@@ -422,28 +422,73 @@ def classify_run(
 # --------------------------------------------------------------------------------------------
 
 
+def _is_in_a_cite_style(run: RunDescription, profile: StyleProfile) -> bool:
+    match = profile.resolve_character_style(
+        run.character_style_id, run.character_style_name, run.character_style_based_on
+    )
+    return match is not None and match.emphasis is RunEmphasis.CITE
+
+
+def _the_cite_style_marks_a_name_and_year_at_the_head(
+    paragraph: ParagraphDescription, profile: StyleProfile
+) -> bool:
+    """Whether the paragraph's first name and year sits at its head, at least partly in a cite style.
+
+    That is what the style is for in a cite: `Okonkwo 26` at the front, or behind a first name.
+    Used for emphasis in a body, the style sits on a phrase somewhere and no name and year opens
+    the paragraph.
+    """
+    text = paragraph.text
+    leading = len(text) - len(text.lstrip())
+    found = first_name_and_year(text.strip(), profile)
+    if found is None or found.start() > NAME_AND_YEAR_AT_THE_HEAD_CHARACTERS:
+        return False
+    name_starts, name_ends = found.start() + leading, found.end() + leading
+    run_starts = 0
+    for run in paragraph.runs:
+        run_ends = run_starts + len(run.text)
+        if run_starts < name_ends and run_ends > name_starts and _is_in_a_cite_style(run, profile):
+            return True
+        run_starts = run_ends
+    return False
+
+
 def _cite_run_style_match(
     paragraph: ParagraphDescription, profile: StyleProfile
 ) -> ParagraphStyleMatch | None:
-    """A short paragraph whose runs carry the cite character style is a cite line.
+    """A paragraph whose runs carry the cite character style is a cite line.
 
     Verbatim gives a cite no paragraph style of its own, so in nearly every real file this is how
     a cite is found. It is a Verbatim match arrived at indirectly, not a guess, which is why it
     is reported as `VERBATIM_ALIAS` rather than as a heuristic.
+
+    Up to the profile's bound the style on any run is enough. Past it the style is as likely to be
+    emphasis in a body, so the paragraph is a cite only when the style marks a name and a year at
+    its head, nothing in it is highlighted, and it is no longer than
+    :data:`MAXIMUM_STYLED_CITE_CHARACTERS`. Until `v1-e31-t12` the rule simply let go at the
+    bound, and 937 cites in the corpus with long credentials were read as body text or as nothing.
     """
-    if len(paragraph.text) > profile.cite.maximum_cite_characters:
+    if not any(_is_in_a_cite_style(run, profile) for run in paragraph.visible_runs):
         return None
-    for run in paragraph.visible_runs:
-        match = profile.resolve_character_style(
-            run.character_style_id, run.character_style_name, run.character_style_based_on
+    length = len(paragraph.text)
+    if length <= profile.cite.maximum_cite_characters:
+        return ParagraphStyleMatch(
+            unit=StructuralUnit.CITE,
+            rule_id="verbatim-cite-run-style",
+            match_source=StyleMatchSource.VERBATIM_ALIAS,
+            confidence=1.0,
         )
-        if match is not None and match.emphasis is RunEmphasis.CITE:
-            return ParagraphStyleMatch(
-                unit=StructuralUnit.CITE,
-                rule_id="verbatim-cite-run-style",
-                match_source=StyleMatchSource.VERBATIM_ALIAS,
-                confidence=1.0,
-            )
+    if (
+        length <= MAXIMUM_STYLED_CITE_CHARACTERS
+        and not paragraph.has_highlighted_run
+        and _the_cite_style_marks_a_name_and_year_at_the_head(paragraph, profile)
+    ):
+        return ParagraphStyleMatch(
+            unit=StructuralUnit.CITE,
+            rule_id="verbatim-cite-run-style-past-the-profile-bound",
+            match_source=StyleMatchSource.VERBATIM_ALIAS,
+            confidence=1.0,
+        )
     return None
 
 

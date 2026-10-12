@@ -45,7 +45,8 @@ needed, so both take seconds on the store's own table:
 `counts --save-before` writes digests and cluster ids where it is told to. It never
 prints a card's text, tag or cite except in `sample`, to a terminal, one pair at a time, cleared
 before the next; `sample` refuses to run when its input or output is not a terminal, so nothing it
-shows can land in a file or a pipe. The store itself holds no path, school or team code
+shows can land in a file or a pipe; `sample --save-tallies` appends its closing lines, which are
+counts, to a file. The store itself holds no path, school or team code
 (`docs/data/parsed-card-store.md`).
 
     uv run python scripts/compare_card_clusters.py counts --caselist openev
@@ -837,6 +838,21 @@ def _diagnose(arguments: argparse.Namespace) -> int:
     return 0
 
 
+def _report_tallies(arguments: argparse.Namespace, drew: str, tallies: Counter[tuple[str, str]]) -> None:
+    """Print what a sample ends with, and append it to `--save-tallies` when given: counts only.
+
+    The next sample's first pair clears the terminal and its scrollback, the last sample's tallies
+    with it. A file keeps them, so several samples can be run one after another.
+    """
+    lines = [drew, *(f"  {kind}: {verdict}: {count}" for (kind, verdict), count in sorted(tallies.items()))]
+    print("\n".join(lines))
+    if arguments.save_tallies is not None:
+        saved: Path = arguments.save_tallies
+        saved.parent.mkdir(parents=True, exist_ok=True)
+        with saved.open("a", encoding="utf-8") as stream:
+            stream.write("\n".join(lines) + "\n")
+
+
 def _resolve_cluster(placed: Mapping[CardKey, Placement], cluster: str | None, rank: int | None) -> str:
     """The cluster id `--cluster` (an id, or the start of one) or `--largest` (a rank) names."""
     if rank is not None:
@@ -875,12 +891,12 @@ def _sample_cluster(arguments: argparse.Namespace, store: LocalParsedStore, seed
     )
     texts = len({placed[key].exact_fingerprint for key in keys})
     how = "the least alike" if arguments.least_alike else "at random"
-    print(
+    _report_tallies(
+        arguments,
         f"Drew {len(pairs)} of {available} pairs of different texts, {how}, from {caselist}'s cluster of "
-        f"{len(keys)} cards and {texts} texts (size rank {rank}), seed {seed}."
+        f"{len(keys)} cards and {texts} texts (size rank {rank}), seed {seed}.",
+        tallies,
     )
-    for (kind, verdict), count in sorted(tallies.items()):
-        print(f"  {kind}: {verdict}: {count}")
     return 0
 
 
@@ -912,11 +928,11 @@ def _sample_kept_apart(arguments: argparse.Namespace, store: LocalParsedStore, s
         show=lambda text: print(text, end="", flush=True),
         change="Apart now. B is the smallest body that holds A.",
     )
-    print(
-        f"Drew {len(pairs)} of {len(candidates)} cuts kept apart by {arguments.kept_apart_by}, seed {seed}."
+    _report_tallies(
+        arguments,
+        f"Drew {len(pairs)} of {len(candidates)} cuts kept apart by {arguments.kept_apart_by}, seed {seed}.",
+        tallies,
     )
-    for (kind, verdict), count in sorted(tallies.items()):
-        print(f"  {kind}: {verdict}: {count}")
     return 0
 
 
@@ -958,9 +974,7 @@ def _sample(arguments: argparse.Namespace) -> int:
     tallies = run_sample(pairs, ask=input, show=lambda text: print(text, end="", flush=True), change=change)
     print(json.dumps(counts, indent=2, sort_keys=True))
     what = "divided" if arguments.divided else "newly joined"
-    print(f"Drew {len(pairs)} of {len(candidates)} {what} pairs, seed {seed}.")
-    for (kind, verdict), count in sorted(tallies.items()):
-        print(f"  {kind}: {verdict}: {count}")
+    _report_tallies(arguments, f"Drew {len(pairs)} of {len(candidates)} {what} pairs, seed {seed}.", tallies)
     return 0
 
 
@@ -1029,6 +1043,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                 metavar="LIMIT",
                 help="Draw cuts the store's table keeps out of a cluster that holds them, each with "
                 f"the smallest body holding it. One of: {', '.join(KEPT_APART_BY)}.",
+            )
+            command.add_argument(
+                "--save-tallies",
+                type=Path,
+                metavar="FILE",
+                help="Also append the closing lines, which hold counts and no card text, to this file.",
             )
             command.add_argument(
                 "--least-alike",

@@ -763,6 +763,30 @@ def test_sample_by_limit_shows_a_cut_beside_the_smallest_body_that_holds_it(
     assert "long-cut-within-the-share: different card: 1" in tallies
 
 
+def test_the_closing_lines_of_each_sample_are_appended_to_a_file_of_counts(
+    nested_dir: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Each pair clears the terminal and its scrollback, the previous sample's tallies with it.
+    The file keeps them, and holds no word of a card."""
+    saved = nested_dir / "kept" / "tallies.txt"
+    arguments = ["--data-dir", str(nested_dir), "sample", "--caselist", CASELIST, "--seed", "3"]
+    for verdict, chosen in (
+        ("u", ["--largest", "1"]),
+        ("s", ["--kept-apart-by", "long-cut-within-the-share"]),
+    ):
+        _as_a_terminal(monkeypatch, [verdict])
+        assert script.main([*arguments, *chosen, "--save-tallies", str(saved)]) == 0
+    capsys.readouterr()
+    kept = saved.read_text(encoding="utf-8").splitlines()
+    assert kept == [
+        "Drew 0 of 0 pairs of different texts, at random, from testcl26's cluster of 2 cards and 1 texts "
+        "(size rank 1), seed 3.",
+        "Drew 1 of 1 cuts kept apart by long-cut-within-the-share, seed 3.",
+        "  long-cut-within-the-share: same card: 1",
+    ]
+    assert not [word for word in NUMBERED_TELLTALE if word in "\n".join(kept)]
+
+
 @pytest.mark.parametrize(
     ("options", "refusal"),
     [

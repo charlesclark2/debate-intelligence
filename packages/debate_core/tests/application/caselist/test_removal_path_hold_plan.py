@@ -16,10 +16,12 @@ The store is `v1-e30-t11`'s and what arrives is `tests/fixtures/caselist/build_h
 from __future__ import annotations
 
 import hashlib
+import inspect
 import json
+import zipfile
 from datetime import date
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import pytest
 from tests.fixtures.caselist.build_held_path_archives import (
@@ -29,14 +31,17 @@ from tests.fixtures.caselist.build_held_path_archives import (
     build_arriving_weekly_zips,
 )
 from tests.fixtures.caselist.build_revised_path_archives import (
+    BODIES,
     CASELIST,
     OTHER_TEAM_PATH,
     REVISED_PATH,
     digest_of,
 )
 
+from debate_core.application.caselist import pipeline
 from debate_core.application.caselist.import_service import CaselistImportService, Classification
 from debate_core.application.caselist.manifest import manifest_key
+from debate_core.application.caselist.pipeline import SourceImportPipeline, SuppressedWriteRefused
 from debate_core.application.caselist.removal_plan import (
     Disposition,
     Inclusion,
@@ -52,9 +57,9 @@ from debate_core.application.caselist.suppression import (
     RecordedSuppressionList,
 )
 from debate_core.application.errors import StoreCredentialsExpired
-from debate_core.application.ports.evidence_store import ObjectInfo, ObjectKey
+from debate_core.application.ports.evidence_store import EvidenceObjectStore, ObjectInfo, ObjectKey
 from debate_core.application.ports.suppression import ReasonCode
-from debate_core.integrations.local import FsSnapshotStore
+from debate_core.integrations.local import FsEvidenceObjectStore, FsSnapshotStore
 from debate_core.integrations.local.suppression_list import local_suppression_list_file
 from debate_core.testing.fakes import InMemoryAppendOnlyRecord
 
@@ -157,7 +162,41 @@ async def test_the_plan_carries_one_path_entry_for_the_one_path_the_file_is_remo
 
     assert [json.loads(entry.to_line()) for entry in plan.path_holds] == [THE_PATH_ENTRY]
     assert plan.path_holds[0].after_snapshot == HELD_FROM
+    assert plan.suppression_after.path_holds == plan.path_holds, "the list as it will read holds the path"
     assert no_path_entry_anywhere(world), "a dry run writes nothing"
+
+
+async def test_the_hold_is_dated_by_the_first_snapshot_that_held_the_file_whatever_recorded_it(
+    world: RemovalWorld,
+) -> None:
+    """The weekly of `2026-09-08` lost its manifest on both sides; its disclosure record still says
+    the file was at the path that week, three weeks before the next snapshot that holds it."""
+    key = manifest_key(CASELIST, date(2026, 9, 8))
+    FsEvidenceObjectStore(world.data_dir).path_for(key).unlink()
+    world.client.delete_object(Bucket=world.bucket_name, Key=key)
+
+    plan = await planned(world)
+
+    assert [entry.after_snapshot for entry in plan.path_holds] == [date(2026, 9, 8)]
+
+
+async def test_a_copy_of_the_named_file_waiting_in_the_inbox_at_another_path_holds_that_path_too(
+    world: RemovalWorld,
+) -> None:
+    """The team uploaded the same bytes again under a browser's `(1)` name, and the pull has
+    downloaded that week and not imported it. The removal takes the file from there as well."""
+    second_path = REVISED_PATH.replace(".docx", " (1).docx")
+    waiting = world.data_dir / "inbox" / f"{CASELIST}-weekly-2026-10-11.zip"
+    with zipfile.ZipFile(waiting, "w") as archive:
+        archive.writestr(second_path, BODIES["named-version"])
+
+    plan = await planned(world)
+
+    assert {(entry.disclosure, entry.after_snapshot) for entry in plan.path_holds} == {
+        (hashlib.sha256(f"testcl26/{REVISED_PATH}".encode()).hexdigest(), date(2026, 9, 8)),
+        (hashlib.sha256(f"testcl26/{second_path}".encode()).hexdigest(), date(2026, 10, 11)),
+    }
+    assert {entry.sha256 for entry in plan.path_holds} == {NAMED}
 
 
 async def test_the_executed_removal_writes_it_beside_the_list_here_and_in_the_bucket(
@@ -259,22 +298,21 @@ async def test_include_shared_removes_it_for_both_teams_and_holds_both_of_its_pa
     plan = await planned(world, SourceSelector(LATER_SHARED), include_shared=True)
     assert [source.disposition for source in plan.sources] == [Disposition.REMOVE]
 
-    def by_path(entry: dict[str, object]) -> str:
-        return str(entry["disclosure"])
-
     # The shared revision is held at both teams' paths, first in the weekly of 2026-10-06.
-    assert sorted((json.loads(entry.to_line()) for entry in plan.path_holds), key=by_path) == sorted(
-        (
-            {
-                **THE_PATH_ENTRY,
-                "disclosure": hashlib.sha256(f"testcl26/{path}".encode()).hexdigest(),
-                "sha256": digest_of("later-also-at-another-path"),
-                "after_snapshot": "2026-10-06",
-            }
-            for path in (REVISED_PATH, OTHER_TEAM_PATH)
-        ),
-        key=by_path,
-    )
+    written = {entry.disclosure: json.loads(entry.to_line()) for entry in plan.path_holds}
+    assert len(plan.path_holds) == 2
+    assert written == {
+        digest: {
+            **THE_PATH_ENTRY,
+            "disclosure": digest,
+            "sha256": digest_of("later-also-at-another-path"),
+            "after_snapshot": "2026-10-06",
+        }
+        for digest in (
+            hashlib.sha256(f"testcl26/{REVISED_PATH}".encode()).hexdigest(),
+            hashlib.sha256(f"testcl26/{OTHER_TEAM_PATH}".encode()).hexdigest(),
+        )
+    }
 
 
 # ------------------------------------------------------------------------------------------------
@@ -320,6 +358,32 @@ async def test_the_import_appends_nothing_to_the_list_or_beside_it(
     assert {path.name: path.read_bytes() for path in sorted(suppression.iterdir())} == before
 
 
+async def test_if_classification_ever_let_a_held_upload_through_the_write_would_refuse_it(
+    world: RemovalWorld, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The check is made again where the bytes are written, as the list's own is (`v1-e30-t07`)."""
+    await remove_the_named_file(world)
+
+    def everything_is_new(member: object, **_: object) -> Classification:
+        return Classification.NEW
+
+    monkeypatch.setattr(pipeline, "_classify", everything_is_new)
+
+    with pytest.raises(SuppressedWriteRefused):
+        await import_weekly(world, tmp_path, CASELIST, date(2026, 10, 8))
+
+    assert not local_blob(world, UPLOADED_AFTER).exists()
+    assert await world.repository.find_source(UPLOADED_AFTER) is None
+
+
+def test_an_import_has_to_say_which_snapshot_it_is_importing() -> None:
+    """A default would let an importer leave the date off and ask no hold about anything."""
+    parameter = inspect.signature(SourceImportPipeline.run).parameters["snapshot"]
+
+    assert parameter.default is inspect.Parameter.empty
+    assert parameter.kind is inspect.Parameter.KEYWORD_ONLY
+
+
 # ------------------------------------------------------------------------------------------------
 # The weekly pull's importer, and an importer that reads the list alone
 # ------------------------------------------------------------------------------------------------
@@ -330,6 +394,11 @@ class _BucketNeedingALogin:
         raise StoreCredentialsExpired(hint="aws sso login --profile debate-dev-evidence")
 
 
+def _needing_a_login() -> EvidenceObjectStore:
+    """The bucket as the weekly agent finds it once the SSO session has run out: no read answers."""
+    return cast("EvidenceObjectStore", _BucketNeedingALogin())
+
+
 async def test_the_pulls_importer_refuses_it_from_this_machines_copy_when_the_bucket_needs_a_login(
     world: RemovalWorld, tmp_path: Path
 ) -> None:
@@ -338,9 +407,7 @@ async def test_the_pulls_importer_refuses_it_from_this_machines_copy_when_the_bu
     suppression = LocalFallbackSuppressionList(
         RecordedSuppressionList(
             local,
-            ObjectStoreAppendOnlyRecord(
-                _BucketNeedingALogin(), "manifests/_suppression/suppression-list.jsonl"
-            ),  # pyright: ignore[reportArgumentType]
+            ObjectStoreAppendOnlyRecord(_needing_a_login(), "manifests/_suppression/suppression-list.jsonl"),
         ),
         local=RecordedSuppressionList(local),
     )

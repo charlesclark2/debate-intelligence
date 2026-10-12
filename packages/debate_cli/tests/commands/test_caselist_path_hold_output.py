@@ -243,6 +243,7 @@ def test_a_later_upload_only_the_inbox_holds_is_listed_as_in_the_inbox_and_not_i
     )
     assert "held nowhere in this environment" not in shown
     assert "  One marked as in the download inbox is in an archive `caselist pull` downloaded" in shown
+    new_lines_name_no_one("\n".join(line for line in shown.splitlines() if "download inbox" in line))
 
 
 def test_one_the_store_and_the_inbox_both_hold_says_both() -> None:

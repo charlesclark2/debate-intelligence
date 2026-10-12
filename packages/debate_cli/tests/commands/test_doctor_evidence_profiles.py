@@ -328,9 +328,12 @@ def test_an_everyday_profile_the_aws_config_lacks_fails_doctor_naming_the_profil
             "hint": THE_ADAPTERS_FIX.format(setting=EVERYDAY_SETTING),
         }
     ]
-    everything = json.dumps(envelope)
+    # What the profile check adds to the report. `doctor` has always reported where its interpreter
+    # is, which is a path; nothing it says about a profile is one.
+    about_the_profiles = json.dumps([error["message"], error["hint"], profiles_in(envelope)])
     for forbidden in (str(installation), str(Path.home()), AWS_CONFIG_NAME, "/.aws", "aws sso login"):
-        assert forbidden not in everything
+        assert forbidden not in about_the_profiles
+    assert AWS_CONFIG_NAME not in json.dumps(envelope), "nowhere in the envelope either"
 
 
 def test_a_removal_profile_the_aws_config_lacks_fails_doctor_naming_its_own_setting(
@@ -457,9 +460,15 @@ def test_a_person_sees_one_row_for_each_profile(monkeypatch: pytest.MonkeyPatch)
     exit_code, shown = as_a_person_sees_it("--evidence-profiles")
 
     assert exit_code == ExitCode.OK, shown
-    assert "debate-dev-evidence: defined, and signed in as DebateDevEvidenceOperator" in shown
-    assert "debate-dev-evidence-removal: defined; its session has expired or was never started" in shown
-    assert "(aws sso login --profile debate-dev-evidence-removal)" in shown
+    assert (
+        "Evidence profile debate-dev-evidence (storage.s3.aws_profile): defined, and signed in as "
+        "DebateDevEvidenceOperator"
+    ) in shown
+    assert (
+        "Evidence profile debate-dev-evidence-removal (DEBATE_REMOVAL_PROFILE): defined; its session "
+        "has expired or was never started, so AWS cannot be asked which permission set it is (aws sso "
+        "login --profile debate-dev-evidence-removal)"
+    ) in shown
 
 
 def test_a_person_sees_the_report_and_then_the_profile_that_is_not_defined(
@@ -470,7 +479,11 @@ def test_a_person_sees_the_report_and_then_the_profile_that_is_not_defined(
     exit_code, shown = as_a_person_sees_it("--evidence-profiles")
 
     assert exit_code == ExitCode.DOMAIN_FAILURE
-    assert "debate-dev-evidence-typo: not defined in this machine's AWS config" in shown
+    assert (
+        "Evidence profile debate-dev-evidence-typo (storage.s3.aws_profile): not defined in this "
+        "machine's AWS config"
+    ) in shown
+    assert "(set storage.s3.aws_profile" not in shown, "the fix is the panel's, not the row's"
     assert "STORE_PROFILE_NOT_CONFIGURED" in shown
     assert "named by storage.s3.aws_profile, is not defined" in shown
     for forbidden in (str(installation), AWS_CONFIG_NAME, "/.aws"):

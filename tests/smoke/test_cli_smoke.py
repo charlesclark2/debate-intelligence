@@ -138,7 +138,8 @@ def test_doctor_checks_the_evidence_profiles_only_when_asked_and_fails_on_one_th
             "hint": error["hint"],
         }
     ]
-    assert str(installed_cli.home) not in asked.stdout and "/.aws" not in asked.stdout
+    about_the_profile = f"{error['message']} {error['hint']}"
+    assert str(installed_cli.home) not in about_the_profile and "/.aws" not in asked.stdout
 
 
 # ------------------------------------------------------------------------------------------------

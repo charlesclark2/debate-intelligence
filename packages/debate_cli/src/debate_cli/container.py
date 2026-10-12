@@ -81,6 +81,15 @@ The takedown access also carries a
 profile, which the preflight asks first: a profile that is not signed in as this environment's
 takedown role is refused before it lists or writes (`v1-e29-t08`).
 
+## Checking the profiles ahead of a run
+
+:meth:`ServiceContainer.evidence_profile_check` asks the same question of every profile these
+settings name, the everyday one and the takedown one when its variable is set, through the same
+port and the same adapter (:meth:`ServiceContainer.caller_identity_for`): is it defined, and
+which permission set is it signed in as. `debate-research doctor --evidence-profiles` runs it
+(`v1-e34-t22`), so that a setting naming a profile this machine does not have is found by a
+person, before the weekly pull finds it.
+
 ## Why the AWS adapters are imported inside the factory
 
 `debate_core.integrations.s3` is imported where it is used rather than at the top of this module,
@@ -136,6 +145,7 @@ from debate_core.application.caselist_card_stats import CaselistCardStatsService
 from debate_core.application.caselist_parse import CaselistParseService
 from debate_core.application.caselist_pull_parse import PullParseStage
 from debate_core.application.caselist_sync import CaselistSyncService, FullArchiveRotation
+from debate_core.application.evidence_profiles import ConfiguredProfile, EvidenceProfileCheck
 from debate_core.application.evidence_sync import (
     EvidenceSyncService,
     SyncJournal,
@@ -143,6 +153,7 @@ from debate_core.application.evidence_sync import (
 )
 from debate_core.application.evidence_verifier import EvidenceVerifier
 from debate_core.application.ports.archive import ArchiveEntry
+from debate_core.application.ports.caller_identity import CallerIdentity
 from debate_core.application.ports.evidence_store import EvidenceObjectStore, ObjectKey
 from debate_core.application.ports.notifier import Notifier, NullNotifier
 from debate_core.application.ports.suppression import SuppressionList
@@ -195,6 +206,7 @@ SERVICE_NAMES: Final[tuple[str, ...]] = (
     "caselist_sync_history",
     "caselist_sync_monitor",
     "caselist_token_store",
+    "evidence_profile_check",
     "evidence_sync",
     "openev_import",
     "opencaselist_client",
@@ -742,7 +754,6 @@ class ServiceContainer:
         from debate_core.integrations.s3 import (
             S3EvidenceObjectStore,
             S3EvidenceVersionStore,
-            StsCallerIdentity,
             build_s3_client,
         )
 
@@ -772,14 +783,58 @@ class ServiceContainer:
             ),
             # Asked first, before the profile lists or writes anything (v1-e29-t08): built from the
             # same profile name as the client above, so it answers for the role that would delete.
-            caller=StsCallerIdentity(
-                bucket=str(storage.s3.bucket),
-                profile=profile,
-                profile_setting=_REMOVAL_PROFILE_SETTING,
-                region=storage.s3.region,
+            caller=self.caller_identity_for(
+                ConfiguredProfile(setting=_REMOVAL_PROFILE_SETTING, name=profile, for_takedowns=True)
             ),
             profile=profile,
             bucket=str(storage.s3.bucket),
+        )
+
+    def caller_identity_for(self, profile: ConfiguredProfile) -> CallerIdentity:
+        """Who `profile` is signed in as, asked of STS: the one place that adapter is built.
+
+        The takedown preflight asks it of the takedown profile (`v1-e29-t08`), and the profile
+        check of every profile these settings name (`v1-e34-t22`). Raises
+        :class:`~debate_core.application.errors.StoreProfileNotConfigured`, naming the profile's
+        setting, when this machine's AWS config does not define it: building the adapter builds a
+        session, which is where boto3 refuses one. A test replaces this method to stub the answer.
+        """
+        from debate_core.integrations.s3 import StsCallerIdentity
+
+        s3 = self.settings.storage.s3
+        return StsCallerIdentity(
+            bucket=str(s3.bucket or ""),
+            profile=profile.name,
+            profile_setting=profile.setting,
+            region=s3.region,
+        )
+
+    def evidence_profile_check(self) -> EvidenceProfileCheck:
+        """Build the check of every evidence profile this environment is configured with (`v1-e34-t22`).
+
+        The everyday profile, when the environment names a bucket to reach with it, and the
+        takedown profile, when `DEBATE_REMOVAL_PROFILE` is set. An environment with neither, which
+        is what `test` is, has nothing to check. Building the check asks nothing and reads no AWS
+        config: each profile's adapter is built when the check is run.
+        """
+        return self.singleton("evidence_profile_check", self._build_evidence_profile_check)
+
+    def _build_evidence_profile_check(self) -> EvidenceProfileCheck:
+        settings = self.settings
+        s3 = settings.storage.s3
+        configured: list[ConfiguredProfile] = []
+        if s3.bucket and s3.aws_profile:
+            configured.append(ConfiguredProfile(setting=_EVERYDAY_PROFILE_SETTING, name=s3.aws_profile))
+        if settings.removal_profile:
+            configured.append(
+                ConfiguredProfile(
+                    setting=_REMOVAL_PROFILE_SETTING, name=settings.removal_profile, for_takedowns=True
+                )
+            )
+        return EvidenceProfileCheck(
+            profiles=configured,
+            caller_for=self.caller_identity_for,
+            environment=settings.environment.value,
         )
 
     def _local_evidence(self) -> LocalEvidence:
@@ -912,6 +967,13 @@ class ServiceContainer:
         (:func:`~debate_cli.exit_codes.codes_exit_as_a_retrieval_failure`), so that a failed run's
         notification says "the next run retries it" exactly when the command exits `3`
         (`v1-e34-t19`). `debate_core` never decides that for itself.
+
+        It is handed the bucket to build, not the bucket (`v1-e34-t22`). A profile setting that
+        names a profile the AWS config does not define stops the S3 adapter being built
+        (`v1-e29-t07`), and a monitor that needed the adapter to exist could not be built either:
+        the run ended unrecorded and unannounced. Built this way the monitor always exists, the
+        refusal reaches it as the error the run stopped on, and the record it writes here is owed
+        to the bucket until a run can build one.
         """
         return self.singleton("caselist_sync_monitor", self._build_caselist_sync_monitor)
 
@@ -922,7 +984,8 @@ class ServiceContainer:
             state_dir=settings.storage.data_dir,
             environment=settings.environment.value,
             notifier=self.sync_notifier(),
-            remote=self._evidence_bucket() if settings.storage.s3.bucket else None,
+            remote=None,
+            build_remote=self._evidence_bucket if settings.storage.s3.bucket else None,
             aws_login_command=self._aws_login_command(),
             secrets=lambda: [token.get_secret_value()] if token is not None else [],
             clock=self.clock(),

@@ -78,6 +78,23 @@ details go up before its record, so a record there is never waiting for its deta
 exception is a record an *older* build publishes from the list of records still owed: it knows
 nothing of details, and that run's stay on this machine.
 
+## A run that cannot build its bucket (`v1-e34-t22`)
+
+The monitor is handed its bucket to build, not a bucket: `build_remote`, called when a record is
+first to be published and never before. The difference is one failure. A profile setting that
+names a profile the AWS config does not define makes boto3 refuse a session, so the bucket's
+adapter cannot be built at all (`v1-e29-t07`). While the monitor took the adapter built, the
+monitor could not be built either, and the weekly run ended with no record and no notification:
+the one failure this module exists to make loud was silent.
+
+Now that refusal is a run that stopped on an error, like an expired `caselist_token`. The pull is
+refused its service inside :meth:`SyncRunMonitor.watch`, which writes the record and its details
+on this machine first, as always. Publishing then asks for the bucket, is refused in turn, and
+leaves the record **owed**: its run id joins the ids still to publish, behind any already there,
+and the next run that can build the bucket publishes it with its details. One notification says
+a person should look and carries the adapter's fix, which names the setting. Nothing is added to
+the record for any of this: it is the record a failed run has always had.
+
 ## The backlog (ac5)
 
 A cap-deferred archive is a delay, not a loss (ADR-0017), and one that clears itself on the next
@@ -1075,7 +1092,8 @@ class SyncRunMonitor:
             state_dir=settings.storage.data_dir,
             environment=settings.environment.value,
             notifier=MacOsNotifier(),
-            remote=bucket_or_none,
+            remote=None,
+            build_remote=build_the_bucket_or_none,
             aws_login_command="aws sso login --profile debate-dev-evidence",
         )
         monitored = await monitor.watch(lambda: service.run(slugs), caselists=slugs, mode="run")
@@ -1084,7 +1102,13 @@ class SyncRunMonitor:
         state_dir: The environment's data directory: the run log and the pending-record file.
         environment: `dev` or `prod`, recorded on every record.
         notifier: Where notifications go.
-        remote: The evidence bucket, or `None` for an environment with no bucket.
+        remote: The evidence bucket, already built, or `None`. What a test with a bucket in hand
+            passes. Never together with `build_remote`.
+        build_remote: Builds the evidence bucket, and is called when a record is first to be
+            published: what the composition root passes, so that a bucket that cannot be built
+            is a failure of the run the monitor records and not of building the monitor
+            (`v1-e34-t22`). Whatever it raises leaves every record owed. `None`, with `remote`
+            `None` too, is an environment with no bucket.
         aws_login_command: The command that renews this environment's AWS session.
         secrets: Values to scrub from every message, e.g. the caselist_token when it is known.
         clock: For the times of a run that raised before it could report its own.
@@ -1105,12 +1129,16 @@ class SyncRunMonitor:
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
         growth_runs: int = BACKLOG_GROWTH_RUNS,
         may_succeed_on_retry: RetryRule = _no_failure_is_known_to_be_transient,
+        build_remote: Callable[[], EvidenceObjectStore] | None = None,
     ) -> None:
+        if remote is not None and build_remote is not None:
+            raise ValueError("a run monitor is given remote or build_remote, never both")
         self._may_succeed_on_retry = may_succeed_on_retry
         self._state_dir = Path(state_dir)
         self._environment = environment
         self._notifier = notifier
         self._remote = remote
+        self._build_remote = build_remote
         self._aws_login_command = aws_login_command
         self._secrets = secrets
         self._clock = clock
@@ -1206,8 +1234,22 @@ class SyncRunMonitor:
         Each with its details, when this machine holds them, and the details first.
         """
         owed = [run_id for run_id in self._pending.read() if run_id != record.run_id] + [record.run_id]
-        if self._remote is None:
+        if self._remote is None and self._build_remote is None:
             self._pending.write([])
+            return False, None
+        try:
+            remote = self._bucket()
+        except Exception as unbuilt:
+            # The bucket's adapter cannot be built: a profile the AWS config does not define, most
+            # likely (`v1-e34-t22`). There is a bucket, so everything owed stays owed, this run's
+            # record with it, for the next run that can build one. By its class and no more: the
+            # message may be a library's.
+            logger.warning(
+                "caselist run record %s not published: the bucket's adapter could not be built (%s)",
+                record.run_id,
+                type(unbuilt).__name__,
+            )
+            self._pending.write(owed)
             return False, None
         known = self.log.by_run_id()
         beside = self.details.read()
@@ -1218,7 +1260,7 @@ class SyncRunMonitor:
             if to_publish is None:
                 continue
             try:
-                await self._put(self._remote, to_publish, beside.get(run_id))
+                await self._put(remote, to_publish, beside.get(run_id))
             except StoreCredentialsExpired as expired:
                 login_hint = expired.hint or self._aws_login_command
                 left.extend(owed[index:])
@@ -1228,6 +1270,17 @@ class SyncRunMonitor:
                 left.append(run_id)
         self._pending.write(left)
         return record.run_id not in left, login_hint
+
+    def _bucket(self) -> EvidenceObjectStore:
+        """The evidence bucket, built on first use when the monitor was handed it to build.
+
+        Called only where a bucket is known to be configured. Raises whatever building it raises,
+        and tries again the next time: a bucket that could not be built is never remembered.
+        """
+        if self._remote is None:
+            assert self._build_remote is not None
+            self._remote = self._build_remote()
+        return self._remote
 
     async def _put(
         self, remote: EvidenceObjectStore, record: SyncRunRecord, details: SyncRunDetails | None

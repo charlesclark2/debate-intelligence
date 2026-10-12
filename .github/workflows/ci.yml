@@ -1,8 +1,9 @@
 # The PR and push gate for dev and main (v1-e01-t04-ci-pipeline).
 #
 # Branch protection requires exactly one status check, `ci`: the aggregate job at the bottom. Every
-# other job is one of its needs, so a job added later gates merges as soon as it is appended to that
-# list, and no ruleset has to be edited. Do not rename `ci`; the other job ids can change freely.
+# other job that runs on a pull request is one of its needs, so a job added later gates merges as
+# soon as it is appended to that list, and no ruleset has to be edited. Do not rename `ci`; the other
+# job ids can change freely.
 #
 # Every check a pull request needs lives in this file, including the ones later tasks add (web in
 # v2-e14-t01, api-contract in v2-e12-t06). A new job is gated on a `changes` output and appended to
@@ -11,11 +12,26 @@
 # promotion-guard.yml (v1-e01-t08): `promotion-source` and `back-merge` run only on pull requests into
 # main and are required checks on protect-main in their own right. Do not add them to `ci`.
 #
-# CI stays light (docs/process/working-agreements.md §1): the `ci` check on a PR into dev should
-# finish in under 5 minutes. Nothing here reaches a model, a search provider or an AWS account, and
-# nothing reads a repository secret. The only network use is installing tools and dependencies.
-# LLM evaluations, browser end-to-end suites, live canaries, terraform plan/apply and load tests never
-# run here.
+# CI stays light (docs/process/working-agreements.md §1): the `ci` check on a PR into dev has a budget
+# of 5 minutes and a target of under 3 on a typical pull request. Nothing here reaches a model, a
+# search provider or an AWS account, and nothing reads a repository secret. The only network use is
+# installing tools and dependencies. LLM evaluations, browser end-to-end suites, live canaries,
+# terraform plan/apply and load tests never run here.
+#
+# What keeps it there is the `test` job (v1-e01-t27). It was one runner taking 4 to 6 minutes over
+# the whole suite, and it grew with every task. Now:
+#   * It is a matrix of parts that run side by side, each `pytest --part K/N` on its own runner. A
+#     part is not a list of directories: tests/pytest_plugins/run_in_parts.py deals every test file's
+#     tests round the parts, so the parts are level without anyone balancing them and no part can
+#     be forgotten. tests/scripts/test_ci_workflow_test_job.py collects every part and proves that
+#     together they are exactly the unsplit selection.
+#   * It measures no coverage. The `coverage` job does, over the whole selection, on pushes to dev and
+#     main only.
+#   * When it drifts: every part ends with its 25 slowest tests (`--durations=25`). If `ci` on
+#     ordinary pull requests passes 3 minutes, or one part's pytest step passes 2, append the next
+#     number to the `test` job's `matrix.part`. That is the whole change. If one part is steadily
+#     slower than the rest, its durations name the few slow tests that landed together; make them
+#     cheaper, as working agreement 1 describes.
 #
 # Every job in every workflow names its runner image, ubuntu-24.04, never ubuntu-latest: GitHub moves
 # ubuntu-latest to Ubuntu 26 from 2026-10-19, and a new image (its python3, shellcheck, gh) must not
@@ -163,20 +179,51 @@ jobs:
       - name: pyright
         run: uv run --frozen pyright
 
+  # The default selection, in parts that run side by side (see the top of this file). Every part runs
+  # on every event this job runs on; no test is left to pushes.
   test:
     needs: changes
     if: needs.changes.outputs.python == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    strategy:
+      # Every part reports its own failures: one failing part does not cancel the others.
+      fail-fast: false
+      matrix:
+        # To add a part, append the next number and change nothing else. Each part asks for itself
+        # out of strategy.job-total, and `ci` needs this job as a whole: a matrix job is one entry
+        # in `needs`, and its result is a failure if any part failed.
+        part: [1, 2, 3, 4]
     steps:
       - *checkout
       - *setup-uv
       - *install-python
       - *uv-sync
-      - name: pytest (default selection, no slow or live tests)
-        # pyproject.toml's addopts already say all of this and block sockets; it is spelled out here
-        # so the PR path cannot quietly start running slow or live tests if addopts change.
-        run: uv run --frozen pytest -n auto --cov -m "not slow and not live"
+      - name: pytest (one part of the default selection, no slow or live tests, no coverage)
+        # pyproject.toml's addopts already say `-n auto` and the markers, and block sockets; they are
+        # spelled out here so the PR path cannot quietly start running slow or live tests if addopts
+        # change. The durations are how anyone sees which tests are slow on a runner, where the
+        # order is not the one a laptop gives.
+        run: uv run --frozen pytest -n auto -m "not slow and not live" --part "${{ matrix.part }}/${{ strategy.job-total }}" --durations=25
+
+  # Branch coverage of the whole default selection, with the report every run printed until
+  # v1-e01-t27, on pushes to dev and main only: nothing is gated on coverage (pyproject.toml sets no
+  # fail_under), and measuring it took a third of the suite's time on every pull request. It is one
+  # unsplit run, so the report covers everything at once, and it is the collection the parts above
+  # are compared with. It is not one of `ci`'s needs, because `ci` is what a pull request waits for
+  # and this never runs on one; a failure here still fails the push's run.
+  coverage:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    # Longer than the other jobs: this is the one run that still grows with the suite.
+    timeout-minutes: 20
+    steps:
+      - *checkout
+      - *setup-uv
+      - *install-python
+      - *uv-sync
+      - name: pytest --cov (the whole default selection, unsplit)
+        run: uv run --frozen pytest -n auto --cov --cov-report=term-missing -m "not slow and not live"
 
   # The contracts live in pyproject.toml's [tool.importlinter]; v1-e02-t06-import-boundary-guard
   # owns the full set.
@@ -311,7 +358,8 @@ jobs:
 
   # The single required status check on the protect-dev and protect-main rulesets. It passes only if
   # every job it needs succeeded, or was skipped because its path filter found nothing to check. A job
-  # skipped for any other reason (the `changes` job failed, a condition was wrong) fails it.
+  # skipped for any other reason (the `changes` job failed, a condition was wrong) fails it. It needs
+  # every job above except `coverage`, which runs on pushes only.
   ci:
     needs:
       - changes

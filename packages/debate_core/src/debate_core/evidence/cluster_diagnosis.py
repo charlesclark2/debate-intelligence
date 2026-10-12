@@ -1,0 +1,608 @@
+"""Why near-duplicate clustering left a body where it did, in counts (`v1-e31-t11`).
+
+:mod:`debate_core.evidence.near_duplicates` answers *which* bodies share a cluster. This module
+answers the question a person asks of a finished placement: this body is plainly inside that one,
+so why are they apart, and which limit did it. It reads bodies and the cluster ids they were given
+and returns outcomes, digests and numbers. It never returns a word of a body, changes no cluster and
+takes no part in placing a card.
+
+## A cut and its containers
+
+A body is a **cut** of another when the other is at least as large, holds the cut's first and last
+shingle, and is *confirmed*: nine-tenths of the cut's shingles are in it, or the cut is short and
+in it but for one word (:func:`~debate_core.evidence.near_duplicates.confirms_a_cut`, the test the
+clusterer itself applies). :func:`diagnose_cuts` reports every body with a container **outside its
+own cluster**, and says what kept it out (:class:`CutOutcome`):
+
+* **Short cuts** are governed by the short-body step, so the outcome names the limit of that step
+  that applied: its containers are in more than one cluster, it is under
+  :data:`~debate_core.evidence.near_duplicates.MIN_CUT_SHARE` of every one of them, or its ends are
+  held by more than :data:`~debate_core.evidence.near_duplicates.MAX_CONTAINER_CLUSTERS` clusters.
+* **Long cuts** have no step of their own. A long cut and its container are compared only if the
+  LSH banding happens to pair them, and a pair that was compared would have merged. So a long cut
+  with a container outside its cluster is one the banding never paired.
+* A short body nine-tenths inside a body that **lacks one of its ends** is reported too: before the
+  short-body step such a pair merged when the banding paired it, and since it they are never
+  compared.
+
+## Containers in more than one cluster: one card, or two?
+
+A cut inside two clusters stays out of both, because joining either would be a guess. That is right
+when the clusters are two different cards that share a passage, and it costs recall when they are
+one card whose longer copies never merged. The two are told apart the way
+:mod:`debate_core.evidence.abbreviated_links` tells them apart for an abbreviation: by the
+containers' own text. Two container clusters *read as one card* when some container of one shares at
+least :data:`~debate_core.evidence.abbreviated_links.SPLIT_COPY_OVERLAP` of the smaller body's
+shingles with some container of the other; a cut's container clusters read as one card when that
+relation connects them all (:class:`CopiesRead`). For each connected pair :class:`KeptApartBy` says
+which limit left the two copies in different clusters.
+
+This is a reading of counts, not a judgement of the cards. Whether two bodies that share half
+their text are one card is what the operator's by-eye sample decides.
+
+## A cluster's shape
+
+:func:`cluster_shape` describes one cluster from the inside: how many of its distinct texts share
+nothing at all, and whether it hangs together through single texts (:class:`ClusterShape`). One
+much-read card and its cuts is a cluster whose texts overlap one another. A chain of containment
+merges, or two cards joined through a body that holds both, is a cluster with pairs of texts that
+have no shingle in common and a text whose removal leaves unrelated parts.
+"""
+
+from __future__ import annotations
+
+import statistics
+from collections import Counter, defaultdict
+from collections.abc import Mapping, Sequence, Set
+from dataclasses import dataclass, replace
+from enum import StrEnum
+from typing import Final
+
+from debate_core.evidence.abbreviated_links import SPLIT_COPY_OVERLAP
+from debate_core.evidence.near_duplicates import (
+    LSH_BANDS,
+    LSH_ROWS_PER_BAND,
+    MAX_CONTAINER_CLUSTERS,
+    MIN_CUT_SHARE,
+    MINHASH_SEED,
+    SHORT_BODY_SHINGLES,
+    NearDuplicateThresholds,
+    confirms_a_cut,
+    containment,
+    jaccard,
+    matching_words,
+    minhash_signature,
+    word_shingles,
+)
+
+__all__ = [
+    "MAX_CONTAINERS_COMPARED",
+    "ClusterShape",
+    "CopiesRead",
+    "CutCensus",
+    "CutFinding",
+    "CutOutcome",
+    "DividedPart",
+    "KeptApartBy",
+    "cluster_shape",
+    "diagnose_cuts",
+    "explain_divided_part",
+    "tally_cuts",
+]
+
+MAX_CONTAINERS_COMPARED: Final = 12
+"""Containers of one cut, per cluster, that are compared across clusters and checked against the
+banding. A much-read card has hundreds of copies; a spread of them by size says as much."""
+
+
+class CutOutcome(StrEnum):
+    """What kept a cut out of the cluster of a body that contains it."""
+
+    SEVERAL_CLUSTERS = "short: its containers are in more than one cluster"
+    UNDER_MIN_CUT_SHARE = "short: under the minimum share of every container"
+    TOO_MANY_HOLDERS = "short: its ends are held by too many clusters"
+    WITHIN_THE_RULE = "short: one cluster holds it, within the share, and it is still apart"
+    ENDS_NOT_BOTH_INSIDE = "short: nine-tenths inside a body that lacks one of its ends"
+    LONG_NEVER_PAIRED = "long: its containers are one cluster the banding never paired it with"
+    LONG_SEVERAL_CLUSTERS = "long: its containers are in more than one cluster"
+
+
+class CopiesRead(StrEnum):
+    """How the container clusters of a cut inside several of them read, from their own text."""
+
+    ONE_CARD_SPLIT = "as one card, split"
+    DIFFERENT_CARDS = "as different cards"
+
+
+class KeptApartBy(StrEnum):
+    """Which limit left two copies that read as one card in different clusters."""
+
+    BANDING = "pass the thresholds, never paired by the banding"
+    THRESHOLDS = "share at least half, under the Jaccard and containment thresholds"
+    SHORT_BODY_STEP = "the smaller copy is a short body the short-body step left out"
+
+
+@dataclass(frozen=True, slots=True)
+class CutFinding:
+    """One body with a container outside its cluster. Digests and numbers only."""
+
+    fingerprint: str
+    cluster_id: str
+    shingles: int
+    outcome: CutOutcome
+    container_clusters: tuple[str, ...]
+    """Other clusters holding a confirmed container, sorted."""
+    containers: frozenset[str]
+    """Every body outside its cluster that was found to contain it, by either test."""
+    copies_read: CopiesRead | None = None
+    """For a cut inside several clusters: how those clusters read."""
+    kept_apart_by: tuple[KeptApartBy, ...] = ()
+    """For container clusters that read as one card: the limit between each connected pair."""
+    banded_with_a_container: bool = False
+    """Whether the banding pairs it with one of the containers compared: for a short cut, the pair
+    the rules before the short-body step would have merged."""
+    first_container_over_the_share: bool = False
+    """For :attr:`CutOutcome.WITHIN_THE_RULE`: the container that sorts first by fingerprint in the
+    one cluster is over the share, although another container there is within it."""
+
+    @property
+    def is_short(self) -> bool:
+        return self.shingles < SHORT_BODY_SHINGLES
+
+
+@dataclass(frozen=True, slots=True)
+class CutCensus:
+    """What :func:`diagnose_cuts` found over one placement."""
+
+    texts: int
+    """Distinct bodies read."""
+    short_texts: int
+    """Of those, the bodies under :data:`SHORT_BODY_SHINGLES` shingles."""
+    findings: tuple[CutFinding, ...]
+    """Every body with a container outside its cluster, sorted by fingerprint."""
+
+
+@dataclass(frozen=True, slots=True)
+class DividedPart:
+    """Why one part of an earlier cluster is no longer with the rest of it."""
+
+    kind: str
+    outcome: CutOutcome | None
+    copies_read: CopiesRead | None
+    kept_apart_by: tuple[KeptApartBy, ...]
+
+    LEFT_OUT = "a short cut in this part was left out"
+    THROUGH_A_CUT = "this part was joined only through a short cut elsewhere"
+    UNEXPLAINED = "no short cut links this part to the rest"
+
+
+@dataclass(frozen=True, slots=True)
+class ClusterShape:
+    """One cluster from the inside. Counts only."""
+
+    cluster_id: str
+    cards: int
+    distinct_texts: int
+    short_texts: int
+    words_smallest: int
+    words_median: int
+    words_largest: int
+    pairs: int
+    """Pairs of distinct texts."""
+    pairs_sharing_nothing: int
+    pairs_sharing_under_half: int
+    """Pairs sharing some shingle, and under :data:`SPLIT_COPY_OVERLAP` of the smaller text."""
+    pairs_sharing_half_or_more: int
+    pairs_matching: int
+    """Pairs the rules would confirm if compared: Jaccard, long containment, or a short cut."""
+    groups_sharing_half: int
+    """Connected groups when only texts sharing at least half of the smaller are joined."""
+    largest_group_texts: int
+    largest_group_cards: int
+    texts_sharing_nothing_with_most_read: int
+    cards_sharing_nothing_with_most_read: int
+    bridging_texts: int
+    """Texts whose removal leaves matching texts in more than one piece."""
+    bridges_between_unrelated_parts: int
+    """Bridging texts whose pieces, once it is removed, have a pair sharing nothing."""
+    unrelated_bridges_that_are_fragments: int
+    """Of those, the ones smaller than every text they match: a passage several texts contain."""
+    unrelated_bridges_that_hold_the_parts: int
+    """Of those, the ones larger than every text they match: one body holding several texts."""
+
+    def as_json(self) -> dict[str, object]:
+        return {name: getattr(self, name) for name in self.__dataclass_fields__}
+
+
+# ------------------------------------------------------------------------------------------------
+# Cuts and their containers
+# ------------------------------------------------------------------------------------------------
+
+
+class _Bodies:
+    """The words and shingles of every body, worked out once."""
+
+    def __init__(self, bodies: Mapping[str, str]) -> None:
+        self.fingerprints = sorted(bodies)
+        self.words = {fingerprint: matching_words(bodies[fingerprint]) for fingerprint in self.fingerprints}
+        self.ordered = {
+            fingerprint: word_shingles(self.words[fingerprint]) for fingerprint in self.fingerprints
+        }
+        self.sets = {fingerprint: frozenset(self.ordered[fingerprint]) for fingerprint in self.fingerprints}
+
+    def size(self, fingerprint: str) -> int:
+        return len(self.sets[fingerprint])
+
+    def by_size(self, fingerprints: Set[str] | Sequence[str]) -> list[str]:
+        """Smallest first, then by fingerprint: an order that depends on nothing else."""
+        return sorted(fingerprints, key=lambda fingerprint: (self.size(fingerprint), fingerprint))
+
+
+def diagnose_cuts(
+    bodies: Mapping[str, str],
+    clusters: Mapping[str, str],
+    thresholds: NearDuplicateThresholds | None = None,
+    *,
+    seed: str = MINHASH_SEED,
+) -> CutCensus:
+    """Every body that another body outside its cluster contains, and what kept it out.
+
+    `bodies` maps each exact fingerprint to its text and `clusters` maps it to the cluster id it
+    was given, by any version of the rules. A body whose containers are all in its own cluster, or
+    that nothing contains, is not among the findings.
+    """
+    limits = thresholds or NearDuplicateThresholds()
+    held = _Bodies(bodies)
+    ends = {
+        fingerprint: (ordered[0], ordered[-1]) for fingerprint, ordered in held.ordered.items() if ordered
+    }
+    short = {fingerprint for fingerprint in ends if held.size(fingerprint) < SHORT_BODY_SHINGLES}
+
+    end_shingles = {shingle for pair in ends.values() for shingle in pair}
+    short_shingles = {shingle for fingerprint in short for shingle in held.sets[fingerprint]}
+    holders: defaultdict[str, set[str]] = defaultdict(set)
+    for fingerprint in held.fingerprints:
+        for shingle in held.sets[fingerprint] & (end_shingles | short_shingles):
+            holders[shingle].add(fingerprint)
+
+    signatures: dict[str, tuple[int, ...]] = {}
+
+    def banded(left: str, right: str) -> bool:
+        for fingerprint in (left, right):
+            if fingerprint not in signatures:
+                signatures[fingerprint] = minhash_signature(held.sets[fingerprint], seed)
+        return _share_a_band(signatures[left], signatures[right])
+
+    findings: list[CutFinding] = []
+    for cut in sorted(ends):
+        first, last = ends[cut]
+        cut_set, cluster = held.sets[cut], clusters[cut]
+        outside_holders = {
+            holder
+            for holder in holders[first] & holders[last]
+            if holder != cut and held.size(holder) >= len(cut_set) and clusters[holder] != cluster
+        }
+        confirmed: defaultdict[str, list[str]] = defaultdict(list)
+        for holder in held.by_size(outside_holders):
+            if confirms_a_cut(cut_set, held.sets[holder], held.words[cut], held.words[holder], limits):
+                confirmed[clusters[holder]].append(holder)
+
+        lacking_an_end: set[str] = set()
+        if cut in short:
+            sharing: Counter[str] = Counter()
+            for shingle in cut_set:
+                sharing.update(holders[shingle])
+            lacking_an_end = {
+                other
+                for other, shared in sharing.items()
+                if other != cut
+                and other not in outside_holders
+                and clusters[other] != cluster
+                and held.size(other) >= len(cut_set)
+                and shared >= limits.containment * len(cut_set)
+            }
+        if not confirmed and not lacking_an_end:
+            continue
+
+        finding = _finding(held, cut, cluster, outside_holders, confirmed, lacking_an_end, clusters, limits)
+        if cut in short:
+            # Only a short cut's pairing matters: a long pair the banding made would have merged.
+            compared = [holder for members in confirmed.values() for holder in _spread(members)]
+            compared += held.by_size(lacking_an_end)[:MAX_CONTAINERS_COMPARED]
+            finding = replace(
+                finding,
+                banded_with_a_container=any(
+                    banded(cut, holder)
+                    for holder in compared
+                    if len(cut_set & held.sets[holder]) >= limits.containment * len(cut_set)
+                ),
+            )
+        findings.append(finding)
+    return CutCensus(texts=len(held.fingerprints), short_texts=len(short), findings=tuple(findings))
+
+
+def _finding(
+    held: _Bodies,
+    cut: str,
+    cluster: str,
+    outside_holders: Set[str],
+    confirmed: Mapping[str, list[str]],
+    lacking_an_end: Set[str],
+    clusters: Mapping[str, str],
+    limits: NearDuplicateThresholds,
+) -> CutFinding:
+    """The finding for one cut, before the banding check."""
+    size = held.size(cut)
+    is_short = size < SHORT_BODY_SHINGLES
+
+    def finding(
+        outcome: CutOutcome,
+        copies_read: CopiesRead | None = None,
+        kept_apart_by: tuple[KeptApartBy, ...] = (),
+        first_container_over_the_share: bool = False,
+    ) -> CutFinding:
+        return CutFinding(
+            fingerprint=cut,
+            cluster_id=cluster,
+            shingles=size,
+            outcome=outcome,
+            container_clusters=tuple(sorted(confirmed)),
+            containers=frozenset(holder for members in confirmed.values() for holder in members)
+            | frozenset(lacking_an_end),
+            copies_read=copies_read,
+            kept_apart_by=kept_apart_by,
+            first_container_over_the_share=first_container_over_the_share,
+        )
+
+    if not confirmed:
+        return finding(CutOutcome.ENDS_NOT_BOTH_INSIDE)
+    # The short-body step counts the clusters holding both ends before it compares any of them.
+    if is_short and len({clusters[holder] for holder in outside_holders}) > MAX_CONTAINER_CLUSTERS:
+        return finding(CutOutcome.TOO_MANY_HOLDERS)
+    if len(confirmed) > 1:
+        copies_read, kept_apart_by = _read_container_clusters(held, confirmed, limits)
+        outcome = CutOutcome.SEVERAL_CLUSTERS if is_short else CutOutcome.LONG_SEVERAL_CLUSTERS
+        return finding(outcome, copies_read, kept_apart_by)
+    if not is_short:
+        return finding(CutOutcome.LONG_NEVER_PAIRED)
+    (members,) = confirmed.values()
+    within_the_share = [holder for holder in members if size >= MIN_CUT_SHARE * held.size(holder)]
+    if not within_the_share:
+        return finding(CutOutcome.UNDER_MIN_CUT_SHARE)
+    return finding(
+        CutOutcome.WITHIN_THE_RULE, first_container_over_the_share=min(members) not in within_the_share
+    )
+
+
+def _spread(members: Sequence[str]) -> list[str]:
+    """Up to :data:`MAX_CONTAINERS_COMPARED` of `members`, evenly across the order given."""
+    if len(members) <= MAX_CONTAINERS_COMPARED:
+        return list(members)
+    step = (len(members) - 1) / (MAX_CONTAINERS_COMPARED - 1)
+    return [members[round(position * step)] for position in range(MAX_CONTAINERS_COMPARED)]
+
+
+def _read_container_clusters(
+    held: _Bodies, confirmed: Mapping[str, list[str]], limits: NearDuplicateThresholds
+) -> tuple[CopiesRead, tuple[KeptApartBy, ...]]:
+    """Whether a cut's container clusters read as one card, and what split each connected pair."""
+    names = sorted(confirmed)
+    linked: dict[str, set[str]] = {name: set() for name in names}
+    gaps: list[KeptApartBy] = []
+    for position, left in enumerate(names):
+        for right in names[position + 1 :]:
+            best = max(
+                (
+                    (containment(held.sets[a], held.sets[b]), a, b)
+                    for a in _spread(confirmed[left])
+                    for b in _spread(confirmed[right])
+                ),
+                key=lambda scored: (scored[0], scored[1], scored[2]),
+            )
+            if best[0] < SPLIT_COPY_OVERLAP:
+                continue
+            linked[left].add(right)
+            linked[right].add(left)
+            gaps.append(_kept_apart_by(held, best[1], best[2], limits))
+    reached, frontier = {names[0]}, [names[0]]
+    while frontier:
+        for neighbour in linked[frontier.pop()] - reached:
+            reached.add(neighbour)
+            frontier.append(neighbour)
+    if len(reached) < len(names):
+        return CopiesRead.DIFFERENT_CARDS, tuple(sorted(gaps))
+    return CopiesRead.ONE_CARD_SPLIT, tuple(sorted(gaps))
+
+
+def _kept_apart_by(held: _Bodies, left: str, right: str, limits: NearDuplicateThresholds) -> KeptApartBy:
+    left_set, right_set = held.sets[left], held.sets[right]
+    overlap = containment(left_set, right_set)
+    if min(len(left_set), len(right_set)) < SHORT_BODY_SHINGLES:
+        if jaccard(left_set, right_set) >= limits.jaccard:
+            return KeptApartBy.BANDING
+        return KeptApartBy.SHORT_BODY_STEP if overlap >= limits.containment else KeptApartBy.THRESHOLDS
+    if jaccard(left_set, right_set) >= limits.jaccard or overlap >= limits.containment:
+        return KeptApartBy.BANDING
+    return KeptApartBy.THRESHOLDS
+
+
+def _share_a_band(left: Sequence[int], right: Sequence[int]) -> bool:
+    return any(
+        left[band * LSH_ROWS_PER_BAND : (band + 1) * LSH_ROWS_PER_BAND]
+        == right[band * LSH_ROWS_PER_BAND : (band + 1) * LSH_ROWS_PER_BAND]
+        for band in range(LSH_BANDS)
+    )
+
+
+def tally_cuts(findings: Sequence[CutFinding]) -> dict[str, object]:
+    """The findings as counts, in the shape the diagnosis prints."""
+    by_outcome: Counter[str] = Counter(finding.outcome.value for finding in findings)
+    several = [finding for finding in findings if finding.copies_read is not None]
+
+    def read(short: bool) -> dict[str, object]:
+        chosen = [finding for finding in several if finding.is_short is short]
+        split = [finding for finding in chosen if finding.copies_read is CopiesRead.ONE_CARD_SPLIT]
+        return {
+            CopiesRead.ONE_CARD_SPLIT.value: len(split),
+            CopiesRead.DIFFERENT_CARDS.value: len(chosen) - len(split),
+            "one card split, by what kept the copies apart": dict(
+                sorted(Counter(gap.value for finding in split for gap in set(finding.kept_apart_by)).items())
+            ),
+        }
+
+    short_findings = [finding for finding in findings if finding.is_short]
+    within = [finding for finding in findings if finding.outcome is CutOutcome.WITHIN_THE_RULE]
+    return {
+        "bodies_with_a_container_outside_their_cluster": len(findings),
+        "by_outcome": {outcome.value: by_outcome.get(outcome.value, 0) for outcome in CutOutcome},
+        "short_in_several_clusters_read": read(short=True),
+        "long_in_several_clusters_read": read(short=False),
+        "short_within_the_rule_first_container_over_the_share": sum(
+            finding.first_container_over_the_share for finding in within
+        ),
+        "short_banded_with_a_container": dict(
+            sorted(
+                Counter(
+                    finding.outcome.value for finding in short_findings if finding.banded_with_a_container
+                ).items()
+            )
+        ),
+    }
+
+
+def explain_divided_part(part: Set[str], rest: Set[str], findings: Mapping[str, CutFinding]) -> DividedPart:
+    """Why `part` and `rest`, once one cluster, are apart: the short cut that used to join them.
+
+    `part` and `rest` are the exact fingerprints of two sides of an earlier cluster, and `findings`
+    is :func:`diagnose_cuts` over the later placement, by fingerprint. Under the rules before the
+    short-body step the only join that step removed was a short body merged with a body the banding
+    paired it with, on containment. So the part either holds such a cut, whose containers are in
+    the rest, or was joined to the rest only through such a cut on the other side.
+    """
+    for kind, cuts, others in (
+        (DividedPart.LEFT_OUT, part, rest),
+        (DividedPart.THROUGH_A_CUT, rest, part),
+    ):
+        for cut in sorted(cuts):
+            finding = findings.get(cut)
+            if finding is not None and finding.is_short and finding.containers & others:
+                return DividedPart(kind, finding.outcome, finding.copies_read, finding.kept_apart_by)
+    return DividedPart(DividedPart.UNEXPLAINED, None, None, ())
+
+
+# ------------------------------------------------------------------------------------------------
+# One cluster from the inside
+# ------------------------------------------------------------------------------------------------
+
+
+def cluster_shape(
+    cluster_id: str,
+    bodies: Mapping[str, str],
+    copies: Mapping[str, int],
+    thresholds: NearDuplicateThresholds | None = None,
+) -> ClusterShape:
+    """Describe one cluster: `bodies` are its distinct texts and `copies` how many cards hold each."""
+    limits = thresholds or NearDuplicateThresholds()
+    held = _Bodies(bodies)
+    texts = [fingerprint for fingerprint in held.fingerprints if held.sets[fingerprint]]
+    nothing = under_half = half_or_more = matching = 0
+    alike: dict[str, set[str]] = {text: set() for text in texts}
+    matches: dict[str, set[str]] = {text: set() for text in texts}
+    disjoint: dict[str, set[str]] = {text: set() for text in texts}
+    for position, left in enumerate(texts):
+        for right in texts[position + 1 :]:
+            overlap = containment(held.sets[left], held.sets[right])
+            if overlap == 0:
+                nothing += 1
+                disjoint[left].add(right)
+                disjoint[right].add(left)
+            elif overlap < SPLIT_COPY_OVERLAP:
+                under_half += 1
+            else:
+                half_or_more += 1
+                alike[left].add(right)
+                alike[right].add(left)
+            if _would_match(held, left, right, limits):
+                matching += 1
+                matches[left].add(right)
+                matches[right].add(left)
+
+    groups = _components(texts, alike)
+    nobody: set[str] = set()
+    largest = max(groups, key=lambda group: (sum(copies[text] for text in group), len(group)), default=nobody)
+    most_read = min(texts, key=lambda text: (-copies[text], text), default=None)
+    apart = disjoint[most_read] if most_read is not None else nobody
+    bridging = unrelated = fragments = holding = 0
+    whole = len(_components(texts, matches))
+    for text in texts:
+        remaining = [other for other in texts if other != text]
+        pieces = _components(remaining, matches)
+        if len(pieces) <= whole:
+            continue
+        bridging += 1
+        if any(
+            disjoint[member] & other
+            for position, piece in enumerate(pieces)
+            for other in pieces[position + 1 :]
+            for member in piece
+        ):
+            unrelated += 1
+            fragments += all(held.size(other) > held.size(text) for other in matches[text])
+            holding += all(held.size(other) < held.size(text) for other in matches[text])
+    words = sorted(len(held.words[text]) for text in texts)
+    return ClusterShape(
+        cluster_id=cluster_id,
+        cards=sum(copies.values()),
+        distinct_texts=len(held.fingerprints),
+        short_texts=sum(held.size(text) < SHORT_BODY_SHINGLES for text in texts),
+        words_smallest=words[0] if words else 0,
+        words_median=int(statistics.median(words)) if words else 0,
+        words_largest=words[-1] if words else 0,
+        pairs=nothing + under_half + half_or_more,
+        pairs_sharing_nothing=nothing,
+        pairs_sharing_under_half=under_half,
+        pairs_sharing_half_or_more=half_or_more,
+        pairs_matching=matching,
+        groups_sharing_half=len(groups),
+        largest_group_texts=len(largest),
+        largest_group_cards=sum(copies[text] for text in largest),
+        texts_sharing_nothing_with_most_read=len(apart),
+        cards_sharing_nothing_with_most_read=sum(copies[text] for text in apart),
+        bridging_texts=bridging,
+        bridges_between_unrelated_parts=unrelated,
+        unrelated_bridges_that_are_fragments=fragments,
+        unrelated_bridges_that_hold_the_parts=holding,
+    )
+
+
+def _would_match(held: _Bodies, left: str, right: str, limits: NearDuplicateThresholds) -> bool:
+    """Whether the rules confirm this pair when they compare it, in either direction."""
+    left_set, right_set = held.sets[left], held.sets[right]
+    if jaccard(left_set, right_set) >= limits.jaccard:
+        return True
+    smaller, larger = sorted((left, right), key=lambda text: (held.size(text), text))
+    ordered = held.ordered[smaller]
+    if not (ordered[0] in held.sets[larger] and ordered[-1] in held.sets[larger]):
+        return held.size(smaller) >= SHORT_BODY_SHINGLES and (
+            containment(left_set, right_set) >= limits.containment
+        )
+    return confirms_a_cut(
+        held.sets[smaller], held.sets[larger], held.words[smaller], held.words[larger], limits
+    )
+
+
+def _components(nodes: Sequence[str], edges: Mapping[str, Set[str]]) -> list[set[str]]:
+    kept = set(nodes)
+    seen: set[str] = set()
+    components: list[set[str]] = []
+    for node in nodes:
+        if node in seen:
+            continue
+        group, frontier = {node}, [node]
+        while frontier:
+            for neighbour in (edges[frontier.pop()] & kept) - group:
+                group.add(neighbour)
+                frontier.append(neighbour)
+        seen |= group
+        components.append(group)
+    return components

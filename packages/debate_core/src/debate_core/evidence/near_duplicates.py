@@ -115,6 +115,7 @@ __all__ = [
     "SHORT_BODY_SHINGLES",
     "NearDuplicateThresholds",
     "cluster_near_duplicates",
+    "confirms_a_cut",
     "contained_but_for_one_word",
     "containment",
     "jaccard",
@@ -249,6 +250,25 @@ def contained_but_for_one_word(short: Sequence[str], long: Sequence[str]) -> boo
 _ONE_WORD_CHANGES: Final = ((1, 1), (1, 2), (2, 1), (0, 1), (1, 0))
 
 
+def confirms_a_cut(
+    cut_set: frozenset[str],
+    holder_set: frozenset[str],
+    cut_words: Sequence[str],
+    holder_words: Sequence[str],
+    limits: NearDuplicateThresholds,
+) -> bool:
+    """Whether a body that holds both ends of `cut` is confirmed to contain it.
+
+    At least the containment threshold of the cut's shingles are in the holder, or the cut is short
+    and in it but for one word. The one test the short-body step and
+    :mod:`debate_core.evidence.cluster_diagnosis` both apply, so the diagnosis cannot drift from
+    the rule it explains.
+    """
+    if len(cut_set & holder_set) >= limits.containment * len(cut_set):
+        return True
+    return len(cut_set) < SHORT_BODY_SHINGLES and contained_but_for_one_word(cut_words, holder_words)
+
+
 def cluster_near_duplicates(
     bodies: Mapping[str, str],
     thresholds: NearDuplicateThresholds | None = None,
@@ -343,9 +363,7 @@ def _join_short_bodies_to_their_one_container(
         for members in others.values():
             for holder in members:
                 holder_set = shingle_sets[holder]
-                if len(short_set & holder_set) >= limits.containment * len(
-                    short_set
-                ) or contained_but_for_one_word(words_of(short), words_of(holder)):
+                if confirms_a_cut(short_set, holder_set, words_of(short), words_of(holder), limits):
                     found.add(holder)
                     if len(short_set) >= MIN_CUT_SHARE * len(holder_set):
                         joinable.add(cluster)

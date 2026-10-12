@@ -25,6 +25,18 @@ the store's `occurrences.jsonl` holds now, and *before* is one of:
 
 `sample --divided` shows the opposite change: pairs that shared a cluster before and no longer do.
 
+**Inside one placement** (`v1-e31-t11-long-card-splits-and-fragment-merges`), with no *before*
+needed, so both take seconds on the store's own table:
+
+* **`diagnose`** prints counts only: every body that a body outside its cluster contains and which
+  limit kept it out, whether the clusters holding a short cut read as one card that was split or
+  as different cards, and the shape of the largest clusters from the inside. With `--before` or
+  `--before-rules` it also says, for each divided pair, why its part is no longer with the rest.
+  `--preview` diagnoses the placement the checked-out rules would make instead of the store's.
+* **`sample --cluster ID`** (or `--largest RANK`) draws pairs of different texts from one cluster,
+  for a person to say whether a large cluster is one card. `--least-alike` shows the pairs that
+  share the least text first, which is where two cards merged into one cluster would be.
+
 **Operator-run on the real store.** It writes nothing to the store or the repository.
 `--before-rules` copies source files, never card text, to a temporary directory it removes, and
 `counts --save-before` writes digests and cluster ids where it is told to. It never
@@ -36,6 +48,8 @@ shows can land in a file or a pipe. The store itself holds no path, school or te
     uv run python scripts/compare_card_clusters.py counts --caselist openev
     uv run python scripts/compare_card_clusters.py counts --caselist hsld26 --before ~/saved/hsld26.jsonl
     uv run python scripts/compare_card_clusters.py sample --caselist hsld26 --before-rules 8c082b5
+    uv run python scripts/compare_card_clusters.py diagnose --caselist openev
+    uv run python scripts/compare_card_clusters.py sample --caselist hspolicy26 --largest 1 --count 10
 """
 
 from __future__ import annotations
@@ -54,6 +68,7 @@ from collections import Counter, defaultdict
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from debate_core.application.caselist_card_stats import CaselistCardStatsService
 from debate_core.application.ports.parsed_store import (
@@ -65,15 +80,22 @@ from debate_core.domain.debate_files import ParsedCard
 from debate_core.integrations.local.parsed_store import LocalParsedStore
 from debate_core.testing.fakes import build_fake_caselist_repository
 
+if TYPE_CHECKING:
+    from debate_core.evidence.cluster_diagnosis import CutFinding
+
 __all__ = [
     "ABSORBED_BANDS",
     "MATCHING_RULE_MODULES",
     "ClusterChange",
     "Joined",
     "Placement",
+    "cluster_pairs",
     "common_cards",
     "compare",
+    "diagnose",
+    "divided_parts",
     "joined_pairs",
+    "largest_clusters",
     "main",
     "placements_now",
     "placements_under_rules",
@@ -431,6 +453,170 @@ def joined_pairs(before: Mapping[CardKey, Placement], after: Mapping[CardKey, Pl
 
 
 # ------------------------------------------------------------------------------------------------
+# Diagnosing one placement
+# ------------------------------------------------------------------------------------------------
+
+
+def full_bodies(
+    cards: Mapping[CardKey, ParsedCard], placed: Mapping[CardKey, Placement]
+) -> tuple[dict[str, str], dict[str, str]]:
+    """The distinct FULL bodies of `cards`, and the cluster each was placed in, by exact fingerprint."""
+    bodies: dict[str, str] = {}
+    clusters: dict[str, str] = {}
+    for key in sorted(cards):
+        placement = placed[key]
+        if placement.completeness == "FULL" and placement.exact_fingerprint not in bodies:
+            bodies[placement.exact_fingerprint] = cards[key].evidence_text
+            clusters[placement.exact_fingerprint] = placement.cluster_id
+    return bodies, clusters
+
+
+def largest_clusters(placed: Mapping[CardKey, Placement], count: int) -> list[tuple[str, list[CardKey]]]:
+    """The `count` clusters with the most card positions, largest first; ties by cluster id."""
+    members = _members(placed)
+    ranked = sorted(members, key=lambda name: (-len(members[name]), name))
+    return [(name, members[name]) for name in ranked[:count]]
+
+
+def divided_parts(
+    before: Mapping[CardKey, Placement], after: Mapping[CardKey, Placement]
+) -> list[tuple[set[str], set[str], bool]]:
+    """One entry per divided pair: the FULL texts of the part that left, of the rest, and whether
+    the part holds a FULL card at all.
+
+    The same pairs `sample --divided` draws from: in an earlier cluster now in several, the part
+    with the most cards is the host and each other part left it. The rest is every other part.
+    """
+    entries: list[tuple[set[str], set[str], bool]] = []
+    before, after = common_cards(before, after)
+    for _, keys in sorted(_members(before).items()):
+        parts: defaultdict[str, list[CardKey]] = defaultdict(list)
+        for key in keys:
+            parts[after[key].cluster_id].append(key)
+        if len(parts) < 2:
+            continue
+        host = max(parts, key=lambda name: (len(parts[name]), name))
+        texts = {
+            name: {after[key].exact_fingerprint for key in members if after[key].completeness == "FULL"}
+            for name, members in parts.items()
+        }
+        for name in sorted(parts):
+            if name == host:
+                continue
+            rest = set().union(*(texts[other] for other in parts if other != name))
+            entries.append((texts[name], rest, bool(texts[name])))
+    return entries
+
+
+def diagnose(
+    cards: Mapping[CardKey, ParsedCard],
+    placed: Mapping[CardKey, Placement],
+    *,
+    before: Mapping[CardKey, Placement] | None = None,
+    largest: int = 3,
+    show_cluster_ids: bool = False,
+) -> dict[str, object]:
+    """Why `placed` put the stored cards where it did. Counts only, and digests when asked for."""
+    # Imported here, not at the top: `--before-rules` runs this file against the matching modules
+    # of an earlier commit, which the diagnosis may not import from.
+    from debate_core.evidence.cluster_diagnosis import cluster_shape, diagnose_cuts, tally_cuts
+
+    bodies, clusters = full_bodies(cards, placed)
+    census = diagnose_cuts(bodies, clusters)
+    findings = census.findings
+    result: dict[str, object] = {
+        "cards": len(placed),
+        "full_texts": census.texts,
+        "short_full_texts": census.short_texts,
+        "clusters": len({placement.cluster_id for placement in placed.values()}),
+        "cuts": tally_cuts(findings),
+    }
+    if before is not None:
+        result["divided_pairs"] = _divided_tally(divided_parts(before, placed), findings)
+    shapes: list[dict[str, object]] = []
+    for rank, (cluster_id, keys) in enumerate(largest_clusters(placed, largest), start=1):
+        full = [key for key in keys if placed[key].completeness == "FULL"]
+        copies = Counter(placed[key].exact_fingerprint for key in full)
+        shape = cluster_shape(cluster_id, {text: bodies[text] for text in copies}, copies).as_json()
+        if not show_cluster_ids:
+            del shape["cluster_id"]
+        shapes.append({"rank": rank, "cards_not_full": len(keys) - len(full), **shape})
+    result["largest_clusters"] = shapes
+    return result
+
+
+def _divided_tally(
+    parts: Sequence[tuple[set[str], set[str], bool]], findings: Sequence[CutFinding]
+) -> dict[str, object]:
+    from debate_core.evidence.cluster_diagnosis import explain_divided_part
+
+    by_fingerprint = {finding.fingerprint: finding for finding in findings}
+    reasons: Counter[tuple[str, str, str, tuple[str, ...]]] = Counter()
+    for part, rest, has_full_card in parts:
+        if not has_full_card:
+            reasons[("the part holds no full card", "", "", ())] += 1
+            continue
+        why = explain_divided_part(part, rest, by_fingerprint)
+        reasons[
+            (
+                why.kind,
+                why.outcome.value if why.outcome else "",
+                why.copies_read.value if why.copies_read else "",
+                tuple(sorted({gap.value for gap in why.kept_apart_by})),
+            )
+        ] += 1
+    return {
+        "pairs": len(parts),
+        "by_reason": [
+            {
+                "pairs": count,
+                "kind": kind,
+                "outcome": outcome or None,
+                "containers_read": read or None,
+                "copies_kept_apart_by": list(gaps),
+            }
+            for (kind, outcome, read, gaps), count in sorted(
+                reasons.items(), key=lambda item: (-item[1], item[0])
+            )
+        ],
+    }
+
+
+def cluster_pairs(
+    cards: Mapping[CardKey, ParsedCard],
+    placed: Mapping[CardKey, Placement],
+    keys: Sequence[CardKey],
+    *,
+    count: int,
+    seed: int,
+    least_alike: bool,
+) -> tuple[list[Joined], int]:
+    """Pairs of different texts from one cluster, and how many such pairs there are.
+
+    One card stands for each text: the first at that text. Drawn at random, or with `least_alike`
+    the pairs sharing the smallest part of the smaller text first, ties in a random order.
+    """
+    first: dict[str, CardKey] = {}
+    for key in sorted(keys):
+        first.setdefault(placed[key].exact_fingerprint, key)
+    texts = sorted(first)
+    pairs = [(left, right) for position, left in enumerate(texts) for right in texts[position + 1 :]]
+    chooser = random.Random(seed)
+    chooser.shuffle(pairs)
+    if least_alike:
+        from debate_core.evidence.near_duplicates import containment, shingles
+
+        sets = {text: shingles(cards[first[text]].evidence_text) for text in texts}
+        pairs.sort(key=lambda pair: containment(sets[pair[0]], sets[pair[1]]))
+    drawn: list[Joined] = []
+    for left, right in pairs[:count]:
+        abbreviated = sum(placed[first[text]].completeness != "FULL" for text in (left, right))
+        kind = ("full with full", "abbreviated with full", "abbreviated with abbreviated")[abbreviated]
+        drawn.append(Joined(kind=kind, joiner=first[left], host=first[right]))
+    return drawn, len(pairs)
+
+
+# ------------------------------------------------------------------------------------------------
 # The by-eye sample
 # ------------------------------------------------------------------------------------------------
 
@@ -501,6 +687,89 @@ def _counts(arguments: argparse.Namespace) -> int:
     return 0
 
 
+def _diagnose(arguments: argparse.Namespace) -> int:
+    from debate_core.evidence.fingerprints import FINGERPRINT_VERSION
+
+    store = LocalParsedStore(arguments.data_dir)
+    results: dict[str, dict[str, object]] = {}
+    for caselist in arguments.caselist:
+        started = time.monotonic()
+        version = current_version(store, caselist)
+        held = read_placements(store.root / caselist / version / OCCURRENCES_NAME)
+        cards = read_cards(store, caselist, version, held)
+        before: dict[CardKey, Placement] | None = None
+        if arguments.before is not None:
+            saved: Path = arguments.before
+            before = read_placements(saved / f"{caselist}.jsonl" if saved.is_dir() else saved)
+        elif arguments.before_rules is not None:
+            before = placements_under_rules(_module_at(arguments.before_rules), arguments.data_dir, caselist)
+        placed = placements_now(cards, FINGERPRINT_VERSION) if arguments.preview else held
+        if arguments.preview and before is None:
+            before = held
+        results[caselist] = {
+            "version_directory": version,
+            "fingerprint_version": ", ".join(sorted({p.fingerprint_version for p in placed.values()})),
+            "placement": "the checked-out rules, in memory" if arguments.preview else "the store's table",
+            **diagnose(
+                cards,
+                placed,
+                before=before,
+                largest=arguments.largest_clusters,
+                show_cluster_ids=arguments.show_cluster_ids,
+            ),
+            "seconds": round(time.monotonic() - started, 1),
+        }
+    print(json.dumps(results, indent=2, sort_keys=True))
+    return 0
+
+
+def _resolve_cluster(placed: Mapping[CardKey, Placement], cluster: str | None, rank: int | None) -> str:
+    """The cluster id `--cluster` (an id, or the start of one) or `--largest` (a rank) names."""
+    if rank is not None:
+        ranked = largest_clusters(placed, rank)
+        if rank < 1 or len(ranked) < rank:
+            raise SystemExit(f"--largest {rank}: the placement has {len(_members(placed))} clusters")
+        return ranked[rank - 1][0]
+    assert cluster is not None  # noqa: S101 - argparse requires one of the two
+    matching = sorted({p.cluster_id for p in placed.values() if p.cluster_id.startswith(cluster.lower())})
+    if len(matching) != 1:
+        raise SystemExit(f"--cluster: {len(matching)} cluster ids start with what was given; one must")
+    return matching[0]
+
+
+def _sample_cluster(arguments: argparse.Namespace, store: LocalParsedStore, seed: int) -> int:
+    """`sample --cluster` and `sample --largest`: pairs of different texts inside one cluster."""
+    if len(arguments.caselist) != 1:
+        raise SystemExit("--cluster and --largest read one caselist: give --caselist once")
+    (caselist,) = arguments.caselist
+    print(f"Reading {caselist} ...", flush=True)
+    version = current_version(store, caselist)
+    placed = read_placements(store.root / caselist / version / OCCURRENCES_NAME)
+    cluster_id = _resolve_cluster(placed, arguments.cluster, arguments.largest)
+    keys = _members(placed)[cluster_id]
+    rank = 1 + sum(len(members) > len(keys) for members in _members(placed).values())
+    cards = read_cards(store, caselist, version, keys)
+    drawn, available = cluster_pairs(
+        cards, placed, keys, count=arguments.count, seed=seed, least_alike=arguments.least_alike
+    )
+    pairs = [(caselist, pair, cards[pair.joiner], cards[pair.host]) for pair in drawn]
+    tallies = run_sample(
+        pairs,
+        ask=input,
+        show=lambda text: print(text, end="", flush=True),
+        change="In one cluster now.",
+    )
+    texts = len({placed[key].exact_fingerprint for key in keys})
+    how = "the least alike" if arguments.least_alike else "at random"
+    print(
+        f"Drew {len(pairs)} of {available} pairs of different texts, {how}, from {caselist}'s cluster of "
+        f"{len(keys)} cards and {texts} texts (size rank {rank}), seed {seed}."
+    )
+    for (kind, verdict), count in sorted(tallies.items()):
+        print(f"  {kind}: {verdict}: {count}")
+    return 0
+
+
 def _sample(arguments: argparse.Namespace) -> int:
     if not (sys.stdin.isatty() and sys.stdout.isatty()):
         print(
@@ -509,6 +778,14 @@ def _sample(arguments: argparse.Namespace) -> int:
         return 2
     store = LocalParsedStore(arguments.data_dir)
     seed = arguments.seed if arguments.seed is not None else random.SystemRandom().randrange(10**9)
+    if arguments.cluster is not None or arguments.largest is not None:
+        if arguments.divided or arguments.before is not None or arguments.before_rules is not None:
+            raise SystemExit(
+                "--cluster and --largest read one placement: no --before, --before-rules or --divided"
+            )
+        return _sample_cluster(arguments, store, seed)
+    if arguments.least_alike:
+        raise SystemExit("--least-alike orders the pairs inside one cluster: give --cluster or --largest")
     candidates: list[tuple[str, str, Joined]] = []
     counts: dict[str, dict[str, object]] = {}
     for caselist in arguments.caselist:
@@ -542,7 +819,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="The data directory whose parsed/ store is read. Default: the dev data directory.",
     )
     commands = parser.add_subparsers(dest="command", required=True)
-    for name, handler in (("counts", _counts), ("sample", _sample), ("place", _place)):
+    for name, handler in (
+        ("counts", _counts),
+        ("sample", _sample),
+        ("diagnose", _diagnose),
+        ("place", _place),
+    ):
         command = commands.add_parser(name)
         command.add_argument("--caselist", action="append", required=True, help="Repeat for several.")
         command.set_defaults(handler=handler)
@@ -573,6 +855,43 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "--divided",
                 action="store_true",
                 help="Draw pairs that shared a cluster before and no longer do.",
+            )
+            inside = command.add_mutually_exclusive_group()
+            inside.add_argument(
+                "--cluster",
+                metavar="ID",
+                help="Draw pairs of different texts from this cluster of the store's table (an id, or "
+                "the start of one that no other id shares).",
+            )
+            inside.add_argument(
+                "--largest",
+                type=int,
+                metavar="RANK",
+                help="The same, for the cluster with the RANK-th most cards: 1 is the largest.",
+            )
+            command.add_argument(
+                "--least-alike",
+                action="store_true",
+                help="With --cluster or --largest: the pairs sharing the least text first, not at random.",
+            )
+        if name == "diagnose":
+            command.add_argument(
+                "--preview",
+                action="store_true",
+                help="Diagnose the placement the checked-out rules would make, not the store's table. "
+                "Takes about as long as a rebuild.",
+            )
+            command.add_argument(
+                "--largest-clusters",
+                type=int,
+                default=3,
+                metavar="COUNT",
+                help="How many of the largest clusters to describe from the inside. Default 3.",
+            )
+            command.add_argument(
+                "--show-cluster-ids",
+                action="store_true",
+                help="Print each described cluster's id, a digest, for `sample --cluster`.",
             )
     arguments = parser.parse_args(argv)
     handler: Callable[[argparse.Namespace], int] = arguments.handler

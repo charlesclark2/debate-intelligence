@@ -1100,6 +1100,7 @@ class TestACiteWhollyInsideABracket:
         assert (card.full_cite, card.evidence_text, card.completeness) == (text, body, CardCompleteness.FULL)
         assert document.sections[1].match.rule_id == f"{BRACKETED_BEFORE_THE_BODY}:heuristic-shrunk-body-text"
         assert document.sections[1].match.match_source is StyleMatchSource.HEURISTIC
+        assert document.sections[1].match.confidence == 0.6
 
     def test_at_reading_size_with_nothing_under_it_the_tag_is_still_a_tag(
         self, parser: DebateDocxParser

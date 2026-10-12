@@ -460,6 +460,7 @@ def test_the_dry_run_lists_a_later_upload_by_digest_caselist_and_snapshot_and_ex
             "of_sha256": FIRST_VERSION,
             "caselist": SYNTHETIC_CASELIST,
             "snapshots": ["2026-09-08", "2026-09-15"],
+            "inbox_snapshots": [],
             "openev_ids": [],
             "same_path_by": "caselist_path",
             "outcome": "removed",

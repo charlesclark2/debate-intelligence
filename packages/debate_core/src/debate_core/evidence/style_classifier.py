@@ -542,11 +542,11 @@ def _wiki_cite_entry_match(
 
 
 def _opens_in_bold(paragraph: ParagraphDescription) -> bool:
-    """Whether the paragraph's first visible run is bold, by its own setting or the paragraph mark's."""
-    visible = paragraph.visible_runs
-    if not visible:
-        return False
-    first = visible[0]
+    """Whether the paragraph's first visible run is bold, by its own setting or the paragraph mark's.
+
+    Asked only of a paragraph that opens with a name and a year, so it has a visible run.
+    """
+    first = paragraph.visible_runs[0]
     return first.bold if first.bold is not None else bool(paragraph.paragraph_bold)
 
 

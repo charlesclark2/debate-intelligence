@@ -31,8 +31,8 @@ own cluster** that no container inside its cluster accounts for, and says what k
   compared.
 
 **Witnesses.** As in the clusterer since `card-fingerprint-v3`, containers that hold one another
-count once. When every confirmed container outside the cluster of the smallest one holds that
-smallest one, the cut has one witness (:attr:`CutFinding.containers_nested`). And a container
+count once. When every confirmed container outside the cluster of the smallest one holds a
+container inside that cluster, the cut has one witness (:attr:`CutFinding.containers_nested`). And a container
 outside the cut's cluster that holds a container *inside* it is accounted for: a cut that has
 joined its smallest container is not reported for the larger bodies that container is a cut of.
 
@@ -150,7 +150,7 @@ class CutFinding:
     """Every such body outside its cluster that was found to contain it, by either test."""
     containers_nested: bool = False
     """Its containers are in several clusters, and every one outside the cluster of the smallest
-    holds that smallest one: one witness."""
+    holds a container inside that cluster: one witness."""
     copies_read: CopiesRead | None = None
     """For a cut with containers in several clusters: how those clusters read."""
     kept_apart_by: tuple[KeptApartBy, ...] = ()
@@ -403,16 +403,19 @@ def _finding(
     is_short = size < SHORT_BODY_SHINGLES
     everything = held.by_size([holder for members in confirmed.values() for holder in members])
     smallest = everything[0] if everything else None
-    nested = (
-        smallest is not None
-        and len(confirmed) > 1
-        and all(
-            confirms_a_cut(
-                held.sets[smallest], held.sets[holder], held.words[smallest], held.words[holder], limits
+    home = [
+        holder for holder in everything if smallest is not None and clusters[holder] == clusters[smallest]
+    ]
+    nested = len(confirmed) > 1 and all(
+        any(
+            held.size(inside) <= held.size(holder)
+            and confirms_a_cut(
+                held.sets[inside], held.sets[holder], held.words[inside], held.words[holder], limits
             )
-            for holder in everything
-            if clusters[holder] != clusters[smallest]
+            for inside in home
         )
+        for holder in everything
+        if holder not in home
     )
     copies_read, kept_apart_by = (
         _read_container_clusters(held, confirmed, limits) if len(confirmed) > 1 else (None, ())

@@ -688,6 +688,47 @@ def test_a_short_cut_inside_two_overlapping_copies_joins_neither() -> None:
     assert partition(WHOLE, first, second, cut) == [[0], [1], [2], [3]]
 
 
+def test_a_body_in_the_larger_copys_cluster_that_does_not_hold_the_smaller_is_a_second_witness() -> None:
+    """An 800-word card and a near-copy of it, one cluster by Jaccard, in which the passage the
+    90-word copy was cut from is reworded around the cut. The card holds the copy; its near-copy
+    holds the cut and not the copy. Every container outside the smaller copy's cluster has to
+    account for itself, not just the smallest of them, so the cut is inside two and joins neither."""
+    card = numbered("word", 800)
+    copy = card[100:190]
+    cut = copy[10:40]
+    reworded = [
+        *card[:100],
+        *numbered("re", 10),
+        *cut,
+        *numbered("worded", 50),
+        *card[190:],
+        *numbered("z", 5),
+    ]
+    assert len(reworded) > len(card)
+    assert jaccard(frozenset(word_shingles(card)), frozenset(word_shingles(reworded))) >= 0.8
+    assert partition(card, reworded, copy) == [[0, 1], [2]]
+    assert partition(card, reworded, copy, cut) == [[0, 1], [2], [3]]
+    assert partition(card, copy, cut) == [[0], [1, 2]]  # and without the near-copy, it joins
+
+
+@pytest.mark.parametrize("twin_sorts_first", [False, True])
+def test_two_copies_of_one_size_in_one_cluster_do_not_leave_the_outcome_to_a_digest(
+    twin_sorts_first: bool,
+) -> None:
+    """The 90-word copy and a twin of it with a different ending: 77 of 86 shingles shared, one
+    cluster by Jaccard, and neither holds the other. The whole card holds the copy and not the
+    twin. Whichever of the two sorts first, the card holds a container of the cut inside their
+    cluster, so it is no second witness and the cut joins them."""
+    twin = [*LONG_COPY[:81], *numbered("ending", 9)]
+    shared = len(frozenset(word_shingles(twin)) & frozenset(word_shingles(LONG_COPY)))
+    assert (shared, len(word_shingles(twin))) == (77, 86)  # Jaccard 77/95, containment under 0.9
+    keys = {"copy": "2", "twin": "1" if twin_sorts_first else "3", "whole": "4", "cut": "5"}
+    bodies = {keys["copy"]: LONG_COPY, keys["twin"]: twin, keys["whole"]: WHOLE, keys["cut"]: CUT_OF_THE_COPY}
+    assert keyed_partition(bodies) == sorted(
+        [sorted([keys["copy"], keys["twin"], keys["cut"]]), [keys["whole"]]]
+    )
+
+
 def test_a_short_cut_under_a_quarter_of_the_smallest_nested_copy_stays_out() -> None:
     cut = LONG_COPY[10:30]  # 16 shingles of 86
     assert len(word_shingles(cut)) < MIN_CUT_SHARE * len(word_shingles(LONG_COPY))

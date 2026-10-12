@@ -60,8 +60,10 @@ A short body is never merged on containment through the banding. Instead:
   container that counts as a *witness* is in that one cluster. A body inside two clusters is a cut
   of either, so it stays out of both; this is the rule abbreviated disclosures are linked by.
 * **Containers that hold one another are one witness** (`v1-e31-t11`). When every confirmed
-  container outside the cluster of the smallest one also holds that smallest one, by the same test
-  a cut is confirmed by, the smallest is the only witness and the short body joins its cluster.
+  container outside the cluster of the smallest one also holds a container inside that cluster, by
+  the same test a cut is confirmed by, the smallest is the only witness and the short body joins
+  its cluster. "A container inside that cluster", not "the smallest": two copies of one size in
+  one cluster are told apart only by fingerprint, and a digest must not decide the outcome.
   A cut of a team's ninety-word copy is inside the three-hundred-word card that copy was cut from
   as well; if the banding never paired those two long bodies they are two clusters, but the longer
   says nothing about the cut that the shorter did not. Two containers neither of which holds the
@@ -373,24 +375,29 @@ def _join_short_bodies_to_their_one_container(
         """The containers of `short` that each say something of their own, smallest first.
 
         The smallest confirmed container of each cluster in `others`; or, when every confirmed
-        container outside the cluster of the smallest of them all holds that smallest one, it alone.
+        container outside the cluster of the smallest of them all holds a container of `short`
+        inside that cluster, that smallest one alone.
         """
-        smallest_in_each = by_size(
-            confirmed
-            for members in others.values()
-            if (confirmed := next((holder for holder in by_size(members) if holds(holder, short)), None))
-        )
+        confirmed = {
+            cluster: held
+            for cluster, members in others.items()
+            if (held := [holder for holder in by_size(members) if holds(holder, short)])
+        }
+        smallest_in_each = by_size(held[0] for held in confirmed.values())
         if len(smallest_in_each) < 2:
             return smallest_in_each
-        smallest = smallest_in_each[0]
+        home = next(held for held in confirmed.values() if held[0] == smallest_in_each[0])
         nested = all(
-            holds(holder, smallest)
-            for members in others.values()
-            if smallest not in members
-            for holder in members
-            if holds(holder, short)
+            any(
+                holds(holder, inside)
+                for inside in home
+                if len(shingle_sets[inside]) <= len(shingle_sets[holder])
+            )
+            for held in confirmed.values()
+            if held is not home
+            for holder in held
         )
-        return [smallest] if nested else smallest_in_each
+        return smallest_in_each[:1] if nested else smallest_in_each
 
     # Per cluster as the banding left it: the witnesses of its short bodies, and whether any short
     # body is large enough to join. `None` marks a cluster with a body too common to compare.

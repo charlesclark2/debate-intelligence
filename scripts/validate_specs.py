@@ -53,6 +53,10 @@ CRITERIA_FIELDS = {
     "custom": {"name"},
 }
 RELEASE_FILE_NAME = re.compile(r"^v(\d+)\.(\d+)$")
+# libyaml's parser where PyYAML was built with it, which every wheel PyYAML publishes is; the
+# pure-Python one otherwise. Both are the safe loader and build the same documents. The spec tree
+# is 3 MB of YAML: one read of it took 1.5 s in pure Python and takes 0.2 s this way (v1-e01-t27).
+SAFE_LOADER = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
 
 
 def release_order(specs: Path) -> list[str]:
@@ -103,9 +107,14 @@ class SpecTree:
         return (self.goals.get(name, {}).get("status") or {}).get("phase", "Pending")
 
 
+def load_documents(path: Path) -> list[dict]:
+    """Every YAML document in one spec file, in order; an empty document is left out."""
+    return [d for d in yaml.load_all(path.read_text(), Loader=SAFE_LOADER) if d is not None]
+
+
 def load(tree: SpecTree, path: Path) -> list[dict]:
     try:
-        docs = [d for d in yaml.safe_load_all(path.read_text()) if d is not None]
+        docs = load_documents(path)
     except yaml.YAMLError as exc:
         tree.err(path, f"YAML parse error: {exc}")
         return []

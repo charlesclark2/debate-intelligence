@@ -71,7 +71,7 @@ spec:
         Working agreement 1 and the comment at the top of `ci.yml` state the new target and
         how the test job is split, and say how to rebalance the split when it drifts.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

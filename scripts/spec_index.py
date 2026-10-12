@@ -28,11 +28,10 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
-import yaml
-
 # The version ordering rule lives with the validator, so the roadmap and the validator's
-# --status roll-up can never disagree about which release comes first.
-from validate_specs import release_order
+# --status roll-up can never disagree about which release comes first. So does the reading of a
+# spec file.
+from validate_specs import load_documents, release_order
 
 ROOT = Path(__file__).resolve().parents[1]
 BEGIN, END = "<!-- BEGIN GENERATED -->", "<!-- END GENERATED -->"
@@ -55,7 +54,7 @@ def hours(effort: str | None) -> float:
 
 
 def documents(path: Path) -> dict[str, dict]:
-    return {d["kind"]: d for d in yaml.safe_load_all(path.read_text()) if d}
+    return {d["kind"]: d for d in load_documents(path) if d}
 
 
 def title_of(doc: dict) -> str:

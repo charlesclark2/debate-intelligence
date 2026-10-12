@@ -50,8 +50,8 @@ classifier does not make, because each needs something the classifier cannot see
   (`v1-e31-t09`). A guess that arrives with no card open stays the cite of a card with no tag:
   re-read as body it would belong to nothing and be dropped.
 * **A guess longer than any cite entry is body wherever a card is open.** Both rules above ask
-  that the paragraph be formatted as body, and a body's first words are often bold: 184 cards
-  whose body opens that way were still stored with the body in the cite. Past
+  that the paragraph be formatted as body, and a body's first words are often bold: 220 cards
+  were still stored with their body in the cite and no evidence text. Past
   :data:`LONGEST_GUESSED_CITE_ENTRY_CHARACTERS` a wiki cite-entry guess is body whatever its
   formatting, unless it carries a cite character style or names a source within its first
   :data:`A_CITE_ENTRY_NAMES_ITS_SOURCE_WITHIN_CHARACTERS`, which is where a cite run together

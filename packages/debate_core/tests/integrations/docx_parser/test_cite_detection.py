@@ -511,8 +511,8 @@ class TestAGuessLongerThanACiteEntry:
     """Past 2,000 characters a guess with no name at its head is body, whatever its formatting.
 
     `v1-e31-t09` asked that such a paragraph be formatted as body: small print throughout, or
-    highlighted, and not opening in bold. A body's first words are often bold, and 184 cards whose
-    body opens that way were still stored with the body in the cite.
+    highlighted, and not opening in bold. A body's first words are often bold, and 220 cards were
+    still stored with their body in the cite and no evidence text.
     """
 
     def test_after_the_cards_cite_it_is_the_body(self, parser: DebateDocxParser) -> None:
@@ -703,7 +703,7 @@ def styled_cite(
 
 
 class TestAStyledCitePastTheProfileBound:
-    """The style rule let go at 1,000 characters, and 613 such cites were read as nothing at all."""
+    """The style rule let go at 1,000 characters, and 811 such cites were read as nothing at all."""
 
     def test_it_is_the_cards_cite_and_the_body_is_the_body(self, parser: DebateDocxParser) -> None:
         markup, text = styled_cite(1_400)

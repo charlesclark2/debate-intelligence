@@ -157,7 +157,7 @@ def test_an_acronym_spelled_like_a_sentence_opener_is_still_an_author(
 
 
 def test_a_sentence_opener_that_opens_in_bold_is_left_to_the_old_reading(profile: StyleProfile) -> None:
-    """Bold is how a cite is written. 279 such lines in the corpus cannot be told apart from here."""
+    """Bold is how a cite is written. 160 such lines in the corpus cannot be told apart from here."""
     result = classify_paragraph(
         paragraph(run("The 74", bold=True, half_points=26), run(", an invented education newsroom")),
         profile,

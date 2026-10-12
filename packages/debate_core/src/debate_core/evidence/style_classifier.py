@@ -78,41 +78,41 @@ MINIMUM_PROSE_CHARACTERS = 200
 #:
 #: :data:`MAXIMUM_CITE_LINE_CHARACTERS` was set for a line that only *opens* like a cite. It left
 #: 33,624 tagged cards in the corpus with no cite, 21,585 of them with a line under the tag that
-#: was read as nothing. 8,023 of those lines open in bold with a name and a year, carry no cite
-#: style and no highlighting and are longer than 400 characters: 5,916 run to 600 characters,
-#: 1,266 to 800, 458 to 1,000, 293 to 1,517, 47 to 2,000 and 43 past it. They thin out with no gap,
-#: so the bound is the one `v1-e31-t09` measured for a guessed cite entry, which ends by 1,517
-#: characters and does not start again until 2,679: 2,000 takes 7,980 of the 8,023.
+#: was read as nothing. 8,023 paragraphs directly under a tag open in bold with a name and a
+#: year, carry no cite style and no highlighting and are longer than 400 characters: 5,916 run to
+#: 600 characters, 1,266 to 800, 458 to 1,000, 293 to 1,517, 47 to 2,000 and 43 past it. They thin
+#: out with no gap, so the bound is the one `v1-e31-t09` measured for a guessed cite entry, which
+#: ends by 1,517 characters and does not start again until 2,679: 2,000 takes 7,980 of the 8,023.
 MAXIMUM_LONG_CITE_LINE_CHARACTERS = 2_000
 
 #: The longest paragraph read as a cite from its cite character style (`v1-e31-t12`).
 #:
 #: The profile's own bound is 1,000, set so that body text carrying the cite style for emphasis is
-#: not a cite. Past it, 937 paragraphs in the corpus have the style on a name and a year at their
-#: head and no highlighting, and every one is a cite by what it holds: all 937 name a credential,
-#: and 925 are followed by a card's body. The longest is 3,283 characters. No paragraph of that
-#: shape is longer, so 4,000 is above every one the corpus holds and below a card written as one
-#: paragraph behind its cite, which this rule must not take.
+#: not a cite. Past it, 1,221 paragraphs in the corpus have the style on a name and a year at
+#: their head and no highlighting, and they are cites by what they hold: 1,219 name a credential,
+#: and 1,203 sit under a tag with a card's body below. The longest is 3,283 characters. No
+#: paragraph of that shape is longer, so 4,000 is above every one the corpus holds and below a
+#: card written as one paragraph behind its cite, which this rule must not take.
 MAXIMUM_STYLED_CITE_CHARACTERS = 4_000
 
 #: How far into a paragraph a cite's name and year may begin: a first name, a title, an opening
-#: bracket. Of the 1,116 styled cites past the profile's bound that sit under a tag, 1,088 have
-#: their name and year within their first 40 characters; body text that carries the style has
-#: none there (0 of 84).
+#: bracket. Of the 1,279 unhighlighted paragraphs past the profile's bound that carry the cite
+#: style and sit directly under a tag, 1,143 have a name and a year starting within their first
+#: 40 characters. Of the 84 that open in the style inside a body, none has.
 NAME_AND_YEAR_AT_THE_HEAD_CHARACTERS = 40
 
 #: The most a cutter leaves after a cite's closing bracket: initials, a name, two of either.
 #:
-#: Counted over the 83,000 paragraphs the corpus writes as a name and year followed by one
-#: bracket and that the parser already reads as cites: 72,064 have 10 characters or fewer after
-#: the bracket closes, 77,042 have 30 or fewer, and past that the remainder is the rest of the
-#: cite, not a signature.
+#: Counted over the 82,928 paragraphs the corpus writes as a name and year followed by a bracket
+#: and that the parser already read as cites: 72,064 have 10 characters or fewer after the
+#: bracket closes, 77,042 have 30 or fewer, and past that the remainder is the rest of the cite,
+#: not a signature.
 MAXIMUM_CUTTER_SIGNATURE_CHARACTERS = 30
 
 #: Words that open a sentence and are not anyone's name, as a file writes them at the start of a
 #: line. The cite-line guess reads any capitalised word followed by two or four digits as an
-#: author and a year, so *In 2019*, *Since 2001* and *Figure 12* opened cites: about 6,000 lines
-#: in the corpus, 564 of them still cites after the assembly's own corrections (`v1-e31-t12`).
+#: author and a year, so *In 2019*, *Since 2001* and *Figure 12* opened cites: about 5,400 lines
+#: in the corpus, 686 of them still cites after the assembly's own corrections (`v1-e31-t12`).
 #:
 #: Written out, not derived, and kept to words that are no one's surname. Months, seasons and the
 #: short words that are also surnames (*May*, *March*, *Winter*, *An*, *So*, *To*, *Page*, *Law*)
@@ -466,7 +466,8 @@ def _cite_run_style_match(
     emphasis in a body, so the paragraph is a cite only when the style marks a name and a year at
     its head, nothing in it is highlighted, and it is no longer than
     :data:`MAXIMUM_STYLED_CITE_CHARACTERS`. Until `v1-e31-t12` the rule simply let go at the
-    bound, and 937 cites in the corpus with long credentials were read as body text or as nothing.
+    bound, and 1,221 cites in the corpus with long credentials were read as nothing (811), as body
+    text (329) or by a guess that happened to catch them (81).
     """
     if not any(_is_in_a_cite_style(run, profile) for run in paragraph.visible_runs):
         return None
@@ -555,7 +556,7 @@ def _cite_line_match(paragraph: ParagraphDescription, profile: StyleProfile) -> 
     Not a line that opens with a word no author is called: *In 2019*, *Since 2001*, *Figure 12*
     (:data:`WORDS_THAT_OPEN_A_SENTENCE`). The pattern cannot tell those from a name, and they are
     how a sentence of evidence begins. A line that opens in bold is left to the pattern all the
-    same: bold is how a cite is written, 279 such lines in the corpus open that way, and what they
+    same: bold is how a cite is written, 160 such lines in the corpus open that way, and what they
     are cannot be told from here (`v1-e31-t12`).
     """
     text = paragraph.text.strip()
@@ -584,7 +585,7 @@ def _long_cite_line_match(
     writes a cite with its author's credentials in it (`v1-e31-t12`):
 
     * **the name and year open the line in bold**, the way a file with no cite style writes a
-      cite. 8,023 such lines under a tag were read as nothing or as the body's first paragraph;
+      cite. 8,426 such lines were read as nothing or as the body's first paragraph;
     * **everything after the name and year sits in one bracket**, but for what the cutter signs
       after it closes: `Okonkwo 26 [credentials, title, link] KR`.
 

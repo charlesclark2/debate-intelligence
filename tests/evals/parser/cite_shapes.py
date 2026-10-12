@@ -1018,7 +1018,7 @@ def _a_small_print_line_under_a_cite() -> tuple[LabelledExample, ...]:
         _under_a_cite(
             "a small-print sentence opening In and a year",
             small_print(prose(180, "In 2019, the operator revised its forecast twice. ")),
-            why="The body's first line. 179 of the 218 open with such a word.",
+            why="The body's first line. 178 of the 218 open with such a word.",
         ),
         _under_a_cite(
             "a small-print sentence opening Since and a year",

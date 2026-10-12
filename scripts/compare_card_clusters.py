@@ -592,16 +592,24 @@ def _divided_tally(
     from debate_core.evidence.cluster_diagnosis import explain_divided_part
 
     by_fingerprint = {finding.fingerprint: finding for finding in findings}
-    reasons: Counter[tuple[str, str, str, tuple[str, ...]]] = Counter()
+    reasons: Counter[tuple[str, str, str, str, tuple[str, ...]]] = Counter()
     for part, rest, has_full_card in parts:
         if not has_full_card:
-            reasons[("the part holds no full card", "", "", ())] += 1
+            reasons[("the part holds no full card", "", "", "", ())] += 1
             continue
         why = explain_divided_part(part, rest, by_fingerprint)
+        detail = (
+            "its containers are nested copies in several clusters"
+            if why.containers_nested
+            else "the container first by fingerprint is over the share"
+            if why.first_container_over_the_share
+            else ""
+        )
         reasons[
             (
                 why.kind,
                 why.outcome.value if why.outcome else "",
+                detail,
                 why.copies_read.value if why.copies_read else "",
                 tuple(sorted({gap.value for gap in why.kept_apart_by})),
             )
@@ -613,10 +621,11 @@ def _divided_tally(
                 "pairs": count,
                 "kind": kind,
                 "outcome": outcome or None,
+                "detail": detail or None,
                 "containers_read": read or None,
                 "copies_kept_apart_by": list(gaps),
             }
-            for (kind, outcome, read, gaps), count in sorted(
+            for (kind, outcome, detail, read, gaps), count in sorted(
                 reasons.items(), key=lambda item: (-item[1], item[0])
             )
         ],

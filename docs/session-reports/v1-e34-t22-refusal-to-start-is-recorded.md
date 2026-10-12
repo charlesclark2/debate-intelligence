@@ -35,21 +35,26 @@ What was built:
 
 The run record has no new field, and neither do the details. All four criteria were shown failing
 first and pass now. 65 mutants were run: 61 were caught on the first run and the other four are
-dealt with under [Mutation results](#mutation-results). The full suite passes: 5,891 passed, 1
-skipped. `dev` did not move during the session (`7efe8c6` at the start and at the end).
+dealt with under [Mutation results](#mutation-results).
+
+**Synced onto `v1-e01-t27` at the end.** `dev` moved from `7efe8c6` to `50eae0d` after this report
+was first written. I ran `scripts/task sync` and the whole suite again: 5,909 passed, 1 skipped.
+One test this task does not touch failed once in that run and passes alone; see
+[After the sync](#after-the-sync-onto-v1-e01-t27). Commit ids below are the rebased ones.
 
 ## Plan nodes
 
 | Node | Status | Notes |
 |---|---|---|
-| `refusal-recorded`: Refusal to start recorded; profiles checked | Done | `uv run pytest packages/debate_core/tests/application packages/debate_cli/tests -k "pull or doctor or profile"` → `452 passed in 27.57s` |
+| `refusal-recorded`: Refusal to start recorded; profiles checked | Done | `uv run pytest packages/debate_core/tests/application packages/debate_cli/tests -k "pull or doctor or profile"` → `452 passed in 28.58s` |
 
 ## Acceptance criteria
 
 "Red" is two runs. The first was made before any implementation and is the branch's first commit,
-`1d668d3`: 62 failed, 171 passed across the nine new and changed test files. The second is the
-finished tests against the source as it was when the task started (`PYTHONPATH` on a `git archive`
-of `aa45ca4`). My first attempt at the second run passed every test, which is how I found that the
+`e398c51`: 62 failed, 171 passed across the nine new and changed test files. The second is the
+finished tests against the source the task started from (`PYTHONPATH` on a `git archive` of that
+source, which is `dev`'s at `7efe8c6`; the sync changed nothing under either package's `src`). My
+first attempt at the second run passed every test, which is how I found that the
 old source was not on the path; the figures below are from the run that printed the old source's
 file name first.
 
@@ -58,21 +63,25 @@ file name first.
 | **ac1** a pull whose profile the AWS config lacks writes a local record with status failed, details naming the code and the setting, and one notification that a person should look; shown failing first | PASS | Red, through the real composition root with boto3 refusing a real session: `8 failed, 2 passed`. No record (`ValueError: not enough values to unpack (expected 1, got 0)`), no details (`assert [] == [{... 'failure_codes': ['STORE_PROFILE_NOT_CONFIGURED'] ...}]`), no notification, nothing owed (`assert None == ['20260916T060000Z']`). The two that pass assert the exit code and that a dry run records nothing, neither of which changed. Green: `packages/debate_cli/tests/test_pull_refused_before_the_bucket_is_built.py` → `10 passed`. Smoke, red `2 failed`, green: `tests/smoke/test_caselist_pull.py -k "refused or names_no_profile"` passes |
 | **ac2** the next run that can reach the bucket publishes that record and its details, and the older builds' readers still read every record, by v1-e34-t19's compatibility tests | PASS | Publishing: `test_the_record_is_owed_and_the_next_run_that_reaches_the_bucket_publishes_it_with_its_details` (the command, moto) and the smoke check where the week after a refused run imports, publishes and publishes both records. Compatibility: `packages/debate_core/tests/application/caselist/test_pull_run_record_is_read_by_every_build.py` → `67 passed` (61 before this task), including the five parametrized checks for the new stored scenario. See [Compatibility](#compatibility) |
 | **ac3** `doctor` and `install.sh --check-launchd` report, for each configured evidence profile, whether it is defined and which permission set it is signed in as, and fail on one that is not defined; an expired session is reported and does not fail; by test with the identity stubbed at the port | PASS with `--evidence-profiles`; plain `doctor` does not make the check (Deviation 1) | Red: `15 failed, 1 passed` for `doctor` (`assert 2 == <ExitCode.DOMAIN_FAILURE: 1>`: no such option), and `17 failed` for the check itself, a module that did not exist. The one that passes is plain `doctor`, which is unchanged. Green: `test_doctor_evidence_profiles.py` → `16 passed`; `test_evidence_profiles.py` → `17 passed`. The launchd check: `tests/integration/test_launchd_install.py` → `68 passed` on this Mac; first red run, 9 failed. See [The launchd check off macOS](#the-launchd-check-off-macos) |
-| **ac4** the runbook's reinstall steps run the check, and its troubleshooting replaces the workaround v1-e29-t07 described | PASS (Deviation 3 on the wording) | Red at `1d668d3`: `6 failed` in `test_runbook_reinstall_runs_the_profile_check.py`. Green: `6 passed`. The test reads the runbook's command blocks in order and builds the banner the runbook quotes with the monitor's own code |
-| Node criterion | PASS | `452 passed in 27.57s` |
+| **ac4** the runbook's reinstall steps run the check, and its troubleshooting replaces the workaround v1-e29-t07 described | PASS (Deviation 3 on the wording) | Red at `e398c51`: `6 failed` in `test_runbook_reinstall_runs_the_profile_check.py`. Green: `6 passed`. The test reads the runbook's command blocks in order and builds the banner the runbook quotes with the monitor's own code |
+| Node criterion | PASS | `452 passed in 28.58s`, after the sync |
 | Forbidden: a new field on the run record, or a record or details file an earlier build cannot read | PASS | The record model's schema still equals both older builds' stored schemas. No key was added to the details either: the refusal uses `failure_codes` and `hint`, which v1-e34-t19 defined. Mutants "the run record gains a field" and "the record keeps the error's code where its class was" were caught, by 43 and 12 tests |
 | Forbidden: an account id, role ARN, SSO start URL or AWS config path in a record, notification, check output, log or the report | PASS | Asserted over the record, details, owed file, notification, envelope and captured logs for the refused pull, and over `doctor`'s output through the real STS adapter on moto, which answers with an account and a full identifier. Six mutants on this rule were caught. This report names none |
 
-Full suite, in three commands that together are the whole default selection, on the final tree:
+Full suite, on the final tree after the sync, as the three parts `v1-e01-t27` gave the default
+selection (`uv run --frozen pytest --part K/3`, one command each):
 
-| Paths | Result |
+| Part | Result |
 |---|---|
-| `packages/debate_core/tests` | `4028 passed in 81.17s` |
-| `packages/debate_cli/tests` | `564 passed in 43.82s` |
-| `packages/debate_api/tests packages/debate_workers/tests tests` | `1299 passed, 1 skipped, 1 warning in 81.01s` |
+| `--part 1/3` | `1953 passed in 39.18s` |
+| `--part 2/3` | `1976 passed, 1 skipped in 59.85s` |
+| `--part 3/3` | `1980 passed, 1 warning in 56.76s`, on its second run. The first: `1 failed, 1979 passed` |
 
-I ran it twice: once before the last runbook change, with the same three counts in 65, 31 and 81
-seconds, and again after it. The skip is the parser evaluation's existing one. Also clean: `ruff check .`,
+The skip is the parser evaluation's existing one. Before the sync the suite ran twice by the three
+path groups of earlier reports, the second time on what was then the final tree: 4,028, 564 and
+1,299 passed with 1 skipped, both times.
+
+Also clean: `ruff check .`,
 `ruff format --check`, `pyright` (0 errors), `lint-imports` (12 kept), `check_thin_handlers.py`
 (`doctor` holds 14 statements of 25), `validate_specs.py`, `docs_index.py --check-descriptions`,
 `check_command_blocks.py --base origin/dev`, `check_links.py`, and shellcheck on both launchd
@@ -136,6 +145,25 @@ start commit's, and every record here validates against it.
 
 One known gap carries over from v1-e34-t19: if an *older* build publishes an owed record, it goes
 up without its details. That applies to a refused run's record too, and it ends at the reinstall.
+
+## After the sync onto `v1-e01-t27`
+
+`scripts/task sync` rebased the nine commits with no conflict. `v1-e01-t27` changed the CI
+workflow, `pyproject.toml`'s test settings, two scripts and the working agreements, and nothing
+under either package's `src`, `ops/` or `docs/runbooks/`, which I checked with `git diff --quiet`.
+I ran the suite by its new option, `--part K/3`, because the working agreements now give that as
+the way to split a local run, and the default selection no longer measures coverage.
+
+**One failure, in a test this task does not touch.** In the first run of part 3,
+`test_caselist_parse.py::test_a_parse_past_the_time_limit_is_stopped_and_the_run_carries_on`
+failed. It gives a two-worker parse pool a 1.5-second limit for each file and expects exactly one
+`TIMEOUT`, so it depends on the wall clock. That run shared the machine with part 2's tail and a
+polling loop of mine. Afterwards it passed alone three times of three, taking 2.5 to 6.2 seconds,
+and part 3 passed whole when run by itself. I did not change the test. It is Follow-up 11.
+
+After the sync I also ran the stored-record generator again against the older source: it rewrote
+all 20 files and changed none. The static checks and the node's command were run again and pass.
+The mutation runs and the red runs were made before the sync, on the same source.
 
 ## The launchd check off macOS
 
@@ -261,7 +289,7 @@ as they are.
    Compatibility. "Generated by the older code" is true of the record and not of the error object,
    which that code cannot produce.
 5. **Two things run by hand that no criterion asked for.** `git fetch origin dev`, read-only, to
-   check whether `dev` had moved; it had not, so `scripts/task sync` was not needed. And this
+   check whether `dev` had moved. The third fetch found that it had, and I ran `scripts/task sync`. And this
    checkout's `doctor --evidence-profiles` once, against an AWS config and a profile directory
    written in the session's scratch directory, to read what a person is shown. Neither read the
    operator's AWS config or reached AWS.
@@ -376,6 +404,10 @@ task's report and not repeated here.
     assumption as v1-e29-t08's preflight, that a permission set's role is named
     `AWSReservedSSO_<set>_<suffix>`. If it is not, `doctor` says "a role that is no permission
     set's" and still passes. The first operator command above shows which.
+11. **A parse-timeout test depends on the wall clock** (E31, p3).
+    `test_a_parse_past_the_time_limit_is_stopped_and_the_run_carries_on` allows 1.5 seconds a
+    file and failed once here on a loaded machine. A healthy parse that takes longer than that
+    is counted as a second `TIMEOUT`.
 
 ## PM review
 

@@ -388,9 +388,72 @@ runs recorded before it show `not recorded`.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-11
 
 **Notes:**
+
+Accepted, with the phase `Succeeded`. I have amended ac3 and ac9 in this branch to say "the run's
+details", so they now pass as written.
+
+**Deviation 1 is the design I hoped for, and you proved it rather than assumed it.** My brief
+offered a sidecar keyed by run id as the fallback. Every one of the following would have lost runs
+silently on the build installed today:
+
+* a new field on the record;
+* a new field on each stage;
+* a field written only when set;
+* `schema_version` 2.
+
+The eight-way table run through both builds' real readers is what shows it. So is the finding that
+a skipped line also drops its run id from the list of records owed to the bucket. That consequence
+makes "it only hides a row" the wrong reading. The rest of the design follows from it:
+
+* **The details prefix sits beside `reports/sync-runs/`, not under it,** so an older reader's
+  listing never meets them.
+* **The write order differs on each side, and both directions are right.** Locally the record goes
+  first. In the bucket the details go first, and the run stays owed as a whole.
+* **"Not recorded" is told from "did not run".**
+
+The stored fixtures are written by the older code, not by hand, and regenerating them changed no
+byte.
+
+**Rulings:**
+
+* **Deviation 2, the selection stopping with exit 3:** accepted. It is `v1-e34-t13`'s treatment of
+  an unreadable manifest directory.
+* **Deviation 3, five readers through one, not two:** accepted, and better than the spec. Two would
+  have left exit 70 in place.
+* **Deviations 4 and 5:** accepted.
+* **`earlier_findings` additive with the summary staying at version 5:** accepted. Nothing is
+  decided from it.
+* **The retry rule staying in `debate_cli`, handed to the monitor:** accepted. One decision for
+  the exit and the banner.
+* **"Will be retried" for a refusal that carries a hint:** accepted as the rule reads today. But
+  a refusal needs a fix before the retry can succeed, and the banner should say so. Filed below.
+
+**The mutation run:** 82 of 87 mutants were caught on the first run. The two real survivors became
+tests: the disk-full error, and the kill between record and details. Removing the equivalent check
+rather than keeping it is the right call.
+
+**Follow-up work, filed by the PM in the next spec batch:**
+
+* **One E34 p3 task for your 1, 3, 4, 5, 6, 7 and 9:**
+  * the report stage loses what it found on expiry;
+  * the remaining fsyncs;
+  * codes and verdict in `caselist runs`;
+  * a camp download's class;
+  * a torn weekly manifest at the selection;
+  * the lock refusal's words;
+  * the redaction that eats the runbook pointer.
+
+  Add to them the banner for a refusal that is retried but needs its fix first.
+* **Your 2** ends at the reinstall, and **your 8** waits until no machine runs an older build.
+  Neither gets a task now.
+* **The E34 p2 task for `v1-e29-t07`'s silent failure** can start once this merges. Recording a
+  refusal to start fits this design: the record as it is, plus details.
+
+**Operator follow-up:** the banner check (`osascript`) joins the steps after Wednesday's
+reinstall.

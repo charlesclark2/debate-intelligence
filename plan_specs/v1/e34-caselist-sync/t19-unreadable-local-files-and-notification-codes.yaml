@@ -51,9 +51,13 @@ spec:
         failing first.
     - id: ac3
       description: >-
-        The run record carries the failed stages' codes. A record written by this build is
+        The run's details carry the failed stages' codes. A record written by this build is
         read by the build currently installed (a stored record from the start commit's code,
-        and the reverse), by test.
+        and the reverse), by test. Amended by the PM, 2026-10-11: the record forbids unknown
+        fields in every build released so far, so the codes are in the run's details, a file
+        and a bucket prefix beside the record, keyed by run id, which older builds never open.
+        As first written this criterion said "the run record carries", which could not hold
+        together with forbidden item 2.
     - id: ac4
       description: >-
         The notification for a failed run says whether the next scheduled run should retry
@@ -90,8 +94,8 @@ spec:
         with v1-e34-t18's shape: a mismatch, then an expiry.
     - id: ac9
       description: >-
-        Added by the PM, 2026-10-11, from v1-e34-t17's Follow-up work 5. The run record
-        carries the parse stage's counts (the nine integers of the summary's `parse` object,
+        Added by the PM, 2026-10-11, from v1-e34-t17's Follow-up work 5, and amended the same
+        day for the reason under ac3. The run's details carry the parse stage's counts (the nine integers of the summary's `parse` object,
         or null when the stage did not run), under the same compatibility as ac3, and
         `caselist runs` shows them in its table rather than only in the caption sentence
         v1-e34-t17 added.

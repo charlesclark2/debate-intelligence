@@ -45,7 +45,7 @@ from tests.evals.parser.cite_shapes import (
 
 from debate_core.application.ports.parsed_store import parse_version_directory
 from debate_core.domain.caselist import SourceDocument, SourceFormat, SourceOrigin
-from debate_core.domain.debate_files import CardCompleteness, ParsedDocument
+from debate_core.domain.debate_files import CardCompleteness, ParsedCard, ParsedDocument
 from debate_core.domain.style_profile import StructuralUnit, StyleMatchSource, StyleProfile
 from debate_core.integrations.docx_parser.parser import DOCX_PARSER_VERSION, DebateDocxParser
 from debate_core.testing.docx_builder import build_docx, paragraph_xml, run_xml
@@ -103,6 +103,15 @@ def parse(parser: DebateDocxParser, body: str) -> ParsedDocument:
 
 def units(document: ParsedDocument) -> list[StructuralUnit]:
     return [section.unit for section in document.sections]
+
+
+def only_card(document: ParsedDocument) -> ParsedCard:
+    """The document's one card. Any other number of cards fails here, by assertion."""
+    ranges = [
+        (card.provenance.first_element_index, card.provenance.last_element_index) for card in document.cards
+    ]
+    assert len(ranges) == 1, ranges
+    return document.cards[0]
 
 
 def tag_paragraph(text: str = TAG) -> str:
@@ -335,7 +344,7 @@ class TestACardThatIsOnlyACite:
 
         document = parse(parser, tag_paragraph() + markup)
 
-        (card,) = document.cards
+        card = only_card(document)
         assert units(document) == [StructuralUnit.TAG, CITE]
         assert card.tag == TAG
         assert card.completeness is CardCompleteness.CITE_ONLY
@@ -354,7 +363,7 @@ class TestACardThatIsOnlyACite:
 
         document = parse(parser, tag_paragraph() + markup)
 
-        (card,) = document.cards
+        card = only_card(document)
         assert units(document) == [StructuralUnit.TAG, CITE]
         assert card.completeness is CardCompleteness.CITE_ONLY
         assert card.full_cite == text
@@ -364,7 +373,7 @@ class TestACardThatIsOnlyACite:
     def test_its_short_cite_is_the_name_and_year(self, parser: DebateDocxParser, form: str) -> None:
         markup, _ = cite_only_paragraph(form, "[]", " KR", "an underlined link", 620)
 
-        (card,) = parse(parser, tag_paragraph() + markup).cards
+        card = only_card(parse(parser, tag_paragraph() + markup))
 
         assert card.short_cite == SHORT_CITE
 
@@ -375,7 +384,7 @@ class TestACardThatIsOnlyACite:
         """The short-cite pattern reads the front of a line. An invented one would be repeated as fact."""
         markup, _ = cite_only_paragraph(form, "[]", " KR", "small print", 500)
 
-        (card,) = parse(parser, tag_paragraph() + markup).cards
+        card = only_card(parse(parser, tag_paragraph() + markup))
 
         assert card.short_cite is None
 
@@ -393,6 +402,7 @@ class TestACardThatIsOnlyACite:
             + body_paragraph(body),
         )
 
+        assert len(document.cards) == 2
         first, second = document.cards
         assert (first.completeness, first.full_cite, first.evidence_text) == (
             CardCompleteness.CITE_ONLY,
@@ -412,7 +422,7 @@ class TestACardThatIsOnlyACite:
         markup, text = cite_only_paragraph(FORMS[0], "[]", " KR", "an underlined link", 620)
         body = prose(240)
 
-        (card,) = parse(parser, tag_paragraph() + markup + body_paragraph(body)).cards
+        card = only_card(parse(parser, tag_paragraph() + markup + body_paragraph(body)))
 
         assert card.completeness is CardCompleteness.FULL
         assert card.full_cite == text
@@ -437,7 +447,7 @@ class TestASentenceIsNotACiteLine:
             + body_paragraph(last)
         )
 
-        (card,) = parse(parser, body).cards
+        card = only_card(parse(parser, body))
 
         assert card.evidence_text == "\n".join([first, IN_2019, last])
         assert card.full_cite == SHORT_CITE + CITE_TAIL
@@ -487,7 +497,7 @@ class TestASentenceIsNotACiteLine:
     ) -> None:
         line = plain_paragraph("Lindqvist 25, Professor of Engineering at an invented university.")
 
-        (card,) = parse(parser, tag_paragraph() + line + body_paragraph()).cards
+        card = only_card(parse(parser, tag_paragraph() + line + body_paragraph()))
 
         assert card.short_cite == "Lindqvist 25"
 
@@ -510,7 +520,7 @@ class TestAGuessLongerThanACiteEntry:
 
         document = parse(parser, tag_paragraph() + cite_paragraph() + bold_opening_paragraph(text))
 
-        (card,) = document.cards
+        card = only_card(document)
         assert card.completeness is CardCompleteness.FULL
         assert card.full_cite == SHORT_CITE + CITE_TAIL
         assert card.evidence_text == text
@@ -532,7 +542,7 @@ class TestAGuessLongerThanACiteEntry:
 
         document = parse(parser, body)
 
-        (card,) = document.cards
+        card = only_card(document)
         assert card.evidence_text == "\n".join([first, text, last])
         assert document.sections[3].match.rule_id == f"{INSIDE_THE_BODY}:heuristic-wiki-cite-entry"
 
@@ -541,7 +551,7 @@ class TestAGuessLongerThanACiteEntry:
 
         document = parse(parser, tag_paragraph() + bold_opening_paragraph(text))
 
-        (card,) = document.cards
+        card = only_card(document)
         assert (card.completeness, card.full_cite, card.evidence_text) == (CardCompleteness.FULL, "", text)
         assert document.sections[1].match.rule_id == f"{LONGER_THAN_A_CITE}:heuristic-wiki-cite-entry"
 
@@ -601,6 +611,18 @@ class TestAGuessLongerThanACiteEntry:
 
         assert document.sections[2].unit is EVIDENCE
 
+    def test_a_guess_whose_only_name_and_year_is_a_sentence_opener_is_the_body(
+        self, parser: DebateDocxParser
+    ) -> None:
+        """An ellipsis and *In 2019* are all the guess had. Nothing in the paragraph names a source."""
+        text = prose(2_300, "In 2019, the regional operator revised its forecast [...] and then again. ")
+        assert "Lindqvist" not in text
+
+        document = parse(parser, tag_paragraph() + cite_paragraph() + bold_opening_paragraph(text))
+
+        assert document.sections[2].match.rule_id == f"{AFTER_THE_CARDS_CITE}:heuristic-wiki-cite-entry"
+        assert only_card(document).evidence_text == text
+
     def test_under_a_bare_tag_a_sentence_opener_and_a_year_at_its_head_do_not_hold_it(
         self, parser: DebateDocxParser
     ) -> None:
@@ -623,7 +645,7 @@ class TestAGuessLongerThanACiteEntry:
             + bold_opening_paragraph(long)
         )
 
-        (card,) = parse(parser, body).cards
+        card = only_card(parse(parser, body))
 
         assert card.full_cite == SHORT_CITE + CITE_TAIL
         assert card.evidence_text == short + "\n" + long
@@ -649,7 +671,7 @@ class TestAGuessLongerThanACiteEntry:
 
         document = parse(parser, block_paragraph() + bold_opening_paragraph(text))
 
-        (card,) = document.cards
+        card = only_card(document)
         assert document.sections[1].unit is CITE
         assert (card.tag or "", card.full_cite) == ("", text)
 
@@ -689,7 +711,7 @@ class TestAStyledCitePastTheProfileBound:
 
         document = parse(parser, tag_paragraph() + markup + body_paragraph(body))
 
-        (card,) = document.cards
+        card = only_card(document)
         assert (card.full_cite, card.short_cite, card.evidence_text) == (text, SHORT_CITE, body)
         assert document.sections[1].match.rule_id == PAST_THE_PROFILE_BOUND
         assert document.sections[1].match.match_source is StyleMatchSource.VERBATIM_ALIAS
@@ -729,7 +751,7 @@ class TestAStyledCitePastTheProfileBound:
     def test_a_styled_name_behind_a_first_name_is_a_cite(self, parser: DebateDocxParser) -> None:
         markup, text = styled_cite(1_400, before_the_name="Adaeze ")
 
-        (card,) = parse(parser, tag_paragraph() + markup + body_paragraph()).cards
+        card = only_card(parse(parser, tag_paragraph() + markup + body_paragraph()))
 
         assert card.full_cite == text
 
@@ -812,7 +834,7 @@ class TestACiteLineLongerThanFourHundredCharacters:
 
         document = parse(parser, tag_paragraph() + markup + body_paragraph(body))
 
-        (card,) = document.cards
+        card = only_card(document)
         assert (card.full_cite, card.short_cite, card.evidence_text) == (text, SHORT_CITE, body)
         assert document.sections[1].match.rule_id == BOLD_CITE_LINE
         assert document.sections[1].match.match_source is StyleMatchSource.HEURISTIC
@@ -878,7 +900,7 @@ class TestACiteLineLongerThanFourHundredCharacters:
         markup, text = bold_cite(700)
         body = prose(240)
 
-        (card,) = parse(parser, block_paragraph() + markup + body_paragraph(body)).cards
+        card = only_card(parse(parser, block_paragraph() + markup + body_paragraph(body)))
 
         assert (card.tag or "", card.full_cite, card.evidence_text) == ("", text, body)
 
@@ -896,7 +918,9 @@ class TestACiteLineLongerThanFourHundredCharacters:
             + body_paragraph(second_body)
         )
 
-        first, second = parse(parser, body).cards
+        document = parse(parser, body)
+        assert len(document.cards) == 2
+        first, second = document.cards
 
         assert (first.full_cite, first.evidence_text) == (SHORT_CITE + CITE_TAIL, first_body)
         assert (second.tag or "", second.full_cite, second.evidence_text) == ("", text, second_body)
@@ -933,7 +957,7 @@ class TestABracketedCiteLine:
 
         document = parse(parser, tag_paragraph() + markup + body_paragraph(body))
 
-        (card,) = document.cards
+        card = only_card(document)
         assert (card.full_cite, card.short_cite, card.evidence_text) == (text, SHORT_CITE, body)
         assert document.sections[1].match.rule_id == BRACKETED_CITE_LINE
 
@@ -959,7 +983,7 @@ class TestABracketedCiteLine:
     def test_a_bracket_inside_the_bracket_does_not_close_it(self, parser: DebateDocxParser) -> None:
         markup, text = bracketed_cite(700, inside="formerly [until 2024] at the regulator; ")
 
-        (card,) = parse(parser, tag_paragraph() + markup + body_paragraph()).cards
+        card = only_card(parse(parser, tag_paragraph() + markup + body_paragraph()))
 
         assert card.full_cite == text
 
@@ -1033,7 +1057,7 @@ class TestABracketedCiteLine:
 
         document = parse(parser, body)
 
-        (card,) = document.cards
+        card = only_card(document)
         assert card.evidence_text == "\n".join([first, text])
         assert document.sections[3].match.rule_id == f"{INSIDE_THE_BODY}:{BRACKETED_CITE_LINE}"
 
@@ -1072,7 +1096,7 @@ class TestACiteWhollyInsideABracket:
 
         document = parse(parser, tag_paragraph() + markup + body_paragraph(body))
 
-        (card,) = document.cards
+        card = only_card(document)
         assert (card.full_cite, card.evidence_text, card.completeness) == (text, body, CardCompleteness.FULL)
         assert document.sections[1].match.rule_id == f"{BRACKETED_BEFORE_THE_BODY}:heuristic-shrunk-body-text"
         assert document.sections[1].match.match_source is StyleMatchSource.HEURISTIC
@@ -1085,7 +1109,7 @@ class TestACiteWhollyInsideABracket:
 
         document = parse(parser, tag_paragraph() + markup)
 
-        (card,) = document.cards
+        card = only_card(document)
         assert units(document) == [StructuralUnit.TAG, CITE]
         assert (card.tag, card.full_cite, card.completeness) == (TAG, text, CardCompleteness.CITE_ONLY)
         assert (
@@ -1097,7 +1121,7 @@ class TestACiteWhollyInsideABracket:
         markup, text = wholly_bracketed(half_points=READING_SIZE)
         body = prose(240)
 
-        (card,) = parse(parser, tag_paragraph() + cite_paragraph() + markup + body_paragraph(body)).cards
+        card = only_card(parse(parser, tag_paragraph() + cite_paragraph() + markup + body_paragraph(body)))
 
         assert card.full_cite == SHORT_CITE + CITE_TAIL + "\n" + text
         assert card.evidence_text == body
@@ -1105,7 +1129,7 @@ class TestACiteWhollyInsideABracket:
     def test_a_blank_line_above_it_changes_nothing(self, parser: DebateDocxParser) -> None:
         markup, text = wholly_bracketed()
 
-        (card,) = parse(parser, tag_paragraph() + paragraph_xml("") + markup + body_paragraph()).cards
+        card = only_card(parse(parser, tag_paragraph() + paragraph_xml("") + markup + body_paragraph()))
 
         assert card.full_cite == text
 
@@ -1117,7 +1141,7 @@ class TestACiteWhollyInsideABracket:
 
         document = parse(parser, body)
 
-        (card,) = document.cards
+        card = only_card(document)
         assert card.evidence_text == "\n".join([first, text, last])
         assert document.sections[3].match.rule_id == "heuristic-shrunk-body-text"
 
@@ -1139,7 +1163,7 @@ class TestACiteWhollyInsideABracket:
 
         document = parse(parser, body)
 
-        (card,) = document.cards
+        card = only_card(document)
         assert document.sections[3].unit is OTHER
         assert card.evidence_text == "\n".join([long_body, last])
         assert text not in card.full_cite
@@ -1152,9 +1176,9 @@ class TestACiteWhollyInsideABracket:
         first_line = "Okonkwo 26, Adaeze Okonkwo, invented for this test"
         body = prose(240)
 
-        (card,) = parse(
-            parser, tag_paragraph() + plain_paragraph(first_line) + markup + body_paragraph(body)
-        ).cards
+        card = only_card(
+            parse(parser, tag_paragraph() + plain_paragraph(first_line) + markup + body_paragraph(body))
+        )
 
         assert card.full_cite == first_line + "\n" + text
         assert card.evidence_text == body
@@ -1163,7 +1187,7 @@ class TestACiteWhollyInsideABracket:
         markup, text = wholly_bracketed()
         undertag = paragraph_xml(run_xml("Answers the reserve margin turn"), style="Undertag")
 
-        (card,) = parse(parser, tag_paragraph() + undertag + markup + body_paragraph()).cards
+        card = only_card(parse(parser, tag_paragraph() + undertag + markup + body_paragraph()))
 
         assert card.full_cite == text
         assert card.undertag == "Answers the reserve margin turn"
@@ -1190,6 +1214,15 @@ class TestACiteWhollyInsideABracket:
         assert document.sections[1].match.rule_id == "assembly-table-cell"
         assert text not in document.cards[0].full_cite
 
+    def test_at_the_head_of_a_file_it_is_left_as_it_was(self, parser: DebateDocxParser) -> None:
+        """Nothing is above it, so no card is open for it to be the cite of."""
+        markup, _ = wholly_bracketed()
+
+        document = parse(parser, markup + body_paragraph())
+
+        assert document.cards == ()
+        assert units(document) == [EVIDENCE, EVIDENCE]
+
     def test_with_no_card_open_it_is_left_as_it_was(self, parser: DebateDocxParser) -> None:
         markup, _ = wholly_bracketed()
 
@@ -1202,9 +1235,12 @@ class TestACiteWhollyInsideABracket:
         note = "(The 2019 survey covered four regions and is described in the appendix to the filing.)"
         body = prose(240)
 
-        (card,) = parse(
-            parser, tag_paragraph() + plain_paragraph(note, half_points=SMALL_PRINT) + body_paragraph(body)
-        ).cards
+        card = only_card(
+            parse(
+                parser,
+                tag_paragraph() + plain_paragraph(note, half_points=SMALL_PRINT) + body_paragraph(body),
+            )
+        )
 
         assert (card.full_cite, card.evidence_text) == ("", "\n".join([note, body]))
 
@@ -1275,6 +1311,6 @@ class TestTheParserVersion:
         assert names == [SECOND_CORPUS_PARSE_VERSION, DOCX_PARSER_VERSION]
 
     def test_every_card_names_it(self, parser: DebateDocxParser) -> None:
-        (card,) = parse(parser, tag_paragraph() + cite_paragraph() + body_paragraph()).cards
+        card = only_card(parse(parser, tag_paragraph() + cite_paragraph() + body_paragraph()))
 
         assert card.provenance.parser_version == DOCX_PARSER_VERSION

@@ -812,9 +812,9 @@ class ServiceContainer:
     def evidence_profile_check(self) -> EvidenceProfileCheck:
         """Build the check of every evidence profile this environment is configured with (`v1-e34-t22`).
 
-        The everyday profile, when the environment names a bucket to reach with it, and the
-        takedown profile, when `DEBATE_REMOVAL_PROFILE` is set. An environment with neither, which
-        is what `test` is, has nothing to check. Building the check asks nothing and reads no AWS
+        The everyday profile, when the settings name one, and the takedown profile, when
+        `DEBATE_REMOVAL_PROFILE` is set. An environment with neither, which is what `test` is,
+        has nothing to check. Building the check asks nothing and reads no AWS
         config: each profile's adapter is built when the check is run.
         """
         return self.singleton("evidence_profile_check", self._build_evidence_profile_check)
@@ -823,7 +823,7 @@ class ServiceContainer:
         settings = self.settings
         s3 = settings.storage.s3
         configured: list[ConfiguredProfile] = []
-        if s3.bucket and s3.aws_profile:
+        if s3.aws_profile:
             configured.append(ConfiguredProfile(setting=_EVERYDAY_PROFILE_SETTING, name=s3.aws_profile))
         if settings.removal_profile:
             configured.append(

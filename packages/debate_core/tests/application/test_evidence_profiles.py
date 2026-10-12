@@ -349,4 +349,3 @@ async def test_only_a_profile_that_is_not_defined_is_a_failure() -> None:
         ("wrong", True),
         ("right", True),
     ]
-    assert [one.profile for one in check_module.not_defined(found)] == ["missing"]

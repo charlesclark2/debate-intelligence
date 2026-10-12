@@ -1137,8 +1137,11 @@ class SyncRunMonitor:
         self._state_dir = Path(state_dir)
         self._environment = environment
         self._notifier = notifier
-        self._remote = remote
-        self._build_remote = build_remote
+        # One way to the bucket, whether it was handed over built or to be built. `None` is an
+        # environment with no bucket.
+        self._build_remote: Callable[[], EvidenceObjectStore] | None = (
+            build_remote if remote is None else lambda: remote
+        )
         self._aws_login_command = aws_login_command
         self._secrets = secrets
         self._clock = clock
@@ -1234,11 +1237,11 @@ class SyncRunMonitor:
         Each with its details, when this machine holds them, and the details first.
         """
         owed = [run_id for run_id in self._pending.read() if run_id != record.run_id] + [record.run_id]
-        if self._remote is None and self._build_remote is None:
+        if self._build_remote is None:
             self._pending.write([])
             return False, None
         try:
-            remote = self._bucket()
+            remote = self._build_remote()
         except Exception as unbuilt:
             # The bucket's adapter cannot be built: a profile the AWS config does not define, most
             # likely (`v1-e34-t22`). There is a bucket, so everything owed stays owed, this run's
@@ -1270,17 +1273,6 @@ class SyncRunMonitor:
                 left.append(run_id)
         self._pending.write(left)
         return record.run_id not in left, login_hint
-
-    def _bucket(self) -> EvidenceObjectStore:
-        """The evidence bucket, built on first use when the monitor was handed it to build.
-
-        Called only where a bucket is known to be configured. Raises whatever building it raises,
-        and tries again the next time: a bucket that could not be built is never remembered.
-        """
-        if self._remote is None:
-            assert self._build_remote is not None
-            self._remote = self._build_remote()
-        return self._remote
 
     async def _put(
         self, remote: EvidenceObjectStore, record: SyncRunRecord, details: SyncRunDetails | None

@@ -14,8 +14,8 @@ already asks (`v1-e29-t08`). `debate-research doctor --evidence-profiles` runs i
 
 ## What fails a check, and what does not
 
-Only a profile that is **not defined** (:func:`not_defined`). That is the one finding nothing but
-an edit cures, and the one that makes a scheduled run refuse to start.
+Only a profile that is **not defined** (:attr:`ProfileFinding.defined`). That is the one finding
+nothing but an edit cures, and the one that makes a scheduled run refuse to start.
 
 * **An expired session** is reported as expired, with the command that renews it. It is not a
   failure: the weekly run captures and imports without a session and publishes after a login.
@@ -50,7 +50,6 @@ __all__ = [
     "EvidenceProfileCheck",
     "ProfileFinding",
     "ProfileSession",
-    "not_defined",
 ]
 
 _ASK_AGAIN: Final = "Run the check again when this machine can reach AWS."
@@ -121,11 +120,6 @@ class ProfileFinding:
             "summary": self.summary,
             "hint": self.hint,
         }
-
-
-def not_defined(findings: Sequence[ProfileFinding]) -> tuple[ProfileFinding, ...]:
-    """The findings that fail a check: the profiles this machine's AWS config does not define."""
-    return tuple(one for one in findings if not one.defined)
 
 
 class EvidenceProfileCheck:

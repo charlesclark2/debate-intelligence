@@ -53,6 +53,7 @@ from enum import StrEnum
 from typing import ClassVar, Final
 
 __all__ = [
+    "LOCAL_STORE_ACCESS_DENIED_HINT",
     "UNMODELLED_ERROR_CODE",
     "AlreadyExists",
     "ArchiveTooLarge",
@@ -333,8 +334,10 @@ class StoreAccessDenied(StoreError):
 class LocalStoreAccessDenied(StoreAccessDenied):
     """The operating system refused a directory of this machine's own store.
 
-    Raised by the filesystem adapters, and by nothing that talks to a bucket, so a caller can tell
-    the two refusals apart by type rather than by reading a message (`v1-e34-t13`). They have
+    Raised by the filesystem adapters and by the code that reads and writes a manifest file by its
+    path (:mod:`debate_core.application.caselist.manifest`, `v1-e34-t19`), and by nothing that talks
+    to a bucket, so a caller can tell the two refusals apart by type rather than by reading a
+    message (`v1-e34-t13`). They have
     different fixes: this one is a permission on the environment's data directory, and a refusal
     by the bucket is a grant the profile lacks. Neither is an expired login.
 
@@ -345,6 +348,17 @@ class LocalStoreAccessDenied(StoreAccessDenied):
     """
 
     ERROR_CODE: ClassVar[str] = "STORE_ACCESS_DENIED"
+
+
+LOCAL_STORE_ACCESS_DENIED_HINT: Final = (
+    "the operating system refused it; check that this user can read and write the environment's "
+    "data directory (storage.data_dir)"
+)
+"""The one line a CLI prints under a :class:`LocalStoreAccessDenied`. It names the setting, not the
+path it holds.
+
+Defined here, beside the error, because two layers raise it: the filesystem adapters, and the
+application code that reads and writes a manifest by the path the store gave it (`v1-e34-t19`)."""
 
 
 class StoreCredentialsExpired(StoreError):

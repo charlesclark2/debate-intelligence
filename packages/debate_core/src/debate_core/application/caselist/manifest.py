@@ -78,6 +78,18 @@ out. It is counted, as `SUPPRESSED` in the summary row's `classifications`, and 
 list as a required argument, and it refuses to render a row the list stops
 (:class:`SuppressedRowRefused`), whichever writer built the row.
 
+## A manifest file this machine refuses
+
+A manifest is read and written by the path the local evidence store names for its key, not through
+the store, so the store's own translation of a refusal (`v1-e34-t13`) never sees these reads. Every
+one of them goes through :func:`read_manifest_file`, :func:`read_manifest_lines` or
+:func:`write_manifest_text`, and a `PermissionError` in any of the three is
+:class:`~debate_core.application.errors.LocalStoreAccessDenied` naming "the manifest directory",
+the role the filesystem store gives the same directory, and never the path (`v1-e34-t19`). That
+covers a manifest file the operating system will not open in a directory it will list, a directory
+it will not let this user look into, and a directory it will not let this user write to. Refused is
+never read as absent: a manifest that could not be looked at is not a manifest that is not there.
+
 ## What is in it that is not in a log
 
 School, team code, tournament, round and the archive path. That is deliberate and it is the
@@ -90,15 +102,21 @@ from __future__ import annotations
 
 import json
 import os
+import stat
 import tempfile
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Generator, Iterable, Mapping, Sequence
+from contextlib import contextmanager
 from datetime import date
 from enum import StrEnum
 from pathlib import Path
 from typing import Any, Final
 
 from debate_core.application.caselist.import_service import Classification, ImportedEntry, ImportReport
-from debate_core.application.errors import DomainError
+from debate_core.application.errors import (
+    LOCAL_STORE_ACCESS_DENIED_HINT,
+    DomainError,
+    LocalStoreAccessDenied,
+)
 from debate_core.application.ports.evidence_store import ObjectKey, validate_object_key
 from debate_core.application.ports.suppression import SuppressionState, disclosure_digest
 
@@ -114,6 +132,7 @@ __all__ = [
     "manifest_key",
     "manifest_lines",
     "name_of",
+    "read_manifest_file",
     "read_manifest_lines",
     "render_manifest",
     "render_rows",
@@ -141,6 +160,28 @@ _COMPACT_SEPARATORS: Final = (",", ":")
 
 #: Prefix of the temp file a manifest is written to before it is renamed into place.
 _TEMPORARY_FILE_PREFIX: Final = ".incoming-manifest-"
+
+MANIFEST_DIRECTORY_ROLE: Final = "the manifest directory"
+"""How a refusal names where manifests are kept: what the directory is for, never where it is.
+
+The same words :func:`debate_core.integrations.local.refusals.role_of` gives a key under
+`manifests/`, so a manifest refused through the store and one refused by its path read alike.
+"""
+
+
+@contextmanager
+def _refused_as_access_denied(operation: str) -> Generator[None]:
+    """Raise :class:`LocalStoreAccessDenied` naming the manifest directory for a `PermissionError`.
+
+    Only a refusal is translated, as in the filesystem stores: any other `OSError` (a full disk, an
+    I/O error) is not one, and is left as it is. The `PermissionError` stays on `__cause__`.
+    """
+    try:
+        yield
+    except PermissionError as refused:
+        raise LocalStoreAccessDenied(
+            operation, MANIFEST_DIRECTORY_ROLE, hint=LOCAL_STORE_ACCESS_DENIED_HINT
+        ) from refused
 
 
 class SuppressedRowRefused(DomainError):
@@ -233,11 +274,39 @@ def render_manifest(report: ImportReport) -> str:
 
 
 def read_manifest_lines(path: Path) -> list[str]:
-    """The lines of the manifest already at `path`, or none when nothing has been written there."""
+    """The lines of the manifest already at `path`, or none when nothing has been written there.
+
+    Raises :class:`~debate_core.application.errors.LocalStoreAccessDenied` when the operating
+    system will not say whether it is there, or will not open it: see "A manifest file this machine
+    refuses" in the module docstring.
+    """
     location = Path(path)
-    if not location.is_file():
-        return []
-    return location.read_text(encoding="utf-8").splitlines()
+    with _refused_as_access_denied("read"):
+        if not _is_regular_file(location):
+            return []
+    return read_manifest_file(location)
+
+
+def read_manifest_file(path: Path) -> list[str]:
+    """The lines of the manifest file at `path`, which a listing of the store has already found.
+
+    What every reader of a local manifest by its path calls, so that a file this user may not open
+    is :class:`~debate_core.application.errors.LocalStoreAccessDenied` whoever is reading it.
+    """
+    with _refused_as_access_denied("read"):
+        return Path(path).read_text(encoding="utf-8").splitlines()
+
+
+def _is_regular_file(path: Path) -> bool:
+    """Whether `path` names a regular file; false when nothing is there.
+
+    `os.stat` rather than `Path.is_file`: what the latter does with a refusal has changed between
+    Python versions, and a refusal must reach the caller rather than read as "not there".
+    """
+    try:
+        return stat.S_ISREG(os.stat(path).st_mode)
+    except (FileNotFoundError, NotADirectoryError):
+        return False
 
 
 def write_manifest(report: ImportReport, destination: Path) -> Path:
@@ -261,20 +330,28 @@ def write_manifest_lines(lines: Iterable[str], destination: Path) -> Path:
 
 
 def write_manifest_text(text: str, destination: Path) -> Path:
-    """Write already-rendered manifest text to `destination`, atomically, and return the path."""
+    """Write already-rendered manifest text to `destination`, atomically, and return the path.
+
+    Raises :class:`~debate_core.application.errors.LocalStoreAccessDenied` when the operating
+    system will not let the manifest directory be written to, leaving any manifest already there
+    as it was.
+    """
     path = Path(destination)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    handle, temporary_name = tempfile.mkstemp(dir=path.parent, prefix=_TEMPORARY_FILE_PREFIX, suffix=".tmp")
-    temporary_path = Path(temporary_name)
-    try:
-        with os.fdopen(handle, "w", encoding="utf-8", newline="\n") as stream:
-            stream.write(text)
-            stream.flush()
-            os.fsync(stream.fileno())
-        os.replace(temporary_path, path)
-    except BaseException:
-        temporary_path.unlink(missing_ok=True)
-        raise
+    with _refused_as_access_denied("write"):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        handle, temporary_name = tempfile.mkstemp(
+            dir=path.parent, prefix=_TEMPORARY_FILE_PREFIX, suffix=".tmp"
+        )
+        temporary_path = Path(temporary_name)
+        try:
+            with os.fdopen(handle, "w", encoding="utf-8", newline="\n") as stream:
+                stream.write(text)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(temporary_path, path)
+        except BaseException:
+            temporary_path.unlink(missing_ok=True)
+            raise
     return path
 
 

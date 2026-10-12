@@ -38,7 +38,11 @@ from debate_cli.commands.caselist_pull import (
     _pull_failure,  # pyright: ignore[reportPrivateUsage]
 )
 from debate_cli.container import ServiceContainer
-from debate_cli.exit_codes import ExitCode
+from debate_cli.exit_codes import (
+    ExitCode,
+    codes_exit_as_a_retrieval_failure,
+    exit_code_for_failure_codes,
+)
 from debate_core.application.caselist_sync import (
     InboxFileKind,
     InboxFileVerdict,
@@ -759,7 +763,7 @@ def test_no_output_of_a_pull_names_a_camp_file_by_its_title(
         runs = printed(*arguments)
         assert runs.exit_code == ExitCode.OK, runs.output
         assert_no_probe(f"`{' '.join(arguments)}`", runs.output + (runs.stderr or ""))
-    assert [one.title for one in notified.sent] == ["caselist pull failed", "caselist pull failed"]
+    assert [one.title for one in notified.sent] == ["caselist pull failed: needs a person"] * 2
     shown = MacOsNotifier(executable="osascript")
     assert_no_probe("the notifications", " ".join(" ".join(shown.command_for(one)) for one in notified.sent))
 
@@ -913,3 +917,100 @@ def test_full_archive_flag_and_publish_pending_are_refused_together(installation
     )
 
     assert result.exit_code == ExitCode.USAGE_ERROR
+
+
+# ------------------------------------------------------------------------------------------------
+# The notification says what the exit code says (`v1-e34-t19`)
+# ------------------------------------------------------------------------------------------------
+
+A_RETRY_MAY_CURE = [
+    "STORE_UNAVAILABLE",
+    "STORE_CREDENTIALS_EXPIRED",
+    "STORE_ACCESS_DENIED",
+    "PROVIDER_UNAVAILABLE",
+    "PROVIDER_RATE_LIMITED",
+]
+"""The five codes that exit `3`, by hand from the runbook's table. The tests of `debate_core`,
+which may not import this package, carry the same five
+(`packages/debate_core/tests/application/caselist/retry_rule.py`)."""
+
+A_PERSON_HAS_TO_LOOK = [
+    "DAILY_DOWNLOAD_LIMIT_REACHED",
+    "CASELIST_AUTH_EXPIRED",
+    "ARCHIVE_UNAVAILABLE",
+    "ARCHIVE_TOO_LARGE",
+    "DOWNLOAD_INTEGRITY_ERROR",
+    "UNREADABLE_ARCHIVE",
+    "UNREADABLE_APPEND_ONLY_RECORD",
+    "UNREADABLE_MANIFEST",
+    "CHECKSUM_MISMATCH",
+    "NOTHING_TO_PUBLISH",
+    "PENDING_WORK_UNREADABLE",
+    "INTERNAL_ERROR",
+    "A_CODE_NOBODY_HAS_HEARD_OF",
+]
+"""Every other code in that table, a publisher's own, and one that is on no list at all."""
+
+
+@pytest.mark.parametrize(
+    ("code", "transient"),
+    [*((code, True) for code in A_RETRY_MAY_CURE), *((code, False) for code in A_PERSON_HAS_TO_LOOK)],
+)
+def test_the_rule_the_run_monitor_is_handed_is_the_exit_codes_own(code: str, transient: bool) -> None:
+    """One decision, asked two ways: a run that failed on this code exits `3` exactly when the
+    notification's rule calls it one the next run may cure."""
+    assert codes_exit_as_a_retrieval_failure([code]) is transient
+    assert (exit_code_for_failure_codes([code]) is ExitCode.RETRIEVAL_FAILURE) is transient
+
+
+def test_a_run_is_transient_only_when_every_code_is_and_never_when_there_is_none() -> None:
+    assert codes_exit_as_a_retrieval_failure(["STORE_UNAVAILABLE", "PROVIDER_RATE_LIMITED"]) is True
+    assert codes_exit_as_a_retrieval_failure(["STORE_UNAVAILABLE", "UNREADABLE_ARCHIVE"]) is False
+    assert codes_exit_as_a_retrieval_failure(["STORE_UNAVAILABLE", None]) is False
+    assert codes_exit_as_a_retrieval_failure([]) is False, (
+        "a failure with no code is nobody's to wave through"
+    )
+
+
+def test_a_run_that_exits_three_notifies_that_the_next_scheduled_run_should_retry_it(
+    installation: Path, site: respx.MockRouter, quick_retries: None, notified: RecordingNotifier
+) -> None:
+    """Through the real composition root: the file host answers 503 past the retries, the command
+    exits `3`, and the banner says the same thing. The details beside the record carry the code,
+    and the record itself is the shape it always was."""
+    site.get(f"{FILE_HOST}/{weekly_name(WEEK_THREE)}").respond(503)
+
+    envelope = pull("--caselist", SYNTHETIC_CASELIST)
+
+    assert envelope["exit_code"] == ExitCode.RETRIEVAL_FAILURE, envelope
+    [notification] = notified.sent
+    assert notification.title == "caselist pull failed: will be retried"
+    assert "the download stage failed on PROVIDER_UNAVAILABLE" in notification.message
+    assert (
+        "The next scheduled run should retry it: every failure here is one a later run may not meet."
+        in notification.message
+    )
+    summary = envelope["error"]["details"]
+    assert summary["run_details"]["failure_codes"] == ["PROVIDER_UNAVAILABLE"]
+    assert summary["run_details"]["stages"] == [
+        {"stage": "download", "error_codes": ["PROVIDER_UNAVAILABLE"], "hint": None, "earlier_findings": []}
+    ]
+    assert all(sorted(one) == ["outcome", "reason", "stage"] for one in summary["run_record"]["stages"])
+
+
+def test_a_run_that_exits_one_notifies_that_a_person_should_look(
+    installation: Path, site: respx.MockRouter, quick_retries: None, notified: RecordingNotifier
+) -> None:
+    """The file host no longer serves an archive it listed: the same next week."""
+    site.get(f"{FILE_HOST}/{weekly_name(WEEK_THREE)}").respond(404)
+
+    envelope = pull("--caselist", SYNTHETIC_CASELIST)
+
+    assert envelope["exit_code"] == ExitCode.DOMAIN_FAILURE, envelope
+    [notification] = notified.sent
+    assert notification.title == "caselist pull failed: needs a person"
+    assert "the download stage failed on ARCHIVE_UNAVAILABLE" in notification.message
+    assert (
+        "A person should look: at least one failure here will be the same on the next scheduled run."
+        in notification.message
+    )

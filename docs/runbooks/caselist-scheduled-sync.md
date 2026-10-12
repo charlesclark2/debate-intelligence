@@ -284,7 +284,8 @@ against an agent whose wrapper is not this checkout's copied out, so reinstall f
 
 You should not have to go looking. A failed stage, an expired `caselist_token`, an expired SSO
 session, and a cap backlog that has grown for two runs in a row each post a macOS notification
-naming the command that fixes it (`caselist.notifier`, `auto` by default). Every run also appends
+naming the command that fixes it (`caselist.notifier`, `auto` by default).
+[What a notification says](#what-a-notification-says) lists each one. Every run also appends
 one record to the run log, `<data_dir>/caselist-sync-runs.jsonl`, and publishes it to
 `reports/sync-runs/<yyyy>/<run-id>.json` in the bucket (`v1-e34-t03`). The first command reads this
 machine's log, the second the bucket's copy:
@@ -296,6 +297,35 @@ debate-research caselist runs --last 5 --remote
 
 Its caption says how long ago the newest run started, and says the schedule may have stopped when
 that is more than eight days — the one failure that leaves no record and sends no notification.
+Its last column, `Parse stage`, is each run's parse counts
+([Reading what it did](#reading-what-it-did)).
+
+### The record, and the details beside it
+
+A run is written down in two places (`v1-e34-t19`):
+
+| | On this Mac | In the bucket | Holds |
+|---|---|---|---|
+| The **record** | `<data_dir>/caselist-sync-runs.jsonl` | `reports/sync-runs/<yyyy>/<run-id>.json` | What it always has: the outcome, the counts, each stage's outcome and reason |
+| The run's **details** | `<data_dir>/caselist-sync-run-details.jsonl` | `reports/sync-run-details/<yyyy>/<run-id>.json` | Each failed stage's `error_codes` and `hint`, a pending stage's `earlier_findings`, the codes the exit code was decided from, and the parse stage's nine counts |
+
+They are two files because the record cannot change. Every build refuses a record with a field
+it does not know, and the agent goes on running the build it was installed with: a record with
+one more field would be a run that build cannot see, in `caselist runs`, in the backlog it
+carries from week to week, and in the list of records it still has to publish. So the record
+this build writes is the record the installed build wrote, field for field, and what is new is
+kept beside it under the same run id. No older build opens the details. `caselist runs` puts the
+two together:
+
+```bash
+debate-research --json caselist runs --last 1 | jq '.data.runs[0].details'
+```
+
+`details` is `null`, and the `Parse stage` column says `not recorded`, for a run a build before
+`v1-e34-t19` recorded. That is every run of an agent that has not been reinstalled since. It
+also happens once in the other direction: a record that waited for a login and was then
+published by an older build goes to the bucket without its details, which stay on this Mac.
+After the reinstall every run has both.
 
 The raw output of each run is still there:
 
@@ -320,8 +350,9 @@ One JSON object per run on stdout. The fields to read first:
 | `inbox_retention` | What left the inbox and the bytes freed, and what stayed and why. See [The download inbox](#the-download-inbox) |
 | `full_archive` | What the complete-archive rotation decided and why (`reason`), what the weeklies left of the day's allowance, and for a complete archive imported, its `bytes` and its `withdrawn` and `superseded` counts. See [The complete archive](#the-complete-archive) |
 | `openev_selections[]` | Each camp file OpenEv listed: its `openev_id`, the run's `decision`, and `inbox_file`, the first twelve hex digits of the download's sha256 once the run had its bytes (the name `inbox_retention` gives the same file) |
-| `stages[]` | One entry per stage, each with the sentence saying why it ended that way (`reason`). A failed stage also carries `error_codes`, the code of each failure behind it, and, when a store refused it, `hint`, the fix that applies (`v1-e34-t13`). See [What the exit code says](#what-the-exit-code-says) |
-| `schema_version` | `5` since `v1-e34-t17`, which replaced `cards_parsed` and `parse_failures` (always `0`; no stage filled them) with `parse`. `4` since `v1-e34-t13`, which added `error_codes` and `hint` to every stage; a summary written before that says `3` and has neither. Nothing reads a summary back; `caselist runs` reads the run log, which builds of every kind read and write alike |
+| `stages[]` | One entry per stage, each with the sentence saying why it ended that way (`reason`). A failed stage also carries `error_codes`, the code of each failure behind it, and, when a store refused it, `hint`, the fix that applies (`v1-e34-t13`). A `pending` stage carries `earlier_findings`, the codes of what it had already found when the session expired (`v1-e34-t19`); they never change the exit code. See [What the exit code says](#what-the-exit-code-says) |
+| `run_record`, `run_details` | What the run log keeps of this run, and what is kept beside it. See [The record, and the details beside it](#the-record-and-the-details-beside-it) |
+| `schema_version` | `5` since `v1-e34-t17`, which replaced `cards_parsed` and `parse_failures` (always `0`; no stage filled them) with `parse`. `4` since `v1-e34-t13`, which added `error_codes` and `hint` to every stage; a summary written before that says `3` and has neither. `v1-e34-t19` added `earlier_findings` to every stage and left the version at `5`, because nothing is decided from it. Nothing reads a summary back; `caselist runs` reads the run log, which builds of every kind read and write alike |
 
 Nothing in that object is a school, a team code, a debater's initials, a disclosure path, a camp
 file's title or the `caselist_token` — the policy forbids all of them in a log, and the summary is
@@ -356,7 +387,7 @@ Which failure is which:
 |---|---|---|
 | The bucket did not answer: a 5xx, a throttle, a timeout | `STORE_UNAVAILABLE` | `3` |
 | The bucket refused the profile: it is signed in and lacks a grant | `STORE_ACCESS_DENIED` | `3`, with a `hint` |
-| This Mac refused a folder under the data directory | `STORE_ACCESS_DENIED` | `3`, with a `hint` |
+| This Mac refused a folder under the data directory, or a manifest file in one | `STORE_ACCESS_DENIED` | `3`, with a `hint` |
 | OpenCaselist answered a download with a 5xx, or the connection failed or timed out, and the client's retries ran out | `PROVIDER_UNAVAILABLE` | `3` |
 | OpenCaselist rate-limited a download, and it was not the daily cap | `PROVIDER_RATE_LIMITED` | `3` |
 | The daily cap, on a weekly archive | none: the stage completes and the week is deferred | `0` |
@@ -365,7 +396,8 @@ Which failure is which:
 | The file host no longer serves an archive it listed | `ARCHIVE_UNAVAILABLE` | `1` |
 | An archive is over `caselist.max_archive_bytes` | `ARCHIVE_TOO_LARGE` | `1` |
 | A download did not arrive whole | `DOWNLOAD_INTEGRITY_ERROR` | `1` |
-| A zip cannot be read | `UNREADABLE_ARCHIVE` | `1` |
+| A zip cannot be read: it is not a zip, or this Mac will not open the file. That archive's import fails, and the run's other archives are imported | `UNREADABLE_ARCHIVE` | `1` |
+| A manifest on this Mac has a line nobody can read, so the snapshot it describes cannot be published. The other snapshots are | `UNREADABLE_MANIFEST` | `1` |
 | A copy of the suppression list has a line nobody can read | `UNREADABLE_APPEND_ONLY_RECORD` | `1` |
 | A source's bytes in the bucket are not the ones its key names | `CHECKSUM_MISMATCH` | `1` |
 | The pending-work file names a snapshot this Mac holds no manifest for | `NOTHING_TO_PUBLISH` | `1`, once: the snapshot leaves the file, because no run here can publish it |
@@ -381,6 +413,14 @@ above for a store that did not answer or refused, the code of each object of the
 bucket did not confirm, and `INTERNAL_ERROR` for a parse that crashed.
 [The parse stage](#the-parse-stage) says what to do about each.
 
+**`publish: pending` decides nothing either, whatever it found first.** A publish that the session
+expired on is `pending` and exits `0`, as it always has. If a snapshot had already ended incomplete
+on a code before that, a checksum mismatch say, the stage carries the code in `earlier_findings`
+and not in `error_codes`, and the exit code does not read it (`v1-e34-t19`). The login notification
+says so when the code is one that needs a person
+([What a notification says](#what-a-notification-says)). The retry after the login then reports it
+as a failed publish, with the exit code that goes with it.
+
 One failure of the second kind among any number of the first makes the run a `1`: a week that
 cannot be read is not fixed by the bucket coming back. A failure that ends the run before any stage
 records it, such as OpenCaselist not answering the listing, exits as it does in every other command:
@@ -392,7 +432,9 @@ have one, and they are told apart by where the refusal came from:
 
 * *This Mac refused a folder.* The hint names the folder by what it is for ("the blob directory",
   "the manifest directory") and the setting `storage.data_dir`. Check that the user the agent runs
-  as can read and write the data directory, then run the command again.
+  as can read and write the data directory, then run the command again. A single manifest file the
+  user cannot open, or a manifest folder the user cannot write to, is the same refusal with the
+  same hint (`v1-e34-t19`; it used to be exit `70`).
 * *The bucket refused the profile.* The hint says the profile lacks a grant and points at
   [`evidence-store.md`](evidence-store.md), which lists what each profile is granted and how to
   check it. `aws sso login` does not change a grant.
@@ -420,6 +462,66 @@ the bucket at all, and it ends before any stage:
 It is a configuration error, not an expired session: `aws sso login` does not define a profile, and
 next week's run ends the same way. Until `v1-e29-t07` it was reported as
 `STORE_CREDENTIALS_EXPIRED` with exit `3`, "a retry may succeed".
+
+## What a notification says
+
+Each banner has a title, the command to run once the fix is made (under the title), and a body.
+A failed run's title is its verdict, so it can be read without opening the banner
+(`v1-e34-t19`). The verdict is the exit code said in words, decided by the same rule.
+
+| Title | When | Exit |
+|---|---|---|
+| `caselist pull failed: will be retried` | A download, an import or a publish failed, or the run stopped on an error, and every failure is one a later run may not meet | `3` |
+| `caselist pull failed: needs a person` | The same, and at least one failure will be the same next week. Also a run that stopped on a bug | `1`, `70` |
+| `caselist pull finished with a failed stage` | Only a stage that did not have to finish failed: parse, report or retention | `0` |
+| `caselist publish waiting for an AWS login` | The SSO session had expired | `0` |
+| `caselist pull stopped: OpenCaselist login expired` | The `caselist_token` expired | `1` |
+| `caselist backlog growing` | The cap has deferred more archives for two runs in a row | `0` |
+
+**The two wordings of a failed run.** The body names each failed stage with the codes it failed on,
+and then says one of two things. When the next scheduled run should retry it:
+
+> Run 20261014T100000Z (prod): the publish stage failed on STORE_UNAVAILABLE. The next scheduled run should retry it: every failure here is one a later run may not meet. What was captured is kept.
+
+When a person should look:
+
+> Run 20261014T100000Z (prod): the import stage failed on UNREADABLE_ARCHIVE. A person should look: at least one failure here will be the same on the next scheduled run. What was captured is kept.
+
+A run that stopped on an error before any stage could record it says `stopped with` and the
+error's class, then the same sentence.
+
+**The fix, when the stage has one.** A failed stage's `hint` follows the sentence, word for word as
+the summary gives it. Either wording can have one. With the first, the hint is what to do before
+the retry can help: a refusal exits `3`, and next week's run is refused again until the permission
+or the grant is fixed.
+
+> Run 20261014T100000Z (prod): the publish stage failed on STORE_ACCESS_DENIED. The next scheduled run should retry it: every failure here is one a later run may not meet. What was captured is kept. This machine refused the blob directory: check that this user can read and write it, under the environment's data directory (storage.data_dir). It is a permission on this machine, not the AWS session.
+
+The hints are the ones [What the exit code says](#what-the-exit-code-says) describes: a folder
+this Mac refused, a grant the profile lacks, and the pending-work file when it cannot be read.
+None of them names a path: a folder is named by what it is for.
+
+**A failed parse stage** gets neither wording, because the run exits `0` and the next scheduled run
+does not retry a parse. Its banner carries the stage's own hint, which names the command:
+`debate-research caselist parse --caselist <slug> --publish` for a parsed store the bucket did not
+take, and `debate-research caselist parse --caselist <slug> --failures` for a failure rate over the
+threshold. See [The parse stage](#the-parse-stage).
+
+**A login that will not be enough.** When the session expired after a snapshot had already ended
+incomplete on something no later run cures, the login banner adds a sentence:
+
+> Run 20261014T100000Z (prod) kept everything it fetched; 2 snapshot(s) and the run record wait to be published. A person should look as well: before the session expired a snapshot ended incomplete on CHECKSUM_MISMATCH, which the login will not fix.
+
+Log in and drain as usual. The retry publishes the rest and reports that snapshot as a failed
+publish; the stage's reason names it. A snapshot that ended incomplete on something a retry does
+cure, a `503` say, adds no sentence: the drain publishes it.
+
+Notification Centre shows the first lines of a body and the rest when the banner is opened. The
+whole of it is also in the run's details:
+
+```bash
+debate-research --json caselist runs --last 1 | jq '.data.runs[0].details'
+```
 
 ## The complete archive
 
@@ -602,14 +704,23 @@ made from it.
 ### Reading what it did
 
 The summary's `parse` holds counts only, and the stage's row in the table says the same in a
-sentence. `caselist runs` keeps that sentence and shows it under its table for the newest run,
-unless the stage was skipped:
+sentence. `caselist runs` shows every run's counts in its last column, `Parse stage`
+(`v1-e34-t19`), and the stage's sentence under the table for the newest run, unless the stage was
+skipped:
 
 ```bash
-debate-research caselist runs --last 1
+debate-research caselist runs --last 5
 tail -n 1 ~/Library/Logs/debate-research/caselist-sync.jsonl | jq '.data.parse'
+debate-research --json caselist runs --last 1 | jq '.data.runs[0].details.parse'
 debate-research --json caselist runs --last 1 | jq '.data.runs[0].stages[] | select(.stage == "parse")'
 ```
+
+The column gives the nine counts on four lines: caselists and how many in full; sources attempted,
+skipped, unsupported and failed; cards; objects uploaded and caselists not published. It says
+`did not run` for a run whose parse stage parsed nothing (turned off, or nothing imported), and
+`not recorded` for a run a build before `v1-e34-t19` recorded, which kept no counts. The counts are
+in the run's details, not its record
+([The record, and the details beside it](#the-record-and-the-details-beside-it)).
 
 | Count | What it says |
 |---|---|
@@ -852,9 +963,11 @@ with `not recorded as owed:` and their names. To repair it:
    debate-research caselist status --caselist hsld26
    ```
 
-The sync writes the file to a second file beside it and renames that into place, so a run that
-dies while writing cannot be what cut it short. Something else did: an editor, a restore, a full
-disk at the wrong moment for another tool.
+The sync writes the file to a second file beside it, puts that on the disk, renames it into place
+and then puts the folder on the disk too (`v1-e34-t19`), so neither a run that dies while writing
+nor the Mac losing power just after can be what cut it short. The download ledger, the OpenEv
+delivery record and each run's summary are written the same way. Something else did: an editor, a
+restore, a full disk at the wrong moment for another tool.
 
 ## When something goes wrong
 
@@ -881,6 +994,20 @@ drain them now:
 ```bash
 debate-research caselist pull --publish-pending
 ```
+
+**`publish` is `pending`, and its `earlier_findings` is not empty.** The session expired, and
+before it did a snapshot ended incomplete on the code shown. Log in and drain it as above. If the
+banner said *a person should look as well*, the drain will report that snapshot as a failed publish
+with exit `1`, and its reason will name the snapshot and the source: a `CHECKSUM_MISMATCH` is a
+source whose key in the bucket holds other bytes, which nothing overwrites and a person has to
+look at ([`evidence-store-cli.md`](../guides/evidence-store-cli.md)).
+
+**`publish` is `failed` with `UNREADABLE_MANIFEST`.** A manifest on this Mac has a line that is not
+what the importer writes, so the snapshot it describes was not published; every other snapshot
+was, and that one stays in [the pending-work file](#the-pending-work-file). The stage's reason
+gives the manifest's key and the line number, never the line. Before `v1-e34-t19` this ended the
+run with no summary. Importing the archive again rewrites the manifest: put the zip back in the
+inbox if retention has removed it, or run `caselist import` on it, then drain.
 
 **`publish` is `failed` with `PENDING_WORK_UNREADABLE`.** The file that lists what is owed could not
 be read, and the run left it alone. This is exit `1` and no later run fixes it by itself. Follow
@@ -919,9 +1046,11 @@ confirms it was refused. Nothing is lost and nothing waits for a login, but noth
 until a run can confirm it. Make the fix the hint names; the next run confirms and clears the inbox.
 
 **The run stopped with `STORE_ACCESS_DENIED` before fetching anything.** This Mac refused the
-manifest folder, so the run could not tell which weeks it already holds. It stops there rather than
-take every listed week for new and fetch them all again, which is what an unreadable folder used to
-cause. Fix the permission on the data directory and run the command again.
+manifest folder, or one manifest file in it (`v1-e34-t19`), so the run could not tell which weeks
+it already holds. It stops there rather than take every listed week for new and fetch them all
+again, which is what an unreadable folder used to cause. Fix the permission on the data directory
+and run the command again. The banner is `caselist pull failed: will be retried`, with the same
+fix in its body.
 
 **`another caselist sync is already running`.** A run holds the lock at
 `<data_dir>/caselist-sync.lock`. It is an `flock`, so the kernel drops it when the process ends —
@@ -946,7 +1075,12 @@ newer weeks of that caselist that waited behind it. What the operator has to do 
 cause the reason names — an archive over `caselist.max_archive_bytes`, a caselist slug this build
 does not know the event of, an unreadable zip — because a run meets the same archive again and,
 with the cause still there, fails the same way. An unreadable zip is the one case to delete by
-hand: remove it from the inbox, and the next run downloads it again. A camp download is named in the
+hand: remove it from the inbox, and the next run downloads it again. If the reason says the file in
+the inbox *could not be read (PermissionError)*, the zip may be whole and this user cannot open
+it: fix its permission instead, and the next run imports it from the inbox without a download.
+One archive that cannot be read no longer stops the run (`v1-e34-t19`): the other caselists' weeks,
+the camp files and the complete archive are imported, and the same caselist's newer weeks wait
+behind it as behind any failed import. A camp download is named in the
 reason by its id, `openev-777 (sha256 2b912c191a8a)`; its file in the inbox is the one whose name
 starts `openev-777-`.
 

@@ -201,10 +201,12 @@ def test_runs_still_reads_the_run_log_a_schema_3_build_wrote(installation: Path)
         ("import", "completed"),
     ]
     assert all(sorted(one) == ["outcome", "reason", "stage"] for one in run["stages"])
+    assert run["details"] is None, "a build before v1-e34-t19 wrote nothing beside its record"
 
     table = " ".join(invoke("caselist", "runs", "--last", "5").stdout.split())
-    # Nothing was deferred by the cap, so the table shows the downloads as a plain count.
-    assert "20260916T060000Z │ 2026-09-16 06:00 │ failed │ 2 │ 0 │ 0" in table
+    # Nothing was deferred by the cap, so the table shows the downloads as a plain count. The parse
+    # stage's column says the run has no counts on record, which is not the same as none parsed.
+    assert "20260916T060000Z │ 2026-09-16 06:00 │ failed │ 2 │ 0 │ 0 │ not recorded" in table
 
 
 def test_runs_with_nothing_recorded_says_so_and_is_overdue(installation: Path) -> None:
@@ -268,8 +270,110 @@ def test_runs_shows_what_the_newest_runs_parse_stage_did(installation: Path, sit
     assert {one["stage"]: one["outcome"] for one in record["stages"]}["parse"] == "completed"
 
     # The next run imports nothing, so its parse stage is skipped and the caption is silent on it.
+    # (The table has a "Parse stage" column since `v1-e34-t19`; it is the caption's sentence that
+    # is absent.)
     assert invoke("--json", "caselist", "pull", "--caselist", SYNTHETIC_CASELIST).exit_code == ExitCode.OK
-    assert "Parse stage" not in " ".join(invoke("caselist", "runs", "--last", "1").stdout.split())
+    assert "Parse stage of the newest run" not in " ".join(
+        invoke("caselist", "runs", "--last", "1").stdout.split()
+    )
+
+
+# ------------------------------------------------------------------------------------------------
+# The parse stage's counts, in the table (`v1-e34-t19` ac9)
+# ------------------------------------------------------------------------------------------------
+
+DETAILS_FILE = "caselist-sync-run-details.jsonl"
+"""The file beside the run log that holds what the record cannot, by its name in the runbook."""
+
+
+def test_runs_shows_the_nine_parse_counts_kept_beside_a_record_each_under_its_own_name(
+    installation: Path,
+) -> None:
+    """A record, and beside it details written here by hand, with nine different numbers so that no
+    two counts can change places unnoticed. All nine are in the run's row, each named."""
+    started = datetime.now(UTC).replace(microsecond=0) - timedelta(days=1)
+    record = a_record(started)
+    SyncRunLog(installation / SYNC_RUN_LOG_FILENAME).append(record)
+    (installation / DETAILS_FILE).write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "run_id": record.run_id,
+                "stages": [],
+                "failure_codes": [],
+                "hint": None,
+                "parse": {
+                    "caselists": 3,
+                    "full_parses": 1,
+                    "attempted": 120,
+                    "skipped": 45,
+                    "unsupported": 7,
+                    "failed": 2,
+                    "cards": 310,
+                    "uploaded": 58,
+                    "not_published": 4,
+                },
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    table = " ".join(invoke("caselist", "runs").stdout.split())
+
+    assert "Parse stage" in table
+    assert f"{record.run_id} │" in table
+    for counts in (
+        "3 caselist(s), 1 in full",
+        "120 attempted, 45 skipped, 7 unsupported, 2 failed",
+        "310 card(s)",
+        "58 uploaded, 4 caselist(s) not published",
+    ):
+        assert counts in table, table
+    [run] = as_json("caselist", "runs")["data"]["runs"]
+    assert run["run_id"] == record.run_id, "the record's own fields are where they always were"
+    assert run["details"]["parse"]["cards"] == 310
+
+
+def test_runs_shows_what_a_real_pulls_parse_stage_counted_and_that_the_next_one_did_not_run(
+    installation: Path, site: respx.MockRouter
+) -> None:
+    """Through the command, both ways. The counts are the ones the caption test above derives by
+    hand from the fixture: one caselist parsed in full, fourteen bodies of which a PDF and a legacy
+    `.doc` are unsupported, no cards, and no bucket in `test` so nothing uploaded. The second pull
+    imports nothing, so its parse stage did not run, and its row says that and not a row of zeros."""
+    first = as_json("caselist", "pull", "--caselist", SYNTHETIC_CASELIST)
+    assert first["exit_code"] == ExitCode.OK, first
+    by_hand = {
+        "caselists": 1,
+        "full_parses": 1,
+        "attempted": 14,
+        "skipped": 0,
+        "unsupported": 2,
+        "failed": 0,
+        "cards": 0,
+        "uploaded": 0,
+        "not_published": 0,
+    }
+    assert first["data"]["run_details"]["parse"] == by_hand
+
+    [run] = as_json("caselist", "runs", "--last", "1")["data"]["runs"]
+    assert run["details"]["parse"] == by_hand
+    table = " ".join(invoke("caselist", "runs", "--last", "1").stdout.split())
+    for counts in (
+        "1 caselist(s), 1 in full",
+        "14 attempted, 0 skipped, 2 unsupported, 0 failed",
+        "0 card(s)",
+        "0 uploaded, 0 caselist(s) not published",
+    ):
+        assert counts in table, table
+
+    assert as_json("caselist", "pull", "--caselist", SYNTHETIC_CASELIST)["exit_code"] == ExitCode.OK
+    newest, older = as_json("caselist", "runs")["data"]["runs"]
+    assert newest["details"]["parse"] is None
+    assert older["details"]["parse"] == by_hand
+    rows = " ".join(invoke("caselist", "runs").stdout.split())
+    assert f"{newest['run_id']} │" in rows and "│ did not run" in rows
 
 
 def test_a_dry_run_leaves_no_record(installation: Path, site: respx.MockRouter) -> None:

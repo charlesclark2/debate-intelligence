@@ -41,7 +41,7 @@ from contextlib import contextmanager
 from pathlib import Path, PurePosixPath
 from typing import Final
 
-from debate_core.application.errors import LocalStoreAccessDenied
+from debate_core.application.errors import LOCAL_STORE_ACCESS_DENIED_HINT, LocalStoreAccessDenied
 
 __all__ = [
     "ACCESS_DENIED_HINT",
@@ -52,11 +52,11 @@ __all__ = [
     "role_of",
 ]
 
-ACCESS_DENIED_HINT: Final = (
-    "the operating system refused it; check that this user can read and write the environment's "
-    "data directory (storage.data_dir)"
-)
-"""The one line a CLI prints under the refusal. It names the setting, not the path it holds."""
+ACCESS_DENIED_HINT: Final = LOCAL_STORE_ACCESS_DENIED_HINT
+"""The one line a CLI prints under the refusal. It names the setting, not the path it holds.
+
+The sentence itself lives beside the error (`v1-e34-t19`), so that the application code that reads
+a manifest by its path says the same thing these stores do."""
 
 #: What each directory under the data directory is for, as an operator would name it.
 _ROLES: Final = {

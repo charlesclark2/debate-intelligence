@@ -77,6 +77,7 @@ from debate_core.integrations.local.suppression_list import local_suppression_li
 from debate_core.integrations.s3 import S3Call, S3EvidenceObjectStore, translate_s3_error
 
 from . import test_inbox_retention as inbox_retention
+from .retry_rule import the_commands_retry_rule
 from .test_inbox_retention import (
     CASELIST,
     ESTUARY,
@@ -272,6 +273,7 @@ async def pull(
         notifier=notifier,
         remote=installation.bucket,
         aws_login_command=AWS_LOGIN,
+        **the_commands_retry_rule(),
     )
     pulled = await run_pull(
         lambda: service,
@@ -398,7 +400,7 @@ async def test_uploads_the_bucket_did_not_take_fail_publish_on_the_store_and_wai
     assert watched.summary.failure_codes == ("STORE_UNAVAILABLE",)
     assert owed(installation) == ["testcl26 2026-09-01"]
     assert stage(watched.summary, SyncStage.REPORT)["outcome"] == "skipped"
-    assert [one.title for one in watched.notifier.sent] == ["caselist pull failed"]
+    assert [one.title for one in watched.notifier.sent] == ["caselist pull failed: will be retried"]
     assert "aws sso login" not in watched.notified
     assert_names_nothing_of_this_machine(watched.summary, installation)
 
@@ -673,7 +675,7 @@ async def test_a_local_refusal_in_publish_fails_the_stage_and_names_the_data_dir
     assert retried.summary.failure_codes == ("STORE_ACCESS_DENIED",)
     assert owed(installation) == ["testcl26 2026-09-01"], "still owed, for the run after the fix"
     assert stage(retried.summary, SyncStage.REPORT)["outcome"] == "skipped"
-    assert [one.title for one in retried.notifier.sent] == ["caselist pull failed"]
+    assert [one.title for one in retried.notifier.sent] == ["caselist pull failed: will be retried"]
     assert "aws sso login" not in json.dumps(stages_of(retried.summary))
     assert "aws sso login" not in retried.notified
     assert_names_nothing_of_this_machine(retried.summary, installation)
@@ -731,7 +733,7 @@ async def test_a_missing_grant_in_publish_fails_the_stage_and_names_the_grant(
     assert watched.summary.failure_codes == ("STORE_ACCESS_DENIED",)
     assert owed(installation) == ["testcl26 2026-09-01"]
     assert stage(watched.summary, SyncStage.REPORT)["outcome"] == "skipped"
-    assert [one.title for one in watched.notifier.sent] == ["caselist pull failed"]
+    assert [one.title for one in watched.notifier.sent] == ["caselist pull failed: will be retried"]
     assert "aws sso login" not in json.dumps(stages_of(watched.summary))
     assert "aws sso login" not in watched.notified
     assert_names_nothing_of_this_machine(watched.summary, installation)
@@ -780,7 +782,7 @@ async def test_a_profile_the_aws_config_lacks_fails_publish_and_nothing_waits_fo
     assert stage(watched.summary, SyncStage.REPORT)["outcome"] == "skipped"
     assert watched.pulled.record is not None
     assert watched.pulled.record.outcome is SyncRunOutcome.FAILED
-    assert [one.title for one in watched.notifier.sent] == ["caselist pull failed"]
+    assert [one.title for one in watched.notifier.sent] == ["caselist pull failed: needs a person"]
     assert "aws sso login" not in json.dumps(stages_of(watched.summary))
     assert "aws sso login" not in watched.notified
     assert_names_nothing_of_this_machine(watched.summary, installation)
@@ -973,7 +975,8 @@ async def test_from_summary_schema_version_4_every_stage_carries_the_new_fields(
 ) -> None:
     """`error_codes` and `hint` were new on every stage in version 4, so the version moved (PM
     decision). `v1-e34-t17` moved it again, to 5, for the parse stage's counts; the stages kept
-    both fields."""
+    both fields. `v1-e34-t19` added `earlier_findings` beside them, which decides nothing, so by
+    `v1-e34-t07`'s rule the version stayed."""
     source = FakeSource(installation.archives, weeks=[WEEK_1])
 
     summary = await installation.sync(source).run([CASELIST])
@@ -981,9 +984,10 @@ async def test_from_summary_schema_version_4_every_stage_carries_the_new_fields(
     assert RUN_SUMMARY_SCHEMA_VERSION >= 4
     assert summary.as_json()["schema_version"] == RUN_SUMMARY_SCHEMA_VERSION
     for one in stages_of(summary):
-        assert sorted(one) == ["error_codes", "hint", "outcome", "reason", "stage"]
+        assert sorted(one) == ["earlier_findings", "error_codes", "hint", "outcome", "reason", "stage"]
         assert one["error_codes"] == []
         assert one["hint"] is None
+        assert one["earlier_findings"] == []
 
 
 def test_the_stored_summary_is_a_schema_3_one() -> None:

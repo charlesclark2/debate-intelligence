@@ -69,6 +69,7 @@ __all__ = [
     "RETRYABLE_STORE_FAILURES",
     "STOPPED_BY_A_STORE",
     "ExitCode",
+    "codes_exit_as_a_retrieval_failure",
     "error_code_for",
     "exit_code_for",
     "exit_code_for_failure_codes",
@@ -174,6 +175,20 @@ def exit_code_for_failure_codes(codes: Iterable[str | None]) -> ExitCode:
     if all(code in _RETRYABLE_ERROR_CODES for code in recorded):
         return ExitCode.RETRIEVAL_FAILURE
     return ExitCode.DOMAIN_FAILURE
+
+
+def codes_exit_as_a_retrieval_failure(codes: Iterable[str | None]) -> bool:
+    """Whether a run that recorded exactly these failures exits `3`: one a retry may cure.
+
+    :func:`exit_code_for_failure_codes` asked as a question, and nothing more: the rule is that
+    function's and is not restated here. It is what the composition root hands the caselist run
+    monitor (`v1-e34-t19`), so that the notification for a failed `caselist pull` says "the next
+    scheduled run should retry it" for exactly the runs the command exits `3` on, and "a person
+    should look" for the rest. False for no codes at all: a failure nobody recorded a code for is
+    never called transient.
+    """
+    recorded = list(codes)
+    return bool(recorded) and exit_code_for_failure_codes(recorded) is ExitCode.RETRIEVAL_FAILURE
 
 
 def error_code_for(exception: BaseException) -> str:

@@ -134,7 +134,7 @@ from debate_core.application.caselist.inbox_purge import (
     InboxTeamFilesLeft,
     plan_inbox,
 )
-from debate_core.application.caselist.manifest import MANIFEST_DIRECTORY, render_rows
+from debate_core.application.caselist.manifest import MANIFEST_DIRECTORY, read_manifest_file, render_rows
 from debate_core.application.caselist.openev_manifest import openev_release_name, summary_row
 from debate_core.application.caselist.pipeline import (
     STORED_CLASSIFICATIONS,
@@ -832,7 +832,7 @@ class RemovalPlanner:
             local_digest: str | None = None
             if key in local_keys:
                 async with local_file(self._local.objects, self._local.object_path_for, key) as path:
-                    local_lines = tuple(path.read_text(encoding="utf-8").splitlines())
+                    local_lines = tuple(read_manifest_file(path))
                 local_digest = (await self._local.objects.head(key)).sha256
                 copies.append(_copy(key, caselist, Side.LOCAL, local_lines))
             if key in remote_keys:

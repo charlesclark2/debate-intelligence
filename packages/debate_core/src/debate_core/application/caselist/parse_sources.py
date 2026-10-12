@@ -42,6 +42,7 @@ from typing import Final
 
 from debate_core.application.caselist.evidence_listing import LocalEvidence, local_file
 from debate_core.application.caselist.import_service import STORED_CLASSIFICATIONS
+from debate_core.application.caselist.manifest import read_manifest_file
 from debate_core.application.caselist.publish_plan import (
     OPENEV,
     UnreadableManifest,
@@ -123,7 +124,7 @@ async def enumerate_sources(local: LocalEvidence, caselist: str) -> tuple[Enumer
         if snapshot is None:
             continue
         async with local_file(local.objects, local.object_path_for, info.key) as path:
-            lines = path.read_text(encoding="utf-8").splitlines()
+            lines = read_manifest_file(path)
         for digest, row in _stored_rows(info.key, caselist, snapshot, lines):
             rows.setdefault(digest, []).append(row)
     sources: list[EnumeratedSource] = []

@@ -837,15 +837,36 @@ def test_a_write_that_dies_part_way_leaves_the_file_as_it_was(
     before = (PendingSnapshot("testcl26", "2026-09-01"),)
     PendingWork(path).write(before)
     as_written = path.read_bytes()
-    write_text = Path.write_text
+    open_file = Path.open
     died: list[Path] = []
 
-    def dies_half_way(self: Path, data: str, *arguments: Any, **named: Any) -> int:
-        died.append(self)
-        write_text(self, data[: len(data) // 2], *arguments, **named)
-        raise OSError(errno.ENOSPC, "No space left on device")
+    class DiesHalfWay:
+        """A file opened for writing that takes half of what it is given, and then the disk is full."""
 
-    monkeypatch.setattr(Path, "write_text", dies_half_way)
+        def __init__(self, stream: Any) -> None:
+            self._stream = stream
+
+        def __enter__(self) -> DiesHalfWay:
+            return self
+
+        def __exit__(self, *_: object) -> None:
+            self._stream.close()
+
+        def write(self, data: str) -> int:
+            self._stream.write(data[: len(data) // 2])
+            self._stream.flush()
+            raise OSError(errno.ENOSPC, "No space left on device")
+
+    def opens_and_dies_half_way(self: Path, mode: str = "r", *arguments: Any, **named: Any) -> Any:
+        stream = open_file(self, mode, *arguments, **named)
+        if "w" not in mode:
+            return stream
+        died.append(self)
+        return DiesHalfWay(stream)
+
+    # `v1-e34-t19` moved the write from `Path.write_text` to an opened stream it can flush and
+    # fsync, so the fault is injected there; what is asserted below is unchanged.
+    monkeypatch.setattr(Path, "open", opens_and_dies_half_way)
     with pytest.raises(OSError, match="No space left on device"):
         PendingWork(path).write([*before, PendingSnapshot("testcl26", "2026-09-08")])
     monkeypatch.undo()

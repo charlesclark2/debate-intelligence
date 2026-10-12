@@ -285,7 +285,7 @@ async def test_a_camp_download_whose_import_is_refused_is_named_by_id_and_digest
     import_stage = first.pulled.summary.stage(SyncStage.IMPORT)
     assert import_stage is not None and import_stage.outcome is StageOutcome.FAILED
     assert import_stage.reason == refused
-    assert [one.title for one in first.notifier.sent] == ["caselist pull failed"]
+    assert [one.title for one in first.notifier.sent] == ["caselist pull failed: needs a person"]
 
     again = await pull(installation, source)
 

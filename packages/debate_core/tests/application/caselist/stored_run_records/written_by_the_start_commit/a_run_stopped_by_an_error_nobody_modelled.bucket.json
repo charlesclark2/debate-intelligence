@@ -1,0 +1,3 @@
+{
+  "reports/sync-runs/2026/20260916T060000Z.json": "{\n  \"schema_version\": 1,\n  \"run_id\": \"20260916T060000Z\",\n  \"environment\": \"dev\",\n  \"mode\": \"run\",\n  \"started_at\": \"2026-09-16T06:00:00Z\",\n  \"finished_at\": \"2026-09-16T06:00:00Z\",\n  \"outcome\": \"failed\",\n  \"caselists\": [\n    \"testcl26\"\n  ],\n  \"archives_seen\": 0,\n  \"archives_wanted\": 0,\n  \"archives_downloaded\": 0,\n  \"archives_deferred\": 0,\n  \"deferred_by_caselist\": {},\n  \"backlog_carried\": null,\n  \"backlog_growing\": [],\n  \"openev_downloaded\": 0,\n  \"files_imported\": 0,\n  \"snapshots_imported\": [],\n  \"objects_published\": 0,\n  \"pending_publish\": [],\n  \"stages\": [],\n  \"error_class\": \"RuntimeError\",\n  \"error_message\": null\n}\n"
+}

@@ -19,11 +19,13 @@ somebody finds out, and a log file nobody opens is not finding out. So the run p
 
 ## What a notification may say
 
-A title, one sentence, and a command. **Never** a token, a credential, a file's contents, card
-text, a school, a team code or a student's name (`docs/policies/caselist-data-use.md` rule 4, and
-the task spec's forbidden list). The text is built from counts, caselist slugs, stage names and
-error *class* names — never from an exception's message, which is the one place a disclosure path
-could hide — and it is on the caller to keep it that way; the adapters send what they are given.
+A title, a sentence or two, a command, and sometimes a hint. **Never** a token, a credential, a
+file's contents, card text, a school, a team code, a student's name or a path on the operator's
+machine (`docs/policies/caselist-data-use.md` rule 4, and the task specs' forbidden lists). The
+text is built from counts, caselist slugs, stage names, error *class* names and error codes — never
+from an exception's message, which is the one place a disclosure path could hide — and a hint is
+one of this project's own sentences about a fix, which names a directory by what it is for
+(`v1-e34-t19`). It is on the caller to keep it that way; the adapters send what they are given.
 
 ## Delivery is best effort
 
@@ -52,10 +54,17 @@ class Notification:
     fix_command: str
     """The one command that fixes it, e.g. `debate-research caselist auth login`."""
 
+    hint: str | None = None
+    """The fix a failed stage gives in the run summary, when it has one that is not a command: a
+    permission on this machine's data directory, a grant the profile lacks, a file a person has to
+    repair (`v1-e34-t19`). This project's own sentence, naming a directory by its role and never by
+    its path; `None` when the command says it all."""
+
     @property
     def text(self) -> str:
-        """The message and its fix as one line, for adapters with a single text field."""
-        return f"{self.message} Fix: {self.fix_command}"
+        """The message, its hint and its fix as one line, for adapters with a single text field."""
+        hint = f" {self.hint}" if self.hint else ""
+        return f"{self.message}{hint} Fix: {self.fix_command}"
 
 
 class Notifier(Protocol):

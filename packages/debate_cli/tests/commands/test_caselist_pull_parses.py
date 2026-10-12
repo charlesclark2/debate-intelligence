@@ -237,6 +237,7 @@ def test_a_pull_that_imports_nothing_parses_nothing(
         "reason": "nothing new was imported",
         "error_codes": [],
         "hint": None,
+        "earlier_findings": [],
     }
     assert again["data"]["parse"] is None
     assert parsed_tree(installation) == before

@@ -51,16 +51,56 @@ spec:
         failing first.
     - id: ac3
       description: >-
-        The run record carries the failed stages' codes. A record written by this build is
+        The run's details carry the failed stages' codes. A record written by this build is
         read by the build currently installed (a stored record from the start commit's code,
-        and the reverse), by test.
+        and the reverse), by test. Amended by the PM, 2026-10-11: the record forbids unknown
+        fields in every build released so far, so the codes are in the run's details, a file
+        and a bucket prefix beside the record, keyed by run id, which older builds never open.
+        As first written this criterion said "the run record carries", which could not hold
+        together with forbidden item 2.
     - id: ac4
       description: >-
         The notification for a failed run says whether the next scheduled run should retry
         it (every failed required code retryable) or a person should look (any other).
         docs/runbooks/caselist-scheduled-sync.md shows both wordings.
+    - id: ac5
+      description: >-
+        Added by the PM, 2026-10-11, from v1-e34-t18's Follow-up work. An error the publisher
+        raises outside its per-object loop, `UnreadableManifest` from the plan among them,
+        fails the publish stage with its existing code, and the run finishes with its summary,
+        run record and notification rather than ending on the exception. The pending-work file
+        is left as v1-e34-t18 settled it. Shown failing first.
+    - id: ac6
+      description: >-
+        Added by the PM, 2026-10-11, from v1-e34-t18's Follow-up work. `_write_json` flushes
+        and fsyncs the temporary file before the rename, and fsyncs the directory after it,
+        for every state file it writes. A test records the order of those calls. A failing
+        fsync surfaces as the same error the write raises today.
+    - id: ac7
+      description: >-
+        Added by the PM, 2026-10-11, from v1-e34-t18's Follow-up work. The notification for a
+        failed stage carries that stage's hint, the fix the summary gives, rather than only
+        "caselist pull failed", for every stage whose failure has one. That includes the parse
+        stage's `caselist parse --caselist <slug> --publish`, which v1-e34-t17 added. Both
+        wordings of ac4 hold with a hint present. No hint names a path.
+    - id: ac8
+      description: >-
+        Added by the PM, 2026-10-11, from v1-e34-t18's Follow-up work, which waited on this
+        task's record change. A publish stage that ends `pending` after a snapshot ended
+        incomplete on a code (a checksum mismatch, say) records that code on the stage as an
+        earlier finding. The summary shows it, and the notification names it as needing a
+        person. It does not enter `exit_code_for_failure_codes`: v1-e34-t13's rule that a
+        pending stage carries no failure code for the exit is unchanged. Shown failing first
+        with v1-e34-t18's shape: a mismatch, then an expiry.
+    - id: ac9
+      description: >-
+        Added by the PM, 2026-10-11, from v1-e34-t17's Follow-up work 5, and amended the same
+        day for the reason under ac3. The run's details carry the parse stage's counts (the nine integers of the summary's `parse` object,
+        or null when the stage did not run), under the same compatibility as ac3, and
+        `caselist runs` shows them in its table rather than only in the caption sentence
+        v1-e34-t17 added.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

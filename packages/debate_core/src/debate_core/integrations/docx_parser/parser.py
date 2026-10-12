@@ -604,16 +604,15 @@ class DebateDocxParser:
         return section
 
     def _is_longer_than_a_cite_entry(self, section: _ReadSection) -> bool:
-        """Whether a wiki cite-entry guess is body by its length alone.
+        """Whether a paragraph the classifier guessed to be a cite is body by its length alone.
 
         The wiki guess takes any paragraph that holds an ellipsis and a name with a year, at any
-        length. Past :data:`LONGEST_GUESSED_CITE_ENTRY_CHARACTERS` it is no cite entry, unless the
+        length, and it is the only guess with no bound of its own. Past
+        :data:`LONGEST_GUESSED_CITE_ENTRY_CHARACTERS` a paragraph is no cite entry, unless the
         file's author marked it with a cite character style or it names a source within its first
         :data:`A_CITE_ENTRY_NAMES_ITS_SOURCE_WITHIN_CHARACTERS`: a card written as one paragraph
         behind its cite, which is left as the classifier called it.
         """
-        if section.match.rule_id != "heuristic-wiki-cite-entry":
-            return False
         text = section.read.text
         if len(text) <= LONGEST_GUESSED_CITE_ENTRY_CHARACTERS or self._carries_a_cite_style(section.read):
             return False

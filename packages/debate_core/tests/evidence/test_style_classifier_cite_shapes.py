@@ -286,10 +286,17 @@ def test_the_name_and_year_must_start_within_the_head(profile: StyleProfile) -> 
 
 
 def test_leading_white_space_does_not_move_the_head(profile: StyleProfile) -> None:
-    """The head is measured over the text as a reader sees it, and the style is found where it is."""
+    """The head is measured over the text as a reader sees it."""
     result = classify_paragraph(styled(1_400, before="   " + "x" * 39 + " "), profile)
 
     assert result.unit is CITE
+
+
+def test_leading_white_space_does_not_move_the_style_off_the_name(profile: StyleProfile) -> None:
+    """The style is looked for where the name is in the paragraph, white space included."""
+    result = classify_paragraph(styled(1_400, before=" " * 20), profile)
+
+    assert result.rule_id == PAST_THE_PROFILE_BOUND
 
 
 def test_the_style_must_touch_the_name_and_year(profile: StyleProfile) -> None:
@@ -438,7 +445,19 @@ def test_a_name_and_year_then_one_bracket_to_the_end_is_a_cite_line(
 
 
 @pytest.mark.parametrize(
-    "opening", ["Okonkwo 26[", "Okonkwo 26, [", "Okonkwo 26 - [", "Okonkwo 26: [", "Okonkwo '26 ["]
+    "opening",
+    [
+        "Okonkwo 26[",
+        "Okonkwo 26 [",
+        "Okonkwo 26, [",
+        "Okonkwo 26 - [",
+        "Okonkwo 26 – [",
+        "Okonkwo 26 — [",
+        "Okonkwo 26: [",
+        "Okonkwo 26; [",
+        "Okonkwo 26. [",
+        "Okonkwo '26 [",
+    ],
 )
 def test_only_punctuation_and_space_may_stand_between_the_year_and_the_bracket(
     profile: StyleProfile, opening: str

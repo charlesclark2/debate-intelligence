@@ -279,7 +279,7 @@ def _compiled(pattern: str) -> re.Pattern[str]:
 _CLOSING_BRACKET = {"[": "]", "(": ")"}
 
 #: What may stand between a cite's year and the bracket that holds the rest of it.
-_BETWEEN_YEAR_AND_BRACKET = " \t,:;.–—-"
+_BETWEEN_YEAR_AND_BRACKET = " ,:;.–—-"
 
 
 def _is_a_sentence_opener(author: str) -> bool:
@@ -593,9 +593,10 @@ def _long_cite_line_match(
     a sentence; or past :data:`MAXIMUM_LONG_CITE_LINE_CHARACTERS`.
     """
     text = paragraph.text.strip()
-    if not MAXIMUM_CITE_LINE_CHARACTERS < len(text) <= MAXIMUM_LONG_CITE_LINE_CHARACTERS:
-        return None
-    if paragraph.has_highlighted_run:
+    # No lower bound is asked: a shorter line that opens with a name and a year never gets here,
+    # because the short rule above has taken it, and one that opens with a sentence opener is
+    # turned away below as it was there.
+    if len(text) > MAXIMUM_LONG_CITE_LINE_CHARACTERS or paragraph.has_highlighted_run:
         return None
     short_cite = _compiled(profile.cite.short_cite_pattern).match(text)
     if short_cite is None or _is_a_sentence_opener(short_cite.group("author")):

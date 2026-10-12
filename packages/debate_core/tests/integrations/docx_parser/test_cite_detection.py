@@ -601,6 +601,33 @@ class TestAGuessLongerThanACiteEntry:
 
         assert document.sections[2].unit is EVIDENCE
 
+    def test_under_a_bare_tag_a_sentence_opener_and_a_year_at_its_head_do_not_hold_it(
+        self, parser: DebateDocxParser
+    ) -> None:
+        """v1-e31-t09 left a long first paragraph that opens with a name and a year. *In 2019* is neither."""
+        text = wiki_guess(2_300, opening="In 2019, the regional operator revised its forecast. ")
+
+        document = parse(parser, tag_paragraph() + bold_opening_paragraph(text))
+
+        assert document.sections[1].unit is EVIDENCE
+        assert document.cards[0].evidence_text == text
+
+    def test_a_short_guess_above_it_is_not_a_line_between_two_cites(self, parser: DebateDocxParser) -> None:
+        """A short guess with a cite directly below it stays a line of the cite. A long guess is no cite."""
+        short = "March 2019 was the first time the operator revised its forecast upward in a decade."
+        long = wiki_guess(2_300)
+        body = (
+            tag_paragraph()
+            + cite_paragraph()
+            + plain_paragraph(short, half_points=SMALL_PRINT)
+            + bold_opening_paragraph(long)
+        )
+
+        (card,) = parse(parser, body).cards
+
+        assert card.full_cite == SHORT_CITE + CITE_TAIL
+        assert card.evidence_text == short + "\n" + long
+
     def test_a_run_in_the_cite_character_style_leaves_it_a_cite(self, parser: DebateDocxParser) -> None:
         text = wiki_guess(2_300)
         styled = paragraph_xml(
@@ -910,7 +937,7 @@ class TestABracketedCiteLine:
         assert (card.full_cite, card.short_cite, card.evidence_text) == (text, SHORT_CITE, body)
         assert document.sections[1].match.rule_id == BRACKETED_CITE_LINE
 
-    @pytest.mark.parametrize("between", [" ", ", ", " - ", ": ", ""])
+    @pytest.mark.parametrize("between", [" ", ", ", " - ", " – ", " — ", ": ", "; ", ". ", ""])
     def test_the_bracket_opens_straight_after_the_name_and_year(
         self, parser: DebateDocxParser, between: str
     ) -> None:
@@ -1131,6 +1158,37 @@ class TestACiteWhollyInsideABracket:
 
         assert card.full_cite == first_line + "\n" + text
         assert card.evidence_text == body
+
+    def test_under_an_undertag_it_is_the_cards_cite(self, parser: DebateDocxParser) -> None:
+        markup, text = wholly_bracketed()
+        undertag = paragraph_xml(run_xml("Answers the reserve margin turn"), style="Undertag")
+
+        (card,) = parse(parser, tag_paragraph() + undertag + markup + body_paragraph()).cards
+
+        assert card.full_cite == text
+        assert card.undertag == "Answers the reserve margin turn"
+
+    def test_in_a_body_paragraph_style_it_is_taken_at_the_styles_word(self, parser: DebateDocxParser) -> None:
+        """Only what the classifier guessed is re-read. A style is the file's author saying what it is."""
+        _, text = wholly_bracketed()
+        styled = paragraph_xml(run_xml(text, half_points=SMALL_PRINT), style="CardBody")
+
+        document = parse(parser, tag_paragraph() + styled + body_paragraph())
+
+        assert document.sections[1].unit is EVIDENCE
+        assert document.sections[1].match.match_source is not StyleMatchSource.HEURISTIC
+        assert document.cards[0].full_cite == ""
+
+    def test_in_a_table_cell_it_is_page_furniture(self, parser: DebateDocxParser) -> None:
+        """A table under a tag is a chart, whatever its cells hold."""
+        markup, text = wholly_bracketed()
+        table = f"<w:tbl><w:tr><w:tc>{markup}</w:tc></w:tr></w:tbl>"
+
+        document = parse(parser, tag_paragraph() + table + body_paragraph())
+
+        assert document.sections[1].unit is OTHER
+        assert document.sections[1].match.rule_id == "assembly-table-cell"
+        assert text not in document.cards[0].full_cite
 
     def test_with_no_card_open_it_is_left_as_it_was(self, parser: DebateDocxParser) -> None:
         markup, _ = wholly_bracketed()

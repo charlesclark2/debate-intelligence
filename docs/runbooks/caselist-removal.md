@@ -7,7 +7,7 @@
 | Who runs it | The operator (Charlie). Not an agent session, not CI |
 | How long | 15–30 minutes of attention, spread over the 7-day response window |
 | Destructive? | **Yes.** It deletes objects and all of their noncurrent versions in dev and prod |
-| Tooling | `debate-research caselist remove` and `caselist unsuppress` (v1-e30-t07; the download inbox since v1-e30-t09; later uploads at the removed path since v1-e30-t11), and `caselist status`, which reports what a removal left in the bucket (v1-e30-t10) |
+| Tooling | `debate-research caselist remove` and `caselist unsuppress` (v1-e30-t07; the download inbox since v1-e30-t09; later uploads at the removed path since v1-e30-t11; the hold on a removed caselist path since v1-e30-t13), and `caselist status`, which reports what a removal left in the bucket (v1-e30-t10) |
 
 Removal is not a negotiation. A team asks, and their disclosure comes out. This runbook exists so
 that it comes out *completely* — local store, both buckets, every noncurrent version, the parsed
@@ -98,6 +98,17 @@ already names every version of every file there.
   the later uploads as left in place. Use it only when the requester said so. If they did not say,
   the request covers the later uploads.
 
+**It also covers what is uploaded there afterwards** (`v1-e30-t13`). A `--source` removal that
+removes a file whole records each caselist path it takes the file from, as a *path entry* beside
+the suppression list. From then on `caselist import` and `caselist pull` refuse a new upload at
+that path, whatever its bytes. The plan also reads the archives in the download inbox, so a
+revision that was downloaded and not yet imported is in the plan too. Step 9 says what you do when
+one arrives. Three removals record no path:
+
+- `--only-named`, because the request was about one version and the team's later uploads stay;
+- a file the plan withdraws or skips, because it stays with another holder;
+- `--team`, which holds no path. Run the same `--team` command again after a pull, as step 9 says.
+
 ## Step 4 — Dry run in dev
 
 The command is a dry run by default. Nothing is written anywhere without `--execute`: no record, no
@@ -118,7 +129,8 @@ holds: only this team's copies are withdrawn), **LATER UPLOADS AT A REMOVED PATH
 VERSIONS AT A REMOVED PATH** (other files the store holds at the same paths; read them as described
 below), **MANIFESTS REWRITTEN**, **DOWNLOAD INBOX** (every
 file `caselist pull` downloaded that holds a removed file, and whether it is deleted or rewritten
-without it; see step 8), the **SUPPRESSION ENTRIES** exactly as they will be written, **FOR THE
+without it; see step 8), the **SUPPRESSION ENTRIES** exactly as they will be written, the **PATH
+ENTRIES** exactly as they will be written, or why there are none, **FOR THE
 CONFIRMATION TO THE REQUESTER** (the facts for step 10: how many files, which weekly archives,
 which tournament rounds, what was kept and what was not done), and **TO CARRY IT OUT**, the exact
 `--execute` command. Add `--json` for the same plan as one
@@ -153,6 +165,14 @@ store holds, weekly and complete, here and in the bucket:
   - *KEPT*: a camp file's later upload that another holder also has. The suppression list cannot
     stop one camp path of a file, so nothing is done. To remove it for everyone, run a second
     removal that names it, with `--include-shared`, under the same request id.
+- **In the download inbox.** A later upload's line says *in the download inbox in `<snapshot>`, not
+  in the store* when an archive `caselist pull` downloaded holds it at the removed path and no
+  manifest does (`v1-e30-t13`). Either the archive has not been imported yet, or it was imported
+  after the removal and the upload was refused. It is covered like any other later upload: its
+  sha256 goes on the suppression list under this request, and the *DOWNLOAD INBOX* section says
+  what happens to its archive, `rewrite` if it is still waiting to be imported and `delete` if it
+  was imported. A line that says *held in … ; also in the download inbox in …* is one the store and
+  a waiting archive both hold.
 - **For an OpenEv camp file** a later upload is a higher OpenEv id at the same camp path: OpenEv
   changes a file only by deleting it and uploading it again, and the sync fetches the new id as a
   revision (`v1-e34-t08`). Its line names the release and the ids, and says how the two were
@@ -179,6 +199,11 @@ Read the plan before going further. Confirm:
 - [ ] **Later uploads.** The number the plan adds is what you expect, each one is a later version of
       the requester's file at the requester's path, and `--only-named` is on the command only if the
       request was explicitly about one version.
+- [ ] **Path entries.** For `--source` without `--only-named`, *PATH ENTRIES* lists one line for
+      each caselist path the named file is removed from. Each line is a caselist, two digests, the
+      date of the first snapshot that held the file there (`after_snapshot`), the request id and the
+      reason. With `--only-named` or `--team` it says *none* and why. A camp file has none: the pull
+      holds a camp path (step 8).
 - [ ] The listed disclosure records, manifest rows, local blobs and S3 objects (with their version
       counts) look right.
 - [ ] **Shared references.** If the plan lists sources also disclosed by another team, or that are
@@ -223,8 +248,8 @@ grants are not what [evidence-store.md](evidence-store.md) says they are. The er
 probe's key, and [A probe a preflight left behind](#a-probe-a-preflight-left-behind) says how to
 remove it.
 
-It then appends the suppression entries first, deletes from the bucket, then from this machine — the
-store, then the download inbox (step 8) — and writes one removal-log entry. The `DONE` output says
+It then appends the suppression entries and the path entries first, deletes from the bucket, then
+from this machine — the store, then the download inbox (step 8) — and writes one removal-log entry. The `DONE` output says
 how many files the request named and how many later uploads the run covered; the removal log lists
 every sha256 it removed or withdrew, later uploads included. If it stops part-way it
 says so, logs `INCOMPLETE`, and the fix is to run the same command again, with the same flags. The inbox is changed only
@@ -333,6 +358,13 @@ DEBATE_ENV=prod DEBATE_STORAGE__DATA_DIR="$HOME/.debate-research/dev" uv run deb
       `manifests/_suppression/suppression-list.jsonl` in each bucket, merged as a set union whenever a
       command holds both. `store sync` never copies it either way. The removal log sits beside it
       (`removal-log.jsonl`), one line per execution.
+- [ ] After a `--source` removal without `--only-named`, confirm the path entries are beside the
+      list in both places (`v1-e30-t13`): `<data_dir>/suppression/path-holds.jsonl` on this machine
+      and `manifests/_suppression/path-holds.jsonl` in each bucket, one line for each path the plan
+      printed. It is append-only and merged like the list. It is a file of its own because a build
+      from before `v1-e30-t13` refuses the whole suppression list at a line it does not know, and
+      an import against a list it cannot read fails. Those builds never open this file, and read
+      the list beside it exactly as before.
 - [ ] Find every built file whose provenance sidecar cites a removed sha256 (E33). Withdraw it from
       use immediately and rebuild it without those cards before anyone reads it in a round.
 - [ ] If the file was shared inside the team outside the evidence store — a copy in someone's
@@ -376,11 +408,21 @@ DEBATE_ENV=prod DEBATE_STORAGE__DATA_DIR="$HOME/.debate-research/dev" uv run deb
         `same_path_as_a_removed_file` and is never imported (`v1-e34-t14`). So for a camp file the
         hold and the plan between them cover a later upload either way: whichever side of the
         removal it was imported on, it does not stay.
-      - **Not yet imported, a caselist file:** nothing holds it back, and step 9 has the check. If
-        the team revises the file after the removal, the weekly that carries the revision imports
-        it: its bytes are new, and the list stops bytes and withdrawn disclosures, not paths.
-      If you ran the removal with `--only-named`, none of this applies to the later uploads it left.
-      That was the request.
+      - **Not yet imported, a caselist file, waiting in the inbox when you ran the removal:** the
+        plan listed it under *LATER UPLOADS AT A REMOVED PATH* as *in the download inbox*, and the
+        run put it on the list and rewrote its archive without it (`v1-e30-t13`).
+      - **Not yet imported, a caselist file the team uploads after a `--source` removal:** the path
+        entry holds it. The import of the weekly or the complete archive that carries it refuses it
+        and counts it as `SUPPRESSED`, under the request id. Step 9 says how you finish it.
+      - **After a `--team` removal:** nothing holds a new file of the team's. The same `--team`
+        command, run again after the pull, finds it (step 9).
+      If you ran the removal with `--only-named`, none of this applies to the later uploads it left
+      or to what the team uploads at the path afterwards. That was the request.
+- [ ] **Which build applies the hold.** The build that imports must have `v1-e30-t13`. A build from
+      before it reads the suppression list and not the path entries, so it imports a new upload at
+      a removed path, and nothing fails. If the weekly agent runs such a build
+      (`debate-research --version` says which), treat every pull as one that may have imported a
+      later upload, and do step 9 after each until the agent is updated.
 - [ ] **A removal made before `v1-e30-t09`** left its files in the inbox. Run the same command again
       — same `--team` or `--source`, same `--request` and `--reason` — dry run first, then
       `--execute`: it finds nothing left in the store or the buckets, appends nothing, and purges
@@ -408,22 +450,33 @@ At the next weekly import (or immediately, if you have the next archive on hand)
 
 - [ ] The importer reports the sha256 as `SUPPRESSED`.
 - [ ] `caselist publish` does not upload it.
-- [ ] **No revision of it arrived at the same path** (caselist files; a camp file's is held by the
-      pull, step 8). The plan covered the later uploads the store held when you ran it. A revision
-      the team uploads afterwards is imported with the weekly that carries it. After a `--team`
-      removal, run the same `--team` dry run again once that weekly is imported: it selects by the
-      team's directories, so it lists anything new there, and `--execute` removes it under the same
-      request id. After a `--source` removal a re-run cannot find it, because the removed file's
-      path is recorded nowhere once its rows are gone. Ask the newest manifest instead, with the
-      path from the request in your mailbox:
+- [ ] **A new upload at the removed path** (caselist files; a camp file's is held by the pull,
+      step 8). After a `--source` removal the path entry refuses it at import (`v1-e30-t13`). The
+      import's table then says, under its counts, *SUPPRESSED includes N new upload(s) at a removed
+      path (N under RM-…), refused because that removal holds the path*, and `--json` gives
+      `held_at_removed_paths` as request ids and counts. The upload is not in the store, the bucket
+      or any manifest. It is still inside the archive in the download inbox, and its sha256 is not
+      on the suppression list yet, because only `caselist remove` writes the list.
+- [ ] **Finish it by running the same removal again**, dry run first: the same `--source`, the same
+      `--request` and `--reason`, in dev and then prod. Do this after any pull that reported a held
+      upload, and after every pull while the agent runs a build from before `v1-e30-t13`.
 
       ```bash
-      jq -r --arg path '<the path, as the request gave it>' 'select(.kind == "member" and .path == $path and .sha256 != null) | .sha256' "$HOME/.debate-research/dev/objects/manifests/hsld26/<date>.jsonl"
+      DEBATE_ENV=dev uv run debate-research caselist remove --source <sha256> --request RM-2026-01 --reason REQUESTED_BY_TEAM
       ```
 
-      It prints nothing when the path is not in that week's window, and a sha256 when a file is
-      there. If the request covers it, remove that sha256 with `--source`, under the same request
-      id, in dev and then prod.
+      The removed file's own rows are gone, so the plan finds its path from the path entry. Under
+      *LATER UPLOADS AT A REMOVED PATH* it lists whatever is at that path in a later snapshot:
+      - *in the download inbox …, not in the store*: this build refused it. `--execute` puts its
+        sha256 on the list under the request and deletes the imported archive from the inbox.
+      - *held in `<snapshot>`*: a build from before `v1-e30-t13` imported it. `--execute` removes it
+        from the store and the bucket as it removes any later upload, every version.
+      - nothing, and *Nothing is left to remove*: nothing arrived.
+      Then execute as in step 5, and verify as in step 6. The path stays held afterwards.
+- [ ] **After a `--team` removal**, run the same `--team` dry run again once the next weekly is
+      imported: it selects by the team's directories, so it lists anything new there, and
+      `--execute` removes it under the same request id. A `--team` removal holds no path, so until
+      you do, a new file of the team's is in the store.
 
 Once E34 is running, the scheduled download inherits this check because everything it downloads
 goes through the same importer. For an OpenEv camp file it does more: `caselist pull` reads the same
@@ -652,7 +705,11 @@ DEBATE_ENV=dev DEBATE_REMOVAL_PROFILE=debate-dev-evidence-removal uv run debate-
 Then prod, with `--confirm-prod`, and re-import the archive that holds the file (with
 `--allow-out-of-order` if a newer one is already imported). `--reason` is `REMOVED_IN_ERROR` or
 `REQUEST_WITHDRAWN`. One `unsuppress` lifts every suppression of that sha256, whole-file and
-per-path. Record the mistake in the register.
+per-path. It also releases the hold on each path that file was removed from (`v1-e30-t13`), and
+the dry run says how many: a later upload there is imported again from the next archive that holds
+it. Nothing is appended to `path-holds.jsonl` for that. A later upload that a removal put on the
+list itself stays suppressed until you `unsuppress` its own sha256. Record the mistake in the
+register.
 
 This is the strongest argument for always running the dry run and reading it.
 
@@ -685,7 +742,9 @@ register keeps the original one.
 - `plan_specs/v1/e30-caselist-ingestion/t11-removal-covers-later-uploads.yaml` — later uploads at
   the removed path, and `--only-named`.
 - `plan_specs/v1/e34-caselist-sync/t14-removed-path-hold-for-inbox-copies.yaml` — the pull's hold
-  for a later upload that has not been imported.
+  for a camp file's later upload that has not been imported.
+- `plan_specs/v1/e30-caselist-ingestion/t13-removed-path-holds-caselist-uploads.yaml` — the path
+  entry that holds a removed caselist path, and the inbox in the removal plan.
 - `plan_specs/v1/e30-caselist-ingestion/t10-removal-docstrings-and-residue.yaml` — the residue
   report in `caselist status`.
 - `plan_specs/v1/e29-cloud-evidence-store/t06-removal-grant-scope-test.yaml` — the everyday

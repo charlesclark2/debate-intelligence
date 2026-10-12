@@ -587,10 +587,6 @@ def test_a_long_bodys_cut_is_still_left_to_the_banding() -> None:
 # rules had put them in. Counted by `scripts/compare_card_clusters.py diagnose`, 27 of them are
 # the two cases below; the limits that held the rest are kept, and have a case here too.
 
-BEFORE_T11: Final = pytest.mark.xfail(
-    strict=True, reason="red: fails against card-fingerprint-v2, the rules as v1-e31-t08 left them"
-)
-
 
 def partition(*bodies: list[str]) -> list[list[int]]:
     """Which of `bodies` share a cluster, as sorted groups of their positions."""
@@ -642,7 +638,6 @@ CUT_OF_THE_COPY: Final = LONG_COPY[10:40]
 """Thirty words (26 shingles) of the copy: a short body, three-tenths of the copy."""
 
 
-@BEFORE_T11
 def test_a_short_cut_inside_nested_copies_joins_the_smallest_of_them() -> None:
     """The cut is inside the copy, and the copy is inside the whole card. The banding never paired
     the two long bodies, so they are two clusters, and the cut was "inside more than one cluster"
@@ -652,7 +647,6 @@ def test_a_short_cut_inside_nested_copies_joins_the_smallest_of_them() -> None:
     assert partition(WHOLE, LONG_COPY, CUT_OF_THE_COPY) == [[0], [1, 2]]
 
 
-@BEFORE_T11
 def test_a_short_cut_joins_a_short_copy_that_a_longer_card_holds() -> None:
     """The same when the smaller copy is itself short and under a quarter of the whole card, which
     is what keeps it out of the card's cluster. The cut is two-fifths of the copy."""
@@ -663,7 +657,6 @@ def test_a_short_cut_joins_a_short_copy_that_a_longer_card_holds() -> None:
     assert partition(whole, copy, cut) == [[0], [1, 2]]
 
 
-@BEFORE_T11
 def test_a_larger_copy_with_one_changed_word_still_holds_the_smaller() -> None:
     """Whether the larger body holds the smaller is the test a cut is confirmed by: a short copy is
     held but for one word. Here the whole card has a typo inside the copy and outside the cut."""
@@ -708,7 +701,6 @@ def test_joining_the_smallest_nested_copy_never_merges_the_longer_copies() -> No
     assert with_the_cut[:2] == without
 
 
-@BEFORE_T11
 @pytest.mark.parametrize("ordering", list(itertools.permutations(range(3))))
 def test_nested_copies_cluster_the_same_under_any_fingerprints(ordering: tuple[int, ...]) -> None:
     """Which body is "the smallest" is decided by size, then fingerprint: never by input order."""

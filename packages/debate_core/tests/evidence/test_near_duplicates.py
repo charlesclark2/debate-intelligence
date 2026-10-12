@@ -32,6 +32,7 @@ import sys
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
+from typing import Final
 
 import pytest
 
@@ -576,3 +577,145 @@ def test_a_long_bodys_cut_is_still_left_to_the_banding() -> None:
     assert len(word_shingles(short_cut)) == SHORT_BODY_SHINGLES - 1
     assert len(set(clustered(smaller_card, short_cut))) == 1
     assert len(set(clustered(smaller_card, long_cut))) == 2
+
+
+# ------------------------------------------------------------------------------------------------
+# Short cuts whose containers are several copies of one card (`v1-e31-t11`)
+# ------------------------------------------------------------------------------------------------
+#
+# On the re-parsed corpus the short-body step left 81 short cuts out of a cluster the earlier
+# rules had put them in. Counted by `scripts/compare_card_clusters.py diagnose`, 27 of them are
+# the two cases below; the limits that held the rest are kept, and have a case here too.
+
+BEFORE_T11: Final = pytest.mark.xfail(
+    strict=True, reason="red: fails against card-fingerprint-v2, the rules as v1-e31-t08 left them"
+)
+
+
+def partition(*bodies: list[str]) -> list[list[int]]:
+    """Which of `bodies` share a cluster, as sorted groups of their positions."""
+    groups: dict[str, list[int]] = {}
+    for position, cluster in enumerate(clustered(*bodies)):
+        groups.setdefault(cluster, []).append(position)
+    return sorted(groups.values())
+
+
+def keyed_partition(bodies: dict[str, list[str]]) -> list[list[str]]:
+    """The same for bodies under fingerprints the test chooses, so their sort order is the test's."""
+    clusters = cluster_near_duplicates({key: " ".join(body) for key, body in bodies.items()})
+    groups: dict[str, list[str]] = {}
+    for key in bodies:
+        groups.setdefault(clusters[key], []).append(key)
+    return sorted(sorted(group) for group in groups.values())
+
+
+@BEFORE_T11
+def test_a_short_cut_is_measured_against_the_smallest_body_that_holds_it() -> None:
+    """One cluster holds the cut in two copies: one four times its size, and that copy with twenty
+    words more. The cut is a quarter of the smaller, so it joins. Before `v1-e31-t11` the share was
+    tested against whichever copy's fingerprint sorted first, and a digest decided the outcome."""
+    smaller = numbered("word", 64)  # 60 shingles
+    larger = [*smaller, *numbered("more", 20)]  # 80 shingles
+    cut = smaller[:19]  # 15 shingles: a quarter of 60, under a quarter of 80
+    assert len(word_shingles(cut)) == MIN_CUT_SHARE * len(word_shingles(smaller))
+    assert len(word_shingles(cut)) < MIN_CUT_SHARE * len(word_shingles(larger))
+    assert partition(smaller, larger) == [[0, 1]]  # the two copies are one cluster before the cut
+
+    assert keyed_partition({"a": smaller, "b": larger, "c": cut}) == [["a", "b", "c"]]
+    assert keyed_partition({"a": larger, "b": smaller, "c": cut}) == [["a", "b", "c"]]
+
+
+def test_a_short_cut_under_a_quarter_of_every_body_that_holds_it_still_stays_out() -> None:
+    """The share is a limit, not a formality: under a quarter of the smallest copy, no join."""
+    smaller = numbered("word", 64)
+    larger = [*smaller, *numbered("more", 20)]
+    assert keyed_partition({"a": smaller, "b": larger, "c": smaller[:18]}) == [["a", "b"], ["c"]]
+
+
+WHOLE: Final = numbered("word", 330)
+"""A long card. No copy below shares enough of it for the banding to pair them: checked in the
+tests that rely on it, since which pairs the banding makes is the seed's doing, not arithmetic."""
+
+LONG_COPY: Final = WHOLE[100:190]
+"""Ninety words of it (86 shingles): a long body, and just over a quarter of the whole."""
+
+CUT_OF_THE_COPY: Final = LONG_COPY[10:40]
+"""Thirty words (26 shingles) of the copy: a short body, three-tenths of the copy."""
+
+
+@BEFORE_T11
+def test_a_short_cut_inside_nested_copies_joins_the_smallest_of_them() -> None:
+    """The cut is inside the copy, and the copy is inside the whole card. The banding never paired
+    the two long bodies, so they are two clusters, and the cut was "inside more than one cluster"
+    and left out of both. But the larger holds everything the smaller does: being inside it says
+    nothing the smaller did not. One witness, not two, so the cut joins the smaller copy."""
+    assert partition(WHOLE, LONG_COPY) == [[0], [1]]  # the split among the longer copies
+    assert partition(WHOLE, LONG_COPY, CUT_OF_THE_COPY) == [[0], [1, 2]]
+
+
+@BEFORE_T11
+def test_a_short_cut_joins_a_short_copy_that_a_longer_card_holds() -> None:
+    """The same when the smaller copy is itself short and under a quarter of the whole card, which
+    is what keeps it out of the card's cluster. The cut is two-fifths of the copy."""
+    whole = numbered("word", 200)
+    copy = whole[60:105]  # 41 shingles of 196
+    cut = copy[10:30]  # 16 shingles
+    assert partition(whole, copy) == [[0], [1]]
+    assert partition(whole, copy, cut) == [[0], [1, 2]]
+
+
+@BEFORE_T11
+def test_a_larger_copy_with_one_changed_word_still_holds_the_smaller() -> None:
+    """Whether the larger body holds the smaller is the test a cut is confirmed by: a short copy is
+    held but for one word. Here the whole card has a typo inside the copy and outside the cut."""
+    whole = numbered("word", 200)
+    copy = whole[60:105]
+    cut = copy[10:30]
+    typo = replaced(whole, 60 + 37, "changed")
+    assert containment(frozenset(word_shingles(copy)), frozenset(word_shingles(typo))) < 0.9
+    assert contained_but_for_one_word(copy, typo)
+    assert partition(typo, copy, cut) == [[0], [1, 2]]
+
+
+def test_a_short_cut_inside_nested_copies_and_a_third_card_joins_nothing() -> None:
+    """A third body holds the cut and not the smaller copy. That is a second witness: the cut is
+    inside two bodies neither of which accounts for the other, and joins neither."""
+    other = [*numbered("other", 40), *CUT_OF_THE_COPY, *numbered("ending", 40)]
+    assert partition(WHOLE, LONG_COPY, other, CUT_OF_THE_COPY) == [[0], [1], [2], [3]]
+
+
+def test_a_short_cut_inside_two_overlapping_copies_joins_neither() -> None:
+    """Two copies that overlap by two-thirds and each have text the other lacks. Neither holds the
+    other, so the cut both contain is still inside two clusters. This is the largest group of cuts
+    the corpus diagnosis found left out, and the rule that leaves them out is kept: which of two
+    different extents of a text a cut belongs to is a guess."""
+    first, second = WHOLE[100:190], WHOLE[130:220]
+    cut = WHOLE[140:170]
+    shared = containment(frozenset(word_shingles(first)), frozenset(word_shingles(second)))
+    assert 0.5 <= shared < 0.9
+    assert partition(WHOLE, first, second, cut) == [[0], [1], [2], [3]]
+
+
+def test_a_short_cut_under_a_quarter_of_the_smallest_nested_copy_stays_out() -> None:
+    cut = LONG_COPY[10:30]  # 16 shingles of 86
+    assert len(word_shingles(cut)) < MIN_CUT_SHARE * len(word_shingles(LONG_COPY))
+    assert partition(WHOLE, LONG_COPY, cut) == [[0], [1], [2]]
+
+
+def test_joining_the_smallest_nested_copy_never_merges_the_longer_copies() -> None:
+    """The cut joins one cluster and merges none: the long bodies are where they were without it."""
+    with_the_cut = clustered(WHOLE, LONG_COPY, CUT_OF_THE_COPY)
+    without = clustered(WHOLE, LONG_COPY)
+    assert with_the_cut[:2] == without
+
+
+@BEFORE_T11
+@pytest.mark.parametrize("ordering", list(itertools.permutations(range(3))))
+def test_nested_copies_cluster_the_same_under_any_fingerprints(ordering: tuple[int, ...]) -> None:
+    """Which body is "the smallest" is decided by size, then fingerprint: never by input order."""
+    bodies = (WHOLE, LONG_COPY, CUT_OF_THE_COPY)
+    keys = [f"{position:064x}" for position in ordering]
+    clusters = cluster_near_duplicates({key: " ".join(body) for key, body in zip(keys, bodies, strict=True)})
+    whole, copy, cut = (clusters[key] for key in keys)
+    assert whole != copy
+    assert cut == copy

@@ -55,6 +55,15 @@ is listed with the later uploads, marked as in the inbox, and the inbox section 
 to its archive. `caselist unsuppress` of the removed file releases the hold on its paths and says
 how many.
 
+## A `--source` plan names no team as "this team"
+
+A `--team` removal has a requesting team, and its plan says what happens to "this team's" copies.
+A `--source` removal names a file, and no team asked, so its plan says what happens at the removed
+path instead (`v1-e30-t16`). The holders it counts are the ones other than the holder removed, and
+a withdrawn later upload's copy stays because another *path* holds it, which may be the same
+team's. Each withdrawal's caselist is recorded beside the list, by slug, and the plan prints those
+lines under *WITHDRAWALS* as it prints the path entries.
+
 ## What is printed and what is not
 
 The plan's text names the team's paths, school and team code: this is the operator's own terminal,
@@ -329,12 +338,7 @@ def render_plan(plan: RemovalPlan, report: RemovalReport | None) -> str:
         for number, source in enumerate(removed, start=1):
             lines += _source_lines(number, source, plan)
     if withdrawn:
-        lines += [
-            "",
-            f"SHARED, KEPT: {len(withdrawn)} file(s) another team or a camp file also holds. Only this",
-            "team's copies are withdrawn and suppressed; the file stays for the others.",
-            "--include-shared would remove it for everyone.",
-        ]
+        lines += ["", *_shared_kept_heading(plan, len(withdrawn))]
         for number, source in enumerate(withdrawn, start=1):
             lines += _source_lines(number, source, plan)
     if skipped:
@@ -360,16 +364,22 @@ def render_plan(plan: RemovalPlan, report: RemovalReport | None) -> str:
 
     entries = plan.suppression_entries
     whole = sum(1 for entry in entries if entry.disclosure is None)
+    paths = (
+        f"{len(entries) - whole} of this team's path(s) to a shared file"
+        if _names_a_team(plan)
+        else f"{len(entries) - whole} path(s) a shared file is withdrawn from"
+    )
     lines += [
         "",
         f"SUPPRESSION ENTRIES appended to the list, here and in the bucket: {len(entries)}",
-        f"  {whole} whole file(s), and {len(entries) - whole} of this team's path(s) to a shared file. Each",
+        f"  {whole} whole file(s), and {paths}. Each",
         "  line below is exactly what is written, with recorded_at set when it runs; no school, team",
         "  code or name appears in any of them.",
     ]
     lines += [f"  {entry.to_line()}" for entry in entries] or [
         "  (none: everything selected is already on the list)"
     ]
+    lines += _withdrawal_lines(plan)
 
     lines += ["", *_path_hold_lines(plan)]
 
@@ -389,6 +399,42 @@ def render_plan(plan: RemovalPlan, report: RemovalReport | None) -> str:
             f"  {_execute_command(plan)}",
         ]
     return "\n".join(lines)
+
+
+def _shared_kept_heading(plan: RemovalPlan, files: int) -> list[str]:
+    """The heading over the files the request names whose copies are withdrawn, and the rest kept."""
+    if _names_a_team(plan):
+        return [
+            f"SHARED, KEPT: {files} file(s) another team or a camp file also holds. Only this",
+            "team's copies are withdrawn and suppressed; the file stays for the others.",
+            "--include-shared would remove it for everyone.",
+        ]
+    # A --source plan withdraws only what a stopped run left, from the paths it was taken from.
+    return [
+        f"SHARED, KEPT: {files} file(s) a path this removal does not take them from also holds.",
+        "Only the copies at the removed path(s) are withdrawn and suppressed; the file stays at its",
+        "other paths.",
+    ]
+
+
+def _names_a_team(plan: RemovalPlan) -> bool:
+    """Whether a team asked: `--team`. A `--source` plan has no "this team" (`v1-e30-t16`)."""
+    return not isinstance(plan.selector, SourceSelector)
+
+
+def _withdrawal_lines(plan: RemovalPlan) -> list[str]:
+    """The withdrawal record's lines exactly as they are appended, when the plan withdraws a copy."""
+    withdrawals = plan.withdrawals
+    if not withdrawals:
+        return []
+    return [
+        "",
+        f"WITHDRAWALS recorded beside the list, here and in the bucket: {len(withdrawals)}",
+        "  One for each suppression entry above that withdraws a copy from a path: the caselist it is",
+        "  withdrawn from, by its slug, so the withdrawal can be attributed afterwards. No school, team",
+        "  code or name is in any of them.",
+        *(f"  {entry.to_line()}" for entry in withdrawals),
+    ]
 
 
 def _path_hold_lines(plan: RemovalPlan) -> list[str]:
@@ -637,7 +683,12 @@ def _source_lines(number: int, source: PlannedSource, plan: RemovalPlan) -> list
         for caselist, path in source.requester_paths:
             lines.append(f"     withdraw {caselist}  {path}")
         if source.kept_in:
-            lines.append(f"     kept in  {', '.join(source.kept_in)} (another team there still holds it)")
+            # A --team withdrawal is kept for another team; a later upload, or what a --source run
+            # left, for any path the removal does not take, which may be the same team's.
+            holder = (
+                "team" if _names_a_team(plan) and source.inclusion is not Inclusion.LATER_UPLOAD else "path"
+            )
+            lines.append(f"     kept in  {', '.join(source.kept_in)} (another {holder} there still holds it)")
     for planned in plan.objects:
         if planned.sha256 != source.sha256:
             continue
@@ -657,11 +708,17 @@ def _confirmation(plan: RemovalPlan) -> list[str]:
         {f"{ref.tournament or 'no tournament named'}, {ref.round_label or 'no round named'}" for ref in refs}
     )
     snapshots = sorted({ref.snapshot for ref in refs})
-    lines = [
-        f"  - Removed from this environment: {len(_not_later_uploads(plan, Disposition.REMOVE))} file(s), "
-        "and this team's copies of "
-        f"{len(_not_later_uploads(plan, Disposition.WITHDRAW))} shared file(s)."
-    ]
+    removed_whole = len(_not_later_uploads(plan, Disposition.REMOVE))
+    copies = len(_not_later_uploads(plan, Disposition.WITHDRAW))
+    if _names_a_team(plan):
+        removed_line = f"{removed_whole} file(s), and this team's copies of {copies} shared file(s)."
+    elif copies:
+        removed_line = (
+            f"{removed_whole} file(s), and the copies at the removed path(s) of {copies} shared file(s)."
+        )
+    else:
+        removed_line = f"{removed_whole} file(s)."
+    lines = [f"  - Removed from this environment: {removed_line}"]
     if plan.later_uploads_added:
         lines.append(
             f"  - Also removed, as later uploads at the same path(s): {plan.later_uploads_added} file(s)."
@@ -680,9 +737,13 @@ def _confirmation(plan: RemovalPlan) -> list[str]:
         lines += [f"      {item}" for item in rounds]
     shared = _not_later_uploads(plan, Disposition.WITHDRAW) + plan.of(Disposition.SKIP_SHARED)
     if shared:
-        lines.append(
-            f"  - Kept: {len(shared)} file(s) another team disclosed too or a camp released; say so, and why."
+        # Under --source the holder kept for may be the same team at another path (v1-e30-t16).
+        holders = (
+            "another team disclosed too or a camp released"
+            if _names_a_team(plan)
+            else ("another path or a camp file also holds")
         )
+        lines.append(f"  - Kept: {len(shared)} file(s) {holders}; say so, and why.")
     if plan.inbox:
         lines.append(
             f"  - Taken out of the download inbox on this machine: {len(plan.inbox)} downloaded file(s) "
@@ -714,15 +775,17 @@ def _suppressed_line(plan: RemovalPlan) -> str:
     only when it is edited, carried or uploaded again, and in every complete archive until the team
     takes it down on OpenCaselist; the list stops it in all of them. A file removed whole is stopped
     by its bytes, and a shared file withdrawn from this team only at the path it was taken from.
-    Whether a path is held is the line before this one.
+    A `--source` removal has no requesting team: what it withdraws is a copy at the path it was
+    withdrawn from (`v1-e30-t16`). Whether a path is held is the line before this one.
     """
+    withdrawn = (
+        "this team's copy of a shared file at the path it was taken from"
+        if _names_a_team(plan)
+        else "the copy of a shared file at the path it was withdrawn from"
+    )
     stopped = [
         *(["a removed file"] if plan.of(Disposition.REMOVE) else []),
-        *(
-            ["this team's copy of a shared file at the path it was taken from"]
-            if plan.of(Disposition.WITHDRAW)
-            else []
-        ),
+        *([withdrawn] if plan.of(Disposition.WITHDRAW) else []),
     ]
     if not stopped:
         return "  - Nothing suppressed: no file was removed, and no copy withdrawn."

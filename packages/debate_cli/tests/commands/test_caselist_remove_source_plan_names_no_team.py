@@ -45,6 +45,7 @@ from debate_core.application.ports.suppression import (
 
 from .test_caselist_remove_plan_output import (
     CASELIST,
+    IDENTIFYING,
     LATER,
     NAMED,
     SETTINGS,
@@ -172,7 +173,28 @@ def test_a_withdrawn_copy_kept_for_another_path_does_not_claim_another_team() ->
 
     kept = [line for line in lines if line.lstrip().startswith("kept in")]
     assert kept == [f"     kept in  {CASELIST} (another path there still holds it)"] * 2
+    assert "  - Kept: 2 file(s) another path or a camp file also holds; say so, and why." in lines
     assert not [line for line in lines if "another team" in line]
+
+
+def test_the_withdrawal_record_lines_are_printed_as_appended_by_slug_and_name_no_one() -> None:
+    plan = every_kind_of_source()
+    lines = render_plan(plan, None).splitlines()
+
+    start = lines.index("WITHDRAWALS recorded beside the list, here and in the bucket: 2")
+    written = lines[start + 4 : start + 6]
+    assert written == [f"  {entry.to_line()}" for entry in plan.withdrawals]
+    assert {(entry.sha256, entry.caselist, entry.disclosure) for entry in plan.withdrawals} == {
+        (sha256, CASELIST, disclosure_digest(CASELIST, TEAM_PATH)) for sha256 in (UNFINISHED, LATER)
+    }
+    assert not [word for word in IDENTIFYING if word in "\n".join(written)]
+
+
+def test_a_plan_that_withdraws_nothing_prints_no_withdrawals() -> None:
+    plan = plan_of((source(NAMED, Inclusion.NAMED, Disposition.REMOVE),))
+
+    assert plan.withdrawals == ()
+    assert not [line for line in render_plan(plan, None).splitlines() if line.startswith("WITHDRAWALS")]
 
 
 def test_a_source_removal_that_withdraws_nothing_says_only_what_it_removed() -> None:
@@ -208,6 +230,7 @@ def test_a_team_removal_still_says_this_teams_where_a_team_asked() -> None:
         "team's copy of a shared file at the path it was taken from."
     ) in lines
     assert f"     kept in  {CASELIST} (another team there still holds it)" in lines
+    assert "  - Kept: 2 file(s) another team disclosed too or a camp released; say so, and why." in lines
 
 
 def test_the_fixture_withdraws_from_a_path_the_suppression_entries_name() -> None:

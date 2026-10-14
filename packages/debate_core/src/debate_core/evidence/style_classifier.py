@@ -47,12 +47,19 @@ from debate_core.domain.style_profile import (
 
 __all__ = [
     "MAXIMUM_CITE_LINE_CHARACTERS",
+    "MAXIMUM_CUTTER_SIGNATURE_CHARACTERS",
     "MAXIMUM_HEADING_CHARACTERS",
+    "MAXIMUM_LONG_CITE_LINE_CHARACTERS",
+    "MAXIMUM_STYLED_CITE_CHARACTERS",
     "MINIMUM_PROSE_CHARACTERS",
+    "NAME_AND_YEAR_AT_THE_HEAD_CHARACTERS",
+    "WORDS_THAT_OPEN_A_SENTENCE",
     "ParagraphDescription",
     "RunDescription",
     "classify_paragraph",
     "classify_run",
+    "first_name_and_year",
+    "is_a_cite_wholly_in_brackets",
 ]
 
 #: A heading is short. Anything longer is a paragraph that happens to be bold.
@@ -65,6 +72,75 @@ MAXIMUM_CITE_LINE_CHARACTERS = 400
 
 #: Below this a paragraph is too short to be prose, and the fallback declines to call it evidence.
 MINIMUM_PROSE_CHARACTERS = 200
+
+#: The longest cite line recognised from its shape when the shape says more than a name and a year:
+#: a bold opening, or everything after the year inside one bracket (`v1-e31-t12`).
+#:
+#: :data:`MAXIMUM_CITE_LINE_CHARACTERS` was set for a line that only *opens* like a cite. It left
+#: 33,624 tagged cards in the corpus with no cite, 21,585 of them with a line under the tag that
+#: was read as nothing. 8,023 paragraphs directly under a tag open in bold with a name and a
+#: year, carry no cite style and no highlighting and are longer than 400 characters: 5,916 run to
+#: 600 characters, 1,266 to 800, 458 to 1,000, 293 to 1,517, 47 to 2,000 and 43 past it. They thin
+#: out with no gap, so the bound is the one `v1-e31-t09` measured for a guessed cite entry, which
+#: ends by 1,517 characters and does not start again until 2,679: 2,000 takes 7,980 of the 8,023.
+MAXIMUM_LONG_CITE_LINE_CHARACTERS = 2_000
+
+#: The longest paragraph read as a cite from its cite character style (`v1-e31-t12`).
+#:
+#: The profile's own bound is 1,000, set so that body text carrying the cite style for emphasis is
+#: not a cite. Past it, 1,221 paragraphs in the corpus have the style on a name and a year at
+#: their head and no highlighting, and they are cites by what they hold: 1,219 name a credential,
+#: and 1,203 sit under a tag with a card's body below. The longest is 3,283 characters. No
+#: paragraph of that shape is longer, so 4,000 is above every one the corpus holds and below a
+#: card written as one paragraph behind its cite, which this rule must not take.
+MAXIMUM_STYLED_CITE_CHARACTERS = 4_000
+
+#: How far into a paragraph a cite's name and year may begin: a first name, a title, an opening
+#: bracket. Of the 1,279 unhighlighted paragraphs past the profile's bound that carry the cite
+#: style and sit directly under a tag, 1,143 have a name and a year starting within their first
+#: 40 characters. Of the 84 that open in the style inside a body, none has.
+NAME_AND_YEAR_AT_THE_HEAD_CHARACTERS = 40
+
+#: The most a cutter leaves after a cite's closing bracket: initials, a name, two of either.
+#:
+#: Counted over the 82,928 paragraphs the corpus writes as a name and year followed by a bracket
+#: and that the parser already read as cites: 72,064 have 10 characters or fewer after the
+#: bracket closes, 77,042 have 30 or fewer, and past that the remainder is the rest of the cite,
+#: not a signature.
+MAXIMUM_CUTTER_SIGNATURE_CHARACTERS = 30
+
+#: Words that open a sentence and are not anyone's name, as a file writes them at the start of a
+#: line. The cite-line guess reads any capitalised word followed by two or four digits as an
+#: author and a year, so *In 2019*, *Since 2001* and *Figure 12* opened cites: about 5,400 lines
+#: in the corpus, 686 of them still cites after the assembly's own corrections (`v1-e31-t12`).
+#:
+#: Written out, not derived, and kept to words that are no one's surname. Months, seasons and the
+#: short words that are also surnames (*May*, *March*, *Winter*, *An*, *So*, *To*, *Page*, *Law*)
+#: are left off: the cost of taking one of those from a real cite is a card with no cite. An
+#: acronym in capitals (*WHO 24*) is not on it either, because the comparison keeps case.
+WORDS_THAT_OPEN_A_SENTENCE: frozenset[str] = frozenset(
+    {
+        # prepositions
+        "About", "Across", "After", "Against", "Among", "Around", "As", "At", "Before", "Between",
+        "Beyond", "By", "Despite", "During", "For", "From", "In", "Into", "Of", "On", "Over", "Per",
+        "Through", "Throughout", "Toward", "Towards", "Under", "Until", "Via", "With", "Within",
+        "Without",
+        # determiners and pronouns
+        "A", "All", "Another", "Any", "Both", "Each", "Either", "Every", "Few", "He", "Her", "His",
+        "It", "Its", "Many", "More", "Most", "My", "Neither", "Our", "Several", "She", "Some", "Such",
+        "That", "The", "Their", "These", "They", "This", "Those", "We", "What", "Which", "Who",
+        "Whose", "You", "Your",
+        # conjunctions and adverbs
+        "Again", "Almost", "Also", "Although", "And", "Approximately", "Because", "But", "Even",
+        "Furthermore", "Hence", "Here", "How", "However", "If", "Just", "Meanwhile", "Moreover",
+        "Nearly", "Not", "Now", "Once", "Only", "Or", "Roughly", "Since", "Still", "Then", "There",
+        "Therefore", "Though", "Thus", "When", "Where", "Whereas", "While", "Why", "Yet",
+        # when
+        "Early", "Fiscal", "Late", "Mid", "Q1", "Q2", "Q3", "Q4", "Today",
+        # parts of a document
+        "Appendix", "Article", "Chapter", "Exhibit", "Figure", "Footnote", "Section", "Table", "Title",
+    }
+)  # fmt: skip
 
 _SENTENCE_END = re.compile(r"[.!?][\"'’”)\]]*\s*$")
 
@@ -197,6 +273,81 @@ def _compiled(pattern: str) -> re.Pattern[str]:
 
 
 # --------------------------------------------------------------------------------------------
+# What a cite's text looks like
+# --------------------------------------------------------------------------------------------
+
+_CLOSING_BRACKET = {"[": "]", "(": ")"}
+
+#: What may stand between a cite's year and the bracket that holds the rest of it.
+_BETWEEN_YEAR_AND_BRACKET = " ,:;.–—-"
+
+
+def _is_a_sentence_opener(author: str) -> bool:
+    """Whether the "author" a cite pattern captured is a lone word that opens a sentence."""
+    return author.strip() in WORDS_THAT_OPEN_A_SENTENCE
+
+
+def first_name_and_year(text: str, profile: StyleProfile) -> re.Match[str] | None:
+    """The first name with a year in `text`, by the profile's pattern, or None.
+
+    A sentence opener followed by a year (*In 2019*) matches the pattern and is passed over: it
+    dates a sentence and names no source.
+    """
+    for found in _compiled(profile.cite.author_year_pattern).finditer(text):
+        if not _is_a_sentence_opener(found.group("author")):
+            return found
+    return None
+
+
+def _closes_at(text: str, opens_at: int) -> int | None:
+    """Where the bracket opened at `opens_at` closes, or None when it never does.
+
+    Counted, so a bracket inside the bracket closes only itself; and by kind, so a round bracket
+    does not close a square one.
+    """
+    opener = text[opens_at]
+    closer = _CLOSING_BRACKET[opener]
+    depth = 0
+    for position in range(opens_at, len(text)):
+        character = text[position]
+        if character == opener:
+            depth += 1
+        elif character == closer:
+            depth -= 1
+            if depth == 0:
+                return position
+    return None
+
+
+def _one_bracket_runs_to_the_end(text: str, opens_at: int) -> bool:
+    """Whether the bracket opened at `opens_at` closes at the end of `text`, but for a signature."""
+    if text[opens_at : opens_at + 1] not in _CLOSING_BRACKET:
+        return False
+    closes_at = _closes_at(text, opens_at)
+    if closes_at is None:
+        return False
+    return len(text[closes_at + 1 :].strip()) <= MAXIMUM_CUTTER_SIGNATURE_CHARACTERS
+
+
+def is_a_cite_wholly_in_brackets(paragraph: ParagraphDescription, profile: StyleProfile) -> bool:
+    """Whether a paragraph is a cite written inside one bracket: `[Okonkwo 26, ...] KR`.
+
+    It opens with the bracket, the bracket runs to the end but for the cutter's signature, a name
+    and a year sit at its head, nothing in it is highlighted, and it is no longer than a cite line
+    may be. The classifier does not call such a paragraph a cite: a reference in brackets inside a
+    source's own text has the same shape. The parser's assembly asks this where a cite stands,
+    under a tag or under the card's cite, before any body (`v1-e31-t12`).
+    """
+    text = paragraph.text.strip()
+    if len(text) > MAXIMUM_LONG_CITE_LINE_CHARACTERS or paragraph.has_highlighted_run:
+        return False
+    if not _one_bracket_runs_to_the_end(text, 0):
+        return False
+    found = first_name_and_year(text, profile)
+    return found is not None and found.start() <= NAME_AND_YEAR_AT_THE_HEAD_CHARACTERS
+
+
+# --------------------------------------------------------------------------------------------
 # Run classification
 # --------------------------------------------------------------------------------------------
 
@@ -271,28 +422,74 @@ def classify_run(
 # --------------------------------------------------------------------------------------------
 
 
+def _is_in_a_cite_style(run: RunDescription, profile: StyleProfile) -> bool:
+    match = profile.resolve_character_style(
+        run.character_style_id, run.character_style_name, run.character_style_based_on
+    )
+    return match is not None and match.emphasis is RunEmphasis.CITE
+
+
+def _the_cite_style_marks_a_name_and_year_at_the_head(
+    paragraph: ParagraphDescription, profile: StyleProfile
+) -> bool:
+    """Whether the paragraph's first name and year sits at its head, at least partly in a cite style.
+
+    That is what the style is for in a cite: `Okonkwo 26` at the front, or behind a first name.
+    Used for emphasis in a body, the style sits on a phrase somewhere and no name and year opens
+    the paragraph.
+    """
+    text = paragraph.text
+    leading = len(text) - len(text.lstrip())
+    found = first_name_and_year(text.strip(), profile)
+    if found is None or found.start() > NAME_AND_YEAR_AT_THE_HEAD_CHARACTERS:
+        return False
+    name_starts, name_ends = found.start() + leading, found.end() + leading
+    run_starts = 0
+    for run in paragraph.runs:
+        run_ends = run_starts + len(run.text)
+        if run_starts < name_ends and run_ends > name_starts and _is_in_a_cite_style(run, profile):
+            return True
+        run_starts = run_ends
+    return False
+
+
 def _cite_run_style_match(
     paragraph: ParagraphDescription, profile: StyleProfile
 ) -> ParagraphStyleMatch | None:
-    """A short paragraph whose runs carry the cite character style is a cite line.
+    """A paragraph whose runs carry the cite character style is a cite line.
 
     Verbatim gives a cite no paragraph style of its own, so in nearly every real file this is how
     a cite is found. It is a Verbatim match arrived at indirectly, not a guess, which is why it
     is reported as `VERBATIM_ALIAS` rather than as a heuristic.
+
+    Up to the profile's bound the style on any run is enough. Past it the style is as likely to be
+    emphasis in a body, so the paragraph is a cite only when the style marks a name and a year at
+    its head, nothing in it is highlighted, and it is no longer than
+    :data:`MAXIMUM_STYLED_CITE_CHARACTERS`. Until `v1-e31-t12` the rule simply let go at the
+    bound, and 1,221 cites in the corpus with long credentials were read as nothing (811), as body
+    text (329) or by a guess that happened to catch them (81).
     """
-    if len(paragraph.text) > profile.cite.maximum_cite_characters:
+    if not any(_is_in_a_cite_style(run, profile) for run in paragraph.visible_runs):
         return None
-    for run in paragraph.visible_runs:
-        match = profile.resolve_character_style(
-            run.character_style_id, run.character_style_name, run.character_style_based_on
+    length = len(paragraph.text)
+    if length <= profile.cite.maximum_cite_characters:
+        return ParagraphStyleMatch(
+            unit=StructuralUnit.CITE,
+            rule_id="verbatim-cite-run-style",
+            match_source=StyleMatchSource.VERBATIM_ALIAS,
+            confidence=1.0,
         )
-        if match is not None and match.emphasis is RunEmphasis.CITE:
-            return ParagraphStyleMatch(
-                unit=StructuralUnit.CITE,
-                rule_id="verbatim-cite-run-style",
-                match_source=StyleMatchSource.VERBATIM_ALIAS,
-                confidence=1.0,
-            )
+    if (
+        length <= MAXIMUM_STYLED_CITE_CHARACTERS
+        and not paragraph.has_highlighted_run
+        and _the_cite_style_marks_a_name_and_year_at_the_head(paragraph, profile)
+    ):
+        return ParagraphStyleMatch(
+            unit=StructuralUnit.CITE,
+            rule_id="verbatim-cite-run-style-past-the-profile-bound",
+            match_source=StyleMatchSource.VERBATIM_ALIAS,
+            confidence=1.0,
+        )
     return None
 
 
@@ -344,12 +541,31 @@ def _wiki_cite_entry_match(
     )
 
 
+def _opens_in_bold(paragraph: ParagraphDescription) -> bool:
+    """Whether the paragraph's first visible run is bold, by its own setting or the paragraph mark's.
+
+    Asked only of a paragraph that opens with a name and a year, so it has a visible run.
+    """
+    first = paragraph.visible_runs[0]
+    return first.bold if first.bold is not None else bool(paragraph.paragraph_bold)
+
+
 def _cite_line_match(paragraph: ParagraphDescription, profile: StyleProfile) -> ParagraphStyleMatch | None:
-    """A short line that opens with a short cite — `Smith 26`, `Smith et al. 2026`."""
+    """A short line that opens with a short cite — `Smith 26`, `Smith et al. 2026`.
+
+    Not a line that opens with a word no author is called: *In 2019*, *Since 2001*, *Figure 12*
+    (:data:`WORDS_THAT_OPEN_A_SENTENCE`). The pattern cannot tell those from a name, and they are
+    how a sentence of evidence begins. A line that opens in bold is left to the pattern all the
+    same: bold is how a cite is written, 160 such lines in the corpus open that way, and what they
+    are cannot be told from here (`v1-e31-t12`).
+    """
     text = paragraph.text.strip()
     if len(text) > MAXIMUM_CITE_LINE_CHARACTERS:
         return None
-    if not _compiled(profile.cite.short_cite_pattern).match(text):
+    short_cite = _compiled(profile.cite.short_cite_pattern).match(text)
+    if short_cite is None:
+        return None
+    if _is_a_sentence_opener(short_cite.group("author")) and not _opens_in_bold(paragraph):
         return None
     return ParagraphStyleMatch(
         unit=StructuralUnit.CITE,
@@ -357,6 +573,52 @@ def _cite_line_match(paragraph: ParagraphDescription, profile: StyleProfile) -> 
         match_source=StyleMatchSource.HEURISTIC,
         confidence=0.6,
     )
+
+
+def _long_cite_line_match(
+    paragraph: ParagraphDescription, profile: StyleProfile
+) -> ParagraphStyleMatch | None:
+    """A cite line longer than :data:`MAXIMUM_CITE_LINE_CHARACTERS`, told by more than its opening.
+
+    A name and a year at the front is all the short rule asks, and past 400 characters that is
+    also how a paragraph of evidence can begin. Two shapes say more, and each is how the corpus
+    writes a cite with its author's credentials in it (`v1-e31-t12`):
+
+    * **the name and year open the line in bold**, the way a file with no cite style writes a
+      cite. 8,426 such lines were read as nothing or as the body's first paragraph;
+    * **everything after the name and year sits in one bracket**, but for what the cutter signs
+      after it closes: `Okonkwo 26 [credentials, title, link] KR`.
+
+    Neither is taken when a run is highlighted, because nobody highlights a citation and a card
+    written as one paragraph behind its cite is highlighted; when the "name" is a word that opens
+    a sentence; or past :data:`MAXIMUM_LONG_CITE_LINE_CHARACTERS`.
+    """
+    text = paragraph.text.strip()
+    # No lower bound is asked: a shorter line that opens with a name and a year never gets here,
+    # because the short rule above has taken it, and one that opens with a sentence opener is
+    # turned away below as it was there.
+    if len(text) > MAXIMUM_LONG_CITE_LINE_CHARACTERS or paragraph.has_highlighted_run:
+        return None
+    short_cite = _compiled(profile.cite.short_cite_pattern).match(text)
+    if short_cite is None or _is_a_sentence_opener(short_cite.group("author")):
+        return None
+    if _opens_in_bold(paragraph):
+        return ParagraphStyleMatch(
+            unit=StructuralUnit.CITE,
+            rule_id="heuristic-cite-line-bold-author-year",
+            match_source=StyleMatchSource.HEURISTIC,
+            confidence=0.6,
+        )
+    rest = text[short_cite.end() :]
+    bracket_opens_at = short_cite.end() + len(rest) - len(rest.lstrip(_BETWEEN_YEAR_AND_BRACKET))
+    if _one_bracket_runs_to_the_end(text, bracket_opens_at):
+        return ParagraphStyleMatch(
+            unit=StructuralUnit.CITE,
+            rule_id="heuristic-cite-line-bracketed",
+            match_source=StyleMatchSource.HEURISTIC,
+            confidence=0.6,
+        )
+    return None
 
 
 def _direct_formatted_heading_match(
@@ -449,9 +711,10 @@ def classify_paragraph(paragraph: ParagraphDescription, profile: StyleProfile) -
     4. outline level plus the formatting that must accompany it,
     5. a wiki-converted cite entry,
     6. a line that opens with a short cite,
-    7. a heading expressed only as bold text at a heading size,
-    8. card body: marked up, shrunk, or prose,
-    9. `OTHER`, which is what a paragraph is when nothing else fits.
+    7. a longer line that opens with one in bold, or holds everything after it in one bracket,
+    8. a heading expressed only as bold text at a heading size,
+    9. card body: marked up, shrunk, or prose,
+    10. `OTHER`, which is what a paragraph is when nothing else fits.
 
     There is always an answer. A caller that wants to know how much to trust it reads
     `confidence` and `match_source`, which is what the parser records on every card.
@@ -485,6 +748,7 @@ def classify_paragraph(paragraph: ParagraphDescription, profile: StyleProfile) -
         _outline_level_match,
         _wiki_cite_entry_match,
         _cite_line_match,
+        _long_cite_line_match,
         _direct_formatted_heading_match,
         _evidence_match,
     ):

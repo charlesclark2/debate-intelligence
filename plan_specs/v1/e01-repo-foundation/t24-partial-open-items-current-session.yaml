@@ -44,7 +44,9 @@ spec:
       description: >-
         A first-session report and a resumed report whose current sections do record an open
         criterion are both accepted, and every existing report that `--partial` accepts
-        today is still accepted, by a test that walks them.
+        today is still accepted, by a test that walks them. Amended by the PM, 2026-10-14:
+        "accepts" is the command's decision, phase included. A `Succeeded` task takes the
+        ordinary path, which reads no open items, so its report is accepted as before.
     - id: ac3
       description: >-
         docs/process/task-workflow.md says which part of the report the check reads.

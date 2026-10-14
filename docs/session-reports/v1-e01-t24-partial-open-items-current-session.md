@@ -351,9 +351,46 @@ None. The full default selection ran here in four parts, each under a minute.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-14
 
 **Notes:**
+
+Accepted in full, with the phase `Succeeded`. I have amended ac2 in this branch to the reading the
+operator chose: "accepts" is the command's decision, phase included.
+
+**Deviation 1: stopping and asking was right, and so was the answer.** Read as the marker check
+alone, ac2 would contradict ac1 on v1-e30-t06 and t08, which are ac1's own case in real reports.
+Neither flips under `pr --partial` as it runs, because a `Succeeded` task never reaches the check.
+Measuring the flip list and committing it before any code changed is what made the question
+answerable in one exchange.
+
+**The work itself:**
+
+* **One boundary, not two.** `report_verdict` and `current_session` share one compiled pattern, as
+  the brief asked, and t18's walk of 93 reports still passes.
+* **The case table is the clearest statement of a rule in this repository.** Every case has a side
+  and a reason, and the one on the less-right side (a `##` record after an earlier review) is named,
+  costed in the safe direction, and given a convention.
+* **The red evidence is the real script,** in a throwaway repository: today's `pr --partial` pushed
+  and opened a pull request for the ac1 report; the new one refuses and pushes nothing.
+* **The property** generated one to four review cycles, and 17.8% of its examples were the case
+  today's grep accepts.
+* **The mutation run:** 11 of 11 caught. Mutant 5 found the two-reviews-in-one-section case and got
+  its test; mutant 6 made a fixture catch what only the walk caught.
+
+**Rulings:**
+
+* **Deviations 1 and 2:** accepted. ac2 amended.
+* **Decisions 1 to 8:** accepted. Decision 3, keeping a record with an earlier review as a `###`
+  heading under it, is how I will append records from now on. Decision 4, the prompt and template
+  telling a resumed session to restate its open items, was needed for the change to work.
+
+**Follow-up work:**
+
+* **Your 1, the template's HTML comments satisfying the check:** a real gap, filed by the PM as an
+  E01 tooling task **after the v1.0 tag**, so that it does not hold the release. Until then the PM's
+  review of every partial merge is the backstop.
+* **Your 2:** no task. The `###` convention covers it.

@@ -544,20 +544,22 @@ class RemovalPlan:
         """
         entries: list[WithdrawalEntry] = []
         for source in self.sources:
-            for caselist, path in source.requester_paths:
-                digest = disclosure_digest(caselist, path)
-                entries += [
-                    WithdrawalEntry(
-                        sha256=entry.sha256,
-                        disclosure=digest,
-                        caselist=caselist,
-                        recorded_at=entry.recorded_at,
-                        reason=entry.reason,
-                        request_id=self.request_id,
-                    )
-                    for entry in source.suppression
-                    if entry.disclosure == digest
-                ]
+            # Every entry of one disclosure is planned for a path it is withdrawn from.
+            caselist_of = {
+                disclosure_digest(caselist, path): caselist for caselist, path in source.requester_paths
+            }
+            entries += [
+                WithdrawalEntry(
+                    sha256=entry.sha256,
+                    disclosure=entry.disclosure,
+                    caselist=caselist_of[entry.disclosure],
+                    recorded_at=entry.recorded_at,
+                    reason=entry.reason,
+                    request_id=self.request_id,
+                )
+                for entry in source.suppression
+                if entry.disclosure is not None
+            ]
         return tuple(entries)
 
     @property

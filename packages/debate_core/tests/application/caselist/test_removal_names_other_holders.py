@@ -377,6 +377,7 @@ class TestAWithdrawalRecordsItsCaselist:
         plan = await service.plan(
             parse_team_selector(TEAM), request_id=TEAM_REQUEST, reason=ReasonCode.REQUESTED_BY_TEAM
         )
+        assert [(one.sha256, one.caselist) for one in plan.withdrawals] == [(ROUND_1_AFF, CASELIST)] * 2
         assert (await service.execute(plan)).completed
 
         recorded = recorded_withdrawals(removal_world)

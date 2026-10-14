@@ -247,3 +247,22 @@ def test_the_fixture_withdraws_from_a_path_the_suppression_entries_name() -> Non
         hashlib.sha256(f"{CASELIST}/{TEAM_PATH}".encode()).hexdigest(),
     }
     assert isinstance(plan.selector, SourceSelector)
+
+
+def test_a_copy_withdrawn_from_two_caselists_records_each_its_own_caselist() -> None:
+    """One later upload withdrawn from the removed path in two caselists: each entry names its own."""
+    other_caselist = "testclb26"
+    both = ((CASELIST, TEAM_PATH), (other_caselist, TEAM_PATH))
+    later = dataclasses.replace(
+        source(LATER, Inclusion.LATER_UPLOAD, Disposition.WITHDRAW, requester_paths=both),
+        suppression=(
+            suppressed(LATER, TEAM_PATH),
+            dataclasses.replace(suppressed(LATER), disclosure=disclosure_digest(other_caselist, TEAM_PATH)),
+        ),
+    )
+
+    plan = plan_of((later,))
+
+    assert {(entry.disclosure, entry.caselist) for entry in plan.withdrawals} == {
+        (disclosure_digest(caselist, path), caselist) for caselist, path in both
+    }

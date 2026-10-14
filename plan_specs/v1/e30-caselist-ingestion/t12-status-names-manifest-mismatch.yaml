@@ -56,7 +56,7 @@ spec:
         the JSON. A snapshot whose only difference is a current suppressed object says so,
         rather than "0 snapshot(s) differ". Shown failing first. Exit codes unchanged.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

@@ -39,6 +39,7 @@ from tests.evals.parser.labels_schema import (
 )
 from tests.evals.parser.metrics import (
     FileScore,
+    blind_comparison,
     check_against_baseline,
     group_scores,
     prediction_from_document,
@@ -222,4 +223,6 @@ def run_evaluation(
         label_status={
             status.value: count for status, count in status_counts(labels[e.digest] for e in entries).items()
         },
+        # Every file in the manifest, whichever the tier: it reads label headers, not the corpus.
+        blind_labeling=blind_comparison(manifest.entries, labels),
     )

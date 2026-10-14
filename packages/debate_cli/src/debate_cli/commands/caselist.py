@@ -587,7 +587,7 @@ def _drift_hints(report: CaselistStatusReport) -> list[str]:
         commands = " and ".join(f"`caselist publish --caselist {caselist}`" for caselist in manifests)
         hints.append(
             "A manifest mismatch is this machine's copy rewritten since its last publish, by a camp "
-            f"metadata re-import or a removal: {commands} uploads it."
+            f"metadata re-import or a removal. Run {commands} to upload it."
         )
     if report.source_mismatched:
         hints.append("A source mismatch needs a person: the bucket holds other bytes under a digest's key.")

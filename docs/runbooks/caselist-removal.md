@@ -292,10 +292,13 @@ DEBATE_ENV=dev uv run debate-research caselist import <archive> --caselist hsld2
 
 - [ ] `caselist status` is clean (exit 0, no drift). It now also treats as drift any local manifest
       row the suppression list stops, and any current bucket object of a suppressed file.
-- [ ] Under its table it says *No version of a removed file is left under raw/ or parsed/*
-      (`v1-e30-t10`). It lists the bucket's object versions with the everyday profile and counts
-      what is left of every file on the suppression list, the later uploads this removal took down
-      included. If it says *REMOVAL RESIDUE* or *NOT CHECKED* instead, go to
+- [ ] Under its table it says *No version of a removed file is left under raw/ or parsed/, and no
+      manifest or aggregate version is older than a removal that touched its caselist*
+      (`v1-e30-t10`, `v1-e30-t15`). It lists the bucket's object versions with the everyday profile
+      and counts what is left of every file on the suppression list, the later uploads this removal
+      took down included, and the versions of the parsed store's aggregates and of the manifests
+      this removal rewrote that are older than it. The aggregates the parse in step 5 rebuilt are
+      newer, and are not counted. If it says *REMOVAL RESIDUE* or *NOT CHECKED* instead, go to
       [When `caselist status` reports removal residue](#when-caselist-status-reports-removal-residue).
 - [ ] The `DONE` line counts the inbox files deleted and rewritten, and the dry run run again says
       *DOWNLOAD INBOX (…): nothing in it holds a removed file.*
@@ -335,8 +338,11 @@ the bucket holds. The line under the table about removal residue is right either
       it is why the sha256 values are what you compare. Pass `--only-named` in prod if you passed
       it in dev.
 - [ ] `caselist status`, run against the dev data directory as above, is clean afterwards, and says
-      *No version of a removed file is left under raw/ or parsed/*. Residue is reported per
-      environment, so a clean dev says nothing about prod.
+      *No version of a removed file is left under raw/ or parsed/, and no manifest or aggregate
+      version is older than a removal that touched its caselist*. Residue is reported per
+      environment, so a clean dev says nothing about prod. It compares prod's bucket with prod's own
+      removals only: the dev data directory's copy of the removal log holds dev's, and those are
+      left out.
 
 Then rebuild prod's parsed aggregates, for the same caselists as in step 5. The parsed store is
 built on this machine in the dev data directory and published to both buckets from there, so this
@@ -498,17 +504,26 @@ holds every other team's disclosures too, and the importer refuses the removed f
 ## When `caselist status` reports removal residue
 
 `caselist status` also lists the bucket's object versions and reports, for each caselist, what the
-bucket still holds of files the suppression list says were removed (`v1-e30-t10`). It runs with the
-everyday profile, it only lists, and it never uses the takedown profile. Under its table it says
-one of three things:
+bucket still holds of files the suppression list says were removed (`v1-e30-t10`), and the manifest
+and aggregate versions older than a removal that touched the caselist (`v1-e30-t15`). It runs with
+the everyday profile, it only lists, and it never uses the takedown profile. Under its table it says
+some of these:
 
-- *No version of a removed file is left under raw/ or parsed/ (N caselist(s) checked; noncurrent
-  manifest versions are not read).* Nothing to do.
+- *No version of a removed file is left under raw/ or parsed/, and no manifest or aggregate version
+  is older than a removal that touched its caselist (N caselist(s) checked).* Nothing to do.
 - *REMOVAL RESIDUE in `<caselist>`: N current object(s), N noncurrent version(s) and N delete
   marker(s) of N file(s) (sha256 `<twelve characters>`, …).* The command exits 1. The steps below
   clear it.
+- *REMOVAL RESIDUE in `<caselist>`: N manifest version(s) and N index.jsonl version(s) older than
+  `RM-…`, completed `<date> <time>` UTC.* The command exits 1. See
+  [Versions older than a removal](#versions-older-than-a-removal) below. One line can carry both
+  kinds, separated by a semicolon.
 - *Removal residue NOT CHECKED for `<caselist>`.* The profile was refused the version listing. That
   is not a finding of none: see [Not checked](#not-checked) below.
+- *Manifest and aggregate versions NOT CHECKED against `RM-…`.* That removal was made by a build from
+  before `v1-e30-t15`, which did not record which caselists it touched, so nothing is compared with
+  it. That is not a finding of none either, and it does not change the exit code. It stays for as
+  long as that log entry is the request's.
 
 Each file is one removed file, named by the first twelve characters of its sha256 and by counts.
 The report prints no school, team code, path or file name, in the text or in `removal_residue` of
@@ -586,25 +601,90 @@ would say `CASELIST_DRIFT` and none would exit 0.
    DEBATE_ENV=dev uv run debate-research caselist status
    ```
 
-   - [ ] It exits 0 and says *No version of a removed file is left under raw/ or parsed/*. With
-         `--json`, every entry of `removal_residue` has `"checked": true` and `"files": []`.
+   - [ ] It exits 0 and says *No version of a removed file is left under raw/ or parsed/, and no
+         manifest or aggregate version is older than a removal that touched its caselist*. With
+         `--json`, every entry of `removal_residue` has `"checked": true`, `"files": []` and
+         `"older_versions": []`.
    - [ ] If the plan you executed listed a `parsed/<caselist>/<version>/index.jsonl`, rebuild that
          caselist's aggregates as in step 5. Any executed removal deletes them.
    - [ ] The register entry for the request records that residue was found and cleared, with the
          counts and the date. Counts and codes only.
 
-**What the report does not see.** It lists versions under `raw/` and `parsed/` and matches an
-object by its key, which is the file's sha256. So:
+### Versions older than a removal
 
-- It does not read manifests. A noncurrent version of a manifest that still holds a removed row is
-  not reported, because its key names no file and the check downloads nothing. Every executed
-  removal sweeps those, a re-run included. The same goes for a noncurrent version of the parsed
-  store's `index.jsonl`, `failures.jsonl` and `occurrences.jsonl`.
+A removal deletes every version of the parsed store's `index.jsonl`, `failures.jsonl` and
+`occurrences.jsonl`, in every version directory, and it rewrites each manifest that held the file
+and purges every other version of it. So in a caselist the removal touched, a version of one of
+those older than the removal is something it should have taken: an old manifest version can hold
+the removed row, and an old aggregate a removed card's tag. A newer one is an ordinary later write,
+such as the aggregates the parse in step 5 rebuilt.
+
+The command finds them from the listing's times and the removal log, downloading nothing. Each
+removal records, beside its log entry in `removal-scopes.jsonl`, the caselists it touched and the
+manifests it rewrote. Per caselist it compares with the latest completed removal that touched it,
+in this environment only. A version counts as older when it is more than 15 minutes older than the
+removal's completion, because S3 stamps a version with its clock and the log with this machine's.
+S3 refuses a request from a machine whose clock is more than 15 minutes out.
+
+| Role | What the bucket holds | How it gets there |
+|---|---|---|
+| manifest | A version of a manifest the removal rewrote, other than the rewrite, written before it | A purge that did not finish: the run stopped between writing the manifest and purging it, or something put the version back |
+| index.jsonl, failures.jsonl, occurrences.jsonl | A version of an aggregate, current or not, written before the removal | A takedown that stopped before the aggregates, or a version put back |
+
+**Clearing it.** Run the removal again under the same request: name one file the request removed,
+by `--source`, with the same `--request` and `--reason`. The request id is the one the line names.
+The sha256 values it removed are in that request's removal-log line, in `removed_sha256`. This
+`grep` prints the line, which holds sha256 values, counts and codes only:
+
+```bash
+grep '"request_id":"RM-2026-01"' "$HOME/.debate-research/dev/suppression/removal-log.jsonl"
+```
+
+In prod the line is in the bucket's copy, `manifests/_suppression/removal-log.jsonl`, unless prod's
+removal ran from this machine with prod's data directory. Then the dry run and `--execute`, as
+step 2 above shows for a file:
+
+```bash
+DEBATE_ENV=dev uv run debate-research caselist remove --source <sha256> --request RM-2026-01 --reason REQUESTED_BY_TEAM
+```
+
+- **Aggregates.** The plan lists every aggregate under *WILL BE REMOVED*, the old versions with
+  the new ones, because a removal of a whole file deletes every caselist's. `--execute` deletes
+  them all. Rebuild them afterwards as in step 5.
+- **A manifest version alone.** The plan reads current manifests only, so it may say *Nothing is
+  left to remove* and print no command to carry it out. Run it with `--execute` anyway. The sweep
+  happens during the execution: it reads each noncurrent manifest version of every caselist with
+  the takedown profile and deletes the ones that name the removed file.
+
+Then run `caselist status` again. Both kinds are cleared that way, and
+`test_versions_older_than_a_removal_are_cleared_by_running_it_again_under_the_same_request` and
+`test_an_old_manifest_version_alone_is_cleared_by_executing_a_plan_that_says_nothing_is_left`
+(`tests/smoke/test_caselist_remove_smoke.py`) prove it. Two cases are not cleared that way. Tell
+the PM about either, and do not delete anything by hand:
+
+- the same manifest count after the re-run: that version names nothing the removal took, since the
+  sweep reads each one;
+- a request that removed no whole file (its `removed_sha256` is empty, only `withdrawn_sha256`):
+  running it again plans no aggregates.
+
+**What the report does not see.** It matches `raw/` and `parsed/` objects by their key, which is
+the file's sha256, and the aggregates and the rewritten manifests by their time. So:
+
+- It does not read manifests. A version of a manifest the removal *did not rewrite*, older than it,
+  is not counted, even if it still names a removed row: the removal's sweep reads those, keeps the
+  ones that name nothing removed, and deletes the rest. Telling the two apart would mean downloading
+  each. A camp release's manifest re-published by `caselist reimport-openev-metadata` keeps such a
+  version by design. Every executed removal sweeps them again, a re-run included.
+- It compares nothing with a removal whose build did not record its scope (the *NOT CHECKED
+  against `RM-…`* line), and nothing in a caselist no removal touched.
 - It does not report a shared file that was withdrawn from one team and kept for another. That file
   is suppressed for one path, not whole, and the other holder's copy is the same object.
+- `manifests/_suppression/` is never residue. The list, the removal log, the path holds and the
+  scopes are appended to, and their old versions hold sha256 values and request ids, the record of
+  what was asked. No removal deletes them.
 
-So *No version of a removed file is left* means what it says about `raw/` and `parsed/`, and no
-more. The AWS CLI check in step 6 is still there for one key.
+So the clean line means what it says about `raw/`, `parsed/`, the aggregates and the manifests a
+removal rewrote, and no more. The AWS CLI check in step 6 is still there for one key.
 
 ### Not checked
 

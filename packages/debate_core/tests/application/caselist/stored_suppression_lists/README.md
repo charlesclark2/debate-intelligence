@@ -14,7 +14,7 @@ writes is one an installed build reads, and the reverse.
 | `line_schemas_of_the_start_commit.json` | The source of tag `v0.1.0-dev.119` (`7efe8c6`), the commit on `dev` this task started from | The same, printed by that build's own code. Byte for byte the file above |
 | `written_by_the_installed_build/` | The source of `v0.1.0-dev.60` | `local/`: every file under `<data_dir>/suppression/`. `bucket/`: every object under `manifests/_suppression/` |
 | `written_by_the_start_commit/` | The source of `v0.1.0-dev.119` | The same |
-| `written_by_this_build/` | This task's source | The same. It holds one more file in each place, `path-holds.jsonl` |
+| `written_by_this_build/` | This task's source | The same. It holds two more files in each place: `path-holds.jsonl` beside the list (`v1-e30-t13`) and `removal-scopes.jsonl` beside the log (`v1-e30-t15`). The scopes hold the version ids the bucket gave each rewritten manifest, which moto picks at random, so the test compares that file with those ids masked and every other byte as written |
 
 The history is `suppression_list_scenario.py`, which uses nothing a build from before `v1-e30-t11`
 lacks, so the same file runs against all three sources: a `--team` removal, a `--source` removal of
@@ -81,6 +81,11 @@ reader: the debate_core source at dev60
 a path entry written into the list: UnreadableAppendOnlyRecord at line 8
 the whole list is refused, and an import against it fails with nothing stored
 ```
+
+`v1-e30-t15` ran the same check against `v0.1.0-dev.122`, the build the weekly agent was reinstalled
+from on 2026-10-14, over `written_by_this_build/` with its scope file. Its first line named the
+eight files placed, the scope file in both places among them, and the four after it were the
+lines above.
 
 ## When these may change
 

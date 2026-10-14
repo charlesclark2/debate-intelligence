@@ -126,6 +126,13 @@ what to run (`docs/runbooks/caselist-removal.md`). A file is named by the first 
 its sha256 and by counts, in the text and in `removal_residue` of the JSON alike. Where the profile
 may not list versions the caselist is reported as *not checked*, with `null` counts: that is not a
 finding of none, and it does not change the exit code.
+
+And, per caselist a completed removal touched, the manifest and aggregate versions older than it, by
+key role and count (`v1-e30-t15`): versions of the parsed store's `index.jsonl`, `failures.jsonl` and
+`occurrences.jsonl` in every version directory, and of each manifest the removal rewrote other than
+its own rewrite. Found by comparing the listing's times with the removal log's, with the scope each
+removal records beside its log entry; nothing is downloaded. A completed removal whose build recorded
+no scope is named as not checked.
 """
 
 from __future__ import annotations
@@ -495,12 +502,14 @@ def _status_failure(report: CaselistStatusReport, payload: dict[str, JsonValue])
     drifted = report.drifted
     if report.residue_found and not drifted:
         files = sum(len(one.files) for one in report.residue)
+        held = (
+            f"the bucket still holds versions of {files} removed file(s)"
+            if files
+            else "the bucket still holds versions older than a removal"
+        )
         return CommandFailure(
             code=REMOVAL_RESIDUE,
-            message=(
-                f"the bucket still holds versions of {files} removed file(s): "
-                + "; ".join(_residue_found(one) for one in report.residue if one.found)
-            ),
+            message=f"{held}: " + "; ".join(_residue_found(one) for one in report.residue if one.found),
             exit_code=ExitCode.DOMAIN_FAILURE,
             details=payload,
             hint=(
@@ -637,7 +646,10 @@ def status_summary(report: CaselistStatusReport, settings: Settings) -> dict[str
 
     `removal_residue` is one object per caselist compared (`v1-e30-t10`): what a version listing
     shows of its removed files, by digest prefix and count, or `checked: false` with `null` counts
-    where the listing was refused. No whole digest and nothing from a manifest row.
+    where the listing was refused. No whole digest and nothing from a manifest row. Each also gives
+    `older_versions`, by key role and count, and `older_than`, the latest completed removal that
+    touched the caselist (`v1-e30-t15`). `removals_not_checked` names the completed removals no
+    version was compared with, because the build that made them did not record their reach.
     """
     return {
         "environment": settings.environment.value,
@@ -645,6 +657,7 @@ def status_summary(report: CaselistStatusReport, settings: Settings) -> dict[str
         "in_sync": report.in_sync,
         "snapshots": [_status_entry(entry) for entry in report.snapshots],
         "removal_residue": [_residue_entry(one) for one in report.residue],
+        "removals_not_checked": list(report.removals_not_checked),
     }
 
 
@@ -667,17 +680,42 @@ def _residue_entry(residue: CaselistResidue) -> dict[str, JsonValue]:
         "noncurrent_versions": residue.noncurrent_versions,
         "delete_markers": residue.delete_markers,
         "files": files if residue.checked else None,
+        "older_versions": [{"role": one.role, "versions": one.versions} for one in residue.older_versions]
+        if residue.checked
+        else None,
+        "older_than": None
+        if residue.older_than is None
+        else {
+            "request_id": residue.older_than.request_id,
+            "completed_at": _utc_stamp(residue.older_than.completed_at),
+        },
     }
 
 
+def _utc_stamp(when: datetime) -> str:
+    """A moment as the removal log writes one: UTC, `Z`."""
+    return when.astimezone(UTC).isoformat().replace("+00:00", "Z")
+
+
 def _residue_found(residue: CaselistResidue) -> str:
-    """`<caselist>: counts of N file(s) (sha256 <prefix>, …)`, for a caselist with something left."""
-    named = ", ".join(f"sha256 {one.sha256_prefix}" for one in residue.files)
-    return (
-        f"{residue.caselist}: {residue.current_objects} current object(s), "
-        f"{residue.noncurrent_versions} noncurrent version(s) and {residue.delete_markers} delete marker(s) "
-        f"of {len(residue.files)} file(s) ({named})"
-    )
+    """`<caselist>: counts of N file(s) (sha256 <prefix>, …)`, and the versions older than a removal
+    by role and count, for a caselist with something left."""
+    found: list[str] = []
+    if residue.files:
+        named = ", ".join(f"sha256 {one.sha256_prefix}" for one in residue.files)
+        found.append(
+            f"{residue.current_objects} current object(s), {residue.noncurrent_versions} noncurrent "
+            f"version(s) and {residue.delete_markers} delete marker(s) "
+            f"of {len(residue.files)} file(s) ({named})"
+        )
+    if residue.older_versions and residue.older_than is not None:
+        counts = [f"{one.versions} {one.role} version(s)" for one in residue.older_versions]
+        listed = counts[0] if len(counts) == 1 else f"{', '.join(counts[:-1])} and {counts[-1]}"
+        found.append(
+            f"{listed} older than {residue.older_than.request_id}, completed "
+            f"{residue.older_than.completed_at.astimezone(UTC):%Y-%m-%d %H:%M} UTC"
+        )
+    return f"{residue.caselist}: " + "; ".join(found)
 
 
 def _residue_lines(report: CaselistStatusReport) -> list[str]:
@@ -691,11 +729,17 @@ def _residue_lines(report: CaselistStatusReport) -> list[str]:
             f"Removal residue NOT CHECKED for {', '.join(unchecked)}: this profile may not list object "
             "versions there. That is not a finding of none."
         )
+    if report.removals_not_checked:
+        lines.append(
+            f"Manifest and aggregate versions NOT CHECKED against {', '.join(report.removals_not_checked)}: "
+            "the build that made that removal did not record which caselists it touched. That is not a "
+            "finding of none."
+        )
     checked = [one for one in report.residue if one.checked]
     if checked and not report.residue_found:
         lines.append(
-            f"No version of a removed file is left under raw/ or parsed/ ({len(checked)} caselist(s) "
-            "checked; noncurrent manifest versions are not read)."
+            "No version of a removed file is left under raw/ or parsed/, and no manifest or aggregate "
+            f"version is older than a removal that touched its caselist ({len(checked)} caselist(s) checked)."
         )
     return lines
 

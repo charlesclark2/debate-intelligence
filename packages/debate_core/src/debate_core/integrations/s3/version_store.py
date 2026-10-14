@@ -108,6 +108,7 @@ class S3EvidenceVersionStore:
                             version_id=stored.get("VersionId"),
                             size=stored.get("Size", 0),
                             is_latest=stored.get("IsLatest", False),
+                            last_modified=stored.get("LastModified"),
                         )
                     )
                 for marker in page.get("DeleteMarkers", []):
@@ -120,6 +121,7 @@ class S3EvidenceVersionStore:
                             version_id=marker.get("VersionId"),
                             is_latest=marker.get("IsLatest", False),
                             is_delete_marker=True,
+                            last_modified=marker.get("LastModified"),
                         )
                     )
         return tuple(

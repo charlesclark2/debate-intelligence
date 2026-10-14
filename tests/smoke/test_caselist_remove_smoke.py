@@ -18,9 +18,10 @@ import json
 import os
 import zipfile
 from collections.abc import Iterator
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+from unittest.mock import ANY
 
 import boto3
 import pytest
@@ -619,6 +620,9 @@ def test_a_source_plan_for_a_file_two_teams_hold_counts_one_other_team(
 #: `caselist status` with the everyday profile only. The takedown profile names nothing that exists,
 #: so a status that built a client with it would fail instead of reporting.
 NO_SUCH_PROFILE = "debate-no-such-profile"
+#: After the removal under `RM-2026-03`, which touched the caselist (`v1-e30-t15`). Its completion is
+#: this machine's clock at the time the test runs: the tests that need it read it from the log.
+COMPLETED_BY_THE_REMOVAL = {"request_id": "RM-2026-03", "completed_at": ANY}
 NOTHING_LEFT = {
     "caselist": SYNTHETIC_CASELIST,
     "checked": True,
@@ -627,6 +631,8 @@ NOTHING_LEFT = {
     "noncurrent_versions": 0,
     "delete_markers": 0,
     "files": [],
+    "older_versions": [],
+    "older_than": COMPLETED_BY_THE_REMOVAL,
 }
 
 
@@ -679,7 +685,13 @@ def test_status_after_a_complete_removal_says_it_checked_and_nothing_is_left(
 
     assert status["exit_code"] == ExitCode.OK, status
     assert status["data"]["removal_residue"] == [NOTHING_LEFT]
-    assert "No version of a removed file is left under raw/ or parsed/" in status_as_a_person_reads_it()
+    assert status["data"]["removals_not_checked"] == []
+    shown = status_as_a_person_reads_it()
+    assert (
+        "No version of a removed file is left under raw/ or parsed/, and no manifest or aggregate version "
+        "is older than a removal that touched its caselist (1 caselist(s) checked)."
+    ) in shown
+    assert "noncurrent manifest versions are not read" not in shown
 
 
 def test_versions_of_a_later_upload_left_under_a_delete_marker_fail_status_by_prefix_and_count(
@@ -712,6 +724,8 @@ def test_versions_of_a_later_upload_left_under_a_delete_marker_fail_status_by_pr
                     "delete_markers": 1,
                 }
             ],
+            "older_versions": [],
+            "older_than": COMPLETED_BY_THE_REMOVAL,
         }
     ]
     assert error["message"] == (
@@ -756,6 +770,8 @@ def test_a_refused_version_listing_says_not_checked_and_never_that_nothing_is_le
             "noncurrent_versions": None,
             "delete_markers": None,
             "files": None,
+            "older_versions": None,
+            "older_than": None,
         }
     ]
     assert f"Removal residue NOT CHECKED for {SYNTHETIC_CASELIST}" in shown
@@ -868,6 +884,197 @@ def test_residue_a_completed_removal_left_is_cleared_by_naming_the_file_under_th
     clean = run("caselist", "status")
     assert clean["exit_code"] == ExitCode.OK, clean
     assert clean["data"]["removal_residue"] == [NOTHING_LEFT]
+
+
+# ------------------------------------------------------------------------------------------------
+# Manifest and aggregate versions older than a removal (v1-e30-t15)
+# ------------------------------------------------------------------------------------------------
+
+AGGREGATE = f"parsed/{SYNTHETIC_CASELIST}/2026.10.10-docx-2/index.jsonl"
+REMOVAL_LOG = "manifests/_suppression/removal-log.jsonl"
+SCOPES = "manifests/_suppression/removal-scopes.jsonl"
+
+
+def body_of(client: S3Client, key: str) -> str:
+    return client.get_object(Bucket=BUCKET, Key=key)["Body"].read().decode()
+
+
+def completion_of_the_removal(client: S3Client) -> datetime:
+    """When `RM-2026-03` completed, from the bucket's removal log: what the tests set times against."""
+    entries = [json.loads(line) for line in body_of(client, REMOVAL_LOG).splitlines()]
+    return max(
+        datetime.fromisoformat(entry["recorded_at"])
+        for entry in entries
+        if entry["request_id"] == "RM-2026-03" and entry["outcome"] == "COMPLETED"
+    )
+
+
+def a_manifest_the_removal_rewrote(client: S3Client) -> str:
+    (scope,) = [json.loads(line) for line in body_of(client, SCOPES).splitlines()]
+    return str(scope["manifest_rewrites"][0]["key"])
+
+
+def put_older(client: S3Client, key: str, body: bytes, written: datetime) -> None:
+    """Put a version beneath the current one, as if written at `written`: moto keeps the time as an
+    attribute, lists versions by it, and serves the last one stored, so the stored order follows it."""
+    from moto.core.models import DEFAULT_ACCOUNT_ID
+    from moto.s3.models import FakeKey, s3_backends
+
+    version_id = client.put_object(Bucket=BUCKET, Key=key, Body=body)["VersionId"]
+    stored: list[FakeKey] = s3_backends[DEFAULT_ACCOUNT_ID]["aws"].get_bucket(BUCKET).keys.getlist(key)
+    (put,) = [one for one in stored if one.version_id == version_id]
+    put.last_modified = written.astimezone(UTC).replace(tzinfo=None)
+    stored.sort(key=lambda one: one.last_modified)
+
+
+def a_member_row_of(sha: str) -> bytes:
+    return (json.dumps({"kind": "member", "path": "a path", "sha256": sha}) + "\n").encode()
+
+
+@pytest.fixture
+def an_old_manifest_version(removed_with_its_later_upload: None, bucket: S3Client) -> str:
+    """A day before the removal, a version of a manifest it rewrote, naming the file it removed.
+
+    What a purge that did not happen leaves: a build from before the purge, or a run that stopped.
+    Returns the manifest's key.
+    """
+    manifest = a_manifest_the_removal_rewrote(bucket)
+    put_older(
+        bucket,
+        manifest,
+        a_member_row_of(FIRST_VERSION),
+        completion_of_the_removal(bucket) - timedelta(days=1),
+    )
+    return manifest
+
+
+@pytest.fixture
+def an_old_index_too(an_old_manifest_version: str, bucket: S3Client) -> str:
+    """And the caselist's parsed index, a day older than the removal, which no rebuild replaced."""
+    put_older(
+        bucket, AGGREGATE, b"a removed card's row\n", completion_of_the_removal(bucket) - timedelta(days=1)
+    )
+    return an_old_manifest_version
+
+
+def test_a_manifest_and_an_aggregate_version_older_than_the_removal_fail_status_by_role_and_count(
+    installation: Path, bucket: S3Client, an_old_index_too: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Listing only, with the everyday profile: the only objects read are the takedown's records."""
+    from debate_core.integrations.s3 import S3EvidenceObjectStore, S3EvidenceVersionStore
+
+    read: list[str] = []
+    profiles: list[str | None] = []
+    get_file, listing = S3EvidenceObjectStore.get_file, S3EvidenceVersionStore.list_versions
+
+    async def reads(self: S3EvidenceObjectStore, key: str, destination: Path) -> None:
+        read.append(key)
+        await get_file(self, key, destination)
+
+    async def lists(self: S3EvidenceVersionStore, prefix: str) -> tuple[Any, ...]:
+        profiles.append(self.profile)
+        return await listing(self, prefix)
+
+    async def forbidden(self: S3EvidenceVersionStore, *_: Any) -> Any:
+        raise AssertionError("caselist status deleted or downloaded an object version")
+
+    monkeypatch.setattr(S3EvidenceObjectStore, "get_file", reads)
+    monkeypatch.setattr(S3EvidenceVersionStore, "list_versions", lists)
+    monkeypatch.setattr(S3EvidenceVersionStore, "delete_versions", forbidden)
+    monkeypatch.setattr(S3EvidenceVersionStore, "get_version_file", forbidden)
+    before = every_version(bucket)
+    completed = completion_of_the_removal(bucket)
+
+    status = run("caselist", "status")
+    shown = status_as_a_person_reads_it()
+
+    assert status["exit_code"] == ExitCode.DOMAIN_FAILURE, status
+    error = status["error"]
+    assert error["code"] == "REMOVAL_RESIDUE"
+    assert all(entry["in_sync"] for entry in error["details"]["snapshots"]), "no snapshot differs"
+    assert error["details"]["removal_residue"] == [
+        {
+            **NOTHING_LEFT,
+            "older_versions": [{"role": "manifest", "versions": 1}, {"role": "index.jsonl", "versions": 1}],
+        }
+    ]
+    assert error["details"]["removal_residue"][0]["older_than"][
+        "completed_at"
+    ] == completed.isoformat().replace("+00:00", "Z")
+    found = (
+        f"{SYNTHETIC_CASELIST}: 1 manifest version(s) and 1 index.jsonl version(s) older than RM-2026-03, "
+        f"completed {completed:%Y-%m-%d %H:%M} UTC"
+    )
+    assert error["message"] == f"the bucket still holds versions older than a removal: {found}"
+    assert f"REMOVAL RESIDUE in {found}." in shown
+    assert "docs/runbooks/caselist-removal.md" in error["hint"]
+    reported = json.dumps([error["details"]["removal_residue"], error["message"], error["hint"]]) + shown
+    assert FIRST_VERSION not in reported, "no whole digest"
+    for identifying in IDENTIFYING:
+        assert identifying not in reported, identifying
+    assert every_version(bucket) == before, "status changed the bucket"
+    assert read and all(key.startswith("manifests/_suppression/") for key in read), read
+    assert profiles and set(profiles) == {OPERATOR_PROFILE}
+
+
+def test_versions_older_than_a_removal_are_cleared_by_running_it_again_under_the_same_request(
+    installation: Path, bucket: S3Client, an_old_index_too: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The runbook's instruction: name a file the request removed, same request and reason, execute.
+
+    The plan lists the old index with every aggregate, and the execution's sweep reads the manifest
+    version, finds the removed row and deletes it.
+    """
+    shown = runner.invoke(create_app(), list(REMOVE_FIRST_VERSION), terminal_width=200).stdout
+    assert AGGREGATE in shown
+
+    monkeypatch.setenv("DEBATE_REMOVAL_PROFILE", REMOVAL_PROFILE)
+    done = run(*REMOVE_FIRST_VERSION, "--execute")
+    assert done["exit_code"] == ExitCode.OK, done
+    monkeypatch.setenv("DEBATE_REMOVAL_PROFILE", NO_SUCH_PROFILE)
+
+    clean = run("caselist", "status")
+    assert clean["exit_code"] == ExitCode.OK, clean
+    assert clean["data"]["removal_residue"] == [NOTHING_LEFT]
+
+
+def test_an_old_manifest_version_alone_is_cleared_by_executing_a_plan_that_says_nothing_is_left(
+    installation: Path, bucket: S3Client, an_old_manifest_version: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The plan reads current manifests only, so it finds nothing to do; the sweep runs at execution."""
+    assert run("caselist", "status")["error"]["code"] == "REMOVAL_RESIDUE"
+    assert "Nothing is left to remove" in runner.invoke(create_app(), list(REMOVE_FIRST_VERSION)).stdout
+
+    monkeypatch.setenv("DEBATE_REMOVAL_PROFILE", REMOVAL_PROFILE)
+    done = run(*REMOVE_FIRST_VERSION, "--execute")
+    assert done["exit_code"] == ExitCode.OK, done
+    monkeypatch.setenv("DEBATE_REMOVAL_PROFILE", NO_SUCH_PROFILE)
+
+    clean = run("caselist", "status")
+    assert clean["exit_code"] == ExitCode.OK, clean
+    assert clean["data"]["removal_residue"] == [NOTHING_LEFT]
+
+
+def test_a_removal_an_older_build_made_is_named_as_not_checked_and_never_as_none(
+    installation: Path, bucket: S3Client, removed_with_its_later_upload: None
+) -> None:
+    """A completed removal in this machine's log with no scope beside it, as builds before this one wrote."""
+    log = installation / "dev" / "suppression" / "removal-log.jsonl"
+    (line,) = log.read_text(encoding="utf-8").splitlines()
+    older = {**json.loads(line), "request_id": "RM-2026-90", "recorded_at": "2026-10-01T12:00:00Z"}
+    log.write_text(
+        line + "\n" + json.dumps(older, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8"
+    )
+
+    status = run("caselist", "status")
+    shown = status_as_a_person_reads_it()
+
+    assert status["exit_code"] == ExitCode.OK, status
+    assert status["data"]["removals_not_checked"] == ["RM-2026-90"]
+    assert (
+        "Manifest and aggregate versions NOT CHECKED against RM-2026-90: the build that made that removal "
+        "did not record which caselists it touched. That is not a finding of none."
+    ) in shown
 
 
 # ------------------------------------------------------------------------------------------------

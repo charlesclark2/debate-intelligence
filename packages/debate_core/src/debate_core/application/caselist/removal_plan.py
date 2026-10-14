@@ -541,6 +541,28 @@ class RemovalPlan:
         return tuple(rewrite for rewrite in self.manifests if rewrite.side is side)
 
     @property
+    def touched_caselists(self) -> tuple[str, ...]:
+        """The caselists that hold a file this plan removes or withdraws (`v1-e30-t15`).
+
+        Where a manifest it rewrites is filed, where an object it deletes under `raw/` or `parsed/`
+        is named for the file, where a record it deletes was disclosed, and where it withdraws a
+        copy from; OpenEv for a camp file. Not every caselist whose aggregates it deletes: a removal
+        deletes those of every caselist, and only one that held the file can hold a row of it.
+        """
+        touched: set[str] = {rewrite.key.split("/")[1] for rewrite in self.manifests}
+        for planned in self.objects:
+            if planned.side is Side.BUCKET and planned.kind is not ObjectKind.PARSED_AGGREGATE:
+                touched.add(_caselist_of_bucket_key(planned.key))
+        for source in self.sources:
+            if source.disposition is Disposition.SKIP_SHARED:
+                continue
+            touched.update(ref.caselist for ref in source.disclosures)
+            touched.update(caselist for caselist, _ in source.requester_paths)
+            if source.camp_files:
+                touched.add(OPENEV)
+        return tuple(sorted(touched))
+
+    @property
     def nothing_to_do(self) -> bool:
         return (
             not self.local_records
@@ -1696,6 +1718,17 @@ def _imported_openev_downloads(copies: Sequence[_ManifestCopy]) -> frozenset[str
         for _, row in copy.rows
         if isinstance(row.get("archive_sha256"), str)
     )
+
+
+def _caselist_of_bucket_key(key: str) -> str:
+    """The caselist a `raw/` or `parsed/` key is filed under: `raw/caselist/<slug>/…`, `raw/openev/…`
+    or `parsed/<caselist>/…`."""
+    parts = key.split("/")
+    if key.startswith(f"{CASELIST_SOURCE_PREFIX}/"):
+        return parts[2]
+    if key.startswith(f"{OPENEV_SOURCE_PREFIX}/"):
+        return OPENEV
+    return parts[1]
 
 
 def _is_parsed_aggregate(key: str, caselist_prefix: str) -> bool:

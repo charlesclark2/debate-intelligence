@@ -20,9 +20,10 @@ No line of another shape may ever be written to the list, and none is: the paths
 
 **An older build reads what this build writes.** The list and the removal log this build writes
 are byte for byte the ones each older build wrote for the same history, in both places; every line
-validates against each older build's own schema; and what this build adds is one more file beside
-them. `check_an_older_build_reads_this_builds_files.py` runs an older build's own importer,
-publisher and status over these files, and the README records what it printed.
+validates against each older build's own schema; and what this build adds is two more files beside
+them, the path holds (`v1-e30-t13`) and the removal scopes (`v1-e30-t15`).
+`check_an_older_build_reads_this_builds_files.py` runs an older build's own importer, publisher and
+status over these files, and the README records what it printed.
 
 **This build reads what an older build wrote.** Each stored list reads back to the state written
 out below by hand, with no path held, and serialises again to the bytes it was read from.
@@ -33,6 +34,7 @@ The scenario and the records it leaves are the invented archives of `tests/fixtu
 from __future__ import annotations
 
 import json
+import re
 from datetime import date
 from pathlib import Path
 from typing import Any, cast
@@ -86,6 +88,7 @@ SCHEMAS = {
 THE_LIST = "suppression-list.jsonl"
 THE_LOG = "removal-log.jsonl"
 THE_PATH_HOLDS = "path-holds.jsonl"
+THE_REMOVAL_SCOPES = "removal-scopes.jsonl"
 PLACES = ("local", "bucket")
 
 #: What the stored history leaves suppressed, written from `suppression_list_scenario.py`'s
@@ -110,6 +113,20 @@ def lines_of(path: Path) -> list[str]:
 # ------------------------------------------------------------------------------------------------
 
 
+def with_version_ids_masked(name: str, body: bytes) -> bytes:
+    """The scope record with each rewrite's version id masked: the bucket assigns those, at random.
+
+    Every other byte of it, and every byte of every other file, is compared as written. The ids
+    masked must be the rewrites the stored history made, two and three, so a scope that lost its
+    rewrites is not masked into agreement.
+    """
+    if name.rsplit("/", 1)[-1] != THE_REMOVAL_SCOPES:
+        return body
+    masked, count = re.subn(rb'"version_id":"[^"]+"', b'"version_id":"<assigned by the bucket>"', body)
+    assert count == 5, name
+    return masked
+
+
 async def test_this_build_still_writes_the_stored_files_byte_for_byte(removal_world: RemovalWorld) -> None:
     await a_team_removal_a_source_removal_and_an_unsuppress(removal_world)
 
@@ -121,7 +138,9 @@ async def test_this_build_still_writes_the_stored_files_byte_for_byte(removal_wo
         for path in sorted((THIS_BUILD / place).iterdir())
     }
     assert sorted(written) == sorted(stored)
-    assert written == stored
+    assert {name: with_version_ids_masked(name, body) for name, body in written.items()} == {
+        name: with_version_ids_masked(name, body) for name, body in stored.items()
+    }
 
 
 # ------------------------------------------------------------------------------------------------
@@ -175,16 +194,16 @@ def test_a_path_entry_is_a_line_an_older_build_would_refuse_which_is_why_it_is_n
         jsonschema.validate(json.loads(entry), schemas_of(build)["suppression_list_line"])
 
 
-def test_what_this_build_adds_is_one_file_beside_the_list_in_each_place() -> None:
+def test_what_this_build_adds_is_two_files_beside_the_list_and_the_log_in_each_place() -> None:
+    """The path holds beside the list (`v1-e30-t13`), and the removal scopes beside the log (`v1-e30-t15`)."""
     for place in PLACES:
         ours = {path.name for path in (THIS_BUILD / place).iterdir()}
         for build, directory in OLDER_BUILDS.items():
             theirs = {path.name for path in (directory / place).iterdir()}
             assert theirs == {THE_LIST, THE_LOG}, build
-            assert ours - theirs == {THE_PATH_HOLDS}, build
-    assert (THIS_BUILD / "local" / THE_PATH_HOLDS).read_bytes() == (
-        THIS_BUILD / "bucket" / THE_PATH_HOLDS
-    ).read_bytes()
+            assert ours - theirs == {THE_PATH_HOLDS, THE_REMOVAL_SCOPES}, build
+    for added in (THE_PATH_HOLDS, THE_REMOVAL_SCOPES):
+        assert (THIS_BUILD / "local" / added).read_bytes() == (THIS_BUILD / "bucket" / added).read_bytes()
 
 
 def test_the_one_path_entry_is_for_the_file_removed_by_source_and_names_no_one() -> None:

@@ -39,8 +39,10 @@ from debate_core.application.caselist.publish_service import CaselistPublishServ
 from debate_core.application.caselist.removal_plan import RemovalPlanner
 from debate_core.application.caselist.removal_service import CaselistRemovalService, TakedownAccess
 from debate_core.application.caselist.suppression import (
+    REMOVAL_LOG_KEY,
     SUPPRESSION_LIST_KEY,
     ObjectStoreAppendOnlyRecord,
+    RecordedRemovalLog,
     RecordedSuppressionList,
 )
 from debate_core.application.ports.evidence_versions import EvidenceVersionStore
@@ -195,6 +197,13 @@ class RemovalWorld:
         return RecordedSuppressionList(
             local_suppression_list_file(self.data_dir),
             ObjectStoreAppendOnlyRecord(self.bucket, SUPPRESSION_LIST_KEY),
+        )
+
+    def removal_log(self) -> RecordedRemovalLog:
+        """The local copy and the bucket's, as `caselist status` reads them (`v1-e30-t15`)."""
+        return RecordedRemovalLog(
+            local_removal_log_file(self.data_dir),
+            ObjectStoreAppendOnlyRecord(self.bucket, REMOVAL_LOG_KEY),
         )
 
     def planner(self, *, versions: EvidenceVersionStore | None = None) -> RemovalPlanner:

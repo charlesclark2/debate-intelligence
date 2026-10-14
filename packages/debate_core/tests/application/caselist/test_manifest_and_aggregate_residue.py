@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Sequence
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -517,6 +518,27 @@ class TestWhatIsNotReported:
 
         assert of(report, SYNTHETIC_CASELIST).older_versions == ()
         assert not report.residue_found
+
+    async def test_a_version_whose_store_states_no_time_is_not_counted(self, removed: RemovalWorld) -> None:
+        """S3 always states one. A store that does not cannot show a version older than anything."""
+        world = removed
+        put(
+            world,
+            aggregate_key(SYNTHETIC_CASELIST, PARSER_VERSIONS[0], "index.jsonl"),
+            b"old\n",
+            written=LONG_BEFORE,
+        )
+        everyday = S3EvidenceVersionStore(bucket=world.bucket_name, client=world.client)
+
+        class StatesNoTime(RefusesUnder):
+            async def list_versions(self, prefix: str) -> tuple[ObjectVersion, ...]:
+                listed = await super().list_versions(prefix)
+                return tuple(replace(version, last_modified=None) for version in listed)
+
+        residue = of(await status(world, versions=StatesNoTime(everyday, "nothing/")), SYNTHETIC_CASELIST)
+
+        assert residue.checked
+        assert residue.older_versions == ()
 
     async def test_the_suppression_records_old_versions_are_never_residue(
         self, removed: RemovalWorld

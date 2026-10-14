@@ -604,7 +604,10 @@ class TestTheFirstRemovalInABucketWithoutListBucket:
             await remove_team(removal_world, service=removal_world.service(takedown=refusing))
 
         message = str(stopped.value)
-        assert f"PutObject s3://{removal_world.bucket_name}/{SUPPRESSION_LIST_KEY}" in message
+        # The team's shared file is withdrawn, so the first write is the caselist it is withdrawn
+        # from, beside the list, just before the suppression entries (`v1-e30-t16`).
+        first = SUPPRESSION_LIST_KEY.replace("suppression-list.jsonl", "withdrawals.jsonl")
+        assert f"not allowed to PutObject s3://{removal_world.bucket_name}/{first}" in message
         assert "nothing was deleted" in message
         assert "appended first" not in message, "it was not: that append is what failed"
         assert "removal log" in message, "the log entry could not be written either, and it says so"

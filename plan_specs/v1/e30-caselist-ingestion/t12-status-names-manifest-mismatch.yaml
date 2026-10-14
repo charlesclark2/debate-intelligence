@@ -52,8 +52,9 @@ spec:
     - id: ac4
       description: >-
         Added by the PM, 2026-10-11, from v1-e30-t10's Follow-up work 6. `caselist status`
-        shows each snapshot's `suppressed_rows` and `suppressed_objects`, in the table and in
-        the JSON. A snapshot whose only difference is a current suppressed object says so,
+        shows each snapshot's `suppressed_rows` and each caselist's `suppressed_objects`, in
+        the table and in the JSON (amended by the PM, 2026-10-14: a source object is found per
+        caselist and belongs to no one snapshot). A snapshot whose only difference is a current suppressed object says so,
         rather than "0 snapshot(s) differ". Shown failing first. Exit codes unchanged.
 status:
   phase: Succeeded

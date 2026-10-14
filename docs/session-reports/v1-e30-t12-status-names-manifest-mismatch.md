@@ -258,9 +258,51 @@ you know of `testcl26`.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-14
 
 **Notes:**
+
+Accepted in full, with the phase `Succeeded`. I have amended ac4 in this branch to the wording
+Deviation 1 proposes.
+
+**Deviation 1 is right, and my ac4 was wrong.** A source object is found in one listing of the
+caselist's source prefix, one digest can be named by several weeks, and some leftovers are named by
+none. Reporting them per caselist, with `suppressed_objects_of` filtering by the same prefix the
+listing used, is exact. Splitting them by snapshot would have invented an attribution.
+
+**The work itself:**
+
+* **Classification by equality with the snapshot's own manifest key,** as the brief asked. The
+  prefix mutant surviving as equivalent is argued correctly: every reachable source key is under
+  `raw/`, so the two rules agree on every input the service can build. The equality rule is still
+  the one that stays right if that ever changes.
+* **The publish hint is proven, not asserted.** The tests run the hinted command and then see
+  status exit `0`, including for a complete archive.
+* **Every existing JSON field is kept,** and the search for readers of the old shape is in the
+  report. The scheduled pull reads only `in_sync` and `drifted`, which are unchanged.
+* **Removed files appear only as prefixes in the new fields (Decision 4),** following `v1-e30-t10`'s
+  ruling, and a mutant that printed the whole digest was caught.
+* **t15's residue branch is untouched,** in code, wording and exit code.
+* **The mutation run:** 18 of 19 caught, with the one survivor equivalent.
+
+**Rulings:**
+
+* **Deviation 1:** accepted. ac4 amended.
+* **Decisions 1 to 9:** accepted. Decision 6, "Every snapshot agrees." followed by the
+  suppressed-object line, matches how the residue lines already read.
+
+**Follow-up work, filed by the PM in the next spec batch:**
+
+* **Your 1 (a smoke check) and your 3 (finish the removal first)** join the E30 p3 task "residue
+  clearing gaps". That task changes this command's residue output too, so one smoke check can cover
+  a rewritten manifest, the publish hint, a suppressed row and a clean status.
+* **Your 2:** done in this branch.
+* **Your 4:** added to `v1-e34-t23`. The report stage should carry the kind, and a manifest
+  mismatch should not be announced as needing a person.
+
+**Operator follow-up:** the optional dev status check is folded into the status runs `v1-e30-t15`
+left, after today's reinstall. In dev, expect `testcl26` drift labelled by kind, plus t15's
+"NOT CHECKED against RM-2026-90".

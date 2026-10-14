@@ -33,6 +33,15 @@ spec:
   - id: gate
     description: >-
       Gate release-v1-0-gate is approved.
+  # Close-out path, set by the PM on 2026-10-14. What is left between this release and its tag:
+  #   1. v1-e01-t23 ac4: the agent reinstalled from v0.1.0-dev.122 after the 2026-10-14 scheduled
+  #      run, doctor showing a managed interpreter. Recorded by the PM at the next close-out.
+  #   2. v1-e01-t15 ac5: the sandbox proof of the scheduled sweep, run by the operator. The first
+  #      attempt (2026-10-09) received no push or pull-request events.
+  #   3. v1-e01-t21, t24 and t25: task sessions. v1-e01-t26 follows t15.
+  #   4. A PM close-out: the E01 epic set Succeeded, and CHANGELOG.md created with a v1.0 section.
+  #   5. A promotion of dev into main, the v1.0.0 tag on main, and this release's Gate.
+  # v1-e01-t27 was recorded and set Succeeded on 2026-10-14.
 status:
   phase: Pending
 ---

@@ -49,6 +49,8 @@ spec:
     - kind: TaskRef
       name: v1-e31-t03-debate-docx-parser
       relation: dependsOn
+  # PM, 2026-10-14: the labeling for ac1 goes through v1-e31-t18's click-through labeller once it
+  # merges, with the Numbers worksheet as the fallback. The criteria are unchanged.
   acceptanceCriteria:
     - id: ac1
       description: >-

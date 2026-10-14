@@ -476,10 +476,10 @@ file that stays `UNKNOWN` names a high school at the camp position, not a camp, 
 the alias table on purpose.
 
 The manifest's bytes change, so the bucket's copy differs until the release is published again.
-Between the re-import and the publish, `caselist status --caselist openev` exits `1` with one
-checksum mismatch, on `manifests/openev/2026-policy.jsonl` itself, and every source present. That is expected, not the
-mismatch that needs a person. `caselist publish` re-uploads a manifest whose bucket digest
-differs. It uploads no source, because all 102 are already there. The bucket keeps the old
+Between the re-import and the publish, `caselist status --caselist openev` exits `1`, names
+`openev 2026-policy (manifest mismatch)` with every source present, and its hint names
+`caselist publish --caselist openev`. The publish below is that one, narrowed to the release with
+`--snapshot`. `caselist publish` re-uploads a manifest whose bucket digest differs. It uploads no source, because all 102 are already there. The bucket keeps the old
 manifest as a noncurrent version for its retention window (30 days in dev, 365 in prod).
 
 Run it from the repository root of a checkout that includes `v1-e30-t08`, as every command here
@@ -539,8 +539,8 @@ changed and both status results in a dated section of
 | `pending_publish` is not empty | With `publish: pending`, the session expired: `aws sso login --profile debate-dev-evidence`, then `caselist pull --publish-pending`. With `publish: failed`, logging in is not the fix: do what the stage's `hint` or reason names first, then `caselist pull --publish-pending`. See the scheduled-sync runbook, "When something goes wrong" |
 | `another caselist sync is already running` | Another `pull` holds the lock; wait for it. See the scheduled-sync runbook if none is running |
 | `SnapshotOutOfOrder` on a manual import | Stop. Something newer is already held. Never pass `--allow-out-of-order` in this backfill |
-| `caselist status` shows drift | Re-run the `caselist publish` for that caselist. A checksum mismatch needs a person |
-| `caselist status --caselist openev` shows one mismatch, on `manifests/openev/2026-policy.jsonl`, after `reimport-openev-metadata` | Expected: publish the release (`caselist publish --caselist openev --snapshot 2026-policy`), then check `--caselist openev` again. In dev, check one caselist at a time: an unscoped dev status exits `1` because of `testcl26`, kept by PM decision. See the camp-metadata section above |
+| `caselist status` shows drift | Do what its hint says for each kind it names. Something missing: re-run the `caselist publish` for that caselist. A manifest mismatch is this machine's copy rewritten since its last publish, by a camp metadata re-import or a removal: run the `caselist publish --caselist <slug>` the hint names. A source mismatch needs a person. A suppressed row or object is a removal left unfinished: see `caselist-removal.md`, "When caselist status reports removal residue" |
+| `caselist status --caselist openev` shows one manifest mismatch, on `manifests/openev/2026-policy.jsonl`, after `reimport-openev-metadata` | Expected: publish the release (`caselist publish --caselist openev --snapshot 2026-policy`), then check `--caselist openev` again. In dev, check one caselist at a time: an unscoped dev status exits `1` because of `testcl26`, kept by PM decision. See the camp-metadata section above |
 | A day was missed | Carry on the next day. Nothing is lost; the plan just ends a day later |
 
 ## Related

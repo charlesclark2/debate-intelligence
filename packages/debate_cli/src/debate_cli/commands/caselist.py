@@ -117,6 +117,16 @@ nothing. `0` only when every snapshot agrees; `1` on any drift, with the per-sna
 `error.details`; `3` when the bucket could not be read. With no `--caselist` it compares every
 caselist either side holds a manifest for.
 
+A checksum mismatch is named by its kind (`v1-e30-t12`), in the message, the table and each
+snapshot's `mismatches` in the JSON. A **manifest** mismatch is this machine's copy rewritten since
+its last publish, by a camp metadata re-import or a removal, and the hint names
+`caselist publish --caselist <slug>` for each caselist affected, complete archives included. A
+**source** mismatch is other bytes under a digest's key, and the hint says it needs a person. A run
+with both prints both. Each snapshot also shows its suppressed rows, and each caselist the current
+objects of suppressed sources still in the bucket, which a removal should have taken: a run whose
+only difference is such an object says that every snapshot agrees and what is left. The exit codes
+are as above.
+
 It also reports what a removal left in the bucket (`v1-e30-t10`): per caselist, the current objects,
 noncurrent versions and delete markers still held under `raw/` and `parsed/` of files the
 suppression list says were removed, later uploads taken down with them included. It lists object
@@ -162,7 +172,7 @@ from debate_core.application.caselist.openev_manifest import openev_manifest_key
 from debate_core.application.caselist.openev_metadata_reimport import OpenEvMetadataReimport
 from debate_core.application.caselist.publish_plan import SourceAction, validate_publish_target
 from debate_core.application.caselist.publish_service import PublishReport, SourceResult
-from debate_core.application.caselist.removal_residue import CaselistResidue
+from debate_core.application.caselist.removal_residue import RESIDUE_DIGEST_PREFIX_LENGTH, CaselistResidue
 from debate_core.application.caselist.status_service import (
     CASELIST_DRIFT,
     REMOVAL_RESIDUE,
@@ -517,16 +527,76 @@ def _status_failure(report: CaselistStatusReport, payload: dict[str, JsonValue])
                 'docs/runbooks/caselist-removal.md, "When caselist status reports removal residue".'
             ),
         )
+    differ = (
+        f"{len(drifted)} snapshot(s) differ between this machine and the bucket: "
+        + ", ".join(_drifted_snapshot(entry) for entry in drifted)
+        if drifted
+        else "every snapshot agrees"
+    )
+    leftover = _suppressed_objects_found(report)
     return CommandFailure(
         code=CASELIST_DRIFT,
-        message=(
-            f"{len(drifted)} snapshot(s) differ between this machine and the bucket: "
-            + ", ".join(f"{entry.caselist} {entry.snapshot}" for entry in drifted)
-        ),
+        message=differ if leftover is None else f"{differ}{'; and' if drifted else ', and'} {leftover}",
         exit_code=ExitCode.DOMAIN_FAILURE,
         details=payload,
-        hint="`caselist publish` completes what is missing here; a checksum mismatch needs a person.",
+        hint=" ".join(_drift_hints(report)),
     )
+
+
+def _drifted_snapshot(entry: SnapshotStatus) -> str:
+    """`<caselist> <snapshot>`, and in brackets the mismatches and suppressed rows that differ."""
+    what: list[str] = []
+    if entry.manifest_mismatched:
+        what.append("manifest mismatch")
+    if entry.source_mismatches:
+        what.append(f"{len(entry.source_mismatches)} source mismatch(es)")
+    if entry.suppressed_rows:
+        what.append(f"{len(entry.suppressed_rows)} suppressed row(s)")
+    named = f"{entry.caselist} {entry.snapshot}"
+    return f"{named} ({', '.join(what)})" if what else named
+
+
+def _suppressed_objects_found(report: CaselistStatusReport) -> str | None:
+    """`the bucket still holds N current object(s) of suppressed sources: <caselist> N, …`, or None."""
+    if not report.suppressed_objects:
+        return None
+    counts = [
+        f"{caselist} {len(found)}"
+        for caselist in report.caselists
+        if (found := report.suppressed_objects_of(caselist))
+    ]
+    return (
+        f"the bucket still holds {len(report.suppressed_objects)} current object(s) of suppressed "
+        f"sources: {', '.join(counts)}"
+    )
+
+
+def _drift_hints(report: CaselistStatusReport) -> list[str]:
+    """One sentence per kind of difference found, each naming what clears it (`v1-e30-t12`).
+
+    A manifest mismatch is this machine's rewrite not yet published, and the publish of each
+    caselist affected uploads it. A source mismatch needs a person. What a removal left needs the
+    removal finished. Anything missing is what a publish completes, as before.
+    """
+    drifted = report.drifted
+    hints: list[str] = []
+    if any(entry.incomplete for entry in drifted):
+        hints.append("`caselist publish` completes what is missing here.")
+    manifests = tuple(dict.fromkeys(entry.caselist for entry in report.manifest_mismatched))
+    if manifests:
+        commands = " and ".join(f"`caselist publish --caselist {caselist}`" for caselist in manifests)
+        hints.append(
+            "A manifest mismatch is this machine's copy rewritten since its last publish, by a camp "
+            f"metadata re-import or a removal. Run {commands} to upload it."
+        )
+    if report.source_mismatched:
+        hints.append("A source mismatch needs a person: the bucket holds other bytes under a digest's key.")
+    if report.suppressed_objects or any(entry.suppressed_rows for entry in drifted):
+        hints.append(
+            "A suppressed row or object is what a removal did not finish: "
+            'docs/runbooks/caselist-removal.md, "When caselist status reports removal residue".'
+        )
+    return hints
 
 
 class InvalidStatusRequest(ConfigurationError):
@@ -650,12 +720,28 @@ def status_summary(report: CaselistStatusReport, settings: Settings) -> dict[str
     `older_versions`, by key role and count, and `older_than`, the latest completed removal that
     touched the caselist (`v1-e30-t15`). `removals_not_checked` names the completed removals no
     version was compared with, because the build that made them did not record their reach.
+
+    Per snapshot, `mismatches` gives each of `checksum_mismatches` with its kind, `manifest` or
+    `source`, in the same order; `checksum_mismatches` is unchanged (`v1-e30-t12`). Beside them,
+    `suppressed_rows` counts the local manifest's rows the suppression list stops, and
+    `suppressed_row_prefixes` names their files. `suppressed_objects` is one object per caselist
+    compared, because one listing of a caselist's source prefix finds them for all its snapshots:
+    the count of current source objects whose digest is suppressed, and their `sha256_prefixes`.
+    A removed file is named by the first twelve characters of its digest, as in `removal_residue`.
     """
     return {
         "environment": settings.environment.value,
         "bucket": settings.storage.s3.bucket,
         "in_sync": report.in_sync,
         "snapshots": [_status_entry(entry) for entry in report.snapshots],
+        "suppressed_objects": [
+            {
+                "caselist": caselist,
+                "objects": len(found := report.suppressed_objects_of(caselist)),
+                "sha256_prefixes": [_digest_prefix(_digest_of_key(key)) for key in found],
+            }
+            for caselist in report.caselists
+        ],
         "removal_residue": [_residue_entry(one) for one in report.residue],
         "removals_not_checked": list(report.removals_not_checked),
     }
@@ -759,7 +845,35 @@ def _status_entry(entry: SnapshotStatus) -> dict[str, JsonValue]:
         "missing_local": list(entry.missing_local),
         "checksum_mismatches": list(entry.checksum_mismatches),
         "suppressed": entry.suppressed,
+        "mismatches": [
+            {"key": key, "kind": entry.mismatch_kind(key).value} for key in entry.checksum_mismatches
+        ],
+        "suppressed_rows": len(entry.suppressed_rows),
+        "suppressed_row_prefixes": [_digest_prefix(digest) for digest in entry.suppressed_rows],
     }
+
+
+def _digest_prefix(digest: str) -> str:
+    """A removed file's name in this report: the first twelve characters of its digest."""
+    return digest[:RESIDUE_DIGEST_PREFIX_LENGTH]
+
+
+def _digest_of_key(key: str) -> str:
+    """The digest a source key ends in: `…/sha256/ab/cd/<digest>`."""
+    return key.rsplit("/", 1)[-1]
+
+
+def _suppressed_object_lines(report: CaselistStatusReport) -> list[str]:
+    """Under the status table, per caselist: the current objects of suppressed sources, by count."""
+    lines: list[str] = []
+    for caselist in report.caselists:
+        found = report.suppressed_objects_of(caselist)
+        if found:
+            named = ", ".join(f"sha256 {_digest_prefix(_digest_of_key(key))}" for key in found)
+            lines.append(
+                f"SUPPRESSED SOURCE OBJECTS in {caselist}: {len(found)} current object(s) ({named})."
+            )
+    return lines
 
 
 def _publish_table(report: PublishReport, settings: Settings) -> TableSpec:
@@ -814,8 +928,9 @@ def _status_table(report: CaselistStatusReport, settings: Settings) -> TableSpec
             f"{entry.local_files}/{entry.sources}" if entry.local_manifest else "no manifest",
             str(entry.published_sources),
             str(len(entry.missing_sources)),
-            "yes" if entry.manifest_present else "no",
-            str(len(entry.checksum_mismatches)),
+            ("differs" if entry.manifest_mismatched else "yes") if entry.manifest_present else "no",
+            str(len(entry.source_mismatches)),
+            str(len(entry.suppressed_rows)),
             "yes" if entry.in_sync else "NO",
         ]
         for entry in report.snapshots
@@ -829,7 +944,8 @@ def _status_table(report: CaselistStatusReport, settings: Settings) -> TableSpec
             "Published",
             "Missing",
             "Manifest",
-            "Mismatches",
+            "Source mismatches",
+            "Suppressed rows",
             "In sync",
         ),
         rows=rows,
@@ -839,6 +955,7 @@ def _status_table(report: CaselistStatusReport, settings: Settings) -> TableSpec
                 "Every snapshot agrees."
                 if not drifted
                 else f"{drifted} snapshot(s) differ; see --json for digests.",
+                *_suppressed_object_lines(report),
                 *_residue_lines(report),
             ]
         ),

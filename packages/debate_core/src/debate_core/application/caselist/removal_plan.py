@@ -1233,7 +1233,7 @@ class RemovalPlanner:
             or state.suppresses(digest, disclosure=camp_path_disclosure(row.snapshot, row.path))
         }
         # A release's record with no row of the file left: what a run stopped among the records leaves.
-        orphaned = (
+        orphaned: set[str] = (
             _orphaned_releases(camp_files, rows, digest) if inclusion is Inclusion.UNFINISHED else set()
         )
         live_releases = {

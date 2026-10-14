@@ -586,9 +586,9 @@ def manifest_versions(world: RemovalWorld) -> list[str]:
         "Versions", []
     )
     return [
-        world.client.get_object(Bucket=world.bucket_name, Key=RELEASE_KEY, VersionId=str(one["VersionId"]))[
-            "Body"
-        ]
+        world.client.get_object(
+            Bucket=world.bucket_name, Key=RELEASE_KEY, VersionId=str(one.get("VersionId"))
+        )["Body"]
         .read()
         .decode()
         for one in listed

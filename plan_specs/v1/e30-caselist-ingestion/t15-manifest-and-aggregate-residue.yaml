@@ -59,7 +59,7 @@ spec:
         docs/runbooks/caselist-removal.md's `What the report does not see` is rewritten to
         match.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

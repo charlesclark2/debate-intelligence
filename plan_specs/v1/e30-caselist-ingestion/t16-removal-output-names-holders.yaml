@@ -56,7 +56,7 @@ spec:
         No plan line says 'this team's' where the removal names no team, by a test that
         walks every line of a `--source` plan.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

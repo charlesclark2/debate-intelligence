@@ -1,4 +1,4 @@
-{"record":"file","digest":"06e05b7abae54eb2ae1b66a6bc6e3c3e1a6c16395f2693ca36ac3031b6388058","paragraph_count":68,"blocks":[[0,67]],"plan_id":"06a5e928bf1fc90f","status":"PRELABELED","prelabel_parser_version":"2026.09.20-docx-1","corrected_by":null,"reviewed_by":null,"rows_changed_from_prelabel":null,"span_sample_fraction":0.2}
+{"record":"file","digest":"06e05b7abae54eb2ae1b66a6bc6e3c3e1a6c16395f2693ca36ac3031b6388058","paragraph_count":68,"blocks":[[0,67]],"plan_id":"06a5e928bf1fc90f","status":"PRELABELED","prelabel_parser_version":"2026.10.12-docx-3","corrected_by":null,"reviewed_by":null,"rows_changed_from_prelabel":null,"span_sample_fraction":0.2}
 {"record":"paragraph","index":0,"length":3,"text_digest":"0b2b9496e7d9a9ac699f873638ad6fa9a191d37ba717e67767c780adf71162b6","unit":"POCKET","card":null}
 {"record":"paragraph","index":1,"length":7,"text_digest":"72a1e13a2e5aca6b56be0e463c76d44e0a4badd22b64fc652289c38cdeee56b9","unit":"HAT","card":null}
 {"record":"paragraph","index":2,"length":44,"text_digest":"085a64bec780431b78a7e158a0d120adc0c76133af1fdb75f640ffe4bdfe294d","unit":"ANALYTIC","card":null}
@@ -14,7 +14,7 @@
 {"record":"paragraph","index":12,"length":0,"text_digest":"24532245209765ada879bbd3cb4cad655812054928157f24f8c3beaf80a34508","unit":"OTHER","card":null}
 {"record":"paragraph","index":13,"length":104,"text_digest":"95de9984d717b04c5f90fc5c4a9bb44569fe06028d6b9cb3f37ccef0a225b9b3","unit":"TAG","card":2}
 {"record":"paragraph","index":14,"length":367,"text_digest":"a85860658e04589ff49e55812fd8596626fa0c2289b31cb3b578825392b539d8","unit":"OTHER","card":null}
-{"record":"paragraph","index":15,"length":3298,"text_digest":"e322d3f5bc6c9896ac1b456ea1e3de1bdbd100f9539a8f1fe5eb586a48707067","unit":"CITE","card":2}
+{"record":"paragraph","index":15,"length":3298,"text_digest":"e322d3f5bc6c9896ac1b456ea1e3de1bdbd100f9539a8f1fe5eb586a48707067","unit":"EVIDENCE","card":2}
 {"record":"paragraph","index":16,"length":0,"text_digest":"24532245209765ada879bbd3cb4cad655812054928157f24f8c3beaf80a34508","unit":"OTHER","card":null}
 {"record":"paragraph","index":17,"length":137,"text_digest":"761369d634c3839574cfdc7c487a7921b02576568cc73f4c43c888d75fee0a44","unit":"TAG","card":3}
 {"record":"paragraph","index":18,"length":249,"text_digest":"b8c6a6a2a34910b683a35f4d4d2d84b7cb4cd82307f34413cbf58366c91ec2a6","unit":"CITE","card":3}
@@ -22,7 +22,7 @@
 {"record":"paragraph","index":20,"length":0,"text_digest":"24532245209765ada879bbd3cb4cad655812054928157f24f8c3beaf80a34508","unit":"OTHER","card":null}
 {"record":"paragraph","index":21,"length":185,"text_digest":"e425c1199a123d622c7be9d24806dd4e64b0abeec938862b241f8cde1616c07c","unit":"TAG","card":4}
 {"record":"paragraph","index":22,"length":296,"text_digest":"38c0874d1a27c2c71f9e575469e7b28dcf08f258bb7da56d387626742665efb9","unit":"CITE","card":4}
-{"record":"paragraph","index":23,"length":2851,"text_digest":"a3160712ea6fe9b7d7b15b8efdede40e4b92324b81685aa0c0dd0cf693c1f164","unit":"CITE","card":4}
+{"record":"paragraph","index":23,"length":2851,"text_digest":"a3160712ea6fe9b7d7b15b8efdede40e4b92324b81685aa0c0dd0cf693c1f164","unit":"EVIDENCE","card":4}
 {"record":"paragraph","index":24,"length":0,"text_digest":"24532245209765ada879bbd3cb4cad655812054928157f24f8c3beaf80a34508","unit":"OTHER","card":null}
 {"record":"paragraph","index":25,"length":48,"text_digest":"0b932829a46fd305a4a4d06ba11c0a9b0d8e274dfd67789314f2410707ed3daa","unit":"TAG","card":5}
 {"record":"paragraph","index":26,"length":656,"text_digest":"a4c7198eed31685a886067cbb92fd7fbe07a699ece9e95b338af8da6484836b6","unit":"OTHER","card":null}
@@ -67,11 +67,11 @@
 {"record":"paragraph","index":65,"length":92,"text_digest":"8304cee42f1bd9ba136c95ee33bc72f9aac67213e5299e097085a28549fe5056","unit":"ANALYTIC","card":null}
 {"record":"paragraph","index":66,"length":0,"text_digest":"24532245209765ada879bbd3cb4cad655812054928157f24f8c3beaf80a34508","unit":"OTHER","card":null}
 {"record":"paragraph","index":67,"length":0,"text_digest":"24532245209765ada879bbd3cb4cad655812054928157f24f8c3beaf80a34508","unit":"OTHER","card":null}
-{"record":"card","card":0,"completeness":"ABBREVIATED"}
-{"record":"card","card":1,"completeness":"ABBREVIATED"}
-{"record":"card","card":2,"completeness":"CITE_ONLY"}
+{"record":"card","card":0,"completeness":"FULL"}
+{"record":"card","card":1,"completeness":"FULL"}
+{"record":"card","card":2,"completeness":"FULL"}
 {"record":"card","card":3,"completeness":"FULL"}
-{"record":"card","card":4,"completeness":"CITE_ONLY"}
+{"record":"card","card":4,"completeness":"FULL"}
 {"record":"card","card":5,"completeness":"FULL"}
 {"record":"card","card":6,"completeness":"FULL"}
 {"record":"card","card":7,"completeness":"FULL"}

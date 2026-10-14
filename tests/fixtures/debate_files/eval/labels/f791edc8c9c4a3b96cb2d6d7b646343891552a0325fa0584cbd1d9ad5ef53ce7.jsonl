@@ -1,4 +1,4 @@
-{"record":"file","digest":"f791edc8c9c4a3b96cb2d6d7b646343891552a0325fa0584cbd1d9ad5ef53ce7","paragraph_count":30,"blocks":[[0,29]],"plan_id":"06a5e928bf1fc90f","status":"PRELABELED","prelabel_parser_version":"2026.09.20-docx-1","corrected_by":null,"reviewed_by":null,"rows_changed_from_prelabel":null,"span_sample_fraction":0.2}
+{"record":"file","digest":"f791edc8c9c4a3b96cb2d6d7b646343891552a0325fa0584cbd1d9ad5ef53ce7","paragraph_count":30,"blocks":[[0,29]],"plan_id":"06a5e928bf1fc90f","status":"PRELABELED","prelabel_parser_version":"2026.10.12-docx-3","corrected_by":null,"reviewed_by":null,"rows_changed_from_prelabel":null,"span_sample_fraction":0.2}
 {"record":"paragraph","index":0,"length":47,"text_digest":"62684d919bda2f360ea2cd8da57c379463cf65080575a55af2c2e8e089e470fb","unit":"OTHER","card":null}
 {"record":"paragraph","index":1,"length":136,"text_digest":"6bc6644ad1388bd2a1d0afaf522b62241abbc78d1455c4210c86ea9ce077a321","unit":"OTHER","card":null}
 {"record":"paragraph","index":2,"length":45,"text_digest":"1b4c9b072355de308f103ef81a25645373e8ec8a65b964315963ead763e9fbba","unit":"OTHER","card":null}

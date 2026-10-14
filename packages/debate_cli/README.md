@@ -120,7 +120,7 @@ rather than writing an integer.
 | 1 | `DOMAIN_FAILURE` | The command ran and the answer is a failure: a card is `UNVERIFIED`, a record was not found, a write lost its revision check, a profile setting names a profile the AWS config does not define, `DEBATE_REMOVAL_PROFILE` names a profile that is not signed in as the takedown role, `doctor` found a failed check (the interpreter's Unicode database is not the normalizer's pin, a wired integration does not import, or with `--evidence-profiles` a configured evidence profile is not defined). Running it again gives the same answer. |
 | 2 | `USAGE_ERROR` | The command line was wrong: unknown command or option, missing argument, no command given. Nothing was executed. |
 | 3 | `RETRIEVAL_FAILURE` | Something the command depends on did not answer, so there is no answer yet. An external provider — search, fetch, a model — failed or rate-limited the call, or a store could not be read or written: it was unavailable, the SSO session for it expired, or it refused access (the operating system refusing a data directory included). The same command may well succeed later. |
-| 70 | `INTERNAL_ERROR` | A bug: an exception the CLI does not model. 70 is `EX_SOFTWARE` from `sysexits.h`. |
+| 70 | `INTERNAL_ERROR` | A bug: an exception the CLI does not model. It is reported by its class, never its message (below). 70 is `EX_SOFTWARE` from `sysexits.h`. |
 
 Exceptions are mapped by `exit_code_for`: `ProviderError` → 3; `StoreUnavailable`,
 `StoreCredentialsExpired` and `StoreAccessDenied` (`RETRYABLE_STORE_FAILURES`) → 3 in every
@@ -129,6 +129,33 @@ of those three is what stopped them (`v1-e01-t20`); any other `DomainError` → 
 `NotFound`; a usage error → 2; anything else → 70. A failure that is an *outcome* rather than an
 exception — `verify` finding an unverifiable card — is reported with `output.failure(...)` and then
 `raise typer.Exit(code=ExitCode.DOMAIN_FAILURE)`.
+
+**Exit 70 names the exception's class, never its message** (`v1-e01-t25`). An exception the CLI
+does not model did not get its message from this project: an `OSError` quotes the path it failed
+on, which carries the home directory and, for a file in the inbox, a camp file's title. So the
+panel on stderr, and the envelope with `--json`, say only which class it was and how to see more:
+
+```json
+{"schema_version": 1, "status": "error", "command": "caselist pull", "data": null,
+ "error": {"code": "INTERNAL_ERROR",
+           "message": "debate-research stopped on an unexpected PermissionError. Its message is not printed, because it can quote a path on this machine.",
+           "exit_code": 70, "details": {"exception_type": "PermissionError"},
+           "hint": "This is a bug in debate-research. Re-run with --verbose for the traceback, which includes the error's message."}}
+```
+
+The detail is in the traceback, and `--verbose` is the only thing that prints it, on stderr. Run
+the same command again with the flag; with `--json` too, stdout still carries the envelope above
+and nothing else:
+
+```bash
+debate-research --verbose caselist pull --dry-run
+```
+
+The scheduled agent (`ops/launchd/`) runs `--json caselist pull` without `--verbose`, so its logs
+hold the class and no traceback; the same command by hand with `--verbose` shows it. Errors the CLI
+models keep their own messages and exit codes: every `DomainError`, every usage error, and the
+incomplete-installation message for a missing optional dependency (`v1-e01-t17`), which is exit 70
+with its own fix.
 
 **A profile the AWS config does not define is a `1`, not a `3`** (`v1-e29-t07`). When the
 environment's profile setting (`storage.s3.aws_profile`), `DEBATE_REMOVAL_PROFILE` for a takedown,

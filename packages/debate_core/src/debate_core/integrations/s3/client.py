@@ -26,6 +26,15 @@ in `infrastructure/envs/<env>/outputs.tf` — and reach an adapter through its c
 adapter with a bucket name compiled into it would be an adapter that writes dev evidence into prod
 the first time someone copied a line.
 
+## Where requests go
+
+To AWS, unless the caller names an `endpoint_url`: the composition root passes the dev-only
+`storage.s3.endpoint_url`, which is how the installed-build smoke checks reach moto on this machine
+(`v1-e01-t21`). botocore has routes of its own for the same thing (`AWS_ENDPOINT_URL`,
+`AWS_ENDPOINT_URL_S3`, `AWS_ENDPOINT_URL_STS`, and `endpoint_url` in the AWS config), which a client
+honours unless built with `ignore_configured_endpoints`. A prod installation builds every client
+with it, so that nothing in a prod environment can send the evidence store anywhere but AWS.
+
 ## Thread safety
 
 Both adapters do their blocking S3 work in a worker thread (`asyncio.to_thread`) and share one
@@ -41,6 +50,7 @@ from typing import TYPE_CHECKING, Any
 
 import boto3
 from boto3.s3.transfer import TransferConfig
+from botocore.config import Config
 
 from debate_core.integrations.s3.errors import S3Call, mapped_s3_errors
 
@@ -82,12 +92,19 @@ Checked when an adapter is constructed rather than discovered when an upload fai
 
 
 def build_s3_client(
-    *, region: str | None = None, profile: str | None = None, profile_setting: str | None = None
+    *,
+    region: str | None = None,
+    profile: str | None = None,
+    profile_setting: str | None = None,
+    endpoint_url: str | None = None,
+    ignore_configured_endpoints: bool = False,
 ) -> S3Client:
     """Return an S3 client for `region`, using `profile` from the shared AWS config when given.
 
     `profile_setting` is the name of the setting `profile` came from (`"storage.s3.aws_profile"`,
     `"DEBATE_REMOVAL_PROFILE"`), which is what the error for a profile the config lacks names.
+    `endpoint_url` and `ignore_configured_endpoints` decide where its requests go (module docstring,
+    "Where requests go").
 
     A new :class:`boto3.session.Session` per call rather than the module-level default session, so
     that two adapters built for two profiles — an everyday one and the takedown one from
@@ -108,11 +125,18 @@ def build_s3_client(
         # whose stub package is installed — `s3` here. The overloads for every other service therefore
         # return Unknown, which strict mode reports on the symbol as a whole even though the call this
         # module makes resolves to `S3Client`. Narrowed to this one line rather than turned off.
-        return session.client("s3")  # pyright: ignore[reportUnknownMemberType]
+        return session.client(  # pyright: ignore[reportUnknownMemberType]
+            "s3", endpoint_url=endpoint_url, config=_endpoint_config(ignore_configured_endpoints)
+        )
 
 
 def build_sts_client(
-    *, region: str | None = None, profile: str | None = None, profile_setting: str | None = None
+    *,
+    region: str | None = None,
+    profile: str | None = None,
+    profile_setting: str | None = None,
+    endpoint_url: str | None = None,
+    ignore_configured_endpoints: bool = False,
 ) -> Any:
     """Return an STS client for `region`, using `profile` exactly as :func:`build_s3_client` does.
 
@@ -121,13 +145,23 @@ def build_sts_client(
     same profile name as the S3 client it is asked about: the two read one entry of one AWS config,
     so they are one role. A profile the config lacks is the same
     :class:`~debate_core.application.errors.StoreProfileNotConfigured`, naming `profile_setting`.
+    It goes where the S3 client goes: the same `endpoint_url`, the same rule for botocore's own.
 
     Typed `Any` because boto3-stubs is installed for `s3` only; the adapter narrows it to the one
     operation it calls.
     """
     with _session_errors(profile, profile_setting):
         session = boto3.session.Session(profile_name=profile, region_name=region)
-        return session.client("sts")  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+        return session.client(  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+            "sts", endpoint_url=endpoint_url, config=_endpoint_config(ignore_configured_endpoints)
+        )
+
+
+def _endpoint_config(ignore_configured_endpoints: bool) -> Config:
+    """botocore's switch for its own endpoint routes: the variables and the config's `endpoint_url`."""
+    # botocore has taken this argument since 1.31; the botocore-stubs installed here do not list it,
+    # and test_s3_client_endpoints.py is what shows it works. Narrowed to this one line.
+    return Config(ignore_configured_endpoint_urls=ignore_configured_endpoints)  # pyright: ignore[reportCallIssue]
 
 
 def _session_errors(profile: str | None, profile_setting: str | None) -> AbstractContextManager[None]:

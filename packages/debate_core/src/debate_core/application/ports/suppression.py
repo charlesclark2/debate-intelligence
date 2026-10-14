@@ -90,12 +90,15 @@ __all__ = [
     "PATH_HOLDS_FILENAME",
     "REINSTATEMENT_REASONS",
     "REMOVAL_REASONS",
+    "REMOVAL_SCOPES_FILENAME",
     "REQUEST_ID_PATTERN",
     "SUPPRESSION_SCHEMA_VERSION",
+    "TOUCHED_CASELIST_PATTERN",
     "AppendOnlyRecord",
     "AppendOnlyViolation",
     "InboxRewriteRecord",
     "KeepsRecordsBesideIt",
+    "ManifestRewriteRecord",
     "PathHoldEntry",
     "PathHoldList",
     "ReasonCode",
@@ -103,6 +106,8 @@ __all__ = [
     "RemovalLogEntry",
     "RemovalLogKind",
     "RemovalOutcome",
+    "RemovalScopeEntry",
+    "RemovalScopeLog",
     "RemovalSelectorKind",
     "RequestId",
     "SuppressionAction",
@@ -118,6 +123,8 @@ SUPPRESSION_SCHEMA_VERSION: Final = 1
 """Version of a suppression-list or removal-log line. Bumped only by a change an old reader breaks on."""
 
 PATH_HOLDS_FILENAME: Final = "path-holds.jsonl"
+REMOVAL_SCOPES_FILENAME: Final = "removal-scopes.jsonl"
+"""The removal-scope record's file name, beside the removal log in both places (`v1-e30-t15`)."""
 """The path-hold record's file name, beside the suppression list on this machine and in the bucket."""
 
 REQUEST_ID_PATTERN: Final = r"^RM-[0-9]{4}-[0-9]{2,4}$"
@@ -385,6 +392,26 @@ class InboxRewriteRecord(DomainModel):
     to_sha256: Sha256Hex
 
 
+TOUCHED_CASELIST_PATTERN: Final = r"^([a-z]+[0-9]{2}|openev)$"
+"""A caselist a removal touched: a season's slug (:data:`CASELIST_SLUG_PATTERN`), or `openev`."""
+
+_MANIFEST_KEY_PATTERN: Final = r"^manifests/([a-z]+[0-9]{2}|openev)/[A-Za-z0-9][A-Za-z0-9._/-]*\.jsonl$"
+_VERSION_ID_PATTERN: Final = r"^[A-Za-z0-9._+/=-]{1,1024}$"
+
+
+class ManifestRewriteRecord(DomainModel):
+    """One manifest a removal rewrote in the bucket, and the version its rewrite is (`v1-e30-t15`).
+
+    The removal purges every other version of the key, so any version older than the removal but
+    this one is something it should have taken. The key is a caselist and a snapshot's date, or a
+    camp release's year and event: never a school, a team code or a path.
+    """
+
+    key: Annotated[str, StringConstraints(pattern=_MANIFEST_KEY_PATTERN)]
+    version_id: Annotated[str, StringConstraints(pattern=_VERSION_ID_PATTERN)] | None
+    """The rewrite's version id, or `None` where the bucket keeps no versions."""
+
+
 class RemovalLogEntry(DomainModel):
     """One line of the removal log: one execution, in sha256 values, counts and codes.
 
@@ -425,6 +452,47 @@ class RemovalLogEntry(DomainModel):
 
     @classmethod
     def from_line(cls, line: str) -> RemovalLogEntry:
+        return cls.model_validate_json(line)
+
+
+class RemovalScopeEntry(DomainModel):
+    """What one removal reached, beside its removal-log entry (`v1-e30-t15`).
+
+    `caselist status` needs two facts the removal log does not hold: which caselists a removal
+    touched, and which manifests it rewrote. They are a record of their own, `removal-scopes.jsonl`,
+    beside the log in both places, and not two more fields of a log line, for the reason the path
+    holds are beside the list: a log line's keys are pinned to what every installed build writes
+    (`test_suppression_list_is_read_by_every_build.py`). One entry per removal execution, written
+    just before its log entry, and joined to it by :meth:`joins`.
+
+    No field can hold a school, a team code or a file name: caselist slugs, manifest keys (a
+    caselist and a date, or a camp release's year and event), version ids, a date and a request id.
+    """
+
+    schema_version: Literal[1] = SUPPRESSION_SCHEMA_VERSION
+    recorded_at: UtcDatetime
+    """The removal-log entry's own `recorded_at`: when the removal completed or stopped."""
+    request_id: RequestId | None
+    environment: Annotated[str, StringConstraints(pattern=r"^(dev|prod|test)$")]
+    caselists: tuple[Annotated[str, StringConstraints(pattern=TOUCHED_CASELIST_PATTERN)], ...]
+    """The caselists that held a file the removal removed or withdrew: in a manifest it rewrote, an
+    object it deleted under `raw/` or `parsed/`, or a record it deleted."""
+    manifest_rewrites: tuple[ManifestRewriteRecord, ...]
+    """Each manifest the removal rewrote in the bucket, with the version its rewrite is."""
+
+    def joins(self, entry: RemovalLogEntry) -> bool:
+        """Whether this is the scope of `entry`: the same environment, request and moment."""
+        return (self.environment, self.request_id, self.recorded_at) == (
+            entry.environment,
+            entry.request_id,
+            entry.recorded_at,
+        )
+
+    def to_line(self) -> str:
+        return canonical_line(self)
+
+    @classmethod
+    def from_line(cls, line: str) -> RemovalScopeEntry:
         return cls.model_validate_json(line)
 
 
@@ -529,3 +597,12 @@ class RemovalLog(Protocol):
     async def entries(self) -> tuple[RemovalLogEntry, ...]: ...
 
     async def append(self, entries: Sequence[RemovalLogEntry]) -> None: ...
+
+
+@runtime_checkable
+class RemovalScopeLog(Protocol):
+    """A removal log that keeps the removal-scope record beside it (`v1-e30-t15`)."""
+
+    async def scopes(self) -> tuple[RemovalScopeEntry, ...]:
+        """Every scope entry on every copy, deduplicated. A record that does not exist has none."""
+        ...

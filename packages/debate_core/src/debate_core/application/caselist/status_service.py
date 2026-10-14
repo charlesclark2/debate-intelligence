@@ -83,7 +83,7 @@ from debate_core.application.caselist.suppression import load_suppression_state
 from debate_core.application.errors import DomainError, NotFound
 from debate_core.application.ports.evidence_store import EvidenceObjectStore, ObjectInfo, ObjectKey
 from debate_core.application.ports.evidence_versions import EvidenceVersionStore
-from debate_core.application.ports.suppression import SuppressionList, SuppressionState
+from debate_core.application.ports.suppression import RemovalLog, SuppressionList, SuppressionState
 from debate_core.domain import Sha256Hex
 
 __all__ = [
@@ -169,6 +169,9 @@ class CaselistStatusReport:
     residue: tuple[CaselistResidue, ...] = ()
     """Per caselist compared, what a version listing shows of its removed files. Empty when the
     caller did not ask for the check."""
+    removals_not_checked: tuple[str, ...] = ()
+    """Request ids of completed removals whose log entries do not say which caselists they touched,
+    so that no manifest or aggregate version is checked against them (`v1-e30-t15`)."""
 
     @property
     def in_sync(self) -> bool:
@@ -207,6 +210,10 @@ class CaselistStatusService:
         suppression: The removal suppression list. Required.
         versions: The bucket's object versions through the everyday profile, for the residue check.
             Listed only, and only when :meth:`status` is asked for residue.
+        removal_log: The removal log, this machine's copy and the bucket's read as one, for the
+            manifest and aggregate versions older than a removal (`v1-e30-t15`). Read only when
+            :meth:`status` is asked for residue. Without one, no removal is known.
+        environment: This environment, `dev` or `prod`. Only its own removals are compared.
         concurrency: `HeadObject` calls in flight at once.
     """
 
@@ -217,6 +224,8 @@ class CaselistStatusService:
         remote: EvidenceObjectStore,
         suppression: SuppressionList,
         versions: EvidenceVersionStore | None = None,
+        removal_log: RemovalLog | None = None,
+        environment: str | None = None,
         concurrency: int = _DEFAULT_CONCURRENCY,
     ) -> None:
         if concurrency < 1:
@@ -225,6 +234,8 @@ class CaselistStatusService:
         self._remote = remote
         self._suppression = suppression
         self._versions = versions
+        self._removal_log = removal_log
+        self._environment = environment
         self._semaphore_size = concurrency
 
     async def status(

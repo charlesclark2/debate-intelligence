@@ -52,12 +52,14 @@ from debate_core.application.errors import NotFound, StoreCredentialsExpired
 from debate_core.application.ports.evidence_store import EvidenceObjectStore, ObjectKey, validate_object_key
 from debate_core.application.ports.suppression import (
     PATH_HOLDS_FILENAME,
+    REMOVAL_SCOPES_FILENAME,
     AppendOnlyRecord,
     AppendOnlyViolation,
     KeepsRecordsBesideIt,
     PathHoldEntry,
     PathHoldList,
     RemovalLogEntry,
+    RemovalScopeEntry,
     SuppressionEntry,
     SuppressionList,
     SuppressionState,
@@ -89,6 +91,7 @@ PATH_HOLDS_KEY: Final = validate_object_key(f"{SUPPRESSION_PREFIX}{PATH_HOLDS_FI
 """The bucket's copy of the path-hold record: beside the list, under the takedown's one prefix."""
 
 _PATH_HOLDS_CALLED: Final = "path-hold list"
+_REMOVAL_SCOPES_CALLED: Final = "removal-scope record"
 
 
 def is_suppression_key(key: str) -> bool:
@@ -285,10 +288,21 @@ class LocalFallbackSuppressionList:
 
 
 class RecordedRemovalLog:
-    """A :class:`~debate_core.application.ports.suppression.RemovalLog` over one or more copies."""
+    """A :class:`~debate_core.application.ports.suppression.RemovalLog` over one or more copies.
+
+    It keeps the removal-scope record (`removal-scopes.jsonl`, `v1-e30-t15`) beside each copy that
+    can name a record beside it, found and merged as :class:`RecordedSuppressionList` finds the path
+    holds: a command that holds the log holds the scopes.
+    """
 
     def __init__(self, *records: AppendOnlyRecord) -> None:
         self._lines = _MergedLines(records)
+        beside = [
+            record.beside(REMOVAL_SCOPES_FILENAME, called=_REMOVAL_SCOPES_CALLED)
+            for record in records
+            if isinstance(record, KeepsRecordsBesideIt)
+        ]
+        self._scope_lines = _MergedLines(beside) if beside else None
 
     @property
     def records(self) -> tuple[AppendOnlyRecord, ...]:
@@ -297,11 +311,32 @@ class RecordedRemovalLog:
     async def entries(self) -> tuple[RemovalLogEntry, ...]:
         return tuple(_parse(RemovalLogEntry, *read) for read in await self._lines.read())
 
-    async def append(self, entries: Sequence[RemovalLogEntry]) -> None:
+    async def scopes(self) -> tuple[RemovalScopeEntry, ...]:
+        """Every scope entry on every copy, deduplicated. None for a log that keeps no scope record."""
+        if self._scope_lines is None:
+            return ()
+        return tuple(_parse(RemovalScopeEntry, *read) for read in await self._scope_lines.read())
+
+    async def append(
+        self, entries: Sequence[RemovalLogEntry], *, scopes: Sequence[RemovalScopeEntry] = ()
+    ) -> None:
+        """Append `scopes` to every copy's scope record, then `entries` to every copy of the log.
+
+        The scopes go first, so a log entry is never on a copy without its scope beside it: a scope
+        alone is joined to nothing and read by nothing. Where no copy keeps a scope record, scopes
+        are refused rather than dropped.
+        """
+        if scopes:
+            if self._scope_lines is None:
+                raise AppendOnlyViolation(
+                    self._lines.records[0].location,
+                    "no copy of this log keeps a removal-scope record beside it",
+                )
+            await self._scope_lines.append([scope.to_line() for scope in scopes])
         await self._lines.append([entry.to_line() for entry in entries])
 
 
-def _parse[EntryT: (SuppressionEntry, RemovalLogEntry, PathHoldEntry)](
+def _parse[EntryT: (SuppressionEntry, RemovalLogEntry, PathHoldEntry, RemovalScopeEntry)](
     kind: type[EntryT], line: str, location: str, number: int
 ) -> EntryT:
     try:

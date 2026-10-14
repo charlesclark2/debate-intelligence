@@ -66,6 +66,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Final
 
 from debate_core.application.caselist.publish_plan import remote_source_prefix
@@ -79,6 +80,8 @@ from debate_core.domain import SHA256_HEX_PATTERN, Sha256Hex
 __all__ = [
     "RESIDUE_DIGEST_PREFIX_LENGTH",
     "CaselistResidue",
+    "OlderVersions",
+    "RemovalCompletion",
     "ResidueFile",
     "removal_residue",
     "residue_prefixes",
@@ -105,6 +108,23 @@ class ResidueFile:
 
 
 @dataclass(frozen=True, slots=True)
+class OlderVersions:
+    """How many versions of one key role in a caselist are older than a removal that touched it."""
+
+    role: str
+    """`manifest`, or the aggregate's file name: `index.jsonl`, `failures.jsonl`, `occurrences.jsonl`."""
+    versions: int
+
+
+@dataclass(frozen=True, slots=True)
+class RemovalCompletion:
+    """When a removal request was last completed in this environment, from the removal log."""
+
+    request_id: str | None
+    completed_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
 class CaselistResidue:
     """What a version listing shows of one caselist's removed files, or that it could not be made."""
 
@@ -115,10 +135,14 @@ class CaselistResidue:
     """Every removed file with anything left, in digest order. Empty when :attr:`checked` is false."""
     not_checked_reason: str | None = None
     """The error code of the refusal, e.g. `STORE_ACCESS_DENIED`."""
+    older_versions: tuple[OlderVersions, ...] = ()
+    """Manifest and aggregate versions older than a removal that touched this caselist, by role."""
+    older_than: RemovalCompletion | None = None
+    """The latest completed removal that touched this caselist, or `None` when none did."""
 
     @property
     def found(self) -> bool:
-        return bool(self.files)
+        return bool(self.files) or bool(self.older_versions)
 
     @property
     def current_objects(self) -> int | None:

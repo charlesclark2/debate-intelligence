@@ -12,6 +12,42 @@
 
 <!-- 3-6 sentences: what was built, how it fits the epic, anything the PM should look at first. -->
 
+## Existing reports under the new boundary, measured before any change
+
+Measured at the start commit `4dadf6a`, before any code changed, by a scratch script that applied
+today's grep and the proposed boundary to every report in `docs/session-reports/`. The proposed
+boundary: the current part starts at the first `## ` heading after the last-but-one `**Verdict:**`
+line, found with `report_verdict`'s own pattern.
+
+* 99 reports; today's grep (`NOT RUN\|NOT APPLICABLE\|PARTIAL\|FAIL`, whole file) matches 61.
+* 7 reports have more than one line the verdict pattern matches. 5 of them reach the boundary
+  differently from the whole file:
+
+  | Report | Verdict lines | Today's grep | Current part only |
+  |---|---|---|---|
+  | `v1-e01-t19-paste-safe-command-blocks` | 2 | no match | no match |
+  | `v1-e30-t06-initial-backfill` | 2 | match | **no match** |
+  | `v1-e30-t08-import-metadata-defects` | 3 | match | **no match** |
+  | `v1-e31-t06-parse-pipeline` | 2 | match | match (FAIL, NOT RUN, PARTIAL) |
+  | `v1-e31-t09-first-corpus-parse-findings` | 3 | match | match (FAIL, NOT RUN, PARTIAL) |
+
+  v1-e03-t05 and v1-e31-t05 renamed their earlier verdict label, so the pattern sees one review in
+  each, and the whole report is current, for the verdict and for this check alike.
+* **Two reports flip on the marker check alone: v1-e30-t06 and v1-e30-t08.** Both are ac1's case
+  on real data. Each ends with a closing section in which every criterion is PASS ("Acceptance
+  criteria (final)"; "Operator results and close-out (2026-10-09)"). Today's grep matches them only
+  through an earlier session's NOT RUN or PARTIAL. Both Goals are `Succeeded`, and both merged with a
+  plain `scripts/task pr`.
+* **Neither flips under `scripts/task pr --partial` as it runs.** The command reads the markers only
+  when the spec's phase is not `Succeeded`. For a `Succeeded` task it takes the ordinary path, which
+  reads no markers, before and after this change. The 8 InProgress tasks with an ACCEPTED report
+  are the reports whose markers `--partial` actually reads. All 8 are still accepted:
+  t15, t23, v1-e29-t08, v1-e31-t05, v1-e31-t11, v1-e31-t12, v1-e34-t17 and v1-e37-t05.
+
+The brief said to stop if a report flipped. I stopped and asked the operator, who chose to proceed.
+ac2's walk now models `pr --partial` as it runs, phase included. A second test pins the two
+`Succeeded` reports as refused by the marker check alone. No report was edited. See Deviation 1.
+
 ## Plan nodes
 
 <!-- One row per Plan graph node, in the order they were completed. -->

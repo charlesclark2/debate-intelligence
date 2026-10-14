@@ -60,7 +60,7 @@ v2.3's extension work.
 
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
-| [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 40 | 36 | 216 |
+| [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 40 | 37 | 216 |
 | [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 67 | 47 | 384 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 17 | 0 | 179 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 13 | 0 | 108 |
@@ -111,7 +111,7 @@ Repo, tooling, CI, promotion flow, task tooling, domain core, and deterministic 
 | [scripts/task restarts a task that merged partially](plan_specs/v1/e01-repo-foundation/t18-restart-partial-tasks.yaml) `v1-e01-t18-restart-partial-tasks` | Succeeded | 1 | 3.0 |
 | [Command blocks in the docs are safe to paste into zsh](plan_specs/v1/e01-repo-foundation/t19-paste-safe-command-blocks.yaml) `v1-e01-t19-paste-safe-command-blocks` | Succeeded | 1 | 3.0 |
 | [A failure that may succeed on retry never shares an exit code with a verdict](plan_specs/v1/e01-repo-foundation/t20-retryable-failures-exit-3.yaml) `v1-e01-t20-retryable-failures-exit-3` | Succeeded | 1 | 3.0 |
-| [The storage and OpenCaselist smoke checks run against the installed build](plan_specs/v1/e01-repo-foundation/t21-installed-smoke-stand-ins.yaml) `v1-e01-t21-installed-smoke-stand-ins` | Pending | 1 | 4.0 |
+| [The storage and OpenCaselist smoke checks run against the installed build](plan_specs/v1/e01-repo-foundation/t21-installed-smoke-stand-ins.yaml) `v1-e01-t21-installed-smoke-stand-ins` | Succeeded | 1 | 4.0 |
 | [The real install is the build the rehearsal checked, and doctor answers for all of it](plan_specs/v1/e01-repo-foundation/t22-install-resolves-once.yaml) `v1-e01-t22-install-resolves-once` | Succeeded | 1 | 3.0 |
 | [The installed build runs on a Python that uv manages](plan_specs/v1/e01-repo-foundation/t23-managed-python.yaml) `v1-e01-t23-managed-python` | InProgress | 1 | 2.5 |
 | [A partial merge's open items are read from the current session's sections](plan_specs/v1/e01-repo-foundation/t24-partial-open-items-current-session.yaml) `v1-e01-t24-partial-open-items-current-session` | Succeeded | 1 | 1.5 |

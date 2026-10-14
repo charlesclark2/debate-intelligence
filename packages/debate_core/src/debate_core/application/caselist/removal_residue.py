@@ -154,6 +154,9 @@ the completion and missed by the removal, which is not counted either."""
 MANIFEST_ROLE: Final = "manifest"
 """The role of a manifest's versions in the report; an aggregate's role is its file name."""
 
+_ROLES: Final = (MANIFEST_ROLE, *AGGREGATE_NAMES)
+"""Every role, in the order the report gives them."""
+
 
 @dataclass(frozen=True, slots=True)
 class ResidueFile:
@@ -310,9 +313,8 @@ def _older_versions(
             ):
                 older.setdefault(MANIFEST_ROLE, set()).add((version.key, version.version_id))
     return tuple(
-        OlderVersions(role=role, versions=len(older[role]))
-        for role in (MANIFEST_ROLE, *AGGREGATE_NAMES)
-        if role in older
+        OlderVersions(role=role, versions=len(found))
+        for role, found in sorted(older.items(), key=lambda item: _ROLES.index(item[0]))
     )
 
 

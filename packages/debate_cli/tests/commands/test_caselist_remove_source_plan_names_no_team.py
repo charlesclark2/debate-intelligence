@@ -62,11 +62,11 @@ UNFINISHED = "2" * 64
 RECORDED_AT = datetime(2026, 9, 30, 18, 0, tzinfo=UTC)
 
 
-def suppressed(sha256: str, path: str | None = None) -> SuppressionEntry:
+def suppressed(sha256: str, path: str | None = None, caselist: str = CASELIST) -> SuppressionEntry:
     return SuppressionEntry(
         action=SuppressionAction.SUPPRESS,
         sha256=sha256,
-        disclosure=None if path is None else disclosure_digest(CASELIST, path),
+        disclosure=None if path is None else disclosure_digest(caselist, path),
         recorded_at=RECORDED_AT,
         reason=ReasonCode.REQUESTED_BY_TEAM,
         request_id="RM-2026-05",
@@ -257,7 +257,7 @@ def test_a_copy_withdrawn_from_two_caselists_records_each_its_own_caselist() -> 
         source(LATER, Inclusion.LATER_UPLOAD, Disposition.WITHDRAW, requester_paths=both),
         suppression=(
             suppressed(LATER, TEAM_PATH),
-            dataclasses.replace(suppressed(LATER), disclosure=disclosure_digest(other_caselist, TEAM_PATH)),
+            suppressed(LATER, TEAM_PATH, other_caselist),
         ),
     )
 

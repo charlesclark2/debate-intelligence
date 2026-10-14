@@ -735,9 +735,75 @@ paths. Keep them out of the repository all the same.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-13
 
 **Notes:**
+
+Accepted as a partial merge. ac4's re-parse is NOT RUN, and the Goal stays `InProgress`.
+
+**The headline finding is that my spec's figure for shape (3) was a hundred times too small.** The
+337 were the cards one of `v1-e31-t09`'s rules re-read. You counted the shape itself: 33,624 tagged
+cards with no cite. Then you found the cause of most of them, a 400-character bound on the
+cite-line guess.
+
+**Decision on (3): fix it now. I agree.** The evidence is one-sided: 8,394 of 8,426 paragraphs
+name a credential or hold a link, and 7,821 of 7,873 under a tag have a body below. The rule is a
+formatting rule, as the brief asked. Holding it back would cost a second parser version and a
+second 30-minute re-parse for the same cards. You also built it to come out cleanly, which I
+won't need.
+
+**What makes this reviewable at this size:**
+
+* **The side-by-side corpus run.** Both parsers ran in one process over the same bytes, and the
+  "before" equals the stored directory. Every change to a card is accounted for: 183,575
+  identical, 13,521 changed, 1,109 replaced by 1,274, and 23 gone with a reason.
+* **The precision tables.** The corrected files are identical before and after. The synthetic set
+  goes from 0.805 to 1.000 for cite precision, and you said plainly that it is your own set and
+  not an outside check.
+* **The mutation run:** 91 of 91 caught. The first pass's four "caught by an unpacking error"
+  were tightened to fail by assertion. The three unreachable checks were deleted, not kept.
+* **The corpus run found a defect before the review did.** Eight cards were split by a bracketed
+  reference, now fixed with a fixture that fails first.
+
+**Rulings:**
+
+* **Deviations 1 to 13:** accepted.
+* **Deviation 4, the commands past two minutes on a machine at load 45:** accepted. Four sessions
+  were running. Capping at two shards per command was the right correction.
+* **Deviation 10, a tag with a body and no cite labelled as a card:** accepted. A debater would
+  call it a card missing its cite.
+* **Deviation 12, the 3.7 GB of scratch counts:** delete them now. The report and the parse
+  report hold everything I need, and the disk is shared.
+* **The five cards made worse through `v1-e31-t09`'s cite-style hold:** your measure under shape
+  (2) settles it. A cite style that marks no name and year at the head is emphasis, not a cite.
+  Change the hold, including `v1-e31-t09`'s 300-word fixture. That change is authorised in the
+  follow-up task below, not here.
+* **Decisions 1 to 3, and every choice under them:** accepted. Leaving highlighted paragraphs alone
+  was the cautious side, and it is why the corrected files did not move.
+
+**Sequencing the re-parse.** Your operator steps 1 to 7 are right, and they wait for two things:
+
+* **Wednesday's scheduled run.** The agent is reinstalled tomorrow from the build at
+  `v1-e34-t22`'s merge, which does not carry this task.
+* **`v1-e31-t11`.** If it changes card matching, one re-parse should cover both tasks, as
+  `v1-e31-t08` and `v1-e31-t09` shared one.
+
+I will give the operator one combined set of steps when `v1-e31-t11` is reviewed. Step 8, the
+install of a build that carries this task, comes only after them.
+
+**Follow-up work, filed by the PM in the next spec batch:**
+
+* **One E31 p2 task, "remaining cite shapes", counts first:**
+  * a cite behind a first name or a title (7,200 cards);
+  * a cite in a paragraph style that resolves to nothing (957);
+  * highlighted cites, taken only when a body follows (593);
+  * `v1-e31-t09`'s cite-style hold, changed as ruled above;
+  * the short plain lines inside a body that are read as nothing, measured first.
+* **The four short cites in the corrected files:** go to `v1-e31-t13`.
+* **The second line of a cite in small print, and the sentence openers left:** stay as they are.
+* **The runbook's `2026.10.10-docx-2` references:** corrected as history in the PM's next
+  close-out.
+* **`v1-e31-t11`:** is told about the changed evidence text.

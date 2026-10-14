@@ -7,7 +7,7 @@
 | Who runs it | The operator (Charlie). Not an agent session, not CI |
 | How long | 15–30 minutes of attention, spread over the 7-day response window |
 | Destructive? | **Yes.** It deletes objects and all of their noncurrent versions in dev and prod |
-| Tooling | `debate-research caselist remove` and `caselist unsuppress` (v1-e30-t07; the download inbox since v1-e30-t09; later uploads at the removed path since v1-e30-t11; the hold on a removed caselist path since v1-e30-t13), and `caselist status`, which reports what a removal left in the bucket (v1-e30-t10) |
+| Tooling | `debate-research caselist remove` and `caselist unsuppress` (v1-e30-t07; the download inbox since v1-e30-t09; later uploads at the removed path since v1-e30-t11; the hold on a removed caselist path since v1-e30-t13; a camp path withdrawn on its own, and camp rows that carry their upstream identity, since v1-e30-t14), and `caselist status`, which reports what a removal left in the bucket (v1-e30-t10) |
 
 Removal is not a negotiation. A team asks, and their disclosure comes out. This runbook exists so
 that it comes out *completely* — local store, both buckets, every noncurrent version, the parsed
@@ -167,9 +167,16 @@ store holds, weekly and complete, here and in the bucket:
     of this team's. Its row and record at the removed path go and that path is suppressed for it,
     as for a shared file a team withdraws. The blob and the other path's rows stay.
     `--include-shared` does not change this: it is a decision about the files the request names.
-  - *KEPT*: a camp file's later upload that another holder also has. The suppression list cannot
-    stop one camp path of a file, so nothing is done. To remove it for everyone, run a second
-    removal that names it, with `--include-shared`, under the same request id.
+  - *withdrawn from this path only*, for a camp file (`v1-e30-t14`): another release or a team
+    holds the same bytes. Its row in that release's manifest goes, and so do that release's
+    camp-file record and its year's `raw/openev/<year>/` copy, unless another row of that release
+    or another release of that year still holds it. The suppression entry stops the file at that
+    row of that release only. Its line reads `withdraw openev <release> openev-<id>`, and
+    *WITHDRAWALS* names `openev`. The other release's row and record, a team's copy and the blob
+    stay. To remove it for everyone instead, run a second removal that names it, with
+    `--include-shared`, under the same request id.
+  - *KEPT*: another holder has it, and the plan takes it from none of its paths. A later upload
+    should not read this way since `v1-e30-t14`; if one does, stop and report it.
 - **In the download inbox.** A later upload's line says *in the download inbox in `<snapshot>`, not
   in the store* when an archive `caselist pull` downloaded holds it at the removed path and no
   manifest does (`v1-e30-t13`). Either the archive has not been imported yet, or it was imported
@@ -181,11 +188,15 @@ store holds, weekly and complete, here and in the bucket:
 - **For an OpenEv camp file** a later upload is a higher OpenEv id at the same camp path: OpenEv
   changes a file only by deleting it and uploading it again, and the sync fetches the new id as a
   revision (`v1-e34-t08`). Its line names the release and the ids, and says how the two were
-  matched. *The delivery record puts both ids at one upstream path* is certain. *Matched by file
-  name alone* means this machine has no delivery record for both ids (prod never pulls, so it never
-  has one). A release's rows do not keep the camp's folder, so two camps' files with one file name
-  read alike. Compare that plan with the dev plan, and use `--only-named` if it lists a file the
-  dev plan did not.
+  matched. *Matched by upstream path* is certain: each row of a release manifest carries the
+  OpenEv id it was downloaded as and the digest of that id's upstream path (`v1-e30-t14`), dev's
+  delivery record says the same, and prod's manifests are published from dev's data directory, so
+  the two environments match alike. *Matched by file name alone* means neither the rows nor a
+  delivery record here knows both ids' upstream path: the release was published before
+  `v1-e30-t14` and has not been re-derived since, or the weekly agent's build is older than that.
+  A release's rows do not keep the camp's folder, so two camps' files with one file name read
+  alike. Stop, and give the rows their identity first
+  ([Camp rows that carry no upstream identity](#camp-rows-that-carry-no-upstream-identity)).
 - **EARLIER VERSIONS AT A REMOVED PATH, NOT REMOVED.** Files held at the same path only in
   snapshots dated before the named file first appeared there. The request does not cover them and
   nothing is done to them. If the requester wants one gone, run a second removal that names it,
@@ -346,11 +357,12 @@ the bucket holds. The line under the table about removal residue is right either
 
 - [ ] The prod dry-run plan matches the dev one (a difference means the two environments had
       drifted — investigate before executing). The *DOWNLOAD INBOX* section may differ: each
-      environment that pulls has its own inbox, and each environment's run purges its own. The
-      *LATER UPLOADS* section should list the same sha256 values as dev's. For a camp file, prod
-      says *matched by file name alone* where dev named the delivery record. That is expected, and
-      it is why the sha256 values are what you compare. Pass `--only-named` in prod if you passed
-      it in dev.
+      environment that pulls has its own inbox, and each environment's run purges its own. A camp
+      file's later uploads are matched in prod as in dev, by the upstream identity the release's
+      rows carry (`v1-e30-t14`), so each of their lines says *matched by upstream path*. If one says
+      *matched by file name alone*, prod's release manifest predates that: stop, and do
+      [Camp rows that carry no upstream identity](#camp-rows-that-carry-no-upstream-identity)
+      before executing. Pass `--only-named` in prod if you passed it in dev.
 - [ ] `caselist status`, run against the dev data directory as above, is clean afterwards, and says
       *No version of a removed file is left under raw/ or parsed/, and no manifest or aggregate
       version is older than a removal that touched its caselist*. Residue is reported per
@@ -394,7 +406,8 @@ DEBATE_ENV=prod DEBATE_STORAGE__DATA_DIR="$HOME/.debate-research/dev" uv run deb
       kept in another is attributed afterwards: find the sha256 in this file and read `caselist`. It
       is append-only and merged like the list, and a file of its own for the reason the path entries
       are. A removal made by a build from before `v1-e30-t16` wrote none, so its withdrawals have no
-      caselist recorded.
+      caselist recorded. A camp path withdrawn on its own (`v1-e30-t14`) has a line here too, which
+      names `openev`; its disclosure digest is of `openev/<release>/<row path>`.
 - [ ] Find every built file whose provenance sidecar cites a removed sha256 (E33). Withdraw it from
       use immediately and rebuild it without those cards before anyone reads it in a round.
 - [ ] If the file was shared inside the team outside the evidence store — a copy in someone's
@@ -408,7 +421,8 @@ DEBATE_ENV=prod DEBATE_STORAGE__DATA_DIR="$HOME/.debate-research/dev" uv run deb
       (`v1-e30-t09`), so after a `COMPLETED` run no file there holds a removed file, as itself or as
       a member of an archive. What it did to each file is what the plan's *DOWNLOAD INBOX* section
       said:
-      - **Deleted:** a removed camp document (`openev-<id>-…`); a camp release whose every file was
+      - **Deleted:** a removed camp document (`openev-<id>-…`); the download of a camp path the
+        plan withdrew, *its camp path is withdrawn* (`v1-e30-t14`); a camp release whose every file was
         removed; and every weekly archive (`<slug>-weekly-<date>.zip`) whose week is already imported,
         because the store holds everything else in it and the pull never fetches an imported week
         again. Before deleting a camp file's copy it records in
@@ -433,6 +447,11 @@ DEBATE_ENV=prod DEBATE_STORAGE__DATA_DIR="$HOME/.debate-research/dev" uv run deb
       - **Already imported** (a caselist file or a camp file): the plan listed it under *LATER
         UPLOADS AT A REMOVED PATH* and the run removed it with the named file (`v1-e30-t11`). The
         copies of it in the inbox went with it.
+      - **Already imported, a camp file another release or a team also holds:** the run withdrew it
+        from its camp path (`v1-e30-t14`). Its entry stops it at that row of that release: the
+        OpenEv importer refuses it there, and `caselist pull` reports the id as
+        `skipped_as_removed` instead of fetching it again. The other holder's copy is untouched.
+        Its download (`openev-<id>-…`) was deleted from the inbox, as a removed camp file's is.
       - **Not yet imported, a camp file:** a new OpenEv id at the removed camp path, listed upstream
         or already downloaded into the inbox, is held back by every later `caselist pull` as
         `same_path_as_a_removed_file` and is never imported (`v1-e34-t14`). So for a camp file the
@@ -452,7 +471,11 @@ DEBATE_ENV=prod DEBATE_STORAGE__DATA_DIR="$HOME/.debate-research/dev" uv run deb
       before it reads the suppression list and not the path entries, so it imports a new upload at
       a removed path, and nothing fails. If the weekly agent runs such a build
       (`debate-research --version` says which), treat every pull as one that may have imported a
-      later upload, and do step 9 after each until the agent is updated.
+      later upload, and do step 9 after each until the agent is updated. The same goes for a camp
+      path withdrawn on its own (`v1-e30-t14`): a build from before it reads that entry and asks only
+      whether the whole file is suppressed, so its pull may fetch the withdrawn id again and record
+      its row. The same removal, run again with a build that has `v1-e30-t14`, finds that row by its
+      entry and takes it, with that release's record and copy.
 - [ ] **A removal made before `v1-e30-t09`** left its files in the inbox. Run the same command again
       — same `--team` or `--source`, same `--request` and `--reason` — dry run first, then
       `--execute`: it finds nothing left in the store or the buckets, appends nothing, and purges
@@ -526,6 +549,58 @@ holds other teams' disclosures too, and the importer refuses the removed files i
 - [ ] Reply to the requester confirming completion, naming what was removed in their terms (their
       team, their rounds) and anything that was not, with the reason.
 - [ ] Commit the register update. No personal data in the diff or the commit message.
+
+## Camp rows that carry no upstream identity
+
+Every row of a camp release manifest that `caselist pull` writes carries the OpenEv id it was
+downloaded as and the SHA-256 of that id's upstream path, never the path (`v1-e30-t14`). A plan in
+either environment matches a camp file's later upload by them, so prod, which never pulls and has
+no delivery record, matches as dev does. Rows written before `v1-e30-t14`, or since by a weekly
+agent on an older build, carry neither, and a plan over them says *matched by file name alone*. A
+hand-imported row carries the id only if its name gives one, and never the path; it is never a later
+upload, so nothing needs it.
+
+Give the rows their identity in the dev data directory, from this machine's delivery record, with
+a build that has `v1-e30-t14` (`uv run` in a checkout of `dev` after it merges). Do it for each
+release under `manifests/openev/`; today that is `2026-policy`. First the dry run, which writes
+nothing:
+
+```bash
+DEBATE_ENV=dev uv run debate-research caselist reimport-openev-metadata --year 2026 --event policy --dry-run
+```
+
+Its caption says how many rows it would give their upstream identity: every member row of a
+release published before `v1-e30-t14`. The camps before and after should be the same, and titles
+changed 0, unless the alias table changed since the release was last re-derived. Then apply it and
+publish it to dev:
+
+```bash
+aws sso login --profile debate-dev-evidence
+DEBATE_ENV=dev uv run debate-research caselist reimport-openev-metadata --year 2026 --event policy
+DEBATE_ENV=dev uv run debate-research caselist status --caselist openev
+DEBATE_ENV=dev uv run debate-research caselist publish --caselist openev --snapshot 2026-policy
+DEBATE_ENV=dev uv run debate-research caselist status --caselist openev
+```
+
+The first `status` exits 1 with `CASELIST_DRIFT`, naming `openev 2026-policy (manifest mismatch)`,
+and its hint says a manifest mismatch is this machine's copy rewritten since its last publish and
+to run `caselist publish --caselist openev`. That is the re-derive, not a fault (`v1-e30-t12`). The
+publish uploads the manifest and no source, and the second `status` exits 0. Then prod, from the same
+data directory:
+
+```bash
+aws sso login --profile debate-prod-evidence
+DEBATE_ENV=prod DEBATE_STORAGE__DATA_DIR="$HOME/.debate-research/dev" uv run debate-research caselist publish --caselist openev --snapshot 2026-policy --dry-run
+DEBATE_ENV=prod DEBATE_STORAGE__DATA_DIR="$HOME/.debate-research/dev" uv run debate-research caselist publish --caselist openev --snapshot 2026-policy --confirm-prod
+DEBATE_ENV=prod DEBATE_STORAGE__DATA_DIR="$HOME/.debate-research/dev" uv run debate-research caselist status --caselist openev
+```
+
+The prod dry run plans 0 uploads and the manifest; the real run uploads the manifest and no source;
+`status` exits 0. A removal planned in prod then says *matched by upstream path*.
+
+Until the weekly agent runs a build with `v1-e30-t14`, each camp file it pulls adds a row without
+the two keys. Run the re-derive and the two publishes again before a removal of a camp file that
+was pulled since.
 
 ## When `caselist status` reports removal residue
 
@@ -856,6 +931,8 @@ register keeps the original one.
   for a camp file's later upload that has not been imported.
 - `plan_specs/v1/e30-caselist-ingestion/t13-removed-path-holds-caselist-uploads.yaml` — the path
   entry that holds a removed caselist path, and the inbox in the removal plan.
+- `plan_specs/v1/e30-caselist-ingestion/t14-camp-path-identity.yaml` — the upstream identity in
+  camp rows, and a camp path withdrawn on its own.
 - `plan_specs/v1/e30-caselist-ingestion/t10-removal-docstrings-and-residue.yaml` — the residue
   report in `caselist status`.
 - `plan_specs/v1/e29-cloud-evidence-store/t06-removal-grant-scope-test.yaml` — the everyday

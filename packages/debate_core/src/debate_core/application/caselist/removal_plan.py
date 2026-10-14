@@ -206,6 +206,7 @@ from debate_core.application.caselist.removal_path_versions import (
 from debate_core.application.caselist.suppression import read_path_holds
 from debate_core.application.errors import DomainError, StoreAccessDenied
 from debate_core.application.ports.caselist import CaselistRepository
+from debate_core.application.ports.caselist_source import openev_id_of_inbox_name
 from debate_core.application.ports.evidence_store import EvidenceObjectStore, ObjectKey
 from debate_core.application.ports.evidence_versions import EvidenceVersionStore, ObjectVersion
 from debate_core.application.ports.parsed_store import AGGREGATE_NAMES
@@ -890,6 +891,7 @@ class RemovalPlanner:
             if isinstance(selector, TeamSelector)
             else None,
             files=inbox_files,
+            withdrawn_camp_documents=_withdrawn_camp_documents(sources),
         )
         return RemovalPlan(
             selector=selector,
@@ -1770,6 +1772,24 @@ def taken_path(caselist: str, snapshot: str, path: str) -> tuple[str, str]:
     :func:`~debate_core.application.ports.suppression.camp_path_disclosure`.
     """
     return (OPENEV, f"{snapshot}/{path}") if caselist == OPENEV else (caselist, path)
+
+
+def _withdrawn_camp_documents(sources: Sequence[PlannedSource]) -> dict[str, str]:
+    """`{inbox name: sha256}` of the camp documents whose camp path this plan withdraws (`v1-e30-t14`).
+
+    A single document the pull fetched is imported as one row at its inbox name, `openev-<id>-…`,
+    so a withdrawn row at a name of that form is the copy in the inbox. A camp release that is a zip
+    records its members at their own paths, which are not inbox names.
+    """
+    return {
+        path.split("/", 1)[1]: source.sha256
+        for source in sources
+        if source.disposition is Disposition.WITHDRAW
+        for caselist, path in source.requester_paths
+        if caselist == OPENEV
+        and openev_id_of_inbox_name(path.split("/", 1)[1]) is not None
+        and "/" not in path.split("/", 1)[1]
+    }
 
 
 def _row_upstream_paths(copies: Sequence[_ManifestCopy]) -> dict[int, str]:

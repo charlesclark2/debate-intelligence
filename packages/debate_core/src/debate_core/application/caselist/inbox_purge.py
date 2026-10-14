@@ -38,6 +38,11 @@ without the removed entries, and which depends on whether anything in it is stil
 
 `DELETE`, the file itself is removed
     A single document whose bytes are suppressed. Nothing else is in it.
+`DELETE`, its camp path is withdrawn
+    A camp document (`openev-<id>-…`) whose camp path the removal withdraws (`v1-e30-t14`): the
+    copy at that row of its release, while another release or a team keeps the bytes. The list
+    stops it only at that camp path, so the plan names it, by its name and its bytes. The pull
+    would not import it again, and no manifest row came from it, so retention would keep it.
 `DELETE`, every member is removed
     A camp download (or any other zip) whose every real member the list stops. This is the sync's
     own test for a removed camp file (:attr:`~debate_core.application.caselist_sync.
@@ -119,7 +124,7 @@ import hashlib
 import json
 import os
 import uuid
-from collections.abc import Collection, Iterable, Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date
 from enum import StrEnum
@@ -228,6 +233,8 @@ class InboxReason(StrEnum):
     """Why a file is deleted or rewritten. See the module docstring for each."""
 
     THE_FILE_IS_REMOVED = "the file itself is removed"
+    THE_COPY_IS_WITHDRAWN = "its camp path is withdrawn: another holder keeps the bytes"
+    """A camp document whose camp path the removal withdraws (`v1-e30-t14`): the copy at that path."""
     EVERY_MEMBER_IS_REMOVED = "every member is removed"
     IMPORTED = "imported: everything else in it is already in the store"
     WAITING_TO_BE_IMPORTED = "waiting to be imported: the next pull imports what is kept"
@@ -415,6 +422,7 @@ def plan_inbox(
     imported_openev_downloads: Collection[str],
     team: tuple[str, str, str] | None = None,
     files: Sequence[InboxFile] | None = None,
+    withdrawn_camp_documents: Mapping[str, str] | None = None,
 ) -> tuple[tuple[InboxFilePlan, ...], tuple[InboxTeamFilesLeft, ...]]:
     """Every inbox file holding something `suppression` stops, and what to do with it. Reads only.
 
@@ -428,6 +436,9 @@ def plan_inbox(
             in a waiting archive that the list does not stop; `None` otherwise.
         files: The inbox as :func:`read_inbox` read it, when the caller already has; read here
             otherwise.
+        withdrawn_camp_documents: `{inbox name: sha256}` of each camp document whose camp path the
+            removal withdraws (`v1-e30-t14`): the download of that row, by its name and its bytes,
+            is deleted though the list does not stop its bytes everywhere.
     """
     remembered = {key: value.download_sha256 for key, value in inbox.deliveries.read().items()}
     planned: list[InboxFilePlan] = []
@@ -441,6 +452,7 @@ def plan_inbox(
             imported_openev_downloads=imported_openev_downloads,
             remembered=remembered,
             team=team,
+            withdrawn=withdrawn_camp_documents or {},
         )
         if one is not None:
             planned.append(one)
@@ -458,12 +470,14 @@ def _plan_file(
     imported_openev_downloads: Collection[str],
     remembered: dict[int, str],
     team: tuple[str, str, str] | None,
+    withdrawn: Mapping[str, str],
 ) -> tuple[InboxFilePlan | None, int]:
     name, digest, kind = file.name, file.sha256, file.kind
     caselist, snapshot, openev_id = file.caselist, file.snapshot, file.openev_id
     whole = suppression.suppresses_source(digest)
     if file.path.suffix.lower() != ".zip":
-        if not whole:
+        at_a_withdrawn_camp_path = openev_id is not None and withdrawn.get(name) == digest
+        if not whole and not at_a_withdrawn_camp_path:
             return None, 0
         return (
             InboxFilePlan(
@@ -471,7 +485,7 @@ def _plan_file(
                 kind=kind,
                 sha256=digest,
                 action=InboxAction.DELETE,
-                reason=InboxReason.THE_FILE_IS_REMOVED,
+                reason=InboxReason.THE_FILE_IS_REMOVED if whole else InboxReason.THE_COPY_IS_WITHDRAWN,
                 removed_sha256=(digest,),
                 openev_id=openev_id,
                 delivered=frozenset({digest}),

@@ -55,7 +55,7 @@ from debate_core.application.caselist.removal_plan import (
 )
 from debate_core.application.caselist.removal_service import RemovalIncomplete
 from debate_core.application.caselist.suppression import caselist_withdrawn_from, caselists_withdrawn_by
-from debate_core.application.caselist_sync import SelectionDecision
+from debate_core.application.caselist_sync import OPENEV_DELIVERIES_FILENAME, SelectionDecision
 from debate_core.application.ports.archive import ArchiveMember
 from debate_core.application.ports.caselist_source import OpenEvFile
 from debate_core.application.ports.suppression import ReasonCode, RemovalLogEntry, WithdrawalEntry
@@ -442,3 +442,26 @@ async def test_a_row_an_older_build_records_again_is_taken_by_running_the_same_r
     assert await camp_releases_of(world, REVISED_SHA256) == [(2027, Event.POLICY)]
     assert versions_of(world, openev_raw_key(2026, REVISED_SHA256)) == []
     assert rows_of(world, NEXT_RELEASE_KEY) == [{NEXT_YEAR_ROW: REVISED_SHA256}] * 2
+
+
+async def test_its_download_is_taken_out_of_the_inbox_and_the_record_of_what_it_delivered_stays(
+    world: RemovalWorld,
+) -> None:
+    """The withdrawn copy leaves the inbox as a removed one does; 800's download is another file."""
+    await another_release_holds_the_later_upload(world)
+    inbox = world.data_dir / "inbox"
+    assert sorted(path.name for path in inbox.iterdir() if path.is_file()) == [
+        "openev-512-TSF-Estuary_Solvency_Advocate.docx",
+        NEW_ROW,
+        NEXT_YEAR_ROW,
+    ]
+
+    plan = await remove(world)
+
+    assert sorted((one.name, one.action.value, str(one.reason)) for one in plan.inbox) == [
+        ("openev-512-TSF-Estuary_Solvency_Advocate.docx", "delete", "the file itself is removed"),
+        (NEW_ROW, "delete", "its camp path is withdrawn: another holder keeps the bytes"),
+    ]
+    assert sorted(path.name for path in inbox.iterdir() if path.is_file()) == [NEXT_YEAR_ROW]
+    deliveries = json.loads((world.data_dir / OPENEV_DELIVERIES_FILENAME).read_text())["deliveries"]
+    assert deliveries["640"]["member_sha256"] == [REVISED_SHA256]

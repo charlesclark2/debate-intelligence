@@ -475,7 +475,10 @@ named by its OpenEv id, `openev-777`, with `(sha256 2b912c191a8a)` once the run 
 never by its file name, which is its title (`v1-e34-t12`). Summaries and logs written before that
 change may still name camp files, so check older ones before pasting them. A failed stage's reason,
 codes and hint name no path on this Mac either: a folder the operating system refused is named by
-what it is for, and the data directory and the inbox by those names (`v1-e34-t13`).
+what it is for, and the data directory and the inbox by those names (`v1-e34-t13`). A run that ended
+on a bug, exit `70`, prints the error envelope instead of the summary, and it names the exception's
+class and not its message (`v1-e01-t25`). An envelope written before that change may quote a path
+in `error.message`, so check older exit-`70` lines before pasting them.
 
 ## What the exit code says
 
@@ -490,7 +493,7 @@ is `CASELIST_PULL_INCOMPLETE` either way.
 | `0` | Every stage that puts bytes somewhere durable finished. That includes a run that found nothing new, one whose `publish` is `pending` on an expired SSO session, and one where only `report` or `retention` failed | Nothing, or what the stage table names. `publish: pending` is under [When something goes wrong](#when-something-goes-wrong) |
 | `3` | **Transient.** Every failure is one a later run may not meet | Usually nothing: next week's run retries it, and what was captured is kept. Read the failed stage's `hint` first; a refused store has a fix to make before the retry helps |
 | `1` | **A verdict.** At least one failure will be the same next time, or the run was refused before it started | Read the failed stage's reason and deal with what it names |
-| `70` | A bug | Report it |
+| `70` | A bug | Report it, by the class the envelope names (`error.details.exception_type`): since `v1-e01-t25` the log holds the class and never the exception's message. The same command by hand with `--verbose` prints the traceback, message included, on stderr. That traceback can quote a path on this Mac and a camp file's title, so read it and do not paste it as it is |
 
 The agent never runs again on any exit code: launchd records the number and waits for next week's
 slot. A `3` on Wednesday therefore means "next Wednesday's run, or the same command by hand now".

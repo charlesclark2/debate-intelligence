@@ -48,7 +48,7 @@ spec:
         The CLI README's exit-code section says what exit 70 prints and how to get the
         detail.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

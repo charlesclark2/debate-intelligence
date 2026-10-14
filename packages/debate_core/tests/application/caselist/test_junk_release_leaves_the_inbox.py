@@ -209,7 +209,9 @@ async def test_a_junk_only_release_leaves_on_the_run_that_imports_it_and_is_neve
     assert [(one.openev_id, one.decision) for one in summary.openev] == [(960, SelectionDecision.DOWNLOAD)]
     assert summary.files_imported == 0 and summary.files_skipped == 3, "the release is not junk alone"
     assert summary.snapshots_imported == ("openev 2026-policy",), "its release manifest is written"
-    assert retention_of(summary)["removed"] == [JUNK_ONLY_REMOVED], "the junk-only release stayed"
+    assert retention_of(summary)["removed"] == [JUNK_ONLY_REMOVED], (
+        "the junk-only release was not removed as junk_only, named by its id and digest"
+    )
     assert retention_of(summary)["kept"] == []
     assert retention_of(summary)["bytes_freed"] == len(JUNK_ONLY_BODY)
     assert stage_reason(summary, SyncStage.RETENTION) == JUNK_ONLY_SENTENCE

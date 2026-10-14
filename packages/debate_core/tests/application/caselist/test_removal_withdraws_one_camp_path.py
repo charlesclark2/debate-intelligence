@@ -42,7 +42,7 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 
-from debate_core.application.caselist.manifest import read_manifest_lines
+from debate_core.application.caselist.manifest import read_manifest_lines, write_manifest_lines
 from debate_core.application.caselist.openev_import_service import OpenEvImportService
 from debate_core.application.caselist.openev_manifest import openev_manifest_key
 from debate_core.application.caselist.pipeline import Classification
@@ -396,3 +396,49 @@ async def test_an_import_with_no_list_entry_still_imports_it_at_that_camp_path(w
     )
     assert report.count(Classification.SUPPRESSED) == 0
     assert _member_paths(report.manifest_lines) == [NEW_ROW]
+
+
+async def test_a_row_an_older_build_records_again_is_taken_by_running_the_same_removal_again(
+    world: RemovalWorld,
+) -> None:
+    """Until the weekly agent runs this build, its pull may record the withdrawn id at its camp path
+    again: a build from before `v1-e30-t14` asks the list about the whole file only. Here that import
+    is made with no list at all, which is what such a build's importer sees of a camp-path entry.
+    The same removal, run again, finds the row by its entry and takes it, its record and its copy.
+    """
+    await another_release_holds_the_later_upload(world)
+    await remove(world)
+    older = OpenEvImportService(
+        caselists=world.repository,
+        blobs=FsSnapshotStore(world.data_dir),
+        suppression=empty_suppression_list(),
+    )
+    path = FsEvidenceObjectStore(world.data_dir).path_for(RELEASE_KEY)
+    body = REVISED_BODY
+    report = await older.import_release(
+        [ArchiveMember(path=NEW_ROW, sha256=REVISED_SHA256, byte_size=len(body), data=body)],
+        year=2026,
+        event=Event.POLICY,
+        imported_on=PULLED_AT.date(),
+        archive_sha256=REVISED_SHA256,
+        recorded_manifest=read_manifest_lines(path),
+    )
+    write_manifest_lines(report.manifest_lines, path)
+    world.client.put_object(Bucket=world.bucket_name, Key=RELEASE_KEY, Body=path.read_bytes())
+    world.client.put_object(
+        Bucket=world.bucket_name, Key=openev_raw_key(2026, REVISED_SHA256), Body=REVISED_BODY
+    )
+    assert release_rows(world) == [{NEW_ROW: REVISED_SHA256}] * 2
+    assert await camp_releases_of(world, REVISED_SHA256) == [(2026, Event.POLICY), (2027, Event.POLICY)]
+
+    again = await plan_removal(world)
+
+    unfinished = again.source(REVISED_SHA256)
+    assert unfinished is not None
+    assert (unfinished.inclusion, unfinished.disposition) == (Inclusion.UNFINISHED, Disposition.WITHDRAW)
+    assert again.suppression_entries == ()
+    assert (await world.service().execute(again)).completed
+    assert release_rows(world) == [{}, {}]
+    assert await camp_releases_of(world, REVISED_SHA256) == [(2027, Event.POLICY)]
+    assert versions_of(world, openev_raw_key(2026, REVISED_SHA256)) == []
+    assert rows_of(world, NEXT_RELEASE_KEY) == [{NEXT_YEAR_ROW: REVISED_SHA256}] * 2

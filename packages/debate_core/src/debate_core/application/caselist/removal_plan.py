@@ -1009,15 +1009,27 @@ class RemovalPlanner:
         What a `--source` removal stopped part-way can leave of a later upload once the manifest
         rows that showed it at the removed path are rewritten: nothing else would find it again.
         A file with nothing left is not planned again, so a second `--source` under one request id
-        does not list the first. For a camp path withdrawn (`v1-e30-t14`), what is left is a
-        release's camp-file record with no row of the file left in that release.
+        does not list the first.
+
+        For a camp path withdrawn (`v1-e30-t14`), what is left is a release's camp-file record with
+        no row of the file left in that release, or a row at the withdrawn camp path itself: a build
+        from before that task asks the list about a camp file's whole source only, so its pull may
+        record the withdrawn id there again, and running the same removal again takes it.
         """
         disclosures = [one async for one in _all_disclosures(self._caselists, source_sha256=digest)]
         if not state.suppresses_source(digest):
-            return any(
-                state.suppresses(digest, disclosure=disclosure_digest(one.caselist, one.source_path))
-                for one in disclosures
-            ) or bool(_orphaned_releases(await _all_camp_files(self._caselists, digest), held, digest))
+            return (
+                any(
+                    state.suppresses(digest, disclosure=disclosure_digest(one.caselist, one.source_path))
+                    for one in disclosures
+                )
+                or any(
+                    state.suppresses(digest, disclosure=camp_path_disclosure(row.snapshot, row.path))
+                    for row in held
+                    if row.caselist == OPENEV and row.sha256 == digest and not row.inbox
+                )
+                or bool(_orphaned_releases(await _all_camp_files(self._caselists, digest), held, digest))
+            )
         return bool(
             disclosures
             or await self._caselists.find_source(digest) is not None

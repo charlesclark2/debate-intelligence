@@ -178,9 +178,11 @@ def test_a_check_with_a_stand_in_reaches_it_and_is_refused_an_address_off_this_m
     assert [(attempt["call"], attempt["target"]) for attempt in attempts(log)] == [
         ("connect", repr((UNROUTABLE, 9)))
     ]
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as connection:
-        with pytest.raises(pytest_socket.SocketConnectBlockedError):
-            connection.connect((UNROUTABLE, 9))
+    with (
+        socket.socket(socket.AF_INET, socket.SOCK_STREAM) as connection,
+        pytest.raises(pytest_socket.SocketConnectBlockedError),
+    ):
+        connection.connect((UNROUTABLE, 9))
 
 
 def test_a_check_with_a_stand_in_is_refused_any_other_loopback_port_and_it_is_logged(

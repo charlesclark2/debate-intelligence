@@ -8,7 +8,8 @@ object naming its ports. Everything it says after that goes to a log file beside
 scratch files, so a pipe nobody reads can never fill and stall it.
 
 :meth:`StandInProcess.stop` is the teardown: terminate, wait, kill if it will not go. A stand-in
-outlives no check.
+outlives no check: every one started is remembered in :data:`STARTED`, and tests/smoke/conftest.py
+fails the check after which one is still running.
 """
 
 from __future__ import annotations
@@ -22,13 +23,17 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import IO
 
-__all__ = ["LOOPBACK", "StandInFailedToStart", "StandInProcess"]
+__all__ = ["LOOPBACK", "STARTED", "StandInFailedToStart", "StandInProcess", "still_running"]
 
 LOOPBACK = "127.0.0.1"
 """The only address a stand-in binds, and the only host a declared stand-in can be reached at."""
 
 STARTUP_SECONDS = 20.0
 """How long a stand-in may take to announce its ports. Moto's server takes well under one."""
+
+
+STARTED: list[StandInProcess] = []
+"""Every stand-in this pytest process started, running or not."""
 
 
 class StandInFailedToStart(RuntimeError):
@@ -66,7 +71,9 @@ class StandInProcess:
         except BaseException:
             _stop(process)
             raise
-        return cls(process, {str(name): int(port) for name, port in ports.items()}, log)
+        started = cls(process, {str(name): int(port) for name, port in ports.items()}, log)
+        STARTED.append(started)
+        return started
 
     def address(self, name: str) -> tuple[str, int]:
         """`(host, port)` of the server this stand-in announced as `name`."""
@@ -82,6 +89,11 @@ class StandInProcess:
 
     def stop(self) -> None:
         _stop(self.process)
+
+
+def still_running() -> list[StandInProcess]:
+    """The stand-ins started in this process that have not exited."""
+    return [stand_in for stand_in in STARTED if stand_in.running]
 
 
 def _first_line(stream: IO[str], timeout: float) -> str:

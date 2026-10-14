@@ -44,7 +44,7 @@ from tests.smoke.installed_build import (
 )
 from tests.smoke.stand_ins import STAND_IN_FIXTURES
 from tests.smoke.stand_ins.opencaselist import OpenCaselistStandIn, StandInCertificate, make_certificate
-from tests.smoke.stand_ins.process import LOOPBACK
+from tests.smoke.stand_ins.process import LOOPBACK, still_running
 from tests.smoke.stand_ins.s3 import S3StandIn
 
 
@@ -136,6 +136,16 @@ def opencaselist_stand_in(
         yield stand_in
     finally:
         stand_in.stop()
+
+
+@pytest.fixture(autouse=True)
+def _no_stand_in_outlives_its_check() -> Iterator[None]:
+    """Torn down after every other fixture of the check, so it sees what they left running (ac4)."""
+    yield
+    left = still_running()
+    for stand_in in left:
+        stand_in.stop()
+    assert not left, f"{len(left)} stand-in(s) outlived the check: {[s.ports for s in left]}"
 
 
 @pytest.fixture(autouse=True)

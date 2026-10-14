@@ -6,7 +6,8 @@ directory on that process's PYTHONPATH and name a log file in ``DEBATE_SMOKE_NET
 ``site`` module imports ``sitecustomize`` at start-up, before the CLI's own code, so from then on:
 
 * connecting or sending to an internet address (IPv4 or IPv6, loopback included) raises
-  :class:`OutboundNetworkBlocked`;
+  :class:`OutboundNetworkBlocked`, with one exception: a connection to a stand-in the check declared
+  (below);
 * resolving a host name raises it too, since a DNS lookup is itself a request; ``localhost`` and
   numeric loopback addresses are the exceptions, because resolving them leaves the machine never;
 * every refusal is appended to the log as one JSON line, *before* raising.
@@ -15,6 +16,12 @@ The log is what makes this enforcement rather than a hint. A command that caught
 carried on (a retry loop, a "could not reach the server" message) would still leave its line in the
 log, and the smoke fixture fails the check after it finishes whenever the log is not empty
 (tests/smoke/conftest.py).
+
+**A declared stand-in** (v1-e01-t21). A check that takes a stand-in fixture runs the process with
+``DEBATE_SMOKE_STAND_INS`` naming each stand-in's ``host:port``, separated by spaces
+(tests/smoke/stand_ins/). A connection to exactly one of those is let through. An entry whose host is
+not a loopback address is ignored, so the variable can open nothing off this machine, and a check
+that declares no stand-in has no entries: loopback is refused to it like every other address.
 
 Unix-domain sockets are left alone: they cannot leave the machine, and asyncio builds its event
 loop's self-pipe from one. Binding is left alone too: urllib3 binds ``::1`` once at import to learn
@@ -38,7 +45,20 @@ if _LOG:
 
     _LOG_PATH: str = _LOG
     _RESOLVABLE = frozenset({"localhost", "127.0.0.1", "::1"})
+    _LOOPBACK = frozenset({"127.0.0.1", "::1"})
     _INTERNET_FAMILIES = frozenset({socket.AF_INET, socket.AF_INET6})
+
+    def _declared_stand_ins(declared: str) -> frozenset[tuple[str, int]]:
+        """The `host:port` pairs a check declared, loopback ones only; `[::1]:port` for IPv6."""
+        stand_ins: set[tuple[str, int]] = set()
+        for entry in declared.split():
+            host, _, port = entry.rpartition(":")
+            host = host.removeprefix("[").removesuffix("]")
+            if host in _LOOPBACK and port.isdigit():
+                stand_ins.add((host, int(port)))
+        return frozenset(stand_ins)
+
+    _STAND_INS = _declared_stand_ins(os.environ.get("DEBATE_SMOKE_STAND_INS", ""))
 
     class OutboundNetworkBlocked(RuntimeError):
         """A process started by the smoke suite tried to reach the network."""
@@ -58,13 +78,16 @@ if _LOG:
     _gethostbyname = socket.gethostbyname
     _gethostbyname_ex = socket.gethostbyname_ex
 
+    def _to_a_stand_in(address: Any) -> bool:
+        return isinstance(address, tuple) and len(address) >= 2 and (address[0], address[1]) in _STAND_INS
+
     def _connect_guarded(self: socket.socket, address: Any) -> None:
-        if self.family in _INTERNET_FAMILIES:
+        if self.family in _INTERNET_FAMILIES and not _to_a_stand_in(address):
             _refuse("connect", address)
         _connect(self, address)
 
     def _connect_ex_guarded(self: socket.socket, address: Any) -> int:
-        if self.family in _INTERNET_FAMILIES:
+        if self.family in _INTERNET_FAMILIES and not _to_a_stand_in(address):
             _refuse("connect_ex", address)
         return _connect_ex(self, address)
 

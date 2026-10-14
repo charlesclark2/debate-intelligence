@@ -191,7 +191,9 @@ files stay under the data directory. They name no school or team, but they are r
 something to commit.
 
 If an import refuses with `SnapshotOutOfOrder`, **stop**. Do not pass `--allow-out-of-order`. It
-means something newer is already held, and the counts would be computed against the wrong week.
+means something newer is already held. The archive itself would be classified against the right
+week, but the newer weeks were measured without it, and their manifests would keep the counts and
+first-seen numbers measured against the wrong week until each was imported again.
 
 ### 4. Publish them to dev
 

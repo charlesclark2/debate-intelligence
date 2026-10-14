@@ -48,7 +48,7 @@ Each is a fresh store and a list of imports in the order given.
 | Import | Against | Counts | First seen |
 |---|---|---|---|
 | `2026-09-01` | none | NEW 2 | 2 |
-| `2026-09-08` | `2026-09-01` | CHANGED 1, UNCHANGED 1, NEW 2 | 3: `second-version`, `second-week-only`, `from-the-second-week-on` |
+| `2026-09-08` | `2026-09-01` | CHANGED 1, UNCHANGED 1, NEW 2 | 3: `second-version` and the two new files |
 | `2026-09-15` | `2026-09-08` | CHANGED 1, UNCHANGED 2, REMOVED 1 | 1: `third-version` |
 
 The first-seen counts sum to 6, the distinct documents.
@@ -58,7 +58,7 @@ The first-seen counts sum to 6, the distinct documents.
 | Import | Against | Counts | First seen |
 |---|---|---|---|
 | `2026-09-01` | none | NEW 2 | 2 |
-| `2026-09-15` | `2026-09-01` | CHANGED 1, UNCHANGED 1, NEW 1 | 2: `third-version`, `from-the-second-week-on` |
+| `2026-09-15` | `2026-09-01` | CHANGED 1, UNCHANGED 1, NEW 1 | 2: `third-version`, `from-the-…-on` |
 | `2026-09-08`, not allowed | refused: `2026-09-15` is already imported | | |
 | `2026-09-08`, allowed out of order | `2026-09-01` | CHANGED 1, UNCHANGED 1, NEW 2 | 3, as in date order |
 
@@ -208,7 +208,11 @@ WEEKLY_WINDOWS: Final[dict[date, dict[str, str]]] = {
         ONE_WEEK_PATH: "second-week-only",
         OTHER_TEAM_PATH: "from-the-second-week-on",
     },
-    THIRD_WEEK: {REVISED_PATH: "third-version", KEPT_PATH: "carried", OTHER_TEAM_PATH: "from-the-second-week-on"},
+    THIRD_WEEK: {
+        REVISED_PATH: "third-version",
+        KEPT_PATH: "carried",
+        OTHER_TEAM_PATH: "from-the-second-week-on",
+    },
 }
 """Each weekly archive of `testcl26`, `{path: body name}`, by date."""
 
@@ -430,7 +434,10 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__ and __doc__.splitlines()[0])
     parser.add_argument("destination", type=Path, help="Directory to build the archives into.")
     arguments = parser.parse_args()
-    for built in (build_weekly_zips(arguments.destination), build_complete_archive_zips(arguments.destination)):
+    for built in (
+        build_weekly_zips(arguments.destination),
+        build_complete_archive_zips(arguments.destination),
+    ):
         for day, path in sorted(built.items()):
             print(f"{CASELIST} {day.isoformat()}: {path}")
 

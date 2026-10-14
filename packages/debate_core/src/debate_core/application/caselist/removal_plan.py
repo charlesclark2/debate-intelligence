@@ -31,7 +31,7 @@ deletes them, and reports how many it deleted.
     and — when no other team in the same caselist holds it — that caselist's `raw/` and `parsed/`
     copies. The blob and the other holders' records stay. Each of the requester's paths is
     suppressed as one disclosure (:func:`~debate_core.application.ports.suppression.
-    disclosure_digest`), so the next cumulative archive cannot record it as theirs again.
+    disclosure_digest`), so no later archive, weekly or complete, can record it as theirs again.
 `SKIP_SHARED`
     A `--source` removal of a shared file without `--include-shared`. Nothing is deleted: there is
     no requesting team to withdraw it from, and deleting it would take it from the other holders

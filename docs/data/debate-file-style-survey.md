@@ -208,8 +208,9 @@ uv run python scripts/survey_docx_styles.py \
 `--input` is repeatable. `CATEGORY=PATH` puts everything under `PATH` in one category; a
 bare path takes its categories from its immediate subdirectories, the layout
 [`scripts/cardmirror-roundtrip/`](../../scripts/cardmirror-roundtrip/README.md) uses. Point
-`caselist` at the newest snapshot only: successive hsld26 snapshots are cumulative, so
-surveying all of them counts most files several times.
+`caselist` at one snapshot: a weekly is one week's window of editing, a sample of that week,
+and a complete archive (`<slug>-all-<date>.zip`) is the whole caselist. Surveying several
+snapshots counts a file carried between them more than once.
 
 The command overwrites this file, and writes the full unredacted aggregate beside it at
 `docs/data/debate-file-style-survey.full.json` — always, and gitignored, so it is there to

@@ -12,8 +12,9 @@ well over the two-minute hand-off threshold (working agreements §2). It writes 
 no file name, path, school, team code, document text or exception message appears in the
 report — an exception is counted by its type name, a refusal by its `ParseFailureReason`.
 
-Snapshots are cumulative, so the same bytes appear in several of them. A file is parsed once per
-SHA-256 and the report gives both the number of files seen and the number of distinct files.
+The same bytes appear in more than one snapshot: a file carried from one weekly window into the
+next, or held by a complete archive as well as a weekly. A file is parsed once per SHA-256 and the
+report gives both the number of files seen and the number of distinct files.
 
     uv run python scripts/parser_corpus_health.py \\
       --input "caselist=$HOME/Documents/debate/2026-2027/LD Debate/Opencaselist/hsld26-0901" \\

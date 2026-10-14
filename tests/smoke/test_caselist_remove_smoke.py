@@ -3,8 +3,9 @@
 The operator's whole takedown in one check, through the installed command: three synthetic weeks
 imported and published to the dev bucket, a team's removal planned (and shown to change nothing),
 refused without the takedown profile, executed with it, checked with `caselist status`, and then
-attacked the way the world will attack it — next Monday's cumulative archive imported and published
-— without the team's files coming back. Then a mistaken removal reversed with `unsuppress`.
+attacked the way the world will attack it — a later archive that still holds the team's files,
+imported and published as next Monday's — without the team's files coming back. Then a mistaken
+removal reversed with `unsuppress`.
 
 **Not marked `live`, and must not be.** It needs no deployed environment: the bucket is moto's,
 in-process, with sockets disabled (tests/smoke/README.md). Exercising the runbook against the real
@@ -191,7 +192,7 @@ def test_a_team_is_removed_and_next_weeks_archive_does_not_bring_it_back(
     status = run("caselist", "status")
     assert status["exit_code"] == ExitCode.OK, status
 
-    # Next Monday: the same cumulative archive, in order. Nothing of the team's comes back.
+    # Next Monday: an archive that still holds the team's files, in order. Nothing of theirs comes back.
     reimported = run(
         "caselist", "import", str(published[SNAPSHOTS[-1].snapshot]),
         "--caselist", SYNTHETIC_CASELIST, "--snapshot", "2026-09-22",

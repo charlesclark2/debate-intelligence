@@ -12,9 +12,16 @@ counts and nothing else.
 ## What the three archives are
 
 `testcl26-0901`, `testcl26-0908` and `testcl26-0915`: one fictional Lincoln-Douglas caselist,
-three weekly archives, **cumulative** the way the real ones are. The 09-08 archive contains
-everything the 09-01 archive contained and more; the 09-15 archive drops exactly one file. Each
-archive is laid out the way OpenCaselist lays one out::
+three weekly archives, **cumulative**: the 09-08 archive contains everything the 09-01 archive
+contained and more; the 09-15 archive drops exactly one file. Real weekly archives were believed to
+be cumulative when this fixture was written. They are not: a real weekly is a window of about a
+week's editing, and the complete archive is the cumulative copy
+(`docs/data/caselist-backfill-2026-09.md`, "Weekly archives are adjacent windows, not cumulative
+copies"). `build_revised_path_archives.py` and `build_window_order_archives.py` are built as windows.
+These three stay cumulative because `expected_summary.json`'s counts were worked out by hand for
+them, and what they test (hashing, deduplication, the classifications against the week before)
+does not depend on which model the weeks follow. Each archive is laid out the way OpenCaselist lays
+one out::
 
     testcl26-0915/<School>/<TeamCode>/<School>-<TeamCode>-<Side>-<Tournament>-<Round>.docx
 

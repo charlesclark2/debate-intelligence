@@ -2,7 +2,7 @@
 
 `packages/debate_core/tests/application/test_caselist_fake_repository.py` says the adapter in
 this task "is held to the same expectations", so the cases there are the cases here: the
-cumulative-archive arithmetic, the contradictions that are refused, the listing orders and the
+seen-range arithmetic, the contradictions that are refused, the listing orders and the
 cursors. What is added on top is what only a real database can get wrong — that the schema
 migrates, that a widening write is one transaction, and that a row which no longer validates is
 reported rather than half-built.
@@ -237,7 +237,7 @@ def test_snapshots_list_newest_first_and_only_for_their_own_caselist(
 
 
 # ------------------------------------------------------------------------------------------------
-# Source documents: the cumulative-archive arithmetic
+# Source documents: the seen-range arithmetic
 # ------------------------------------------------------------------------------------------------
 
 

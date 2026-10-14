@@ -203,7 +203,9 @@ class SnapshotOutOfOrder(DomainError):
     and the message says so.
     """
 
-    def __init__(self, *, caselist: str, snapshot: date, latest: date, already_imported: bool = False) -> None:
+    def __init__(
+        self, *, caselist: str, snapshot: date, latest: date, already_imported: bool = False
+    ) -> None:
         self.caselist = caselist
         self.snapshot = snapshot
         self.latest = latest
@@ -534,7 +536,10 @@ class CaselistImportService:
         held = [stored.snapshot for stored in await self._caselists.list_snapshots(caselist)]
         if latest is not None and latest.snapshot > snapshot and not allow_out_of_order:
             raise SnapshotOutOfOrder(
-                caselist=caselist, snapshot=snapshot, latest=latest.snapshot, already_imported=snapshot in held
+                caselist=caselist,
+                snapshot=snapshot,
+                latest=latest.snapshot,
+                already_imported=snapshot in held,
             )
         earlier = [one for one in held if one < snapshot]
         return max(earlier) if earlier else None

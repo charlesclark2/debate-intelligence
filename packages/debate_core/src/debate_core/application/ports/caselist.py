@@ -13,8 +13,9 @@ only from :mod:`debate_core.application.errors`, `get_*` raises
 paginated listing returns a :class:`~debate_core.application.ports.persistence.Page` with an
 opaque cursor.
 
-Two conventions are this port's own, and both come from the fact that weekly archives are
-cumulative — the same file arrives again every week until the team takes it down:
+Two conventions are this port's own, and both come from the fact that the same file arrives more
+than once — carried from one weekly window into the next, uploaded again, disclosed by a second
+team, and held by every complete archive until the team takes it down:
 
 *Natural keys.* Nothing here is keyed by a minted ULID. A snapshot is its `(caselist, snapshot)`,
 a source document is its `sha256`, a disclosure is its `(caselist, snapshot, source_path)` and a
@@ -90,8 +91,8 @@ class CaselistRepository(Protocol):
     async def latest_snapshot(self, caselist: CaselistSlug) -> ArchiveSnapshot | None:
         """Return the most recent archive imported for this caselist, or `None` if there is none.
 
-        The importer compares against this to refuse an archive older than one already imported,
-        because applying an older cumulative archive would wrongly mark current files as removed.
+        The importer compares against this to refuse a weekly older than one already imported:
+        the weeks after it were measured without it ("Ordering", in the import service).
         """
         ...
 

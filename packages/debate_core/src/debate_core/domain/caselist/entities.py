@@ -143,9 +143,10 @@ class TeamCode(DomainModel):
 class ArchiveSnapshot(DomainModel):
     """One weekly open-source archive, as downloaded.
 
-    Weekly archives are cumulative, so the snapshot date is the axis everything else is ordered
-    along: a source document's first and last seen snapshots, a re-import's no-op check, and the
-    refusal to import an archive older than the latest one already in the store all read it.
+    A weekly archive is the window of about a week's editing, dated by its snapshot, and that date
+    is the axis everything else is ordered along: a source document's first and last seen
+    snapshots, a re-import's no-op check, and the refusal to import a weekly older than the latest
+    one already in the store all read it.
 
     `archive_sha256` is the hash of the archive file that was imported, which is what makes "we
     already imported this exact file" answerable without re-reading its members. That is the
@@ -170,9 +171,9 @@ class ArchiveSnapshot(DomainModel):
 class SourceDocument(DomainModel):
     """One evidence file, identified by the SHA-256 of its bytes.
 
-    The hash is the identity, which is what makes deduplication across cumulative weekly archives
-    a lookup rather than a decision: the same file appearing in ten snapshots is one source
-    document whose `last_seen_snapshot` moves forward.
+    The hash is the identity, which is what makes deduplication across weekly windows and complete
+    archives a lookup rather than a decision: the same file appearing in ten snapshots is one
+    source document whose seen range widens to cover them.
 
     `origin` records which import first brought the bytes in. A file that later shows up in the
     other kind of import does not get a second source document — the

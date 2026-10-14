@@ -204,7 +204,8 @@ async def test_what_is_stored_does_not_depend_on_the_order_the_weeks_arrived_in(
     """Bytes, source records, seen ranges and disclosures are facts about the weeks, not the order."""
     in_order = await imported(tmp_path / "in-order", SCENARIOS["weeklies in date order"])
     late = await imported(
-        tmp_path / "late", (Step("weekly", FIRST_WEEK), Step("weekly", THIRD_WEEK), Step("weekly", SECOND_WEEK, True))
+        tmp_path / "late",
+        (Step("weekly", FIRST_WEEK), Step("weekly", THIRD_WEEK), Step("weekly", SECOND_WEEK, True)),
     )
 
     def stored(store: OrderedImports) -> tuple[object, ...]:
@@ -240,7 +241,9 @@ async def test_a_late_week_makes_the_first_seen_counts_sum_past_the_distinct_fil
         tmp_path, (Step("weekly", FIRST_WEEK), Step("weekly", THIRD_WEEK), Step("weekly", SECOND_WEEK, True))
     )
 
-    counted = [store.summary(snapshot)["first_seen"] for snapshot in ("2026-09-01", "2026-09-08", "2026-09-15")]
+    counted = [
+        int(str(store.summary(day)["first_seen"])) for day in ("2026-09-01", "2026-09-08", "2026-09-15")
+    ]
 
     assert counted == [2, 3, 2]
     assert sum(counted) == 7, "six distinct files, one of them counted twice"
@@ -250,7 +253,8 @@ async def test_importing_the_week_after_again_measures_it_against_the_late_one(t
     """The remedy the refusal names: the manifest the date-order run writes, byte for byte, no flag."""
     in_order = await imported(tmp_path / "in-order", SCENARIOS["weeklies in date order"])
     late = await imported(
-        tmp_path / "late", (Step("weekly", FIRST_WEEK), Step("weekly", THIRD_WEEK), Step("weekly", SECOND_WEEK, True))
+        tmp_path / "late",
+        (Step("weekly", FIRST_WEEK), Step("weekly", THIRD_WEEK), Step("weekly", SECOND_WEEK, True)),
     )
 
     again = await late.run(Step("weekly", THIRD_WEEK))
@@ -332,7 +336,9 @@ async def removal_world(root: Path, steps: tuple[Step, ...], client: S3Client, b
     """The imports made and published, as the operator's store is when a request arrives."""
     store = await imported(root, steps)
     world = RemovalWorld(data_dir=store.data_dir, bucket_name=bucket, client=client)
-    publisher = CaselistPublishService(local=world.local, remote=world.bucket, suppression=empty_suppression_list())
+    publisher = CaselistPublishService(
+        local=world.local, remote=world.bucket, suppression=empty_suppression_list()
+    )
     assert (await publisher.execute(await publisher.plan(CASELIST))).succeeded
     return world
 
@@ -371,7 +377,11 @@ async def test_a_weekly_imported_out_of_order_after_a_removal_is_held_by_its_dat
         RecordedSuppressionList(local_suppression_list_file(world.data_dir)),
     )
 
-    assert what_the_plan_found(plan) == (expected.hold_after, expected.later_uploads, expected.earlier_versions)
+    assert what_the_plan_found(plan) == (
+        expected.hold_after,
+        expected.later_uploads,
+        expected.earlier_versions,
+    )
     assert late == expected.late_week
 
 

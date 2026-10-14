@@ -1,8 +1,8 @@
 """Imported, confirmed downloads leave the sync's inbox (`v1-e34-t11`).
 
 Before this task nothing cleared `<data_dir>/inbox`. Every weekly archive and camp download stayed
-after it was imported, and because the weeklies are cumulative the dev inbox grew by a season's
-caselist every week (25 zips, 527 MB on 2026-10-01, measured by `v1-e30-t09`). The retention stage
+after it was imported, so the dev inbox grew by every week's windows (25 zips, 527 MB on
+2026-10-01, measured by `v1-e30-t09`). The retention stage
 removes a download once it is imported and its snapshot is confirmed in the bucket, under the run
 lock, and the run summary names what went.
 

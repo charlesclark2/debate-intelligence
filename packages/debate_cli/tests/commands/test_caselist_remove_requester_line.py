@@ -84,7 +84,9 @@ def test_a_team_removal_says_its_whole_files_and_its_copies_of_shared_files_are_
     plan = plan_of(
         (
             source(NAMED, Inclusion.NAMED, Disposition.REMOVE, disclosures=(disclosure(date(2026, 9, 8)),)),
-            source(SHARED, Inclusion.NAMED, Disposition.WITHDRAW, disclosures=(disclosure(date(2026, 9, 15)),)),
+            source(
+                SHARED, Inclusion.NAMED, Disposition.WITHDRAW, disclosures=(disclosure(date(2026, 9, 15)),)
+            ),
         ),
         selector=TeamSelector(caselist="testcl26", school="Alder Point", team_code="KR"),
     )
@@ -112,7 +114,11 @@ def test_only_named_says_the_named_file_is_suppressed_and_its_path_not_held() ->
 
 def test_a_removal_that_only_withdraws_says_only_the_teams_copy_is_suppressed() -> None:
     plan = plan_of(
-        (source(SHARED, Inclusion.NAMED, Disposition.WITHDRAW, disclosures=(disclosure(date(2026, 9, 15)),)),),
+        (
+            source(
+                SHARED, Inclusion.NAMED, Disposition.WITHDRAW, disclosures=(disclosure(date(2026, 9, 15)),)
+            ),
+        ),
         selector=TeamSelector(caselist="testcl26", school="Alder Point", team_code="KR"),
     )
 

@@ -101,7 +101,7 @@ spec:
         the spot-check and the baseline. The Numbers route stays documented as the fallback.
         The page shows rows per minute, so the operator can report the real pace.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

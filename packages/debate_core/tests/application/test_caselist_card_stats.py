@@ -135,12 +135,12 @@ def build_report(
 
 
 # ------------------------------------------------------------------------------------------------
-# ac4: cumulative snapshots collapse; teams are counted, not files
+# ac4: one disclosure held by several snapshots collapses; teams are counted, not files
 # ------------------------------------------------------------------------------------------------
 
 
-def test_three_cumulative_snapshots_yield_one_occurrence_with_first_and_last_seen() -> None:
-    # One file, disclosed once, present in three weekly archives and parsed under each of them.
+def test_one_disclosure_in_three_snapshots_yields_one_occurrence_with_first_and_last_seen() -> None:
+    # One file, disclosed once, carried in three weekly windows and parsed under each of them.
     cards = [card(FILE_A, 4, snapshot=week) for week in (WEEK_THREE, WEEK_ONE, WEEK_TWO)]
     disclosures = [disclosure(FILE_A, week) for week in (WEEK_ONE, WEEK_TWO, WEEK_THREE)]
 

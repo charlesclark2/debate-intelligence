@@ -17,8 +17,9 @@ and collapses whitespace so that two copies of one card hash the same. Nothing i
 stored as, or shown in place of, evidence text; :class:`CardFingerprint` holds a digest and has no
 field for normalized text at all.
 
-**An occurrence is a place, not a file.** Weekly caselist archives are cumulative, so one
-disclosure arrives again every week until it is taken down. An occurrence is therefore keyed by
+**An occurrence is a place, not a file.** One disclosure arrives more than once: carried from one
+weekly window into the next, and held by every complete archive until it is taken down. An
+occurrence is therefore keyed by
 the source's SHA-256 and the card's element index together with the disclosure it was read under
 (caselist, school, team code, side, tournament and round) — never by snapshot or archive path — and
 the snapshots only move its first and last seen dates (:attr:`CardOccurrence.occurrence_key`).
@@ -196,7 +197,7 @@ class CardOccurrence(DomainModel):
 
         The source SHA-256 and element index say which paragraph of which bytes; the disclosure
         fields say who read it where. Snapshot and archive path are deliberately absent, so the
-        same disclosure in three cumulative archives, or re-uploaded under a browser's `(1)` name,
+        same disclosure in three archives, or re-uploaded under a browser's `(1)` name,
         is one occurrence. The same bytes disclosed by two teams are two.
         """
         return (

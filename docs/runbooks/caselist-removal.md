@@ -12,7 +12,9 @@
 Removal is not a negotiation. A team asks, and their disclosure comes out. This runbook exists so
 that it comes out *completely* — local store, both buckets, every noncurrent version, the parsed
 cards, the archives and camp files `caselist pull` downloaded, and the built files that quoted it —
-and so that next week's cumulative archive cannot put it back.
+and so that no later archive puts it back. A weekly archive is a window of about a week's editing,
+so it holds the file again only when its window carries it; the complete archive holds it until the
+team takes it down on OpenCaselist. The suppression list stops it in both.
 
 ## Before you start
 
@@ -66,7 +68,7 @@ Reply within 3 business days. Something like:
 
 > Thanks for reaching out — we've logged this as `RM-2026-01` and we're removing it. You don't need
 > to explain why. We'll delete the files and everything we derived from them from both of our
-> environments, and add them to a suppression list so next week's caselist archive can't bring them
+> environments, and add them to a suppression list so no later caselist archive can bring them
 > back, within 7 days. We'll confirm when it's done. One thing we can't do is remove the disclosure
 > from OpenCaselist itself — that request goes to the site.
 
@@ -209,8 +211,8 @@ Read the plan before going further. Confirm:
 - [ ] **Shared references.** If the plan lists sources also disclosed by another team, or that are
       also a camp file, decide explicitly: without `--include-shared` only this team's `Disclosure`
       records and manifest rows are dropped and the shared blob stays, and each of this team's
-      paths to it is suppressed on its own, so next week's archive cannot record it as theirs
-      again; with it, the file goes for everyone. Default to *without*, and tell the requester what
+      paths to it is suppressed on its own, so no later archive can record it as theirs again;
+      with it, the file goes for everyone. Default to *without*, and tell the requester what
       stayed and why (step 10).
 - [ ] **`--source` on a shared file** is listed as *SHARED, SKIPPED* and nothing happens to it
       without `--include-shared`: there is no requesting team to withdraw it from.
@@ -452,9 +454,11 @@ DEBATE_ENV=prod DEBATE_STORAGE__DATA_DIR="$HOME/.debate-research/dev" uv run deb
 
 ## Step 9 — Check nothing re-imports it
 
-At the next weekly import (or immediately, if you have the next archive on hand):
+At the next import (or immediately, if you have the next archive on hand):
 
-- [ ] The importer reports the sha256 as `SUPPRESSED`.
+- [ ] Where the archive holds the file, the importer reports it as `SUPPRESSED`. A weekly holds it
+      only when its window carries it, so the next weekly may not; a complete archive holds it
+      until the team takes it down on OpenCaselist.
 - [ ] `caselist publish` does not upload it.
 - [ ] **A new upload at the removed path** (caselist files; a camp file's is held by the pull,
       step 8). After a `--source` removal the path entry refuses it at import (`v1-e30-t13`). The
@@ -489,7 +493,7 @@ goes through the same importer. For an OpenEv camp file it does more: `caselist 
 list before it fetches anything, and a camp file whose every member is suppressed is reported as
 `skipped_as_removed` and never requested from OpenCaselist again (`v1-e34-t07`). Check for that
 decision in the next run's `openev_selections`. A weekly archive is still downloaded, because it
-holds every other team's disclosures too, and the importer refuses the removed files inside it.
+holds other teams' disclosures too, and the importer refuses the removed files inside it.
 
 ## Step 10 — Close it out
 

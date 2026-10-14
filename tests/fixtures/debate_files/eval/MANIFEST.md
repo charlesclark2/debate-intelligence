@@ -43,7 +43,9 @@ content differs, and the operator holds the key. See
 [`scripts/select_eval_files.py`](../../../../scripts/select_eval_files.py) proposed the selection on
 2026-09-21 from the operator's folders: the three team season folders (2024-2025, 2025-2026 and
 2026-2027, with the caselist and camp folders inside them excluded), the `hsld26-0915` caselist
-snapshot (the newest; the snapshots are cumulative) and the 2026-27 Policy camp files. It read
+snapshot (the newest then, chosen in the belief that the weeklies were cumulative; a weekly is one
+week's window of editing, so the candidates are that week's files, not the whole caselist) and the
+2026-27 Policy camp files. It read
 bytes and style references only, never text, and printed counts only.
 
 * Candidates are ordered by their keyed digest, so the choice is reproducible and has nothing to do

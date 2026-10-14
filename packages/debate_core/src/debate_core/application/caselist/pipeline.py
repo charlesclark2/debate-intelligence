@@ -22,8 +22,9 @@ file title for the other — but what happens to each member is the same five st
 
 ## The suppression list is not optional
 
-A removal (`v1-e30-t07`) is undone by the next cumulative archive unless every import consults the
-suppression list, so the pipeline is not built without one: :class:`SourceImportPipeline` takes a
+A removal (`v1-e30-t07`) is undone by the next archive that holds the file, weekly or complete,
+unless every import consults the suppression list, so the pipeline is not built without one:
+:class:`SourceImportPipeline` takes a
 :class:`~debate_core.application.ports.suppression.SuppressionList` as a required constructor
 argument, reads it once at the start of every run, and checks it again at the one place a member's
 bytes and records are written (:meth:`SourceImportPipeline._store`). An importer cannot opt out by
@@ -62,8 +63,9 @@ it is still counted as skipped and given no row.
 
 What stays with each service is what genuinely differs: where the baseline comes from (the
 previous weekly snapshot, or the camp release's existing manifest), which records are written,
-and whether a path that has gone is a removal (a weekly archive is cumulative, so yes; an OpenEv
-download is whatever the operator happened to fetch, so no).
+and whether a path that has gone is reported as `REMOVED` (yes for a caselist archive, against the
+one before it, though a weekly window leaves out every file nobody touched that week; no for an
+OpenEv download, which is whatever the operator happened to fetch).
 
 ## One source document per digest, whichever import saw it first
 

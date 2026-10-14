@@ -700,11 +700,33 @@ def _confirmation(plan: RemovalPlan) -> list[str]:
             "  - Not held: the request was about one version, so a later upload at the same path is imported."
         )
     lines += [
-        "  - Suppressed, so next week's cumulative archive cannot bring any of it back.",
+        _suppressed_line(plan),
         f"  - Run in {plan.environment} only; the policy needs dev and prod both, dev first.",
         "  - Not done: the disclosure on OpenCaselist itself, which is the site's to remove.",
     ]
     return lines
+
+
+def _suppressed_line(plan: RemovalPlan) -> str:
+    """What the suppression list now stops, of what this plan removes, in the requester's terms.
+
+    A weekly archive is a window of a week's editing, so a removed file comes back in a later weekly
+    only when it is edited, carried or uploaded again, and in every complete archive until the team
+    takes it down on OpenCaselist; the list stops it in all of them. A file removed whole is stopped
+    by its bytes, and a shared file withdrawn from this team only at the path it was taken from.
+    Whether a path is held is the line before this one.
+    """
+    stopped = [
+        *(["a removed file"] if plan.of(Disposition.REMOVE) else []),
+        *(
+            ["this team's copy of a shared file at the path it was taken from"]
+            if plan.of(Disposition.WITHDRAW)
+            else []
+        ),
+    ]
+    if not stopped:
+        return "  - Nothing suppressed: no file was removed, and no copy withdrawn."
+    return f"  - Suppressed, so no later archive, weekly or complete, can bring back {', or '.join(stopped)}."
 
 
 def _describe(selector: RemovalSelector) -> str:

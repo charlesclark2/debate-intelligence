@@ -36,8 +36,9 @@ its next re-import.
 
 ## It accumulates
 
-A caselist manifest describes one archive, because a weekly archive is cumulative. An OpenEv
-download is not: it is whichever files the operator fetched, and the scheduled sync
+A caselist manifest describes one archive, because each caselist archive is a dated snapshot of
+its own: a weekly is the window of a week's editing, and a complete archive the whole caselist on
+its date. An OpenEv download is neither: it is whichever files the operator fetched, and the scheduled sync
 (`v1-e34-t02`) fetches only the ones that are new. So each import is *merged into* the release's
 existing manifest rather than replacing it, and the existing manifest's `{path: sha256}` is the
 baseline the import classifies against:

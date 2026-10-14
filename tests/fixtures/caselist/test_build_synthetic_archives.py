@@ -93,7 +93,7 @@ def test_every_document_body_is_distinct() -> None:
 
 
 def test_each_week_carries_the_previous_week_forward_except_the_file_that_was_taken_down() -> None:
-    """Real weekly archives are cumulative; a fixture that was not would test nothing."""
+    """The fixture is built cumulative, and the counts in `expected_summary.json` were worked out for that."""
     first, second, third = ({member.path for member in snapshot.members} for snapshot in SNAPSHOTS)
 
     assert first <= second, "the second week must contain everything the first week did"

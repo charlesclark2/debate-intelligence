@@ -130,8 +130,8 @@ Downloads land in one directory, which is what the importer reads. Two rules com
 
 ## What leaves the inbox
 
-Nothing used to: every weekly and camp download stayed after it was imported, and the weeklies are
-cumulative, so the inbox grew by the season's whole caselist every week (`v1-e34-t11`). The last
+Nothing used to: every weekly and camp download stayed after it was imported, so the inbox grew by
+every week's windows and every camp download for the whole season (`v1-e34-t11`). The last
 stage of a run, **retention**, removes a download once nothing can need it again. It runs after the
 report stage, under the run lock, on every real run — one that downloaded nothing too, which is how
 the first run after it shipped cleared the backlog — and a dry run lists what it would remove and
@@ -155,11 +155,10 @@ Anything else stays, and the summary names it with the reason: a download not im
 not confirmed, a camp download the record does not cover, and any file whose name the pull does
 not give a download. Nothing is kept longer, the newest week included. The usual reason to keep a
 zip is a free re-import after a failed publish, but a zip is removed only after its publish is
-confirmed, and a publish reads the local store, never the inbox. The newest weekly is also the
-largest, because the weeklies are cumulative. An imported week is `ALREADY_IMPORTED` whether or not
-its zip is here (:func:`_decide_archive`, `v1-e30-t09`), and the site keeps the weekly
-back-catalogue (ADR-0017), so a removed zip is never fetched again by a pull and can be fetched by
-hand if ever needed.
+confirmed, and a publish reads the local store, never the inbox. An imported week is
+`ALREADY_IMPORTED` whether or not its zip is here (:func:`_decide_archive`, `v1-e30-t09`), and the
+site keeps the weekly back-catalogue (ADR-0017), so a removed zip is never fetched again by a pull
+and can be fetched by hand if ever needed.
 
 A removal (`caselist remove`, `v1-e30-t09`) also deletes inbox files, the ones holding removed
 bytes, under the same lock. The two cannot interleave, and each counts only the files it deleted:

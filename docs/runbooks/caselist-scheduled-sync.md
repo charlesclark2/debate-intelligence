@@ -1010,10 +1010,9 @@ only when all of these are true:
 **Nothing is kept longer, the newest week included.** The usual reason to keep a zip is that
 re-importing after a failed publish costs nothing. Here a zip is removed only after its publish is
 confirmed, and a publish (or a re-publish, after drift) reads the local store, never the inbox, so
-that case cannot arise. The newest weekly is also the largest, because the weeklies are cumulative.
-A removed week is never fetched again: a week on or before the newest imported one is
-`already_imported` whether or not its zip is here. The site keeps the weekly back-catalogue
-(ADR-0017), so a zip can be fetched again by hand if one is ever needed.
+that case cannot arise. A removed week is never fetched again: a week on or before the newest
+imported one is `already_imported` whether or not its zip is here. The site keeps the weekly
+back-catalogue (ADR-0017), so a zip can be fetched again by hand if one is ever needed.
 
 **A run that downloads nothing still runs retention.** The first run after `v1-e34-t11` therefore
 clears the backlog that earlier builds left: every weekly they imported and published. A **dry run**

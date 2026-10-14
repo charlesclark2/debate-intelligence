@@ -426,8 +426,9 @@ class InMemorySearchRepository:
 class InMemoryCaselistRepository:
     """Imported caselist and camp-file records in dictionaries, keyed the way the port is keyed.
 
-    The behaviour worth having a fake for is the cumulative-archive arithmetic: the same file
-    arrives in every weekly archive until a team takes it down, so `put_source` widens a stored
+    The behaviour worth having a fake for is the seen-range arithmetic: the same file arrives in
+    more than one archive, carried from one weekly window into the next and held by every complete
+    archive until a team takes it down, so `put_source` widens a stored
     document's first/last seen range rather than replacing it, and it does that correctly even
     when archives are imported out of order. A fake that simply overwrote would let an importer
     test pass while the real thing lost the range that `caselist status` and the E32 reports read.

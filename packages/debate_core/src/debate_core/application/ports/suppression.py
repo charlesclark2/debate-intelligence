@@ -1,10 +1,11 @@
 """The suppression list and the removal log: what a takedown leaves behind so it stays done.
 
 A removal under `docs/policies/caselist-data-use.md` deletes a source everywhere it is stored. That
-is the easy half. OpenCaselist's weekly archives are **cumulative**, so the file a team asked us to
-remove is in next Monday's archive too, and the Monday after; without something that remembers the
-request, the next import puts it straight back. The suppression list is that memory, and every path
-that can store a source — both importers, the publisher, `store sync` — consults it
+is the easy half. The file a team asked us to remove comes back: in every complete archive until
+the team takes it down on OpenCaselist, and in any later weekly window that carries it (the team
+edits or uploads it again, or another team discloses it). Without something that remembers the
+request, the next import that meets it puts it straight back. The suppression list is that memory,
+and every path that can store a source — both importers, the publisher, `store sync` — consults it
 (`v1-e30-t07-source-removal`).
 
 ## Two records, both append-only
@@ -39,12 +40,13 @@ removal of a file nobody else holds appends.
 
 One **disclosure**: these bytes, at this archive path of this caselist, are never recorded again —
 but the bytes themselves stay for the other team or camp file that also holds them. What a `--team`
-removal of a *shared* file appends without `--include-shared`; the cumulative archive still holds
-the requesting team's copy at the same path, and without this the next import would record it as
-their disclosure again. The path is stored only as :func:`disclosure_digest`, the SHA-256 of the
-caselist and path, never as text. Reversing that digest needs the archive in hand, exactly as
-reversing a file's own sha256 does, so it identifies no more than the sha256 values the list was
-always going to hold (Deviation recorded in the session report; spec ac4 amended).
+removal of a *shared* file appends without `--include-shared`; every complete archive until the
+team takes it down, and any weekly that carries it, still holds the requesting team's copy at the
+same path, and without this the next import would record it as their disclosure again. The path is
+stored only as :func:`disclosure_digest`, the SHA-256 of the caselist and path, never as text.
+Reversing that digest needs the archive in hand, exactly as reversing a file's own sha256 does, so it
+identifies no more than the sha256 values the list was always going to hold (Deviation recorded in
+the session report; spec ac4 amended).
 
 ## A third record: the paths a removal holds
 

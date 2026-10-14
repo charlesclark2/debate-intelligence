@@ -336,8 +336,14 @@ class TestStatus:
                 "checksum_mismatches", "suppressed", "mismatches", "suppressed_rows",
                 "suppressed_row_prefixes",
             }  # fmt: skip
-            assert (entry["mismatches"], entry["suppressed_rows"], entry["suppressed_row_prefixes"]) == ([], 0, [])
-        assert data["suppressed_objects"] == [{"caselist": SYNTHETIC_CASELIST, "objects": 0, "sha256_prefixes": []}]
+            assert (entry["mismatches"], entry["suppressed_rows"], entry["suppressed_row_prefixes"]) == (
+                [],
+                0,
+                [],
+            )
+        assert data["suppressed_objects"] == [
+            {"caselist": SYNTHETIC_CASELIST, "objects": 0, "sha256_prefixes": []}
+        ]
 
     def test_status_reads_the_bucket_of_its_own_environment(
         self, buckets: S3Client, imported: Path, monkeypatch: pytest.MonkeyPatch
@@ -554,7 +560,9 @@ class TestStatusKeepsTheSourceMismatchHint:
         )
         assert PERSON_HINT in error["hint"]
         assert "caselist publish --caselist" not in error["hint"]
-        assert reported(error, SYNTHETIC_CASELIST, "2026-09-15")["mismatches"] == [{"key": key, "kind": "source"}]
+        assert reported(error, SYNTHETIC_CASELIST, "2026-09-15")["mismatches"] == [
+            {"key": key, "kind": "source"}
+        ]
 
     def test_status_with_both_kinds_prints_both_hints(self, buckets: S3Client, imported: Path) -> None:
         publish()
@@ -605,7 +613,11 @@ class TestStatusShowsSuppressedRowsAndObjects:
             entry["snapshot"]: (entry["suppressed_rows"], entry["suppressed_row_prefixes"])
             for entry in error["details"]["snapshots"]
         }
-        assert counts == {"2026-09-01": (1, [removed[:12]]), "2026-09-08": (1, [removed[:12]]), "2026-09-15": (0, [])}
+        assert counts == {
+            "2026-09-01": (1, [removed[:12]]),
+            "2026-09-08": (1, [removed[:12]]),
+            "2026-09-15": (0, []),
+        }
         assert error["details"]["suppressed_objects"] == [
             {"caselist": SYNTHETIC_CASELIST, "objects": 1, "sha256_prefixes": [removed[:12]]}
         ]

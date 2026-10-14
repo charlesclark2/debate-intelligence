@@ -49,6 +49,17 @@ removal log, which it reads as it reads the suppression list: this machine's cop
 as one, with the scopes beside them. Only entries recorded in this environment are compared: in
 prod the command runs against the dev data directory, whose copy holds dev's removals.
 
+## A manifest mismatch and a source mismatch
+
+A checksum mismatch is one of two kinds (:class:`MismatchKind`, `v1-e30-t12`), told apart by
+comparing the key with that snapshot's own :attr:`SnapshotStatus.manifest_key`, never by a prefix:
+`manifests/` also holds the suppression records, and a complete archive's manifest is one level
+further down. A **source** is filed under the digest of its bytes, so other bytes under its key are
+never expected, and that needs a person. A **manifest** is not content-addressed: this machine
+rewrites one in place after a camp metadata re-import (`v1-e30-t08`) or a removal, and the bucket's
+copy differs until the next `caselist publish`, which uploads a manifest whose recorded digest
+differs. Both kinds are drift, as they always were.
+
 Checksums are the bucket's *recorded* digests, read with one `HeadObject` per listed source — the
 listing states none (`debate_core.application.ports.evidence_store`). Nothing is downloaded: a
 manifest's digest is compared, and its body is never read back from the bucket.
@@ -64,6 +75,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import Final
 
 from debate_core.application.caselist.evidence_listing import (
@@ -107,6 +119,7 @@ __all__ = [
     "REMOVAL_RESIDUE",
     "CaselistStatusReport",
     "CaselistStatusService",
+    "MismatchKind",
     "NoCaselistEvidence",
     "SnapshotStatus",
 ]
@@ -122,6 +135,15 @@ file the suppression list says was removed: `caselist status`'s `error.code` the
 code, like :data:`CASELIST_DRIFT`, and as deterministic: only a removal run again changes it."""
 
 _DEFAULT_CONCURRENCY: Final = 8
+
+
+class MismatchKind(StrEnum):
+    """What a checksum mismatch is on: see "A manifest mismatch and a source mismatch" above."""
+
+    MANIFEST = "manifest"
+    """The snapshot's own manifest. `caselist publish` uploads this machine's copy."""
+    SOURCE = "source"
+    """A source, filed by the digest of its bytes. A person finds out why the bucket holds others."""
 
 
 class NoCaselistEvidence(DomainError):
@@ -174,6 +196,30 @@ class SnapshotStatus:
             and not self.suppressed_rows
         )
 
+    def mismatch_kind(self, key: ObjectKey) -> MismatchKind:
+        """The kind of a key in :attr:`checksum_mismatches`: this snapshot's manifest, or a source."""
+        return MismatchKind.MANIFEST if key == self.manifest_key else MismatchKind.SOURCE
+
+    @property
+    def manifest_mismatched(self) -> bool:
+        """Whether the bucket's manifest differs from this machine's: a publish uploads it."""
+        return self.manifest_key in self.checksum_mismatches
+
+    @property
+    def source_mismatches(self) -> tuple[ObjectKey, ...]:
+        """The source keys the bucket holds with other bytes, or no recorded digest."""
+        return tuple(key for key in self.checksum_mismatches if key != self.manifest_key)
+
+    @property
+    def incomplete(self) -> bool:
+        """Whether something is missing: a manifest on either side, or a source on either side."""
+        return (
+            not self.local_manifest
+            or not self.manifest_present
+            or bool(self.missing_sources)
+            or bool(self.missing_local)
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class CaselistStatusReport:
@@ -205,6 +251,30 @@ class CaselistStatusReport:
     @property
     def drifted(self) -> tuple[SnapshotStatus, ...]:
         return tuple(snapshot for snapshot in self.snapshots if not snapshot.in_sync)
+
+    @property
+    def manifest_mismatched(self) -> tuple[SnapshotStatus, ...]:
+        """The snapshots whose manifest the bucket holds with other bytes."""
+        return tuple(snapshot for snapshot in self.snapshots if snapshot.manifest_mismatched)
+
+    @property
+    def source_mismatched(self) -> tuple[SnapshotStatus, ...]:
+        """The snapshots with a source the bucket holds with other bytes."""
+        return tuple(snapshot for snapshot in self.snapshots if snapshot.source_mismatches)
+
+    @property
+    def caselists(self) -> tuple[str, ...]:
+        """The caselists compared, in order: each holds at least one snapshot on one side."""
+        return tuple(dict.fromkeys(snapshot.caselist for snapshot in self.snapshots))
+
+    def suppressed_objects_of(self, caselist: str) -> tuple[ObjectKey, ...]:
+        """The :attr:`suppressed_objects` among `caselist`'s sources.
+
+        Per caselist, because that is how they are found: one listing of the caselist's source
+        prefix, which every snapshot of it shares. A source object belongs to no one snapshot.
+        """
+        prefix = remote_source_prefix(caselist)
+        return tuple(key for key in self.suppressed_objects if key.startswith(prefix))
 
     @property
     def residue_found(self) -> bool:

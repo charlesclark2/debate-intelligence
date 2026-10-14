@@ -522,6 +522,11 @@ some of these:
   `RM-…`, completed `<date> <time>` UTC.* The command exits 1. See
   [Versions older than a removal](#versions-older-than-a-removal) below. One line can carry both
   kinds, separated by a semicolon.
+- *SUPPRESSED SOURCE OBJECTS in `<caselist>`: N current object(s) (sha256 `<twelve characters>`,
+  …).* The bucket's current listing of the caselist's sources still holds a removed file
+  (`v1-e30-t12`). The command exits 1. Where the residue was checked the same file is in a REMOVAL
+  RESIDUE line too; where it was not, this line is the only one that shows it. The steps below
+  clear it.
 - *Removal residue NOT CHECKED for `<caselist>`.* The profile was refused the version listing. That
   is not a finding of none: see [Not checked](#not-checked) below.
 - *Manifest and aggregate versions NOT CHECKED against `RM-…`.* That removal was made by a build from

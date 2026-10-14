@@ -70,6 +70,7 @@ __all__ = [
     "OpenEvFile",
     "UnexpectedCaselistResponse",
     "UnsafeDownloadName",
+    "openev_id_of_inbox_name",
     "openev_inbox_name",
 ]
 
@@ -152,6 +153,20 @@ def openev_inbox_name(file: OpenEvFile) -> str:
     base = Path(file.filename or file.path.rsplit("/", 1)[-1]).name
     cleaned = _UNSAFE_INBOX_CHARACTERS.sub("_", base).strip("._") or "file"
     return f"openev-{file.openev_id}-{cleaned}"
+
+
+OPENEV_INBOX_PREFIX: Final = re.compile(r"^openev-(\d+)-")
+"""What :func:`openev_inbox_name` puts in front of a camp file's name, and which file it was."""
+
+
+def openev_id_of_inbox_name(name: str) -> int | None:
+    """The OpenEv id a file was downloaded as (`openev-<id>-…`), or `None` for any other name.
+
+    The other half of :func:`openev_inbox_name`. Read from an inbox file's name, and from the last
+    component of a release-manifest row's path, which the sync names the same way.
+    """
+    prefixed = OPENEV_INBOX_PREFIX.match(name)
+    return int(prefixed.group(1)) if prefixed is not None else None
 
 
 class DownloadedFile(DomainModel):

@@ -75,6 +75,7 @@ from typing import Final
 
 from debate_core.application.caselist.evidence_listing import LocalEvidence
 from debate_core.application.caselist.inbox_purge import CaselistInbox, InboxPurge, purge_inbox
+from debate_core.application.caselist.publish_plan import OPENEV
 from debate_core.application.caselist.publish_service import error_code_of
 from debate_core.application.caselist.removal_plan import (
     Disposition,
@@ -123,6 +124,7 @@ from debate_core.application.ports.suppression import (
     SuppressionEntry,
     SuppressionList,
     SuppressionState,
+    camp_path_scope,
     disclosure_digest,
 )
 from debate_core.domain import SHA256_HEX_PATTERN
@@ -654,7 +656,7 @@ class CaselistRemovalService:
             staged = Path(directory) / "version.jsonl"
             await access.versions.get_version_file(version, staged)
             lines = staged.read_text(encoding="utf-8").splitlines()
-        return any(_names_removed(plan, caselist, line) for line in lines if line.strip())
+        return any(_names_removed(plan, caselist, line, key=version.key) for line in lines if line.strip())
 
     async def _delete_local_files(self, plan: RemovalPlan, counts: _Counts) -> None:
         for planned in plan.objects_on(Side.LOCAL):
@@ -831,8 +833,12 @@ async def _copies_holding(
     return tuple(holding), tuple(missing)
 
 
-def _names_removed(plan: RemovalPlan, caselist: str, line: str) -> bool:
-    """Whether one manifest line names something this removal took out: what the sweep looks for."""
+def _names_removed(plan: RemovalPlan, caselist: str, line: str, *, key: str) -> bool:
+    """Whether one manifest line names something this removal took out: what the sweep looks for.
+
+    `key` is the manifest's: a camp release's rows are asked about at their camp path in the release
+    the key names (`v1-e30-t14`), as a caselist's are at their caselist path.
+    """
     try:
         row: object = json.loads(line)
     except json.JSONDecodeError:
@@ -848,9 +854,10 @@ def _names_removed(plan: RemovalPlan, caselist: str, line: str) -> bool:
     ):
         return True
     if isinstance(digest, str):
-        scope = None if caselist == "openev" else caselist
+        release = key.rsplit("/", 1)[-1].removesuffix(".jsonl")
+        scope = camp_path_scope(release) if caselist == OPENEV else caselist
         after: SuppressionState = plan.suppression_after
         return after.suppresses(
-            digest, disclosure=disclosure_digest(scope, path) if scope and isinstance(path, str) else None
+            digest, disclosure=disclosure_digest(scope, path) if isinstance(path, str) else None
         )
     return False

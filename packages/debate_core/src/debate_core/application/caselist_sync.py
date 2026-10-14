@@ -210,6 +210,17 @@ What the memory does not know, it cannot use. A camp file this machine never imp
 somewhere else, is fetched once; the importer refuses it, the memory records what it delivered, and
 the next run skips it. A file still in the inbox is read there instead, so it costs nothing.
 
+**A camp path withdrawn on its own counts as removed for that id** (`v1-e30-t14`). When a removal
+takes a later upload from its camp path while another release or a team keeps the bytes, the list
+stops those bytes at that release's row path only
+(:func:`~debate_core.application.ports.suppression.camp_path_disclosure`), and the row is gone. The
+id's bytes are asked about at the row path the import would give them, `openev-<id>-<file name>` in
+its release, so the id is `SKIPPED_AS_REMOVED` there and is not fetched every week for the importer
+to refuse. The same bytes listed under another id, or in another release, are another row path and
+are not stopped. A camp release that is a zip records its members at their own paths, which the
+delivery record does not keep, so this asks only about a single document, which is what a
+withdrawn later upload is.
+
 ## A camp file that changed upstream
 
 **A camp file changes upstream only under a new id.** OpenCaselist has no route that replaces a
@@ -453,7 +464,11 @@ from debate_core.application.caselist.openev_import_service import (
     OpenEvImportReport,
     OpenEvImportService,
 )
-from debate_core.application.caselist.openev_manifest import openev_manifest_key
+from debate_core.application.caselist.openev_manifest import (
+    OpenEvUpstream,
+    openev_manifest_key,
+    openev_release_name,
+)
 from debate_core.application.caselist.pipeline import STORED_CLASSIFICATIONS, Classification
 from debate_core.application.caselist.publish_plan import (
     InvalidPublishTarget,
@@ -490,14 +505,21 @@ from debate_core.application.errors import (
 )
 from debate_core.application.ports.archive import ArchiveEntry, ArchiveMember
 from debate_core.application.ports.caselist_source import (
+    OPENEV_INBOX_PREFIX,
     ArchiveKind,
     ArchiveListing,
     CaselistArchiveSource,
     DownloadedFile,
     OpenEvFile,
+    openev_id_of_inbox_name,
     openev_inbox_name,
 )
-from debate_core.application.ports.suppression import SuppressionAction, SuppressionList, SuppressionState
+from debate_core.application.ports.suppression import (
+    SuppressionAction,
+    SuppressionList,
+    SuppressionState,
+    camp_path_disclosure,
+)
 from debate_core.domain.caselist import CASELIST_SLUG_PATTERN, Acquisition, Event
 
 if TYPE_CHECKING:  # pragma: no cover - sync_runs imports this module, so its types are named only
@@ -1785,6 +1807,19 @@ class OpenEvDeliveries:
             return {}
         return deliveries
 
+    def upstream_paths(self) -> dict[int, str]:
+        """`{openev id: SHA-256 of its upstream path}` for every id this record knows the path of.
+
+        What a release-manifest row's `upstream_path_sha256` is (`v1-e30-t14`): the removal plan
+        reads it beside the rows, and `caselist reimport-openev-metadata` writes it onto the rows of
+        a release imported before the rows carried it.
+        """
+        return {
+            openev_id: delivery.path_sha256
+            for openev_id, delivery in self.read().items()
+            if delivery.path_sha256 is not None
+        }
+
     def remember_if_unknown(self, openev_id: int, delivery: OpenEvDelivery) -> bool:
         """Record `delivery` for `openev_id` unless the record already holds that id. True if it wrote.
 
@@ -2627,6 +2662,7 @@ class CaselistSyncService:
                         suppression,
                         in_inbox=(self._inbox / inbox_name, inbox_digest) if inbox_digest else None,
                         replaces=replaces,
+                        camp_path=camp_path_disclosure(openev_release_name(year, event), inbox_name),
                     )
                     # Otherwise in the inbox, its import failed or never ran, and this run imports
                     # it (v1-e34-t06 ac1); or it is new, or a revision, and this run fetches it.
@@ -2665,6 +2701,7 @@ class CaselistSyncService:
         *,
         in_inbox: tuple[Path, str] | None,
         replaces: frozenset[int] = frozenset(),
+        camp_path: str | None = None,
     ) -> tuple[SelectionDecision | None, str | None]:
         """Whether a camp file the manifest does not record was removed, and so must not be fetched.
 
@@ -2685,7 +2722,9 @@ class CaselistSyncService:
           for the copy too (`v1-e34-t14`): the copy can be there only because it was downloaded
           before this machine knew of the removal, and a held copy is left in the inbox untouched.
         * Every member this id delivered — by the record, or by its copy in the inbox — is
-          suppressed: `SKIPPED_AS_REMOVED`.
+          suppressed: `SKIPPED_AS_REMOVED`. Suppressed is the whole file, or the file at the row
+          path this id would be imported at (`camp_path`, `v1-e30-t14`), which a removal that
+          withdrew that camp path stops.
         * Every member is recorded in the release manifest or suppressed — a camp release some of
           whose members were removed: `ALREADY_IMPORTED`.
         * A remembered id whose bytes are neither: fetched, with a note. The usual cause is an
@@ -2715,10 +2754,14 @@ class CaselistSyncService:
                 if members <= release.stored_digests:
                     return SelectionDecision.ALREADY_IMPORTED, None
                 return (SelectionDecision.SUPPRESSION_LIST_UNREADABLE if from_record else None), None
-            if all(state.suppresses_source(one) for one in members):
+
+            def stopped(one: str) -> bool:
+                return state.suppresses(one, disclosure=camp_path)
+
+            if all(stopped(one) for one in members):
                 return SelectionDecision.SKIPPED_AS_REMOVED, None
             recorded = members & release.stored_digests
-            if recorded and all(one in recorded or state.suppresses_source(one) for one in members):
+            if recorded and all(one in recorded or stopped(one) for one in members):
                 return SelectionDecision.ALREADY_IMPORTED, None
             if not from_record:
                 return None, None
@@ -3214,6 +3257,7 @@ class CaselistSyncService:
             raise UnknownSyncEvent("openev")
         key = openev_manifest_key(selection.year, selection.event)
         path = self._manifest_path(key)
+        path_sha256 = _path_digest(selection.file.path) if selection.file is not None else None
         report = await self._openev_importer.import_release(
             self._openev_entries(downloaded),
             year=selection.year,
@@ -3221,6 +3265,8 @@ class CaselistSyncService:
             imported_on=self._clock().date(),
             archive_sha256=downloaded.sha256,
             recorded_manifest=read_manifest_lines(path),
+            # Every row of it carries which upstream file it was (v1-e30-t14): digests and an id.
+            upstream=OpenEvUpstream(openev_id=selection.openev_id, path_sha256=path_sha256),
         )
         write_manifest_lines(report.manifest_lines, path)
         # Which bytes this id delivered, so that a later run can ask the suppression list about
@@ -3229,7 +3275,7 @@ class CaselistSyncService:
             selection.openev_id,
             OpenEvDelivery(
                 download_sha256=downloaded.sha256,
-                path_sha256=_path_digest(selection.file.path) if selection.file is not None else None,
+                path_sha256=path_sha256,
                 member_sha256=frozenset(
                     entry.sha256
                     for entry in report.entries
@@ -4557,14 +4603,8 @@ def _path_digest(path: str) -> str:
     return hashlib.sha256(path.encode("utf-8")).hexdigest()
 
 
-_OPENEV_INBOX_PREFIX: Final = re.compile(r"^openev-(\d+)-")
+_OPENEV_INBOX_PREFIX: Final = OPENEV_INBOX_PREFIX
 """What the sync puts in front of a camp file's name (`openev_inbox_name`), and which file it was."""
-
-
-def openev_id_of_inbox_name(name: str) -> int | None:
-    """The OpenEv id an inbox file was downloaded as (`openev-<id>-…`), or `None` for any other name."""
-    prefixed = _OPENEV_INBOX_PREFIX.match(name)
-    return int(prefixed.group(1)) if prefixed is not None else None
 
 
 _WEEKLY_INBOX_NAME: Final = re.compile(

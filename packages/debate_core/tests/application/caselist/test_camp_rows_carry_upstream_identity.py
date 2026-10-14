@@ -17,11 +17,13 @@ Each world is built by the real pull, through the helpers of the `v1-e34-t07`, `
 tests, on the synthetic camp files of `tests/fixtures/openev/`. Every expected value is written out
 from what each test lists upstream:
 
-| OpenEv id | Upstream path | Row |
-|---|---|---|
-| 512 | `openev/2026/Tamarack/TSF-Estuary Solvency Advocate.docx` | `openev-512-TSF-Estuary_Solvency_Advocate.docx` |
-| 640 | the same path, uploaded again | `openev-640-TSF-Estuary_Solvency_Advocate.docx` |
-| 700 | `openev/2026/Quillfeather/TSF-Estuary Solvency Advocate.docx` | `openev-700-TSF-Estuary_Solvency_Advocate.docx` |
+| OpenEv id | Upstream path |
+|---|---|
+| 512 | `openev/2026/Tamarack/TSF-Estuary Solvency Advocate.docx` |
+| 640 | the same path, uploaded again |
+| 700 | `openev/2026/Quillfeather/TSF-Estuary Solvency Advocate.docx` |
+
+Each is a row of `2026-policy` named `openev-<id>-TSF-Estuary_Solvency_Advocate.docx`.
 """
 
 from __future__ import annotations
@@ -178,7 +180,9 @@ async def test_the_prod_plan_matches_the_later_upload_by_its_upstream_identity(
     assert plan.source(OTHER_CAMP_SHA256) is None
 
 
-async def test_the_prod_plan_matches_what_the_dev_plan_matches(world: RemovalWorld, prod: RemovalWorld) -> None:
+async def test_the_prod_plan_matches_what_the_dev_plan_matches(
+    world: RemovalWorld, prod: RemovalWorld
+) -> None:
     """The comparison the runbook's step 7 asked the operator to make by hand, made by the two plans."""
     await pulled_then_revised(world, (OTHER_CAMP, OTHER_CAMP_BODY))
     await published_to_prod_from_the_dev_data_directory(world, prod)
@@ -188,9 +192,11 @@ async def test_the_prod_plan_matches_what_the_dev_plan_matches(world: RemovalWor
     def matched(plan: RemovalPlan) -> list[tuple[str, tuple[int, ...], SamePathEvidence]]:
         return sorted((one.sha256, one.openev_ids, one.evidence) for one in plan.later_uploads)
 
-    assert matched(in_prod) == matched(in_dev) == [
-        (REVISED_SHA256, (640,), SamePathEvidence.UPSTREAM_PATH_DIGEST)
-    ]
+    assert (
+        matched(in_prod)
+        == matched(in_dev)
+        == [(REVISED_SHA256, (640,), SamePathEvidence.UPSTREAM_PATH_DIGEST)]
+    )
 
 
 async def test_executed_in_prod_it_leaves_the_other_camps_file_of_the_same_name(

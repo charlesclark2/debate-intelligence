@@ -1,4 +1,4 @@
-"""A removal withdraws one camp path, and the release that still holds the bytes keeps them (`v1-e30-t14` ac2).
+"""A removal withdraws one camp path, and the release still holding the bytes keeps them (`v1-e30-t14` ac2).
 
 A camp file's later upload at a removed camp path is in the plan (`v1-e30-t11`). When another holder
 has the same bytes, a caselist path is withdrawn: its rows and records go, and one disclosure-scoped
@@ -272,7 +272,10 @@ async def test_its_download_imported_again_is_refused_at_that_camp_path_and_impo
     )
 
     assert (here.count(Classification.SUPPRESSED), _member_paths(here.manifest_lines)) == (1, [])
-    assert (there.count(Classification.UNCHANGED), _member_paths(there.manifest_lines)) == (1, [NEXT_YEAR_ROW])
+    assert (there.count(Classification.UNCHANGED), _member_paths(there.manifest_lines)) == (
+        1,
+        [NEXT_YEAR_ROW],
+    )
 
 
 def _member_paths(lines: tuple[str, ...]) -> list[str]:
@@ -378,7 +381,9 @@ async def test_an_import_with_no_list_entry_still_imports_it_at_that_camp_path(w
     """The control: what the importer refuses above is refused because of the entry, not the bytes."""
     await another_release_holds_the_later_upload(world)
     importer = OpenEvImportService(
-        caselists=world.repository, blobs=FsSnapshotStore(world.data_dir), suppression=empty_suppression_list()
+        caselists=world.repository,
+        blobs=FsSnapshotStore(world.data_dir),
+        suppression=empty_suppression_list(),
     )
     body = REVISED_BODY
     report = await importer.import_release(

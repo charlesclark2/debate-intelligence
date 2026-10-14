@@ -14,7 +14,7 @@ writes is one an installed build reads, and the reverse.
 | `line_schemas_of_the_start_commit.json` | The source of tag `v0.1.0-dev.119` (`7efe8c6`), the commit on `dev` this task started from | The same, printed by that build's own code. Byte for byte the file above |
 | `written_by_the_installed_build/` | The source of `v0.1.0-dev.60` | `local/`: every file under `<data_dir>/suppression/`. `bucket/`: every object under `manifests/_suppression/` |
 | `written_by_the_start_commit/` | The source of `v0.1.0-dev.119` | The same |
-| `written_by_this_build/` | This task's source | The same. It holds two more files in each place: `path-holds.jsonl` beside the list (`v1-e30-t13`) and `removal-scopes.jsonl` beside the log (`v1-e30-t15`). The scopes hold the version ids the bucket gave each rewritten manifest, which moto picks at random, so the test compares that file with those ids masked and every other byte as written |
+| `written_by_this_build/` | This task's source | The same. It holds three more files in each place: `path-holds.jsonl` beside the list (`v1-e30-t13`), `removal-scopes.jsonl` beside the log (`v1-e30-t15`), and `withdrawals.jsonl` beside both, the caselist each withdrawn copy was taken from (`v1-e30-t16`). The scopes hold the version ids the bucket gave each rewritten manifest, which moto picks at random, so the test compares that file with those ids masked and every other byte as written |
 
 The history is `suppression_list_scenario.py`, which uses nothing a build from before `v1-e30-t11`
 lacks, so the same file runs against all three sources: a `--team` removal, a `--source` removal of
@@ -86,6 +86,31 @@ the whole list is refused, and an import against it fails with nothing stored
 from on 2026-10-14, over `written_by_this_build/` with its scope file. Its first line named the
 eight files placed, the scope file in both places among them, and the four after it were the
 lines above.
+
+`v1-e30-t16` ran it again, with two more checks, against two sources on 2026-10-14: its start
+commit (`686b9b1`, two commits after tag `v0.1.0-dev.129`) and `v0.1.0-dev.122`, the build the
+weekly agent is reinstalled from, which predates `v1-e30-t13` and `v1-e30-t15`. For each, the first
+check placed ten files, `withdrawals.jsonl` in both places among them, and printed the four lines
+above but for `knows of path holds`, which is `True` for the start commit. The second printed what
+it prints above.
+
+The third check is why a withdrawal's caselist is a file of its own and not part of
+`removal-scopes.jsonl`. It writes the last scope line the source wrote again with one more field,
+then instead a line of a new kind, and asks that source's log reader and its status for the scopes.
+The start commit printed:
+
+```text
+reader: the debate_core source at start-686b9b1
+a withdrawal's caselist in the scope record, as one more field of its line: UnreadableAppendOnlyRecord at line 3
+a withdrawal's caselist in the scope record, as a line of its own: UnreadableAppendOnlyRecord at line 3
+so `caselist status` with the residue check fails on every run until the line is gone
+```
+
+and `v0.1.0-dev.122` printed `removal scopes: this source reads no removal-scope record, so nothing
+added to one is read`. The fourth puts this build's files in place and runs the source's own
+`caselist status` with the residue check, its only reader of the removal log and the scopes. The
+start commit printed `status with the residue check: completed; caselists checked: openev,
+testcl26` and `removals not checked: 0`; `v0.1.0-dev.122` reads no removal log.
 
 ## When these may change
 

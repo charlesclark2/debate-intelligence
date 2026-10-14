@@ -222,3 +222,46 @@ async def test_this_source_refuses_the_removal_scopes_if_a_scope_line_carries_a_
             print(f"a withdrawal's caselist in the scope record, as {shape}: {error} at line {number}")
     with capsys.disabled():
         print("so `caselist status` with the residue check fails on every run until the line is gone")
+
+
+async def test_this_sources_status_with_the_residue_check_reads_the_log_and_scopes_this_build_writes(
+    removal_world: RemovalWorld, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The one reader of the removal log and its scopes in a build from `v1-e30-t15` on (`v1-e30-t16`).
+
+    `caselist status` reads both copies of the log and of the scopes beside it. This puts this
+    build's files in place, the withdrawal record among them, and asks this source's status for its
+    residue check over them. A source from before `v1-e30-t15` reads neither.
+    """
+    assert os.environ.get("CHECK_AN_OLDER_BUILD_READS") == "this-builds-files", (
+        "run by its path against an older build's source; see stored_suppression_lists/README.md"
+    )
+    import inspect
+
+    from debate_core.integrations.s3 import S3EvidenceVersionStore
+
+    with capsys.disabled():
+        print()
+        print(f"reader: the debate_core source at {_source()}")
+    if "removal_log" not in inspect.signature(CaselistStatusService).parameters:
+        with capsys.disabled():
+            print("status: this source reads no removal log, so nothing beside one is read")
+        return
+    world = removal_world
+    await a_team_removal_a_source_removal_and_an_unsuppress(world)
+    put_this_builds_files_where_the_records_are_kept(world)
+    status = CaselistStatusService(
+        local=world.local,
+        remote=world.bucket,
+        suppression=world.suppression(),
+        versions=S3EvidenceVersionStore(bucket=world.bucket_name, client=world.client),
+        removal_log=world.removal_log(),
+        environment="dev",
+    )
+
+    report = await status.status(residue=True)
+
+    with capsys.disabled():
+        checked = [one.caselist for one in report.residue if one.checked]
+        print(f"status with the residue check: completed; caselists checked: {', '.join(checked)}")
+        print(f"removals not checked: {len(report.removals_not_checked)}")

@@ -11,6 +11,12 @@ pytest-socket never sees, ``network_guard/sitecustomize.py`` refuses every outbo
 it, and :func:`installed_cli` fails the check afterwards if the log holds anything, even when the
 command caught the refusal and carried on.
 
+**A check that declares a stand-in may reach it, and nothing else** (v1-e01-t21). The stand-in
+fixtures (:data:`~tests.smoke.stand_ins.STAND_IN_FIXTURES`) start a server on 127.0.0.1 and an
+ephemeral port, tell :func:`installed_cli` its address, and stop it afterwards. The build's guard
+then lets it connect to exactly those addresses, and this process is opened to 127.0.0.1 alone for
+the check. Loopback is refused, and logged, for every check that declares none.
+
 The markers registered here: ``in_process`` for checks that drive the CLI inside pytest's own
 process (they run in ``ci`` and are not part of validate-dev's recorded tier), and ``canary`` for
 validate-dev's opt-in live canary tier. README.md in this directory explains both.
@@ -19,8 +25,11 @@ validate-dev's opt-in live canary tier. README.md in this directory explains bot
 from __future__ import annotations
 
 import os
+import socket
 from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
+from typing import Any
 
 import pytest
 import pytest_socket
@@ -33,6 +42,10 @@ from tests.smoke.installed_build import (
     assert_no_network_attempts,
     resolve_build,
 )
+from tests.smoke.stand_ins import STAND_IN_FIXTURES
+from tests.smoke.stand_ins.opencaselist import OpenCaselistStandIn, StandInCertificate, make_certificate
+from tests.smoke.stand_ins.process import LOOPBACK
+from tests.smoke.stand_ins.s3 import S3StandIn
 
 
 def pytest_configure(config: pytest.Config) -> None:
@@ -88,14 +101,79 @@ def installed_cli(
         assert_no_network_attempts(cli.network_log)
 
 
+@pytest.fixture
+def s3_stand_in(installed_cli: InstalledCli, tmp_path: Path) -> Iterator[S3StandIn]:
+    """moto in server mode, which the build reaches through `storage.s3.endpoint_url` (v1-e01-t21)."""
+    stand_in = S3StandIn.start(log=tmp_path / "stand-ins" / "s3.log")
+    try:
+        for host, port in stand_in.addresses:
+            installed_cli.allow_stand_in(host, port)
+        installed_cli.configure(DEBATE_STORAGE__S3__ENDPOINT_URL=stand_in.endpoint)
+        yield stand_in
+    finally:
+        stand_in.stop()
+
+
+@pytest.fixture(scope="session")
+def stand_in_certificate(tmp_path_factory: pytest.TempPathFactory) -> StandInCertificate:
+    """The run's CA and the leaf the OpenCaselist stand-in serves with; made once per worker."""
+    return make_certificate(tmp_path_factory.mktemp("stand-in-certificate"))
+
+
+@pytest.fixture
+def opencaselist_stand_in(
+    installed_cli: InstalledCli, tmp_path: Path, stand_in_certificate: StandInCertificate
+) -> Iterator[OpenCaselistStandIn]:
+    """The OpenCaselist API and its file host, over https, reached through `caselist.api_base_url`."""
+    stand_in = OpenCaselistStandIn.start(tmp_path / "stand-ins" / "opencaselist", stand_in_certificate)
+    try:
+        for host, port in stand_in.addresses:
+            installed_cli.allow_stand_in(host, port)
+        installed_cli.configure(
+            DEBATE_CASELIST__API_BASE_URL=stand_in.api_base_url,
+            SSL_CERT_FILE=str(stand_in_certificate.authority),
+        )
+        yield stand_in
+    finally:
+        stand_in.stop()
+
+
 @pytest.fixture(autouse=True)
 def _sockets_blocked_unless_live(request: pytest.FixtureRequest) -> Iterator[None]:
-    """pytest's own process gets no network either, whatever the command line said (ac4)."""
+    """pytest's own process gets no network either, whatever the command line said (ac4).
+
+    A check that declares a stand-in gets 127.0.0.1 and nothing else (v1-e01-t21).
+    """
     if request.node.get_closest_marker("live") is not None:
         yield
+        return
+    if STAND_IN_FIXTURES & set(request.fixturenames):
+        with _loopback_only():
+            yield
         return
     pytest_socket.disable_socket(allow_unix_socket=True)
     try:
         yield
     finally:
         pytest_socket.enable_socket()
+
+
+@contextmanager
+def _loopback_only() -> Iterator[None]:
+    """Connections to 127.0.0.1 only, and no host lookup but of 127.0.0.1 and localhost."""
+    pytest_socket.enable_socket()
+    connect, getaddrinfo = socket.socket.connect, socket.getaddrinfo
+
+    def loopback_lookups(host: Any, *arguments: Any, **keywords: Any) -> Any:
+        name = host.decode("ascii", "replace") if isinstance(host, bytes) else host
+        if name not in {LOOPBACK, "localhost"}:
+            raise pytest_socket.SocketBlockedError(f"a stand-in check looked up {host!r}")
+        return getaddrinfo(host, *arguments, **keywords)
+
+    pytest_socket.socket_allow_hosts([LOOPBACK], allow_unix_socket=True)
+    socket.getaddrinfo = loopback_lookups
+    try:
+        yield
+    finally:
+        socket.socket.connect = connect  # type: ignore[method-assign]
+        socket.getaddrinfo = getaddrinfo

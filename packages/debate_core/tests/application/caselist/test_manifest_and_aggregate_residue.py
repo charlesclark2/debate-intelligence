@@ -401,6 +401,46 @@ class TestOlderVersionsAreReported:
 
         assert residue.older_versions == (OlderVersions(role="failures.jsonl", versions=2),)
 
+    async def test_a_delete_marker_is_not_a_version_and_what_it_hides_is(self, removed: RemovalWorld) -> None:
+        """An old index, deleted without a version id before the removal: a marker over one version.
+        The marker holds nothing; the version under it does."""
+        world = removed
+        key = aggregate_key(SYNTHETIC_CASELIST, PARSER_VERSIONS[1], "index.jsonl")
+        put(world, key, b"old\n", written=LONG_BEFORE - timedelta(hours=1))
+        marker = str(world.client.delete_object(Bucket=world.bucket_name, Key=key)["VersionId"])
+        backdate(world, key, marker, LONG_BEFORE)
+
+        residue = of(await status(world), SYNTHETIC_CASELIST)
+
+        assert residue.older_versions == (OlderVersions(role="index.jsonl", versions=1),)
+
+    async def test_the_latest_removal_that_touched_the_caselist_is_the_one_compared_with(
+        self, removed: RemovalWorld, tmp_path: Path
+    ) -> None:
+        """Two requests, three days and one day before the fixture's: an index between them is older
+        than the later one, and the report names it."""
+        world = removed
+        put(
+            world,
+            aggregate_key(SYNTHETIC_CASELIST, PARSER_VERSIONS[0], "index.jsonl"),
+            b"x\n",
+            written=COMPLETED - timedelta(days=2),
+        )
+        earlier = log_entry(request_id="RM-2026-05", recorded_at=COMPLETED - timedelta(days=3))
+        later = log_entry(request_id="RM-2026-06", recorded_at=COMPLETED - timedelta(days=1))
+        log = await log_in(
+            tmp_path,
+            [later, earlier],
+            [scope_of(later, SYNTHETIC_CASELIST), scope_of(earlier, SYNTHETIC_CASELIST)],
+        )
+
+        residue = of(await status(world, removal_log=log), SYNTHETIC_CASELIST)
+
+        assert residue.older_than == RemovalCompletion(
+            request_id="RM-2026-06", completed_at=COMPLETED - timedelta(days=1)
+        )
+        assert residue.older_versions == (OlderVersions(role="index.jsonl", versions=1),)
+
 
 # ------------------------------------------------------------------------------------------------
 # ac3: what is not, and what cannot be checked
@@ -456,6 +496,27 @@ class TestWhatIsNotReported:
 
         assert residue.checked
         assert residue.older_versions == ()
+
+    async def test_a_parsed_file_of_a_source_is_no_aggregate(self, removed: RemovalWorld) -> None:
+        """A file nobody removed, parsed before the removal: its per-source file is not an aggregate,
+        and its digest is suppressed by nothing."""
+        world = removed
+        kept = digest_of_body("harbor-aff")
+        per_source = (
+            f"parsed/{SYNTHETIC_CASELIST}/{PARSER_VERSIONS[0]}/sha256/{kept[:2]}/{kept[2:4]}/{kept}.jsonl"
+        )
+        put(world, per_source, b"cards\n", written=LONG_BEFORE)
+        put(
+            world,
+            f"parsed/{SYNTHETIC_CASELIST}/{PARSER_VERSIONS[0]}/index.jsonl.tmp",
+            b"x\n",
+            written=LONG_BEFORE,
+        )
+
+        report = await status(world)
+
+        assert of(report, SYNTHETIC_CASELIST).older_versions == ()
+        assert not report.residue_found
 
     async def test_the_suppression_records_old_versions_are_never_residue(
         self, removed: RemovalWorld

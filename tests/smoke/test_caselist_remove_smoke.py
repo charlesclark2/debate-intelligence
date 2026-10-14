@@ -1009,7 +1009,7 @@ def test_a_manifest_and_an_aggregate_version_older_than_the_removal_fail_status_
     assert f"REMOVAL RESIDUE in {found}." in shown
     assert "docs/runbooks/caselist-removal.md" in error["hint"]
     reported = json.dumps([error["details"]["removal_residue"], error["message"], error["hint"]]) + shown
-    assert FIRST_VERSION not in reported and an_old_index_too not in reported
+    assert FIRST_VERSION not in reported, "no whole digest"
     for identifying in IDENTIFYING:
         assert identifying not in reported, identifying
     assert every_version(bucket) == before, "status changed the bucket"

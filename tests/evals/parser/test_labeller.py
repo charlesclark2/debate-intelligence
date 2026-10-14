@@ -30,6 +30,7 @@ from tests.evals.parser.labeller import (
     written_numbers,
 )
 from tests.evals.parser.labels_schema import (
+    LABELS_DIRECTORY,
     REPOSITORY_ROOT,
     CardLabel,
     Category,
@@ -899,3 +900,35 @@ def test_the_server_binds_loopback_at_a_free_port_and_prints_only_its_address(
     assert bound == [("127.0.0.1", 0)]
     assert capsys.readouterr().out == "http://127.0.0.1:50123/\n"
     assert app.port == 50123
+
+
+# --------------------------------------------------------------------------------------------
+# ac7: the labeling guide's steps
+# --------------------------------------------------------------------------------------------
+
+
+def _guide_blocks(start: str, end: str) -> list[str]:
+    guide = (LABELS_DIRECTORY / "README.md").read_text(encoding="utf-8")
+    return guide[guide.index(start) : guide.index(end)].split("```bash\n")[1:]
+
+
+def test_the_guide_regenerates_then_labels_in_the_page_and_keeps_the_spreadsheet_as_the_fallback() -> None:
+    regenerate = _guide_blocks("### 2. Regenerate the pre-labels", "### 3. Label the PR subset first")[0]
+    assert regenerate.index("worksheet --all --remove-untouched") < regenerate.index("prelabel --all")
+    assert regenerate.index("prelabel --all") < regenerate.index("worksheet --all --out-dir")
+
+    start, finish = _guide_blocks("### 4. Each file, in the labeller", "### 5. One PR-subset file blind")
+    assert 'label "${f}" --out-dir ~/parser-eval-worksheets' in start and "--blind" not in start
+    assert finish.index("prelabel_docx.py check") < finish.index("prelabel_docx.py import")
+    assert "rm ~/parser-eval-worksheets/${f}.csv ~/parser-eval-worksheets/${f}.progress.json &&" in finish
+    assert "--labeled-blind" not in finish
+
+    blind_start, blind_finish = _guide_blocks("### 5. One PR-subset file blind", "### 6. The finish")
+    assert "--blind" in blind_start
+    assert "--corrected-by coach --labeled-blind &&" in blind_finish
+
+    fallback = _guide_blocks("### The fallback: a spreadsheet", "## What you label")
+    assert any("check" in block and "--repair" in block for block in fallback)
+    finish_step = _guide_blocks("### 6. The finish", "### The fallback: a spreadsheet")
+    assert any("mark-reviewed" in block for block in finish_step)
+    assert any("--write-baseline" in block for block in finish_step)

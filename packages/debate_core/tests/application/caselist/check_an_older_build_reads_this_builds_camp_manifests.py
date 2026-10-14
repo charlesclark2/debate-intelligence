@@ -20,6 +20,7 @@ them or kept them:
 
 from __future__ import annotations
 
+import inspect
 import json
 import os
 from pathlib import Path
@@ -35,9 +36,10 @@ from debate_core.application.caselist.publish_service import CaselistPublishServ
 from debate_core.application.caselist.removal_plan import SourceSelector
 from debate_core.application.caselist.status_service import CaselistStatusService
 from debate_core.application.caselist.suppression import load_suppression_state
-from debate_core.application.ports.suppression import ReasonCode
+from debate_core.application.ports.suppression import ReasonCode, UnreadableAppendOnlyRecord
 from debate_core.domain.caselist import Event
 from debate_core.integrations.local import FsSnapshotStore
+from debate_core.integrations.s3 import S3EvidenceVersionStore
 
 from .camp_manifest_scenario import (
     MANIFEST_NAME,
@@ -50,6 +52,7 @@ from .camp_manifest_scenario import (
     REVISION,
     ROWS,
     STORED,
+    WITHDRAWAL_RECORDS,
     release_lines,
     release_manifest,
     two_pulls,
@@ -201,6 +204,95 @@ async def test_this_source_reads_a_camp_manifest_as_this_build_writes_it(
     published = await publisher.execute(await publisher.plan("openev", "2026-policy"))
     status = await status_in_sync().status("openev")
     lines.append(f"publish again: succeeded {published.succeeded}; status in sync: {status.in_sync}")
+
+    with capsys.disabled():
+        print()
+        for line in lines:
+            print(line)
+
+
+async def test_this_source_reads_the_records_a_camp_path_withdrawal_leaves(
+    removal_world: RemovalWorld, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A camp path's entry in the list, and an `openev` line in the withdrawal record (`v1-e30-t14`).
+
+    This source's history, then this build's records of 640's camp path withdrawn put where the
+    records are kept, on this machine and in the bucket. Then what the agent and the operator run
+    with them: the list read, the next pull, the same removal run with this source (which finishes
+    512 and takes 640 down whole, since this source has no other release holding it), a publish and
+    the status, with the residue check where this source has one. Last, the withdrawal record read
+    by this source's own model, which no command of it does.
+    """
+    assert os.environ.get("CHECK_AN_OLDER_BUILD_READS") == "this-builds-camp-manifests", (
+        "run by its path against an older build's source; see stored_camp_manifests/README.md"
+    )
+    world = removal_world
+    source = await two_pulls(world)
+    placed: list[str] = []
+    for name in WITHDRAWAL_RECORDS:
+        body = (STORED / "written_by_this_build" / "suppression" / name).read_bytes()
+        (world.data_dir / "suppression").mkdir(parents=True, exist_ok=True)
+        (world.data_dir / "suppression" / name).write_bytes(body)
+        world.client.put_object(Bucket=world.bucket_name, Key=f"manifests/_suppression/{name}", Body=body)
+        placed.append(name)
+    lines = [f"reader: the debate_core source at {_source()}", f"placed, in both places: {', '.join(placed)}"]
+
+    state = await load_suppression_state(world.suppression())
+    lines.append(f"list read: {len(state.sources)} whole file(s) and {len(state.disclosures)} disclosure(s)")
+
+    summary = await pull(world, source)
+    lines.append(
+        "next pull: "
+        + ", ".join(f"openev-{one} {decision.value}" for one, decision in sorted(decisions(summary).items()))
+    )
+
+    service = world.service()
+    plan = await service.plan(
+        SourceSelector(ESTUARY_SHA256), request_id=REQUEST, reason=ReasonCode.REQUESTED_BY_CAMP
+    )
+    report = await service.execute(plan)
+    lines.append(
+        f"the same removal: {report.log_entry.outcome.value}; removed "
+        f"{len(report.log_entry.removed_sha256)} file(s), withdrew {len(report.log_entry.withdrawn_sha256)}"
+    )
+    publisher = CaselistPublishService(
+        local=world.local, remote=world.bucket, suppression=world.suppression()
+    )
+    published = await publisher.execute(await publisher.plan("openev", "2026-policy"))
+    status = CaselistStatusService(local=world.local, remote=world.bucket, suppression=world.suppression())
+    lines.append(
+        f"publish: succeeded {published.succeeded}; status in sync: {(await status.status('openev')).in_sync}"
+    )
+    if "removal_log" in inspect.signature(CaselistStatusService.__init__).parameters:
+        residue = CaselistStatusService(
+            local=world.local,
+            remote=world.bucket,
+            suppression=world.suppression(),
+            removal_log=world.removal_log(),  # type: ignore[call-arg]
+            environment="dev",  # type: ignore[call-arg]
+            versions=S3EvidenceVersionStore(bucket=world.bucket_name, client=world.client),  # type: ignore[call-arg]
+        )
+        checked = await residue.status("openev", residue=True)
+        lines.append(f"status with the residue check: completed; in sync {checked.in_sync}")
+    else:
+        lines.append("status with the residue check: this source reads no removal log")
+    if hasattr(world.suppression(), "withdrawals"):
+        try:
+            withdrawals = await world.suppression().withdrawals()  # type: ignore[attr-defined]
+        except UnreadableAppendOnlyRecord as refused:
+            lines.append(
+                f"the withdrawal record read by this source's own model: {type(refused).__name__} at line "
+                f"{refused.line_number}; no command of this source reads it"
+            )
+        else:
+            lines.append(f"the withdrawal record read by this source's own model: {len(withdrawals)} line(s)")
+    else:
+        lines.append("the withdrawal record: this source has no reader of it")
+    left = (world.data_dir / "suppression" / "withdrawals.jsonl").read_bytes()
+    lines.append(
+        "the withdrawal record afterwards: this build's line kept "
+        f"{(STORED / 'written_by_this_build' / 'suppression' / 'withdrawals.jsonl').read_bytes() in left}"
+    )
 
     with capsys.disabled():
         print()

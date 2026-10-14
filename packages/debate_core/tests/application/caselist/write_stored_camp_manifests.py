@@ -12,7 +12,14 @@ import os
 
 import pytest
 
-from .camp_manifest_scenario import MANIFEST_NAME, STORED, release_manifest, two_pulls
+from .camp_manifest_scenario import (
+    MANIFEST_NAME,
+    STORED,
+    WITHDRAWAL_RECORDS,
+    a_camp_path_withdrawn,
+    release_manifest,
+    two_pulls,
+)
 from .conftest import RemovalWorld
 
 pytestmark = pytest.mark.anyio
@@ -33,3 +40,18 @@ async def test_write_the_release_manifest_this_sources_pull_writes(removal_world
     target = STORED / WRITTEN_BY[build] / MANIFEST_NAME
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_bytes(release_manifest(removal_world).read_bytes())
+
+
+async def test_write_the_records_a_camp_path_withdrawal_leaves(removal_world: RemovalWorld) -> None:
+    """This build only: the suppression list and withdrawal record after 640's camp path is withdrawn."""
+    build = os.environ.get("WRITE_STORED_CAMP_MANIFESTS", "")
+    assert build in WRITTEN_BY, "this rewrites the stored files; see stored_camp_manifests/README.md"
+    if build != "this-build":
+        return  # an older build cannot withdraw a camp path
+
+    await a_camp_path_withdrawn(removal_world, await two_pulls(removal_world))
+
+    for name in WITHDRAWAL_RECORDS:
+        target = STORED / WRITTEN_BY[build] / "suppression" / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes((removal_world.data_dir / "suppression" / name).read_bytes())

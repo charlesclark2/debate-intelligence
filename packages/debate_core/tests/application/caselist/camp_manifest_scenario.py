@@ -17,12 +17,14 @@ from tests.fixtures.openev.build_synthetic_openev import DOCUMENT_BODIES
 
 from debate_core.application.caselist.manifest import read_manifest_lines
 from debate_core.application.caselist.openev_manifest import openev_manifest_key
+from debate_core.application.caselist.removal_plan import SourceSelector
 from debate_core.application.ports.caselist_source import OpenEvFile
+from debate_core.application.ports.suppression import ReasonCode
 from debate_core.domain.caselist import Event
 from debate_core.integrations.local import FsEvidenceObjectStore
 
-from .conftest import RemovalWorld
-from .test_sync_skips_suppressed_downloads import ESTUARY, YEAR, FakeOpenEvSource, pull
+from .conftest import REQUEST, RemovalWorld
+from .test_sync_skips_suppressed_downloads import ESTUARY, ESTUARY_SHA256, YEAR, FakeOpenEvSource, pull
 
 RELEASE_KEY = openev_manifest_key(YEAR, Event.POLICY)
 STORED = Path(__file__).parent / "stored_camp_manifests"
@@ -45,6 +47,15 @@ ESTUARY_BODY = DOCUMENT_BODIES["estuary-solvency"]
 REVISED_BODY = DOCUMENT_BODIES["canal-counterplan-revised"]
 OTHER_CAMP_BODY = DOCUMENT_BODIES["harbor-tariffs-aff"]
 NEXT_WEEK_BODY = DOCUMENT_BODIES["harbor-tariffs-neg"]
+
+#: 640's bytes, released the next year by another camp: what keeps them when 640's camp path goes.
+NEXT_YEAR = OpenEvFile(
+    openev_id=800,
+    path="openev/2027/Juniper/JDI-Canal Counterplan.docx",
+    filename="JDI-Canal Counterplan.docx",
+    year=2027,
+    tags=("policy",),
+)
 
 ROWS = (
     "openev-512-TSF-Estuary_Solvency_Advocate.docx",
@@ -70,3 +81,23 @@ def release_manifest(world: RemovalWorld) -> Path:
 
 def release_lines(world: RemovalWorld) -> list[str]:
     return read_manifest_lines(release_manifest(world))
+
+
+#: The takedown's records a camp path's withdrawal leaves, as `stored_camp_manifests/` keeps them.
+WITHDRAWAL_RECORDS = ("suppression-list.jsonl", "withdrawals.jsonl")
+
+
+async def a_camp_path_withdrawn(world: RemovalWorld, source: FakeOpenEvSource) -> None:
+    """After :func:`two_pulls`: 800 pulled into 2027-policy with 640's bytes, then 512 removed.
+
+    640 is 512's later upload, and 800 keeps its bytes in another release, so 640 is withdrawn from
+    its camp path in 2026-policy. Uses what `v1-e30-t14` added: run with this build only.
+    """
+    source.files = [*source.files, (NEXT_YEAR, REVISED_BODY)]
+    await pull(world, source)
+    service = world.service()
+    plan = await service.plan(
+        SourceSelector(ESTUARY_SHA256), request_id=REQUEST, reason=ReasonCode.REQUESTED_BY_CAMP
+    )
+    assert [one.caselist for one in plan.withdrawals] == ["openev"]
+    assert (await service.execute(plan)).completed

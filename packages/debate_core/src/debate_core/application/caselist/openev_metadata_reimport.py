@@ -158,7 +158,8 @@ class OpenEvMetadataReimport:
     """Digests the manifest names that the local blob store does not hold. Reported, not fetched."""
 
     identities_added: int = 0
-    """Member rows whose upstream identity (`openev_id`, `upstream_path_sha256`) this changed."""
+    """Member rows whose upstream identity (`openev_id`, `upstream_path_sha256`) this wrote or changed:
+    every row of a release imported before `v1-e30-t14`, `null` where nothing here knows it."""
 
     @property
     def release(self) -> str:
@@ -255,7 +256,7 @@ def rederive_release(
     for path in sorted(recorded.rows):
         row = dict(recorded.rows[path])
         identity = _upstream_identity(path, row, upstream_paths or {})
-        identities_added += any(row.get(name) != value for name, value in identity.items())
+        identities_added += any(name not in row or row[name] != value for name, value in identity.items())
         row.update(identity)
         if row.get("classification") in _STORED:
             parsed = parse_camp_path(path, aliases=aliases)

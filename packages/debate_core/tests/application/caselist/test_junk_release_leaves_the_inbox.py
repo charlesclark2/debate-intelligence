@@ -42,6 +42,8 @@ from debate_core.application.ports.caselist_source import OpenEvFile, openev_inb
 from debate_core.application.sync_runs import SYNC_RUN_DETAILS_FILENAME, SYNC_RUN_DETAILS_KEY_PREFIX
 from debate_core.integrations.s3 import S3EvidenceObjectStore
 
+from . import test_inbox_retention as inbox_retention
+from .run_record_scenarios import SECOND_RUN
 from .test_inbox_retention import (
     CASELIST,
     RELEASE,
@@ -189,13 +191,14 @@ def assert_names_nothing_from_the_release(texts: dict[str, str]) -> None:
 
 
 async def test_a_junk_only_release_leaves_on_the_run_that_imports_it_and_is_never_fetched_or_imported_again(
-    installation: Installation, logged: pytest.LogCaptureFixture
+    installation: Installation, logged: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The run fetches the release and imports it, which keeps nothing and writes its delivery
     entry with no member. Retention then removes it, as `openev-960 sha256 <prefix>`, with the
     reason `junk_only`, in the summary and in the run record. The next run's own stages show it
     handled: the select stage calls it already imported, the download stage fetches nothing, the
-    import stage imports nothing, and the inbox stays empty."""
+    import stage imports nothing, and the inbox stays empty. It runs a week later, as the next
+    scheduled run would, so that the two runs have their own run ids."""
     source = FakeSource(installation.archives, openev=[(JUNK_ONLY, JUNK_ONLY_BODY)])
 
     first = await pull(installation, source)
@@ -222,6 +225,7 @@ async def test_a_junk_only_release_leaves_on_the_run_that_imports_it_and_is_neve
     assert first.pulled.details.stage("retention") is None, "a completed retention stage has no details"
     assert_names_nothing_from_the_release(texts)
 
+    monkeypatch.setattr(inbox_retention, "RUN_CLOCK", SECOND_RUN)
     again = await pull(installation, source)
 
     summary = again.pulled.summary

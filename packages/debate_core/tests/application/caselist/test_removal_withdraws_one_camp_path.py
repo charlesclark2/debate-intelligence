@@ -41,6 +41,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import pytest
+from tests.fixtures.openev.build_synthetic_openev import DOCUMENT_BODIES
 
 from debate_core.application.caselist.manifest import read_manifest_lines, write_manifest_lines
 from debate_core.application.caselist.openev_import_service import OpenEvImportService
@@ -54,6 +55,7 @@ from debate_core.application.caselist.removal_plan import (
     SourceSelector,
 )
 from debate_core.application.caselist.removal_service import RemovalIncomplete
+from debate_core.application.caselist.status_service import CaselistStatusService
 from debate_core.application.caselist.suppression import caselist_withdrawn_from, caselists_withdrawn_by
 from debate_core.application.caselist_sync import OPENEV_DELIVERIES_FILENAME, SelectionDecision
 from debate_core.application.ports.archive import ArchiveMember
@@ -430,6 +432,12 @@ async def test_a_row_an_older_build_records_again_is_taken_by_running_the_same_r
     )
     assert release_rows(world) == [{NEW_ROW: REVISED_SHA256}] * 2
     assert await camp_releases_of(world, REVISED_SHA256) == [(2026, Event.POLICY), (2027, Event.POLICY)]
+    status = await CaselistStatusService(
+        local=world.local, remote=world.bucket, suppression=world.suppression()
+    ).status("openev")
+    assert {one.snapshot: one.suppressed_rows for one in status.snapshots}[RELEASE] == (REVISED_SHA256,), (
+        "status names the row at the withdrawn camp path, and the publisher refuses it"
+    )
 
     again = await plan_removal(world)
 
@@ -465,3 +473,138 @@ async def test_its_download_is_taken_out_of_the_inbox_and_the_record_of_what_it_
     assert sorted(path.name for path in inbox.iterdir() if path.is_file()) == [NEXT_YEAR_ROW]
     deliveries = json.loads((world.data_dir / OPENEV_DELIVERIES_FILENAME).read_text())["deliveries"]
     assert deliveries["640"]["member_sha256"] == [REVISED_SHA256]
+
+
+# ------------------------------------------------------------------------------------------------
+# What the mutation run called for
+# ------------------------------------------------------------------------------------------------
+
+#: 640's bytes at another camp's path in the same release: the release keeps them.
+SAME_RELEASE = OpenEvFile(
+    openev_id=701,
+    path="openev/2026/Quillfeather/QDI-Canal Counterplan.docx",
+    filename="QDI-Canal Counterplan.docx",
+    year=2026,
+    tags=("policy",),
+)
+SAME_RELEASE_ROW = "openev-701-QDI-Canal_Counterplan.docx"
+
+
+async def test_a_camp_path_withdrawn_where_another_row_of_its_release_holds_the_file_keeps_record_and_copy(
+    world: RemovalWorld,
+) -> None:
+    """One camp-file record and one `raw/openev/2026/` copy serve both rows: the other row keeps them."""
+    await pulled_then_revised(world, (SAME_RELEASE, REVISED_BODY))
+    assert (
+        release_rows(world)
+        == [
+            {
+                "openev-512-TSF-Estuary_Solvency_Advocate.docx": ESTUARY_SHA256,
+                NEW_ROW: REVISED_SHA256,
+                SAME_RELEASE_ROW: REVISED_SHA256,
+            }
+        ]
+        * 2
+    )
+
+    plan = await remove(world)
+
+    withdrawn = plan.source(REVISED_SHA256)
+    assert withdrawn is not None and (withdrawn.disposition, withdrawn.camp_files) == (
+        Disposition.WITHDRAW,
+        (),
+    )
+    assert release_rows(world) == [{SAME_RELEASE_ROW: REVISED_SHA256}] * 2
+    assert await camp_releases_of(world, REVISED_SHA256) == [(2026, Event.POLICY)]
+    assert len(versions_of(world, openev_raw_key(2026, REVISED_SHA256))) == 1
+    for entries in suppression_lines(world):
+        assert {(entry.sha256, entry.disclosure) for entry in entries} == {
+            (ESTUARY_SHA256, None),
+            (REVISED_SHA256, CAMP_PATH_DISCLOSURE),
+        }
+
+
+async def test_a_row_carried_forward_at_a_withdrawn_camp_path_is_dropped_and_a_rerun_sweeps_its_old_version(
+    world: RemovalWorld,
+) -> None:
+    """An older build records the row again and publishes it; this build's next import of the release
+    drops it rather than refusing to write the manifest, and publishes. The version with the row is
+    then noncurrent, and the same removal run again deletes it with the record the older import made."""
+    await another_release_holds_the_later_upload(world)
+    await remove(world)
+    path = FsEvidenceObjectStore(world.data_dir).path_for(RELEASE_KEY)
+    body = REVISED_BODY
+    older = await OpenEvImportService(
+        caselists=world.repository,
+        blobs=FsSnapshotStore(world.data_dir),
+        suppression=empty_suppression_list(),
+    ).import_release(
+        [ArchiveMember(path=NEW_ROW, sha256=REVISED_SHA256, byte_size=len(body), data=body)],
+        year=2026,
+        event=Event.POLICY,
+        imported_on=PULLED_AT.date(),
+        archive_sha256=REVISED_SHA256,
+        recorded_manifest=read_manifest_lines(path),
+    )
+    write_manifest_lines(older.manifest_lines, path)
+    world.client.put_object(Bucket=world.bucket_name, Key=RELEASE_KEY, Body=path.read_bytes())
+
+    other = DOCUMENT_BODIES["harbor-tariffs-neg"]
+    other_sha256 = hashlib.sha256(other).hexdigest()
+    report = await OpenEvImportService(
+        caselists=world.repository, blobs=FsSnapshotStore(world.data_dir), suppression=world.suppression()
+    ).import_release(
+        [
+            ArchiveMember(
+                path="openev-900-JDI-Harbor_Tariffs_Neg.docx",
+                sha256=other_sha256,
+                byte_size=len(other),
+                data=other,
+            )
+        ],
+        year=2026,
+        event=Event.POLICY,
+        imported_on=PULLED_AT.date(),
+        archive_sha256=other_sha256,
+        recorded_manifest=read_manifest_lines(path),
+    )
+    write_manifest_lines(report.manifest_lines, path)
+    world.client.put_object(Bucket=world.bucket_name, Key=RELEASE_KEY, Body=path.read_bytes())
+    assert release_rows(world) == [{"openev-900-JDI-Harbor_Tariffs_Neg.docx": other_sha256}] * 2
+    assert sum(NEW_ROW in body for body in manifest_versions(world)) == 1, "the older build's version"
+
+    again = await plan_removal(world)
+    assert (await world.service().execute(again)).completed
+
+    assert not [body for body in manifest_versions(world) if NEW_ROW in body]
+    assert await camp_releases_of(world, REVISED_SHA256) == [(2027, Event.POLICY)]
+
+
+def manifest_versions(world: RemovalWorld) -> list[str]:
+    """Every version of the 2026 release manifest in the bucket, current and noncurrent."""
+    listed = world.client.list_object_versions(Bucket=world.bucket_name, Prefix=RELEASE_KEY).get(
+        "Versions", []
+    )
+    return [
+        world.client.get_object(Bucket=world.bucket_name, Key=RELEASE_KEY, VersionId=str(one["VersionId"]))[
+            "Body"
+        ]
+        .read()
+        .decode()
+        for one in listed
+        if one.get("Key") == RELEASE_KEY
+    ]
+
+
+async def test_a_file_at_the_withdrawn_downloads_name_with_other_bytes_stays_in_the_inbox(
+    world: RemovalWorld,
+) -> None:
+    """The inbox step takes the copy by its name and its bytes, so it never deletes what it did not plan."""
+    await another_release_holds_the_later_upload(world)
+    inbox = world.data_dir / "inbox"
+    (inbox / NEW_ROW).write_bytes(b"not the bytes the removal withdrew")
+
+    plan = await remove(world)
+
+    assert NEW_ROW not in [one.name for one in plan.inbox]
+    assert (inbox / NEW_ROW).read_bytes() == b"not the bytes the removal withdrew"

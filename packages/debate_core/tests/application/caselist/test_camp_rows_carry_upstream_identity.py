@@ -334,3 +334,29 @@ async def test_a_row_the_delivery_record_does_not_know_keeps_null(world: Removal
         NEW_ROW: (640, None),
         OTHER_CAMP_ROW: (700, None),
     }
+
+
+async def test_a_row_whose_upstream_digest_is_not_one_carries_no_identity(world: RemovalWorld) -> None:
+    """Rows saying `""` for every path would otherwise all be at one upstream path, the other camp's too."""
+    await pulled_then_revised(world, (OTHER_CAMP, OTHER_CAMP_BODY))
+    (world.data_dir / OPENEV_DELIVERIES_FILENAME).unlink()
+    path = FsEvidenceObjectStore(world.data_dir).path_for(RELEASE_KEY)
+    rows = [json.loads(line) for line in read_manifest_lines(path)]
+    lines = [
+        json.dumps(
+            {**row, "upstream_path_sha256": ""} if row["kind"] == "member" else row,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        )
+        for row in rows
+    ]
+    write_manifest_lines(lines, path)
+    world.client.put_object(Bucket=world.bucket_name, Key=RELEASE_KEY, Body=path.read_bytes())
+
+    plan = await plan_in(world)
+
+    assert {one.sha256: one.evidence for one in plan.later_uploads} == {
+        REVISED_SHA256: SamePathEvidence.ROW_NAME,
+        OTHER_CAMP_SHA256: SamePathEvidence.ROW_NAME,
+    }

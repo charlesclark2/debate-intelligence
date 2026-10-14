@@ -294,6 +294,7 @@ def test_a_camp_path_withdrawn_through_the_command_names_its_release_and_id_and_
         if "withdraw openev" in line or "later upload of" in line or '"caselist":"openev"' in line
     ]
     assert "     withdraw openev  2026-policy openev-640" in added
+    assert "     record   openev 2026-policy  the camp-file record of the withdrawn copy" in shown
     (record,) = [json.loads(line) for line in added if '"caselist":"openev"' in line]
     assert {key: value for key, value in record.items() if key != "recorded_at"} == {
         "caselist": "openev",

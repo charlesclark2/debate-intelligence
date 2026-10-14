@@ -311,7 +311,7 @@ def row_upstream_identity(row: Mapping[str, object]) -> tuple[int, str] | None:
     carries none: the reader then has only the delivery record, or the row's name, to go by.
     """
     openev_id, digest = row.get("openev_id"), row.get("upstream_path_sha256")
-    if isinstance(openev_id, bool) or not isinstance(openev_id, int) or openev_id < 1:
+    if not isinstance(openev_id, int):
         return None
     if not isinstance(digest, str) or _SHA256_HEX.match(digest) is None:
         return None

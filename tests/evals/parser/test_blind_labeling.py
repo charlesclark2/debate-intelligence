@@ -74,6 +74,7 @@ ENTRIES = (
     _entry("d", TEAM, HEURISTIC),
     _entry("e", TEAM, VERBATIM),
     _entry("f", CASELIST, VERBATIM),
+    _entry("9", TEAM, VERBATIM),
 )
 LABELS = {
     _digest("a"): _labels("a", 40, 10, blind=True),
@@ -82,12 +83,14 @@ LABELS = {
     _digest("d"): _labels("d", 20, 8),
     _digest("e"): _labels("e", 25, None, status=LabelStatus.PRELABELED),
     _digest("f"): _labels("f", 10, 1, blind=True),
+    _digest("9"): _labels("9", 20, 6, blind=True),
 }
 
 
 def test_each_blind_file_is_compared_with_the_other_corrected_files_of_its_stratum() -> None:
-    """a: 10 of 40 against b and c, 8 of 80 (d is another family; e is not corrected).
-    f: 1 of 10, and no other caselist Verbatim file is corrected."""
+    """a: 10 of 40 against b and c, 8 of 80 (d is another family; e is not corrected; 9 is blind
+    too, and a blind file is never what another is compared with). f: 1 of 10, and no other
+    caselist Verbatim file is corrected. 9: 6 of 20 against b and c."""
     assert blind_comparison(ENTRIES, LABELS) == [
         {
             "file": "a" * 16,
@@ -104,6 +107,14 @@ def test_each_blind_file_is_compared_with_the_other_corrected_files_of_its_strat
             "rows_changed": 1,
             "share_changed": 0.1,
             "stratum_others": {"files": 0, "labeled_rows": 0, "rows_changed": 0, "share_changed": None},
+        },
+        {
+            "file": "9" * 16,
+            "stratum": "team, verbatim",
+            "labeled_rows": 20,
+            "rows_changed": 6,
+            "share_changed": 0.3,
+            "stratum_others": {"files": 2, "labeled_rows": 80, "rows_changed": 8, "share_changed": 0.1},
         },
     ]
 

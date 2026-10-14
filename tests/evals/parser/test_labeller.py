@@ -18,6 +18,7 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 from tests.evals.parser.digests import text_digest
+from tests.evals.parser.docx_render import RenderedParagraph, RenderedRun
 from tests.evals.parser.labeller import (
     CardState,
     LabellerApp,
@@ -289,7 +290,10 @@ def test_the_new_card_key_starts_a_card_on_this_row_and_neither_checks_nor_moves
     app = evaluation.app()
     _keys(app, *["Enter"] * 7)
 
-    state = _keys(app, "n", "t")
+    pressed = _press(app, "n")
+    assert pressed["row"]["index"] == 7 and pressed["row"]["label"]["starts_card"] is True
+    assert pressed["rows"][7] == {"unit": "ANALYTIC", "checked": False}
+    state = _press(app, "t")
 
     assert state["rows"][7] == {"unit": "TAG", "checked": True}
     started = _press(app, "Backspace")["row"]
@@ -767,6 +771,26 @@ def test_a_highlight_the_document_inherits_and_the_parser_does_not_read_is_flagg
     rows = {int(row["index"]): row for row in read_worksheet(evaluation.csv).rows}
     for index in sampled:
         assert rows[index]["highlight"] == f"⟦{TEXTS[index]}⟧"
+
+
+def test_a_paragraph_the_renderer_reads_differently_gets_no_marks_and_check_names_its_cells(
+    evaluation: _Evaluation,
+) -> None:
+    """Ranges are offsets into a text; into another text they would mark the wrong characters."""
+    app = evaluation.app()
+    app.rendered[10] = RenderedParagraph(
+        text="Another text", runs=(RenderedRun("Another text", underline="single"),)
+    )
+    _keys(app, *["Enter"] * 10)
+
+    spans = _state(app)["row"]["spans"]
+    state = _press(app, "Enter")
+
+    assert spans["readable"] is False and spans["differs"] is True
+    assert spans["document"] == {"underline": [], "highlight": []}
+    row = {int(row["index"]): row for row in read_worksheet(evaluation.csv).rows}[10]
+    assert (row["underline"], row["highlight"]) == ("", "")
+    assert any(problem.startswith("row 12, underline: empty") for problem in state["finished"]["problems"])
 
 
 def test_the_worksheet_carries_the_documents_marks_not_the_pre_labels(evaluation: _Evaluation) -> None:

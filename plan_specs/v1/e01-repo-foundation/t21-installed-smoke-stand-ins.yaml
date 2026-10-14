@@ -62,7 +62,7 @@ spec:
         ephemeral port and is torn down, and tests/smoke/README.md says how a later check adds a
         stand-in.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

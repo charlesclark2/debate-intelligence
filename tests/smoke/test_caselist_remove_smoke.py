@@ -1,4 +1,4 @@
-"""`debate-research caselist remove` and `unsuppress` end to end, against moto.
+"""`debate-research caselist remove` and `unsuppress` end to end, against the installed build.
 
 The operator's whole takedown in one check, through the installed command: three synthetic weeks
 imported and published to the dev bucket, a team's removal planned (and shown to change nothing),
@@ -7,16 +7,24 @@ attacked the way the world will attack it — a later archive that still holds t
 imported and published as next Monday's — without the team's files coming back. Then a mistaken
 removal reversed with `unsuppress`.
 
-**Not marked `live`, and must not be.** It needs no deployed environment: the bucket is moto's,
-in-process, with sockets disabled (tests/smoke/README.md). Exercising the runbook against the real
-dev bucket is an operator step (session report, Operator follow-ups).
+The bucket, and the STS that says which role a profile is signed in as, are moto in server mode: a
+stand-in the build reaches over loopback through `storage.s3.endpoint_url` (`v1-e01-t21`,
+tests/smoke/stand_ins/). Until then these checks ran in pytest's own process under `mock_aws()`,
+which the installed build could not see. Where a check used to patch the S3 adapter, to refuse a
+version listing, to watch what `caselist status` asked for, or to lose the bucket part-way through a
+takedown, the stand-in now does it from the server's side: it refuses the request with the error S3
+would send, or records the request (tests/smoke/stand_ins/s3.py). The build is never patched.
+
+**Not marked `live`, and must not be.** It needs no deployed environment, and the build's network
+guard allows the stand-in and nothing else (tests/smoke/README.md). Exercising the runbook against
+the real dev bucket is an operator step (session report, Operator follow-ups).
 """
 
 from __future__ import annotations
 
+import configparser
 import hashlib
 import json
-import os
 import zipfile
 from collections.abc import Iterator
 from datetime import UTC, date, datetime, timedelta
@@ -24,9 +32,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from unittest.mock import ANY
 
-import boto3
 import pytest
-from moto import mock_aws
 from tests.fixtures.caselist.build_synthetic_archives import (
     DOCUMENT_BODIES,
     SNAPSHOTS,
@@ -38,19 +44,13 @@ from tests.fixtures.identity_center_roles import EVERYDAY_ROLE, TAKEDOWN_ROLE, s
 from tests.fixtures.openev.build_synthetic_openev import CAMP_ALIASES_PATH, build_download_zips
 from tests.fixtures.openev.build_synthetic_openev import DOCUMENT_BODIES as CAMP_BODIES
 from tests.fixtures.openev.build_synthetic_openev import DOWNLOADS as OPENEV_DOWNLOADS
-from typer.testing import CliRunner, Result
+from tests.smoke.installed_build import CliRun, InstalledCli
+from tests.smoke.stand_ins.s3 import MOTO_TEST_CREDENTIALS, S3Request, S3StandIn
 
-from debate_cli.app import create_app
 from debate_cli.exit_codes import ExitCode
 
 if TYPE_CHECKING:  # pragma: no cover - import for the type checker only
     from mypy_boto3_s3.client import S3Client
-
-runner = CliRunner()
-
-# Runs in pytest's own process, where moto answers S3, so it cannot run against an installed
-# build: `ci` runs it, and validate-dev's recorded tier deselects it (README.md).
-pytestmark = pytest.mark.in_process
 
 BUCKET = "debate-dev-evidence-smoke-moto"
 OPERATOR_PROFILE = "debate-dev-evidence"
@@ -63,13 +63,28 @@ EXCLUSIVE = {
 }
 BAYVIEW = hashlib.sha256(DOCUMENT_BODIES["bayview-semis-neg"]).hexdigest()
 
+THE_BUILD: list[InstalledCli] = []
+"""The installed build the check in progress runs. `installation` puts it here, for the helpers
+below, and takes it out again; a pytest process runs one check at a time, so there is only one."""
+
+
+def build() -> InstalledCli:
+    return THE_BUILD[-1]
+
+
+def environment(**variables: str | None) -> None:
+    """Set variables, or with `None` unset them, for every later command of the check in progress."""
+    build().configure(**variables)
+
+
+def invoke(*arguments: str, width: int = 80) -> CliRun:
+    """One command as a person reads it: no `--json`, on a terminal `width` columns wide."""
+    return build().run(*arguments, env={"COLUMNS": str(width)})
+
 
 @pytest.fixture
-def installation(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[Path]:
-    """Dev and prod profiles naming a moto bucket, both SSO profiles, and fake AWS credentials."""
-    for name in list(os.environ):
-        if name.startswith("DEBATE_"):
-            monkeypatch.delenv(name, raising=False)
+def installation(installed_cli: InstalledCli, s3_stand_in: S3StandIn, tmp_path: Path) -> Iterator[Path]:
+    """Dev and prod profiles naming the stand-in's bucket, and both SSO profiles in an AWS config."""
     config = tmp_path / "aws-config"
     credentials = tmp_path / "aws-credentials"
     config.write_text(
@@ -78,59 +93,61 @@ def installation(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[Pa
     )
     credentials.write_text(
         "".join(
-            f"[{name}]\naws_access_key_id = testing\naws_secret_access_key = testing\n"
+            f"[{name}]\naws_access_key_id = {MOTO_TEST_CREDENTIALS['aws_access_key_id']}\n"
+            f"aws_secret_access_key = {MOTO_TEST_CREDENTIALS['aws_secret_access_key']}\n"
             for name in (OPERATOR_PROFILE, REMOVAL_PROFILE)
         ),
         encoding="utf-8",
     )
-    for name, value in {
-        "AWS_ACCESS_KEY_ID": "testing",
-        "AWS_SECRET_ACCESS_KEY": "testing",
-        "AWS_SESSION_TOKEN": "testing",
-        "AWS_DEFAULT_REGION": "us-east-1",
-        "AWS_EC2_METADATA_DISABLED": "true",
-        "AWS_CONFIG_FILE": str(config),
-        "AWS_SHARED_CREDENTIALS_FILE": str(credentials),
-    }.items():
-        monkeypatch.setenv(name, value)
-    monkeypatch.delenv("AWS_PROFILE", raising=False)
-
     profiles = tmp_path / "profiles"
     profiles.mkdir()
-    for environment in ("dev", "prod"):
-        (profiles / f"{environment}.toml").write_text(
-            f'[storage]\ndata_dir = "{tmp_path / environment}"\n'
+    for environment_name in ("dev", "prod"):
+        (profiles / f"{environment_name}.toml").write_text(
+            f'[storage]\ndata_dir = "{tmp_path / environment_name}"\n'
             f'[storage.s3]\nbucket = "{BUCKET}"\nregion = "us-east-1"\naws_profile = "{OPERATOR_PROFILE}"\n'
             f'[models]\nrouting_file = "{tmp_path / "routing.yaml"}"\nbudget_usd_daily = 1.0\n',
             encoding="utf-8",
         )
-    monkeypatch.setenv("DEBATE_PROFILE_DIR", str(profiles))
-    monkeypatch.setenv("DEBATE_ENV", "dev")
-    yield tmp_path
+    # Each environment's own data directory, as its profile names it, rather than the harness's one.
+    installed_cli.configure(
+        DEBATE_PROFILE_DIR=str(profiles),
+        DEBATE_STORAGE__DATA_DIR=None,
+        AWS_CONFIG_FILE=str(config),
+        AWS_SHARED_CREDENTIALS_FILE=str(credentials),
+    )
+    THE_BUILD.append(installed_cli)
+    try:
+        yield tmp_path
+    finally:
+        THE_BUILD.remove(installed_cli)
 
 
 @pytest.fixture
-def bucket(installation: Path) -> Iterator[S3Client]:
-    with mock_aws():
-        client: S3Client = boto3.client("s3", region_name="us-east-1")  # pyright: ignore[reportUnknownMemberType]
-        client.create_bucket(Bucket=BUCKET)
-        client.put_bucket_versioning(Bucket=BUCKET, VersioningConfiguration={"Status": "Enabled"})
-        # Each profile is the role its name says: a takedown asks before it does anything (v1-e29-t08).
-        sign_in(
-            installation / "aws-credentials",
-            {OPERATOR_PROFILE: EVERYDAY_ROLE, REMOVAL_PROFILE: TAKEDOWN_ROLE},
-        )
-        yield client
+def bucket(installation: Path, s3_stand_in: S3StandIn) -> S3Client:
+    client = s3_stand_in.versioned_bucket(BUCKET)
+    # Each profile is the role its name says: a takedown asks before it does anything (v1-e29-t08).
+    sign_in(
+        installation / "aws-credentials",
+        {OPERATOR_PROFILE: EVERYDAY_ROLE, REMOVAL_PROFILE: TAKEDOWN_ROLE},
+        iam=s3_stand_in.client("iam"),
+        sts=s3_stand_in.client("sts"),
+    )
+    return client
+
+
+def access_key_of(installation: Path, profile: str) -> str:
+    """The access key `sign_in` wrote for `profile`: how the stand-in's record says who signed."""
+    signed_in = configparser.ConfigParser()
+    signed_in.read(installation / "aws-credentials", encoding="utf-8")
+    return signed_in[profile]["aws_access_key_id"]
 
 
 def run(*arguments: str) -> dict[str, Any]:
     """Run one command asking for JSON, and return its envelope with the exit code."""
-    result: Result = runner.invoke(create_app(), ["--json", *arguments])
-    lines = [line for line in result.stdout.splitlines() if line.strip()]
-    assert len(lines) == 1, f"expected one line of JSON on stdout; got {lines!r}\n{result.stderr}"
-    envelope = json.loads(lines[0])
+    result = build().run("--json", *arguments)
+    envelope = result.envelope()
     envelope["exit_code"] = result.exit_code
-    return envelope  # pyright: ignore[reportUnknownVariableType]
+    return envelope
 
 
 def versions(client: S3Client) -> list[tuple[str, str]]:
@@ -164,7 +181,6 @@ def test_a_team_is_removed_and_next_weeks_archive_does_not_bring_it_back(
     installation: Path,
     bucket: S3Client,
     published: dict[date, Path],
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     data_dir = installation / "dev"
 
@@ -184,7 +200,7 @@ def test_a_team_is_removed_and_next_weeks_archive_does_not_bring_it_back(
     assert (tree(data_dir), versions(bucket)) == before
 
     # With it: done, and `caselist status` agrees with the bucket.
-    monkeypatch.setenv("DEBATE_REMOVAL_PROFILE", REMOVAL_PROFILE)
+    environment(DEBATE_REMOVAL_PROFILE=REMOVAL_PROFILE)
     done = run(*REMOVE, "--execute")
     assert done["exit_code"] == ExitCode.OK, done
     assert done["data"]["outcome"] == "COMPLETED"
@@ -231,9 +247,9 @@ def test_a_team_is_removed_and_next_weeks_archive_does_not_bring_it_back(
 def test_the_dry_run_reads_as_a_plan_for_a_person(
     installation: Path, bucket: S3Client, published: Any
 ) -> None:
-    result = runner.invoke(create_app(), list(REMOVE))
+    result = invoke(*REMOVE)
 
-    assert result.exit_code == ExitCode.OK, result.stdout
+    assert result.exit_code == ExitCode.OK, result.output
     for heading in (
         "DRY RUN: nothing was changed.",
         "WILL BE REMOVED, everywhere, and suppressed: 3 file(s)",
@@ -248,11 +264,11 @@ def test_the_dry_run_reads_as_a_plan_for_a_person(
         assert heading in result.stdout, heading
 
 
-def test_prod_is_refused_without_confirm_prod(
-    installation: Path, bucket: S3Client, published: Any, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setenv("DEBATE_ENV", "prod")
-    monkeypatch.setenv("DEBATE_REMOVAL_PROFILE", "debate-prod-evidence-removal")
+def test_prod_is_refused_without_confirm_prod(installation: Path, bucket: S3Client, published: Any) -> None:
+    # A prod installation reaches no stand-in: the endpoint is the one setting it would refuse. The
+    # refusal under test comes before anything is built, so nothing is reached at all.
+    environment(DEBATE_ENV="prod", DEBATE_STORAGE__S3__ENDPOINT_URL=None)
+    environment(DEBATE_REMOVAL_PROFILE="debate-prod-evidence-removal")
 
     refused = run(*REMOVE, "--execute")
 
@@ -261,9 +277,9 @@ def test_prod_is_refused_without_confirm_prod(
 
 
 def test_a_mistaken_removal_is_reversed_and_the_file_is_imported_again(
-    installation: Path, bucket: S3Client, published: dict[date, Path], monkeypatch: pytest.MonkeyPatch
+    installation: Path, bucket: S3Client, published: dict[date, Path]
 ) -> None:
-    monkeypatch.setenv("DEBATE_REMOVAL_PROFILE", REMOVAL_PROFILE)
+    environment(DEBATE_REMOVAL_PROFILE=REMOVAL_PROFILE)
     removed = run(
         "caselist",
         "remove",
@@ -299,20 +315,19 @@ def test_a_sha256_held_nowhere_is_planned_as_a_suppression_only(
 ) -> None:
     """The runbook's manual-procedure backfill: hashes recorded before this command existed."""
     unknown = "0" * 64
-    result = runner.invoke(
-        create_app(),
-        ["caselist", "remove", "--source", unknown, "--request", "RM-2026-04", "--reason", "POLICY"],
+    result = invoke(
+        "caselist", "remove", "--source", unknown, "--request", "RM-2026-04", "--reason", "POLICY"
     )
 
-    assert result.exit_code == ExitCode.OK, result.stdout
+    assert result.exit_code == ExitCode.OK, result.output
     assert "held nowhere in this environment: it is only suppressed" in result.stdout
     assert "SUPPRESSION ENTRIES appended to the list, here and in the bucket: 1" in result.stdout
 
 
 def test_a_removal_profile_missing_from_the_aws_config_is_refused_with_nothing_changed(
-    installation: Path, bucket: S3Client, published: Any, monkeypatch: pytest.MonkeyPatch
+    installation: Path, bucket: S3Client, published: Any
 ) -> None:
-    monkeypatch.setenv("DEBATE_REMOVAL_PROFILE", "debate-dev-evidence-removal-typo")
+    environment(DEBATE_REMOVAL_PROFILE="debate-dev-evidence-removal-typo")
     before = (tree(installation / "dev"), versions(bucket))
 
     refused = run(*REMOVE, "--execute")
@@ -335,7 +350,7 @@ def test_a_removal_profile_missing_from_the_aws_config_is_refused_with_nothing_c
 
 
 def test_the_everyday_profile_named_for_a_takedown_is_refused_before_anything_is_written(
-    installation: Path, bucket: S3Client, published: Any, monkeypatch: pytest.MonkeyPatch
+    installation: Path, bucket: S3Client, published: Any
 ) -> None:
     """`DEBATE_REMOVAL_PROFILE` naming the everyday profile, which is easy to do: one suffix apart.
 
@@ -343,7 +358,7 @@ def test_the_everyday_profile_named_for_a_takedown_is_refused_before_anything_is
     (v1-e29-t08). Moto's bucket would let this profile run the whole removal, so the unchanged
     bucket below is the command's doing and not a refused request's.
     """
-    monkeypatch.setenv("DEBATE_REMOVAL_PROFILE", OPERATOR_PROFILE)
+    environment(DEBATE_REMOVAL_PROFILE=OPERATOR_PROFILE)
     before = (tree(installation / "dev"), versions(bucket))
 
     refused = run(*REMOVE, "--execute")
@@ -359,15 +374,15 @@ def test_the_everyday_profile_named_for_a_takedown_is_refused_before_anything_is
 
 
 def test_a_removal_that_completes_but_cannot_be_logged_says_it_completed(
-    installation: Path, bucket: S3Client, published: Any, monkeypatch: pytest.MonkeyPatch
+    installation: Path, bucket: S3Client, published: Any
 ) -> None:
     """This machine's removal log refuses the append after every deletion has succeeded."""
-    monkeypatch.setenv("DEBATE_REMOVAL_PROFILE", REMOVAL_PROFILE)
+    environment(DEBATE_REMOVAL_PROFILE=REMOVAL_PROFILE)
     local_log = installation / "dev" / "suppression" / "removal-log.jsonl"
     local_log.parent.mkdir(parents=True, exist_ok=True)
     local_log.touch(mode=0o400)
 
-    result = runner.invoke(create_app(), [*REMOVE, "--execute"], terminal_width=100)
+    result = invoke(*REMOVE, "--execute", width=100)
 
     text = " ".join(result.output.replace("│", " ").split())
     assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.output
@@ -381,7 +396,7 @@ def test_a_removal_that_completes_but_cannot_be_logged_says_it_completed(
 
 
 def test_the_download_inbox_is_listed_by_the_dry_run_and_purged_by_the_execution(
-    installation: Path, bucket: S3Client, published: dict[date, Path], monkeypatch: pytest.MonkeyPatch
+    installation: Path, bucket: S3Client, published: dict[date, Path]
 ) -> None:
     """`v1-e30-t09`: the inbox `caselist pull` downloads into, where the composition root puts it.
 
@@ -400,7 +415,7 @@ def test_the_download_inbox_is_listed_by_the_dry_run_and_purged_by_the_execution
     before = tree(inbox)
 
     planned = run(*REMOVE)
-    shown = runner.invoke(create_app(), list(REMOVE))
+    shown = invoke(*REMOVE)
 
     assert planned["exit_code"] == ExitCode.OK, planned
     assert [(one["name"], one["action"]) for one in planned["data"]["inbox"]] == [
@@ -412,7 +427,7 @@ def test_the_download_inbox_is_listed_by_the_dry_run_and_purged_by_the_execution
     assert f"DOWNLOAD INBOX ({inbox}): 4 file(s) hold removed files." in shown.stdout
     assert tree(inbox) == before, "the dry run changed the inbox"
 
-    monkeypatch.setenv("DEBATE_REMOVAL_PROFILE", REMOVAL_PROFILE)
+    environment(DEBATE_REMOVAL_PROFILE=REMOVAL_PROFILE)
     done = run(*REMOVE, "--execute")
 
     assert done["exit_code"] == ExitCode.OK, done
@@ -443,8 +458,8 @@ IDENTIFYING = ("Maple Grove", "QX", "Cedar Hollow", "ZaLu", "Grove City", "Bayvi
 
 
 def raw_json(*arguments: str) -> str:
-    result: Result = runner.invoke(create_app(), ["--json", *arguments])
-    assert result.exit_code == ExitCode.OK, result.stdout
+    result = build().run("--json", *arguments)
+    assert result.exit_code == ExitCode.OK, result.output
     return result.stdout
 
 
@@ -453,7 +468,7 @@ def bucket_holds(client: S3Client, sha: str) -> bool:
 
 
 def test_the_dry_run_lists_a_later_upload_by_digest_caselist_and_snapshot_and_execute_removes_both(
-    installation: Path, bucket: S3Client, published: Any, monkeypatch: pytest.MonkeyPatch
+    installation: Path, bucket: S3Client, published: Any
 ) -> None:
     planned = run(*REMOVE_FIRST_VERSION)
 
@@ -479,7 +494,7 @@ def test_the_dry_run_lists_a_later_upload_by_digest_caselist_and_snapshot_and_ex
     ]
     assert bucket_holds(bucket, FIRST_VERSION) and bucket_holds(bucket, REVISION), "a dry run"
 
-    shown = runner.invoke(create_app(), list(REMOVE_FIRST_VERSION)).stdout
+    shown = invoke(*REMOVE_FIRST_VERSION).stdout
     assert "LATER UPLOADS AT A REMOVED PATH, ADDED TO THIS PLAN: 1 file(s)" in shown
     assert (
         f"later upload of sha256 {FIRST_VERSION[:12]} in {SYNTHETIC_CASELIST}, held in 2026-09-08, "
@@ -491,7 +506,7 @@ def test_the_dry_run_lists_a_later_upload_by_digest_caselist_and_snapshot_and_ex
     )
     assert "--only-named" in confirm and "--only-named --execute" not in confirm
 
-    monkeypatch.setenv("DEBATE_REMOVAL_PROFILE", REMOVAL_PROFILE)
+    environment(DEBATE_REMOVAL_PROFILE=REMOVAL_PROFILE)
     done = run(*REMOVE_FIRST_VERSION, "--execute")
 
     assert done["exit_code"] == ExitCode.OK, done
@@ -504,15 +519,15 @@ def test_the_dry_run_lists_a_later_upload_by_digest_caselist_and_snapshot_and_ex
 
 
 def test_only_named_removes_the_named_version_and_leaves_the_later_upload(
-    installation: Path, bucket: S3Client, published: Any, monkeypatch: pytest.MonkeyPatch
+    installation: Path, bucket: S3Client, published: Any
 ) -> None:
-    shown = runner.invoke(create_app(), [*REMOVE_FIRST_VERSION, "--only-named"]).stdout
+    shown = invoke(*REMOVE_FIRST_VERSION, "--only-named").stdout
     assert "LATER UPLOADS AT A REMOVED PATH, LEFT IN PLACE (--only-named): 1 file(s)" in shown
     confirm = shown[shown.index("TO CARRY IT OUT") :]
     assert "the 1 file(s) named only; 1 later upload(s) at the removed path(s) are left in place" in confirm
     assert "--only-named --execute" in confirm, "the printed command carries the flag"
 
-    monkeypatch.setenv("DEBATE_REMOVAL_PROFILE", REMOVAL_PROFILE)
+    environment(DEBATE_REMOVAL_PROFILE=REMOVAL_PROFILE)
     done = run(*REMOVE_FIRST_VERSION, "--only-named", "--execute")
 
     assert done["exit_code"] == ExitCode.OK, done
@@ -526,14 +541,14 @@ def test_only_named_removes_the_named_version_and_leaves_the_later_upload(
 
 
 def test_an_earlier_version_is_listed_and_not_removed(
-    installation: Path, bucket: S3Client, published: Any, monkeypatch: pytest.MonkeyPatch
+    installation: Path, bucket: S3Client, published: Any
 ) -> None:
-    shown = runner.invoke(create_app(), list(REMOVE_REVISION)).stdout
+    shown = invoke(*REMOVE_REVISION).stdout
     assert "EARLIER VERSIONS AT A REMOVED PATH, NOT REMOVED: 1 file(s)" in shown
     assert "LATER UPLOADS AT A REMOVED PATH" not in shown
     assert "This plan covers the 1 file(s) named, and adds 0 later upload(s)" in shown
 
-    monkeypatch.setenv("DEBATE_REMOVAL_PROFILE", REMOVAL_PROFILE)
+    environment(DEBATE_REMOVAL_PROFILE=REMOVAL_PROFILE)
     done = run(*REMOVE_REVISION, "--execute")
 
     assert done["exit_code"] == ExitCode.OK, done
@@ -544,13 +559,13 @@ def test_an_earlier_version_is_listed_and_not_removed(
 
 
 def test_the_plans_json_names_no_school_team_path_or_file(
-    installation: Path, bucket: S3Client, published: Any, monkeypatch: pytest.MonkeyPatch
+    installation: Path, bucket: S3Client, published: Any
 ) -> None:
     """`--source` with a later upload, `--team` with a withdrawn file, and an executed removal.
 
     The text of the same plans names them, as it always has: that is the operator's terminal.
     """
-    assert "Maple Grove/QX/" in runner.invoke(create_app(), list(REMOVE_FIRST_VERSION)).stdout
+    assert "Maple Grove/QX/" in invoke(*REMOVE_FIRST_VERSION).stdout
 
     for arguments in (REMOVE_FIRST_VERSION, REMOVE, (*REMOVE, "--include-shared")):
         emitted = raw_json(*arguments)
@@ -562,7 +577,7 @@ def test_the_plans_json_names_no_school_team_path_or_file(
     assert sum(len(source["disclosures"]) for source in team["sources"]) == 9
     assert sum(len(source["withdrawn_disclosures"]) for source in team["sources"]) == 2
 
-    monkeypatch.setenv("DEBATE_REMOVAL_PROFILE", REMOVAL_PROFILE)
+    environment(DEBATE_REMOVAL_PROFILE=REMOVAL_PROFILE)
     executed = raw_json(*REMOVE_FIRST_VERSION, "--execute")
     assert json.loads(executed)["data"]["applied"] is True
     assert not [name for name in IDENTIFYING if name in executed]
@@ -588,7 +603,7 @@ def test_a_source_plan_for_a_file_one_team_holds_says_nothing_about_other_teams(
 ) -> None:
     remove = ("caselist", "remove", "--source", BAYVIEW, *LATER_UPLOADS_REQUEST)
 
-    shown = runner.invoke(create_app(), list(remove)).stdout
+    shown = invoke(*remove).stdout
     planned = run(*remove)
 
     (line,) = [line for line in shown.splitlines() if BAYVIEW in line and line.lstrip().startswith("1.")]
@@ -604,7 +619,7 @@ def test_a_source_plan_for_a_file_two_teams_hold_counts_one_other_team(
 ) -> None:
     remove = ("caselist", "remove", "--source", HELD_BY_TWO_TEAMS, *LATER_UPLOADS_REQUEST)
 
-    shown = runner.invoke(create_app(), list(remove)).stdout
+    shown = invoke(*remove).stdout
     planned = run(*remove)
 
     (line,) = [
@@ -653,21 +668,29 @@ def every_version(client: S3Client) -> list[tuple[str, str, str]]:
     )
 
 
+def deletes_or_version_reads(asked: list[S3Request]) -> list[S3Request]:
+    """The requests that deleted anything or fetched a version by its id: none of `status`'s business."""
+    return [
+        one
+        for one in asked
+        if one.operation in {"DeleteObject", "DeleteObjects"}
+        or (one.operation == "GetObject" and one.version_id)
+    ]
+
+
 def status_as_a_person_reads_it() -> str:
-    result = runner.invoke(create_app(), ["caselist", "status"], terminal_width=200)
+    result = invoke("caselist", "status", width=200)
     return " ".join((result.stdout + result.stderr).split())
 
 
 @pytest.fixture
-def removed_with_its_later_upload(
-    installation: Path, bucket: S3Client, published: Any, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def removed_with_its_later_upload(installation: Path, bucket: S3Client, published: Any) -> None:
     """The first version removed by `--source`, and the revision with it as a later upload."""
-    monkeypatch.setenv("DEBATE_REMOVAL_PROFILE", REMOVAL_PROFILE)
+    environment(DEBATE_REMOVAL_PROFILE=REMOVAL_PROFILE)
     done = run(*REMOVE_FIRST_VERSION, "--execute")
     assert done["exit_code"] == ExitCode.OK, done
     assert json.loads(done["data"]["log_entry"])["removed_sha256"] == sorted([FIRST_VERSION, REVISION])
-    monkeypatch.setenv("DEBATE_REMOVAL_PROFILE", NO_SUCH_PROFILE)
+    environment(DEBATE_REMOVAL_PROFILE=NO_SUCH_PROFILE)
 
 
 @pytest.fixture
@@ -750,16 +773,13 @@ def test_a_refused_version_listing_says_not_checked_and_never_that_nothing_is_le
     installation: Path,
     bucket: S3Client,
     versions_left_under_a_delete_marker: None,
-    monkeypatch: pytest.MonkeyPatch,
+    s3_stand_in: S3StandIn,
 ) -> None:
-    """The versions are there. A profile without the grant cannot see them, and says so."""
-    from debate_core.application.errors import StoreAccessDenied
-    from debate_core.integrations.s3 import S3EvidenceVersionStore
+    """The versions are there. A profile without the grant cannot see them, and says so.
 
-    async def refused(self: S3EvidenceVersionStore, prefix: str) -> tuple[Any, ...]:
-        raise StoreAccessDenied("ListObjectVersions", f"s3://{BUCKET}/{prefix}")
-
-    monkeypatch.setattr(S3EvidenceVersionStore, "list_versions", refused)
+    The bucket refuses the listing as S3 refuses a call the permission set does not grant.
+    """
+    s3_stand_in.refuse("ListObjectVersions", status=403, code="AccessDenied", message="Access Denied")
 
     status = run("caselist", "status")
     shown = status_as_a_person_reads_it()
@@ -786,34 +806,24 @@ def test_status_reports_residue_with_the_everyday_profile_and_never_deletes_or_d
     installation: Path,
     bucket: S3Client,
     versions_left_under_a_delete_marker: None,
-    monkeypatch: pytest.MonkeyPatch,
+    s3_stand_in: S3StandIn,
 ) -> None:
-    from debate_core.integrations.s3 import S3EvidenceVersionStore
-
-    profiles: list[str | None] = []
-    listing = S3EvidenceVersionStore.list_versions
-
-    async def recorded(self: S3EvidenceVersionStore, prefix: str) -> tuple[Any, ...]:
-        profiles.append(self.profile)
-        return await listing(self, prefix)
-
-    async def forbidden(self: S3EvidenceVersionStore, *_: Any) -> Any:
-        raise AssertionError("caselist status deleted or downloaded an object version")
-
-    monkeypatch.setattr(S3EvidenceVersionStore, "list_versions", recorded)
-    monkeypatch.setattr(S3EvidenceVersionStore, "delete_versions", forbidden)
-    monkeypatch.setattr(S3EvidenceVersionStore, "get_version_file", forbidden)
-    assert os.environ["DEBATE_REMOVAL_PROFILE"] == NO_SUCH_PROFILE
+    """Who signed each listing, and that nothing deleted or fetched a version, from the bucket's side."""
+    assert build().environment()["DEBATE_REMOVAL_PROFILE"] == NO_SUCH_PROFILE
+    mark = len(s3_stand_in.requests())
 
     status = run("caselist", "status")
 
     assert status["exit_code"] == ExitCode.DOMAIN_FAILURE, status
     assert status["error"]["code"] == "REMOVAL_RESIDUE"
-    assert profiles and set(profiles) == {OPERATOR_PROFILE}
+    asked = s3_stand_in.requests_since(mark)
+    listings = {one.access_key for one in asked if one.operation == "ListObjectVersions"}
+    assert listings == {access_key_of(installation, OPERATOR_PROFILE)}, listings
+    assert deletes_or_version_reads(asked) == [], "caselist status deleted or downloaded an object version"
 
 
 def test_a_takedown_stopped_among_a_later_uploads_versions_shows_in_status_until_the_rerun(
-    installation: Path, bucket: S3Client, published: Any, monkeypatch: pytest.MonkeyPatch
+    installation: Path, bucket: S3Client, published: Any, s3_stand_in: S3StandIn
 ) -> None:
     """The runbook's loop: a run stops, `caselist status` says what is left, the same command finishes it.
 
@@ -821,23 +831,22 @@ def test_a_takedown_stopped_among_a_later_uploads_versions_shows_in_status_until
     first, current, version of the later upload's, and loses the bucket. S3 makes the next version
     current, so one current object and one noncurrent version are left, of the later upload alone.
     """
-    from debate_core.application.errors import StoreUnavailable
-    from debate_core.integrations.s3 import S3EvidenceVersionStore
-
     for body in (b"a second version", b"a third version"):
         bucket.put_object(Bucket=BUCKET, Key=raw_key(REVISION), Body=body)
-    deleting = S3EvidenceVersionStore.delete_versions
 
-    async def loses_the_bucket(self: S3EvidenceVersionStore, versions: Any) -> int:
-        if not any(REVISION in version.key for version in versions):
-            return await deleting(self, versions)
-        await deleting(self, versions[:1])
-        raise StoreUnavailable("DeleteObject", f"s3://{BUCKET}/{versions[0].key}", "the connection dropped")
-
-    monkeypatch.setenv("DEBATE_REMOVAL_PROFILE", REMOVAL_PROFILE)
-    with monkeypatch.context() as stopped:
-        stopped.setattr(S3EvidenceVersionStore, "delete_versions", loses_the_bucket)
+    # The first delete of a later-upload version goes through, and every one after it is answered
+    # 503, as a bucket that has stopped answering is. One attempt each: a retry would meet the same.
+    environment(DEBATE_REMOVAL_PROFILE=REMOVAL_PROFILE, AWS_MAX_ATTEMPTS="1")
+    with s3_stand_in.refusing(
+        "DeleteObject",
+        key_contains=REVISION,
+        after=1,
+        status=503,
+        code="SlowDown",
+        message="Reduce your request rate.",
+    ):
         incomplete = run(*REMOVE_FIRST_VERSION, "--execute")
+    environment(AWS_MAX_ATTEMPTS=None)
     assert incomplete["exit_code"] == ExitCode.RETRIEVAL_FAILURE, incomplete
 
     left = run("caselist", "status")
@@ -863,7 +872,6 @@ def test_residue_a_completed_removal_left_is_cleared_by_naming_the_file_under_th
     installation: Path,
     bucket: S3Client,
     versions_left_under_a_delete_marker: None,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The runbook's other loop: every snapshot agrees, and the version listing still shows a file.
 
@@ -871,15 +879,15 @@ def test_residue_a_completed_removal_left_is_cleared_by_naming_the_file_under_th
     removed path any more. Naming the file by its own sha256, under the same request, plans its
     three versions (two data versions and the delete marker) and removes them.
     """
-    assert "Nothing is left to remove" in runner.invoke(create_app(), list(REMOVE_FIRST_VERSION)).stdout
+    assert "Nothing is left to remove" in invoke(*REMOVE_FIRST_VERSION).stdout
     name_it = ("caselist", "remove", "--source", REVISION, *LATER_UPLOADS_REQUEST)
 
-    shown = runner.invoke(create_app(), list(name_it), terminal_width=200).stdout
+    shown = invoke(*name_it, width=200).stdout
 
     assert "already suppressed by this request: finishing what a previous run left" in shown
     assert f"{raw_key(REVISION)}  (3 version(s))" in shown
 
-    monkeypatch.setenv("DEBATE_REMOVAL_PROFILE", REMOVAL_PROFILE)
+    environment(DEBATE_REMOVAL_PROFILE=REMOVAL_PROFILE)
     done = run(*name_it, "--execute")
     assert done["exit_code"] == ExitCode.OK, done
     assert not bucket_holds(bucket, REVISION)
@@ -918,17 +926,11 @@ def a_manifest_the_removal_rewrote(client: S3Client) -> str:
     return str(scope["manifest_rewrites"][0]["key"])
 
 
-def put_older(client: S3Client, key: str, body: bytes, written: datetime) -> None:
-    """Put a version beneath the current one, as if written at `written`: moto keeps the time as an
-    attribute, lists versions by it, and serves the last one stored, so the stored order follows it."""
-    from moto.core.models import DEFAULT_ACCOUNT_ID
-    from moto.s3.models import FakeKey, s3_backends
-
+def put_older(client: S3Client, stand_in: S3StandIn, key: str, body: bytes, written: datetime) -> None:
+    """Put a version beneath the current one, as if written at `written`. S3 lets no client set a
+    version's time; the stand-in sets it in moto's store, and keeps the versions in that order."""
     version_id = client.put_object(Bucket=BUCKET, Key=key, Body=body)["VersionId"]
-    stored: list[FakeKey] = s3_backends[DEFAULT_ACCOUNT_ID]["aws"].get_bucket(BUCKET).keys.getlist(key)
-    (put,) = [one for one in stored if one.version_id == version_id]
-    put.last_modified = written.astimezone(UTC).replace(tzinfo=None)
-    stored.sort(key=lambda one: one.last_modified)
+    stand_in.backdate(BUCKET, key, version_id, written.astimezone(UTC))
 
 
 def a_member_row_of(sha: str) -> bytes:
@@ -936,7 +938,9 @@ def a_member_row_of(sha: str) -> bytes:
 
 
 @pytest.fixture
-def an_old_manifest_version(removed_with_its_later_upload: None, bucket: S3Client) -> str:
+def an_old_manifest_version(
+    removed_with_its_later_upload: None, bucket: S3Client, s3_stand_in: S3StandIn
+) -> str:
     """A day before the removal, a version of a manifest it rewrote, naming the file it removed.
 
     What a purge that did not happen leaves: a build from before the purge, or a run that stopped.
@@ -945,6 +949,7 @@ def an_old_manifest_version(removed_with_its_later_upload: None, bucket: S3Clien
     manifest = a_manifest_the_removal_rewrote(bucket)
     put_older(
         bucket,
+        s3_stand_in,
         manifest,
         a_member_row_of(FIRST_VERSION),
         completion_of_the_removal(bucket) - timedelta(days=1),
@@ -953,44 +958,29 @@ def an_old_manifest_version(removed_with_its_later_upload: None, bucket: S3Clien
 
 
 @pytest.fixture
-def an_old_index_too(an_old_manifest_version: str, bucket: S3Client) -> str:
+def an_old_index_too(an_old_manifest_version: str, bucket: S3Client, s3_stand_in: S3StandIn) -> str:
     """And the caselist's parsed index, a day older than the removal, which no rebuild replaced."""
     put_older(
-        bucket, AGGREGATE, b"a removed card's row\n", completion_of_the_removal(bucket) - timedelta(days=1)
+        bucket,
+        s3_stand_in,
+        AGGREGATE,
+        b"a removed card's row\n",
+        completion_of_the_removal(bucket) - timedelta(days=1),
     )
     return an_old_manifest_version
 
 
 def test_a_manifest_and_an_aggregate_version_older_than_the_removal_fail_status_by_role_and_count(
-    installation: Path, bucket: S3Client, an_old_index_too: str, monkeypatch: pytest.MonkeyPatch
+    installation: Path, bucket: S3Client, an_old_index_too: str, s3_stand_in: S3StandIn
 ) -> None:
     """Listing only, with the everyday profile: the only objects read are the takedown's records."""
-    from debate_core.integrations.s3 import S3EvidenceObjectStore, S3EvidenceVersionStore
-
-    read: list[str] = []
-    profiles: list[str | None] = []
-    get_file, listing = S3EvidenceObjectStore.get_file, S3EvidenceVersionStore.list_versions
-
-    async def reads(self: S3EvidenceObjectStore, key: str, destination: Path) -> None:
-        read.append(key)
-        await get_file(self, key, destination)
-
-    async def lists(self: S3EvidenceVersionStore, prefix: str) -> tuple[Any, ...]:
-        profiles.append(self.profile)
-        return await listing(self, prefix)
-
-    async def forbidden(self: S3EvidenceVersionStore, *_: Any) -> Any:
-        raise AssertionError("caselist status deleted or downloaded an object version")
-
-    monkeypatch.setattr(S3EvidenceObjectStore, "get_file", reads)
-    monkeypatch.setattr(S3EvidenceVersionStore, "list_versions", lists)
-    monkeypatch.setattr(S3EvidenceVersionStore, "delete_versions", forbidden)
-    monkeypatch.setattr(S3EvidenceVersionStore, "get_version_file", forbidden)
     before = every_version(bucket)
     completed = completion_of_the_removal(bucket)
+    mark = len(s3_stand_in.requests())
 
     status = run("caselist", "status")
     shown = status_as_a_person_reads_it()
+    asked = s3_stand_in.requests_since(mark)
 
     assert status["exit_code"] == ExitCode.DOMAIN_FAILURE, status
     error = status["error"]
@@ -1017,25 +1007,28 @@ def test_a_manifest_and_an_aggregate_version_older_than_the_removal_fail_status_
     for identifying in IDENTIFYING:
         assert identifying not in reported, identifying
     assert every_version(bucket) == before, "status changed the bucket"
+    read = [str(one.key) for one in asked if one.operation == "GetObject"]
     assert read and all(key.startswith("manifests/_suppression/") for key in read), read
-    assert profiles and set(profiles) == {OPERATOR_PROFILE}
+    listings = {one.access_key for one in asked if one.operation == "ListObjectVersions"}
+    assert listings == {access_key_of(installation, OPERATOR_PROFILE)}, listings
+    assert deletes_or_version_reads(asked) == [], "caselist status deleted or downloaded an object version"
 
 
 def test_versions_older_than_a_removal_are_cleared_by_running_it_again_under_the_same_request(
-    installation: Path, bucket: S3Client, an_old_index_too: str, monkeypatch: pytest.MonkeyPatch
+    installation: Path, bucket: S3Client, an_old_index_too: str
 ) -> None:
     """The runbook's instruction: name a file the request removed, same request and reason, execute.
 
     The plan lists the old index with every aggregate, and the execution's sweep reads the manifest
     version, finds the removed row and deletes it.
     """
-    shown = runner.invoke(create_app(), list(REMOVE_FIRST_VERSION), terminal_width=200).stdout
+    shown = invoke(*REMOVE_FIRST_VERSION, width=200).stdout
     assert AGGREGATE in shown
 
-    monkeypatch.setenv("DEBATE_REMOVAL_PROFILE", REMOVAL_PROFILE)
+    environment(DEBATE_REMOVAL_PROFILE=REMOVAL_PROFILE)
     done = run(*REMOVE_FIRST_VERSION, "--execute")
     assert done["exit_code"] == ExitCode.OK, done
-    monkeypatch.setenv("DEBATE_REMOVAL_PROFILE", NO_SUCH_PROFILE)
+    environment(DEBATE_REMOVAL_PROFILE=NO_SUCH_PROFILE)
 
     clean = run("caselist", "status")
     assert clean["exit_code"] == ExitCode.OK, clean
@@ -1043,16 +1036,16 @@ def test_versions_older_than_a_removal_are_cleared_by_running_it_again_under_the
 
 
 def test_an_old_manifest_version_alone_is_cleared_by_executing_a_plan_that_says_nothing_is_left(
-    installation: Path, bucket: S3Client, an_old_manifest_version: str, monkeypatch: pytest.MonkeyPatch
+    installation: Path, bucket: S3Client, an_old_manifest_version: str
 ) -> None:
     """The plan reads current manifests only, so it finds nothing to do; the sweep runs at execution."""
     assert run("caselist", "status")["error"]["code"] == "REMOVAL_RESIDUE"
-    assert "Nothing is left to remove" in runner.invoke(create_app(), list(REMOVE_FIRST_VERSION)).stdout
+    assert "Nothing is left to remove" in invoke(*REMOVE_FIRST_VERSION).stdout
 
-    monkeypatch.setenv("DEBATE_REMOVAL_PROFILE", REMOVAL_PROFILE)
+    environment(DEBATE_REMOVAL_PROFILE=REMOVAL_PROFILE)
     done = run(*REMOVE_FIRST_VERSION, "--execute")
     assert done["exit_code"] == ExitCode.OK, done
-    monkeypatch.setenv("DEBATE_REMOVAL_PROFILE", NO_SUCH_PROFILE)
+    environment(DEBATE_REMOVAL_PROFILE=NO_SUCH_PROFILE)
 
     clean = run("caselist", "status")
     assert clean["exit_code"] == ExitCode.OK, clean
@@ -1111,7 +1104,7 @@ def import_next_week(archive: Path) -> dict[str, Any]:
 
 
 def test_a_removed_path_holds_next_weeks_upload_and_the_same_removal_run_again_finishes_it(
-    installation: Path, bucket: S3Client, published: Any, monkeypatch: pytest.MonkeyPatch
+    installation: Path, bucket: S3Client, published: Any
 ) -> None:
     data_dir = installation / "dev"
     local_path_holds = data_dir / "suppression" / "path-holds.jsonl"
@@ -1131,12 +1124,12 @@ def test_a_removed_path_holds_next_weeks_upload_and_the_same_removal_run_again_f
     assert {key: value for key, value in entry.items() if key != "recorded_at"} == the_path_entry
     assert not [name for name in IDENTIFYING if name in planned]
     assert "PATH ENTRIES appended beside the list, here and in the bucket: 1" in (
-        runner.invoke(create_app(), list(REMOVE_REVISION)).stdout
+        invoke(*REMOVE_REVISION).stdout
     )
     assert not local_path_holds.exists()
 
     # Executed: the entry is beside the list on this machine and in the bucket, the same line.
-    monkeypatch.setenv("DEBATE_REMOVAL_PROFILE", REMOVAL_PROFILE)
+    environment(DEBATE_REMOVAL_PROFILE=REMOVAL_PROFILE)
     assert run(*REMOVE_REVISION, "--execute")["exit_code"] == ExitCode.OK
     written = local_path_holds.read_text(encoding="utf-8")
     assert {
@@ -1145,7 +1138,7 @@ def test_a_removed_path_holds_next_weeks_upload_and_the_same_removal_run_again_f
     in_the_bucket = bucket.get_object(Bucket=BUCKET, Key="manifests/_suppression/path-holds.jsonl")
     assert in_the_bucket["Body"].read().decode("utf-8") == written
     assert not [name for name in IDENTIFYING if name in written]
-    monkeypatch.delenv("DEBATE_REMOVAL_PROFILE")
+    environment(DEBATE_REMOVAL_PROFILE=None)
 
     # Next week's archive holds a new upload at that path. The import refuses it under the request.
     archive = next_weeks_archive(data_dir / "inbox")
@@ -1171,7 +1164,7 @@ def test_a_removed_path_holds_next_weeks_upload_and_the_same_removal_run_again_f
     assert again["data"]["path_holds"] == [], "the path is held already"
     assert archive.exists(), "a dry run"
 
-    monkeypatch.setenv("DEBATE_REMOVAL_PROFILE", REMOVAL_PROFILE)
+    environment(DEBATE_REMOVAL_PROFILE=REMOVAL_PROFILE)
     done = run(*REMOVE_REVISION, "--execute")
     assert done["exit_code"] == ExitCode.OK, done
     assert not archive.exists()
@@ -1186,10 +1179,10 @@ def test_a_removed_path_holds_next_weeks_upload_and_the_same_removal_run_again_f
 
 
 def test_after_only_named_no_path_is_held_and_next_weeks_upload_is_imported(
-    installation: Path, bucket: S3Client, published: Any, monkeypatch: pytest.MonkeyPatch
+    installation: Path, bucket: S3Client, published: Any
 ) -> None:
     data_dir = installation / "dev"
-    monkeypatch.setenv("DEBATE_REMOVAL_PROFILE", REMOVAL_PROFILE)
+    environment(DEBATE_REMOVAL_PROFILE=REMOVAL_PROFILE)
 
     done = run(*REMOVE_REVISION, "--only-named", "--execute")
 
@@ -1266,8 +1259,8 @@ def import_the_camp_download(installation: Path, *, event: str) -> None:
 
 def shown(*arguments: str) -> str:
     """What the command prints for a person."""
-    result: Result = runner.invoke(create_app(), list(arguments))
-    assert result.exit_code == ExitCode.OK, result.stdout
+    result = invoke(*arguments)
+    assert result.exit_code == ExitCode.OK, result.output
     return result.stdout
 
 
@@ -1312,7 +1305,6 @@ def test_no_line_of_a_source_plan_says_this_team_in_the_dry_run_the_execution_or
     installation: Path,
     bucket: S3Client,
     revised_at_two_of_the_teams_paths: None,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Every line printed and every string in the JSON, the confirmation to the requester included.
 
@@ -1322,7 +1314,7 @@ def test_no_line_of_a_source_plan_says_this_team_in_the_dry_run_the_execution_or
     """
     dry_run = shown(*REMOVE_BAYVIEW)
     dry_run_json = raw_json(*REMOVE_BAYVIEW)
-    monkeypatch.setenv("DEBATE_REMOVAL_PROFILE", REMOVAL_PROFILE)
+    environment(DEBATE_REMOVAL_PROFILE=REMOVAL_PROFILE)
     executed = shown(*REMOVE_BAYVIEW, "--execute")
     rerun = shown(*REMOVE_BAYVIEW)
     rerun_json = raw_json(*REMOVE_BAYVIEW)

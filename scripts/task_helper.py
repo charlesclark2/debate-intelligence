@@ -17,6 +17,8 @@ Every subcommand reads the specs of the checkout it is run from.
   new-report <task>              create docs/session-reports/<task>.md from the template (if absent)
   verdict <task>                 print the PM verdict recorded in the session report
   verdict-of <file>              print the PM verdict recorded in a report file (- reads stdin)
+  open-items <task>              print the open-item markers in the current session's part of the
+                                 session report; exit 1 if there are none
   pr-body <task>                 render the pull request body
 """
 
@@ -34,6 +36,9 @@ REPORTS = ROOT / "docs" / "session-reports"
 TEMPLATE = ROOT / "docs" / "process" / "session-report-template.md"
 PHASES = {"Pending", "Ready", "InProgress", "Blocked", "Succeeded", "Failed", "Cancelled"}
 VERDICTS = ("ACCEPTED", "CHANGES_REQUESTED", "PENDING")
+VERDICT_LINE = re.compile(r"^\*\*Verdict:\*\*[ \t]*`?([A-Z_]+)`?", re.M)
+SECTION_HEADING = re.compile(r"^## ", re.M)
+OPEN_ITEM_MARKERS = re.compile(r"NOT RUN|NOT APPLICABLE|PARTIAL|FAIL")
 
 
 def die(msg: str, code: int = 2) -> None:
@@ -164,8 +169,28 @@ def report_verdict(text: str) -> str:
     appends a new, empty review at the end. Reading the first line would let `scripts/task pr` open on
     an earlier ACCEPTED before anyone has reviewed the new work (v1-e01-t18).
     """
-    found = re.findall(r"^\*\*Verdict:\*\*[ \t]*`?([A-Z_]+)`?", text, re.M)
+    found = VERDICT_LINE.findall(text)
     return found[-1] if found and found[-1] in VERDICTS else "PENDING"
+
+
+def current_session(text: str) -> str:
+    """The current session's part of a report: everything after the last-but-one PM review.
+
+    The reviews are the `**Verdict:**` lines `report_verdict` reads. With one review or none, the whole
+    report is current. Otherwise the last-but-one review ends, as `section()` ends a section, at the
+    next `## ` heading, and the current part starts there. Its notes and any `###` record the PM adds
+    under it stay with it; a `##` section appended after it is current (v1-e01-t24).
+    """
+    reviews = list(VERDICT_LINE.finditer(text))
+    if len(reviews) < 2:
+        return text
+    end = SECTION_HEADING.search(text, reviews[-2].end())
+    return text[end.start() :] if end else ""
+
+
+def open_items(text: str) -> list[str]:
+    """The open-item markers `scripts/task pr --partial` requires, found in the current session's part."""
+    return sorted(set(OPEN_ITEM_MARKERS.findall(current_session(text))))
 
 
 def cmd_verdict(task: str) -> None:
@@ -175,6 +200,16 @@ def cmd_verdict(task: str) -> None:
 
 def cmd_verdict_of(file: str) -> None:
     print(report_verdict(sys.stdin.read() if file == "-" else Path(file).read_text()))
+
+
+def cmd_open_items(task: str) -> None:
+    rep = REPORTS / f"{task}.md"
+    if not rep.exists():
+        die(f"no session report at {rep.relative_to(ROOT)}")
+    found = open_items(rep.read_text())
+    if not found:
+        sys.exit(1)
+    print(", ".join(found))
 
 
 def section(text: str, heading: str) -> str:
@@ -291,7 +326,8 @@ RESUMED_REPORT_STEP = """\
   gets PASS/FAIL/NOT RUN with the evidence (command + result). End the report with a new, empty
   "## PM review" section copied from docs/process/session-report-template.md. scripts/task pr
   reads the last verdict in the report, so that empty review is what it reads until the PM fills
-  it in."""
+  it in. A criterion still open is marked NOT RUN (or PARTIAL/FAIL) again in your own section:
+  `scripts/task pr --partial` reads open items only after the last-but-one PM review."""
 
 STARTED = {
     "resumed": "",
@@ -347,6 +383,7 @@ def main() -> None:
         "new-report": (cmd_new_report, 1),
         "verdict": (cmd_verdict, 1),
         "verdict-of": (cmd_verdict_of, 1),
+        "open-items": (cmd_open_items, 1),
         "pr-body": (cmd_pr_body, 1),
     }
     if not a or a[0] not in cmds or len(a) - 1 != cmds[a[0]][1]:

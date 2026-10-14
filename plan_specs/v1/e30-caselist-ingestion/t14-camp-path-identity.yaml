@@ -55,7 +55,7 @@ spec:
         The removal runbook's step 7 drops the by-hand comparison of a camp file's later
         uploads.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

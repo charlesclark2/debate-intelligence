@@ -306,8 +306,10 @@ class TestOlderVersionsAreReported:
         assert not report.in_sync
         assert of(report, "openev").older_versions == ()
 
-    async def test_versions_written_after_the_removal_are_not_reported(self, removed: RemovalWorld) -> None:
-        """The aggregates rebuilt and a manifest re-published afterwards, as step 5 of the runbook does.
+    async def test_versions_written_after_the_removal_are_not_reported(
+        self, removed: RemovalWorld, tmp_path: Path
+    ) -> None:
+        """The aggregates rebuilt afterwards, as step 5 of the runbook does, and a manifest re-published.
 
         moto stamps them with the time the test runs, after the removal. The rewrite becomes
         noncurrent and is still not reported: it is the removal's own.
@@ -316,7 +318,10 @@ class TestOlderVersionsAreReported:
         for version in PARSER_VERSIONS:
             for name in AGGREGATES:
                 put(world, aggregate_key(SYNTHETIC_CASELIST, version, name), b"rebuilt\n")
-        put(world, REWRITTEN[0], b"re-published\n")
+        republished = tmp_path / "manifest.jsonl"
+        republished.write_bytes(current_bytes(world, REWRITTEN[0]))
+        await world.bucket.put_file(REWRITTEN[0], republished)
+        assert len(versions_of(world, REWRITTEN[0])) == 2
 
         report = await status(world)
 

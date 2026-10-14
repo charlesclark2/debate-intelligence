@@ -48,6 +48,9 @@ probe behind. `docs/runbooks/caselist-removal.md` says how to remove one left fr
    use to recognise it as removed, which is safe only once the list says it is.
 4. **The removal log**, one entry, `COMPLETED` or `INCOMPLETE` with the error's code. An incomplete
    run is finished by running the same command again; nothing is retried behind the operator's back.
+   Just before it, beside the log, the run's scope (`v1-e30-t15`): the caselists it touched and each
+   manifest it rewrote in the bucket, with the version the rewrite is. `caselist status` compares
+   manifest and aggregate versions with the removal's completion by them.
 
 ## What it never deletes
 
@@ -108,10 +111,12 @@ from debate_core.application.ports.suppression import (
     REQUEST_ID_PATTERN,
     AppendOnlyRecord,
     InboxRewriteRecord,
+    ManifestRewriteRecord,
     ReasonCode,
     RemovalLogEntry,
     RemovalLogKind,
     RemovalOutcome,
+    RemovalScopeEntry,
     SuppressionAction,
     SuppressionEntry,
     SuppressionList,
@@ -431,6 +436,8 @@ class _Counts:
     manifest_rows_dropped: int = 0
     s3_versions_deleted: int = 0
     inbox: InboxPurge = field(default_factory=InboxPurge)
+    rewrites: list[ManifestRewriteRecord] = field(default_factory=lambda: [])
+    """Each manifest rewritten in the bucket so far, with the version its rewrite is."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -558,10 +565,17 @@ class CaselistRemovalService:
         except (DomainError, OSError) as stopped:
             failure = stopped
         entry = self._log_entry(plan, counts, failure)
+        scope = RemovalScopeEntry(
+            recorded_at=entry.recorded_at,
+            request_id=entry.request_id,
+            environment=entry.environment,
+            caselists=plan.touched_caselists,
+            manifest_rewrites=tuple(sorted(counts.rewrites, key=lambda rewrite: rewrite.key)),
+        )
         log = RecordedRemovalLog(self.local_removal_log, self._bucket_record(access, REMOVAL_LOG_KEY))
         unlogged: DomainError | OSError | None = None
         try:
-            await log.append([entry])
+            await log.append([entry], scopes=[scope])
         except (DomainError, OSError) as refused:
             unlogged = refused  # reported with the run's own failure, or as a completed removal unlogged
         report = RemovalReport(
@@ -608,6 +622,7 @@ class CaselistRemovalService:
             )
             refuse_protected_versions(stale)
             counts.s3_versions_deleted += await access.versions.delete_versions(stale)
+            counts.rewrites.append(ManifestRewriteRecord(key=rewrite.key, version_id=written))
             counts.manifests_rewritten += 1
             counts.manifest_rows_dropped += rewrite.rows_dropped
 

@@ -78,12 +78,22 @@ from debate_core.application.caselist.publish_plan import (
     suppressed_rows,
     validate_publish_target,
 )
-from debate_core.application.caselist.removal_residue import CaselistResidue, removal_residue
+from debate_core.application.caselist.removal_residue import (
+    CaselistResidue,
+    CompletedRemovals,
+    completed_removals,
+    removal_residue,
+)
 from debate_core.application.caselist.suppression import load_suppression_state
 from debate_core.application.errors import DomainError, NotFound
 from debate_core.application.ports.evidence_store import EvidenceObjectStore, ObjectInfo, ObjectKey
 from debate_core.application.ports.evidence_versions import EvidenceVersionStore
-from debate_core.application.ports.suppression import RemovalLog, SuppressionList, SuppressionState
+from debate_core.application.ports.suppression import (
+    RemovalLog,
+    RemovalScopeLog,
+    SuppressionList,
+    SuppressionState,
+)
 from debate_core.domain import Sha256Hex
 
 __all__ = [
@@ -230,6 +240,8 @@ class CaselistStatusService:
     ) -> None:
         if concurrency < 1:
             raise ValueError("concurrency must be at least 1")
+        if removal_log is not None and environment is None:
+            raise ValueError("a removal log is compared only with its own environment's removals; name it")
         self._local = local
         self._remote = remote
         self._suppression = suppression
@@ -275,11 +287,24 @@ class CaselistStatusService:
         if not compared:
             raise NoCaselistEvidence(caselist, snapshot)
         left: list[CaselistResidue] = []
+        removals = CompletedRemovals()
         if residue and self._versions is not None:
-            left = [await removal_residue(self._versions, name, suppression) for name in caselists]
+            removals = await self._completed_removals()
+            left = [await removal_residue(self._versions, name, suppression, removals) for name in caselists]
         return CaselistStatusReport(
-            snapshots=tuple(compared), suppressed_objects=tuple(sorted(set(leftovers))), residue=tuple(left)
+            snapshots=tuple(compared),
+            suppressed_objects=tuple(sorted(set(leftovers))),
+            residue=tuple(left),
+            removals_not_checked=removals.not_checked,
         )
+
+    async def _completed_removals(self) -> CompletedRemovals:
+        """This environment's completed removals, from both copies of the log and of its scopes."""
+        if self._removal_log is None or self._environment is None:
+            return CompletedRemovals()
+        log = self._removal_log
+        scopes = await log.scopes() if isinstance(log, RemovalScopeLog) else ()
+        return completed_removals(await log.entries(), scopes, self._environment)
 
     async def _caselist_status(
         self,

@@ -683,9 +683,66 @@ Expected: `exit 0` each.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-13
 
 **Notes:**
+
+Accepted as a partial merge. The rest of ac1, ac2's sample and ac4's operator run are NOT RUN, and
+the Goal stays `InProgress`.
+
+**You tested the hypothesis rather than building on it, and it is only partly right.**
+
+* **It holds for about seven in ten of the 81 divided pairs.** All 44 cuts whose containers sit in
+  several clusters read as one split card, and none as two cards.
+* **`MIN_CUT_SHARE` is not the cause:** it explains 7 of the 81.
+* **The real cause is upstream, in long-body matching.** 3,563 long texts are cuts of a body in
+  another cluster. The two defects in the short-body step are real and now fixed, but they do not
+  re-join the pairs the operator judged. You said so plainly instead of claiming the divisions
+  were answered.
+
+**The work itself:**
+
+* **The diagnosis confirms a container with the clusterer's own function,** so it cannot drift
+  from the rule it explains. Its total equals the 81 counted on 2026-10-11, and on openev it
+  matched the one divided pair exactly.
+* **The fixes are narrow:**
+  * a cut's share is measured against the smallest body that holds it;
+  * nested containers count as one witness.
+
+  The labelled sets did not move, and you showed why: they hold none of these cases. So the
+  synthetic fixtures carry the evidence, and each states its own precondition.
+* **The mutation run:** 11 of 11 caught, the one survivor turned into a test, and one
+  indistinguishable check deleted.
+* **The largest cluster is a finding, not a fix.** hspolicy26's 1,172 cards are a chain, and 6,409
+  of its 13,695 pairs share no five-word run. Leaving it for a person to judge is right.
+
+**Rulings:**
+
+* **Deviation 1, running the store's own-table diagnosis on all four caselists:** accepted. It
+  was read-only and under two minutes a run, and fixes resting on openev's single pair would have
+  rested on nothing. The one run that overran wrote nothing, and you capped every later run.
+* **Deviations 2 to 4:** accepted. `--least-alike` in particular makes ac2's sample find a false
+  merge on purpose rather than by chance.
+* **Decision 1, long cuts not joined yet:** accepted. Your alternative, counting a cut's own
+  cluster as a witness and refusing a join that would put two unrelated texts together, is the
+  design to try. It waits for ac2's tallies and step 7's sample.
+* **Decision 2, the largest clusters not broken up:** accepted. Whether a source cut at many
+  extents is one card or several is my call, and I will make it from step 5's tallies.
+* **Decisions 3 to 11:** accepted.
+
+**The re-parse is combined with `v1-e31-t12`'s, as your steps assume.** Merge this before the
+re-parse runs, so the `2026.10.12-docx-3` directory is built under `card-fingerprint-v3` from the
+start. I give the operator one combined order of steps from both reports.
+
+**Follow-up work, filed by the PM in the next spec batch:**
+
+* **One E31 p2 task, "long cuts and their limits", gated on ac2's and step 7's tallies:** your 1,
+  3, 4, 5 and 6, with Decision 1's alternative as the starting design.
+* **Your 2:** my ruling after step 5. It also settles what `v1-e32-t03` calls the most-read card.
+* **Your 8, the `card_occurrence.py` sentence:** added to `v1-e31-t14`, which edits the domain.
+* **Your 9 and 10:** the E01 trim task. One is a flaky timing test; the other is a test that reads
+  `HEAD`.
+* **Your 11:** I record the figures at close-out.

@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from hypothesis import given, settings
+from hypothesis import event, given, settings
 from hypothesis import strategies as st
 from tests.evals.parser.digests import text_digest
 from tests.evals.parser.docx_render import RenderedParagraph, RenderedRun
@@ -479,6 +479,11 @@ def test_each_key_checks_at_most_the_row_it_was_pressed_on(keys: list[str], blin
         after = {row.index for row in session.rows if row.checked}
         assert after - before <= {pressed_on}
         assert before <= after
+    checked = sum(row.checked for row in session.rows)
+    event("blind" if blind else "pre-label shown")
+    event(
+        "no row checked" if not checked else "1-3 rows checked" if checked <= 3 else "4 or more rows checked"
+    )
 
 
 def test_progress_is_saved_after_every_key_and_holds_no_text(evaluation: _Evaluation) -> None:

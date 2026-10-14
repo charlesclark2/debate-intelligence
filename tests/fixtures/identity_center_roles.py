@@ -5,7 +5,9 @@ it does anything (`v1-e29-t08`), and carries on only for the takedown role. A te
 command through the real composition root therefore needs profiles that *are* roles. moto answers
 `GetCallerIdentity` with the role a credential assumed, so :func:`sign_in` creates a role named the
 way the account names a permission set's, assumes it, and writes the temporary credentials moto
-issued into the test's own credentials file under the profile's name.
+issued into the test's own credentials file under the profile's name. In-process, under
+`mock_aws()`, it makes its own clients; against the moto server an installed-build smoke check
+reaches (`v1-e01-t21`), the check passes the IAM and STS clients for that server.
 
 Moto does not enforce IAM: these roles hold no policy, and a profile signed in as the everyday role
 could delete from moto's bucket if the command let it. What a test gets from this module is who a
@@ -32,14 +34,22 @@ EVERYDAY_ROLE = "AWSReservedSSO_DebateDevEvidenceOperator_fedcba9876543210"
 """The role of dev's `DebateDevEvidenceOperator` permission set."""
 
 
-def sign_in(credentials_file: Path, roles: Mapping[str, str], *, region: str = "us-east-1") -> None:
+def sign_in(
+    credentials_file: Path,
+    roles: Mapping[str, str],
+    *,
+    region: str = "us-east-1",
+    iam: Any = None,
+    sts: Any = None,
+) -> None:
     """Rewrite `credentials_file` so that each profile in `roles` is signed in as its role.
 
-    Call it inside `mock_aws()`: the roles live in moto's account for as long as that does. A role
-    two profiles share is created once.
+    Call it inside `mock_aws()`, or pass `iam` and `sts` clients for a moto server: the roles live in
+    moto's account for as long as that does. A role two profiles share is created once.
     """
     untyped: Any = boto3  # boto3's types cover `s3` alone here
-    iam, sts = untyped.client("iam", region_name=region), untyped.client("sts", region_name=region)
+    iam = iam if iam is not None else untyped.client("iam", region_name=region)
+    sts = sts if sts is not None else untyped.client("sts", region_name=region)
     created: dict[str, str] = {}
     sections: list[str] = []
     for profile, role_name in roles.items():

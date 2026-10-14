@@ -187,6 +187,8 @@ from debate_core.integrations.local.suppression_list import (
 )
 
 if TYPE_CHECKING:  # pragma: no cover - imported for the type checker only; see the factories
+    from mypy_boto3_s3.client import S3Client
+
     from debate_core.integrations.opencaselist import CaselistTokenStore, OpenCaselistClient
 
 __all__ = [
@@ -580,7 +582,7 @@ class ServiceContainer:
     def _build_evidence_sync(self, blob_prefix: str | None) -> EvidenceSyncService:
         # Imported here, not at module scope: boto3 is an optional dependency and `--help` must
         # work without it. See this module's docstring.
-        from debate_core.integrations.s3 import S3EvidenceObjectStore, build_s3_client
+        from debate_core.integrations.s3 import S3EvidenceObjectStore
 
         settings = self.settings
         storage = settings.storage
@@ -589,11 +591,7 @@ class ServiceContainer:
 
         # One client for both keyspaces: one set of credentials, one connection pool, and one
         # profile name in any `aws sso login` hint the adapters raise.
-        client = build_s3_client(
-            region=storage.s3.region,
-            profile=storage.s3.aws_profile,
-            profile_setting=_EVERYDAY_PROFILE_SETTING,
-        )
+        client = self._s3_client(profile=storage.s3.aws_profile, profile_setting=_EVERYDAY_PROFILE_SETTING)
 
         def bucket_store() -> S3EvidenceObjectStore:
             return S3EvidenceObjectStore(
@@ -667,7 +665,7 @@ class ServiceContainer:
 
     def _build_caselist_status(self) -> CaselistStatusService:
         # Imported here, not at module scope: boto3 is an optional dependency. See the docstring.
-        from debate_core.integrations.s3 import S3EvidenceVersionStore, build_s3_client
+        from debate_core.integrations.s3 import S3EvidenceVersionStore
 
         storage = self.settings.storage
         bucket = self._evidence_bucket()
@@ -687,10 +685,8 @@ class ServiceContainer:
                 bucket=str(storage.s3.bucket),
                 profile=storage.s3.aws_profile,
                 profile_setting=_EVERYDAY_PROFILE_SETTING,
-                client=build_s3_client(
-                    region=storage.s3.region,
-                    profile=storage.s3.aws_profile,
-                    profile_setting=_EVERYDAY_PROFILE_SETTING,
+                client=self._s3_client(
+                    profile=storage.s3.aws_profile, profile_setting=_EVERYDAY_PROFILE_SETTING
                 ),
             ),
         )
@@ -705,7 +701,7 @@ class ServiceContainer:
 
     def _build_caselist_removal(self) -> CaselistRemovalService:
         # Imported here, not at module scope: boto3 is an optional dependency. See the docstring.
-        from debate_core.integrations.s3 import S3EvidenceVersionStore, build_s3_client
+        from debate_core.integrations.s3 import S3EvidenceVersionStore
 
         settings = self.settings
         storage = settings.storage
@@ -725,10 +721,8 @@ class ServiceContainer:
                 bucket=str(storage.s3.bucket),
                 profile=storage.s3.aws_profile,
                 profile_setting=_EVERYDAY_PROFILE_SETTING,
-                client=build_s3_client(
-                    region=storage.s3.region,
-                    profile=storage.s3.aws_profile,
-                    profile_setting=_EVERYDAY_PROFILE_SETTING,
+                client=self._s3_client(
+                    profile=storage.s3.aws_profile, profile_setting=_EVERYDAY_PROFILE_SETTING
                 ),
             ),
             inbox=self.caselist_inbox(),
@@ -762,11 +756,7 @@ class ServiceContainer:
         return self.singleton("takedown_access", self._build_takedown_access)
 
     def _build_takedown_access(self) -> TakedownAccess:
-        from debate_core.integrations.s3 import (
-            S3EvidenceObjectStore,
-            S3EvidenceVersionStore,
-            build_s3_client,
-        )
+        from debate_core.integrations.s3 import S3EvidenceObjectStore, S3EvidenceVersionStore
 
         settings = self.settings
         storage = settings.storage
@@ -775,9 +765,7 @@ class ServiceContainer:
             raise TakedownNotConfigured
         if not storage.s3.bucket:
             raise EvidenceStoreNotConfigured(settings.environment)
-        client = build_s3_client(
-            region=storage.s3.region, profile=profile, profile_setting=_REMOVAL_PROFILE_SETTING
-        )
+        client = self._s3_client(profile=profile, profile_setting=_REMOVAL_PROFILE_SETTING)
         return TakedownAccess(
             versions=S3EvidenceVersionStore(
                 bucket=str(storage.s3.bucket),
@@ -818,6 +806,8 @@ class ServiceContainer:
             profile=profile.name,
             profile_setting=profile.setting,
             region=s3.region,
+            endpoint_url=s3.endpoint_url,
+            ignore_configured_endpoints=self._ignores_configured_endpoints,
         )
 
     def evidence_profile_check(self) -> EvidenceProfileCheck:
@@ -848,6 +838,31 @@ class ServiceContainer:
             environment=settings.environment.value,
         )
 
+    def _s3_client(self, *, profile: str | None, profile_setting: str) -> S3Client:
+        """An S3 client for this environment's bucket, signed with `profile`: the one place one is built.
+
+        It goes where `storage.s3.endpoint_url` says, which only a dev installation accepts, and
+        otherwise to AWS. A prod installation also ignores the endpoints botocore configures for
+        itself, so no variable or AWS config entry can send its evidence store elsewhere
+        (`v1-e01-t21`).
+        """
+        # Imported here, not at module scope: boto3 is an optional dependency. See the docstring.
+        from debate_core.integrations.s3 import build_s3_client
+
+        s3 = self.settings.storage.s3
+        return build_s3_client(
+            region=s3.region,
+            profile=profile,
+            profile_setting=profile_setting,
+            endpoint_url=s3.endpoint_url,
+            ignore_configured_endpoints=self._ignores_configured_endpoints,
+        )
+
+    @property
+    def _ignores_configured_endpoints(self) -> bool:
+        """Whether botocore's own endpoint routes are ignored: in prod, always."""
+        return self.settings.environment is Environment.PROD
+
     def _local_evidence(self) -> LocalEvidence:
         data_dir = self.settings.storage.data_dir
         objects = FsEvidenceObjectStore(data_dir)
@@ -865,7 +880,7 @@ class ServiceContainer:
 
     def _build_evidence_bucket(self) -> EvidenceObjectStore:
         # Imported here, not at module scope: boto3 is an optional dependency. See the docstring.
-        from debate_core.integrations.s3 import S3EvidenceObjectStore, build_s3_client
+        from debate_core.integrations.s3 import S3EvidenceObjectStore
 
         settings = self.settings
         storage = settings.storage
@@ -873,11 +888,7 @@ class ServiceContainer:
             raise EvidenceStoreNotConfigured(settings.environment)
         return S3EvidenceObjectStore(
             bucket=str(storage.s3.bucket),
-            client=build_s3_client(
-                region=storage.s3.region,
-                profile=storage.s3.aws_profile,
-                profile_setting=_EVERYDAY_PROFILE_SETTING,
-            ),
+            client=self._s3_client(profile=storage.s3.aws_profile, profile_setting=_EVERYDAY_PROFILE_SETTING),
             profile=storage.s3.aws_profile,
             profile_setting=_EVERYDAY_PROFILE_SETTING,
             multipart_threshold_bytes=storage.s3.multipart_threshold_bytes,

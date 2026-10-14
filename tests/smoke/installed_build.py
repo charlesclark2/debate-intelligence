@@ -15,7 +15,9 @@ binary, never against this checkout's code. :func:`resolve_build` decides which 
 directory, in an environment built from scratch: no inherited ``DEBATE_*``, AWS or token
 variables, the checkout's ``.venv`` taken off ``PATH``, ``DEBATE_ENV=dev`` and
 ``DEBATE_STORAGE__DATA_DIR`` pointing at the scratch data directory. Offline, it also puts
-``network_guard/`` on the process's ``PYTHONPATH`` (see the module there).
+``network_guard/`` on the process's ``PYTHONPATH`` (see the module there), and names in
+``DEBATE_SMOKE_STAND_INS`` the stand-ins the check declared, the only addresses the guard lets the
+build reach (tests/smoke/stand_ins/).
 """
 
 from __future__ import annotations
@@ -37,6 +39,7 @@ SMOKE_BIN = "DEBATE_SMOKE_BIN"
 EXPECT_SHA = "DEBATE_SMOKE_EXPECT_SHA"
 EXPECT_TAG = "DEBATE_SMOKE_EXPECT_TAG"
 NETWORK_LOG = "DEBATE_SMOKE_NETWORK_LOG"
+STAND_INS = "DEBATE_SMOKE_STAND_INS"
 
 INSTALLED_CHANNEL = "dev"
 FULL_SHA = re.compile(r"[0-9a-f]{40}")
@@ -153,6 +156,7 @@ class InstalledCli:
         self.data_dir = root / "smoke-data"
         self.network_log = root / "smoke-network.log"
         self.network = network
+        self.stand_ins: list[tuple[str, int]] = []
         self._configured: dict[str, str | None] = {}
         for directory in (self.home, self.workdir):
             directory.mkdir(parents=True, exist_ok=True)
@@ -160,6 +164,10 @@ class InstalledCli:
     def configure(self, **overrides: str | None) -> None:
         """Environment overrides for every later run, as a check's installation fixture sets up."""
         self._configured |= overrides
+
+    def allow_stand_in(self, host: str, port: int) -> None:
+        """Let the build connect to a stand-in at `host:port`. Only a stand-in fixture calls this."""
+        self.stand_ins.append((host, port))
 
     def environment(self, overrides: Mapping[str, str | None] | None = None) -> dict[str, str]:
         """The process environment of a run; an override of None removes that variable."""
@@ -182,6 +190,8 @@ class InstalledCli:
         }
         if not self.network:
             environment |= {"PYTHONPATH": str(NETWORK_GUARD), NETWORK_LOG: str(self.network_log)}
+            if self.stand_ins:
+                environment[STAND_INS] = " ".join(f"{host}:{port}" for host, port in self.stand_ins)
         for name, value in (self._configured | dict(overrides or {})).items():
             if value is None:
                 environment.pop(name, None)

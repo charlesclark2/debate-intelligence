@@ -44,6 +44,11 @@ dev = [
     "lxml-stubs>=0.5",
     # Answers the S3 adapters in-process (v1-e29-t04). The PR test suite reaches no AWS account.
     "moto[s3]>=5.0",
+    # moto's server mode, which the installed-build smoke checks reach over loopback instead of
+    # patching a process they cannot see (v1-e01-t21). Its own `server` extra would add cfn-lint,
+    # docker and a dozen more for services the evidence store never calls; S3 and STS need only these.
+    "flask>=3.0",
+    "flask-cors>=5.0",
     "numbers-parser>=4.19",
     "pre-commit>=4.0",
     "pre-commit-hooks>=5.0",

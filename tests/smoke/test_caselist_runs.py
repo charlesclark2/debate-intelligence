@@ -1,10 +1,11 @@
-"""`debate-research caselist runs` end to end, as `validate-dev` runs it (`v1-e34-t03`).
+"""`debate-research caselist runs` end to end, against the installed build (`v1-e34-t03`).
 
 A weekly `caselist pull` wired up the way an installation wires it — console script, composition
 root, a `dev` settings profile, the real client, importers, manifests and publisher — followed by
-`caselist runs`, from the local log and from the bucket. respx answers OpenCaselist and moto
-answers S3, both in-process with sockets disabled, and the profile names the null notifier, so
-nothing leaves the process and nothing appears on a screen.
+`caselist runs`, from the local log and from the bucket. Two stand-ins answer for the world, each a
+server the build reaches over loopback (`v1-e01-t21`, tests/smoke/stand_ins/): moto in server mode
+for S3, and a local OpenCaselist API and file host serving synthetic responses over https. The
+profile names the null notifier, so nothing appears on a screen.
 
 Unmarked, like `test_caselist_pull.py` and for the same reason: a `live` marker would make the
 default run collect this and skip it (`tests/smoke/README.md`).
@@ -17,36 +18,25 @@ three downloaded, none deferred.
 from __future__ import annotations
 
 import json
-import os
-from collections.abc import Iterator
 from datetime import date
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-import boto3
 import jsonschema
 import pytest
-import respx
-from moto import mock_aws
 from tests.fixtures.caselist.build_synthetic_archives import (
     SNAPSHOTS,
     SYNTHETIC_CASELIST,
     build_snapshot_zips,
 )
-from typer.testing import CliRunner, Result
+from tests.smoke.installed_build import InstalledCli
+from tests.smoke.stand_ins.opencaselist import OpenCaselistStandIn
+from tests.smoke.stand_ins.s3 import MOTO_TEST_CREDENTIALS, S3StandIn
 
-from debate_cli.app import create_app
 from debate_cli.exit_codes import ExitCode
 
 if TYPE_CHECKING:  # pragma: no cover - import for the type checker only
     from mypy_boto3_s3.client import S3Client
-
-runner = CliRunner()
-
-# Runs in pytest's own process, where respx answers OpenCaselist and moto answers S3, so it cannot
-# run against an installed build: `ci` runs it, and validate-dev's recorded tier deselects it
-# (README.md).
-pytestmark = pytest.mark.in_process
 
 BUCKET = "debate-dev-evidence-runs-moto"
 
@@ -57,8 +47,6 @@ INSTALLED_BUILDS_RECORD = (
 )
 """The run record's schema as the build installed for the weekly agent (0.1.0.dev60) printed it."""
 AWS_PROFILE_NAME = "debate-dev-evidence"
-API = "https://api.opencaselist.example.invalid/v1"
-FILE_HOST = "https://files.opencaselist.example.invalid"
 
 
 def weekly_name(day: date) -> str:
@@ -66,30 +54,21 @@ def weekly_name(day: date) -> str:
 
 
 @pytest.fixture
-def installation(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[Path]:
-    """A dev profile naming a moto bucket, the test API and the null notifier."""
-    for name in list(os.environ):
-        if name.startswith("DEBATE_"):
-            monkeypatch.delenv(name, raising=False)
+def installation(
+    installed_cli: InstalledCli,
+    s3_stand_in: S3StandIn,
+    opencaselist_stand_in: OpenCaselistStandIn,
+    tmp_path: Path,
+) -> Path:
+    """A dev profile naming the stand-in's bucket and the null notifier, with a token in the environment."""
     config = tmp_path / "aws-config"
     config.write_text(f"[profile {AWS_PROFILE_NAME}]\nregion = us-east-1\n", encoding="utf-8")
     credentials = tmp_path / "aws-credentials"
     credentials.write_text(
-        f"[{AWS_PROFILE_NAME}]\naws_access_key_id = testing\naws_secret_access_key = testing\n",
+        f"[{AWS_PROFILE_NAME}]\naws_access_key_id = {MOTO_TEST_CREDENTIALS['aws_access_key_id']}\n"
+        f"aws_secret_access_key = {MOTO_TEST_CREDENTIALS['aws_secret_access_key']}\n",
         encoding="utf-8",
     )
-    for name, value in {
-        "AWS_ACCESS_KEY_ID": "testing",
-        "AWS_SECRET_ACCESS_KEY": "testing",
-        "AWS_SESSION_TOKEN": "testing",
-        "AWS_DEFAULT_REGION": "us-east-1",
-        "AWS_EC2_METADATA_DISABLED": "true",
-        "AWS_CONFIG_FILE": str(config),
-        "AWS_SHARED_CREDENTIALS_FILE": str(credentials),
-    }.items():
-        monkeypatch.setenv(name, value)
-    monkeypatch.delenv("AWS_PROFILE", raising=False)
-
     profiles = tmp_path / "profiles"
     profiles.mkdir()
     (profiles / "dev.toml").write_text(
@@ -99,56 +78,55 @@ def installation(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[Pa
         "[caselist]\n"
         "api_enabled = true\n"
         'notifier = "none"\n'
-        f'api_base_url = "{API}"\n'
         f'sync_caselists = ["{SYNTHETIC_CASELIST}"]\n'
         "min_request_interval_seconds = 0.5\n"
         f'[models]\nrouting_file = "{tmp_path / "routing.yaml"}"\nbudget_usd_daily = 1.0\n',
         encoding="utf-8",
     )
-    monkeypatch.setenv("DEBATE_PROFILE_DIR", str(profiles))
-    monkeypatch.setenv("DEBATE_ENV", "dev")
-    monkeypatch.setenv("DEBATE_PROVIDERS__CASELIST_TOKEN", "fixture-token-not-a-real-one")
-    yield tmp_path
+    installed_cli.configure(
+        DEBATE_PROFILE_DIR=str(profiles),
+        DEBATE_STORAGE__DATA_DIR=None,
+        DEBATE_PROVIDERS__CASELIST_TOKEN="fixture-token-not-a-real-one",
+        AWS_CONFIG_FILE=str(config),
+        AWS_SHARED_CREDENTIALS_FILE=str(credentials),
+    )
+    return tmp_path
 
 
 @pytest.fixture
-def bucket(installation: Path) -> Iterator[S3Client]:
-    with mock_aws():
-        client: S3Client = boto3.client("s3", region_name="us-east-1")  # pyright: ignore[reportUnknownMemberType]
-        client.create_bucket(Bucket=BUCKET)
-        client.put_bucket_versioning(Bucket=BUCKET, VersioningConfiguration={"Status": "Enabled"})
-        yield client
+def bucket(installation: Path, s3_stand_in: S3StandIn) -> S3Client:
+    return s3_stand_in.versioned_bucket(BUCKET)
 
 
 @pytest.fixture
-def site(installation: Path) -> Iterator[respx.MockRouter]:
+def site(installation: Path, opencaselist_stand_in: OpenCaselistStandIn) -> OpenCaselistStandIn:
+    """Three weekly archives on the file host, listed by the API, and no OpenEv file."""
     zips = build_snapshot_zips(installation / "published")
     listing = [
-        {"name": weekly_name(week.snapshot), "url": f"{FILE_HOST}/{weekly_name(week.snapshot)}"}
+        {
+            "name": weekly_name(week.snapshot),
+            "url": opencaselist_stand_in.serve_file(weekly_name(week.snapshot), zips[week.snapshot]),
+        }
         for week in SNAPSHOTS
     ]
-    with respx.mock(assert_all_called=False) as router:
-        router.get(f"{API}/caselists/{SYNTHETIC_CASELIST}/downloads").respond(200, json=listing)
-        router.get(f"{API}/openev").respond(200, json=[])
-        for week in SNAPSHOTS:
-            router.get(f"{FILE_HOST}/{weekly_name(week.snapshot)}").respond(
-                200, content=zips[week.snapshot].read_bytes()
-            )
-        yield router
+    opencaselist_stand_in.serve_json(f"/caselists/{SYNTHETIC_CASELIST}/downloads", listing)
+    opencaselist_stand_in.serve_json("/openev", [])
+    return opencaselist_stand_in
 
 
-def run(*arguments: str) -> dict[str, Any]:
-    result: Result = runner.invoke(create_app(), ["--json", *arguments])
-    lines = [line for line in result.stdout.splitlines() if line.strip()]
-    assert len(lines) == 1, f"expected one line of JSON on stdout; got {lines!r}"
-    envelope = json.loads(lines[0])
-    assert isinstance(envelope, dict)
-    envelope["exit_code"] = result.exit_code
-    return envelope  # pyright: ignore[reportUnknownVariableType]
+@pytest.fixture
+def run(installed_cli: InstalledCli) -> Any:
+    def run(*arguments: str) -> dict[str, Any]:
+        result = installed_cli.run("--json", *arguments)
+        envelope = result.envelope()
+        envelope["exit_code"] = result.exit_code
+        return envelope
+
+    return run
 
 
 def test_a_pull_is_listed_by_caselist_runs_locally_and_from_the_bucket(
-    installation: Path, bucket: S3Client, site: respx.MockRouter
+    installation: Path, bucket: S3Client, site: OpenCaselistStandIn, run: Any, installed_cli: InstalledCli
 ) -> None:
     pulled = run("caselist", "pull")
     assert pulled["exit_code"] == ExitCode.OK
@@ -200,7 +178,7 @@ def test_a_pull_is_listed_by_caselist_runs_locally_and_from_the_bucket(
     under_the_records = bucket.list_objects_v2(Bucket=BUCKET, Prefix="reports/sync-runs/")["Contents"]
     assert [one["Key"] for one in under_the_records] == [key], "an older build lists this prefix"
 
-    rendered = runner.invoke(create_app(), ["caselist", "runs"], env={"COLUMNS": "200"})
+    rendered = installed_cli.run("caselist", "runs", env={"COLUMNS": "200"})
     table = " ".join(rendered.stdout.split())
     assert "Parse stage" in table
     assert f"{counted['caselists']} caselist(s), {counted['full_parses']} in full" in table

@@ -55,6 +55,10 @@ class StsCallerIdentity:
         profile_setting: The setting `profile`'s name came from, e.g. `"DEBATE_REMOVAL_PROFILE"`.
         client: An already-built STS client. The tests pass moto's.
         region: Used only when `client` is not given.
+        endpoint_url: Where the client sends its request instead of AWS; only when `client` is not
+            given. The composition root passes the S3 client's, so the two reach one service.
+        ignore_configured_endpoints: Whether botocore's own endpoint routes are ignored, as for the
+            S3 client (:func:`~debate_core.integrations.s3.client.build_sts_client`).
     """
 
     def __init__(
@@ -65,6 +69,8 @@ class StsCallerIdentity:
         profile_setting: str | None = None,
         client: object | None = None,
         region: str | None = None,
+        endpoint_url: str | None = None,
+        ignore_configured_endpoints: bool = False,
     ) -> None:
         self._bucket = bucket
         self._profile = profile
@@ -73,7 +79,13 @@ class StsCallerIdentity:
             "_StsClient",
             client
             if client is not None
-            else build_sts_client(region=region, profile=profile, profile_setting=profile_setting),
+            else build_sts_client(
+                region=region,
+                profile=profile,
+                profile_setting=profile_setting,
+                endpoint_url=endpoint_url,
+                ignore_configured_endpoints=ignore_configured_endpoints,
+            ),
         )
 
     async def assumed_role_name(self) -> str | None:

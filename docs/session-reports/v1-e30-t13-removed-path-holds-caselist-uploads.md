@@ -400,9 +400,64 @@ real data directory.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-13
 
 **Notes:**
+
+Accepted in full. I have written ac5's policy clause in this branch as data-use policy 1.8, from
+your proposed sentence plus one more: until the agent runs a build that applies the hold, the
+removal is run again after each pull. With that in, the phase is `Succeeded`. 1.8 tightens the
+policy, so it takes effect when this merges.
+
+**The compatibility finding is the review.** You gave each older build's own reader four kinds of
+unknown line, and each build refused the whole list each time. That means any new line in the
+list would have stopped the weekly agent's import. A record beside the list, which older builds
+never open, is therefore the only safe shape. This build's list and removal log are byte for byte
+what the older builds wrote. Running an older build's code over this build's files shows it reads
+the list, imports, publishes and reports in sync.
+
+**The work itself:**
+
+* **The date on a hold (Decision 1)** keeps a re-import of an old week from dropping an earlier
+  version's row. That is the subtle case.
+* **Recording the hold beside each copy of the list (Decision 8)** means no composition root can
+  build the list without its holds.
+* **Running the same removal again now finds later revisions (Decision 7).** That closes the gap
+  `v1-e30-t11` could not reach.
+* **Mutant 18 found a real defect.** A run stopped after the suppress step left the path entry on
+  one copy and not the other. The fix gives each copy what the other holds, as the list itself
+  does.
+
+**Rulings:**
+
+* **Deviation 2, the import counts a refused upload and appends nothing:** accepted. Only the
+  takedown writes the takedown's records, with its credential. An append from the weekly import
+  would fail on an expired session, and an append to one copy only would split the copies, which
+  is what `v1-e34-t07` ruled out.
+* **Deviations 1, 3 and 4:** accepted. Deviation 1 is closed by policy 1.8.
+* **Decisions 1 to 16:** accepted.
+* **Your follow-up 4, a team removal holding nothing:** no team hold in V1. A team's new files land
+  at new paths as often as old ones. Running the removal again after the next import, as the
+  runbook says, is the procedure. No task.
+* **Decision 15, the reads against both buckets:** accepted for what they showed. Prod's missing
+  key reads as "no hold", which is evidence worth having. But this is the second session to make
+  credentialed calls itself. From now on, a call that uses the operator's AWS profiles goes to the
+  operator as a command, however read-only it is. That will be in future briefs.
+* **The 143 s chained run:** noted, as you did.
+
+**Follow-up work, filed by the PM in the next spec batch:**
+
+* **Your 2, the pull not reporting a held upload:** added to `v1-e34-t23`. The run's details can
+  carry the count by request.
+* **One E30 p3 task, "held-path loose ends", for your 3, 5, 7 and 8:**
+  * `caselist status` reporting an upload held in the inbox, or a row at a held path;
+  * the publisher refusing a row at a held path;
+  * an imported archive holding a refused upload;
+  * a skipped member named as the removed file.
+* **Your 6:** the agent gets the hold with the build after the combined `v1-e31-t11` and
+  `v1-e31-t12` re-parse. It is installed `v0.1.0-dev.122` tomorrow, which predates this task. Dev
+  has had one removal (the RM-2026-90 exercise) and prod none, so nothing is exposed meanwhile.
+* **Your 9:** `v1-e30-t17` owns it.

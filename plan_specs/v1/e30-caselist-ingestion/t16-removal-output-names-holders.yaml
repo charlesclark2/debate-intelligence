@@ -49,8 +49,11 @@ spec:
         team, and its result is recorded in the report whether or not it was failing.
     - id: ac3
       description: >-
-        A withdrawal records which caselist it took the file from, by slug, in the removal
-        log and in the suppression entry, readable by the build at the start commit.
+        A withdrawal records which caselist it took the file from, by slug, readable by the
+        build at the start commit. Amended by the PM, 2026-10-14: in a withdrawal record kept
+        beside the removal log and the suppression list, in both places they are kept, which
+        each one's reader joins to its entries. Both older builds refuse an unknown field or
+        line in the log and the list, and the start commit refuses it in t15's removal scope.
     - id: ac4
       description: >-
         No plan line says 'this team's' where the removal names no team, by a test that

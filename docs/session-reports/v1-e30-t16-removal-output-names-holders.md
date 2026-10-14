@@ -435,9 +435,52 @@ which every reader takes as no withdrawal recorded.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-14
 
 **Notes:**
+
+Accepted in full, with the phase `Succeeded`. I have amended ac3 in this branch to the record
+beside the log and the list, as Deviation 1 describes.
+
+**Deviation 1 is the answer the brief asked for, and it is proven.** The brief asked whether t15's
+removal scope could carry the caselist or whether a new record was needed. You ran the start
+commit's own code over both shapes of the scope record, and it refused both and would have failed
+`caselist status` on every run. A third record beside the log and the list, joined to each, follows
+`v1-e30-t13` and `t15`, and every older build reads, imports, publishes and reports in sync with it
+in place. ac3's words were written before that pattern was settled; the amendment makes them match
+it. A removal from an earlier build attributing to nothing is the honest cost, and only dev's
+synthetic RM-2026-90 has one.
+
+**The work itself:**
+
+* **ac2 did what it was for.** Case (3) was built first and was failing, 1 for 0 and 2 for 1.
+* **Writing the withdrawals before the entries they attribute (Decision 2)** is the right order for
+  the same reason as t15's scopes: a record without its entry harms nothing, and an entry without
+  its record would never get one.
+* **The joins (Decision 3)** are exact and pinned by `TestTheJoins`, including a request that
+  withdrew a file in two runs.
+* **The walk found a line the brief missed,** the *Kept* line's "another team", and fixed it.
+* **The mutation run did its job twice:** W7 found a missing assertion and A3 found redundant
+  matching code, replaced by a lookup that fails loudly. 31 of 31 caught.
+* **Decision 11** (one commit with a failing test, no run reported at it) is noted, and saying so
+  was right.
+
+**Rulings:**
+
+* **Deviations 1 to 4:** accepted. ac3 amended.
+* **Decisions 1 to 11:** accepted. Decision 5 (a path under no team's directories is no team's) is
+  accepted as the one rule, untested because no fixture has one.
+
+**Follow-up work, filed by the PM:**
+
+* **Your 1, the data-use policy:** the PM writes it at the next close-out, as policy 1.9, together
+  with `v1-e30-t17`'s wording correction. It describes records that identify no one, so it does
+  not tighten the policy.
+* **Your 2:** joins the E30 p3 task "residue clearing gaps".
+* **Your 3, 4 and 5:** one E30 p3 task, "removal output loose ends": a `withdrawals` key in the
+  plan's JSON beside `path_holds` (yes, add it); the `--team --include-shared` later-upload wording;
+  and the re-run's confirmation counting what it plans again rather than what it removes.
+* **Your 6:** no task. Revisit if a real removal from an earlier build ever needs attributing.

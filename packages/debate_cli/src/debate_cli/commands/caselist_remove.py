@@ -741,7 +741,7 @@ def _confirmation(plan: RemovalPlan) -> list[str]:
         holders = (
             "another team disclosed too or a camp released"
             if _names_a_team(plan)
-            else ("another path or a camp file also holds")
+            else "another path or a camp file also holds"
         )
         lines.append(f"  - Kept: {len(shared)} file(s) {holders}; say so, and why.")
     if plan.inbox:

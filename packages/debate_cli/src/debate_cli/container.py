@@ -136,9 +136,11 @@ from debate_core.application.caselist.removal_service import (
 )
 from debate_core.application.caselist.status_service import CaselistStatusService
 from debate_core.application.caselist.suppression import (
+    REMOVAL_LOG_KEY,
     SUPPRESSION_LIST_KEY,
     LocalFallbackSuppressionList,
     ObjectStoreAppendOnlyRecord,
+    RecordedRemovalLog,
     RecordedSuppressionList,
 )
 from debate_core.application.caselist_card_stats import CaselistCardStatsService
@@ -658,7 +660,8 @@ class ServiceContainer:
 
         It can also list object versions, for the removal-residue check `caselist status` asks for
         (`v1-e30-t10`). That client is built with the everyday evidence profile, like the bucket's:
-        the takedown profile is never read here.
+        the takedown profile is never read here. The removal log and the scopes beside it are read
+        from this machine's copy and the bucket's, as the suppression list is (`v1-e30-t15`).
         """
         return self.singleton("caselist_status", self._build_caselist_status)
 
@@ -672,6 +675,14 @@ class ServiceContainer:
             local=self._local_evidence(),
             remote=bucket,
             suppression=self.suppression_list(),
+            # Both copies of the log, and of the scopes beside it, read as the list is (`v1-e30-t15`).
+            removal_log=RecordedRemovalLog(
+                local_removal_log_file(storage.data_dir),
+                ObjectStoreAppendOnlyRecord(
+                    bucket, REMOVAL_LOG_KEY, location=f"s3://{storage.s3.bucket}/{REMOVAL_LOG_KEY}"
+                ),
+            ),
+            environment=self.settings.environment.value,
             versions=S3EvidenceVersionStore(
                 bucket=str(storage.s3.bucket),
                 profile=storage.s3.aws_profile,

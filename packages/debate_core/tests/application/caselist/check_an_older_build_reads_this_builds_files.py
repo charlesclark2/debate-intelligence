@@ -13,6 +13,7 @@ status.
 
 from __future__ import annotations
 
+import json
 import os
 from datetime import date
 from pathlib import Path
@@ -42,6 +43,7 @@ from .suppression_list_scenario import (
     REMOVED_WITH_THE_TEAM,
     SUPPRESSION_PREFIX,
     UNSUPPRESSED,
+    WITHDRAWN_FROM_THE_TEAM,
     a_team_removal_a_source_removal_and_an_unsuppress,
 )
 
@@ -163,3 +165,103 @@ def _source() -> str:
     import debate_core
 
     return Path(debate_core.__file__).parents[4].name
+
+
+async def test_this_source_refuses_the_removal_scopes_if_a_scope_line_carries_a_withdrawals_caselist(
+    removal_world: RemovalWorld, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Why a withdrawal's caselist is not in `removal-scopes.jsonl` (`v1-e30-t16`).
+
+    The scope record is `v1-e30-t15`'s, and the build at `v1-e30-t16`'s start commit reads it on every
+    `caselist status`. This carries out the history with the source it is run against, writes the
+    last scope line that source wrote again with one more field, the caselist of a withdrawal, and
+    then instead a line of a new kind holding only that, and each time asks that source's own log
+    reader and its status for the scopes. A source from before `v1-e30-t15` reads no scope record.
+    """
+    assert os.environ.get("CHECK_AN_OLDER_BUILD_READS") == "this-builds-files", (
+        "run by its path against an older build's source; see stored_suppression_lists/README.md"
+    )
+    from debate_core.application.caselist.suppression import RecordedRemovalLog
+    from debate_core.integrations.local.suppression_list import local_removal_log_file
+
+    with capsys.disabled():
+        print()
+        print(f"reader: the debate_core source at {_source()}")
+    if not hasattr(RecordedRemovalLog, "scopes"):
+        with capsys.disabled():
+            print(
+                "removal scopes: this source reads no removal-scope record, so nothing added to one is read"
+            )
+        return
+    from debate_core.integrations.s3 import S3EvidenceVersionStore
+
+    world = removal_world
+    await a_team_removal_a_source_removal_and_an_unsuppress(world)
+    scopes = world.data_dir / "suppression" / "removal-scopes.jsonl"
+    written = scopes.read_text(encoding="utf-8").splitlines()
+    carried = json.loads(written[-1]) | {"withdrawn_from": {WITHDRAWN_FROM_THE_TEAM: [SYNTHETIC_CASELIST]}}
+    alone = {"schema_version": 1, "sha256": WITHDRAWN_FROM_THE_TEAM, "caselist": SYNTHETIC_CASELIST}
+    for shape, line in (("one more field of its line", carried), ("a line of its own", alone)):
+        added = json.dumps(line, sort_keys=True, separators=(",", ":"))
+        scopes.write_text("".join(f"{one}\n" for one in (*written, added)), encoding="utf-8")
+        log = RecordedRemovalLog(local_removal_log_file(world.data_dir))
+        with pytest.raises(UnreadableAppendOnlyRecord) as refused:
+            await log.scopes()
+        status = CaselistStatusService(
+            local=world.local,
+            remote=world.bucket,
+            suppression=world.suppression(),
+            versions=S3EvidenceVersionStore(bucket=world.bucket_name, client=world.client),
+            removal_log=log,
+            environment="dev",
+        )
+        with pytest.raises(UnreadableAppendOnlyRecord):
+            await status.status(residue=True)
+        with capsys.disabled():
+            error, number = type(refused.value).__name__, refused.value.line_number
+            print(f"a withdrawal's caselist in the scope record, as {shape}: {error} at line {number}")
+    with capsys.disabled():
+        print("so `caselist status` with the residue check fails on every run until the line is gone")
+
+
+async def test_this_sources_status_with_the_residue_check_reads_the_log_and_scopes_this_build_writes(
+    removal_world: RemovalWorld, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """The one reader of the removal log and its scopes in a build from `v1-e30-t15` on (`v1-e30-t16`).
+
+    `caselist status` reads both copies of the log and of the scopes beside it. This puts this
+    build's files in place, the withdrawal record among them, and asks this source's status for its
+    residue check over them. A source from before `v1-e30-t15` reads neither.
+    """
+    assert os.environ.get("CHECK_AN_OLDER_BUILD_READS") == "this-builds-files", (
+        "run by its path against an older build's source; see stored_suppression_lists/README.md"
+    )
+    import inspect
+
+    from debate_core.integrations.s3 import S3EvidenceVersionStore
+
+    with capsys.disabled():
+        print()
+        print(f"reader: the debate_core source at {_source()}")
+    if "removal_log" not in inspect.signature(CaselistStatusService).parameters:
+        with capsys.disabled():
+            print("status: this source reads no removal log, so nothing beside one is read")
+        return
+    world = removal_world
+    await a_team_removal_a_source_removal_and_an_unsuppress(world)
+    put_this_builds_files_where_the_records_are_kept(world)
+    status = CaselistStatusService(
+        local=world.local,
+        remote=world.bucket,
+        suppression=world.suppression(),
+        versions=S3EvidenceVersionStore(bucket=world.bucket_name, client=world.client),
+        removal_log=world.removal_log(),
+        environment="dev",
+    )
+
+    report = await status.status(residue=True)
+
+    with capsys.disabled():
+        checked = [one.caselist for one in report.residue if one.checked]
+        print(f"status with the residue check: completed; caselists checked: {', '.join(checked)}")
+        print(f"removals not checked: {len(report.removals_not_checked)}")

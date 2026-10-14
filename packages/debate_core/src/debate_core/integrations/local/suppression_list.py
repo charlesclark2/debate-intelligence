@@ -5,9 +5,11 @@
     <data_dir>/suppression/suppression-list.jsonl   sha256 values that must never be re-imported
     <data_dir>/suppression/removal-log.jsonl        one line per removal or un-suppress
     <data_dir>/suppression/path-holds.jsonl         the paths whole-file removals hold (`v1-e30-t13`)
+    <data_dir>/suppression/removal-scopes.jsonl     what each removal reached (`v1-e30-t15`)
+    <data_dir>/suppression/withdrawals.jsonl        the caselist each withdrawn copy left (`v1-e30-t16`)
 
-The third is the list's own neighbour: a build from before `v1-e30-t13` never opens it, and reads
-the list beside it exactly as before (:mod:`debate_core.application.ports.suppression`).
+The last three are neighbours of the first two: a build from before each never opens it, and reads
+the list and the log beside it exactly as before (:mod:`debate_core.application.ports.suppression`).
 
 A sibling of `objects/` and `blobs/`, not a file inside either, for the same reason the sync
 journal is (`debate_core.application.evidence_sync.JOURNAL_DIRECTORY`): `store sync` moves what is

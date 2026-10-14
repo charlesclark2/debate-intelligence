@@ -126,13 +126,16 @@ both are the only things besides sha256 values and dates that reach the suppress
 removal log. Quote the `--team` value: school names have spaces.
 
 The plan prints, in order: **WILL BE REMOVED** (each file, every record of it, its local blob and
-bucket objects with their version counts), **SHARED, KEPT** (files another team or a camp file also
-holds: only this team's copies are withdrawn), **LATER UPLOADS AT A REMOVED PATH** and **EARLIER
-VERSIONS AT A REMOVED PATH** (other files the store holds at the same paths; read them as described
+bucket objects with their version counts), **SHARED, KEPT** (for `--team`, files another team or a
+camp file also holds: only this team's copies are withdrawn; for `--source`, only what a stopped run
+left withdrawn, and only its copies at the removed paths), **LATER UPLOADS AT A REMOVED PATH** and
+**EARLIER VERSIONS AT A REMOVED PATH** (other files the store holds at the same paths; read them as described
 below), **MANIFESTS REWRITTEN**, **DOWNLOAD INBOX** (every
 file `caselist pull` downloaded that holds a removed file, and whether it is deleted or rewritten
-without it; see step 8), the **SUPPRESSION ENTRIES** exactly as they will be written, the **PATH
-ENTRIES** exactly as they will be written, or why there are none, **FOR THE
+without it; see step 8), the **SUPPRESSION ENTRIES** exactly as they will be written, the
+**WITHDRAWALS** (when the plan withdraws a copy: the caselist each is withdrawn from, by slug,
+exactly as written; see step 8), the **PATH ENTRIES** exactly as they will be written, or why there
+are none, **FOR THE
 CONFIRMATION TO THE REQUESTER** (the facts for step 10: how many files, which weekly archives,
 which tournament rounds, what was kept and what was not done), and **TO CARRY IT OUT**, the exact
 `--execute` command. Add `--json` for the same plan as one
@@ -208,6 +211,15 @@ Read the plan before going further. Confirm:
       holds a camp path (step 8).
 - [ ] The listed disclosure records, manifest rows, local blobs and S3 objects (with their version
       counts) look right.
+- [ ] **Other holders.** A file's line ends *also held by N other team(s)* or *N camp file(s)* only
+      when someone besides the holder being removed has it (`v1-e30-t16`): for `--team` that is
+      every other team and every camp file, and for `--source` every holder but one, the team whose
+      file it is or, for a file no team holds, one camp file. A later upload withdrawn from the
+      removed path counts the teams at its other paths less the team at the removed path, and its
+      `kept in` line says *another path there still holds it*, which may be the same team's. A
+      `--source` plan never says "this team's": no team asked. It says what happens at the removed
+      path instead (*N path(s) a shared file is withdrawn from*, *the copy of a shared file at the
+      path it was withdrawn from*).
 - [ ] **Shared references.** If the plan lists sources also disclosed by another team, or that are
       also a camp file, decide explicitly: without `--include-shared` only this team's `Disclosure`
       records and manifest rows are dropped and the shared blob stays, and each of this team's
@@ -373,6 +385,16 @@ DEBATE_ENV=prod DEBATE_STORAGE__DATA_DIR="$HOME/.debate-research/dev" uv run deb
       from before `v1-e30-t13` refuses the whole suppression list at a line it does not know, and
       an import against a list it cannot read fails. Those builds never open this file, and read
       the list beside it exactly as before.
+- [ ] If the plan printed *WITHDRAWALS*, confirm the same lines are beside the list in both places
+      (`v1-e30-t16`): `<data_dir>/suppression/withdrawals.jsonl` on this machine and
+      `manifests/_suppression/withdrawals.jsonl` in each bucket. Each says which caselist one
+      suppressed disclosure was withdrawn from, by its slug, beside the entry's sha256, disclosure
+      digest and request id. The suppression entry and the removal log hold only the digest, which
+      hides the caselist with the path, so this is how a shared file withdrawn from one caselist and
+      kept in another is attributed afterwards: find the sha256 in this file and read `caselist`. It
+      is append-only and merged like the list, and a file of its own for the reason the path entries
+      are. A removal made by a build from before `v1-e30-t16` wrote none, so its withdrawals have no
+      caselist recorded.
 - [ ] Find every built file whose provenance sidecar cites a removed sha256 (E33). Withdraw it from
       use immediately and rebuild it without those cards before anyone reads it in a round.
 - [ ] If the file was shared inside the team outside the evidence store — a copy in someone's

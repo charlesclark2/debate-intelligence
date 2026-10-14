@@ -35,6 +35,9 @@ from tests.fixtures.caselist.build_synthetic_archives import (
     build_snapshot_zips,
 )
 from tests.fixtures.identity_center_roles import EVERYDAY_ROLE, TAKEDOWN_ROLE, sign_in
+from tests.fixtures.openev.build_synthetic_openev import CAMP_ALIASES_PATH, build_download_zips
+from tests.fixtures.openev.build_synthetic_openev import DOCUMENT_BODIES as CAMP_BODIES
+from tests.fixtures.openev.build_synthetic_openev import DOWNLOADS as OPENEV_DOWNLOADS
 from typer.testing import CliRunner, Result
 
 from debate_cli.app import create_app
@@ -1203,3 +1206,172 @@ def test_after_only_named_no_path_is_held_and_next_weeks_upload_is_imported(
     assert (
         data_dir / "blobs" / "sha256" / UPLOADED_AFTER[0:2] / UPLOADED_AFTER[2:4] / UPLOADED_AFTER
     ).exists()
+
+
+# ------------------------------------------------------------------------------------------------
+# A --source plan names only holders other than the one removed, and no team as "this team"
+# (v1-e30-t16)
+# ------------------------------------------------------------------------------------------------
+
+BAYVIEW_PATH = "Maple Grove/QX/Maple Grove-QX-Neg-Bayview Open [2]-Semis.docx"
+#: The same team's second path, where it uploaded the revision again.
+BAYVIEW_SECOND_PATH = "Maple Grove/QX/Maple Grove-QX-Neg-Bayview Open [2]-Semis (1).docx"
+BAYVIEW_REVISED = _docx(("Bayview Open, semifinals, negative.", "Revised the week after, twice uploaded."))
+BAYVIEW_REVISION = hashlib.sha256(BAYVIEW_REVISED).hexdigest()
+REMOVE_BAYVIEW = (
+    "caselist",
+    "remove",
+    "--source",
+    BAYVIEW,
+    "--request",
+    "RM-2026-07",
+    "--reason",
+    "REQUESTED_BY_TEAM",
+)
+#: A camp file of the synthetic 2026 Policy download that no team discloses.
+CAMP_ONLY = hashlib.sha256(CAMP_BODIES["orchard-kritik"]).hexdigest()
+REMOVE_CAMP_ONLY = (
+    "caselist", "remove", "--source", CAMP_ONLY, "--request", "RM-2026-07", "--reason", "REQUESTED_BY_CAMP",
+)  # fmt: skip
+
+
+@pytest.fixture
+def revised_at_two_of_the_teams_paths(installation: Path, published: Any) -> None:
+    """The weekly window of 2026-09-22: the Bayview negative revised, at its path and the team's second.
+
+    `caselist remove --source <bayview-semis-neg>` removes the named file whole and withdraws the
+    revision from the named file's path only: the team's second path still holds it.
+    """
+    archive = installation / "downloads" / f"{SYNTHETIC_CASELIST}-weekly-2026-09-22.zip"
+    with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as written:
+        written.writestr(BAYVIEW_PATH, BAYVIEW_REVISED)
+        written.writestr(BAYVIEW_SECOND_PATH, BAYVIEW_REVISED)
+    imported = run(
+        "caselist", "import", str(archive), "--caselist", SYNTHETIC_CASELIST, "--snapshot", "2026-09-22"
+    )  # fmt: skip
+    assert imported["exit_code"] == ExitCode.OK, imported
+    assert run("caselist", "publish", "--caselist", SYNTHETIC_CASELIST)["exit_code"] == ExitCode.OK
+
+
+def import_the_camp_download(installation: Path, *, event: str) -> None:
+    """The first synthetic OpenEv download, as the release of `event`, imported and published."""
+    download = build_download_zips(installation / f"openev-{event}")[OPENEV_DOWNLOADS[0].name]
+    imported = run(
+        "caselist", "import-openev", str(download), "--year", "2026", "--event", event,
+        "--snapshot", "2026-09-14", "--camp-aliases", str(CAMP_ALIASES_PATH),
+    )  # fmt: skip
+    assert imported["exit_code"] == ExitCode.OK, imported
+    assert run("caselist", "publish", "--caselist", "openev")["exit_code"] == ExitCode.OK
+
+
+def shown(*arguments: str) -> str:
+    """What the command prints for a person."""
+    result: Result = runner.invoke(create_app(), list(arguments))
+    assert result.exit_code == ExitCode.OK, result.stdout
+    return result.stdout
+
+
+def numbered_line(text: str, sha: str) -> str:
+    (line,) = [line for line in text.splitlines() if sha in line and line.lstrip()[:1].isdigit()]
+    return line
+
+
+def strings_in(value: Any) -> list[str]:
+    """Every string anywhere in a JSON value: keys and values, however deeply nested."""
+    if isinstance(value, str):
+        return [value]
+    if isinstance(value, dict):
+        return [text for key, item in value.items() for text in (key, *strings_in(item))]  # pyright: ignore[reportUnknownVariableType]
+    if isinstance(value, list):
+        return [text for item in value for text in strings_in(item)]  # pyright: ignore[reportUnknownVariableType]
+    return []
+
+
+def test_a_later_upload_the_team_also_holds_at_a_second_path_names_no_other_team(
+    installation: Path, bucket: S3Client, revised_at_two_of_the_teams_paths: None
+) -> None:
+    text = shown(*REMOVE_BAYVIEW)
+    planned = run(*REMOVE_BAYVIEW)
+
+    assert "also held" not in numbered_line(text, BAYVIEW_REVISION)
+    assert "other team" not in text and "another team" not in text
+    assert f"     kept in  {SYNTHETIC_CASELIST} (another path there still holds it)" in text.splitlines()
+    sources = {source["sha256"]: source for source in planned["data"]["sources"]}
+    revision = sources[BAYVIEW_REVISION]
+    assert (revision["disposition"], revision["other_teams"], revision["camp_file_holders"]) == (
+        "withdraw",
+        0,
+        0,
+    )
+    assert revision["kept_in"] == [SYNTHETIC_CASELIST]
+    assert (sources[BAYVIEW]["other_teams"], sources[BAYVIEW]["camp_file_holders"]) == (0, 0)
+    assert all(set(source) == SOURCE_KEYS for source in planned["data"]["sources"])
+
+
+def test_no_line_of_a_source_plan_says_this_team_in_the_dry_run_the_execution_or_a_rerun(
+    installation: Path,
+    bucket: S3Client,
+    revised_at_two_of_the_teams_paths: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Every line printed and every string in the JSON, the confirmation to the requester included.
+
+    The plan removes one file whole and withdraws one later upload from the named file's path, so
+    every section that once said "this team's" is printed: the suppression entries' count, the
+    confirmation's first line, and the line on what the list stops.
+    """
+    dry_run = shown(*REMOVE_BAYVIEW)
+    dry_run_json = raw_json(*REMOVE_BAYVIEW)
+    monkeypatch.setenv("DEBATE_REMOVAL_PROFILE", REMOVAL_PROFILE)
+    executed = shown(*REMOVE_BAYVIEW, "--execute")
+    rerun = shown(*REMOVE_BAYVIEW)
+    rerun_json = raw_json(*REMOVE_BAYVIEW)
+
+    for text in (dry_run, executed):
+        lines = text.splitlines()
+        assert "  1 whole file(s), and 1 path(s) a shared file is withdrawn from. Each" in lines
+        assert "  - Removed from this environment: 1 file(s)." in lines
+        assert "  - Also removed, as later uploads at the same path(s): 1 file(s)." in lines
+        assert (
+            "  - Suppressed, so no later archive, weekly or complete, can bring back a removed file, or the "
+            "copy of a shared file at the path it was withdrawn from."
+        ) in lines
+    assert "Nothing is left to remove" in rerun
+    printed = [line for text in (dry_run, executed, rerun) for line in text.splitlines()]
+    assert len(printed) > 100
+    assert [line for line in printed if "this team" in line] == []
+    for document in (dry_run_json, rerun_json):
+        assert [text for text in strings_in(json.loads(document)) if "this team" in text] == []
+
+
+def test_a_camp_file_only_one_camp_file_holds_names_no_other_holder(
+    installation: Path, bucket: S3Client, published: Any
+) -> None:
+    import_the_camp_download(installation, event="policy")
+
+    text = shown(*REMOVE_CAMP_ONLY)
+    planned = run(*REMOVE_CAMP_ONLY)
+
+    line = numbered_line(text, CAMP_ONLY)
+    assert "also held" not in line and "camp file(s)" not in line, line
+    (source,) = planned["data"]["sources"]
+    assert (source["disposition"], source["other_teams"], source["camp_file_holders"]) == ("remove", 0, 0)
+    assert set(source) == SOURCE_KEYS
+
+
+def test_a_camp_file_two_releases_hold_names_one_other_camp_file(
+    installation: Path, bucket: S3Client, published: Any
+) -> None:
+    import_the_camp_download(installation, event="policy")
+    import_the_camp_download(installation, event="ld")
+
+    text = shown(*REMOVE_CAMP_ONLY)
+    planned = run(*REMOVE_CAMP_ONLY)
+
+    assert numbered_line(text, CAMP_ONLY).endswith("; also held by 1 camp file(s))")
+    (source,) = planned["data"]["sources"]
+    assert (source["disposition"], source["other_teams"], source["camp_file_holders"]) == (
+        "skip_shared",
+        0,
+        1,
+    )

@@ -5,7 +5,8 @@ whole list at the first line it cannot validate. So does every build already ins
 agent's (`0.1.0.dev60`) and the one at the commit this task started from (`v0.1.0-dev.119`). An
 import against a list it cannot read fails closed, which for the agent is a weekly run that stops.
 No line of another shape may ever be written to the list, and none is: the paths a removal holds
-(`v1-e30-t13`) are in `path-holds.jsonl`, beside the list, which no older build opens.
+(`v1-e30-t13`) are in `path-holds.jsonl`, beside the list, which no older build opens, and so is the
+caselist each withdrawn copy was taken from (`withdrawals.jsonl`, `v1-e30-t16`).
 
 ## What is compared with what
 
@@ -20,8 +21,9 @@ No line of another shape may ever be written to the list, and none is: the paths
 
 **An older build reads what this build writes.** The list and the removal log this build writes
 are byte for byte the ones each older build wrote for the same history, in both places; every line
-validates against each older build's own schema; and what this build adds is two more files beside
-them, the path holds (`v1-e30-t13`) and the removal scopes (`v1-e30-t15`).
+validates against each older build's own schema; and what this build adds is three more files beside
+them, the path holds (`v1-e30-t13`), the removal scopes (`v1-e30-t15`) and the withdrawals
+(`v1-e30-t16`).
 `check_an_older_build_reads_this_builds_files.py` runs an older build's own importer, publisher and
 status over these files, and the README records what it printed.
 
@@ -43,10 +45,13 @@ import jsonschema
 import pytest
 
 from debate_core.application.caselist.suppression import (
+    REMOVAL_LOG_KEY,
     SUPPRESSION_LIST_KEY,
     ObjectStoreAppendOnlyRecord,
     RecordedRemovalLog,
     RecordedSuppressionList,
+    caselist_withdrawn_from,
+    caselists_withdrawn_by,
     load_suppression_state,
 )
 from debate_core.application.ports.suppression import (
@@ -89,6 +94,7 @@ THE_LIST = "suppression-list.jsonl"
 THE_LOG = "removal-log.jsonl"
 THE_PATH_HOLDS = "path-holds.jsonl"
 THE_REMOVAL_SCOPES = "removal-scopes.jsonl"
+THE_WITHDRAWALS = "withdrawals.jsonl"
 PLACES = ("local", "bucket")
 
 #: What the stored history leaves suppressed, written from `suppression_list_scenario.py`'s
@@ -194,15 +200,15 @@ def test_a_path_entry_is_a_line_an_older_build_would_refuse_which_is_why_it_is_n
         jsonschema.validate(json.loads(entry), schemas_of(build)["suppression_list_line"])
 
 
-def test_what_this_build_adds_is_two_files_beside_the_list_and_the_log_in_each_place() -> None:
-    """The path holds beside the list (`v1-e30-t13`), and the removal scopes beside the log (`v1-e30-t15`)."""
+def test_what_this_build_adds_is_three_files_beside_the_list_and_the_log_in_each_place() -> None:
+    """The path holds (`v1-e30-t13`), the removal scopes (`v1-e30-t15`) and the withdrawals (`v1-e30-t16`)."""
     for place in PLACES:
         ours = {path.name for path in (THIS_BUILD / place).iterdir()}
         for build, directory in OLDER_BUILDS.items():
             theirs = {path.name for path in (directory / place).iterdir()}
             assert theirs == {THE_LIST, THE_LOG}, build
-            assert ours - theirs == {THE_PATH_HOLDS, THE_REMOVAL_SCOPES}, build
-    for added in (THE_PATH_HOLDS, THE_REMOVAL_SCOPES):
+            assert ours - theirs == {THE_PATH_HOLDS, THE_REMOVAL_SCOPES, THE_WITHDRAWALS}, build
+    for added in (THE_PATH_HOLDS, THE_REMOVAL_SCOPES, THE_WITHDRAWALS):
         assert (THIS_BUILD / "local" / added).read_bytes() == (THIS_BUILD / "bucket" / added).read_bytes()
 
 
@@ -221,6 +227,84 @@ def test_the_one_path_entry_is_for_the_file_removed_by_source_and_names_no_one()
     }
     for name in ("Riverbend", "MnPr", "Seaside", "Finals", ".docx", "Maple Grove", "QX"):
         assert name not in line
+
+
+def test_the_two_withdrawals_are_the_teams_two_paths_of_the_shared_file_by_slug_and_name_no_one() -> None:
+    """Step 1 of the history withdraws the Round 1 affirmative from the team's two paths in testcl26."""
+    lines = lines_of(THIS_BUILD / "local" / THE_WITHDRAWALS)
+
+    assert sorted((json.loads(line) for line in lines), key=lambda one: str(one["disclosure"])) == sorted(
+        (
+            {
+                "schema_version": 1,
+                "sha256": WITHDRAWN_FROM_THE_TEAM,
+                "disclosure": disclosure_digest("testcl26", path),
+                "caselist": "testcl26",
+                "recorded_at": "2026-09-30T18:00:00Z",
+                "reason": "REQUESTED_BY_TEAM",
+                "request_id": "RM-2026-01",
+            }
+            for path in THE_TEAMS_PATHS_OF_THE_SHARED_FILE
+        ),
+        key=lambda one: str(one["disclosure"]),
+    )
+    for name in ("Maple Grove", "QX", "Cedar Hollow", "ZaLu", "Grove City", "Round", ".docx"):
+        assert not [line for line in lines if name in line], name
+
+
+@pytest.mark.parametrize("build", sorted(SCHEMAS))
+def test_a_withdrawal_is_a_line_an_older_builds_list_and_log_would_refuse_which_is_why_it_is_beside_them(
+    build: str,
+) -> None:
+    for line in lines_of(THIS_BUILD / "local" / THE_WITHDRAWALS):
+        for record in ("suppression_list_line", "removal_log_line"):
+            with pytest.raises(jsonschema.ValidationError):
+                jsonschema.validate(json.loads(line), schemas_of(build)[record])
+
+
+async def test_this_build_attributes_its_suppression_entries_and_its_log_entry_by_the_withdrawals(
+    tmp_path: Path,
+) -> None:
+    """The list's reader and the log's each find the record beside them, and name testcl26."""
+    data_dir, bucket = copies_of(THIS_BUILD, tmp_path)
+    listed = RecordedSuppressionList(
+        local_suppression_list_file(data_dir), ObjectStoreAppendOnlyRecord(bucket, SUPPRESSION_LIST_KEY)
+    )
+    log = RecordedRemovalLog(
+        local_removal_log_file(data_dir), ObjectStoreAppendOnlyRecord(bucket, REMOVAL_LOG_KEY)
+    )
+
+    withdrawals = await listed.withdrawals()
+    attributed = {
+        entry.disclosure: caselist_withdrawn_from(entry, withdrawals) for entry in await listed.entries()
+    }
+    team_removal = next(entry for entry in await log.entries() if entry.request_id == "RM-2026-01")
+
+    assert attributed == {
+        None: None,
+        **{disclosure_digest("testcl26", path): "testcl26" for path in THE_TEAMS_PATHS_OF_THE_SHARED_FILE},
+    }
+    assert caselists_withdrawn_by(team_removal, await log.withdrawals()) == {
+        WITHDRAWN_FROM_THE_TEAM: ("testcl26",)
+    }
+    assert await log.withdrawals() == withdrawals
+
+
+@pytest.mark.parametrize("build", sorted(OLDER_BUILDS))
+async def test_an_older_builds_records_attribute_nothing_and_invent_no_caselist(
+    build: str, tmp_path: Path
+) -> None:
+    data_dir, _ = copies_of(OLDER_BUILDS[build], tmp_path)
+    listed = RecordedSuppressionList(local_suppression_list_file(data_dir))
+    log = RecordedRemovalLog(local_removal_log_file(data_dir))
+
+    assert await listed.withdrawals() == ()
+    assert {caselist_withdrawn_from(entry, ()) for entry in await listed.entries()} == {None}
+    assert [caselists_withdrawn_by(entry, await log.withdrawals()) for entry in await log.entries()] == [
+        {},
+        {},
+        {},
+    ]
 
 
 # ------------------------------------------------------------------------------------------------

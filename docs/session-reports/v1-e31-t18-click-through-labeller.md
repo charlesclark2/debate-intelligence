@@ -387,9 +387,55 @@ baseline's report now ends with *Labeled blind*.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-14
 
 **Notes:**
+
+Accepted in full, with the phase `Succeeded`. I have amended ac3 in this branch for Deviation 1,
+and added two sentences to the guide's "Spans" paragraph (below).
+
+**This is the task that takes the parser evaluation off the operator's evenings.** Every
+guarantee `import` had is still in `import`; the labeller writes what `import` already takes. The
+one-row-per-key rule is held by a property, by example tests and by the routes themselves (four,
+with `/accept-all` and its kin a 404), and the server is shut to other tabs (token), other hosts
+(`Host` check) and the network (CSP, nothing loaded).
+
+**The work itself:**
+
+* **The renderer shares no code with the parser,** checked by AST, and finds the same paragraphs
+  over tables, text boxes, tracked changes and content controls. Its test with a document-default
+  highlight is a real disagreement, and it is the kind your follow-up suspects the parser misses.
+* **Card numbers keep the pre-label's where a card starts in the same place,** so renumbering is
+  not counted as change. Without that, the blind comparison would have been spoiled.
+* **The live smoke run** covered the one part no test reaches, the real server, including the
+  `403`s.
+* **The mutation run:** 52 mutants, 49 caught first, all three misses were weak tests, and 52 of
+  52 after.
+
+**Rulings:**
+
+* **Deviation 1 (`import --labeled-blind`):** accepted. ac3 amended.
+* **Deviation 2 (`prelabel` refuses a file that no longer fits the plan):** accepted. If the
+  regeneration prints a `REFUSED` line, the operator stops and tells the PM, as follow-up 2 says.
+* **Deviation 3 (the blind comparison's stratum is category and family):** accepted.
+* **Deviation 4 (the report names blind files by keyed-digest prefix):** accepted. The digests
+  are HMACs under the operator's key, so they are not a join key back to a file.
+* **Decisions:** accepted, including a row staying checked when a deliberate card start elsewhere
+  re-derives its card.
+* **The span rows, one addition to the guide.** The page draws the labeller's own reading, so a
+  key there confirms the renderer, not the document. Word is the independent check. I have made the
+  guide say: on a flagged row, look at the paragraph in Word before accepting it, and if Word shows
+  it differently, do not accept the row and tell the PM. The 0.99 span target is only worth
+  something if a renderer fault cannot be confirmed by a keypress.
+
+**Follow-up work:**
+
+* **A `REFUSED` line, and the two CORRECTED files:** if the regeneration refuses any file, the PM
+  rules before labeling starts, including whether the corrected files still validate.
+* **Style-inherited highlight in the parser:** the operator reports how many rows each file
+  flags. If they are many and they are style-inherited, the PM files a parser task with a version
+  bump.
+* **pyright over `tests/` and `scripts/`:** an E01 tooling task after the v1.0 tag.

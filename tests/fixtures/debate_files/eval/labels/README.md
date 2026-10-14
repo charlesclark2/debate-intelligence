@@ -177,12 +177,15 @@ card goes on past the block, press `k` until it reads *cut off by the block's ed
 the start of a block for a card whose tag is above it, or press `n` on its first row to stop it
 starting there.
 
-**Spans.** On a span row the page shows the underline and highlight as the document's own
-formatting gives them, read by the labeller and not by the parser, beside the pre-label's marks.
-What is written is the document's. A row where the two differ is flagged: look at it in Word if
-unsure. If the page says it could not read a paragraph's formatting, it leaves that row's
-underline and highlight cells empty, and `check` below names them; fill them in on the
-spreadsheet route.
+**Spans.** On a span row the page shows the underline and highlight as the document's own formatting
+gives them, read by the labeller and not by the parser, beside the pre-label's marks. What is
+written is the document's. A row where the two differ is flagged. On a flagged row, look at the
+paragraph in Word (`prelabel_docx.py open <prefix>`, as in Setup) before you accept it: the page
+draws the labeller's own reading, so Word is the only independent check. If Word shows it
+differently from the page, do not accept the row; stop, and tell the PM which file and row, because
+that is a fault in the labeller's reading, not a label. If the page says it could not read a
+paragraph's formatting, it leaves that row's underline and highlight cells empty, and `check` below
+names them; fill them in on the spreadsheet route.
 
 **Stopping and going on.** Progress is saved after every key, outside the repository, beside the
 worksheet. Close the tab and press Ctrl+C in the terminal whenever you like; the same command

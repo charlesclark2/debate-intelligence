@@ -69,7 +69,9 @@ spec:
     - id: ac3
       description: >-
         When the last row is checked, it writes a worksheet that `check` passes and `import`
-        turns into a CORRECTED label file with no change to either. Shown end to end on the
+        turns into a CORRECTED label file with no change to either (amended by the PM,
+        2026-10-14: apart from `import --labeled-blind`, which records ac5's field and checks
+        nothing). Shown end to end on the
         invented file `tests/evals/parser/synthetic.py` builds: pre-label, label every row
         by keys (some accepted, some changed, one new card, one completeness), write, check,
         import, and the label file holds exactly what the keys said.

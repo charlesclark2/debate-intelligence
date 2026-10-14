@@ -49,7 +49,7 @@ spec:
         The new condition is mutated (any camp download with an entry removed, members
         ignored) and shown caught, and the runbook's inbox section says what leaves when.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

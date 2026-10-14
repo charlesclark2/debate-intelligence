@@ -61,7 +61,7 @@ v2.3's extension work.
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 40 | 36 | 216 |
-| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 67 | 46 | 384 |
+| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 67 | 47 | 384 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 17 | 0 | 179 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 13 | 0 | 108 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 14 | 0 | 96 |
@@ -204,7 +204,7 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [The zip guard judges only the parts it reads, and exporter quirks are decided](plan_specs/v1/e31-debate-file-parsing/t15-zip-guard-and-exporter-quirks.yaml) `v1-e31-t15-zip-guard-and-exporter-quirks` | Pending | 1 | 2.0 |
 | [Superseded parsed-store version directories are retired, locally and in both buckets](plan_specs/v1/e31-debate-file-parsing/t16-version-directory-retention.yaml) `v1-e31-t16-version-directory-retention` | Pending | 1 | 3.0 |
 | [A transient parse failure is retried, and one data directory publishes a bucket's parsed store](plan_specs/v1/e31-debate-file-parsing/t17-parse-retries-and-one-publisher.yaml) `v1-e31-t17-parse-retries-and-one-publisher` | Pending | 1 | 2.0 |
-| [The parser evaluation's labels are corrected one keypress per row, in a local page](plan_specs/v1/e31-debate-file-parsing/t18-click-through-labeller.yaml) `v1-e31-t18-click-through-labeller` | Pending | 1 | 5.0 |
+| [The parser evaluation's labels are corrected one keypress per row, in a local page](plan_specs/v1/e31-debate-file-parsing/t18-click-through-labeller.yaml) `v1-e31-t18-click-through-labeller` | Succeeded | 1 | 5.0 |
 
 #### [E34 — Scheduled Caselist Sync](plan_specs/v1/e34-caselist-sync/epic.yaml)
 

@@ -211,6 +211,60 @@ def test_dev_and_prod_get_their_own_data_directory_routing_file_and_budget(
 
 
 # ------------------------------------------------------------------------------------------------
+# The endpoints a smoke check's stand-ins are reached through, which prod refuses (v1-e01-t21, ac3)
+# ------------------------------------------------------------------------------------------------
+
+STAND_IN_ENDPOINTS = {
+    "storage.s3.endpoint_url": ("DEBATE_STORAGE__S3__ENDPOINT_URL", "http://127.0.0.1:9"),
+    "caselist.api_base_url": ("DEBATE_CASELIST__API_BASE_URL", "https://127.0.0.1:9/v1"),
+}
+
+
+def test_config_show_reports_the_stand_in_endpoints_and_where_each_came_from(
+    installed_cli: InstalledCli,
+) -> None:
+    unset = data_of(installed_cli.run("--json", "config", "show"))
+    given = data_of(
+        installed_cli.run(
+            "--json",
+            "config",
+            "show",
+            env={variable: value for variable, value in STAND_IN_ENDPOINTS.values()},
+        )
+    )
+
+    assert (unset["settings"]["storage.s3.endpoint_url"], unset["sources"]["storage.s3.endpoint_url"]) == (
+        None,
+        "default",
+    )
+    assert unset["settings"]["caselist.api_base_url"] == "https://api.opencaselist.com/v1"
+    for setting, (variable, value) in STAND_IN_ENDPOINTS.items():
+        assert given["settings"][setting] == value, setting
+        assert given["sources"][setting] == f"env:{variable}", setting
+
+
+def test_prod_refuses_each_stand_in_endpoint_with_a_message_naming_the_setting(
+    installed_cli: InstalledCli,
+) -> None:
+    """Whichever command it is: the settings are refused before anything runs, and nothing is reached."""
+    for setting, (variable, value) in STAND_IN_ENDPOINTS.items():
+        for command in (("config", "show"), ("caselist", "status")):
+            run = installed_cli.run("--json", *command, env={"DEBATE_ENV": "prod", variable: value})
+
+            assert run.exit_code == 1, run.output
+            error = run.envelope()["error"]
+            assert error["code"] == "CONFIGURATION_ERROR", error
+            assert error["details"] == {"field": setting, "source": f"env:{variable}"}
+            assert setting in error["message"] and variable in error["message"], error["message"]
+            refusal = (
+                "accepted only in the dev environment, never in prod"
+                if setting == "storage.s3.endpoint_url"
+                else "prod reaches OpenCaselist at https://api.opencaselist.com/v1 and nowhere else"
+            )
+            assert refusal in error["message"], error["message"]
+
+
+# ------------------------------------------------------------------------------------------------
 # verify: v1-e03-t06's fixture manifests against a data directory built for this run
 # ------------------------------------------------------------------------------------------------
 

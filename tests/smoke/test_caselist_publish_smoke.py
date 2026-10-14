@@ -18,6 +18,7 @@ caselist file enters this repository (`docs/policies/caselist-data-use.md`).
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -28,7 +29,7 @@ from tests.fixtures.caselist.build_synthetic_archives import (
     build_snapshot_zips,
 )
 from tests.fixtures.caselist.publish_expectations import expected_publish, expected_source_key
-from tests.smoke.installed_build import InstalledCli
+from tests.smoke.installed_build import NETWORK_LOG, InstalledCli
 from tests.smoke.stand_ins.s3 import MOTO_TEST_CREDENTIALS, S3StandIn
 
 from debate_cli.exit_codes import ExitCode
@@ -120,3 +121,46 @@ def test_imported_weeks_publish_to_the_bucket_and_report_a_clean_status(
     assert again["exit_code"] == ExitCode.OK
     assert again["data"]["counts"]["uploaded"] == 0
     assert again["data"]["counts"]["skipped"] == expected["totals"]["source_objects"]
+
+
+def test_prod_sends_the_evidence_store_to_aws_whatever_endpoint_botocore_is_given(
+    installed_cli: InstalledCli, installation: Path, bucket: S3Client, s3_stand_in: S3StandIn, tmp_path: Path
+) -> None:
+    """`v1-e01-t21`, ac3: no endpoint override reaches prod by a route this project does not control.
+
+    botocore honours `AWS_ENDPOINT_URL`, `AWS_ENDPOINT_URL_S3` and `AWS_ENDPOINT_URL_STS` of its own
+    accord. Here all three point at the stand-in, a prod profile names its bucket, and
+    `storage.s3.endpoint_url`, which prod would refuse, is unset. A prod installation builds its
+    clients with those variables ignored, so the stand-in hears nothing from it, and the request
+    goes to AWS instead, where the network guard refuses it and says so in the log.
+    """
+    (installation / "profiles" / "prod.toml").write_text(
+        f'[storage.s3]\nbucket = "{BUCKET}"\nregion = "us-east-1"\naws_profile = "{AWS_PROFILE_NAME}"\n'
+        f'[models]\nrouting_file = "{tmp_path / "routing.yaml"}"\nbudget_usd_daily = 1.0\n',
+        encoding="utf-8",
+    )
+    provoked = tmp_path / "provoked.log"
+    mark = len(s3_stand_in.requests())
+
+    installed_cli.run(
+        "--json",
+        "caselist",
+        "status",
+        env={
+            "DEBATE_ENV": "prod",
+            "DEBATE_STORAGE__S3__ENDPOINT_URL": None,
+            "DEBATE_STORAGE__DATA_DIR": str(tmp_path / "prod-data"),
+            "AWS_ENDPOINT_URL": s3_stand_in.endpoint,
+            "AWS_ENDPOINT_URL_S3": s3_stand_in.endpoint,
+            "AWS_ENDPOINT_URL_STS": s3_stand_in.endpoint,
+            "AWS_MAX_ATTEMPTS": "1",
+            NETWORK_LOG: str(provoked),
+        },
+    )
+
+    assert s3_stand_in.requests_since(mark) == [], (
+        "a prod installation reached the endpoint botocore was given"
+    )
+    attempts = [json.loads(line) for line in provoked.read_text(encoding="utf-8").splitlines()]
+    assert attempts, "the request went nowhere at all"
+    assert all("amazonaws.com" in attempt["target"] for attempt in attempts), attempts

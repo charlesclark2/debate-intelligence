@@ -314,9 +314,58 @@ uv sync --all-packages
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-14
 
 **Notes:**
+
+Accepted in full, with the phase `Succeeded`. The spec is unchanged.
+
+**On the phase.** ac1 and ac4 name validate-dev, which runs only after the merge. My brief asked
+for them to be rehearsed against a locally installed build and for the real run to be an operator
+follow-up, and the rehearsal is the same command validate-dev runs, against a build stamped and
+installed the way `dev-prerelease.yml` does. The check is also self-enforcing: if the stand-in
+tier fails in validate-dev, the `validate-dev` status is red and no promotion can merge. So
+`Succeeded` stands, and I record follow-up 1's run at the next close-out.
+
+**Deviation 2 is the most important line in this report.** Prod accepted any https
+`caselist.api_base_url`, which is an endpoint override prod accepts, and nothing had noticed. Prod
+now refuses anything but the documented API, naming the setting, and prod builds its S3 and STS
+clients with botocore's configured endpoints ignored. Shown on the installed build, with the
+variables aimed at the stand-in and the stand-in hearing nothing. That closes the trap the brief
+named without relying on a variable being unset.
+
+**The work itself:**
+
+* **Stand-ins as processes, and the guard allowing declared `host:port` pairs only,** is stricter
+  than the spec asked, and right: a stand-in opens its own address and nothing else listening on
+  the machine.
+* **Every remove check moved with every assertion,** t16's four included, and the four that patched
+  the adapter now get the same faults from the stand-in's side, as real 403s and 503s.
+* **The 14 pull checks kept in-process (Deviation 4)** are kept for the right reason: each replaces
+  part of the CLI, not the world, and an expired SSO session cannot be produced from outside the
+  build.
+* **The red runs for ac2** were redone after the first attempts failed for the test's own reason,
+  and the report says so.
+* **The mutation run:** 9 of 9 caught; G2 found before the run and given its check.
+
+**Rulings:**
+
+* **Deviations 1 to 4:** accepted. `flask` and `flask-cors` over `moto[server]` is the right
+  trade. The five-part split stands unless follow-up 2 shows four would fit.
+* **Decisions:** accepted, including dev keeping botocore's configured endpoints so that
+  `test_launchd_install.py`'s net still holds.
+
+**Follow-up work:** the 14 in-process pull checks moving to the CLI tests, part 1's durations, and
+the guard's `connect_ex` and `sendto` checks are E01 tooling, filed **after the v1.0 tag** so they
+do not hold the release.
+
+**Merge note.** `v1-e30-t14` is open and its branch also edits `tests/smoke/README.md`'s checks
+table and `container.py`. A trial merge shows one conflict, in the README table only. This task
+merges first; t14 then syncs and keeps both rows. t14's new smoke module is `in_process` with
+moto, which the harness allows.
+
+**Operator follow-ups:** 1 (validate-dev's first run with the stand-ins), 2 (the five parts'
+times on this PR) and 3 (`uv sync --all-packages` in every checkout that runs `tests/smoke`).

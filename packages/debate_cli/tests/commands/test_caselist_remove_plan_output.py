@@ -256,6 +256,7 @@ def test_the_json_lists_later_uploads_by_digest_caselist_and_snapshot_with_what_
             "of_sha256": NAMED,
             "caselist": CASELIST,
             "snapshots": ["2026-09-15"],
+            "inbox_snapshots": [],
             "openev_ids": [],
             "same_path_by": "caselist_path",
             "outcome": "withdrawn_from_the_path",
@@ -267,6 +268,7 @@ def test_the_json_lists_later_uploads_by_digest_caselist_and_snapshot_with_what_
             "of_sha256": NAMED,
             "caselist": "openev",
             "snapshots": ["2026-policy"],
+            "inbox_snapshots": [],
             "openev_ids": [640],
             "same_path_by": "row_name",
             "outcome": "kept_shared",
@@ -280,6 +282,7 @@ def test_the_json_lists_later_uploads_by_digest_caselist_and_snapshot_with_what_
             "of_sha256": NAMED,
             "caselist": CASELIST,
             "snapshots": ["2026-09-01", "full/2026-09-05"],
+            "inbox_snapshots": [],
             "openev_ids": [],
             "same_path_by": "caselist_path",
         }

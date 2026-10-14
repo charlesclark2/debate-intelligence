@@ -3,12 +3,12 @@
 
 | | |
 |---|---|
-| Policy version | 1.7 |
-| Status | **Approved**, version 1.7, 2026-10-11. See [Approval](#approval). |
+| Policy version | 1.8 |
+| Status | **Approved**, version 1.8, 2026-10-13. See [Approval](#approval). |
 | Owner | Charlie Clark (product owner and head coach) |
 | Written by | v1-e30-t01-caselist-data-use-policy implementation session, 2026-09-19 |
 | Applies to | Everything the platform collects from OpenCaselist and OpenEv, and everything derived from it, in every environment |
-| Approved by | Charlie Clark, product owner and head coach, 2026-09-19 (versions 1.0 and 1.1), 2026-10-01 (versions 1.3 and 1.4), 2026-10-10 (versions 1.5 and 1.6) and 2026-10-11 (version 1.7) |
+| Approved by | Charlie Clark, product owner and head coach, 2026-09-19 (versions 1.0 and 1.1), 2026-10-01 (versions 1.3 and 1.4), 2026-10-10 (versions 1.5 and 1.6), 2026-10-11 (version 1.7) and 2026-10-13 (version 1.8) |
 | Next review | Start of the 2027-28 season, or sooner if a source's terms change |
 
 This is the policy that governs how the Debate Intelligence Platform collects, stores, uses and
@@ -361,8 +361,11 @@ weighed.
   keep its revisions, so every later upload at the same path that the store holds is removed with
   it, in every step listed here. Only when the requester asks for the revisions to stay are they
   left in place. A camp's later upload at a removed camp path is also held when the sync next meets
-  it. A caselist revision that is not yet imported when the removal runs is not yet held by the
-  tooling: the runbook's check after a removal covers it by hand until `v1-e30-t13` ships.
+  it. A caselist file removed whole by its sha256 also has its path held: a new upload at that
+  path is refused when it is imported, and one already downloaded and waiting is taken out with
+  the removal. Removing a team's disclosures holds no path, so the same removal is run again after
+  the next import. A request that is about one version holds nothing. Until the weekly agent runs
+  a build that applies the hold, the runbook has the same removal run again after each pull.
 - Deletes the parsed cards derived from it.
 - Deletes or rewrites the downloaded archives and camp files in the sync's download inbox that
   hold it, so no downloaded copy keeps the removed bytes.
@@ -536,7 +539,7 @@ before the thing it gates.
 
 ## Approval
 
-**Version 1.7 of this policy is approved.** Publishing caselist and OpenEv imports, loading the
+**Version 1.8 of this policy is approved.** Publishing caselist and OpenEv imports, loading the
 real corpus into dev, model classification over real disclosed text, and automated download (E34)
 are unblocked, each still subject to its own conditions in [Gates](#gates). Version 1.1 recorded
 the maintainer's confirmation of scheduled API downloads and the 10-per-minute rate limit.
@@ -581,16 +584,23 @@ later uploads at a removed path with the file a request named, and says which re
 held by the tooling. It tightens the policy, so under
 [Review and change control](#review-and-change-control) it takes effect on merge.
 
+Version 1.8 replaces the last sentence of that bullet, now that `v1-e30-t13` holds a caselist path
+removed whole by its sha256: a new upload there is refused on import, and a revision waiting in the
+download inbox is taken out with the removal. It says what still needs the removal run again: a
+team's disclosures, which hold no path, and any import made by a build older than the hold. It
+tightens the policy, so under [Review and change control](#review-and-change-control) it takes
+effect on merge.
+
 The standing rule for every future version: until this table records an approval of that version,
 nothing this policy governs may happen under it.
 
 | Field | Value |
 |---|---|
-| Policy version | 1.7 (2026-10-11); 1.6 and 1.5 (2026-10-10); 1.4 and 1.3 approved 2026-10-01, 1.3 including version 1.2's correction to rule 3; 1.0 and 1.1 approved 2026-09-19 |
+| Policy version | 1.8 (2026-10-13); 1.7 (2026-10-11); 1.6 and 1.5 (2026-10-10); 1.4 and 1.3 approved 2026-10-01, 1.3 including version 1.2's correction to rule 3; 1.0 and 1.1 approved 2026-09-19 |
 | Approved by | Charlie Clark |
 | Role | Product owner and head coach |
-| Approval date | 2026-10-11 (version 1.7; 1.5 and 1.6: 2026-10-10; 1.3 and 1.4: 2026-10-01; 1.0 and 1.1: 2026-09-19) |
-| Scope of approval | Sections [Scope](#scope) through [Review and change control](#review-and-change-control) of version 1.7, including the [clause register](#clause-register) read 2026-09-19 and the [community disclosure norms](#community-disclosure-norms), both confirmed by Charlie |
+| Approval date | 2026-10-13 (version 1.8; 1.7: 2026-10-11; 1.5 and 1.6: 2026-10-10; 1.3 and 1.4: 2026-10-01; 1.0 and 1.1: 2026-09-19) |
+| Scope of approval | Sections [Scope](#scope) through [Review and change control](#review-and-change-control) of version 1.8, including the [clause register](#clause-register) read 2026-09-19 and the [community disclosure norms](#community-disclosure-norms), both confirmed by Charlie |
 | Open questions resolved at approval | **5** — removal contact address is `ctcb57@gmail.com`. **7** — two-season retention stands. **8** — resolved by a PM spec change to v1-e29-t03 / v1-e30-t07. **2** (version 1.1) — maintainer confirmed scheduled API downloads at 10 file downloads per minute |
 | Open questions accepted as known gaps | **1** — OpenCaselist privacy page unread. **3** — OpenEv distribution and per-camp terms unread |
 | Open questions left open | **4** — Bedrock data-protection terms, an E32 gate. **6** — school or district review, before V2 student accounts |

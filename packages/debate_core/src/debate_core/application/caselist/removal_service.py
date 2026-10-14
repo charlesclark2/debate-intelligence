@@ -33,7 +33,8 @@ probe behind. `docs/runbooks/caselist-removal.md` says how to remove one left fr
 
 1. **Suppress first.** The entries go on the list — this machine's copy and the bucket's — before
    anything is deleted, so if the run stops part-way, the next weekly import still cannot bring the
-   file back.
+   file back. The plan's path entries go with them, to the path-hold record beside each copy of the
+   list (`v1-e30-t13`), so the next import cannot store a new upload at a removed path either.
 2. **The bucket**: every version of every `raw/` and `parsed/` object, listed again with the
    takedown credential so nothing the dry run could not see is missed; then each rewritten
    manifest, written and every superseded version of it purged; then every noncurrent version of
@@ -465,6 +466,9 @@ class UnsuppressPlan:
     disclosures: int
     """How many disclosure-scoped suppressions of it are in force now."""
     previous: SuppressionEntry
+    path_holds_released: int = 0
+    """How many paths its removal holds now, which the un-suppress releases (`v1-e30-t13`): an
+    upload at one is imported again from the next archive that holds it."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -542,6 +546,7 @@ class CaselistRemovalService:
         suppressed = False
         try:
             await suppression.append(plan.suppression_entries)
+            await suppression.append_path_holds(plan.path_holds)
             suppressed = True
             await self._delete_bucket_objects(plan, access, counts)
             await self._rewrite_bucket_manifests(plan, access, counts)
@@ -739,13 +744,15 @@ class CaselistRemovalService:
             whole_source=state.suppresses_source(sha256),
             disclosures=sum(1 for digest, _ in state.disclosures if digest == sha256),
             previous=state.latest[sha256],
+            path_holds_released=sum(1 for hold in state.path_holds if hold.sha256 == sha256),
         )
 
     async def unsuppress(self, plan: UnsuppressPlan) -> UnsuppressReport:
         """Append the un-suppress entry to both copies of the list, and one entry to the removal log.
 
         Purged data is not restored: the file comes back only when an archive that holds it is
-        imported again.
+        imported again. The entry also lifts the hold on each path the file's removal took it from,
+        with nothing more appended: a hold follows the file it came from.
         """
         access = await self._authorised()
         suppression = RecordedSuppressionList(

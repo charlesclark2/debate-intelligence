@@ -29,6 +29,7 @@ from tests.fixtures.caselist.build_synthetic_archives import (
     DOCUMENT_BODIES,
     SNAPSHOTS,
     SYNTHETIC_CASELIST,
+    _docx,  # pyright: ignore[reportPrivateUsage]
     build_snapshot_zips,
 )
 from tests.fixtures.identity_center_roles import EVERYDAY_ROLE, TAKEDOWN_ROLE, sign_in
@@ -460,6 +461,7 @@ def test_the_dry_run_lists_a_later_upload_by_digest_caselist_and_snapshot_and_ex
             "of_sha256": FIRST_VERSION,
             "caselist": SYNTHETIC_CASELIST,
             "snapshots": ["2026-09-08", "2026-09-15"],
+            "inbox_snapshots": [],
             "openev_ids": [],
             "same_path_by": "caselist_path",
             "outcome": "removed",
@@ -866,3 +868,130 @@ def test_residue_a_completed_removal_left_is_cleared_by_naming_the_file_under_th
     clean = run("caselist", "status")
     assert clean["exit_code"] == ExitCode.OK, clean
     assert clean["data"]["removal_residue"] == [NOTHING_LEFT]
+
+
+# ------------------------------------------------------------------------------------------------
+# A removed path holds what is uploaded there afterwards (v1-e30-t13)
+# ------------------------------------------------------------------------------------------------
+
+#: The Round 2 negative's path, which the 09-08 weekly is the first to hold the revision at.
+HELD_PATH = "Maple Grove/QX/Maple Grove-QX-Neg-Grove City Invitational-Round 2.docx"
+UPLOADED_AFTER_THE_REMOVAL = _docx(("Grove City Invitational, round two, negative.", "Uploaded again."))
+UPLOADED_AFTER = hashlib.sha256(UPLOADED_AFTER_THE_REMOVAL).hexdigest()
+NEXT_WEEK = f"{SYNTHETIC_CASELIST}-weekly-2026-09-22.zip"
+
+
+def next_weeks_archive(inbox: Path) -> Path:
+    """The weekly of 2026-09-22 as `caselist pull` leaves one in the inbox: a new upload at the held
+    path, and another team's file."""
+    inbox.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(inbox / NEXT_WEEK, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr(HELD_PATH, UPLOADED_AFTER_THE_REMOVAL)
+        archive.writestr(
+            "Cedar Hollow/ZaLu/Cedar Hollow-ZaLu-AFF-Harbor Classic.docx", DOCUMENT_BODIES["harbor-aff"]
+        )
+    return inbox / NEXT_WEEK
+
+
+def import_next_week(archive: Path) -> dict[str, Any]:
+    return run(
+        "caselist", "import", str(archive), "--caselist", SYNTHETIC_CASELIST, "--snapshot", "2026-09-22"
+    )  # fmt: skip
+
+
+def test_a_removed_path_holds_next_weeks_upload_and_the_same_removal_run_again_finishes_it(
+    installation: Path, bucket: S3Client, published: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    data_dir = installation / "dev"
+    local_path_holds = data_dir / "suppression" / "path-holds.jsonl"
+    the_path_entry = {
+        "schema_version": 1,
+        "caselist": SYNTHETIC_CASELIST,
+        "disclosure": hashlib.sha256(f"{SYNTHETIC_CASELIST}/{HELD_PATH}".encode()).hexdigest(),
+        "sha256": REVISION,
+        "after_snapshot": "2026-09-08",
+        "reason": "REQUESTED_BY_TEAM",
+        "request_id": "RM-2026-03",
+    }
+
+    # The dry run prints the path entry, names no one in its JSON, and writes nothing.
+    planned = raw_json(*REMOVE_REVISION)
+    (entry,) = [json.loads(line) for line in json.loads(planned)["data"]["path_holds"]]
+    assert {key: value for key, value in entry.items() if key != "recorded_at"} == the_path_entry
+    assert not [name for name in IDENTIFYING if name in planned]
+    assert "PATH ENTRIES appended beside the list, here and in the bucket: 1" in (
+        runner.invoke(create_app(), list(REMOVE_REVISION)).stdout
+    )
+    assert not local_path_holds.exists()
+
+    # Executed: the entry is beside the list on this machine and in the bucket, the same line.
+    monkeypatch.setenv("DEBATE_REMOVAL_PROFILE", REMOVAL_PROFILE)
+    assert run(*REMOVE_REVISION, "--execute")["exit_code"] == ExitCode.OK
+    written = local_path_holds.read_text(encoding="utf-8")
+    assert {
+        key: value for key, value in json.loads(written).items() if key != "recorded_at"
+    } == the_path_entry
+    in_the_bucket = bucket.get_object(Bucket=BUCKET, Key="manifests/_suppression/path-holds.jsonl")
+    assert in_the_bucket["Body"].read().decode("utf-8") == written
+    assert not [name for name in IDENTIFYING if name in written]
+    monkeypatch.delenv("DEBATE_REMOVAL_PROFILE")
+
+    # Next week's archive holds a new upload at that path. The import refuses it under the request.
+    archive = next_weeks_archive(data_dir / "inbox")
+    imported = import_next_week(archive)
+    assert imported["exit_code"] == ExitCode.OK, imported
+    assert imported["data"]["counts"]["SUPPRESSED"] == 1
+    assert imported["data"]["held_at_removed_paths"] == {"RM-2026-03": 1}
+    assert not (
+        data_dir / "blobs" / "sha256" / UPLOADED_AFTER[0:2] / UPLOADED_AFTER[2:4] / UPLOADED_AFTER
+    ).exists()
+    manifest = (data_dir / "objects" / "manifests" / SYNTHETIC_CASELIST / "2026-09-22.jsonl").read_text()
+    assert UPLOADED_AFTER not in manifest and HELD_PATH not in manifest
+    assert run("caselist", "publish", "--caselist", SYNTHETIC_CASELIST)["exit_code"] == ExitCode.OK
+    assert not bucket_holds(bucket, UPLOADED_AFTER)
+
+    # The same removal, run again, finds it in the inbox archive, and takes the archive out.
+    again = run(*REMOVE_REVISION)
+    assert [
+        (one["sha256"], one["snapshots"], one["inbox_snapshots"], one["outcome"])
+        for one in again["data"]["later_uploads"]
+    ] == [(UPLOADED_AFTER, [], ["2026-09-22"], "removed")]
+    assert [(one["name"], one["action"]) for one in again["data"]["inbox"]] == [(NEXT_WEEK, "delete")]
+    assert again["data"]["path_holds"] == [], "the path is held already"
+    assert archive.exists(), "a dry run"
+
+    monkeypatch.setenv("DEBATE_REMOVAL_PROFILE", REMOVAL_PROFILE)
+    done = run(*REMOVE_REVISION, "--execute")
+    assert done["exit_code"] == ExitCode.OK, done
+    assert not archive.exists()
+    listed = (data_dir / "suppression" / "suppression-list.jsonl").read_text(encoding="utf-8")
+    assert UPLOADED_AFTER in [json.loads(line)["sha256"] for line in listed.splitlines()]
+    assert {json.loads(line)["request_id"] for line in listed.splitlines()} == {"RM-2026-03"}
+    assert run("caselist", "status")["exit_code"] == ExitCode.OK
+
+    # Letting the removed file back in would release the path.
+    lifted = run("caselist", "unsuppress", "--sha256", REVISION, "--reason", "REMOVED_IN_ERROR")
+    assert lifted["data"]["path_holds_released"] == 1 and lifted["data"]["applied"] is False
+
+
+def test_after_only_named_no_path_is_held_and_next_weeks_upload_is_imported(
+    installation: Path, bucket: S3Client, published: Any, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    data_dir = installation / "dev"
+    monkeypatch.setenv("DEBATE_REMOVAL_PROFILE", REMOVAL_PROFILE)
+
+    done = run(*REMOVE_REVISION, "--only-named", "--execute")
+
+    assert done["exit_code"] == ExitCode.OK, done
+    assert done["data"]["path_holds"] == []
+    assert not (data_dir / "suppression" / "path-holds.jsonl").exists()
+    assert not any(key.endswith("path-holds.jsonl") for key, _ in versions(bucket))
+
+    imported = import_next_week(next_weeks_archive(installation / "next-week"))
+
+    assert imported["exit_code"] == ExitCode.OK, imported
+    assert imported["data"]["counts"]["SUPPRESSED"] == 0
+    assert imported["data"]["held_at_removed_paths"] == {}
+    assert (
+        data_dir / "blobs" / "sha256" / UPLOADED_AFTER[0:2] / UPLOADED_AFTER[2:4] / UPLOADED_AFTER
+    ).exists()

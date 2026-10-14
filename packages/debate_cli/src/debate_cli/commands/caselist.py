@@ -913,6 +913,9 @@ def import_summary(report: ImportReport, manifest: Path | None) -> dict[str, Jso
     `counts["NEW"]` is week-over-week: not present in `previous_snapshot`. `first_seen` is what is
     new to the caselist — distinct stored digests no earlier snapshot of it held — and is the
     number to sum across weeks (`v1-e30-t08`).
+
+    `held_at_removed_paths` is `{request id: count}` for the uploads refused because a removal
+    holds their path (`v1-e30-t13`): each is one of `counts["SUPPRESSED"]`, and empty when none was.
     """
     return {
         "caselist": report.caselist,
@@ -925,6 +928,7 @@ def import_summary(report: ImportReport, manifest: Path | None) -> dict[str, Jso
         "archive_sha256": report.archive_sha256,
         "members": report.member_count,
         "counts": {str(name): report.count(name) for name in Classification},
+        "held_at_removed_paths": dict(sorted(report.held_by_request.items())),
         "skipped": {str(reason): count for reason, count in sorted(report.skipped.items(), key=str)},
         "skipped_total": sum(report.skipped.values()),
         "distinct_sha256": report.distinct_digests,
@@ -1063,6 +1067,19 @@ def _summary_table(report: ImportReport, manifest: Path | None) -> TableSpec:
     )
 
 
+def _held_note(report: ImportReport) -> str:
+    """One sentence when a removal's hold refused an upload: how many, under which request, and what next."""
+    if not report.held_by_request:
+        return ""
+    requests = ", ".join(
+        f"{count} under {request}" for request, count in sorted(report.held_by_request.items())
+    )
+    return (
+        f" SUPPRESSED includes {report.held_at_removed_paths} new upload(s) at a removed path ({requests}), "
+        "refused because that removal holds the path: run the same `caselist remove` again to finish."
+    )
+
+
 def _caption(report: ImportReport, manifest: Path | None) -> str:
     """What the numbers mean, in the lines under the table: NEW's baseline, and first-seen beside it."""
     against = (
@@ -1079,7 +1096,7 @@ def _caption(report: ImportReport, manifest: Path | None) -> str:
     first_seen = (
         f"; {report.first_seen} first seen in {report.caselist}" if report.first_seen is not None else ""
     )
-    meaning = f"{new_means}{first_seen}."
+    meaning = f"{new_means}{first_seen}.{_held_note(report)}"
     if not report.applied:
         return (
             f"{report.member_count} member(s), {against}{warned}. {meaning} Planned only; nothing was "

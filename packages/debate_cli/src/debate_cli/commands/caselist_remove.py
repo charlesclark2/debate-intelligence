@@ -45,6 +45,16 @@ confirms it: above the command under *TO CARRY IT OUT*, and again when `--execut
 later uploads are still listed, as left in place. The command printed under *TO CARRY IT OUT*
 carries the flag, so the plan that is executed is the plan that was read.
 
+## The removed path is held, and the inbox is read (`v1-e30-t13`)
+
+A `--source` removal that removes a file whole appends a path entry for each caselist path it takes
+the file from, beside the suppression list, and the plan prints each under *PATH ENTRIES*. From then
+on `caselist import` and `caselist pull` refuse a new upload at that path. `--only-named` appends
+none, and neither does a file the plan withdraws or skips. A revision waiting in the download inbox
+is listed with the later uploads, marked as in the inbox, and the inbox section says what happens
+to its archive. `caselist unsuppress` of the removed file releases the hold on its paths and says
+how many.
+
 ## What is printed and what is not
 
 The plan's text names the team's paths, school and team code: this is the operator's own terminal,
@@ -361,6 +371,8 @@ def render_plan(plan: RemovalPlan, report: RemovalReport | None) -> str:
         "  (none: everything selected is already on the list)"
     ]
 
+    lines += ["", *_path_hold_lines(plan)]
+
     if not plan.versions_counted and report is None:
         lines += [
             "",
@@ -377,6 +389,32 @@ def render_plan(plan: RemovalPlan, report: RemovalReport | None) -> str:
             f"  {_execute_command(plan)}",
         ]
     return "\n".join(lines)
+
+
+def _path_hold_lines(plan: RemovalPlan) -> list[str]:
+    """The path entries exactly as they are appended, or why this plan appends none."""
+    holds = plan.path_holds
+    lines = [f"PATH ENTRIES appended beside the list, here and in the bucket: {len(holds)}"]
+    if holds:
+        lines += [
+            "  Each holds one caselist path this removal takes a file from. From now on an import refuses a",
+            "  new upload at that path, whatever its bytes, in any snapshot dated after after_snapshot,",
+            "  and counts it under this request. The path is a digest: no school, team code or name is",
+            "  in any of them. `caselist unsuppress` of the removed file releases its paths.",
+        ]
+        return lines + [f"  {entry.to_line()}" for entry in holds]
+    if plan.only_named:
+        why = f"{ONLY_NAMED_FLAG} is a request about one version, so later uploads at the path are not held"
+    elif not isinstance(plan.selector, SourceSelector):
+        why = (
+            "a --team removal holds no path; run this command again after a pull to cover what the team "
+            "uploads later"
+        )
+    elif not _not_later_uploads(plan, Disposition.REMOVE):
+        why = "no file the request names is removed whole, so no path is held"
+    else:
+        why = "every caselist path of the removed file(s) is already held, or it has none"
+    return [*lines, f"  (none: {why})"]
 
 
 def _not_later_uploads(plan: RemovalPlan, disposition: Disposition) -> tuple[PlannedSource, ...]:
@@ -450,6 +488,12 @@ def _later_upload_lines(plan: RemovalPlan) -> list[str]:
             "  camp path). The request covers them, so each goes through what a named file goes through.",
             f"  {ONLY_NAMED_FLAG} leaves them in place.",
         ]
+    if any(version.inbox_snapshots for version in plan.later_uploads):
+        lines += [
+            "  One marked as in the download inbox is in an archive `caselist pull` downloaded: not",
+            "  imported yet, or refused at import because the path is held. The DOWNLOAD INBOX section",
+            "  below says what happens to that archive.",
+        ]
     for number, digest in enumerate(digests, start=1):
         source = plan.source(digest)
         detail = _source_lines(number, source, plan) if source is not None else [f"  {number}. {digest}"]
@@ -501,7 +545,11 @@ def _where_held(version: PathVersion) -> str:
     """The caselist and snapshots a version is held in. Never its path."""
     snapshots = ", ".join(version.snapshots)
     if not version.openev_ids:
-        return f"{version.caselist}, held in {snapshots}"
+        waiting = ", ".join(version.inbox_snapshots)
+        if version.only_in_the_inbox:
+            return f"{version.caselist}, in the download inbox in {waiting}, not in the store"
+        also = f"; also in the download inbox in {waiting}" if waiting else ""
+        return f"{version.caselist}, held in {snapshots}{also}"
     ids = ", ".join(f"openev-{one}" for one in version.openev_ids)
     matched = (
         "the delivery record puts both ids at one upstream path"
@@ -565,7 +613,14 @@ def _source_lines(number: int, source: PlannedSource, plan: RemovalPlan) -> list
         or source.local_blob
         or any(planned.sha256 == source.sha256 for planned in plan.objects)
     )
-    if source.disposition is Disposition.REMOVE and not held_here:
+    in_the_inbox = any(
+        version.sha256 == source.sha256 and version.inbox_snapshots for version in plan.later_uploads
+    )
+    if source.disposition is Disposition.REMOVE and not held_here and in_the_inbox:
+        lines.append(
+            "     not in the store: it is suppressed, and taken out of the inbox archive that holds it"
+        )
+    elif source.disposition is Disposition.REMOVE and not held_here:
         lines.append(
             "     held nowhere in this environment: it is only suppressed, so no import can bring it in"
         )
@@ -632,6 +687,17 @@ def _confirmation(plan: RemovalPlan) -> list[str]:
         lines.append(
             f"  - Taken out of the download inbox on this machine: {len(plan.inbox)} downloaded file(s) "
             "held it."
+        )
+    named_removed = {source.sha256 for source in _not_later_uploads(plan, Disposition.REMOVE)}
+    held = sum(1 for hold in plan.suppression_after.path_holds if hold.sha256 in named_removed)
+    if held:
+        lines.append(
+            f"  - Held: {held} path(s) the file was removed from, so a new upload there is refused when "
+            "it is imported."
+        )
+    elif plan.only_named and isinstance(plan.selector, SourceSelector):
+        lines.append(
+            "  - Not held: the request was about one version, so a later upload at the same path is imported."
         )
     lines += [
         "  - Suppressed, so next week's cumulative archive cannot bring any of it back.",
@@ -714,6 +780,7 @@ def plan_summary(plan: RemovalPlan, settings: Settings, report: RemovalReport | 
             for planned in plan.objects
         ],
         "suppression_entries": [entry.to_line() for entry in plan.suppression_entries],
+        "path_holds": [entry.to_line() for entry in plan.path_holds],
         "inbox_directory": plan.inbox_directory,
         "inbox_exists": plan.inbox_exists,
         "inbox": [
@@ -761,6 +828,7 @@ def _version_json(version: PathVersion) -> dict[str, JsonValue]:
         "of_sha256": version.of_sha256,
         "caselist": version.caselist,
         "snapshots": list(version.snapshots),
+        "inbox_snapshots": list(version.inbox_snapshots),
         "openev_ids": list(version.openev_ids),
         "same_path_by": version.evidence.value,
     }
@@ -822,6 +890,12 @@ def render_unsuppress(plan: UnsuppressPlan, report: UnsuppressReport | None) -> 
         "",
         "The next import of an archive that holds the file stores it again. Nothing purged is restored.",
     ]
+    if plan.path_holds_released:
+        lines += [
+            f"It also releases the hold on {plan.path_holds_released} path(s) the file was removed from: a",
+            "later upload there is imported again from the next archive that holds it. Nothing is",
+            "appended beside the list for that; a hold follows the file it came from.",
+        ]
     if report is None:
         request = f" --request {plan.request_id}" if plan.request_id else ""
         confirm = f" {CONFIRM_PROD_FLAG}" if plan.environment == Environment.PROD.value else ""
@@ -847,6 +921,7 @@ def unsuppress_summary(
         "request_id": plan.request_id,
         "whole_source": plan.whole_source,
         "disclosures": plan.disclosures,
+        "path_holds_released": plan.path_holds_released,
         "entry": plan.entry.to_line(),
     }
     if report is not None:

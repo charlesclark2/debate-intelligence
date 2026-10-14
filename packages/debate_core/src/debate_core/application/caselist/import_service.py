@@ -43,7 +43,9 @@ the answer is one of six things:
     The file's SHA-256 is on the removal suppression list — or this one disclosure of it is — so it
     is not stored, not disclosed and given no manifest row, however many later archives, weekly
     or complete, hold it. Only the count survives. The list is a required constructor argument,
-    not a per-call option: an import cannot be run without it (`v1-e30-t07`).
+    not a per-call option: an import cannot be run without it (`v1-e30-t07`). A new upload at a
+    path a whole-file removal took a file from is `SUPPRESSED` too, whatever its bytes, and is
+    counted under that removal's request (:attr:`ImportReport.held_by_request`, `v1-e30-t13`).
 
 ## What the previous archive is
 
@@ -242,6 +244,18 @@ class ImportReport:
     suppression: SuppressionState = field(default_factory=SuppressionState)
     """The suppression list this import read, which the manifest writer checks every row against."""
 
+    held_by_request: Mapping[str, int] = field(default_factory=lambda: {})
+    """Uploads refused because a removal holds their path, by that removal's request id (`v1-e30-t13`).
+
+    Each is one of the `SUPPRESSED` count. Running the same removal again covers them: it finds
+    each in the download inbox, puts it on the suppression list and takes the archive out.
+    """
+
+    @property
+    def held_at_removed_paths(self) -> int:
+        """How many uploads this import refused because a removal holds their path."""
+        return sum(self.held_by_request.values())
+
     @property
     def member_count(self) -> int:
         """Members this archive actually contained, skipped ones included."""
@@ -334,6 +348,7 @@ class CaselistImportService:
             write=write,
             baseline=baseline,
             disclosure_scope=caselist,
+            snapshot=snapshot,
             dry_run=dry_run,
         )
 
@@ -361,6 +376,7 @@ class CaselistImportService:
             newly_stored_blobs=run.newly_stored_blobs,
             previous_snapshot=previous,
             suppression=run.suppression,
+            held_by_request=run.held_by_request,
             first_seen=await self._first_seen(caselist, snapshot, run.entries),
         )
         _log_counts(report)
@@ -381,7 +397,8 @@ class CaselistImportService:
         """Import a complete archive as its own snapshot, beside the weekly series (`v1-e34-t04`).
 
         The same pipeline as a weekly: every member hashed, checked against the suppression list
-        (whole sources and this caselist's disclosures alike), stored by digest, classified. Three
+        (whole sources, this caselist's disclosures and the paths removals hold alike), stored by
+        digest, classified. Three
         things differ, and each is what keeps the weekly series as it was:
 
         * **The baseline is the complete archive before it**, `previous`, which the caller reads
@@ -431,6 +448,7 @@ class CaselistImportService:
             write=write,
             baseline=baseline,
             disclosure_scope=caselist,
+            snapshot=archive_date,
             dry_run=dry_run,
         )
         report = ImportReport(
@@ -446,6 +464,7 @@ class CaselistImportService:
             newly_stored_blobs=run.newly_stored_blobs,
             previous_snapshot=previous.snapshot if previous is not None else None,
             suppression=run.suppression,
+            held_by_request=run.held_by_request,
             full_archive=True,
             withdrawals=count_withdrawals(
                 earlier,
@@ -594,6 +613,7 @@ def _log_counts(report: ImportReport) -> None:
             "withdrawn": report.withdrawals.withdrawn if report.withdrawals is not None else None,
             "superseded": report.withdrawals.superseded if report.withdrawals is not None else None,
             "counts": {str(name): count for name, count in report.counts.items()},
+            "held_at_removed_paths": report.held_at_removed_paths,
             "skipped": {str(reason): count for reason, count in report.skipped.items()},
             "warnings": report.warning_count,
         },

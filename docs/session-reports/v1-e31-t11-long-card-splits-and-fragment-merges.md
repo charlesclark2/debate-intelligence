@@ -6,7 +6,7 @@
 | Spec | [`plan_specs/v1/e31-debate-file-parsing/t11-long-card-splits-and-fragment-merges.yaml`](../../plan_specs/v1/e31-debate-file-parsing/t11-long-card-splits-and-fragment-merges.yaml) |
 | Epic / release | `v1-e31-debate-file-parsing` / `v1.1` |
 | Branch | `task/v1-e31-t11-long-card-splits-and-fragment-merges` |
-| Session status | PARTIAL: the diagnosis, the sampling tool and two fixes are done and tested. The operator's parts are NOT RUN: the pair-by-pair match to the 81 divided pairs on three caselists, the by-eye sample of the largest clusters (ac2), and the re-check after the rebuild (ac4) |
+| Session status | PARTIAL: the diagnosis, the sampling tool and two fixes are done and tested. The operator's parts are NOT RUN, and are now written for the store after `v1-e31-t12`'s re-parse: the divided pairs explained pair by pair (the rest of ac1), the by-eye sample of the largest clusters (ac2), and the counts and samples under `v3` (ac4) |
 
 ## Summary
 
@@ -40,13 +40,22 @@ tool for it is built.
    openev in the session and the rest to the operator, because `--before-rules` takes 4 to 9
    minutes a caselist. The part that needs no "before" reads the store's own table and takes under
    a minute, so I ran it on all four. One run went over: see the deviation.
-5. **`scripts/task sync` ran once**, when `v1-e01-t27` merged into `dev` during the session. The
-   whole suite ran again on the result, in four parts: 5,895 passed, 1 skipped.
+5. **`scripts/task sync` ran three times**: after `v1-e01-t27`, after `v1-e34-t22`, and after
+   `v1-e31-t12`. The whole suite ran again each time, in four parts; on top of t12, 6,598 passed,
+   1 skipped and t12's own 2 expected failures. t12 also appended to
+   `docs/data/caselist-parse-report.md`, so the last rebase stopped there: both additions are
+   kept, this task's as a subsection of the 2026-10-11 re-parse and t12's after it, and none of
+   t12's lines changed.
+6. **The operator steps are for the store after t12's re-parse** (PM's note of 2026-10-13). t12
+   bumps the parser to `2026.10.12-docx-3`, and one re-parse covers both tasks: if this task
+   merges first, the new directory is built under `card-fingerprint-v3` from the start, and
+   "before" is computed from git. The figures in this report are from `2026.10.10-docx-2` and are
+   a diagnosis of that store, not the figures to expect to the digit.
 
 **The Goal stays `InProgress`.** Three criteria have parts only the operator can close. Merge with
 `scripts/task pr --partial`.
 
-Commit ids in this report are as of the sync onto `50eae0d`. A later sync changes them; the
+Commit ids in this report are as of the sync onto `68f78ef`. A later sync changes them; the
 subject lines stay.
 
 ## Plan nodes
@@ -62,21 +71,21 @@ Every command ran from the task worktree on 2026-10-12.
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
 | **ac1** — a read-only diagnosis of the divided pairs on the dev store, by counts: whether the longer copies are in more than one cluster, and which threshold kept them apart | PASS on the store's own table for all four caselists | `uv run python scripts/compare_card_clusters.py diagnose --caselist <caselist>` → the tables under [The diagnosis](#the-diagnosis). The banding pairs exactly 81 short cuts with a container outside their cluster (45, 23, 12, 1), the count of divided pairs on 2026-10-11, and each has its limit named. |
-| **ac1**, matched pair by pair to the 81 divided pairs | PASS for openev; **NOT RUN** for hsld26, hspf26, hspolicy26 | openev: `counts --caselist openev --before-rules f5ad52b --save-before <scratch>` → 5,865 to 5,864 clusters, 2 merged, 1 divided, 58 s, the 2026-10-11 row exactly; then `diagnose --caselist openev --before <scratch>` → `"pairs": 1`, explained, nothing unexplained. The other three need the earlier placement, 4 to 9 minutes each: Operator follow-ups, step 1. |
+| **ac1**, matched pair by pair to the 81 divided pairs | PASS for openev; **NOT RUN** for the rest | openev: `counts --caselist openev --before-rules f5ad52b --save-before <scratch>` → 5,865 to 5,864 clusters, 2 merged, 1 divided, 58 s, the 2026-10-11 row exactly; then `diagnose --caselist openev --before <scratch>` → `"pairs": 1`, explained, nothing unexplained. The other three need the earlier placement, 4 to 9 minutes each. Rewritten for the re-parsed store as Operator follow-ups, step 6. The mechanism was checked again after the t12 sync: on openev the rules before `v1-e31-t08` give the same 2 merged and 1 divided, 79 s. |
 | **ac2** — `sample` can be pointed at a cluster by id | PASS | `sample --cluster ID` takes an id or the start of one, and `sample --largest RANK` finds it by size. `uv run pytest tests/scripts/test_compare_card_clusters.py -n0 --no-cov` → `29 passed`, among them both forms shown to a terminal, each pair cleared, tallies alone at the end. On the real store, drawing without showing: 15 s to the first pair of hspolicy26's largest cluster, and 13,695 pairs available, the diagnosis's own figure. |
-| **ac2**, the operator checks 10 pairs from each of the three largest clusters per caselist | **NOT RUN** | Needs a person at a terminal. Operator follow-ups, step 2. |
-| **ac3** — each defect has a synthetic fixture shown failing first; recall on both labelled sets does not fall; precision stays 1.000 | PASS | Commit `c49a23f` marks the fixtures `xfail(strict=True)` against `v2`: `69 passed, 10 xfailed`. `8cb4ae2` (fix 1) removes its mark: `188 passed, 9 xfailed`. `68cddb0` (fix 2) removes the rest: `969 passed`. A third fixture, for a refinement of fix 2, was run against the committed rule before the change: `1 failed, 2 passed`, then `3 passed` (`059a33e`). The labelled table is identical before and after: [Labelled sets](#labelled-sets-before-and-after). |
-| **ac4** — if clustering changes, `FINGERPRINT_VERSION` is bumped | PASS | `card-fingerprint-v3` (`68cddb0`). `fingerprints.py` lists what it changed; `parsed-card-store.md` has its row. Mutant "the version bump skipped" → 3 tests fail. |
-| **ac4**, operator-run: the counts and both samples again after the rebuild, recorded in `caselist-parse-report.md` | **NOT RUN** | Needs the merged code and a rebuild. Operator follow-ups, steps 5 to 7. The session's estimate and openev's full preview are recorded there now, marked as such. |
-| Node: `uv run pytest packages/debate_core/tests/evidence` | PASS | `1000 passed in 10.18s` |
+| **ac2**, the operator checks 10 pairs from each of the three largest clusters per caselist | **NOT RUN** | Needs a person at a terminal, and is to be taken on the re-parsed store. Operator follow-ups, step 5. |
+| **ac3** — each defect has a synthetic fixture shown failing first; recall on both labelled sets does not fall; precision stays 1.000 | PASS | Commit `2217e6a` marks the fixtures `xfail(strict=True)` against `v2`: `69 passed, 10 xfailed`. `2836a41` (fix 1) removes its mark: `188 passed, 9 xfailed`. `f63ec18` (fix 2) removes the rest: `969 passed`. A third fixture, for a refinement of fix 2, was run against the committed rule before the change: `1 failed, 2 passed`, then `3 passed` (`f460583`). The labelled table is identical before and after: [Labelled sets](#labelled-sets-before-and-after). |
+| **ac4** — if clustering changes, `FINGERPRINT_VERSION` is bumped | PASS | `card-fingerprint-v3` (`f63ec18`). `fingerprints.py` lists what it changed; `parsed-card-store.md` has its row. Mutant "the version bump skipped" → 3 tests fail. |
+| **ac4**, operator-run: the counts and both samples again after the rebuild, recorded in `caselist-parse-report.md` | **NOT RUN** | Needs the merged code and t12's re-parse. Operator follow-ups, steps 2 to 4. The session's estimate and openev's full preview, on the old directory, are recorded there now, marked as such. |
+| Node: `uv run pytest packages/debate_core/tests/evidence` | PASS | `1103 passed in 8.14s`, after the t12 sync (1,000 before it) |
 
 Also run, not criteria of this task:
 
 | Check | Result |
 |---|---|
-| Whole default suite after the sync, `uv run pytest --part K/4 -q` for K = 1 to 4, one command each | `1469 passed in 37.51s`, `1474 passed in 28.37s`, `1477 passed, 1 skipped, 1 warning in 28.15s`, `1475 passed in 30.78s`: 5,895 passed. The skip is the parser eval waiting on human corrections, as on `dev`. |
+| Whole default suite after the sync onto t12, `uv run pytest --part K/4 -q` for K = 1 to 4, one command each | `1643 passed in 36.38s`, `1651 passed, 1 xfailed in 34.25s`, `1653 passed, 1 skipped, 1 warning in 31.42s`, `1651 passed, 1 xfailed in 31.93s`: 6,598 passed. The skip is the parser eval waiting on human corrections, and the two expected failures are t12's own, as on `dev`. The earlier syncs gave 5,895 and 5,976 passed. |
 | `uv run pyright` | `0 errors, 0 warnings, 0 informations` |
-| `uv run ruff check .`, `uv run ruff format --check .` | `All checks passed!`, `625 files already formatted` |
+| `uv run ruff check .`, `uv run ruff format --check .` | `All checks passed!`, `637 files already formatted` |
 | `uv run lint-imports` | `Contracts: 12 kept, 0 broken.` |
 | `uv run scripts/check_thin_handlers.py` | `OK: 21 CLI command and API route handlers within 25 statements` |
 | `check_command_blocks.py --base origin/dev`, `check_links.py`, `docs_index.py --check-descriptions` | all OK |
@@ -134,8 +143,8 @@ The figures that test the hypothesis:
 
 The rules before `v1-e31-t08` merged a short body with any container the banding paired it with,
 so these 81 are the joins `v2` dropped. The total equals the 81 divided pairs counted on
-2026-10-11, and on openev the one cut is the one pair. That the other 80 match pair for pair is
-what step 1 of the operator follow-ups checks.
+2026-10-11, and on openev the one cut is the one pair. The other 80 could only be matched pair for pair
+before the re-parse; step 6 of the operator follow-ups does the same on the re-parsed store.
 
 **What it says about the hypothesis:**
 
@@ -183,14 +192,14 @@ before I removed a quadratic step and stopped building every card model, are not
 
 Both are in `_join_short_bodies_to_their_one_container`, the short-body step of `v1-e31-t08`.
 
-**Fix 1: a short cut's share is measured against the smallest body that holds it** (`8cb4ae2`).
+**Fix 1: a short cut's share is measured against the smallest body that holds it** (`2836a41`).
 Within one cluster the step stopped at the first container it confirmed, in fingerprint order, and
 tested `MIN_CUT_SHARE` against that one. A cut that is a quarter of one copy and less of a longer
 copy in the same cluster joined or not by which digest sorted first. Containers are now tried
 smallest first. Fixture: `test_a_short_cut_is_measured_against_the_smallest_body_that_holds_it`,
 the same three bodies under two orders of fingerprint.
 
-**Fix 2: containers that hold one another are one witness** (`68cddb0`, refined in `059a33e`). A
+**Fix 2: containers that hold one another are one witness** (`f63ec18`, refined in `f460583`). A
 short cut inside two clusters stayed out of both. When every confirmed container outside the
 cluster of the smallest one also holds a container inside that cluster, the larger ones say nothing
 about the cut that the smaller did not, so the smallest is the cut's only witness and it joins that
@@ -291,7 +300,7 @@ exactly once. The suite ran without `-x`, the file was restored byte for byte, a
 | The version bump skipped | CAUGHT: 3 failed: `test_fingerprints.py`'s literal, the smoke check, and the script's git-ref test |
 
 **One check deleted.** The nested test had a size condition on which inside container an outside
-one could hold. I could not build a case that told it from its absence, so it is gone (`28627e7`).
+one could hold. I could not build a case that told it from its absence, so it is gone (`af14a8c`).
 
 ## Files changed
 
@@ -395,7 +404,7 @@ one could hold. I could not build a case that told it from its absence, so it is
    witnesses under `v3` are a subset of `v2`'s and the share test is no stricter, so every join I
    can construct under `v2` happens under `v3`, and the estimate divides no cluster. A proof would
    need a case I could not rule out: a short body's cluster reaching its smallest container by
-   another route first. The operator's `clusters_divided` after the rebuild is the check.
+   another route first. `clusters_divided` in step 2 of the operator follow-ups is the check.
 10. **The estimate's method.** The corrected step applied to the stored clusters. It skips the
     banding, which is nearly all of a rebuild's time and which the fixes do not touch.
 11. **`domain/card_occurrence.py` is not edited.** A field description there names `v1` and `v2`.
@@ -409,62 +418,114 @@ commit, a fixture or this report.
 
 ## Operator follow-ups
 
+**Rewritten on 2026-10-13 after the PM's note:** `v1-e31-t12` bumps the parser to
+`2026.10.12-docx-3`, so every step here is taken on the re-parsed store, and the PM combines them
+with t12's. Nothing needs running before the merge. The session's figures above are from
+`2026.10.10-docx-2` and stay valid as a diagnosis of that store. They are not the figures to
+expect to the digit: the re-parse changes the text of 2,515 cards that keep their paragraph range
+and replaces 1,109 card ranges with 1,274.
+
+**The order these steps assume.** This task and t12 both merge, then t12's re-parse writes
+`parsed/<caselist>/2026.10.12-docx-3/`. That one re-parse covers both tasks: it builds the new
+directory's aggregates under `card-fingerprint-v3` from the start. If the re-parse ran before this
+task merged, see [If the new directory was built under `v2`](#if-the-new-directory-was-built-under-v2).
+
+**What the next rebuild will do.**
+
+* **With t12, the first run is a full parse, not a rebuild.** A new parser version starts a new
+  version directory that holds nothing, so every source is parsed again and the aggregates are
+  built from that. They are built under `v3`, and the new directory never holds a `v2` table.
+* **So "before" has to be computed.** There is no earlier table for these cards to compare with.
+  Step 2 places the new directory's cards with the matching rules as they were just before this
+  task merged, taken from git. On openev today the same mechanism, with the rules on `origin/dev`,
+  reproduced the stored `v2` table exactly: 5,864 clusters on both sides, nothing merged or
+  divided, 53 s.
+* **The weekly pull's parse stage** (`v1-e34-t17`) would do that full parse itself on its first
+  run with the new build, for each caselist it imports into: about 30 minutes where it takes 20,
+  with `full_parses` above 0, and openev left on the old directory until a camp file arrives. The
+  scheduled-sync runbook says to do the full parse by hand first, which is what t12's steps are.
+* **Had this task merged alone**, with no parser bump, nothing would have been parsed again: the
+  skip key has no fingerprint version in it. The next parse stage would have rewritten every
+  occurrence row of each caselist it imported into under `v3`, and uploaded that one file.
+
 Don't run any of this while `caselist pull` is running: `uv run debate-research caselist runs
---last 1` shows the last run. Steps 0 to 4 read the store and can run now, from the task worktree,
-before the merge. Steps 5 to 8 are after it.
+--last 1` shows the last run. The script finds the newest version directory by itself, so no step
+but the first names it.
 
-**What the next rebuild will do.** Nothing is parsed again: the skip key has no fingerprint version
-in it. Every occurrence row is rewritten under `card-fingerprint-v3`, about 45 clusters merge into
-another, and `occurrences.jsonl` is the only file whose bytes change, so a publish uploads that one
-file per caselist plus whatever the week added. The weekly pull's parse stage (`v1-e34-t17`) does
-this for each caselist it imports into, on its first run with a build that has this change. A
-caselist that run does not import into, openev in most weeks, keeps its `v2` rows until a camp
-file arrives or step 5 is run for it. In between, the caselists carry different versions; a reader
-checks the rows' `fingerprint_version`, as `parsed-card-store.md` says.
-
-**Step 0. Save the `v2` tables** (seconds). They are the "before" for step 6, and the first
-rebuild with the merged code overwrites them. Now is fine: cards a pull adds in between are
-counted and left out of the comparison.
+**Step 1. Check both tasks are merged and the re-parse has run** (seconds).
 
 ```zsh
-mkdir -p ~/.debate-research/dev/card-clusters-v2
-for c in hsld26 hspf26 hspolicy26 openev; do cp -p ~/.debate-research/dev/parsed/${c}/2026.10.10-docx-2/occurrences.jsonl ~/.debate-research/dev/card-clusters-v2/${c}.jsonl; done
-jq -r '.fingerprint_version' ~/.debate-research/dev/card-clusters-v2/*.jsonl | sort | uniq -c
-```
-
-Expected: one line, every row `card-fingerprint-v2` (228,377 rows on 2026-10-11).
-
-**Step 1. Match the diagnosis to the 81 divided pairs** (the rest of ac1; 15 to 25 minutes, then
-about 5). It writes four files of digests and cluster ids, no text, in the dev data directory.
-
-```zsh
-cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e31-t11-long-card-splits-and-fragment-merges
+cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence
 git branch --show-current
-T08=$(git log -1 --format=%H --grep='^v1-e31-t08-short-card-recall:')
-echo "${T08}"
-uv run python scripts/compare_card_clusters.py counts --caselist hsld26 --caselist hspf26 --caselist hspolicy26 --caselist openev --before-rules "${T08}^" --save-before ~/.debate-research/dev/card-clusters-before-t08 > ~/card-clusters-counts-t08.json; echo "exit $?"
+git status --short
+git pull --ff-only origin dev
+git log --oneline -1 --grep='^v1-e31-t11-long-card-splits-and-fragment-merges:'
+git log --oneline -1 --grep='^v1-e31-t12-cite-detection:'
+ls ~/.debate-research/dev/parsed/hsld26
+jq -r '.fingerprint_version' ~/.debate-research/dev/parsed/hsld26/2026.10.12-docx-3/occurrences.jsonl | sort | uniq -c
 ```
 
-Expected: the branch is `task/v1-e31-t11-long-card-splits-and-fragment-merges`, `echo` prints one
-commit id, and `exit 0`. The file should repeat the 2026-10-11 table: `clusters_divided` 21, 18,
-11 and 1, unless a pull has added sources since.
+Expected: `dev`; `git status` prints nothing; each `git log` prints that task's merge commit; `ls`
+shows `2026.10.12-docx-3`; and the last line is one count of `card-fingerprint-v3`.
+
+* **No `2026.10.12-docx-3` directory:** the re-parse has not run. Run t12's operator steps first.
+* **It says `card-fingerprint-v2`:** the re-parse ran before this task merged. Go to
+  [If the new directory was built under `v2`](#if-the-new-directory-was-built-under-v2).
+
+**Step 2. Compute "before" once and print the counts** (ac4's counts; 15 to 25 minutes on
+2026-10-11's timings). It reads the store and writes four files of digests and cluster ids, no
+text, inside the dev data directory.
 
 ```zsh
-uv run python scripts/compare_card_clusters.py diagnose --caselist hsld26 --caselist hspf26 --caselist hspolicy26 --caselist openev --before ~/.debate-research/dev/card-clusters-before-t08 > ~/card-clusters-diagnosis-v2.json; echo "exit $?"
-jq 'map_values(.divided_pairs)' ~/card-clusters-diagnosis-v2.json
+cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence
+T11=$(git log -1 --format=%H --grep='^v1-e31-t11-long-card-splits-and-fragment-merges:')
+echo "${T11}"
+uv run python scripts/compare_card_clusters.py counts --caselist hsld26 --caselist hspf26 --caselist hspolicy26 --caselist openev --before-rules "${T11}^" --save-before ~/.debate-research/dev/card-clusters-before-t11 > ~/card-clusters-counts-v3.json; echo "exit $?"
+cat ~/card-clusters-counts-v3.json
 ```
 
-Expected: `exit 0`; the four `pairs` add to 81; and no entry whose `kind` is `no short cut links
-this part to the rest`. Paste `~/card-clusters-diagnosis-v2.json` back: it holds counts only. An
-entry of that kind is a cause this diagnosis does not know, and is the thing to send first.
+`"${T11}^"` is the commit just before this task's merge. Only the four matching modules are taken
+from it, so it does not matter which of the two tasks merged first.
 
-**Step 2. The by-eye sample of the largest clusters** (ac2; about an hour, 120 pairs). Each pair is
-two different texts from one cluster. Press `s` (same card), `d` (different card) or `u` (unsure),
-then Enter. Each pair is cleared from the terminal, scrollback included, so the tallies go to a
-file of counts. It will not run with its output redirected.
+Expected: `echo` prints one commit id and `exit 0`. For every caselist `before_version`
+`card-fingerprint-v2`, `after_version` `card-fingerprint-v3`, `exact_fingerprints_changed` 0,
+`cards_only_before` and `cards_only_after` 0, and `clusters_divided` 0. Nothing under `absorbed`
+past `3 to 5`. `clusters_merged_into_another` near the session's estimate on the old directory: 18,
+10, 17 and 0. Paste the file back: it holds counts only. Any divided cluster, or anything under
+`6 to 20` or above, stop and send it before the sample.
+
+**Step 3. The by-eye sample of what `v3` changed** (ac4's samples; seconds to start, then about 15
+minutes). Each pair is shown one at a time. Press `s` (same card), `d` (different card) or `u`
+(unsure), then Enter. Each pair is cleared from the terminal, scrollback included, so the tallies
+go to a file of counts. It will not run with its output redirected.
 
 ```zsh
-cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e31-t11-long-card-splits-and-fragment-merges
+uv run python scripts/compare_card_clusters.py sample --count 20 --caselist hsld26 --caselist hspf26 --caselist hspolicy26 --caselist openev --before ~/.debate-research/dev/card-clusters-before-t11 --save-tallies ~/card-cluster-sample-tallies.txt
+uv run python scripts/compare_card_clusters.py sample --divided --count 10 --caselist hsld26 --caselist hspf26 --caselist hspolicy26 --caselist openev --before ~/.debate-research/dev/card-clusters-before-t11 --save-tallies ~/card-cluster-sample-tallies.txt
+```
+
+Expected: the first draws 20 of about 45 newly joined pairs. The second should say `Drew 0 of 0
+divided pairs`. The cards are real disclosures, so nothing from them goes into a message, a
+screenshot, an issue or a file. **One "different card" among the newly joined pairs is a false
+positive on the real corpus.** If t12's prod publish has not run yet, take this sample between its
+dev and prod steps, so that verdict comes before prod.
+
+**Step 4. The diagnosis of the new directory** (about 5 minutes; counts only).
+
+```zsh
+uv run python scripts/compare_card_clusters.py diagnose --caselist hsld26 --caselist hspf26 --caselist hspolicy26 --caselist openev > ~/card-clusters-diagnosis-v3.json; echo "exit $?"
+jq 'map_values(.cuts.short_within_the_rule_and_apart)' ~/card-clusters-diagnosis-v3.json
+```
+
+Expected: `exit 0`, and in every caselist the `cuts` under `short_within_the_rule_and_apart` near
+0 (on the old directory under `v2` they were 16, 10, 14 and 0; the two fixes leave only the ones
+where another short body of the cluster points elsewhere, 2 in all). The other rows should be near
+the old directory's table in `caselist-parse-report.md`. Paste the file back.
+
+**Step 5. The by-eye sample of the largest clusters** (ac2; about an hour, 120 pairs). Each pair is
+two different texts from one cluster of the new directory.
+
+```zsh
 for c in hsld26 hspf26 hspolicy26 openev; do for r in 1 2 3; do uv run python scripts/compare_card_clusters.py sample --caselist ${c} --largest ${r} --count 10 --save-tallies ~/card-cluster-sample-tallies.txt; done; done
 ```
 
@@ -476,16 +537,35 @@ for c in hsld26 hspf26 hspolicy26 openev; do uv run python scripts/compare_card_
 cat ~/card-cluster-sample-tallies.txt
 ```
 
-Paste the file back. The cards are real disclosures, so nothing from them goes into a message, a
-screenshot, an issue or a file. Two notes:
+Paste the file back. Two notes:
 
-* hspf26's largest cluster holds texts of 1,441 to 7,697 words. Its pairs are long to read, and
-  `u` is an honest answer.
+* On the old directory hspf26's largest cluster held texts of 1,441 to 7,697 words. If it still
+  does, its pairs are long to read, and `u` is an honest answer.
 * To point at a cluster by its id instead of its rank,
   `diagnose --caselist hspolicy26 --only-largest-clusters --show-cluster-ids` prints the ids, and
   `sample --cluster` takes one or the start of one.
 
-**Step 3. Optional: the limits, by eye** (about 4 minutes of reading the store before the first
+**Step 6. The pairs divided since before `v1-e31-t08`, each with its reason** (the rest of ac1;
+15 to 25 minutes, then about 5). On the old directory there were 81. This places the new
+directory's cards with the rules before `v1-e31-t08` and explains every part that has left its
+earlier cluster.
+
+```zsh
+cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence
+T08=$(git log -1 --format=%H --grep='^v1-e31-t08-short-card-recall:')
+echo "${T08}"
+uv run python scripts/compare_card_clusters.py counts --caselist hsld26 --caselist hspf26 --caselist hspolicy26 --caselist openev --before-rules "${T08}^" --save-before ~/.debate-research/dev/card-clusters-before-t08 > ~/card-clusters-counts-since-t08.json; echo "exit $?"
+uv run python scripts/compare_card_clusters.py diagnose --caselist hsld26 --caselist hspf26 --caselist hspolicy26 --caselist openev --before ~/.debate-research/dev/card-clusters-before-t08 > ~/card-clusters-diagnosis-since-t08.json; echo "exit $?"
+jq 'map_values(.divided_pairs)' ~/card-clusters-diagnosis-since-t08.json
+```
+
+Expected: `exit 0` twice. The count of pairs will not be 81: the cards differ, and `v3` has joined
+some cuts. Most of the parts `v3` joined to a smaller copy are still counted as divided here, with
+the detail `it is with a copy that the bodies it left also hold`. What matters is that **no entry
+has the `kind` `no short cut links this part to the rest`**. One that does is a cause this
+diagnosis does not know, and is the thing to send first. Paste both files back.
+
+**Step 7. Optional: the limits, by eye** (about 4 minutes of reading the store before the first
 pair of each, then the pairs). These are the evidence for Decisions 1, 3 and 4. Each pair is a cut
 and the smallest body that holds it, which the rules keep apart.
 
@@ -495,26 +575,37 @@ uv run python scripts/compare_card_clusters.py sample --kept-apart-by under-the-
 uv run python scripts/compare_card_clusters.py sample --kept-apart-by witnesses-in-several-clusters --count 10 --caselist hsld26 --caselist hspf26 --caselist hspolicy26 --caselist openev --save-tallies ~/card-cluster-sample-tallies.txt
 ```
 
-**Step 4. Optional, before the merge: the real figures for `v3`** (12 to 25 minutes). Step 6 gives
-the same figures after the rebuild, so this is only for seeing them first.
+**Prod.** This task has no prod step of its own. t12's prod publish carries the `v3` aggregates
+with it, from the same dev data directory. It goes ahead only if step 3 found no "different card".
+
+**Step 8. Remove what the steps saved:**
 
 ```zsh
-uv run python scripts/compare_card_clusters.py counts --caselist hsld26 --caselist hspf26 --caselist hspolicy26 > ~/card-clusters-preview-v3.json; echo "exit $?"
-cat ~/card-clusters-preview-v3.json
+rm -r ~/.debate-research/dev/card-clusters-before-t11 ~/.debate-research/dev/card-clusters-before-t08
+rm ~/card-clusters-counts-v3.json ~/card-clusters-diagnosis-v3.json ~/card-clusters-counts-since-t08.json ~/card-clusters-diagnosis-since-t08.json ~/card-cluster-sample-tallies.txt
 ```
 
-Expected: `before_version` `card-fingerprint-v2`, `after_version` `card-fingerprint-v3`,
-`exact_fingerprints_changed` 0, `clusters_divided` 0, `clusters_merged_into_another` near 18, 10
-and 17, nothing under `absorbed` past `3 to 5`, and `largest_after` 620, 543 and about 1,179.
+### If the new directory was built under `v2`
 
-**Step 5. After the merge: rebuild in dev** (about 18 minutes: 314, 473, 193 and 71 s on
-2026-10-11). The sequence is the removal runbook's step 5. Or leave it to the next scheduled pull,
-which does the three weekly caselists and not openev.
+That is, t12 merged and its re-parse ran before this task merged. The new directory then holds a
+real `v2` table, which is a better "before" than a computed one, and one more run rebuilds it under
+`v3`. Nothing is parsed again.
+
+Save the tables first (seconds):
 
 ```zsh
 cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence
-git branch --show-current
-git status --short
+mkdir -p ~/.debate-research/dev/card-clusters-before-t11
+for c in hsld26 hspf26 hspolicy26 openev; do cp -p ~/.debate-research/dev/parsed/${c}/2026.10.12-docx-3/occurrences.jsonl ~/.debate-research/dev/card-clusters-before-t11/${c}.jsonl; done
+jq -r '.fingerprint_version' ~/.debate-research/dev/card-clusters-before-t11/*.jsonl | sort | uniq -c
+```
+
+Expected: one line, every row `card-fingerprint-v2`.
+
+Then, with this task merged and pulled, rebuild and publish in dev, as the removal runbook's
+step 5 does (about 18 minutes on 2026-10-11's timings: 314, 473, 193 and 71 s):
+
+```zsh
 git pull --ff-only origin dev
 git log --oneline -1 --grep='^v1-e31-t11-long-card-splits-and-fragment-merges:'
 aws sso login --profile debate-dev-evidence
@@ -525,30 +616,19 @@ DEBATE_ENV=dev uv run debate-research --json caselist parse --caselist openev --
 for c in hsld26 hspolicy26 hspf26 openev; do jq -c '(.data // .error.details) | {caselist, version, fingerprint_version, attempted, store, elapsed_seconds, publish: .publish.counts}' ~/parse-dev-${c}.json; done
 ```
 
-Expected: the branch is `dev`, `git status` prints nothing, `git log` prints this task's merge
-commit, and for each caselist `exit 0`, `fingerprint_version` `card-fingerprint-v3`, `attempted` 0
-unless a pull left sources unparsed, and `publish.uploaded` 1, the occurrence table.
+Expected for each: `exit 0`, `fingerprint_version` `card-fingerprint-v3`, `attempted` 0, and
+`publish.uploaded` 1, because `occurrences.jsonl` is the only file whose bytes change.
 
-**Step 6. The counts and both samples again** (ac4; seconds, then about 15 minutes by eye).
+Then the counts, which take seconds because both tables exist:
 
 ```zsh
-uv run python scripts/compare_card_clusters.py counts --caselist hsld26 --caselist hspf26 --caselist hspolicy26 --caselist openev --before ~/.debate-research/dev/card-clusters-v2 > ~/card-clusters-counts-v3.json; echo "exit $?"
+uv run python scripts/compare_card_clusters.py counts --caselist hsld26 --caselist hspf26 --caselist hspolicy26 --caselist openev --before ~/.debate-research/dev/card-clusters-before-t11 > ~/card-clusters-counts-v3.json; echo "exit $?"
 cat ~/card-clusters-counts-v3.json
-uv run python scripts/compare_card_clusters.py diagnose --caselist hsld26 --caselist hspf26 --caselist hspolicy26 --caselist openev > ~/card-clusters-diagnosis-v3.json; echo "exit $?"
-uv run python scripts/compare_card_clusters.py sample --count 20 --caselist hsld26 --caselist hspf26 --caselist hspolicy26 --caselist openev --before ~/.debate-research/dev/card-clusters-v2 --save-tallies ~/card-cluster-sample-tallies.txt
-uv run python scripts/compare_card_clusters.py sample --divided --count 10 --caselist hsld26 --caselist hspf26 --caselist hspolicy26 --caselist openev --before ~/.debate-research/dev/card-clusters-v2 --save-tallies ~/card-cluster-sample-tallies.txt
 ```
 
-Expected: the figures of step 4, with openev at 0 merged. In the second file, the count under
-`short: one cluster is its witness, within the share, and it is still apart` falls from 16, 10, 14
-and 0 to about 2 in all. The first sample draws from about 45 newly joined pairs. The second
-should say `Drew 0 of 0 divided pairs`. Paste back both JSON files and the tallies file. One
-"different card" among the newly joined pairs is a false positive on the real corpus, and stops
-step 7.
-
-**Step 7. Prod, only if step 6 found no "different card"**, from the same dev data directory, as
-the removal runbook does it. Each variable is on the command line, so nothing is left pointing the
-shell at prod.
+Expected as in step 2. Then steps 3 to 8 above. Prod, from the same dev data directory and only if
+step 3 found no "different card", as the removal runbook does it (each variable is on the command
+line, so nothing is left pointing the shell at prod):
 
 ```zsh
 aws sso login --profile debate-prod-evidence
@@ -560,13 +640,6 @@ DEBATE_ENV=prod DEBATE_STORAGE__DATA_DIR="$HOME/.debate-research/dev" uv run deb
 
 Expected: `exit 0` each.
 
-**Step 8. Remove what the steps saved:**
-
-```zsh
-rm -r ~/.debate-research/dev/card-clusters-v2 ~/.debate-research/dev/card-clusters-before-t08
-rm ~/card-clusters-counts-t08.json ~/card-clusters-diagnosis-v2.json ~/card-clusters-counts-v3.json ~/card-clusters-diagnosis-v3.json ~/card-cluster-sample-tallies.txt
-```
-
 ## Follow-up work
 
 1. **Long cuts joined to the one cluster that holds them (E31).** Decision 1: the figures, the
@@ -574,9 +647,9 @@ rm ~/card-clusters-counts-t08.json ~/card-clusters-diagnosis-v2.json ~/card-clus
    divided pairs proper, since it merges the two long copies a cut sits between.
 2. **What one card is, when a source is cut at many extents (PM, then E31).** Decision 2. The
    answer decides whether hspolicy26's largest cluster is one card or many, and it changes what
-   `v1-e32-t03`'s "most-read card" means. Step 2's tallies are the evidence.
+   `v1-e32-t03`'s "most-read card" means. Step 5's tallies are the evidence.
 3. **`MIN_CUT_SHARE` (E31).** 272 short cuts are under it, 91 of them between a tenth and a
-   quarter. Step 3's second sample is the evidence.
+   quarter. Step 7's second sample is the evidence.
 4. **`MAX_CONTAINER_CLUSTERS` counts clusters before it confirms any (E31).** A much-read card
    whose long copies are split fills the count with copies of itself. Re-measure after
    Follow-up 1.
@@ -602,7 +675,7 @@ rm ~/card-clusters-counts-t08.json ~/card-clusters-diagnosis-v2.json ~/card-clus
 10. **`test_counts_reads_the_earlier_rules_from_a_git_ref` reads `HEAD`**, so it fails in a working
     tree where the version constant is edited and not yet committed. It passes once committed. A
     session that bumps the version will meet it, as I did.
-11. **`docs/data/caselist-parse-report.md`** needs the figures of steps 1, 2 and 6 at close-out.
+11. **`docs/data/caselist-parse-report.md`** needs the figures of steps 2 to 6 at close-out, from the re-parsed store.
     The places are marked `not run`.
 
 ## PM review

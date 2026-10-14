@@ -759,8 +759,12 @@ banding (5 to 33 s a caselist), and its one full preview, openev (66 s):
   text; 288 would be put in a cluster with at least one text they share nothing with. That feeds
   the same chains as the largest clusters, so it waits for the by-eye sample.
 
-**After the rebuild under `card-fingerprint-v3`:** not run. The counts and both by-eye samples
-(`v1-e31-t11`, criterion ac4) are the operator's, recorded here at close-out.
+**After the rebuild under `card-fingerprint-v3`:** not run. It will be taken on
+`2026.10.12-docx-3`, after `v1-e31-t12`'s re-parse, which builds that directory's aggregates under
+`v3` if `v1-e31-t11` has merged by then. Everything above is from `2026.10.10-docx-2`. The
+re-parse changes the text of 2,515 cards and replaces 1,109 card ranges with 1,274, so the figures
+there should be near these, not equal. The counts and both by-eye samples (`v1-e31-t11`, criteria
+ac2 and ac4) are the operator's, recorded here at close-out.
 
 ## Cites the parser missed or misread (`v1-e31-t12`)
 
@@ -1102,3 +1106,4 @@ The one cite line still missed is the second line of a cite in small print, unde
   leaves them as cite text: 14 before this task and the five above. A style that marks no name and
   year at the head is emphasis, by the measure under 2, and that is a change to the earlier rule
   and to one of its fixtures.
+

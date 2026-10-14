@@ -48,13 +48,26 @@ Deviation 1 covers files outside `constraints.packages`, docstrings and a new fi
 | ac2 — the requester line is still true and no longer calls the weekly cumulative, by test | PASS | `uv run --frozen pytest packages/debate_cli/tests/commands/test_caselist_remove_requester_line.py`: `5 failed` before the change, all on the old line; `222 passed` for `packages/debate_cli/tests/commands/` after it. Covers `--source` (path held), `--team` (whole file plus a withdrawn shared copy), `--only-named`, a withdrawal only, and a plan that removes nothing |
 | ac3 — the ordering investigation on synthetic fixtures; result in the report; any defect fixed, failing first; Ordering section and `SnapshotOutOfOrder` rewritten | PASS | `uv run --frozen pytest packages/debate_core/tests/application/caselist/test_import_window_ordering.py`: before the rewrite `2 failed, 15 passed`, and the 2 were the message tests; after it, `17 passed`. The 15 behaviour tests passed against hand-worked answers on the first run. Table below. The two outcomes that need a ruling are diagnosed, the conservative behaviour is kept, and Follow-ups 1 and 3 say what I would change |
 | Node `window-model`: Import tests pass (`uv run pytest packages/debate_core/tests/application -k "import or order or removal"`) | PASS | `430 passed in 49.48s` (run with `--frozen`) |
-| Full suite, four parts (`uv run --frozen pytest -n auto -m "not slow and not live" --part K/4`) | PASS | Part 1/4 `1673 passed in 135.15s` (with `-p no:randomly` added; `pytest_randomly` is not installed, so the flag changes nothing). Parts 2–4: see "Full suite" below |
+| Full suite, four parts (`uv run --frozen pytest -n auto -m "not slow and not live" --part K/4`) | PASS | `1673 passed`; `1681 passed, 1 xfailed`; `1686 passed, 1 skipped`; `1684 passed, 1 xfailed`. See "Full suite" below |
 | Lint, types, import contracts, command blocks | PASS | `ruff format --check` and `ruff check` on the 28 changed Python files: clean. `uv run --frozen pyright`: `0 errors`. `lint-imports`: `12 kept, 0 broken`. `scripts/check_command_blocks.py`: OK |
-| `uv run scripts/validate_specs.py` | PASS | See the end of this report |
+| Goal set to `Succeeded`; `uv run scripts/validate_specs.py` | PASS | `uv run scripts/task_helper.py set-phase v1-e30-t17-weekly-window-wording-and-ordering Succeeded`, then `OK: 347 files, 38 epics, 289 tasks, 20 releases` |
 
 ### Full suite
 
-FULL_SUITE_PLACEHOLDER
+Run on the final code (commit with this report's draft), one command each, after checking the load
+average (8.6 to 16.9), each under a hard stop:
+
+| Part | Command | Result |
+|---|---|---|
+| 1/4 | `uv run --frozen pytest -n auto -m "not slow and not live" --part 1/4` | `1673 passed in 32.84s` |
+| 2/4 | `… --part 2/4` | `1681 passed, 1 xfailed in 50.28s` |
+| 3/4 | `… --part 3/4` | `1686 passed, 1 skipped, 1 warning in 36.87s` |
+| 4/4 | `… --part 4/4` | `1684 passed, 1 xfailed in 45.50s` |
+
+The xfails are the cite-detection example marked "left as it is", and the skip is the parser eval's
+uncorrected files: neither is this task's. An earlier part 1, run before the last two commits at a
+load average of 27, took 135 s (`1673 passed`). `dev` had not moved at the end (`git fetch`, then
+`HEAD..origin/dev` empty), so no sync was needed.
 
 ## The search list (ac1)
 

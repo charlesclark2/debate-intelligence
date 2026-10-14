@@ -51,7 +51,7 @@ spec:
         synthetic fixture. The result is in the report. Any defect is fixed, shown failing
         first. The Ordering section and `SnapshotOutOfOrder` are rewritten to match.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

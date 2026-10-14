@@ -25,6 +25,13 @@ without being looked at:
    changed.
 5. **`mark-reviewed`** records that the coach spot-checked a corrected file end to end.
 
+**`label`** is the quick way through steps 2 to 4: a page served on this machine only that shows
+one sampled paragraph at a time, rendered with its formatting, beside the pre-label, and takes one
+key per row. When the last row is checked it writes the same worksheet, which `check` and `import`
+take as they take any other (`tests/evals/parser/labeller.py`). `label --blind` hides the
+pre-label, and `import --labeled-blind` records that on the label file. The spreadsheet route stays
+as the fallback.
+
 What it prints is counts, keyed-digest prefixes, row numbers and worksheet file names, never paths,
 and of text only a few characters around a difference.
 
@@ -46,6 +53,7 @@ See `tests/fixtures/debate_files/eval/labels/README.md` for the labeling guide.
 ## Running it
 
     uv run python scripts/prelabel_docx.py prelabel --all
+    uv run python scripts/prelabel_docx.py label 4f2c91ab --out-dir ~/parser-eval-worksheets
     uv run python scripts/prelabel_docx.py worksheet 4f2c91ab --out-dir ~/parser-eval-worksheets
     uv run python scripts/prelabel_docx.py check 4f2c91ab \\
         --worksheet ~/parser-eval-worksheets/4f2c91ab....numbers \\
@@ -65,18 +73,34 @@ from __future__ import annotations
 import argparse
 import csv
 import hashlib
+import io
 import shutil
 import subprocess
 import sys
-from collections.abc import Mapping, Sequence
+import time
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import replace
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
-from tests.evals.parser.corpus import load_evaluation_document, load_path_map  # noqa: E402
-from tests.evals.parser.digests import require_key, text_digest  # noqa: E402
+from tests.evals.parser.corpus import (  # noqa: E402
+    load_evaluation_document,
+    load_path_map,
+    parse_evaluation_file,
+)
+from tests.evals.parser.digests import keyed_digest, require_key, text_digest  # noqa: E402
+from tests.evals.parser.docx_render import render_docx  # noqa: E402
+from tests.evals.parser.labeller import (  # noqa: E402
+    LabellerApp,
+    ProgressError,
+    csv_bytes,
+    labelled_worksheet,
+    load_or_begin,
+    progress_path_for,
+    serve,
+)
 from tests.evals.parser.labels_schema import (  # noqa: E402
     CARD_UNITS,
     LABELS_DIRECTORY,
@@ -127,7 +151,7 @@ from tests.evals.parser.worksheets import (  # noqa: E402
 
 from debate_core.domain.debate_files import CardCompleteness, ParsedDocument  # noqa: E402
 from debate_core.domain.style_profile import StructuralUnit  # noqa: E402
-from debate_core.integrations.docx_parser import DOCX_PARSER_VERSION  # noqa: E402
+from debate_core.integrations.docx_parser import DOCX_PARSER_VERSION, DebateDocxParser  # noqa: E402
 
 __all__ = [
     "MARK_CLOSE",
@@ -137,10 +161,12 @@ __all__ = [
     "WorksheetError",
     "import_worksheet",
     "is_sampled",
+    "labeller_for",
     "main",
     "parse_markup",
     "prelabel_document",
     "render_markup",
+    "worksheet_csv_bytes",
     "worksheet_problems",
     "write_worksheet",
 ]
@@ -278,6 +304,35 @@ def _label_cells(labels: LabelFile) -> dict[int, tuple[str, str, str]]:
     return cells
 
 
+def worksheet_csv_bytes(labels: LabelFile, texts: Sequence[str]) -> bytes:
+    """The worksheet `worksheet` writes for these labels, byte for byte.
+
+    Also how a worksheet nobody has touched is recognised: it is exactly these bytes.
+    """
+    spans = {span.index: span for span in labels.spans}
+    cells = _label_cells(labels)
+    buffer = io.StringIO(newline="")
+    writer = csv.writer(buffer)
+    writer.writerow(WORKSHEET_COLUMNS)
+    for paragraph in labels.paragraphs:
+        span = spans.get(paragraph.index)
+        text = texts[paragraph.index]
+        unit, card, completeness = cells[paragraph.index]
+        writer.writerow(
+            [
+                paragraph.index,
+                "",
+                unit,
+                card,
+                completeness,
+                text,
+                "" if span is None else render_markup(text, span.underline),
+                "" if span is None else render_markup(text, span.highlight),
+            ]
+        )
+    return buffer.getvalue().encode("utf-8-sig")
+
+
 def write_worksheet(
     labels: LabelFile, document: ParsedDocument, out_dir: Path, key: bytes, digest: str
 ) -> Path:
@@ -287,30 +342,9 @@ def write_worksheet(
     problems = validate_against_texts(labels, digest, texts, lambda text: text_digest(text, key))
     if problems:
         raise WorksheetError("the labels do not describe this file: " + "; ".join(problems[:3]))
-    spans = {span.index: span for span in labels.spans}
-    cells = _label_cells(labels)
-
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / f"{labels.digest[:16]}.csv"
-    with path.open("w", encoding="utf-8-sig", newline="") as handle:
-        writer = csv.writer(handle)
-        writer.writerow(WORKSHEET_COLUMNS)
-        for paragraph in labels.paragraphs:
-            span = spans.get(paragraph.index)
-            text = texts[paragraph.index]
-            unit, card, completeness = cells[paragraph.index]
-            writer.writerow(
-                [
-                    paragraph.index,
-                    "",
-                    unit,
-                    card,
-                    completeness,
-                    text,
-                    "" if span is None else render_markup(text, span.underline),
-                    "" if span is None else render_markup(text, span.highlight),
-                ]
-            )
+    path.write_bytes(worksheet_csv_bytes(labels, texts))
     return path
 
 
@@ -630,11 +664,13 @@ def import_worksheet(
     corrected_by: ReviewerRole,
     key: bytes,
     numbers_beside: str | None = None,
+    labeled_blind: bool = False,
 ) -> LabelFile:
     """Turn a corrected worksheet into a `CORRECTED` label file, or list every reason it cannot.
 
     The label file is checked with the same rules `write_label_file` applies, so a worksheet this
-    accepts is one `import` can write.
+    accepts is one `import` can write. `labeled_blind` records that the person never saw the
+    pre-labels (`label --blind`); it is recorded as given, like `corrected_by`, and checks nothing.
     """
     if not isinstance(worksheet, Worksheet):
         worksheet = Worksheet.of(worksheet)
@@ -688,6 +724,7 @@ def import_worksheet(
             corrected_by=corrected_by,
             rows_changed_from_prelabel=changed,
             span_sample_fraction=prelabels.header.span_sample_fraction,
+            labeled_blind=labeled_blind,
         ),
         paragraphs=tuple(paragraphs),
         cards=tuple(CardLabel(card=card, completeness=value) for card, value in sorted(completeness.items())),
@@ -766,6 +803,127 @@ def _all_worksheets(
             print(f"{digest[:16]}: rejected; its worksheet removed")
     print(f"{written} worksheet(s) written, {kept} left as they were (already there, or already corrected)")
     return 0
+
+
+def _remove_untouched_worksheets(manifest: Manifest, labels_dir: Path, out_dir: Path, key: bytes) -> int:
+    """Before pre-labels are regenerated: remove each worksheet nobody has worked on.
+
+    A worksheet is untouched when it is, byte for byte, what `worksheet` writes from the pre-labels
+    it came from, and no `.numbers` file is beside it. Run before `prelabel --all`, while those are
+    still the pre-labels on disk, so that `worksheet --all` can then write fresh ones. A worksheet
+    someone has worked on is kept, and named.
+    """
+    directory = _outside_repository(out_dir)
+    removed = kept = 0
+    for entry in manifest.entries:
+        prefix = entry.digest[:16]
+        path = label_path_for(entry.digest, labels_dir)
+        worksheet = directory / f"{prefix}.csv"
+        if not path.exists() or not worksheet.exists():
+            continue
+        labels = load_label_file(path)
+        if labels.header.status is not LabelStatus.PRELABELED:
+            continue
+        if (directory / f"{prefix}.progress.json").exists():
+            print(f"{prefix}: labeling in the page has started (its progress file is beside it); kept")
+            kept += 1
+        elif (directory / f"{prefix}.numbers").exists():
+            print(f"{prefix}: a .numbers file is beside the worksheet, so someone has worked on it; kept")
+            kept += 1
+        elif worksheet.read_bytes() != worksheet_csv_bytes(
+            labels, [section.text for section in _document(entry, key).sections]
+        ):
+            print(f"{prefix}: the worksheet changed since it was written; kept")
+            kept += 1
+        else:
+            worksheet.unlink()
+            removed += 1
+    print(f"{removed} untouched worksheet(s) removed, {kept} kept")
+    return 0
+
+
+def _content(entry: ManifestEntry, key: bytes) -> bytes:
+    """The file's bytes from where the path map says it is, checked against its keyed digest."""
+    path_map = load_path_map()
+    if path_map is None:
+        raise ProgressError("no evaluation path map on this machine; run scripts/select_eval_files.py first")
+    path = path_map.get(entry.digest)
+    if path is None or not path.is_file():
+        raise ProgressError("not found on this machine (see the path map)")
+    content = path.read_bytes()
+    if keyed_digest(content, key) != entry.digest:
+        raise ProgressError("the file at its mapped path has changed")
+    return content
+
+
+def labeller_for(
+    prefix: str,
+    *,
+    out_dir: Path,
+    blind: bool,
+    manifest_path: Path = MANIFEST_PATH,
+    plan_path: Path = SAMPLING_PLAN_PATH,
+    labels_dir: Path = LABELS_DIRECTORY,
+    clock: Callable[[], float] = time.monotonic,
+) -> LabellerApp:
+    """The click-through labeller for one file, ready to serve. Raises `ProgressError` to refuse.
+
+    It refuses a folder inside the repository, a file already corrected, a file whose `.numbers`
+    file is in the folder (it is on the spreadsheet route), a worksheet changed in a spreadsheet,
+    and progress that cannot be resumed as asked. Nothing is written until the first key.
+    """
+    entry = _resolve(load_manifest(manifest_path), prefix)
+    short = entry.digest[:16]
+    key = require_key()
+    path = label_path_for(entry.digest, labels_dir)
+    if not path.exists():
+        raise ProgressError("no label file; run prelabel first")
+    labels = load_label_file(path)
+    if labels.header.status is not LabelStatus.PRELABELED:
+        raise ProgressError(f"already {labels.header.status}; the labeller corrects PRELABELED files only")
+    plan = load_sampling_plan(plan_path)
+    if labels.header.plan_id != plan.plan_id:
+        raise ProgressError(
+            f"pre-labeled under plan {labels.header.plan_id}, not {plan.plan_id}: run prelabel again"
+        )
+    progress = progress_path_for(out_dir, entry.digest)
+    numbers = progress.parent / f"{short}.numbers"
+    if numbers.exists():
+        raise ProgressError(
+            f"{numbers.name} is in the folder, so this file is being labeled in Numbers. Finish it there "
+            f"(check --repair, then import), or delete {numbers.name} to label it in the page"
+        )
+    content = _content(entry, key)
+    texts = [section.text for section in parse_evaluation_file(DebateDocxParser(), entry, content).sections]
+    problems = validate_against_texts(labels, entry.digest, texts, lambda text: text_digest(text, key))
+    if problems:
+        raise ProgressError("the labels do not describe this file: " + "; ".join(problems[:3]))
+    session = load_or_begin(progress, labels, blind=blind)
+    rendered = render_docx(content)
+    worksheet = progress.parent / f"{short}.csv"
+    if worksheet.exists():
+        allowed = {worksheet_csv_bytes(labels, texts)}
+        if session.complete:
+            allowed.add(csv_bytes(labelled_worksheet(session, labels, texts, rendered)))
+        if worksheet.read_bytes() not in allowed:
+            raise ProgressError(
+                f"{worksheet.name} was changed in a spreadsheet, and the labeller never writes over that. "
+                f"Finish it there (check --repair, then import), or delete it to label in the page"
+            )
+
+    def problems_of(written: Worksheet) -> list[str]:
+        return [str(problem) for problem in worksheet_problems(written, prelabels=labels, texts=texts)[0]]
+
+    return LabellerApp(
+        session=session,
+        prelabels=labels,
+        texts=texts,
+        rendered=rendered,
+        worksheet_path=worksheet,
+        progress_path=progress,
+        problems_of=problems_of,
+        clock=clock,
+    )
 
 
 def _open(entry: ManifestEntry) -> int:
@@ -877,7 +1035,28 @@ def main(argv: Sequence[str] | None = None) -> int:
         action="store_true",
         help="Write each missing worksheet of a PRELABELED file, and remove rejected files' worksheets.",
     )
+    worksheet.add_argument(
+        "--remove-untouched",
+        action="store_true",
+        help="With --all, before regenerating pre-labels: remove each PRELABELED file's worksheet that "
+        "is exactly as it was written, keeping any someone has worked on. Writes none.",
+    )
     worksheet.add_argument("--out-dir", type=Path, required=True)
+
+    labeller = commands.add_parser(
+        "label", help="Correct a file's pre-labels one key per row, in a page served on this machine only."
+    )
+    labeller.add_argument("digest")
+    labeller.add_argument(
+        "--out-dir",
+        type=Path,
+        required=True,
+        help="Where the worksheet and the progress go, outside the repository.",
+    )
+    labeller.add_argument(
+        "--blind", action="store_true", help="Hide the pre-labels: every row is labeled from scratch."
+    )
+    labeller.add_argument("--no-browser", action="store_true", help="Print the address without opening it.")
 
     opener = commands.add_parser("open", help="Open a file's .docx by keyed-digest prefix, printing no path.")
     opener.add_argument("digest")
@@ -900,6 +1079,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     importer.add_argument("digest")
     importer.add_argument("--worksheet", type=Path, required=True, help=worksheet_help)
     importer.add_argument("--corrected-by", type=ReviewerRole, choices=list(ReviewerRole), required=True)
+    importer.add_argument(
+        "--labeled-blind",
+        action="store_true",
+        help="The worksheet was made with label --blind: record labeled_blind on the label file.",
+    )
 
     review = commands.add_parser("mark-reviewed", help="Record the coach's end-to-end spot-check.")
     review.add_argument("digest")
@@ -917,6 +1101,25 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.command == "open":
         return _open(_resolve(manifest, args.digest))
+    if args.command == "label":
+        try:
+            app = labeller_for(
+                args.digest,
+                out_dir=args.out_dir,
+                blind=args.blind,
+                manifest_path=args.manifest,
+                plan_path=args.plan,
+                labels_dir=args.labels_dir,
+            )
+        except (ProgressError, WorksheetError) as error:
+            print(f"{args.digest}: {error}", file=sys.stderr)
+            return 1
+        serve(app, open_browser=not args.no_browser)
+        return 0
+    if args.command == "worksheet" and args.remove_untouched:
+        if not args.all:
+            parser.error("--remove-untouched goes with --all")
+        return _remove_untouched_worksheets(manifest, args.labels_dir, args.out_dir, key)
     if args.command == "worksheet" and args.all:
         return _all_worksheets(manifest, rejected, args.labels_dir, args.out_dir, key)
     if args.command == "worksheet" and not args.digest:
@@ -983,13 +1186,15 @@ def main(argv: Sequence[str] | None = None) -> int:
                 corrected_by=args.corrected_by,
                 key=key,
                 numbers_beside=_numbers_beside(worksheet_path),
+                labeled_blind=args.labeled_blind,
             )
         except WorksheetError as error:
             print(f"{entry.digest[:16]}: worksheet refused — {error}", file=sys.stderr)
             return 1
         write_label_file(corrected, args.labels_dir)
+        blind = ", blind" if args.labeled_blind else ""
         print(
-            f"{entry.digest[:16]}: CORRECTED by {args.corrected_by}; "
+            f"{entry.digest[:16]}: CORRECTED by {args.corrected_by}{blind}; "
             f"{corrected.header.rows_changed_from_prelabel} of {len(corrected.paragraphs)} "
             "labeled rows changed from the pre-labels"
         )

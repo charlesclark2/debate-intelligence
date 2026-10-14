@@ -61,7 +61,7 @@ v2.3's extension work.
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 40 | 33 | 216 |
-| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 66 | 42 | 379 |
+| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 66 | 44 | 379 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 17 | 0 | 179 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 13 | 0 | 108 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 14 | 0 | 96 |
@@ -179,9 +179,9 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [caselist status tells a manifest mismatch from a source mismatch](plan_specs/v1/e30-caselist-ingestion/t12-status-names-manifest-mismatch.yaml) `v1-e30-t12-status-names-manifest-mismatch` | Pending | 1 | 1.0 |
 | [A removed caselist path holds the uploads that arrive after the removal](plan_specs/v1/e30-caselist-ingestion/t13-removed-path-holds-caselist-uploads.yaml) `v1-e30-t13-removed-path-holds-caselist-uploads` | Succeeded | 1 | 4.0 |
 | [A camp file is identified by its upstream record, and a camp path can be withdrawn on its own](plan_specs/v1/e30-caselist-ingestion/t14-camp-path-identity.yaml) `v1-e30-t14-camp-path-identity` | Pending | 1 | 3.0 |
-| [caselist status reports manifest and aggregate versions older than a removal](plan_specs/v1/e30-caselist-ingestion/t15-manifest-and-aggregate-residue.yaml) `v1-e30-t15-manifest-and-aggregate-residue` | Pending | 1 | 3.0 |
+| [caselist status reports manifest and aggregate versions older than a removal](plan_specs/v1/e30-caselist-ingestion/t15-manifest-and-aggregate-residue.yaml) `v1-e30-t15-manifest-and-aggregate-residue` | Succeeded | 1 | 3.0 |
 | [The removal plan names holders correctly in every case](plan_specs/v1/e30-caselist-ingestion/t16-removal-output-names-holders.yaml) `v1-e30-t16-removal-output-names-holders` | Pending | 1 | 2.0 |
-| [No text calls a weekly archive cumulative, and import ordering is checked against the window model](plan_specs/v1/e30-caselist-ingestion/t17-weekly-window-wording-and-ordering.yaml) `v1-e30-t17-weekly-window-wording-and-ordering` | Pending | 1 | 3.0 |
+| [No text calls a weekly archive cumulative, and import ordering is checked against the window model](plan_specs/v1/e30-caselist-ingestion/t17-weekly-window-wording-and-ordering.yaml) `v1-e30-t17-weekly-window-wording-and-ordering` | Succeeded | 1 | 3.0 |
 
 #### [E31 — Debate File Parsing](plan_specs/v1/e31-debate-file-parsing/epic.yaml)
 

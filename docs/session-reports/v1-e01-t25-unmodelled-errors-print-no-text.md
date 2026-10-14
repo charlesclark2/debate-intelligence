@@ -280,9 +280,43 @@ For information, about the agent being reinstalled today:
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-14
 
 **Notes:**
+
+Accepted in full, with the phase `Succeeded`. The spec is unchanged.
+
+**Putting the rule in `from_exception` was the right call (Decision 1).** It is the one place a
+message is read off an exception, so the panel, the envelope and the after-the-result line are all
+covered by one change, and the boundary is by type: a `DomainError` or a usage error keeps its
+message, anything else is named by its class. Mutant 4 shows the boundary is tested.
+
+**The work itself:**
+
+* **The probe is checked on letters and digits only,** so a panel border or a wrap cannot split it
+  and pass by accident. That is the detail that makes ac1's evidence trustworthy.
+* **The sweep answered the question the brief asked.** The run record, details and notifications of
+  `caselist pull` already carried only the class, the agent's stdout log was the one real leak, and
+  this change closes it. The agent never runs with `--verbose`, so its logs never held a traceback.
+* **Decision 3:** I checked the project's own non-`DomainError` exceptions. `SettingsNotConfigured`
+  and `UnfollowableWiring` are wiring bugs whose messages are for a developer, so the `--verbose`
+  traceback is the right place for them.
+* **The runbook warning** that a `--verbose` traceback can quote a path and a camp title, so it is
+  not pasted as it is, is a good addition.
+* **The mutation run:** 6 of 6 caught.
+
+**Rulings on your follow-up work:**
+
+* **Your 1 and 2 (sweep rows A, B and C, and `ParsedObjectOutcome.error_message`):** one rule for
+  all of them: an `OSError`'s text never reaches output, in `data` or inside a modelled message;
+  name its class and errno instead. Added by the PM to `v1-e29-t09` (store error loose ends) in the
+  next spec batch, with the four routes listed.
+* **Your 3 (configuration errors):** no task. The path in "could not read {path}" is the file the
+  operator has to fix, so it stays. It reaches only the operator's own terminal and logs, and the
+  runbook now says a pasted log can quote a path.
+
+**Operator follow-up:** none. The agent installed today keeps printing the message on an exit 70
+until a build carrying this change is installed, which is the normal next reinstall.

@@ -35,12 +35,16 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from debate_core.application.caselist.manifest import read_manifest_lines
+from debate_core.application.caselist.manifest import read_manifest_lines, write_manifest_lines
+from debate_core.application.caselist.openev_import_service import OpenEvImportService
 from debate_core.application.caselist.publish_service import CaselistPublishService
 from debate_core.application.caselist.removal_path_versions import SamePathEvidence
 from debate_core.application.caselist.removal_plan import RemovalPlan, SourceSelector
+from debate_core.application.caselist.status_service import CaselistStatusService
+from debate_core.application.caselist_sync import OPENEV_DELIVERIES_FILENAME, OpenEvDeliveries
 from debate_core.application.ports.suppression import ReasonCode
-from debate_core.integrations.local import FsEvidenceObjectStore
+from debate_core.domain.caselist import Event
+from debate_core.integrations.local import FsEvidenceObjectStore, FsSnapshotStore
 from debate_core.integrations.s3 import S3EvidenceObjectStore
 
 from .conftest import REQUEST, RemovalWorld
@@ -211,4 +215,122 @@ async def test_executed_in_prod_it_leaves_the_other_camps_file_of_the_same_name(
     rows = [json.loads(line) for line in bucket_lines(prod.client, prod.bucket_name)]
     assert {row["path"]: row["sha256"] for row in rows if row["kind"] == "member"} == {
         OTHER_CAMP_ROW: OTHER_CAMP_SHA256
+    }
+
+
+# ------------------------------------------------------------------------------------------------
+# Rows an older build wrote: how prod's camp rows get their identity
+# ------------------------------------------------------------------------------------------------
+
+
+def as_an_older_build_wrote_them(world: RemovalWorld, *buckets: str) -> None:
+    """The release manifest without the two keys, here and in each bucket: what prod holds today."""
+    path = FsEvidenceObjectStore(world.data_dir).path_for(RELEASE_KEY)
+    rows = [json.loads(line) for line in read_manifest_lines(path)]
+    older = [
+        json.dumps(
+            {key: value for key, value in row.items() if key not in ("openev_id", "upstream_path_sha256")},
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        )
+        for row in rows
+    ]
+    write_manifest_lines(older, path)
+    for bucket in buckets:
+        world.client.put_object(Bucket=bucket, Key=RELEASE_KEY, Body=path.read_bytes())
+
+
+async def test_re_deriving_the_release_gives_older_rows_their_identity_and_a_publish_takes_it_to_prod(
+    world: RemovalWorld, prod: RemovalWorld
+) -> None:
+    """The operator's follow-up, in order: re-derive in dev's data directory, see status ask for a
+    publish, publish to dev, then to prod from the same directory. Prod's plan then matches by it."""
+    await pulled_then_revised(world, (OTHER_CAMP, OTHER_CAMP_BODY))
+    as_an_older_build_wrote_them(world, world.bucket_name, prod.bucket_name)
+    before = await plan_in(prod)
+    assert {one.sha256: one.evidence for one in before.later_uploads} == {
+        REVISED_SHA256: SamePathEvidence.ROW_NAME,
+        OTHER_CAMP_SHA256: SamePathEvidence.ROW_NAME,
+    }, "prod today: matched by file name alone, and the other camp's file with it"
+
+    path = FsEvidenceObjectStore(world.data_dir).path_for(RELEASE_KEY)
+    importer = OpenEvImportService(
+        caselists=world.repository, blobs=FsSnapshotStore(world.data_dir), suppression=world.suppression()
+    )
+    report = await importer.reimport_metadata(
+        year=2026,
+        event=Event.POLICY,
+        recorded_manifest=read_manifest_lines(path),
+        upstream_paths=OpenEvDeliveries(world.data_dir / OPENEV_DELIVERIES_FILENAME).upstream_paths(),
+    )
+    write_manifest_lines(report.manifest_lines, path)
+
+    assert (report.identities_added, report.rows_changed, report.camp_files_updated) == (3, 0, 0)
+    assert identities(read_manifest_lines(path)) == EXPECTED_IDENTITY
+    status = await CaselistStatusService(
+        local=world.local, remote=world.bucket, suppression=world.suppression()
+    ).status("openev")
+    (snapshot,) = status.snapshots
+    assert (snapshot.snapshot, snapshot.manifest_mismatched, snapshot.source_mismatches) == (
+        RELEASE,
+        True,
+        (),
+    )
+
+    publisher = CaselistPublishService(
+        local=world.local, remote=world.bucket, suppression=world.suppression()
+    )
+    assert (await publisher.execute(await publisher.plan("openev", RELEASE))).succeeded
+    assert (
+        await CaselistStatusService(
+            local=world.local, remote=world.bucket, suppression=world.suppression()
+        ).status("openev")
+    ).in_sync
+    await published_to_prod_from_the_dev_data_directory(world, prod)
+
+    after = await plan_in(prod)
+    assert {one.sha256: one.evidence for one in after.later_uploads} == {
+        REVISED_SHA256: SamePathEvidence.UPSTREAM_PATH_DIGEST
+    }
+
+
+async def test_re_deriving_again_changes_nothing(world: RemovalWorld) -> None:
+    """Rows the pull wrote already carry it: a re-derive gives none, and writes the same lines."""
+    await pulled_then_revised(world, (OTHER_CAMP, OTHER_CAMP_BODY))
+    path = FsEvidenceObjectStore(world.data_dir).path_for(RELEASE_KEY)
+    importer = OpenEvImportService(
+        caselists=world.repository, blobs=FsSnapshotStore(world.data_dir), suppression=world.suppression()
+    )
+
+    report = await importer.reimport_metadata(
+        year=2026,
+        event=Event.POLICY,
+        recorded_manifest=read_manifest_lines(path),
+        upstream_paths=OpenEvDeliveries(world.data_dir / OPENEV_DELIVERIES_FILENAME).upstream_paths(),
+    )
+
+    assert report.identities_added == 0 and not report.manifest_changed
+
+
+async def test_a_row_the_delivery_record_does_not_know_keeps_null(world: RemovalWorld) -> None:
+    """A re-derive on a machine whose record has lost an id: the id from the name, no digest invented."""
+    await pulled_then_revised(world, (OTHER_CAMP, OTHER_CAMP_BODY))
+    as_an_older_build_wrote_them(world)
+    path = FsEvidenceObjectStore(world.data_dir).path_for(RELEASE_KEY)
+    importer = OpenEvImportService(
+        caselists=world.repository, blobs=FsSnapshotStore(world.data_dir), suppression=world.suppression()
+    )
+
+    report = await importer.reimport_metadata(
+        year=2026,
+        event=Event.POLICY,
+        recorded_manifest=read_manifest_lines(path),
+        upstream_paths={512: TAMARACK_PATH_SHA256},
+    )
+
+    assert identities(list(report.manifest_lines)) == {
+        OLD_ROW: (512, TAMARACK_PATH_SHA256),
+        NEW_ROW: (640, None),
+        OTHER_CAMP_ROW: (700, None),
     }

@@ -21,7 +21,9 @@ Rules for the session:
   own dated section after it (for example `## Resumed 2026-10-08: <what this session did>`), and
   ends the report with a new, empty **PM review** section copied from below. `scripts/task` reads
   the last verdict line in the report, so that new review decides and the earlier ones are history
-  ([task-workflow.md](task-workflow.md#4-pm-review)).
+  ([task-workflow.md](task-workflow.md#4-pm-review)). A criterion that is still open is marked
+  `NOT RUN` again in the new section: `scripts/task pr --partial` reads open items only from there
+  on ([task-workflow.md](task-workflow.md#when-a-task-is-reviewed-but-not-finished)).
 
 <!-- TEMPLATE START -->
 # Session report: {{TASK}}

@@ -11,7 +11,11 @@ guards the second pull request:
   retry starts clean (ac2);
 * the last `**Verdict:**` line in a report decides, so a report carrying an ACCEPTED review of
   earlier work and a PENDING one for the current work is refused by `scripts/task pr` (ac3). Every
-  report already in `docs/session-reports/` that reads ACCEPTED keeps reading ACCEPTED.
+  report already in `docs/session-reports/` that reads ACCEPTED keeps reading ACCEPTED;
+* `pr --partial` reads the open items (NOT RUN, NOT APPLICABLE, PARTIAL, FAIL) only from the current
+  session's part of the report, after the last-but-one PM review, so an earlier session's NOT RUN
+  cannot stand in for the current session's (v1-e01-t24). Every report `--partial` accepted before
+  that change is still accepted.
 
 The shell tests run the real `scripts/task` and `scripts/task_helper.py` in a throwaway repository
 built in `tmp_path`, with a local bare repository as `origin`. `uv`, `gh`, `pbcopy`, `code` and
@@ -28,11 +32,13 @@ import re
 import shutil
 import subprocess
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
 
 import pytest
+import yaml
 from hypothesis import event, given
 from hypothesis import strategies as st
 
@@ -444,8 +450,12 @@ def test_pr_refuses_a_report_whose_current_review_is_pending(repo: TaskRepo) -> 
 
 
 def test_pr_opens_once_the_current_review_is_accepted(repo: TaskRepo) -> None:
+    # The current sections must record what is still open for --partial (v1-e01-t24), which the
+    # resumed_review_pending.md fixture's do not.
     rebuild_worktree_by_hand(repo, PARTLY_MERGED)
-    commit_report(repo, PARTLY_MERGED, resumed_report("ACCEPTED"), "Second session, reviewed")
+    commit_report(
+        repo, PARTLY_MERGED, (FIXTURES / "resumed_still_open.md").read_text(), "Second session, reviewed"
+    )
 
     result = repo.run("pr", PARTLY_MERGED, "--partial")
 
@@ -553,3 +563,305 @@ def test_finish_partial_refuses_until_the_resumed_report_reaches_dev(repo: TaskR
     assert not wt.exists()
     assert not repo.has_branch(PARTLY_MERGED)
     assert not repo.has_remote_branch(PARTLY_MERGED)
+
+
+# --------------------------------------------------------------------------------------
+# pr --partial reads the open items from the current session's sections (v1-e01-t24).
+# --------------------------------------------------------------------------------------
+
+OPEN_ITEM_MARKERS = ("NOT RUN", "NOT APPLICABLE", "PARTIAL", "FAIL")
+
+
+def fixture_text(name: str) -> str:
+    return (FIXTURES / name).read_text()
+
+
+def with_current_open_item(marker: str) -> str:
+    """resumed_still_open.md, with the one open item in its current sections recorded as `marker`."""
+    earlier, current = fixture_text("resumed_still_open.md").split("## Resumed", 1)
+    assert current.count("NOT RUN") == 1
+    return earlier + "## Resumed" + current.replace("NOT RUN", marker)
+
+
+def test_pr_partial_refuses_a_resumed_report_whose_current_sections_record_nothing_open(
+    repo: TaskRepo,
+) -> None:
+    # The first session's NOT RUN, the PM's notes and the PM's FAIL record are all above the
+    # last-but-one review's end; the second session's sections and its review record nothing open.
+    rebuild_worktree_by_hand(repo, PARTLY_MERGED)
+    commit_report(repo, PARTLY_MERGED, fixture_text("resumed_nothing_open.md"), "Second session, reviewed")
+
+    result = repo.run("pr", PARTLY_MERGED, "--partial")
+
+    assert result.returncode != 0
+    assert "--partial needs the current session's sections" in result.stderr
+    assert not repo.has_remote_branch(PARTLY_MERGED)
+    assert "gh pr create" not in repo.log.read_text()
+
+
+def test_pr_partial_accepts_a_resumed_report_whose_current_sections_record_an_open_criterion(
+    repo: TaskRepo,
+) -> None:
+    rebuild_worktree_by_hand(repo, PARTLY_MERGED)
+    commit_report(repo, PARTLY_MERGED, fixture_text("resumed_still_open.md"), "Second session, reviewed")
+
+    result = repo.run("pr", PARTLY_MERGED, "--partial")
+
+    assert result.returncode == 0, result.stderr
+    assert repo.has_remote_branch(PARTLY_MERGED)
+    assert "gh pr create --base dev" in repo.log.read_text()
+
+
+def test_pr_partial_accepts_a_first_session_report_that_records_an_open_criterion(repo: TaskRepo) -> None:
+    # origin/dev's copy of the report is first_session_accepted.md: one review, ac2 NOT RUN.
+    rebuild_worktree_by_hand(repo, PARTLY_MERGED)
+
+    result = repo.run("pr", PARTLY_MERGED, "--partial")
+
+    assert result.returncode == 0, result.stderr
+    assert "gh pr create --base dev" in repo.log.read_text()
+
+
+def test_the_open_items_are_read_from_the_current_sessions_sections() -> None:
+    assert helper.open_items(fixture_text("resumed_nothing_open.md")) == []
+    assert helper.open_items(fixture_text("resumed_still_open.md")) == ["NOT RUN"]
+    assert helper.open_items(fixture_text("first_session_accepted.md")) == ["NOT RUN", "PARTIAL"]
+
+
+@pytest.mark.parametrize("marker", OPEN_ITEM_MARKERS)
+def test_each_open_item_marker_counts_in_the_current_sections(marker: str) -> None:
+    assert helper.open_items(with_current_open_item(marker)) == [marker]
+
+
+def test_the_markers_are_matched_in_upper_case_as_the_grep_matched_them() -> None:
+    assert helper.open_items(with_current_open_item("not run")) == []
+
+
+# The boundary, case by case. Each is described in task-workflow.md and the t24 session report.
+
+
+def test_a_first_session_report_with_one_review_is_current_throughout() -> None:
+    text = fixture_text("first_session_accepted.md")
+
+    assert helper.current_session(text) == text
+
+
+def test_a_resumed_report_before_its_own_review_is_appended_is_current_throughout() -> None:
+    # Until the resumed session appends its empty review, the report has one review, and both the
+    # verdict and the open items are read as they are in a first-session report.
+    text = fixture_text("resumed_nothing_open.md")
+    before_its_review = text[: text.rindex("## PM review")]
+
+    assert helper.current_session(before_its_review) == before_its_review
+    assert helper.report_verdict(before_its_review) == "ACCEPTED"
+    assert helper.open_items(before_its_review) == ["FAIL", "NOT RUN", "PARTIAL"]
+
+
+@pytest.mark.parametrize("verdict", VERDICTS)
+def test_a_resumed_report_after_its_own_review_is_appended_starts_at_its_own_sections(verdict: str) -> None:
+    text = fixture_text("resumed_nothing_open.md")
+    head, _, tail = text.rpartition("**Verdict:** ACCEPTED")
+    text = head + f"**Verdict:** {verdict}" + tail
+
+    current = helper.current_session(text)
+
+    assert current.startswith("## Resumed 2026-10-08: the second session\n")
+    assert text.endswith(current)
+    assert helper.report_verdict(text) == verdict
+
+
+def test_the_earlier_reviews_notes_and_a_record_the_pm_adds_under_it_stay_with_that_review() -> None:
+    # v1-e01-t23's "### Operator follow-up 1, recorded (PM, …)" is a record of this kind.
+    current = helper.current_session(fixture_text("resumed_nothing_open.md"))
+
+    assert "ac2 stays NOT RUN" not in current
+    assert "Operator follow-up 1, recorded" not in current
+    assert "Follow-up 1: FAIL" not in current
+
+
+def test_a_record_the_pm_adds_under_the_current_review_is_current() -> None:
+    text = fixture_text("resumed_nothing_open.md") + (
+        "\n### Operator follow-up 2, recorded (PM, 2026-10-10)\n\n"
+        "**Follow-up 2: NOT RUN.** The operator has not had the device since.\n"
+    )
+
+    assert helper.open_items(text) == ["NOT RUN"]
+
+
+SECTION_THE_PM_APPENDS = """## Sandbox attempt, 2026-10-01
+
+Recorded on the PM's instruction. ac2 remains **NOT RUN**, and this section asks for no new review.
+
+"""
+
+
+def test_a_section_the_pm_appends_after_the_only_review_is_current() -> None:
+    # v1-e01-t15's "## Sandbox attempt, 2026-10-09", in the one-review report it is today.
+    nothing_open = (
+        fixture_text("first_session_accepted.md")
+        .replace("| Session status | PARTIAL |", "| Session status | COMPLETE |")
+        .replace(
+            "| ac2 | NOT RUN | needs the operator's device |", "| ac2 | PASS | `device-check` → exit 0 |"
+        )
+    )
+    assert helper.open_items(nothing_open) == []
+
+    assert helper.open_items(nothing_open + "\n" + SECTION_THE_PM_APPENDS) == ["NOT RUN"]
+
+
+def test_a_section_the_pm_appends_after_an_earlier_review_is_read_with_the_next_sessions() -> None:
+    # A `##` section starts after the earlier review has ended, so it is on the current side: the
+    # boundary cannot tell who wrote a section. The t24 report says why that is accepted.
+    text = fixture_text("resumed_nothing_open.md").replace(
+        "## Resumed 2026-10-08", SECTION_THE_PM_APPENDS + "## Resumed 2026-10-08", 1
+    )
+
+    assert helper.current_session(text).startswith("## Sandbox attempt, 2026-10-01\n")
+    assert helper.open_items(text) == ["NOT RUN"]
+
+
+def test_an_earlier_review_whose_label_was_renamed_is_not_a_review_to_either_check() -> None:
+    # v1-e03-t05 and v1-e31-t05 renamed an earlier label by hand before v1-e01-t18. The verdict pattern
+    # does not match it, so the report has one review, and the open items are read from all of it.
+    text = fixture_text("resumed_nothing_open.md").replace(
+        "**Verdict:** ACCEPTED", "**Verdict (first review):** ACCEPTED", 1
+    )
+
+    assert helper.current_session(text) == text
+    assert helper.open_items(text) == ["FAIL", "NOT RUN", "PARTIAL"]
+
+
+def test_two_reviews_with_no_section_between_them_leave_no_current_part() -> None:
+    # The layout v1-e03-t05 used: the second review under the first's `## PM review`, the session's
+    # changes above both. Nothing marks a current session's section, so nothing counts as open.
+    text = fixture_text("first_session_accepted.md") + (
+        "\n### Second review\n\n**Verdict:** ACCEPTED\n\n**Notes:** ac2 is still NOT RUN.\n"
+    )
+
+    assert helper.current_session(text) == ""
+    assert helper.open_items(text) == []
+
+
+# A report of 1 to 4 review cycles. Each cycle is a session's sections, a PM review with its notes,
+# and optionally a `###` record the PM adds under the review and a `##` section appended after it.
+# Each part records an open item or not. The expectation is built from the cycles, not from the
+# text: with one review the whole report is current; otherwise the current part is the section
+# appended after the last-but-one review, if any, and the whole last cycle.
+
+CYCLE_PARTS = ("session", "notes", "record_under_review", "section_after_review")
+
+
+def cycle_text(index: int, verdict: str, parts: dict[str, str | None]) -> str:
+    def status(part: str) -> str:
+        return parts[part] or "PASS"
+
+    text = (
+        f"## Session {index}\n\n| Criterion | Status |\n|---|---|\n| ac{index} | {status('session')} |\n\n"
+        "## PM review\n\n<!-- Completed by the PM only. -->\n\n"
+        f"**Verdict:** {verdict}\n<!-- ACCEPTED / CHANGES_REQUESTED -->\n\n"
+        f"**Reviewed by / date:** PM\n\n**Notes:**\n\nac{index} reads {status('notes')}.\n\n"
+    )
+    if "record_under_review" in parts:
+        text += f"### Operator follow-up {index}, recorded (PM)\n\nIt is {status('record_under_review')}.\n\n"
+    if "section_after_review" in parts:
+        text += f"## Record after review {index}\n\nIt is {status('section_after_review')}.\n\n"
+    return text
+
+
+@st.composite
+def review_cycles(draw: st.DrawFn) -> list[tuple[str, dict[str, str | None]]]:
+    cycles = []
+    for _ in range(draw(st.integers(min_value=1, max_value=4))):
+        present = ["session", "notes"] + [part for part in CYCLE_PARTS[2:] if draw(st.booleans())]
+        parts = {part: draw(st.none() | st.sampled_from(OPEN_ITEM_MARKERS)) for part in present}
+        cycles.append((draw(st.sampled_from(VERDICTS)), parts))
+    return cycles
+
+
+@given(cycles=review_cycles())
+def test_only_the_current_part_of_a_report_decides_whether_anything_is_open(
+    cycles: list[tuple[str, dict[str, str | None]]],
+) -> None:
+    text = "# Session report\n\n" + "".join(cycle_text(i, v, parts) for i, (v, parts) in enumerate(cycles))
+    if len(cycles) == 1:
+        current = [cycles[0][1]]
+        earlier = []
+    else:
+        appended = cycles[-2][1].get("section_after_review")
+        current = [cycles[-1][1], {"section_after_review": appended}]
+        earlier = [parts for _, parts in cycles[:-1]]
+    open_now = sorted({marker for parts in current for marker in parts.values() if marker})
+    open_earlier = any(marker for parts in earlier for marker in parts.values())
+    event(f"{len(cycles)} review(s)")
+    if open_earlier and not open_now:
+        event("open items only before the boundary: the case today's grep accepts")
+
+    assert helper.open_items(text) == open_now
+
+
+# The walk over the reports already in the repository. `--partial` reads the markers only when the
+# spec's phase is InProgress: for a Succeeded task it takes the ordinary path, before and after.
+
+
+def spec_phases() -> dict[str, str]:
+    phases = {}
+    for path in (REPO_ROOT / "plan_specs").glob("v*/e*/t*.yaml"):
+        for document in yaml.safe_load_all(path.read_text()):
+            if document and document.get("kind") == "Goal":
+                phases[document["metadata"]["name"]] = (document.get("status") or {}).get("phase", "Pending")
+    return phases
+
+
+PHASES = spec_phases()
+
+
+def open_items_before_this_task(text: str) -> bool:
+    """The check `scripts/task pr --partial` ran until v1-e01-t24, copied by hand: the whole report."""
+    return re.search(r"NOT RUN|NOT APPLICABLE|PARTIAL|FAIL", text) is not None
+
+
+def partial_accepts(text: str, phase: str, open_items: Callable[[str], bool]) -> bool:
+    """What `scripts/task pr --partial` decides from the report and the phase, copied from cmd_pr by hand."""
+    if helper.report_verdict(text) != "ACCEPTED":
+        return False
+    if phase == "Succeeded":
+        return True
+    return phase == "InProgress" and open_items(text)
+
+
+REPORTS_PARTIAL_ACCEPTS_TODAY = sorted(
+    path
+    for path in SESSION_REPORTS.glob("v*.md")
+    if path.stem in PHASES
+    and partial_accepts(path.read_text(), PHASES[path.stem], open_items_before_this_task)
+)
+
+
+def test_the_walk_over_reports_partial_accepts_is_not_vacuous() -> None:
+    names = {path.stem for path in REPORTS_PARTIAL_ACCEPTS_TODAY}
+    in_progress = {name for name in names if PHASES[name] == "InProgress"}
+    # The reports whose markers --partial really reads, including the PM's two examples of records
+    # added after a review.
+    assert {"v1-e01-t15-promotion-guard-sweep", "v1-e01-t23-managed-python"} <= in_progress
+    assert len(in_progress) >= 5
+    assert len(names) >= 60
+
+
+@pytest.mark.parametrize("report", REPORTS_PARTIAL_ACCEPTS_TODAY, ids=lambda path: path.stem)
+def test_an_existing_report_partial_accepts_is_still_accepted(report: Path) -> None:
+    assert partial_accepts(
+        report.read_text(), PHASES[report.stem], lambda text: bool(helper.open_items(text))
+    )
+
+
+def test_the_reports_the_marker_check_alone_now_refuses_are_all_of_succeeded_tasks() -> None:
+    # v1-e30-t06 and v1-e30-t08: closing sections that record every criterion PASS, after earlier
+    # sessions' NOT RUN. They are ac1's case in real reports. Neither reaches the marker check.
+    flipped = {
+        path.stem
+        for path in SESSION_REPORTS.glob("v*.md")
+        if open_items_before_this_task(path.read_text()) and not helper.open_items(path.read_text())
+    }
+
+    assert {"v1-e30-t06-initial-backfill", "v1-e30-t08-import-metadata-defects"} <= flipped
+    assert {name: PHASES.get(name) for name in flipped} == dict.fromkeys(flipped, "Succeeded")

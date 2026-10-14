@@ -93,8 +93,7 @@ class S3StandIn:
 
     def refuse(
         self,
-        operation: str,
-        *,
+        *operations: str,
         status: int,
         code: str,
         message: str,
@@ -102,28 +101,34 @@ class S3StandIn:
         key_contains: str | None = None,
         after: int = 0,
     ) -> None:
-        """Answer `operation` (on `key`, or a key holding `key_contains`) with an S3 error, from then on.
+        """Answer each of `operations` (on `key`, or a key holding `key_contains`) with an S3 error.
 
-        The first `after` matching requests are let through. A later call replaces every rule, and
-        :meth:`stop_refusing` clears them.
+        From then on, until :meth:`stop_refusing`; a later call replaces every rule. The first
+        `after` matching requests of each operation are let through. A `HEAD` is answered with the
+        status alone, as S3 answers it. Requests signed with :data:`MOTO_TEST_CREDENTIALS`, which
+        the check's own clients use, are never refused, so a check that refuses the build anything
+        signs the build's profiles in as roles (`tests/fixtures/identity_center_roles.py`).
         """
-        rule = {
-            "operation": operation,
-            "status": status,
-            "code": code,
-            "message": message,
-            "key": key,
-            "key_contains": key_contains,
-            "after": after,
-        }
-        self._control("PUT", "faults", [rule])
+        rules = [
+            {
+                "operation": operation,
+                "status": status,
+                "code": code,
+                "message": message,
+                "key": key,
+                "key_contains": key_contains,
+                "after": after,
+            }
+            for operation in operations
+        ]
+        self._control("PUT", "faults", rules)
 
     def stop_refusing(self) -> None:
         self._control("PUT", "faults", [])
 
     @contextmanager
-    def refusing(self, operation: str, **rule: Any) -> Iterator[None]:
-        self.refuse(operation, **rule)
+    def refusing(self, *operations: str, **rule: Any) -> Iterator[None]:
+        self.refuse(*operations, **rule)
         try:
             yield
         finally:

@@ -14,7 +14,8 @@ moto alone would make a faithful bucket. Three things are added in front of it, 
   The signature itself, the session token and every body stay out of it.
 * **Faults** (`PUT /_stand_in/faults`): rules that answer a matching request with the error S3
   would send, a 403 `AccessDenied` or a 503 `SlowDown`, before moto sees it. What a bucket that
-  refuses or fails a call looks like, through botocore's own error path.
+  refuses or fails a call looks like, through botocore's own error path. A request the check itself
+  signs, with moto's test credentials, is never faulted: the check still reads the bucket it broke.
 * **A backdated version** (`POST /_stand_in/backdate`): one version of a key given an earlier
   `LastModified`, which moto keeps as an attribute and S3 never lets a client set.
 
@@ -40,6 +41,8 @@ from werkzeug.serving import make_server
 
 LOOPBACK = "127.0.0.1"
 CONTROL = "/_stand_in/"
+CHECK_SIDE_ACCESS_KEY = "testing"
+"""moto's documented test key, which the check's own clients sign with (tests/smoke/stand_ins/s3.py)."""
 
 type Environ = dict[str, Any]
 type StartResponse = Any
@@ -133,6 +136,8 @@ class StandIn:
         return parse_qs(body.decode("utf-8", "replace")).get("Action", [None])[0]
 
     def _fault_for(self, record: dict[str, Any]) -> dict[str, Any] | None:
+        if record["access_key"] == CHECK_SIDE_ACCESS_KEY:
+            return None
         for fault in self.faults:
             if fault["operation"] != record["operation"]:
                 continue

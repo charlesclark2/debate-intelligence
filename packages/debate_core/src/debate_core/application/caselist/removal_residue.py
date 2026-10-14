@@ -1,4 +1,4 @@
-"""What a removal left in the bucket, counted from a version listing (`v1-e30-t10`).
+"""What a removal left in the bucket, counted from a version listing (`v1-e30-t10`, `v1-e30-t15`).
 
 A takedown deletes every version of every object of a removed file. One that stopped part-way, or
 a delete made some other way, can leave versions behind, and a version that can be restored is a
@@ -10,7 +10,8 @@ profile.
 ## It reads, with the everyday profile
 
 One call, `ListObjectVersions`, under two prefixes per caselist: its sources (`raw/caselist/<slug>/`,
-or `raw/openev/` for camp files) and its parsed cards (`parsed/<caselist>/`). The everyday
+or `raw/openev/` for camp files) and its parsed cards (`parsed/<caselist>/`); and a third, its
+manifests (`manifests/<caselist>/`), when a completed removal touched it. The everyday
 `EvidenceOperator` profile may list versions under `raw/` and `parsed/` (`v1-e29-t06`). Nothing is
 downloaded and nothing is deleted: this module calls no other method of the version store, and the
 credential it is given cannot delete.
@@ -35,17 +36,53 @@ taken. That covers the files a request named and the later uploads a removal too
 An object is matched by its key alone: its last segment is the file's digest (`raw/`), or the
 digest and an extension (`parsed/…/<sha256>.jsonl`).
 
+## Manifests and aggregates (`v1-e30-t15`)
+
+A removal also cleans two things no key names a file in, and this check reaches them by time alone,
+from the listing and the removal log, with nothing downloaded. Under each completed removal:
+
+* **The parsed store's aggregates.** It deletes every version of `index.jsonl`, `failures.jsonl` and
+  `occurrences.jsonl`, in every version directory, of every caselist for a file it removes whole and
+  of each caselist it withdraws a copy from (`removal_plan`, "The parsed card store's aggregates").
+  `caselist_card_stats` writes card tags into them, so any version of one older than the removal can
+  hold a removed card's row.
+* **The manifests it rewrote.** It writes each one without the removed rows and purges every other
+  version of it. Any version of that key older than the removal but the rewrite itself is one the
+  purge should have taken.
+
+So per caselist, against the latest completed removal that touched it (:func:`completed_removals`):
+each aggregate version, current or not, older than its completion; and each version of a manifest
+it rewrote, other than the rewrite, older than its completion. "Older" allows for the two clocks
+(:data:`CLOCK_SKEW_MARGIN`). A version written after it is an ordinary later write: the aggregates
+rebuilt by the next parse, a manifest published again.
+
+**Not every manifest of the caselist.** The removal's sweep of the caselist's *other* manifests
+reads each noncurrent version and deletes only those that name what was removed. A version that
+never named it stays, older than the removal, and holds nothing removed: a camp release's manifest
+re-published by `caselist reimport-openev-metadata` keeps one by design. Its age says nothing, so it
+is not counted, and the sweep run again is what covers those.
+
+**Only a caselist the removal touched**, one that held a file it removed or withdrew. A removal of a
+whole file deletes every caselist's aggregates, but only one that held the file can hold a row of it.
+
+Both facts come from the scope a removal records beside its log entry
+(:class:`~debate_core.application.ports.suppression.RemovalScopeEntry`). A completed removal with no
+scope was made by a build from before it, which did not say which caselists it touched; nothing is
+compared with it, and the report names it as not checked.
+
 ## What it does not see
 
-* **Manifests and the parsed store's aggregates.** A noncurrent version of a manifest, or of an
-  `index.jsonl`, can still hold a removed file's row. Its key names no file, so telling would mean
-  downloading every noncurrent version, and this check lists only. `caselist remove` purges them:
-  a re-run sweeps every noncurrent manifest version that names what the list stops.
+* **A manifest version older than a removal, of a manifest it did not rewrite**, which names a
+  removed row: the sweep should have taken it. Telling it from one that names nothing would mean
+  downloading it. Every executed removal sweeps those, a re-run included.
 * **A file withdrawn from one team and kept for another.** It is suppressed for one disclosure, not
   whole, and the other holders' copy is the same object. Nothing in a key says which holder a
   version was for.
+* **`manifests/_suppression/`**: the list, the log, the path holds and the scopes are appended to,
+  and their old versions are the record of what was asked, which no removal deletes.
 
-So "nothing found" means no version of a wholly removed file is left under these two prefixes, and
+So "nothing found" means no version of a wholly removed file is left under `raw/` and `parsed/`, and
+no aggregate or rewritten manifest version is older than a removal that touched its caselist, and
 the command says exactly that.
 
 ## A refused listing is not an empty one

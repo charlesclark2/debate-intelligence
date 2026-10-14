@@ -43,6 +43,12 @@ listing is refused, and the caselist is reported as *not checked*, which is not 
 and does not by itself make the comparison fail. `caselist pull` asks for the comparison alone, so
 its runs list no versions.
 
+The same check reports, per caselist one of this environment's completed removals touched, the
+manifest and aggregate versions older than that removal (`v1-e30-t15`), from the listing and the
+removal log, which it reads as it reads the suppression list: this machine's copy and the bucket's,
+as one, with the scopes beside them. Only entries recorded in this environment are compared: in
+prod the command runs against the dev data directory, whose copy holds dev's removals.
+
 Checksums are the bucket's *recorded* digests, read with one `HeadObject` per listed source — the
 listing states none (`debate_core.application.ports.evidence_store`). Nothing is downloaded: a
 manifest's digest is compared, and its body is never read back from the bucket.

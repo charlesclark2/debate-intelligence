@@ -64,6 +64,16 @@ a list it cannot read fails closed. A new kind of line would have stopped the we
 builds that run it; a file those builds never open cannot. They go on reading the list exactly as
 it was, and do not apply the hold, which is what they did before there was one.
 
+## A fourth record: what each removal reached
+
+`removal-scopes.jsonl`
+    One :class:`RemovalScopeEntry` per removal execution, beside the removal log in both places
+    (`v1-e30-t15`): the caselists the removal touched and each manifest it rewrote in the bucket,
+    with the version its rewrite is. `caselist status` compares manifest and aggregate versions with
+    the removal's completion by them. A file of its own and not two more keys of a log line, for the
+    reason the path holds are not in the list: a log line's keys are what every installed build
+    writes, and are held to them.
+
 A hold follows the removed file it came from: an un-suppress of that sha256 recorded at or after
 the hold lifts it, as it lifts every suppression of the file (:meth:`SuppressionState.from_entries`).
 Nothing is appended to release one.

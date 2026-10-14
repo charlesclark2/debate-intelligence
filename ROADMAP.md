@@ -198,7 +198,7 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [Parser findings from the first full-corpus parse](plan_specs/v1/e31-debate-file-parsing/t09-first-corpus-parse-findings.yaml) `v1-e31-t09-first-corpus-parse-findings` | Succeeded | 1 | 4.0 |
 | [The weekly aggregate rebuild costs what the week added, not the whole store](plan_specs/v1/e31-debate-file-parsing/t10-incremental-aggregate-rebuild.yaml) `v1-e31-t10-incremental-aggregate-rebuild` | Pending | 1 | 6.0 |
 | [Copies split apart by the short-body rule, and long bodies merged through a fragment](plan_specs/v1/e31-debate-file-parsing/t11-long-card-splits-and-fragment-merges.yaml) `v1-e31-t11-long-card-splits-and-fragment-merges` | Pending | 2 | 5.0 |
-| [Cites the parser misses or misreads](plan_specs/v1/e31-debate-file-parsing/t12-cite-detection.yaml) `v1-e31-t12-cite-detection` | Pending | 1 | 5.0 |
+| [Cites the parser misses or misreads](plan_specs/v1/e31-debate-file-parsing/t12-cite-detection.yaml) `v1-e31-t12-cite-detection` | InProgress | 1 | 5.0 |
 | [Split a cite from its words when a card or wiki entry is one paragraph](plan_specs/v1/e31-debate-file-parsing/t13-one-paragraph-cards-and-wiki-entries.yaml) `v1-e31-t13-one-paragraph-cards-and-wiki-entries` | Pending | 1 | 6.0 |
 | [A card with no tag has no tag in memory and in every output](plan_specs/v1/e31-debate-file-parsing/t14-card-tag-optional.yaml) `v1-e31-t14-card-tag-optional` | Pending | 2 | 2.0 |
 | [The zip guard judges only the parts it reads, and exporter quirks are decided](plan_specs/v1/e31-debate-file-parsing/t15-zip-guard-and-exporter-quirks.yaml) `v1-e31-t15-zip-guard-and-exporter-quirks` | Pending | 1 | 2.0 |

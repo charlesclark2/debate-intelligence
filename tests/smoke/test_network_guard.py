@@ -86,18 +86,24 @@ def test_a_request_the_cli_itself_makes_is_refused_and_logged(
 # Loopback, for a check that declares a stand-in and for no other (v1-e01-t21, ac2)
 # ------------------------------------------------------------------------------------------------
 
+#: A plain `connect`, with no host lookup before it: what the guard's connect rule decides alone. (A
+#: lookup of anything but loopback is refused first, which the checks above already show.)
 REACH = """
 import socket, sys
 for address in sys.argv[1:]:
     host, port = address.rsplit(":", 1)
+    connection = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    connection.settimeout(2)
     try:
-        socket.create_connection((host, int(port)), timeout=2).close()
+        connection.connect((host, int(port)))
     except RuntimeError as refusal:
         print(address, "refused:", type(refusal).__name__)
     except OSError as failure:
         print(address, "reached the network stack:", failure)
     else:
         print(address, "connected")
+    finally:
+        connection.close()
 """
 
 LISTENER = """

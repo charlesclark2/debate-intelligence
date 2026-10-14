@@ -295,7 +295,10 @@ def test_the_traceback_of_a_bug_needs_verbose(app_with: Callable[..., typer.Type
 
     assert "Traceback" not in quiet.stderr
     assert "Traceback" in loud.stderr
-    assert "off by one" in quiet.stderr
+    # The message is part of the traceback, and only there (v1-e01-t25): the panel names the class.
+    assert "off by one" not in quiet.stderr
+    assert "ValueError" in quiet.stderr
+    assert "ValueError: off by one" in loud.stderr
 
 
 def test_an_outcome_failure_reports_itself_and_exits_one(

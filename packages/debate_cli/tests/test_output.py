@@ -24,7 +24,14 @@ from debate_cli.exit_codes import (
     exit_code_for_failure_codes,
     is_retryable_store_failure,
 )
-from debate_cli.output import SCHEMA_VERSION, CliOutput, CommandFailure, OutputMode, TableSpec
+from debate_cli.output import (
+    SCHEMA_VERSION,
+    UNMODELLED_ERROR_HINT,
+    CliOutput,
+    CommandFailure,
+    OutputMode,
+    TableSpec,
+)
 from debate_core.application.caselist.removal_service import (
     RemovalCompletedUnlogged,
     RemovalIncomplete,
@@ -311,9 +318,21 @@ def test_an_unmodelled_exception_is_an_internal_error() -> None:
 
     assert failure.code == "INTERNAL_ERROR"
     assert failure.exit_code is ExitCode.INTERNAL_ERROR
-    assert failure.message == "off by one"
+    assert "off by one" not in failure.message
+    assert "ValueError" in failure.message
     assert failure.details == {"exception_type": "ValueError"}
     assert failure.hint == "This is a bug."
+
+
+def test_an_unmodelled_exception_points_at_verbose_and_ignores_a_hint_of_its_own() -> None:
+    # Only this project's errors carry a hint worth repeating; another library's is its own text.
+    error = RuntimeError("cannot open the file")
+    error.hint = "see the file"  # type: ignore[attr-defined]
+
+    failure = CommandFailure.from_exception(error)
+
+    assert failure.hint == UNMODELLED_ERROR_HINT
+    assert "--verbose" in failure.hint
 
 
 def test_a_usage_error_keeps_clicks_own_exit_code() -> None:

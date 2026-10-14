@@ -104,11 +104,10 @@ class DebateResearchGroup(TyperGroup):
                 incomplete = incomplete_installation_failure(exception, current_build_info())
                 if incomplete is not None:
                     raise self._incomplete_installation(ctx, *incomplete) from exception
-            raise self._reported(
-                ctx,
-                exception,
-                hint="This is a bug in debate-research. Re-run with --verbose for the traceback.",
-            ) from exception
+            # Named by its class, with the hint to re-run with --verbose: its message can quote a
+            # path on this machine, so the traceback above is the only place it is printed
+            # (v1-e01-t25, CommandFailure.from_exception).
+            raise self._reported(ctx, exception) from exception
 
     def _incomplete_installation(
         self, ctx: Any, message: str, hint: str, details: dict[str, str]

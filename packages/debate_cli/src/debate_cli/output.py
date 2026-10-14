@@ -60,6 +60,7 @@ from debate_core.application.errors import DomainError
 
 __all__ = [
     "SCHEMA_VERSION",
+    "UNMODELLED_ERROR_HINT",
     "CliOutput",
     "CommandFailure",
     "JsonValue",
@@ -69,6 +70,12 @@ __all__ = [
 
 SCHEMA_VERSION = 1
 """Version of the `--json` envelope. Bumped only by a change that breaks existing consumers."""
+
+UNMODELLED_ERROR_HINT = (
+    "This is a bug in debate-research. Re-run with --verbose for the traceback, which includes the "
+    "error's message."
+)
+"""The hint on an exception the CLI does not model: the one way to see what its message said."""
 
 type JsonValue = str | int | float | bool | None | Sequence[JsonValue] | Mapping[str, JsonValue]
 
@@ -132,7 +139,25 @@ class CommandFailure:
         lacks a grant, and a profile the AWS config does not define names the setting to correct;
         neither offers a login (`v1-e29-t07`). The hint is promoted out of
         `details` so it renders once, in the place a person looks for what to do next.
+
+        **An exception the CLI does not model is named by its class, never by its message**
+        (`v1-e01-t25`). Anything that is neither a `DomainError` nor a usage error ends the run
+        with `INTERNAL_ERROR` (70), and its message is not a sentence this project wrote: an
+        `OSError` quotes the path it failed on, which carries the home directory and, for a file
+        in the inbox, a camp file's title. So the message says which class it was, the hint says
+        to re-run with `--verbose`, and the traceback that `--verbose` prints is the only place
+        the message appears. An attribute such an exception calls `hint` is not this project's
+        either, and is not used.
         """
+        if not isinstance(exception, DomainError | typer.TyperException):
+            return cls(
+                code=error_code_for(exception),
+                message=f"debate-research stopped on an unexpected {type(exception).__name__}. "
+                "Its message is not printed, because it can quote a path on this machine.",
+                exit_code=exit_code_for(exception),
+                details=_details_of(exception),
+                hint=hint if hint is not None else UNMODELLED_ERROR_HINT,
+            )
         carried = getattr(exception, "hint", None)
         return cls(
             code=error_code_for(exception),

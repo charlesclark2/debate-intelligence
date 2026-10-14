@@ -564,3 +564,25 @@ mutant ran for 100 s, is the right lesson to take from it.
 
 **Operator follow-ups:** your 2 (this PR's own run, then the first push to `dev`) and your 1 (ac5,
 over three pull requests). I record the result and set the phase in the next close-out.
+
+### Operator follow-up 1, recorded (PM, 2026-10-14)
+
+**ac5: PASS.** The operator listed the last six pull-request runs of `ci`, each run's time from its
+start to its last update:
+
+| Branch | Result | Time |
+|---|---|---|
+| `task/v1-e30-t17-weekly-window-wording-and-ordering` | success | 116 s |
+| `task/v1-e30-t15-manifest-and-aggregate-residue` | success | 133 s |
+| `task/v1-e31-t11-long-card-splits-and-fragment-merges` | success | 130 s |
+| `bot/refresh-generated-files` (three runs) | success | 123 s, 201 s, 133 s |
+
+All three task pull requests are under 180 s, against a median of 329 s before the change. One of
+the three bot refresh runs took 201 s. Bot refreshes are not the typical pull request ac5 names,
+and the other two were well inside. If refresh runs keep crossing 3 minutes, the trim task's
+measurement from a runner's durations will show which part is slow.
+
+The runner minutes after the change were not measured. The report's estimate (about level with
+before) stands, and the PM amended ac5 to waive the measurement: the repository is public, so
+runner minutes cost nothing. The Goal is `Succeeded`.
+

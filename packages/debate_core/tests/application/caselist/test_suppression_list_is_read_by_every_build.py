@@ -21,8 +21,9 @@ No line of another shape may ever be written to the list, and none is: the paths
 **An older build reads what this build writes.** The list and the removal log this build writes
 are byte for byte the ones each older build wrote for the same history, in both places; every line
 validates against each older build's own schema; and what this build adds is two more files beside
-them, the path holds (`v1-e30-t13`) and the removal scopes (`v1-e30-t15`). `check_an_older_build_reads_this_builds_files.py` runs an older build's own importer,
-publisher and status over these files, and the README records what it printed.
+them, the path holds (`v1-e30-t13`) and the removal scopes (`v1-e30-t15`).
+`check_an_older_build_reads_this_builds_files.py` runs an older build's own importer, publisher and
+status over these files, and the README records what it printed.
 
 **This build reads what an older build wrote.** Each stored list reads back to the state written
 out below by hand, with no path held, and serialises again to the bytes it was read from.

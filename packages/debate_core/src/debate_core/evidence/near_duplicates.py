@@ -57,13 +57,27 @@ A short body is never merged on containment through the banding. Instead:
   open alike and then diverge differ from the point of divergence to the end, and a changed word
   does not.
 * **It joins only when that is not a guess.** A short body joins a container's cluster when every
-  confirmed container is in that one cluster, and the container is at most
-  `1 / MIN_CUT_SHARE` times its size. A body inside two clusters is a cut of either, so it stays
-  out of both; this is the rule abbreviated disclosures are linked by. A body whose two end
-  shingles are both held by more than :data:`MAX_CONTAINER_CLUSTERS` other clusters opens and
-  closes with stock phrases and is left alone without comparing them all, which is also what bounds
-  the step's cost. The size limit keeps a body that is really a whole section of a file, parsed as
-  one card, from gathering the short cards it contains into one cluster.
+  container that counts as a *witness* is in that one cluster. A body inside two clusters is a cut
+  of either, so it stays out of both; this is the rule abbreviated disclosures are linked by.
+* **Containers that hold one another are one witness** (`v1-e31-t11`). When every confirmed
+  container outside the cluster of the smallest one also holds a container inside that cluster, by
+  the same test a cut is confirmed by, the smallest is the only witness and the short body joins
+  its cluster. "A container inside that cluster", not "the smallest": two copies of one size in
+  one cluster are told apart only by fingerprint, and a digest must not decide the outcome.
+  A cut of a team's ninety-word copy is inside the three-hundred-word card that copy was cut from
+  as well; if the banding never paired those two long bodies they are two clusters, but the longer
+  says nothing about the cut that the shorter did not. Two containers neither of which holds the
+  other are still two witnesses, however much they overlap: which of two extents of a text a cut
+  belongs to is a guess. The cut joins one cluster and the long bodies stay where they were.
+* **Its share is of the smallest body that holds it** (`v1-e31-t11`). The short body must be at
+  least :data:`MIN_CUT_SHARE` of the smallest confirmed container, so the container is at most
+  `1 / MIN_CUT_SHARE` times its size. Containers are tried smallest first, then by fingerprint,
+  which is what makes "the smallest" the same body on every run. The size limit keeps a body that
+  is really a whole section of a file, parsed as one card, from gathering the short cards it
+  contains into one cluster.
+* **A body that opens and closes like many others is left alone.** One whose two end shingles are
+  both held by more than :data:`MAX_CONTAINER_CLUSTERS` other clusters opens and closes with stock
+  phrases, and is not compared with them at all, which is also what bounds the step's cost.
 
 Two long bodies are matched exactly as before this step existed.
 
@@ -75,7 +89,8 @@ smaller root the parent, so the root of a component is its smallest member howev
 happened to be ordered. Joining a short body's cluster to its one container cluster can only make
 another short body's containers fewer clusters, never more, so repeating it until nothing changes
 ends in the same place whatever order it ran in. The same bodies, read from files in any order, in
-any process, produce the same ids.
+any process, produce the same ids. Which containers are a short body's witnesses is decided once,
+from the bodies and the clusters the banding left, before any of them is joined.
 
 ## What a cluster is not
 
@@ -86,8 +101,12 @@ Nothing here calls a model or an embedding service; the task forbids both for de
 
 Which bodies share a cluster id is part of what
 :data:`~debate_core.evidence.fingerprints.FINGERPRINT_VERSION` names. A change here that can move a
-body to another cluster bumps it, as the short-body step did (`card-fingerprint-v2`), although the
-exact fingerprint itself is unchanged.
+body to another cluster bumps it, as the short-body step did (`card-fingerprint-v2`) and its two
+corrections did (`card-fingerprint-v3`), although the exact fingerprint itself is unchanged.
+
+:mod:`debate_core.evidence.cluster_diagnosis` reads a finished placement and says, in counts, which
+of the limits above kept each cut out of a cluster that holds it. Measure with it before changing
+one.
 """
 
 from __future__ import annotations
@@ -115,6 +134,7 @@ __all__ = [
     "SHORT_BODY_SHINGLES",
     "NearDuplicateThresholds",
     "cluster_near_duplicates",
+    "confirms_a_cut",
     "contained_but_for_one_word",
     "containment",
     "jaccard",
@@ -249,6 +269,25 @@ def contained_but_for_one_word(short: Sequence[str], long: Sequence[str]) -> boo
 _ONE_WORD_CHANGES: Final = ((1, 1), (1, 2), (2, 1), (0, 1), (1, 0))
 
 
+def confirms_a_cut(
+    cut_set: frozenset[str],
+    holder_set: frozenset[str],
+    cut_words: Sequence[str],
+    holder_words: Sequence[str],
+    limits: NearDuplicateThresholds,
+) -> bool:
+    """Whether a body that holds both ends of `cut` is confirmed to contain it.
+
+    At least the containment threshold of the cut's shingles are in the holder, or the cut is short
+    and in it but for one word. The one test the short-body step and
+    :mod:`debate_core.evidence.cluster_diagnosis` both apply, so the diagnosis cannot drift from
+    the rule it explains.
+    """
+    if len(cut_set & holder_set) >= limits.containment * len(cut_set):
+        return True
+    return len(cut_set) < SHORT_BODY_SHINGLES and contained_but_for_one_word(cut_words, holder_words)
+
+
 def cluster_near_duplicates(
     bodies: Mapping[str, str],
     thresholds: NearDuplicateThresholds | None = None,
@@ -323,8 +362,41 @@ def _join_short_bodies_to_their_one_container(
         for shingle in shingle_sets[fingerprint] & end_shingles:
             holders[shingle].add(fingerprint)
 
-    # Per cluster as the banding left it: every container of its short bodies, and whether any of
-    # them is small enough to join. `None` marks a cluster with a body too common to compare.
+    def by_size(members: Iterable[str]) -> list[str]:
+        """Smallest first, then by fingerprint: the order a body's containers are tried in."""
+        return sorted(members, key=lambda member: (len(shingle_sets[member]), member))
+
+    def holds(holder: str, cut: str) -> bool:
+        return confirms_a_cut(
+            shingle_sets[cut], shingle_sets[holder], words_of(cut), words_of(holder), limits
+        )
+
+    def witnesses(short: str, others: Mapping[str, Sequence[str]]) -> list[str]:
+        """The containers of `short` that each say something of their own, smallest first.
+
+        The smallest confirmed container of each cluster in `others`; or, when every confirmed
+        container outside the cluster of the smallest of them all holds a container of `short`
+        inside that cluster, that smallest one alone.
+        """
+        confirmed = {
+            cluster: held
+            for cluster, members in others.items()
+            if (held := [holder for holder in by_size(members) if holds(holder, short)])
+        }
+        smallest_in_each = by_size(held[0] for held in confirmed.values())
+        if len(smallest_in_each) < 2:
+            return smallest_in_each
+        home = next(held for held in confirmed.values() if held[0] == smallest_in_each[0])
+        nested = all(
+            any(holds(holder, inside) for inside in home)
+            for held in confirmed.values()
+            if held is not home
+            for holder in held
+        )
+        return smallest_in_each[:1] if nested else smallest_in_each
+
+    # Per cluster as the banding left it: the witnesses of its short bodies, and whether any short
+    # body is large enough to join. `None` marks a cluster with a body too common to compare.
     containers: defaultdict[str, set[str] | None] = defaultdict(set)
     joinable: set[str] = set()
     for short, (first, last) in ends.items():
@@ -340,16 +412,11 @@ def _join_short_bodies_to_their_one_container(
         if len(others) > MAX_CONTAINER_CLUSTERS:
             containers[cluster] = None
             continue
-        for members in others.values():
-            for holder in members:
-                holder_set = shingle_sets[holder]
-                if len(short_set & holder_set) >= limits.containment * len(
-                    short_set
-                ) or contained_but_for_one_word(words_of(short), words_of(holder)):
-                    found.add(holder)
-                    if len(short_set) >= MIN_CUT_SHARE * len(holder_set):
-                        joinable.add(cluster)
-                    break  # one confirmed container says this cluster holds the short body
+        seen = witnesses(short, others)
+        found.update(seen)
+        # The share is of the smallest body that holds it, whatever that body's fingerprint.
+        if seen and len(short_set) >= MIN_CUT_SHARE * len(shingle_sets[seen[0]]):
+            joinable.add(cluster)
 
     pending = {cluster: found for cluster, found in containers.items() if found and cluster in joinable}
     joined = True

@@ -79,7 +79,7 @@ Every line of every file is one JSON object with sorted keys, and every one carr
 | `source_sha256` | The source file's SHA-256 |
 | `parser_version` | The parser that read it, e.g. `2026.09.20-docx-1` |
 | `profile_version` | The style profile it resolved through, e.g. `2026.09.20-verbatim-1` |
-| `fingerprint_version` | The card matching rules, e.g. `card-fingerprint-v2`. What it says depends on the record: see [Fingerprint versions](#fingerprint-versions) |
+| `fingerprint_version` | The card matching rules, e.g. `card-fingerprint-v3`. What it says depends on the record: see [Fingerprint versions](#fingerprint-versions) |
 
 ### Schema versions
 
@@ -302,6 +302,7 @@ each version and what it changed).
 |---|---|---|---|
 | `card-fingerprint-v1` | `v1-e31-t04` | | |
 | `card-fingerprint-v2` | `v1-e31-t08` | the same as `v1` | changed: short cards and abbreviated disclosures that `v1` left apart now share clusters |
+| `card-fingerprint-v3` | `v1-e31-t11` | the same as `v1` | changed for short cards only: a short cut inside nested copies of a card joins the smallest of them, and its size is compared with the smallest body that holds it. A long card's cluster changes only by gaining such a cut, which can give the cluster a smaller id |
 
 **What the stamp says depends on the record.**
 

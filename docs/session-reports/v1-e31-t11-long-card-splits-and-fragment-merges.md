@@ -55,7 +55,7 @@ tool for it is built.
 **The Goal stays `InProgress`.** Three criteria have parts only the operator can close. Merge with
 `scripts/task pr --partial`.
 
-Commit ids in this report are as of the sync onto `68f78ef`. A later sync changes them; the
+Commit ids in this report are as of the sync onto `af18476`, the generated-files refresh after t12. A later sync changes them; the
 subject lines stay.
 
 ## Plan nodes
@@ -74,8 +74,8 @@ Every command ran from the task worktree on 2026-10-12.
 | **ac1**, matched pair by pair to the 81 divided pairs | PASS for openev; **NOT RUN** for the rest | openev: `counts --caselist openev --before-rules f5ad52b --save-before <scratch>` → 5,865 to 5,864 clusters, 2 merged, 1 divided, 58 s, the 2026-10-11 row exactly; then `diagnose --caselist openev --before <scratch>` → `"pairs": 1`, explained, nothing unexplained. The other three need the earlier placement, 4 to 9 minutes each. Rewritten for the re-parsed store as Operator follow-ups, step 6. The mechanism was checked again after the t12 sync: on openev the rules before `v1-e31-t08` give the same 2 merged and 1 divided, 79 s. |
 | **ac2** — `sample` can be pointed at a cluster by id | PASS | `sample --cluster ID` takes an id or the start of one, and `sample --largest RANK` finds it by size. `uv run pytest tests/scripts/test_compare_card_clusters.py -n0 --no-cov` → `29 passed`, among them both forms shown to a terminal, each pair cleared, tallies alone at the end. On the real store, drawing without showing: 15 s to the first pair of hspolicy26's largest cluster, and 13,695 pairs available, the diagnosis's own figure. |
 | **ac2**, the operator checks 10 pairs from each of the three largest clusters per caselist | **NOT RUN** | Needs a person at a terminal, and is to be taken on the re-parsed store. Operator follow-ups, step 5. |
-| **ac3** — each defect has a synthetic fixture shown failing first; recall on both labelled sets does not fall; precision stays 1.000 | PASS | Commit `2217e6a` marks the fixtures `xfail(strict=True)` against `v2`: `69 passed, 10 xfailed`. `2836a41` (fix 1) removes its mark: `188 passed, 9 xfailed`. `f63ec18` (fix 2) removes the rest: `969 passed`. A third fixture, for a refinement of fix 2, was run against the committed rule before the change: `1 failed, 2 passed`, then `3 passed` (`f460583`). The labelled table is identical before and after: [Labelled sets](#labelled-sets-before-and-after). |
-| **ac4** — if clustering changes, `FINGERPRINT_VERSION` is bumped | PASS | `card-fingerprint-v3` (`f63ec18`). `fingerprints.py` lists what it changed; `parsed-card-store.md` has its row. Mutant "the version bump skipped" → 3 tests fail. |
+| **ac3** — each defect has a synthetic fixture shown failing first; recall on both labelled sets does not fall; precision stays 1.000 | PASS | Commit `fec2841` marks the fixtures `xfail(strict=True)` against `v2`: `69 passed, 10 xfailed`. `47b3576` (fix 1) removes its mark: `188 passed, 9 xfailed`. `38508c0` (fix 2) removes the rest: `969 passed`. A third fixture, for a refinement of fix 2, was run against the committed rule before the change: `1 failed, 2 passed`, then `3 passed` (`b89e220`). The labelled table is identical before and after: [Labelled sets](#labelled-sets-before-and-after). |
+| **ac4** — if clustering changes, `FINGERPRINT_VERSION` is bumped | PASS | `card-fingerprint-v3` (`38508c0`). `fingerprints.py` lists what it changed; `parsed-card-store.md` has its row. Mutant "the version bump skipped" → 3 tests fail. |
 | **ac4**, operator-run: the counts and both samples again after the rebuild, recorded in `caselist-parse-report.md` | **NOT RUN** | Needs the merged code and t12's re-parse. Operator follow-ups, steps 2 to 4. The session's estimate and openev's full preview, on the old directory, are recorded there now, marked as such. |
 | Node: `uv run pytest packages/debate_core/tests/evidence` | PASS | `1103 passed in 8.14s`, after the t12 sync (1,000 before it) |
 
@@ -192,14 +192,14 @@ before I removed a quadratic step and stopped building every card model, are not
 
 Both are in `_join_short_bodies_to_their_one_container`, the short-body step of `v1-e31-t08`.
 
-**Fix 1: a short cut's share is measured against the smallest body that holds it** (`2836a41`).
+**Fix 1: a short cut's share is measured against the smallest body that holds it** (`47b3576`).
 Within one cluster the step stopped at the first container it confirmed, in fingerprint order, and
 tested `MIN_CUT_SHARE` against that one. A cut that is a quarter of one copy and less of a longer
 copy in the same cluster joined or not by which digest sorted first. Containers are now tried
 smallest first. Fixture: `test_a_short_cut_is_measured_against_the_smallest_body_that_holds_it`,
 the same three bodies under two orders of fingerprint.
 
-**Fix 2: containers that hold one another are one witness** (`f63ec18`, refined in `f460583`). A
+**Fix 2: containers that hold one another are one witness** (`38508c0`, refined in `b89e220`). A
 short cut inside two clusters stayed out of both. When every confirmed container outside the
 cluster of the smallest one also holds a container inside that cluster, the larger ones say nothing
 about the cut that the smaller did not, so the smallest is the cut's only witness and it joins that
@@ -300,7 +300,7 @@ exactly once. The suite ran without `-x`, the file was restored byte for byte, a
 | The version bump skipped | CAUGHT: 3 failed: `test_fingerprints.py`'s literal, the smoke check, and the script's git-ref test |
 
 **One check deleted.** The nested test had a size condition on which inside container an outside
-one could hold. I could not build a case that told it from its absence, so it is gone (`af14a8c`).
+one could hold. I could not build a case that told it from its absence, so it is gone (`ab8ead6`).
 
 ## Files changed
 

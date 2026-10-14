@@ -79,6 +79,19 @@ it was, and do not apply the hold, which is what they did before there was one.
 A hold follows the removed file it came from: an un-suppress of that sha256 recorded at or after
 the hold lifts it, as it lifts every suppression of the file (:meth:`SuppressionState.from_entries`).
 Nothing is appended to release one.
+
+## A fifth record: which caselist a withdrawal took the file from
+
+`withdrawals.jsonl`
+    One :class:`WithdrawalEntry` per suppression of one disclosure, beside the list (and so beside
+    the removal log, which is kept in the same place) in both places (`v1-e30-t16`). A disclosure's
+    digest hides its caselist with its path, so without this a shared file withdrawn from one
+    caselist and kept in another could not be attributed afterwards. The entry carries the caselist's
+    slug, and joins the suppression entry by its sha256, disclosure and request
+    (:meth:`WithdrawalEntry.attributes`) and the removal log entry that lists the sha256 among
+    `withdrawn_sha256` by request. A file of its own, for the reason each record above is: the list's
+    lines and the log's are pinned to what every installed build reads, and so are the scope
+    record's, which the build before this one reads on every `caselist status`.
 """
 
 from __future__ import annotations
@@ -127,6 +140,9 @@ __all__ = [
     "SuppressionList",
     "SuppressionState",
     "UnreadableAppendOnlyRecord",
+    "WITHDRAWALS_FILENAME",
+    "WithdrawalEntry",
+    "WithdrawalList",
     "canonical_line",
     "disclosure_digest",
 ]
@@ -135,9 +151,11 @@ SUPPRESSION_SCHEMA_VERSION: Final = 1
 """Version of a suppression-list or removal-log line. Bumped only by a change an old reader breaks on."""
 
 PATH_HOLDS_FILENAME: Final = "path-holds.jsonl"
+"""The path-hold record's file name, beside the suppression list on this machine and in the bucket."""
 REMOVAL_SCOPES_FILENAME: Final = "removal-scopes.jsonl"
 """The removal-scope record's file name, beside the removal log in both places (`v1-e30-t15`)."""
-"""The path-hold record's file name, beside the suppression list on this machine and in the bucket."""
+WITHDRAWALS_FILENAME: Final = "withdrawals.jsonl"
+"""The withdrawal record's file name, beside the list and the log in both places (`v1-e30-t16`)."""
 
 REQUEST_ID_PATTERN: Final = r"^RM-[0-9]{4}-[0-9]{2,4}$"
 """`RM-2026-01`: the register id `docs/runbooks/caselist-removal.md` step 1 assigns a request.
@@ -278,6 +296,50 @@ class PathHoldEntry(DomainModel):
 
     @classmethod
     def from_line(cls, line: str) -> PathHoldEntry:
+        return cls.model_validate_json(line)
+
+
+class WithdrawalEntry(DomainModel):
+    """One line of the withdrawal record: the caselist one suppressed disclosure was taken from.
+
+    Written with the suppression entry it attributes, before it, by the same execution
+    (`v1-e30-t16`). No field can hold a school, a team code or a file name: the caselist is its
+    slug, the path is the digest the suppression entry already holds, and the rest are a digest, a
+    time, a code and a request id.
+    """
+
+    schema_version: Literal[1] = SUPPRESSION_SCHEMA_VERSION
+    sha256: Sha256Hex
+    disclosure: Sha256Hex
+    """:func:`disclosure_digest` of the caselist and the path the copy was withdrawn from: the
+    suppression entry's own :attr:`SuppressionEntry.disclosure`."""
+    caselist: Annotated[str, StringConstraints(pattern=CASELIST_SLUG_PATTERN)]
+    """The slug of the caselist the copy was withdrawn from: the one thing the digest cannot give."""
+    recorded_at: UtcDatetime
+    """The suppression entry's `recorded_at`."""
+    reason: ReasonCode
+    request_id: RequestId
+
+    @model_validator(mode="after")
+    def _a_removals(self) -> Self:
+        if self.reason not in REMOVAL_REASONS:
+            raise ValueError(f"{self.reason} is not a reason to withdraw a copy")
+        return self
+
+    def attributes(self, entry: SuppressionEntry) -> bool:
+        """Whether this records where `entry`, a suppression of one disclosure, took its copy from."""
+        named = (entry.sha256, entry.disclosure, entry.request_id)
+        return entry.action is SuppressionAction.SUPPRESS and named == (
+            self.sha256,
+            self.disclosure,
+            self.request_id,
+        )
+
+    def to_line(self) -> str:
+        return canonical_line(self)
+
+    @classmethod
+    def from_line(cls, line: str) -> WithdrawalEntry:
         return cls.model_validate_json(line)
 
 
@@ -600,6 +662,17 @@ class PathHoldList(Protocol):
     async def path_holds(self) -> tuple[PathHoldEntry, ...]: ...
 
     async def append_path_holds(self, entries: Sequence[PathHoldEntry]) -> None: ...
+
+
+@runtime_checkable
+class WithdrawalList(Protocol):
+    """A suppression list that keeps the withdrawal record beside it (`v1-e30-t16`)."""
+
+    async def withdrawals(self) -> tuple[WithdrawalEntry, ...]:
+        """Every withdrawal entry on every copy, deduplicated. A record that does not exist has none."""
+        ...
+
+    async def append_withdrawals(self, entries: Sequence[WithdrawalEntry]) -> None: ...
 
 
 @runtime_checkable

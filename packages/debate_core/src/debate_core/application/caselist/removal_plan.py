@@ -206,6 +206,7 @@ from debate_core.application.ports.suppression import (
     SuppressionEntry,
     SuppressionList,
     SuppressionState,
+    WithdrawalEntry,
     disclosure_digest,
 )
 from debate_core.domain import SHA256_HEX_PATTERN, Sha256Hex
@@ -532,6 +533,32 @@ class RemovalPlan:
     @property
     def suppression_entries(self) -> tuple[SuppressionEntry, ...]:
         return tuple(entry for source in self.sources for entry in source.suppression)
+
+    @property
+    def withdrawals(self) -> tuple[WithdrawalEntry, ...]:
+        """The withdrawal record's entries this removal appends (`v1-e30-t16`).
+
+        One for each suppression entry of one disclosure, naming the caselist it withdraws the copy
+        from by its slug: the path it was taken from is `(caselist, path)` in
+        :attr:`PlannedSource.requester_paths`, and the entry holds only its digest.
+        """
+        entries: list[WithdrawalEntry] = []
+        for source in self.sources:
+            for caselist, path in source.requester_paths:
+                digest = disclosure_digest(caselist, path)
+                entries += [
+                    WithdrawalEntry(
+                        sha256=entry.sha256,
+                        disclosure=digest,
+                        caselist=caselist,
+                        recorded_at=entry.recorded_at,
+                        reason=entry.reason,
+                        request_id=self.request_id,
+                    )
+                    for entry in source.suppression
+                    if entry.disclosure == digest
+                ]
+        return tuple(entries)
 
     @property
     def local_records(self) -> int:

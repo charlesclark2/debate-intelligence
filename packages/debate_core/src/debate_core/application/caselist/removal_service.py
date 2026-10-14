@@ -34,7 +34,9 @@ probe behind. `docs/runbooks/caselist-removal.md` says how to remove one left fr
 1. **Suppress first.** The entries go on the list — this machine's copy and the bucket's — before
    anything is deleted, so if the run stops part-way, the next weekly import still cannot bring the
    file back. The plan's path entries go with them, to the path-hold record beside each copy of the
-   list (`v1-e30-t13`), so the next import cannot store a new upload at a removed path either.
+   list (`v1-e30-t13`), so the next import cannot store a new upload at a removed path either. Just
+   before them, beside the list too, the caselist each withdrawn copy is taken from (`v1-e30-t16`),
+   so no suppressed disclosure is on a copy without its caselist beside it.
 2. **The bucket**: every version of every `raw/` and `parsed/` object, listed again with the
    takedown credential so nothing the dry run could not see is missed; then each rewritten
    manifest, written and every superseded version of it purged; then every noncurrent version of
@@ -552,6 +554,7 @@ class CaselistRemovalService:
         failure: BaseException | None = None
         suppressed = False
         try:
+            await suppression.append_withdrawals(plan.withdrawals)
             await suppression.append(plan.suppression_entries)
             await suppression.append_path_holds(plan.path_holds)
             suppressed = True

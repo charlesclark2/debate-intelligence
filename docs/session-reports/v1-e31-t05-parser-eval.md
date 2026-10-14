@@ -888,3 +888,75 @@ rows, 435 in the PR subset and the old PR-subset table, and omits the approval s
 
 Every code block in the guide, including the existing Workflow block, must be safe to paste into
 zsh: no `#` comments inside code blocks. The coach's shell treats them as arguments.
+
+## Labeling with the click-through labeller (appended 2026-10-14 by v1-e31-t18)
+
+Appended by the session of
+[`v1-e31-t18-click-through-labeller`](../../plan_specs/v1/e31-debate-file-parsing/t18-click-through-labeller.yaml)
+(its ac7). Nothing above this section is changed, and this section is not a review. **It replaces
+the labeling follow-ups above** (follow-ups 2, 3 and 4 of the first session and "2. Correct the
+labels" of the resumed one): each file is now labeled in a page, one key per row, and the
+spreadsheet route is the fallback. The step-by-step version, safe to paste, is the labeling
+guide's [working reference](../../tests/fixtures/debate_files/eval/labels/README.md#working-reference).
+Follow-ups 1 (approve the selection), 5 (the corpus health run), 6 (closing the task), 7 (back up
+the digest key) and 8 (ac6) stand as written.
+
+Where: the main clone on `dev`, after `git pull` and `uv sync --all-packages`.
+
+**1. Regenerate the pre-labels, once (under a minute).** Every file still `PRELABELED` gets
+pre-labels from the current parser, under the committed sampling plan; `CORRECTED` and
+`COACH_REVIEWED` files are left alone and the plan id does not change. Worksheets nobody has
+worked on are removed first and written again after.
+
+```bash
+uv run python scripts/prelabel_docx.py worksheet --all --remove-untouched --out-dir ~/parser-eval-worksheets &&
+uv run python scripts/prelabel_docx.py prelabel --all &&
+uv run python scripts/prelabel_docx.py worksheet --all --out-dir ~/parser-eval-worksheets &&
+git status --short
+```
+
+Success looks like: `already corrected; left alone` for each corrected file, no `REFUSED` line,
+and changed label files under `tests/fixtures/debate_files/eval/labels/` and nothing else. Commit
+them through a pull request, as the guide's step 2 shows, and `git pull` once it merges.
+
+**2. The PR-subset files first, then the rest.** The six files are in the guide's generated table.
+For each file, set its digest and start the page; it prints only its address and opens it.
+
+```bash
+f=PASTE_DIGEST_PREFIX_HERE
+uv run python scripts/prelabel_docx.py label "${f}" --out-dir ~/parser-eval-worksheets
+```
+
+Answer every row with a key (Enter accepts, a letter sets the unit, `n` starts a card, `k` sets its
+completeness or marks it cut off by the block's edge, Backspace goes back). When the page says
+every row is checked and `check` passes, press Ctrl+C and run:
+
+```bash
+uv run python scripts/prelabel_docx.py check "${f}" --worksheet ~/parser-eval-worksheets/${f}.csv &&
+uv run python scripts/prelabel_docx.py import "${f}" --worksheet ~/parser-eval-worksheets/${f}.csv --corrected-by coach &&
+rm ~/parser-eval-worksheets/${f}.csv ~/parser-eval-worksheets/${f}.progress.json &&
+git switch -c "labels/${f}" &&
+git add tests/fixtures/debate_files/eval/labels &&
+git commit -m "Parser evaluation labels: ${f}" &&
+git push -u origin HEAD &&
+gh pr create --base dev --fill &&
+git switch dev
+```
+
+Success looks like: `ready to import`, then `CORRECTED by coach; N of M labeled rows changed from
+the pre-labels`. Report the rows per minute the page showed, so the PM has the real pace.
+
+**3. One PR-subset file blind (the coach).** Chosen before labeling the PR subset, from the
+PR-subset files still `PRELABELED`, without looking at its pre-label. Start it with `--blind`
+added to the `label` line above, and import it with `--labeled-blind` added after
+`--corrected-by coach`. The guide's step 5 has both blocks written out.
+
+**4. The spot-check, then the baseline.** Unchanged: three corrected files end to end (team,
+caselist, camp), each marked with `mark-reviewed`, then `run_parser_eval.py --write-baseline`, as
+the guide's step 6 gives them. The report the baseline writes now ends with a *Labeled blind*
+section: the blind file's share of rows changed from its pre-label beside the rest of its stratum's.
+
+**The fallback.** A file the page cannot be used for goes round the spreadsheet loop the first two
+files went round (Numbers, `check --repair`, import), in the guide's last working-reference
+section. The page refuses a file whose worksheet was changed in a spreadsheet or whose `.numbers`
+file is in the folder, so the two routes never write over each other.

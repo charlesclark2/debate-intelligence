@@ -132,13 +132,16 @@ def build_synthetic_file(
     key: bytes = TEST_DIGEST_KEY,
     blocks: tuple[Block, ...] | None = None,
     plan_id: str = "",
+    styles_xml: str | None = None,
 ) -> SyntheticFile:
     """The invented file, and labels for it in the given review status.
 
     `blocks` labels only part of the file, the way the sampling plan does outside the PR subset;
-    the default labels all eleven paragraphs, as the PR subset is labeled.
+    the default labels all eleven paragraphs, as the PR subset is labeled. `styles_xml` replaces
+    the style table, for a test of formatting a style carries; the hand-written spans then describe
+    only the runs' own formatting.
     """
-    content = build_docx("".join(markup for markup, _, _, _ in _PARAGRAPHS))
+    content = build_docx("".join(markup for markup, _, _, _ in _PARAGRAPHS), styles_xml=styles_xml)
     digest = keyed_digest(content, key)
     labeled = blocks if blocks is not None else ((0, len(_PARAGRAPHS) - 1),)
     indices = [index for first, last in labeled for index in range(first, last + 1)]

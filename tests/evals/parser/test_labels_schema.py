@@ -470,3 +470,40 @@ def test_the_guides_code_blocks_are_safe_to_paste_into_zsh() -> None:
                 if line.lstrip().startswith("#") or re.search(r"<[A-Za-z]", line):
                     offenders.append(f"{path.name}: {line.strip()}")
     assert not offenders, "\n".join(offenders)
+
+
+# --------------------------------------------------------------------------------------------
+# labeled_blind (v1-e31-t18 ac5): an added, optional field
+# --------------------------------------------------------------------------------------------
+
+
+def test_every_committed_label_file_reads_as_not_blind_and_rewrites_to_the_same_bytes() -> None:
+    """Files written before `labeled_blind` existed validate unchanged, and a rewrite of one (by
+    `mark-reviewed`, say) does not add the field to it."""
+    paths = sorted(LABELS_DIRECTORY.glob("*.jsonl"))
+    assert len(paths) == 30
+    statuses = set()
+    for path in paths:
+        labels = load_label_file(path)
+        statuses.add(labels.header.status)
+        assert labels.header.labeled_blind is False
+        assert labels.to_jsonl() == path.read_text(encoding="utf-8"), path.name[:12]
+    assert statuses == {LabelStatus.PRELABELED, LabelStatus.CORRECTED}
+
+
+def test_a_file_labeled_blind_says_so_and_reads_back_the_same() -> None:
+    labels = build_synthetic_file(LabelStatus.CORRECTED).labels
+    blind = replace(labels, header=labels.header.model_copy(update={"labeled_blind": True}))
+
+    written = blind.to_jsonl()
+
+    assert '"labeled_blind":true' in written.splitlines()[0]
+    assert '"labeled_blind"' not in labels.to_jsonl()
+    assert FileLabelHeader.model_validate_json(written.splitlines()[0]).labeled_blind is True
+
+
+def test_a_pre_label_cannot_claim_to_have_been_labeled_blind() -> None:
+    header = build_synthetic_file(LabelStatus.PRELABELED).labels.header.model_dump()
+
+    with pytest.raises(ValueError, match="PRELABELED file has not been labeled"):
+        FileLabelHeader.model_validate({**header, "labeled_blind": True})

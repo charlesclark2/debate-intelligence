@@ -465,6 +465,12 @@ class FileLabelHeader(_Record):
         description="How many paragraph rows the correction changed. Recorded, not judged.",
     )
     span_sample_fraction: float = Field(default=0.2, gt=0.0, le=1.0)
+    labeled_blind: bool = Field(
+        default=False,
+        description="Corrected with the pre-label hidden (the labeller's blind mode). Added in "
+        "v1-e31-t18 and optional: a file written before it reads as not blind, and a file that is not "
+        "blind is written without it, byte for byte as before.",
+    )
 
     @model_validator(mode="after")
     def _status_is_backed(self) -> FileLabelHeader:
@@ -476,6 +482,8 @@ class FileLabelHeader(_Record):
             raise ValueError("a COACH_REVIEWED file must be reviewed_by the coach")
         if self.status is not LabelStatus.COACH_REVIEWED and self.reviewed_by is not None:
             raise ValueError("reviewed_by is set only on a COACH_REVIEWED file")
+        if self.status is LabelStatus.PRELABELED and self.labeled_blind:
+            raise ValueError("a PRELABELED file has not been labeled, blind or otherwise")
         return self
 
     @property
@@ -558,8 +566,11 @@ class LabelFile:
         return ranges
 
     def to_jsonl(self) -> str:
-        records: list[_Record] = [self.header, *self.paragraphs, *self.cards, *self.spans]
-        return "".join(record.model_dump_json() + "\n" for record in records)
+        # `labeled_blind` is written only when it is true, so every file written before the field
+        # existed, and every file that is not blind, keeps exactly the bytes it had.
+        header = self.header.model_dump_json(exclude=None if self.header.labeled_blind else {"labeled_blind"})
+        records: list[_Record] = [*self.paragraphs, *self.cards, *self.spans]
+        return header + "\n" + "".join(record.model_dump_json() + "\n" for record in records)
 
 
 def label_path_for(digest: str, directory: Path = LABELS_DIRECTORY) -> Path:

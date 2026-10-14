@@ -1115,9 +1115,12 @@ def test_a_message_never_shows_a_whole_cell(text: str, data: st.DataObject) -> N
 
 
 def test_the_guides_loop_repairs_before_it_imports_and_deletes_both_files() -> None:
-    """ac4: save, check --repair, import, then delete the worksheet and its .numbers file."""
+    """ac4: save, check --repair, import, then delete the worksheet and its .numbers file.
+
+    Since v1-e31-t18 this loop is the fallback; the labeller is the guide's step 4.
+    """
     guide = (LABELS_DIRECTORY / "README.md").read_text(encoding="utf-8")
-    loop = guide[guide.index("### 3. Each file") : guide.index("### 4. The finish")]
+    loop = guide[guide.index("### The fallback: a spreadsheet") : guide.index("## What you label")]
     blocks = [block for block in loop.split("```bash\n")[1:]]
     repair = next(i for i, block in enumerate(blocks) if "prelabel_docx.py check" in block)
     imported = next(i for i, block in enumerate(blocks) if "prelabel_docx.py import" in block)

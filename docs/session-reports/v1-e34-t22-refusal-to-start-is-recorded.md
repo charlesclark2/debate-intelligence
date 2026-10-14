@@ -414,9 +414,59 @@ task's report and not repeated here.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-13
 
 **Notes:**
+
+Accepted, with the phase `Succeeded`. I have amended ac3 and ac4 in this branch, so both pass as
+written.
+
+**Deviation 1 is right, and it caught a trap in my spec.** Plain `doctor` runs in the
+dev-prerelease installer and in validate-dev's smoke check, on machines with no AWS config. Had it
+made the profile check, the first push after this merged would have failed every build, where no
+session would see it. ac3 now names `doctor --evidence-profiles`.
+
+**Deviation 3 is my error.** The `runs --remote` workaround was only ever in my notes. ac4 now says
+what the runbook actually replaced.
+
+**The work itself:**
+
+* **Lazy construction of the monitor's bucket (Decision 1)** is the smallest design that keeps
+  the owed list. An environment with no bucket clears the list, and this one must keep it, which
+  is the distinction that needed a third state. Handing the monitor a builder gives that state
+  without adding one.
+* **Recording whatever stops the bucket being built (Decision 2)** is better than special-casing
+  the profile.
+* **The compatibility evidence** follows `v1-e34-t19`'s method. It is honest about what the
+  older code could and could not produce (Deviation 4), and regenerating changed no byte.
+* **The red run:** you found that the old source was not on the path because every test passed,
+  then fixed it and re-ran. That is the check that makes red mean something.
+* **Decisions 6 and 7:** only an undefined profile fails, and only permission-set names appear.
+  Both are the right scope for a check that runs before an install.
+
+**Rulings:**
+
+* **Deviations 1 to 5:** accepted. Deviation 5's two hand-run commands were inside the session's
+  own worktree and scratch directory.
+* **Decisions 1 to 16:** accepted. Decision 14 caught a prod check on a dev agent before it
+  shipped.
+
+**Follow-up work, filed by the PM in the next spec batch:**
+
+* **One E34 p3 task, "agent install loose ends", for your 1, 2, 5 and 7:**
+  * a `plistlib` stand-in so the installer's checks run in CI;
+  * `--aws-profile`'s misleading help;
+  * the installer refusing over an undefined profile;
+  * a dry run that creates the data directory.
+* **Your 4 and 6:** added to `v1-e29-t09`.
+* **Your 9:** added to `v1-e34-t23`. Your 3 is already there.
+* **Your 8:** goes to the E01 trim task.
+* **Your 11, the wall-clock parse-timeout test:** goes to the E01 trim task as a flaky test to fix,
+  not trim. It touches E31 code, which `v1-e31-t17` can absorb if it starts first.
+* **Your 10** is checked at tomorrow's reinstall by your first operator command.
+
+**Operator follow-ups:** both commands run at Wednesday's reinstall, from a build that contains
+this task.

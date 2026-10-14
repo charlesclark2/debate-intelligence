@@ -55,15 +55,20 @@ spec:
         v1-e34-t19 set up.
     - id: ac3
       description: >-
-        `doctor` and `install.sh --check-launchd` report, for each configured evidence
-        profile, whether it is defined and which permission set it is signed in as, and fail
-        on a profile that is not defined. An expired session is reported as such and does
-        not fail the check. By test with the identity stubbed at the port.
+        `doctor --evidence-profiles` and `install.sh --check-launchd` report, for each
+        configured evidence profile, whether it is defined and which permission set it is
+        signed in as, and fail on a profile that is not defined. An expired session is
+        reported as such and does not fail the check. By test with the identity stubbed at the
+        port. Amended by the PM, 2026-10-13: plain `doctor` runs where no AWS config exists
+        (the dev-prerelease installer and validate-dev's smoke check), so the profile check is
+        an option, and plain `doctor` reaches no network, as before.
     - id: ac4
       description: >-
         docs/runbooks/caselist-scheduled-sync.md's reinstall steps run the check, and its
-        troubleshooting section replaces the `caselist runs --remote` workaround v1-e29-t07
-        described.
+        troubleshooting section replaces what it said of a missing profile (that only the exit
+        code and the agent's log show it). Amended by the PM, 2026-10-13: the
+        `caselist runs --remote` workaround was in v1-e29-t07's report and the PM's notes,
+        never in the runbook.
 status:
   phase: Succeeded
 ---

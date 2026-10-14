@@ -1127,6 +1127,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     if args.command == "prelabel":
         entries = list(manifest.entries) if args.all else [_resolve(manifest, p) for p in args.digest]
+        refused = 0
         for entry in entries:
             path = label_path_for(entry.digest, args.labels_dir)
             if (
@@ -1140,7 +1141,17 @@ def main(argv: Sequence[str] | None = None) -> int:
                 )
                 continue
             file_plan = plan.of(entry.digest)
-            labels = prelabel_document(_document(entry, key), file_plan, plan.plan_id, key)
+            document = _document(entry, key)
+            if len(document.sections) != file_plan.paragraphs:
+                # The plan is fixed before labeling and never moves (its id is in every label file
+                # and the baseline), so a pre-label that no longer fits it is not written.
+                print(
+                    f"{entry.digest[:16]}: REFUSED; the parser reads {len(document.sections)} paragraphs "
+                    f"and the sampling plan has {file_plan.paragraphs}. Its pre-label is left as it was"
+                )
+                refused += 1
+                continue
+            labels = prelabel_document(document, file_plan, plan.plan_id, key)
             # Pre-labels are the parser's opinion, and may break a rule a person's labels must keep
             # (a card with no cite, say). They are written anyway, to be corrected; import checks.
             write_label_file(labels, args.labels_dir, check_cards=False)
@@ -1152,7 +1163,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
         if args.all:
             _remove_rejected_prelabels(rejected, args.labels_dir)
-        return 0
+        return 1 if refused else 0
 
     entry = _resolve(manifest, args.digest)
     path = label_path_for(entry.digest, args.labels_dir)

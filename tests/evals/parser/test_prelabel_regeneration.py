@@ -104,10 +104,10 @@ def evaluation(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> _Evaluation:
     (directory / "manifest.json").write_text(
         Manifest(entries=tuple(entries)).model_dump_json(), encoding="utf-8"
     )
-    plan = SamplingPlan(
-        plan_id=PLAN_ID, generated_on="2026-10-14", parser_version="test",
-        files=tuple(FileSamplingPlan(digest=e.digest, paragraphs=12, blocks=((0, 11),), full=True) for e in entries),
-    )  # fmt: skip
+    whole = tuple(
+        FileSamplingPlan(digest=e.digest, paragraphs=12, blocks=((0, 11),), full=True) for e in entries
+    )
+    plan = SamplingPlan(plan_id=PLAN_ID, generated_on="2026-10-14", parser_version="test", files=whole)
     (directory / "sampling-plan.json").write_text(plan.model_dump_json(), encoding="utf-8")
     made = _Evaluation(
         options=[
@@ -228,3 +228,26 @@ def test_removing_untouched_worksheets_writes_none_and_refuses_the_repository(
         evaluation.run(
             "worksheet", evaluation.prefix(0), "--remove-untouched", "--out-dir", str(evaluation.worksheets)
         )
+
+
+@pytest.mark.parametrize("planned", [13, 11])
+def test_a_file_the_parser_now_reads_into_other_paragraphs_than_the_plan_is_left_alone(
+    evaluation: _Evaluation, capsys: pytest.CaptureFixture[str], planned: int
+) -> None:
+    """The plan does not move, so a pre-label that no longer fits it is not written. With fewer
+    paragraphs planned than read, the old command wrote one silently; with more, it crashed."""
+    plan = SamplingPlan.model_validate_json(evaluation.plan.read_text(encoding="utf-8"))
+    changed = plan.files[0].model_copy(update={"paragraphs": planned, "blocks": ((0, planned - 1),)})
+    files = (changed, *plan.files[1:])
+    evaluation.plan.write_text(plan.model_copy(update={"files": files}).model_dump_json(), encoding="utf-8")
+    before = {n: evaluation.label_file(n).read_bytes() for n in range(3)}
+    capsys.readouterr()
+
+    assert evaluation.run("prelabel", "--all") == 1
+
+    printed = capsys.readouterr().out
+    expected = (
+        f"{evaluation.prefix(0)}: REFUSED; the parser reads 12 paragraphs and the sampling plan has {planned}"
+    )
+    assert expected in printed
+    assert evaluation.label_file(0).read_bytes() == before[0]

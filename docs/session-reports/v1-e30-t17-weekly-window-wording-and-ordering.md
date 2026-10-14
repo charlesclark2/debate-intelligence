@@ -331,9 +331,63 @@ the real data directory.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-14
 
 **Notes:**
+
+Accepted in full, with the phase `Succeeded`. The spec is unchanged.
+
+**The investigation answered the question the task was filed for.** My worry was that an
+out-of-order import did something wrong to what is stored. It does not: a late week is classified
+against the week dated before it, and bytes, source records, seen ranges, disclosures, holds and
+later uploads all follow dates. The old refusal message described a harm that does not happen.
+What is wrong is narrower and you named it exactly: the later weeks' manifests are not measured
+again, and a complete archive's withdrawal count misses a weekly dated before it that arrives
+after it. Writing every answer by hand, as literals, before the tests ran, and having all 15
+behaviour tests match on the first run, is what makes the table trustworthy.
+
+**Keeping the behaviour and fixing the words was right.** The forbidden constraint allowed a
+behaviour change only for a defect. Neither stale manifest nor low count is a defect in what is
+stored, and each fix needs a ruling, which follows below.
+
+**The work itself:**
+
+* **The search list (ac1)** is complete and its keep/correct calls are right, including the
+  synthetic fixtures that are cumulative by construction (Decision 1) and the superseded ADR.
+* **The requester line (ac2)** now says only what this removal put on the list, in four forms,
+  and no longer claims suppression when nothing was suppressed. Leaving the hold to `v1-e30-t13`'s
+  line (Decision 4) is right.
+* **Telling a re-import apart in the refusal** without changing the import is a good touch.
+* **The mutation run**, including the two not caught on the target file: mutant 5 is equivalent and
+  you said why, and mutant 6 is caught by `v1-e34-t04`'s tests. Follow-up 6 turns mutant 5's finding
+  into a fix.
+
+**Rulings:**
+
+* **Deviations 1 and 2:** accepted. Docstrings and prose only outside the constraints, as in
+  `v1-e30-t11` and `t13`.
+* **Decisions 1 to 7:** accepted.
+* **Your follow-up 1, a late weekly:** allow it, then rewrite each later weekly's manifest from
+  what the store already holds, as you propose. The zips are usually gone, so "import each later
+  week again" cannot stay the only remedy.
+* **Your follow-up 2:** drop the refusal when the week is already imported, and correct the removal
+  runbook's two steps that pass the flag for it.
+* **Your follow-up 3:** recount the newest complete archive's withdrawals after a later import of
+  an earlier-dated weekly. Do not hold the complete archive back: it carries files that no weekly
+  holds, and a weekly that never becomes readable would hold it back for good.
+* **Your follow-up 6:** compare dates in the "strictly before" filter.
+
+**Follow-up work, filed by the PM in the next spec batch:**
+
+* **One E30 p3 task, "late imports re-measure later manifests"**, for your 1, 2, 3 and 6, with the
+  rulings above. It changes what an import writes, so it starts from your fixture and tests.
+* **Your 4:** the PM amends `v1-e32` t02, t03 and t04 and `v2-e35` t02 and t05 in the same batch.
+* **Your 5:** the PM corrects the data-use policy's three lines at the next close-out. It is a
+  wording correction, not a tightening.
+
+**Merge note.** `v1-e30-t15`'s pull request is open and touches four of the same files (the removal
+runbook, `removal_plan.py`, `ports/suppression.py` and the remove smoke test). A trial merge of the
+two branches shows no conflict, so either can merge first.

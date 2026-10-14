@@ -45,7 +45,7 @@ from __future__ import annotations
 import hashlib
 import json
 import zipfile
-from datetime import date
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Final
 
@@ -72,7 +72,16 @@ from debate_core.application.caselist.removal_plan import (
     SourceSelector,
     parse_team_selector,
 )
-from debate_core.application.ports.suppression import ReasonCode
+from debate_core.application.caselist.suppression import caselist_withdrawn_from, caselists_withdrawn_by
+from debate_core.application.ports.suppression import (
+    ReasonCode,
+    RemovalLogEntry,
+    RemovalLogKind,
+    RemovalOutcome,
+    SuppressionAction,
+    SuppressionEntry,
+    WithdrawalEntry,
+)
 from debate_core.domain.caselist import Event
 from debate_core.integrations.local import FsEvidenceObjectStore, FsSnapshotStore
 from debate_core.integrations.local.archive_reader import archive_digest, read_archive
@@ -393,11 +402,6 @@ class TestAWithdrawalRecordsItsCaselist:
         self, removal_world: RemovalWorld, tmp_path: Path
     ) -> None:
         """Read back through the list's reader and the log's: each finds the record beside it."""
-        from debate_core.application.caselist.suppression import (  # noqa: PLC0415 - red first, see ac3
-            caselist_withdrawn_from,
-            caselists_withdrawn_by,
-        )
-
         await import_and_publish_next_week(removal_world, tmp_path / "next-week", (BAYVIEW_PATH,))
         await import_and_publish_another_caselists_week(removal_world, tmp_path / "other-caselist")
         await remove_the_named_file(removal_world)
@@ -413,3 +417,87 @@ class TestAWithdrawalRecordsItsCaselist:
         assert entry.withdrawn_sha256 == (REVISION,)
         assert caselists_withdrawn_by(entry, await log.withdrawals()) == {REVISION: (CASELIST,)}
         assert await log.withdrawals() == await listed.withdrawals()
+
+
+class TestTheJoins:
+    """What a withdrawal entry attributes, on entries written by hand: the rules the readers rely on."""
+
+    WITHDRAWN = "a" * 64
+    OTHER_FILE = "b" * 64
+    AT_THE_PATH = hashlib.sha256(f"{CASELIST}/{BAYVIEW_PATH}".encode()).hexdigest()
+    IN_THE_OTHER_CASELIST = hashlib.sha256(f"{OTHER_CASELIST}/{ANOTHER_TEAMS_PATH}".encode()).hexdigest()
+
+    @staticmethod
+    def at(hour: int) -> datetime:
+        return datetime(2026, 9, 30, hour, 0, tzinfo=UTC)
+
+    def withdrawal(
+        self, caselist: str, disclosure: str, *, hour: int = 18, request: str = REQUEST
+    ) -> WithdrawalEntry:
+        return WithdrawalEntry(
+            sha256=self.WITHDRAWN,
+            disclosure=disclosure,
+            caselist=caselist,
+            recorded_at=self.at(hour),
+            reason=ReasonCode.REQUESTED_BY_TEAM,
+            request_id=request,
+        )
+
+    def suppression(self, disclosure: str | None, *, request: str = REQUEST) -> SuppressionEntry:
+        return SuppressionEntry(
+            action=SuppressionAction.SUPPRESS,
+            sha256=self.WITHDRAWN,
+            disclosure=disclosure,
+            recorded_at=self.at(18),
+            reason=ReasonCode.REQUESTED_BY_TEAM,
+            request_id=request,
+        )
+
+    def log_entry(self, hour: int, withdrawn: tuple[str, ...]) -> RemovalLogEntry:
+        return RemovalLogEntry(
+            kind=RemovalLogKind.REMOVAL,
+            recorded_at=self.at(hour),
+            request_id=REQUEST,
+            reason=ReasonCode.REQUESTED_BY_TEAM,
+            environment="dev",
+            outcome=RemovalOutcome.COMPLETED,
+            withdrawn_sha256=withdrawn,
+        )
+
+    def test_a_suppression_entry_is_attributed_by_its_file_its_disclosure_and_its_request(self) -> None:
+        withdrawals = [
+            self.withdrawal(CASELIST, self.AT_THE_PATH),
+            self.withdrawal(OTHER_CASELIST, self.IN_THE_OTHER_CASELIST, request="RM-2026-09"),
+        ]
+
+        assert caselist_withdrawn_from(self.suppression(self.AT_THE_PATH), withdrawals) == CASELIST
+        assert caselist_withdrawn_from(self.suppression(self.IN_THE_OTHER_CASELIST), withdrawals) is None, (
+            "the same file and disclosure under another request"
+        )
+        assert caselist_withdrawn_from(self.suppression(None), withdrawals) is None, "removed whole"
+        other_file = self.suppression(self.AT_THE_PATH).model_copy(update={"sha256": self.OTHER_FILE})
+        assert caselist_withdrawn_from(other_file, withdrawals) is None
+        unsuppressed = SuppressionEntry(
+            action=SuppressionAction.UNSUPPRESS,
+            sha256=self.WITHDRAWN,
+            recorded_at=self.at(19),
+            reason=ReasonCode.REMOVED_IN_ERROR,
+            request_id=REQUEST,
+        )
+        assert caselist_withdrawn_from(unsuppressed, withdrawals) is None
+
+    def test_a_log_entry_names_the_caselists_its_request_had_withdrawn_each_file_from_by_then(self) -> None:
+        """Two runs of one request: the first withdraws from testcl26, the second from testclb26."""
+        withdrawals = [
+            self.withdrawal(CASELIST, self.AT_THE_PATH, hour=18),
+            self.withdrawal(OTHER_CASELIST, self.IN_THE_OTHER_CASELIST, hour=20),
+            self.withdrawal(OTHER_CASELIST, self.IN_THE_OTHER_CASELIST, hour=18, request="RM-2026-09"),
+        ]
+
+        first, second = self.log_entry(19, (self.WITHDRAWN,)), self.log_entry(21, (self.WITHDRAWN,))
+
+        assert caselists_withdrawn_by(first, withdrawals) == {self.WITHDRAWN: (CASELIST,)}
+        assert caselists_withdrawn_by(second, withdrawals) == {self.WITHDRAWN: (CASELIST, OTHER_CASELIST)}
+        assert caselists_withdrawn_by(self.log_entry(21, (self.OTHER_FILE,)), withdrawals) == {}, (
+            "a file the entry does not list as withdrawn"
+        )

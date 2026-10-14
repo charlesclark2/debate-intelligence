@@ -327,9 +327,11 @@ class WithdrawalEntry(DomainModel):
         return self
 
     def attributes(self, entry: SuppressionEntry) -> bool:
-        """Whether this records where `entry`, a suppression of one disclosure, took its copy from."""
-        named = (entry.sha256, entry.disclosure, entry.request_id)
-        return entry.action is SuppressionAction.SUPPRESS and named == (
+        """Whether this records where `entry`, a suppression of one disclosure, took its copy from.
+
+        The same file, disclosure and request. An un-suppress names no disclosure, so it is never one.
+        """
+        return (entry.sha256, entry.disclosure, entry.request_id) == (
             self.sha256,
             self.disclosure,
             self.request_id,

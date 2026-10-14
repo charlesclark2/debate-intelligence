@@ -383,7 +383,7 @@ def test_a_live_dry_run_lists_the_operators_own_caselist() -> None:
 
     ```
     DEBATE_ENV=dev DEBATE_CASELIST__API_ENABLED=true CASELIST_LIVE_SLUG=hsld26 \
-        uv run pytest tests/smoke/test_caselist_pull.py -m live
+        uv run pytest tests/smoke/test_caselist_pull_in_process.py -m live
     ```
 
     A `--dry-run` because a real download would spend one of the site's five bulk downloads a day

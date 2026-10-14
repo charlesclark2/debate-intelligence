@@ -359,9 +359,59 @@ are compared. If prod has removals logged by an earlier build, each is named as 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-14
 
 **Notes:**
+
+Accepted in full, with the phase `Succeeded`. I have amended ac1 in this branch to the rule you
+found, as Deviation 1 asked.
+
+**Deviation 1: my ruling's model was too broad, and you proved where.** The takedown's sweep keeps
+a version of a manifest it did not rewrite if that version never named the removed file. My rule
+would have reported those versions, and no re-run can clear them, so status would have failed
+until lifecycle expiry. Counting only the keys the removal rewrote, and telling its own rewrite
+apart by version id rather than by time, is the right rule. It was shown by three behaviour tests
+that passed before any code changed, because they describe the takedown as it already is.
+
+**Deviation 2: the scope record follows `v1-e30-t13`'s precedent, and the guard did its job.**
+Adding fields to the removal log broke the older-build tests. You put the scope beside the log
+instead of loosening the guard. A removal from an earlier build being reported as "not checked"
+is the honest cost. It touches only dev's synthetic RM-2026-90, and prod has had no removal.
+
+**The work itself:**
+
+* **The margin argument (Decision 2) is the best reasoning in this task.** S3 refuses a request
+  more than 15 minutes off its own clock. A removal ends by writing its log entry to the bucket. So
+  15 minutes is the most the clocks can disagree, and it is not a guess. Both sides of it are
+  tested.
+* **Union of both log copies, filtered to this environment (Decision 1),** is what makes prod
+  right when status runs against the dev data directory.
+* **The clearing instruction is proven through the command for both kinds of residue.** That
+  includes the case where the dry run says nothing is left and `--execute` still clears it, and the
+  runbook says so.
+* **The mutation run:** 24 of 24 caught. Two of them came only after a test or a code change,
+  which is what a mutation run is for.
+* **Running `v0.1.0-dev.122`'s own code over this build's records,** from an export, shows the
+  build installed today reads everything this one writes.
+
+**Rulings:**
+
+* **Deviations 1 to 5:** accepted.
+* **Decisions 1 to 7:** accepted.
+* **Your follow-up 4, giving an old removal a scope by hand:** no task. The only such entry is a
+  synthetic exercise from before the parsed store existed, and prod has no removals. Revisit if a
+  real one ever shows as "not checked".
+
+**Follow-up work, filed by the PM in the next spec batch:**
+
+* **One E30 p3 task, "residue clearing gaps", for your 1, 2 and 3:**
+  * a rewritten key's older version that names nothing removed;
+  * a withdrawal-only request whose aggregate residue cannot be re-planned;
+  * the dry run saying nothing is left when the sweep would act.
+* **Your 5:** measured by the operator runs below.
+
+**Operator follow-ups:** your two status runs, in dev and in prod against the dev data directory,
+any time after this merges. They run from the main checkout once it is on `dev`.

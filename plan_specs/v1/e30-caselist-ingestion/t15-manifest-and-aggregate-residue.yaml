@@ -41,9 +41,13 @@ spec:
   acceptanceCriteria:
     - id: ac1
       description: >-
-        The report states the model it relies on (a removal's purge leaves no manifest or
-        aggregate version older than its completion), and a test against moto shows the
-        takedown's behaviour that makes it true.
+        The report states the model it relies on, and a test against moto shows the
+        takedown's behaviour that makes it true. Amended by the PM, 2026-10-14: the model holds
+        for every aggregate version and for the manifests a removal rewrote, whose only version
+        left is the rewrite. It does not hold for a manifest the removal did not rewrite: the
+        takedown's sweep keeps a noncurrent version of it that never named the removed file. So
+        manifest versions are counted only for the keys the removal rewrote, recorded in a
+        removal scope beside the removal log.
     - id: ac2
       description: >-
         A noncurrent manifest version and a noncurrent aggregate version older than a

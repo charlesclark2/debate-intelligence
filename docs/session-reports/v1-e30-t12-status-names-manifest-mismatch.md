@@ -120,7 +120,7 @@ added, so it was run again with the exact command.
 
 | Check | Result |
 |---|---|
-| `uv run --frozen ruff format --check .` | `655 files already formatted` after `ruff format` reformatted 2 of mine |
+| `uv run --frozen ruff format --check .` | `657 files already formatted` (after `ruff format` reformatted 2 of my files) |
 | `uv run --frozen ruff check .` | `All checks passed!` |
 | `uv run --frozen pyright` | `0 errors, 0 warnings, 0 informations` |
 | `uv run --frozen lint-imports` | `Contracts: 12 kept, 0 broken.` |

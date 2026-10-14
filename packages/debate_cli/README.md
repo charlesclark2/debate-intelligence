@@ -117,7 +117,7 @@ rather than writing an integer.
 | Code | Name | Means |
 |---|---|---|
 | 0 | `OK` | The command did what it was asked to do. |
-| 1 | `DOMAIN_FAILURE` | The command ran and the answer is a failure: a card is `UNVERIFIED`, a record was not found, a write lost its revision check, a profile setting names a profile the AWS config does not define, `DEBATE_REMOVAL_PROFILE` names a profile that is not signed in as the takedown role, `doctor` found a failed check (the interpreter's Unicode database is not the normalizer's pin, or a wired integration does not import). Running it again gives the same answer. |
+| 1 | `DOMAIN_FAILURE` | The command ran and the answer is a failure: a card is `UNVERIFIED`, a record was not found, a write lost its revision check, a profile setting names a profile the AWS config does not define, `DEBATE_REMOVAL_PROFILE` names a profile that is not signed in as the takedown role, `doctor` found a failed check (the interpreter's Unicode database is not the normalizer's pin, a wired integration does not import, or with `--evidence-profiles` a configured evidence profile is not defined). Running it again gives the same answer. |
 | 2 | `USAGE_ERROR` | The command line was wrong: unknown command or option, missing argument, no command given. Nothing was executed. |
 | 3 | `RETRIEVAL_FAILURE` | Something the command depends on did not answer, so there is no answer yet. An external provider — search, fetch, a model — failed or rate-limited the call, or a store could not be read or written: it was unavailable, the SSO session for it expired, or it refused access (the operating system refusing a data directory included). The same command may well succeed later. |
 | 70 | `INTERNAL_ERROR` | A bug: an exception the CLI does not model. 70 is `EX_SOFTWARE` from `sysexits.h`. |
@@ -182,8 +182,12 @@ retryable, so nothing exits 3 because nobody classified it. The retryable codes 
   `storage.data_dir` or a grant the profile lacks, never `aws sso login`. The grant's sentence is
   the S3 adapter's, read from the error (`v1-e29-t07`).
   A profile setting that names no profile in the AWS config stops the bucket's adapter being built,
-  so on a real installation it ends the pull before any stage, with `STORE_PROFILE_NOT_CONFIGURED`
-  as `error.code` and exit 1; nothing is fetched, and no run is recorded or announced.
+  so on a real installation it refuses the pull before any stage, with `STORE_PROFILE_NOT_CONFIGURED`
+  as `error.code` and exit 1, and nothing is fetched. The run is still recorded and announced
+  (`v1-e34-t22`): a `failed` record in this machine's run log, details beside it with that code
+  and the fix, which names the setting, and one notification that a person should look. The
+  record is owed to the bucket and the next run that can reach it publishes it.
+  `doctor --evidence-profiles` finds the setting before a run does.
   Whatever ended the publish stage, the pending-work file under `storage.data_dir` then holds every
   snapshot the bucket did not confirm complete, and `--publish-pending` takes one off only when the
   bucket has (`v1-e34-t18`). A pending-work file that cannot be read fails the stage with
@@ -195,7 +199,19 @@ retryable, so nothing exits 3 because nobody classified it. The retryable codes 
 whether settings are wired, the services the container can build, the running Python's Unicode
 database beside the version the evidence normalizer is pinned to (`v1-e01-t14`), and every
 `debate_core.integrations` module the composition root wires with whether it imports (`v1-e01-t22`).
-It fails on two checks only, the ones it can state precisely:
+
+With `--evidence-profiles` it also reports each AWS profile this environment is configured to reach
+the evidence bucket with, `storage.s3.aws_profile` and `DEBATE_REMOVAL_PROFILE` when it is set:
+whether this machine's AWS config defines it, and which permission set it is signed in as
+(`v1-e34-t22`). It fails on a profile that is not defined, with `STORE_PROFILE_NOT_CONFIGURED`,
+naming the profile and its setting; an expired session is reported as expired, with the login, and
+does not fail it. The option reads the AWS config and asks AWS who each defined profile is. Plain
+`doctor` does neither, which is why the installer and `validate-dev` can run it on a machine with
+no AWS config. `ops/launchd/install.sh --check-launchd` runs it under launchd, as the weekly agent
+will run. It names a permission set and never an account, a role's full identifier or the AWS
+config's path.
+
+Without the option it fails on two checks only, the ones it can state precisely:
 
 * **The Unicode database.** Under any database but the pin, `normalize` refuses to run, so every
   command that touches evidence text would fail on first use.

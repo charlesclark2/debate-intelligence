@@ -73,7 +73,9 @@ Two more ceilings the site sets, both handled in code rather than here:
    (`v1-e34-t01`). `caselist auth status --check` confirms it.
 3. **An AWS session**, if you want the run to publish: `aws sso login --profile
    debate-<env>-evidence`. Without one the run still downloads and imports, and records the
-   publish as pending.
+   publish as pending. The profile itself has to be one this Mac's AWS config defines, or the run
+   is refused before it starts; `debate-research doctor --evidence-profiles` says whether it is
+   ([Checking the evidence profiles](#checking-the-evidence-profiles)).
 4. **A validation run in dev**, below. The schedule is enabled only after that has passed.
 
 ## Checking an installed build
@@ -153,6 +155,39 @@ version, an unexpected platform, a Python uv does not manage, or a declared extr
 are described, never failed: none of them is a failure it can state precisely. A missing package
 that a wired integration needs makes that integration fail to import, and that is exit 1. The
 installer refuses a build with any declared package missing.
+
+### Checking the evidence profiles
+
+Plain `doctor` says nothing about AWS. It loads no settings, reads no AWS config and reaches no
+network, because the installer runs it on every install, on machines that have no AWS config.
+`doctor --evidence-profiles` adds one check (`v1-e34-t22`): each AWS profile this environment is
+configured to reach the evidence bucket with. That is the everyday profile, `storage.s3.aws_profile`,
+and the takedown profile when `DEBATE_REMOVAL_PROFILE` is set in the shell it runs in. As the agent
+runs it, with the `PATH` and the environment its plist gives it and nothing of this shell's:
+
+```bash
+AGENT_PATH=$(plutil -extract EnvironmentVariables.PATH raw ~/Library/LaunchAgents/com.debate-intelligence.caselist-sync.plist)
+AGENT_ENV=$(plutil -extract EnvironmentVariables.DEBATE_ENV raw ~/Library/LaunchAgents/com.debate-intelligence.caselist-sync.plist)
+env -i HOME="${HOME}" PATH="${AGENT_PATH}" DEBATE_ENV="${AGENT_ENV}" sh -c 'debate-research doctor --evidence-profiles; echo "doctor exit=$?"'
+```
+
+It adds one row for each profile to the report, `Evidence profile`, and reads this Mac's AWS
+config and asks AWS one question for each profile that is defined: who it is signed in as. What a
+row says:
+
+| The row says | Means | Exit |
+|---|---|---|
+| `debate-prod-evidence (storage.s3.aws_profile): defined, and signed in as DebateProdEvidenceOperator` | The profile is in this Mac's AWS config and its session is live. The name is the permission set's: `DebateProdEvidenceOperator` for prod's everyday profile, `DebateDevEvidenceOperator` for dev's | `0` |
+| `… defined; its session has expired or was never started, so AWS cannot be asked which permission set it is (aws sso login --profile debate-prod-evidence)` | The profile is defined. Run the login it gives to see the permission set. This does not fail the check: a run without a session still captures and imports | `0` |
+| `… defined; AWS did not answer when asked which permission set it is signed in as` | No verdict on the profile. Run it again when the Mac is online | `0` |
+| `… not defined in this machine's AWS config` | The setting names a profile this Mac does not have. The command fails with `STORE_PROFILE_NOT_CONFIGURED`, naming the profile and the setting, and a scheduled run would be refused before it starts. See [A profile the AWS config does not define](#a-profile-the-aws-config-does-not-define) | `1` |
+| `Evidence profiles: none configured for this environment` | The environment names no bucket, as `test` does | `0` |
+
+A profile signed in as something unexpected is said in the same row and does not fail the check.
+The takedown profile is compared with the permission set a takedown runs as: one signed in as
+anything else reads `… a takedown runs only as DebateProdEvidenceRemoval, so caselist remove
+--execute will refuse this profile`. The row names a profile, the setting that holds its name and
+a permission set, and never an account, a role's full identifier or where the AWS config is.
 
 ## Step 1 — rehearse, in dev
 
@@ -272,13 +307,92 @@ ops/launchd/install.sh --check-launchd
 
 It loads a one-off copy of the installed plist as `com.debate-intelligence.caselist-sync.check`,
 with no schedule, running the copied wrapper's `--check`. That prints the path
-`DEBATE_RESEARCH_BIN` resolves to and the build's `debate-research --version`, and nothing else: no
-`caselist pull`, no listing call, no download. The installer kickstarts it, waits for it, prints
+`DEBATE_RESEARCH_BIN` resolves to and the build's `debate-research --version`, then runs
+`debate-research doctor --evidence-profiles` (`v1-e34-t22`), and nothing else: no `caselist pull`,
+no listing call to OpenCaselist, no download. The installer kickstarts it, waits for it, prints
 its log (`~/Library/Logs/debate-research/caselist-sync-check.log`) and exit code, and boots it out.
 It reads the agent's `runs` count before and after and fails if it changed. It refuses to run
-against an agent whose wrapper is not this checkout's copied out, so reinstall first. Success is
-`exit code 0`, the version you installed, and the same `runs` before and after. An exit code of
-126 is the privacy-protection failure above.
+against an agent whose wrapper is not this checkout's copied out, so reinstall first.
+
+The log is `doctor`'s report as launchd runs the build: with the plist's `HOME`, `PATH` and
+`DEBATE_ENV`, and nothing of a shell's. Its `Evidence profile` row is the one
+[Checking the evidence profiles](#checking-the-evidence-profiles) describes, for the profile the
+weekly run will use. Success is `exit code 0`, the version you installed, that row saying
+`defined`, and the same `runs` before and after.
+
+| Exit code | Means |
+|---|---|
+| `0` | launchd ran the build, the build's own checks passed, and the profile is defined. A session that has expired is still `0`: the row says so, and gives the login |
+| `1` | A check `doctor` makes failed. If the row says `not defined in this machine's AWS config`, the weekly run would be refused before it starts: see [A profile the AWS config does not define](#a-profile-the-aws-config-does-not-define). An exit code of 1 is also what a Unicode database mismatch or an integration that does not import give ([Checking an installed build](#checking-an-installed-build)) |
+| `2` | The installed build is older than the profile check and does not know the option. Install a newer build with `scripts/install_channel.sh`, then run the check again |
+| `126` | The privacy-protection failure above |
+
+## Reinstalling the agent
+
+For a new build, a changed wrapper, or a changed schedule. Nothing here fetches anything, and
+the two checks are the point of doing it in this order: the first finds a profile the AWS config
+does not define before the agent is replaced, and the second finds it as launchd will meet it.
+
+1. **Install the build**: `scripts/install_channel.sh` with the tag to install. It rehearses the
+   install and refuses a build that fails its checks, leaving the one the agent runs untouched
+   ([Checking an installed build](#checking-an-installed-build)).
+
+2. **Check the evidence profile, as the agent will run.** Sign in first, so that the check can
+   say which permission set the profile is (`debate-dev-evidence` for an agent installed with
+   `--env dev`). The environment is read from the installed plist, not typed:
+
+   ```bash
+   aws sso login --profile debate-prod-evidence
+   AGENT_PATH=$(plutil -extract EnvironmentVariables.PATH raw ~/Library/LaunchAgents/com.debate-intelligence.caselist-sync.plist)
+   AGENT_ENV=$(plutil -extract EnvironmentVariables.DEBATE_ENV raw ~/Library/LaunchAgents/com.debate-intelligence.caselist-sync.plist)
+   env -i HOME="${HOME}" PATH="${AGENT_PATH}" DEBATE_ENV="${AGENT_ENV}" sh -c 'debate-research doctor --evidence-profiles; echo "doctor exit=$?"'
+   ```
+
+   Success is `doctor exit=0` and the row `Evidence profile` reading `debate-prod-evidence
+   (storage.s3.aws_profile): defined, and signed in as DebateProdEvidenceOperator`. A session that
+   has expired does not fail the check: the row says `expired` and gives the login, and the exit
+   is still `0`. **Stop if it exits `1` with `STORE_PROFILE_NOT_CONFIGURED`**: the setting
+   `storage.s3.aws_profile` names a profile this Mac's AWS config does not define, and the weekly
+   run would be refused before it starts. Correct it as
+   [A profile the AWS config does not define](#a-profile-the-aws-config-does-not-define) says,
+   then run the check again. An exit of `2`, "No such option", means the build installed in step
+   1 is older than the check.
+
+3. **Install the agent** with the caselists it already follows. The first command prints them,
+   and the second is [Step 2](#step-2--install-the-agent)'s, with those caselists:
+
+   ```bash
+   plutil -extract ProgramArguments json -o - ~/Library/LaunchAgents/com.debate-intelligence.caselist-sync.plist
+   ops/launchd/install.sh --caselist hsld26 --caselist hspolicy26 --env prod --debate-research "$HOME/.local/bin/debate-research"
+   ```
+
+4. **Reload it.** launchd keeps the plist it loaded:
+
+   ```bash
+   launchctl bootout gui/$UID/com.debate-intelligence.caselist-sync
+   launchctl bootstrap gui/$UID ~/Library/LaunchAgents/com.debate-intelligence.caselist-sync.plist
+   launchctl print gui/$UID/com.debate-intelligence.caselist-sync
+   ```
+
+   If `bootstrap` says `Bootstrap failed: 5: Input/output error`, the bootout had not finished;
+   run the bootstrap line again. `print` should show the copied wrapper, the caselists and the
+   calendar interval, and `runs = 0`.
+
+5. **Check it under launchd:**
+
+   ```bash
+   ops/launchd/install.sh --check-launchd
+   ```
+
+   Success is `exit code 0`, the version installed in step 1, the same `Evidence profile` row as
+   in step 2, and the same `runs` before and after
+   ([Step 3](#step-3--enable-it) has the table of exit codes). This is the check that counts: it
+   is launchd's environment, not a shell's, reading the AWS config launchd's `HOME` leads to.
+
+The next scheduled run is the first with the new build. If the profile is not defined on the day
+after all, that run is no longer silent:
+[A profile the AWS config does not define](#a-profile-the-aws-config-does-not-define) says what
+it leaves.
 
 ## Watching it
 
@@ -448,16 +562,59 @@ and `caselist remove` show the same one.
 
 `storage.s3.aws_profile` in the environment's profile names the AWS profile the run publishes with.
 When this Mac's AWS config defines no profile of that name, the run cannot build its connection to
-the bucket at all, and it ends before any stage:
+the bucket at all, and it is refused before any stage:
 
 * exit `1`, with `error.code` `STORE_PROFILE_NOT_CONFIGURED`;
 * the message names the profile and the setting it came from, and the `hint` says to correct the
   setting or add the profile, as [`evidence-store.md`](evidence-store.md) describes;
-* nothing is fetched or imported, the pending-work file is not touched, and **no run is recorded
-  and no notification is sent**, because the run log's own copy in the bucket is built from the
-  same profile. The exit code launchd records and the error in
-  `~/Library/Logs/debate-research/caselist-sync.jsonl` are the only signs. Check them after
-  changing the setting or reinstalling the agent.
+* nothing is fetched or imported, and the pending-work file is not touched.
+
+**The run is recorded and announced** (`v1-e34-t22`). It used to be silent: the run log's copy in
+the bucket is built from the same profile, so nothing could be built to record the run, and the
+exit code launchd kept was the only sign. Now the refusal is the error the run stopped on:
+
+* **A record on this Mac.** One line in `<data_dir>/caselist-sync-runs.jsonl` with the outcome
+  `failed`, no stages, and the error's class, `StoreProfileNotConfigured`. It is the record a run
+  stopped by an expired `caselist_token` has always had, and nothing is added to it.
+* **Its details beside it.** One line in `<data_dir>/caselist-sync-run-details.jsonl` with
+  `failure_codes` of `STORE_PROFILE_NOT_CONFIGURED` and the fix as `hint`, which names the setting.
+* **One banner**, titled `caselist pull failed: needs a person`:
+
+  > Run 20261014T100000Z (prod) stopped with StoreProfileNotConfigured. A person should look: at
+  > least one failure here will be the same on the next scheduled run. The bucket was never
+  > reached: set storage.s3.aws_profile to a profile this machine's AWS config defines, or add the
+  > profile to it: docs/runbooks/evidence-store.md lists the evidence profiles and how they are
+  > added. It is not an expired session, and logging in changes nothing.
+
+* **The record is owed to the bucket.** It could not be published, since the bucket is what could
+  not be reached. Its run id is kept in `<data_dir>/caselist-sync-records-pending.json`, behind any
+  already there, and the next run that reaches the bucket publishes the record and its details
+  with its own. That is next week's run or, once the setting is corrected, this:
+
+  ```bash
+  debate-research caselist pull --publish-pending
+  ```
+
+`debate-research caselist runs` shows the refused run from this Mac's log straight away, and from
+the bucket once a later run has published it.
+
+**What to correct.** The agent's build takes the profile's name from the profile bundled into it,
+`debate-prod-evidence` for prod, unless `DEBATE_STORAGE__S3__AWS_PROFILE` in the plist says
+otherwise. So either this Mac's AWS config has lost that profile, and
+[`evidence-store.md`](evidence-store.md) says how the evidence profiles are added, or the
+override misspells it. Then confirm it, as the agent runs:
+
+```bash
+AGENT_PATH=$(plutil -extract EnvironmentVariables.PATH raw ~/Library/LaunchAgents/com.debate-intelligence.caselist-sync.plist)
+AGENT_ENV=$(plutil -extract EnvironmentVariables.DEBATE_ENV raw ~/Library/LaunchAgents/com.debate-intelligence.caselist-sync.plist)
+env -i HOME="${HOME}" PATH="${AGENT_PATH}" DEBATE_ENV="${AGENT_ENV}" sh -c 'debate-research doctor --evidence-profiles; echo "doctor exit=$?"'
+```
+
+`doctor exit=0` and the profile's row reading `defined`
+([Checking the evidence profiles](#checking-the-evidence-profiles)). `ops/launchd/install.sh
+--check-launchd` makes the same check under launchd, and both are in
+[Reinstalling the agent](#reinstalling-the-agent), so that the setting is found by a person
+before a scheduled run finds it.
 
 It is a configuration error, not an expired session: `aws sso login` does not define a profile, and
 next week's run ends the same way. Until `v1-e29-t07` it was reported as
@@ -488,7 +645,9 @@ When a person should look:
 > Run 20261014T100000Z (prod): the import stage failed on UNREADABLE_ARCHIVE. A person should look: at least one failure here will be the same on the next scheduled run. What was captured is kept.
 
 A run that stopped on an error before any stage could record it says `stopped with` and the
-error's class, then the same sentence.
+error's class, then the same sentence. A run refused because its AWS profile is not defined is
+one of these, with the fix after it
+([A profile the AWS config does not define](#a-profile-the-aws-config-does-not-define)).
 
 **The fix, when the stage has one.** A failed stage's `hint` follows the sentence, word for word as
 the summary gives it. Either wording can have one. With the first, the hint is what to do before
@@ -1051,6 +1210,15 @@ it already holds. It stops there rather than take every listed week for new and 
 again, which is what an unreadable folder used to cause. Fix the permission on the data directory
 and run the command again. The banner is `caselist pull failed: will be retried`, with the same
 fix in its body.
+
+**The banner says `needs a person`, and the run `stopped with StoreProfileNotConfigured`.** The
+profile setting names an AWS profile this Mac's AWS config does not define, so the run was refused
+before it fetched anything. Nothing is lost and nothing was spent. The run is in `caselist runs`
+as `failed`, and its record waits to be published. Correct the setting or add the profile, confirm
+it with `debate-research doctor --evidence-profiles`, and publish the record with
+`debate-research caselist pull --publish-pending`, or leave it to next week's run:
+[A profile the AWS config does not define](#a-profile-the-aws-config-does-not-define) has each
+step. `aws sso login` does not fix it.
 
 **`another caselist sync is already running`.** A run holds the lock at
 `<data_dir>/caselist-sync.lock`. It is an `flock`, so the kernel drops it when the process ends —

@@ -79,7 +79,7 @@ from .test_removal_covers_later_camp_uploads import (
 )
 from .test_removal_covers_later_uploads import suppression_lines, versions_of
 from .test_removal_later_uploads_plan import RecordsThatFailAfter
-from .test_sync_fetches_revised_camp_files import REVISED_BODY
+from .test_sync_fetches_revised_camp_files import REVISED_BODY, REVISION
 from .test_sync_skips_suppressed_downloads import CASELIST, ESTUARY_SHA256, PULLED_AT, decisions, pull
 
 if TYPE_CHECKING:  # pragma: no cover - import for the type checker only
@@ -608,3 +608,19 @@ async def test_a_file_at_the_withdrawn_downloads_name_with_other_bytes_stays_in_
 
     assert NEW_ROW not in [one.name for one in plan.inbox]
     assert (inbox / NEW_ROW).read_bytes() == b"not the bytes the removal withdrew"
+
+
+async def test_a_new_id_at_the_withdrawn_camp_path_is_held_by_the_pulls_hold_on_the_removed_files_path(
+    world: RemovalWorld,
+) -> None:
+    """A camp path is withdrawn only as a later upload of a file removed whole, at that file's upstream
+    path. The pull's hold (`v1-e34-t14`) already holds a new id there, so a third upload is not fetched."""
+    source = await another_release_holds_the_later_upload(world)
+    await remove(world)
+    third = REVISION.model_copy(update={"openev_id": 641})
+    source.files = [*source.files, (third, DOCUMENT_BODIES["harbor-tariffs-neg"])]
+
+    summary = await pull(world, source)
+
+    assert decisions(summary)[641] is SelectionDecision.SAME_PATH_AS_A_REMOVED_FILE
+    assert 641 not in source.openev_fetches

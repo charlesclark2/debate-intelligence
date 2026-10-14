@@ -720,6 +720,28 @@ def test_a_section_the_pm_appends_after_an_earlier_review_is_read_with_the_next_
     assert helper.open_items(text) == ["NOT RUN"]
 
 
+def test_an_earlier_review_whose_label_was_renamed_is_not_a_review_to_either_check() -> None:
+    # v1-e03-t05 and v1-e31-t05 renamed an earlier label by hand before v1-e01-t18. The verdict pattern
+    # does not match it, so the report has one review, and the open items are read from all of it.
+    text = fixture_text("resumed_nothing_open.md").replace(
+        "**Verdict:** ACCEPTED", "**Verdict (first review):** ACCEPTED", 1
+    )
+
+    assert helper.current_session(text) == text
+    assert helper.open_items(text) == ["FAIL", "NOT RUN", "PARTIAL"]
+
+
+def test_two_reviews_with_no_section_between_them_leave_no_current_part() -> None:
+    # The layout v1-e03-t05 used: the second review under the first's `## PM review`, the session's
+    # changes above both. Nothing marks a current session's section, so nothing counts as open.
+    text = fixture_text("first_session_accepted.md") + (
+        "\n### Second review\n\n**Verdict:** ACCEPTED\n\n**Notes:** ac2 is still NOT RUN.\n"
+    )
+
+    assert helper.current_session(text) == ""
+    assert helper.open_items(text) == []
+
+
 # A report of 1 to 4 review cycles. Each cycle is a session's sections, a PM review with its notes,
 # and optionally a `###` record the PM adds under the review and a `##` section appended after it.
 # Each part records an open item or not. The expectation is built from the cycles, not from the

@@ -24,7 +24,7 @@ from pathlib import Path
 
 import pytest
 import pytest_socket
-from tests.smoke.installed_build import NETWORK_LOG, InstalledCli
+from tests.smoke.installed_build import NETWORK_LOG, STAND_INS, InstalledCli
 from tests.smoke.stand_ins.s3 import S3StandIn
 
 UNROUTABLE = "192.0.2.1"
@@ -197,3 +197,24 @@ def test_a_check_with_a_stand_in_is_refused_any_other_loopback_port_and_it_is_lo
     assert reached == {listening: "refused: OutboundNetworkBlocked"}
     assert [attempt["call"] for attempt in attempts(log)] == ["connect"]
     assert not accepted.exists(), "the connection reached the listener"
+
+
+def test_a_stand_in_declared_off_this_machine_opens_nothing(
+    installed_cli: InstalledCli, tmp_path: Path, s3_stand_in: S3StandIn
+) -> None:
+    """A declaration cannot open an address off the machine: the guard keeps its loopback entries only."""
+    log = tmp_path / "provoked.log"
+    (stand_in,) = (f"{host}:{port}" for host, port in s3_stand_in.addresses)
+    elsewhere = f"{UNROUTABLE}:9"
+
+    run = installed_cli.run_program(
+        [str(installed_cli.build.interpreter), "-c", REACH, stand_in, elsewhere],
+        env={NETWORK_LOG: str(log), STAND_INS: f"{stand_in} {elsewhere}"},
+    )
+
+    assert run.exit_code == 0, run.output
+    reached = dict(line.split(" ", 1) for line in run.stdout.splitlines())
+    assert reached == {stand_in: "connected", elsewhere: "refused: OutboundNetworkBlocked"}
+    assert [(attempt["call"], attempt["target"]) for attempt in attempts(log)] == [
+        ("connect", repr((UNROUTABLE, 9)))
+    ]

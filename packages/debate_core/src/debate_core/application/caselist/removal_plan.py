@@ -1231,7 +1231,7 @@ class RemovalPlanner:
             disclosures=tuple(sorted(dropped, key=lambda ref: (ref.caselist, ref.snapshot, ref.source_path))),
             camp_files=tuple(sorted(dropped_camp, key=lambda ref: (ref.year, ref.event, ref.file_title))),
             requester_paths=requester_paths,
-            other_teams=len(_teams_at(live_paths) - _teams_at(taken, known_only=True)),
+            other_teams=len(_teams_at(live_paths) - _teams_at(taken)),
             camp_file_holders=len(live_releases),
             kept_in=tuple(sorted({caselist for caselist, _ in live_paths}))
             if disposition is Disposition.WITHDRAW
@@ -1689,21 +1689,13 @@ def _recorded_paths(
     return tuple(sorted(stand_ins, key=lambda one: (one.caselist, one.snapshot, one.path, one.sha256)))
 
 
-def _teams_at(
-    paths: Collection[tuple[str, str]], *, known_only: bool = False
-) -> set[tuple[str, tuple[str, str] | None]]:
-    """The teams holding `(caselist, path)` copies: each as its caselist and its two directories.
+def _teams_at(paths: Collection[tuple[str, str]]) -> set[tuple[str, tuple[str, str]]]:
+    """The teams holding `(caselist, path)` copies, each as its caselist and its two directories.
 
-    A path filed under no team's directories is one unknown holder. With `known_only` it is left
-    out, so that leaving out the teams at the removed paths never leaves out an unknown holder at
-    another path: a copy of a later upload at a path a removal does not take is another team's
-    unless the team is known to be the removed path's own (`v1-e30-t16`).
+    A path filed under no team's directories is no team's, as :meth:`RemovalPlanner._holdings`
+    counts them: the archive's structure is all that says whose a copy is.
     """
-    return {
-        (caselist, team)
-        for caselist, path in paths
-        if (team := team_of_path(path)) is not None or not known_only
-    }
+    return {(caselist, team) for caselist, path in paths if (team := team_of_path(path)) is not None}
 
 
 def _paths_taken(named: Sequence[PlannedSource]) -> dict[str, frozenset[tuple[str, ...]] | None]:

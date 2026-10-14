@@ -229,7 +229,12 @@ def test_a_team_removal_still_says_this_teams_where_a_team_asked() -> None:
         "  - Suppressed, so no later archive, weekly or complete, can bring back a removed file, or this "
         "team's copy of a shared file at the path it was taken from."
     ) in lines
-    assert f"     kept in  {CASELIST} (another team there still holds it)" in lines
+    # The file a stopped --team run left is kept for another team; the later upload, for any path the
+    # removal does not take it from, which may be the other holder's own second path.
+    assert [line for line in lines if line.lstrip().startswith("kept in")] == [
+        f"     kept in  {CASELIST} (another team there still holds it)",
+        f"     kept in  {CASELIST} (another path there still holds it)",
+    ]
     assert "  - Kept: 2 file(s) another team disclosed too or a camp released; say so, and why." in lines
 
 

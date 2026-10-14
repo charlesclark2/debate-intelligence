@@ -403,12 +403,18 @@ class PlannedSource:
     other_teams: int
     """Other teams that disclosed these bytes, before the removal: other than the requesting team,
     or for a `--source` removal other than the one team whose file it is. For a later upload, the
-    teams holding it at a path the removal does not take it from."""
+    teams holding it at a path the removal does not take it from, less the teams at the paths it
+    does: a second path of the same team keeps the bytes, and is no other team (`v1-e30-t16`)."""
     camp_file_holders: int
-    """OpenEv camp files holding these bytes, before the removal. For a later upload, the releases
-    holding it at a camp path the removal does not take it from."""
+    """OpenEv camp files holding these bytes before the removal, other than the one removed, as
+    teams are counted (a camp file is one release's). For `--team`, every one, since a team is the
+    holder removed; for `--source`, every one when a team holds the file, and one fewer when none
+    does, so a file only one camp file holds has none (`v1-e30-t16`). For a later upload, the
+    releases holding it at a camp path the removal does not take it from."""
     kept_in: tuple[str, ...]
-    """Caselists where another holder still has a withdrawn file, so its copy there stays."""
+    """Caselists where another holder still has a withdrawn file, so its copy there stays: another
+    team for a `--team` withdrawal, and for a later upload any path the removal does not take it
+    from, the same team's included."""
     delete_source_record: bool
     local_blob: bool
     """Whether this machine holds the blob and the removal deletes it."""
@@ -1031,12 +1037,15 @@ class RemovalPlanner:
         if isinstance(selector, TeamSelector):
             requester = (selector.caselist, selector.school, selector.team_code)
             others = len(set(holdings.teams) - {requester})
-            shared = others > 0 or bool(holdings.releases)
+            other_releases = len(holdings.releases)
         else:
-            # No requesting team: one holding team's file is the one removed, and the rest are the
-            # others. Counting all of them called a file one team holds "also held by 1 other team".
+            # No requesting team: one holder is the one whose file is removed, and the rest are the
+            # others. A team's file is that team's, and a file no team holds is one camp release's.
+            # Counting every holder called a file one holder has "also held by 1 other team"
+            # (`v1-e30-t10`), or "by 1 camp file" (`v1-e30-t16`).
             others = max(len(holdings.teams) - 1, 0)
-            shared = len(holdings.teams) + len(holdings.releases) > 1
+            other_releases = len(holdings.releases) if holdings.teams else max(len(holdings.releases) - 1, 0)
+        shared = others + other_releases > 0
 
         if (state.suppresses_source(digest) and finishing) or not shared or include_shared:
             disposition = Disposition.REMOVE
@@ -1080,7 +1089,7 @@ class RemovalPlanner:
             camp_files=tuple(sorted(dropped_camp, key=lambda ref: (ref.year, ref.event, ref.file_title))),
             requester_paths=requester_paths,
             other_teams=others,
-            camp_file_holders=len(holdings.releases),
+            camp_file_holders=other_releases,
             kept_in=tuple(
                 sorted(
                     {
@@ -1195,7 +1204,7 @@ class RemovalPlanner:
             disclosures=tuple(sorted(dropped, key=lambda ref: (ref.caselist, ref.snapshot, ref.source_path))),
             camp_files=tuple(sorted(dropped_camp, key=lambda ref: (ref.year, ref.event, ref.file_title))),
             requester_paths=requester_paths,
-            other_teams=len({(caselist, team_of_path(path)) for caselist, path in live_paths}),
+            other_teams=len(_teams_at(live_paths) - _teams_at(taken, known_only=True)),
             camp_file_holders=len(live_releases),
             kept_in=tuple(sorted({caselist for caselist, _ in live_paths}))
             if disposition is Disposition.WITHDRAW
@@ -1651,6 +1660,23 @@ def _recorded_paths(
                 )
             )
     return tuple(sorted(stand_ins, key=lambda one: (one.caselist, one.snapshot, one.path, one.sha256)))
+
+
+def _teams_at(
+    paths: Collection[tuple[str, str]], *, known_only: bool = False
+) -> set[tuple[str, tuple[str, str] | None]]:
+    """The teams holding `(caselist, path)` copies: each as its caselist and its two directories.
+
+    A path filed under no team's directories is one unknown holder. With `known_only` it is left
+    out, so that leaving out the teams at the removed paths never leaves out an unknown holder at
+    another path: a copy of a later upload at a path a removal does not take is another team's
+    unless the team is known to be the removed path's own (`v1-e30-t16`).
+    """
+    return {
+        (caselist, team)
+        for caselist, path in paths
+        if (team := team_of_path(path)) is not None or not known_only
+    }
 
 
 def _paths_taken(named: Sequence[PlannedSource]) -> dict[str, frozenset[tuple[str, ...]] | None]:

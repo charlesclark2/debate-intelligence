@@ -470,3 +470,15 @@ what the runbook actually replaced.
 
 **Operator follow-ups:** both commands run at Wednesday's reinstall, from a build that contains
 this task.
+
+### Operator follow-ups, recorded (PM, 2026-10-15)
+
+**Both commands: PASS**, at the reinstall of 2026-10-14 from `v0.1.0-dev.122`, a build that
+contains this task. The agent is a dev agent (`DEBATE_ENV=dev` in its plist).
+
+* `doctor --evidence-profiles`, with the agent's `PATH` and `DEBATE_ENV` and nothing of the
+  shell's: the row `Evidence profile │ debate-dev-evidence (storage.s3.aws_profile): defined, and
+  signed in as DebateDevEvidenceOperator`, and `doctor exit=0`.
+* `ops/launchd/install.sh --check-launchd`, under launchd: `exit code 0`, version `0.1.0.dev122`,
+  the same `Evidence profile` row, and `runs: 0 before, 0 after`.
+

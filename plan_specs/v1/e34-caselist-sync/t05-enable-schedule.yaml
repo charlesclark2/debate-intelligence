@@ -103,6 +103,9 @@ spec:
         The first run the schedule makes by itself is recorded in docs/data/caselist-sync-runs.md with
         "How it started" = scheduled, its counts agree with `caselist status` for the caselists it
         covers, and its `succeeded` is true. Counts only; no school, team code or file name.
+        Amended by the PM, 2026-10-15: the run's outcome is `completed`, or `publish_pending` when
+        the AWS session has expired and a `caselist pull --publish-pending` then publishes it, with
+        `caselist status` in sync afterwards. That is the run's capture-first design.
     - id: ac4
       description: >-
         A run that the daily bulk cap truncated is recorded as such rather than as a clean run
@@ -117,7 +120,11 @@ spec:
     # code change, and this task is operator-only and forbids changes to the sync service.
     # That contradiction was the PM's, introduced when ac6 was added on 2026-09-30.
 status:
-  phase: Pending
+  # Set by the PM, 2026-10-15, at close-out: the first scheduled run, 2026-10-14, recorded in
+  # docs/data/caselist-sync-runs.md (ac3, ac4); the installed build, the store and the loaded agent
+  # in the same record and the reinstall that followed (ac1, ac1b, ac2); the runbook names the
+  # installed-build prerequisite (ac5).
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

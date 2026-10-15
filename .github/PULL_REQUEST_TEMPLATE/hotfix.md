@@ -46,7 +46,7 @@ block another hotfix.
       merge makes to `main`.** That is the fast path: it re-runs the promotion guards on every pull
       request still open against `main`, so a promotion opened before this hotfix turns its
       `back-merge` check red on its own instead of keeping a stale green. A scheduled sweep does the
-      same every 15 minutes without needing any event, so a push GitHub never delivers is still
+      same on a schedule (in practice every few hours) without needing any event, so a push GitHub never delivers is still
       caught; this item is for the minutes before that sweep. **If no "Back-merge main into dev" run
       appears for the merge commit**, GitHub lost the push: run that workflow from the Actions tab
       (Run workflow, from `dev`) rather than waiting, and open the back-merge pull request by hand,

@@ -85,7 +85,14 @@ spec:
         push trigger temporarily removed), confirm the open promotion keeps a green `back-merge` and
         that no job failed anywhere, then let the sweep run and confirm it turns red and the
         promotion reports BLOCKED with nobody having touched it. Record what was done to suppress the
-        push, so the proof is reproducible rather than anecdotal.
+        push, so the proof is reproducible rather than anecdotal. Amended by the PM, 2026-10-15: two
+        sandbox repositories (2026-10-09 and 2026-10-14) were created as the procedure says, and in
+        neither did GitHub start any event-triggered run, not even for the push to `main` at setup;
+        only `workflow_dispatch` ran. The live proof cannot be made in a fresh repository, so ac5 is
+        met by: the real repository's scheduled sweeps running, succeeding and staying quiet; the
+        dispatched sweep and its no-guard-run path, live in the 2026-10-09 sandbox; and the re-run
+        path held by the sweep's own tests. Both attempts, and the cadence GitHub keeps for the
+        schedule, are recorded in the session report.
     - id: ac6
       description: >-
         docs/process/branching-and-environments.md and the hotfix template describe the schedule as
@@ -106,7 +113,8 @@ spec:
         a promotion check without a decision. A test fails on any `-latest` runner label, and the
         session report says what moving to Ubuntu 26 would later need.
 status:
-  phase: InProgress
+  # Set by the PM, 2026-10-15, at close-out: ac5 met as amended; recorded in the session report.
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

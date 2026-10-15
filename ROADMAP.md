@@ -61,7 +61,7 @@ v2.3's extension work.
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 40 | 39 | 216 |
-| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 67 | 49 | 384 |
+| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 74 | 49 | 411 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 17 | 0 | 179 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 13 | 0 | 108 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 14 | 0 | 96 |
@@ -182,6 +182,10 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [caselist status reports manifest and aggregate versions older than a removal](plan_specs/v1/e30-caselist-ingestion/t15-manifest-and-aggregate-residue.yaml) `v1-e30-t15-manifest-and-aggregate-residue` | Succeeded | 1 | 3.0 |
 | [The removal plan names holders correctly in every case](plan_specs/v1/e30-caselist-ingestion/t16-removal-output-names-holders.yaml) `v1-e30-t16-removal-output-names-holders` | Succeeded | 1 | 2.0 |
 | [No text calls a weekly archive cumulative, and import ordering is checked against the window model](plan_specs/v1/e30-caselist-ingestion/t17-weekly-window-wording-and-ordering.yaml) `v1-e30-t17-weekly-window-wording-and-ordering` | Succeeded | 1 | 3.0 |
+| [A weekly imported late re-measures the weeks after it, and a re-import needs no flag](plan_specs/v1/e30-caselist-ingestion/t18-late-imports-re-measure-later-manifests.yaml) `v1-e30-t18-late-imports-re-measure-later-manifests` | Pending | 1 | 4.0 |
+| [Removal residue the status reports can always be cleared, and says whose it is](plan_specs/v1/e30-caselist-ingestion/t19-residue-clearing-gaps.yaml) `v1-e30-t19-residue-clearing-gaps` | Pending | 4 | 3.0 |
+| [Loose ends in what a removal plan prints and how it decides what to drop](plan_specs/v1/e30-caselist-ingestion/t20-removal-output-loose-ends.yaml) `v1-e30-t20-removal-output-loose-ends` | Pending | 1 | 2.0 |
+| [Loose ends of the removed-path hold: status, the publisher and the inbox](plan_specs/v1/e30-caselist-ingestion/t21-held-path-loose-ends.yaml) `v1-e30-t21-held-path-loose-ends` | Pending | 1 | 3.0 |
 
 #### [E31 — Debate File Parsing](plan_specs/v1/e31-debate-file-parsing/epic.yaml)
 
@@ -205,6 +209,8 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [Superseded parsed-store version directories are retired, locally and in both buckets](plan_specs/v1/e31-debate-file-parsing/t16-version-directory-retention.yaml) `v1-e31-t16-version-directory-retention` | Pending | 1 | 3.0 |
 | [A transient parse failure is retried, and one data directory publishes a bucket's parsed store](plan_specs/v1/e31-debate-file-parsing/t17-parse-retries-and-one-publisher.yaml) `v1-e31-t17-parse-retries-and-one-publisher` | Pending | 1 | 2.0 |
 | [The parser evaluation's labels are corrected one keypress per row, in a local page](plan_specs/v1/e31-debate-file-parsing/t18-click-through-labeller.yaml) `v1-e31-t18-click-through-labeller` | Succeeded | 1 | 5.0 |
+| [The cite shapes the parser still misses, counted first](plan_specs/v1/e31-debate-file-parsing/t19-remaining-cite-shapes.yaml) `v1-e31-t19-remaining-cite-shapes` | Pending | 1 | 6.0 |
+| [Long cuts join the one cluster that holds them, and the matching limits are set from samples](plan_specs/v1/e31-debate-file-parsing/t20-long-cuts-and-limits.yaml) `v1-e31-t20-long-cuts-and-limits` | Pending | 1 | 6.0 |
 
 #### [E34 — Scheduled Caselist Sync](plan_specs/v1/e34-caselist-sync/epic.yaml)
 
@@ -233,6 +239,7 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [The parse stage holds the run lock and has a time budget](plan_specs/v1/e34-caselist-sync/t21-parse-stage-bounds.yaml) `v1-e34-t21-parse-stage-bounds` | Pending | 1 | 2.0 |
 | [A weekly run that cannot reach its bucket is recorded and announced, and the profile is checked before install](plan_specs/v1/e34-caselist-sync/t22-refusal-to-start-is-recorded.yaml) `v1-e34-t22-refusal-to-start-is-recorded` | Succeeded | 2 | 3.0 |
 | [Loose ends in the weekly sync's findings, records and notifications](plan_specs/v1/e34-caselist-sync/t23-sync-loose-ends.yaml) `v1-e34-t23-sync-loose-ends` | Pending | 1 | 3.0 |
+| [The agent's installer checks what it can, and never changes an agent's environment by default](plan_specs/v1/e34-caselist-sync/t24-agent-install-loose-ends.yaml) `v1-e34-t24-agent-install-loose-ends` | Pending | 1 | 3.0 |
 
 
 ### v1.2 — Argument landscape & file building

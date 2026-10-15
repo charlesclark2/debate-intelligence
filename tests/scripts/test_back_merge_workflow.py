@@ -345,9 +345,11 @@ def run_open_job(tmp_path: Path, *, main: str, open_pr: str = "") -> OpenJobRun:
     step_outputs = dict(line.split("=", 1) for line in outputs.read_text(encoding="utf-8").splitlines())
 
     opener = open_job_step(OPEN_STEP)
-    assert opener["if"] == "steps.compare.outputs.needed == 'true'"
+    # The runner's reading of the condition: a step with no `if` always runs.
+    condition = opener.get("if")
+    assert condition in (None, "steps.compare.outputs.needed == 'true'"), condition
     assert opener["env"] == {"GH_TOKEN": "${{ github.token }}", "REPO": "${{ github.repository }}"}
-    if step_outputs.get("needed") == "true":
+    if condition is None or step_outputs.get("needed") == "true":
         steps.append(opener)
         step_env = {**env, "GH_TOKEN": "fake-token", "REPO": REPO}
         done = subprocess.run(

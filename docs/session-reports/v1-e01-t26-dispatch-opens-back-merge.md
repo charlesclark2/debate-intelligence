@@ -370,9 +370,105 @@ its back-merge pull request even if the push was lost.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-15
 
 **Notes:**
+
+Accepted. The code and the offline half of ac1 pass; the sandbox half is Operator follow-up 1. If
+the operator runs it before the pull request is opened, the PM records it under this review and
+sets the phase `Succeeded` in this branch; otherwise this is a partial merge and the close-out
+records it.
+
+**The schedule opening it too is justified, and the first reason is the one that matters.** With
+no promotion open, a lost push turns nothing red, so the back-merge pull request is the only sign it
+happened, and the schedule is the only route that needs nobody to have noticed. Doing nothing
+visible when `main` and `dev` agree, with no `gh` call at all, is held by a test that runs the
+step's own shell.
+
+**The ref gate on the open job is a catch I did not ask for.** A dispatch can name any branch, and
+the job runs that checkout's script before the step that holds the token. Using the sweep's gate
+word for word closes that.
+
+**The work itself:**
+
+* **The step-logic harness runs the workflow's own `run:` text** against a throwaway repository and
+  a recording `gh`, so the tests exercise the shell that ships, not a copy.
+* **The holders test across every workflow** pins who may write anywhere, which is a stronger form
+  of ac2 than the spec asked for.
+* **One concurrency group for every trigger,** so two open jobs can never both find nothing open
+  and both open one; the per-event mutant is caught.
+* **The sandbox procedure turns t15's finding to use:** in a fresh repository every push is lost,
+  so the lost push needs no suppression, and the dispatch is the thing under test.
+* **The mutation run:** 13 of 13 caught, the last by behaviour after the harness was sharpened.
+
+**Rulings:**
+
+* **Deviation 1 (the hotfix template):** accepted, with the spec's packages amended as you did.
+* **Deviation 2:** accepted, and the error was mine: the open job has only ever held
+  `pull-requests: write` and `contents: read`. Keeping `contents: read` is right.
+* **Decisions:** accepted.
+* **Your follow-up (the seconds-wide race):** no task unless it is seen.
+
+**Operator follow-ups:** 1, the sandbox proof, about ten minutes; 2, `scripts/task sync` before the
+pull request; 3, what the next scheduled run on the real repository should show after the merge.
+
+### Sandbox proof, recorded (PM, 2026-10-15)
+
+The operator ran Operator follow-up 1 in `charlesclark2/back-merge-dispatch-sandbox` (base
+`7279dec`).
+
+* **[A] PASS.** The quiet dispatch (run 38784757755) succeeded. One line from each job:
+  `No pull requests are open against main.` and ``OK: `dev` holds every non-merge commit on
+  `main`.``, and no warning or error.
+* **[B] PASS.** No pull request, no `back-merge` label.
+* **[C] PASS.** After the push of `1285f64` to `main`, the run list held only the quiet dispatch:
+  nothing ran for the push.
+* **[D] PASS.** `main` held "Sandbox hotfix whose push starts nothing", which `dev` lacked, and no
+  pull request existed.
+* **[E] FAIL.** The dispatch (run 38785319409) printed the `FAILED:` compare line and **opened
+  pull request #1** (`dev` ← `main`), then the step exited 1:
+  `pull request update failed: GraphQL: github-actions[bot] does not have permission to update the
+  pull request … (updatePullRequest)`. The `back-merge` label had been created (`B60205`), but #1
+  carries no label, and the run is red.
+* **[F]** therefore shows one open pull request with `labels: []`. [G] and [H] were not run.
+
+`gh pr create --label` opens the pull request, then adds the label with GraphQL's
+`updatePullRequest`, which the job's `pull-requests: write` token is refused. This was already true
+of the push path, unchanged since `v1-e01-t08`, and no test could see it: the fake `gh` accepts
+every call. The sandbox is kept for the re-proof.
+
+## PM review, after the sandbox proof
+
+**Verdict:** CHANGES_REQUESTED
+
+**Reviewed by / date:** PM, 2026-10-15
+
+**Notes:**
+
+The dispatch opens the back-merge pull request, which is the heart of ac1, but the run then goes red
+and the pull request is left without the label that warns against a squash. Fix it in this branch:
+
+1. **Apply the label without GraphQL.** Open the pull request without `--label`, then add the label
+   with the REST endpoint `POST /repos/{owner}/{repo}/issues/{number}/labels` through `gh api`,
+   which a `pull-requests: write` token may call for a pull request. Do the same on the path that
+   names an open pull request, in place of `gh pr edit --add-label`, which goes through the same
+   GraphQL mutation. Keep `gh label create --force`, which worked.
+2. **No new permission.** The job keeps `contents: read` and `pull-requests: write`. If you find the
+   REST call refused too, stop and say so rather than adding `issues: write`; that is the PM's
+   decision.
+3. **Make the tests see this.** The fake `gh` must refuse what the token cannot do: `gh pr create`
+   with `--label`, `gh pr edit --add-label`, and any `updatePullRequest`, each failing as GitHub
+   did. Show the current step failing first under it, then passing with the REST call on both paths,
+   with the label applied to the right number.
+4. **Correct the comment** that says the labels API accepts `pull-requests: write`: it does for
+   creating the label and for the REST call, not for GraphQL's `updatePullRequest`.
+5. **Write the re-proof** as a new operator follow-up, in the same sandbox, which is still up with
+   #1 open and unlabelled: put this branch's `back-merge.yml` on the sandbox's `dev` only, dispatch
+   and see #1 named and labelled with a green run; then close #1, dispatch, and see #2 opened and
+   labelled with a green run; then the cleanup. Bracketed checkpoints, as before.
+
+Append your changes as a new section of this report, after this review, with the red and green runs,
+and leave a new PM review section PENDING at the end. The phase stays `InProgress`.

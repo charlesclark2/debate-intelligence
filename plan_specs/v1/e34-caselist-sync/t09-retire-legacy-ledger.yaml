@@ -78,6 +78,7 @@ spec:
           - type: test_passes
             name: The cap is enforced from the rolling window alone
             command: uv
-            args: [run, pytest, packages/debate_core/tests, -k, "budget or cap or download_starts"]
+            # Amended by the PM, 2026-10-15: the old selector collected no rolling-window test.
+            args: [run, pytest, packages/debate_core/tests, -k, "window or budget or cap"]
 status:
   phase: Pending

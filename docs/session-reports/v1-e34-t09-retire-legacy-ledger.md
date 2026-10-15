@@ -334,9 +334,45 @@ output back to the PM, who records them and sets the phase to `Succeeded` at a c
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-15
 
 **Notes:**
+
+Accepted as a **partial merge**: the phase stays `InProgress`, and the operator opens the pull
+request with `scripts/task pr --partial`. ac2's last clause, the deletion, is the operator's after
+the merge; the PM records it and sets `Succeeded` at a close-out. I have amended the node
+criterion's selector in this branch to `-k "window or budget or cap"`, as you suggested.
+
+**The forbidden item turned on one question, and you answered it from source.** `v0.1.0-dev.122`
+and `0.1.0.dev60` only read the legacy file (`DownloadLedger.starts()` through `_legacy_starts`;
+`record()` writes only the download-starts file), and the last tag that writes it is
+`v0.1.0-dev.12`, found with `git tag --no-contains aa7c2b6`. The table of writers, the backfill
+included, and the mtime check before the deletion make the claim checkable on the operator's
+machine rather than taken on trust.
+
+**The work itself:**
+
+* **The leftover-ledger test** fails on the original source for exactly the reason expected (`5 ==
+  0`, the legacy read counting the file's five) and asserts the leftover keeps its bytes and mtime.
+* **The property test change (Deviation 1)** keeps the rolling-window half byte for byte; the
+  mutation run shows it still bites.
+* **The selector finding** is a good catch: 23 of its 38 matches were "escape" and "landscape".
+* **The mutation run:** 8 of 10 caught. The two survivors are argued correctly: the settings
+  validator refuses a limit above five, so the service's `min()` is unreachable from settings, and
+  `max(..., 0)` at each point of use means the missing clamp shows only as a negative number in a
+  summary.
+
+**Rulings:**
+
+* **Deviations 1 and 2:** accepted; the selector is amended.
+* **Decisions:** accepted. A leftover ignored rather than deleted by code is right.
+* **Your follow-up, the two untested guards:** the PM adds them to `v1-e34-t23` at its next
+  amendment, as a test with six starts against a limit of five and a decision on the unreachable
+  `min()`. Nothing in them lets a run download more than five in 24 hours.
+* **The legacy-era wording:** left as it is.
+
+**Operator follow-ups:** 1, the read-only checks, which can run now; 2, the deletion, after the
+merge and not during a Wednesday run.

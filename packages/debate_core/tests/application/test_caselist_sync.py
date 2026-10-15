@@ -1274,6 +1274,37 @@ async def test_window_the_run_summary_reports_the_window_and_the_spend_inside_it
     )
 
 
+LEFTOVER_CALENDAR_LEDGER = "caselist-sync-downloads.json"
+"""Where builds before `v1-e34-t06` kept their calendar-day ledger. Written here, not imported:
+since `v1-e34-t09` the module no longer names the file."""
+
+
+async def test_window_the_cap_is_counted_from_the_download_starts_file_alone_and_a_leftover_calendar_ledger_is_ignored(
+    source: FakeCaselistSource, data_dir: Path, inbox: Path, archives: dict[date, Path]
+) -> None:
+    """The operator's old five, forty minutes after they were written, no longer count.
+
+    No build that writes the calendar ledger runs against a state directory any more
+    (`v1-e34-t09`), so what is left of it is a stale file. The window counts only its own file,
+    and the stale one is neither read, rewritten nor removed.
+    """
+    await import_first_week(data_dir, archives)
+    leftover = data_dir / LEFTOVER_CALENDAR_LEDGER
+    leftover.write_bytes(OPERATOR_LEGACY_LEDGER)
+    written_at(leftover, OPERATOR_EVENING)
+    forty_minutes_later = OPERATOR_EVENING + timedelta(minutes=40)
+    service = build_service(source=source, data_dir=data_dir, inbox=inbox, clock=lambda: forty_minutes_later)
+
+    summary = await service.run([SYNTHETIC_CASELIST])
+
+    assert summary.bulk_downloads_spent_in_window == 0
+    assert summary.bulk_downloads_allowed == 5
+    assert source.archive_fetches == [weekly_name(date(2026, 9, 8)), weekly_name(date(2026, 9, 15))]
+    assert DownloadLedger(data_dir / DOWNLOAD_LEDGER_FILENAME).spent_in_window(forty_minutes_later) == 2
+    assert leftover.read_bytes() == OPERATOR_LEGACY_LEDGER
+    assert leftover.stat().st_mtime == OPERATOR_EVENING.timestamp()
+
+
 async def test_window_the_first_run_after_the_upgrade_counts_the_old_calendar_ledger(
     source: FakeCaselistSource, data_dir: Path, inbox: Path, archives: dict[date, Path]
 ) -> None:

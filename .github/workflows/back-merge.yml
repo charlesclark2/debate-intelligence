@@ -138,14 +138,19 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           # The label is the warning on the pull request list: a squashed back-merge leaves main's
-          # commits unreachable from dev and the `back-merge` check red for good. --force makes this
-          # an idempotent create-or-update; the labels API accepts pull-requests: write.
+          # commits unreachable from dev and the `back-merge` check red for good. --force makes
+          # creating it an idempotent create-or-update. A pull-requests: write token may create the
+          # label and add it to a pull request through REST (POST .../issues/<number>/labels), but
+          # not through GraphQL's updatePullRequest, which `gh pr create --label` and
+          # `gh pr edit --add-label` use: in v1-e01-t26's sandbox proof the pull request opened and
+          # the label was then refused. So the pull request is opened without --label and labelled
+          # through `gh api`, on both paths below.
           gh label create back-merge --repo "$REPO" --force --color B60205 \
             --description "Merge with a merge commit, never squash: a squash keeps back-merge red"
           open_pr=$(gh pr list --repo "$REPO" --base dev --head main --state open \
             --json number --jq '.[0].number // empty')
           if [ -n "$open_pr" ]; then
-            gh pr edit "$open_pr" --repo "$REPO" --add-label back-merge
+            gh api --method POST "repos/$REPO/issues/$open_pr/labels" -f "labels[]=back-merge" --silent
             echo "Back-merge pull request #$open_pr is open; its head is main, so it already has these commits."
             exit 0
           fi
@@ -163,8 +168,17 @@ jobs:
             echo
             echo "Opened by .github/workflows/back-merge.yml."
           } > body.md
-          gh pr create --repo "$REPO" --base dev --head main --label back-merge \
-            --title "Back-merge main → dev" --body-file body.md
+          url=$(gh pr create --repo "$REPO" --base dev --head main \
+            --title "Back-merge main → dev" --body-file body.md)
+          echo "$url"
+          number=${url##*/}
+          case "$number" in
+            '' | *[!0-9]*)
+              echo "::error::gh pr create printed no pull request URL to label: $url"
+              exit 1
+              ;;
+          esac
+          gh api --method POST "repos/$REPO/issues/$number/labels" -f "labels[]=back-merge" --silent
 
   rerun-promotion-guards:
     runs-on: ubuntu-24.04

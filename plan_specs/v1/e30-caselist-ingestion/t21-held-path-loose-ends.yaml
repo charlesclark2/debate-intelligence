@@ -1,0 +1,88 @@
+# TASK v1-e30-t21-held-path-loose-ends - Loose ends of the removed-path hold: status, the publisher and the inbox
+# Epic: E30 Caselist Evidence Ingestion | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e30-t21-held-path-loose-ends
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e30-caselist-ingestion
+  annotations:
+    debate/title: "Loose ends of the removed-path hold: status, the publisher and the inbox"
+spec:
+  # Filed by the PM, 2026-10-15, from v1-e30-t13's Follow-up work 3, 5, 7 and 8, with the PM's ruling on 4.
+  description: >-
+    Gaps v1-e30-t13 left around a held caselist path. (1) `caselist status` does not report an
+    upload held in the inbox, or a manifest row at a held path; either would tell the operator a
+    re-run is owed without their asking (FU3). (2) The publisher does not refuse a manifest row
+    at a held path; it matters only where an older build imported one (FU5). (3) An imported
+    archive that holds a refused upload stays in the inbox until the removal is run again or
+    retention deletes it (FU7). (4) A skipped member named as the removed file stays in its
+    inbox archive (FU8). Ruled out: a hold for a `--team` removal, which needs a different
+    record and is not built in V1 (FU4).
+  priority: 3
+  constraints:
+    packages: [debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/runbooks]
+    forbidden:
+      - A hold on a team's directories
+      - A path, school, team code or file name in status output, a record or a log
+      - Removing an inbox file that holds anything not removed or held
+  context:
+    - kind: TaskRef
+      name: v1-e30-t13-removed-path-holds-caselist-uploads
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        (1): status reports a held upload in the inbox and a row at a held path, by count
+        and digest prefix, with the hint to run the removal again; exit codes unchanged.
+        Shown failing first.
+    - id: ac2
+      description: >-
+        (2): the publisher withholds a manifest with a row at a held path, as it does one
+        with a suppressed row, by test.
+    - id: ac3
+      description: >-
+        (3) and (4): the inbox copy is taken out when the import that met the hold has
+        finished, or the report says why it stays, by test.
+    - id: ac4
+      description: >-
+        Archives and records written by the build at the start commit and by the build the
+        agent runs are read unchanged.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e30-t21-held-path-loose-ends-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e30-caselist-ingestion
+spec:
+  description: >-
+    Status, the publisher and the inbox learn about held paths.
+  goalRef:
+    name: v1-e30-t21-held-path-loose-ends
+  graph:
+    nodes:
+      - id: held-path
+        kind: Task
+        name: Held-path loose ends
+        description: >-
+          Status, the publisher's refusal and the inbox.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Removal and status tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application, -k, hold or held or status]
+status:
+  phase: Pending

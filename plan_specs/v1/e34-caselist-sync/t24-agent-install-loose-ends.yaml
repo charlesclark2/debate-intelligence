@@ -1,0 +1,95 @@
+# TASK v1-e34-t24-agent-install-loose-ends - The agent's installer checks what it can, and never changes an agent's environment by default
+# Epic: E34 Caselist Sync | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e34-t24-agent-install-loose-ends
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e34-caselist-sync
+  annotations:
+    debate/title: "The agent's installer checks what it can, and never changes an agent's environment by default"
+spec:
+  # Filed by the PM, 2026-10-15, from v1-e34-t22's Follow-up work 1, 2, 5 and 7, and the PM's reinstall of 2026-10-14.
+  description: >-
+    Loose ends in installing the agent. (1) The installer's launchd-check tests never run in CI,
+    because they need `plutil`; a `plistlib` stand-in beside the fake `launchctl` would let them
+    run on Linux (t22 FU1). (2) `install.sh --aws-profile` writes `AWS_PROFILE` into the plist,
+    but the adapters use `storage.s3.aws_profile`, so the option does not choose the profile it
+    reads as choosing; make it do what it says or remove it (t22 FU2). (3) `install.sh` could
+    refuse to install over a profile the AWS config does not define, as the runbook's step 2
+    checks by hand (t22 FU5). (4) A dry run with a profile that is not defined creates the data
+    directory and an empty database before it is refused (t22 FU7). (5) Found at the 2026-10-14
+    reinstall: `install.sh` defaults to `--env prod`, so reinstalling a dev agent with the
+    runbook's prod example would have switched it to prod and an empty store. Over an installed
+    agent, it must keep the installed environment and caselists unless told otherwise. Out of
+    scope: the schedule, the wrapper's behaviour, and the run itself.
+  priority: 3
+  constraints:
+    packages: [ops/launchd, debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, tests/integration, docs/runbooks]
+    forbidden:
+      - Changing an installed agent's environment, caselists or data directory without an explicit option
+      - An account id, role ARN, SSO name or AWS config path in output, a log or the report
+  context:
+    - kind: TaskRef
+      name: v1-e34-t22-refusal-to-start-is-recorded
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        (1): the launchd-check tests run on Linux in CI with a `plistlib` stand-in, and
+        t22's two installer mutants are caught there.
+    - id: ac2
+      description: >-
+        (2) and (3): `--aws-profile` either sets the profile the run uses or is removed, and
+        the installer refuses a profile the AWS config does not define, naming it, each by
+        test.
+    - id: ac3
+      description: >-
+        (4): a dry run refused for an undefined profile creates nothing on disk, shown
+        failing first.
+    - id: ac4
+      description: >-
+        (5): `install.sh` over an installed agent with no `--env` or `--caselist` keeps the
+        installed ones and says so; a different `--env` given explicitly is refused unless
+        confirmed. Shown failing first. The runbook's reinstall step reads the environment
+        and caselists from the installed plist.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e34-t24-agent-install-loose-ends-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e34-caselist-sync
+spec:
+  description: >-
+    CI runs the launchd checks, the profile option is honest, and a reinstall keeps what is
+    installed.
+  goalRef:
+    name: v1-e34-t24-agent-install-loose-ends
+  graph:
+    nodes:
+      - id: install-loose-ends
+        kind: Task
+        name: Agent install loose ends
+        description: >-
+          The plistlib stand-in, the profile option and check, the dry run, and the
+          reinstall defaults.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Installer tests pass
+            command: uv
+            args: [run, pytest, tests/integration, -k, launchd]
+status:
+  phase: Pending

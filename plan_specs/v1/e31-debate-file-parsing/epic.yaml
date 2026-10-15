@@ -479,5 +479,45 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e31-t18-click-through-labeller
+    - id: t19
+      kind: Task
+      name: 'The cite shapes the parser still misses, counted first'
+      description: >-
+        The cite shapes the parser still misses are counted and, where the counts justify
+        it, caught.
+      inputs:
+        specRef: plan_specs/v1/e31-debate-file-parsing/t19-remaining-cite-shapes.yaml
+        goalRef: v1-e31-t19-remaining-cite-shapes
+      dependsOn:
+      - t12
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e31-t19-remaining-cite-shapes reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e31-t19-remaining-cite-shapes
+    - id: t20
+      kind: Task
+      name: 'Long cuts join the one cluster that holds them, and the matching limits are set from samples'
+      description: >-
+        Long cuts join the one cluster that holds them, and the matching limits are set from
+        coach-checked samples.
+      inputs:
+        specRef: plan_specs/v1/e31-debate-file-parsing/t20-long-cuts-and-limits.yaml
+        goalRef: v1-e31-t20-long-cuts-and-limits
+      dependsOn:
+      - t11
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e31-t20-long-cuts-and-limits reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e31-t20-long-cuts-and-limits
 status:
   phase: Pending

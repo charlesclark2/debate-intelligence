@@ -30,7 +30,7 @@ spec:
     reason category, scope), matching files become REMOVED immediately and stop listing and presigning,
     and their sha256 is appended to the V1 suppression list (v1-e30-t07:
     manifests/_suppression/suppression-list.jsonl behind the SuppressionList port) that the V1 importers,
-    the publisher and the t02 indexer all honor, so the next cumulative weekly snapshot cannot resurrect
+    the publisher and the t02 indexer all honor, so no later snapshot, weekly or complete, can resurrect
     them; no tub-specific blocklist is defined. Built files containing cards from a removed source are
     flagged for rebuild, and deleting the sources and purging their S3 object versions is the
     operator-run V1 `debate-research caselist remove --execute` command, referenced in the runbook.

@@ -643,5 +643,25 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e34-t23-sync-loose-ends
+    - id: t24
+      kind: Task
+      name: 'The agent''s installer checks what it can, and never changes an agent''s environment by default'
+      description: >-
+        The installer's checks run in CI, its profile option is honest, and a reinstall
+        keeps the installed agent's environment.
+      inputs:
+        specRef: plan_specs/v1/e34-caselist-sync/t24-agent-install-loose-ends.yaml
+        goalRef: v1-e34-t24-agent-install-loose-ends
+      dependsOn:
+      - t22
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e34-t24-agent-install-loose-ends reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e34-t24-agent-install-loose-ends
 status:
   phase: Pending

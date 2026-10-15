@@ -36,7 +36,7 @@ spec:
       - infrastructure/modules/tub_index
     forbidden:
       - Writing, deleting or copying objects under raw/, files/, uploads/ or manifests/ (only reports/tub/)
-      - Reactivating a REMOVED TubFile when a later cumulative snapshot re-publishes the same key
+      - Reactivating a REMOVED TubFile when a later snapshot, weekly or complete, re-publishes the same key
       - Storing card text, file bytes or debater names in index items or log lines
       - Queues without a DLQ, or unbounded retries
       - Live S3/SQS/DynamoDB in CI tests (use moto or DynamoDB Local)

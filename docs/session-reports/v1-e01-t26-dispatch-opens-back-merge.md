@@ -707,9 +707,60 @@ the merge) still stand.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-15
 
 **Notes:**
+
+Accepted, and the phase is set `Succeeded` in this branch. All five items of the review after the
+sandbox proof are met, and the re-proof (Operator follow-up 4, recorded below) passed at every
+checkpoint, [I] to [N]. That is the sandbox half of ac1 and the `dispatch-opens` node, so every
+criterion is now PASS: ac1 by shape test, step logic and sandbox; ac2 and ac3 as accepted in the
+first review.
+
+**The REST call is accepted from `pull-requests: write`.** That was the one thing nothing offline
+could show, and [K] settles it: the label went onto #1 with the job's permissions unchanged. No
+`issues: write` is needed, so no ruling on it is.
+
+**The fix is the right size.** The fake `gh` now refuses what GitHub refused, word for word, so the
+two step tests went red for the reason the sandbox did before the step changed, and nine label
+mutants (22 of 22 overall) show the tests would see the label going missing, going to the wrong
+number, or going back through GraphQL. The push path carried the same fault since `v1-e01-t08`;
+this fixes it there too.
+
+**Rulings:**
+
+* **The `updatePullRequest` finding** is recorded here and in the workflow's comment, which is
+  enough. No task.
+* **Your follow-up (`test_an_existing_accepted_report_still_reads_accepted` on mid-review
+  reports):** right, and it is an E01 tooling item, so it waits for the v1.0 tag with the other E01
+  follow-ups. With this review the test passes on this report again.
+* **The two `test_task_restart.py` failures** in your suite run were this report mid-review, as you
+  said. Both pass once this review is in; the hand-back re-runs them.
+
+**Operator follow-ups:** the sandbox cleanup in follow-up 4, then follow-up 2 (`scripts/task sync`)
+and follow-up 3 (the first scheduled runs after the merge, recorded at the next close-out).
+
+### Re-proof, recorded (PM, 2026-10-15)
+
+The operator ran Operator follow-up 4 in `charlesclark2/back-merge-dispatch-sandbox`, with this
+branch's `back-merge.yml` on the sandbox's `dev` (`fdefd11`) and nothing else changed.
+
+* **[I] PASS.** Before anything changed: #1 `OPEN`, `dev` ← `main`, `labels: []`.
+* **[J] PASS.** The diff stat named only `.github/workflows/back-merge.yml`, and the two blob ids
+  matched.
+* **[K] PASS.** The dispatch (run 38787901219) succeeded with `headSha` `fdefd11`. The log showed the
+  `FAILED:` compare line, `Back-merge pull request #1 is open; its head is main, so it already has
+  these commits.` and `No pull requests are open against main.`, with no `##[warning]` or
+  `##[error]` line.
+* **[L] PASS.** #1 `OPEN` with labels `["back-merge"]`: the REST call labelled it.
+* **[M] PASS.** After #1 was closed, the dispatch (run 38788931830, a different id) succeeded. The
+  log showed the same `FAILED:` line, the new pull request's URL ending `/pull/2`, and
+  `No pull requests are open against main.`, with no `##[warning]` or `##[error]` line. The
+  `Back-merge pull request #` match in the log is the step's script as GitHub lists it, not output.
+* **[N] PASS.** #2 `OPEN`, `dev` ← `main`, labels `["back-merge"]`; #1 `CLOSED`, labels
+  `["back-merge"]`.
+
+Both paths, naming an open pull request and opening a new one, run green and leave the label on.

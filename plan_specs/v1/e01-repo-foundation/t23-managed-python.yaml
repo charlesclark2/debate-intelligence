@@ -60,7 +60,8 @@ spec:
         Operator follow-up: reinstall the agent's build in a week the agent is not due to run, and
         record doctor showing a managed interpreter and the agent-environment check passing.
 status:
-  phase: InProgress
+  # Set by the PM, 2026-10-15, at close-out: ac4 (operator follow-up 2) recorded in the session report.
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

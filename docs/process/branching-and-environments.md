@@ -156,8 +156,8 @@ the same [`scripts/rerun_promotion_guards.py`](../../scripts/rerun_promotion_gua
 | Route | Trigger | What it covers |
 |---|---|---|
 | **Fast path** | every push to `main` | A hotfix's promotions go red within about a minute of the merge. Added by `v1-e01-t12-promotion-guard-rerun`. |
-| **Backstop** | a schedule, every 15 minutes (minutes 7, 22, 37 and 52 of each hour) | Needs no event at all. On 2026-09-30 GitHub never delivered the push for a merged hotfix, and with nothing to start the fast path the promotion stayed green and wrong, with no red anywhere. The sweep catches that within about 15 minutes, longer when GitHub delays or drops a scheduled run. Added by `v1-e01-t15-promotion-guard-sweep`. |
-| **Manual route** | **Run workflow** on *Back-merge main into dev* in the Actions tab, from `dev` or `main` | The same sweep on demand, in one click, for anyone who notices a lost push before the next scheduled run. |
+| **Backstop** | a schedule, every 15 minutes (minutes 7, 22, 37 and 52 of each hour) | Needs no event at all. On 2026-09-30 GitHub never delivered the push for a merged hotfix, and with nothing to start the fast path the promotion stayed green and wrong, with no red anywhere. The sweep is asked for every 15 minutes, but GitHub ran it about every two to five hours when measured on 2026-10-15, so it catches a lost push within hours. Added by `v1-e01-t15-promotion-guard-sweep`. |
+| **Manual route** | **Run workflow** on *Back-merge main into dev* in the Actions tab, from `dev` or `main` | The same sweep on demand, in one click, for anyone who notices a lost push before the next scheduled run. Every promotion runs it once just before it merges (the promotion template's checklist), because the schedule runs only every few hours. |
 
 **Which pull requests it re-runs.** The `back-merge` job of each guard run records the `main`
 commit it compared, as a notice titled `promotion-guard evaluated main` on its check run. A pull
@@ -171,7 +171,8 @@ promotion's guards within a minute, and a lost one is caught by the next schedul
 anyone noticing it first. Not mechanical:
 
 * **The minutes between a lost push and the next sweep.** A promotion merged in that window merges
-  stale. GitHub does not promise when a scheduled run starts, and a dropped slot adds 15 minutes.
+  stale. GitHub does not promise when a scheduled run starts; measured on 2026-10-15, it ran this one
+  about every two to five hours. A promotion dispatches the sweep before it merges for that reason.
   What catches a merge in that window is a person: the hotfix template asks for the
   `rerun-promotion-guards` job to have *passed on the hotfix's own push*, and a job that never ran
   cannot be ticked. If no *Back-merge main into dev* run appears for the merge commit, dispatch it.
@@ -187,7 +188,7 @@ anyone noticing it first. Not mechanical:
 * **A re-run that fails.** A red `rerun-promotion-guards` job, with an error naming the pull
   request, means that promotion was not re-checked. Causes include a run older than GitHub's 30-day
   re-run limit, or a run that stayed in progress too long. The scheduled sweep stays red for it
-  every 15 minutes until someone acts. Re-run the checks on that pull request by hand: re-run its
+  on every scheduled pass until someone acts. Re-run the checks on that pull request by hand: re-run its
   promotion-guard run in the Actions tab, or edit its description, which retriggers the workflow.
 * **A pull request with no guard run at all**, because its own `pull_request` event was lost. There
   is nothing to re-run, so the sweep warns about it on every pass. protect-main already blocks it,

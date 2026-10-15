@@ -50,6 +50,11 @@
 # passed on the push. The minutes are off the hour because that is when GitHub's scheduler is busiest.
 # A scheduled run uses this file as it is on the default branch, dev.
 #
+# Measured, 2026-10-15: GitHub ran this schedule about every two to five hours on this repository,
+# not four times an hour, so in practice the bound above is hours. The schedule stays as the backstop
+# for a push nobody notices was lost, and a promotion dispatches this workflow once just before it
+# merges (the promotion template's checklist), so its guard is current whatever the schedule does.
+#
 # Runs only on push to main, the schedule and a dispatch, never on a pull request, so no fork's code
 # ever runs with the write permissions below. Each is scoped to the one job that needs it. The job
 # holding `actions: write` checks out only this workflow's own commit of main or dev, never a pull

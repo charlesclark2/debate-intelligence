@@ -414,6 +414,18 @@ that is more than eight days — the one failure that leaves no record and sends
 Its last column, `Parse stage`, is each run's parse counts
 ([Reading what it did](#reading-what-it-did)).
 
+**The 06:00 run and the AWS session.** An SSO session lasts hours, not a week, so the Wednesday
+06:00 run usually finds it expired. That is not a failure: the run downloads and imports
+everything, records the publish as `pending` (outcome `publish_pending`), and the next run, or this,
+publishes it. The first scheduled run, on 2026-10-14, did exactly that
+([docs/data/caselist-sync-runs.md](../data/caselist-sync-runs.md)). To have the run publish by
+itself, sign in on Tuesday evening; otherwise run the second line after it:
+
+```bash
+aws sso login --profile debate-dev-evidence
+DEBATE_ENV=dev debate-research caselist pull --publish-pending
+```
+
 ### The record, and the details beside it
 
 A run is written down in two places (`v1-e34-t19`):

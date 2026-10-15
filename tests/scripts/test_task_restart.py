@@ -840,9 +840,9 @@ REPORTS_PARTIAL_ACCEPTS_TODAY = sorted(
 def test_the_walk_over_reports_partial_accepts_is_not_vacuous() -> None:
     names = {path.stem for path in REPORTS_PARTIAL_ACCEPTS_TODAY}
     in_progress = {name for name in names if PHASES[name] == "InProgress"}
-    # The reports whose markers --partial really reads, including the PM's two examples of records
-    # added after a review.
-    assert {"v1-e01-t15-promotion-guard-sweep", "v1-e01-t23-managed-python"} <= in_progress
+    # The reports whose markers --partial really reads. The PM's two examples of records added
+    # after a review, v1-e01-t15 and v1-e01-t23, were set Succeeded at the 2026-10-15 close-out;
+    # their shapes are pinned by the case tests above, so this names no task, whose phase moves.
     assert len(in_progress) >= 5
     assert len(names) >= 60
 

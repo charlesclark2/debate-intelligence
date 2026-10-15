@@ -453,3 +453,21 @@ import everything it wires":
 **Follow-up 2** is still open, so the Goal stays `InProgress`. The agent is reinstalled with
 `v0.1.0-dev.71`, or a newer validated tag, only after the scheduled run of Wednesday 2026-10-14
 06:00 CDT has been checked for v1-e34-t05.
+
+### Operator follow-up 2, recorded (PM, 2026-10-15)
+
+**Follow-up 2: PASS.** After the agent's scheduled run of 2026-10-14 had been checked for
+`v1-e34-t05`, the operator reinstalled the agent's build from `v0.1.0-dev.122` (`d87febd`) the same
+evening, following "Reinstalling the agent" in `docs/runbooks/caselist-scheduled-sync.md`:
+
+* `install_channel.sh` printed `The build runs on the Python at
+  ~/.local/share/uv/python/cpython-3.12.13-macos-aarch64-none, which uv manages.` for the rehearsal
+  and for the real install, and ended `9/9 wired integrations import; declared extras: aws, docx,
+  opencaselist; complete`.
+* `doctor --evidence-profiles`, run with the agent's `PATH` and `DEBATE_ENV` and nothing of the
+  shell's, showed `Managed by uv │ yes`, its base interpreter under `uv's Pythons`, and exit 0.
+* `ops/launchd/install.sh --check-launchd`, under launchd itself, exited 0 on `0.1.0.dev122`, again
+  with `Managed by uv │ yes`, and `runs` was 0 before and after.
+
+The Goal is `Succeeded`.
+

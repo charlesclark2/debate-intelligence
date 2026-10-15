@@ -1,11 +1,12 @@
 # Opens the main → dev back-merge pull request after a hotfix (v1-e01-t08-branch-promotion-workflow).
 #
 # A hotfix merges into main from hotfix/<slug>, so main then holds commits dev lacks, and the
-# `back-merge` check in promotion-guard.yml fails every promotion until dev has them. This workflow
-# runs on every push to main, asks scripts/check_promotion_source.py whether dev lacks anything, and
-# if it does, opens a "Back-merge main → dev" pull request, or leaves the open one in place (its head
-# is main itself, so it already carries the new commits). A promotion from dev puts only a merge
-# commit on main, which the check ignores, so after a promotion this does nothing.
+# `back-merge` check in promotion-guard.yml fails every promotion until dev has them. On every run,
+# whatever started it, the first job asks scripts/check_promotion_source.py whether dev lacks
+# anything, and if it does, opens a "Back-merge main → dev" pull request, or names the open one and
+# leaves it in place (its head is main itself, so it already carries the new commits). A promotion
+# from dev puts only a merge commit on main, which the check ignores, so after a promotion, and on
+# any run where main and dev agree, it calls nothing on GitHub and prints one `OK:` line.
 #
 # The pull request's head is `main`, not a branch copied from it. That needs no write to the
 # repository's contents: pushing a copy with the workflow token would be refused whenever the new
@@ -23,8 +24,9 @@
 # Merging into main re-runs nothing on pull requests already open against it, GitHub has no "base
 # branch moved" event, and "require branches to be up to date" is off on purpose, so without this a
 # promotion opened before a hotfix keeps a stale green `back-merge` and can merge a combination dev
-# never validated. The re-run is how its `back-merge` learns main moved. Three triggers start that
-# one job, and all three run the same scripts/rerun_promotion_guards.py:
+# never validated. The re-run is how its `back-merge` learns main moved. Three triggers start both
+# jobs; every one sweeps with the same scripts/rerun_promotion_guards.py and opens the back-merge
+# pull request if dev lacks something (v1-e01-t26):
 #
 #   push               the fast path. main just moved, so this is seconds after a hotfix merges.
 #   schedule           the backstop that needs no event. On 2026-09-30 GitHub never delivered the push
@@ -32,7 +34,16 @@
 #                      the promotion stayed green and wrong. Everything push-triggered is blind to that,
 #                      so the schedule sweeps whether or not anything happened.
 #   workflow_dispatch  the manual route: one click for an operator who notices a lost push. It takes no
-#                      inputs. It runs from main or dev only (the job refuses any other ref).
+#                      inputs. It runs from main or dev only (both jobs refuse any other ref).
+#
+# Why the schedule opens the back-merge pull request too, and not only the dispatch. Before
+# v1-e01-t26 only a push opened it, so after a lost push the sweep turned a promotion red while the
+# pull request that red check names did not exist. A dispatch now opens it, but a dispatch needs
+# someone who already knows the push was lost. The schedule is the one route that needs nobody, and
+# when no promotion is open the sweep has nothing to turn red: the back-merge pull request is then
+# the only sign anywhere that a hotfix's push was lost, and the "same day" back-merge rule depends on
+# it appearing. The cost is one short job in a scheduled run that exists anyway; when main and dev
+# agree it calls nothing on GitHub, so nothing changes on any pull request, label or check.
 #
 # The sweep is quiet when nothing moved. promotion-guard.yml's `back-merge` job records the main
 # commit it compared, as a notice on its check run, and a pull request whose newest guard run
@@ -56,9 +67,9 @@
 # merges (the promotion template's checklist), so its guard is current whatever the schedule does.
 #
 # Runs only on push to main, the schedule and a dispatch, never on a pull request, so no fork's code
-# ever runs with the write permissions below. Each is scoped to the one job that needs it. The job
-# holding `actions: write` checks out only this workflow's own commit of main or dev, never a pull
-# request's code, and reads pull requests and runs through the API.
+# ever runs with the write permissions below. Each is scoped to the one job that needs it. Both jobs
+# check out only this workflow's own commit of main or dev, never a pull request's code, and refuse
+# to run from any other ref. The sweep reads pull requests and runs through the API.
 
 name: Back-merge main into dev
 
@@ -73,10 +84,12 @@ permissions: {}
 
 jobs:
   open-back-merge-pull-request:
-    # Only main moving can make dev lack something, so neither the schedule nor a dispatch runs this.
-    if: github.event_name == 'push'
-    # One push at a time, as before the schedule existed. A sweep never waits behind this job and
-    # never takes its place in the queue.
+    # Every trigger runs this, not only a push (v1-e01-t26). After a lost push, the schedule or a
+    # dispatch is the only run there is, and it has to open the pull request that the red
+    # `back-merge` check tells the operator to merge. With nothing to back-merge it calls nothing.
+    # One group for every trigger, so two of these never run at once and cannot both find no pull
+    # request open and both open one. A pending one replaced by a newer one loses nothing: the newer
+    # one does the same from the live branches. A sweep never waits behind this job.
     concurrency:
       group: back-merge
       cancel-in-progress: false
@@ -86,6 +99,14 @@ jobs:
       contents: read
       pull-requests: write # open the back-merge pull request
     steps:
+      # The checkout below is this workflow's own commit, and its script runs before the step that
+      # holds the token. A push runs from main and the schedule from dev; a dispatch could name any
+      # branch, including a pull request's, so it is refused there, as in the sweep.
+      - name: Run only from main or dev
+        if: github.ref != 'refs/heads/main' && github.ref != 'refs/heads/dev'
+        run: |
+          echo "::error::Dispatch this workflow from main or dev; it checks out the ref it runs from."
+          exit 1
       # Full depth for the same reason as promotion-guard.yml's back-merge job: a shallow clone
       # would answer "nothing missing" and no pull request would open.
       - uses: actions/checkout@v7
@@ -117,14 +138,19 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           # The label is the warning on the pull request list: a squashed back-merge leaves main's
-          # commits unreachable from dev and the `back-merge` check red for good. --force makes this
-          # an idempotent create-or-update; the labels API accepts pull-requests: write.
+          # commits unreachable from dev and the `back-merge` check red for good. --force makes
+          # creating it an idempotent create-or-update. A pull-requests: write token may create the
+          # label and add it to a pull request through REST (POST .../issues/<number>/labels), but
+          # not through GraphQL's updatePullRequest, which `gh pr create --label` and
+          # `gh pr edit --add-label` use: in v1-e01-t26's sandbox proof the pull request opened and
+          # the label was then refused. So the pull request is opened without --label and labelled
+          # through `gh api`, on both paths below.
           gh label create back-merge --repo "$REPO" --force --color B60205 \
             --description "Merge with a merge commit, never squash: a squash keeps back-merge red"
           open_pr=$(gh pr list --repo "$REPO" --base dev --head main --state open \
             --json number --jq '.[0].number // empty')
           if [ -n "$open_pr" ]; then
-            gh pr edit "$open_pr" --repo "$REPO" --add-label back-merge
+            gh api --method POST "repos/$REPO/issues/$open_pr/labels" -f "labels[]=back-merge" --silent
             echo "Back-merge pull request #$open_pr is open; its head is main, so it already has these commits."
             exit 0
           fi
@@ -142,8 +168,17 @@ jobs:
             echo
             echo "Opened by .github/workflows/back-merge.yml."
           } > body.md
-          gh pr create --repo "$REPO" --base dev --head main --label back-merge \
-            --title "Back-merge main → dev" --body-file body.md
+          url=$(gh pr create --repo "$REPO" --base dev --head main \
+            --title "Back-merge main → dev" --body-file body.md)
+          echo "$url"
+          number=${url##*/}
+          case "$number" in
+            '' | *[!0-9]*)
+              echo "::error::gh pr create printed no pull request URL to label: $url"
+              exit 1
+              ;;
+          esac
+          gh api --method POST "repos/$REPO/issues/$number/labels" -f "labels[]=back-merge" --silent
 
   rerun-promotion-guards:
     runs-on: ubuntu-24.04

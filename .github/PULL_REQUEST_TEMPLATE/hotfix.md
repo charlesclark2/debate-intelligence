@@ -49,8 +49,8 @@ block another hotfix.
       same on a schedule (in practice every few hours) without needing any event, so a push GitHub never delivers is still
       caught; this item is for the minutes before that sweep. **If no "Back-merge main into dev" run
       appears for the merge commit**, GitHub lost the push: run that workflow from the Actions tab
-      (Run workflow, from `dev`) rather than waiting, and open the back-merge pull request by hand,
-      since only the push opens it. **If the job failed**, re-run the checks by hand on each
+      (Run workflow, from `dev`) rather than waiting; that run also opens the back-merge pull
+      request. **If the job failed**, re-run the checks by hand on each
       promotion it names: re-run its promotion-guard run, or edit its description to retrigger.
       Until one of these happens, the promotion can merge a combination onto prod that dev never
       validated.

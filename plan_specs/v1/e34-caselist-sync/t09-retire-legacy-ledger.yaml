@@ -48,7 +48,7 @@ spec:
         old-format build still writes to the agent's state directories, and the operator has deleted
         the legacy file from each.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

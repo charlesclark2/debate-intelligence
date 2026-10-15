@@ -369,3 +369,24 @@ moto, which the harness allows.
 
 **Operator follow-ups:** 1 (validate-dev's first run with the stand-ins), 2 (the five parts'
 times on this PR) and 3 (`uv sync --all-packages` in every checkout that runs `tests/smoke`).
+
+### validate-dev with the stand-ins, recorded (PM, 2026-10-15)
+
+Operator follow-up 1, from the validate-dev run the operator listed at the v1.0 close-out: run
+38790399896, for `dev` at `16cc21e`, succeeded. The four runs before it, back to `0d64c1b`, all
+succeeded too.
+
+* `== installed build:` names `v0.1.0-dev.151`, commit `16cc21e`, channel and environment `dev`,
+  and the run validates that same commit.
+* `== recorded tier: … tests/smoke -m not live and not in_process …`, then
+  `85 passed, 2 warnings in 141.44s (0:02:21)` and `== recorded tier: passed`. No `skipped` line,
+  and no `NetworkAttempted` or `OutboundNetworkBlocked`.
+* The slow tier, from the same commit: `1 passed in 27.62s`.
+
+So validate-dev's half of ac1 and ac4 holds: the four commands' checks pass against the installed
+build, and the recorded tier takes under 5 minutes on validate-dev's runner (141 s, against 64 to
+96 s locally on 4 workers).
+
+Follow-up 2, the five parts' times, was not taken: the `ci` run listed was still running. The five
+parts stand, as ruled.
+

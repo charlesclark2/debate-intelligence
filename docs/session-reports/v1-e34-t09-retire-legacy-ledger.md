@@ -376,3 +376,15 @@ machine rather than taken on trust.
 
 **Operator follow-ups:** 1, the read-only checks, which can run now; 2, the deletion, after the
 merge and not during a Wednesday run.
+
+### The deletion, recorded (PM, 2026-10-15)
+
+Operator follow-up 2, after the merge. The legacy file in the agent's data directory was 50 bytes,
+last modified 2026-10-01 20:18:19 CDT (2026-10-02 01:18 UTC), no later than 2026-10-09 UTC as
+required. It held two keys, a download count and a date matching that time. After `rm`, `ls`
+reported `No such file or directory`.
+
+The phase stays `InProgress` for one more paste: ac2 asks for the file to be gone from each of the
+agent's state directories, and follow-up 1d's `find` over `~/.debate-research` is what shows no
+other copy, the prod directory included. The PM sets `Succeeded` when it is in.
+

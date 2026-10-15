@@ -42,7 +42,12 @@ spec:
       `debate-research verify <manifest.json>` reports per-card verification results with a non-zero exit
       on failure.
 status:
-  phase: Pending
+  # Set by the PM, 2026-10-15, at the v1.0 close-out: all 7 tasks Succeeded. ac1:
+  # test_normalization_props.py (Hypothesis) over the versioned normalizer. ac2 and ac3: the
+  # extractor cuts evidence from a stored snapshot by offsets and the verifier sets VERIFIED only
+  # on an exact reproduction, else UNVERIFIED (test_verifier*.py, test_extraction_properties.py).
+  # ac4: `debate-research verify <manifest>` exits 0 when every card is VERIFIED and 1 otherwise.
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

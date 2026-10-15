@@ -38,7 +38,13 @@ spec:
     description: >-
       Import-boundary rules forbid AWS SDKs, Typer and FastAPI inside debate_core domain/application layers.
 status:
-  phase: Pending
+  # Set by the PM, 2026-10-15, at the v1.0 close-out: all 6 tasks Succeeded. ac1: the persisted
+  # entities (Article, SourceSnapshot, Card, Search) carry `owner_id` and `organization_id`;
+  # CardSpan, Citation and SearchResult are value objects inside them. ac2: the port contract suites
+  # in packages/debate_core/tests/contracts run against the local filesystem and SQLite adapters.
+  # ac3: lint-imports forbids boto3, botocore, typer, click, rich, fastapi and starlette in the
+  # domain and application layers (12 contracts kept).
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

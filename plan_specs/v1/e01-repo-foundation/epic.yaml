@@ -40,7 +40,15 @@ spec:
     description: >-
       `debate-research --version` runs from an installed CLI with no business logic in the CLI package.
 status:
-  phase: Pending
+  # Set by the PM, 2026-10-15, at the v1.0 close-out: all 27 tasks Succeeded. ac1: protect-main
+  # and protect-dev rulesets (docs/process/rulesets), the task, promotion and hotfix templates, and
+  # the required `ci`, promotion guards and `validate-dev` status. ac2: ci.yml runs ruff, pyright,
+  # pytest (five parts), lint-imports and validate_specs.py on every pull request into dev or main.
+  # ac3: ADR-0001 to 0009 under docs/adr and docs/architecture/architecture_proposal.md. ac4:
+  # validate-dev installs each dev pre-release and checks `debate-research --version --json`
+  # (v0.1.0-dev.151: 85 recorded smoke checks passed), and lint-imports keeps business logic out
+  # of debate_cli (12 contracts kept).
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

@@ -539,7 +539,6 @@ __all__ = [
     "DEFAULT_BULK_DOWNLOADS_PER_DAY",
     "DEFAULT_FULL_ARCHIVE_INTERVAL_DAYS",
     "INBOX_PARTIAL_DIRECTORY",
-    "LEGACY_DOWNLOAD_LEDGER_FILENAME",
     "LOCK_FILENAME",
     "OPENEV_DELIVERIES_FILENAME",
     "PENDING_WORK_FILENAME",
@@ -617,12 +616,6 @@ LOCK_FILENAME: Final = "caselist-sync.lock"
 PENDING_WORK_FILENAME: Final = "caselist-sync-pending.json"
 DOWNLOAD_LEDGER_FILENAME: Final = "caselist-sync-download-starts.json"
 """When each bulk download started, for the rolling window. See :class:`DownloadLedger`."""
-
-LEGACY_DOWNLOAD_LEDGER_FILENAME: Final = "caselist-sync-downloads.json"
-"""The calendar-day ledger builds before `v1-e34-t06` kept: `{"date": ..., "bulk_downloads": N}`.
-
-Read, never written. See :class:`DownloadLedger` for why it is still read, and how.
-"""
 
 OPENEV_DELIVERIES_FILENAME: Final = "caselist-sync-openev-deliveries.json"
 """What each OpenEv id delivered when this machine imported it. See :class:`OpenEvDeliveries`."""
@@ -1680,16 +1673,10 @@ class DownloadLedger:
     A file here that is not a ledger this class wrote is read as `limit` downloads started when
     the file was last written (its mtime): fully spent for 24 hours, then released.
 
-    The calendar-day ledger of the builds before `v1-e34-t06`
-    (:data:`LEGACY_DOWNLOAD_LEDGER_FILENAME`) is still read, and never written. Its
-    `{"date": ..., "bulk_downloads": N}` becomes `N` downloads started at its mtime: every write
-    replaced the file, so each of the `N` started at or before that moment, and counting them there
-    keeps them in the window for as long as any of them could be. It is read on every run rather than
-    migrated once, because an installed build still on the old format writes it — `v1-e30-t06`'s
-    backfill runs from one — and what that build spends must still count against this one. An old
-    build does not read this file, so it may spend what this one already has; the server's own
-    limiter absorbs that as a deferral (:data:`SKIP_TODAY_SECONDS`), which is a wasted run and not
-    a breach.
+    This file is the only one counted. The builds before `v1-e34-t06` kept a calendar-day ledger,
+    `caselist-sync-downloads.json`, which the builds after it read beside this one while an
+    old-format build still ran against the same state directory. None has since `v1-e34-t09`, which
+    removed that read: a copy left behind is neither read nor removed.
     """
 
     def __init__(
@@ -1697,11 +1684,9 @@ class DownloadLedger:
         path: Path,
         *,
         limit: int = DEFAULT_BULK_DOWNLOADS_PER_DAY,
-        legacy_path: Path | None = None,
     ) -> None:
         self.path = Path(path)
         self.limit = limit
-        self.legacy_path = Path(legacy_path) if legacy_path is not None else None
 
     @staticmethod
     def window_start(now: datetime) -> datetime:
@@ -1709,11 +1694,8 @@ class DownloadLedger:
         return now - BULK_DOWNLOAD_WINDOW
 
     def starts(self) -> tuple[datetime, ...]:
-        """Every download start this ledger and the legacy one account for, oldest first."""
-        recorded = list(self._own_starts())
-        if self.legacy_path is not None:
-            recorded.extend(self._legacy_starts(self.legacy_path))
-        return tuple(sorted(recorded))
+        """Every download start this ledger accounts for, oldest first."""
+        return tuple(sorted(self._own_starts()))
 
     def spent_in_window(self, now: datetime) -> int:
         """Downloads started in the 24 hours before `now`, or after it."""
@@ -1747,16 +1729,6 @@ class DownloadLedger:
             )
             return self._spent_when_written(self.path, self.limit)
         return starts
-
-    def _legacy_starts(self, path: Path) -> tuple[datetime, ...]:
-        if not path.is_file():
-            return ()
-        body = _read_json_object(path)
-        spent = body.get("bulk_downloads") if body is not None else None
-        if body is None or not isinstance(body.get("date"), str) or not isinstance(spent, int) or spent < 0:
-            logger.warning("caselist sync: the old download ledger is unreadable; counting it as spent")
-            return self._spent_when_written(path, self.limit)
-        return self._spent_when_written(path, spent)
 
     @staticmethod
     def _spent_when_written(path: Path, downloads: int) -> tuple[datetime, ...]:
@@ -2403,7 +2375,6 @@ class CaselistSyncService:
         self._ledger = DownloadLedger(
             self._state_dir / DOWNLOAD_LEDGER_FILENAME,
             limit=min(bulk_downloads_per_day, DEFAULT_BULK_DOWNLOADS_PER_DAY),
-            legacy_path=self._state_dir / LEGACY_DOWNLOAD_LEDGER_FILENAME,
         )
         self._pending = PendingWork(self._state_dir / PENDING_WORK_FILENAME)
         self._suppression = suppression

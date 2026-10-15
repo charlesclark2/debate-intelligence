@@ -45,11 +45,14 @@ Two more ceilings the site sets, both handled in code rather than here:
   deferred archive is a delay, not a loss, because the site keeps a back-catalogue of the weeklies
   (ADR-0017).
 
-  Builds before `v1-e34-t06` kept a calendar-day ledger, `<data_dir>/caselist-sync-downloads.json`.
-  Newer builds still read it, counting its downloads from when it was last written, and never
-  write it, so a build of either kind can run beside the other without the newer one handing out
-  what the older one spent. Leave the file where it is; it stops counting 24 hours after its last
-  write.
+  Builds before `v1-e34-t06` (tags up to `v0.1.0-dev.12`) kept a calendar-day ledger,
+  `<data_dir>/caselist-sync-downloads.json`. The builds from `v1-e34-t06` on read it beside the
+  rolling window while an old-format build still ran against the same data directory, and never
+  wrote it. Since `v1-e34-t09` no build reads it: the cap is counted from
+  `caselist-sync-download-starts.json` alone, and a copy left in a data directory is ignored and
+  may be deleted. Never install a build older than `v0.1.0-dev.13` for the agent or run one against
+  a data directory: it would write the calendar ledger again, and nothing newer would count what it
+  spent.
 
 ## Before you install anything
 

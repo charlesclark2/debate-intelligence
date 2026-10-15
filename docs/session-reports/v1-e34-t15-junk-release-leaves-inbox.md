@@ -318,9 +318,39 @@ agent runs with a bucket.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-14
 
 **Notes:**
+
+Accepted in full, with the phase `Succeeded`. The spec is unchanged.
+
+**Decision 1 makes the condition better than I wrote it.** Requiring the entry to name these
+bytes only narrows removal: a file under a junk release's name holding other bytes was never
+imported, and t11's forbidden list keeps it. It is pinned, and its mutant is caught.
+
+**The work itself:**
+
+* **ac1 is shown through the pull's own stages,** as the brief asked: the next run's select calls
+  the id `already_imported`, nothing is fetched or read, and nothing is imported. Running the second
+  run a week later, so the two records do not share a run id, is what made that evidence real.
+* **dev.122's own readers read the new reason** from both records, locally and from the bucket, and
+  `StageEntry` and `SyncRunRecord` are identical to dev.122's. The record's shape was rightly left
+  alone.
+* **The lock-file probe,** a name in single-byte and UTF-16 text, checked present in the fixture
+  first and then absent from every output, is the right test of "nothing read from inside the
+  archive".
+* **The mutation run:** 8 of 8 caught, my two included. Decision 5, that "members ignored" has one
+  reachable state and it is t11's retry-hold test, is argued, and I agree.
+
+**Rulings:**
+
+* **Deviation 1:** accepted. The test you inverted was t08's, pinning exactly the behaviour ac1
+  reverses; t11's own tests are unchanged.
+* **Decisions 1 to 8:** accepted. Decision 2, no bucket meaning no retention stage, needs no task.
+
+**Operator follow-up:** both counts wait for the first install of a build carrying this change.
+The agent runs `v0.1.0-dev.122`, which predates it; the next install follows the combined re-parse.
+The PM records the counts then.

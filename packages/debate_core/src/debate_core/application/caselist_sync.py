@@ -151,6 +151,15 @@ removes nothing. A file goes only when all of these hold:
   what lets the next run recognise a camp release as imported or removed (`v1-e34-t07`); without
   it the next run would download the file again.
 
+**A camp release of junk alone** goes on a condition of its own (`v1-e34-t15`). Its import keeps
+nothing, so no manifest row comes from its bytes and there is no snapshot to confirm: by the rules
+above it stayed as `not_imported` for good, although no run imports it again (`v1-e34-t08`), and
+a Word `~$` lock file in it names whoever had a document open. It goes when its id's delivery entry
+exists, names no member, and names these bytes as what the id delivered. The entry is written only
+once an import completes, and it is what the next run reads to neither fetch nor import the release
+again. The summary names it by its OpenEv id and SHA-256 prefix, with the reason `junk_only`. A
+camp download with no entry, or whose entry names members, is judged by the rules above.
+
 Anything else stays, and the summary names it with the reason: a download not imported, a snapshot
 not confirmed, a camp download the record does not cover, and any file whose name the pull does
 not give a download. Nothing is kept longer, the newest week included. The usual reason to keep a
@@ -637,7 +646,10 @@ A key added since leaves the version as it is (`v1-e34-t07`'s rule): it changes 
 nothing reads a summary back. Under version 2 these were `note`, `openev_skipped_as_removed`
 (`v1-e34-t07`), `inbox_retention` (`v1-e34-t11`) and an OpenEv selection's `revision_of`
 (`v1-e34-t08`). Under version 5 it is `earlier_findings` on every entry of `stages` (`v1-e34-t19`):
-unlike `error_codes`, nothing is decided from it, so the rule applies and the version stays.
+unlike `error_codes`, nothing is decided from it, so the rule applies and the version stays. So are
+`openev_id` and `reason` on an `inbox_retention` entry removed as a camp release of junk alone
+(`v1-e34-t15`): a removed entry carried no `reason` before, and its one value, `junk_only`, is one
+no `kept` entry carries, so a filter on `kept[].reason` reads what it read before.
 
 Version 3 (`v1-e34-t12`) removes an OpenEv selection's `inbox_name`, `openev-<id>-<file name>`,
 because a camp file's name is its title, and adds `inbox_file`, the start of the download's SHA-256
@@ -1100,6 +1112,11 @@ class RetentionDecision(StrEnum):
     REMOVE = "remove"
     """Imported, its snapshot confirmed in the bucket, and for a camp download, recorded."""
 
+    JUNK_ONLY = "junk_only"
+    """Removed: a camp download whose delivery entry names these bytes and no member. Its import
+    kept nothing, so there is no snapshot to confirm, and the entry is what the next run reads
+    (`v1-e34-t15`)."""
+
     NOT_IMPORTED = "not_imported"
     """No manifest on this machine came from these bytes: the next pull imports it, or none will."""
 
@@ -1112,6 +1129,11 @@ class RetentionDecision(StrEnum):
     UNCLASSIFIED = "unclassified"
     """A file whose name the pull does not give a download, or one that cannot be read."""
 
+    @property
+    def removes(self) -> bool:
+        """Whether the file leaves the inbox: :attr:`REMOVE`, or :attr:`JUNK_ONLY` for its own reason."""
+        return self in (RetentionDecision.REMOVE, RetentionDecision.JUNK_ONLY)
+
 
 _KEPT_BECAUSE: Final = {
     RetentionDecision.NOT_IMPORTED: "not imported",
@@ -1119,6 +1141,11 @@ _KEPT_BECAUSE: Final = {
     RetentionDecision.NO_DELIVERY_RECORD: "the delivery record does not hold its digests",
     RetentionDecision.UNCLASSIFIED: "not a download the pull names",
 }
+
+_REMOVED_BECAUSE: Final = {
+    RetentionDecision.JUNK_ONLY: "imported, and it held junk alone",
+}
+"""Why a file left, when it left for a reason of its own: the stage's reason gives it in brackets."""
 
 
 class InboxFileKind(StrEnum):
@@ -1147,9 +1174,14 @@ class InboxFileVerdict:
     byte_size: int
     path: Path
     """Where it is. Never in the summary: the inbox's own path is the operator's home directory."""
+    openev_id: int | None = None
+    """A camp release of junk alone's OpenEv id, by which it is named beside its SHA-256 prefix
+    (`v1-e34-t15`). `None` for every other file, which is named as before."""
 
     def as_json(self) -> dict[str, object]:
         body: dict[str, object] = {"name": self.name, "kind": str(self.kind), "bytes": self.byte_size}
+        if self.openev_id is not None:
+            body["openev_id"] = self.openev_id
         if self.decision is not RetentionDecision.REMOVE:
             body["reason"] = str(self.decision)
         return body
@@ -1193,15 +1225,18 @@ class InboxRetention:
             head = f"would remove {len(self.removed)} file(s), {self.bytes_freed} bytes"
         else:
             head = f"{len(self.removed)} file(s) removed, {self.bytes_freed} bytes freed"
-        parts = [head + (f": {_named(self.removed)}" if self.removed else "")]
+        if self.removed:
+            head += ": " + "; ".join(
+                _named(group) + (f" ({_REMOVED_BECAUSE[reason]})" if reason in _REMOVED_BECAUSE else "")
+                for reason, group in _by_decision(self.removed).items()
+            )
+        parts = [head]
         if self.kept:
-            by_reason: dict[RetentionDecision, list[InboxFileVerdict]] = {}
-            for one in self.kept:
-                by_reason.setdefault(one.decision, []).append(one)
             parts.append(
                 f"{len(self.kept)} kept: "
                 + "; ".join(
-                    f"{_named(group)} ({_KEPT_BECAUSE[reason]})" for reason, group in by_reason.items()
+                    f"{_named(group)} ({_KEPT_BECAUSE[reason]})"
+                    for reason, group in _by_decision(self.kept).items()
                 )
             )
         if self.failed:
@@ -1224,12 +1259,25 @@ _MAX_NAMED: Final = 250
 """Names one retention sentence lists before it says how many more; a whole season is about 120."""
 
 
+def _by_decision(files: Sequence[InboxFileVerdict]) -> dict[RetentionDecision, list[InboxFileVerdict]]:
+    """`files` grouped by what was decided about them, in the order each decision first appears."""
+    grouped: dict[RetentionDecision, list[InboxFileVerdict]] = {}
+    for one in files:
+        grouped.setdefault(one.decision, []).append(one)
+    return grouped
+
+
 def _named(files: Sequence[InboxFileVerdict]) -> str:
-    """Weeklies by caselist and date, camp downloads and other files by count and SHA-256 prefix."""
+    """Weeklies by caselist and date, camp downloads and other files by count and SHA-256 prefix, and a
+    camp release of junk alone by its OpenEv id as well (`openev-960 sha256 <first 12 hex>`)."""
     weeklies = [
         one.name for one in files if one.kind in (InboxFileKind.WEEKLY_ARCHIVE, InboxFileKind.FULL_ARCHIVE)
     ]
-    camp = [one.name for one in files if one.kind is InboxFileKind.CAMP_DOWNLOAD]
+    camp = [
+        one.name if one.openev_id is None else f"openev-{one.openev_id} {one.name}"
+        for one in files
+        if one.kind is InboxFileKind.CAMP_DOWNLOAD
+    ]
     other = [one.name for one in files if one.kind is InboxFileKind.OTHER]
     parts: list[str] = []
     if weeklies:
@@ -2239,13 +2287,16 @@ class _JudgedLocally:
     kind: InboxFileKind
     byte_size: int
     path: Path
-    kept_because: RetentionDecision | None
-    """The first local check it failed, or `None` when only the bucket's confirmation is left."""
+    decision: RetentionDecision | None
+    """The first local check it failed, :attr:`RetentionDecision.JUNK_ONLY` for a camp release of
+    junk alone, which no bucket is asked about, or `None` when only the bucket's confirmation is left."""
     snapshots: frozenset[PendingSnapshot] = frozenset()
     """The snapshots its bytes were imported into, which the bucket must hold in sync.
 
-    Never empty when :attr:`kept_because` is `None`: a file is imported only by being in one.
+    Never empty when :attr:`decision` is `None`: a file is imported only by being in one.
     """
+    openev_id: int | None = None
+    """See :attr:`InboxFileVerdict.openev_id`."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -3685,8 +3736,8 @@ class CaselistSyncService:
                 [failure],
             )
             return
-        removable = tuple(one for one in verdicts if one.decision is RetentionDecision.REMOVE)
-        kept = tuple(one for one in verdicts if one.decision is not RetentionDecision.REMOVE)
+        removable = tuple(one for one in verdicts if one.decision.removes)
+        kept = tuple(one for one in verdicts if not one.decision.removes)
         if dry_run:
             once_imported, camp_once_imported = _imported_by(plan)
             tally.inbox_retention = InboxRetention(
@@ -3729,18 +3780,19 @@ class CaselistSyncService:
         judged = [self._judge_locally(path, releases, remembered) for path in files]
         # Only what passed every local check costs a bucket request, and only what this run's report
         # stage did not already confirm.
-        wanted = {snapshot for one in judged if one.kept_because is None for snapshot in one.snapshots}
+        wanted = {snapshot for one in judged if one.decision is None for snapshot in one.snapshots}
         in_sync = confirmed | await self._confirm_in_bucket(wanted - confirmed)
         return [
             InboxFileVerdict(
                 name=one.name,
                 kind=one.kind,
-                decision=one.kept_because
+                decision=one.decision
                 or (
                     RetentionDecision.REMOVE if one.snapshots <= in_sync else RetentionDecision.NOT_CONFIRMED
                 ),
                 byte_size=one.byte_size,
                 path=one.path,
+                openev_id=one.openev_id,
             )
             for one in judged
         ]
@@ -3793,20 +3845,34 @@ class CaselistSyncService:
                 _sha256_label(digest), InboxFileKind.OTHER, size, path, RetentionDecision.UNCLASSIFIED
             )
         in_releases = releases.get(digest, frozenset())
+        delivery = remembered.get(openev_id)
         if not in_releases:
-            kept_because: RetentionDecision | None = RetentionDecision.NOT_IMPORTED
+            # A camp release of junk alone (`v1-e34-t15`): no row came from its bytes, because the
+            # importer classified nothing in it, and its id's entry, written only once an import
+            # completes, names these bytes and no member. The next run reads the entry and neither
+            # fetches nor imports it again (`_judge_unrecorded`), so the copy is needed by nothing.
+            if delivery is not None and not delivery.member_sha256 and delivery.download_sha256 == digest:
+                return _JudgedLocally(
+                    _sha256_label(digest),
+                    InboxFileKind.CAMP_DOWNLOAD,
+                    size,
+                    path,
+                    RetentionDecision.JUNK_ONLY,
+                    openev_id=openev_id,
+                )
+            decision: RetentionDecision | None = RetentionDecision.NOT_IMPORTED
         # The next run looks the record up by id (`_judge_unrecorded`), so an entry for the id is
         # what lets it recognise the file once the copy is gone.
-        elif openev_id not in remembered:
-            kept_because = RetentionDecision.NO_DELIVERY_RECORD
+        elif delivery is None:
+            decision = RetentionDecision.NO_DELIVERY_RECORD
         else:
-            kept_because = None
+            decision = None
         return _JudgedLocally(
             _sha256_label(digest),
             InboxFileKind.CAMP_DOWNLOAD,
             size,
             path,
-            kept_because,
+            decision,
             frozenset(PendingSnapshot(OPENEV_PUBLISH_TARGET, one) for one in in_releases),
         )
 

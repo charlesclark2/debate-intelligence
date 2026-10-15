@@ -985,9 +985,6 @@ Between two runs it holds:
   import failed, a newer week waiting behind it, or a week whose publish is pending an AWS login.
 * **Camp downloads** in the same state (`openev-<id>-<name>`), and any camp download the OpenEv
   delivery record does not cover.
-* **A camp release holding only junk** (`.DS_Store`, `__MACOSX/`, no camp file), named as
-  `not_imported` in every summary: no manifest row with a classification came from it, so
-  retention keeps it. It is not imported again (`v1-e34-t08`); the delivery record says it was.
 * `.partial/`, downloads in progress, which a run sweeps.
 * Anything put there by hand. The pull never touches a file whose name it did not give it.
 
@@ -1010,6 +1007,26 @@ only when all of these are true:
    `v1-e34-t07` has no record entry, so its copy stays, named in every summary. That is harmless,
    and it is never fetched again while the copy is there.
 
+**A camp release of junk alone leaves on a condition of its own** (`v1-e34-t15`). A release holding
+nothing but junk (`.DS_Store`, `__MACOSX/`, a Word `~$` lock file, and no camp file) is imported
+once, keeps nothing, and is not imported again (`v1-e34-t08`). No manifest row comes from its bytes,
+so condition 1 can never hold, and until `v1-e34-t15` it stayed for good as `not_imported`. A Word
+lock file in it stores the name of whoever had the document open, which is one more reason not to
+keep it. It is removed when its id's entry in the delivery record exists, names no member, and names
+these exact bytes as what the id delivered. The entry is written only once an import completes, and
+it is what the next run reads to neither fetch nor import the release again. There is no snapshot
+for the bucket to confirm. Its reason is `junk_only`, never `not_imported`.
+
+What leaves, and when:
+
+| What | Leaves on | Until then |
+|---|---|---|
+| A weekly or complete archive | The first run that finds its snapshot confirmed in the bucket after importing it: usually the run that imports it | `not_imported` or `not_confirmed` |
+| A camp download that held camp files | The first run that finds its release confirmed in the bucket, with its delivery entry written | `not_imported`, `not_confirmed` or `no_delivery_record` |
+| A camp release of junk alone | The run that imports it, since the import writes the entry; or, for one an earlier build imported and left, the next real run | `not_imported`, while its import has not completed |
+| A camp download with no delivery entry, or whose entry names camp files no manifest row came from | Not by retention, until an import completes and its release is confirmed | `not_imported` or `no_delivery_record` |
+| Anything the pull did not name | Never | `unclassified` |
+
 **Nothing is kept longer, the newest week included.** The usual reason to keep a zip is that
 re-importing after a failed publish costs nothing. Here a zip is removed only after its publish is
 confirmed, and a publish (or a re-publish, after drift) reads the local store, never the inbox, so
@@ -1028,8 +1045,12 @@ environment with no bucket can confirm no publish, so nothing ever leaves its in
 report keep as written, lists every removed and kept file and the total bytes freed. Weeklies are
 named by caselist and date (`hsld26 2026-09-15`), and camp downloads and anything else by count and
 the first twelve hex digits of the sha256, never by file name: a camp file's name is its title, and a
-name given by hand can say anything. The JSON summary carries the same lists under `inbox_retention`.
-A kept file's reason is one of:
+name given by hand can say anything. A camp release of junk alone is named by its OpenEv id as well,
+and never by anything inside it, a lock file's contents least of all:
+`1 camp download(s), openev-960 sha256 97633cd06d14 (imported, and it held junk alone)`. The JSON
+summary carries the same lists under `inbox_retention`. A removed file carries no `reason`, except a
+camp release of junk alone: `"reason": "junk_only"`, with its `"openev_id"`. A kept file's reason is
+one of:
 
 | Reason | What it means | What to do |
 |---|---|---|

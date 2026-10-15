@@ -125,7 +125,9 @@ request into `main`, both required by **protect-main**. Both run
 | `back-merge` | `main` holds a non-merge commit that `dev` lacks: a hotfix that was never back-merged. A `hotfix/*` head always passes it, so a second urgent fix is never blocked by the first one's back-merge. |
 
 **After a hotfix merges**, [`back-merge.yml`](../../.github/workflows/back-merge.yml) opens a
-"Back-merge main → dev" pull request, labelled `back-merge`, whose head is `main` itself. Merge it
+"Back-merge main → dev" pull request, labelled `back-merge`, whose head is `main` itself. The
+merge's push opens it; if GitHub loses that push, the next scheduled or dispatched run of the same
+workflow does, and a run that finds one already open names it and opens no second. Merge it
 into `dev` the same day with **Create a merge commit**, never squash: a squash leaves `main`'s commits unreachable from `dev`, and
 `back-merge` stays red on every promotion until they are. A promotion puts only a merge commit on
 `main`, which the check ignores, so promotions never open a back-merge PR.
@@ -134,8 +136,9 @@ Guard workflows run on `pull_request` with `contents: read` and no secrets, beca
 is public and a fork's pull request runs its own code. Only `back-merge.yml`, which runs on push to
 `main`, on a schedule and on a manual dispatch, never on a pull request, holds write permissions,
 each on the one job that needs it: `pull-requests: write` to open the back-merge pull request, and
-`actions: write` to re-run the guards (below). The job holding `actions: write` checks out only its
-re-run script, from the workflow's own commit of `main` or `dev`, and never runs pull-request code.
+`actions: write` to re-run the guards (below). Neither job holds `contents: write`. Both check out
+only the workflow's own commit of `main` or `dev`, refuse to run from any other ref, and never run
+pull-request code; the job holding `actions: write` checks out only its re-run script.
 
 ### When `main` moves, the guards re-run on every open pull request into it
 
@@ -151,13 +154,15 @@ re-runs the newest `promotion-guard.yml` run of each pull request open against `
 re-run's `back-merge` job fetches `main` and `dev` as they are now, so an open promotion goes red
 on its own, and protect-main blocks it until the back-merge pull request is merged into `dev`. Pull
 requests into any other branch are never touched. Three routes start that job, and all three run
-the same [`scripts/rerun_promotion_guards.py`](../../scripts/rerun_promotion_guards.py):
+the same [`scripts/rerun_promotion_guards.py`](../../scripts/rerun_promotion_guards.py). Each
+route also opens the back-merge pull request when `dev` lacks a commit of `main`'s, or names the
+open one, and does nothing visible when they agree (`v1-e01-t26-dispatch-opens-back-merge`):
 
 | Route | Trigger | What it covers |
 |---|---|---|
 | **Fast path** | every push to `main` | A hotfix's promotions go red within about a minute of the merge. Added by `v1-e01-t12-promotion-guard-rerun`. |
-| **Backstop** | a schedule, every 15 minutes (minutes 7, 22, 37 and 52 of each hour) | Needs no event at all. On 2026-09-30 GitHub never delivered the push for a merged hotfix, and with nothing to start the fast path the promotion stayed green and wrong, with no red anywhere. The sweep is asked for every 15 minutes, but GitHub ran it about every two to five hours when measured on 2026-10-15, so it catches a lost push within hours. Added by `v1-e01-t15-promotion-guard-sweep`. |
-| **Manual route** | **Run workflow** on *Back-merge main into dev* in the Actions tab, from `dev` or `main` | The same sweep on demand, in one click, for anyone who notices a lost push before the next scheduled run. Every promotion runs it once just before it merges (the promotion template's checklist), because the schedule runs only every few hours. |
+| **Backstop** | a schedule, every 15 minutes (minutes 7, 22, 37 and 52 of each hour) | Needs no event at all. On 2026-09-30 GitHub never delivered the push for a merged hotfix, and with nothing to start the fast path the promotion stayed green and wrong, with no red anywhere. The sweep is asked for every 15 minutes, but GitHub ran it about every two to five hours when measured on 2026-10-15, so it catches a lost push within hours. It also opens the back-merge pull request, so a lost push shows on the pull request list even when no promotion is open to turn red. Added by `v1-e01-t15-promotion-guard-sweep`. |
+| **Manual route** | **Run workflow** on *Back-merge main into dev* in the Actions tab, from `dev` or `main` | The same sweep, and the back-merge pull request, on demand in one click, for anyone who notices a lost push before the next scheduled run. Every promotion runs it once just before it merges (the promotion template's checklist), because the schedule runs only every few hours. |
 
 **Which pull requests it re-runs.** The `back-merge` job of each guard run records the `main`
 commit it compared, as a notice titled `promotion-guard evaluated main` on its check run. A pull
@@ -168,21 +173,25 @@ GitHub refuses to re-run a run in progress and it may have fetched `main` before
 
 **What is mechanical now, and what is not.** Mechanical: a delivered push re-runs every stale
 promotion's guards within a minute, and a lost one is caught by the next scheduled sweep without
-anyone noticing it first. Not mechanical:
+anyone noticing it first. Whichever run catches it also opens the back-merge pull request that the
+red `back-merge` check tells you to merge. Not mechanical:
 
 * **The minutes between a lost push and the next sweep.** A promotion merged in that window merges
   stale. GitHub does not promise when a scheduled run starts; measured on 2026-10-15, it ran this one
   about every two to five hours. A promotion dispatches the sweep before it merges for that reason.
   What catches a merge in that window is a person: the hotfix template asks for the
   `rerun-promotion-guards` job to have *passed on the hotfix's own push*, and a job that never ran
-  cannot be ticked. If no *Back-merge main into dev* run appears for the merge commit, dispatch it.
-* **The back-merge pull request after a lost push.** Only a push opens it, so after a lost push
-  nobody opens it, and the red `back-merge` check on the promotion will name a pull request that
-  does not exist. Open it by hand, base `dev` and head `main`, labelled `back-merge`, and merge it
-  with a merge commit as usual:
+  cannot be ticked. If no *Back-merge main into dev* run appears for the merge commit, dispatch it:
+  that one run re-runs the guards and opens the back-merge pull request.
+* **A back-merge pull request the workflow could not open.** Every run opens it when `dev` lacks
+  something, so it is opened by hand only when a run's `open-back-merge-pull-request` job fails
+  and a dispatch fails the same way. One cause is the repository setting **Allow GitHub Actions to create
+  and approve pull requests** being off, which makes the job's `gh pr create` refused. Open it
+  yourself, base `dev` and head `main`, labelled `back-merge`, and merge it with a merge commit as
+  usual:
 
   ```bash
-  gh pr create --base dev --head main --label back-merge --title "Back-merge main → dev" --body "Opened by hand: GitHub did not deliver the push for the hotfix."
+  gh pr create --base dev --head main --label back-merge --title "Back-merge main → dev" --body "Opened by hand: the back-merge workflow could not open it."
   ```
 
 * **A re-run that fails.** A red `rerun-promotion-guards` job, with an error naming the pull

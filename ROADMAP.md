@@ -224,7 +224,7 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [Defects found by operating the sync](plan_specs/v1/e34-caselist-sync/t06-sync-defects.yaml) `v1-e34-t06-sync-defects` | Succeeded | 1 | 7.0 |
 | [The sync does not re-download a file it has been told to remove](plan_specs/v1/e34-caselist-sync/t07-suppressed-downloads.yaml) `v1-e34-t07-suppressed-downloads` | Succeeded | 2 | 7.0 |
 | [A camp file uploaded again upstream is fetched](plan_specs/v1/e34-caselist-sync/t08-revised-camp-files.yaml) `v1-e34-t08-revised-camp-files` | Succeeded | 1 | 4.0 |
-| [Retire the legacy download ledger](plan_specs/v1/e34-caselist-sync/t09-retire-legacy-ledger.yaml) `v1-e34-t09-retire-legacy-ledger` | Pending | 1 | 2.0 |
+| [Retire the legacy download ledger](plan_specs/v1/e34-caselist-sync/t09-retire-legacy-ledger.yaml) `v1-e34-t09-retire-legacy-ledger` | InProgress | 1 | 2.0 |
 | [The weekly agent runs nothing from a git checkout](plan_specs/v1/e34-caselist-sync/t10-agent-outside-checkout.yaml) `v1-e34-t10-agent-outside-checkout` | Succeeded | 1 | 2.0 |
 | [Imported downloads leave the inbox](plan_specs/v1/e34-caselist-sync/t11-inbox-retention.yaml) `v1-e34-t11-inbox-retention` | Succeeded | 1 | 4.0 |
 | [The pull summary names a camp download by id, never by title](plan_specs/v1/e34-caselist-sync/t12-summary-names-no-camp-file.yaml) `v1-e34-t12-summary-names-no-camp-file` | Succeeded | 1 | 1.5 |

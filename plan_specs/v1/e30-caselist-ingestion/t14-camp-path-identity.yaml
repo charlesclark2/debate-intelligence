@@ -29,7 +29,10 @@ spec:
   constraints:
     packages: [debate_core.application, debate_core.domain, debate_core.integrations.local, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, tests/smoke, docs/runbooks, docs/data]
     forbidden:
-      - A camp title, school or file name in a manifest row or a plan line
+      - >-
+        A camp title, school or file name in anything this task adds to a manifest row or a
+        plan line (amended by the PM, 2026-10-14: the fields rows and plan lines already
+        carry stay, because older builds read them)
       - A manifest the build installed today cannot read
   context:
     - kind: TaskRef

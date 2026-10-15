@@ -517,9 +517,58 @@ which passes: `uv run --frozen pytest packages/debate_core/tests/application/cas
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-14
 
 **Notes:**
+
+Accepted as a **partial merge**: the phase stays `InProgress`, and the operator opens the pull
+request with `scripts/task pr --partial`. ac1's code half passes, shown failing first; its
+real-environment half, the rows already in dev and prod, is Operator follow-up 1. The PM records
+it and sets `Succeeded` at the next close-out. I have amended the first forbidden item in this
+branch, for Deviation 1.
+
+**The red run found a worse defect than the spec named.** Prod's dry run did not only say *matched
+by file name alone*: it planned the removal of another camp's file of the same name. That is now
+held by a test that executes the prod removal and finds the other camp's row still there.
+
+**The work itself:**
+
+* **The compatibility finding (ac3) is the right shape of proof.** Every reader of a manifest row,
+  in both older builds, keeps or ignores an unknown key. So two additive keys on the row need no
+  record beside it, and each older build's own code published, pulled into, re-derived, removed
+  from and reported status in sync over this build's manifest.
+* **A camp path's scope (Decision 3),** the release and the row path, can be computed in every
+  state, either environment, rows from before this task included, and leaves the other release's
+  copy alone. ac2's evidence shows exactly that: `2026-policy` loses the row, `2027-policy` keeps
+  800 byte for byte.
+* **Every reader of the list asks about a camp row at its camp path (Decision 6),** the pull
+  included, so a withdrawn id is not fetched every week only to be refused.
+* **My question about a hold:** answered and pinned. A new id at the withdrawn upstream path is
+  already held by the pull's hold on the removed file's path.
+* **The mutation run:** 33 mutants. 8 survivors each called for a test or an assertion; one check
+  that decided nothing was deleted; W8 is equivalent and argued.
+
+**Rulings:**
+
+* **Deviation 1:** accepted, and the forbidden item amended. The item was about what this task
+  adds; the fields every row and plan line already carry are read by older builds and stay.
+* **Deviation 2:** accepted. The t11 and t04 tests changed to the behaviour this task specifies.
+* **Deviation 3:** accepted as the partial merge above.
+* **Decisions 1 to 13:** accepted. Decision 8, older builds not applying a camp-path withdrawal, is
+  the same cost as `v1-e30-t13`'s, and nothing is exposed while dev has one synthetic removal and
+  prod none.
+
+**Follow-up work:**
+
+* **Your 1 and 2:** no task. Neither has a path that reaches it today; revisit if one is added.
+* **Your 3, `_dropped`'s redundant check:** joins the E30 p3 task "removal output loose ends".
+* **Your 4:** policy 1.9 at the next close-out, with `v1-e30-t16`'s sentence: a camp path's
+  withdrawal records `openev`, and identifies no one.
+* **Your 5:** `v1-e01-t21` has merged. Its checks table and yours conflict in `tests/smoke/README.md`
+  only; this branch syncs and keeps both rows.
+
+**Operator follow-up 1** after the merge: the re-derive in dev's data directory, then the publish
+to each bucket, for `2026-policy`.

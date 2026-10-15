@@ -472,3 +472,244 @@ and the pull request is left without the label that warns against a squash. Fix 
 
 Append your changes as a new section of this report, after this review, with the red and green runs,
 and leave a new PM review section PENDING at the end. The phase stays `InProgress`.
+
+## Changes after the sandbox proof (session, 2026-10-15)
+
+This answers the review above, item by item. The phase stays `InProgress`. The sandbox half of ac1
+and the `dispatch-opens` node are **NOT RUN** again until the re-proof below (Operator follow-up 4)
+is in.
+
+### What changed
+
+1. **The label goes on through REST, on both paths** (e5bd274). The open step runs
+   `gh pr create` without `--label`. It echoes the URL `gh` prints, reads the number from that URL,
+   and refuses anything that is not a number with a `::error::`. It then adds the label with
+   `gh api --method POST "repos/$REPO/issues/$number/labels" -f "labels[]=back-merge" --silent`.
+   The path that finds a pull request already open makes the same call with `$open_pr`, in place of
+   `gh pr edit --add-label`. `gh label create --force` is unchanged.
+2. **No new permission.** The open job still holds `contents: read` and `pull-requests: write`.
+   `test_back_merge_grants_nothing_at_the_top_and_actions_write_only_to_the_rerun_job` and the
+   holders test pass unchanged. Nothing offline can show whether GitHub accepts the REST call from
+   this token. The re-proof is the first place it runs, and checkpoint [K] says what to do if it is
+   refused: stop, and let the PM decide on `issues: write`.
+3. **The fake `gh` refuses what the token was refused** (c0aea4f). `gh pr create` with `--label`,
+   `gh pr edit` with `--add-label`, and any `gh api graphql` mentioning `updatePullRequest` each exit
+   1 with GitHub's message from run 38785319409. The two step tests now also require exactly one
+   REST label call, to the right number. When no pull request is open, that is `("99",
+   "back-merge")`, the number in the fake's URL, made after the create. When #17 is open, it is
+   `("17", "back-merge")`. The "nothing to do" test is unchanged: still no `gh` call at all.
+4. **The comment is corrected.** It now says that a `pull-requests: write` token may create the
+   label and add it through REST (`POST .../issues/<number>/labels`), but not through GraphQL's
+   `updatePullRequest`, which `gh pr create --label` and `gh pr edit --add-label` use. It also says
+   this was found in this task's sandbox proof.
+5. **The re-proof** is Operator follow-up 4 below, in the same sandbox.
+
+### Red, then green
+
+The fake's refusals and the REST assertions were committed first (c0aea4f), then run against the
+unchanged step:
+
+```bash
+uv run --frozen pytest tests/scripts/test_back_merge_workflow.py -q
+```
+
+```text
+E           AssertionError: pull request update failed: GraphQL: github-actions[bot] does not have permission to update the pull request (updatePullRequest)
+E           assert 1 == 0
+E           AssertionError: pull request update failed: GraphQL: github-actions[bot] does not have permission to update the pull request (updatePullRequest)
+E           assert 1 == 0
+FAILED tests/scripts/test_back_merge_workflow.py::test_with_no_back_merge_pull_request_open_the_job_opens_one
+FAILED tests/scripts/test_back_merge_workflow.py::test_with_one_back_merge_pull_request_open_the_job_names_it_and_opens_no_second
+2 failed, 16 passed in 3.66s
+```
+
+Both paths fail the way the sandbox's [E] did: on `gh pr create --label` and on
+`gh pr edit --add-label`. After e5bd274: `18 passed in 3.03s`.
+
+### Mutation run over the open step
+
+The same procedure as before, run on e5bd274. Each mutant was applied to the committed file, and
+the three workflow test files ran (59 tests) with a new, empty `HYPOTHESIS_STORAGE_DIRECTORY`. The
+file was restored with `git checkout`, and its SHA-256 matched for every mutant.
+`git status --porcelain` was empty afterwards. The load average was 6.12 / 7.29 / 9.17 at the start.
+
+All 13 earlier mutants were caught again, by the same tests as in the first table. The nine new
+ones target the label:
+
+| Mutant | Caught by (failed / 59) |
+|---|---|
+| `--label back-merge` back on `gh pr create` | 1: `test_with_no_back_merge_pull_request_open_the_job_opens_one` |
+| the open path back to `gh pr edit --add-label` | 1: `test_with_one_back_merge_pull_request_open_the_job_names_it_and_opens_no_second` |
+| the create path labels with `gh pr edit --add-label` | 1: `…opens_one` |
+| the open path skips the label call | 1: `…names_it_and_opens_no_second` |
+| the create path skips the label call | 1: `…opens_one` |
+| the open path labels `issues/1` | 1: `…names_it_and_opens_no_second` |
+| the create path labels `$((number + 1))` | 1: `…opens_one` |
+| the number read from the wrong end of the URL (`${url%%/*}`) | 1: `…opens_one` (the step's own number check exits 1) |
+| the label sent as `backmerge` | 1: `…opens_one` |
+
+22 of 22 caught.
+
+### Suite and checks
+
+Each part ran as one command with `set -o pipefail`, under a 115 s `alarm`. Load averages at the
+start of parts 1 to 5 were 7.48, 15.52, 13.13, 12.13 and 12.70 (one-minute), mostly the suite's own
+workers.
+
+| Command | Result |
+|---|---|
+| `uv run --frozen pytest -n auto -m "not slow and not live" --part 1/5` | `1431 passed, 1 skipped in 50.32s` |
+| `… --part 2/5` | `1 failed, 1429 passed, 1 xfailed in 38.08s` (see below) |
+| `… --part 3/5` | `1 failed, 1416 passed, 1 warning in 36.64s` (see below) |
+| `… --part 4/5` | `1419 passed, 1 xfailed, 1 warning in 35.16s` |
+| `… --part 5/5` | `1427 passed, 1 warning in 43.14s` |
+| `uv run --frozen scripts/actionlint.sh` | no findings, exit 0 |
+| `uv run --frozen ruff format --check .` / `ruff check .` | `695 files already formatted` / `All checks passed!` |
+| `uv run --frozen python scripts/check_command_blocks.py --base origin/dev` | `OK: no # comments in 275 shell code blocks in 117 Markdown files (1 session reports changed since origin/dev)`, with this section in |
+| `uv run scripts/check_links.py` | `OK: 1560 relative links and anchors in 222 Markdown files` |
+| `uv run scripts/validate_specs.py` | `OK: 348 files, 38 epics, 290 tasks, 20 releases` |
+
+**The two failures are this report, not the code.** Both are in `tests/scripts/test_task_restart.py`
+(v1-e01-t18 and v1-e01-t24). Both walk every real session report, and both were run while the
+report ended with the PM's CHANGES_REQUESTED review and nothing after it:
+
+* `test_an_existing_accepted_report_still_reads_accepted[v1-e01-t26-dispatch-opens-back-merge]`
+  takes every report whose *first* verdict is ACCEPTED and requires its *last* to be ACCEPTED. This
+  report's first review is ACCEPTED, and the review asks for its last to be PENDING. It will fail
+  until the PM accepts again, and then it passes, because `report_verdict` reads the last line.
+  `scripts/task pr` needs that ACCEPTED anyway, so the test cannot be red on a pull request opened
+  from this branch.
+* `test_the_reports_the_marker_check_alone_now_refuses_are_all_of_succeeded_tasks` failed because
+  the current session's part, which is everything after the last-but-one review, held no open-item
+  marker. This section records NOT RUN, which ends that. Re-run with this section in,
+  `uv run --frozen pytest tests/scripts/test_task_restart.py -q` gave `1 failed, 250 passed in
+  8.11s`. This test passed, and the one failure was the first test, on this report's new PENDING
+  review. `task_helper.report_verdict` on a copy of this report, with that last review set to
+  ACCEPTED, returns `ACCEPTED`; the file itself was not touched.
+
+Neither test is changed. The first one's walk includes reports that are mid-review, which is a
+v1-e01-t18 question (Follow-up work, below).
+
+## Operator follow-ups, after the sandbox proof
+
+### 4. The re-proof, in the same sandbox
+
+Expected runtime is about 5 minutes. It uses `charlesclark2/back-merge-dispatch-sandbox` as it was
+left: `main` holds "Sandbox hotfix whose push starts nothing", `dev` lacks it, #1 (`dev` ← `main`)
+is open with no label, and the `back-merge` label exists. It puts this branch's `back-merge.yml` on
+the sandbox's `dev` and changes nothing else, because a dispatch from `dev` runs `dev`'s file. Then
+it dispatches twice. It touches nothing in `charlesclark2/debate-intelligence`. Paste back the
+output at each bracketed label, [I] to [N]. The letters continue from the first run's [A] to [H].
+
+*Put the new `back-merge.yml` on the sandbox's `dev`.* A detached scratch worktree holds the
+sandbox's `dev`, so no branch is created. The `rev-parse` line prints the file's blob id in the new
+commit and on this branch.
+
+```bash
+cd /Users/charlesclark/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e01-t26-dispatch-opens-back-merge
+SANDBOX=charlesclark2/back-merge-dispatch-sandbox
+SB="https://github.com/${SANDBOX}.git"
+PATTERN='OK: |FAILED: |Back-merge pull request #|/pull/[0-9]+|Swept|No pull requests|##\[(warning|error)\]'
+LIST='[.[] | {number, state, baseRefName, headRefName, labels: [.labels[].name]}]'
+gh pr list --repo "$SANDBOX" --state all --json number,state,baseRefName,headRefName,labels --jq "$LIST"
+git worktree add --detach /tmp/t26-reproof
+cd /tmp/t26-reproof
+git fetch -q "$SB" dev
+git switch -q --detach FETCH_HEAD
+git checkout task/v1-e01-t26-dispatch-opens-back-merge -- .github/workflows/back-merge.yml
+git commit -q -m "Sandbox: back-merge.yml labels through REST"
+git diff --stat FETCH_HEAD HEAD
+git rev-parse HEAD:.github/workflows/back-merge.yml task/v1-e01-t26-dispatch-opens-back-merge:.github/workflows/back-merge.yml
+git push "$SB" HEAD:refs/heads/dev
+DEV=$(git rev-parse HEAD); echo "$DEV"
+```
+
+* **[I]**: before anything changes, the list is
+  `[{"number":1,"state":"OPEN","baseRefName":"dev","headRefName":"main","labels":[]}]`.
+* **[J]**: the diff stat names only `.github/workflows/back-merge.yml`, and the two blob ids are
+  the same.
+
+*Dispatch: it names #1 and labels it.*
+
+```bash
+gh workflow run back-merge.yml --repo "$SANDBOX" --ref dev
+sleep 20; NAMED=$(gh run list --repo "$SANDBOX" --workflow back-merge.yml --event workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId'); echo "$NAMED"
+gh run watch --repo "$SANDBOX" "$NAMED" --exit-status
+gh run view --repo "$SANDBOX" "$NAMED" --json headSha --jq .headSha
+gh run view --repo "$SANDBOX" "$NAMED" --log | grep -E "$PATTERN"
+gh pr list --repo "$SANDBOX" --state all --json number,state,baseRefName,headRefName,labels --jq "$LIST"
+```
+
+* **[K]**: a run id other than 38785319409. The run succeeds, and its `headSha` is `$DEV`. The log
+  shows ``FAILED: `main` has 1 non-merge commit(s) that `dev` lacks``,
+  `Back-merge pull request #1 is open; its head is main, so it already has these commits.` and
+  `No pull requests are open against main.`, with no `##[warning]` or `##[error]` line.
+* **[L]**: `[{"number":1,"state":"OPEN","baseRefName":"dev","headRefName":"main","labels":["back-merge"]}]`.
+
+If [K] fails with `##[error]` and `HTTP 403` (for example `Resource not accessible by
+integration`) from the label call, GitHub refused REST to this token too. Paste the log and stop
+there: adding `issues: write` is the PM's decision. If it fails with `HTTP 422` naming `labels`,
+the runner's `gh` sent the array differently. Paste the log; that one is the session's to fix.
+
+*Close #1 and dispatch: it opens #2 and labels it.*
+
+```bash
+gh pr close 1 --repo "$SANDBOX"
+gh workflow run back-merge.yml --repo "$SANDBOX" --ref dev
+sleep 20; OPENED=$(gh run list --repo "$SANDBOX" --workflow back-merge.yml --event workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId'); echo "$NAMED $OPENED"
+gh run watch --repo "$SANDBOX" "$OPENED" --exit-status
+gh run view --repo "$SANDBOX" "$OPENED" --log | grep -E "$PATTERN"
+gh pr list --repo "$SANDBOX" --state all --json number,state,baseRefName,headRefName,labels --jq "$LIST"
+```
+
+* **[M]**: two different run ids, and the run succeeds. The log shows the same `FAILED:` line, the
+  new pull request's URL ending `/pull/2`, and `No pull requests are open against main.`, with no
+  `##[warning]` or `##[error]` line.
+* **[N]**: two entries: #2 `OPEN`, `dev` ← `main`, labels `["back-merge"]`; and #1 `CLOSED`, labels
+  `["back-merge"]`.
+
+When [I] to [N] hold, the sandbox half of ac1 and the `dispatch-opens` node pass.
+
+*Clean up* once the results are pasted back:
+
+```bash
+cd /Users/charlesclark/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e01-t26-dispatch-opens-back-merge
+git worktree remove --force /tmp/t26-reproof
+gh auth refresh -h github.com -s delete_repo
+gh repo delete charlesclark2/back-merge-dispatch-sandbox --yes
+gh auth refresh -h github.com -r delete_repo
+```
+
+If the first run's scratch worktree and branches are still there, remove them too. Either command
+reports an error, and changes nothing, for anything already gone:
+
+```bash
+cd /Users/charlesclark/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e01-t26-dispatch-opens-back-merge
+git worktree remove --force /tmp/t26-dispatch-sandbox
+git branch -D sandbox-base hotfix/sandbox-lost-push
+```
+
+Follow-ups 2 (`scripts/task sync` before the pull request) and 3 (the first scheduled runs after
+the merge) still stand.
+
+## Follow-up work, after the sandbox proof
+
+* **`test_an_existing_accepted_report_still_reads_accepted` fails on any report between a review
+  that asks for changes and the next acceptance** (v1-e01-t18's test, E01). It treats "first
+  verdict ACCEPTED" as "accepted today". A report reviewed ACCEPTED and then CHANGES_REQUESTED, as
+  this one is, is exactly the case where t18 wants the last verdict to win. So the full suite is red
+  on such a branch until the PM accepts again. It cannot reach `dev` red, because `scripts/task pr`
+  needs that acceptance. Excluding reports whose last verdict is not ACCEPTED, or pinning the walk
+  to the reports on `dev`, would fix it. PM's call.
+
+## PM review
+
+<!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
+this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
+
+**Verdict:** PENDING
+<!-- ACCEPTED / CHANGES_REQUESTED -->
+
+**Reviewed by / date:**
+
+**Notes:**

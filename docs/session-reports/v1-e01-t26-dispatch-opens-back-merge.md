@@ -117,7 +117,7 @@ as one command with `set -o pipefail`, under a 115 s `alarm`:
 | `uv run --frozen pyright` | `0 errors, 0 warnings, 0 informations` |
 | `uv run --frozen lint-imports` | `Contracts: 12 kept, 0 broken.` |
 | `uv run --frozen scripts/actionlint.sh` | no findings, exit 0 |
-| `uv run --frozen python scripts/check_command_blocks.py --base origin/dev` | see the end of this report's commit; the run without `--base` gave `OK: no # comments in 262 shell code blocks in 116 Markdown files` |
+| `uv run --frozen python scripts/check_command_blocks.py --base origin/dev` | `OK: no # comments in 269 shell code blocks in 117 Markdown files (1 session reports changed since origin/dev)`, this report included |
 | `uv run scripts/check_links.py` | `OK: 1560 relative links and anchors in 222 Markdown files` |
 | `uv run scripts/validate_specs.py` | `OK: 348 files, 38 epics, 290 tasks, 20 releases` |
 

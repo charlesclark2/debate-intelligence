@@ -1278,7 +1278,7 @@ LEFTOVER_CALENDAR_LEDGER = "caselist-sync-downloads.json"
 since `v1-e34-t09` the module no longer names the file."""
 
 
-async def test_window_the_cap_is_counted_from_the_download_starts_file_alone_and_a_leftover_calendar_ledger_is_ignored(
+async def test_window_the_cap_counts_the_download_starts_file_alone_and_ignores_a_leftover_calendar_ledger(
     source: FakeCaselistSource, data_dir: Path, inbox: Path, archives: dict[date, Path]
 ) -> None:
     """The operator's old five, forty minutes after they were written, no longer count.

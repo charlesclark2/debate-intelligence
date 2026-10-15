@@ -323,7 +323,8 @@ def test_the_text_gives_each_later_upload_its_caselist_snapshots_and_outcome() -
     ) in shown
     assert (
         "     later upload of sha256 aaaaaaaaaaaa in openev 2026-policy as openev-640 (matched by file name "
-        "alone: no delivery record here knows both ids, so check it): KEPT: another holder has it too"
+        "alone: no row and no delivery record here knows both ids' upstream path, so check it): KEPT: "
+        "another holder has it too, and this plan takes it from none of its paths"
     ) in shown
     assert "EARLIER VERSIONS AT A REMOVED PATH, NOT REMOVED: 1 file(s)" in shown
     assert (
@@ -340,7 +341,8 @@ def test_the_lines_about_later_uploads_and_earlier_versions_show_no_path() -> No
     assert not [word for line in added for word in IDENTIFYING if word in line]
 
 
-def test_a_camp_match_the_delivery_record_confirms_says_so() -> None:
+def test_a_camp_match_by_upstream_path_says_so() -> None:
+    """The rows or the delivery record put both ids at one upstream path (`v1-e30-t14`)."""
     plan = plan_of(
         (
             source(NAMED, Inclusion.NAMED, Disposition.REMOVE),
@@ -350,8 +352,8 @@ def test_a_camp_match_the_delivery_record_confirms_says_so() -> None:
     )
 
     assert (
-        "     later upload of sha256 aaaaaaaaaaaa in openev 2026-policy as openev-640 (the delivery record "
-        "puts both ids at one upstream path): removed everywhere"
+        "     later upload of sha256 aaaaaaaaaaaa in openev 2026-policy as openev-640 (matched by upstream "
+        "path: both ids were uploaded at one upstream path): removed everywhere"
     ) in render_plan(plan, None)
 
 

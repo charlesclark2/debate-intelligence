@@ -48,6 +48,13 @@ Reversing that digest needs the archive in hand, exactly as reversing a file's o
 identifies no more than the sha256 values the list was always going to hold (Deviation recorded in
 the session report; spec ac4 amended).
 
+One **camp path** is the same scope for a camp file (`v1-e30-t14`): these bytes, at this row of this
+OpenEv release's manifest, are never recorded there again, while another release or a team keeps
+them. The entry's disclosure is :func:`camp_path_disclosure`, the digest of `openev/<release>/<row
+path>`, so it is an ordinary disclosure-scoped line that every build reads. A build from before
+`v1-e30-t14` reads it and does not apply it to a camp file: its OpenEv importer asks the list about
+the whole source only.
+
 ## A third record: the paths a removal holds
 
 `path-holds.jsonl`
@@ -87,11 +94,11 @@ Nothing is appended to release one.
     the removal log, which is kept in the same place) in both places (`v1-e30-t16`). A disclosure's
     digest hides its caselist with its path, so without this a shared file withdrawn from one
     caselist and kept in another could not be attributed afterwards. The entry carries the caselist's
-    slug, and joins the suppression entry by its sha256, disclosure and request
-    (:meth:`WithdrawalEntry.attributes`) and the removal log entry that lists the sha256 among
-    `withdrawn_sha256` by request. A file of its own, for the reason each record above is: the list's
-    lines and the log's are pinned to what every installed build reads, and so are the scope
-    record's, which the build before this one reads on every `caselist status`.
+    slug, `openev` for a camp path (`v1-e30-t14`), and joins the suppression entry by its sha256,
+    disclosure and request (:meth:`WithdrawalEntry.attributes`) and the removal log entry that lists
+    the sha256 among `withdrawn_sha256` by request. A file of its own, for the reason each record
+    above is: the list's lines and the log's are pinned to what every installed build reads, and so
+    are the scope record's, which the build before this one reads on every `caselist status`.
 """
 
 from __future__ import annotations
@@ -143,6 +150,8 @@ __all__ = [
     "WITHDRAWALS_FILENAME",
     "WithdrawalEntry",
     "WithdrawalList",
+    "camp_path_disclosure",
+    "camp_path_scope",
     "canonical_line",
     "disclosure_digest",
 ]
@@ -156,6 +165,10 @@ REMOVAL_SCOPES_FILENAME: Final = "removal-scopes.jsonl"
 """The removal-scope record's file name, beside the removal log in both places (`v1-e30-t15`)."""
 WITHDRAWALS_FILENAME: Final = "withdrawals.jsonl"
 """The withdrawal record's file name, beside the list and the log in both places (`v1-e30-t16`)."""
+
+TOUCHED_CASELIST_PATTERN: Final = r"^([a-z]+[0-9]{2}|openev)$"
+"""A caselist a removal touched or withdrew a copy from: a season's slug (:data:`CASELIST_SLUG_PATTERN`),
+or `openev` for a camp path (`v1-e30-t14`)."""
 
 REQUEST_ID_PATTERN: Final = r"^RM-[0-9]{4}-[0-9]{2,4}$"
 """`RM-2026-01`: the register id `docs/runbooks/caselist-removal.md` step 1 assigns a request.
@@ -221,6 +234,32 @@ def disclosure_digest(caselist: str, source_path: str) -> Sha256Hex:
     caselists one entry.
     """
     return hashlib.sha256(f"{caselist}/{source_path}".encode()).hexdigest()
+
+
+OPENEV_SCOPE: Final = "openev"
+"""The caselist a camp path is withdrawn from, as the withdrawal record and the manifests name it."""
+
+
+def camp_path_scope(release: str) -> str:
+    """The `caselist` a camp path's :func:`disclosure_digest` is taken under: `openev/<release>`.
+
+    A camp file has no disclosure, but a release manifest is the camp's own caselist and each of its
+    rows is at a path, so one camp path of a file is withdrawn the way one caselist path is
+    (`v1-e30-t14`): its sha256 with :func:`camp_path_disclosure` as the entry's disclosure. The
+    release is part of the scope because the same row path may be in two releases' manifests, and a
+    withdrawal from one leaves the other.
+    """
+    return f"{OPENEV_SCOPE}/{release}"
+
+
+def camp_path_disclosure(release: str, path: str) -> Sha256Hex:
+    """The digest a suppression of one camp path stores: of `openev/<release>/<row path>`, UTF-8.
+
+    `release` is `2026-policy`; `path` is the release-manifest row's own path, which for a file the
+    pull fetched is `openev-<id>-<file name>`. The same as ``disclosure_digest("openev",
+    f"{release}/{path}")``, so the withdrawal record's join (`v1-e30-t16`) needs nothing new.
+    """
+    return disclosure_digest(camp_path_scope(release), path)
 
 
 class SuppressionEntry(DomainModel):
@@ -313,8 +352,12 @@ class WithdrawalEntry(DomainModel):
     disclosure: Sha256Hex
     """:func:`disclosure_digest` of the caselist and the path the copy was withdrawn from: the
     suppression entry's own :attr:`SuppressionEntry.disclosure`."""
-    caselist: Annotated[str, StringConstraints(pattern=CASELIST_SLUG_PATTERN)]
-    """The slug of the caselist the copy was withdrawn from: the one thing the digest cannot give."""
+    caselist: Annotated[str, StringConstraints(pattern=TOUCHED_CASELIST_PATTERN)]
+    """The slug of the caselist the copy was withdrawn from: the one thing the digest cannot give.
+
+    `openev` for a camp path (`v1-e30-t14`), whose release is inside the digest
+    (:func:`camp_path_disclosure`). No build before this one parses the record: they append to it
+    and never read it."""
     recorded_at: UtcDatetime
     """The suppression entry's `recorded_at`."""
     reason: ReasonCode
@@ -467,9 +510,6 @@ class InboxRewriteRecord(DomainModel):
     from_sha256: Sha256Hex
     to_sha256: Sha256Hex
 
-
-TOUCHED_CASELIST_PATTERN: Final = r"^([a-z]+[0-9]{2}|openev)$"
-"""A caselist a removal touched: a season's slug (:data:`CASELIST_SLUG_PATTERN`), or `openev`."""
 
 _MANIFEST_KEY_PATTERN: Final = r"^manifests/([a-z]+[0-9]{2}|openev)/[A-Za-z0-9][A-Za-z0-9._/-]*\.jsonl$"
 _VERSION_ID_PATTERN: Final = r"^[A-Za-z0-9._+/=-]{1,1024}$"

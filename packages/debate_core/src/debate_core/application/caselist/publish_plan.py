@@ -87,7 +87,7 @@ from debate_core.application.caselist.import_service import STORED_CLASSIFICATIO
 from debate_core.application.caselist.manifest import FULL_ARCHIVE_DIRECTORY, MANIFEST_DIRECTORY
 from debate_core.application.errors import DomainError
 from debate_core.application.ports.evidence_store import ObjectKey, validate_object_key
-from debate_core.application.ports.suppression import SuppressionState, disclosure_digest
+from debate_core.application.ports.suppression import SuppressionState, camp_path_scope, disclosure_digest
 from debate_core.domain import SHA256_HEX_PATTERN, Sha256Hex
 from debate_core.domain.caselist import CASELIST_SLUG_PATTERN
 
@@ -403,17 +403,16 @@ class LocalSnapshot:
 def suppressed_rows(local: LocalSnapshot, suppression: SuppressionState) -> tuple[Sha256Hex, ...]:
     """The digests of the local manifest's stored rows that `suppression` stops, sorted, once each.
 
-    A camp-file manifest is checked by digest alone; a caselist manifest by digest and by each
-    row's own disclosure, so one team's withdrawn copy of a shared file is caught and the other
-    team's row is not.
+    Checked by digest and by each row's own disclosure: for a caselist manifest the row's caselist
+    path, so one team's withdrawn copy of a shared file is caught and the other team's row is not;
+    for a camp release the row's camp path (`v1-e30-t14`), so a camp path withdrawn from this
+    release is caught and another release's row of the same bytes is not.
     """
-    scope = None if local.caselist == OPENEV else local.caselist
+    scope = camp_path_scope(local.snapshot) if local.caselist == OPENEV else local.caselist
     stopped = {
         digest
         for digest, path in local.stored_rows
-        if suppression.suppresses(
-            digest, disclosure=disclosure_digest(scope, path) if scope is not None else None
-        )
+        if suppression.suppresses(digest, disclosure=disclosure_digest(scope, path))
     }
     return tuple(sorted(stopped))
 

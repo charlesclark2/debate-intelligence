@@ -74,7 +74,8 @@ count is in the summary. Exit codes are `import`'s.
     debate-research caselist reimport-openev-metadata --year 2026 --event policy
 
 Re-derives camp, lab, title and warnings for a release already imported, from the paths its
-manifest recorded, with the current alias table
+manifest recorded, with the current alias table, and gives each row its upstream identity
+(`openev_id`, `upstream_path_sha256`) from this machine's OpenEv delivery record (`v1-e30-t14`)
 (:meth:`~debate_core.application.caselist.openev_import_service.OpenEvImportService.reimport_metadata`,
 `v1-e30-t08`). It reads the local manifest, corrects the camp-file records, and writes the manifest
 back to the same key — only when it changed, and never under `--dry-run`. It downloads nothing and
@@ -401,6 +402,7 @@ def reimport_openev_metadata(
             recorded_manifest=read_manifest_lines(manifest_path),
             aliases=aliases,
             dry_run=dry_run,
+            upstream_paths=cli.services.openev_upstream_paths(),
         )
     )
 
@@ -1182,6 +1184,7 @@ def openev_metadata_reimport_summary(
         "camp_files_updated": report.camp_files_updated,
         "camp_files_missing": report.camp_files_missing,
         "blobs_missing": report.blobs_missing,
+        "identities_added": report.identities_added,
         "manifest_changed": report.manifest_changed,
         "manifest": str(manifest) if manifest is not None else None,
     }
@@ -1208,6 +1211,7 @@ def _reimport_table(report: OpenEvMetadataReimport, manifest: Path | None) -> Ta
         title=f"openev {report.release} metadata ({'dry run' if not report.applied else 're-derived'})",
         caption=(
             f"{report.rows} file(s), {report.titles_changed} title(s) changed, "
+            f"{report.identities_added} row(s) given their upstream identity, "
             f"{report.blobs_missing} not held locally. {outcome}"
         ),
     )

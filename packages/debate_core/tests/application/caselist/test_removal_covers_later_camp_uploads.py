@@ -221,18 +221,25 @@ async def a_team_discloses_the_revised_camp_file(world: RemovalWorld, scratch: P
     assert (await publisher.execute(await publisher.plan(CASELIST))).succeeded
 
 
-async def test_a_later_openev_id_a_team_also_disclosed_is_kept_for_that_team(
+async def test_a_later_openev_id_a_team_also_disclosed_is_withdrawn_from_its_camp_path_for_that_team(
     world: RemovalWorld, tmp_path: Path
 ) -> None:
-    """The shared-bytes rule: no entry of the list stops one camp path of a file, so it stays whole."""
+    """The shared-bytes rule: the team keeps the bytes, and the camp path is withdrawn on its own.
+
+    Until `v1-e30-t14` no entry of the list stopped one camp path of a file, so the later id stayed
+    whole. `test_removal_withdraws_one_camp_path.py` has the rest of what the withdrawal does.
+    """
     await pulled_then_revised(world)
     await a_team_discloses_the_revised_camp_file(world, tmp_path / "weekly")
 
     await remove(world, ESTUARY_SHA256)
 
-    assert release_rows(world) == [{NEW_ROW: REVISED_SHA256}] * 2
+    assert release_rows(world) == [{}, {}]
     assert FsSnapshotStore(world.data_dir).path_for(REVISED_SHA256).read_bytes() == REVISED_BODY
-    assert len(versions_of(world, raw_key(REVISED_SHA256))) == 1
-    assert (await world.repository.list_camp_files(source_sha256=REVISED_SHA256, limit=5)).items
+    assert versions_of(world, raw_key(REVISED_SHA256)) == []
+    assert not (await world.repository.list_camp_files(source_sha256=REVISED_SHA256, limit=5)).items
     for entries in suppression_lines(world):
-        assert {entry.sha256 for entry in entries} == {ESTUARY_SHA256}
+        assert {entry.sha256: entry.disclosure is None for entry in entries} == {
+            ESTUARY_SHA256: True,
+            REVISED_SHA256: False,
+        }

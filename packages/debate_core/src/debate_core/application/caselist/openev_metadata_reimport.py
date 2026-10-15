@@ -28,6 +28,14 @@ release's :class:`~debate_core.domain.caselist.CampFile` records are corrected t
 digest, the one the importer recorded, from that digest's first row in path order; its digest,
 year, event and import date are left alone.
 
+It also gives every member row its upstream identity (`v1-e30-t14`, :data:`~debate_core.
+application.caselist.openev_manifest.CAMP_FIELDS`): `openev_id` from the row's own name
+(`openev-<id>-…`), or as the row already carries it, and `upstream_path_sha256` from this machine's
+delivery record for that id (`caselist-sync-openev-deliveries.json`, which holds the path's digest
+and never the path), or as the row already carries it. A row the record does not know keeps `null`.
+This is how rows an older build wrote come to carry what the pull now writes on each new row, and
+prod's rows with them, since prod's manifests are published from this machine's.
+
 What it never touches: the bytes (no blob is read or written; the blob store is only asked
 whether each digest is held), a `sha256`, a `byte_size`, a path, a classification, or the
 manifest's key, which is the release's key and is returned unchanged for the caller to write back
@@ -85,8 +93,9 @@ from debate_core.application.caselist.openev_manifest import (
 )
 from debate_core.application.caselist.pipeline import STORED_CLASSIFICATIONS, Classification
 from debate_core.application.errors import DomainError
+from debate_core.application.ports.caselist_source import openev_id_of_inbox_name
 from debate_core.application.ports.evidence_store import ObjectKey
-from debate_core.application.ports.suppression import SuppressionState
+from debate_core.application.ports.suppression import SuppressionState, camp_path_scope
 from debate_core.domain.caselist import CampFile, Event
 
 __all__ = [
@@ -148,6 +157,10 @@ class OpenEvMetadataReimport:
     blobs_missing: int = 0
     """Digests the manifest names that the local blob store does not hold. Reported, not fetched."""
 
+    identities_added: int = 0
+    """Member rows whose upstream identity (`openev_id`, `upstream_path_sha256`) this wrote or changed:
+    every row of a release imported before `v1-e30-t14`, `null` where nothing here knows it."""
+
     @property
     def release(self) -> str:
         return openev_release_name(self.year, self.event)
@@ -183,6 +196,7 @@ class RederivedRelease:
     rows_changed: int
     titles_changed: int
     warnings_changed: int
+    identities_added: int = 0
 
     def report(
         self, *, applied: bool, camp_files_updated: int, camp_files_missing: int, blobs_missing: int
@@ -203,6 +217,7 @@ class RederivedRelease:
             camp_files_updated=camp_files_updated,
             camp_files_missing=camp_files_missing,
             blobs_missing=blobs_missing,
+            identities_added=self.identities_added,
         )
 
 
@@ -213,8 +228,13 @@ def rederive_release(
     recorded_manifest: Iterable[str],
     aliases: CampAliases,
     suppression: SuppressionState,
+    upstream_paths: Mapping[int, str] | None = None,
 ) -> RederivedRelease:
     """Derive every stored row's camp, lab, title and warnings again from its path; keep the rest.
+
+    Every member row also gets `openev_id` and `upstream_path_sha256`, the second from
+    `upstream_paths` (`{openev id: SHA-256 of its upstream path}`, the delivery record's) where it
+    knows the row's id. See the module docstring.
 
     Raises :class:`NoRecordedRelease` for no lines,
     :class:`~debate_core.application.caselist.publish_plan.UnreadableManifest` for a manifest the
@@ -232,9 +252,12 @@ def rederive_release(
     after: Counter[str] = Counter()
     rows: list[dict[str, object]] = []
     firsts: dict[str, dict[str, object]] = {}
-    derived = rows_changed = titles_changed = warnings_changed = 0
+    derived = rows_changed = titles_changed = warnings_changed = identities_added = 0
     for path in sorted(recorded.rows):
         row = dict(recorded.rows[path])
+        identity = _upstream_identity(path, row, upstream_paths or {})
+        identities_added += any(name not in row or row[name] != value for name, value in identity.items())
+        row.update(identity)
         if row.get("classification") in _STORED:
             parsed = parse_camp_path(path, aliases=aliases)
             fresh: dict[str, object] = {
@@ -260,7 +283,13 @@ def rederive_release(
         year=year,
         event=event,
         manifest_key=key,
-        manifest_lines=tuple(render_rows([*rows, summary], suppression=suppression, disclosure_scope=None)),
+        manifest_lines=tuple(
+            render_rows(
+                [*rows, summary],
+                suppression=suppression,
+                disclosure_scope=camp_path_scope(openev_release_name(year, event)),
+            )
+        ),
         recorded_lines=recorded_lines,
         camp_file_rows=firsts,
         rows=derived,
@@ -269,7 +298,27 @@ def rederive_release(
         rows_changed=rows_changed,
         titles_changed=titles_changed,
         warnings_changed=warnings_changed,
+        identities_added=identities_added,
     )
+
+
+def _upstream_identity(
+    path: str, row: Mapping[str, object], upstream_paths: Mapping[int, str]
+) -> dict[str, object]:
+    """A row's `openev_id` and `upstream_path_sha256`: from its name and the delivery record, or as it was.
+
+    The name decides the id where it names one (`openev-<id>-…`); a camp release's member row names
+    none and keeps the id of the zip the pull wrote on it, if any. The record decides the digest
+    where it knows the id; otherwise the row keeps what it carries.
+    """
+    named = openev_id_of_inbox_name(path.rsplit("/", 1)[-1])
+    carried = row.get("openev_id")
+    openev_id = named if named is not None else carried if isinstance(carried, int) else None
+    digest = upstream_paths.get(openev_id) if openev_id is not None else None
+    return {
+        "openev_id": openev_id,
+        "upstream_path_sha256": digest if digest is not None else row.get("upstream_path_sha256"),
+    }
 
 
 def corrected_camp_file(existing: CampFile, row: Mapping[str, object]) -> CampFile:
@@ -319,6 +368,7 @@ def log_reimport(report: OpenEvMetadataReimport) -> None:
             "camp_files_updated": report.camp_files_updated,
             "camp_files_missing": report.camp_files_missing,
             "blobs_missing": report.blobs_missing,
+            "identities_added": report.identities_added,
             "manifest_changed": report.manifest_changed,
         },
     )

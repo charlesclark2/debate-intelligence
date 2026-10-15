@@ -64,6 +64,15 @@ a withdrawn later upload's copy stays because another *path* holds it, which may
 team's. Each withdrawal's caselist is recorded beside the list, by slug, and the plan prints those
 lines under *WITHDRAWALS* as it prints the path entries.
 
+## A camp path is withdrawn on its own (`v1-e30-t14`)
+
+A camp file's later upload that another release or a team also holds is withdrawn from its camp
+path, as a caselist path is, and its withdrawal is recorded under `openev`. Its plan lines name the
+release and the OpenEv id (`withdraw openev 2026-policy openev-640`), never the camp's title or the
+file's name. How two uploads were found to be at one camp path is said on the later upload's line:
+by the upstream path both ids' rows, or this machine's delivery record, put them at, or by the rows'
+names alone, which is all a release written before `v1-e30-t14` and not yet re-derived offers.
+
 ## What is printed and what is not
 
 The plan's text names the team's paths, school and team code: this is the operator's own terminal,
@@ -107,6 +116,7 @@ from debate_cli.context import CliContext, cli_context, command_name
 from debate_cli.exit_codes import ExitCode
 from debate_cli.output import CliOutput, CommandFailure, JsonValue, OutputMode
 from debate_core.application.caselist.inbox_purge import InboxAction, InboxFilePlan
+from debate_core.application.caselist.publish_plan import OPENEV
 from debate_core.application.caselist.removal_path_versions import (
     PathVersion,
     SamePathEvidence,
@@ -125,6 +135,7 @@ from debate_core.application.caselist.removal_plan import (
     parse_team_selector,
 )
 from debate_core.application.caselist.removal_service import RemovalReport, UnsuppressPlan, UnsuppressReport
+from debate_core.application.ports.caselist_source import openev_id_of_inbox_name
 from debate_core.application.ports.suppression import (
     REINSTATEMENT_REASONS,
     REMOVAL_REASONS,
@@ -505,7 +516,7 @@ _LATER_UPLOAD_OUTCOMES = {
         "withdrawn from this path only: another path still holds it, so its bytes stay"
     ),
     LaterUploadOutcome.KEPT_SHARED: (
-        "KEPT: another holder has it too, and one camp path of a file cannot be withdrawn. To remove it for "
+        "KEPT: another holder has it too, and this plan takes it from none of its paths. To remove it for "
         "everyone, name it with --source and --include-shared"
     ),
     LaterUploadOutcome.LEFT_IN_PLACE: f"left in place ({ONLY_NAMED_FLAG})",
@@ -582,6 +593,23 @@ def _earlier_version_lines(plan: RemovalPlan) -> list[str]:
     return lines
 
 
+def _withdrawn_path_label(caselist: str, path: str) -> str:
+    """A withdrawn path as the plan prints it: a caselist path as it is, a camp path by release and id.
+
+    A camp path is `<release>/<row path>` (`v1-e30-t14`), and its row path names the file, so the
+    line gives the release and the OpenEv id the row was downloaded as instead.
+    """
+    if caselist != OPENEV:
+        return path
+    release, _, row = path.partition("/")
+    openev_id = openev_id_of_inbox_name(row.rsplit("/", 1)[-1])
+    return (
+        f"{release} openev-{openev_id}"
+        if openev_id is not None
+        else f"{release} (a row that names no OpenEv id)"
+    )
+
+
 def _sha256_label(digest: str) -> str:
     """`sha256 <first 12 hex>`: how a file is named where its full digest is not needed."""
     return f"sha256 {digest[:12]}"
@@ -598,9 +626,10 @@ def _where_held(version: PathVersion) -> str:
         return f"{version.caselist}, held in {snapshots}{also}"
     ids = ", ".join(f"openev-{one}" for one in version.openev_ids)
     matched = (
-        "the delivery record puts both ids at one upstream path"
+        "matched by upstream path: both ids were uploaded at one upstream path"
         if version.evidence is SamePathEvidence.UPSTREAM_PATH_DIGEST
-        else "matched by file name alone: no delivery record here knows both ids, so check it"
+        else "matched by file name alone: no row and no delivery record here knows both ids' upstream "
+        "path, so check it"
     )
     return f"openev {snapshots} as {ids} ({matched})"
 
@@ -675,13 +704,16 @@ def _source_lines(number: int, source: PlannedSource, plan: RemovalPlan) -> list
     for ref in source.disclosures:
         lines.append(f"     record   {ref.caselist} {ref.snapshot.isoformat()}  {ref.source_path}")
     for camp_file in source.camp_files:
-        lines.append(
-            f"     record   openev {camp_file.year}-{camp_file.event.lower()}  "
-            f"{camp_file.camp}: {camp_file.file_title}"
+        # A withdrawn camp path's record is named by its release alone (v1-e30-t14).
+        named = (
+            "the camp-file record of the withdrawn copy"
+            if source.disposition is Disposition.WITHDRAW
+            else f"{camp_file.camp}: {camp_file.file_title}"
         )
+        lines.append(f"     record   openev {camp_file.year}-{camp_file.event.lower()}  {named}")
     if source.disposition is Disposition.WITHDRAW:
         for caselist, path in source.requester_paths:
-            lines.append(f"     withdraw {caselist}  {path}")
+            lines.append(f"     withdraw {caselist}  {_withdrawn_path_label(caselist, path)}")
         if source.kept_in:
             # A --team withdrawal is kept for another team; a later upload, or what a --source run
             # left, for any path the removal does not take, which may be the same team's.

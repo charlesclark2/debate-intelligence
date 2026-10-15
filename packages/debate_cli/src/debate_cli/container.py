@@ -408,6 +408,14 @@ class ServiceContainer:
         """The SHA-256 an import records for the archive itself, by the same reader's rules."""
         return archive_reader.archive_digest(source)
 
+    def openev_upstream_paths(self) -> dict[int, str]:
+        """What this machine's OpenEv delivery record knows of each id's upstream path, as digests.
+
+        `caselist reimport-openev-metadata` writes it onto release rows imported before they carried
+        it (`v1-e30-t14`). The record is the pull's, in the data directory it keeps its state in.
+        """
+        return self.caselist_inbox().deliveries.upstream_paths()
+
     def evidence_object_path(self, key: ObjectKey) -> Path:
         """The file this machine's evidence store keeps the named object `key` at: a manifest."""
         return FsEvidenceObjectStore(self.settings.storage.data_dir).path_for(key)

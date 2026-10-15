@@ -379,6 +379,9 @@ def test_every_row_has_the_caselist_row_layout_plus_the_camp_fields(tmp_path: Pa
         "archive_sha256",
         "existing_origin",
         "existing_caselist",
+        # The row's upstream identity (v1-e30-t14): an id and a digest, never the upstream path.
+        "openev_id",
+        "upstream_path_sha256",
     }
 
     rows = manifest_rows(Harness(tmp_path / "openev").import_openev(FIRST).manifest_lines)
@@ -387,6 +390,10 @@ def test_every_row_has_the_caselist_row_layout_plus_the_camp_fields(tmp_path: Pa
     assert {row["schema_version"] for row in rows} == {caselist_rows[0]["schema_version"]}
     for row in rows[:-1]:
         assert set(row) == caselist_member_keys | camp_fields, row["path"]
+        # A hand import never knows the upstream path. It knows the id only of the one file named
+        # as the sync names a download, `openev-417-…`; the rest sit in their camps' folders.
+        named_id = 417 if row["path"] == "openev-417-TSF-Spillway Advantage.docx" else None
+        assert (row["openev_id"], row["upstream_path_sha256"]) == (named_id, None), row["path"]
     # `first_seen` (v1-e30-t08) counts a week against the caselist's earlier weeks; a release has
     # none, and the key is additive, so a reader of both kinds already handles its absence.
     weekly_only = {"first_seen"}

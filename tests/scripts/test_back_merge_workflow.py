@@ -249,14 +249,30 @@ OPEN_STEP = "Open the back-merge pull request unless one is open"
 REPO = "owner/sandbox"
 
 # Records each call's arguments, one JSON list per line. `pr list` answers with the open pull
-# request's number, or nothing, as the real `--jq '.[0].number // empty'` would.
+# request's number, or nothing, as the real `--jq '.[0].number // empty'` would. It refuses what the
+# workflow token was refused in the sandbox proof (v1-e01-t26, 2026-10-15): a label put on a pull
+# request through GraphQL's `updatePullRequest`, which `gh pr create --label` and
+# `gh pr edit --add-label` use. GitHub had already opened the pull request when `--label` failed.
 FAKE_GH = """\
 import json, os, sys
+args = sys.argv[1:]
 with open(os.environ["FAKE_GH_LOG"], "a", encoding="utf-8") as log:
-    log.write(json.dumps(sys.argv[1:]) + "\\n")
-if sys.argv[1:3] == ["pr", "list"]:
+    log.write(json.dumps(args) + "\\n")
+refused = (
+    (args[:2] == ["pr", "create"] and "--label" in args)
+    or (args[:2] == ["pr", "edit"] and "--add-label" in args)
+    or (args[:2] == ["api", "graphql"] and any("updatePullRequest" in arg for arg in args))
+)
+if refused:
+    print(
+        "pull request update failed: GraphQL: github-actions[bot] does not have permission to update"
+        " the pull request (updatePullRequest)",
+        file=sys.stderr,
+    )
+    sys.exit(1)
+if args[:2] == ["pr", "list"]:
     print(os.environ["FAKE_GH_OPEN_PR"])
-elif sys.argv[1:3] == ["pr", "create"]:
+elif args[:2] == ["pr", "create"]:
     print("https://github.com/owner/sandbox/pull/99")
 """
 
@@ -271,6 +287,21 @@ class OpenJobRun:
 
 def option(call: list[str], name: str) -> str:
     return call[call.index(name) + 1]
+
+
+def labels_added(calls: list[list[str]]) -> list[tuple[str, str]]:
+    """(number, label) for each REST call that adds a label to an issue or pull request, which a
+    `pull-requests: write` token may make: `POST /repos/{owner}/{repo}/issues/{number}/labels`."""
+    added = []
+    for call in calls:
+        if call[:1] != ["api"] or "--method" not in call or option(call, "--method") != "POST":
+            continue
+        for arg in call[1:]:
+            if found := re.fullmatch(rf"repos/{REPO}/issues/(\d+)/labels", arg):
+                added += [
+                    (found[1], field.split("=", 1)[1]) for field in call if field.startswith("labels[]=")
+                ]
+    return added
 
 
 def open_job_step(name: str) -> dict[str, Any]:
@@ -379,11 +410,12 @@ def test_with_no_back_merge_pull_request_open_the_job_opens_one(tmp_path: Path) 
         "open",
     )
     assert option(create, "--repo") == REPO
-    assert (option(create, "--base"), option(create, "--head"), option(create, "--label")) == (
-        "dev",
-        "main",
-        "back-merge",
-    )
+    assert (option(create, "--base"), option(create, "--head")) == ("dev", "main")
+    assert "--label" not in create
+    # The label goes on the pull request just opened, #99 in the fake's answer, through REST.
+    assert labels_added(run.calls) == [("99", "back-merge")]
+    [label_call] = [call for call in run.calls if labels_added([call])]
+    assert run.calls.index(create) < run.calls.index(label_call)
     hotfix = subprocess.run(
         ["git", "-C", str(run.workdir), "rev-parse", "main"], check=True, capture_output=True, text=True
     ).stdout.strip()
@@ -395,7 +427,7 @@ def test_with_one_back_merge_pull_request_open_the_job_names_it_and_opens_no_sec
     run = run_open_job(tmp_path, main="hotfix", open_pr="17")
     assert run.outputs == {"needed": "true"}
     assert [call for call in run.calls if call[:2] == ["pr", "create"]] == []
-    assert ["pr", "edit", "17", "--repo", REPO, "--add-label", "back-merge"] in run.calls
+    assert labels_added(run.calls) == [("17", "back-merge")]
     assert "Back-merge pull request #17 is open" in run.log
 
 

@@ -27,8 +27,17 @@ spec:
     wrapped missing profile the setting is in the message and the hint but no longer a field.
     (5) The removal runbook's step 5 describes the preflight without saying `unsuppress` has the
     same one. (6) A takedown that passes its preflight could delete any probe an earlier
-    preflight left; on 2026-10-11 dev and prod held none. Out of scope: the grants, and the
-    exit-code rule.
+    preflight left; on 2026-10-11 dev and prod held none. Added by the PM, 2026-10-15: (7) `doctor`
+    cannot say that an everyday profile is signed in as the other environment's permission set
+    (v1-e34-t22 FU4). (8) The caller-identity question has no time limit of its own, so with AWS
+    unreachable it waits for botocore's retries and `--check-launchd` gives up after 60 seconds
+    (v1-e34-t22 FU6). (9) An `OSError`'s text still reaches output outside the CLI's generic
+    handler (v1-e01-t25 FU1 and FU2): `store sync --apply`'s `data.failed[].message`;
+    `caselist publish`'s `manifest_error` and `failed[].message`; the messages of
+    `RemovalIncomplete` and `RemovalCompletedUnlogged`; and `ParsedObjectOutcome.error_message`,
+    which nothing renders yet. Out of scope: the grants, the exit-code rule, and configuration
+    errors that name the file the operator must fix, which keep the path (ruled in v1-e01-t25's
+    review).
   priority: 3
   constraints:
     packages: [debate_core.application, debate_core.integrations.s3, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, tests/smoke, docs/runbooks]
@@ -60,6 +69,19 @@ spec:
         preflight deletes any version under `manifests/_suppression/preflight/` older than
         its own probe, with the takedown profile, by test against moto. The runbook's
         by-hand section says when it is still needed.
+    - id: ac5
+      description: >-
+        (7): `doctor --evidence-profiles` says when an everyday profile is signed in as the
+        other environment's permission set, without failing the check, by test with the
+        identity stubbed at the port.
+    - id: ac6
+      description: >-
+        (8): the identity question gives up after a bounded time of its own and reports that
+        AWS did not answer, well inside `--check-launchd`'s 60 seconds, by test.
+    - id: ac7
+      description: >-
+        (9): each of the four routes names a non-`DomainError` by its class and errno, never its
+        text, with a probe path and title absent from text and JSON, each shown failing first.
 status:
   phase: Pending
 ---

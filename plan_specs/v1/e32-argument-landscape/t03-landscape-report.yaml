@@ -21,8 +21,9 @@ spec:
     (school, team code, side, tournament, round) and E31 card fingerprints/occurrences, producing one
     report bundle per caselist and snapshot. For each position it reports the rounds and distinct teams
     that READ it, the aff/neg split (PF pro/con normalized to aff/neg), the snapshot in which it was first
-    seen, whether it is new in this snapshot (archives are cumulative, so "new" means first disclosed
-    since the previous snapshot), and the most-read cards: card fingerprints ranked by distinct teams
+    seen, whether it is new in this snapshot ("new" means first disclosed since the previous snapshot,
+    by the first-seen count the import records, since a weekly archive is a window of about a week's
+    changes and not cumulative: v1-e30-t17), and the most-read cards: card fingerprints ranked by distinct teams
     reading them within the position, shown with the tag and short cite exactly as parsed and a source
     reference (content-addressed raw/ object key, element index, snapshot) rather than a team-code path.
     Output is a Markdown report plus positions.csv and top_cards.csv with a header block recording

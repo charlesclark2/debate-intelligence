@@ -39,7 +39,10 @@ spec:
     - id: ac1
       description: >-
         At least 40 labelled examples across both shapes, and the report's decision between
-        a deterministic split and a model call, with each one's accuracy on them.
+        a deterministic split and a model call, with each one's accuracy on them. Amended by
+        the PM, 2026-10-15: the examples include the four cites of 177 to 395 characters with
+        no name and year at their front that the corrected evaluation files hold
+        (v1-e31-t12's follow-up work), and the report says how each is split.
     - id: ac2
       description: >-
         Whichever is built splits the cite from the words, and marks a

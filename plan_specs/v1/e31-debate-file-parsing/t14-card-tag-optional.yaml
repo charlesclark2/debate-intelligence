@@ -46,6 +46,11 @@ spec:
       description: >-
         The aggregates' ordering is unchanged for tagged cards, by a test that rebuilds a
         store before and after.
+    - id: ac4
+      description: >-
+        Added by the PM, 2026-10-15, from v1-e31-t11's Follow-up work 8: the `fingerprint_version`
+        field description in `debate_core/domain/card_occurrence.py` says the exact digest is the
+        same in card-fingerprint-v1, v2 and v3.
 status:
   phase: Pending
 ---

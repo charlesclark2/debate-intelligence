@@ -801,7 +801,7 @@ into adds to that pull.
 
 | Measured | hsld26 | hspf26 | hspolicy26 | openev | All four | The agent's three |
 |---|---|---|---|---|---|---|
-| 2026-10-11, parser `2026.10.10-docx-2` and `card-fingerprint-v2`, which is this build | 314 s | 193 s | 473 s | 71 s | 1,051 s (17.5 min) | 980 s (16.3 min) |
+| 2026-10-11, parser `2026.10.10-docx-2` and `card-fingerprint-v2`, the build current on that day | 314 s | 193 s | 473 s | 71 s | 1,051 s (17.5 min) | 980 s (16.3 min) |
 | 2026-10-10, parser `2026.09.20-docx-1` ([`caselist-parse-report.md`](../data/caselist-parse-report.md), `v1-e31-t06`) | 348 s | 214 s | 460 s | 60 s | 1,082 s (18.0 min) | 1,022 s (17.0 min) |
 
 The arithmetic below uses the 2026-10-11 row. The two runs differ by 3% in total and by up to 18%

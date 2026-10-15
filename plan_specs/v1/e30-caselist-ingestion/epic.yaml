@@ -125,6 +125,14 @@ spec:
       inputs:
         goalRef: v1-e34-t14-removed-path-hold-for-inbox-copies
         specRef: plan_specs/v1/e34-caselist-sync/t14-removed-path-hold-for-inbox-copies.yaml
+    - id: ext-v1-e01-t21-installed-smoke-stand-ins
+      kind: External
+      name: 'Prerequisite from E01: The storage and OpenCaselist smoke checks run against the installed build'
+      description: >-
+        Cross-epic prerequisite owned by v1-e01-repo-foundation (release v1.0).
+      inputs:
+        goalRef: v1-e01-t21-installed-smoke-stand-ins
+        specRef: plan_specs/v1/e01-repo-foundation/t21-installed-smoke-stand-ins.yaml
     - id: t01
       kind: Task
       name: Caselist and OpenEv data-use policy
@@ -485,5 +493,88 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e30-t17-weekly-window-wording-and-ordering
+    - id: t18
+      kind: Task
+      name: 'A weekly imported late re-measures the weeks after it, and a re-import needs no flag'
+      description: >-
+        A weekly imported late re-measures the weeks after it from the store, and a
+        re-import needs no flag.
+      inputs:
+        specRef: plan_specs/v1/e30-caselist-ingestion/t18-late-imports-re-measure-later-manifests.yaml
+        goalRef: v1-e30-t18-late-imports-re-measure-later-manifests
+      dependsOn:
+      - t17
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e30-t18-late-imports-re-measure-later-manifests reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e30-t18-late-imports-re-measure-later-manifests
+    - id: t19
+      kind: Task
+      name: 'Removal residue the status reports can always be cleared, and says whose it is'
+      description: >-
+        Removal residue the status reports can always be cleared by the same removal, and
+        says whose it is.
+      inputs:
+        specRef: plan_specs/v1/e30-caselist-ingestion/t19-residue-clearing-gaps.yaml
+        goalRef: v1-e30-t19-residue-clearing-gaps
+      dependsOn:
+      - t15
+      - t12
+      - t16
+      - ext-v1-e01-t21-installed-smoke-stand-ins
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e30-t19-residue-clearing-gaps reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e30-t19-residue-clearing-gaps
+    - id: t20
+      kind: Task
+      name: 'Loose ends in what a removal plan prints and how it decides what to drop'
+      description: >-
+        The removal plan's JSON lists withdrawals, its wording is right for every removal,
+        and one rule decides what is dropped.
+      inputs:
+        specRef: plan_specs/v1/e30-caselist-ingestion/t20-removal-output-loose-ends.yaml
+        goalRef: v1-e30-t20-removal-output-loose-ends
+      dependsOn:
+      - t16
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e30-t20-removal-output-loose-ends reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e30-t20-removal-output-loose-ends
+    - id: t21
+      kind: Task
+      name: 'Loose ends of the removed-path hold: status, the publisher and the inbox'
+      description: >-
+        Status reports held uploads, the publisher refuses rows at held paths, and the inbox
+        lets them go.
+      inputs:
+        specRef: plan_specs/v1/e30-caselist-ingestion/t21-held-path-loose-ends.yaml
+        goalRef: v1-e30-t21-held-path-loose-ends
+      dependsOn:
+      - t13
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e30-t21-held-path-loose-ends reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e30-t21-held-path-loose-ends
 status:
   phase: Pending

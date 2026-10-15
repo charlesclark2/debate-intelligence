@@ -1,0 +1,83 @@
+# TASK v1-e30-t20-removal-output-loose-ends - Loose ends in what a removal plan prints and how it decides what to drop
+# Epic: E30 Caselist Evidence Ingestion | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e30-t20-removal-output-loose-ends
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e30-caselist-ingestion
+  annotations:
+    debate/title: "Loose ends in what a removal plan prints and how it decides what to drop"
+spec:
+  # Filed by the PM, 2026-10-15, from v1-e30-t16's Follow-up work 3 to 5 and v1-e30-t14's Follow-up work 3.
+  description: >-
+    (1) The plan's JSON carries no withdrawal lines; add a top-level `withdrawals` key beside
+    `path_holds` (t16 FU3, ruled yes). (2) A `--team --include-shared` plan's later upload at
+    another holder's path is still called "this team's copy" and "this team's path(s)" (t16
+    FU4). (3) A re-run's confirmation says "Removed from this environment: 1 file(s)" under
+    "Nothing is left to remove": it counts what the re-run plans again, not what it removes (t16
+    FU5). (4) `_dropped` checks a row against the plan's withdrawn set and then against the list
+    as it will read, and the first check is redundant for caselist and camp rows alike (t14 FU3,
+    mutant W8); remove it so one rule decides. Out of scope: the other JSON keys v1-e30-t11
+    settled.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, tests/smoke, docs/runbooks]
+    forbidden:
+      - A change to the JSON keys v1-e30-t11 settled, other than adding `withdrawals`
+      - A school, team code or file name in a plan line, the JSON or any record
+  context:
+    - kind: TaskRef
+      name: v1-e30-t16-removal-output-names-holders
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        (1): the plan's JSON has `withdrawals`, one entry per withdrawal by digest and
+        caselist slug, and an empty list when there are none, by test.
+    - id: ac2
+      description: >-
+        (2) and (3): each wording is shown failing first and corrected; the confirmation of
+        a re-run that removes nothing says so.
+    - id: ac3
+      description: >-
+        (4): the withdrawn-set check is removed from `_dropped`, and every removal test
+        passes unchanged, with the mutant that removed it before now the code.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e30-t20-removal-output-loose-ends-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e30-caselist-ingestion
+spec:
+  description: >-
+    Add the withdrawals key, fix two wordings, and leave `_dropped` one rule.
+  goalRef:
+    name: v1-e30-t20-removal-output-loose-ends
+  graph:
+    nodes:
+      - id: removal-output
+        kind: Task
+        name: Removal output loose ends
+        description: >-
+          The JSON key, the two wordings and the simplification.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Removal tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application, -k, removal]
+status:
+  phase: Pending

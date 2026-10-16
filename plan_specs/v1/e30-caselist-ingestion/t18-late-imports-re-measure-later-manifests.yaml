@@ -69,7 +69,7 @@ spec:
         the agent runs, from their own code exported with `git archive`, and publishes as a
         changed manifest.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

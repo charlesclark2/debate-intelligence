@@ -48,7 +48,9 @@ spec:
         old-format build still writes to the agent's state directories, and the operator has deleted
         the legacy file from each.
 status:
-  phase: InProgress
+  # Set by the PM, 2026-10-16: ac2's deletion and the check for other copies are recorded in the
+  # session report.
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

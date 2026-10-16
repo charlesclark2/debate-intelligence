@@ -317,7 +317,7 @@ wheels = [
 
 [[package]]
 name = "debate-api"
-version = "1.0.0"
+version = "1.1.0"
 source = { editable = "packages/debate_api" }
 dependencies = [
     { name = "debate-core" },
@@ -328,7 +328,7 @@ requires-dist = [{ name = "debate-core", editable = "packages/debate_core" }]
 
 [[package]]
 name = "debate-cli"
-version = "1.0.0"
+version = "1.1.0"
 source = { editable = "packages/debate_cli" }
 dependencies = [
     { name = "debate-core", extra = ["aws", "docx", "opencaselist"] },
@@ -345,7 +345,7 @@ requires-dist = [
 
 [[package]]
 name = "debate-core"
-version = "1.0.0"
+version = "1.1.0"
 source = { editable = "packages/debate_core" }
 dependencies = [
     { name = "jsonschema" },
@@ -383,7 +383,7 @@ provides-extras = ["aws", "docx", "opencaselist"]
 
 [[package]]
 name = "debate-intelligence"
-version = "1.0.0"
+version = "1.1.0"
 source = { virtual = "." }
 
 [package.dev-dependencies]
@@ -448,7 +448,7 @@ dev = [
 
 [[package]]
 name = "debate-workers"
-version = "1.0.0"
+version = "1.1.0"
 source = { editable = "packages/debate_workers" }
 dependencies = [
     { name = "debate-core" },

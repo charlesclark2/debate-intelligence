@@ -265,7 +265,11 @@ two steps, before it appends anything, and stops in the same ways.
 
 Once its own probe is gone, a check that passed deletes every probe it found under
 `manifests/_suppression/preflight/` before it wrote its own: what earlier checks left
-(`v1-e29-t09`). It deletes them with the takedown profile, and nothing outside that prefix.
+(`v1-e29-t09`). It deletes them with the takedown profile, and nothing outside that prefix. This is
+housekeeping: if the bucket refuses to delete one of them, the command still carries out the
+request. The `DONE` output then ends with *N probe version(s) an earlier preflight left … could not
+be deleted*, and `--json` gives the count and the keys under `data.preflight_probes_left`. Remove
+them by hand afterwards ([A probe a preflight left behind](#a-probe-a-preflight-left-behind)).
 
 An unset `DEBATE_REMOVAL_PROFILE`, one that names a profile your AWS config lacks, a signed-out
 session, or the everyday profile named by mistake stops it at or before the first step: nothing
@@ -858,7 +862,17 @@ and no lifecycle rule expires one outside `exports/`.
 it found under `manifests/_suppression/preflight/` before it wrote its own probe. So a probe left in
 an environment goes with the next request carried out there, and nothing is needed by hand.
 
+**A takedown may report probes it left.** Removing earlier probes never holds a request back: if
+the bucket refuses to delete one, the request is still carried out and the command reports it.
+The `DONE` output says *N probe version(s) an earlier preflight left under
+manifests/_suppression/preflight/ could not be deleted*, and `--json` has the same count, with the
+probes' keys, under `data.preflight_probes_left`. Nothing goes in the removal log for them. Remove
+them by hand as described below, once you have finished with the request.
+
 **Remove one by hand only when** one of these is true:
+
+- **A takedown or an un-suppress reported probes it could not delete.** They stay until they are
+  removed by hand, because the next request would most likely be refused them again.
 
 - **You want the prefix empty before the next request**, and none is due. The count below says
   whether there is anything to remove.

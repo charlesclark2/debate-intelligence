@@ -410,7 +410,7 @@ def refuse_protected_versions(versions: Sequence[ObjectVersion]) -> None:
             )
 
 
-async def preflight(access: TakedownAccess, *, environment: str) -> None:
+async def preflight(access: TakedownAccess, *, environment: str) -> tuple[ObjectVersion, ...]:
     """Prove the credential is the takedown's and can write, list and delete, before any real change.
 
     First asks which role the credential is signed in as, and stops unless it is the role of
@@ -432,8 +432,15 @@ async def preflight(access: TakedownAccess, *, environment: str) -> None:
     :data:`PREFLIGHT_PREFIX` (`v1-e29-t09`): probes that earlier preflights wrote and were refused
     the delete of. They were there before its own probe was written, so they are older than it, and
     the credential has just shown it may delete there. A probe written after that listing, by a
-    preflight running beside this one, is not touched. A refused sweep fails the preflight with the
-    takedown not begun, as any other refused step does.
+    preflight running beside this one, is not touched.
+
+    That sweep is housekeeping, and never holds a takedown back (the PM's review of `v1-e29-t09`):
+    a takedown withdraws someone's data, and an old probe that cannot be deleted for a reason of
+    its own would otherwise stop every takedown after it. Each version is deleted on its own, a
+    refusal of one does not stop the others, and the versions that could not be deleted are
+    returned, for the run's report to count; they are removed by hand
+    (`docs/runbooks/caselist-removal.md`). The preflight's own probe is its proof, and a refused
+    delete of that one still fails it.
     """
     required = takedown_permission_set(environment)
     key = f"{PREFLIGHT_PREFIX}{uuid.uuid4().hex}.txt"
@@ -451,6 +458,7 @@ async def preflight(access: TakedownAccess, *, environment: str) -> None:
             for version in await access.versions.list_versions(PREFLIGHT_PREFIX)
             if version.key.startswith(PREFLIGHT_PREFIX)
         )
+        refuse_protected_versions(earlier)
         step = "write a probe under manifests/_suppression/"
         with tempfile.TemporaryDirectory(prefix="debate-preflight-") as directory:
             probe = Path(directory) / "probe.txt"
@@ -470,17 +478,30 @@ async def preflight(access: TakedownAccess, *, environment: str) -> None:
             raise StoreAccessDenied(
                 "DeleteObject", f"s3://{access.bucket}/{key}", hint="a version survived the delete"
             )
-        written = False
-        if earlier:
-            # Listed before its own probe was written, so older than it: what earlier preflights
-            # left (`v1-e29-t09`). Deleted with the credential that has just shown it may.
-            step = "delete the probes an earlier preflight left"
-            refuse_protected_versions(earlier)
-            await access.versions.delete_versions(earlier)
     except (StoreError, DomainError) as failure:
         raise TakedownPreflightFailed(
             access.profile, step, failure, left=key if written else None
         ) from failure
+    return await _sweep_earlier_probes(access, earlier)
+
+
+async def _sweep_earlier_probes(
+    access: TakedownAccess, earlier: Sequence[ObjectVersion]
+) -> tuple[ObjectVersion, ...]:
+    """Delete each version an earlier preflight left; return the ones the store would not delete.
+
+    Listed before the preflight wrote its own probe, so older than it (`v1-e29-t09`), and deleted
+    with the credential that has just shown it may delete there. One at a time, because the store
+    stops a batch at its first refusal, and a refusal is counted rather than raised: this is
+    housekeeping, and the takedown goes ahead whatever it leaves.
+    """
+    left: list[ObjectVersion] = []
+    for version in earlier:
+        try:
+            await access.versions.delete_versions((version,))
+        except StoreError:
+            left.append(version)
+    return tuple(left)
 
 
 @dataclass(slots=True)
@@ -508,6 +529,10 @@ class RemovalReport:
     s3_versions_deleted: int
     inbox_files_deleted: int = 0
     inbox_files_rewritten: int = 0
+    preflight_probes_left: tuple[ObjectVersion, ...] = ()
+    """Versions earlier preflights left under :data:`PREFLIGHT_PREFIX` that this run's preflight
+    could not delete (`v1-e29-t09`). Counted in the command's output, and removed by hand; never a
+    failure. Empty when the preflight ran in an earlier call of the same service."""
 
     @property
     def completed(self) -> bool:
@@ -537,6 +562,10 @@ class UnsuppressPlan:
 class UnsuppressReport:
     plan: UnsuppressPlan
     log_entry: RemovalLogEntry
+    preflight_probes_left: tuple[ObjectVersion, ...] = ()
+    """Versions earlier preflights left under :data:`PREFLIGHT_PREFIX` that this run's preflight
+    could not delete (`v1-e29-t09`). Counted in the command's output, and removed by hand; never a
+    failure. Empty when the preflight ran in an earlier call of the same service."""
 
 
 @dataclass
@@ -599,7 +628,7 @@ class CaselistRemovalService:
         :class:`RemovalCompletedUnlogged` if every step succeeded and only the log entry could not be
         written to every copy.
         """
-        access = await self._authorised()
+        access, probes_left = await self._authorised()
         suppression = RecordedSuppressionList(
             self.local_suppression, self._bucket_record(access, SUPPRESSION_LIST_KEY)
         )
@@ -644,6 +673,7 @@ class CaselistRemovalService:
             s3_versions_deleted=counts.s3_versions_deleted,
             inbox_files_deleted=counts.inbox.deleted,
             inbox_files_rewritten=counts.inbox.rewritten,
+            preflight_probes_left=probes_left,
         )
         if failure is not None:
             raise RemovalIncomplete(report, failure, suppressed=suppressed, unlogged=unlogged) from failure
@@ -825,7 +855,7 @@ class CaselistRemovalService:
         imported again. The entry also lifts the hold on each path the file's removal took it from,
         with nothing more appended: a hold follows the file it came from.
         """
-        access = await self._authorised()
+        access, probes_left = await self._authorised()
         suppression = RecordedSuppressionList(
             self.local_suppression, self._bucket_record(access, SUPPRESSION_LIST_KEY)
         )
@@ -842,14 +872,19 @@ class CaselistRemovalService:
         await RecordedRemovalLog(self.local_removal_log, self._bucket_record(access, REMOVAL_LOG_KEY)).append(
             [entry]
         )
-        return UnsuppressReport(plan=plan, log_entry=entry)
+        return UnsuppressReport(plan=plan, log_entry=entry, preflight_probes_left=probes_left)
 
     # --------------------------------------------------------------------------------------
     # The takedown credential
     # --------------------------------------------------------------------------------------
 
-    async def _authorised(self) -> TakedownAccess:
-        """The takedown credential, proven by :func:`preflight`. Built and checked once per service."""
+    async def _authorised(self) -> tuple[TakedownAccess, tuple[ObjectVersion, ...]]:
+        """The takedown credential, proven by :func:`preflight`. Built and checked once per service.
+
+        With it, the earlier probes this call's preflight could not delete: none when the
+        credential was proven by an earlier call.
+        """
+        probes_left: tuple[ObjectVersion, ...] = ()
         if self._access is None:
             try:
                 access = self.takedown()
@@ -858,9 +893,9 @@ class CaselistRemovalService:
                 # what an operator who typed `--execute` reads first is that nothing was deleted.
                 named = refused.profile if isinstance(refused, StoreProfileNotConfigured) else None
                 raise TakedownPreflightFailed(named, "start an AWS session", refused) from refused
-            await preflight(access, environment=self.environment)
+            probes_left = await preflight(access, environment=self.environment)
             self._access = access
-        return self._access
+        return self._access, probes_left
 
     def _bucket_record(self, access: TakedownAccess, key: ObjectKey) -> ObjectStoreAppendOnlyRecord:
         """The bucket's copy: appended with the takedown credential, read with the everyday one."""

@@ -11,6 +11,11 @@ takedown's.
 lists the prefix before it writes, so whatever that listing found was there first. A probe that
 arrives after the listing is not touched.
 
+The sweep is housekeeping, and never holds a takedown back (the PM's review of `v1-e29-t09`). An
+earlier probe whose delete is refused is left, counted on the run's report, and removed by hand as
+`docs/runbooks/caselist-removal.md` describes; the takedown goes ahead. Only the preflight's own
+probe is its proof, and a refused delete of that one still fails it.
+
 Against moto, through the real S3 adapters; who the caller is is stubbed at the port, as in
 `test_takedown_preflight_identity.py`.
 """
@@ -77,7 +82,7 @@ class VersionsWithAHook:
         inner: Any,
         *,
         after_listing: Callable[[int], None] | None = None,
-        refuse_delete: Callable[[int], bool] | None = None,
+        refuse_delete: Callable[[int, Sequence[ObjectVersion]], bool] | None = None,
     ) -> None:
         self._inner = inner
         self._after_listing = after_listing
@@ -101,7 +106,7 @@ class VersionsWithAHook:
 
     async def delete_versions(self, versions: Sequence[ObjectVersion]) -> int:
         self.deletes += 1
-        if self._refuse_delete is not None and self._refuse_delete(self.deletes):
+        if self._refuse_delete is not None and self._refuse_delete(self.deletes, versions):
             raise StoreAccessDenied("DeleteObject", f"s3://bucket/{versions[0].key}")
         return int(await self._inner.delete_versions(versions))
 
@@ -133,6 +138,7 @@ class TestAPreflightThatPasses:
         report = await service.execute(await a_plan(service))
 
         assert report.completed
+        assert report.preflight_probes_left == ()
         assert probes(removal_world) == [], "every version and the marker, and its own probe"
         # Its own probe as it has always gone, then one delete of what the first listing found,
         # through the takedown credential's version store: the only one that may delete.
@@ -180,9 +186,51 @@ class TestAPreflightThatPasses:
         leave_probes(removal_world)
         service = removal_world.service()
 
-        await service.unsuppress(await service.plan_unsuppress(BAYVIEW, reason=ReasonCode.REMOVED_IN_ERROR))
+        report = await service.unsuppress(
+            await service.plan_unsuppress(BAYVIEW, reason=ReasonCode.REMOVED_IN_ERROR)
+        )
 
         assert probes(removal_world) == []
+        assert report.preflight_probes_left == ()
+
+    async def test_an_earlier_probe_whose_delete_is_refused_is_left_and_counted_and_the_takedown_completes(
+        self, removal_world: RemovalWorld
+    ) -> None:
+        """The PM's review: housekeeping never holds a takedown back. One earlier probe refused,
+        the other deleted with its marker; the removal is carried out and the one left is counted."""
+        leave_probes(removal_world)
+        versions = VersionsWithAHook(
+            removal_world.takedown().versions,
+            refuse_delete=lambda _, asked: any(version.key == LEFT_ONCE for version in asked),
+        )
+        service = removal_world.service(takedown=with_versions(removal_world, versions))
+
+        report = await service.execute(await a_plan(service))
+
+        assert report.completed
+        assert report.log_entry.s3_versions_deleted > 0, "the takedown itself went ahead"
+        assert len(report.preflight_probes_left) == 1
+        assert [version.key for version in report.preflight_probes_left] == [LEFT_ONCE]
+        assert probes(removal_world) == [LEFT_ONCE], "the other probe, its versions and its marker went"
+
+    async def test_unsuppress_counts_an_earlier_probe_it_could_not_delete_and_appends_its_entry(
+        self, removal_world: RemovalWorld
+    ) -> None:
+        proper = removal_world.service()
+        await proper.execute(await a_plan(proper))
+        leave_probes(removal_world)
+        versions = VersionsWithAHook(
+            removal_world.takedown().versions,
+            refuse_delete=lambda _, asked: any(version.key == LEFT_ONCE for version in asked),
+        )
+        service = removal_world.service(takedown=with_versions(removal_world, versions))
+
+        report = await service.unsuppress(
+            await service.plan_unsuppress(BAYVIEW, reason=ReasonCode.REMOVED_IN_ERROR)
+        )
+
+        assert [version.key for version in report.preflight_probes_left] == [LEFT_ONCE]
+        assert probes(removal_world) == [LEFT_ONCE]
 
 
 class TestAPreflightThatDoesNotPass:
@@ -197,21 +245,25 @@ class TestAPreflightThatDoesNotPass:
 
         assert probes(removal_world) == before
 
-    async def test_a_refused_sweep_fails_the_preflight_and_names_no_probe_of_its_own_as_left(
+    async def test_a_refused_delete_of_its_own_probe_still_fails_it_and_sweeps_nothing(
         self, removal_world: RemovalWorld
     ) -> None:
-        """Its own probe was deleted and checked gone before the sweep, so none of its own is left."""
+        """Its own probe is the proof, so this is unchanged: refused, the takedown does not begin,
+        the error names the probe left, and no earlier probe is touched."""
         leave_probes(removal_world)
+        before = probes(removal_world)
         versions = VersionsWithAHook(
-            removal_world.takedown().versions, refuse_delete=lambda delete: delete == 2
+            removal_world.takedown().versions, refuse_delete=lambda call, _: call == 1
         )
         service = removal_world.service(takedown=with_versions(removal_world, versions))
 
         with pytest.raises(TakedownPreflightFailed) as refused:
             await service.execute(await a_plan(service))
 
-        assert refused.value.step == "delete the probes an earlier preflight left"
-        assert "its probe object was left" not in str(refused.value)
-        assert "nothing was deleted" in str(refused.value)
-        assert sorted(set(probes(removal_world))) == [LEFT_ONCE, LEFT_AND_HIDDEN]
+        assert refused.value.step == "delete an object version"
+        assert "its probe object was left at manifests/_suppression/preflight/" in str(refused.value)
+        assert versions.deletes == 1, "no sweep after a preflight that did not pass"
+        left = probes(removal_world)
+        assert [key for key in left if key in before] == before
+        assert len(left) == len(before) + 1, "its own probe, left, and named in the error"
         assert not (removal_world.data_dir / "suppression").exists(), "nothing appended"

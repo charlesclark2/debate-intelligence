@@ -59,7 +59,7 @@ spec:
       description: >-
         Setting models.provider=fake or replay in settings selects the implementation with no code change.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

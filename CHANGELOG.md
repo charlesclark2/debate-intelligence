@@ -44,8 +44,9 @@ each with a session report and a PM review.
 
 ### Repository and delivery (E01)
 
-* A uv workspace on Python 3.12 with ruff, pyright, pytest and spec validation, all run by CI on
-  every pull request into `dev` or `main`.
+* A uv workspace on the one supported Python, declared once in
+  `packages/debate_core/pyproject.toml`, with ruff, pyright, pytest and spec validation, all run by
+  CI on every pull request into `dev` or `main`.
 * Two environments, `dev` and `main` (ADR-0013). Every merge to `dev` publishes a dev pre-release,
   which `validate-dev` installs and smoke-tests before a promotion into `main` may merge. Promotion
   guards, a sweep that re-runs them, and a back-merge job keep hotfixes on `main` from being lost.

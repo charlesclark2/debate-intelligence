@@ -73,7 +73,7 @@ spec:
         The CLI loads and validates the routing file at startup (RoutingPolicy.from_settings), so a bad file
         fails before any command runs, with a typed RoutingConfigError naming the key. Shown failing first.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

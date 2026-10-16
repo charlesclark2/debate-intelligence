@@ -37,8 +37,13 @@ spec:
     mismatch alone should not be announced as needing a person (v1-e30-t12 FU4). (12) On macOS the
     banner shows its title, a subtitle cut at about forty characters and about ten lines of body,
     so the fix command, which ends the body and is the subtitle, is cut in both (seen 2026-10-15);
-    the command must be readable in the banner. Out of scope: the exit-code rule, and the run
-    record's shape.
+    the command must be readable in the banner. Added by the PM, 2026-10-16: (13), from
+    v1-e34-t09's review: two guards on the 24-hour download allowance have no test. Nothing
+    records more starts than the limit, so the remaining allowance's clamp at zero is untested,
+    and the service's `min()` against the settings limit is unreachable, because the settings
+    refuse a limit above five. (14), from v1-e30-t18's Follow-up 4: the run record's redaction
+    turns a complete archive's snapshot name `full/<date>` into `[redacted]`; it is fixed together
+    with (7), the runbook pointer. Out of scope: the exit-code rule, and the run record's shape.
   priority: 3
   constraints:
     packages: [debate_core.application, debate_core.integrations.local, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, tests/smoke, docs/runbooks]
@@ -85,6 +90,17 @@ spec:
         (11): the report stage's finding carries the mismatch kind in the run's details, and a
         run whose only drift is a manifest mismatch is announced as retryable with the publish
         command, by test.
+    - id: ac8
+      description: >-
+        (13): a test with six recorded starts against a limit of five shows the remaining
+        allowance is 0 and never negative, in the decision and in the summary; and the
+        service's `min()` against the settings limit is either removed or tested by building
+        the service directly, with the report saying which.
+    - id: ac9
+      description: >-
+        (14) with (7): a complete archive's snapshot name and a runbook path both survive the
+        run record's redaction, while a real path from the operator's machine is still
+        redacted, by a test shown failing first.
 status:
   phase: InProgress
 ---

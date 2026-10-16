@@ -273,6 +273,10 @@ Success looks like this:
 
 Paste what the banner shows back into the review.
 
+**Result, 2026-10-16: PASS.** The operator ran the command on the Mac. The banner showed exactly
+what is listed above: the title, the whole subtitle `Run 20261014T100000Z (prod)`, and first body
+lines reading `Fix: debate-research caselist pull --publish-pending` whole.
+
 The weekly agent shows these banners only after it is reinstalled with a build that has this task,
 as usual (`docs/runbooks/caselist-scheduled-sync.md`, "Reinstalling the agent").
 

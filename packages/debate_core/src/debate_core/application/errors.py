@@ -68,6 +68,7 @@ __all__ = [
     "ProviderRateLimited",
     "ProviderUnavailable",
     "RevisionMismatch",
+    "STORE_ERRORS_TRUE_OF_EVERY_OBJECT",
     "SnapshotIntegrityCheck",
     "SnapshotIntegrityError",
     "StoreAccessDenied",
@@ -79,6 +80,7 @@ __all__ = [
     "error_code_of",
     "error_code_of_class",
     "reported_error_code",
+    "reported_error_message",
 ]
 
 
@@ -429,6 +431,20 @@ class StoreUnavailable(StoreError):
 # --------------------------------------------------------------------------------------------
 
 
+STORE_ERRORS_TRUE_OF_EVERY_OBJECT: Final[tuple[type[StoreError], ...]] = (
+    StoreCredentialsExpired,
+    StoreAccessDenied,
+    StoreProfileNotConfigured,
+)
+"""The store errors that end a run over many objects at the first, instead of being recorded per object.
+
+An expired session, a refusal and a profile the AWS config does not define are each true of every
+object still to go, so recording them once per object would report one failure two thousand times,
+and try every one first. `store sync`, `caselist publish` and the parsed store's publish re-raise
+them (`v1-e29-t09`); every other failure of one object is that object's and is recorded.
+"""
+
+
 class InvalidModelOutput(DomainError):
     """A model returned something that is not a valid instance of the requested output schema.
 
@@ -535,6 +551,20 @@ def error_code_of(error: BaseException) -> str:
     an `OSError` beside the port errors and report each by its class (`FILE_NOT_FOUND_ERROR`).
     """
     return error_code_of_class(type(error))
+
+
+def reported_error_message(error: BaseException) -> str:
+    """What a failure that did not end the command says of itself, where a report or a message quotes it.
+
+    A :class:`DomainError`'s own message, which this project wrote. Anything else is named by its
+    class, and an `OSError` by its errno too, and never by its text (`v1-e29-t09`): an `OSError`
+    quotes the path it failed on, which carries the home directory and, for a file in the inbox, a
+    camp file's title. The CLI's own handler says the same of one that ends a command (`v1-e01-t25`).
+    """
+    if isinstance(error, DomainError):
+        return str(error) or type(error).__name__
+    errno = error.errno if isinstance(error, OSError) else None
+    return type(error).__name__ + (f" (errno {errno})" if errno is not None else "")
 
 
 def reported_error_code(error: BaseException) -> str:

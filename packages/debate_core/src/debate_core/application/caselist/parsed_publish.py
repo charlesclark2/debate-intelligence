@@ -52,12 +52,11 @@ from debate_core.application.caselist.publish_service import (
 )
 from debate_core.application.caselist.suppression import load_suppression_state
 from debate_core.application.errors import (
+    STORE_ERRORS_TRUE_OF_EVERY_OBJECT,
     UNMODELLED_ERROR_CODE,
     BlobIntegrityError,
     DomainError,
     NotFound,
-    StoreAccessDenied,
-    StoreCredentialsExpired,
 )
 from debate_core.application.ports.evidence_store import EvidenceObjectStore, ObjectKey
 from debate_core.application.ports.parsed_store import AGGREGATE_NAMES, PARSED_PREFIX
@@ -221,7 +220,7 @@ class ParsedStorePublisher:
             recorded = (await self._remote.head(remote_key)).sha256
             if sent.sha256 != local.sha256 or recorded != local.sha256:
                 raise BlobIntegrityError(remote_key, recorded)
-        except (StoreCredentialsExpired, StoreAccessDenied):
+        except STORE_ERRORS_TRUE_OF_EVERY_OBJECT:
             raise
         except (DomainError, OSError) as failure:
             return ParsedObjectOutcome(

@@ -63,7 +63,11 @@ from debate_core.application.caselist_sync import (
     SyncStage,
     caselists_to_parse,
 )
-from debate_core.application.errors import StoreCredentialsExpired, StoreUnavailable
+from debate_core.application.errors import (
+    StoreCredentialsExpired,
+    StoreProfileNotConfigured,
+    StoreUnavailable,
+)
 from debate_core.application.ports.debate_files import DebateFileParser
 from debate_core.application.ports.evidence_store import EvidenceObjectStore, ObjectKey
 from debate_core.application.ports.parsed_store import version_directory_name
@@ -83,6 +87,8 @@ from debate_core.testing.fakes import (
 
 from .test_inbox_retention import (
     CASELIST,
+    ESTUARY,
+    ESTUARY_BODY,
     WEEK_1,
     WEEK_2,
     WEEK_3,
@@ -533,6 +539,49 @@ async def test_a_bucket_that_refuses_the_parsed_store_fails_the_stage_and_names_
     assert str(missing_grant().hint) in str(parse["hint"]), "the adapter's sentence, read from the error"
     assert "caselist parse --caselist <slug> --publish" in str(parse["hint"])
     assert_the_import_and_the_raw_publish_stand(installation, summary)
+
+
+class ParsesAndCannotPublish:
+    """A parse stage that parses each caselist and is refused every publish with `error`."""
+
+    def __init__(self, error: Exception) -> None:
+        self.error = error
+        self.asked: list[tuple[str, str]] = []
+
+    async def parse_new_sources(self, caselist: str) -> ParsedCaselist:
+        self.asked.append(("parse", caselist))
+        return ParsedCaselist(version=DOCX_PARSER_VERSION)
+
+    async def publish(self, caselist: str, version: str) -> PublishedParsedStore:
+        self.asked.append(("publish", caselist))
+        raise self.error
+
+
+async def test_a_profile_the_aws_config_lacks_stops_the_parsed_publish_at_the_first_caselist(
+    installation: Installation,
+) -> None:
+    """True of every caselist still to publish, as a refusal is, so none after the first is tried.
+
+    A weekly and a camp file make two caselists to parse: the weekly's and `openev` (`v1-e29-t09`
+    ac1). Both are parsed; only the first is offered to the bucket.
+    """
+    missing = StoreProfileNotConfigured(
+        "debate-dev-evidence-typo",
+        setting="storage.s3.aws_profile",
+        hint="set storage.s3.aws_profile to a profile this machine's AWS config defines",
+    )
+    asked = ParsesAndCannotPublish(missing)
+    source = FakeSource(installation.archives, weeks=[WEEK_1], openev=[(ESTUARY, ESTUARY_BODY)])
+
+    summary = await installation.sync(source, parse=asked).run([CASELIST])
+
+    parsed = [caselist for kind, caselist in asked.asked if kind == "parse"]
+    assert sorted(parsed) == sorted([CASELIST, "openev"])
+    assert [one for one in asked.asked if one[0] == "publish"] == [("publish", parsed[0])]
+    parse = stage(summary, SyncStage.PARSE)
+    assert (parse["outcome"], parse["error_codes"]) == ("failed", ["STORE_PROFILE_NOT_CONFIGURED"])
+    assert str(missing.hint) in str(parse["hint"])
+    assert counts(summary)["not_published"] == 2
 
 
 async def test_objects_the_bucket_did_not_take_are_recorded_under_the_publishers_codes(

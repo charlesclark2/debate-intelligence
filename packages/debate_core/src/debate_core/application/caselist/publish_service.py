@@ -85,12 +85,11 @@ from debate_core.application.caselist.publish_plan import (
 )
 from debate_core.application.caselist.suppression import load_suppression_state
 from debate_core.application.errors import (
+    STORE_ERRORS_TRUE_OF_EVERY_OBJECT,
     UNMODELLED_ERROR_CODE,
     BlobIntegrityError,
     DomainError,
     NotFound,
-    StoreAccessDenied,
-    StoreCredentialsExpired,
     error_code_of,
 )
 from debate_core.application.ports.evidence_store import EvidenceObjectStore, ObjectInfo, ObjectKey
@@ -344,8 +343,10 @@ class CaselistPublishService:
 
         Failures of one source are collected, not raised: the report names every one and the
         command's exit code comes from :attr:`PublishReport.succeeded`. The exceptions are an
-        expired or refused credential, which would be true of every remaining object and end the
-        run at once — with no manifest written for the snapshot in progress.
+        expired or refused credential and a profile the AWS config does not define
+        (:data:`~debate_core.application.errors.STORE_ERRORS_TRUE_OF_EVERY_OBJECT`), which would be
+        true of every remaining object and end the run at once — with no manifest written for the
+        snapshot in progress.
         """
         confirmed: set[ObjectKey] = set()
         failed: dict[ObjectKey, SourceOutcome] = {}
@@ -406,7 +407,7 @@ class CaselistPublishService:
         manifest_error_code: str | None = None
         try:
             manifest = await self._publish_manifest(plan)
-        except (StoreCredentialsExpired, StoreAccessDenied):
+        except STORE_ERRORS_TRUE_OF_EVERY_OBJECT:
             raise
         except (DomainError, OSError) as failure:
             manifest = ManifestOutcome.FAILED
@@ -466,7 +467,7 @@ class CaselistPublishService:
                     confirmed.add(planned.key)
                     return _outcome(planned, SourceResult.SKIPPED)
             await self._upload(planned)
-        except (StoreCredentialsExpired, StoreAccessDenied):
+        except STORE_ERRORS_TRUE_OF_EVERY_OBJECT:
             raise
         except (DomainError, OSError) as failure:
             return self._failed(planned, failed, error_code_of(failure), str(failure))

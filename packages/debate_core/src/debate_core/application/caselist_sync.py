@@ -314,7 +314,9 @@ pending-work file. Every way it can go wrong is a line in the summary:
   (:data:`~debate_core.application.caselist_parse.PARSE_FAILURE_RATE_EXCEEDED`), a store that did
   not answer or refused, an object the bucket did not confirm (the code `caselist publish` reports
   it under), and anything the pipeline raised, a bug included, which is recorded by its class alone.
-  The other caselists are still parsed.
+  The other caselists are still parsed. A store that did not answer, a refusal and a profile the
+  AWS config does not define are true of every caselist still to publish, so the first caselist to
+  meet one is the last offered to the bucket (`v1-e29-t09`).
 * *Pending*, when the only thing missing is a login for the parsed store's publish. Unlike the
   publish stage's, this is in no file: the pending-work file holds snapshots, a parsed store is a
   version directory, and what is owed is whatever the bucket lacks of the directory on this machine,
@@ -3590,7 +3592,7 @@ class CaselistSyncService:
                 no_session = str(expired)
                 not_published.append(caselist)
                 continue
-            except (StoreAccessDenied, StoreUnavailable) as refused:
+            except (StoreAccessDenied, StoreProfileNotConfigured, StoreUnavailable) as refused:
                 # True of every caselist still to publish, so none of them is tried.
                 stopped = self._failure(refused)
                 not_published.append(caselist)

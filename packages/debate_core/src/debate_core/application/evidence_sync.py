@@ -85,9 +85,12 @@ the journal is only allowed to make the digest check free.
 
 A transfer that fails marks that object `failed` and the run continues, because 2,300 objects should
 not be abandoned over one of them; the report carries every failure and the command exits non-zero.
-The two exceptions are :class:`~debate_core.application.errors.StoreCredentialsExpired` and
-:class:`~debate_core.application.errors.StoreAccessDenied`, which end the run immediately: they will
-be true of every remaining object, and 2,300 copies of "your SSO session expired" is not a report.
+The exceptions are :class:`~debate_core.application.errors.StoreCredentialsExpired`,
+:class:`~debate_core.application.errors.StoreAccessDenied` and
+:class:`~debate_core.application.errors.StoreProfileNotConfigured`
+(:data:`~debate_core.application.errors.STORE_ERRORS_TRUE_OF_EVERY_OBJECT`), which end the run
+immediately: they will be true of every remaining object, and 2,300 copies of "your SSO session
+expired" is not a report.
 """
 
 from __future__ import annotations
@@ -103,11 +106,10 @@ from pathlib import Path
 
 from debate_core.application.caselist.suppression import is_suppression_key, load_suppression_state
 from debate_core.application.errors import (
+    STORE_ERRORS_TRUE_OF_EVERY_OBJECT,
     BlobIntegrityError,
     DomainError,
     NotFound,
-    StoreAccessDenied,
-    StoreCredentialsExpired,
     error_code_of,
 )
 from debate_core.application.ports.evidence_store import (
@@ -850,7 +852,7 @@ class EvidenceSyncService:
     ) -> TransferOutcome:
         try:
             digest = await self._move(keyspace, planned, direction)
-        except (StoreCredentialsExpired, StoreAccessDenied):
+        except STORE_ERRORS_TRUE_OF_EVERY_OBJECT:
             # True of every remaining object. Ending here is the difference between one line an
             # operator can act on and 2,300 copies of it.
             raise

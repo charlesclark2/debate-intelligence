@@ -955,6 +955,7 @@ async def test_publish_pending_does_not_publish_the_parsed_store_and_caselist_pa
         "error_codes": [],
         "hint": None,
         "earlier_findings": [],
+        "drift": [],
     }
     assert parsed_keys() == set()
 

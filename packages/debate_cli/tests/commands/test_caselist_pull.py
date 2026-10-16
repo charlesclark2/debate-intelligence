@@ -993,7 +993,13 @@ def test_a_run_that_exits_three_notifies_that_the_next_scheduled_run_should_retr
     summary = envelope["error"]["details"]
     assert summary["run_details"]["failure_codes"] == ["PROVIDER_UNAVAILABLE"]
     assert summary["run_details"]["stages"] == [
-        {"stage": "download", "error_codes": ["PROVIDER_UNAVAILABLE"], "hint": None, "earlier_findings": []}
+        {
+            "stage": "download",
+            "error_codes": ["PROVIDER_UNAVAILABLE"],
+            "hint": None,
+            "earlier_findings": [],
+            "drift": [],
+        }
     ]
     assert all(sorted(one) == ["outcome", "reason", "stage"] for one in summary["run_record"]["stages"])
 

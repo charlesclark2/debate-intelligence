@@ -1640,6 +1640,7 @@ async def test_each_run_writes_a_json_summary_with_no_school_team_code_or_token(
         "error_codes",
         "hint",
         "earlier_findings",
+        "drift",
     }
 
     text = written.read_text(encoding="utf-8")
@@ -2192,8 +2193,8 @@ def test_notify_through_osascript_passes_the_text_as_arguments_not_script() -> N
     [command] = ran
     script = [command[index + 1] for index, part in enumerate(command) if part == "-e"]
     assert all(hostile not in line and "touch" not in line for line in script)
-    assert command[-3].startswith('done" & (do shell script')
-    assert command[-2:] == ["caselist pull failed", "debate-research caselist pull"]
+    assert command[-3] == f"Fix: debate-research caselist pull — {hostile}", "the fix first (`v1-e34-t23`)"
+    assert command[-2:] == ["caselist pull failed", ""], "no subtitle was given"
 
 
 def test_notify_failure_of_osascript_does_not_raise() -> None:

@@ -59,6 +59,12 @@ the stored line byte for byte
 Run on 2026-10-12, the command below wrote this scenario's two files and rewrote the other 18,
 changing none of them.
 
+**Those words, since `v1-e34-t23`.** The start commit's redaction took the runbook the error's
+message points at, `docs/runbooks/evidence-store.md`, for a path, and its record says
+`[redacted] lists the evidence profiles`. This build's redaction keeps the runbook. The stored
+files are left as that build wrote them; the comparison reads them with that one phrase in place
+of the other (`WORDS_THIS_BUILD_KEEPS` in the test) and requires everything else to be equal.
+
 ## How they were written
 
 The two schemas, each by the build it describes. The second line reads the installed build and

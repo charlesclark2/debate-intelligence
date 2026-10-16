@@ -18,6 +18,7 @@ those files, not off the run.
 
 from __future__ import annotations
 
+import functools
 import hashlib
 import io
 import json
@@ -39,7 +40,7 @@ from tests.fixtures.openev.build_synthetic_openev import DOCUMENT_BODIES as CAMP
 from tests.fixtures.openev.build_synthetic_openev import DOWNLOADS as CAMP_DOWNLOADS
 from tests.fixtures.openev.build_synthetic_openev import build_download_zips
 
-from debate_core.application.caselist.evidence_listing import LocalEvidence
+from debate_core.application.caselist.evidence_listing import LocalEvidence, digests_in_earlier_manifests
 from debate_core.application.caselist.import_service import CaselistImportService
 from debate_core.application.caselist.manifest import manifest_key, write_manifest
 from debate_core.application.caselist.openev_import_service import OpenEvImportReport, OpenEvImportService
@@ -47,6 +48,7 @@ from debate_core.application.caselist.publish_service import CaselistPublishServ
 from debate_core.application.caselist.removal_plan import SourceSelector
 from debate_core.application.caselist.status_service import CaselistStatusService
 from debate_core.application.caselist_sync import (
+    DEFAULT_BULK_DOWNLOADS_PER_DAY,
     LOCK_FILENAME,
     OPENEV_DELIVERIES_FILENAME,
     CaselistParseStage,
@@ -281,6 +283,9 @@ class Installation:
         unreadable: Sequence[str] = (),
         openev_fails: bool = False,
         parse: CaselistParseStage | None = None,
+        bulk_downloads_per_day: int | None = None,
+        measure_first_seen: bool = False,
+        status: CaselistStatusService | None = None,
     ) -> CaselistSyncService:
         """The pull.
 
@@ -292,6 +297,13 @@ class Installation:
             openev_fails: Every OpenEv import is refused.
             parse: The parse stage (`v1-e34-t17`), or `None` for it turned off, as in every test
                 written before it existed.
+            bulk_downloads_per_day: The service's own allowance, when not its default
+                (`v1-e34-t23`): what a pull built directly, and not from settings, is given.
+            measure_first_seen: Give the weekly importer the earlier manifests to measure first-seen
+                against, as the composition root does: an import then reads the manifests of the
+                weeks before it (`v1-e30-t08`). Off for every test written before `v1-e34-t23`.
+            status: The comparison the report stage and retention ask, when not the one built here
+                over :attr:`bucket` or `compare_with` (`v1-e34-t23`).
         """
         listed = self.suppression or empty_suppression_list()
         repository = SqliteCaselistRepository(SqliteDatabase.open(self.data_dir))
@@ -306,7 +318,14 @@ class Installation:
 
         return CaselistSyncService(
             source=source,
-            archive_importer=CaselistImportService(caselists=repository, blobs=blobs, suppression=listed),
+            archive_importer=CaselistImportService(
+                caselists=repository,
+                blobs=blobs,
+                suppression=listed,
+                earlier_manifest_digests=(
+                    functools.partial(digests_in_earlier_manifests, local) if measure_first_seen else None
+                ),
+            ),
             openev_importer=importer(caselists=repository, blobs=blobs, suppression=listed),
             local=local,
             read_archive=reader,
@@ -320,12 +339,16 @@ class Installation:
                 else None
             ),
             status=(
-                CaselistStatusService(local=local, remote=compare_with or self.bucket, suppression=listed)
+                status
+                or CaselistStatusService(local=local, remote=compare_with or self.bucket, suppression=listed)
                 if bucket
                 else None
             ),
             parse=parse,
             clock=lambda: RUN_CLOCK,
+            bulk_downloads_per_day=(
+                DEFAULT_BULK_DOWNLOADS_PER_DAY if bulk_downloads_per_day is None else bulk_downloads_per_day
+            ),
         )
 
     async def publish(self, caselist: str = CASELIST) -> None:

@@ -109,11 +109,10 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import re
 import tempfile
 from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
@@ -121,14 +120,21 @@ from typing import Final, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from debate_core.application.caselist.status_service import CASELIST_DRIFT
 from debate_core.application.caselist_sync import (
     REQUIRED_STAGES,
+    DriftKind,
     RunSummary,
     StageOutcome,
+    SyncRunInProgress,
     SyncStage,
+    append_state_line,
     fix_for,
+    remove_state_file,
+    write_state_file,
 )
 from debate_core.application.errors import (
+    UNMODELLED_ERROR_CODE,
     DomainError,
     NotFound,
     StoreCredentialsExpired,
@@ -140,16 +146,24 @@ from debate_core.application.ports.evidence_store import EvidenceObjectStore, va
 from debate_core.application.ports.notifier import Notification, Notifier
 
 __all__ = [
+    "ANOTHER_RUN_HELD_THE_LOCK",
+    "ANOTHER_RUN_HELD_THE_LOCK_TITLE",
     "BACKLOG_GROWTH_RUNS",
+    "HELD_BY_A_REMOVAL_TITLE",
+    "MANIFEST_PUBLISHED_AGAIN",
+    "MANIFEST_PUBLISHED_AGAIN_TITLE",
     "NEEDS_A_PERSON",
     "NEEDS_A_PERSON_TITLE",
     "PENDING_RECORDS_FILENAME",
+    "RETRIED_AFTER_ITS_FIX",
+    "RETRIED_AFTER_ITS_FIX_TITLE",
     "RETRIED_BY_THE_NEXT_RUN",
     "RETRIED_BY_THE_NEXT_RUN_TITLE",
     "SYNC_RUN_DETAILS_FILENAME",
     "SYNC_RUN_DETAILS_KEY_PREFIX",
     "SYNC_RUN_KEY_PREFIX",
     "SYNC_RUN_LOG_FILENAME",
+    "DriftFinding",
     "MonitoredRun",
     "NoRemoteRunLog",
     "ParseCounts",
@@ -344,6 +358,21 @@ def sync_run_details_key(record_key: str) -> str:
 # ------------------------------------------------------------------------------------------------
 
 
+class DriftFinding(BaseModel):
+    """One snapshot the report stage found not in sync, and what differs (`v1-e34-t23`).
+
+    `kinds` are :class:`~debate_core.application.caselist_sync.DriftKind` values: `manifest`,
+    `source`, `missing`, `suppressed_rows`. A caselist slug, a snapshot name and words: nothing a
+    record may not hold.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="ignore")
+
+    caselist: str
+    snapshot: str
+    kinds: tuple[str, ...] = ()
+
+
 class StageDetails(BaseModel):
     """What one stage has to say that its :class:`StageEntry` has no field for."""
 
@@ -360,6 +389,11 @@ class StageDetails(BaseModel):
     earlier_findings: tuple[str, ...] = ()
     """What a pending stage had found before the session expired
     (:attr:`~debate_core.application.caselist_sync.StageRecord.earlier_findings`)."""
+
+    drift: tuple[DriftFinding, ...] = ()
+    """The report stage's findings, each snapshot with what differs, failed or pending
+    (:attr:`~debate_core.application.caselist_sync.StageRecord.drift`, `v1-e34-t23`). A key a
+    build from before it passes over."""
 
 
 class ParseCounts(BaseModel):
@@ -409,6 +443,11 @@ class SyncRunDetails(BaseModel):
     parse: ParseCounts | None = None
     """The parse stage's counts, or `None` when the stage did not run."""
 
+    held_by_request: dict[str, int] = Field(default_factory=lambda: dict[str, int]())
+    """Uploads the run's imports refused because a removal holds their path, by request id
+    (:attr:`~debate_core.application.caselist_sync.RunSummary.held_by_request`, `v1-e34-t23`).
+    Request ids and counts, never a path. A key a build from before it passes over."""
+
     def stage(self, name: str) -> StageDetails | None:
         return next((one for one in self.stages if one.stage == name), None)
 
@@ -433,12 +472,28 @@ _URL_QUERY = re.compile(r"(https?://[^\s\"'?#]+)\?[^\s\"'#]*")
 _QUOTED_PATH = re.compile(r"""(['"])[^'"\n]*[/\\][^'"\n]*\1""")
 _PATH_TOKEN = re.compile(r"[^\s'\"]*[/\\][^\s'\"]*")
 
+_NOT_A_PATH = re.compile(
+    r"[(\[]?(?:full/\d{4}-\d{2}-\d{2}|docs/(?:[A-Za-z0-9_-]+/)*[A-Za-z0-9_-]+\.md)[)\]:;,.]*"
+)
+"""The two things with a `/` in them that a record's reason names and that are no path (`v1-e34-t23`):
+a complete archive's snapshot name, `full/<date>`, and a runbook of this repository, `docs/....md`,
+which a refusal's fix points at. Matched against the whole token, brackets and trailing punctuation
+allowed: a path on a machine starts at `/` or `~/`, and a disclosure's path is neither of these."""
+
+
+def _redacted_unless_not_a_path(match: re.Match[str]) -> str:
+    token = match.group(0)
+    return token if _NOT_A_PATH.fullmatch(token) else REDACTED
+
 
 def redact(message: str, *, secrets: Iterable[str] = (), limit: int = _MAX_MESSAGE_CHARACTERS) -> str:
     """`message` with secrets, URL queries and anything path-shaped removed, on one short line.
 
     A path goes whole, including a quoted one with spaces in it, because a disclosure path names a
-    school, a team code and a round, and `OSError` quotes the path it failed on.
+    school, a team code and a round, and `OSError` quotes the path it failed on. A complete
+    archive's snapshot name and a runbook of this repository stay (:data:`_NOT_A_PATH`): until
+    `v1-e34-t23` both went too, and a refusal's reason said "[redacted] lists what each profile is
+    granted".
     """
     text = message
     for secret in secrets:
@@ -447,7 +502,7 @@ def redact(message: str, *, secrets: Iterable[str] = (), limit: int = _MAX_MESSA
     text = _COOKIE_VALUE.sub(lambda match: match.group(1) + REDACTED, text)
     text = _URL_QUERY.sub(lambda match: match.group(1) + "?" + REDACTED, text)
     text = _QUOTED_PATH.sub(REDACTED, text)
-    text = _PATH_TOKEN.sub(REDACTED, text)
+    text = _PATH_TOKEN.sub(_redacted_unless_not_a_path, text)
     text = " ".join(text.split())
     if len(text) > limit:
         text = text[: limit - 1] + "…"
@@ -596,12 +651,21 @@ def details_for_summary(summary: RunSummary, *, secrets: Sequence[str] = ()) -> 
                 error_codes=record.error_codes,
                 hint=hint_for_a_record(record.hint, secrets=secrets) if record.hint else None,
                 earlier_findings=record.earlier_findings,
+                drift=tuple(
+                    DriftFinding(
+                        caselist=one.caselist,
+                        snapshot=one.snapshot,
+                        kinds=tuple(str(kind) for kind in one.kinds),
+                    )
+                    for one in record.drift
+                ),
             )
             for record in summary.stages
-            if record.error_codes or record.hint or record.earlier_findings
+            if record.error_codes or record.hint or record.earlier_findings or record.drift
         ),
         failure_codes=summary.failure_codes,
         parse=ParseCounts(**summary.parse.as_json()) if summary.parse is not None else None,
+        held_by_request=dict(summary.held_by_request),
     )
 
 
@@ -711,7 +775,73 @@ NEEDS_A_PERSON: Final = (
 )
 """The verdict in every other case (exit 1, and a bug). The runbook quotes this one too."""
 
+RETRIED_AFTER_ITS_FIX_TITLE: Final = "caselist pull failed: retried once fixed"
+RETRIED_AFTER_ITS_FIX: Final = (
+    "The next scheduled run retries it, and is refused the same way until the fix that follows is made."
+)
+"""The first verdict's wording when a failed stage that had to finish carries a fix, or the error that
+stopped the run does (`v1-e34-t23`): a refusal exits `3` like an outage, and is refused again until
+the permission or the grant in its hint is fixed. The same rule decides it, and the exit code is
+unchanged. The runbook quotes both."""
+
+ANOTHER_RUN_HELD_THE_LOCK_TITLE: Final = "caselist pull skipped: another was running"
+ANOTHER_RUN_HELD_THE_LOCK: Final = (
+    "Another caselist pull held the run lock, so this one did nothing. That run records and "
+    "announces its own outcome."
+)
+"""A run refused because another holds the run lock (`v1-e34-t23`). It exits `1`, as before, and a
+person's look is not what it asks for: the run holding the lock is the one that says how it went.
+The runbook quotes both."""
+
+RUNS_COMMAND: Final = "debate-research caselist runs"
+
+_WHAT_STOPPED_A_RUN: Final = {
+    "STORE_PROFILE_NOT_CONFIGURED": (
+        "the AWS profile it publishes with is not one this machine's AWS config defines"
+    ),
+    "STORE_ACCESS_DENIED": "this machine or the bucket refused it",
+    "STORE_UNAVAILABLE": "a store did not answer",
+    "STORE_CREDENTIALS_EXPIRED": "the AWS session had expired",
+    "PROVIDER_UNAVAILABLE": "OpenCaselist did not answer",
+    "PROVIDER_RATE_LIMITED": "OpenCaselist was limiting its requests",
+    "NO_CASELISTS_CONFIGURED": "it was given no caselist to pull",
+    "FULL_ARCHIVE_REFUSED": "the complete archive it was asked for cannot be fetched this run",
+    "MANIFESTS_NOT_WRITABLE": "this build's local store cannot write manifests",
+    "UNREADABLE_MANIFEST": "a manifest on this machine has a line nobody can read",
+    UNMODELLED_ERROR_CODE: "an error nobody modelled, most likely a bug",
+}
+"""What a run that stopped before a stage could record it says it stopped on, by the error's code
+(`v1-e34-t23`): in words, never the exception's class, which `v1-e34-t19` showed. A code with no
+words here is named by its code; the run's details hold the hint, and `caselist runs` the class."""
+
+
+def _what_stopped_it(codes: Sequence[str]) -> str:
+    if not codes:
+        return "an error with no code"
+    return "; ".join(_WHAT_STOPPED_A_RUN.get(code, f"an error recorded as {code}") for code in codes)
+
+
 _WHAT_WAS_CAPTURED_IS_KEPT: Final = "What was captured is kept."
+
+STATUS_COMMAND: Final = "debate-research caselist status"
+"""What says whether a removal is owed again: a held upload in the inbox, or a row at a held path
+(`v1-e30-t21`)."""
+
+HELD_BY_A_REMOVAL_TITLE: Final = "caselist pull: uploads held by a removal"
+"""The title of a run whose imports refused an upload at a path a removal holds (`v1-e34-t23`)."""
+
+PUBLISH_A_CASELIST_COMMAND: Final = "debate-research caselist publish --caselist"
+"""What uploads a caselist's manifests this machine rewrote since they were published (`v1-e30-t12`)."""
+
+MANIFEST_PUBLISHED_AGAIN_TITLE: Final = "caselist pull: publish a manifest again"
+"""The title of a run whose only failed stage is the report, on a manifest mismatch alone (`v1-e34-t23`)."""
+
+MANIFEST_PUBLISHED_AGAIN: Final = (
+    "Publishing again should clear it: this machine rewrote the manifest after it was published, "
+    "and the publish uploads this machine's copy. Nothing here needs a person."
+)
+"""What such a run says instead of a verdict: the publish command is the retry that clears it. The
+next scheduled run would not: the snapshot is published, so nothing owes it. The runbook quotes it."""
 
 type RetryRule = Callable[[Sequence[str]], bool]
 """Whether a run that failed on exactly these error codes may succeed on a retry.
@@ -757,10 +887,25 @@ def notifications_for(
     **A pending publish says what it found first.** A snapshot that ended incomplete on a code the
     rule does not call transient, before the session expired, is named on the login notification
     as needing a person: logging in will not publish it.
+
+    **Words of their own** (`v1-e34-t23`). A run another held the lock against says so, and not that
+    a person should look (:data:`ANOTHER_RUN_HELD_THE_LOCK`). The first verdict with a fix to make
+    first says the retry is refused until it is made (:data:`RETRIED_AFTER_ITS_FIX`). A run that
+    stopped says on what in words (:data:`_WHAT_STOPPED_A_RUN`), and no notification names an
+    exception's class. Every notification's subtitle is the run and its environment, which a banner
+    shows whole; the command is the first thing in its body (:attr:`Notification.body`).
     """
     where = f"Run {record.run_id} ({record.environment})"
     sent: list[Notification] = []
-    if record.error_class == CaselistAuthExpired.__name__:
+    if record.error_class == SyncRunInProgress.__name__:
+        sent.append(
+            Notification(
+                title=ANOTHER_RUN_HELD_THE_LOCK_TITLE,
+                message=f"{where}: {ANOTHER_RUN_HELD_THE_LOCK}",
+                fix_command=RUNS_COMMAND,
+            )
+        )
+    elif record.error_class == CaselistAuthExpired.__name__:
         sent.append(
             Notification(
                 title="caselist pull stopped: OpenCaselist login expired",
@@ -770,19 +915,35 @@ def notifications_for(
         )
     elif record.error_class is not None:
         retried = _retried_by_the_next_run(details.failure_codes, may_succeed_on_retry)
+        title, verdict = _verdict(retried, fix_first=details.hint is not None)
         sent.append(
             Notification(
-                title=RETRIED_BY_THE_NEXT_RUN_TITLE if retried else NEEDS_A_PERSON_TITLE,
-                message=(
-                    f"{where} stopped with {record.error_class}. "
-                    f"{RETRIED_BY_THE_NEXT_RUN if retried else NEEDS_A_PERSON}"
-                ),
+                title=title,
+                message=f"{where} stopped: {_what_stopped_it(details.failure_codes)}. {verdict}",
                 fix_command=PULL_COMMAND,
                 hint=details.hint,
             )
         )
     failed = [entry.stage for entry in record.stages if entry.outcome == str(StageOutcome.FAILED)]
-    if failed:
+    publish_again = (
+        _manifest_mismatches_alone(details.stage(str(SyncStage.REPORT)))
+        if failed == [str(SyncStage.REPORT)]
+        else ()
+    )
+    if publish_again:
+        # A manifest this machine rewrote is uploaded by a publish, and needs nobody (`v1-e34-t23`).
+        sent.append(
+            Notification(
+                title=MANIFEST_PUBLISHED_AGAIN_TITLE,
+                message=(
+                    f"{where}: the report stage found the bucket's {_manifests_of(publish_again)} "
+                    f"{'differ' if len(publish_again) > 1 else 'differs'} from this machine's. "
+                    f"{MANIFEST_PUBLISHED_AGAIN}"
+                ),
+                fix_command=_publish_commands(publish_again),
+            )
+        )
+    elif failed:
         required = {str(stage) for stage in REQUIRED_STAGES}
         only_publish = set(failed) == {str(SyncStage.PUBLISH)}
         only_parse = set(failed) == {str(SyncStage.PARSE)}
@@ -795,8 +956,13 @@ def notifications_for(
         hints = list(dict.fromkeys(one.hint for one in said if one is not None and one.hint))
         if required.intersection(failed):
             retried = _retried_by_the_next_run(details.failure_codes, may_succeed_on_retry)
-            title = RETRIED_BY_THE_NEXT_RUN_TITLE if retried else NEEDS_A_PERSON_TITLE
-            verdict = f"{RETRIED_BY_THE_NEXT_RUN if retried else NEEDS_A_PERSON} "
+            fix_first = any(
+                one is not None and one.hint
+                for stage, one in zip(failed, said, strict=True)
+                if stage in required
+            )
+            title, verdict = _verdict(retried, fix_first=fix_first)
+            verdict += " "
         else:
             title = "caselist pull finished with a failed stage"
             verdict = ""
@@ -822,9 +988,13 @@ def notifications_for(
         )
         # What a stage had already found when the session expired that no later run cures by
         # itself. Only a pending stage records an earlier finding, so there is no outcome to ask.
+        # A manifest the report found rewritten is the exception: a publish after the login clears
+        # it, and it is said so below (`v1-e34-t23`).
+        to_publish_again = _manifest_mismatches_alone(details.stage(str(SyncStage.REPORT)))
         found_first = dict.fromkeys(
             code
             for one in details.stages
+            if not (to_publish_again and one.stage == str(SyncStage.REPORT))
             for code in one.earlier_findings
             if not may_succeed_on_retry([code])
         )
@@ -841,12 +1011,37 @@ def notifications_for(
                         else ""
                     )
                     + (
+                        f" Before the session expired, the bucket's {_manifests_of(to_publish_again)} "
+                        f"{'were' if len(to_publish_again) > 1 else 'was'} found to differ from this "
+                        f"machine's; after the login, publishing "
+                        f"{'them' if len(to_publish_again) > 1 else 'it'} again clears it: "
+                        f"{_publish_commands(to_publish_again)}"
+                        if to_publish_again
+                        else ""
+                    )
+                    + (
                         f" The parsed store waits too; after the login: {PARSE_COMMAND}"
                         if parse_waits
                         else ""
                     )
                 ),
                 fix_command=f"{aws_login_command} && {PUBLISH_PENDING_COMMAND}",
+            )
+        )
+    if details.held_by_request:
+        # A hold that refused an upload did its job; whether the removal is owed again is what
+        # `caselist status` says (`v1-e30-t21`). By request id and count only (`v1-e34-t23`).
+        held = ", ".join(
+            f"{request_id} {count}" for request_id, count in sorted(details.held_by_request.items())
+        )
+        sent.append(
+            Notification(
+                title=HELD_BY_A_REMOVAL_TITLE,
+                message=(
+                    f"{where}: the import refused {sum(details.held_by_request.values())} upload(s) at a "
+                    f"path a removal holds, by request: {held}. Nothing of them was stored."
+                ),
+                fix_command=STATUS_COMMAND,
             )
         )
     if record.backlog_growing:
@@ -863,7 +1058,47 @@ def notifications_for(
                 fix_command=f"{PULL_COMMAND} (again tomorrow, when the day's downloads reset)",
             )
         )
-    return sent
+    # Under the title, the run: short enough that a banner shows it whole (`v1-e34-t23`).
+    return [replace(one, subtitle=where) for one in sent]
+
+
+def _verdict(retried: bool, *, fix_first: bool) -> tuple[str, str]:
+    """A failed run's title and verdict sentence. `retried` is the command's rule, as ever."""
+    if not retried:
+        return NEEDS_A_PERSON_TITLE, NEEDS_A_PERSON
+    if fix_first:
+        return RETRIED_AFTER_ITS_FIX_TITLE, RETRIED_AFTER_ITS_FIX
+    return RETRIED_BY_THE_NEXT_RUN_TITLE, RETRIED_BY_THE_NEXT_RUN
+
+
+def _manifest_mismatches_alone(report: StageDetails | None) -> tuple[DriftFinding, ...]:
+    """The report stage's findings when each is a manifest mismatch and nothing else; else none.
+
+    "Nothing else" is the stage's every code being `CASELIST_DRIFT`, failed or found before an
+    expiry, and every snapshot's only kind being `manifest`: one snapshot with a source mismatch, a
+    missing source, or a comparison that failed outright, and a person is still asked to look.
+    """
+    if report is None or not report.drift:
+        return ()
+    if {*report.error_codes, *report.earlier_findings} != {CASELIST_DRIFT}:
+        return ()
+    if any(one.kinds != (str(DriftKind.MANIFEST),) for one in report.drift):
+        return ()
+    return report.drift
+
+
+def _manifests_of(findings: Sequence[DriftFinding]) -> str:
+    """`manifest of <caselist> <snapshot>`, or `manifests of …, …` for more than one."""
+    named = ", ".join(f"{one.caselist} {one.snapshot}" for one in findings)
+    return f"manifest{'s' if len(findings) > 1 else ''} of {named}"
+
+
+def _publish_commands(findings: Sequence[DriftFinding]) -> str:
+    """One `caselist publish --caselist <slug>` for each caselist named, in order, joined by `&&`."""
+    return " && ".join(
+        f"{PUBLISH_A_CASELIST_COMMAND} {caselist}"
+        for caselist in dict.fromkeys(one.caselist for one in findings)
+    )
 
 
 def _retried_by_the_next_run(codes: Sequence[str], may_succeed_on_retry: RetryRule) -> bool:
@@ -887,14 +1122,10 @@ class SyncRunLog:
         self.path = Path(path)
 
     def append(self, record: SyncRunRecord) -> None:
-        """Add `record` as one line, in a single append so concurrent writers cannot interleave."""
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        line = (record.model_dump_json() + "\n").encode("utf-8")
-        descriptor = os.open(self.path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
-        try:
-            os.write(descriptor, line)
-        finally:
-            os.close(descriptor)
+        """Add `record` as one line, in a single append so concurrent writers cannot interleave, and
+        on the disk before this returns (`v1-e34-t23`; :func:`~debate_core.application.caselist_sync.
+        append_state_line`)."""
+        append_state_line(self.path, (record.model_dump_json() + "\n").encode("utf-8"))
 
     def read(self) -> list[SyncRunRecord]:
         """Every record, oldest first. A line that is not a valid record is skipped and logged."""
@@ -936,14 +1167,8 @@ class SyncRunDetailsLog:
         self.path = Path(path)
 
     def append(self, details: SyncRunDetails) -> None:
-        """Add `details` as one line, in a single append so concurrent writers cannot interleave."""
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        line = (details.model_dump_json() + "\n").encode("utf-8")
-        descriptor = os.open(self.path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
-        try:
-            os.write(descriptor, line)
-        finally:
-            os.close(descriptor)
+        """Add `details` as one line, written as the run log is (:meth:`SyncRunLog.append`)."""
+        append_state_line(self.path, (details.model_dump_json() + "\n").encode("utf-8"))
 
     def read(self) -> dict[str, SyncRunDetails]:
         """Every run's details, by run id; the last line for a run id is the one kept."""
@@ -988,13 +1213,15 @@ class _PendingRecords:
         return [one for one in cast("list[object]", run_ids) if isinstance(one, str)]
 
     def write(self, run_ids: Sequence[str]) -> None:
+        """Record exactly `run_ids`, on the disk as every state file of the sync is (`v1-e34-t23`).
+
+        The same bytes as before: a JSON object of one key, so `sort_keys` changes nothing an older
+        build reads.
+        """
         if not run_ids:
-            self.path.unlink(missing_ok=True)
+            remove_state_file(self.path)
             return
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        temporary = self.path.with_name(f".{self.path.name}.incoming")
-        temporary.write_text(json.dumps({"run_ids": list(run_ids)}, indent=2) + "\n", encoding="utf-8")
-        os.replace(temporary, self.path)
+        write_state_file(self.path, {"run_ids": list(run_ids)})
 
 
 # ------------------------------------------------------------------------------------------------

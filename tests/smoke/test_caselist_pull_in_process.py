@@ -762,7 +762,8 @@ def records_owed_to_the_bucket(installation: Path) -> list[str]:
 # Unreadable local files, and what the notification says (v1-e34-t19)
 # ------------------------------------------------------------------------------------------------
 
-RETRY_TITLE = "caselist pull failed: will be retried"
+FIX_FIRST_TITLE = "caselist pull failed: retried once fixed"
+"""A failure a retry gets past only once its fix is made: a refusal, exit `3` (`v1-e34-t23`)."""
 PERSON_TITLE = "caselist pull failed: needs a person"
 """The two banners of a failed run, by hand, as `docs/runbooks/caselist-scheduled-sync.md` gives them."""
 
@@ -812,7 +813,7 @@ def test_a_manifest_this_mac_will_not_let_be_written_fails_the_import_with_three
     assert data["snapshots_imported"] == [f"openev {OPENEV_YEAR}-policy"]
     assert stages["publish"]["outcome"] == "completed"
     [notification] = notified.sent
-    assert notification.title == RETRY_TITLE
+    assert notification.title == FIX_FIRST_TITLE
     assert notification.hint == stages["import"]["hint"]
     assert "aws sso login" not in everything_said(pulled, notified)
     assert str(installation) not in everything_said(pulled, notified)
@@ -849,8 +850,9 @@ def test_a_manifest_file_this_mac_will_not_open_stops_the_run_with_three_and_nev
         call.request.url.host == "files.opencaselist.example.invalid" for call in site.calls[downloads:]
     )
     [notification] = notified.sent
-    assert notification.title == RETRY_TITLE
-    assert "stopped with LocalStoreAccessDenied" in notification.message
+    assert notification.title == FIX_FIRST_TITLE
+    assert "stopped: this machine or the bucket refused it." in notification.message
+    assert "LocalStoreAccessDenied" not in notification.message
     assert notification.hint is not None and "the manifest directory" in notification.hint
     said = json.dumps([stopped["error"], notification.title, notification.message, notification.hint])
     assert str(installation) not in said
@@ -990,7 +992,13 @@ def test_a_mismatch_and_then_an_expired_session_exits_zero_and_says_a_person_is_
     assert stages["publish"]["earlier_findings"] == ["CHECKSUM_MISMATCH"]
     assert data["run_details"]["failure_codes"] == []
     assert data["run_details"]["stages"] == [
-        {"stage": "publish", "error_codes": [], "hint": None, "earlier_findings": ["CHECKSUM_MISMATCH"]}
+        {
+            "stage": "publish",
+            "error_codes": [],
+            "hint": None,
+            "earlier_findings": ["CHECKSUM_MISMATCH"],
+            "drift": [],
+        }
     ]
     [notification] = notified.sent
     assert notification.title == "caselist publish waiting for an AWS login"

@@ -395,7 +395,7 @@ owed from before that the stage had just published stayed in the file.
   person. What the run itself imported needs nothing from the file and is published all the same;
   anything of that the bucket did not confirm is named in the stage's reason, because it could be
   written nowhere. Every state file here is written to a second file in the same directory, put on
-  the disk, and renamed into place (:func:`_write_json`), so neither a run that dies while writing
+  the disk, and renamed into place (:func:`write_state_file`), so neither a run that dies while writing
   nor a power cut just after it can be what cut it short.
 
 ## What a failed stage records
@@ -470,7 +470,7 @@ from typing import TYPE_CHECKING, Final, Protocol, Self, cast
 
 from debate_core.application.caselist.evidence_listing import (
     LocalEvidence,
-    read_local_snapshots,
+    local_file,
     snapshots_before_full_archive,
 )
 from debate_core.application.caselist.import_service import CaselistImportService, ImportReport
@@ -478,6 +478,7 @@ from debate_core.application.caselist.later_manifests import CompleteArchiveReco
 from debate_core.application.caselist.manifest import (
     full_archive_manifest_key,
     manifest_key,
+    read_manifest_file,
     read_manifest_lines,
     write_manifest,
     write_manifest_lines,
@@ -509,6 +510,7 @@ from debate_core.application.caselist.status_service import (
     CASELIST_DRIFT,
     CaselistStatusService,
     NoCaselistEvidence,
+    SnapshotStatus,
 )
 from debate_core.application.caselist.suppression import LocalFallbackSuppressionList, load_suppression_state
 from debate_core.application.caselist_parse import PARSE_FAILURE_RATE_EXCEEDED
@@ -524,6 +526,7 @@ from debate_core.application.errors import (
     StoreUnavailable,
     UnreadableArchive,
     reported_error_code,
+    reported_error_message,
 )
 from debate_core.application.ports.archive import ArchiveEntry, ArchiveMember
 from debate_core.application.ports.caselist_source import (
@@ -563,6 +566,7 @@ __all__ = [
     "CaselistSyncService",
     "DailyDownloadLimitReached",
     "DownloadLedger",
+    "DriftKind",
     "FullArchiveImport",
     "FullArchivePlan",
     "FullArchiveRefused",
@@ -586,6 +590,7 @@ __all__ = [
     "RetentionDecision",
     "RunSummary",
     "SelectionDecision",
+    "SnapshotDrift",
     "StageOutcome",
     "StageRecord",
     "SyncPlan",
@@ -593,6 +598,7 @@ __all__ = [
     "SyncStage",
     "UndatedArchive",
     "UnknownSyncEvent",
+    "append_state_line",
     "camp_path_of_manifest_row",
     "caselists_to_parse",
     "decide_full_archives",
@@ -600,10 +606,12 @@ __all__ = [
     "full_archive_of_inbox_name",
     "inbox_files",
     "openev_id_of_inbox_name",
+    "remove_state_file",
     "run_pull",
     "snapshots_still_owed",
     "weekly_archive_of_inbox_name",
     "within_daily_budget",
+    "write_state_file",
 ]
 
 logger = logging.getLogger(__name__)
@@ -653,6 +661,8 @@ nothing reads a summary back. Under version 2 these were `note`, `openev_skipped
 (`v1-e34-t07`), `inbox_retention` (`v1-e34-t11`) and an OpenEv selection's `revision_of`
 (`v1-e34-t08`). Under version 5 it is `earlier_findings` on every entry of `stages` (`v1-e34-t19`):
 unlike `error_codes`, nothing is decided from it, so the rule applies and the version stays. So are
+`drift` on every entry of `stages` and the top-level `held_by_request` (`v1-e34-t23`): the report
+stage's findings with their kind, and the uploads a removal's hold refused, by request. So are
 `openev_id` and `reason` on an `inbox_retention` entry removed as a camp release of junk alone
 (`v1-e34-t15`): a removed entry carried no `reason` before, and its one value, `junk_only`, is one
 no `kept` entry carries, so a filter on `kept[].reason` reads what it read before.
@@ -744,6 +754,67 @@ class StageOutcome(StrEnum):
     """
 
 
+class DriftKind(StrEnum):
+    """What differs in a snapshot the report stage found not in sync (`v1-e34-t23`).
+
+    The first two are `v1-e30-t12`'s :class:`~debate_core.application.caselist.status_service.
+    MismatchKind`; the other two are the rest of what makes a snapshot drift.
+    """
+
+    MANIFEST = "manifest"
+    """The bucket holds the snapshot's manifest with other bytes: this machine rewrote it after it
+    was published, and `caselist publish` uploads it again."""
+
+    SOURCE = "source"
+    """The bucket holds a source with other bytes than its key names, which needs a person."""
+
+    MISSING = "missing"
+    """A manifest or a source is missing on one side."""
+
+    SUPPRESSED_ROWS = "suppressed_rows"
+    """This machine's manifest has a stored row the suppression list stops: a removal unfinished."""
+
+
+_DRIFT_KIND_WORDS: Final = {
+    DriftKind.MANIFEST: "manifest mismatch",
+    DriftKind.SOURCE: "source mismatch",
+    DriftKind.MISSING: "something missing",
+    DriftKind.SUPPRESSED_ROWS: "suppressed rows",
+}
+
+
+@dataclass(frozen=True, slots=True)
+class SnapshotDrift:
+    """One snapshot the report stage found not in sync, and what differs. A slug, a name and kinds."""
+
+    caselist: str
+    snapshot: str
+    kinds: tuple[DriftKind, ...]
+
+    @classmethod
+    def of(cls, status: SnapshotStatus) -> SnapshotDrift:
+        kinds = (
+            (DriftKind.MANIFEST,) * status.manifest_mismatched
+            + (DriftKind.SOURCE,) * bool(status.source_mismatches)
+            + (DriftKind.MISSING,) * status.incomplete
+            + (DriftKind.SUPPRESSED_ROWS,) * bool(status.suppressed_rows)
+        )
+        return cls(caselist=status.caselist, snapshot=status.snapshot, kinds=kinds)
+
+    @property
+    def sentence(self) -> str:
+        """`<caselist> <snapshot> (<what differs>)`, as the stage's reason names it."""
+        named = f"{self.caselist} {self.snapshot}"
+        return f"{named} ({', '.join(_DRIFT_KIND_WORDS[one] for one in self.kinds)})" if self.kinds else named
+
+    def as_json(self) -> dict[str, object]:
+        return {
+            "caselist": self.caselist,
+            "snapshot": self.snapshot,
+            "kinds": [str(one) for one in self.kinds],
+        }
+
+
 @dataclass(frozen=True, slots=True)
 class StageRecord:
     """One stage's outcome, and the one sentence that says why it was that."""
@@ -779,6 +850,11 @@ class StageRecord:
     failed stage's codes are its :attr:`error_codes`.
     """
 
+    drift: tuple[SnapshotDrift, ...] = ()
+    """The report stage's findings: each snapshot it found not in sync, and what differs
+    (`v1-e34-t23`). On a failed stage, and on one pending on an expired session for what it found
+    before the session expired. Empty for every other stage."""
+
     def as_json(self) -> dict[str, object]:
         return {
             "stage": str(self.stage),
@@ -787,6 +863,7 @@ class StageRecord:
             "error_codes": list(self.error_codes),
             "hint": self.hint,
             "earlier_findings": list(self.earlier_findings),
+            "drift": [one.as_json() for one in self.drift],
         }
 
 
@@ -1635,10 +1712,10 @@ class PendingWork:
         the file: one that cannot be read is not this method's to replace.
         """
         if not owed:
-            self.path.unlink(missing_ok=True)
+            remove_state_file(self.path)
             return
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        _write_json(self.path, {"publish": [one.as_json() for one in owed]})
+        write_state_file(self.path, {"publish": [one.as_json() for one in owed]})
 
 
 def snapshots_still_owed(
@@ -1724,7 +1801,7 @@ class DownloadLedger:
         since = self.window_start(started_at)
         kept = [started for started in self._own_starts() if started > since]
         kept.append(started_at)
-        _write_json(
+        write_state_file(
             self.path,
             {
                 "schema_version": DOWNLOAD_LEDGER_SCHEMA_VERSION,
@@ -1868,7 +1945,7 @@ class OpenEvDeliveries:
         """Remember what `openev_id` delivered, replacing anything remembered for it before."""
         deliveries = self.read()
         deliveries[openev_id] = delivery
-        _write_json(
+        write_state_file(
             self.path,
             {
                 "schema_version": OPENEV_DELIVERIES_SCHEMA_VERSION,
@@ -1934,7 +2011,7 @@ def _read_json_object(path: Path) -> dict[str, object] | None:
     return cast("dict[str, object]", body) if isinstance(body, dict) else None
 
 
-def _write_json(path: Path, body: Mapping[str, object]) -> None:
+def write_state_file(path: Path, body: Mapping[str, object]) -> None:
     """Write `body` to `path` atomically and durably, so no run leaves half a state file.
 
     To a second file in the same directory, renamed over `path` once it is complete: a rename
@@ -1947,7 +2024,8 @@ def _write_json(path: Path, body: Mapping[str, object]) -> None:
     left the page cache, which is a state file cut short by the very write meant to prevent one.
     So the second file is flushed and fsynced before the rename, and the directory is fsynced after
     it. This is every state file this module writes: the pending-work file, the download ledger,
-    the OpenEv delivery record and each run's summary.
+    the OpenEv delivery record and each run's summary; and, since `v1-e34-t23`, the run monitor's
+    list of records still owed to the bucket (:mod:`debate_core.application.sync_runs`).
 
     An `fsync` that fails is a write that failed: the `OSError` is raised as it is, as a failed
     write always was here. Before the rename, `path` still holds what it held.
@@ -1960,6 +2038,36 @@ def _write_json(path: Path, body: Mapping[str, object]) -> None:
         os.fsync(stream.fileno())
     os.replace(temporary, path)
     _fsync_directory(path.parent)
+
+
+def append_state_line(path: Path, line: bytes) -> None:
+    """Append `line` to the log at `path` in one write, and put it on the disk before returning.
+
+    The run log and the run details (`v1-e34-t23`): an append has no second file to rename, so the
+    rule of :func:`write_state_file` is the part of it that applies. The line goes in a single
+    `O_APPEND` write, so two writers cannot interleave; the file is fsynced holding it; and the
+    directory is fsynced after, because the first append is the one that gave the file its name.
+    A failed `fsync` is a failed append, raised as the operating system's own `OSError`.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+    try:
+        os.write(descriptor, line)
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+    _fsync_directory(path.parent)
+
+
+def remove_state_file(path: Path) -> None:
+    """Remove the state file at `path`, when there is one, and put its going on the disk.
+
+    What a state file that owes nothing any more becomes (`v1-e34-t23`): a name the disk still held
+    after a power cut would bring back a file that owes what was since published.
+    """
+    path.unlink(missing_ok=True)
+    if path.parent.is_dir():
+        _fsync_directory(path.parent)
 
 
 def _fsync_directory(directory: Path) -> None:
@@ -2040,6 +2148,11 @@ class RunSummary:
 
     full_archive_recounts: tuple[CompleteArchiveRecount, ...] = ()
     """Complete archives imported before, counted again after a weekly dated before them (`v1-e30-t18`)."""
+
+    held_by_request: Mapping[str, int] = field(default_factory=lambda: dict[str, int]())
+    """Uploads the imports refused because a removal holds their path, by that removal's request id
+    (`v1-e30-t13`'s :attr:`~debate_core.application.caselist.import_service.ImportReport.held_by_request`,
+    summed over the run's imports, `v1-e34-t23`). Request ids and counts: never a path."""
 
     @property
     def archives_seen(self) -> int:
@@ -2167,6 +2280,8 @@ class RunSummary:
             # Additive, like `full_archive` (`v1-e30-t18`): a complete archive imported by an earlier
             # run and counted again by this one, which a run that planned no refresh has as well.
             "full_archive_recounted": [one.as_json() for one in self.full_archive_recounts],
+            # Additive (`v1-e34-t23`): uploads a removal's hold refused, by request id.
+            "held_by_request": dict(sorted(self.held_by_request.items())),
             "selections": [one.as_json() for one in self.archives],
             "openev_selections": [one.as_json() for one in self.openev],
         }
@@ -2225,15 +2340,29 @@ class _RunTally:
     """Each caselist's newest complete archive, counted again after an earlier-dated weekly; the last wins."""
     held_copies_taken_out: int = 0
     """Archives that held nothing but removed or held files, taken out of the inbox once imported."""
+    held_by_request: dict[str, int] = field(default_factory=lambda: dict[str, int]())
+    """Uploads the imports refused at a held path, by request id (`v1-e34-t23`)."""
+
+    def count_held(self, held_by_request: Mapping[str, int]) -> None:
+        for request_id, count in held_by_request.items():
+            self.held_by_request[request_id] = self.held_by_request.get(request_id, 0) + count
 
     def record(self, stage: SyncStage, outcome: StageOutcome, reason: str | None = None) -> None:
         self.stages.append(StageRecord(stage=stage, outcome=outcome, reason=reason))
 
-    def pend(self, stage: SyncStage, reason: str, found_first: Sequence[_StageFailure] = ()) -> None:
+    def pend(
+        self,
+        stage: SyncStage,
+        reason: str,
+        found_first: Sequence[_StageFailure] = (),
+        *,
+        drift: Sequence[SnapshotDrift] = (),
+    ) -> None:
         """Record `stage` as pending on a login, with what it had already found as earlier findings.
 
         Their codes go to :attr:`StageRecord.earlier_findings` and never to its `error_codes`: a
-        pending stage decides nothing about the exit (`v1-e34-t13`).
+        pending stage decides nothing about the exit (`v1-e34-t13`). The report stage's `drift`
+        goes with them (`v1-e34-t23`).
         """
         self.stages.append(
             StageRecord(
@@ -2241,11 +2370,18 @@ class _RunTally:
                 outcome=StageOutcome.PENDING,
                 reason=reason,
                 earlier_findings=tuple(dict.fromkeys(code for one in found_first for code in one.codes)),
+                drift=tuple(drift),
             )
         )
 
     def fail(
-        self, stage: SyncStage, reason: str, failures: Sequence[_StageFailure], *, fix: str | None = None
+        self,
+        stage: SyncStage,
+        reason: str,
+        failures: Sequence[_StageFailure],
+        *,
+        fix: str | None = None,
+        drift: Sequence[SnapshotDrift] = (),
     ) -> None:
         """Record `stage` as failed on `failures`: every code once, and each distinct fix.
 
@@ -2259,6 +2395,7 @@ class _RunTally:
                 reason=reason,
                 error_codes=tuple(dict.fromkeys(code for one in failures for code in one.codes)),
                 hint=" ".join(hints) or None,
+                drift=tuple(drift),
             )
         )
 
@@ -2638,12 +2775,28 @@ class CaselistSyncService:
 
         **The weekly series only.** A complete archive (`manifests/<slug>/full/<date>.jsonl`) is
         dated with the newest weekly, so counting it would mark every older weekly not yet imported
-        `ALREADY_IMPORTED` and strand the back-catalogue (`v1-e34-t04` ac0). `read_local_snapshots`
-        leaves it out unless asked; this does not ask.
+        `ALREADY_IMPORTED` and strand the back-catalogue (`v1-e34-t04` ac0). Its key is
+        `manifests/<slug>/full/<date>.jsonl`, which `snapshot_of_manifest_key` names only when asked;
+        this does not ask.
+
+        **By the manifest's name, not its rows** (`v1-e34-t23`). The date is in the key. This used to
+        read every row of every manifest, through `read_local_snapshots`, so a manifest with a line
+        nobody can read stopped the run here, before any stage, although nothing here needed the
+        line. The stage that does need it fails on it: the publish of that week, or the import of a
+        week after it. Each manifest is still opened, through the reader that says a file this user
+        may not open is :class:`~debate_core.application.errors.LocalStoreAccessDenied`: a manifest
+        nobody can open is one whose week cannot be known to be held, and that still stops the run
+        before anything is fetched (`v1-e34-t19`).
         """
-        snapshots = await read_local_snapshots(self._local, caselist)
-        dates = [_parsed_date(one.snapshot) for one in snapshots]
-        found = [one for one in dates if one is not None]
+        found: list[date] = []
+        for info in await self._local.objects.list_objects(manifest_prefix(caselist)):
+            named = snapshot_of_manifest_key(caselist, info.key, full_archives=False)
+            held = _parsed_date(named) if named is not None else None
+            if held is None:
+                continue
+            async with local_file(self._local.objects, self._local.object_path_for, info.key) as path:
+                read_manifest_file(path)
+            found.append(held)
         return max(found) if found else None
 
     async def _newest_full_archive(self, caselist: str) -> date | None:
@@ -3155,7 +3308,16 @@ class CaselistSyncService:
             if held_back
             else ""
         )
-        taken_out = (
+        held = (
+            f"; {sum(tally.held_by_request.values())} upload(s) refused at a path a removal holds ("
+            + ", ".join(
+                f"{request_id}: {count}" for request_id, count in sorted(tally.held_by_request.items())
+            )
+            + ")"
+            if tally.held_by_request
+            else ""
+        )
+        taken_out = held + (
             f"; {tally.held_copies_taken_out} archive(s) taken out of the inbox, which held only files "
             "removed or held at a removed path"
             if tally.held_copies_taken_out
@@ -3256,6 +3418,7 @@ class CaselistSyncService:
             report, self._manifest_path(full_archive_manifest_key(selection.caselist, selection.archive_date))
         )
         self._count_archive(report, tally)
+        tally.count_held(report.held_by_request)
         snapshot = full_archive_snapshot(selection.archive_date)
         tally.snapshots_imported.append(f"{report.caselist} {snapshot}")
         tally.publish_targets.append(PendingSnapshot(caselist=report.caselist, snapshot=snapshot))
@@ -3313,6 +3476,7 @@ class CaselistSyncService:
         remeasured = await self._later_manifests.after_weekly_import(report)
         self._take_out_if_removed_or_held_alone(report, downloaded, tally)
         self._count_archive(report, tally)
+        tally.count_held(report.held_by_request)
         tally.snapshots_imported.append(f"{report.caselist} {report.snapshot.isoformat()}")
         tally.publish_targets.append(
             PendingSnapshot(caselist=report.caselist, snapshot=report.snapshot.isoformat())
@@ -3373,15 +3537,24 @@ class CaselistSyncService:
         single document becomes one member named as it sits in the inbox, which is the name the
         camp-metadata parser already knows to take the `openev-<id>-` prefix off
         (`debate_core.application.caselist.camp_metadata`).
+
+        A download the operating system will not let be read, when it is opened or part-way
+        through, is :class:`~debate_core.application.errors.UnreadableArchive`, as a weekly is
+        (:func:`_entries_of`). Until `v1-e34-t23` the `OSError` reached the import stage as itself
+        and was recorded as an error nobody modelled.
         """
         if downloaded.path.suffix.lower() == ".zip":
-            return self._read_archive(downloaded.path)
+            return _entries_of(self._read_archive, downloaded.path)
+        try:
+            data = downloaded.path.read_bytes()
+        except OSError as unreadable:
+            raise _unreadable_in_the_inbox(downloaded.path, unreadable) from unreadable
         return [
             ArchiveMember(
                 path=downloaded.path.name,
                 sha256=downloaded.sha256,
                 byte_size=downloaded.byte_size,
-                data=downloaded.path.read_bytes(),
+                data=data,
             )
         ]
 
@@ -3693,6 +3866,7 @@ class CaselistSyncService:
             return
         confirmed = 0
         drifted: list[_StageFailure] = []
+        found: list[SnapshotDrift] = []
         # Snapshot by snapshot, and only the ones this run published. A caselist-wide check would
         # report an older snapshot somebody imported by hand and never published as drift of this
         # run, which it is not: completing that one is `caselist publish`'s job.
@@ -3701,7 +3875,19 @@ class CaselistSyncService:
             try:
                 report = await self._status.status(target.caselist, target.snapshot)
             except StoreCredentialsExpired as expired:
-                tally.record(SyncStage.REPORT, StageOutcome.PENDING, str(expired))
+                # What was found before the expiry is kept (`v1-e34-t23`): the retry after the login
+                # compares only what it publishes, and these were published already.
+                if not drifted:
+                    tally.record(SyncStage.REPORT, StageOutcome.PENDING, str(expired))
+                    return
+                tally.pend(
+                    SyncStage.REPORT,
+                    f"{confirmed} snapshot(s) confirmed; not in sync before the session expired: "
+                    + ", ".join(one.sentence for one in drifted)
+                    + f"; {expired}",
+                    found_first=drifted,
+                    drift=found,
+                )
                 return
             except StoreAccessDenied as refused:
                 # True of every snapshot still to compare, and not a login: the stage fails here.
@@ -3710,6 +3896,7 @@ class CaselistSyncService:
                     SyncStage.REPORT,
                     f"{confirmed} snapshot(s) confirmed; the comparison was refused: {failure.sentence}",
                     [*drifted, failure],
+                    drift=found,
                 )
                 return
             except (NoCaselistEvidence, DomainError) as failed:
@@ -3718,15 +3905,17 @@ class CaselistSyncService:
             in_sync = [snapshot for snapshot in report.snapshots if snapshot.in_sync]
             confirmed += len(in_sync)
             tally.confirmed.update(PendingSnapshot(one.caselist, one.snapshot) for one in in_sync)
-            drifted.extend(
-                _StageFailure(f"{one.caselist} {one.snapshot}", (CASELIST_DRIFT,)) for one in report.drifted
-            )
+            for one in report.drifted:
+                drift = SnapshotDrift.of(one)
+                found.append(drift)
+                drifted.append(_StageFailure(drift.sentence, (CASELIST_DRIFT,)))
         if drifted:
             tally.fail(
                 SyncStage.REPORT,
                 f"{confirmed} snapshot(s) confirmed; not in sync: "
                 + ", ".join(one.sentence for one in drifted),
                 drifted,
+                drift=found,
             )
             return
         tally.record(
@@ -4036,11 +4225,13 @@ class CaselistSyncService:
         """One failure as a stage records it: a sentence, the error's code, and its fix if it has one.
 
         The sentence is the error's own message when this project wrote it, and its class alone
-        when it did not, as the run log gives any such error: an `OSError` quotes the path it
-        failed on. `about` names what failed, an archive or a snapshot, in front of it. A directory
-        of this machine that a message quotes is replaced by its name.
+        when it did not, with an `OSError`'s errno: its text quotes the path it failed on. It is
+        :func:`~debate_core.application.errors.reported_error_message`, so that one `OSError` reads
+        the same in a stage's reason as everywhere else (`v1-e29-t09`, `v1-e34-t23`). `about` names
+        what failed, an archive or a snapshot, in front of it. A directory of this machine that a
+        message quotes is replaced by its name.
         """
-        message = str(error) if isinstance(error, DomainError) else type(error).__name__
+        message = reported_error_message(error)
         sentence = f"{about}: {message}" if about else message
         return _StageFailure(
             self._naming_no_local_directory(sentence), (reported_error_code(error),), fix_for(error)
@@ -4098,12 +4289,13 @@ class CaselistSyncService:
             full_archive=tally.full_archive,
             full_archive_imports=tuple(tally.full_archive_imports),
             full_archive_recounts=tuple(tally.full_archive_recounts.values()),
+            held_by_request=dict(tally.held_by_request),
         )
 
     def _write_summary(self, summary: RunSummary) -> Path:
         """Write the run's JSON summary under `<state_dir>/caselist-sync-runs/`, and return it."""
         destination = self._state_dir / RUN_SUMMARY_DIRECTORY / f"{summary.run_id}.json"
-        _write_json(destination, summary.as_json())
+        write_state_file(destination, summary.as_json())
         return destination
 
     def summary_path(self, summary: RunSummary) -> Path:
@@ -4551,13 +4743,15 @@ def _camp_download_refused(selection: OpenEvSelection, refused: DomainError | OS
     by its inbox name (`openev-<id>-<file name>`), and a camp file's name is its title. Every name the
     file goes by, here and upstream, is replaced by "the download" (`v1-e34-t12`).
 
-    An `OSError` — the inbox refusing the write, or the file the read — is given by its class alone,
-    as the run log gives any error this project did not write: its message quotes the path it failed
-    on. It used to end the run, and `caselist pull --json` printed that message as the command's
-    error; it is now the fetch or import failing, like any other refusal of that file.
+    An `OSError` — the inbox refusing the write — is given by its class and errno alone
+    (:func:`~debate_core.application.errors.reported_error_message`): its message quotes the path it
+    failed on. It used to end the run, and `caselist pull --json` printed that message as the
+    command's error; it is now the fetch failing, like any other refusal of that file. A file the
+    import cannot read is :class:`~debate_core.application.errors.UnreadableArchive` by then
+    (`v1-e34-t23`).
     """
     if not isinstance(refused, DomainError):
-        return f"{selection.label}: {type(refused).__name__}"
+        return f"{selection.label}: {reported_error_message(refused)}"
     message = str(refused)
     file = selection.file
     names = {selection.inbox_name}
@@ -4959,8 +5153,10 @@ def _reading(entries: Iterable[ArchiveEntry], archive: Path) -> Iterator[Archive
 
 
 def _unreadable_in_the_inbox(archive: Path, unreadable: OSError) -> UnreadableArchive:
+    """By the error's class and errno (:func:`~debate_core.application.errors.reported_error_message`),
+    never its text, which quotes the path; a camp download's name is replaced by its stage."""
     return UnreadableArchive(
-        archive.name, f"the file in the inbox could not be read ({type(unreadable).__name__})"
+        archive.name, f"the file in the inbox could not be read ({reported_error_message(unreadable)})"
     )
 
 

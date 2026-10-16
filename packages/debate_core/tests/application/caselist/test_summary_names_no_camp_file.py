@@ -330,13 +330,14 @@ async def test_a_camp_download_the_inbox_cannot_take_is_a_failed_download_named_
     assert_no_probe(await pasteable(installation, failed, logged))
     download = failed.pulled.summary.stage(SyncStage.DOWNLOAD)
     assert download is not None and download.outcome is StageOutcome.FAILED
-    assert download.reason == "0 fetched, then: openev-777: PermissionError"
+    assert download.reason == "0 fetched, then: openev-777: PermissionError (errno 13)"
 
 
 async def test_a_camp_download_that_cannot_be_read_is_a_refused_import_named_by_id_and_digest_alone(
     installation: Installation, logged: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The reader meets an `OSError` opening the camp release, whose message quotes its path."""
+    """The reader meets an `OSError` opening the camp release, whose message quotes its path. Since
+    `v1-e34-t23` that is `UNREADABLE_ARCHIVE`, as a weekly's is, and not an error nobody modelled."""
 
     def locked(path: Path, **_: object) -> Iterable[ArchiveEntry]:
         raise PermissionError(13, "Permission denied", str(path))
@@ -348,5 +349,8 @@ async def test_a_camp_download_that_cannot_be_read_is_a_refused_import_named_by_
 
     assert_no_probe(await pasteable(installation, failed, logged))
     assert reason(failed, SyncStage.IMPORT) == (
-        f"0 imported; 1 refused: openev-777 ({sha256_label(BROKEN_BODY)}): PermissionError"
+        f"0 imported; 1 refused: openev-777 ({sha256_label(BROKEN_BODY)}): the download cannot be read "
+        "as an archive: the file in the inbox could not be read (PermissionError (errno 13))"
     )
+    imported = failed.pulled.summary.stage(SyncStage.IMPORT)
+    assert imported is not None and imported.error_codes == ("UNREADABLE_ARCHIVE",)

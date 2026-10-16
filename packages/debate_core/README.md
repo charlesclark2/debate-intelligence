@@ -34,6 +34,7 @@ model in architecture proposal §7, so V2 swaps storage rather than schemas.
 | `citation.py` | `Citation`, `CitationField[T]` |
 | `schema_export.py` | Renders the published JSON Schemas (no I/O; the script writes them) |
 | `caselist/` | Disclosed and camp evidence: see below (v1-e30-t02-caselist-domain-model) |
+| `model_contracts.py` | What a model call is made of: `TaskClass`, `ModelParams`, `ModelPrompt`, `ModelRequest`, `ResolvedRoute`, `ModelUsage`, `ModelResponse[T]`, `EmbeddingResponse`, `RerankResponse`. No model identifiers (v1-e05-t01-model-router-port) |
 | `debate_files.py` | What reading a debate `.docx` produces: `ParsedDocument`, `FileSection`, `ParsedCard`, `FormattingSpan`, `FontSizeSpan`, `CardCompleteness`, `FileImportProvenance`, `ParseFailure` (v1-e31-t03-debate-docx-parser) |
 
 Things worth knowing before you add a field:
@@ -78,9 +79,10 @@ cross them. Full write-up: [docs/architecture/ports-and-adapters.md](../../docs/
 
 | Module | Contents |
 |---|---|
-| `errors.py` | `DomainError` and the errors a port may raise: `NotFound`, `Conflict` (`AlreadyExists`, `RevisionMismatch`), `InvalidCursor`, `BlobIntegrityError`, `StoreError` (`StoreAccessDenied`, `StoreCredentialsExpired`, `StoreProfileNotConfigured`, `StoreUnavailable`), `InvalidModelOutput`, `ProviderError` (`ProviderUnavailable`, `ProviderRateLimited`) |
+| `errors.py` | `DomainError` and the errors a port may raise: `NotFound`, `Conflict` (`AlreadyExists`, `RevisionMismatch`), `InvalidCursor`, `BlobIntegrityError`, `StoreError` (`StoreAccessDenied`, `StoreCredentialsExpired`, `StoreProfileNotConfigured`, `StoreUnavailable`), `InvalidModelOutput`, `ProviderError` (`ProviderUnavailable` and its `ModelUnavailableError`, `ProviderRateLimited`) |
 | `ports/persistence.py` | `ArticleRepository`, `SnapshotStore`, `CardRepository`, `SearchRepository`, and the `Page` returned by every listing |
-| `ports/providers.py` | `SearchProvider`, `ArticleFetcher`, `ContentExtractor`, `ModelRouter`, `Clock`, `IdGenerator`, and the value objects they exchange |
+| `ports/providers.py` | `SearchProvider`, `ArticleFetcher`, `ContentExtractor`, `Clock`, `IdGenerator`, and the value objects they exchange |
+| `ports/model_router.py` | `ModelRouter` (`generate_structured`, `embed`, `rerank`) and `RoutingConfigError`; every model call goes through it (v1-e05-t01-model-router-port) |
 | `ports/caselist.py` | `CaselistRepository`, the boundary the E30 importers, publisher and removal command store through (v1-e30-t02) |
 | `ports/debate_files.py` | `DebateFileParser`, the boundary a debate `.docx` is taken apart behind. Synchronous, because parsing waits on nothing, and a file it cannot read comes back as a `ParseFailure` rather than an exception (v1-e31-t03) |
 | `ports/evidence_store.py` | `EvidenceObjectStore` and `ObjectInfo`: evidence stored under a *name* rather than a digest — manifests, reports — plus the key validation both its adapters share (v1-e29-t04) |
@@ -190,6 +192,15 @@ Things worth knowing before you use or extend these:
   here the I/O really is a network round trip.
 * **Tests use `moto`, never an account.** The fixtures are in `packages/debate_core/tests/conftest.py`
   and the suite runs with `--disable-socket`.
+### `integrations/models/` — model routing (v1-e05-t01-model-router-port)
+
+`RoutingPolicy` loads a `config/model_routing.*.yaml` file (the one `models.routing_file` names)
+and resolves each call's task class and overrides into the `ResolvedRoute` it takes. Model ids,
+regions and inference profiles live only in those files; code and tests name task classes, and
+tests assert model families, never identifiers. The file is validated in full when it loads, so a
+bad route fails before anything is sent. The offline routers arrive here with
+v1-e05-t03-fake-replay-models; nothing in this package may import the AWS SDK.
+
 ### The debate-file style profile (v1-e31-t02-verbatim-style-profile)
 
 What a pocket, hat, block, tag, cite, analytic and undertag look like in a Word `.docx`, in one

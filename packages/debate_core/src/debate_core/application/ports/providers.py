@@ -1,13 +1,12 @@
 """Ports for everything outside the platform, plus the two ambient dependencies.
 
-Six ports live here:
+Five ports live here:
 
 * :class:`SearchProvider` — one discovery source in the federated search (OpenAlex, an RSS feed,
   a government search endpoint).
 * :class:`ArticleFetcher` — retrieves the bytes at a URL, politely and without circumventing any
   access control.
 * :class:`ContentExtractor` — turns those bytes into readable paragraphs.
-* :class:`ModelRouter` — the single door every LLM call goes through.
 * :class:`Clock` and :class:`IdGenerator` — the two ambient dependencies that would otherwise be
   hidden calls to `datetime.now()` and a random id generator, and would make a service's output
   untestable.
@@ -16,14 +15,14 @@ The value objects the ports exchange are defined here too, because a port whose 
 `httpx.Response`, a `botocore` payload or an OpenAlex work record would defeat the point: swapping
 the adapter would change the use case.
 
-**Later tasks finalize three of these contracts.** v1-e07-t01-search-provider-contract fills out
+**Later tasks finalize two of these contracts.** v1-e07-t01-search-provider-contract fills out
 :class:`CandidateResult` and the provider registry; v1-e04-t02-http-fetcher and
-v1-e04-t04-content-extraction fill out :class:`FetchResult` and :class:`ExtractedContent`;
-v1-e05-t01-model-router-port adds the routing policy behind :class:`ModelRouter`. What is here is
-the shape the application layer codes against in the meantime, and those tasks extend it rather
-than replace it.
+v1-e04-t04-content-extraction fill out :class:`FetchResult` and :class:`ExtractedContent`. What is
+here is the shape the application layer codes against in the meantime, and those tasks extend it
+rather than replace it. The model router began here too and now has its own module,
+:mod:`debate_core.application.ports.model_router` (v1-e05-t01-model-router-port).
 
-**Async where the work is I/O.** Searching, fetching and invoking a model are network calls and
+**Async where the work is I/O.** Searching and fetching are network calls and
 are `async`. Extraction is pure CPU over bytes already in memory, and reading a clock or minting
 an id is immediate, so those are ordinary methods: making them `async` would buy nothing and
 would force every caller to await.
@@ -31,13 +30,10 @@ would force every caller to await.
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from dataclasses import dataclass
 from datetime import datetime
-from enum import StrEnum
 from typing import Protocol, Self, runtime_checkable
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import Field, model_validator
 
 from debate_core.domain import (
     AccessStatus,
@@ -60,10 +56,6 @@ __all__ = [
     "ExtractionQuality",
     "FetchResult",
     "IdGenerator",
-    "ModelInvocation",
-    "ModelInvocationMetadata",
-    "ModelRouter",
-    "ModelTaskClass",
     "ProviderQuery",
     "ProviderResponse",
     "SearchProvider",
@@ -325,120 +317,6 @@ class ContentExtractor(Protocol):
 
         Raises `ValueError` when the content type is one this extractor does not handle; the
         caller chooses the extractor, so being handed a PDF by an HTML extractor is a caller bug.
-        """
-        ...
-
-
-# --------------------------------------------------------------------------------------------
-# Models
-# --------------------------------------------------------------------------------------------
-
-
-class ModelTaskClass(StrEnum):
-    """What kind of work a model call is, which is what routing is decided on.
-
-    Application code names a task class, never a model id. Routing a class to a model, a region
-    and an inference profile is configuration, so a Bedrock model upgrade is a config change
-    rather than a code change across the platform (architecture proposal §10, ADR-005).
-
-    The full routing policy arrives with v1-e05-t01-model-router-port; these are the classes it
-    routes.
-    """
-
-    COMPLEX_REASONING = "complex_reasoning"
-    """Argument analysis, card tagging, coverage analysis, judge reasoning."""
-
-    HIGH_VOLUME = "high_volume"
-    """Cheap, frequent classification and extraction where benchmark quality is sufficient."""
-
-    DEEP_AUDIT = "deep_audit"
-    """Expensive, low-frequency file and strategy audits."""
-
-    EMBEDDINGS = "embeddings"
-    """Vector embeddings for semantic search."""
-
-    RERANK = "rerank"
-    """Cross-encoder reranking of retrieved candidates."""
-
-
-class ModelInvocationMetadata(DomainModel):
-    """What actually happened on one model call.
-
-    Persisted alongside anything a model influenced, so a generated artifact can always be traced
-    to the model and prompt version that produced it, and so a prompt regression can be found by
-    version rather than by memory (architecture proposal §10, prompt/version governance).
-    """
-
-    task_class: ModelTaskClass = Field(description="The task class the call was routed as.")
-    model_id: NonEmptyText = Field(description="Resolved model identifier, e.g. a Bedrock model id.")
-    prompt_id: NonEmptyText = Field(description="Identifier of the prompt that was used.")
-    prompt_version: NonEmptyText = Field(description="Semantic version of that prompt.")
-    region: NonEmptyText | None = Field(
-        default=None, description="Region or inference profile the call was routed to."
-    )
-    temperature: float | None = Field(default=None, ge=0, description="Temperature actually used.")
-    input_tokens: int | None = Field(default=None, ge=0, description="Tokens sent, when reported.")
-    output_tokens: int | None = Field(default=None, ge=0, description="Tokens generated, when reported.")
-    latency_ms: float = Field(ge=0, description="Wall-clock time of the call, in milliseconds.")
-    invoked_at: UtcDatetime = Field(description="When the call was made, in UTC.")
-
-
-@dataclass(frozen=True, slots=True)
-class ModelInvocation[OutputT: BaseModel]:
-    """A validated model output together with the provenance of the call that produced it.
-
-    Generic over the output schema, so `invoke(..., output_type=CardSelection)` is statically
-    known to return a `CardSelection`. A frozen dataclass rather than a Pydantic model because
-    `output` has already been validated against its own schema and `metadata` against its; wrapping
-    them would re-validate both for nothing.
-    """
-
-    output: OutputT
-    """The model's answer, validated against the requested schema."""
-
-    metadata: ModelInvocationMetadata
-    """Which model, which prompt version, how many tokens, how long."""
-
-
-@runtime_checkable
-class ModelRouter(Protocol):
-    """The single door every LLM call in the platform goes through.
-
-    Two rules hold for every call, and they are why this port exists:
-
-    **Structured output only.** A call names the Pydantic type it expects back and receives a
-    validated instance of it. No application code parses free-form model text (architecture
-    proposal §2, §10).
-
-    **A model never supplies evidence text.** A schema may ask a model for paragraph ids, offsets,
-    labels, confidences and explanations — for *which* passage to cut and *why*. The quotation
-    itself is always sliced out of the stored snapshot afterwards. A schema whose field is meant
-    to hold quoted evidence is a defect, not a feature (architecture proposal §8).
-
-    Callers also name a :class:`ModelTaskClass` and a prompt by id and version, never a model id:
-    the mapping from task class to model, region and parameters is configuration
-    (v1-e05-t01-model-router-port).
-    """
-
-    async def invoke[OutputT: BaseModel](
-        self,
-        *,
-        task_class: ModelTaskClass,
-        prompt_id: str,
-        prompt_version: str,
-        output_type: type[OutputT],
-        variables: Mapping[str, object] | None = None,
-    ) -> ModelInvocation[OutputT]:
-        """Run one prompt and return its output validated as `output_type`, plus call metadata.
-
-        `variables` fills the placeholders of the registered prompt; the prompt text itself lives
-        in the prompt registry (v1-e05-t04-prompt-registry), not in the call site.
-
-        Raises :class:`~debate_core.application.errors.InvalidModelOutput` when the model's answer
-        cannot be validated as `output_type`, and
-        :class:`~debate_core.application.errors.ProviderUnavailable` or
-        :class:`~debate_core.application.errors.ProviderRateLimited` when the model could not be
-        reached. Never returns unvalidated text.
         """
         ...
 

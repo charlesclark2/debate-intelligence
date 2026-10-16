@@ -23,6 +23,7 @@ from collections import deque
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
+from typing import cast
 
 from pydantic import BaseModel, ValidationError
 
@@ -54,10 +55,7 @@ from debate_core.application.ports import (
     ExtractionQuality,
     FetchResult,
     IdGenerator,
-    ModelInvocation,
-    ModelInvocationMetadata,
     ModelRouter,
-    ModelTaskClass,
     Page,
     ProviderQuery,
     ProviderResponse,
@@ -93,6 +91,19 @@ from debate_core.domain.caselist import (
     SourceFormat,
 )
 from debate_core.domain.debate_files import ParsedDocument, ParseFailure, ParseFailureReason
+from debate_core.domain.model_contracts import (
+    EmbeddingResponse,
+    ModelParams,
+    ModelPrompt,
+    ModelProvider,
+    ModelRequest,
+    ModelResponse,
+    ModelUsage,
+    RerankResponse,
+    RerankResult,
+    ResolvedRoute,
+    TaskClass,
+)
 
 __all__ = [
     "FAKE_EPOCH",
@@ -112,7 +123,6 @@ __all__ = [
     "InMemorySearchRepository",
     "InMemorySnapshotStore",
     "MisbehavingDebateFileParser",
-    "RecordedModelCall",
     "SequentialIdGenerator",
     "build_fake_card_edit_log",
     "build_fake_caselist_repository",
@@ -861,112 +871,163 @@ class FakeDebateFileParser:
         )
 
 
-@dataclass(frozen=True, slots=True)
-class RecordedModelCall:
-    """One call made to :class:`FakeModelRouter`, kept so a test can assert on it."""
+FAKE_MODEL_TIMEOUT_SECONDS = 60.0
+"""The timeout a :class:`FakeModelRouter` route reports when a call does not override it."""
 
-    task_class: ModelTaskClass
-    prompt_id: str
-    prompt_version: str
-    output_type: type[BaseModel]
-    variables: Mapping[str, object]
+type ScriptedModelResponse = (
+    BaseModel | Mapping[str, object] | Sequence[Sequence[float]] | Sequence[float] | Exception
+)
+"""One scripted answer: a structured output (an instance or a mapping), embedding vectors, rerank
+scores in document order, or an exception to raise."""
 
 
 class FakeModelRouter:
-    """A model router that returns scripted outputs and records every call.
+    """A model router that returns scripted answers and records every structured call.
 
-    Enqueue a Pydantic instance, a mapping to validate against the requested schema, or an
-    exception to raise. That covers the three cases application code has to handle: a good answer,
-    an answer that does not fit its schema (which surfaces as
-    :class:`~debate_core.application.errors.InvalidModelOutput`), and a model that cannot be
-    reached.
+    Enqueue one answer per call, in call order:
 
-    The replay router that plays back *recorded* model responses is a different thing and belongs
-    to v1-e05-t03-fake-replay-models; this one is for unit tests that only need a model to say
-    something specific.
+    * for `generate_structured`, a Pydantic instance or a mapping to validate against the requested
+      schema; an answer that does not fit surfaces as
+      :class:`~debate_core.application.errors.InvalidModelOutput`, as it would from a model;
+    * for `embed`, one vector per text;
+    * for `rerank`, one relevance score per document, in document order (the fake sorts them);
+    * for any call, an exception to raise, such as a model that cannot be reached.
+
+    Responses report a route with provider `fake`, so nothing a fake answered can pass for a billed
+    model's answer. The replay router that plays back *recorded* model responses, and the fixture
+    keyed fake, belong to v1-e05-t03-fake-replay-models; this one is for unit tests that only need
+    a model to say something specific.
     """
 
     def __init__(
         self,
-        responses: Sequence[BaseModel | Mapping[str, object] | Exception] = (),
+        responses: Sequence[ScriptedModelResponse] = (),
         *,
         model_id: str = "fake-model",
         clock: Clock | None = None,
         latency_ms: float = 1.0,
     ) -> None:
-        self._responses: deque[BaseModel | Mapping[str, object] | Exception] = deque(responses)
+        self._responses: deque[ScriptedModelResponse] = deque(responses)
         self._model_id = model_id
         self._clock: Clock = clock if clock is not None else FixedClock()
         self._latency_ms = latency_ms
-        self.calls: list[RecordedModelCall] = []
-        """Every invocation, in order, for assertions about routing and prompt versions."""
+        self.calls: list[ModelRequest] = []
+        """Every structured call, in order, for assertions about routing and prompt versions."""
 
-    def enqueue(self, response: BaseModel | Mapping[str, object] | Exception) -> None:
+    def enqueue(self, response: ScriptedModelResponse) -> None:
         """Add one more scripted response to the end of the queue."""
         self._responses.append(response)
 
-    async def invoke[OutputT: BaseModel](
+    async def generate_structured[OutputT: BaseModel](
         self,
-        *,
-        task_class: ModelTaskClass,
-        prompt_id: str,
-        prompt_version: str,
-        output_type: type[OutputT],
-        variables: Mapping[str, object] | None = None,
-    ) -> ModelInvocation[OutputT]:
-        self.calls.append(
-            RecordedModelCall(
-                task_class=task_class,
-                prompt_id=prompt_id,
-                prompt_version=prompt_version,
-                output_type=output_type,
-                variables=dict(variables or {}),
-            )
+        task_class: TaskClass,
+        prompt: ModelPrompt,
+        schema: type[OutputT],
+        params: ModelParams | None = None,
+    ) -> ModelResponse[OutputT]:
+        request = ModelRequest.build(task_class, prompt, schema, params)
+        self.calls.append(request)
+        scripted = self._next(f"prompt {prompt.prompt_id}@{prompt.prompt_version}")
+        if isinstance(scripted, BaseModel | Mapping):
+            output = self._coerce(scripted, schema, prompt)
+        else:
+            raise TypeError(f"scripted {type(scripted).__name__} where a structured output was expected")
+        return ModelResponse[schema](
+            output=output,
+            route=self._route(task_class, request.params),
+            usage=ModelUsage(input_tokens=0, output_tokens=0, latency_ms=self._latency_ms),
+            prompt_id=prompt.prompt_id,
+            prompt_version=prompt.prompt_version,
+            invoked_at=self._clock.now(),
         )
+
+    async def embed(self, texts: Sequence[str]) -> EmbeddingResponse:
+        if not texts or any(not text.strip() for text in texts):
+            raise ValueError("embed needs at least one text, and no text may be blank")
+        scripted = self._next("embed")
+        vectors = tuple(_floats(vector, "a vector") for vector in _items(scripted, "vectors"))
+        if len(vectors) != len(texts):
+            raise TypeError(f"scripted {len(vectors)} vectors for {len(texts)} texts")
+        return EmbeddingResponse(
+            vectors=vectors,
+            route=self._route(TaskClass.EMBEDDINGS, ModelParams()),
+            usage=ModelUsage(input_tokens=0, latency_ms=self._latency_ms),
+            invoked_at=self._clock.now(),
+        )
+
+    async def rerank(self, query: str, documents: Sequence[str]) -> RerankResponse:
+        if not query.strip() or not documents:
+            raise ValueError("rerank needs a query and at least one document")
+        scripted = self._next("rerank")
+        scores = _floats(scripted, "rerank scores")
+        if len(scores) != len(documents):
+            raise TypeError(f"scripted {len(scores)} scores for {len(documents)} documents")
+        ranked = sorted(enumerate(scores), key=lambda pair: (-pair[1], pair[0]))
+        return RerankResponse(
+            results=tuple(RerankResult(index=index, relevance_score=score) for index, score in ranked),
+            route=self._route(TaskClass.RERANK, ModelParams()),
+            usage=ModelUsage(latency_ms=self._latency_ms),
+            invoked_at=self._clock.now(),
+        )
+
+    def _next(self, what: str) -> ScriptedModelResponse:
+        """The next scripted answer, raised when it is an exception."""
         if not self._responses:
-            raise ProviderUnavailable(
-                "fake-model-router",
-                f"no scripted response left for prompt {prompt_id}@{prompt_version}",
-            )
+            raise ProviderUnavailable("fake-model-router", f"no scripted response left for {what}")
         scripted = self._responses.popleft()
         if isinstance(scripted, Exception):
             raise scripted
-        output = self._coerce(scripted, output_type, prompt_id, prompt_version)
-        return ModelInvocation(
-            output=output,
-            metadata=ModelInvocationMetadata(
-                task_class=task_class,
-                model_id=self._model_id,
-                prompt_id=prompt_id,
-                prompt_version=prompt_version,
-                latency_ms=self._latency_ms,
-                invoked_at=self._clock.now(),
-            ),
+        return scripted
+
+    def _route(self, task_class: TaskClass, params: ModelParams) -> ResolvedRoute:
+        return ResolvedRoute(
+            task_class=task_class,
+            provider=ModelProvider.FAKE,
+            model_id=self._model_id,
+            temperature=params.temperature,
+            max_tokens=params.max_tokens,
+            timeout_seconds=params.timeout_seconds or FAKE_MODEL_TIMEOUT_SECONDS,
         )
 
     def _coerce[OutputT: BaseModel](
         self,
         scripted: BaseModel | Mapping[str, object],
-        output_type: type[OutputT],
-        prompt_id: str,
-        prompt_version: str,
+        schema: type[OutputT],
+        prompt: ModelPrompt,
     ) -> OutputT:
         """Turn a scripted response into an instance of the requested schema, or fail like a model."""
-        if isinstance(scripted, output_type):
+        if isinstance(scripted, schema):
             return scripted
         if isinstance(scripted, BaseModel):
             raise InvalidModelOutput(
-                prompt_id,
-                prompt_version,
-                f"scripted a {type(scripted).__name__} where {output_type.__name__} was requested",
+                prompt.prompt_id,
+                prompt.prompt_version,
+                f"scripted a {type(scripted).__name__} where {schema.__name__} was requested",
                 model_id=self._model_id,
             )
         try:
-            return output_type.model_validate(dict(scripted))
+            return schema.model_validate(dict(scripted))
         except ValidationError as error:
             raise InvalidModelOutput(
-                prompt_id, prompt_version, str(error), model_id=self._model_id
+                prompt.prompt_id, prompt.prompt_version, str(error), model_id=self._model_id
             ) from error
+
+
+def _items(scripted: object, what: str) -> Sequence[object]:
+    """`scripted` as a sequence, or a `TypeError` naming what the call expected instead."""
+    kind = type(scripted).__name__
+    if isinstance(scripted, str | bytes | BaseModel | Mapping) or not isinstance(scripted, Sequence):
+        raise TypeError(f"scripted {kind} where {what} were expected")
+    return cast("Sequence[object]", scripted)
+
+
+def _floats(scripted: object, what: str) -> tuple[float, ...]:
+    """`scripted` as a tuple of floats, or a `TypeError` naming what the call expected instead."""
+    values = _items(scripted, what)
+    numbers = [value for value in values if isinstance(value, int | float) and not isinstance(value, bool)]
+    if len(numbers) != len(values):
+        raise TypeError(f"{what} must be numbers")
+    return tuple(float(number) for number in numbers)
 
 
 # --------------------------------------------------------------------------------------------

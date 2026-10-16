@@ -30,6 +30,7 @@ The hierarchy::
     ├── InvalidModelOutput
     └── ProviderError
         ├── ProviderUnavailable
+        │   └── ModelUnavailableError
         └── ProviderRateLimited
 
 Each class keeps the facts of the failure as attributes rather than only in its message, so a CLI
@@ -63,6 +64,7 @@ __all__ = [
     "InvalidCursor",
     "InvalidModelOutput",
     "LocalStoreAccessDenied",
+    "ModelUnavailableError",
     "NotFound",
     "ProviderError",
     "ProviderRateLimited",
@@ -448,8 +450,8 @@ them (`v1-e29-t09`); every other failure of one object is that object's and is r
 class InvalidModelOutput(DomainError):
     """A model returned something that is not a valid instance of the requested output schema.
 
-    Raised by :meth:`~debate_core.application.ports.providers.ModelRouter.invoke` after the
-    router's own repair attempts, if any, have failed. It carries the prompt identity so a failing
+    Raised by :meth:`~debate_core.application.ports.model_router.ModelRouter.generate_structured`
+    after the router's own repair attempts, if any, have failed. It carries the prompt identity so a failing
     prompt version can be found without correlating logs.
     """
 
@@ -515,6 +517,22 @@ class ProviderRateLimited(ProviderError):
         """Seconds to wait before retrying, when the provider stated a `Retry-After`."""
         wait = "" if retry_after_seconds is None else f" (retry after {retry_after_seconds}s)"
         super().__init__(provider, f"{message}{wait}")
+
+
+class ModelUnavailableError(ProviderUnavailable):
+    """The model a call was routed to could not be reached: a timeout, a server error, a model not ready.
+
+    A :class:`ProviderUnavailable` that also names the model, so a report can say which route is
+    down. It keeps its parent's error code, because to a program it is the same failure and the
+    same retry: `caselist pull` and the CLI's exit status recognise `PROVIDER_UNAVAILABLE`.
+    """
+
+    ERROR_CODE: ClassVar[str] = "PROVIDER_UNAVAILABLE"
+
+    def __init__(self, provider: str, model_id: str, message: str = "unavailable") -> None:
+        self.model_id = model_id
+        """The routed model that could not be reached."""
+        super().__init__(provider, f"{model_id}: {message}")
 
 
 # --------------------------------------------------------------------------------------------

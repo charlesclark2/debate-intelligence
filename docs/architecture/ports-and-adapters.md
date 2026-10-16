@@ -24,7 +24,7 @@ and nothing in `domain/` or `application/` imports `boto3`, `httpx`, `sqlite3`, 
 | `SearchProvider` | `ports.providers` | One discovery source | OpenAlex, Crossref, RSS … | same |
 | `ArticleFetcher` | `ports.providers` | HTTP retrieval | httpx | same |
 | `ContentExtractor` | `ports.providers` | Readable-text extraction | trafilatura, pypdf | same |
-| `ModelRouter` | `ports.providers` | Every LLM call | Bedrock / replay | Bedrock |
+| `ModelRouter` | `ports.model_router` | Every LLM call | Bedrock / replay | Bedrock |
 | `Clock` | `ports.providers` | The current time | system clock | system clock |
 | `IdGenerator` | `ports.providers` | New entity ids | ULID | ULID |
 
@@ -125,6 +125,7 @@ DomainError
 ├── InvalidModelOutput        a model's answer does not fit the requested schema
 └── ProviderError
     ├── ProviderUnavailable   unreachable, timed out, server error
+    │   └── ModelUnavailableError   the routed model specifically; names it
     └── ProviderRateLimited   over the limit; carries retry_after_seconds
 ```
 
@@ -156,22 +157,28 @@ overwrite; re-retrieving a source produces a new snapshot. A read whose bytes do
 key fails with `BlobIntegrityError` rather than returning text a card would then be "verified"
 against.
 
-**A model never supplies evidence text.** `ModelRouter.invoke` takes a `ModelTaskClass`, a
-`prompt_id` and `prompt_version`, and a Pydantic output type, and returns a validated instance
-plus the call's provenance (model id, tokens, latency). A schema may ask a model for paragraph
+**A model never supplies evidence text.** `ModelRouter.generate_structured` takes a `TaskClass`,
+a `ModelPrompt` (prompt id, version and variables), a Pydantic schema and optional `ModelParams`
+overrides, and returns a `ModelResponse` holding a validated instance of the schema plus the
+call's provenance: the `ResolvedRoute` it ran on (model id, inference profile, region, the
+parameters actually sent) and its usage (tokens, latency). Which model a task class reaches is the
+routing file's decision (`config/model_routing.*.yaml`, read by `RoutingPolicy`), never the call
+site's. `embed` and `rerank` are the router's two scoring calls. A schema may ask a model for paragraph
 ids, offsets, labels and explanations — *which* passage to cut and *why*. The quotation itself is
 always sliced out of the stored snapshot afterwards (architecture proposal §8).
 
 ```python
-invocation = await router.invoke(
-    task_class=ModelTaskClass.COMPLEX_REASONING,
-    prompt_id="select-passage",
-    prompt_version="1.2.0",
-    output_type=PassageChoice,
-    variables={"tag": tag, "paragraphs": numbered_paragraphs},
+response = await router.generate_structured(
+    TaskClass.COMPLEX_REASONING,
+    ModelPrompt(
+        prompt_id="select-passage",
+        prompt_version="1.2.0",
+        variables={"tag": tag, "paragraphs": numbered_paragraphs},
+    ),
+    PassageChoice,
 )
-choice = invocation.output  # a validated PassageChoice
-model_id = invocation.metadata.model_id
+choice = response.output  # a validated PassageChoice
+model_id = response.route.model_id
 ```
 
 ## Testing against the fakes

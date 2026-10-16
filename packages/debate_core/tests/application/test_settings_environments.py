@@ -23,8 +23,6 @@ from pathlib import Path
 
 import pytest
 
-from debate_core.application.ports.providers import ModelTaskClass
-from debate_core.application.routing_config import load_routing_config
 from debate_core.application.settings import (
     BUILTIN_PROFILES,
     DEV_DAILY_BUDGET_CAP_USD,
@@ -34,6 +32,8 @@ from debate_core.application.settings import (
     load_settings,
     resolve_environment,
 )
+from debate_core.domain.model_contracts import TaskClass
+from debate_core.integrations.models import RoutingPolicy
 
 
 def _repository_root() -> Path:
@@ -95,24 +95,26 @@ def test_the_dev_budget_never_exceeds_the_documented_cap(no_dotenv: Path) -> Non
 
 
 def test_both_routing_files_exist_and_load() -> None:
-    development = load_routing_config(CONFIG / "model_routing.dev.yaml")
-    production = load_routing_config(CONFIG / "model_routing.prod.yaml")
+    development = RoutingPolicy.load(CONFIG / "model_routing.dev.yaml")
+    production = RoutingPolicy.load(CONFIG / "model_routing.prod.yaml")
 
-    assert set(development.routes) == set(ModelTaskClass)
-    assert set(production.routes) == set(ModelTaskClass)
+    assert set(development.routes) == set(TaskClass)
+    assert set(production.routes) == set(TaskClass)
 
 
 def test_dev_routes_every_text_class_to_a_cheaper_model_than_prod() -> None:
-    development = load_routing_config(CONFIG / "model_routing.dev.yaml").routes
-    production = load_routing_config(CONFIG / "model_routing.prod.yaml").routes
+    development = RoutingPolicy.load(CONFIG / "model_routing.dev.yaml").routes
+    production = RoutingPolicy.load(CONFIG / "model_routing.prod.yaml").routes
 
-    # Hand-written from the two files: dev drops each class one tier.
-    assert development[ModelTaskClass.COMPLEX_REASONING].model_id == "anthropic.claude-haiku-4-5"
-    assert production[ModelTaskClass.COMPLEX_REASONING].model_id == "anthropic.claude-sonnet-5"
-    assert development[ModelTaskClass.DEEP_AUDIT].model_id == "anthropic.claude-sonnet-5"
-    assert production[ModelTaskClass.DEEP_AUDIT].model_id == "anthropic.claude-opus-5"
-    # Embeddings stay the same model, so a dev index is comparable with a prod one.
-    assert development[ModelTaskClass.EMBEDDINGS] == production[ModelTaskClass.EMBEDDINGS]
+    # Hand-written from the two files: dev drops each class one tier. Families, not identifiers,
+    # so the next model release changes the files and not this test (PM ruling, 2026-10-16).
+    assert "claude-haiku" in development[TaskClass.COMPLEX_REASONING].model_id
+    assert "claude-sonnet" in production[TaskClass.COMPLEX_REASONING].model_id
+    assert "claude-sonnet" in development[TaskClass.DEEP_AUDIT].model_id
+    assert "claude-opus" in production[TaskClass.DEEP_AUDIT].model_id
+    # Embeddings and rerank stay the same model, so a dev index is comparable with a prod one.
+    assert development[TaskClass.EMBEDDINGS] == production[TaskClass.EMBEDDINGS]
+    assert development[TaskClass.RERANK] == production[TaskClass.RERANK]
 
 
 @pytest.mark.parametrize("environment", ["dev", "prod"])

@@ -2,7 +2,7 @@
 # the uv workspace definition, the shared dev tooling and every tool's configuration.
 [project]
 name = "debate-intelligence"
-version = "1.0.0"
+version = "1.1.0"
 description = "Workspace root for the Debate Intelligence Platform."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"

@@ -9,6 +9,8 @@ version here.
 
 ## v1.0.0: Foundation and verified evidence core
 
+Tagged 2026-10-16 on `main` at `896d4c1`, the merge commit of promotion #274.
+
 The first release ([`plan_specs/releases/v1.0.yaml`](plan_specs/releases/v1.0.yaml)): the
 repository and its delivery process, the domain core, and deterministic evidence verification,
 before any language model is involved. Its three epics, E01, E02 and E03, are complete: 40 tasks,

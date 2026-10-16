@@ -470,7 +470,7 @@ from typing import TYPE_CHECKING, Final, Protocol, Self, cast
 
 from debate_core.application.caselist.evidence_listing import (
     LocalEvidence,
-    read_local_snapshots,
+    local_file,
     snapshots_before_full_archive,
 )
 from debate_core.application.caselist.import_service import CaselistImportService, ImportReport
@@ -478,6 +478,7 @@ from debate_core.application.caselist.later_manifests import CompleteArchiveReco
 from debate_core.application.caselist.manifest import (
     full_archive_manifest_key,
     manifest_key,
+    read_manifest_file,
     read_manifest_lines,
     write_manifest,
     write_manifest_lines,
@@ -524,6 +525,7 @@ from debate_core.application.errors import (
     StoreUnavailable,
     UnreadableArchive,
     reported_error_code,
+    reported_error_message,
 )
 from debate_core.application.ports.archive import ArchiveEntry, ArchiveMember
 from debate_core.application.ports.caselist_source import (
@@ -2672,12 +2674,28 @@ class CaselistSyncService:
 
         **The weekly series only.** A complete archive (`manifests/<slug>/full/<date>.jsonl`) is
         dated with the newest weekly, so counting it would mark every older weekly not yet imported
-        `ALREADY_IMPORTED` and strand the back-catalogue (`v1-e34-t04` ac0). `read_local_snapshots`
-        leaves it out unless asked; this does not ask.
+        `ALREADY_IMPORTED` and strand the back-catalogue (`v1-e34-t04` ac0). Its key is
+        `manifests/<slug>/full/<date>.jsonl`, which `snapshot_of_manifest_key` names only when asked;
+        this does not ask.
+
+        **By the manifest's name, not its rows** (`v1-e34-t23`). The date is in the key. This used to
+        read every row of every manifest, through `read_local_snapshots`, so a manifest with a line
+        nobody can read stopped the run here, before any stage, although nothing here needed the
+        line. The stage that does need it fails on it: the publish of that week, or the import of a
+        week after it. Each manifest is still opened, through the reader that says a file this user
+        may not open is :class:`~debate_core.application.errors.LocalStoreAccessDenied`: a manifest
+        nobody can open is one whose week cannot be known to be held, and that still stops the run
+        before anything is fetched (`v1-e34-t19`).
         """
-        snapshots = await read_local_snapshots(self._local, caselist)
-        dates = [_parsed_date(one.snapshot) for one in snapshots]
-        found = [one for one in dates if one is not None]
+        found: list[date] = []
+        for info in await self._local.objects.list_objects(manifest_prefix(caselist)):
+            named = snapshot_of_manifest_key(caselist, info.key, full_archives=False)
+            held = _parsed_date(named) if named is not None else None
+            if held is None:
+                continue
+            async with local_file(self._local.objects, self._local.object_path_for, info.key) as path:
+                read_manifest_file(path)
+            found.append(held)
         return max(found) if found else None
 
     async def _newest_full_archive(self, caselist: str) -> date | None:
@@ -3407,15 +3425,24 @@ class CaselistSyncService:
         single document becomes one member named as it sits in the inbox, which is the name the
         camp-metadata parser already knows to take the `openev-<id>-` prefix off
         (`debate_core.application.caselist.camp_metadata`).
+
+        A download the operating system will not let be read, when it is opened or part-way
+        through, is :class:`~debate_core.application.errors.UnreadableArchive`, as a weekly is
+        (:func:`_entries_of`). Until `v1-e34-t23` the `OSError` reached the import stage as itself
+        and was recorded as an error nobody modelled.
         """
         if downloaded.path.suffix.lower() == ".zip":
-            return self._read_archive(downloaded.path)
+            return _entries_of(self._read_archive, downloaded.path)
+        try:
+            data = downloaded.path.read_bytes()
+        except OSError as unreadable:
+            raise _unreadable_in_the_inbox(downloaded.path, unreadable) from unreadable
         return [
             ArchiveMember(
                 path=downloaded.path.name,
                 sha256=downloaded.sha256,
                 byte_size=downloaded.byte_size,
-                data=downloaded.path.read_bytes(),
+                data=data,
             )
         ]
 
@@ -4993,8 +5020,10 @@ def _reading(entries: Iterable[ArchiveEntry], archive: Path) -> Iterator[Archive
 
 
 def _unreadable_in_the_inbox(archive: Path, unreadable: OSError) -> UnreadableArchive:
+    """By the error's class and errno (:func:`~debate_core.application.errors.reported_error_message`),
+    never its text, which quotes the path; a camp download's name is replaced by its stage."""
     return UnreadableArchive(
-        archive.name, f"the file in the inbox could not be read ({type(unreadable).__name__})"
+        archive.name, f"the file in the inbox could not be read ({reported_error_message(unreadable)})"
     )
 
 

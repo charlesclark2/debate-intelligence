@@ -1332,8 +1332,10 @@ cause the reason names — an archive over `caselist.max_archive_bytes`, a casel
 does not know the event of, an unreadable zip — because a run meets the same archive again and,
 with the cause still there, fails the same way. An unreadable zip is the one case to delete by
 hand: remove it from the inbox, and the next run downloads it again. If the reason says the file in
-the inbox *could not be read (PermissionError)*, the zip may be whole and this user cannot open
-it: fix its permission instead, and the next run imports it from the inbox without a download.
+the inbox *could not be read (PermissionError (errno 13))*, the zip may be whole and this user
+cannot open it: fix its permission instead, and the next run imports it from the inbox without a
+download. A camp download this Mac will not let be read is the same `UNREADABLE_ARCHIVE`, with the
+same fix (`v1-e34-t23`; it used to be recorded as `INTERNAL_ERROR`).
 One archive that cannot be read no longer stops the run (`v1-e34-t19`): the other caselists' weeks,
 the camp files and the complete archive are imported, and the same caselist's newer weeks wait
 behind it as behind any failed import. A camp download is named in the

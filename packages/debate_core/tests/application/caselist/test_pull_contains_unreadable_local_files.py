@@ -616,10 +616,10 @@ def test_only_an_operating_system_error_from_the_reader_itself_is_the_archive_be
 
     assert str(at_the_call.value) == (
         "testcl26-weekly-2026-09-01.zip cannot be read as an archive: the file in the inbox could "
-        "not be read (PermissionError)"
+        "not be read (PermissionError (errno 13))"
     )
     assert read == ["one entry"]
-    assert str(part_way.value).endswith("the file in the inbox could not be read (OSError)")
+    assert str(part_way.value).endswith("the file in the inbox could not be read (OSError (errno 5))")
     assert str(tmp_path) not in str(at_the_call.value) + str(part_way.value)
     assert list(entries_of(lambda _: iter(["a", "b"]), archive)) == ["a", "b"]  # pyright: ignore[reportArgumentType]
 

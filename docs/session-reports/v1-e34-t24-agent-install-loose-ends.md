@@ -251,9 +251,55 @@ The next real reinstall can follow the runbook's new step 3, with no `--env` and
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-16
 
 **Notes:**
+
+Accepted in full, with the phase `Succeeded`. The spec is unchanged.
+
+**ac1 on the simulation is accepted, and the pull request's `ci` is its proof.** The tests carry
+no platform skip and sit in the default selection, so the required check runs them on Linux.
+The simulation reproduces what differs there: the platform, no `plutil` or `launchctl`, and
+dash. If `ci` is red on them, the pull request does not merge and the fix comes back here.
+
+**The "before" you recorded is the finding that matters.** A dev agent reinstalled with only
+`--caselist` became a prod agent on an empty store, and the only sign was the last component of
+a path. That would have happened at the re-parse's last step, the build install. The installer
+now keeps what is installed, says so, and refuses a switch unless it is confirmed.
+
+**The work itself:**
+
+* **The profile check is the build's own `doctor --evidence-profiles`, run under `env -i` as
+  the agent runs.** "Defined" has one implementation, shared with the runbook's step 2 and
+  `--check-launchd`. An expired session passing is right: the agent signs in for itself at run
+  time, or publishes later.
+* **The data-directory guard (Decision 6)** reads the forbidden list rather than the description,
+  and is the right reading. Asking the new build for the directory under both environments,
+  rather than parsing variables in shell, keeps one source of truth.
+* **`--aws-profile` refused with its reason,** not "unknown option", so an old command line
+  explains itself.
+* **The stand-in held to the real `plutil` byte for byte, failures included,** is what makes
+  running these tests on Linux trustworthy rather than merely green.
+* **The mutation run:** 18 of 18 caught, t22's two among them.
+
+**Rulings:**
+
+* **Deviation 1:** accepted.
+* **Deviation 2:** accepted. `launchctl print` is a read, and the fake `launchctl` is now first on
+  every installer run's PATH, which closes it for good. Reads of the real agent go to the operator
+  as commands, as this report's follow-up does.
+* **Deviation 3 and the decisions:** accepted.
+* **Follow-up 1 (a reinstall resets the schedule and options):** filed in the next PM batch as an
+  E34 p3 task. It is harmless today, because the agent runs at the defaults.
+* **Follow-up 2 (the wrapper's comment):** with the next task that changes the wrapper.
+* **Follow-up 3:** already in `v1-e29-t09`.
+
+**Operator follow-up:** the read-only dry run over the real agent. It can run any time, before or
+after the merge, and its output is recorded at the next close-out. The next real reinstall, the
+re-parse's build install, follows the runbook's new step 3.
+
+**Merge order:** after the v1.0 release pull request (versions 1.1.0). A merge into `dev` before
+it would fail its pre-release.

@@ -14,6 +14,8 @@ here.
 from __future__ import annotations
 
 import json
+import threading
+import time
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
@@ -23,9 +25,15 @@ import pytest
 from botocore.exceptions import UnauthorizedSSOTokenError
 from moto import mock_aws
 
-from debate_core.application.errors import StoreCredentialsExpired, StoreProfileNotConfigured
+from debate_core.application.errors import (
+    StoreCredentialsExpired,
+    StoreProfileNotConfigured,
+    StoreUnavailable,
+)
+from debate_core.application.evidence_profiles import ConfiguredProfile, EvidenceProfileCheck
 from debate_core.application.ports.caller_identity import CallerIdentity
 from debate_core.integrations.s3 import StsCallerIdentity, build_sts_client
+from debate_core.integrations.s3.caller_identity import IDENTITY_TIME_LIMIT_SECONDS
 
 pytestmark = pytest.mark.anyio
 
@@ -197,3 +205,115 @@ class TestACredentialThatCannotBeAsked:
 
         assert refused.value.setting == TAKEDOWN_SETTING
         assert str(tmp_path) not in str(refused.value)
+
+
+# ------------------------------------------------------------------------------------------------
+# An account that does not answer (`v1-e29-t09` ac6)
+# ------------------------------------------------------------------------------------------------
+
+CHECK_LAUNCHD_GIVES_UP_AFTER_SECONDS = 60
+"""How long `ops/launchd/install.sh --check-launchd` waits for the agent's check, which runs
+`doctor --evidence-profiles`, before it reports that the check never finished."""
+
+PROFILES_DOCTOR_ASKS_ABOUT = 2
+"""The everyday profile, and the takedown profile when `DEBATE_REMOVAL_PROFILE` is set: asked one
+after the other."""
+
+
+class _NeverAnswers:
+    """A client whose `GetCallerIdentity` hangs, as one does when packets to AWS are dropped."""
+
+    def __init__(self) -> None:
+        self.release = threading.Event()
+        self.asked = 0
+
+    def get_caller_identity(self) -> dict[str, Any]:
+        self.asked += 1
+        self.release.wait(timeout=30)
+        return {}
+
+
+@pytest.fixture
+def never_answers() -> Iterator[_NeverAnswers]:
+    client = _NeverAnswers()
+    yield client
+    client.release.set()
+
+
+class TestAnAccountThatDoesNotAnswer:
+    async def test_the_question_gives_up_after_its_own_time_limit_and_says_aws_did_not_answer(
+        self, never_answers: _NeverAnswers
+    ) -> None:
+        caller = StsCallerIdentity(
+            bucket=BUCKET, profile=TAKEDOWN_PROFILE, client=never_answers, time_limit_seconds=0.2
+        )
+        started = time.monotonic()
+
+        with pytest.raises(StoreUnavailable) as unanswered:
+            await caller.assumed_role_name()
+
+        assert time.monotonic() - started < 2, "gave up at its own limit, not when the client did"
+        assert never_answers.asked == 1
+        assert unanswered.value.operation == "GetCallerIdentity"
+        assert str(unanswered.value) == (
+            f"GetCallerIdentity on s3://{BUCKET} failed: AWS did not answer within 0.2 seconds"
+        )
+
+    async def test_the_profile_check_reports_no_answer_for_it_and_asks_the_next_profile(
+        self, never_answers: _NeverAnswers
+    ) -> None:
+        """What `doctor --evidence-profiles` prints for each profile, through the real adapter."""
+        profiles = [
+            ConfiguredProfile(setting="storage.s3.aws_profile", name="debate-dev-evidence"),
+            ConfiguredProfile(setting=TAKEDOWN_SETTING, name=TAKEDOWN_PROFILE, for_takedowns=True),
+        ]
+
+        def caller_for(profile: ConfiguredProfile) -> CallerIdentity:
+            return StsCallerIdentity(
+                bucket=BUCKET, profile=profile.name, client=never_answers, time_limit_seconds=0.2
+            )
+
+        started = time.monotonic()
+        found = await EvidenceProfileCheck(profiles=profiles, caller_for=caller_for, environment="dev").run()
+
+        assert time.monotonic() - started < 3
+        assert never_answers.asked == 2
+        assert [(one.session.value, one.defined) for one in found] == [
+            ("no_answer", True),
+            ("no_answer", True),
+        ]
+        assert {one.summary for one in found} == {
+            "defined; AWS did not answer when asked which permission set it is signed in as"
+        }
+
+    def test_the_default_limit_for_every_profile_asked_is_well_inside_check_launchds_wait(self) -> None:
+        """Both profiles unanswered take at most a third of the 60 seconds, leaving the rest for
+        the build's other checks and for starting the command under launchd."""
+        assert (
+            IDENTITY_TIME_LIMIT_SECONDS * PROFILES_DOCTOR_ASKS_ABOUT
+            <= CHECK_LAUNCHD_GIVES_UP_AFTER_SECONDS / 3
+        )
+
+    def test_the_limit_is_what_check_launchd_waits_for_against_install_sh(self) -> None:
+        """If `install.sh` shortens its wait, this fails and the limit is looked at again."""
+        install = Path(__file__).parents[5] / "ops" / "launchd" / "install.sh"
+        assert f'if [ "${{waited}}" -gt {CHECK_LAUNCHD_GIVES_UP_AFTER_SECONDS} ]; then' in install.read_text(
+            encoding="utf-8"
+        )
+
+    async def test_an_answer_inside_the_limit_is_the_answer(self) -> None:
+        arn = f"arn:aws:sts::ACCOUNT:assumed-role/{TAKEDOWN_ROLE}/an-operator"
+        caller = StsCallerIdentity(bucket=BUCKET, client=_Answers(arn), time_limit_seconds=5)
+
+        assert await caller.assumed_role_name() == TAKEDOWN_ROLE
+
+    async def test_a_failure_inside_the_limit_is_translated_as_before(self) -> None:
+        caller = StsCallerIdentity(
+            bucket=BUCKET,
+            profile=TAKEDOWN_PROFILE,
+            client=_Answers(UnauthorizedSSOTokenError()),
+            time_limit_seconds=5,
+        )
+
+        with pytest.raises(StoreCredentialsExpired):
+            await caller.assumed_role_name()

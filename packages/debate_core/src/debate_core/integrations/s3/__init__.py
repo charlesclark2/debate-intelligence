@@ -57,7 +57,7 @@ if importlib.util.find_spec("boto3") is None:  # pragma: no cover - depends on h
         "(or `pip install 'debate-core[aws]'`)."
     )
 
-from debate_core.integrations.s3.caller_identity import StsCallerIdentity
+from debate_core.integrations.s3.caller_identity import IDENTITY_TIME_LIMIT_SECONDS, StsCallerIdentity
 from debate_core.integrations.s3.client import (
     DEFAULT_MULTIPART_PART_SIZE_BYTES,
     DEFAULT_MULTIPART_THRESHOLD_BYTES,
@@ -85,6 +85,7 @@ __all__ = [
     "DEFAULT_MULTIPART_PART_SIZE_BYTES",
     "DEFAULT_MULTIPART_THRESHOLD_BYTES",
     "GRANTS_ARE_LISTED_IN",
+    "IDENTITY_TIME_LIMIT_SECONDS",
     "MINIMUM_PART_SIZE_BYTES",
     "SHA256_METADATA_NAME",
     "S3Call",

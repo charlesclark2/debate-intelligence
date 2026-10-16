@@ -43,6 +43,7 @@ from debate_core.domain import Sha256Hex
 
 __all__ = [
     "LocalEvidence",
+    "digests_in_each_earlier_manifest",
     "digests_in_earlier_manifests",
     "list_local_caselists",
     "list_remote_caselists",
@@ -132,14 +133,36 @@ async def digests_in_earlier_manifests(
     withdrawn and superseded counts
     (:func:`~debate_core.application.caselist.withdrawals.count_withdrawals`), which read every
     earlier snapshot, weekly and complete alike.
+
+    "Before" compares dates, a complete archive's included, so `full_archives=False` alone is what
+    keeps complete archives out. Until `v1-e30-t18` it compared snapshot names as strings, and
+    `full/<date>` sorts after every date, so the comparison kept them out as well and a mutation
+    run could not tell the flag from its absence (`v1-e30-t17`).
     """
-    before = snapshot.isoformat()
-    return frozenset(
-        source.sha256
-        for held in await read_local_snapshots(local, caselist, full_archives=False)
-        if held.snapshot < before
-        for source in held.sources
+    return frozenset[Sha256Hex]().union(
+        *(await digests_in_each_earlier_manifest(local, caselist, snapshot)).values()
     )
+
+
+async def digests_in_each_earlier_manifest(
+    local: LocalEvidence, caselist: str, snapshot: date
+) -> dict[str, frozenset[Sha256Hex]]:
+    """:func:`digests_in_earlier_manifests`, manifest by manifest: `{weekly snapshot: digests}`.
+
+    The same manifests by the same rule. What measuring a later manifest again after a late weekly
+    reads (`v1-e30-t18`), which needs to know what the late weekly's own manifest adds.
+    """
+    return {
+        held.snapshot: frozenset(source.sha256 for source in held.sources)
+        for held in await read_local_snapshots(local, caselist, full_archives=False)
+        if _date_of_snapshot(held.snapshot) < snapshot
+    }
+
+
+def _date_of_snapshot(snapshot: str) -> date:
+    """The date a snapshot is of: a weekly's own name, or a complete archive's `full/<date>`."""
+    full = full_archive_date(snapshot)
+    return full if full is not None else date.fromisoformat(snapshot)
 
 
 async def snapshots_before_full_archive(
@@ -159,7 +182,7 @@ async def snapshots_before_full_archive(
     count = 0
     for held in await read_local_snapshots(local, caselist, full_archives=True):
         full = full_archive_date(held.snapshot)
-        held_date = full if full is not None else date.fromisoformat(held.snapshot)
+        held_date = _date_of_snapshot(held.snapshot)
         if held_date >= archive_date:
             continue
         count += 1

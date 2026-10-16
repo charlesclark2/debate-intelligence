@@ -85,23 +85,37 @@ withdrawals read every earlier snapshot, weekly and complete.
 
 A weekly is classified against the latest weekly **dated** before it, whichever order the weeks
 arrived in, so a week imported late is classified exactly as it would have been in date order, and
-nothing runs backwards. What a late week leaves behind is in the weeks after it: their manifests
-were written without it and are not written again. The next week still names the week before the
-late one as its previous week, with the classification counts measured against it, and each later
-week's first-seen count still includes what the late week brought, so the first-seen counts summed
-over the season count a file twice. The bytes, the source records, their seen ranges and the
-disclosures do not depend on the order (`v1-e30-t17`, whose fixture works every case out by hand).
+nothing runs backwards. What a late week changes is in the weeks after it: the next week's previous
+week and classification counts, and every later week's first-seen count. The bytes, the source
+records, their seen ranges and the disclosures do not depend on the order (`v1-e30-t17`, whose
+fixture works every case out by hand).
 
-So a weekly older than the newest one already imported is refused (:class:`SnapshotOutOfOrder`)
-unless the caller passes `allow_out_of_order`. The refusal says what the flag leaves stale, and the
-remedy: import each later week again, which measures it with the late one and writes the manifest a
-date-order run writes. Importing again a week that is already imported changes no other week's
-manifest, and is refused the same way, with a message that says so.
+So after every weekly import, the command that made it measures the weekly manifests dated after it
+again, from what the store already holds, since their archives are usually gone
+(:class:`~debate_core.application.caselist.later_manifests.LaterManifests`, `v1-e30-t18`). Each is
+classified against the latest weekly dated before it and its first-seen count taken again, and a
+manifest whose bytes that changes is rewritten, to the manifest a date-order run writes. Its member
+rows are the same rows: only their classifications, its `REMOVED` rows and its summary change. The
+rewritten manifests are published as any changed manifest is.
+
+Only a weekly imported for the first time is measured into the weeks after it. A week already
+imported is imported again without the flag, and writes its own manifest again and no other: it is
+classified against the same week as before, so its manifest is the same bytes, and the weeks after it
+were measured with it already (:attr:`ImportReport.imported_before`). That is also what keeps a
+removal's rewrite of a later week as the removal left it when an older week is imported again
+(`docs/runbooks/caselist-removal.md`, Step 6).
+
+A weekly older than the newest one already imported, and never imported itself, is still refused
+(:class:`SnapshotOutOfOrder`) unless the caller passes `allow_out_of_order`, because importing it
+rewrites other weeks' manifests: the refusal says which.
 
 A complete archive writes no snapshot record, so it is never the newest weekly a weekly is refused
 for, and the weekly series never sees one. Its withdrawals are counted against the manifests on
-this machine dated before it when it is imported, and are not counted again: a weekly dated before
-it that is imported after it is not in its count.
+this machine dated before it when it is imported. A weekly dated before it that is imported after it
+is counted too: after that import, the newest complete archive's withdrawals are counted again and
+its manifest summary rewritten (`v1-e30-t18`). A complete archive is never held back behind a gap in
+the weekly series, because it carries files that no weekly holds, and a weekly that never becomes
+readable would hold it back for good.
 
 A removed path's hold (`v1-e30-t13`) is asked by the snapshot's date, not by when it is imported, so
 a week imported late is held or not as it would have been in date order. The hold's own date is
@@ -194,40 +208,27 @@ local evidence store is the one the composition root passes.
 
 
 class SnapshotOutOfOrder(DomainError):
-    """A weekly older than the newest weekly already imported was refused.
+    """A weekly older than the newest weekly already imported, and never imported itself, was refused.
 
-    It would be classified against the week before it, as in date order; what is stale is the weeks
-    after it, whose manifests were measured without it and are not written again (see "Ordering" in
-    the module docstring). Re-run with `allow_out_of_order` to import it, then import each later
-    week again. A week that is already imported changes no other week's manifest when imported again,
-    and the message says so.
+    It would be classified against the week before it, as in date order; importing it then rewrites
+    the manifests of the weeks after it, and the newest complete archive's withdrawal count (see
+    "Ordering" in the module docstring). Re-run with `allow_out_of_order` to import it. A week that
+    is already imported is never refused (`v1-e30-t18`).
     """
 
-    def __init__(
-        self, *, caselist: str, snapshot: date, latest: date, already_imported: bool = False
-    ) -> None:
+    def __init__(self, *, caselist: str, snapshot: date, latest: date) -> None:
         self.caselist = caselist
         self.snapshot = snapshot
         self.latest = latest
-        self.already_imported = already_imported
-        if already_imported:
-            message = (
-                f"{caselist} already has the {latest.isoformat()} weekly imported, which is newer than "
-                f"{snapshot.isoformat()}. The {snapshot.isoformat()} weekly is already imported too: "
-                "importing it again classifies it against the week before it and writes its own manifest "
-                "again, and no other week's. Pass --allow-out-of-order to import it again."
-            )
-        else:
-            message = (
-                f"{caselist} already has the {latest.isoformat()} weekly imported. The "
-                f"{snapshot.isoformat()} weekly would be classified against the week before it, as it "
-                "would be in date order, but the weeks after it were measured without it and their "
-                "manifests are not written again: the next week's previous week and classification "
-                "counts, and each later week's first-seen count, stay as they were. Pass "
-                "--allow-out-of-order to import it, then import each later week again to measure it "
-                "with this one."
-            )
-        super().__init__(message)
+        super().__init__(
+            f"{caselist} already has the {latest.isoformat()} weekly imported, and has never imported "
+            f"the {snapshot.isoformat()} one. Importing it classifies it against the week before it, as "
+            "in date order, and then measures the weeks after it again from what this machine holds, "
+            "rewriting their manifests: the next week's previous week and classification counts, each "
+            "later week's first-seen count, and the newest complete archive's withdrawals. Pass "
+            "--allow-out-of-order to import it, then publish the caselist, which uploads every "
+            "rewritten manifest."
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -278,6 +279,14 @@ class ImportReport:
 
     withdrawals: WithdrawalCount | None = None
     """For a complete archive: what earlier snapshots held and it does not. `None` for a weekly."""
+
+    imported_before: bool = False
+    """For a weekly: whether this snapshot was already imported before this run (`v1-e30-t18`).
+
+    A fact about the run, not the archive, so no manifest carries it. A week imported again writes
+    its own manifest and no other; one imported for the first time, late, has the later manifests
+    measured again (:class:`~debate_core.application.caselist.later_manifests.LaterManifests`).
+    """
 
     suppression: SuppressionState = field(default_factory=SuppressionState)
     """The suppression list this import read, which the manifest writer checks every row against."""
@@ -348,6 +357,11 @@ class CaselistImportService:
         self._pipeline = SourceImportPipeline(blobs=blobs, suppression=suppression)
         self._earlier_manifest_digests = earlier_manifest_digests
 
+    @property
+    def caselists(self) -> CaselistRepository:
+        """The repository this importer files records in, which measuring later manifests reads too."""
+        return self._caselists
+
     async def import_archive(
         self,
         entries: Iterable[ArchiveEntry],
@@ -366,9 +380,13 @@ class CaselistImportService:
         order. Members the suppression list stops — the whole file, or this team's disclosure of
         it — are counted as `SUPPRESSED` and never stored.
 
-        Raises :class:`SnapshotOutOfOrder` when a newer weekly is already imported, unless
-        `allow_out_of_order` is set. Writes nothing when `dry_run` is set.
+        Raises :class:`SnapshotOutOfOrder` when a newer weekly is already imported and this one has
+        never been, unless `allow_out_of_order` is set. Writes nothing when `dry_run` is set. The
+        caller writes the manifest and then measures the later ones again ("Ordering", above).
         """
+        imported_before = snapshot in {
+            stored.snapshot for stored in await self._caselists.list_snapshots(caselist)
+        }
         previous = await self._previous_snapshot(caselist, snapshot, allow_out_of_order=allow_out_of_order)
         baseline = await self._disclosures_in(caselist, previous)
 
@@ -416,6 +434,7 @@ class CaselistImportService:
             suppression=run.suppression,
             held_by_request=run.held_by_request,
             first_seen=await self._first_seen(caselist, snapshot, run.entries),
+            imported_before=imported_before,
         )
         _log_counts(report)
         return report
@@ -523,24 +542,25 @@ class CaselistImportService:
     async def _previous_snapshot(
         self, caselist: CaselistSlug, snapshot: SnapshotDate, *, allow_out_of_order: bool
     ) -> SnapshotDate | None:
-        """The latest archive *strictly before* this one, refusing an out-of-order import.
+        """The latest archive *strictly before* this one, refusing a late week never imported.
 
         Of the weekly series only, by construction: :meth:`import_full_archive` writes no snapshot
         record, so a complete archive is never a row this reads (`v1-e34-t04` ac0).
 
         Strictly before is the whole of ac3's idempotence: re-importing an archive compares it
         against the same earlier week it was compared against the first time, so it classifies
-        every member identically and writes the same manifest.
+        every member identically and writes the same manifest. That is also why a week already
+        imported is not refused, however many weeks after it are held (`v1-e30-t18`).
         """
         latest = await self._caselists.latest_snapshot(caselist)
         held = [stored.snapshot for stored in await self._caselists.list_snapshots(caselist)]
-        if latest is not None and latest.snapshot > snapshot and not allow_out_of_order:
-            raise SnapshotOutOfOrder(
-                caselist=caselist,
-                snapshot=snapshot,
-                latest=latest.snapshot,
-                already_imported=snapshot in held,
-            )
+        if (
+            latest is not None
+            and latest.snapshot > snapshot
+            and snapshot not in held
+            and not allow_out_of_order
+        ):
+            raise SnapshotOutOfOrder(caselist=caselist, snapshot=snapshot, latest=latest.snapshot)
         earlier = [one for one in held if one < snapshot]
         return max(earlier) if earlier else None
 

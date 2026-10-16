@@ -308,8 +308,7 @@ DEBATE_ENV=dev uv run debate-research caselist status
 ```
 
 Then re-import a snapshot that still contains the file. It reports the file as `SUPPRESSED`, stores
-no blob and writes no manifest row. An archive older than the newest one imported needs
-`--allow-out-of-order`.
+no blob and writes no manifest row.
 
 ```bash
 DEBATE_ENV=dev uv run debate-research caselist import <archive> --caselist hsld26 --snapshot <date>
@@ -888,9 +887,8 @@ DEBATE_ENV=dev DEBATE_REMOVAL_PROFILE=debate-dev-evidence-removal uv run debate-
     --sha256 <sha256> --reason REMOVED_IN_ERROR --request RM-2026-01 --execute
 ```
 
-Then prod, with `--confirm-prod`, and re-import the archive that holds the file (with
-`--allow-out-of-order` if a newer one is already imported). `--reason` is `REMOVED_IN_ERROR` or
-`REQUEST_WITHDRAWN`. One `unsuppress` lifts every suppression of that sha256, whole-file and
+Then prod, with `--confirm-prod`, and re-import the archive that holds the file. `--reason` is
+`REMOVED_IN_ERROR` or `REQUEST_WITHDRAWN`. One `unsuppress` lifts every suppression of that sha256, whole-file and
 per-path. It also releases the hold on each path that file was removed from (`v1-e30-t13`), and
 the dry run says how many: a later upload there is imported again from the next archive that holds
 it. Nothing is appended to `path-holds.jsonl` for that. A later upload that a removal put on the

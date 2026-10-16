@@ -81,7 +81,7 @@ goes on to write its disclosure or camp-file record against it.
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable, Iterable, Mapping
+from collections.abc import Awaitable, Callable, Collection, Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import date
 from enum import StrEnum
@@ -111,6 +111,7 @@ __all__ = [
     "SourceImportPipeline",
     "SourceMetadata",
     "SuppressedWriteRefused",
+    "classify_stored",
     "file_source",
     "withheld_skipped_paths",
 ]
@@ -531,12 +532,31 @@ def _classify(
     """
     if suppressed:
         return Classification.SUPPRESSED
-    previously = baseline.get(member.path)
-    if previously == member.sha256:
+    return classify_stored(
+        member.path, member.sha256, baseline=baseline, baseline_digests=baseline_digests, known=known
+    )
+
+
+def classify_stored(
+    path: str,
+    sha256: str,
+    *,
+    baseline: Mapping[str, str],
+    baseline_digests: Collection[str],
+    known: Collection[str],
+) -> Classification:
+    """What a member the suppression list does not stop is, against the previous import.
+
+    The one rule, shared with the measuring of a later manifest again after a weekly imported out
+    of date order (:mod:`~debate_core.application.caselist.later_manifests`, `v1-e30-t18`), which
+    has the member's path and digest from its manifest row and no archive to read.
+    """
+    previously = baseline.get(path)
+    if previously == sha256:
         return Classification.UNCHANGED
     if previously is not None:
         return Classification.CHANGED
-    if member.sha256 in known or member.sha256 in baseline_digests:
+    if sha256 in known or sha256 in baseline_digests:
         return Classification.DUPLICATE
     return Classification.NEW
 

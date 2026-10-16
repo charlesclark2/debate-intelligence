@@ -91,8 +91,9 @@ class CaselistRepository(Protocol):
     async def latest_snapshot(self, caselist: CaselistSlug) -> ArchiveSnapshot | None:
         """Return the most recent archive imported for this caselist, or `None` if there is none.
 
-        The importer compares against this to refuse a weekly older than one already imported:
-        the weeks after it were measured without it ("Ordering", in the import service).
+        The importer compares against this to refuse a weekly older than one already imported and
+        never imported itself, since importing it rewrites the weeks after it ("Ordering", in the
+        import service).
         """
         ...
 

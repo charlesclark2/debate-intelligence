@@ -51,7 +51,6 @@ from tests.fixtures.caselist.build_revised_path_archives import (
 
 from debate_core.application.caselist.import_service import CaselistImportService
 from debate_core.application.caselist.inbox_purge import InboxAction, read_inbox
-from debate_core.application.caselist.publish_plan import HeldRow
 from debate_core.application.caselist.publish_service import (
     MANIFEST_NAMES_SUPPRESSED_SOURCE,
     CaselistPublishService,
@@ -60,11 +59,7 @@ from debate_core.application.caselist.publish_service import (
     SourceResult,
 )
 from debate_core.application.caselist.removal_plan import SourceSelector
-from debate_core.application.caselist.status_service import (
-    CaselistStatusReport,
-    CaselistStatusService,
-    HeldInboxUpload,
-)
+from debate_core.application.caselist.status_service import CaselistStatusReport, CaselistStatusService
 from debate_core.application.caselist.suppression import RecordedSuppressionList
 from debate_core.application.ports.suppression import (
     ReasonCode,
@@ -173,6 +168,16 @@ def members_of(path: Path) -> list[str]:
         return sorted(info.filename for info in archive.infolist())
 
 
+def rows_of(held: Sequence[object]) -> list[tuple[object, ...]]:
+    """Each held row as `(sha256, request id)`."""
+    return [(row.sha256, row.request_id) for row in held]  # type: ignore[attr-defined]
+
+
+def uploads_of(held: Sequence[object]) -> list[tuple[object, ...]]:
+    """Each held inbox upload as `(caselist, snapshot, sha256, request id)`."""
+    return [(one.caselist, one.snapshot, one.sha256, one.request_id) for one in held]  # type: ignore[attr-defined]
+
+
 def names_no_one(report: CaselistStatusReport) -> None:
     """Nothing the comparison reports about a hold carries a path, a school, a team code or a file name."""
     said = json.dumps(
@@ -197,8 +202,8 @@ async def test_status_reports_a_row_an_older_build_imported_at_a_held_path(
 
     report = await status_service(world).status(CASELIST)
 
-    held = {one.snapshot: one.held_rows for one in report.snapshots if one.held_rows}
-    assert held == {"2026-10-08": (HeldRow(sha256=UPLOADED_AFTER, request_id=REQUEST),)}
+    held = {one.snapshot: rows_of(one.held_rows) for one in report.snapshots if one.held_rows}
+    assert held == {"2026-10-08": [(UPLOADED_AFTER, REQUEST)]}
     assert report.removals_owed == (REQUEST,)
     names_no_one(report)
 
@@ -237,11 +242,11 @@ async def test_status_reports_each_upload_held_in_the_inbox_by_caselist_snapshot
 
     report = await status_service(world).status(held_in_inbox=True)
 
-    assert report.held_in_inbox == (
-        HeldInboxUpload(CASELIST, "2026-10-08", UPLOADED_AFTER, REQUEST),
-        HeldInboxUpload(CASELIST, "2026-10-10", UPLOADED_AFTER_AT_TWO_PATHS, REQUEST),
-        HeldInboxUpload(CASELIST, "full/2026-10-09", UPLOADED_AFTER_IN_A_COMPLETE_ARCHIVE, REQUEST),
-    )
+    assert uploads_of(report.held_in_inbox) == [
+        (CASELIST, "2026-10-08", UPLOADED_AFTER, REQUEST),
+        (CASELIST, "2026-10-10", UPLOADED_AFTER_AT_TWO_PATHS, REQUEST),
+        (CASELIST, "full/2026-10-09", UPLOADED_AFTER_IN_A_COMPLETE_ARCHIVE, REQUEST),
+    ]
     assert report.held_in_inbox_of(OTHER_CASELIST) == ()
     assert report.removals_owed == (REQUEST,)
     names_no_one(report)
@@ -258,7 +263,7 @@ async def test_an_upload_this_build_refused_at_import_is_still_reported_while_it
 
     report = await status_service(world).status(CASELIST, "2026-10-08", held_in_inbox=True)
 
-    assert report.held_in_inbox == (HeldInboxUpload(CASELIST, "2026-10-08", UPLOADED_AFTER, REQUEST),)
+    assert uploads_of(report.held_in_inbox) == [(CASELIST, "2026-10-08", UPLOADED_AFTER, REQUEST)]
     assert [one.held_rows for one in report.snapshots] == [()], "the import stored no row"
 
 
@@ -369,16 +374,8 @@ async def test_the_publisher_withholds_a_manifest_with_a_held_row_exactly_as_one
 
     by_hold = await held.plan(CASELIST, "2026-10-08")
     by_withdrawal = await withdrawn.plan(CASELIST, "2026-10-08")
-
-    (held_plan,), (withdrawn_plan,) = by_hold.snapshots, by_withdrawal.snapshots
-    assert held_plan.held_rows == (HeldRow(sha256=UPLOADED_AFTER, request_id=REQUEST),)
-    assert (held_plan.suppressed_rows, withdrawn_plan.held_rows) == ((), ())
-    assert withdrawn_plan.suppressed_rows == (UPLOADED_AFTER,)
-    assert held_plan.withholding_rows == withdrawn_plan.withholding_rows == (UPLOADED_AFTER,)
-    assert held_plan.counts == withdrawn_plan.counts
     dry_held = PublishReport(plan=by_hold, applied=False)
     dry_withdrawn = PublishReport(plan=by_withdrawal, applied=False)
-    assert dry_held.succeeded is dry_withdrawn.succeeded is False
 
     done_held = await held.execute(by_hold)
     done_withdrawn = await withdrawn.execute(by_withdrawal)
@@ -389,13 +386,20 @@ async def test_the_publisher_withholds_a_manifest_with_a_held_row_exactly_as_one
         ManifestOutcome.WITHHELD,
         MANIFEST_NAMES_SUPPRESSED_SOURCE,
     )
+    listed = world.client.list_objects_v2(Bucket=world.bucket_name, Prefix=HELD_WEEK_MANIFEST)
+    assert listed.get("KeyCount") == 0, "the withheld manifest went up"
+    assert dry_held.succeeded is dry_withdrawn.succeeded is False
+    (held_plan,), (withdrawn_plan,) = by_hold.snapshots, by_withdrawal.snapshots
+    assert held_plan.counts == withdrawn_plan.counts
+    assert rows_of(held_plan.held_rows) == [(UPLOADED_AFTER, REQUEST)]
+    assert (held_plan.suppressed_rows, withdrawn_plan.held_rows) == ((), ())
+    assert withdrawn_plan.suppressed_rows == (UPLOADED_AFTER,)
+    assert held_plan.withholding_rows == withdrawn_plan.withholding_rows == (UPLOADED_AFTER,)
     assert outcome.manifest_error is not None
     assert f"1 row(s) at a path a removal holds: {UPLOADED_AFTER} ({REQUEST})" in outcome.manifest_error
     assert "re-run `caselist remove`" in outcome.manifest_error
     assert done_held.held_rows == (UPLOADED_AFTER,) and done_held.suppressed_rows == ()
     assert not [word for word in (*NAMES, REVISED_PATH) if word in outcome.manifest_error]
-    listed = world.client.list_objects_v2(Bucket=world.bucket_name, Prefix=HELD_WEEK_MANIFEST)
-    assert listed.get("KeyCount") == 0, "the withheld manifest went up"
 
 
 async def test_after_the_removal_alone_nothing_is_withheld(world: RemovalWorld) -> None:
@@ -452,13 +456,11 @@ async def test_the_removal_rewrites_a_waiting_archive_without_a_link_named_as_th
     service = world.service()
     plan = await service.plan(SourceSelector(NAMED), request_id=REQUEST, reason=ReasonCode.REQUESTED_BY_TEAM)
 
-    (planned,) = [one for one in plan.inbox if one.name == waiting.name]
-    assert (planned.action, planned.dropped, planned.entries_kept) == (
-        InboxAction.REWRITE,
-        (REVISED_PATH,),
-        1,
-    )
-    assert planned.removed_sha256 == (), "a link is not a removed file"
+    planned = [one for one in plan.inbox if one.name == waiting.name]
+    assert [(one.action, one.dropped, one.entries_kept) for one in planned] == [
+        (InboxAction.REWRITE, (REVISED_PATH,), 1)
+    ]
+    assert planned[0].removed_sha256 == (), "a link is not a removed file"
     assert (await service.execute(plan)).completed
     assert members_of(waiting) == [KEPT_PATH]
     with zipfile.ZipFile(waiting) as archive:

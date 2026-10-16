@@ -34,7 +34,7 @@ from tests.fixtures.caselist.build_synthetic_archives import (
 
 from debate_core.application.caselist.inbox_purge import CaselistInbox
 from debate_core.application.caselist.removal_plan import SourceSelector
-from debate_core.application.caselist.status_service import CaselistStatusService, HeldInboxUpload
+from debate_core.application.caselist.status_service import CaselistStatusService
 from debate_core.application.caselist_sync import RunSummary, StageOutcome, SyncStage
 from debate_core.application.ports.suppression import ReasonCode
 from debate_core.integrations.local import FsEvidenceObjectStore
@@ -120,15 +120,16 @@ def week_four_counts(world: RemovalWorld) -> dict[str, int]:
     return summary["classifications"]
 
 
-async def held_in_inbox_now(world: RemovalWorld) -> tuple[HeldInboxUpload, ...]:
-    """What `caselist status` says is held in the inbox."""
+async def held_in_inbox_now(world: RemovalWorld) -> list[tuple[str, str, str, str]]:
+    """What `caselist status` says is held in the inbox: `(caselist, snapshot, sha256, request id)`."""
     inbox = CaselistInbox(
         directory=world.data_dir / "inbox", state_dir=world.data_dir, archives=ZipArchiveRewriter(**LIMITS)
     )
     service = CaselistStatusService(
         local=world.local, remote=world.bucket, suppression=world.suppression(), inbox=inbox
     )
-    return (await service.status(CASELIST, held_in_inbox=True)).held_in_inbox
+    held = (await service.status(CASELIST, held_in_inbox=True)).held_in_inbox
+    return [(one.caselist, one.snapshot, one.sha256, one.request_id) for one in held]
 
 
 def import_reason(summary: RunSummary) -> str:
@@ -235,12 +236,12 @@ async def test_an_archive_that_also_holds_another_teams_file_stays_until_its_pub
     assert installation.inbox_names() == {weekly_name(WEEK_4)}
     assert "taken out of the inbox" not in import_reason(expired)
     assert kept(expired) == {label(WEEK_4): "not_confirmed"}
-    assert await held_in_inbox_now(removal_world) == (
-        HeldInboxUpload(CASELIST, WEEK_4.isoformat(), REUPLOADED_SHA256, REQUEST),
-    )
+    assert await held_in_inbox_now(removal_world) == [
+        (CASELIST, WEEK_4.isoformat(), REUPLOADED_SHA256, REQUEST)
+    ]
 
     logged_in = await installation.sync(source).run([CASELIST])
 
     assert removed(logged_in) == [label(WEEK_4)]
     assert installation.inbox_names() == set()
-    assert await held_in_inbox_now(removal_world) == ()
+    assert await held_in_inbox_now(removal_world) == []

@@ -14,8 +14,9 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import zipfile
 from collections.abc import Iterator
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -23,6 +24,7 @@ import boto3
 import pytest
 from moto import mock_aws
 from tests.fixtures.caselist.build_synthetic_archives import (
+    DOCUMENT_BODIES,
     SNAPSHOTS,
     SYNTHETIC_CASELIST,
     build_snapshot_zips,
@@ -39,6 +41,7 @@ from debate_cli.app import create_app
 from debate_cli.exit_codes import ExitCode
 from debate_core.application.errors import StoreUnavailable
 from debate_core.application.ports.evidence_store import ObjectInfo
+from debate_core.application.ports.suppression import PathHoldEntry, ReasonCode, disclosure_digest
 from debate_core.integrations.s3 import SHA256_METADATA_NAME, S3EvidenceObjectStore
 
 if TYPE_CHECKING:  # pragma: no cover - import for the type checker only
@@ -362,6 +365,118 @@ class TestStatus:
         result = invoke("--json", "caselist", "status", "--snapshot", "2026-09-15")
 
         assert result.exit_code == ExitCode.DOMAIN_FAILURE
+
+
+# ------------------------------------------------------------------------------------------------
+# v1-e30-t21: caselist status says when a removal's hold is owed again, and exits as before
+# ------------------------------------------------------------------------------------------------
+
+HELD_PATH = "Maple Grove/QX/Maple Grove-QX-Neg-Grove City Invitational-Round 2.docx"
+FIRST = hashlib.sha256(DOCUMENT_BODIES["grove-round-2-neg-first"]).hexdigest()
+REVISED = hashlib.sha256(DOCUMENT_BODIES["grove-round-2-neg-revised"]).hexdigest()
+NEXT_WEEKS_UPLOAD = b"invented bytes of a later upload at the held path"
+NEXT_WEEKS = hashlib.sha256(NEXT_WEEKS_UPLOAD).hexdigest()
+REQUEST = "RM-2026-09"
+#: Every word of the held path, and the inbox archive's own name.
+IDENTIFYING = ("Maple Grove", "QX", "Grove City", "Round 2", ".docx", "weekly-2026-09-22")
+
+
+def the_removal_holds_the_path(data_dir: Path) -> None:
+    """The path entry, as `caselist remove --source <first version>` appends it on this machine."""
+    entry = PathHoldEntry(
+        caselist=SYNTHETIC_CASELIST,
+        disclosure=disclosure_digest(SYNTHETIC_CASELIST, HELD_PATH),
+        sha256=FIRST,
+        after_snapshot=date(2026, 9, 1),
+        recorded_at=datetime(2026, 9, 2, 12, 0, tzinfo=UTC),
+        reason=ReasonCode.REQUESTED_BY_TEAM,
+        request_id=REQUEST,
+    )
+    record = data_dir / "suppression" / "path-holds.jsonl"
+    record.parent.mkdir(parents=True, exist_ok=True)
+    record.write_text(entry.to_line() + "\n", encoding="utf-8")
+
+
+def next_week_waits_in_the_inbox(data_dir: Path) -> None:
+    inbox = data_dir / "inbox"
+    inbox.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(inbox / f"{SYNTHETIC_CASELIST}-weekly-2026-09-22.zip", "w") as archive:
+        archive.writestr(f"testcl26-0922/{HELD_PATH}", NEXT_WEEKS_UPLOAD)
+
+
+class TestStatusOfAHeldPath:
+    """`caselist status` says when a removal's hold is owed again (`v1-e30-t21`).
+
+    After the three weeks are published, the state an older build leaves after a `--source`
+    removal: the path entry the removal of the round-two negative's first version writes, holding
+    its path after `2026-09-01`; the revision at that path in `2026-09-08` and `2026-09-15`, which
+    stands for what a build from before `v1-e30-t13` imports there, reading no path entry; and next
+    week's archive in the download inbox with another upload at the path. Nothing here needs a name
+    this task added, so it runs against the build at the start commit too, which exits 0 and says
+    nothing of the hold.
+    """
+
+    def test_status_names_the_held_rows_and_the_held_upload_and_still_exits_zero(
+        self, buckets: S3Client, imported: Path
+    ) -> None:
+        assert publish().exit_code == ExitCode.OK
+        the_removal_holds_the_path(imported)
+        next_week_waits_in_the_inbox(imported)
+
+        result = invoke("--json", "caselist", "status", "--caselist", SYNTHETIC_CASELIST)
+
+        assert result.exit_code == ExitCode.OK, result.stdout
+        data = envelope_of(result)["data"]
+        assert data["in_sync"] is True
+        held = {
+            entry["snapshot"]: (
+                entry.get("held_rows"),
+                entry.get("held_row_prefixes"),
+                entry.get("held_row_requests"),
+            )
+            for entry in data["snapshots"]
+        }
+        assert held == {
+            "2026-09-01": (0, [], []),
+            "2026-09-08": (1, [REVISED[:12]], [REQUEST]),
+            "2026-09-15": (1, [REVISED[:12]], [REQUEST]),
+        }
+        assert data.get("held_in_inbox") == [
+            {
+                "caselist": SYNTHETIC_CASELIST,
+                "uploads": 1,
+                "sha256_prefixes": [NEXT_WEEKS[:12]],
+                "requests": [REQUEST],
+            }
+        ]
+        assert data.get("removals_owed") == [REQUEST]
+        assert not [word for word in IDENTIFYING if word in result.stdout]
+
+    def test_the_table_tells_a_person_what_is_held_and_to_run_the_removal_again(
+        self, buckets: S3Client, imported: Path
+    ) -> None:
+        assert publish().exit_code == ExitCode.OK
+        the_removal_holds_the_path(imported)
+        next_week_waits_in_the_inbox(imported)
+
+        result = invoke("caselist", "status", "--caselist", SYNTHETIC_CASELIST)
+
+        assert result.exit_code == ExitCode.OK, result.stdout
+        told = " ".join(result.stdout.split())
+        assert f"HELD PATH ROWS in {SYNTHETIC_CASELIST} 2026-09-08: 1 row(s)" in told
+        assert f"HELD UPLOADS IN THE DOWNLOAD INBOX for {SYNTHETIC_CASELIST}: 1 upload(s)" in told
+        assert f"{REQUEST} is owed again" in told
+        assert not [word for word in IDENTIFYING if word in result.stdout]
+
+    def test_without_a_hold_the_json_says_nothing_is_owed(self, buckets: S3Client, imported: Path) -> None:
+        assert publish().exit_code == ExitCode.OK
+
+        data = envelope_of(invoke("--json", "caselist", "status"))["data"]
+
+        assert data.get("removals_owed") == []
+        assert json.dumps(data.get("held_in_inbox")) == json.dumps(
+            [{"caselist": SYNTHETIC_CASELIST, "uploads": 0, "sha256_prefixes": [], "requests": []}]
+        )
 
 
 # ------------------------------------------------------------------------------------------------

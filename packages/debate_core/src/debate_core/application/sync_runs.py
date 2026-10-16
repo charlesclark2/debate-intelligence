@@ -109,7 +109,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import re
 import tempfile
 from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
@@ -126,7 +125,10 @@ from debate_core.application.caselist_sync import (
     RunSummary,
     StageOutcome,
     SyncStage,
+    append_state_line,
     fix_for,
+    remove_state_file,
+    write_state_file,
 )
 from debate_core.application.errors import (
     DomainError,
@@ -903,14 +905,10 @@ class SyncRunLog:
         self.path = Path(path)
 
     def append(self, record: SyncRunRecord) -> None:
-        """Add `record` as one line, in a single append so concurrent writers cannot interleave."""
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        line = (record.model_dump_json() + "\n").encode("utf-8")
-        descriptor = os.open(self.path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
-        try:
-            os.write(descriptor, line)
-        finally:
-            os.close(descriptor)
+        """Add `record` as one line, in a single append so concurrent writers cannot interleave, and
+        on the disk before this returns (`v1-e34-t23`; :func:`~debate_core.application.caselist_sync.
+        append_state_line`)."""
+        append_state_line(self.path, (record.model_dump_json() + "\n").encode("utf-8"))
 
     def read(self) -> list[SyncRunRecord]:
         """Every record, oldest first. A line that is not a valid record is skipped and logged."""
@@ -952,14 +950,8 @@ class SyncRunDetailsLog:
         self.path = Path(path)
 
     def append(self, details: SyncRunDetails) -> None:
-        """Add `details` as one line, in a single append so concurrent writers cannot interleave."""
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        line = (details.model_dump_json() + "\n").encode("utf-8")
-        descriptor = os.open(self.path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
-        try:
-            os.write(descriptor, line)
-        finally:
-            os.close(descriptor)
+        """Add `details` as one line, written as the run log is (:meth:`SyncRunLog.append`)."""
+        append_state_line(self.path, (details.model_dump_json() + "\n").encode("utf-8"))
 
     def read(self) -> dict[str, SyncRunDetails]:
         """Every run's details, by run id; the last line for a run id is the one kept."""
@@ -1004,13 +996,15 @@ class _PendingRecords:
         return [one for one in cast("list[object]", run_ids) if isinstance(one, str)]
 
     def write(self, run_ids: Sequence[str]) -> None:
+        """Record exactly `run_ids`, on the disk as every state file of the sync is (`v1-e34-t23`).
+
+        The same bytes as before: a JSON object of one key, so `sort_keys` changes nothing an older
+        build reads.
+        """
         if not run_ids:
-            self.path.unlink(missing_ok=True)
+            remove_state_file(self.path)
             return
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        temporary = self.path.with_name(f".{self.path.name}.incoming")
-        temporary.write_text(json.dumps({"run_ids": list(run_ids)}, indent=2) + "\n", encoding="utf-8")
-        os.replace(temporary, self.path)
+        write_state_file(self.path, {"run_ids": list(run_ids)})
 
 
 # ------------------------------------------------------------------------------------------------

@@ -395,7 +395,7 @@ owed from before that the stage had just published stayed in the file.
   person. What the run itself imported needs nothing from the file and is published all the same;
   anything of that the bucket did not confirm is named in the stage's reason, because it could be
   written nowhere. Every state file here is written to a second file in the same directory, put on
-  the disk, and renamed into place (:func:`_write_json`), so neither a run that dies while writing
+  the disk, and renamed into place (:func:`write_state_file`), so neither a run that dies while writing
   nor a power cut just after it can be what cut it short.
 
 ## What a failed stage records
@@ -593,6 +593,7 @@ __all__ = [
     "SyncStage",
     "UndatedArchive",
     "UnknownSyncEvent",
+    "append_state_line",
     "camp_path_of_manifest_row",
     "caselists_to_parse",
     "decide_full_archives",
@@ -600,10 +601,12 @@ __all__ = [
     "full_archive_of_inbox_name",
     "inbox_files",
     "openev_id_of_inbox_name",
+    "remove_state_file",
     "run_pull",
     "snapshots_still_owed",
     "weekly_archive_of_inbox_name",
     "within_daily_budget",
+    "write_state_file",
 ]
 
 logger = logging.getLogger(__name__)
@@ -1635,10 +1638,10 @@ class PendingWork:
         the file: one that cannot be read is not this method's to replace.
         """
         if not owed:
-            self.path.unlink(missing_ok=True)
+            remove_state_file(self.path)
             return
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        _write_json(self.path, {"publish": [one.as_json() for one in owed]})
+        write_state_file(self.path, {"publish": [one.as_json() for one in owed]})
 
 
 def snapshots_still_owed(
@@ -1724,7 +1727,7 @@ class DownloadLedger:
         since = self.window_start(started_at)
         kept = [started for started in self._own_starts() if started > since]
         kept.append(started_at)
-        _write_json(
+        write_state_file(
             self.path,
             {
                 "schema_version": DOWNLOAD_LEDGER_SCHEMA_VERSION,
@@ -1868,7 +1871,7 @@ class OpenEvDeliveries:
         """Remember what `openev_id` delivered, replacing anything remembered for it before."""
         deliveries = self.read()
         deliveries[openev_id] = delivery
-        _write_json(
+        write_state_file(
             self.path,
             {
                 "schema_version": OPENEV_DELIVERIES_SCHEMA_VERSION,
@@ -1934,7 +1937,7 @@ def _read_json_object(path: Path) -> dict[str, object] | None:
     return cast("dict[str, object]", body) if isinstance(body, dict) else None
 
 
-def _write_json(path: Path, body: Mapping[str, object]) -> None:
+def write_state_file(path: Path, body: Mapping[str, object]) -> None:
     """Write `body` to `path` atomically and durably, so no run leaves half a state file.
 
     To a second file in the same directory, renamed over `path` once it is complete: a rename
@@ -1947,7 +1950,8 @@ def _write_json(path: Path, body: Mapping[str, object]) -> None:
     left the page cache, which is a state file cut short by the very write meant to prevent one.
     So the second file is flushed and fsynced before the rename, and the directory is fsynced after
     it. This is every state file this module writes: the pending-work file, the download ledger,
-    the OpenEv delivery record and each run's summary.
+    the OpenEv delivery record and each run's summary; and, since `v1-e34-t23`, the run monitor's
+    list of records still owed to the bucket (:mod:`debate_core.application.sync_runs`).
 
     An `fsync` that fails is a write that failed: the `OSError` is raised as it is, as a failed
     write always was here. Before the rename, `path` still holds what it held.
@@ -1960,6 +1964,36 @@ def _write_json(path: Path, body: Mapping[str, object]) -> None:
         os.fsync(stream.fileno())
     os.replace(temporary, path)
     _fsync_directory(path.parent)
+
+
+def append_state_line(path: Path, line: bytes) -> None:
+    """Append `line` to the log at `path` in one write, and put it on the disk before returning.
+
+    The run log and the run details (`v1-e34-t23`): an append has no second file to rename, so the
+    rule of :func:`write_state_file` is the part of it that applies. The line goes in a single
+    `O_APPEND` write, so two writers cannot interleave; the file is fsynced holding it; and the
+    directory is fsynced after, because the first append is the one that gave the file its name.
+    A failed `fsync` is a failed append, raised as the operating system's own `OSError`.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+    try:
+        os.write(descriptor, line)
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+    _fsync_directory(path.parent)
+
+
+def remove_state_file(path: Path) -> None:
+    """Remove the state file at `path`, when there is one, and put its going on the disk.
+
+    What a state file that owes nothing any more becomes (`v1-e34-t23`): a name the disk still held
+    after a power cut would bring back a file that owes what was since published.
+    """
+    path.unlink(missing_ok=True)
+    if path.parent.is_dir():
+        _fsync_directory(path.parent)
 
 
 def _fsync_directory(directory: Path) -> None:
@@ -4103,7 +4137,7 @@ class CaselistSyncService:
     def _write_summary(self, summary: RunSummary) -> Path:
         """Write the run's JSON summary under `<state_dir>/caselist-sync-runs/`, and return it."""
         destination = self._state_dir / RUN_SUMMARY_DIRECTORY / f"{summary.run_id}.json"
-        _write_json(destination, summary.as_json())
+        write_state_file(destination, summary.as_json())
         return destination
 
     def summary_path(self, summary: RunSummary) -> Path:

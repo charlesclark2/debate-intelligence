@@ -33,12 +33,18 @@ spec:
   - id: gate
     description: >-
       Gate release-v1-0-gate is approved.
-  # Close-out path, set by the PM on 2026-10-14 and updated 2026-10-15. Done: v1-e01-t21, t23,
-  # t24, t25 and t27 Succeeded; t15 Succeeded with ac5 amended. What is left before the tag:
-  #   1. v1-e01-t26, a task session, ready now that t15 is Succeeded.
-  #   2. A PM close-out: the E01 epic set Succeeded, CHANGELOG.md created with a v1.0 section, and
-  #      v1-e01-t21's first validate-dev run with the stand-ins recorded.
-  #   3. A promotion of dev into main, the v1.0.0 tag on main, and this release's Gate.
+  # Close-out path, set by the PM on 2026-10-14 and updated at the v1.0 close-out, 2026-10-15.
+  # Done: every E01, E02 and E03 task Succeeded, the three epics set Succeeded, CHANGELOG.md
+  # created with a v1.0.0 section, and the package versions bumped from 0.1.0 to 1.0.0 so that
+  # dev builds are `v1.0.0-dev.N` from here. What is left:
+  #   1. A promotion of dev into main, with this close-out in it. The Gate's review starts on it:
+  #      the demo of `debate-research verify` end to end and no evidence-integrity regression.
+  #   2. The annotated tag v1.0.0 on the promotion's merge commit on main, and a GitHub release
+  #      whose notes are CHANGELOG.md's v1.0.0 section. It has no assets: the stable install
+  #      channel is v1-e09-t06's. The Gate's last check is `ci` green on the tagged commit.
+  #   3. Straight after the tag, one PM pull request into dev: the versions bumped to 1.1.0 (until
+  #      it merges every dev build is refused, because v1.0.0 is released; see
+  #      scripts/release_version.py), the Gate's approval recorded, and this Goal Succeeded.
 status:
   phase: Pending
 ---

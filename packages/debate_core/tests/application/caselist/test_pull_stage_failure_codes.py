@@ -675,7 +675,8 @@ async def test_a_local_refusal_in_publish_fails_the_stage_and_names_the_data_dir
     assert retried.summary.failure_codes == ("STORE_ACCESS_DENIED",)
     assert owed(installation) == ["testcl26 2026-09-01"], "still owed, for the run after the fix"
     assert stage(retried.summary, SyncStage.REPORT)["outcome"] == "skipped"
-    assert [one.title for one in retried.notifier.sent] == ["caselist pull failed: will be retried"]
+    # Exit `3`, and a retry refused until the permission is fixed: `v1-e34-t23`'s wording of it.
+    assert [one.title for one in retried.notifier.sent] == ["caselist pull failed: retried once fixed"]
     assert "aws sso login" not in json.dumps(stages_of(retried.summary))
     assert "aws sso login" not in retried.notified
     assert_names_nothing_of_this_machine(retried.summary, installation)
@@ -733,7 +734,8 @@ async def test_a_missing_grant_in_publish_fails_the_stage_and_names_the_grant(
     assert watched.summary.failure_codes == ("STORE_ACCESS_DENIED",)
     assert owed(installation) == ["testcl26 2026-09-01"]
     assert stage(watched.summary, SyncStage.REPORT)["outcome"] == "skipped"
-    assert [one.title for one in watched.notifier.sent] == ["caselist pull failed: will be retried"]
+    # Exit `3`, and a retry refused until the grant is made: `v1-e34-t23`'s wording of it.
+    assert [one.title for one in watched.notifier.sent] == ["caselist pull failed: retried once fixed"]
     assert "aws sso login" not in json.dumps(stages_of(watched.summary))
     assert "aws sso login" not in watched.notified
     assert_names_nothing_of_this_machine(watched.summary, installation)

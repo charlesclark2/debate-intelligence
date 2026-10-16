@@ -112,7 +112,7 @@ import logging
 import re
 import tempfile
 from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
@@ -126,6 +126,7 @@ from debate_core.application.caselist_sync import (
     DriftKind,
     RunSummary,
     StageOutcome,
+    SyncRunInProgress,
     SyncStage,
     append_state_line,
     fix_for,
@@ -133,6 +134,7 @@ from debate_core.application.caselist_sync import (
     write_state_file,
 )
 from debate_core.application.errors import (
+    UNMODELLED_ERROR_CODE,
     DomainError,
     NotFound,
     StoreCredentialsExpired,
@@ -144,6 +146,8 @@ from debate_core.application.ports.evidence_store import EvidenceObjectStore, va
 from debate_core.application.ports.notifier import Notification, Notifier
 
 __all__ = [
+    "ANOTHER_RUN_HELD_THE_LOCK",
+    "ANOTHER_RUN_HELD_THE_LOCK_TITLE",
     "BACKLOG_GROWTH_RUNS",
     "HELD_BY_A_REMOVAL_TITLE",
     "MANIFEST_PUBLISHED_AGAIN",
@@ -151,6 +155,8 @@ __all__ = [
     "NEEDS_A_PERSON",
     "NEEDS_A_PERSON_TITLE",
     "PENDING_RECORDS_FILENAME",
+    "RETRIED_AFTER_ITS_FIX",
+    "RETRIED_AFTER_ITS_FIX_TITLE",
     "RETRIED_BY_THE_NEXT_RUN",
     "RETRIED_BY_THE_NEXT_RUN_TITLE",
     "SYNC_RUN_DETAILS_FILENAME",
@@ -769,6 +775,52 @@ NEEDS_A_PERSON: Final = (
 )
 """The verdict in every other case (exit 1, and a bug). The runbook quotes this one too."""
 
+RETRIED_AFTER_ITS_FIX_TITLE: Final = "caselist pull failed: retried once fixed"
+RETRIED_AFTER_ITS_FIX: Final = (
+    "The next scheduled run retries it, and is refused the same way until the fix that follows is made."
+)
+"""The first verdict's wording when a failed stage that had to finish carries a fix, or the error that
+stopped the run does (`v1-e34-t23`): a refusal exits `3` like an outage, and is refused again until
+the permission or the grant in its hint is fixed. The same rule decides it, and the exit code is
+unchanged. The runbook quotes both."""
+
+ANOTHER_RUN_HELD_THE_LOCK_TITLE: Final = "caselist pull skipped: another was running"
+ANOTHER_RUN_HELD_THE_LOCK: Final = (
+    "Another caselist pull held the run lock, so this one did nothing. That run records and "
+    "announces its own outcome."
+)
+"""A run refused because another holds the run lock (`v1-e34-t23`). It exits `1`, as before, and a
+person's look is not what it asks for: the run holding the lock is the one that says how it went.
+The runbook quotes both."""
+
+RUNS_COMMAND: Final = "debate-research caselist runs"
+
+_WHAT_STOPPED_A_RUN: Final = {
+    "STORE_PROFILE_NOT_CONFIGURED": (
+        "the AWS profile it publishes with is not one this machine's AWS config defines"
+    ),
+    "STORE_ACCESS_DENIED": "this machine or the bucket refused it",
+    "STORE_UNAVAILABLE": "a store did not answer",
+    "STORE_CREDENTIALS_EXPIRED": "the AWS session had expired",
+    "PROVIDER_UNAVAILABLE": "OpenCaselist did not answer",
+    "PROVIDER_RATE_LIMITED": "OpenCaselist was limiting its requests",
+    "NO_CASELISTS_CONFIGURED": "it was given no caselist to pull",
+    "FULL_ARCHIVE_REFUSED": "the complete archive it was asked for cannot be fetched this run",
+    "MANIFESTS_NOT_WRITABLE": "this build's local store cannot write manifests",
+    "UNREADABLE_MANIFEST": "a manifest on this machine has a line nobody can read",
+    UNMODELLED_ERROR_CODE: "an error nobody modelled, most likely a bug",
+}
+"""What a run that stopped before a stage could record it says it stopped on, by the error's code
+(`v1-e34-t23`): in words, never the exception's class, which `v1-e34-t19` showed. A code with no
+words here is named by its code; the run's details hold the hint, and `caselist runs` the class."""
+
+
+def _what_stopped_it(codes: Sequence[str]) -> str:
+    if not codes:
+        return "an error with no code"
+    return "; ".join(_WHAT_STOPPED_A_RUN.get(code, f"an error recorded as {code}") for code in codes)
+
+
 _WHAT_WAS_CAPTURED_IS_KEPT: Final = "What was captured is kept."
 
 STATUS_COMMAND: Final = "debate-research caselist status"
@@ -835,10 +887,25 @@ def notifications_for(
     **A pending publish says what it found first.** A snapshot that ended incomplete on a code the
     rule does not call transient, before the session expired, is named on the login notification
     as needing a person: logging in will not publish it.
+
+    **Words of their own** (`v1-e34-t23`). A run another held the lock against says so, and not that
+    a person should look (:data:`ANOTHER_RUN_HELD_THE_LOCK`). The first verdict with a fix to make
+    first says the retry is refused until it is made (:data:`RETRIED_AFTER_ITS_FIX`). A run that
+    stopped says on what in words (:data:`_WHAT_STOPPED_A_RUN`), and no notification names an
+    exception's class. Every notification's subtitle is the run and its environment, which a banner
+    shows whole; the command is the first thing in its body (:attr:`Notification.body`).
     """
     where = f"Run {record.run_id} ({record.environment})"
     sent: list[Notification] = []
-    if record.error_class == CaselistAuthExpired.__name__:
+    if record.error_class == SyncRunInProgress.__name__:
+        sent.append(
+            Notification(
+                title=ANOTHER_RUN_HELD_THE_LOCK_TITLE,
+                message=f"{where}: {ANOTHER_RUN_HELD_THE_LOCK}",
+                fix_command=RUNS_COMMAND,
+            )
+        )
+    elif record.error_class == CaselistAuthExpired.__name__:
         sent.append(
             Notification(
                 title="caselist pull stopped: OpenCaselist login expired",
@@ -848,13 +915,11 @@ def notifications_for(
         )
     elif record.error_class is not None:
         retried = _retried_by_the_next_run(details.failure_codes, may_succeed_on_retry)
+        title, verdict = _verdict(retried, fix_first=details.hint is not None)
         sent.append(
             Notification(
-                title=RETRIED_BY_THE_NEXT_RUN_TITLE if retried else NEEDS_A_PERSON_TITLE,
-                message=(
-                    f"{where} stopped with {record.error_class}. "
-                    f"{RETRIED_BY_THE_NEXT_RUN if retried else NEEDS_A_PERSON}"
-                ),
+                title=title,
+                message=f"{where} stopped: {_what_stopped_it(details.failure_codes)}. {verdict}",
                 fix_command=PULL_COMMAND,
                 hint=details.hint,
             )
@@ -891,8 +956,13 @@ def notifications_for(
         hints = list(dict.fromkeys(one.hint for one in said if one is not None and one.hint))
         if required.intersection(failed):
             retried = _retried_by_the_next_run(details.failure_codes, may_succeed_on_retry)
-            title = RETRIED_BY_THE_NEXT_RUN_TITLE if retried else NEEDS_A_PERSON_TITLE
-            verdict = f"{RETRIED_BY_THE_NEXT_RUN if retried else NEEDS_A_PERSON} "
+            fix_first = any(
+                one is not None and one.hint
+                for stage, one in zip(failed, said, strict=True)
+                if stage in required
+            )
+            title, verdict = _verdict(retried, fix_first=fix_first)
+            verdict += " "
         else:
             title = "caselist pull finished with a failed stage"
             verdict = ""
@@ -988,7 +1058,17 @@ def notifications_for(
                 fix_command=f"{PULL_COMMAND} (again tomorrow, when the day's downloads reset)",
             )
         )
-    return sent
+    # Under the title, the run: short enough that a banner shows it whole (`v1-e34-t23`).
+    return [replace(one, subtitle=where) for one in sent]
+
+
+def _verdict(retried: bool, *, fix_first: bool) -> tuple[str, str]:
+    """A failed run's title and verdict sentence. `retried` is the command's rule, as ever."""
+    if not retried:
+        return NEEDS_A_PERSON_TITLE, NEEDS_A_PERSON
+    if fix_first:
+        return RETRIED_AFTER_ITS_FIX_TITLE, RETRIED_AFTER_ITS_FIX
+    return RETRIED_BY_THE_NEXT_RUN_TITLE, RETRIED_BY_THE_NEXT_RUN
 
 
 def _manifest_mismatches_alone(report: StageDetails | None) -> tuple[DriftFinding, ...]:

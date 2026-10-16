@@ -98,6 +98,13 @@ PERSON = "A person should look: at least one failure here will be the same on th
 
 KEPT = "What was captured is kept."
 
+FIX_FIRST_TITLE = "caselist pull failed: retried once fixed"
+FIX_FIRST = (
+    "The next scheduled run retries it, and is refused the same way until the fix that follows is made."
+)
+"""`v1-e34-t23`'s wording of the first verdict when the failure carries a fix to make first: the same
+rule and the same exit `3`, and a retry that is refused until the fix is made."""
+
 THE_BUCKET_LACKS_A_GRANT = (
     "The bucket refused ListObjectsV2: the AWS profile debate-dev-evidence is signed in and lacks a "
     "grant for this; it is not an expired session, and logging in again changes nothing. "
@@ -258,7 +265,8 @@ async def test_a_run_stopped_by_a_manifest_it_could_not_read_says_retry_and_carr
     world: World,
 ) -> None:
     """The selection cannot read a week's manifest file and stops the run (exit `3`). Nothing is
-    wrong that a later run cannot get past, once the permission is fixed, and the hint says which."""
+    wrong that a later run cannot get past, once the permission is fixed, and the hint says which.
+    Since `v1-e34-t23` it says the retry needs the fix first, and what stopped it in words."""
     await backlog(world.installation, WEEK_1)
     (world.installation.data_dir / "objects/manifests/testcl26/2026-09-01.jsonl").chmod(0)
 
@@ -266,20 +274,21 @@ async def test_a_run_stopped_by_a_manifest_it_could_not_read_says_retry_and_carr
 
     assert [type(one).__name__ for one in world.raised] == ["LocalStoreAccessDenied"]
     notification = the_one_notification(world)
-    assert notification.title == RETRY_TITLE
-    assert notification.message == f"{WHERE} stopped with LocalStoreAccessDenied. {RETRY}"
+    assert notification.title == FIX_FIRST_TITLE
+    assert notification.message == f"{WHERE} stopped: this machine or the bucket refused it. {FIX_FIRST}"
     assert notification.hint == THIS_MACHINE_REFUSED_THE_MANIFESTS
     assert notification.fix_command == "debate-research caselist pull"
     assert_names_no_path(world, notification)
 
 
 async def test_a_run_stopped_by_an_error_nobody_modelled_says_a_person_should_look(world: World) -> None:
-    """A bug, exit 70. Its message quotes a path and never reaches the screen: the class alone."""
+    """A bug, exit 70. Its message quotes a path and never reaches the screen, and since `v1-e34-t23`
+    neither does its class: it is said in words."""
     await a_run_stopped_by_an_error_nobody_modelled(world)
 
     notification = the_one_notification(world)
     assert notification.title == PERSON_TITLE
-    assert notification.message == f"{WHERE} stopped with RuntimeError. {PERSON}"
+    assert notification.message == f"{WHERE} stopped: an error nobody modelled, most likely a bug. {PERSON}"
     assert notification.hint is None
     assert_names_no_path(world, notification)
 
@@ -300,15 +309,15 @@ async def test_an_expired_token_keeps_the_notification_it_always_had(world: Worl
 
 
 async def test_a_refusal_by_the_bucket_says_retry_and_carries_the_grant_to_fix_first(world: World) -> None:
-    """A refusal exits `3`, so the wording is the first one, and it holds with a hint present: the
-    hint is what has to be done before the retry can help."""
+    """A refusal exits `3`, so the wording is the first one, in the words `v1-e34-t23` gave it for a
+    failure with a fix: the hint is what has to be done before the retry can help."""
     await a_publish_the_bucket_refused_with_the_adapters_fix(world)
 
     [pulled] = world.pulled
     notification = the_one_notification(world)
-    assert notification.title == RETRY_TITLE
+    assert notification.title == FIX_FIRST_TITLE
     assert notification.message == (
-        f"{WHERE}: the publish stage failed on STORE_ACCESS_DENIED. {RETRY} {KEPT}"
+        f"{WHERE}: the publish stage failed on STORE_ACCESS_DENIED. {FIX_FIRST} {KEPT}"
     )
     assert notification.hint == THE_BUCKET_LACKS_A_GRANT
     assert notification.hint == stage(pulled.summary, SyncStage.PUBLISH)["hint"], "the fix the summary gives"
@@ -352,8 +361,10 @@ async def test_a_refusal_by_this_machine_says_retry_and_carries_the_data_directo
         manifests.chmod(0o700)
 
     notification = the_one_notification(world)
-    assert notification.title == RETRY_TITLE
-    assert notification.message == f"{WHERE}: the import stage failed on STORE_ACCESS_DENIED. {RETRY} {KEPT}"
+    assert notification.title == FIX_FIRST_TITLE
+    assert (
+        notification.message == f"{WHERE}: the import stage failed on STORE_ACCESS_DENIED. {FIX_FIRST} {KEPT}"
+    )
     assert notification.hint == THIS_MACHINE_REFUSED_THE_MANIFESTS
     assert_names_no_path(world, notification)
 
@@ -424,28 +435,33 @@ async def test_a_parse_over_the_failure_rate_carries_the_command_that_lists_what
     ids=["a grant", "a permission on this machine", "the pending-work file", "both of a parse stage's"],
 )
 def test_the_operators_mac_is_shown_the_verdict_first_and_the_whole_hint(hint: str) -> None:
-    """The title is the verdict, the subtitle the command, and the body the sentence and then the
-    hint, whole, down to the command: the longest a failed stage can give is not cut off."""
+    """The title is the verdict, the subtitle the run, and the body the command and then the
+    sentence and the hint, whole: the longest a failed stage can give is not cut off. Until
+    `v1-e34-t23` the subtitle was the command and the body ended with it, and a banner cut it in
+    both (`test_sync_banner_says_what_happened_and_shows_its_fix_whole.py`)."""
     notification = Notification(
         title=PERSON_TITLE,
         message=f"{WHERE}: the publish stage failed on PENDING_WORK_UNREADABLE. {PERSON} {KEPT}",
         fix_command="debate-research caselist pull --publish-pending",
         hint=hint,
+        subtitle=WHERE,
     )
 
     body, title, subtitle = shown(notification)
 
     assert title == PERSON_TITLE
-    assert subtitle == "debate-research caselist pull --publish-pending"
+    assert subtitle == WHERE
     assert body == (
-        f"{WHERE}: the publish stage failed on PENDING_WORK_UNREADABLE. {PERSON} {KEPT} {hint} "
-        "Fix: debate-research caselist pull --publish-pending"
+        "Fix: debate-research caselist pull --publish-pending — "
+        f"{WHERE}: the publish stage failed on PENDING_WORK_UNREADABLE. {PERSON} {KEPT} {hint}"
     )
 
 
 def test_the_title_and_the_command_are_still_held_to_a_line_and_the_body_to_its_own_limit() -> None:
     """The body grew to hold a hint; nothing else did, and the body is still not a log."""
-    notification = Notification(title="t" * 500, message="m" * 5000, fix_command="c" * 500)
+    notification = Notification(
+        title="t" * 500, message="m" * 5000, fix_command="c" * 500, subtitle="s" * 500
+    )
 
     body, title, subtitle = shown(notification)
 

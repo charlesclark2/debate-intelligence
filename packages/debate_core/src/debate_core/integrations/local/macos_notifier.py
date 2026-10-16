@@ -12,6 +12,14 @@ is a fixed constant that reads its text from `argv` (`on run argv`), so the text
 source at all and there is nothing to escape. Control characters are still removed, and the text
 shortened, because a notification is one glance and not a log: the title and the subtitle to a
 line, the body to what holds a failed stage's hint whole.
+
+## What a banner shows (`v1-e34-t23`)
+
+On the operator's Mac, on 2026-10-15, a banner showed its title, a subtitle cut at about forty
+characters, and about ten lines of about forty-five characters of its body; the rest is shown when
+the notification is opened. The fix command was the subtitle and the end of the body, and was cut
+in both. So the subtitle is the notification's own short subtitle, the run and its environment,
+and the body starts with the fix (:attr:`~debate_core.application.ports.notifier.Notification.body`).
 """
 
 from __future__ import annotations
@@ -43,7 +51,8 @@ _MAX_FIELD_CHARACTERS: Final = 240
 _MAX_BODY_CHARACTERS: Final = 1500
 """The body. Long enough for a failed stage's hint whole (`v1-e34-t19`): a hint is the fix, and one
 cut off half-way is worse than none. Notification Centre shows the first lines in the banner and
-the rest when the notification is opened, so the verdict is in the title and the first sentence."""
+the rest when the notification is opened, so the verdict is in the title and the fix command is
+the first thing in the body (`v1-e34-t23`)."""
 _TIMEOUT_SECONDS: Final = 10.0
 
 type CommandRunner = Callable[[Sequence[str]], int]
@@ -76,9 +85,9 @@ class MacOsNotifier:
             arguments.extend(("-e", line))
         arguments.extend(
             (
-                _clean(notification.text, limit=_MAX_BODY_CHARACTERS),
+                _clean(notification.body, limit=_MAX_BODY_CHARACTERS),
                 _clean(notification.title),
-                _clean(notification.fix_command),
+                _clean(notification.subtitle or ""),
             )
         )
         return arguments

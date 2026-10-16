@@ -2193,8 +2193,8 @@ def test_notify_through_osascript_passes_the_text_as_arguments_not_script() -> N
     [command] = ran
     script = [command[index + 1] for index, part in enumerate(command) if part == "-e"]
     assert all(hostile not in line and "touch" not in line for line in script)
-    assert command[-3].startswith('done" & (do shell script')
-    assert command[-2:] == ["caselist pull failed", "debate-research caselist pull"]
+    assert command[-3] == f"Fix: debate-research caselist pull — {hostile}", "the fix first (`v1-e34-t23`)"
+    assert command[-2:] == ["caselist pull failed", ""], "no subtitle was given"
 
 
 def test_notify_failure_of_osascript_does_not_raise() -> None:

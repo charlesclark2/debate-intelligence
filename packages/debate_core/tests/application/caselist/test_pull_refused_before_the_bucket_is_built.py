@@ -254,7 +254,8 @@ async def test_one_notification_says_a_person_should_look_and_carries_the_adapte
     [notification] = world.notifier.sent
     assert notification.title == PERSON_TITLE
     assert (
-        notification.message == f"Run {FIRST_RUN_ID} (dev) stopped with StoreProfileNotConfigured. {PERSON}"
+        notification.message == f"Run {FIRST_RUN_ID} (dev) stopped: the AWS profile it publishes with is not "
+        f"one this machine's AWS config defines. {PERSON}"
     )
     assert notification.hint == THE_FIX
     assert notification.fix_command == "debate-research caselist pull"

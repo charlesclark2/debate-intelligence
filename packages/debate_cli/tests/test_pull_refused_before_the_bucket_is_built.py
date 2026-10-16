@@ -260,7 +260,8 @@ def test_it_sends_one_notification_that_a_person_should_look_with_the_adapters_h
     [notification] = notified.sent
     assert notification.title == PERSON_TITLE
     assert (
-        notification.message == f"Run {FIRST_RUN_ID} (dev) stopped with StoreProfileNotConfigured. {PERSON}"
+        notification.message == f"Run {FIRST_RUN_ID} (dev) stopped: the AWS profile it publishes with is not "
+        f"one this machine's AWS config defines. {PERSON}"
     )
     assert notification.hint == THE_FIX
     assert "aws sso login" not in notification.text

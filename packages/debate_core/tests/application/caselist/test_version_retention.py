@@ -15,6 +15,7 @@ What each part holds the command to:
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterator
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final
@@ -27,6 +28,7 @@ from debate_core.application.caselist.version_retention import (
     VersionDirectoryRetention,
     standings,
 )
+from debate_core.application.ports.parsed_store import PARSED_PREFIX
 from debate_core.application.ports.version_directories import (
     RESTORED_TAG_VALUE,
     RETIREMENT_TAG_KEY,
@@ -468,3 +470,22 @@ async def test_restoring_sets_the_retirement_tag_to_restored_and_keeps_every_oth
     assert tags_by_key(s3_client, bucket) == {
         stored: ({**tags, **restored} if f"/{FIRST}/" in stored else tags) for stored, tags in before.items()
     }
+
+
+# ------------------------------------------------------------------------------------------------
+# The tag this writes is the tag the lifecycle rule expires
+# ------------------------------------------------------------------------------------------------
+
+EVIDENCE_BUCKET_MODULE: Final = Path(__file__).parents[5] / "infrastructure" / "modules" / "evidence_bucket"
+
+
+def test_the_retirement_tag_is_the_one_the_lifecycle_rule_and_the_grant_name() -> None:
+    """A rename on either side would tag objects the rule never expires, and say nothing."""
+    main = (EVIDENCE_BUCKET_MODULE / "main.tf").read_text(encoding="utf-8")
+    tags = re.search(r'^\s*retired_parsed_tags\s*=\s*\{\s*"([^"]+)"\s*=\s*"([^"]+)"\s*\}', main, re.MULTILINE)
+    prefix = re.search(r'^\s*retired_parsed_prefix\s*=\s*"([^"]+)"', main, re.MULTILINE)
+
+    assert tags is not None, "main.tf no longer defines retired_parsed_tags"
+    assert prefix is not None, "main.tf no longer defines retired_parsed_prefix"
+    assert (tags[1], tags[2]) == (RETIREMENT_TAG_KEY, RETIREMENT_TAG_VALUE)
+    assert prefix[1] == f"{PARSED_PREFIX}/"

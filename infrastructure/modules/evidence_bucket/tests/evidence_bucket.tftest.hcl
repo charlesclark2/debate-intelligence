@@ -14,9 +14,10 @@
 #
 # What is worth asserting here is the set of properties the module exists to guarantee and that a
 # later edit could quietly drop: the bucket is private, versioned and encrypted with this
-# environment's own key; no lifecycle rule expires a current version outside exports/; the
-# everyday credential cannot delete anything; the takedown credential can delete disclosed
-# material and nothing else; and an additional reader is a reader.
+# environment's own key; no lifecycle rule expires a current version outside exports/, except a
+# parsed/ object tagged as retired (v1-e31-t16); the everyday credential cannot delete anything,
+# and may tag nothing outside parsed/; the takedown credential can delete disclosed material and
+# nothing else; and an additional reader is a reader.
 #
 # No real caselist data and no student names appear here (task spec: forbidden). The bucket names,
 # account id and user names below are invented.
@@ -87,6 +88,8 @@ variables {
     "s3:GetObject"           = "object"
     "s3:GetObjectVersion"    = "object"
     "s3:PutObject"           = "object"
+    "s3:GetObjectTagging"    = "object"
+    "s3:PutObjectTagging"    = "object"
     "s3:DeleteObject"        = "object"
     "s3:DeleteObjectVersion" = "object"
     "kms:Encrypt"            = "key"
@@ -260,14 +263,58 @@ run "dev_ages_out_superseded_versions_after_thirty_days" {
   assert {
     condition = alltrue([
       for rule in aws_s3_bucket_lifecycle_configuration.evidence.rule :
-      length(rule.expiration) == 0 || try(rule.filter[0].prefix, null) == "exports/"
+      length(rule.expiration) == 0
+      || try(rule.filter[0].prefix, null) == "exports/"
+      || (
+        try(rule.filter[0].and[0].prefix, null) == "parsed/"
+        && try(rule.filter[0].and[0].tags, null) == tomap({ "debate-retention" = "superseded" })
+      )
     ])
-    error_message = "No lifecycle rule may expire current object versions outside exports/ (task spec: forbidden). Evidence is deleted on request or not at all."
+    error_message = "No lifecycle rule may expire current object versions outside exports/, except parsed/ objects tagged debate-retention=superseded (v1-e31-t16). Evidence is deleted on request or not at all."
   }
 
   assert {
     condition     = alltrue([for rule in aws_s3_bucket_lifecycle_configuration.evidence.rule : rule.status == "Enabled"])
     error_message = "A Disabled lifecycle rule is a rule that is not running; remove it instead."
+  }
+}
+
+# v1-e31-t16. The one rule outside exports/ that expires a current version, and only one the operator
+# has tagged as retired with `caselist retire --bucket`. Expiration counts days from an object's
+# creation, not from its tagging, so a tagged object older than a day is expired at the next
+# lifecycle run; the grace period is how long it is then kept as a noncurrent version, counted from
+# that day. The values are hand-written here, from the grace period the session report proposes.
+run "retired_parsed_version_directories_expire_after_a_grace_period" {
+  assert {
+    condition = one([
+      for rule in aws_s3_bucket_lifecycle_configuration.evidence.rule :
+      rule if rule.id == "expire-retired-parsed-version-directories"
+    ]).filter[0].and[0].prefix == "parsed/"
+    error_message = "The retirement rule must be scoped to parsed/: nothing else in the bucket is retired by tag."
+  }
+
+  assert {
+    condition = one([
+      for rule in aws_s3_bucket_lifecycle_configuration.evidence.rule :
+      rule if rule.id == "expire-retired-parsed-version-directories"
+    ]).filter[0].and[0].tags == tomap({ "debate-retention" = "superseded" })
+    error_message = "The retirement rule must match exactly the tag `caselist retire` writes, debate-retention=superseded (debate_core's ports/version_directories.py)."
+  }
+
+  assert {
+    condition = one([
+      for rule in aws_s3_bucket_lifecycle_configuration.evidence.rule :
+      rule if rule.id == "expire-retired-parsed-version-directories"
+    ]).expiration[0].days == 1
+    error_message = "A retired object's current version expires 1 day after creation, so the grace period starts when it is retired, not when it was written."
+  }
+
+  assert {
+    condition = one([
+      for rule in aws_s3_bucket_lifecycle_configuration.evidence.rule :
+      rule if rule.id == "expire-retired-parsed-version-directories"
+    ]).noncurrent_version_expiration[0].noncurrent_days == 30
+    error_message = "A retired object is kept for a 30-day grace period as a noncurrent version before it is deleted."
   }
 }
 
@@ -302,9 +349,22 @@ run "prod_moves_superseded_versions_to_infrequent_access_then_expires_them" {
   assert {
     condition = alltrue([
       for rule in aws_s3_bucket_lifecycle_configuration.evidence.rule :
-      length(rule.expiration) == 0 || try(rule.filter[0].prefix, null) == "exports/"
+      length(rule.expiration) == 0
+      || try(rule.filter[0].prefix, null) == "exports/"
+      || (
+        try(rule.filter[0].and[0].prefix, null) == "parsed/"
+        && try(rule.filter[0].and[0].tags, null) == tomap({ "debate-retention" = "superseded" })
+      )
     ])
-    error_message = "No lifecycle rule may expire current object versions outside exports/, in prod least of all."
+    error_message = "No lifecycle rule may expire current object versions outside exports/, except parsed/ objects tagged debate-retention=superseded, in prod least of all."
+  }
+
+  assert {
+    condition = one([
+      for rule in aws_s3_bucket_lifecycle_configuration.evidence.rule :
+      rule if rule.id == "expire-retired-parsed-version-directories"
+    ]).noncurrent_version_expiration[0].noncurrent_days == 30
+    error_message = "prod keeps a retired parsed/ object for the same 30-day grace as dev, not the 365 days of other superseded versions: it is derived, reproducible data the operator retired on purpose (v1-e31-t16)."
   }
 
   assert {
@@ -444,11 +504,33 @@ run "operator_permission_set_reads_and_publishes_but_cannot_delete" {
       "s3:GetObject",
       "s3:GetObjectVersion",
       "s3:PutObject",
+      "s3:GetObjectTagging",
+      "s3:PutObjectTagging",
       "kms:Encrypt",
       "kms:Decrypt",
       "kms:GenerateDataKey",
     ])
-    error_message = "The everyday evidence credential may do exactly eight things. s3:ListBucketVersions is read-only, so a removal's dry run can count versions (v1-e29-t06). s3:DeleteObject, s3:DeleteObjectVersion, s3:PutBucketPolicy and kms:* are forbidden by the task spec; a delete is a takedown, and takedowns use the other permission set."
+    error_message = "The everyday evidence credential may do exactly ten things. s3:ListBucketVersions is read-only, so a removal's dry run can count versions (v1-e29-t06); the two tagging actions retire a superseded parsed/ directory for the lifecycle rule (v1-e31-t16). s3:DeleteObject, s3:DeleteObjectVersion, s3:PutBucketPolicy and kms:* are forbidden by the task spec; a delete is a takedown, and takedowns use the other permission set."
+  }
+
+  assert {
+    condition = alltrue([
+      for statement in jsondecode(aws_ssoadmin_permission_set_inline_policy.evidence_operator[0].inline_policy).Statement :
+      alltrue([
+        for resource in tolist(flatten([statement.Resource])) :
+        resource == "${aws_s3_bucket.evidence.arn}/parsed/*"
+      ])
+      if anytrue([for action in tolist(flatten([statement.Action])) : endswith(action, "ObjectTagging")])
+    ])
+    error_message = "The everyday credential may read and write object tags under parsed/ only: retiring a superseded version directory is the one thing it tags for (v1-e31-t16, task spec: forbidden)."
+  }
+
+  assert {
+    condition = length([
+      for statement in jsondecode(aws_ssoadmin_permission_set_inline_policy.evidence_operator[0].inline_policy).Statement :
+      statement if anytrue([for action in tolist(flatten([statement.Action])) : endswith(action, "ObjectTagging")])
+    ]) == 1
+    error_message = "The two tagging actions belong in one statement of their own, so that its resource is theirs alone and cannot widen a grant beside it."
   }
 
   assert {

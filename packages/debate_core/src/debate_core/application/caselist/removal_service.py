@@ -58,9 +58,9 @@ own (`v1-e29-t09`); `docs/runbooks/caselist-removal.md` says when one is still r
 ## What it never deletes
 
 Anything under `manifests/_suppression/` but the preflight's probes, its own and those earlier
-preflights left (:func:`refuse_protected_versions`): the suppression list and the removal log are append-only and
-their versions are the record of what was asked. And nothing under `reports/`, which IAM would refuse
-anyway.
+preflights left (:func:`refuse_protected_versions`): the suppression list and the removal log are
+append-only and their versions are the record of what was asked. And nothing under `reports/`,
+which IAM would refuse anyway.
 """
 
 from __future__ import annotations

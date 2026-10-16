@@ -243,3 +243,121 @@ removed it by hand. So:
 * **5 (`install.sh`'s comment):** with t24's Follow-up 2, the next task that touches `ops/launchd`.
 
 **Operator follow-up:** the optional `doctor --evidence-profiles` run is recorded when it comes.
+
+## Changes after PM review (2026-10-16)
+
+The review asked for one change, to Decision 2: a sweep that is refused, or partly refused, must
+not stop a takedown. That change is made, and Decision 2 is replaced by the rule below. Everything
+else stands as reviewed. The Goal is back at `InProgress` until the PM accepts.
+
+### What changed
+
+* **The sweep never fails the preflight.** `preflight` still deletes each earlier probe version
+  with the takedown profile, but now one version per call. The S3 adapter stops a batch at its
+  first refused delete, and a single refusal must not stop the deletes after it. A refused version
+  is not raised: it is returned, and the takedown goes ahead.
+  * The returned versions travel on `RemovalReport.preflight_probes_left` and
+    `UnsuppressReport.preflight_probes_left`. These are empty when the credential was proven by an
+    earlier call of the same service.
+  * The `remove --execute` and `unsuppress --execute` output adds one line when any are left:
+    *N probe version(s) an earlier preflight left under manifests/_suppression/preflight/ could not
+    be deleted: remove them by hand (docs/runbooks/caselist-removal.md, "A probe a preflight left
+    behind").*
+  * `--json` always carries `data.preflight_probes_left` on an executed run: `{"versions": N,
+    "keys": [...]}`, where the keys are the random-hex probe keys.
+* **The preflight's own probe is unchanged.** A refused delete of it still fails the preflight, the
+  error still names the probe it left, and no sweep runs. A test now pins this down.
+* **The removal log entry does not carry the count.** `RemovalLogEntry` has no free-text field.
+  Adding a field would also break the rule that a log line's keys are what every installed build
+  reads (`test_suppression_list_is_read_by_every_build.py`). The count is in the command's output
+  and JSON only.
+* **The runbook (`caselist-removal.md`) changed in two places:**
+  * Step 5 says the request is still carried out when the bucket refuses to delete an earlier
+    probe, and gives what the output and the JSON then report.
+  * "A probe a preflight left behind" has a new paragraph, "A takedown may report probes it left",
+    and a first case under "Remove one by hand only when": a takedown or an un-suppress reported
+    probes it could not delete.
+* **Tests:**
+  * The test that expected a refused sweep to fail the preflight is replaced by the PM's case: one
+    earlier probe's delete refused, the other's versions and marker deleted, the takedown
+    completed, and the leftover count 1. There is an un-suppress twin.
+  * A new control covers the preflight's own probe being refused.
+  * The control "nothing left to sweep", and the existing un-suppress sweep, now also assert an
+    empty leftover count.
+  * In `test_missing_profile_and_missing_grant.py`, the real-composition-root test of the takedown
+    profile now asserts `{"versions": 0, "keys": []}`. Beside it, a new test runs `caselist remove
+    --execute` against moto with one planted probe whose delete is refused. It asserts exit 0, the
+    count and key in the JSON, the line in the text output, and that only that probe is left.
+
+### Red, then green
+
+Red, before the change: the new and changed tests were run against the code as reviewed.
+
+```text
+uv run pytest -q -p no:randomly packages/debate_core/tests/application/caselist/test_preflight_sweeps_earlier_probes.py
+E   debate_core.application.caselist.removal_service.TakedownPreflightFailed: the takedown profile debate-dev-evidence-removal could not delete the probes an earlier preflight left (STORE_ACCE…
+E   AttributeError: 'RemovalReport' object has no attribute 'preflight_probes_left'
+E   AttributeError: 'UnsuppressReport' object has no attribute 'preflight_probes_left'
+FAILED …::TestAPreflightThatPasses::test_an_earlier_probe_whose_delete_is_refused_is_left_and_counted_and_the_takedown_completes
+FAILED …::TestAPreflightThatPasses::test_it_deletes_every_version_an_earlier_preflight_left_with_the_takedown_profile
+FAILED …::TestAPreflightThatPasses::test_unsuppress_counts_an_earlier_probe_it_could_not_delete_and_appends_its_entry
+FAILED …::TestAPreflightThatPasses::test_unsuppress_sweeps_the_same_way
+4 failed, 4 passed in 4.46s
+
+uv run pytest -q -p no:randomly packages/debate_cli/tests/test_missing_profile_and_missing_grant.py -k "takedown_profile_is_not_refused or earlier_probe"
+E   KeyError: 'preflight_probes_left'
+E   assert <ExitCode.RETRIEVAL_FAILURE: 3> == <ExitCode.OK: 0>
+FAILED …::TestATakedownThatNamesTheEverydayProfile::test_the_takedown_profile_is_not_refused
+FAILED …::TestATakedownThatNamesTheEverydayProfile::test_an_earlier_probe_it_may_not_delete_is_reported_and_the_takedown_goes_ahead
+2 failed in 8.37s
+```
+
+* **The PM's case** (one earlier probe refused) and its un-suppress twin failed for the reason under
+  review: the refused sweep raised `TakedownPreflightFailed`.
+* **Through the CLI**, that same failure was exit 3 with no removal carried out.
+* **The other two failures** are new assertions on a field that did not exist yet.
+* **The four that passed** are the controls:
+  * nothing left to sweep;
+  * a probe written after the listing is kept;
+  * the everyday profile deletes no earlier probe;
+  * the preflight's own probe refused still fails it.
+
+Green, after the change:
+
+| Command | Result |
+|---|---|
+| The two files above | **31 passed** in 6.95 s |
+| Node selector: `uv run pytest packages/debate_core/tests -k "s3 or removal or preflight or publish"` | **731 passed** in 52.17 s |
+| Four-part suite, `uv run pytest --part K/4`, at load averages up to 51 | Part 1: 1796 passed (61 s). Part 2: 1808 passed, 1 xfailed (81 s). Part 3: 1810 passed, 1 skipped (77 s). Part 4: 1803 passed, 1 xfailed (65 s). |
+| `uv run --frozen pyright` | 0 errors |
+| `uv run --frozen lint-imports` | 12 contracts kept |
+| `ruff check` and `ruff format --check` | clean |
+| `scripts/check_links.py` and `scripts/check_command_blocks.py` | OK |
+
+The three warnings in the suite are the network-guard tests' own, as before.
+
+### ac4's evidence, restated
+
+Unchanged:
+
+* The runbook names `unsuppress`.
+* The sweep deletes, with the takedown profile, every version the first listing found.
+* The by-hand section says when it is still needed, now including when a request reports
+  leftovers.
+
+New:
+
+* A refused earlier probe is left, counted (1 in the PM's case) and reported.
+* The takedown completes.
+
+## PM review
+
+<!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
+this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
+
+**Verdict:** PENDING
+<!-- ACCEPTED / CHANGES_REQUESTED -->
+
+**Reviewed by / date:**
+
+**Notes:**

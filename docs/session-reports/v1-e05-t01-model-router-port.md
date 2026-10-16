@@ -192,9 +192,48 @@ None. Every command in this session ran in under two minutes, made no AWS call a
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-16
 
 **Notes:**
+
+Accepted in full, with the phase `Succeeded`. The five spec amendments are the PM's own rulings
+of 2026-10-16 and are quoted correctly.
+
+**The best thing in this task happened before any code.** The spec predated v1-e01-t09's
+per-environment routing files and v1-e02-t04's contract convention. You found both, stopped,
+and brought back options with what each would cost in criteria and churn, instead of satisfying
+the paths as written. Both rulings followed from that, and the result fits the repository
+rather than a stale spec.
+
+**The work itself:**
+
+* **The contract is task classes all the way down.** Code and tests name a class or a family,
+  never a model, so the next model release is a change to the YAML only. The family asserts in
+  the settings tests are what make that true.
+* **The route schema catches the mistakes that cost money silently:** a Haiku profile under a
+  Sonnet id, a Bedrock route with no region, a `fake` provider in a shipped file, sampling
+  parameters on a scoring route.
+* **`ModelPrompt` carries an id, a version and variables, never text,** and `ModelResponse` has
+  no free-text field. That keeps the evidence rule (CLAUDE.md: model output carries offsets
+  and metadata, never quoted evidence) enforceable at the type level from the first model task.
+* **`ModelUnavailableError` keeping `PROVIDER_UNAVAILABLE`** is a careful catch: a new code
+  would have made an unreachable model non-retryable wherever only the code is recorded.
+* **The import-linter entry, proved with a planted `botocore`,** and the mutation run: 17 of 17
+  caught, mutant 1 redone until it failed for its own reason.
+* **The identifiers with sources and a check date,** and the temperature finding that would
+  have made every Claude call fail with the old files.
+
+**Rulings:**
+
+* **Deviations 1 to 6:** accepted. 2, 3 and 6 are the PM's rulings, 1, 4 and 5 follow from them.
+* **Decisions:** accepted. `ModelRequest` naming the schema by dotted path is right; t03 owns the
+  fixture key and should keep it.
+* **Follow-ups:** the PM writes them into the specs in the next batch. t03 gains loading and
+  validating the routing file at CLI startup. t02 gains `effort` as a route default and per-call
+  parameter, the temperature confirmation, the confirmation of each identifier by its first real
+  call, and the `tool_choice` `auto` ruling with your model-card citations.
+
+**Operator follow-ups:** none.

@@ -34,7 +34,7 @@ to prove that a takedown will work when one is needed.
 | Bucket | `debate-dev-evidence-a7508de8` | `debate-prod-evidence-a7508de8` |
 | KMS key alias | `alias/debate-dev-evidence` | `alias/debate-prod-evidence` |
 | Superseded versions | expire after 30 days | Standard-IA at 30 days, expire at 365 |
-| Retired `parsed/` version directories (`v1-e31-t16`) | current version expires a day after creation, then kept 30 days | the same |
+| Retired `parsed/` version directories (`v1-e31-t16`) | current version expires a day after creation, then kept 30 days; the delete marker left behind is removed after that | the same |
 | Everyday permission set | `DebateDevEvidenceOperator` | `DebateProdEvidenceOperator` |
 | Everyday SSO profile | `debate-dev-evidence` | `debate-prod-evidence` |
 | Takedown permission set | `DebateDevEvidenceRemoval` | `DebateProdEvidenceRemoval` |
@@ -521,7 +521,7 @@ ones step 5 lists for that change.
 | Change | dev | prod |
 |---|---|---|
 | `v1-e29-t06`: `DebateEvidenceOperator` may list object versions under `raw/`, `parsed/`, `files/`, `manifests/` and `quarantine/` (one statement added to one inline policy) | 2026-10-08 | 2026-10-08 |
-| `v1-e31-t16`: `DebateEvidenceOperator` may get and put object tags under `parsed/` (one statement added to one inline policy), and a lifecycle rule `expire-retired-parsed-version-directories` expires `parsed/` objects tagged `debate-retention=superseded` (one rule added) | not applied yet | not applied yet |
+| `v1-e31-t16`: `DebateEvidenceOperator` may get and put object tags under `parsed/` (one statement added to one inline policy), a lifecycle rule `expire-retired-parsed-version-directories` expires `parsed/` objects tagged `debate-retention=superseded`, and `remove-orphaned-parsed-delete-markers` removes the delete markers under `parsed/` with nothing behind them (two rules added) | not applied yet | not applied yet |
 
 ## If something is wrong
 

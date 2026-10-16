@@ -9,7 +9,7 @@ reads the old one again. This runbook retires it with `debate-research caselist 
 
 | Place | What retiring does | Undo |
 |---|---|---|
-| The dev or prod bucket (`--bucket`) | Tags each object `debate-retention=superseded`. The bucket's lifecycle rule expires it at its next daily run and deletes it 30 days later | `--restore` until the lifecycle has run; then [copy the versions back](#after-the-lifecycle-has-run) within the 30 days |
+| The dev or prod bucket (`--bucket`) | Tags each object `debate-retention=superseded`. The bucket's lifecycle rule `expire-retired-parsed-version-directories` expires its current version at the next daily run and deletes the noncurrent version 30 days later; `remove-orphaned-parsed-delete-markers` then removes the delete marker left behind | `--restore` until the lifecycle has run; then [copy the versions back](#after-the-lifecycle-has-run) within the 30 days |
 | This machine | Deletes the directory | None. Re-parse with the build that wrote it |
 
 So retire in the buckets first, and on this machine last.
@@ -112,14 +112,25 @@ a dry run no longer lists the directory, because nothing current is left under i
 DEBATE_ENV=dev debate-research caselist retire --bucket
 ```
 
-The versions are kept 30 days as noncurrent and then deleted. Thirty-one days after the lifecycle
-ran, this prints `0` for a fully deleted directory:
+The versions are kept 30 days as noncurrent and then deleted, and the next run removes the delete
+markers left behind. **Thirty-two days after the first lifecycle run, check the per-source files are
+gone**, in each bucket and for one caselist, and record the two numbers in
+[Retired so far](../data/parsed-card-store.md#retired-so-far):
 
 ```bash
-aws s3api list-object-versions --bucket debate-dev-evidence-a7508de8 --prefix parsed/hsld26/2026.10.10-docx-2/ --profile debate-dev-evidence --query 'length(Versions || `[]`)'
+aws s3api list-object-versions --bucket debate-dev-evidence-a7508de8 --prefix parsed/hsld26/2026.10.10-docx-2/sha256/ --profile debate-dev-evidence --query '[length(Versions || `[]`), length(DeleteMarkers || `[]`)]' --output text
 ```
 
-What is left after that are delete markers, which hold no data and cost nothing to store.
+| It prints | It means |
+|---|---|
+| `0` and `0` | The grace period ended, the versions were deleted and their markers removed |
+| A first number above `0` | The tag filter did not reach the noncurrent versions. They now fall to the general rule and are kept 30 days in dev and 365 in prod after they became noncurrent: longer, never shorter. Record it and tell the PM |
+| `0`, then a second number above `0` | The versions are gone and the markers are not yet. Check again the next day |
+
+The per-source files are the ones to count because each is written once. The three aggregate
+files (`index.jsonl`, `failures.jsonl`, `occurrences.jsonl`) were rewritten by every run, so they
+also have older versions that were never tagged and that the general rule deletes on its own clock:
+in prod that can be close to a year. They hold counts and pseudonyms, as the current ones do.
 
 ## Undoing it
 
@@ -143,6 +154,10 @@ back as a new current version with `GetObjectVersion` and `PutObject`. The copy 
 `restored`, so the rule leaves it alone. Run this only for a directory the dry run no longer lists,
 one caselist at a time; for a directory that still has current objects it would put older versions
 over them.
+
+`test_version_retention_lifecycle.py` runs these two blocks as they are written here, against a
+bucket the lifecycle rules have expired, and checks every request against the everyday grants. A
+change to either block is a change to that test.
 
 The first block lists the newest noncurrent version of each key into a file:
 

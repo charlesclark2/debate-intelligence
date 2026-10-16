@@ -432,8 +432,12 @@ So a directory is retired in a bucket only once its successor has been published
   tagging, so the rule expires the tagged current version a day after creation, which for any
   directory worth retiring is the next daily lifecycle run, and then keeps it as a noncurrent
   version for a **30-day grace period** before deleting it. Until that first run,
-  `caselist retire --bucket --restore` undoes it by setting the tag to `restored`. During the grace
-  period the noncurrent versions can be copied back.
+  `caselist retire --bucket --restore` undoes it by setting the tag to `restored`. After it, and for
+  the grace period, copying the noncurrent versions back does (amended by the PM, 2026-10-16: S3
+  counts Expiration from creation, so the grace runs on noncurrent versions). Expiring a current
+  version leaves a delete marker, which carries no tags; once the version behind it is deleted, a
+  second rule on `parsed/`, by prefix alone, removes it. That rule removes only a marker with
+  nothing behind it, and expires no object.
 
 **Why 30 days, and why that agrees with the data-use policy.** The
 [retention section](../policies/caselist-data-use.md#retention) sets an upper bound: parsed cards
@@ -457,14 +461,17 @@ deletes a removed source's per-source files, tagged or not, current and noncurre
 Counts from the operator's runs (`docs/runbooks/parsed-store-retention.md`). Objects and bytes are
 what the dry run listed; nothing else is recorded here.
 
-| Directory | Place | Retired on | Objects | Bytes |
-|---|---|---|---|---|
-| `2026.09.20-docx-1` | this machine | 2026-10-11, by hand, before the command existed | not counted | about 5.8 GB |
-| `2026.09.20-docx-1` | dev bucket | not yet | | |
-| `2026.09.20-docx-1` | prod bucket | not yet | | |
-| `2026.10.10-docx-2` | this machine | not yet | | |
-| `2026.10.10-docx-2` | dev bucket | not yet | | |
-| `2026.10.10-docx-2` | prod bucket | not yet | | |
+The last column is the runbook's check of a bucket 32 days after the first lifecycle run: the
+versions and the delete markers left under one caselist's `sha256/`, which should both be `0`.
+
+| Directory | Place | Retired on | Objects | Bytes | Left after 32 days |
+|---|---|---|---|---|---|
+| `2026.09.20-docx-1` | this machine | 2026-10-11, by hand, before the command existed | not counted | about 5.8 GB | |
+| `2026.09.20-docx-1` | dev bucket | not yet | | | |
+| `2026.09.20-docx-1` | prod bucket | not yet | | | |
+| `2026.10.10-docx-2` | this machine | not yet | | | |
+| `2026.10.10-docx-2` | dev bucket | not yet | | | |
+| `2026.10.10-docx-2` | prod bucket | not yet | | | |
 
 ## Reading it from a shell
 

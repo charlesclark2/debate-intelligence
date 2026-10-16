@@ -27,6 +27,7 @@ from debate_core.application.errors import (
     StoreError,
     StoreProfileNotConfigured,
     error_code_of,
+    reported_error_message,
 )
 
 EVERY_ERROR = (
@@ -135,3 +136,27 @@ def test_a_profile_that_is_not_configured_invents_no_name_and_no_setting() -> No
     assert str(StoreProfileNotConfigured("debate-dev-evidence")) == (
         "AWS profile 'debate-dev-evidence' is not defined in this machine's AWS config"
     )
+
+
+@pytest.mark.parametrize(
+    ("error", "reported"),
+    [
+        pytest.param(NotFound("Card", "01J"), "Card not found: 01J", id="this project's own sentence"),
+        pytest.param(
+            PermissionError(13, "Permission denied", "/Users/someone/inbox/A Camp Release.docx"),
+            "PermissionError (errno 13)",
+            id="an OSError, by its class and errno",
+        ),
+        pytest.param(
+            FileNotFoundError(2, "No such file or directory", "/Users/someone/data/x"),
+            "FileNotFoundError (errno 2)",
+            id="a subclass, by its own class",
+        ),
+        pytest.param(OSError("no errno, a path: /Users/someone"), "OSError", id="an OSError with no errno"),
+        pytest.param(RuntimeError("a bug quoting /Users/someone"), "RuntimeError", id="anything else"),
+    ],
+)
+def test_a_recorded_failure_quotes_only_what_this_project_wrote(error: BaseException, reported: str) -> None:
+    """`v1-e29-t09` ac7: what a result or a message of its own says of a failure that did not end the
+    command. An error this project did not write is named, never quoted."""
+    assert reported_error_message(error) == reported

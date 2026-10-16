@@ -1142,3 +1142,26 @@ async def test_publish_stops_at_the_first_object_when_the_profile_is_not_defined
 
     assert raised.value is missing, "raised, where it used to be recorded once per object"
     assert s3_client.list_objects_v2(Bucket=evidence_bucket).get("Contents", []) == []
+
+
+@pytest.mark.anyio
+async def test_publish_names_an_os_error_by_its_class_and_errno_and_never_its_text(
+    world: World, bucket: S3EvidenceObjectStore
+) -> None:
+    """`v1-e29-t09` ac7: an `OSError` quotes its path, which holds a home directory and a camp's title."""
+    await world.run()
+    probe = "/Users/zqxprobe-home/debate-data/inbox/Zqxprobe Lantern Camp Release.docx"
+
+    def refused_by_the_os(_: str, count: int) -> None:
+        raise PermissionError(13, "Permission denied", probe)
+
+    report = await publisher(world, ScriptedBucket(bucket, refused_by_the_os)).publish(
+        CASELIST, DOCX_PARSER_VERSION
+    )
+
+    failed = [outcome for outcome in report.objects if outcome.result is SourceResult.FAILED]
+    assert failed, "every upload was refused"
+    assert {(outcome.error_code, outcome.error_message) for outcome in failed} == {
+        ("PERMISSION_ERROR", "PermissionError (errno 13)")
+    }
+    assert "zqxprobe" not in repr(report).lower()

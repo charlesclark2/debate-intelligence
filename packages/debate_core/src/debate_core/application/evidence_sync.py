@@ -111,6 +111,7 @@ from debate_core.application.errors import (
     DomainError,
     NotFound,
     error_code_of,
+    reported_error_message,
 )
 from debate_core.application.ports.evidence_store import (
     EvidenceObjectStore,
@@ -368,6 +369,9 @@ class TransferOutcome:
     error_code: str | None = None
     """The failure's class name in upper snake case, or `None`. Never a credential, never content."""
     error_message: str | None = None
+    """Why it failed, for a person. An error this project did not write is named by its class and an
+    `OSError` by its errno too, never by its text, which can quote a path on this machine
+    (:func:`~debate_core.application.errors.reported_error_message`, `v1-e29-t09`)."""
 
     @property
     def key(self) -> ObjectKey:
@@ -861,7 +865,7 @@ class EvidenceSyncService:
                 planned=planned,
                 transferred=False,
                 error_code=error_code_of(failure),
-                error_message=str(failure),
+                error_message=reported_error_message(failure),
             )
         self._journal.record(
             JournalEntry(

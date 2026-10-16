@@ -104,6 +104,7 @@ from debate_core.application.errors import (
     StoreCredentialsExpired,
     StoreError,
     StoreProfileNotConfigured,
+    reported_error_message,
 )
 from debate_core.application.ports.caller_identity import CallerIdentity
 from debate_core.application.ports.caselist import CaselistRepository
@@ -294,6 +295,9 @@ class RemovalIncomplete(DomainError):
     The message says what is true of this run: whether the suppression entries reached every copy
     before it stopped (if appending them is what failed, nothing was deleted either), and whether
     the `INCOMPLETE` log entry could be written. `failure` is always the first thing that went wrong.
+    It is quoted by :func:`~debate_core.application.errors.reported_error_message`: an `OSError` by
+    its class and errno, never by its text, which names the path it failed on (`v1-e29-t09`). The
+    same goes for :class:`RemovalCompletedUnlogged`.
     """
 
     def __init__(
@@ -317,10 +321,11 @@ class RemovalIncomplete(DomainError):
             ""
             if unlogged is None
             else f" The removal log entry could not be written either "
-            f"({error_code_of(unlogged)}): {unlogged}."
+            f"({error_code_of(unlogged)}): {reported_error_message(unlogged)}."
         )
         super().__init__(
-            f"the removal stopped part-way ({self.error_code}): {failure}. {state}{logged} "
+            f"the removal stopped part-way ({self.error_code}): {reported_error_message(failure)}. "
+            f"{state}{logged} "
             "Re-run the same command to finish."
         )
 
@@ -368,7 +373,8 @@ class RemovalCompletedUnlogged(DomainError):
             f"version(s) deleted; {report.manifests_rewritten} manifest(s) rewritten without "
             f"{report.manifest_rows_dropped} row(s); {report.inbox_files_deleted} inbox file(s) deleted and "
             f"{report.inbox_files_rewritten} rewritten. Its removal-log entry was not written to "
-            f"{self.log_copies_without_entry} ({self.error_code}: {failure}).{held} Record these counts "
+            f"{self.log_copies_without_entry} ({self.error_code}: {reported_error_message(failure)}).{held} "
+            "Record these counts "
             "in the register from this output: running the command again finds nothing left to remove "
             "and would log zero counts."
         )

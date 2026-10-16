@@ -57,6 +57,7 @@ from debate_core.application.errors import (
     BlobIntegrityError,
     DomainError,
     NotFound,
+    reported_error_message,
 )
 from debate_core.application.ports.evidence_store import EvidenceObjectStore, ObjectKey
 from debate_core.application.ports.parsed_store import AGGREGATE_NAMES, PARSED_PREFIX
@@ -79,6 +80,9 @@ class ParsedObjectOutcome:
     aggregate: bool
     error_code: str | None = None
     error_message: str | None = None
+    """Why it failed, for a person. An error this project did not write is named by its class and an
+    `OSError` by its errno too, never by its text, which can quote a path on this machine
+    (:func:`~debate_core.application.errors.reported_error_message`, `v1-e29-t09`)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -228,7 +232,7 @@ class ParsedStorePublisher:
                 result=SourceResult.FAILED,
                 aggregate=aggregate,
                 error_code=error_code_of(failure),
-                error_message=str(failure),
+                error_message=reported_error_message(failure),
             )
         return ParsedObjectOutcome(key=remote_key, result=SourceResult.UPLOADED, aggregate=aggregate)
 

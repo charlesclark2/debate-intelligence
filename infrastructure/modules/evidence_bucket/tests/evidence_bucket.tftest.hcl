@@ -269,8 +269,14 @@ run "dev_ages_out_superseded_versions_after_thirty_days" {
         try(rule.filter[0].and[0].prefix, null) == "parsed/"
         && try(rule.filter[0].and[0].tags, null) == tomap({ "debate-retention" = "superseded" })
       )
+      || alltrue([
+        for expiration in rule.expiration :
+        expiration.expired_object_delete_marker == true
+        && coalesce(expiration.days, 0) == 0
+        && expiration.date == null
+      ])
     ])
-    error_message = "No lifecycle rule may expire current object versions outside exports/, except parsed/ objects tagged debate-retention=superseded (v1-e31-t16). Evidence is deleted on request or not at all."
+    error_message = "No lifecycle rule may expire current object versions outside exports/, except parsed/ objects tagged debate-retention=superseded (v1-e31-t16). A rule that only removes expired delete markers expires no object. Evidence is deleted on request or not at all."
   }
 
   assert {
@@ -318,6 +324,47 @@ run "retired_parsed_version_directories_expire_after_a_grace_period" {
   }
 }
 
+# v1-e31-t16, PM ruling 2026-10-16. Expiring a retired object's current version leaves a delete
+# marker, which is orphaned once the grace period deletes the noncurrent version behind it. A delete
+# marker carries no tags, so the tagged rule never matches it, and S3 refuses ExpiredObjectDeleteMarker
+# beside a tag filter. So a rule of its own, on the prefix alone, removes it. It expires no object:
+# an expired delete marker is one with no version left behind it.
+run "orphaned_delete_markers_under_parsed_are_removed" {
+  assert {
+    condition = one([
+      for rule in aws_s3_bucket_lifecycle_configuration.evidence.rule :
+      rule if rule.id == "remove-orphaned-parsed-delete-markers"
+    ]).filter[0].prefix == "parsed/"
+    error_message = "The delete-marker rule must be scoped to parsed/, where retirement leaves markers."
+  }
+
+  assert {
+    condition = length(one([
+      for rule in aws_s3_bucket_lifecycle_configuration.evidence.rule :
+      rule if rule.id == "remove-orphaned-parsed-delete-markers"
+    ]).filter[0].and) == 0
+    error_message = "The delete-marker rule has no tag filter: a delete marker carries no tags, and S3 refuses ExpiredObjectDeleteMarker beside one."
+  }
+
+  assert {
+    condition = one([
+      for rule in aws_s3_bucket_lifecycle_configuration.evidence.rule :
+      rule if rule.id == "remove-orphaned-parsed-delete-markers"
+    ]).expiration[0].expired_object_delete_marker == true
+    error_message = "The delete-marker rule must remove expired object delete markers."
+  }
+
+  assert {
+    condition = alltrue([
+      for rule in aws_s3_bucket_lifecycle_configuration.evidence.rule :
+      coalesce(rule.expiration[0].days, 0) == 0 && rule.expiration[0].date == null
+      && length(rule.noncurrent_version_expiration) == 0 && length(rule.noncurrent_version_transition) == 0
+      if rule.id == "remove-orphaned-parsed-delete-markers"
+    ])
+    error_message = "The delete-marker rule must do nothing else: no days, no date, no noncurrent action. Untagged parsed/ objects, the current directory among them, are never expired."
+  }
+}
+
 run "prod_moves_superseded_versions_to_infrequent_access_then_expires_them" {
   variables {
     name_prefix                       = "debate-prod-evidence"
@@ -355,6 +402,12 @@ run "prod_moves_superseded_versions_to_infrequent_access_then_expires_them" {
         try(rule.filter[0].and[0].prefix, null) == "parsed/"
         && try(rule.filter[0].and[0].tags, null) == tomap({ "debate-retention" = "superseded" })
       )
+      || alltrue([
+        for expiration in rule.expiration :
+        expiration.expired_object_delete_marker == true
+        && coalesce(expiration.days, 0) == 0
+        && expiration.date == null
+      ])
     ])
     error_message = "No lifecycle rule may expire current object versions outside exports/, except parsed/ objects tagged debate-retention=superseded, in prod least of all."
   }

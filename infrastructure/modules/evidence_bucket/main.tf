@@ -324,6 +324,27 @@ resource "aws_s3_bucket_lifecycle_configuration" "evidence" {
       noncurrent_days = local.retired_parsed_grace_period_days
     }
   }
+
+  # Expiring a retired object's current version leaves a delete marker in its place, and once the
+  # grace period has deleted the version behind it the marker is orphaned: an "expired object delete
+  # marker", which hides nothing. The rule above cannot remove it: a delete marker carries no tags,
+  # and S3 refuses ExpiredObjectDeleteMarker in a rule with a tag filter. No other rule covers
+  # parsed/ (the exports/ rule's Days clean up markers under exports/ only). So this rule, on the
+  # prefix alone, removes them and does nothing else: it expires no object (v1-e31-t16, PM ruling
+  # 2026-10-16). A takedown deletes every version of what it removes, markers included, so it
+  # leaves none for this rule.
+  rule {
+    id     = "remove-orphaned-parsed-delete-markers"
+    status = "Enabled"
+
+    filter {
+      prefix = local.retired_parsed_prefix
+    }
+
+    expiration {
+      expired_object_delete_marker = true
+    }
+  }
 }
 
 # The bucket policy. jsonencode, for the same reason as the key policy: the tests have to be able

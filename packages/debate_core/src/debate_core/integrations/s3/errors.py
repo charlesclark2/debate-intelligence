@@ -15,7 +15,7 @@ Everything in this table is in :mod:`debate_core.application.errors`:
 | `NoSuchKey`, `NotFound`, HTTP 404 | `NotFound` |
 | `NoSuchBucket` | `NotFound`, naming the bucket rather than the key |
 | `AccessDenied`, HTTP 403, `KMS.AccessDeniedException` | `StoreAccessDenied` |
-| `InvalidAccessKeyId`, `SignatureDoesNotMatch` | `StoreAccessDenied`, saying the credential was not accepted |
+| `InvalidAccessKeyId`, `SignatureDoesNotMatch` | `StoreAccessDenied`, saying AWS refused the credential |
 | An expired or absent SSO token, no credentials at all | `StoreCredentialsExpired` |
 | `ExpiredToken`, `RequestExpired`, `InvalidClientTokenId` | `StoreCredentialsExpired` |
 | A profile the AWS config does not define (`ProfileNotFound`) | `StoreProfileNotConfigured` |

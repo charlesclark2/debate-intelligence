@@ -301,9 +301,11 @@ class TestAnAccountThatDoesNotAnswer:
             encoding="utf-8"
         )
 
-    async def test_an_answer_inside_the_limit_is_the_answer(self) -> None:
-        arn = f"arn:aws:sts::ACCOUNT:assumed-role/{TAKEDOWN_ROLE}/an-operator"
-        caller = StsCallerIdentity(bucket=BUCKET, client=_Answers(arn), time_limit_seconds=5)
+    async def test_an_answer_inside_the_limit_is_the_answer(self, moto_account: None) -> None:
+        """moto's STS, through the real client: answered at once, so the limit changes nothing."""
+        caller = StsCallerIdentity(
+            bucket=BUCKET, client=moto_client("sts", **assume(TAKEDOWN_ROLE)), time_limit_seconds=5
+        )
 
         assert await caller.assumed_role_name() == TAKEDOWN_ROLE
 

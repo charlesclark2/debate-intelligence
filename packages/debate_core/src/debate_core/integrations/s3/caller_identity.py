@@ -35,6 +35,7 @@ still waiting: a thread from asyncio's own pool would be waited for at the end o
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import re
 import threading
 from collections.abc import Mapping
@@ -131,10 +132,9 @@ class StsCallerIdentity:
                 outcome = self._assumed_role_name()
             except BaseException as failed:  # handed to the waiting coroutine, which raises it
                 outcome = failed
-            try:
+            # A RuntimeError here is the run that asked having ended, with nobody left waiting.
+            with contextlib.suppress(RuntimeError):
                 loop.call_soon_threadsafe(settle, outcome)
-            except RuntimeError:  # the run that asked has ended, and nobody is waiting
-                pass
 
         threading.Thread(target=ask, name="sts-get-caller-identity", daemon=True).start()
         try:

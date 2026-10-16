@@ -306,6 +306,23 @@ def test_a_dry_run_still_records_nothing_and_announces_nothing(
     assert notified.sent == []
 
 
+def test_a_dry_run_refused_for_the_profile_creates_nothing_on_disk(
+    installation: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`v1-e34-t24` ac3. A dry run writes nothing, and one refused for its profile wrote the data
+    directory and an empty database first: the pull's services opened the database before they
+    built the bucket (`v1-e34-t22` Follow-up 7). Whatever stops the bucket being built now stops
+    the dry run before anything else is opened."""
+    before = sorted(path.relative_to(installation) for path in installation.rglob("*"))
+
+    exit_code, envelope = pull_with_the_misspelt_profile(monkeypatch, "--dry-run")
+
+    assert exit_code == ExitCode.DOMAIN_FAILURE
+    assert envelope["error"]["code"] == "STORE_PROFILE_NOT_CONFIGURED"
+    assert not (installation / "data").exists(), "the refused dry run created the data directory"
+    assert sorted(path.relative_to(installation) for path in installation.rglob("*")) == before
+
+
 def test_nothing_it_writes_says_or_logs_names_a_path_an_account_or_an_address(
     installation: Path,
     notified: RecordingNotifier,

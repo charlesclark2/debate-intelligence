@@ -189,8 +189,13 @@ row says:
 A profile signed in as something unexpected is said in the same row and does not fail the check.
 The takedown profile is compared with the permission set a takedown runs as: one signed in as
 anything else reads `… a takedown runs only as DebateProdEvidenceRemoval, so caselist remove
---execute will refuse this profile`. The row names a profile, the setting that holds its name and
-a permission set, and never an account, a role's full identifier or where the AWS config is.
+--execute will refuse this profile`. The everyday profile signed in as the other environment's
+permission set reads `… DebateDevEvidenceOperator, which is dev's permission set and not prod's:
+prod's bucket grants it nothing, so every command that reaches the bucket will be refused`
+(`v1-e29-t09`): the profile's block in the AWS config names the other environment's
+`sso_role_name`, most likely copied from it. The row names a profile, the setting that holds its
+name and a permission set, and never an account, a role's full identifier or where the AWS config
+is.
 
 ## Step 1 — rehearse, in dev
 

@@ -319,6 +319,53 @@ async def test_the_everyday_profile_signed_in_as_the_takedown_permission_set_is_
     )
 
 
+@pytest.mark.parametrize(
+    ("environment", "role_name", "summary"),
+    [
+        pytest.param(
+            "dev",
+            "AWSReservedSSO_DebateProdEvidenceOperator_00000000000000aa",
+            "defined, and signed in as DebateProdEvidenceOperator, which is prod's permission set and not "
+            "dev's: dev's bucket grants it nothing, so every command that reaches the bucket will be refused",
+            id="prod's everyday set, in dev",
+        ),
+        pytest.param(
+            "prod",
+            EVERYDAY_ROLE,
+            "defined, and signed in as DebateDevEvidenceOperator, which is dev's permission set and not "
+            "prod's: prod's bucket grants it nothing, so every command that reaches the bucket will be refused",
+            id="dev's everyday set, in prod",
+        ),
+        pytest.param(
+            "dev",
+            "AWSReservedSSO_DebateProdEvidenceRemoval_00000000000000bb",
+            "defined, and signed in as DebateProdEvidenceRemoval, which is prod's permission set and not "
+            "dev's: dev's bucket grants it nothing, so every command that reaches the bucket will be refused",
+            id="prod's takedown set, in dev",
+        ),
+    ],
+)
+async def test_an_everyday_profile_signed_in_as_the_other_environments_permission_set_is_said_so(
+    environment: str, role_name: str, summary: str
+) -> None:
+    """`v1-e29-t09` ac5: a profile copied from the other environment's block, seen before a run
+    meets every refusal. Said, and not a failure: only a profile that is not defined fails."""
+    [found] = await check([everyday()], {EVERYDAY_PROFILE: SignedInAs(role_name)}, environment=environment)
+
+    assert found["summary"] == summary
+    assert (found["defined"], found["session"]) == (True, "signed_in")
+    assert role_name not in str(found), "the permission set's name and never the role's own"
+
+
+async def test_an_everyday_profile_signed_in_as_this_environments_set_is_not_said_to_be_the_others() -> None:
+    [dev] = await check([everyday()], {EVERYDAY_PROFILE: SignedInAs(EVERYDAY_ROLE)}, environment="dev")
+    prod_role = "AWSReservedSSO_DebateProdEvidenceOperator_00000000000000aa"
+    [prod] = await check([everyday()], {EVERYDAY_PROFILE: SignedInAs(prod_role)}, environment="prod")
+
+    assert dev["summary"] == "defined, and signed in as DebateDevEvidenceOperator"
+    assert prod["summary"] == "defined, and signed in as DebateProdEvidenceOperator"
+
+
 # ------------------------------------------------------------------------------------------------
 # Which findings fail a check
 # ------------------------------------------------------------------------------------------------

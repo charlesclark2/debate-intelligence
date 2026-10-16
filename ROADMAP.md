@@ -61,7 +61,7 @@ v2.3's extension work.
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 40 | 40 | 216 |
-| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 74 | 52 | 411 |
+| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 74 | 54 | 411 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 17 | 0 | 179 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 13 | 0 | 108 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 14 | 0 | 96 |
@@ -159,7 +159,7 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [Removal grants: the scope is tested, and a plan can count versions](plan_specs/v1/e29-cloud-evidence-store/t06-removal-grant-scope-test.yaml) `v1-e29-t06-removal-grant-scope-test` | Succeeded | 1 | 8.0 |
 | [A profile missing from the AWS config is a configuration error, not an expired session](plan_specs/v1/e29-cloud-evidence-store/t07-missing-profile-not-retryable.yaml) `v1-e29-t07-missing-profile-not-retryable` | Succeeded | 1 | 1.0 |
 | [The takedown preflight refuses the everyday profile before it writes anything](plan_specs/v1/e29-cloud-evidence-store/t08-takedown-preflight-identity.yaml) `v1-e29-t08-takedown-preflight-identity` | InProgress | 1 | 2.0 |
-| [Loose ends in how store errors are classified, worded and wrapped](plan_specs/v1/e29-cloud-evidence-store/t09-store-error-loose-ends.yaml) `v1-e29-t09-store-error-loose-ends` | Pending | 1 | 2.0 |
+| [Loose ends in how store errors are classified, worded and wrapped](plan_specs/v1/e29-cloud-evidence-store/t09-store-error-loose-ends.yaml) `v1-e29-t09-store-error-loose-ends` | Succeeded | 1 | 2.0 |
 
 #### [E30 — Caselist Evidence Ingestion](plan_specs/v1/e30-caselist-ingestion/epic.yaml)
 
@@ -185,7 +185,7 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [A weekly imported late re-measures the weeks after it, and a re-import needs no flag](plan_specs/v1/e30-caselist-ingestion/t18-late-imports-re-measure-later-manifests.yaml) `v1-e30-t18-late-imports-re-measure-later-manifests` | Succeeded | 1 | 4.0 |
 | [Removal residue the status reports can always be cleared, and says whose it is](plan_specs/v1/e30-caselist-ingestion/t19-residue-clearing-gaps.yaml) `v1-e30-t19-residue-clearing-gaps` | Pending | 4 | 3.0 |
 | [Loose ends in what a removal plan prints and how it decides what to drop](plan_specs/v1/e30-caselist-ingestion/t20-removal-output-loose-ends.yaml) `v1-e30-t20-removal-output-loose-ends` | Pending | 1 | 2.0 |
-| [Loose ends of the removed-path hold: status, the publisher and the inbox](plan_specs/v1/e30-caselist-ingestion/t21-held-path-loose-ends.yaml) `v1-e30-t21-held-path-loose-ends` | Pending | 1 | 3.0 |
+| [Loose ends of the removed-path hold: status, the publisher and the inbox](plan_specs/v1/e30-caselist-ingestion/t21-held-path-loose-ends.yaml) `v1-e30-t21-held-path-loose-ends` | Succeeded | 1 | 3.0 |
 
 #### [E31 — Debate File Parsing](plan_specs/v1/e31-debate-file-parsing/epic.yaml)
 

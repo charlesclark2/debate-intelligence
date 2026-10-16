@@ -164,6 +164,14 @@ spec:
       inputs:
         goalRef: v1-e29-t07-missing-profile-not-retryable
         specRef: plan_specs/v1/e29-cloud-evidence-store/t07-missing-profile-not-retryable.yaml
+    - id: ext-v1-e29-t09-store-error-loose-ends
+      kind: External
+      name: 'Prerequisite from E29: Loose ends in how store errors are classified, worded and wrapped'
+      description: >-
+        Cross-epic prerequisite owned by v1-e29-cloud-evidence-store (release v1.1).
+      inputs:
+        goalRef: v1-e29-t09-store-error-loose-ends
+        specRef: plan_specs/v1/e29-cloud-evidence-store/t09-store-error-loose-ends.yaml
     - id: t01
       kind: Task
       name: OpenCaselist API client
@@ -663,5 +671,46 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e34-t24-agent-install-loose-ends
+    - id: t25
+      kind: Task
+      name: 'A reinstall keeps the agent''s schedule and options, and doctor names a takedown profile''s environment'
+      description: >-
+        A reinstall keeps the agent's schedule and options, and doctor names a takedown
+        profile's environment.
+      inputs:
+        specRef: plan_specs/v1/e34-caselist-sync/t25-reinstall-keeps-every-setting.yaml
+        goalRef: v1-e34-t25-reinstall-keeps-every-setting
+      dependsOn:
+      - t24
+      - ext-v1-e29-t09-store-error-loose-ends
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e34-t25-reinstall-keeps-every-setting reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e34-t25-reinstall-keeps-every-setting
+    - id: t26
+      kind: Task
+      name: 'A drifted snapshot is owed again, and the banner and run list say what is pending'
+      description: >-
+        A drifted snapshot is owed again, and the banner and run list say what is pending.
+      inputs:
+        specRef: plan_specs/v1/e34-caselist-sync/t26-pending-work-and-banner-words.yaml
+        goalRef: v1-e34-t26-pending-work-and-banner-words
+      dependsOn:
+      - t23
+      - ext-v1-e29-t09-store-error-loose-ends
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e34-t26-pending-work-and-banner-words reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e34-t26-pending-work-and-banner-words
 status:
   phase: Pending

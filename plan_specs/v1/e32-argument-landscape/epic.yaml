@@ -108,6 +108,14 @@ spec:
       inputs:
         goalRef: v1-e31-t08-short-card-recall
         specRef: plan_specs/v1/e31-debate-file-parsing/t08-short-card-recall.yaml
+    - id: ext-v1-e31-t20-long-cuts-and-limits
+      kind: External
+      name: 'Prerequisite from E31: Long cuts join the one cluster that holds them, and the matching limits are set from samples'
+      description: >-
+        Cross-epic prerequisite owned by v1-e31-debate-file-parsing (release v1.1).
+      inputs:
+        goalRef: v1-e31-t20-long-cuts-and-limits
+        specRef: plan_specs/v1/e31-debate-file-parsing/t20-long-cuts-and-limits.yaml
     - id: t01
       kind: Task
       name: Topic position taxonomies
@@ -166,6 +174,7 @@ spec:
       - t02
       - ext-v1-e31-t04-card-fingerprints
       - ext-v1-e31-t08-short-card-recall
+      - ext-v1-e31-t20-long-cuts-and-limits
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e32-t03-landscape-report reports phase Succeeded

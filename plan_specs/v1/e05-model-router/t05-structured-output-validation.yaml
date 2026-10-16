@@ -58,6 +58,11 @@ spec:
       description: >-
         The repair prompt is a registered prompt (prompt_id model.repair) with a semver version, and repair
         calls reuse the original task class route.
+    - id: ac5
+      description: >-
+        A response that never calls the schema's tool, which t02's toolChoice auto allows, is invalid
+        output and gets the one repair attempt like any other; under replay the repair call needs a
+        cassette of its own (v1-e05-t03's Follow-up work). Added by the PM, 2026-10-16.
 status:
   phase: Pending
 ---

@@ -1,0 +1,93 @@
+# TASK v1-e34-t26-pending-work-and-banner-words - A drifted snapshot is owed again, and the banner and run list say what is pending
+# Epic: E34 Caselist Sync | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e34-t26-pending-work-and-banner-words
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e34-caselist-sync
+  annotations:
+    debate/title: "A drifted snapshot is owed again, and the banner and run list say what is pending"
+spec:
+  # Filed by the PM, 2026-10-16, from v1-e34-t23's Follow-up work 2 to 4, with the PM's ruling on 3, and v1-e29-t09's Follow-up work 3.
+  description: >-
+    (1) A run whose only pending stage is the report: its login banner says "0 snapshot(s) and
+    the run record wait to be published", though only the confirmation waits. Say what waits.
+    (2) A drifted snapshot is owed by nothing. The PM's ruling, 2026-10-16, amending
+    v1-e34-t18's rule for what is owed: the report stage puts a snapshot whose manifest no
+    longer matches back into the pending-work file, so the next run publishes it again and a
+    manifest mismatch is retried by itself. (3) `caselist runs` shows the banner's own words
+    beside its verdict: `skipped` for a lock refusal and `retry once fixed` for a refusal with a
+    fix. (4) `caselist_sync._failure` names an error that is not a `DomainError` by its class
+    alone; it uses `reported_error_message`, so a stage reason and a publish result describe one
+    `OSError` the same way.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/runbooks]
+    forbidden:
+      - A change to v1-e34-t13's exit-code rule
+      - A new field on the run record, or a record or details file an earlier build cannot read
+      - A path from the operator's machine in a record, notification or log
+  context:
+    - kind: TaskRef
+      name: v1-e34-t23-sync-loose-ends
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e29-t09-store-error-loose-ends
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        (1): a report-only pending run's banner names what waits, by test shown failing
+        first.
+    - id: ac2
+      description: >-
+        (2): a drifted snapshot is in the pending-work file after the report stage and is
+        published by the next run, by test shown failing first; v1-e34-t18's spec and the
+        runbook say what is owed now.
+    - id: ac3
+      description: >-
+        (3): `caselist runs` shows the banner's words in its table and JSON, by test.
+    - id: ac4
+      description: >-
+        (4): a stage reason for an OSError names its class and errno, never its message, by
+        test.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e34-t26-pending-work-and-banner-words-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e34-caselist-sync
+spec:
+  description: >-
+    Owe a drifted snapshot again, and make the banner and run list say what waits.
+  goalRef:
+    name: v1-e34-t26-pending-work-and-banner-words
+  graph:
+    nodes:
+      - id: pending-and-banner
+        kind: Task
+        name: Pending work and banner words
+        description: >-
+          The report-only banner, the drifted snapshot, the run list's words and the
+          failure reason.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Sync tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, caselist_sync or sync_runs]
+status:
+  phase: Pending

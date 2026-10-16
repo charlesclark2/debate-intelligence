@@ -25,9 +25,18 @@ spec:
     copies of itself; re-measure after (1). (4) A short body nine-tenths inside a body that
     lacks one of its ends: 26 on the corpus; a `sample --kept-apart-by lacking-an-end` decides
     whether they are copies. (5) A short body's own cluster is not among its witnesses; change
-    it with (1). This task starts only once t11's operator tallies (steps 2 to 7) are recorded
-    and the PM has ruled on t11's Follow-up 2, what one card is when a source is cut at many
-    extents; the ruling is written into this spec before the session starts.
+    it with (1). (6) Chains: the largest clusters lump different passages of one article,
+    joined through long bodies that hold several of them; 62% of hspf26's largest cluster's
+    pairs of distinct texts share no text, and 51% of hspolicy26's. (7) A false join: t11's join
+    sample found two bodies sharing no text, joined because a third body holds all of both. The
+    PM's ruling on t11's Follow-up 2 (2026-10-16): a card is a passage. Two bodies are one card
+    when one holds the other or they overlap; two passages of one article are two cards. Bodies
+    join only on text they share directly, never transitively through a third body. A body that
+    holds the passages of two or more clusters is not a witness for joining any of them. This
+    task is measured by v1-e31-t21's cluster shapes, not by a person reading large clusters; a
+    person sees only the pairs whose overlap a rule cannot decide, through v1-e31-t21's sampler.
+    t11's tallies and the shapes before this task are in docs/data/caselist-parse-report.md
+    ("Card matching under card-fingerprint-v3, measured"). Amended by the PM, 2026-10-16.
   priority: 2
   constraints:
     packages: [debate_core.evidence, debate_core.application, packages/debate_core/tests, scripts, docs/data]
@@ -39,12 +48,16 @@ spec:
     - kind: TaskRef
       name: v1-e31-t11-long-card-splits-and-fragment-merges
       relation: dependsOn
+    - kind: TaskRef
+      name: v1-e31-t21-cluster-shapes-and-sampler
+      relation: dependsOn
   acceptanceCriteria:
     - id: ac1
       description: >-
-        (1) and (5): the design is built on synthetic fixtures, shown failing first, and the
-        operator's join sample of 20 newly joined pairs has no pair the coach calls
-        different.
+        (1), (5) and (7): the design is built on synthetic fixtures, shown failing first,
+        including two disjoint bodies and a third holding both, which stay apart. The
+        operator's join sample of 20 newly joined pairs, through v1-e31-t21's sampler, has no
+        pair the coach calls different.
     - id: ac2
       description: >-
         (2) and (3): each limit is set from the recorded samples, with the figures in the
@@ -56,6 +69,12 @@ spec:
       description: >-
         `fingerprint_version` is bumped, and the operator's re-parse records clusters,
         merges and divided pairs before and after in docs/data/caselist-parse-report.md.
+    - id: ac5
+      description: >-
+        (6): after the rebuild, v1-e31-t21's shapes show under 5% of pairs sharing no text in
+        each caselist's three largest clusters, against 62% and 51% before, with the figures in
+        the report. A cluster over 5% is listed with its shape, and the PM decides whether it
+        is a defect. Added by the PM, 2026-10-16.
 status:
   phase: Pending
 ---

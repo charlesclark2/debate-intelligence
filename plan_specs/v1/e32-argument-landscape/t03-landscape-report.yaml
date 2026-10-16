@@ -55,6 +55,12 @@ spec:
     - kind: TaskRef
       name: v1-e31-t08-short-card-recall
       relation: dependsOn
+    # Added by the PM, 2026-10-16: a card is a passage (the PM's ruling on v1-e31-t11's Follow-up 2),
+    # so the most-read card is the most-read passage, not the most-read article. Today's largest
+    # clusters chain passages of one article together until v1-e31-t20 lands.
+    - kind: TaskRef
+      name: v1-e31-t20-long-cuts-and-limits
+      relation: dependsOn
   acceptanceCriteria:
     - id: ac1
       description: >-

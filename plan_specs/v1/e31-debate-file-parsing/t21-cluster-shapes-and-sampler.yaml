@@ -1,0 +1,97 @@
+# TASK v1-e31-t21-cluster-shapes-and-sampler - Measure cluster shapes, and ask a person only about the pairs a rule cannot decide
+# Epic: E31 Debate File Parsing | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e31-t21-cluster-shapes-and-sampler
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e31-debate-file-parsing
+  annotations:
+    debate/title: "Measure cluster shapes, and ask a person only about the pairs a rule cannot decide"
+spec:
+  # Filed by the PM, 2026-10-16, from v1-e31-t11's operator steps of 2026-10-16 and the operator's feedback on them.
+  description: >-
+    The operator stopped v1-e31-t11's largest-cluster sample after 60 pairs: telling one long
+    cut of an article from another by eye is slow and often uncertain, and it kept him from
+    other work. The PM measured the clusters instead, with a read-only scratch script, and the
+    measure agreed with the by-eye tallies. Build that measure and a better sampler into
+    scripts/compare_card_clusters.py. (1) `shapes`: for the largest N clusters of each caselist,
+    or a cluster by id, the pairs of distinct full texts by shape, from directional shares of
+    five-word runs (debate_core.evidence.near_duplicates): identical, one inside the other,
+    overlapping, sharing a little, sharing nothing; and the cluster's distinct short cites and
+    the word counts of its texts. Counts only. Do not build a "composite text" count: the PM's
+    version also counted a long cut holding two separate excerpts of one card. (2) `sample`
+    decides the shapes a rule can decide and asks the person only the rest. Identical and
+    contained pairs are counted as the same card and sharing nothing as different, without being
+    shown. An ambiguous pair is shown side by side with the shared text marked and each side's
+    own text set apart, and answered with one key. Tallies only, with the seed, as today.
+    v1-e31-t20 is measured with both.
+  priority: 2
+  constraints:
+    packages: [scripts, debate_core.evidence, packages/debate_core/tests, tests/scripts, docs/data]
+    forbidden:
+      - Card text, a school, team code or file name in any fixture, file the tool writes, report or commit; the operator's checks are tallies only
+      - Running either command against the operator's data directory in a session (operator-run only)
+  context:
+    - kind: TaskRef
+      name: v1-e31-t11-long-card-splits-and-fragment-merges
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        `shapes` counts every shape correctly on synthetic clusters built to hold each one,
+        by test, and its JSON names no text.
+    - id: ac2
+      description: >-
+        Operator-run, read-only: `shapes` over the dev store's three largest clusters per
+        caselist gives the shares recorded in docs/data/caselist-parse-report.md on
+        2026-10-16 (62% of hspf26's largest sharing nothing, 51% of hspolicy26's), or the
+        report explains any difference.
+    - id: ac3
+      description: >-
+        `sample` shows only the pairs no rule decides, marks the shared text, records
+        rule-decided and person-decided tallies apart, and writes no text to any file, by
+        test.
+    - id: ac4
+      description: >-
+        Operator-run: a 20-pair join sample with the new sampler, timed. The report gives
+        how many pairs the person was asked about and how long it took.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e31-t21-cluster-shapes-and-sampler-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e31-debate-file-parsing
+spec:
+  description: >-
+    Build the shapes measure and the sampler that asks only about ambiguous pairs.
+  goalRef:
+    name: v1-e31-t21-cluster-shapes-and-sampler
+  graph:
+    nodes:
+      - id: shapes-and-sampler
+        kind: Task
+        name: Cluster shapes and sampler
+        description: >-
+          The shapes subcommand, the sampler's rules and display, and the operator's timed
+          sample.
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Cluster comparison tests pass
+            command: uv
+            args: [run, pytest, tests/scripts, -k, card_clusters]
+status:
+  phase: Pending

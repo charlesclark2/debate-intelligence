@@ -1,0 +1,92 @@
+# TASK v1-e34-t25-reinstall-keeps-every-setting - A reinstall keeps the agent's schedule and options, and doctor names a takedown profile's environment
+# Epic: E34 Caselist Sync | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e34-t25-reinstall-keeps-every-setting
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e34-caselist-sync
+  annotations:
+    debate/title: "A reinstall keeps the agent's schedule and options, and doctor names a takedown profile's environment"
+spec:
+  # Filed by the PM, 2026-10-16, from v1-e34-t24's Follow-up work 1 and 2, and v1-e29-t09's Follow-up work 2 and 5.
+  description: >-
+    (1) A reinstall resets `--weekday`, `--hour`, `--minute`, `--log-dir` and `--wrapper-dir` to
+    their defaults: they are not read from the installed plist, so an agent installed for
+    Thursday moves to Wednesday 06:00 on a reinstall that does not repeat them. Read each from
+    the installed agent, as v1-e34-t24 did for the environment, caselists and data directory.
+    (2) The wrapper's comment still says `AWS_PROFILE` is templated into the plist. (3)
+    `ops/launchd/install.sh` says the install "asks AWS one question for each profile" and not
+    how long that may wait. (4) `doctor` says only that a takedown will refuse a takedown
+    profile signed in as the other environment's removal set; it says which environment's set it
+    is, as it does for the everyday profile.
+  priority: 3
+  constraints:
+    packages: [ops/launchd, debate_cli, packages/debate_cli/tests, tests/integration, docs/runbooks]
+    forbidden:
+      - Changing an installed agent's schedule, options, environment, caselists or data directory without an explicit option
+      - An account id, role ARN, SSO name or AWS config path in output, a log or the report
+      - Reading the operator's real agent, AWS config or data directory in a session
+  context:
+    - kind: TaskRef
+      name: v1-e34-t24-agent-install-loose-ends
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e29-t09-store-error-loose-ends
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        (1): a reinstall without the options keeps each from the installed plist, and an
+        explicit option still changes it, by tests against a fake launchctl and a scratch
+        plist, shown failing first.
+    - id: ac2
+      description: >-
+        (2) and (3): the comments say what the code does.
+    - id: ac3
+      description: >-
+        (4): doctor names the other environment's removal set for a takedown profile, by
+        test.
+    - id: ac4
+      description: >-
+        Operator-run: `install.sh --dry-run` over the real agent shows Wednesday 06:00 and
+        the current options kept, recorded in the report.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e34-t25-reinstall-keeps-every-setting-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e34-caselist-sync
+spec:
+  description: >-
+    Keep the schedule and options on reinstall, fix two comments, and name the takedown set's
+    environment.
+  goalRef:
+    name: v1-e34-t25-reinstall-keeps-every-setting
+  graph:
+    nodes:
+      - id: reinstall-settings
+        kind: Task
+        name: Reinstall keeps every setting
+        description: >-
+          The plist reads, the comments and the doctor line.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Installer tests pass
+            command: uv
+            args: [run, pytest, tests/integration/test_launchd_install.py]
+status:
+  phase: Pending

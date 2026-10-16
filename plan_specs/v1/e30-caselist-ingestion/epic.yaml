@@ -576,5 +576,44 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e30-t21-held-path-loose-ends
+    - id: t22
+      kind: Task
+      name: 'A held path''s bytes and skipped rows never reach the bucket'
+      description: >-
+        A held path's skipped rows and bytes never reach the bucket.
+      inputs:
+        specRef: plan_specs/v1/e30-caselist-ingestion/t22-held-rows-publish-nothing.yaml
+        goalRef: v1-e30-t22-held-rows-publish-nothing
+      dependsOn:
+      - t21
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e30-t22-held-rows-publish-nothing reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e30-t22-held-rows-publish-nothing
+    - id: t23
+      kind: Task
+      name: 'Held digests are remembered once the copy is gone, and a manifest write survives a power cut'
+      description: >-
+        Held digests are remembered once the copy is gone, and a manifest write survives a
+        power cut.
+      inputs:
+        specRef: plan_specs/v1/e30-caselist-ingestion/t23-held-digests-and-manifest-fsync.yaml
+        goalRef: v1-e30-t23-held-digests-and-manifest-fsync
+      dependsOn:
+      - t22
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e30-t23-held-digests-and-manifest-fsync reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e30-t23-held-digests-and-manifest-fsync
 status:
   phase: Pending

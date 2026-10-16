@@ -85,13 +85,19 @@ def test_the_test_profile_selects_the_fixture_keyed_fake(tmp_path: Path) -> None
     assert response.output == ContractPassage(paragraph_id=3, start_offset=0, end_offset=42)
 
 
-def test_the_fake_does_not_read_the_mode(tmp_path: Path) -> None:
+def test_the_fake_does_not_read_the_mode_variable(tmp_path: Path) -> None:
     """A developer's DEBATE_MODEL_MODE, even a wrong one, does not touch a fake-provider run."""
     router = build_model_router(
-        settings_with(tmp_path),
-        mode="record",
-        environ={"DEBATE_MODEL_MODE": "nonsense", "CI": "true"},
-        repository_root=REPOSITORY_ROOT,
+        settings_with(tmp_path), environ={"DEBATE_MODEL_MODE": "nonsense"}, repository_root=REPOSITORY_ROOT
+    )
+
+    assert isinstance(router, FakeModelRouter)
+
+
+def test_the_fake_ignores_a_record_option_even_in_ci(tmp_path: Path) -> None:
+    """There is nothing to record from the fake, so record in CI is not refused for it either."""
+    router = build_model_router(
+        settings_with(tmp_path), mode="record", environ={"CI": "true"}, repository_root=REPOSITORY_ROOT
     )
 
     assert isinstance(router, FakeModelRouter)

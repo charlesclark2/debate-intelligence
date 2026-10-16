@@ -622,3 +622,27 @@ async def test_an_older_week_imported_again_after_a_removal_changes_no_other_man
         assert store.remeasured is not None and store.remeasured.rewritten == (), week
         assert {snapshot: store.manifest_bytes(snapshot) for snapshot in others} == before, week
     assert store.summary("2026-09-15")["first_seen"] == 1, "as the removal kept it"
+
+
+async def test_a_weekly_dated_after_the_complete_archive_leaves_its_count_as_a_removal_kept_it(
+    tmp_path: Path, s3_client: S3Client, evidence_bucket: str
+) -> None:
+    """Only an earlier-dated weekly counts the newest complete archive again (PM ruling 3)."""
+    world = await removal_world(
+        tmp_path,
+        (Step("weekly", FIRST_WEEK), Step("weekly", SECOND_WEEK), Step("complete", date(2026, 9, 12))),
+        s3_client,
+        evidence_bucket,
+    )
+    await remove(world, "second-week-only")
+    store = OrderedImports(tmp_path)
+    before = store.manifest_bytes("full/2026-09-12")
+
+    await store.run(
+        Step("weekly", THIRD_WEEK), RecordedSuppressionList(local_suppression_list_file(world.data_dir))
+    )
+
+    assert store.remeasured is not None and store.remeasured.complete_archive is None
+    assert store.manifest_bytes("full/2026-09-12") == before
+    summary = store.summary("full/2026-09-12")
+    assert (summary["withdrawn"], summary["superseded"], summary["earlier_snapshots"]) == (1, 1, 2)

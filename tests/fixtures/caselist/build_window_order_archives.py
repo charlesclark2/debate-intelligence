@@ -192,6 +192,12 @@ and keeps the first-seen count as the import recorded it. Measuring again has to
   runbook's Step 6 does, and then `2026-09-01`. Each was imported before, so no other manifest
   changes. Counting `2026-09-15`'s first-seen afresh from its rows would have given 0 where the
   removal kept 1.
+* **A weekly dated after the complete archive, after a removal**: `2026-09-01`, `2026-09-08` and
+  `full/2026-09-12` (withdrawn 1, superseded 1, 2 compared), then `caselist remove --source
+  <second-week-only>`, which drops its row from `2026-09-08` and leaves the complete archive, which
+  does not hold it, as it was; then `2026-09-15`. That weekly is dated after the complete archive, so
+  the complete archive is not counted again and keeps 1, 1, 2. Counted again, it would be 0, 1, 2:
+  the removed file's rows are gone from every manifest, so it no longer counts as withdrawn.
 
 :data:`EXPECTED_IMPORTS`, :data:`EXPECTED_HOLDS`, :data:`EXPECTED_LATER_UPLOADS`,
 :data:`EXPECTED_REMEASURED` and :data:`EXPECTED_AFTER_A_REMOVAL` state those answers as literals.

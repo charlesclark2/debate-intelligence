@@ -61,7 +61,7 @@ v2.3's extension work.
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 40 | 40 | 216 |
-| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 74 | 54 | 411 |
+| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 74 | 55 | 411 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 17 | 1 | 179 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 13 | 0 | 108 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 14 | 0 | 96 |
@@ -238,7 +238,7 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [After a login, the parsed store publishes without a second rebuild when nothing was removed](plan_specs/v1/e34-caselist-sync/t20-parsed-store-publish-after-login.yaml) `v1-e34-t20-parsed-store-publish-after-login` | Pending | 2 | 4.0 |
 | [The parse stage holds the run lock and has a time budget](plan_specs/v1/e34-caselist-sync/t21-parse-stage-bounds.yaml) `v1-e34-t21-parse-stage-bounds` | Pending | 1 | 2.0 |
 | [A weekly run that cannot reach its bucket is recorded and announced, and the profile is checked before install](plan_specs/v1/e34-caselist-sync/t22-refusal-to-start-is-recorded.yaml) `v1-e34-t22-refusal-to-start-is-recorded` | Succeeded | 2 | 3.0 |
-| [Loose ends in the weekly sync's findings, records and notifications](plan_specs/v1/e34-caselist-sync/t23-sync-loose-ends.yaml) `v1-e34-t23-sync-loose-ends` | Pending | 1 | 3.0 |
+| [Loose ends in the weekly sync's findings, records and notifications](plan_specs/v1/e34-caselist-sync/t23-sync-loose-ends.yaml) `v1-e34-t23-sync-loose-ends` | Succeeded | 1 | 3.0 |
 | [The agent's installer checks what it can, and never changes an agent's environment by default](plan_specs/v1/e34-caselist-sync/t24-agent-install-loose-ends.yaml) `v1-e34-t24-agent-install-loose-ends` | Succeeded | 1 | 3.0 |
 
 

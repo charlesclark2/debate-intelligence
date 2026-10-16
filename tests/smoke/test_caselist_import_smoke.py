@@ -73,7 +73,7 @@ def archives(tmp_path: Path) -> dict[date, Path]:
     return build_snapshot_zips(tmp_path / "downloads")
 
 
-def import_week(cli: InstalledCli, archive: Path, snapshot: date) -> CliRun:
+def import_week(cli: InstalledCli, archive: Path, snapshot: date, *arguments: str) -> CliRun:
     """Run the command exactly as an operator types it, asking for the machine-readable answer."""
     return cli.run(
         "--json",
@@ -84,6 +84,7 @@ def import_week(cli: InstalledCli, archive: Path, snapshot: date) -> CliRun:
         SYNTHETIC_CASELIST,
         "--snapshot",
         snapshot.isoformat(),
+        *arguments,
     )
 
 
@@ -152,6 +153,41 @@ def test_running_the_last_week_again_changes_nothing_on_disk(
 
     assert data["newly_stored_blobs"] == 0
     assert _tree_of(installation) == before
+
+
+def test_a_week_imported_late_measures_the_week_after_it_again(
+    installed_cli: InstalledCli, installation: Path, archives: dict[date, Path]
+) -> None:
+    """`v1-e30-t18`: the week after a late one names it as its previous week, with the date-order counts."""
+    first, second, third = (snapshot.snapshot for snapshot in SNAPSHOTS)
+    for week in (first, third):
+        reported(import_week(installed_cli, archives[week], week))
+
+    late = reported(import_week(installed_cli, archives[second], second, "--allow-out-of-order"))
+
+    assert late["rewritten_manifests"] == [third.isoformat()]
+    manifest = installation / "objects" / "manifests" / SYNTHETIC_CASELIST / f"{third.isoformat()}.jsonl"
+    summary = [json.loads(line) for line in manifest.read_text(encoding="utf-8").splitlines()][-1]
+    expected = {week["snapshot"]: week for week in written_expected_summary()["snapshots"]}  # pyright: ignore[reportIndexIssue, reportGeneralTypeIssues]
+    assert summary["previous_snapshot"] == second.isoformat()
+    assert summary["classifications"] == {
+        name: count for name, count in expected[third.isoformat()]["classifications"].items() if count
+    }
+
+
+def test_a_week_already_imported_is_imported_again_without_the_flag(
+    installed_cli: InstalledCli, installation: Path, archives: dict[date, Path]
+) -> None:
+    """`v1-e30-t18`: no `--allow-out-of-order`, and no other week's manifest is rewritten."""
+    for snapshot in SNAPSHOTS:
+        reported(import_week(installed_cli, archives[snapshot.snapshot], snapshot.snapshot))
+    manifests = installation / "objects" / "manifests" / SYNTHETIC_CASELIST
+    before = {path.name: path.read_bytes() for path in manifests.glob("*.jsonl")}
+
+    again = reported(import_week(installed_cli, archives[SNAPSHOTS[1].snapshot], SNAPSHOTS[1].snapshot))
+
+    assert again["rewritten_manifests"] == []
+    assert {path.name: path.read_bytes() for path in manifests.glob("*.jsonl")} == before
 
 
 def test_an_import_writes_only_inside_the_data_directory(

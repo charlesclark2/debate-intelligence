@@ -41,6 +41,7 @@ from tests.fixtures.caselist.build_synthetic_archives import (
     build_snapshot_zips,
 )
 from tests.fixtures.identity_center_roles import EVERYDAY_ROLE, TAKEDOWN_ROLE, sign_in
+from tests.fixtures.model_routing import EXAMPLE_ROUTING_FILE
 from tests.fixtures.openev.build_synthetic_openev import CAMP_ALIASES_PATH, build_download_zips
 from tests.fixtures.openev.build_synthetic_openev import DOCUMENT_BODIES as CAMP_BODIES
 from tests.fixtures.openev.build_synthetic_openev import DOWNLOADS as OPENEV_DOWNLOADS
@@ -105,7 +106,7 @@ def installation(installed_cli: InstalledCli, s3_stand_in: S3StandIn, tmp_path: 
         (profiles / f"{environment_name}.toml").write_text(
             f'[storage]\ndata_dir = "{tmp_path / environment_name}"\n'
             f'[storage.s3]\nbucket = "{BUCKET}"\nregion = "us-east-1"\naws_profile = "{OPERATOR_PROFILE}"\n'
-            f'[models]\nrouting_file = "{tmp_path / "routing.yaml"}"\nbudget_usd_daily = 1.0\n',
+            f'[models]\nrouting_file = "{EXAMPLE_ROUTING_FILE}"\nbudget_usd_daily = 1.0\n',
             encoding="utf-8",
         )
     # Each environment's own data directory, as its profile names it, rather than the harness's one.

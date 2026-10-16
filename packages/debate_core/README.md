@@ -198,8 +198,31 @@ Things worth knowing before you use or extend these:
 and resolves each call's task class and overrides into the `ResolvedRoute` it takes. Model ids,
 regions and inference profiles live only in those files; code and tests name task classes, and
 tests assert model families, never identifiers. The file is validated in full when it loads, so a
-bad route fails before anything is sent. The offline routers arrive here with
-v1-e05-t03-fake-replay-models; nothing in this package may import the AWS SDK.
+bad route fails before anything is sent, and the CLI loads it with its settings, so a bad file stops
+a command before it starts. Nothing in this package may import the AWS SDK.
+
+The offline routers (v1-e05-t03-fake-replay-models) are why no test or eval ever reaches a model:
+
+| Module | Contents |
+|---|---|
+| `fixture_key.py` | `fixture_key`: SHA-256 of the prompt id, version, canonical JSON of the variables and the schema's dotted path |
+| `fake_router.py` | `FakeModelRouter`, answering from `tests/fixtures/model_outputs/<prompt_id>/<key>.json`, with hashed embeddings and lexical-overlap rerank |
+| `record_replay.py` | `RecordReplayModelRouter`: record a real router's calls to `tests/fixtures/model_cassettes/`, replay them, or pass through |
+| `model_mode.py` | `resolve_model_mode` (`--model-mode`, else `DEBATE_MODEL_MODE`, else replay) and `add_model_mode_option` for argparse |
+| `redaction.py` | What a cassette is scrubbed of before it is written |
+| `factory.py` | `build_model_router`: `models.provider = "fake"` is the fake; a real provider is wrapped in the mode's router |
+
+Things worth knowing:
+
+* **A missing answer is an error, never a default.** The fake and replay both raise
+  `MissingFixtureError` naming the prompt and the key. Replay does not hold the real router at all.
+* **The mode has one control.** No setting chooses record, replay or live, and record is refused
+  when `CI=true`.
+* **Every fixture and cassette is invented.** No credentials, student names or real card text;
+  `tests/fixtures/model_cassettes/README.md` says how to write one.
+* **The scripted router is a different thing.** `debate_core.testing.ScriptedModelRouter` (named
+  `FakeModelRouter` until this task) answers from a queue, for unit tests that need a model to
+  say one particular thing. The shared `model_router` pytest fixture is the fixture-keyed fake.
 
 ### The debate-file style profile (v1-e31-t02-verbatim-style-profile)
 

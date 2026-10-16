@@ -30,6 +30,7 @@ from typing import Any
 
 import pytest
 from pydantic import SecretStr
+from tests.fixtures.model_routing import EXAMPLE_ROUTING_FILE
 from tests.smoke.installed_build import CliRun, InstalledCli
 from typer.testing import CliRunner, Result
 
@@ -55,7 +56,7 @@ def installation(installed_cli: InstalledCli, tmp_path: Path) -> Iterator[Path]:
     profiles.mkdir()
     (profiles / "dev.toml").write_text(
         f'[storage]\ndata_dir = "{tmp_path / "data"}"\n'
-        f'[models]\nrouting_file = "{tmp_path / "routing.yaml"}"\nbudget_usd_daily = 1.0\n'
+        f'[models]\nrouting_file = "{EXAMPLE_ROUTING_FILE}"\nbudget_usd_daily = 1.0\n'
         '[caselist]\ntoken_backend = "file"\n',
         encoding="utf-8",
     )

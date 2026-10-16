@@ -54,6 +54,13 @@ because there are none.
 a container around settings it made up, and it is why loading is lazy: the callable is not run
 until a command actually asks for `settings`, so `--help` and `--version` read no files.
 
+The root callback wraps its loader in :func:`validating_routing`, so the run's settings arrive with
+their model-routing file already loaded and validated. A bad `config/model_routing.*.yaml` stops
+every command that reads settings when it first asks for them, before it has done anything, with the
+:class:`~debate_core.application.ports.model_router.RoutingConfigError` naming the offending key
+(`v1-e05-t03-fake-replay-models` ac6). Plain `doctor`, `--help` and `--version` read no settings and
+so no routing file, which the installer and `validate-dev` depend on.
+
 ## Which copy of the suppression list a service reads
 
 Every service that can store or publish a caselist source is built with the removal suppression
@@ -186,6 +193,7 @@ from debate_core.integrations.local.suppression_list import (
     local_removal_log_file,
     local_suppression_list_file,
 )
+from debate_core.integrations.models.routing_policy import RoutingPolicy
 
 if TYPE_CHECKING:  # pragma: no cover - imported for the type checker only; see the factories
     from mypy_boto3_s3.client import S3Client
@@ -199,6 +207,7 @@ __all__ = [
     "ServiceContainer",
     "Settings",
     "SettingsNotConfigured",
+    "validating_routing",
 ]
 
 SERVICE_NAMES: Final[tuple[str, ...]] = (
@@ -244,6 +253,23 @@ class EvidenceStoreNotConfigured(ConfigurationError):
             field="storage.s3.bucket",
             source=f"profile:{environment.value}",
         )
+
+
+def validating_routing(settings_loader: Callable[[], Settings]) -> Callable[[], Settings]:
+    """`settings_loader`, refusing settings whose model-routing file does not load.
+
+    The loader it returns raises
+    :class:`~debate_core.application.ports.model_router.RoutingConfigError`, naming the file and the
+    offending key, for a routing file that is missing, unreadable or invalid. The policy is not
+    kept: whatever builds a model router loads it again, and a routing file is small.
+    """
+
+    def load() -> Settings:
+        settings = settings_loader()
+        RoutingPolicy.from_settings(settings)
+        return settings
+
+    return load
 
 
 class SettingsNotConfigured(RuntimeError):

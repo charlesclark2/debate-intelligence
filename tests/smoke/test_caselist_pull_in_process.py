@@ -43,6 +43,7 @@ from tests.fixtures.caselist.build_synthetic_archives import (
 )
 from tests.fixtures.caselist.publish_expectations import digest_of_body
 from tests.fixtures.identity_center_roles import EVERYDAY_ROLE, TAKEDOWN_ROLE, sign_in
+from tests.fixtures.model_routing import EXAMPLE_ROUTING_FILE
 from tests.fixtures.openev.build_synthetic_openev import DOCUMENT_BODIES
 from tests.fixtures.permissions import needs_permissions, refused
 from typer.testing import CliRunner, Result
@@ -131,7 +132,7 @@ def installation(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[Pa
         # The parse stage is on, as it is for the agent (`v1-e34-t17`). One worker, so that each
         # pull here starts one process and not the machine's cores less one.
         "[parse]\nworkers = 1\n"
-        f'[models]\nrouting_file = "{tmp_path / "routing.yaml"}"\nbudget_usd_daily = 1.0\n',
+        f'[models]\nrouting_file = "{EXAMPLE_ROUTING_FILE}"\nbudget_usd_daily = 1.0\n',
         encoding="utf-8",
     )
     monkeypatch.setenv("DEBATE_PROFILE_DIR", str(profiles))

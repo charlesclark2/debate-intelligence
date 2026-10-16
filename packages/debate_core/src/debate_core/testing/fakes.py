@@ -111,7 +111,7 @@ __all__ = [
     "FakeArticleFetcher",
     "FakeContentExtractor",
     "FakeDebateFileParser",
-    "FakeModelRouter",
+    "ScriptedModelRouter",
     "FakePorts",
     "FakeSearchProvider",
     "FixedClock",
@@ -873,7 +873,7 @@ class FakeDebateFileParser:
 
 
 FAKE_MODEL_TIMEOUT_SECONDS = 60.0
-"""The timeout a :class:`FakeModelRouter` route reports when a call does not override it."""
+"""The timeout a :class:`ScriptedModelRouter` route reports when a call does not override it."""
 
 type ScriptedModelResponse = (
     BaseModel | Mapping[str, object] | Sequence[Sequence[float]] | Sequence[float] | Exception
@@ -882,7 +882,7 @@ type ScriptedModelResponse = (
 scores in document order, or an exception to raise."""
 
 
-class FakeModelRouter:
+class ScriptedModelRouter:
     """A model router that returns scripted answers and records every structured call.
 
     Enqueue one answer per call, in call order:
@@ -895,9 +895,10 @@ class FakeModelRouter:
     * for any call, an exception to raise, such as a model that cannot be reached.
 
     Responses report a route with provider `fake`, so nothing a fake answered can pass for a billed
-    model's answer. The replay router that plays back *recorded* model responses, and the fixture
-    keyed fake, belong to v1-e05-t03-fake-replay-models; this one is for unit tests that only need
-    a model to say something specific.
+    model's answer. This one is for unit tests that only need a model to say something specific.
+    Answers kept as files, keyed by the call, are what `FakeModelRouter` and
+    `RecordReplayModelRouter` in `debate_core.integrations.models` serve
+    (v1-e05-t03-fake-replay-models). Until that task this class was itself named `FakeModelRouter`.
     """
 
     def __init__(
@@ -1146,7 +1147,7 @@ def build_fake_ports(
         search_provider=FakeSearchProvider(),
         article_fetcher=FakeArticleFetcher(clock=shared_clock),
         content_extractor=FakeContentExtractor(),
-        model_router=FakeModelRouter(clock=shared_clock),
+        model_router=ScriptedModelRouter(clock=shared_clock),
         clock=shared_clock,
         id_generator=id_generator if id_generator is not None else SequentialIdGenerator(),
     )

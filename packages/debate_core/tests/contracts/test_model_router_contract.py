@@ -8,8 +8,10 @@ before they exist:
   routes through a :class:`RoutingPolicy`, as a real adapter does, so its binding switches on the
   contract's field-by-field route checks. Its identifiers are made up; real ones live only in
   `config/model_routing.*.yaml`.
-* The scripted `FakeModelRouter` that `debate_core.testing` ships, so the fake other packages'
-  tests wire in really is a `ModelRouter`.
+* The `ScriptedModelRouter` that `debate_core.testing` ships, so the scripted fake other packages'
+  tests wire in really is a `ModelRouter`. The fixture-keyed `FakeModelRouter` and the
+  `RecordReplayModelRouter` are bound beside their own tests, in
+  `packages/debate_core/tests/integrations/models/`.
 """
 
 from __future__ import annotations
@@ -35,7 +37,7 @@ from debate_core.domain.model_contracts import (
     TaskClass,
 )
 from debate_core.integrations.models import ModelRoute, RoutingPolicy
-from debate_core.testing import FAKE_EPOCH, FakeModelRouter
+from debate_core.testing import FAKE_EPOCH, ScriptedModelRouter
 from debate_core.testing.contracts import (
     EmbeddingAnswer,
     ModelRouterContract,
@@ -159,9 +161,9 @@ def _script(answer: PlannedAnswer) -> ScriptedModelResponse:
             return answer.scores
 
 
-class TestFakeModelRouter(ModelRouterContract):
+class TestScriptedModelRouter(ModelRouterContract):
     """The scripted fake every other package's tests wire in. Its routes report provider `fake`."""
 
     @pytest.fixture
     def make_router(self) -> ModelRouterFactory:
-        return lambda answers: FakeModelRouter([_script(answer) for answer in answers])
+        return lambda answers: ScriptedModelRouter([_script(answer) for answer in answers])

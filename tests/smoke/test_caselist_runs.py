@@ -29,6 +29,7 @@ from tests.fixtures.caselist.build_synthetic_archives import (
     SYNTHETIC_CASELIST,
     build_snapshot_zips,
 )
+from tests.fixtures.model_routing import EXAMPLE_ROUTING_FILE
 from tests.smoke.installed_build import InstalledCli
 from tests.smoke.stand_ins.opencaselist import OpenCaselistStandIn
 from tests.smoke.stand_ins.s3 import MOTO_TEST_CREDENTIALS, S3StandIn
@@ -80,7 +81,7 @@ def installation(
         'notifier = "none"\n'
         f'sync_caselists = ["{SYNTHETIC_CASELIST}"]\n'
         "min_request_interval_seconds = 0.5\n"
-        f'[models]\nrouting_file = "{tmp_path / "routing.yaml"}"\nbudget_usd_daily = 1.0\n',
+        f'[models]\nrouting_file = "{EXAMPLE_ROUTING_FILE}"\nbudget_usd_daily = 1.0\n',
         encoding="utf-8",
     )
     installed_cli.configure(

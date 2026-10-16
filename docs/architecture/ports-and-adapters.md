@@ -199,9 +199,9 @@ article = await service.register(canonical_url=url, title=title)
 assert article.article_id == "0ART0000000000000000000001"
 ```
 
-`FakeSearchProvider`, `FakeArticleFetcher`, `FakeContentExtractor` and `FakeModelRouter` are
+`FakeSearchProvider`, `FakeArticleFetcher`, `FakeContentExtractor` and `ScriptedModelRouter` are
 scripted: give them the answers the test needs, including failures, and assert on what they were
-asked. `FakeModelRouter` records every call, so a test can check that a use case routed to the
+asked. `ScriptedModelRouter` records every call, so a test can check that a use case routed to the
 right task class and prompt version.
 
 Two fakes expose test-only helpers that are deliberately *not* on their ports, because no

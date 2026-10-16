@@ -22,6 +22,7 @@ from tests.fixtures.caselist.build_synthetic_archives import (
     SYNTHETIC_CASELIST,
     build_snapshot_zips,
 )
+from tests.fixtures.model_routing import EXAMPLE_ROUTING_FILE
 from typer.testing import CliRunner, Result
 
 from debate_cli.app import create_app
@@ -56,7 +57,7 @@ def probe_data_dir(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[
     profiles.mkdir()
     (profiles / "dev.toml").write_text(
         f'[storage]\ndata_dir = "{data_dir}"\n'
-        f'[models]\nrouting_file = "{tmp_path / "routing.yaml"}"\nbudget_usd_daily = 1.0\n',
+        f'[models]\nrouting_file = "{EXAMPLE_ROUTING_FILE}"\nbudget_usd_daily = 1.0\n',
         encoding="utf-8",
     )
     monkeypatch.setenv("DEBATE_PROFILE_DIR", str(profiles))

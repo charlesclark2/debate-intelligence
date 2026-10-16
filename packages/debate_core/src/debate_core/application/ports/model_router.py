@@ -20,9 +20,10 @@ always sliced out of the stored snapshot afterwards, and a schema field meant to
 evidence is a defect (architecture proposal §8, ADR-0006). Rerank results name documents by
 position for the same reason.
 
-Implementations: the Bedrock adapter (v1-e05-t02-bedrock-adapter), the fake and record/replay
-routers (v1-e05-t03-fake-replay-models), and the scripted `FakeModelRouter` in
-`debate_core.testing`. Each is held to :mod:`debate_core.testing.contracts.model_router`.
+Implementations: the Bedrock adapter (v1-e05-t02-bedrock-adapter), the fixture-keyed
+`FakeModelRouter` and the `RecordReplayModelRouter` in `debate_core.integrations.models`
+(v1-e05-t03-fake-replay-models), and `ScriptedModelRouter` in `debate_core.testing`, which answers
+from a queue. Each is held to :mod:`debate_core.testing.contracts.model_router`.
 
 ## Errors a router raises
 

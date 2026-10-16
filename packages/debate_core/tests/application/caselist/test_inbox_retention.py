@@ -281,6 +281,7 @@ class Installation:
         unreadable: Sequence[str] = (),
         openev_fails: bool = False,
         parse: CaselistParseStage | None = None,
+        bulk_downloads_per_day: int | None = None,
     ) -> CaselistSyncService:
         """The pull.
 
@@ -292,6 +293,8 @@ class Installation:
             openev_fails: Every OpenEv import is refused.
             parse: The parse stage (`v1-e34-t17`), or `None` for it turned off, as in every test
                 written before it existed.
+            bulk_downloads_per_day: The service's own allowance, when not its default
+                (`v1-e34-t23`): what a pull built directly, and not from settings, is given.
         """
         listed = self.suppression or empty_suppression_list()
         repository = SqliteCaselistRepository(SqliteDatabase.open(self.data_dir))
@@ -326,6 +329,7 @@ class Installation:
             ),
             parse=parse,
             clock=lambda: RUN_CLOCK,
+            **({} if bulk_downloads_per_day is None else {"bulk_downloads_per_day": bulk_downloads_per_day}),
         )
 
     async def publish(self, caselist: str = CASELIST) -> None:

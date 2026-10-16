@@ -127,8 +127,15 @@ class ParsePlan:
     caselist: str
     version: str
     """The version directory this run writes."""
+    new_version: bool
+    """Whether this run starts `version`: a first parse, a parser version bump, or a new generation."""
     superseded: str | None
-    """The generation a new version directory supersedes, left as it was; `None` when not new."""
+    """The directory a new one supersedes, left as it was: the newest the store holds below `version`.
+
+    `None` when the run writes into the current directory, and when the store holds nothing older:
+    a caselist's first parse. A parser version bump supersedes the newest generation of the parser
+    before it, which before `v1-e31-t16` this said nothing about.
+    """
     parser_version: str
     profile_version: str
     snapshot: str | None
@@ -146,10 +153,6 @@ class ParsePlan:
     def skipped(self) -> int:
         """In-scope sources already parsed under this run's skip key, which are not parsed again."""
         return self.in_scope - self.suppressed - len(self.to_parse)
-
-    @property
-    def new_version(self) -> bool:
-        return self.superseded is not None
 
 
 @dataclass(frozen=True, slots=True)
@@ -304,7 +307,7 @@ class CaselistParseService:
         state = await load_suppression_state(self._suppression)
         sources = await enumerate_sources(self._local, caselist)
         parser_version, profile_version = self._parser.parser_version, self._parser.profile_version
-        version, superseded, recorded = await self._choose_version(
+        version, new_version, superseded, recorded = await self._choose_version(
             caselist, parser_version, profile_version, reparse=reparse
         )
         done = {entry.skip_key for entry in recorded if not entry.retried_next_run}
@@ -320,6 +323,7 @@ class CaselistParseService:
         return ParsePlan(
             caselist=caselist,
             version=version,
+            new_version=new_version,
             superseded=superseded,
             parser_version=parser_version,
             profile_version=profile_version,
@@ -334,21 +338,26 @@ class CaselistParseService:
 
     async def _choose_version(
         self, caselist: str, parser_version: str, profile_version: str, *, reparse: bool
-    ) -> tuple[str, str | None, tuple[SourceEntry, ...]]:
-        """The directory to write, the generation it supersedes (if new), and what it already holds.
+    ) -> tuple[str, bool, str | None, tuple[SourceEntry, ...]]:
+        """The directory to write, whether it is new, what it supersedes, and what it already holds.
 
         The newest generation of this parser version is reused when every entry in it has this
         run's skip key. A forced re-parse, or an entry parsed under another profile, starts a new
-        generation instead, so the old directory is never written to.
+        generation instead, so the old directory is never written to. A parser version the store
+        has no directory for starts its first, superseding the newest directory that sorts below it
+        (`v1-e31-t16`): never one a newer build wrote.
         """
+        names = await self._store.version_directories(caselist)
         generations = sorted(
             generation
-            for name in await self._store.version_directories(caselist)
+            for name in names
             for named, generation in [parse_version_directory(name)]
             if named == parser_version
         )
         if not generations:
-            return version_directory_name(parser_version), None, ()
+            first = version_directory_name(parser_version)
+            earlier = [name for name in names if parse_version_directory(name) < (parser_version, 1)]
+            return first, True, (max(earlier, key=parse_version_directory) if earlier else None), ()
         newest = version_directory_name(parser_version, generations[-1])
         recorded = await self._store.read_entries(caselist, newest)
         current = all(
@@ -356,8 +365,8 @@ class CaselistParseService:
             for entry in recorded
         )
         if reparse or not current:
-            return version_directory_name(parser_version, generations[-1] + 1), newest, ()
-        return newest, None, recorded
+            return version_directory_name(parser_version, generations[-1] + 1), True, newest, ()
+        return newest, False, None, recorded
 
     # -- running ------------------------------------------------------------------------------
 

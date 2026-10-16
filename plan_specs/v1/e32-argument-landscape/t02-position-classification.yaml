@@ -27,7 +27,8 @@ spec:
     StructuredOutputGuard into a PositionClassification schema whose position_id must be in the resolved
     taxonomy. The model returns ids, confidence and a short rationale only; it never writes tags, cites or
     evidence text. Results are cached by (item fingerprint, taxonomy_version, prompt version) so weekly
-    reruns on cumulative archives only classify new items, and low-confidence or unmatched items go to a
+    reruns only classify items not classified before, whether a weekly window or a complete archive
+    brings them (weekly archives are windows, not cumulative: v1-e30-t17), and low-confidence or unmatched items go to a
     review queue whose coach decisions become deterministic overrides. Boundaries: taxonomy content is
     t01; aggregation and reports are t03/t04; the CLI entry point and the first full-corpus run are t05.
   priority: 1

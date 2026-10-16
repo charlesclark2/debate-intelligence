@@ -3,12 +3,12 @@
 
 | | |
 |---|---|
-| Policy version | 1.7 |
-| Status | **Approved**, version 1.7, 2026-10-11. See [Approval](#approval). |
+| Policy version | 1.9 |
+| Status | **Approved**, version 1.9, on the merge of its pull request (2026-10-15). See [Approval](#approval). |
 | Owner | Charlie Clark (product owner and head coach) |
 | Written by | v1-e30-t01-caselist-data-use-policy implementation session, 2026-09-19 |
 | Applies to | Everything the platform collects from OpenCaselist and OpenEv, and everything derived from it, in every environment |
-| Approved by | Charlie Clark, product owner and head coach, 2026-09-19 (versions 1.0 and 1.1), 2026-10-01 (versions 1.3 and 1.4), 2026-10-10 (versions 1.5 and 1.6) and 2026-10-11 (version 1.7) |
+| Approved by | Charlie Clark, product owner and head coach, 2026-09-19 (versions 1.0 and 1.1), 2026-10-01 (versions 1.3 and 1.4), 2026-10-10 (versions 1.5 and 1.6), 2026-10-11 (version 1.7), 2026-10-13 (version 1.8) and 2026-10-15 (version 1.9) |
 | Next review | Start of the 2027-28 season, or sooner if a source's terms change |
 
 This is the policy that governs how the Debate Intelligence Platform collects, stores, uses and
@@ -28,7 +28,8 @@ a rule here, this policy is revised and re-approved before the affected work con
 
 **In scope**
 
-- The weekly cumulative open-source archives for the HS LD, HS Policy and HS PF caselists
+- The weekly open-source archives, each holding about a week's changes, and the complete archive,
+  the cumulative copy, for the HS LD, HS Policy and HS PF caselists
   (`hsld26`, `hspolicy26`, `hspf26` and their successors), however they are obtained — the
   operator's manual download today, the authenticated API client in E34 later.
 - OpenEv camp files.
@@ -62,7 +63,7 @@ a rule here, this policy is revised and re-approved before the affected work con
 | Source | What it is | What we take | How we take it | Terms recorded? |
 |---|---|---|---|---|
 | OpenCaselist — site and terms | `https://opencaselist.com/` — the high-school and college open-source disclosure wikis, browsed with a Tabroom account; Terms & Conditions at `https://opencaselist.com/terms` | Nothing directly; the site is where the archives and the terms live | Browser, operator's own Tabroom login | ☑ Terms & Conditions read 2026-09-19. ☐ Privacy page — [open question 1](#open-questions) |
-| OpenCaselist — weekly open-source archives | Cumulative per-caselist archives of every open-source document teams have disclosed this season (e.g. `hsld26-0915`) | The archive `.zip`, unpacked into per-school / per-team-code / per-round documents | Manual download today (v1-e30-t03/t06); authenticated API later, gated by this policy (E34) | ☑ Covered by the site Terms & Conditions, read 2026-09-19 |
+| OpenCaselist — weekly open-source archives | Per-caselist archives of the open-source documents teams disclosed or changed in about a week (e.g. `hsld26-0915`); the complete archive holds every document disclosed this season | The archive `.zip`, unpacked into per-school / per-team-code / per-round documents | Manual download today (v1-e30-t03/t06); authenticated API later, gated by this policy (E34) | ☑ Covered by the site Terms & Conditions, read 2026-09-19 |
 | OpenCaselist — API v1 | `https://api.opencaselist.com/` — documented API for caselists, schools, teams, rounds, cites, downloads and OpenEv (architecture proposal §21, reference 11) | Caselist and download listings, archive bytes, OpenEv listings | Not yet used. E34 only, with the operator's own `caselist_token`, at most 10 file downloads per minute | ☑ Covered by the site Terms & Conditions, read 2026-09-19, and the maintainer's confirmation of scheduled downloads (clause 12) |
 | OpenEv camp files | Camp-published evidence files distributed through OpenCaselist's OpenEv section | The camp-file archives and their camp / year / event / title metadata | Manual download today (v1-e30-t04); API later (E34) | ☐ Not yet — [open question 3](#open-questions) |
 
@@ -244,8 +245,11 @@ personal data about a minor (architecture proposal §14).
 5. **Never in committed artefacts.** Fixtures, cassettes, tests, session reports, runbooks and
    `docs/data/` summaries use fictional schools and team codes (`Maple Grove`, `QX`) and aggregate
    counts.
-6. **Never in the removal log or suppression list.** Those carry sha256 values, dates, reason
-   codes and request ids only (v1-e30-t07).
+6. **Never in the removal log or suppression list, or the records kept beside them.** Those carry
+   sha256 values, dates, reason codes and request ids (v1-e30-t07). The records beside them carry
+   the same, plus the digest of a held path (v1-e30-t13), the keys a removal reached (v1-e30-t15)
+   and the caselist a withdrawn copy was taken from, by its slug, `openev` for a camp path
+   (v1-e30-t16, v1-e30-t14).
 7. **Never in a model prompt.** See [Model provider use](#model-provider-use).
 8. **Names in document bodies are not extracted.** They are never parsed into a field, indexed as
    a name, or surfaced in a report. They remain where they are, inside a private source document
@@ -263,7 +267,7 @@ provenance sidecar of a built file, and the per-school landscape view.
 | Per-school and trend views (v1-e32-t04) | **School plus team code, as disclosed. Never more.** |
 | Operator import/publish summaries (`docs/data/`) | Aggregate counts only. |
 | Built-file provenance line and sidecar (E33) | School, team code, side, tournament, round — inside the team only. |
-| Removal log and suppression list (v1-e30-t07) | sha256, date, reason code, request id. |
+| Removal log and suppression list (v1-e30-t07), and the records beside them (v1-e30-t13, t14, t15, t16) | sha256, date, reason code, request id; a held path's digest, the keys a removal reached, and a caselist slug. |
 
 **Access.** In V1, the operator only. In V2, authenticated members of the team's organization
 only, audited — see [the debate tub gate](#v2-e35--debate-tub-v21).
@@ -361,8 +365,11 @@ weighed.
   keep its revisions, so every later upload at the same path that the store holds is removed with
   it, in every step listed here. Only when the requester asks for the revisions to stay are they
   left in place. A camp's later upload at a removed camp path is also held when the sync next meets
-  it. A caselist revision that is not yet imported when the removal runs is not yet held by the
-  tooling: the runbook's check after a removal covers it by hand until `v1-e30-t13` ships.
+  it. A caselist file removed whole by its sha256 also has its path held: a new upload at that
+  path is refused when it is imported, and one already downloaded and waiting is taken out with
+  the removal. Removing a team's disclosures holds no path, so the same removal is run again after
+  the next import. A request that is about one version holds nothing. Until the weekly agent runs
+  a build that applies the hold, the runbook has the same removal run again after each pull.
 - Deletes the parsed cards derived from it.
 - Deletes or rewrites the downloaded archives and camp files in the sync's download inbox that
   hold it, so no downloaded copy keeps the removed bytes.
@@ -370,7 +377,9 @@ weighed.
   no later archive, weekly or complete, can bring the file back.
 - Flags every built file whose provenance sidecar cites that source, for rebuild or withdrawal.
 - Records the removal with request id, date, reason code, environment and sha256 values — and no
-  school, team code or name.
+  school, team code or name. Beside the suppression list and the removal log it keeps, in the same
+  way and with no school, team code or name, the paths a removal holds, what each removal reached,
+  and the caselist each withdrawn copy was taken from, by its slug (`openev` for a camp path).
 
 **What removal does not do**
 
@@ -383,7 +392,9 @@ weighed.
 **Shared content.** If the same bytes were disclosed by another team as well, or are also a camp
 file, only the requesting team's `Disclosure` records are dropped by default and the blob stays for
 the other holder; removing the blob itself requires `--include-shared` and a judgement call by the
-coach, who explains the outcome to the requester within the same 7 days.
+coach, who explains the outcome to the requester within the same 7 days. A camp file's later upload
+that another release or a team also holds is withdrawn from its camp path in the same way, and stays
+in the other release (`v1-e30-t14`).
 
 **Steps:** [docs/runbooks/caselist-removal.md](../runbooks/caselist-removal.md), built around
 `debate-research caselist remove --source <sha256> | --team <caselist>/<school>/<team>`
@@ -405,7 +416,7 @@ published to prod.
 **Why it is necessary**
 
 - The parser, the deduplication logic and the landscape pipeline have to work against real volume
-  and real shapes: ~2,342 `.docx` and 32 `.pdf` across three cumulative HS LD snapshots, plus
+  and real shapes: ~2,342 `.docx` and 32 `.pdf` across three HS LD weekly snapshots, plus
   ~106 OpenEv camp files (v1-e30-t06).
 - Synthetic fixtures cannot reproduce what actually breaks the parser: malformed filenames,
   `(1)` and `-2` re-upload suffixes, hyphenated tournament names, missing round labels, tracked
@@ -536,7 +547,7 @@ before the thing it gates.
 
 ## Approval
 
-**Version 1.7 of this policy is approved.** Publishing caselist and OpenEv imports, loading the
+**Version 1.9 of this policy is approved.** Publishing caselist and OpenEv imports, loading the
 real corpus into dev, model classification over real disclosed text, and automated download (E34)
 are unblocked, each still subject to its own conditions in [Gates](#gates). Version 1.1 recorded
 the maintainer's confirmation of scheduled API downloads and the 10-per-minute rate limit.
@@ -581,16 +592,37 @@ later uploads at a removed path with the file a request named, and says which re
 held by the tooling. It tightens the policy, so under
 [Review and change control](#review-and-change-control) it takes effect on merge.
 
+Version 1.8 replaces the last sentence of that bullet, now that `v1-e30-t13` holds a caselist path
+removed whole by its sha256: a new upload there is refused on import, and a revision waiting in the
+download inbox is taken out with the removal. It says what still needs the removal run again: a
+team's disclosures, which hold no path, and any import made by a build older than the hold. It
+tightens the policy, so under [Review and change control](#review-and-change-control) it takes
+effect on merge.
+
+Version 1.9 makes three corrections and one addition, and loosens nothing:
+
+- It removes the last places that called a weekly archive cumulative: the scope, the source
+  register and the measured shapes under the dev exception. `v1-e30-t17` corrected the code and
+  the runbooks; version 1.6 corrected one sentence of [Removal](#removal).
+- [Personal data](#personal-data) rule 6, the report table and [What removal does](#removal) name
+  the records kept beside the suppression list and the removal log since `v1-e30-t13`, `t15`,
+  `t16` and `t14`. None identifies anyone.
+- [Shared content](#removal) says that a camp file's later upload another holder keeps is withdrawn
+  from its camp path, as `v1-e30-t14` built.
+
+The last tightens the policy, so under [Review and change control](#review-and-change-control)
+version 1.9 takes effect on merge, and merging its pull request records the approval below.
+
 The standing rule for every future version: until this table records an approval of that version,
 nothing this policy governs may happen under it.
 
 | Field | Value |
 |---|---|
-| Policy version | 1.7 (2026-10-11); 1.6 and 1.5 (2026-10-10); 1.4 and 1.3 approved 2026-10-01, 1.3 including version 1.2's correction to rule 3; 1.0 and 1.1 approved 2026-09-19 |
+| Policy version | 1.9 (2026-10-15); 1.8 (2026-10-13); 1.7 (2026-10-11); 1.6 and 1.5 (2026-10-10); 1.4 and 1.3 approved 2026-10-01, 1.3 including version 1.2's correction to rule 3; 1.0 and 1.1 approved 2026-09-19 |
 | Approved by | Charlie Clark |
 | Role | Product owner and head coach |
-| Approval date | 2026-10-11 (version 1.7; 1.5 and 1.6: 2026-10-10; 1.3 and 1.4: 2026-10-01; 1.0 and 1.1: 2026-09-19) |
-| Scope of approval | Sections [Scope](#scope) through [Review and change control](#review-and-change-control) of version 1.7, including the [clause register](#clause-register) read 2026-09-19 and the [community disclosure norms](#community-disclosure-norms), both confirmed by Charlie |
+| Approval date | 2026-10-15 (version 1.9; 1.8: 2026-10-13; 1.7: 2026-10-11; 1.5 and 1.6: 2026-10-10; 1.3 and 1.4: 2026-10-01; 1.0 and 1.1: 2026-09-19) |
+| Scope of approval | Sections [Scope](#scope) through [Review and change control](#review-and-change-control) of version 1.9, including the [clause register](#clause-register) read 2026-09-19 and the [community disclosure norms](#community-disclosure-norms), both confirmed by Charlie |
 | Open questions resolved at approval | **5** — removal contact address is `ctcb57@gmail.com`. **7** — two-season retention stands. **8** — resolved by a PM spec change to v1-e29-t03 / v1-e30-t07. **2** (version 1.1) — maintainer confirmed scheduled API downloads at 10 file downloads per minute |
 | Open questions accepted as known gaps | **1** — OpenCaselist privacy page unread. **3** — OpenEv distribution and per-camp terms unread |
 | Open questions left open | **4** — Bedrock data-protection terms, an E32 gate. **6** — school or district review, before V2 student accounts |

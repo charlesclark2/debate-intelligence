@@ -66,12 +66,17 @@ spec:
         Measured on at least three pull requests after the change, the `ci` check takes
         under 3 minutes wall-clock on a typical pull request into `dev`. The report gives
         the runner minutes before and after as well, since each extra job repeats setup.
+        Amended by the PM, 2026-10-14: the runner minutes after the change are the report's
+        estimate (about level with before), not a measurement. The repository is public, so
+        they cost nothing, and measuring them is waived.
     - id: ac6
       description: >-
         Working agreement 1 and the comment at the top of `ci.yml` state the new target and
         how the test job is split, and say how to rebalance the split when it drifts.
 status:
-  phase: Pending
+  # Set by the PM, 2026-10-14: ac5 measured on three task pull requests after the change, 116 s,
+  # 133 s and 130 s, recorded in the session report.
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

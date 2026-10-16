@@ -356,7 +356,7 @@ def test_re_importing_stores_no_further_blobs(harness: ImportHarness) -> None:
 
 
 def test_an_archive_older_than_the_latest_imported_is_refused(harness: ImportHarness) -> None:
-    """ac3. Applying it would run the deduplication backwards."""
+    """ac3. The weeks after it were measured without it (`test_import_window_ordering.py`)."""
     harness.import_one(SNAPSHOTS[-1].snapshot)
 
     with pytest.raises(SnapshotOutOfOrder) as raised:
@@ -462,10 +462,11 @@ def test_a_suppressed_file_is_counted_and_never_stored_and_has_no_manifest_row(
 def test_a_suppressed_file_stays_out_however_often_the_archives_republish_it(
     harness: ImportHarness,
 ) -> None:
-    """Cumulative archives bring it back every week; the list is what keeps it out every week.
+    """Every archive that holds it again brings it back; the list is what keeps it out of each.
 
-    The fixture's three weeks hold the suppressed bytes at three paths across two teams, the
-    re-upload included: every one of them is refused, in every week.
+    A complete archive holds it until the team takes it down, and a weekly whenever its window
+    carries it. The fixture's three weeks hold the suppressed bytes at three paths across two
+    teams, the re-upload included: every one of them is refused, in every week.
     """
     suppressed = hashlib.sha256(DOCUMENT_BODIES["grove-round-1-aff"]).hexdigest()
     harness.suppress(suppressed)
@@ -712,7 +713,11 @@ def test_the_import_does_log_the_counts_an_operator_needs(
 
 
 def test_an_empty_archive_marks_last_week_entirely_removed(harness: ImportHarness) -> None:
-    """Cumulative archives mean an empty one is a real, and alarming, answer — reported, not applied."""
+    """An empty weekly marks every path of the week before `REMOVED`: reported, and nothing deleted.
+
+    A window nobody edited would be empty, and so would a broken download; either way the count is
+    what an operator reads, and no stored file is touched.
+    """
     harness.import_one(SNAPSHOTS[0].snapshot)
 
     report = run(

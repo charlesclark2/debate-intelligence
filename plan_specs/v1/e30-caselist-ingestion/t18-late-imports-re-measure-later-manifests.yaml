@@ -1,0 +1,105 @@
+# TASK v1-e30-t18-late-imports-re-measure-later-manifests - A weekly imported late re-measures the weeks after it, and a re-import needs no flag
+# Epic: E30 Caselist Evidence Ingestion | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e30-t18-late-imports-re-measure-later-manifests
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e30-caselist-ingestion
+  annotations:
+    debate/title: "A weekly imported late re-measures the weeks after it, and a re-import needs no flag"
+spec:
+  # Filed by the PM, 2026-10-15, from v1-e30-t17's Follow-up work 1, 2, 3 and 6, with the PM's rulings.
+  description: >-
+    v1-e30-t17 showed that an out-of-order import stores the same as a date-order one, but
+    leaves two outcomes wrong under the window model. The weeks after a late weekly keep
+    manifests measured without it: the next week's previous week and classification counts, and
+    every later week's first-seen count. And a complete archive's withdrawal count misses a
+    weekly dated before it that is imported after it. Rulings: (1) allow the late week, then
+    rewrite each later weekly's manifest from what the store already holds, since the zips are
+    usually gone: its member rows do not change, and its classifications and first-seen count
+    are recomputed from the disclosures and the earlier manifests. (2) Drop the refusal when the
+    week is already imported, since that writes only its own manifest, and correct the removal
+    runbook's steps that pass the flag for it. (3) After a later import of an earlier-dated
+    weekly, recount the newest complete archive's withdrawals; never hold a complete archive
+    back behind a weekly gap. (4) The first-seen filter compares dates, not snapshot names, so
+    that the `full_archives` flag alone keeps complete archives out of it. Out of scope:
+    anything the store, the disclosures or the seen ranges hold, which t17 showed are already
+    right.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, tests/fixtures/caselist, docs/runbooks]
+    forbidden:
+      - Holding a complete archive back behind a weekly gap
+      - A manifest, summary or record an earlier build cannot read
+      - A change to stored bytes, source records, seen ranges or disclosures
+  context:
+    - kind: TaskRef
+      name: v1-e30-t17-weekly-window-wording-and-ordering
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        On t17's window-order fixture, a weekly imported after a later one leaves every
+        later weekly's manifest equal, byte for byte, to the manifest a date-order run
+        writes, with no archive re-read. Shown failing first with t17's own scenario.
+    - id: ac2
+      description: >-
+        A re-import of a week already imported needs no flag, and changes no other week's
+        manifest, by test. The removal runbook's steps no longer pass `--allow-out-of-order`
+        for it.
+    - id: ac3
+      description: >-
+        After a later import of an earlier-dated weekly, the newest complete archive's
+        withdrawal count, in its manifest summary and the run record, equals the date-order
+        count. Shown failing first.
+    - id: ac4
+      description: >-
+        The first-seen filter compares dates. A mutant that lets complete archives into
+        first-seen through the flag alone is caught, where t17's mutation run could not tell
+        it apart.
+    - id: ac5
+      description: >-
+        Each rewritten manifest is read by the build at the start commit and by the build
+        the agent runs, from their own code exported with `git archive`, and publishes as a
+        changed manifest.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e30-t18-late-imports-re-measure-later-manifests-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e30-caselist-ingestion
+spec:
+  description: >-
+    Re-measure later weeklies from the store, drop the re-import refusal, recount the complete
+    archive, and compare dates in first-seen.
+  goalRef:
+    name: v1-e30-t18-late-imports-re-measure-later-manifests
+  graph:
+    nodes:
+      - id: late-imports
+        kind: Task
+        name: Late imports re-measure later manifests
+        description: >-
+          The rewrite of later manifests, the re-import, the recount and the date
+          comparison.
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Import tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application, -k, import or order]
+status:
+  phase: Pending

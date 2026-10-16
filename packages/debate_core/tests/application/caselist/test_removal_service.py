@@ -1,8 +1,9 @@
 """Executing a removal against moto, and then trying to undo it the ways the world would.
 
 The easy half is that a removed file is removed. The half that matters is that it stays removed:
-the weekly archives are cumulative, so every one of them still holds it, and the next import, the
-OpenEv import, a publish, a `store sync` and a renamed copy are each a way it could come back. Each
+every archive that held it still does, as every complete archive will until the team takes it
+down, so the next import, the OpenEv import, a publish, a `store sync` and a renamed copy are each a
+way it could come back. Each
 is tried here after a removal, and each must fail to bring it back.
 
 Counts are worked out by hand from the fixture tables; see `test_removal_plan.py` for the team's
@@ -114,8 +115,8 @@ async def reimport_weeks(world: RemovalWorld, tmp_path: Path) -> list[ImportRepo
     """Import the three archives again, then next Monday's: the 09-15 archive arriving as 09-22.
 
     The old weeks need `allow_out_of_order`, as they would for an operator re-importing them. The
-    new week is the attack that matters: a cumulative archive, in order, that still holds every
-    file the team asked to have removed.
+    new week is the attack that matters: a later archive, in order, that still holds every file the
+    team asked to have removed, as a complete archive does until the team takes them down.
     """
     importer = CaselistImportService(
         caselists=world.repository,
@@ -603,7 +604,10 @@ class TestTheFirstRemovalInABucketWithoutListBucket:
             await remove_team(removal_world, service=removal_world.service(takedown=refusing))
 
         message = str(stopped.value)
-        assert f"PutObject s3://{removal_world.bucket_name}/{SUPPRESSION_LIST_KEY}" in message
+        # The team's shared file is withdrawn, so the first write is the caselist it is withdrawn
+        # from, beside the list, just before the suppression entries (`v1-e30-t16`).
+        first = SUPPRESSION_LIST_KEY.replace("suppression-list.jsonl", "withdrawals.jsonl")
+        assert f"not allowed to PutObject s3://{removal_world.bucket_name}/{first}" in message
         assert "nothing was deleted" in message
         assert "appended first" not in message, "it was not: that append is what failed"
         assert "removal log" in message, "the log entry could not be written either, and it says so"

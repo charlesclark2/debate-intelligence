@@ -8,7 +8,7 @@ same card, and it is where a `ParsedCard`'s provenance is attached.
 
 Every unit — pocket, hat, block, tag, cite, evidence, analytic, undertag — is resolved by
 :func:`~debate_core.evidence.style_classifier.classify_paragraph`, which tries the Verbatim style
-first, its aliases second and a measured heuristic last. This module adds six decisions the
+first, its aliases second and a measured heuristic last. This module adds eight decisions the
 classifier does not make, because each needs something the classifier cannot see:
 
 * **A tag with no cite and no evidence under it is an analytic.** `Heading4` is what a debater
@@ -49,6 +49,19 @@ classifier does not make, because each needs something the classifier cannot see
   :data:`LONGEST_GUESSED_CITE_ENTRY_CHARACTERS` and not when it opens with a name and a year
   (`v1-e31-t09`). A guess that arrives with no card open stays the cite of a card with no tag:
   re-read as body it would belong to nothing and be dropped.
+* **A guess longer than any cite entry is body wherever a card is open.** Both rules above ask
+  that the paragraph be formatted as body, and a body's first words are often bold: 220 cards
+  were still stored with their body in the cite and no evidence text. Past
+  :data:`LONGEST_GUESSED_CITE_ENTRY_CHARACTERS` a wiki cite-entry guess is body whatever its
+  formatting, unless it carries a cite character style or names a source within its first
+  :data:`A_CITE_ENTRY_NAMES_ITS_SOURCE_WITHIN_CHARACTERS`, which is where a cite run together
+  with its card has its cite (`v1-e31-t12`).
+* **A cite written wholly inside a bracket is a cite where a cite stands.** `[Okonkwo 26, ...] KR`
+  opens with its bracket, so nothing that reads the front of a line sees a name and a year, and
+  it was read as body text or as nothing: a card that is only such a cite was stored `FULL`. A
+  reference in brackets inside a source's own text has the same shape, so the classifier cannot
+  call it; under a tag or under the card's cite, before any body, it is the card's cite
+  (`v1-e31-t12`).
 
 ## Where a section path comes from
 
@@ -92,7 +105,11 @@ from debate_core.domain.style_profile import (
     StyleMatchSource,
     StyleProfile,
 )
-from debate_core.evidence.style_classifier import classify_paragraph
+from debate_core.evidence.style_classifier import (
+    classify_paragraph,
+    first_name_and_year,
+    is_a_cite_wholly_in_brackets,
+)
 from debate_core.evidence.style_profile_loader import load_style_profile
 from debate_core.integrations.docx_parser.package import (
     DEFAULT_PACKAGE_LIMITS,
@@ -125,8 +142,13 @@ __all__ = ["DOCX_PARSER_VERSION", "DebateDocxParser"]
 #: files it refused for the words `system "` and `public '`, keeps a body paragraph guessed to be
 #: a cite in its card, no longer takes a blank line in a heading style for a heading, calls a card
 #: abbreviated for the shape of a first-and-last-words disclosure rather than for an ellipsis, and
-#: no longer files the first paragraph of a body as the card's cite.
-DOCX_PARSER_VERSION: Final = "2026.10.10-docx-2"
+#: no longer files the first paragraph of a body as the card's cite. `2026.10.12-docx-3`
+#: (`v1-e31-t12`) reads cites the two before it missed or misread: a cite in the cite character
+#: style past the profile's 1,000 characters, a cite line longer than 400 characters that opens
+#: in bold or holds everything after its name and year in one bracket, and a cite written wholly
+#: inside a bracket; it no longer takes a line that opens *In 2019* for a cite, and a guessed cite
+#: entry longer than any cite entry is body whatever its formatting.
+DOCX_PARSER_VERSION: Final = "2026.10.12-docx-3"
 
 W_PARAGRAPH: Final = qualified_name("p")
 W_TABLE: Final = qualified_name("tbl")
@@ -172,8 +194,25 @@ MAXIMUM_DISCLOSED_FRAGMENT_WORDS: Final = 12
 #: have moved. The classifier's own bound for a cite *style* is the profile's 1,000.
 LONGEST_GUESSED_CITE_ENTRY_CHARACTERS: Final = 2_000
 
+#: How far into a paragraph a cite entry run together with its card may name its source.
+#:
+#: A guess past :data:`LONGEST_GUESSED_CITE_ENTRY_CHARACTERS` is body by its length alone only
+#: when no name and year sits in its first 300 characters. Of the 403 such guesses in the corpus
+#: that are still cites and neither carry a cite style nor open with a name and a year, 336 have
+#: their first name and year further in than that: prose that mentions a source somewhere. 18
+#: have it within 80 characters and 49 between 81 and 300, and those 67 are left as they are:
+#: a card written as one paragraph behind a full name looks the same, and splitting one into its
+#: cite and its words is a model question.
+A_CITE_ENTRY_NAMES_ITS_SOURCE_WITHIN_CHARACTERS: Final = 300
+
 #: A body paragraph re-read from a cite guess is no surer than the classifier's own shrunk-text rule.
 _REREAD_BODY_CONFIDENCE: Final = 0.6
+
+#: A cite read from its bracket and its place is a guess of the same weight as a cite line.
+_BRACKETED_CITE_CONFIDENCE: Final = 0.6
+
+#: The units after which a cite may stand: a tag, a line under it, or a line of the cite itself.
+_UNITS_A_CITE_STANDS_AFTER: Final = (StructuralUnit.TAG, StructuralUnit.UNDERTAG, StructuralUnit.CITE)
 
 #: How much a match source is worth when a card reports the weakest one it was built from.
 _MATCH_SOURCE_STRENGTH: Final = {
@@ -398,6 +437,65 @@ class DebateDocxParser:
             sections.append(_ReadSection(read=read, match=match, in_text_box=body_paragraph.in_text_box))
         return sections
 
+    def _read_bracketed_cites_where_a_cite_stands(self, sections: list[_ReadSection]) -> list[_ReadSection]:
+        """Re-read a paragraph written wholly inside a bracket as a cite, where a cite stands.
+
+        `[Okonkwo 26, ...] KR` is a cite and `(Lindqvist 2019)` on a line of an article is the
+        article's own reference: the same shape
+        (:func:`~debate_core.evidence.style_classifier.is_a_cite_wholly_in_brackets`), told apart
+        only by where it is. A cite stands after a tag, an undertag or another line of the cite,
+        before any body. Blank lines, page furniture and lines read as nothing are stepped over.
+        A guessed cite that a body may yet take for itself (:meth:`_is_a_guess_a_body_may_take`)
+        is not such a line: what follows it may be the middle of a body, where a reference in
+        brackets would end the card.
+
+        Only what the classifier guessed to be body or nothing is re-read; a paragraph style is
+        the file's author saying what the paragraph is. It runs before tags with no card are
+        demoted, because a tag whose only paragraph is such a cite is a card, cite-only, and read
+        as nothing the cite left its tag an analytic.
+        """
+        reread: list[_ReadSection] = []
+        a_cite_stands_here = False
+        for section in sections:
+            match = section.match
+            if (
+                a_cite_stands_here
+                and match.unit in (StructuralUnit.EVIDENCE, StructuralUnit.OTHER)
+                and match.match_source is StyleMatchSource.HEURISTIC
+                and not match.rule_id.startswith("assembly-")
+                and is_a_cite_wholly_in_brackets(section.read.description, self._profile)
+            ):
+                section = _ReadSection(
+                    read=section.read,
+                    match=ParagraphStyleMatch(
+                        unit=StructuralUnit.CITE,
+                        rule_id=f"assembly-bracketed-cite-before-the-body:{match.rule_id}",
+                        match_source=StyleMatchSource.HEURISTIC,
+                        confidence=_BRACKETED_CITE_CONFIDENCE,
+                    ),
+                    in_text_box=section.in_text_box,
+                )
+            unit = section.match.unit
+            if unit in _UNITS_A_CITE_STANDS_AFTER:
+                a_cite_stands_here = not self._is_a_guess_a_body_may_take(section)
+            elif unit is not StructuralUnit.OTHER:
+                a_cite_stands_here = False
+            reread.append(section)
+        return reread
+
+    def _is_a_guess_a_body_may_take(self, section: _ReadSection) -> bool:
+        """Whether a paragraph is a guessed cite that the assembly may yet re-read as body.
+
+        A guess formatted as body, or longer than any cite entry: the two kinds an open body takes
+        for itself (:meth:`_keep_a_guessed_cite_in_its_body`). A cite read from a style is never one.
+        """
+        match = section.match
+        return (
+            match.unit is StructuralUnit.CITE
+            and match.match_source is StyleMatchSource.HEURISTIC
+            and (self._is_formatted_as_body(section.read) or self._is_longer_than_a_cite_entry(section))
+        )
+
     def _demote_tags_with_no_card(self, sections: list[_ReadSection]) -> list[_ReadSection]:
         """Turn a tag with no cite and no evidence under it into an analytic.
 
@@ -439,17 +537,15 @@ class DebateDocxParser:
         * the classifier *guessed*: the match is one of its cite heuristics, not a Verbatim cite
           style, which is the file's author saying "cite" and is taken at its word;
         * the paragraph is formatted the way a body is and not the way a cite is
-          (:meth:`_is_formatted_as_body`).
+          (:meth:`_is_formatted_as_body`), or is longer than any cite entry
+          (:meth:`_is_longer_than_a_cite_entry`).
 
         Otherwise the paragraph stays the cite the classifier called it, and starts a card with no
         tag, which is what two cards under one tag look like.
         """
-        match = section.match
         if building is None or not building.has_body:
             return section
-        if match.unit is not StructuralUnit.CITE or match.match_source is not StyleMatchSource.HEURISTIC:
-            return section
-        if not self._is_formatted_as_body(section.read):
+        if not self._is_a_guess_a_body_may_take(section):
             return section
         return _reread_as_body(section, "assembly-cite-guess-inside-card-body")
 
@@ -479,6 +575,10 @@ class DebateDocxParser:
           Re-read as body it would end the card at the cite below, and the real body under that
           would go to a card with no tag.
 
+        A guess longer than any cite entry (:meth:`_is_longer_than_a_cite_entry`) opens the body
+        whatever its formatting: a body's first words are often bold, and length alone says such
+        a paragraph is no cite entry.
+
         With no card open the paragraph is left the cite of a card with no tag. Re-read as body it
         would belong to no card, and :meth:`_close` drops a body with neither tag nor cite.
         """
@@ -487,25 +587,43 @@ class DebateDocxParser:
             return section
         if match.unit is not StructuralUnit.CITE or match.match_source is not StyleMatchSource.HEURISTIC:
             return section
-        if not self._is_formatted_as_body(section.read) or self._carries_a_cite_style(section.read):
+        by_its_length_alone = self._is_longer_than_a_cite_entry(section)
+        if not by_its_length_alone and (
+            not self._is_formatted_as_body(section.read) or self._carries_a_cite_style(section.read)
+        ):
             return section
-        # A guess formatted as body that is still a cite here was not taken by an open body, so
-        # the card has none yet.
+        # A guess that is still a cite here was not taken by an open body, so the card has none yet.
         text = section.read.text
         longer_than_a_cite_entry = len(text) > LONGEST_GUESSED_CITE_ENTRY_CHARACTERS
         if building.has_cite:
             if a_cite_follows and not longer_than_a_cite_entry:
                 return section
             return _reread_as_body(section, "assembly-cite-guess-after-card-cite")
-        if longer_than_a_cite_entry and self._short_cite(text) is None:
+        if by_its_length_alone or (longer_than_a_cite_entry and self._short_cite(text) is None):
             return _reread_as_body(section, "assembly-cite-guess-longer-than-a-cite")
         return section
+
+    def _is_longer_than_a_cite_entry(self, section: _ReadSection) -> bool:
+        """Whether a paragraph the classifier guessed to be a cite is body by its length alone.
+
+        The wiki guess takes any paragraph that holds an ellipsis and a name with a year, at any
+        length, and it is the only guess with no bound of its own. Past
+        :data:`LONGEST_GUESSED_CITE_ENTRY_CHARACTERS` a paragraph is no cite entry, unless the
+        file's author marked it with a cite character style or it names a source within its first
+        :data:`A_CITE_ENTRY_NAMES_ITS_SOURCE_WITHIN_CHARACTERS`: a card written as one paragraph
+        behind its cite, which is left as the classifier called it.
+        """
+        text = section.read.text
+        if len(text) <= LONGEST_GUESSED_CITE_ENTRY_CHARACTERS or self._carries_a_cite_style(section.read):
+            return False
+        source = first_name_and_year(text.strip(), self._profile)
+        return source is None or source.start() > A_CITE_ENTRY_NAMES_ITS_SOURCE_WITHIN_CHARACTERS
 
     def _followed_by_a_cite(self, sections: Sequence[_ReadSection]) -> list[bool]:
         """For each paragraph, whether the next one that says anything is a cite that stays a cite.
 
         Blank lines and page furniture are stepped over. A cite stays a cite unless it is a guess
-        formatted as body, which an open body takes for itself
+        formatted as body or longer than any cite entry, which an open body takes for itself
         (:meth:`_keep_a_guessed_cite_in_its_body`).
         """
         followed = [False] * len(sections)
@@ -516,8 +634,8 @@ class DebateDocxParser:
             match = section.match
             if match.unit is StructuralUnit.OTHER:
                 continue
-            a_cite_is_next = match.unit is StructuralUnit.CITE and not (
-                match.match_source is StyleMatchSource.HEURISTIC and self._is_formatted_as_body(section.read)
+            a_cite_is_next = match.unit is StructuralUnit.CITE and not self._is_a_guess_a_body_may_take(
+                section
             )
         return followed
 
@@ -561,7 +679,9 @@ class DebateDocxParser:
         snapshot: date,
         camp: str | None,
     ) -> ParsedDocument:
-        read_sections = self._demote_tags_with_no_card(self._read_sections(package))
+        read_sections = self._demote_tags_with_no_card(
+            self._read_bracketed_cites_where_a_cite_stands(self._read_sections(package))
+        )
 
         open_headings: list[str | None] = [None, None, None, None]
         sections: list[FileSection] = []

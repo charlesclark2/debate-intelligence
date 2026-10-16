@@ -28,8 +28,17 @@ spec:
     publish's reason in the run record reads "[redacted] lists what each profile is granted":
     the record's redaction takes `docs/runbooks/evidence-store.md` for a path. And (8), from the
     PM's review: a refusal such as `STORE_ACCESS_DENIED` exits 3 and its banner says it "will be
-    retried", though the retry cannot succeed until the fix in its hint is made. Say so. Out of
-    scope: the exit-code rule, and the run record's shape.
+    retried", though the retry cannot succeed until the fix in its hint is made. Say so. Added by
+    the PM, 2026-10-15: (9) the refusal's banner names a class, `StoreProfileNotConfigured`, where
+    it should say what is wrong in words (v1-e34-t22 FU9). (10) A pull does not say that a removed
+    path's hold refused an upload; the import report counts it by request, and the run's details
+    and notification should too (v1-e30-t13 FU2). (11) The report stage records `CASELIST_DRIFT`
+    per snapshot with no kind; it should carry v1-e30-t12's manifest or source kind, and a manifest
+    mismatch alone should not be announced as needing a person (v1-e30-t12 FU4). (12) On macOS the
+    banner shows its title, a subtitle cut at about forty characters and about ten lines of body,
+    so the fix command, which ends the body and is the subtitle, is cut in both (seen 2026-10-15);
+    the command must be readable in the banner. Out of scope: the exit-code rule, and the run
+    record's shape.
   priority: 3
   constraints:
     packages: [debate_core.application, debate_core.integrations.local, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, tests/smoke, docs/runbooks]
@@ -61,6 +70,21 @@ spec:
         (6) and (8): a lock refusal and a refusal that needs its fix first each have a
         banner wording of their own, shown in the runbook's section on what a notification
         says, by test.
+    - id: ac5
+      description: >-
+        (9) and (12): no banner names an exception class, and the fix command fits where the
+        banner shows it whole, by a test that applies the observed limits (subtitle about forty
+        characters, body about ten lines of about forty-five).
+    - id: ac6
+      description: >-
+        (10): a pull that met a held path says how many uploads the hold refused, by request id,
+        in the run's details and its notification, with no path, by test, and without a new
+        record field.
+    - id: ac7
+      description: >-
+        (11): the report stage's finding carries the mismatch kind in the run's details, and a
+        run whose only drift is a manifest mismatch is announced as retryable with the publish
+        command, by test.
 status:
   phase: Pending
 ---

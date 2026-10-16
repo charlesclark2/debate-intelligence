@@ -76,7 +76,15 @@ not turned on, no caselist to pull, another run already holding the lock, or a `
 day's allowance cannot cover. A failure that ends the run before any stage records it exits as that
 exception does in every other command: `3` for a store or provider failure (`v1-e01-t20`), and `1`
 for a profile setting that names no profile in the AWS config, which stops the bucket's adapter
-being built and so ends the run before it starts (`v1-e29-t07`).
+being built and so refuses the run before any stage (`v1-e29-t07`).
+
+That refusal is recorded and announced like the others (`v1-e34-t22`). The run monitor is handed
+the bucket to build when a record is first published, so it exists whatever the setting says: the
+run leaves a `failed` record on this machine, details beside it naming `STORE_PROFILE_NOT_CONFIGURED`
+and the setting to correct, and one notification that a person should look. Its record is owed to
+the bucket, and the next run that can build the bucket's adapter publishes it. A dry run records
+nothing, as always. `debate-research doctor --evidence-profiles` finds the same setting ahead of
+a run.
 
 The envelope's `error.code` for a failed stage is `CASELIST_PULL_INCOMPLETE` whichever it is; the
 exit status and each stage's `error_codes` say which.

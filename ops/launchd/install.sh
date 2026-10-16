@@ -38,11 +38,16 @@
 #                        as DEBATE_RESEARCH_BIN. Default: whatever `command -v debate-research`
 #                        finds, as found (a symlink stays a symlink).
 #   --dry-run            Render the plist to stdout and write nothing at all.
-#   --check-launchd      Prove launchd can run the installed agent's wrapper, without a sync: load
-#                        a one-off copy of the installed plist as <label>.check, running the
-#                        wrapper's `--check` (which only prints the console script's version),
-#                        kickstart it, print its log and exit code, and boot it out. The agent
-#                        itself is only read, and its run count is shown before and after.
+#   --check-launchd      Prove launchd can run the installed agent's wrapper, and that the AWS
+#                        profile the weekly run uses is defined, without a sync: load a one-off
+#                        copy of the installed plist as <label>.check, running the wrapper's
+#                        `--check` (which prints the console script's version and then runs
+#                        `debate-research doctor --evidence-profiles`), kickstart it, print its
+#                        log and exit code, and boot it out. The log names each configured
+#                        evidence profile, whether this machine's AWS config defines it and which
+#                        permission set it is signed in as; the check fails (exit 1) on a profile
+#                        that is not defined, and not on an expired session. The agent itself is
+#                        only read, and its run count is shown before and after.
 #   -h, --help           This text.
 set -eu
 
@@ -289,6 +294,11 @@ if [ "${CHECK_LAUNCHD}" -eq 1 ]; then
     if [ "${RUNS_BEFORE}" != "${RUNS_AFTER}" ]; then
         echo "install.sh: the agent's run count changed during the check; it is not evidence the agent can run" >&2
         exit 1
+    fi
+    # 2 is the command refusing an option it does not know. A build from before the profile check
+    # answers `doctor --evidence-profiles` that way, and that is not a verdict on any profile.
+    if [ "${EXIT_CODE}" = "2" ]; then
+        echo "install.sh: exit code 2 means the installed build does not have the profile check (doctor --evidence-profiles); install a newer build with scripts/install_channel.sh, then run this again" >&2
     fi
     [ "${EXIT_CODE}" = "0" ] || exit 1
     exit 0

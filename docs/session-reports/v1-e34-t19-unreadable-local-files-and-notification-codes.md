@@ -457,3 +457,14 @@ rather than keeping it is the right call.
 
 **Operator follow-up:** the banner check (`osascript`) joins the steps after Wednesday's
 reinstall.
+
+### The banner check, recorded (PM, 2026-10-15)
+
+**PASS.** The operator posted the report's test banner with `osascript` on 2026-10-15, with Script
+Editor's notifications set to stay on screen. The banner showed the title `caselist pull failed:
+will be retried`, the subtitle cut at `debate-research caselist pull --publish-p…`, and a body that
+reaches the whole sentence about the blob directory and ends `Fix: debate-…`. The sentence the check
+asked about is there. The fix command is cut in both the subtitle and the body, so the PM has added
+that to `v1-e34-t23` as (12): the command must be readable in the banner. The whole text is in
+`caselist runs --json`, as before.
+

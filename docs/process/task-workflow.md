@@ -174,6 +174,25 @@ open (`NOT RUN`, `PARTIAL`, `FAIL` or `NOT APPLICABLE` against a criterion), bec
 merged task whose report does not say which criteria remain is indistinguishable from a finished
 one six weeks later.
 
+**The open items are read from the current session's part of the report only** (`v1-e01-t24`).
+That part is found from the verdict lines `scripts/task` already reads (see
+[PM review](#4-pm-review)):
+
+* **One review, or none:** the whole report is current. This covers a first session's report, with
+  anything the PM appends after its review, and a resumed report before the resumed session has
+  appended its own empty review.
+* **Two reviews or more:** the current part starts at the first `## ` heading after the
+  last-but-one `**Verdict:**` line, where that review's section ends. It runs to the end of the
+  report: the current session's sections, its review, and anything appended after that review.
+  * The earlier review's notes, and a record the PM adds under it as a `###` heading, stay with the
+    earlier review.
+  * A `##` section after the earlier review is read with the current session's, whoever wrote it.
+    To keep a record with the earlier review, add it under that review as a `###` heading, as
+    v1-e01-t23's report does.
+
+So a resumed session that leaves criteria open says so in its own sections. An earlier session's
+`NOT RUN` does not count for it.
+
 Because a partially merged task stays `InProgress` on `dev`, the phase cannot confirm the merge and
 the squash commit breaks ancestry, so `finish --partial` confirms it by checking the session report
 on `origin/dev` instead: its last verdict must be `ACCEPTED` and, while the task branch exists, it
@@ -222,7 +241,8 @@ The resumed session follows the rule in [PM review](#4-pm-review): it appends it
 for example `## Resumed 2026-10-08: <what this session did>`, after everything already in the
 report, and ends the report with a new, empty **PM review**. Nothing already in the report is
 overwritten, and no earlier review is renamed or edited. From there it is the ordinary path:
-`scripts/task pr <task>` (with `--partial` again if criteria are still open), merge, and
+`scripts/task pr <task>` (with `--partial` again if criteria are still open, recorded in the resumed
+session's own sections), merge, and
 `scripts/task finish <task>` (or `finish --partial`).
 
 ## Keep your main checkout on `dev`

@@ -31,7 +31,7 @@ deletes them, and reports how many it deleted.
     and — when no other team in the same caselist holds it — that caselist's `raw/` and `parsed/`
     copies. The blob and the other holders' records stay. Each of the requester's paths is
     suppressed as one disclosure (:func:`~debate_core.application.ports.suppression.
-    disclosure_digest`), so the next cumulative archive cannot record it as theirs again.
+    disclosure_digest`), so no later archive, weekly or complete, can record it as theirs again.
 `SKIP_SHARED`
     A `--source` removal of a shared file without `--include-shared`. Nothing is deleted: there is
     no requesting team to withdraw it from, and deleting it would take it from the other holders
@@ -47,14 +47,14 @@ rows — because each one names the team.
 
 ## Later uploads at a removed path
 
-A removal request covers later uploads at the same path (the PM's ruling under `v1-e30-t07`). The
-sync holds back one that has not been imported yet (`v1-e34-t14`); one imported before the removal
-is this module's (`v1-e30-t11`). For every file the selector names and removes or withdraws, the
-planner asks every snapshot it reads, weekly and complete, which other files sit at the paths it
-takes that file from (:mod:`~debate_core.application.caselist.removal_path_versions`, which says
-what "later" and "the same path" mean, for a caselist and for an OpenEv camp file). A later upload
-joins the plan (:attr:`Inclusion.LATER_UPLOAD`) and goes through everything a named file goes
-through:
+A removal request covers later uploads at the same path (the PM's ruling under `v1-e30-t07`). For a
+camp file the sync holds back one that has not been imported yet (`v1-e34-t14`); for a caselist
+file the path hold below does. One the store already holds is this module's (`v1-e30-t11`). For
+every file the selector names and removes or withdraws, the planner asks every snapshot it reads,
+weekly and complete, which other files sit at the paths it takes that file from
+(:mod:`~debate_core.application.caselist.removal_path_versions`, which says what "later" and "the
+same path" mean, for a caselist and for an OpenEv camp file). A later upload joins the plan
+(:attr:`Inclusion.LATER_UPLOAD`) and goes through everything a named file goes through:
 
 * held at no other path, it is `REMOVE`d: blob, records, rows, `raw/` and `parsed/` objects with
   every version, the inbox, and a whole-file suppression;
@@ -62,8 +62,18 @@ through:
   disclosure records go and each of those paths is suppressed as one disclosure, while the blob and
   the other path's rows stay. `--include-shared` does not widen this: it is a decision about the
   files the request names;
-* a camp file's later upload that is held elsewhere too is `SKIP_SHARED`, because the suppression
-  list has no entry that stops one camp path of a file. Naming it with `--include-shared` removes it.
+* a camp file's later upload that another release or a team holds too is `WITHDRAW`n from its camp
+  path (`v1-e30-t14`), as a caselist path is: its row in that release goes, and that release's
+  camp-file record and its year's `raw/openev/<year>/` copy when nothing else there holds it, and
+  one entry stops the file at that row of that release
+  (:func:`~debate_core.application.ports.suppression.camp_path_disclosure`). The withdrawal record
+  names `openev`. The other release's row, record and objects, and the blob, stay.
+
+Two uploads are at one camp path when their rows say so: each row of a release manifest carries the
+OpenEv id it was downloaded as and the SHA-256 of that id's upstream path (`v1-e30-t14`), and this
+machine's delivery record says the same for the ids it pulled. The rows are what prod has, since it
+never pulls and its manifests are published from dev's data directory; a row from before that task
+has neither, and is matched by its name alone until it is re-derived.
 
 An earlier version at the path is listed (:attr:`RemovalPlan.earlier_versions`) and left alone.
 `only_named` (`--only-named`) plans the named files alone, for a request that is explicitly about
@@ -72,6 +82,34 @@ one version; the later uploads are still listed, as left in place.
 A `--team` removal names every file at the team's paths already, earlier and later versions alike
 (:meth:`RemovalPlanner._selected`), so it has later uploads only at the *other* holders' paths of a
 shared file it removes with `--include-shared`.
+
+## A removed path is held, and the inbox is read as snapshots (`v1-e30-t13`)
+
+The store's manifests show a later upload only once it has been imported. Two more things cover
+one that has not:
+
+**The path hold.** A `--source` removal that removes a file whole plans one
+:class:`~debate_core.application.ports.suppression.PathHoldEntry` for each caselist path it takes
+the file from (:attr:`RemovalPlan.path_holds`), dated by the earliest snapshot that held the file
+there. The executor appends them with the suppression entries, before anything is deleted, and
+from then on the importer refuses a new sha256 at the path in any later snapshot. None is planned
+with `--only-named`, which is a request about one version; for a file the plan withdraws or skips,
+which stays with another holder; for a later upload, whose own paths are the removed ones; or by
+`--team`, which holds no path and finds a team's later files by running again.
+
+**The download inbox.** Every weekly and complete archive in the inbox is read as a snapshot too
+(:func:`~debate_core.application.caselist.inbox_purge.read_inbox`), dated as its name dates it. A
+revision waiting there at a removed path is a later upload by the same rule as one in a manifest:
+it joins the plan, gets its suppression entry under the request, and the inbox step rewrites or
+deletes the archive that holds it. Another path of it in the same archive is a live path, so a
+revision two teams uploaded is withdrawn from the removed path only.
+
+**Running the same removal again** finds what arrived since. The removed file's rows are gone by
+then, so nothing in a manifest says where it was; its path holds do. For each hold of a file the
+selector names, a row or an inbox member at the held path stands in for the removed file there
+(:func:`_recorded_paths`), and everything at that path dated later is a later upload as before:
+one this build refused at import, which is still in its archive in the inbox, and one an older
+build imported, which is in the store.
 
 ## The complete archive
 
@@ -120,7 +158,7 @@ from __future__ import annotations
 import json
 import re
 import tempfile
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from enum import StrEnum
@@ -130,12 +168,19 @@ from typing import Final
 from debate_core.application.caselist.evidence_listing import LocalEvidence, local_file
 from debate_core.application.caselist.inbox_purge import (
     CaselistInbox,
+    InboxFile,
+    InboxFileKind,
     InboxFilePlan,
     InboxTeamFilesLeft,
     plan_inbox,
+    read_inbox,
 )
 from debate_core.application.caselist.manifest import MANIFEST_DIRECTORY, read_manifest_file, render_rows
-from debate_core.application.caselist.openev_manifest import openev_release_name, summary_row
+from debate_core.application.caselist.openev_manifest import (
+    openev_release_name,
+    row_upstream_identity,
+    summary_row,
+)
 from debate_core.application.caselist.pipeline import (
     STORED_CLASSIFICATIONS,
     Classification,
@@ -156,9 +201,12 @@ from debate_core.application.caselist.removal_path_versions import (
     VersionRelation,
     other_versions,
     path_identity,
+    snapshot_date,
 )
+from debate_core.application.caselist.suppression import read_path_holds
 from debate_core.application.errors import DomainError, StoreAccessDenied
 from debate_core.application.ports.caselist import CaselistRepository
+from debate_core.application.ports.caselist_source import openev_id_of_inbox_name
 from debate_core.application.ports.evidence_store import EvidenceObjectStore, ObjectKey
 from debate_core.application.ports.evidence_versions import EvidenceVersionStore, ObjectVersion
 from debate_core.application.ports.parsed_store import AGGREGATE_NAMES
@@ -166,12 +214,16 @@ from debate_core.application.ports.providers import Clock
 from debate_core.application.ports.suppression import (
     REMOVAL_REASONS,
     REQUEST_ID_PATTERN,
+    PathHoldEntry,
     ReasonCode,
     RemovalSelectorKind,
     SuppressionAction,
     SuppressionEntry,
     SuppressionList,
     SuppressionState,
+    WithdrawalEntry,
+    camp_path_disclosure,
+    camp_path_scope,
     disclosure_digest,
 )
 from debate_core.domain import SHA256_HEX_PATTERN, Sha256Hex
@@ -193,6 +245,7 @@ __all__ = [
     "SourceSelector",
     "TeamSelector",
     "parse_team_selector",
+    "taken_path",
 ]
 
 _DIGEST = re.compile(SHA256_HEX_PATTERN)
@@ -304,7 +357,11 @@ class LaterUploadOutcome(StrEnum):
     WITHDRAWN_FROM_THE_PATH = "withdrawn_from_the_path"
     """Another path holds it too: only its rows and records at the removed path go."""
     KEPT_SHARED = "kept_shared"
-    """A camp path of a file another holder has too, which cannot be withdrawn on its own."""
+    """Another holder has it, and this plan takes it from none of its paths: left whole.
+
+    Before `v1-e30-t14` this was every camp file's later upload another holder had too, because a
+    camp path could not be withdrawn. A camp path is withdrawn now, so a later upload is never this
+    unless the planner finds no path to take it from."""
     LEFT_IN_PLACE = "left_in_place"
     """Not in the plan: `--only-named`."""
 
@@ -362,19 +419,28 @@ class PlannedSource:
     disclosures: tuple[DisclosureRef, ...]
     """The disclosure records on this machine the removal deletes."""
     camp_files: tuple[CampFileRef, ...]
-    """The camp-file records on this machine the removal deletes."""
+    """The camp-file records on this machine the removal deletes: every one for a file removed
+    whole, and for a camp path withdrawn the release's own, when no other row of it holds the file."""
     requester_paths: tuple[tuple[str, str], ...]
     """`(caselist, path)` of the copies a withdrawal takes: the requesting team's, from records and
-    manifests alike, or for a later upload the removed paths it is held at."""
+    manifests alike, or for a later upload the removed paths it is held at. A camp path is
+    `("openev", "<release>/<row path>")` (:func:`taken_path`, `v1-e30-t14`), whose
+    :func:`~debate_core.application.ports.suppression.disclosure_digest` is the camp path's."""
     other_teams: int
     """Other teams that disclosed these bytes, before the removal: other than the requesting team,
     or for a `--source` removal other than the one team whose file it is. For a later upload, the
-    teams holding it at a path the removal does not take it from."""
+    teams holding it at a path the removal does not take it from, less the teams at the paths it
+    does: a second path of the same team keeps the bytes, and is no other team (`v1-e30-t16`)."""
     camp_file_holders: int
-    """OpenEv camp files holding these bytes, before the removal. For a later upload, the releases
-    holding it at a camp path the removal does not take it from."""
+    """OpenEv camp files holding these bytes before the removal, other than the one removed, as
+    teams are counted (a camp file is one release's). For `--team`, every one, since a team is the
+    holder removed; for `--source`, every one when a team holds the file, and one fewer when none
+    does, so a file only one camp file holds has none (`v1-e30-t16`). For a later upload, the
+    releases holding it at a camp path the removal does not take it from."""
     kept_in: tuple[str, ...]
-    """Caselists where another holder still has a withdrawn file, so its copy there stays."""
+    """Caselists where another holder still has a withdrawn file, so its copy there stays: another
+    team for a `--team` withdrawal, and for a later upload any path the removal does not take it
+    from, the same team's included; `openev` when another release keeps it (`v1-e30-t14`)."""
     delete_source_record: bool
     local_blob: bool
     """Whether this machine holds the blob and the removal deletes it."""
@@ -449,6 +515,10 @@ class RemovalPlan:
     earlier_versions: tuple[PathVersion, ...] = ()
     """Earlier versions at those paths, and files whose order the snapshot dates cannot give: listed
     for the operator, never included."""
+    path_holds: tuple[PathHoldEntry, ...] = ()
+    """The path entries this removal appends: one for each caselist path a `--source` removal takes
+    a file from whole (`v1-e30-t13`). None with `--only-named`, none for a file withdrawn or
+    skipped, and none that is already in force."""
 
     def of(self, disposition: Disposition) -> tuple[PlannedSource, ...]:
         return tuple(source for source in self.sources if source.disposition is disposition)
@@ -467,7 +537,10 @@ class RemovalPlan:
             return LaterUploadOutcome.LEFT_IN_PLACE
         if source.disposition is Disposition.REMOVE:
             return LaterUploadOutcome.REMOVED
-        if (version.caselist, version.path) in source.requester_paths:
+        if any(
+            taken_path(version.caselist, snapshot, version.path) in source.requester_paths
+            for snapshot in version.snapshots or ("",)
+        ):
             return LaterUploadOutcome.WITHDRAWN_FROM_THE_PATH
         return LaterUploadOutcome.KEPT_SHARED
 
@@ -490,6 +563,34 @@ class RemovalPlan:
         return tuple(entry for source in self.sources for entry in source.suppression)
 
     @property
+    def withdrawals(self) -> tuple[WithdrawalEntry, ...]:
+        """The withdrawal record's entries this removal appends (`v1-e30-t16`).
+
+        One for each suppression entry of one disclosure, naming the caselist it withdraws the copy
+        from by its slug: the path it was taken from is `(caselist, path)` in
+        :attr:`PlannedSource.requester_paths`, and the entry holds only its digest.
+        """
+        entries: list[WithdrawalEntry] = []
+        for source in self.sources:
+            # Every entry of one disclosure is planned for a path it is withdrawn from.
+            caselist_of = {
+                disclosure_digest(caselist, path): caselist for caselist, path in source.requester_paths
+            }
+            entries += [
+                WithdrawalEntry(
+                    sha256=entry.sha256,
+                    disclosure=entry.disclosure,
+                    caselist=caselist_of[entry.disclosure],
+                    recorded_at=entry.recorded_at,
+                    reason=entry.reason,
+                    request_id=self.request_id,
+                )
+                for entry in source.suppression
+                if entry.disclosure is not None
+            ]
+        return tuple(entries)
+
+    @property
     def local_records(self) -> int:
         return sum(
             len(source.disclosures) + len(source.camp_files) + int(source.delete_source_record)
@@ -503,12 +604,35 @@ class RemovalPlan:
         return tuple(rewrite for rewrite in self.manifests if rewrite.side is side)
 
     @property
+    def touched_caselists(self) -> tuple[str, ...]:
+        """The caselists that hold a file this plan removes or withdraws (`v1-e30-t15`).
+
+        Where a manifest it rewrites is filed, where an object it deletes under `raw/` or `parsed/`
+        is named for the file, where a record it deletes was disclosed, and where it withdraws a
+        copy from; OpenEv for a camp file. Not every caselist whose aggregates it deletes: a removal
+        deletes those of every caselist, and only one that held the file can hold a row of it.
+        """
+        touched: set[str] = {rewrite.key.split("/")[1] for rewrite in self.manifests}
+        for planned in self.objects:
+            if planned.side is Side.BUCKET and planned.kind is not ObjectKind.PARSED_AGGREGATE:
+                touched.add(_caselist_of_bucket_key(planned.key))
+        for source in self.sources:
+            if source.disposition is Disposition.SKIP_SHARED:
+                continue
+            touched.update(ref.caselist for ref in source.disclosures)
+            touched.update(caselist for caselist, _ in source.requester_paths)
+            if source.camp_files:
+                touched.add(OPENEV)
+        return tuple(sorted(touched))
+
+    @property
     def nothing_to_do(self) -> bool:
         return (
             not self.local_records
             and not self.manifests
             and not self.objects
             and not self.suppression_entries
+            and not self.path_holds
             and not any(source.local_blob for source in self.sources)
             and not self.inbox
         )
@@ -656,7 +780,8 @@ class RemovalPlanner:
             )
         recorded_at = self._clock.now()
         existing = await self._suppression.entries()
-        state = SuppressionState.from_entries(existing)
+        existing_holds = await read_path_holds(self._suppression)
+        state = SuppressionState.from_entries(existing, existing_holds)
         caselists = await self._known_caselists()
         copies = [copy for caselist in caselists for copy in await self._manifest_copies(caselist)]
 
@@ -675,17 +800,23 @@ class RemovalPlanner:
             for digest in sorted(selected)
         ]
 
-        # Every other file at the paths the named files are taken from, and when it was held there.
-        holdings = _path_holdings(copies)
+        # Every other file at the paths the named files are taken from, and when it was held there:
+        # in a manifest, or in an archive in the download inbox, imported or not (v1-e30-t13).
+        inbox_files = read_inbox(self._inbox)
+        held = (*_path_holdings(copies), *_inbox_holdings(inbox_files))
+        path_holds = (
+            _path_holds(named, held, state, recorded_at=recorded_at, reason=reason, request_id=request_id)
+            if isinstance(selector, SourceSelector) and not only_named
+            else ()
+        )
+        # A file this request removed earlier has no row left to say where it was: its holds do.
+        holdings = (*held, *_recorded_paths(state, selected, held))
         versions = other_versions(
             holdings,
             _paths_taken(named),
             named=selected,
-            upstream_path_digests={
-                openev_id: delivery.path_sha256
-                for openev_id, delivery in self._inbox.deliveries.read().items()
-                if delivery.path_sha256 is not None
-            },
+            # What the rows say (v1-e30-t14), which prod has too, and what this machine pulled.
+            upstream_path_digests={**self._inbox.deliveries.upstream_paths(), **_row_upstream_paths(copies)},
         )
         later = tuple(one for one in versions if one.relation is VersionRelation.LATER)
         added: list[PlannedSource] = []
@@ -721,7 +852,7 @@ class RemovalPlanner:
                         recorded_at=recorded_at,
                     )
                 )
-            elif await self._left_on_this_machine(digest, state):
+            elif await self._left_on_this_machine(digest, state, held):
                 unfinished.append(
                     await self._plan_other_source(
                         digest,
@@ -737,7 +868,8 @@ class RemovalPlanner:
         sources = [*sorted([*named, *unfinished], key=lambda source: source.sha256), *added]
 
         after = SuppressionState.from_entries(
-            [*existing, *(entry for source in sources for entry in source.suppression)]
+            [*existing, *(entry for source in sources for entry in source.suppression)],
+            [*existing_holds, *path_holds],
         )
         removed = {source.sha256 for source in sources if source.disposition is Disposition.REMOVE}
         withdrawn = {
@@ -758,6 +890,8 @@ class RemovalPlanner:
             team=(selector.caselist, selector.school, selector.team_code)
             if isinstance(selector, TeamSelector)
             else None,
+            files=inbox_files,
+            withdrawn_camp_documents=_withdrawn_camp_documents(sources),
         )
         return RemovalPlan(
             selector=selector,
@@ -781,6 +915,7 @@ class RemovalPlanner:
             only_named=only_named,
             later_uploads=later,
             earlier_versions=tuple(one for one in versions if one.relation is not VersionRelation.LATER),
+            path_holds=path_holds,
         )
 
     # --------------------------------------------------------------------------------------
@@ -868,19 +1003,34 @@ class RemovalPlanner:
                     found.add(digest)
         return found
 
-    async def _left_on_this_machine(self, digest: str, state: SuppressionState) -> bool:
+    async def _left_on_this_machine(
+        self, digest: str, state: SuppressionState, held: Sequence[PathHolding]
+    ) -> bool:
         """Whether a file this request already suppressed still has a record or its blob here.
 
         What a `--source` removal stopped part-way can leave of a later upload once the manifest
         rows that showed it at the removed path are rewritten: nothing else would find it again.
         A file with nothing left is not planned again, so a second `--source` under one request id
         does not list the first.
+
+        For a camp path withdrawn (`v1-e30-t14`), what is left is a release's camp-file record with
+        no row of the file left in that release, or a row at the withdrawn camp path itself: a build
+        from before that task asks the list about a camp file's whole source only, so its pull may
+        record the withdrawn id there again, and running the same removal again takes it.
         """
         disclosures = [one async for one in _all_disclosures(self._caselists, source_sha256=digest)]
         if not state.suppresses_source(digest):
-            return any(
-                state.suppresses(digest, disclosure=disclosure_digest(one.caselist, one.source_path))
-                for one in disclosures
+            return (
+                any(
+                    state.suppresses(digest, disclosure=disclosure_digest(one.caselist, one.source_path))
+                    for one in disclosures
+                )
+                or any(
+                    state.suppresses(digest, disclosure=camp_path_disclosure(row.snapshot, row.path))
+                    for row in held
+                    if row.caselist == OPENEV and row.sha256 == digest and not row.inbox
+                )
+                or bool(_orphaned_releases(await _all_camp_files(self._caselists, digest), held, digest))
             )
         return bool(
             disclosures
@@ -957,12 +1107,15 @@ class RemovalPlanner:
         if isinstance(selector, TeamSelector):
             requester = (selector.caselist, selector.school, selector.team_code)
             others = len(set(holdings.teams) - {requester})
-            shared = others > 0 or bool(holdings.releases)
+            other_releases = len(holdings.releases)
         else:
-            # No requesting team: one holding team's file is the one removed, and the rest are the
-            # others. Counting all of them called a file one team holds "also held by 1 other team".
+            # No requesting team: one holder is the one whose file is removed, and the rest are the
+            # others. A team's file is that team's, and a file no team holds is one camp release's.
+            # Counting every holder called a file one holder has "also held by 1 other team"
+            # (`v1-e30-t10`), or "by 1 camp file" (`v1-e30-t16`).
             others = max(len(holdings.teams) - 1, 0)
-            shared = len(holdings.teams) + len(holdings.releases) > 1
+            other_releases = len(holdings.releases) if holdings.teams else max(len(holdings.releases) - 1, 0)
+        shared = others + other_releases > 0
 
         if (state.suppresses_source(digest) and finishing) or not shared or include_shared:
             disposition = Disposition.REMOVE
@@ -1006,7 +1159,7 @@ class RemovalPlanner:
             camp_files=tuple(sorted(dropped_camp, key=lambda ref: (ref.year, ref.event, ref.file_title))),
             requester_paths=requester_paths,
             other_teams=others,
-            camp_file_holders=len(holdings.releases),
+            camp_file_holders=other_releases,
             kept_in=tuple(
                 sorted(
                     {
@@ -1069,25 +1222,36 @@ class RemovalPlanner:
             if state.suppresses(digest, disclosure=disclosure_digest(caselist, path))
         }
         live_paths = held_at - taken
+        # A camp path is taken as a caselist path is (v1-e30-t14): where it is a later upload, and
+        # where the list already stops the file at that release's row.
         later_camp_paths = {one.identity for one in later if one.caselist == OPENEV}
-        live_releases = {
-            row.snapshot
-            for row in rows
-            if row.caselist == OPENEV and path_identity(row) not in later_camp_paths
-        } | {
-            openev_release_name(camp_file.year, camp_file.event)
-            for camp_file in camp_files
-            if not any(row.caselist == OPENEV for row in rows)
+        camp_rows = [row for row in rows if row.caselist == OPENEV and not row.inbox]
+        taken |= {
+            taken_path(OPENEV, row.snapshot, row.path)
+            for row in camp_rows
+            if path_identity(row) in later_camp_paths
+            or state.suppresses(digest, disclosure=camp_path_disclosure(row.snapshot, row.path))
         }
+        # A release's record with no row of the file left: what a run stopped among the records leaves.
+        orphaned: set[str] = (
+            _orphaned_releases(camp_files, rows, digest) if inclusion is Inclusion.UNFINISHED else set()
+        )
+        live_releases = {
+            row.snapshot for row in camp_rows if taken_path(OPENEV, row.snapshot, row.path) not in taken
+        } | {
+            release
+            for release in {openev_release_name(one.year, one.event) for one in camp_files} - orphaned
+            if not camp_rows
+        }
+        taken_releases = {path.split("/", 1)[0] for caselist, path in taken if caselist == OPENEV} | orphaned
         shared = bool(live_paths or live_releases)
 
         if (state.suppresses_source(digest) and finishing) or not shared:
             disposition = Disposition.REMOVE
-        elif taken:
+        elif taken or orphaned:
             disposition = Disposition.WITHDRAW
         else:
-            # Only a camp path of it is removed, and another holder has it: no entry of the list
-            # stops one camp path of a file, so nothing can be done that the next pull would not undo.
+            # Another holder has it, and nothing here says which path of it to take.
             disposition = Disposition.SKIP_SHARED
 
         entries: list[SuppressionEntry] = []
@@ -1107,6 +1271,12 @@ class RemovalPlanner:
                 for disclosure in disclosures
                 if (disclosure.caselist, disclosure.source_path) in taken
             ]
+            dropped_camp = [
+                _camp_ref(camp_file)
+                for camp_file in camp_files
+                if (release := openev_release_name(camp_file.year, camp_file.event)) in taken_releases
+                and release not in live_releases
+            ]
             requester_paths = tuple(sorted(taken))
             for caselist, path in requester_paths:
                 digest_of_path = disclosure_digest(caselist, path)
@@ -1121,9 +1291,11 @@ class RemovalPlanner:
             disclosures=tuple(sorted(dropped, key=lambda ref: (ref.caselist, ref.snapshot, ref.source_path))),
             camp_files=tuple(sorted(dropped_camp, key=lambda ref: (ref.year, ref.event, ref.file_title))),
             requester_paths=requester_paths,
-            other_teams=len({(caselist, team_of_path(path)) for caselist, path in live_paths}),
+            other_teams=len(_teams_at(live_paths) - _teams_at(taken)),
             camp_file_holders=len(live_releases),
-            kept_in=tuple(sorted({caselist for caselist, _ in live_paths}))
+            kept_in=tuple(
+                sorted({caselist for caselist, _ in live_paths} | ({OPENEV} if live_releases else set()))
+            )
             if disposition is Disposition.WITHDRAW
             else (),
             delete_source_record=disposition is Disposition.REMOVE and source is not None,
@@ -1216,9 +1388,15 @@ class RemovalPlanner:
                     )
             else:
                 # Withdrawn: a caselist's own copy goes only when no other team there still holds it,
-                # by this machine's records or by any manifest on either side.
+                # by this machine's records or by any manifest on either side. A camp path's release
+                # year's copy goes only when no other release of that year holds it (v1-e30-t14).
                 parsed_caselists = sorted({name for name, _ in source.requester_paths} - set(source.kept_in))
-                raw_prefixes = [f"{CASELIST_SOURCE_PREFIX}/{name}/" for name in parsed_caselists]
+                raw_prefixes = [
+                    f"{CASELIST_SOURCE_PREFIX}/{name}/" for name in parsed_caselists if name != OPENEV
+                ]
+                raw_prefixes += [
+                    f"{OPENEV_SOURCE_PREFIX}/{year}/" for year in _camp_years_withdrawn(source, copies)
+                ]
 
             for prefix in raw_prefixes:
                 key = f"{prefix}{local_blob_key(digest)}"
@@ -1328,11 +1506,10 @@ def _rows_to_drop(
     after: SuppressionState,
 ) -> set[int]:
     """Indexes of the member rows a rewrite leaves out. See the module docstring for each rule."""
-    scope = None if copy.caselist == OPENEV else copy.caselist
     dropped = {
         index
         for index, (_, row) in enumerate(copy.rows)
-        if _dropped(row, copy.caselist, scope, selector, removed, withdrawn, held_removed, after)
+        if _dropped(row, copy, selector, removed, withdrawn, held_removed, after)
     }
     real = {
         str(row["path"]): index in dropped
@@ -1353,8 +1530,7 @@ def _rows_to_drop(
 
 def _dropped(
     row: Mapping[str, object],
-    caselist: str,
-    scope: str | None,
+    copy: _ManifestCopy,
     selector: RemovalSelector,
     removed: set[str],
     withdrawn: set[tuple[str, str, str]],
@@ -1363,21 +1539,29 @@ def _dropped(
 ) -> bool:
     """Whether one member row goes, before the junk that shadows dropped files is added.
 
-    `withdrawn` is `(caselist, path, sha256)`: a withdrawal takes one file from one path, and an
-    earlier version of another file at that path keeps its row (`v1-e30-t11`).
+    `withdrawn` is `(caselist, path, sha256)` with the path as :func:`taken_path` gives it: a
+    withdrawal takes one file from one path, and an earlier version of another file at that path
+    keeps its row (`v1-e30-t11`). A camp path is one row of one release (`v1-e30-t14`).
     """
     path, digest = row.get("path"), row.get("sha256")
     if not isinstance(path, str):
         return False
+    caselist = copy.caselist
     if isinstance(selector, TeamSelector) and selector.holds(caselist, path):
         return True  # every row of the requesting team's, junk and REMOVED rows included
-    if digest in removed or (caselist, path, digest) in withdrawn:
+    if digest in removed or (*taken_path(caselist, copy.release, path), digest) in withdrawn:
         return True
     if row.get("classification") == str(Classification.REMOVED) and path in held_removed:
         return True  # "this path's file was taken down", where the file was the removed one
     # Anything else the list already stops: a row an earlier removal never reached.
-    disclosure = disclosure_digest(scope, path) if scope is not None else None
-    return isinstance(digest, str) and after.suppresses(digest, disclosure=disclosure)
+    return isinstance(digest, str) and after.suppresses(
+        digest, disclosure=disclosure_digest(_scope(copy), path)
+    )
+
+
+def _scope(copy: _ManifestCopy) -> str:
+    """What a row's disclosure digest is taken under: its caselist, or its camp release (`v1-e30-t14`)."""
+    return camp_path_scope(copy.release) if copy.caselist == OPENEV else copy.caselist
 
 
 def _rewritten(copy: _ManifestCopy, dropped: set[int], after: SuppressionState) -> tuple[str, ...]:
@@ -1390,7 +1574,7 @@ def _rewritten(copy: _ManifestCopy, dropped: set[int], after: SuppressionState) 
     assert copy.summary is not None
     kept = [row for index, (_, row) in enumerate(copy.rows) if index not in dropped]
     gone = [row for index, (_, row) in enumerate(copy.rows) if index in dropped]
-    scope = None if copy.caselist == OPENEV else copy.caselist
+    scope = _scope(copy)
     render_rows(kept, suppression=after, disclosure_scope=scope)
     if copy.caselist == OPENEV:
         summary = _recounted_openev_summary(copy.summary, kept, gone)
@@ -1474,6 +1658,192 @@ def _path_holdings(copies: Sequence[_ManifestCopy]) -> tuple[PathHolding, ...]:
     return tuple(sorted(held, key=lambda one: (one.caselist, one.snapshot, one.path, one.sha256)))
 
 
+def _inbox_holdings(files: Sequence[InboxFile]) -> tuple[PathHolding, ...]:
+    """Every real member of every weekly and complete archive in the inbox, as a snapshot holds it.
+
+    Dated as the archive's name dates it, which is how the sync dates the snapshot it imports it
+    as. An archive that cannot be read holds nothing here; the inbox step reports it. A camp
+    download is not a caselist snapshot: `v1-e34-t14` holds a camp path.
+    """
+    held: set[PathHolding] = set()
+    for file in files:
+        if file.entries is None or file.caselist is None or file.snapshot is None:
+            continue  # unreadable, or not a caselist's archive: only those are named for a caselist
+        complete = file.kind is InboxFileKind.FULL_ARCHIVE
+        snapshot = full_archive_snapshot(file.snapshot) if complete else file.snapshot.isoformat()
+        for entry in file.entries:
+            if entry.skip_reason is None and entry.sha256 is not None:
+                held.add(
+                    PathHolding(
+                        caselist=file.caselist,
+                        snapshot=snapshot,
+                        path=entry.path,
+                        sha256=entry.sha256,
+                        inbox=True,
+                    )
+                )
+    return tuple(sorted(held, key=lambda one: (one.caselist, one.snapshot, one.path, one.sha256)))
+
+
+def _path_holds(
+    named: Sequence[PlannedSource],
+    held: Sequence[PathHolding],
+    state: SuppressionState,
+    *,
+    recorded_at: datetime,
+    reason: ReasonCode,
+    request_id: str,
+) -> tuple[PathHoldEntry, ...]:
+    """One path entry for each caselist path the removal takes a named file from whole.
+
+    The path is every place the file is held: a stored row, a disclosure record, or a member of an
+    archive in the inbox. The hold is dated by the earliest snapshot that holds it there, which is
+    the date `v1-e30-t11` measures "later" from. A file the plan withdraws or skips stays with
+    another holder and gets none, and neither does a path this file already holds.
+    """
+    entries: list[PathHoldEntry] = []
+    for source in named:
+        if source.disposition is not Disposition.REMOVE:
+            continue
+        first_held: dict[tuple[str, str], date] = {}
+        seen = [
+            (row.caselist, row.path, snapshot_date(row.snapshot))
+            for row in held
+            if row.sha256 == source.sha256 and row.caselist != OPENEV
+        ]
+        seen += [(ref.caselist, ref.source_path, ref.snapshot) for ref in source.disclosures]
+        for caselist, path, held_on in seen:
+            if held_on is not None:
+                first_held[(caselist, path)] = min(held_on, first_held.get((caselist, path), held_on))
+        for (caselist, path), held_on in sorted(first_held.items()):
+            disclosure = disclosure_digest(caselist, path)
+            if any(hold.sha256 == source.sha256 for hold in state.held_paths.get(disclosure, ())):
+                continue
+            entries.append(
+                PathHoldEntry(
+                    caselist=caselist,
+                    disclosure=disclosure,
+                    sha256=source.sha256,
+                    after_snapshot=held_on,
+                    recorded_at=recorded_at,
+                    reason=reason,
+                    request_id=request_id,
+                )
+            )
+    return tuple(entries)
+
+
+def _recorded_paths(
+    state: SuppressionState, named: Collection[str], held: Sequence[PathHolding]
+) -> tuple[PathHolding, ...]:
+    """Where the path holds in force say a named file was, for each such path something is held at.
+
+    A hold keeps the path as a digest, so the path's text comes from whatever is at it now: a row
+    or an inbox member whose caselist and path give the hold's digest. That is every case with
+    something to find. The stand-in is dated by the hold, the earliest snapshot that held the
+    removed file there, so "later" means what it meant when the file was removed.
+    """
+    of_named = {
+        disclosure: [hold for hold in holds if hold.sha256 in named]
+        for disclosure, holds in state.held_paths.items()
+    }
+    if not any(of_named.values()):
+        return ()
+    stand_ins: set[PathHolding] = set()
+    for caselist, path in {(row.caselist, row.path) for row in held if row.caselist != OPENEV}:
+        for hold in of_named.get(disclosure_digest(caselist, path), ()):
+            stand_ins.add(
+                PathHolding(
+                    caselist=caselist,
+                    snapshot=hold.after_snapshot.isoformat(),
+                    path=path,
+                    sha256=hold.sha256,
+                )
+            )
+    return tuple(sorted(stand_ins, key=lambda one: (one.caselist, one.snapshot, one.path, one.sha256)))
+
+
+def taken_path(caselist: str, snapshot: str, path: str) -> tuple[str, str]:
+    """`(caselist, path)` as a withdrawal names a copy it takes (:attr:`PlannedSource.requester_paths`).
+
+    A caselist path is its caselist and path, in every snapshot. A camp path is `openev` and
+    `<release>/<row path>` (`v1-e30-t14`): one row of one release manifest, whose
+    :func:`~debate_core.application.ports.suppression.disclosure_digest` is
+    :func:`~debate_core.application.ports.suppression.camp_path_disclosure`.
+    """
+    return (OPENEV, f"{snapshot}/{path}") if caselist == OPENEV else (caselist, path)
+
+
+def _withdrawn_camp_documents(sources: Sequence[PlannedSource]) -> dict[str, str]:
+    """`{inbox name: sha256}` of the camp documents whose camp path this plan withdraws (`v1-e30-t14`).
+
+    A single document the pull fetched is imported as one row at its inbox name, `openev-<id>-…`,
+    so a withdrawn row at a name of that form is the copy in the inbox. A camp release that is a zip
+    records its members at their own paths, which are not inbox names.
+    """
+    return {
+        path.split("/", 1)[1]: source.sha256
+        for source in sources
+        if source.disposition is Disposition.WITHDRAW
+        for caselist, path in source.requester_paths
+        if caselist == OPENEV
+        and openev_id_of_inbox_name(path.split("/", 1)[1]) is not None
+        and "/" not in path.split("/", 1)[1]
+    }
+
+
+def _row_upstream_paths(copies: Sequence[_ManifestCopy]) -> dict[int, str]:
+    """`{openev id: SHA-256 of its upstream path}` as the release manifests' rows carry it (`v1-e30-t14`)."""
+    found: dict[int, str] = {}
+    for copy in copies:
+        if copy.caselist != OPENEV:
+            continue
+        for _, row in copy.rows:
+            identity = row_upstream_identity(row)
+            if identity is not None:
+                found[identity[0]] = identity[1]
+    return found
+
+
+def _orphaned_releases(camp_files: Sequence[CampFile], held: Sequence[PathHolding], digest: str) -> set[str]:
+    """The releases with a camp-file record of `digest` and no stored row of it: a withdrawal's leftover."""
+    with_rows = {
+        row.snapshot for row in held if row.caselist == OPENEV and row.sha256 == digest and not row.inbox
+    }
+    return {openev_release_name(one.year, one.event) for one in camp_files} - with_rows
+
+
+def _camp_years_withdrawn(source: PlannedSource, copies: Sequence[_ManifestCopy]) -> list[str]:
+    """The years whose `raw/openev/<year>/` copy a camp path's withdrawal deletes (`v1-e30-t14`).
+
+    A year a withdrawn camp path or record is in, and no other release of that year still holds the
+    file at a row the withdrawal does not take.
+    """
+    withdrawn = {path for caselist, path in source.requester_paths if caselist == OPENEV}
+    years = {path.split("/", 1)[0][:4] for path in withdrawn} | {
+        f"{ref.year:04d}" for ref in source.camp_files
+    }
+    live = {
+        copy.release[:4]
+        for copy in copies
+        if copy.caselist == OPENEV
+        for _, row in copy.rows
+        if row.get("sha256") == source.sha256
+        and row.get("classification") in _STORED
+        and taken_path(OPENEV, copy.release, str(row.get("path"))) not in source.requester_paths
+    }
+    return sorted(years - live)
+
+
+def _teams_at(paths: Collection[tuple[str, str]]) -> set[tuple[str, tuple[str, str]]]:
+    """The teams holding `(caselist, path)` copies, each as its caselist and its two directories.
+
+    A path filed under no team's directories is no team's, as :meth:`RemovalPlanner._holdings`
+    counts them: the archive's structure is all that says whose a copy is.
+    """
+    return {(caselist, team) for caselist, path in paths if (team := team_of_path(path)) is not None}
+
+
 def _paths_taken(named: Sequence[PlannedSource]) -> dict[str, frozenset[tuple[str, ...]] | None]:
     """For each named file the removal acts on, the paths it takes it from: `None` for all of them.
 
@@ -1539,6 +1909,17 @@ def _imported_openev_downloads(copies: Sequence[_ManifestCopy]) -> frozenset[str
         for _, row in copy.rows
         if isinstance(row.get("archive_sha256"), str)
     )
+
+
+def _caselist_of_bucket_key(key: str) -> str:
+    """The caselist a `raw/` or `parsed/` key is filed under: `raw/caselist/<slug>/…`, `raw/openev/…`
+    or `parsed/<caselist>/…`."""
+    parts = key.split("/")
+    if key.startswith(f"{CASELIST_SOURCE_PREFIX}/"):
+        return parts[2]
+    if key.startswith(f"{OPENEV_SOURCE_PREFIX}/"):
+        return OPENEV
+    return parts[1]
 
 
 def _is_parsed_aggregate(key: str, caselist_prefix: str) -> bool:

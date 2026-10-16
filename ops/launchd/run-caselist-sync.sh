@@ -17,8 +17,13 @@
 #     run-caselist-sync.sh --caselist hsld26 --caselist hspolicy26
 #
 # The one exception is `--check`, alone: it shows which console script DEBATE_RESEARCH_BIN
-# resolves to and runs its `--version`, and nothing else. `install.sh --check-launchd` runs it
-# under launchd to prove the agent can be executed, without a sync and without a download.
+# resolves to, runs its `--version`, and then runs `doctor --evidence-profiles`, and nothing else.
+# `install.sh --check-launchd` runs it under launchd to prove the agent can be executed, and that
+# the AWS profile the weekly run will use is one this machine's AWS config defines, without a sync
+# and without a download (v1-e34-t22). It ends with doctor's exit code: 1 when a configured
+# evidence profile is not defined, which is the setting that would make the scheduled run refuse
+# to start. What that check asks, and what does not fail it, is the command's to say, not this
+# file's.
 #
 # Environment, all optional, all templated into the plist by install.sh:
 #
@@ -51,7 +56,11 @@ if [ "${1:-}" = "--check" ]; then
         exit 2
     fi
     echo "run-caselist-sync: check: DEBATE_RESEARCH_BIN is $(command -v "${DEBATE_RESEARCH_BIN}")"
-    exec "${DEBATE_RESEARCH_BIN}" --version
+    "${DEBATE_RESEARCH_BIN}" --version
+    # The build's own checks, and each configured evidence profile: defined or not, and which
+    # permission set it is signed in as. Run here because this is the environment the scheduled
+    # run has: launchd's, with the plist's HOME, PATH and DEBATE_ENV, and nothing of a shell's.
+    exec "${DEBATE_RESEARCH_BIN}" doctor --evidence-profiles
 fi
 
 # --json so that stdout is one object per run, which is what the plist's StandardOutPath collects

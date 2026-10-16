@@ -11,9 +11,10 @@ the fake and run against this.
 
 ## The one piece of arithmetic worth reading
 
-`put_source` **widens** rather than overwrites. Weekly archives are cumulative, so the same file
-arrives again every week until the team takes it down, and the answer to "which weeks was this
-file up?" is a range that has to survive being written to out of order: importing 09-15 and then
+`put_source` **widens** rather than overwrites. The same file arrives more than once, carried from
+one weekly window into the next and held by every complete archive until the team takes it down,
+and the answer to "between which snapshots was this file seen?" is a range that has to survive
+being written to out of order: importing 09-15 and then
 09-01 must leave `first_seen=09-01, last_seen=09-15`, not the other way round. The read and the
 widening write happen inside one `BEGIN IMMEDIATE` transaction, so two importers cannot each read
 the old range and each write half of it.

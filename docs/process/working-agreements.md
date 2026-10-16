@@ -11,6 +11,29 @@ The goal is a short wait between opening a PR and being able to merge it into `d
 * **Budget:** the required `ci` check on a PR into `dev` should finish in **under 5 minutes**
   wall-clock, with 10 minutes as a hard ceiling. A change that pushes CI past the budget has to
   move work out of the PR path in the same PR.
+* **Target:** on a typical PR into `dev`, `ci` finishes in **under 3 minutes**. The budget is the
+  limit; the target is where the check is kept, so that a growing suite is noticed two minutes
+  before it is a problem. Until `v1-e01-t27` the `test` job alone took 4 to 6 minutes.
+* **The test job runs in parts.** `ci.yml`'s `test` job is a matrix, and each part runs
+  `pytest --part K/N` on its own runner. A part is not a list of directories:
+  `tests/pytest_plugins/run_in_parts.py` deals each test file's tests round the N parts, so every
+  selected test is in exactly one part and the parts stay level with nothing to maintain. The
+  parts together are the whole default selection; `tests/scripts/test_ci_workflow_test_job.py`
+  collects all of them and proves it on every run. No test is moved off the PR path to make room.
+* **When it drifts**, read the `test` parts of a few recent pull requests. Each ends with its 25
+  slowest tests.
+  * `ci` over 3 minutes on ordinary pull requests, or one part's pytest step over 2: append the
+    next number to `matrix.part` in `ci.yml` (`[1, 2, 3, 4]` becomes `[1, 2, 3, 4, 5]`). Nothing
+    else changes. Each extra part repeats the job's setup, about 15 seconds, and its own collection.
+  * One part steadily slower than the others: a few slow tests have landed together. Its durations
+    name them. Make them cheaper; never mark them `slow` to get them out of the way.
+* **The same option splits a long local run.** `uv run pytest --part 1/2` and then `--part 2/2`
+  are the whole default selection between them, for any N, so a session that has to stay under
+  the two minutes of agreement 2 runs the parts one after another and says so in its report.
+* **Coverage is not measured on a PR, or by a plain `uv run pytest`.** It took a third of the
+  suite's time and nothing is gated on it. `ci.yml`'s `coverage` job measures it over the whole
+  selection on every push to `dev` and `main`. Locally, ask for it:
+  `uv run pytest --cov --cov-report=term-missing`.
 * **What runs on every PR:** formatting and lint, type checks, fast unit and contract tests,
   import-boundary checks, spec validation. All offline: recorded fixtures and the fake/replay
   model router, no live network, no real model calls.

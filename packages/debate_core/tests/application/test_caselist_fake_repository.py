@@ -1,8 +1,9 @@
 """The in-memory CaselistRepository really behaves the way the port says it does.
 
-The point of these tests is the cumulative-archive arithmetic. OpenCaselist republishes every
-disclosed file every week, so an importer asks the repository the same questions over and over —
-have I seen this hash, which snapshots was it up in, what is the latest archive I have — and a
+The point of these tests is the seen-range arithmetic. The same disclosed file arrives in more than
+one archive — carried from one weekly window into the next, and held by every complete archive —
+so an importer asks the repository the same questions over and over — have I seen this hash, which
+snapshots held it, what is the latest archive I have — and a
 fake that answered them loosely would let v1-e30-t03's dedupe counts pass here and be wrong in
 production. The SQLite adapter in t03 is held to the same expectations.
 """
@@ -221,7 +222,7 @@ def test_snapshots_list_newest_first_and_only_for_their_own_caselist(
 
 
 # --------------------------------------------------------------------------------------------
-# Source documents: the cumulative-archive arithmetic
+# Source documents: the seen-range arithmetic
 # --------------------------------------------------------------------------------------------
 
 

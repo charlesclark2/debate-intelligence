@@ -60,8 +60,8 @@ v2.3's extension work.
 
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
-| [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 40 | 33 | 216 |
-| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 66 | 40 | 379 |
+| [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 40 | 40 | 216 |
+| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 74 | 49 | 411 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 17 | 0 | 179 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 13 | 0 | 108 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 14 | 0 | 96 |
@@ -105,19 +105,19 @@ Repo, tooling, CI, promotion flow, task tooling, domain core, and deterministic 
 | [Re-run the promotion guards when main moves](plan_specs/v1/e01-repo-foundation/t12-promotion-guard-rerun.yaml) `v1-e01-t12-promotion-guard-rerun` | Succeeded | 1 | 3.5 |
 | [Empty the import-boundary exception lists](plan_specs/v1/e01-repo-foundation/t13-composition-root-cleanup.yaml) `v1-e01-t13-composition-root-cleanup` | Succeeded | 1 | 4.0 |
 | [One source for the supported interpreter, enforced at install](plan_specs/v1/e01-repo-foundation/t14-install-interpreter-bound.yaml) `v1-e01-t14-install-interpreter-bound` | Succeeded | 2 | 6.0 |
-| [Re-run the promotion guards without waiting for an event](plan_specs/v1/e01-repo-foundation/t15-promotion-guard-sweep.yaml) `v1-e01-t15-promotion-guard-sweep` | InProgress | 1 | 7.0 |
+| [Re-run the promotion guards without waiting for an event](plan_specs/v1/e01-repo-foundation/t15-promotion-guard-sweep.yaml) `v1-e01-t15-promotion-guard-sweep` | Succeeded | 1 | 7.0 |
 | [Generate the docs index instead of hand-editing it](plan_specs/v1/e01-repo-foundation/t16-generated-docs-index.yaml) `v1-e01-t16-generated-docs-index` | Succeeded | 1 | 6.5 |
 | [The installed build carries what its commands need](plan_specs/v1/e01-repo-foundation/t17-installed-build-extras.yaml) `v1-e01-t17-installed-build-extras` | Succeeded | 1 | 4.0 |
 | [scripts/task restarts a task that merged partially](plan_specs/v1/e01-repo-foundation/t18-restart-partial-tasks.yaml) `v1-e01-t18-restart-partial-tasks` | Succeeded | 1 | 3.0 |
 | [Command blocks in the docs are safe to paste into zsh](plan_specs/v1/e01-repo-foundation/t19-paste-safe-command-blocks.yaml) `v1-e01-t19-paste-safe-command-blocks` | Succeeded | 1 | 3.0 |
 | [A failure that may succeed on retry never shares an exit code with a verdict](plan_specs/v1/e01-repo-foundation/t20-retryable-failures-exit-3.yaml) `v1-e01-t20-retryable-failures-exit-3` | Succeeded | 1 | 3.0 |
-| [The storage and OpenCaselist smoke checks run against the installed build](plan_specs/v1/e01-repo-foundation/t21-installed-smoke-stand-ins.yaml) `v1-e01-t21-installed-smoke-stand-ins` | Pending | 1 | 4.0 |
+| [The storage and OpenCaselist smoke checks run against the installed build](plan_specs/v1/e01-repo-foundation/t21-installed-smoke-stand-ins.yaml) `v1-e01-t21-installed-smoke-stand-ins` | Succeeded | 1 | 4.0 |
 | [The real install is the build the rehearsal checked, and doctor answers for all of it](plan_specs/v1/e01-repo-foundation/t22-install-resolves-once.yaml) `v1-e01-t22-install-resolves-once` | Succeeded | 1 | 3.0 |
-| [The installed build runs on a Python that uv manages](plan_specs/v1/e01-repo-foundation/t23-managed-python.yaml) `v1-e01-t23-managed-python` | InProgress | 1 | 2.5 |
-| [A partial merge's open items are read from the current session's sections](plan_specs/v1/e01-repo-foundation/t24-partial-open-items-current-session.yaml) `v1-e01-t24-partial-open-items-current-session` | Pending | 1 | 1.5 |
-| [An unexpected error never prints its message on the command line](plan_specs/v1/e01-repo-foundation/t25-unmodelled-errors-print-no-text.yaml) `v1-e01-t25-unmodelled-errors-print-no-text` | Pending | 1 | 1.0 |
-| [The manual sweep also opens the back-merge pull request](plan_specs/v1/e01-repo-foundation/t26-dispatch-opens-back-merge.yaml) `v1-e01-t26-dispatch-opens-back-merge` | Pending | 1 | 1.5 |
-| [The CI test job finishes well inside the five-minute budget](plan_specs/v1/e01-repo-foundation/t27-ci-test-job-within-budget.yaml) `v1-e01-t27-ci-test-job-within-budget` | Pending | 1 | 3.0 |
+| [The installed build runs on a Python that uv manages](plan_specs/v1/e01-repo-foundation/t23-managed-python.yaml) `v1-e01-t23-managed-python` | Succeeded | 1 | 2.5 |
+| [A partial merge's open items are read from the current session's sections](plan_specs/v1/e01-repo-foundation/t24-partial-open-items-current-session.yaml) `v1-e01-t24-partial-open-items-current-session` | Succeeded | 1 | 1.5 |
+| [An unexpected error never prints its message on the command line](plan_specs/v1/e01-repo-foundation/t25-unmodelled-errors-print-no-text.yaml) `v1-e01-t25-unmodelled-errors-print-no-text` | Succeeded | 1 | 1.0 |
+| [The manual sweep also opens the back-merge pull request](plan_specs/v1/e01-repo-foundation/t26-dispatch-opens-back-merge.yaml) `v1-e01-t26-dispatch-opens-back-merge` | Succeeded | 1 | 1.5 |
+| [The CI test job finishes well inside the five-minute budget](plan_specs/v1/e01-repo-foundation/t27-ci-test-job-within-budget.yaml) `v1-e01-t27-ci-test-job-within-budget` | Succeeded | 1 | 3.0 |
 
 #### [E02 — Domain Core: Entities, Ports & Local Persistence](plan_specs/v1/e02-domain-core/epic.yaml)
 
@@ -176,12 +176,16 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [A removal leaves no removed bytes in the inbox](plan_specs/v1/e30-caselist-ingestion/t09-removal-purges-inbox.yaml) `v1-e30-t09-removal-purges-inbox` | Succeeded | 2 | 6.0 |
 | [caselist status reports noncurrent versions a removal left behind](plan_specs/v1/e30-caselist-ingestion/t10-removal-docstrings-and-residue.yaml) `v1-e30-t10-removal-docstrings-and-residue` | Succeeded | 1 | 2.0 |
 | [A removal also takes down later uploads at the removed path](plan_specs/v1/e30-caselist-ingestion/t11-removal-covers-later-uploads.yaml) `v1-e30-t11-removal-covers-later-uploads` | Succeeded | 2 | 3.0 |
-| [caselist status tells a manifest mismatch from a source mismatch](plan_specs/v1/e30-caselist-ingestion/t12-status-names-manifest-mismatch.yaml) `v1-e30-t12-status-names-manifest-mismatch` | Pending | 1 | 1.0 |
-| [A removed caselist path holds the uploads that arrive after the removal](plan_specs/v1/e30-caselist-ingestion/t13-removed-path-holds-caselist-uploads.yaml) `v1-e30-t13-removed-path-holds-caselist-uploads` | Pending | 1 | 4.0 |
-| [A camp file is identified by its upstream record, and a camp path can be withdrawn on its own](plan_specs/v1/e30-caselist-ingestion/t14-camp-path-identity.yaml) `v1-e30-t14-camp-path-identity` | Pending | 1 | 3.0 |
-| [caselist status reports manifest and aggregate versions older than a removal](plan_specs/v1/e30-caselist-ingestion/t15-manifest-and-aggregate-residue.yaml) `v1-e30-t15-manifest-and-aggregate-residue` | Pending | 1 | 3.0 |
-| [The removal plan names holders correctly in every case](plan_specs/v1/e30-caselist-ingestion/t16-removal-output-names-holders.yaml) `v1-e30-t16-removal-output-names-holders` | Pending | 1 | 2.0 |
-| [No text calls a weekly archive cumulative, and import ordering is checked against the window model](plan_specs/v1/e30-caselist-ingestion/t17-weekly-window-wording-and-ordering.yaml) `v1-e30-t17-weekly-window-wording-and-ordering` | Pending | 1 | 3.0 |
+| [caselist status tells a manifest mismatch from a source mismatch](plan_specs/v1/e30-caselist-ingestion/t12-status-names-manifest-mismatch.yaml) `v1-e30-t12-status-names-manifest-mismatch` | Succeeded | 1 | 1.0 |
+| [A removed caselist path holds the uploads that arrive after the removal](plan_specs/v1/e30-caselist-ingestion/t13-removed-path-holds-caselist-uploads.yaml) `v1-e30-t13-removed-path-holds-caselist-uploads` | Succeeded | 1 | 4.0 |
+| [A camp file is identified by its upstream record, and a camp path can be withdrawn on its own](plan_specs/v1/e30-caselist-ingestion/t14-camp-path-identity.yaml) `v1-e30-t14-camp-path-identity` | InProgress | 1 | 3.0 |
+| [caselist status reports manifest and aggregate versions older than a removal](plan_specs/v1/e30-caselist-ingestion/t15-manifest-and-aggregate-residue.yaml) `v1-e30-t15-manifest-and-aggregate-residue` | Succeeded | 1 | 3.0 |
+| [The removal plan names holders correctly in every case](plan_specs/v1/e30-caselist-ingestion/t16-removal-output-names-holders.yaml) `v1-e30-t16-removal-output-names-holders` | Succeeded | 1 | 2.0 |
+| [No text calls a weekly archive cumulative, and import ordering is checked against the window model](plan_specs/v1/e30-caselist-ingestion/t17-weekly-window-wording-and-ordering.yaml) `v1-e30-t17-weekly-window-wording-and-ordering` | Succeeded | 1 | 3.0 |
+| [A weekly imported late re-measures the weeks after it, and a re-import needs no flag](plan_specs/v1/e30-caselist-ingestion/t18-late-imports-re-measure-later-manifests.yaml) `v1-e30-t18-late-imports-re-measure-later-manifests` | Pending | 1 | 4.0 |
+| [Removal residue the status reports can always be cleared, and says whose it is](plan_specs/v1/e30-caselist-ingestion/t19-residue-clearing-gaps.yaml) `v1-e30-t19-residue-clearing-gaps` | Pending | 4 | 3.0 |
+| [Loose ends in what a removal plan prints and how it decides what to drop](plan_specs/v1/e30-caselist-ingestion/t20-removal-output-loose-ends.yaml) `v1-e30-t20-removal-output-loose-ends` | Pending | 1 | 2.0 |
+| [Loose ends of the removed-path hold: status, the publisher and the inbox](plan_specs/v1/e30-caselist-ingestion/t21-held-path-loose-ends.yaml) `v1-e30-t21-held-path-loose-ends` | Pending | 1 | 3.0 |
 
 #### [E31 — Debate File Parsing](plan_specs/v1/e31-debate-file-parsing/epic.yaml)
 
@@ -197,13 +201,16 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [Near-duplicate matching finds short cards and abbreviated disclosures](plan_specs/v1/e31-debate-file-parsing/t08-short-card-recall.yaml) `v1-e31-t08-short-card-recall` | Succeeded | 1 | 5.0 |
 | [Parser findings from the first full-corpus parse](plan_specs/v1/e31-debate-file-parsing/t09-first-corpus-parse-findings.yaml) `v1-e31-t09-first-corpus-parse-findings` | Succeeded | 1 | 4.0 |
 | [The weekly aggregate rebuild costs what the week added, not the whole store](plan_specs/v1/e31-debate-file-parsing/t10-incremental-aggregate-rebuild.yaml) `v1-e31-t10-incremental-aggregate-rebuild` | Pending | 1 | 6.0 |
-| [Copies split apart by the short-body rule, and long bodies merged through a fragment](plan_specs/v1/e31-debate-file-parsing/t11-long-card-splits-and-fragment-merges.yaml) `v1-e31-t11-long-card-splits-and-fragment-merges` | Pending | 2 | 5.0 |
-| [Cites the parser misses or misreads](plan_specs/v1/e31-debate-file-parsing/t12-cite-detection.yaml) `v1-e31-t12-cite-detection` | Pending | 1 | 5.0 |
+| [Copies split apart by the short-body rule, and long bodies merged through a fragment](plan_specs/v1/e31-debate-file-parsing/t11-long-card-splits-and-fragment-merges.yaml) `v1-e31-t11-long-card-splits-and-fragment-merges` | InProgress | 2 | 5.0 |
+| [Cites the parser misses or misreads](plan_specs/v1/e31-debate-file-parsing/t12-cite-detection.yaml) `v1-e31-t12-cite-detection` | InProgress | 1 | 5.0 |
 | [Split a cite from its words when a card or wiki entry is one paragraph](plan_specs/v1/e31-debate-file-parsing/t13-one-paragraph-cards-and-wiki-entries.yaml) `v1-e31-t13-one-paragraph-cards-and-wiki-entries` | Pending | 1 | 6.0 |
 | [A card with no tag has no tag in memory and in every output](plan_specs/v1/e31-debate-file-parsing/t14-card-tag-optional.yaml) `v1-e31-t14-card-tag-optional` | Pending | 2 | 2.0 |
 | [The zip guard judges only the parts it reads, and exporter quirks are decided](plan_specs/v1/e31-debate-file-parsing/t15-zip-guard-and-exporter-quirks.yaml) `v1-e31-t15-zip-guard-and-exporter-quirks` | Pending | 1 | 2.0 |
 | [Superseded parsed-store version directories are retired, locally and in both buckets](plan_specs/v1/e31-debate-file-parsing/t16-version-directory-retention.yaml) `v1-e31-t16-version-directory-retention` | Pending | 1 | 3.0 |
 | [A transient parse failure is retried, and one data directory publishes a bucket's parsed store](plan_specs/v1/e31-debate-file-parsing/t17-parse-retries-and-one-publisher.yaml) `v1-e31-t17-parse-retries-and-one-publisher` | Pending | 1 | 2.0 |
+| [The parser evaluation's labels are corrected one keypress per row, in a local page](plan_specs/v1/e31-debate-file-parsing/t18-click-through-labeller.yaml) `v1-e31-t18-click-through-labeller` | Succeeded | 1 | 5.0 |
+| [The cite shapes the parser still misses, counted first](plan_specs/v1/e31-debate-file-parsing/t19-remaining-cite-shapes.yaml) `v1-e31-t19-remaining-cite-shapes` | Pending | 1 | 6.0 |
+| [Long cuts join the one cluster that holds them, and the matching limits are set from samples](plan_specs/v1/e31-debate-file-parsing/t20-long-cuts-and-limits.yaml) `v1-e31-t20-long-cuts-and-limits` | Pending | 1 | 6.0 |
 
 #### [E34 — Scheduled Caselist Sync](plan_specs/v1/e34-caselist-sync/epic.yaml)
 
@@ -213,25 +220,26 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [Weekly scheduled sync](plan_specs/v1/e34-caselist-sync/t02-scheduled-sync.yaml) `v1-e34-t02-scheduled-sync` | Succeeded | 3 | 11.0 |
 | [Sync run log and staleness warnings](plan_specs/v1/e34-caselist-sync/t03-sync-monitoring.yaml) `v1-e34-t03-sync-monitoring` | Succeeded | 1 | 9.0 |
 | [Periodic full-archive refresh](plan_specs/v1/e34-caselist-sync/t04-full-archive-refresh.yaml) `v1-e34-t04-full-archive-refresh` | Succeeded | 2 | 6.5 |
-| [Install and enable the weekly agent](plan_specs/v1/e34-caselist-sync/t05-enable-schedule.yaml) `v1-e34-t05-enable-schedule` | Pending | 6 | 1.5 |
+| [Install and enable the weekly agent](plan_specs/v1/e34-caselist-sync/t05-enable-schedule.yaml) `v1-e34-t05-enable-schedule` | Succeeded | 6 | 1.5 |
 | [Defects found by operating the sync](plan_specs/v1/e34-caselist-sync/t06-sync-defects.yaml) `v1-e34-t06-sync-defects` | Succeeded | 1 | 7.0 |
 | [The sync does not re-download a file it has been told to remove](plan_specs/v1/e34-caselist-sync/t07-suppressed-downloads.yaml) `v1-e34-t07-suppressed-downloads` | Succeeded | 2 | 7.0 |
 | [A camp file uploaded again upstream is fetched](plan_specs/v1/e34-caselist-sync/t08-revised-camp-files.yaml) `v1-e34-t08-revised-camp-files` | Succeeded | 1 | 4.0 |
-| [Retire the legacy download ledger](plan_specs/v1/e34-caselist-sync/t09-retire-legacy-ledger.yaml) `v1-e34-t09-retire-legacy-ledger` | Pending | 1 | 2.0 |
+| [Retire the legacy download ledger](plan_specs/v1/e34-caselist-sync/t09-retire-legacy-ledger.yaml) `v1-e34-t09-retire-legacy-ledger` | InProgress | 1 | 2.0 |
 | [The weekly agent runs nothing from a git checkout](plan_specs/v1/e34-caselist-sync/t10-agent-outside-checkout.yaml) `v1-e34-t10-agent-outside-checkout` | Succeeded | 1 | 2.0 |
 | [Imported downloads leave the inbox](plan_specs/v1/e34-caselist-sync/t11-inbox-retention.yaml) `v1-e34-t11-inbox-retention` | Succeeded | 1 | 4.0 |
 | [The pull summary names a camp download by id, never by title](plan_specs/v1/e34-caselist-sync/t12-summary-names-no-camp-file.yaml) `v1-e34-t12-summary-names-no-camp-file` | Succeeded | 1 | 1.5 |
 | [A pull stage that fails on a retryable cause ends the run with exit 3](plan_specs/v1/e34-caselist-sync/t13-pull-stage-failure-classes.yaml) `v1-e34-t13-pull-stage-failure-classes` | Succeeded | 2 | 4.0 |
 | [A camp file already in the inbox is held if its path was removed](plan_specs/v1/e34-caselist-sync/t14-removed-path-hold-for-inbox-copies.yaml) `v1-e34-t14-removed-path-hold-for-inbox-copies` | Succeeded | 1 | 1.5 |
-| [A camp release of junk alone leaves the inbox once it is handled](plan_specs/v1/e34-caselist-sync/t15-junk-release-leaves-inbox.yaml) `v1-e34-t15-junk-release-leaves-inbox` | Pending | 1 | 1.0 |
+| [A camp release of junk alone leaves the inbox once it is handled](plan_specs/v1/e34-caselist-sync/t15-junk-release-leaves-inbox.yaml) `v1-e34-t15-junk-release-leaves-inbox` | Succeeded | 1 | 1.0 |
 | [The dry run's download plan names no path on the operator's machine](plan_specs/v1/e34-caselist-sync/t16-dry-run-names-no-home-path.yaml) `v1-e34-t16-dry-run-names-no-home-path` | Pending | 1 | 0.5 |
 | [The weekly pull parses the sources it imported](plan_specs/v1/e34-caselist-sync/t17-pull-parses-new-sources.yaml) `v1-e34-t17-pull-parses-new-sources` | InProgress | 2 | 3.0 |
 | [A publish stopped by an expired session still owes every snapshot it did not finish](plan_specs/v1/e34-caselist-sync/t18-publish-owes-every-unpublished-snapshot.yaml) `v1-e34-t18-publish-owes-every-unpublished-snapshot` | Succeeded | 1 | 2.0 |
 | [Unreadable local files fail a stage, and a notification says whether a failure is transient](plan_specs/v1/e34-caselist-sync/t19-unreadable-local-files-and-notification-codes.yaml) `v1-e34-t19-unreadable-local-files-and-notification-codes` | Succeeded | 1 | 3.0 |
 | [After a login, the parsed store publishes without a second rebuild when nothing was removed](plan_specs/v1/e34-caselist-sync/t20-parsed-store-publish-after-login.yaml) `v1-e34-t20-parsed-store-publish-after-login` | Pending | 2 | 4.0 |
 | [The parse stage holds the run lock and has a time budget](plan_specs/v1/e34-caselist-sync/t21-parse-stage-bounds.yaml) `v1-e34-t21-parse-stage-bounds` | Pending | 1 | 2.0 |
-| [A weekly run that cannot reach its bucket is recorded and announced, and the profile is checked before install](plan_specs/v1/e34-caselist-sync/t22-refusal-to-start-is-recorded.yaml) `v1-e34-t22-refusal-to-start-is-recorded` | Pending | 2 | 3.0 |
+| [A weekly run that cannot reach its bucket is recorded and announced, and the profile is checked before install](plan_specs/v1/e34-caselist-sync/t22-refusal-to-start-is-recorded.yaml) `v1-e34-t22-refusal-to-start-is-recorded` | Succeeded | 2 | 3.0 |
 | [Loose ends in the weekly sync's findings, records and notifications](plan_specs/v1/e34-caselist-sync/t23-sync-loose-ends.yaml) `v1-e34-t23-sync-loose-ends` | Pending | 1 | 3.0 |
+| [The agent's installer checks what it can, and never changes an agent's environment by default](plan_specs/v1/e34-caselist-sync/t24-agent-install-loose-ends.yaml) `v1-e34-t24-agent-install-loose-ends` | Pending | 1 | 3.0 |
 
 
 ### v1.2 — Argument landscape & file building

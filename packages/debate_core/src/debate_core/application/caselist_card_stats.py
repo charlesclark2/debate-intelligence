@@ -11,13 +11,14 @@ as totals and a ranking of clusters by the number of distinct teams that read th
 1. Every card is fingerprinted (:mod:`debate_core.evidence.fingerprints`).
 2. FULL cards are clustered by near-duplicate text (:mod:`debate_core.evidence.near_duplicates`),
    with the thresholds from `settings.fingerprints`. Short bodies are matched as cuts of the one
-   card that contains them (`v1-e31-t08`).
+   card that contains them (`v1-e31-t08`), where copies of a card that hold one another count as
+   one (`v1-e31-t11`).
 3. ABBREVIATED and CITE_ONLY cards are linked to one full card's cluster, which may be one of
    several that card was split across; failing that they are grouped with the other abbreviated
    cards that matched no full card; failing that they are left in a cluster of their own
    (:mod:`debate_core.evidence.abbreviated_links`, `v1-e31-t08`).
 4. Each card is joined to every disclosure of the file it came from. One file disclosed by two
-   teams is two occurrences; the same disclosure in three cumulative weekly archives is one, whose
+   teams is two occurrences; the same disclosure carried in three weekly archives is one, whose
    first and last seen snapshots span the three (:attr:`CardOccurrence.occurrence_key`).
 
 A card whose file has no disclosure on record still gets an occurrence, with no school or team, so

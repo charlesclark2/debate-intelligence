@@ -135,12 +135,12 @@ def build_report(
 
 
 # ------------------------------------------------------------------------------------------------
-# ac4: cumulative snapshots collapse; teams are counted, not files
+# ac4: one disclosure held by several snapshots collapses; teams are counted, not files
 # ------------------------------------------------------------------------------------------------
 
 
-def test_three_cumulative_snapshots_yield_one_occurrence_with_first_and_last_seen() -> None:
-    # One file, disclosed once, present in three weekly archives and parsed under each of them.
+def test_one_disclosure_in_three_snapshots_yields_one_occurrence_with_first_and_last_seen() -> None:
+    # One file, disclosed once, carried in three weekly windows and parsed under each of them.
     cards = [card(FILE_A, 4, snapshot=week) for week in (WEEK_THREE, WEEK_ONE, WEEK_TWO)]
     disclosures = [disclosure(FILE_A, week) for week in (WEEK_ONE, WEEK_TWO, WEEK_THREE)]
 
@@ -425,6 +425,30 @@ def test_a_cut_that_matches_two_different_full_cards_is_not_grouped_with_a_third
     assert placed[2][1] is placed[3][1] is ClusterMembership.UNLINKED
     # The same two cuts with no full card between them are consistent, and share five opening words.
     assert len({cluster for cluster, _ in place(either, third)}) == 1
+
+
+# ------------------------------------------------------------------------------------------------
+# A short cut of nested copies (`v1-e31-t11`)
+# ------------------------------------------------------------------------------------------------
+
+
+def test_a_short_cut_is_placed_with_the_smallest_of_the_nested_copies_that_hold_it() -> None:
+    """Through the step the parse pipeline builds its occurrence table with: a 330-word card, a
+    90-word copy from inside it that the banding never pairs with it, and a 30-word cut from inside
+    the copy. `card-fingerprint-v2` left the cut a cluster of its own, inside two clusters. It is
+    placed with the copy, and the two long cards are where they were."""
+    whole = [f"word{index}" for index in range(330)]
+    copy, cut = whole[100:190], whole[110:140]
+    cards = [
+        card(source, 0, " ".join(body)) for source, body in ((FILE_A, whole), (FILE_B, copy), (FILE_C, cut))
+    ]
+    (whole_cluster, _), (copy_cluster, _), (cut_cluster, membership) = place(*cards)
+    assert cut_cluster == copy_cluster != whole_cluster
+    assert membership is ClusterMembership.NEAR_DUPLICATE
+    # A cluster's id is its smallest fingerprint, so the cut may be what names the copy's cluster.
+    assert copy_cluster == min(card_fingerprint(item).exact_fingerprint for item in cards[1:])
+    (whole_alone, _), (copy_alone, _) = place(*cards[:2])
+    assert whole_alone == whole_cluster != copy_alone
 
 
 def test_cutter_mark_is_recorded_on_the_occurrence_and_nowhere_else() -> None:

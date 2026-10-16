@@ -43,6 +43,23 @@ listing is refused, and the caselist is reported as *not checked*, which is not 
 and does not by itself make the comparison fail. `caselist pull` asks for the comparison alone, so
 its runs list no versions.
 
+The same check reports, per caselist one of this environment's completed removals touched, the
+manifest and aggregate versions older than that removal (`v1-e30-t15`), from the listing and the
+removal log, which it reads as it reads the suppression list: this machine's copy and the bucket's,
+as one, with the scopes beside them. Only entries recorded in this environment are compared: in
+prod the command runs against the dev data directory, whose copy holds dev's removals.
+
+## A manifest mismatch and a source mismatch
+
+A checksum mismatch is one of two kinds (:class:`MismatchKind`, `v1-e30-t12`), told apart by
+comparing the key with that snapshot's own :attr:`SnapshotStatus.manifest_key`, never by a prefix:
+`manifests/` also holds the suppression records, and a complete archive's manifest is one level
+further down. A **source** is filed under the digest of its bytes, so other bytes under its key are
+never expected, and that needs a person. A **manifest** is not content-addressed: this machine
+rewrites one in place after a camp metadata re-import (`v1-e30-t08`) or a removal, and the bucket's
+copy differs until the next `caselist publish`, which uploads a manifest whose recorded digest
+differs. Both kinds are drift, as they always were.
+
 Checksums are the bucket's *recorded* digests, read with one `HeadObject` per listed source — the
 listing states none (`debate_core.application.ports.evidence_store`). Nothing is downloaded: a
 manifest's digest is compared, and its body is never read back from the bucket.
@@ -58,6 +75,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import Final
 
 from debate_core.application.caselist.evidence_listing import (
@@ -78,12 +96,22 @@ from debate_core.application.caselist.publish_plan import (
     suppressed_rows,
     validate_publish_target,
 )
-from debate_core.application.caselist.removal_residue import CaselistResidue, removal_residue
+from debate_core.application.caselist.removal_residue import (
+    CaselistResidue,
+    CompletedRemovals,
+    completed_removals,
+    removal_residue,
+)
 from debate_core.application.caselist.suppression import load_suppression_state
 from debate_core.application.errors import DomainError, NotFound
 from debate_core.application.ports.evidence_store import EvidenceObjectStore, ObjectInfo, ObjectKey
 from debate_core.application.ports.evidence_versions import EvidenceVersionStore
-from debate_core.application.ports.suppression import SuppressionList, SuppressionState
+from debate_core.application.ports.suppression import (
+    RemovalLog,
+    RemovalScopeLog,
+    SuppressionList,
+    SuppressionState,
+)
 from debate_core.domain import Sha256Hex
 
 __all__ = [
@@ -91,6 +119,7 @@ __all__ = [
     "REMOVAL_RESIDUE",
     "CaselistStatusReport",
     "CaselistStatusService",
+    "MismatchKind",
     "NoCaselistEvidence",
     "SnapshotStatus",
 ]
@@ -106,6 +135,15 @@ file the suppression list says was removed: `caselist status`'s `error.code` the
 code, like :data:`CASELIST_DRIFT`, and as deterministic: only a removal run again changes it."""
 
 _DEFAULT_CONCURRENCY: Final = 8
+
+
+class MismatchKind(StrEnum):
+    """What a checksum mismatch is on: see "A manifest mismatch and a source mismatch" above."""
+
+    MANIFEST = "manifest"
+    """The snapshot's own manifest. `caselist publish` uploads this machine's copy."""
+    SOURCE = "source"
+    """A source, filed by the digest of its bytes. A person finds out why the bucket holds others."""
 
 
 class NoCaselistEvidence(DomainError):
@@ -158,6 +196,30 @@ class SnapshotStatus:
             and not self.suppressed_rows
         )
 
+    def mismatch_kind(self, key: ObjectKey) -> MismatchKind:
+        """The kind of a key in :attr:`checksum_mismatches`: this snapshot's manifest, or a source."""
+        return MismatchKind.MANIFEST if key == self.manifest_key else MismatchKind.SOURCE
+
+    @property
+    def manifest_mismatched(self) -> bool:
+        """Whether the bucket's manifest differs from this machine's: a publish uploads it."""
+        return self.manifest_key in self.checksum_mismatches
+
+    @property
+    def source_mismatches(self) -> tuple[ObjectKey, ...]:
+        """The source keys the bucket holds with other bytes, or no recorded digest."""
+        return tuple(key for key in self.checksum_mismatches if key != self.manifest_key)
+
+    @property
+    def incomplete(self) -> bool:
+        """Whether something is missing: a manifest on either side, or a source on either side."""
+        return (
+            not self.local_manifest
+            or not self.manifest_present
+            or bool(self.missing_sources)
+            or bool(self.missing_local)
+        )
+
 
 @dataclass(frozen=True, slots=True)
 class CaselistStatusReport:
@@ -169,6 +231,9 @@ class CaselistStatusReport:
     residue: tuple[CaselistResidue, ...] = ()
     """Per caselist compared, what a version listing shows of its removed files. Empty when the
     caller did not ask for the check."""
+    removals_not_checked: tuple[str, ...] = ()
+    """Request ids of completed removals whose log entries do not say which caselists they touched,
+    so that no manifest or aggregate version is checked against them (`v1-e30-t15`)."""
 
     @property
     def in_sync(self) -> bool:
@@ -186,6 +251,30 @@ class CaselistStatusReport:
     @property
     def drifted(self) -> tuple[SnapshotStatus, ...]:
         return tuple(snapshot for snapshot in self.snapshots if not snapshot.in_sync)
+
+    @property
+    def manifest_mismatched(self) -> tuple[SnapshotStatus, ...]:
+        """The snapshots whose manifest the bucket holds with other bytes."""
+        return tuple(snapshot for snapshot in self.snapshots if snapshot.manifest_mismatched)
+
+    @property
+    def source_mismatched(self) -> tuple[SnapshotStatus, ...]:
+        """The snapshots with a source the bucket holds with other bytes."""
+        return tuple(snapshot for snapshot in self.snapshots if snapshot.source_mismatches)
+
+    @property
+    def caselists(self) -> tuple[str, ...]:
+        """The caselists compared, in order: each holds at least one snapshot on one side."""
+        return tuple(dict.fromkeys(snapshot.caselist for snapshot in self.snapshots))
+
+    def suppressed_objects_of(self, caselist: str) -> tuple[ObjectKey, ...]:
+        """The :attr:`suppressed_objects` among `caselist`'s sources.
+
+        Per caselist, because that is how they are found: one listing of the caselist's source
+        prefix, which every snapshot of it shares. A source object belongs to no one snapshot.
+        """
+        prefix = remote_source_prefix(caselist)
+        return tuple(key for key in self.suppressed_objects if key.startswith(prefix))
 
     @property
     def residue_found(self) -> bool:
@@ -207,6 +296,10 @@ class CaselistStatusService:
         suppression: The removal suppression list. Required.
         versions: The bucket's object versions through the everyday profile, for the residue check.
             Listed only, and only when :meth:`status` is asked for residue.
+        removal_log: The removal log, this machine's copy and the bucket's read as one, for the
+            manifest and aggregate versions older than a removal (`v1-e30-t15`). Read only when
+            :meth:`status` is asked for residue. Without one, no removal is known.
+        environment: This environment, `dev` or `prod`. Only its own removals are compared.
         concurrency: `HeadObject` calls in flight at once.
     """
 
@@ -217,14 +310,20 @@ class CaselistStatusService:
         remote: EvidenceObjectStore,
         suppression: SuppressionList,
         versions: EvidenceVersionStore | None = None,
+        removal_log: RemovalLog | None = None,
+        environment: str | None = None,
         concurrency: int = _DEFAULT_CONCURRENCY,
     ) -> None:
         if concurrency < 1:
             raise ValueError("concurrency must be at least 1")
+        if removal_log is not None and environment is None:
+            raise ValueError("a removal log is compared only with its own environment's removals; name it")
         self._local = local
         self._remote = remote
         self._suppression = suppression
         self._versions = versions
+        self._removal_log = removal_log
+        self._environment = environment
         self._semaphore_size = concurrency
 
     async def status(
@@ -264,11 +363,24 @@ class CaselistStatusService:
         if not compared:
             raise NoCaselistEvidence(caselist, snapshot)
         left: list[CaselistResidue] = []
+        removals = CompletedRemovals()
         if residue and self._versions is not None:
-            left = [await removal_residue(self._versions, name, suppression) for name in caselists]
+            removals = await self._completed_removals()
+            left = [await removal_residue(self._versions, name, suppression, removals) for name in caselists]
         return CaselistStatusReport(
-            snapshots=tuple(compared), suppressed_objects=tuple(sorted(set(leftovers))), residue=tuple(left)
+            snapshots=tuple(compared),
+            suppressed_objects=tuple(sorted(set(leftovers))),
+            residue=tuple(left),
+            removals_not_checked=removals.not_checked,
         )
+
+    async def _completed_removals(self) -> CompletedRemovals:
+        """This environment's completed removals, from both copies of the log and of its scopes."""
+        if self._removal_log is None or self._environment is None:
+            return CompletedRemovals()
+        log = self._removal_log
+        scopes = await log.scopes() if isinstance(log, RemovalScopeLog) else ()
+        return completed_removals(await log.entries(), scopes, self._environment)
 
     async def _caselist_status(
         self,

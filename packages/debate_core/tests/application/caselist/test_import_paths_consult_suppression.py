@@ -1,6 +1,7 @@
 """Every path that can store or publish a caselist source consults the suppression list.
 
-A removal is undone by the next cumulative archive unless *every* import path checks the list, and
+A removal is undone by the next archive that holds the file, weekly or complete, unless *every*
+import path checks the list, and
 the failure mode the project has learned to fear is not a path that checks wrongly but a fourth
 path, added later, that never checks at all and reports success. So the guarantee is made
 structural rather than conventional, and this module fails when the structure is broken:

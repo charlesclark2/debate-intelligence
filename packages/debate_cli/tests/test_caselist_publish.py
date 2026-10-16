@@ -11,9 +11,11 @@ Nothing here reaches AWS: moto answers botocore in-process and sockets are disab
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from collections.abc import Iterator
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -37,7 +39,7 @@ from debate_cli.app import create_app
 from debate_cli.exit_codes import ExitCode
 from debate_core.application.errors import StoreUnavailable
 from debate_core.application.ports.evidence_store import ObjectInfo
-from debate_core.integrations.s3 import S3EvidenceObjectStore
+from debate_core.integrations.s3 import SHA256_METADATA_NAME, S3EvidenceObjectStore
 
 if TYPE_CHECKING:  # pragma: no cover - import for the type checker only
     from mypy_boto3_s3.client import S3Client
@@ -326,11 +328,22 @@ class TestStatus:
             week["snapshot"] for week in EXPECTED["snapshots"]
         ]
         for entry in data["snapshots"]:
+            # Every field from before v1-e30-t12 is still here; `mismatches` and the two
+            # suppressed-row fields were added beside them.
             assert set(entry) == {
                 "caselist", "snapshot", "manifest_key", "in_sync", "local_manifest", "manifest_present",
                 "sources", "local_files", "published_sources", "missing_sources", "missing_local",
-                "checksum_mismatches", "suppressed",
+                "checksum_mismatches", "suppressed", "mismatches", "suppressed_rows",
+                "suppressed_row_prefixes",
             }  # fmt: skip
+            assert (entry["mismatches"], entry["suppressed_rows"], entry["suppressed_row_prefixes"]) == (
+                [],
+                0,
+                [],
+            )
+        assert data["suppressed_objects"] == [
+            {"caselist": SYNTHETIC_CASELIST, "objects": 0, "sha256_prefixes": []}
+        ]
 
     def test_status_reads_the_bucket_of_its_own_environment(
         self, buckets: S3Client, imported: Path, monkeypatch: pytest.MonkeyPatch
@@ -347,6 +360,305 @@ class TestStatus:
         result = invoke("--json", "caselist", "status", "--snapshot", "2026-09-15")
 
         assert result.exit_code == ExitCode.DOMAIN_FAILURE
+
+
+# ------------------------------------------------------------------------------------------------
+# v1-e30-t12: caselist status tells a manifest mismatch from a source mismatch, and shows what a
+# removal left (suppressed rows per snapshot, suppressed objects per caselist)
+# ------------------------------------------------------------------------------------------------
+
+SECOND_CASELIST = "testcl27"
+"""A second invented caselist slug, holding the first synthetic week, for "each caselist affected"."""
+
+COMPLETE_ARCHIVE = "full/2026-09-20"
+PUBLISH_HINT = "caselist publish --caselist {}"
+PERSON_HINT = "needs a person"
+
+
+def manifest_path(data_dir: Path, caselist: str, snapshot: str) -> Path:
+    return data_dir / "objects" / "manifests" / caselist / f"{snapshot}.jsonl"
+
+
+def rewrite_local_manifest(data_dir: Path, caselist: str, snapshot: str) -> None:
+    """Change this machine's manifest bytes and none of its sources, as a re-import or a removal does.
+
+    The summary row is written again with other separators: the same facts, other bytes.
+    """
+    path = manifest_path(data_dir, caselist, snapshot)
+    before = path.read_bytes()
+    lines = before.decode("utf-8").splitlines()
+    lines[-1] = json.dumps(json.loads(lines[-1]), separators=(", ", ": "), sort_keys=True)
+    path.write_text("".join(f"{line}\n" for line in lines), encoding="utf-8")
+    assert path.read_bytes() != before
+
+
+def replace_in_bucket(client: S3Client, key: str) -> None:
+    """Other bytes of the same size under `key`, with some other digest recorded."""
+    size = client.head_object(Bucket=DEV_BUCKET, Key=key)["ContentLength"]
+    client.put_object(Bucket=DEV_BUCKET, Key=key, Body=b"x" * size, Metadata={SHA256_METADATA_NAME: "0" * 64})
+
+
+def suppress(data_dir: Path, sha256: str) -> None:
+    """Put `sha256` on this machine's copy of the suppression list, whole, as a removal does."""
+    from debate_core.application.ports.suppression import ReasonCode, SuppressionAction, SuppressionEntry
+    from debate_core.integrations.local.suppression_list import local_suppression_list_file
+
+    path = local_suppression_list_file(data_dir).path
+    path.parent.mkdir(parents=True, exist_ok=True)
+    entry = SuppressionEntry(
+        action=SuppressionAction.SUPPRESS,
+        sha256=sha256,
+        recorded_at=datetime(2026, 9, 30, 12, 0, tzinfo=UTC),
+        reason=ReasonCode.REQUESTED_BY_TEAM,
+        request_id="RM-2026-01",
+    )
+    with path.open("a", encoding="utf-8") as stream:
+        stream.write(entry.to_line() + "\n")
+
+
+def refuse_version_listing(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A profile without the version-listing grant: the residue is then *not checked*."""
+    from debate_core.application.errors import StoreAccessDenied
+    from debate_core.integrations.s3 import S3EvidenceVersionStore
+
+    async def refused(self: S3EvidenceVersionStore, prefix: str) -> tuple[Any, ...]:
+        raise StoreAccessDenied("ListObjectVersions", f"s3://{DEV_BUCKET}/{prefix}")
+
+    monkeypatch.setattr(S3EvidenceVersionStore, "list_versions", refused)
+
+
+def status_as_a_person_reads_it() -> str:
+    result = runner.invoke(create_app(), ["caselist", "status"], terminal_width=200)
+    return " ".join(result.output.split())
+
+
+def status_error() -> dict[str, Any]:
+    result = invoke("--json", "caselist", "status")
+    assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.stdout
+    error = envelope_of(result)["error"]
+    assert isinstance(error, dict)
+    return error
+
+
+def reported(error: dict[str, Any], caselist: str, snapshot: str) -> dict[str, Any]:
+    (entry,) = [
+        one
+        for one in error["details"]["snapshots"]
+        if (one["caselist"], one["snapshot"]) == (caselist, snapshot)
+    ]
+    return entry
+
+
+@pytest.fixture
+def second_caselist(tmp_path: Path, imported: Path) -> Path:
+    """The first synthetic week imported again as a second caselist, so two caselists are held."""
+    zips = build_snapshot_zips(tmp_path / "second-downloads")
+    first = SNAPSHOTS[0].snapshot
+    result = invoke(
+        "--json", "caselist", "import", str(zips[first]),
+        "--caselist", SECOND_CASELIST, "--snapshot", first.isoformat(),
+    )  # fmt: skip
+    assert result.exit_code == ExitCode.OK, result.stdout
+    return imported
+
+
+class TestStatusNamesManifestMismatches:
+    """ac1: a manifest mismatch is named as one, and its hint is a publish of each caselist affected."""
+
+    def test_status_with_only_manifest_mismatches_hints_a_publish_of_each_caselist_and_no_person(
+        self, buckets: S3Client, second_caselist: Path
+    ) -> None:
+        for caselist in (SYNTHETIC_CASELIST, SECOND_CASELIST):
+            assert invoke("--json", "caselist", "publish", "--caselist", caselist).exit_code == ExitCode.OK
+        rewrite_local_manifest(second_caselist, SYNTHETIC_CASELIST, "2026-09-01")
+        rewrite_local_manifest(second_caselist, SYNTHETIC_CASELIST, "2026-09-08")
+        rewrite_local_manifest(second_caselist, SECOND_CASELIST, "2026-09-01")
+
+        error = status_error()
+
+        assert error["code"] == "CASELIST_DRIFT"
+        assert error["exit_code"] == ExitCode.DOMAIN_FAILURE
+        assert error["message"] == (
+            "3 snapshot(s) differ between this machine and the bucket: "
+            f"{SYNTHETIC_CASELIST} 2026-09-01 (manifest mismatch), "
+            f"{SYNTHETIC_CASELIST} 2026-09-08 (manifest mismatch), "
+            f"{SECOND_CASELIST} 2026-09-01 (manifest mismatch)"
+        )
+        assert PUBLISH_HINT.format(SYNTHETIC_CASELIST) in error["hint"]
+        assert PUBLISH_HINT.format(SECOND_CASELIST) in error["hint"]
+        assert PERSON_HINT not in error["hint"]
+        assert "completes what is missing" not in error["hint"]
+        key = f"manifests/{SYNTHETIC_CASELIST}/2026-09-01.jsonl"
+        entry = reported(error, SYNTHETIC_CASELIST, "2026-09-01")
+        assert entry["checksum_mismatches"] == [key]
+        assert entry["mismatches"] == [{"key": key, "kind": "manifest"}]
+        assert reported(error, SYNTHETIC_CASELIST, "2026-09-15")["mismatches"] == []
+
+    def test_the_publish_the_hint_names_clears_it(self, buckets: S3Client, imported: Path) -> None:
+        publish()
+        rewrite_local_manifest(imported, SYNTHETIC_CASELIST, "2026-09-08")
+        assert PUBLISH_HINT.format(SYNTHETIC_CASELIST) in status_error()["hint"]
+
+        assert publish().exit_code == ExitCode.OK
+
+        assert invoke("--json", "caselist", "status").exit_code == ExitCode.OK
+
+    def test_a_complete_archive_manifest_mismatch_is_a_manifest_mismatch_the_same_publish_clears(
+        self, buckets: S3Client, imported: Path
+    ) -> None:
+        """`manifests/<caselist>/full/<date>.jsonl` is a manifest one level down, published with its
+        caselist by `caselist publish --caselist <slug>` like every weekly."""
+        complete = manifest_path(imported, SYNTHETIC_CASELIST, COMPLETE_ARCHIVE)
+        complete.parent.mkdir(parents=True)
+        complete.write_bytes(manifest_path(imported, SYNTHETIC_CASELIST, "2026-09-15").read_bytes())
+        publish()
+        rewrite_local_manifest(imported, SYNTHETIC_CASELIST, COMPLETE_ARCHIVE)
+
+        error = status_error()
+
+        key = f"manifests/{SYNTHETIC_CASELIST}/{COMPLETE_ARCHIVE}.jsonl"
+        assert reported(error, SYNTHETIC_CASELIST, COMPLETE_ARCHIVE)["mismatches"] == [
+            {"key": key, "kind": "manifest"}
+        ]
+        assert f"{SYNTHETIC_CASELIST} {COMPLETE_ARCHIVE} (manifest mismatch)" in error["message"]
+        assert PUBLISH_HINT.format(SYNTHETIC_CASELIST) in error["hint"]
+        assert PERSON_HINT not in error["hint"]
+        assert publish().exit_code == ExitCode.OK
+        assert invoke("--json", "caselist", "status").exit_code == ExitCode.OK
+
+    def test_the_table_and_the_hint_say_manifest_mismatch_to_a_person(
+        self, buckets: S3Client, imported: Path
+    ) -> None:
+        publish()
+        rewrite_local_manifest(imported, SYNTHETIC_CASELIST, "2026-09-08")
+
+        shown = status_as_a_person_reads_it()
+
+        assert f"{SYNTHETIC_CASELIST} 2026-09-08 (manifest mismatch)" in shown
+        assert PUBLISH_HINT.format(SYNTHETIC_CASELIST) in shown
+        assert PERSON_HINT not in shown
+        assert "Source mismatches" in shown
+        assert "differs" in shown
+
+
+class TestStatusKeepsTheSourceMismatchHint:
+    """ac2: a source mismatch still needs a person; both kinds at once print both hints."""
+
+    def test_status_with_only_a_source_mismatch_keeps_the_hint_that_a_person_must_investigate(
+        self, buckets: S3Client, imported: Path
+    ) -> None:
+        publish()
+        key = expected_source_key("bayview-semis-neg")
+        replace_in_bucket(buckets, key)
+
+        error = status_error()
+
+        assert error["code"] == "CASELIST_DRIFT"
+        assert error["message"] == (
+            "1 snapshot(s) differ between this machine and the bucket: "
+            f"{SYNTHETIC_CASELIST} 2026-09-15 (1 source mismatch(es))"
+        )
+        assert PERSON_HINT in error["hint"]
+        assert "caselist publish --caselist" not in error["hint"]
+        assert reported(error, SYNTHETIC_CASELIST, "2026-09-15")["mismatches"] == [
+            {"key": key, "kind": "source"}
+        ]
+
+    def test_status_with_both_kinds_prints_both_hints(self, buckets: S3Client, imported: Path) -> None:
+        publish()
+        key = expected_source_key("bayview-semis-neg")
+        replace_in_bucket(buckets, key)
+        rewrite_local_manifest(imported, SYNTHETIC_CASELIST, "2026-09-15")
+        rewrite_local_manifest(imported, SYNTHETIC_CASELIST, "2026-09-01")
+
+        error = status_error()
+
+        assert error["message"] == (
+            "2 snapshot(s) differ between this machine and the bucket: "
+            f"{SYNTHETIC_CASELIST} 2026-09-01 (manifest mismatch), "
+            f"{SYNTHETIC_CASELIST} 2026-09-15 (manifest mismatch, 1 source mismatch(es))"
+        )
+        assert PUBLISH_HINT.format(SYNTHETIC_CASELIST) in error["hint"]
+        assert PERSON_HINT in error["hint"]
+        manifest_key = f"manifests/{SYNTHETIC_CASELIST}/2026-09-15.jsonl"
+        assert reported(error, SYNTHETIC_CASELIST, "2026-09-15")["mismatches"] == [
+            {"key": manifest_key, "kind": "manifest"},
+            {"key": key, "kind": "source"},
+        ]
+
+    def test_status_with_something_missing_keeps_the_publish_completes_it_hint(
+        self, buckets: S3Client, imported: Path
+    ) -> None:
+        error = status_error()
+
+        assert error["hint"] == "`caselist publish` completes what is missing here."
+
+
+class TestStatusShowsSuppressedRowsAndObjects:
+    """ac4: suppressed rows per snapshot and suppressed objects per caselist, in the table and JSON."""
+
+    def test_status_shows_each_snapshots_suppressed_rows_and_each_caselists_suppressed_objects(
+        self, buckets: S3Client, imported: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        publish()
+        removed = digest_of_body("harbor-octas-neg")
+        suppress(imported, removed)
+        refuse_version_listing(monkeypatch)
+
+        error = status_error()
+        shown = status_as_a_person_reads_it()
+
+        # expected_publish.json: the first two weeks hold it, the third does not.
+        counts = {
+            entry["snapshot"]: (entry["suppressed_rows"], entry["suppressed_row_prefixes"])
+            for entry in error["details"]["snapshots"]
+        }
+        assert counts == {
+            "2026-09-01": (1, [removed[:12]]),
+            "2026-09-08": (1, [removed[:12]]),
+            "2026-09-15": (0, []),
+        }
+        assert error["details"]["suppressed_objects"] == [
+            {"caselist": SYNTHETIC_CASELIST, "objects": 1, "sha256_prefixes": [removed[:12]]}
+        ]
+        assert error["message"] == (
+            "2 snapshot(s) differ between this machine and the bucket: "
+            f"{SYNTHETIC_CASELIST} 2026-09-01 (1 suppressed row(s)), "
+            f"{SYNTHETIC_CASELIST} 2026-09-08 (1 suppressed row(s)); and the bucket still holds "
+            f"1 current object(s) of suppressed sources: {SYNTHETIC_CASELIST} 1"
+        )
+        assert "caselist-removal.md" in error["hint"]
+        assert "Suppressed rows" in shown
+        assert (
+            f"SUPPRESSED SOURCE OBJECTS in {SYNTHETIC_CASELIST}: 1 current object(s) "
+            f"(sha256 {removed[:12]})" in shown
+        )
+        # A removed file is named by twelve characters, as the residue report names one.
+        assert removed not in json.dumps(error) + shown
+
+    def test_status_whose_only_difference_is_a_suppressed_object_says_so_not_zero_snapshots_differ(
+        self, buckets: S3Client, imported: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        publish()
+        leftover = hashlib.sha256(b"a synthetic later upload nobody's manifest names").hexdigest()
+        key = f"raw/caselist/{SYNTHETIC_CASELIST}/sha256/{leftover[0:2]}/{leftover[2:4]}/{leftover}"
+        buckets.put_object(Bucket=DEV_BUCKET, Key=key, Body=b"leftover")
+        suppress(imported, leftover)
+        refuse_version_listing(monkeypatch)
+
+        error = status_error()
+        shown = status_as_a_person_reads_it()
+
+        assert error["code"] == "CASELIST_DRIFT"
+        assert error["exit_code"] == ExitCode.DOMAIN_FAILURE
+        assert error["message"] == (
+            "every snapshot agrees, and the bucket still holds 1 current object(s) of suppressed "
+            f"sources: {SYNTHETIC_CASELIST} 1"
+        )
+        assert "0 snapshot(s)" not in shown
+        assert "caselist-removal.md" in error["hint"]
+        assert "caselist publish" not in error["hint"]
+        assert f"SUPPRESSED SOURCE OBJECTS in {SYNTHETIC_CASELIST}: 1 current object(s)" in shown
 
 
 # ------------------------------------------------------------------------------------------------

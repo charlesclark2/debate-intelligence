@@ -33,7 +33,10 @@ probe behind. `docs/runbooks/caselist-removal.md` says how to remove one left fr
 
 1. **Suppress first.** The entries go on the list — this machine's copy and the bucket's — before
    anything is deleted, so if the run stops part-way, the next weekly import still cannot bring the
-   file back.
+   file back. The plan's path entries go with them, to the path-hold record beside each copy of the
+   list (`v1-e30-t13`), so the next import cannot store a new upload at a removed path either. Just
+   before them, beside the list too, the caselist each withdrawn copy is taken from (`v1-e30-t16`),
+   so no suppressed disclosure is on a copy without its caselist beside it.
 2. **The bucket**: every version of every `raw/` and `parsed/` object, listed again with the
    takedown credential so nothing the dry run could not see is missed; then each rewritten
    manifest, written and every superseded version of it purged; then every noncurrent version of
@@ -47,6 +50,9 @@ probe behind. `docs/runbooks/caselist-removal.md` says how to remove one left fr
    use to recognise it as removed, which is safe only once the list says it is.
 4. **The removal log**, one entry, `COMPLETED` or `INCOMPLETE` with the error's code. An incomplete
    run is finished by running the same command again; nothing is retried behind the operator's back.
+   Just before it, beside the log, the run's scope (`v1-e30-t15`): the caselists it touched and each
+   manifest it rewrote in the bucket, with the version the rewrite is. `caselist status` compares
+   manifest and aggregate versions with the removal's completion by them.
 
 ## What it never deletes
 
@@ -69,6 +75,7 @@ from typing import Final
 
 from debate_core.application.caselist.evidence_listing import LocalEvidence
 from debate_core.application.caselist.inbox_purge import CaselistInbox, InboxPurge, purge_inbox
+from debate_core.application.caselist.publish_plan import OPENEV
 from debate_core.application.caselist.publish_service import error_code_of
 from debate_core.application.caselist.removal_plan import (
     Disposition,
@@ -107,14 +114,17 @@ from debate_core.application.ports.suppression import (
     REQUEST_ID_PATTERN,
     AppendOnlyRecord,
     InboxRewriteRecord,
+    ManifestRewriteRecord,
     ReasonCode,
     RemovalLogEntry,
     RemovalLogKind,
     RemovalOutcome,
+    RemovalScopeEntry,
     SuppressionAction,
     SuppressionEntry,
     SuppressionList,
     SuppressionState,
+    camp_path_scope,
     disclosure_digest,
 )
 from debate_core.domain import SHA256_HEX_PATTERN
@@ -430,6 +440,8 @@ class _Counts:
     manifest_rows_dropped: int = 0
     s3_versions_deleted: int = 0
     inbox: InboxPurge = field(default_factory=InboxPurge)
+    rewrites: list[ManifestRewriteRecord] = field(default_factory=lambda: [])
+    """Each manifest rewritten in the bucket so far, with the version its rewrite is."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -465,6 +477,9 @@ class UnsuppressPlan:
     disclosures: int
     """How many disclosure-scoped suppressions of it are in force now."""
     previous: SuppressionEntry
+    path_holds_released: int = 0
+    """How many paths its removal holds now, which the un-suppress releases (`v1-e30-t13`): an
+    upload at one is imported again from the next archive that holds it."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -541,7 +556,9 @@ class CaselistRemovalService:
         failure: BaseException | None = None
         suppressed = False
         try:
+            await suppression.append_withdrawals(plan.withdrawals)
             await suppression.append(plan.suppression_entries)
+            await suppression.append_path_holds(plan.path_holds)
             suppressed = True
             await self._delete_bucket_objects(plan, access, counts)
             await self._rewrite_bucket_manifests(plan, access, counts)
@@ -553,10 +570,17 @@ class CaselistRemovalService:
         except (DomainError, OSError) as stopped:
             failure = stopped
         entry = self._log_entry(plan, counts, failure)
+        scope = RemovalScopeEntry(
+            recorded_at=entry.recorded_at,
+            request_id=entry.request_id,
+            environment=entry.environment,
+            caselists=plan.touched_caselists,
+            manifest_rewrites=tuple(sorted(counts.rewrites, key=lambda rewrite: rewrite.key)),
+        )
         log = RecordedRemovalLog(self.local_removal_log, self._bucket_record(access, REMOVAL_LOG_KEY))
         unlogged: DomainError | OSError | None = None
         try:
-            await log.append([entry])
+            await log.append([entry], scopes=[scope])
         except (DomainError, OSError) as refused:
             unlogged = refused  # reported with the run's own failure, or as a completed removal unlogged
         report = RemovalReport(
@@ -603,6 +627,7 @@ class CaselistRemovalService:
             )
             refuse_protected_versions(stale)
             counts.s3_versions_deleted += await access.versions.delete_versions(stale)
+            counts.rewrites.append(ManifestRewriteRecord(key=rewrite.key, version_id=written))
             counts.manifests_rewritten += 1
             counts.manifest_rows_dropped += rewrite.rows_dropped
 
@@ -631,7 +656,7 @@ class CaselistRemovalService:
             staged = Path(directory) / "version.jsonl"
             await access.versions.get_version_file(version, staged)
             lines = staged.read_text(encoding="utf-8").splitlines()
-        return any(_names_removed(plan, caselist, line) for line in lines if line.strip())
+        return any(_names_removed(plan, caselist, line, key=version.key) for line in lines if line.strip())
 
     async def _delete_local_files(self, plan: RemovalPlan, counts: _Counts) -> None:
         for planned in plan.objects_on(Side.LOCAL):
@@ -739,13 +764,15 @@ class CaselistRemovalService:
             whole_source=state.suppresses_source(sha256),
             disclosures=sum(1 for digest, _ in state.disclosures if digest == sha256),
             previous=state.latest[sha256],
+            path_holds_released=sum(1 for hold in state.path_holds if hold.sha256 == sha256),
         )
 
     async def unsuppress(self, plan: UnsuppressPlan) -> UnsuppressReport:
         """Append the un-suppress entry to both copies of the list, and one entry to the removal log.
 
         Purged data is not restored: the file comes back only when an archive that holds it is
-        imported again.
+        imported again. The entry also lifts the hold on each path the file's removal took it from,
+        with nothing more appended: a hold follows the file it came from.
         """
         access = await self._authorised()
         suppression = RecordedSuppressionList(
@@ -806,8 +833,12 @@ async def _copies_holding(
     return tuple(holding), tuple(missing)
 
 
-def _names_removed(plan: RemovalPlan, caselist: str, line: str) -> bool:
-    """Whether one manifest line names something this removal took out: what the sweep looks for."""
+def _names_removed(plan: RemovalPlan, caselist: str, line: str, *, key: str) -> bool:
+    """Whether one manifest line names something this removal took out: what the sweep looks for.
+
+    `key` is the manifest's: a camp release's rows are asked about at their camp path in the release
+    the key names (`v1-e30-t14`), as a caselist's are at their caselist path.
+    """
     try:
         row: object = json.loads(line)
     except json.JSONDecodeError:
@@ -823,9 +854,10 @@ def _names_removed(plan: RemovalPlan, caselist: str, line: str) -> bool:
     ):
         return True
     if isinstance(digest, str):
-        scope = None if caselist == "openev" else caselist
+        release = key.rsplit("/", 1)[-1].removesuffix(".jsonl")
+        scope = camp_path_scope(release) if caselist == OPENEV else caselist
         after: SuppressionState = plan.suppression_after
         return after.suppresses(
-            digest, disclosure=disclosure_digest(scope, path) if scope and isinstance(path, str) else None
+            digest, disclosure=disclosure_digest(scope, path) if isinstance(path, str) else None
         )
     return False

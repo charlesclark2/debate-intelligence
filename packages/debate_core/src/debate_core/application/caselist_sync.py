@@ -130,8 +130,8 @@ Downloads land in one directory, which is what the importer reads. Two rules com
 
 ## What leaves the inbox
 
-Nothing used to: every weekly and camp download stayed after it was imported, and the weeklies are
-cumulative, so the inbox grew by the season's whole caselist every week (`v1-e34-t11`). The last
+Nothing used to: every weekly and camp download stayed after it was imported, so the inbox grew by
+every week's windows and every camp download for the whole season (`v1-e34-t11`). The last
 stage of a run, **retention**, removes a download once nothing can need it again. It runs after the
 report stage, under the run lock, on every real run — one that downloaded nothing too, which is how
 the first run after it shipped cleared the backlog — and a dry run lists what it would remove and
@@ -151,15 +151,23 @@ removes nothing. A file goes only when all of these hold:
   what lets the next run recognise a camp release as imported or removed (`v1-e34-t07`); without
   it the next run would download the file again.
 
+**A camp release of junk alone** goes on a condition of its own (`v1-e34-t15`). Its import keeps
+nothing, so no manifest row comes from its bytes and there is no snapshot to confirm: by the rules
+above it stayed as `not_imported` for good, although no run imports it again (`v1-e34-t08`), and
+a Word `~$` lock file in it names whoever had a document open. It goes when its id's delivery entry
+exists, names no member, and names these bytes as what the id delivered. The entry is written only
+once an import completes, and it is what the next run reads to neither fetch nor import the release
+again. The summary names it by its OpenEv id and SHA-256 prefix, with the reason `junk_only`. A
+camp download with no entry, or whose entry names members, is judged by the rules above.
+
 Anything else stays, and the summary names it with the reason: a download not imported, a snapshot
 not confirmed, a camp download the record does not cover, and any file whose name the pull does
 not give a download. Nothing is kept longer, the newest week included. The usual reason to keep a
 zip is a free re-import after a failed publish, but a zip is removed only after its publish is
-confirmed, and a publish reads the local store, never the inbox. The newest weekly is also the
-largest, because the weeklies are cumulative. An imported week is `ALREADY_IMPORTED` whether or not
-its zip is here (:func:`_decide_archive`, `v1-e30-t09`), and the site keeps the weekly
-back-catalogue (ADR-0017), so a removed zip is never fetched again by a pull and can be fetched by
-hand if ever needed.
+confirmed, and a publish reads the local store, never the inbox. An imported week is
+`ALREADY_IMPORTED` whether or not its zip is here (:func:`_decide_archive`, `v1-e30-t09`), and the
+site keeps the weekly back-catalogue (ADR-0017), so a removed zip is never fetched again by a pull
+and can be fetched by hand if ever needed.
 
 A removal (`caselist remove`, `v1-e30-t09`) also deletes inbox files, the ones holding removed
 bytes, under the same lock. The two cannot interleave, and each counts only the files it deleted:
@@ -210,6 +218,17 @@ suppressed is reported in the select stage and fetched, never skipped on the mem
 What the memory does not know, it cannot use. A camp file this machine never imported, removed
 somewhere else, is fetched once; the importer refuses it, the memory records what it delivered, and
 the next run skips it. A file still in the inbox is read there instead, so it costs nothing.
+
+**A camp path withdrawn on its own counts as removed for that id** (`v1-e30-t14`). When a removal
+takes a later upload from its camp path while another release or a team keeps the bytes, the list
+stops those bytes at that release's row path only
+(:func:`~debate_core.application.ports.suppression.camp_path_disclosure`), and the row is gone. The
+id's bytes are asked about at the row path the import would give them, `openev-<id>-<file name>` in
+its release, so the id is `SKIPPED_AS_REMOVED` there and is not fetched every week for the importer
+to refuse. The same bytes listed under another id, or in another release, are another row path and
+are not stopped. A camp release that is a zip records its members at their own paths, which the
+delivery record does not keep, so this asks only about a single document, which is what a
+withdrawn later upload is.
 
 ## A camp file that changed upstream
 
@@ -454,7 +473,11 @@ from debate_core.application.caselist.openev_import_service import (
     OpenEvImportReport,
     OpenEvImportService,
 )
-from debate_core.application.caselist.openev_manifest import openev_manifest_key
+from debate_core.application.caselist.openev_manifest import (
+    OpenEvUpstream,
+    openev_manifest_key,
+    openev_release_name,
+)
 from debate_core.application.caselist.pipeline import STORED_CLASSIFICATIONS, Classification
 from debate_core.application.caselist.publish_plan import (
     InvalidPublishTarget,
@@ -491,14 +514,21 @@ from debate_core.application.errors import (
 )
 from debate_core.application.ports.archive import ArchiveEntry, ArchiveMember
 from debate_core.application.ports.caselist_source import (
+    OPENEV_INBOX_PREFIX,
     ArchiveKind,
     ArchiveListing,
     CaselistArchiveSource,
     DownloadedFile,
     OpenEvFile,
+    openev_id_of_inbox_name,
     openev_inbox_name,
 )
-from debate_core.application.ports.suppression import SuppressionAction, SuppressionList, SuppressionState
+from debate_core.application.ports.suppression import (
+    SuppressionAction,
+    SuppressionList,
+    SuppressionState,
+    camp_path_disclosure,
+)
 from debate_core.domain.caselist import CASELIST_SLUG_PATTERN, Acquisition, Event
 
 if TYPE_CHECKING:  # pragma: no cover - sync_runs imports this module, so its types are named only
@@ -509,7 +539,6 @@ __all__ = [
     "DEFAULT_BULK_DOWNLOADS_PER_DAY",
     "DEFAULT_FULL_ARCHIVE_INTERVAL_DAYS",
     "INBOX_PARTIAL_DIRECTORY",
-    "LEGACY_DOWNLOAD_LEDGER_FILENAME",
     "LOCK_FILENAME",
     "OPENEV_DELIVERIES_FILENAME",
     "PENDING_WORK_FILENAME",
@@ -588,12 +617,6 @@ PENDING_WORK_FILENAME: Final = "caselist-sync-pending.json"
 DOWNLOAD_LEDGER_FILENAME: Final = "caselist-sync-download-starts.json"
 """When each bulk download started, for the rolling window. See :class:`DownloadLedger`."""
 
-LEGACY_DOWNLOAD_LEDGER_FILENAME: Final = "caselist-sync-downloads.json"
-"""The calendar-day ledger builds before `v1-e34-t06` kept: `{"date": ..., "bulk_downloads": N}`.
-
-Read, never written. See :class:`DownloadLedger` for why it is still read, and how.
-"""
-
 OPENEV_DELIVERIES_FILENAME: Final = "caselist-sync-openev-deliveries.json"
 """What each OpenEv id delivered when this machine imported it. See :class:`OpenEvDeliveries`."""
 
@@ -616,7 +639,10 @@ A key added since leaves the version as it is (`v1-e34-t07`'s rule): it changes 
 nothing reads a summary back. Under version 2 these were `note`, `openev_skipped_as_removed`
 (`v1-e34-t07`), `inbox_retention` (`v1-e34-t11`) and an OpenEv selection's `revision_of`
 (`v1-e34-t08`). Under version 5 it is `earlier_findings` on every entry of `stages` (`v1-e34-t19`):
-unlike `error_codes`, nothing is decided from it, so the rule applies and the version stays.
+unlike `error_codes`, nothing is decided from it, so the rule applies and the version stays. So are
+`openev_id` and `reason` on an `inbox_retention` entry removed as a camp release of junk alone
+(`v1-e34-t15`): a removed entry carried no `reason` before, and its one value, `junk_only`, is one
+no `kept` entry carries, so a filter on `kept[].reason` reads what it read before.
 
 Version 3 (`v1-e34-t12`) removes an OpenEv selection's `inbox_name`, `openev-<id>-<file name>`,
 because a camp file's name is its title, and adds `inbox_file`, the start of the download's SHA-256
@@ -1079,6 +1105,11 @@ class RetentionDecision(StrEnum):
     REMOVE = "remove"
     """Imported, its snapshot confirmed in the bucket, and for a camp download, recorded."""
 
+    JUNK_ONLY = "junk_only"
+    """Removed: a camp download whose delivery entry names these bytes and no member. Its import
+    kept nothing, so there is no snapshot to confirm, and the entry is what the next run reads
+    (`v1-e34-t15`)."""
+
     NOT_IMPORTED = "not_imported"
     """No manifest on this machine came from these bytes: the next pull imports it, or none will."""
 
@@ -1091,6 +1122,11 @@ class RetentionDecision(StrEnum):
     UNCLASSIFIED = "unclassified"
     """A file whose name the pull does not give a download, or one that cannot be read."""
 
+    @property
+    def removes(self) -> bool:
+        """Whether the file leaves the inbox: :attr:`REMOVE`, or :attr:`JUNK_ONLY` for its own reason."""
+        return self in (RetentionDecision.REMOVE, RetentionDecision.JUNK_ONLY)
+
 
 _KEPT_BECAUSE: Final = {
     RetentionDecision.NOT_IMPORTED: "not imported",
@@ -1098,6 +1134,11 @@ _KEPT_BECAUSE: Final = {
     RetentionDecision.NO_DELIVERY_RECORD: "the delivery record does not hold its digests",
     RetentionDecision.UNCLASSIFIED: "not a download the pull names",
 }
+
+_REMOVED_BECAUSE: Final = {
+    RetentionDecision.JUNK_ONLY: "imported, and it held junk alone",
+}
+"""Why a file left, when it left for a reason of its own: the stage's reason gives it in brackets."""
 
 
 class InboxFileKind(StrEnum):
@@ -1126,9 +1167,14 @@ class InboxFileVerdict:
     byte_size: int
     path: Path
     """Where it is. Never in the summary: the inbox's own path is the operator's home directory."""
+    openev_id: int | None = None
+    """A camp release of junk alone's OpenEv id, by which it is named beside its SHA-256 prefix
+    (`v1-e34-t15`). `None` for every other file, which is named as before."""
 
     def as_json(self) -> dict[str, object]:
         body: dict[str, object] = {"name": self.name, "kind": str(self.kind), "bytes": self.byte_size}
+        if self.openev_id is not None:
+            body["openev_id"] = self.openev_id
         if self.decision is not RetentionDecision.REMOVE:
             body["reason"] = str(self.decision)
         return body
@@ -1172,15 +1218,18 @@ class InboxRetention:
             head = f"would remove {len(self.removed)} file(s), {self.bytes_freed} bytes"
         else:
             head = f"{len(self.removed)} file(s) removed, {self.bytes_freed} bytes freed"
-        parts = [head + (f": {_named(self.removed)}" if self.removed else "")]
+        if self.removed:
+            head += ": " + "; ".join(
+                _named(group) + (f" ({_REMOVED_BECAUSE[reason]})" if reason in _REMOVED_BECAUSE else "")
+                for reason, group in _by_decision(self.removed).items()
+            )
+        parts = [head]
         if self.kept:
-            by_reason: dict[RetentionDecision, list[InboxFileVerdict]] = {}
-            for one in self.kept:
-                by_reason.setdefault(one.decision, []).append(one)
             parts.append(
                 f"{len(self.kept)} kept: "
                 + "; ".join(
-                    f"{_named(group)} ({_KEPT_BECAUSE[reason]})" for reason, group in by_reason.items()
+                    f"{_named(group)} ({_KEPT_BECAUSE[reason]})"
+                    for reason, group in _by_decision(self.kept).items()
                 )
             )
         if self.failed:
@@ -1203,12 +1252,25 @@ _MAX_NAMED: Final = 250
 """Names one retention sentence lists before it says how many more; a whole season is about 120."""
 
 
+def _by_decision(files: Sequence[InboxFileVerdict]) -> dict[RetentionDecision, list[InboxFileVerdict]]:
+    """`files` grouped by what was decided about them, in the order each decision first appears."""
+    grouped: dict[RetentionDecision, list[InboxFileVerdict]] = {}
+    for one in files:
+        grouped.setdefault(one.decision, []).append(one)
+    return grouped
+
+
 def _named(files: Sequence[InboxFileVerdict]) -> str:
-    """Weeklies by caselist and date, camp downloads and other files by count and SHA-256 prefix."""
+    """Weeklies by caselist and date, camp downloads and other files by count and SHA-256 prefix, and a
+    camp release of junk alone by its OpenEv id as well (`openev-960 sha256 <first 12 hex>`)."""
     weeklies = [
         one.name for one in files if one.kind in (InboxFileKind.WEEKLY_ARCHIVE, InboxFileKind.FULL_ARCHIVE)
     ]
-    camp = [one.name for one in files if one.kind is InboxFileKind.CAMP_DOWNLOAD]
+    camp = [
+        one.name if one.openev_id is None else f"openev-{one.openev_id} {one.name}"
+        for one in files
+        if one.kind is InboxFileKind.CAMP_DOWNLOAD
+    ]
     other = [one.name for one in files if one.kind is InboxFileKind.OTHER]
     parts: list[str] = []
     if weeklies:
@@ -1611,16 +1673,10 @@ class DownloadLedger:
     A file here that is not a ledger this class wrote is read as `limit` downloads started when
     the file was last written (its mtime): fully spent for 24 hours, then released.
 
-    The calendar-day ledger of the builds before `v1-e34-t06`
-    (:data:`LEGACY_DOWNLOAD_LEDGER_FILENAME`) is still read, and never written. Its
-    `{"date": ..., "bulk_downloads": N}` becomes `N` downloads started at its mtime: every write
-    replaced the file, so each of the `N` started at or before that moment, and counting them there
-    keeps them in the window for as long as any of them could be. It is read on every run rather than
-    migrated once, because an installed build still on the old format writes it — `v1-e30-t06`'s
-    backfill runs from one — and what that build spends must still count against this one. An old
-    build does not read this file, so it may spend what this one already has; the server's own
-    limiter absorbs that as a deferral (:data:`SKIP_TODAY_SECONDS`), which is a wasted run and not
-    a breach.
+    This file is the only one counted. The builds before `v1-e34-t06` kept a calendar-day ledger,
+    `caselist-sync-downloads.json`, which the builds after it read beside this one while an
+    old-format build still ran against the same state directory. None has since `v1-e34-t09`, which
+    removed that read: a copy left behind is neither read nor removed.
     """
 
     def __init__(
@@ -1628,11 +1684,9 @@ class DownloadLedger:
         path: Path,
         *,
         limit: int = DEFAULT_BULK_DOWNLOADS_PER_DAY,
-        legacy_path: Path | None = None,
     ) -> None:
         self.path = Path(path)
         self.limit = limit
-        self.legacy_path = Path(legacy_path) if legacy_path is not None else None
 
     @staticmethod
     def window_start(now: datetime) -> datetime:
@@ -1640,11 +1694,8 @@ class DownloadLedger:
         return now - BULK_DOWNLOAD_WINDOW
 
     def starts(self) -> tuple[datetime, ...]:
-        """Every download start this ledger and the legacy one account for, oldest first."""
-        recorded = list(self._own_starts())
-        if self.legacy_path is not None:
-            recorded.extend(self._legacy_starts(self.legacy_path))
-        return tuple(sorted(recorded))
+        """Every download start this ledger accounts for, oldest first."""
+        return tuple(sorted(self._own_starts()))
 
     def spent_in_window(self, now: datetime) -> int:
         """Downloads started in the 24 hours before `now`, or after it."""
@@ -1678,16 +1729,6 @@ class DownloadLedger:
             )
             return self._spent_when_written(self.path, self.limit)
         return starts
-
-    def _legacy_starts(self, path: Path) -> tuple[datetime, ...]:
-        if not path.is_file():
-            return ()
-        body = _read_json_object(path)
-        spent = body.get("bulk_downloads") if body is not None else None
-        if body is None or not isinstance(body.get("date"), str) or not isinstance(spent, int) or spent < 0:
-            logger.warning("caselist sync: the old download ledger is unreadable; counting it as spent")
-            return self._spent_when_written(path, self.limit)
-        return self._spent_when_written(path, spent)
 
     @staticmethod
     def _spent_when_written(path: Path, downloads: int) -> tuple[datetime, ...]:
@@ -1785,6 +1826,19 @@ class OpenEvDeliveries:
             )
             return {}
         return deliveries
+
+    def upstream_paths(self) -> dict[int, str]:
+        """`{openev id: SHA-256 of its upstream path}` for every id this record knows the path of.
+
+        What a release-manifest row's `upstream_path_sha256` is (`v1-e30-t14`): the removal plan
+        reads it beside the rows, and `caselist reimport-openev-metadata` writes it onto the rows of
+        a release imported before the rows carried it.
+        """
+        return {
+            openev_id: delivery.path_sha256
+            for openev_id, delivery in self.read().items()
+            if delivery.path_sha256 is not None
+        }
 
     def remember_if_unknown(self, openev_id: int, delivery: OpenEvDelivery) -> bool:
         """Record `delivery` for `openev_id` unless the record already holds that id. True if it wrote.
@@ -2205,13 +2259,16 @@ class _JudgedLocally:
     kind: InboxFileKind
     byte_size: int
     path: Path
-    kept_because: RetentionDecision | None
-    """The first local check it failed, or `None` when only the bucket's confirmation is left."""
+    decision: RetentionDecision | None
+    """The first local check it failed, :attr:`RetentionDecision.JUNK_ONLY` for a camp release of
+    junk alone, which no bucket is asked about, or `None` when only the bucket's confirmation is left."""
     snapshots: frozenset[PendingSnapshot] = frozenset()
     """The snapshots its bytes were imported into, which the bucket must hold in sync.
 
-    Never empty when :attr:`kept_because` is `None`: a file is imported only by being in one.
+    Never empty when :attr:`decision` is `None`: a file is imported only by being in one.
     """
+    openev_id: int | None = None
+    """See :attr:`InboxFileVerdict.openev_id`."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -2318,7 +2375,6 @@ class CaselistSyncService:
         self._ledger = DownloadLedger(
             self._state_dir / DOWNLOAD_LEDGER_FILENAME,
             limit=min(bulk_downloads_per_day, DEFAULT_BULK_DOWNLOADS_PER_DAY),
-            legacy_path=self._state_dir / LEGACY_DOWNLOAD_LEDGER_FILENAME,
         )
         self._pending = PendingWork(self._state_dir / PENDING_WORK_FILENAME)
         self._suppression = suppression
@@ -2628,6 +2684,7 @@ class CaselistSyncService:
                         suppression,
                         in_inbox=(self._inbox / inbox_name, inbox_digest) if inbox_digest else None,
                         replaces=replaces,
+                        camp_path=camp_path_disclosure(openev_release_name(year, event), inbox_name),
                     )
                     # Otherwise in the inbox, its import failed or never ran, and this run imports
                     # it (v1-e34-t06 ac1); or it is new, or a revision, and this run fetches it.
@@ -2666,6 +2723,7 @@ class CaselistSyncService:
         *,
         in_inbox: tuple[Path, str] | None,
         replaces: frozenset[int] = frozenset(),
+        camp_path: str | None = None,
     ) -> tuple[SelectionDecision | None, str | None]:
         """Whether a camp file the manifest does not record was removed, and so must not be fetched.
 
@@ -2686,7 +2744,9 @@ class CaselistSyncService:
           for the copy too (`v1-e34-t14`): the copy can be there only because it was downloaded
           before this machine knew of the removal, and a held copy is left in the inbox untouched.
         * Every member this id delivered — by the record, or by its copy in the inbox — is
-          suppressed: `SKIPPED_AS_REMOVED`.
+          suppressed: `SKIPPED_AS_REMOVED`. Suppressed is the whole file, or the file at the row
+          path this id would be imported at (`camp_path`, `v1-e30-t14`), which a removal that
+          withdrew that camp path stops.
         * Every member is recorded in the release manifest or suppressed — a camp release some of
           whose members were removed: `ALREADY_IMPORTED`.
         * A remembered id whose bytes are neither: fetched, with a note. The usual cause is an
@@ -2716,10 +2776,14 @@ class CaselistSyncService:
                 if members <= release.stored_digests:
                     return SelectionDecision.ALREADY_IMPORTED, None
                 return (SelectionDecision.SUPPRESSION_LIST_UNREADABLE if from_record else None), None
-            if all(state.suppresses_source(one) for one in members):
+
+            def stopped(one: str) -> bool:
+                return state.suppresses(one, disclosure=camp_path)
+
+            if all(stopped(one) for one in members):
                 return SelectionDecision.SKIPPED_AS_REMOVED, None
             recorded = members & release.stored_digests
-            if recorded and all(one in recorded or state.suppresses_source(one) for one in members):
+            if recorded and all(one in recorded or stopped(one) for one in members):
                 return SelectionDecision.ALREADY_IMPORTED, None
             if not from_record:
                 return None, None
@@ -3215,6 +3279,7 @@ class CaselistSyncService:
             raise UnknownSyncEvent("openev")
         key = openev_manifest_key(selection.year, selection.event)
         path = self._manifest_path(key)
+        path_sha256 = _path_digest(selection.file.path) if selection.file is not None else None
         report = await self._openev_importer.import_release(
             self._openev_entries(downloaded),
             year=selection.year,
@@ -3222,6 +3287,8 @@ class CaselistSyncService:
             imported_on=self._clock().date(),
             archive_sha256=downloaded.sha256,
             recorded_manifest=read_manifest_lines(path),
+            # Every row of it carries which upstream file it was (v1-e30-t14): digests and an id.
+            upstream=OpenEvUpstream(openev_id=selection.openev_id, path_sha256=path_sha256),
         )
         write_manifest_lines(report.manifest_lines, path)
         # Which bytes this id delivered, so that a later run can ask the suppression list about
@@ -3230,7 +3297,7 @@ class CaselistSyncService:
             selection.openev_id,
             OpenEvDelivery(
                 download_sha256=downloaded.sha256,
-                path_sha256=_path_digest(selection.file.path) if selection.file is not None else None,
+                path_sha256=path_sha256,
                 member_sha256=frozenset(
                     entry.sha256
                     for entry in report.entries
@@ -3640,8 +3707,8 @@ class CaselistSyncService:
                 [failure],
             )
             return
-        removable = tuple(one for one in verdicts if one.decision is RetentionDecision.REMOVE)
-        kept = tuple(one for one in verdicts if one.decision is not RetentionDecision.REMOVE)
+        removable = tuple(one for one in verdicts if one.decision.removes)
+        kept = tuple(one for one in verdicts if not one.decision.removes)
         if dry_run:
             once_imported, camp_once_imported = _imported_by(plan)
             tally.inbox_retention = InboxRetention(
@@ -3684,18 +3751,19 @@ class CaselistSyncService:
         judged = [self._judge_locally(path, releases, remembered) for path in files]
         # Only what passed every local check costs a bucket request, and only what this run's report
         # stage did not already confirm.
-        wanted = {snapshot for one in judged if one.kept_because is None for snapshot in one.snapshots}
+        wanted = {snapshot for one in judged if one.decision is None for snapshot in one.snapshots}
         in_sync = confirmed | await self._confirm_in_bucket(wanted - confirmed)
         return [
             InboxFileVerdict(
                 name=one.name,
                 kind=one.kind,
-                decision=one.kept_because
+                decision=one.decision
                 or (
                     RetentionDecision.REMOVE if one.snapshots <= in_sync else RetentionDecision.NOT_CONFIRMED
                 ),
                 byte_size=one.byte_size,
                 path=one.path,
+                openev_id=one.openev_id,
             )
             for one in judged
         ]
@@ -3748,20 +3816,34 @@ class CaselistSyncService:
                 _sha256_label(digest), InboxFileKind.OTHER, size, path, RetentionDecision.UNCLASSIFIED
             )
         in_releases = releases.get(digest, frozenset())
+        delivery = remembered.get(openev_id)
         if not in_releases:
-            kept_because: RetentionDecision | None = RetentionDecision.NOT_IMPORTED
+            # A camp release of junk alone (`v1-e34-t15`): no row came from its bytes, because the
+            # importer classified nothing in it, and its id's entry, written only once an import
+            # completes, names these bytes and no member. The next run reads the entry and neither
+            # fetches nor imports it again (`_judge_unrecorded`), so the copy is needed by nothing.
+            if delivery is not None and not delivery.member_sha256 and delivery.download_sha256 == digest:
+                return _JudgedLocally(
+                    _sha256_label(digest),
+                    InboxFileKind.CAMP_DOWNLOAD,
+                    size,
+                    path,
+                    RetentionDecision.JUNK_ONLY,
+                    openev_id=openev_id,
+                )
+            decision: RetentionDecision | None = RetentionDecision.NOT_IMPORTED
         # The next run looks the record up by id (`_judge_unrecorded`), so an entry for the id is
         # what lets it recognise the file once the copy is gone.
-        elif openev_id not in remembered:
-            kept_because = RetentionDecision.NO_DELIVERY_RECORD
+        elif delivery is None:
+            decision = RetentionDecision.NO_DELIVERY_RECORD
         else:
-            kept_because = None
+            decision = None
         return _JudgedLocally(
             _sha256_label(digest),
             InboxFileKind.CAMP_DOWNLOAD,
             size,
             path,
-            kept_because,
+            decision,
             frozenset(PendingSnapshot(OPENEV_PUBLISH_TARGET, one) for one in in_releases),
         )
 
@@ -4558,14 +4640,8 @@ def _path_digest(path: str) -> str:
     return hashlib.sha256(path.encode("utf-8")).hexdigest()
 
 
-_OPENEV_INBOX_PREFIX: Final = re.compile(r"^openev-(\d+)-")
+_OPENEV_INBOX_PREFIX: Final = OPENEV_INBOX_PREFIX
 """What the sync puts in front of a camp file's name (`openev_inbox_name`), and which file it was."""
-
-
-def openev_id_of_inbox_name(name: str) -> int | None:
-    """The OpenEv id an inbox file was downloaded as (`openev-<id>-…`), or `None` for any other name."""
-    prefixed = _OPENEV_INBOX_PREFIX.match(name)
-    return int(prefixed.group(1)) if prefixed is not None else None
 
 
 _WEEKLY_INBOX_NAME: Final = re.compile(

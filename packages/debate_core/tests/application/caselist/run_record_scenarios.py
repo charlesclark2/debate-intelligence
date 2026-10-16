@@ -7,26 +7,36 @@ against the start commit's source and keeps what that build wrote; `test_pull_ru
 by_every_build.py` runs them against this build and compares.
 
 Nothing here names anything this task adds, so the module imports under either source.
+
+`v1-e34-t22` added one scenario, `a_refusal_to_start_published_by_the_next_run`: the bucket's
+adapter cannot be built, because the profile setting names a profile the AWS config lacks. The two
+things about it that an older build's source does not have are looked up when the scenario runs,
+never imported: the refusal itself (:attr:`World.profile_not_defined`), and a run monitor that is
+handed its bucket to build later (:meth:`World.pull_with_no_bucket`).
 """
 
 from __future__ import annotations
 
+import inspect
 import json
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from tests.fixtures.caselist.interruptible_bucket import ScriptedBucket
 from tests.fixtures.caselist.publish_expectations import expected_source_key
 from tests.fixtures.parse_pipeline.build_parse_world import build_week_zips
 
+from debate_core.application import errors
 from debate_core.application.caselist_sync import CaselistSyncService, PulledRun, run_pull
 from debate_core.application.errors import StoreAccessDenied
 from debate_core.application.ports.caselist_source import ArchiveListing, CaselistAuthExpired
+from debate_core.application.ports.evidence_store import EvidenceObjectStore
 from debate_core.application.ports.notifier import RecordingNotifier
 from debate_core.application.sync_runs import SYNC_RUN_LOG_FILENAME, SyncRunMonitor
+from debate_core.integrations import s3
 from debate_core.integrations.s3 import S3EvidenceObjectStore
 
 from . import test_inbox_retention as inbox_retention
@@ -55,6 +65,36 @@ SECOND_RUN = datetime(2026, 9, 23, 6, 0, tzinfo=UTC)
 RECORDS_PREFIX = "reports/sync-runs/"
 """Where every build puts a run's record in the bucket, and the one prefix an older build lists."""
 
+MISSPELT_PROFILE = "debate-dev-evidence-typo"
+"""A profile no AWS config defines: what `storage.s3.aws_profile` holds in the refused run."""
+
+PROFILE_SETTING = "storage.s3.aws_profile"
+"""The setting the everyday profile's name comes from, which the refusal names."""
+
+
+def the_adapters_refusal_of_a_session() -> Exception:
+    """What building the bucket's adapter raises for :data:`MISSPELT_PROFILE`, by the adapter itself.
+
+    boto3 answers a profile its config lacks with `ProfileNotFound` when the session is built, and
+    `debate_core.integrations.s3.client` translates that there (`v1-e29-t07`). This is that
+    translation, of that exception, for that call, with no AWS config read: the tests that build a
+    real session against a config written for them are the CLI's. Looked up when called, because
+    the start commit's source has no `profile_setting` to pass.
+    """
+    from botocore.exceptions import ProfileNotFound
+
+    return s3.translate_s3_error(
+        ProfileNotFound(profile=MISSPELT_PROFILE),
+        s3.S3Call(
+            operation="CreateSession",
+            bucket="",
+            entity="AWS session",
+            key="",
+            profile=MISSPELT_PROFILE,
+            profile_setting=PROFILE_SETTING,
+        ),
+    )
+
 
 @dataclass
 class World:
@@ -71,25 +111,59 @@ class World:
     pulled: list[PulledRun] = field(default_factory=lambda: list[PulledRun]())
     raised: list[BaseException] = field(default_factory=lambda: list[BaseException]())
 
+    profile_not_defined: Callable[[], Exception] = the_adapters_refusal_of_a_session
+    """What building the bucket's adapter raises when the profile setting names no profile.
+
+    This build's own, unless whoever builds the world says otherwise: the start commit's source has
+    no such error, so `write_stored_run_records.py` hands that build the same refusal written out.
+    """
+
     async def pull(self, service: CaselistSyncService, *, publish_pending: bool = False) -> None:
         """`caselist pull` as the command runs it: `run_pull` inside a real run monitor.
 
         A run that raises is recorded by the monitor and raised again, as in the command; the
         error is kept here so that the scenario can go on.
         """
+        await self._run(lambda: service, publish_pending=publish_pending, remote=self.installation.bucket)
+
+    async def pull_with_no_bucket(self) -> None:
+        """`caselist pull` when the bucket's adapter cannot be built (`v1-e34-t22`).
+
+        The composition root is refused the adapter when it builds the pull, so the run has no
+        service, and refused it again when the run's record is to be published. A monitor of this
+        build is handed the bucket to build then, as the composition root hands it. A monitor of
+        an older build takes only a bucket that is already built, and that build never reached
+        this run with one; it is given a bucket whose every call raises the same refusal, which is
+        the nearest thing it can be given, so that both builds are asked to record the same run.
+        """
+
+        def no_service() -> CaselistSyncService:
+            raise self.profile_not_defined()
+
+        def no_bucket() -> EvidenceObjectStore:
+            raise self.profile_not_defined()
+
+        if "build_remote" in inspect.signature(SyncRunMonitor).parameters:
+            await self._run(no_service, publish_pending=False, remote=None, build_remote=no_bucket)
+        else:
+            await self._run(no_service, publish_pending=False, remote=RefusingBucket(_a_store_error(self)))
+
+    async def _run(
+        self, service: Callable[[], CaselistSyncService], *, publish_pending: bool, **bucket: Any
+    ) -> None:
         monitor = SyncRunMonitor(
             state_dir=self.installation.data_dir,
             environment="dev",
             notifier=self.notifier,
-            remote=self.installation.bucket,
             aws_login_command=AWS_LOGIN,
             clock=lambda: inbox_retention.RUN_CLOCK,
+            **bucket,
             **the_commands_retry_rule(),
         )
         try:
             self.pulled.append(
                 await run_pull(
-                    lambda: service,
+                    service,
                     [] if publish_pending else [CASELIST],
                     dry_run=False,
                     publish_pending=publish_pending,
@@ -115,6 +189,12 @@ class World:
             .decode("utf-8")
             for one in listed.get("Contents", [])
         }
+
+
+def _a_store_error(world: World) -> errors.DomainError:
+    refusal = world.profile_not_defined()
+    assert isinstance(refusal, errors.DomainError)
+    return refusal
 
 
 class TokenExpired(FakeSource):
@@ -213,6 +293,16 @@ async def two_weeks_imported_and_parsed(world: World) -> None:
     await world.pull(parsing.sync(source, parse=parse_stage(parsing)))
 
 
+async def a_refusal_to_start_published_by_the_next_run(world: World) -> None:
+    """`v1-e34-t22`: the profile setting names a profile the AWS config lacks, so the bucket's
+    adapter cannot be built and the run is refused before any stage. Its record is owed. The week
+    after, with the setting corrected, a pull imports and publishes, and publishes that record."""
+    await world.pull_with_no_bucket()
+    world.set_clock(SECOND_RUN)
+    source = FakeSource(world.installation.archives, weeks=[WEEK_1])
+    await world.pull(world.installation.sync(source))
+
+
 SCENARIOS: dict[str, Callable[[World], Awaitable[None]]] = {
     one.__name__: one
     for one in (
@@ -225,6 +315,7 @@ SCENARIOS: dict[str, Callable[[World], Awaitable[None]]] = {
         a_run_stopped_by_an_expired_token,
         a_run_stopped_by_an_error_nobody_modelled,
         two_weeks_imported_and_parsed,
+        a_refusal_to_start_published_by_the_next_run,
     )
 }
 

@@ -479,3 +479,41 @@ All times below are UTC.
   pull-request events undelivered to this repository's workflows, while a dispatched run started
   within seconds. That is the class of failure the schedule exists for. Whether scheduled runs keep
   arriving during such a gap is what the retried proof still has to show.
+
+## Sandbox retry and close-out (PM, 2026-10-15)
+
+Recorded by the PM at close-out. It asks for no new review; the PM review above stands, and ac5 is
+amended in the spec.
+
+**The second sandbox, 2026-10-14.** The operator created `charlesclark2/promotion-guard-sweep-sandbox-2`
+from `origin/dev` as follow-up 1 describes (the four workflows not under test removed,
+`back-merge.yml` and `promotion-guard.yml` as on `dev`, `dev` the default branch, protect-main
+copied with `promotion-source` and `back-merge` required), pushed a change to `dev` and opened the
+promotion. After three minutes no `pull_request` run had started. Read with `gh`:
+
+* the promotion was open and `BLOCKED`, its two required checks never reported;
+* the repository had **no run at all**, not even `Back-merge main into dev` for the setup push to
+  `main`;
+* Actions was enabled with all actions allowed, and both workflows were `active`;
+* the head commit's check suites were the account's two other apps, both `queued`, and no
+  `github-actions` suite.
+
+This is the 2026-10-09 picture again. In two fresh repositories GitHub started no event-triggered
+workflow while `workflow_dispatch` worked, so the live proof cannot be made in a fresh repository.
+Both sandboxes were deleted afterwards.
+
+**The schedule in the real repository.** The last eight scheduled `back-merge` runs, read on
+2026-10-15, all succeeded, and the history holds no failed scheduled run. The latest logged
+`No pull requests are open against main.` They started at 2026-10-13 21:12, 2026-10-14 00:23,
+05:20, 10:24, 15:27, 19:40, 22:43 and 2026-10-15 00:59 UTC.
+
+**The cadence is hours, not minutes.** The workflow asks for four sweeps an hour; GitHub ran it
+about every two to five hours. The backstop holds, and a stale green is caught within hours
+rather than about fifteen minutes. The workflow's comment and
+`docs/process/branching-and-environments.md` are corrected in this close-out, and a promotion now
+dispatches the sweep once before it merges, so the guard is current whatever the schedule does.
+
+**ac5, as amended:** met by the real repository's scheduled sweeps, the dispatched sweep and its
+no-guard-run path in the 2026-10-09 sandbox, and the re-run path held by the sweep's own tests. The
+Goal is `Succeeded`, and `v1-e01-t26` is ready.
+

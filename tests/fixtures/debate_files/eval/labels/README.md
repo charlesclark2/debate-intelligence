@@ -9,6 +9,10 @@ Left unreplaced, it matches no file and the block stops at its first command. Th
 section ([units](#units), [cards](#cards), [ambiguous conventions](#ambiguous-conventions),
 [spans](#spans)) says how to decide each label.
 
+Each file is labeled in **the labeller**, a page served on this Mac only that shows one sampled
+paragraph at a time and takes one key per row ([step 4](#4-each-file-in-the-labeller)). The
+spreadsheet route of the first two files stays as [the fallback](#the-fallback-a-spreadsheet).
+
 ### Setup
 
 Work in the main clone on `dev`. The task worktree `debate-intelligence-worktrees/v1-e31-t05-parser-eval`
@@ -78,7 +82,41 @@ git switch dev
 
 Wait for it to merge and `git pull` before labeling anything.
 
-### 2. Label the PR subset first
+### 2. Regenerate the pre-labels, once
+
+The pre-labels were made by an older parser than the one on `dev`, and a pre-label the current
+parser agrees with is one fewer row to change. This regenerates every file still `PRELABELED`,
+under the committed sampling plan; a `CORRECTED` or `COACH_REVIEWED` file is never touched, and
+the plan id does not change. It takes under a minute. Do it once, before labeling in the page.
+
+```bash
+uv run python scripts/prelabel_docx.py worksheet --all --remove-untouched --out-dir ~/parser-eval-worksheets &&
+uv run python scripts/prelabel_docx.py prelabel --all &&
+uv run python scripts/prelabel_docx.py worksheet --all --out-dir ~/parser-eval-worksheets &&
+git status --short
+```
+
+The first command removes each worksheet that is still exactly as it was written, so the third can
+write it again from the new pre-labels. A worksheet someone has worked on, one with a `.numbers`
+file beside it, or a file already started in the page is kept and named: finish that file the way
+it was started. `prelabel` prints one line per file, `already corrected; left alone` for each
+corrected one, and `REFUSED` for a file the current parser reads into a different number of
+paragraphs than the plan has; that file's pre-label is left as it was, the chain stops there, and
+the PM needs to hear about it. `git status` should list changed label files under
+`tests/fixtures/debate_files/eval/labels/` and nothing else. Commit them through a pull request:
+
+```bash
+git switch -c "labels/regenerated-prelabels-$(date +%Y-%m-%d)"
+git add tests/fixtures/debate_files/eval/labels
+git commit -m "Parser evaluation: pre-labels regenerated with the current parser"
+git push -u origin HEAD
+gh pr create --base dev --fill
+git switch dev
+```
+
+Wait for it to merge and `git pull` before labeling in the page.
+
+### 3. Label the PR subset first
 
 These files are labeled in full and first, because they gate every pull request. The table is
 regenerated with every rejection.
@@ -98,10 +136,165 @@ Sampling plan `06a5e928bf1fc90f`: **1,851 rows** to label across 30 files, **410
 
 The other files follow in any order. Their digests are in [`../MANIFEST.md`](../MANIFEST.md#the-selection).
 
-### 3. Each file
+### 4. Each file, in the labeller
 
-Each file goes round the same loop: open it, label it in the spreadsheet and save, repair and check,
-then import. Set the file's digest, then open its `.docx` and its worksheet side by side:
+Set the file's digest and start the page. It prints its address, `http://127.0.0.1:` and a port,
+and opens it in the browser; nothing else is printed, and the page loads nothing from the network.
+
+```bash
+f=PASTE_DIGEST_PREFIX_HERE
+uv run python scripts/prelabel_docx.py label "${f}" --out-dir ~/parser-eval-worksheets
+```
+
+If `label` refuses because the file has a `.numbers` file, or a worksheet someone has worked on in
+a spreadsheet, finish that file on [the fallback route](#the-fallback-a-spreadsheet): the page
+never writes over a spreadsheet's work.
+
+**What the page shows.** One sampled row at a time: the paragraph rendered with its heading level,
+bold, underline and highlight, the two paragraphs either side (dimmed, and marked when they are not
+sampled), which sampling block it is in, the pre-label, rows done and left, and the pace in rows
+per minute. The label it shows starts as the pre-label.
+
+**The keys.** Every row is answered by one key pressed on it, and nothing checks more than the row
+you are on. Holding a key down counts once.
+
+| Key | What it does |
+|---|---|
+| Enter or Space | Accept the row as shown: check it and move on |
+| `p` `h` `b` `t` `c` | POCKET, HAT, BLOCK, TAG, CITE: set it, check the row, move on |
+| `e` `a` `u` `o` | EVIDENCE, ANALYTIC, UNDERTAG, OTHER: set it, check the row, move on |
+| `n` | Start a card on this row, or stop one starting here. Then accept or set the unit |
+| `k` | The card's completeness: FULL, ABBREVIATED, CITE_ONLY, and for a block's first or last card, *cut off by the block's edge* |
+| Backspace or Left | Back one row |
+
+**Cards** follow the [card rules](#cards), and the page numbers them from where each card starts.
+A card starts on its TAG, or on its CITE when it has no tag (press `n` there). It runs to its last
+EVIDENCE row, and a heading, an ANALYTIC, a TAG not marked as a start, the next start and the end of
+the block each end it. A blank row inside it is not part of it. The page says under the label when a
+card has no CITE or no completeness, or a TAG starts nothing. **A card cut off by the end of a
+block is left unnumbered**: on the last rows of a block, look at the paragraphs after it; if the
+card goes on past the block, press `k` until it reads *cut off by the block's edge*. Do the same at
+the start of a block for a card whose tag is above it, or press `n` on its first row to stop it
+starting there.
+
+**Spans.** On a span row the page shows the underline and highlight as the document's own formatting
+gives them, read by the labeller and not by the parser, beside the pre-label's marks. What is
+written is the document's. A row where the two differ is flagged. On a flagged row, look at the
+paragraph in Word (`prelabel_docx.py open <prefix>`, as in Setup) before you accept it: the page
+draws the labeller's own reading, so Word is the only independent check. If Word shows it
+differently from the page, do not accept the row; stop, and tell the PM which file and row, because
+that is a fault in the labeller's reading, not a label. If the page says it could not read a
+paragraph's formatting, it leaves that row's underline and highlight cells empty, and `check` below
+names them; fill them in on the spreadsheet route.
+
+**Stopping and going on.** Progress is saved after every key, outside the repository, beside the
+worksheet. Close the tab and press Ctrl+C in the terminal whenever you like; the same command
+starts again where you stopped.
+
+**When every row is checked** the page writes the worksheet and runs `check`'s own checks on it.
+If it lists a problem, click it to go to that row, fix it with a key, and the worksheet is written
+again. When it says `check` passes, press Ctrl+C in the terminal, then check, import, clean up and
+send it as its own small pull request. If the operator labeled the file rather than the coach,
+write `--corrected-by operator`.
+
+```bash
+uv run python scripts/prelabel_docx.py check "${f}" --worksheet ~/parser-eval-worksheets/${f}.csv &&
+uv run python scripts/prelabel_docx.py import "${f}" --worksheet ~/parser-eval-worksheets/${f}.csv --corrected-by coach &&
+rm ~/parser-eval-worksheets/${f}.csv ~/parser-eval-worksheets/${f}.progress.json &&
+git switch -c "labels/${f}" &&
+git add tests/fixtures/debate_files/eval/labels &&
+git commit -m "Parser evaluation labels: ${f}" &&
+git push -u origin HEAD &&
+gh pr create --base dev --fill &&
+git switch dev
+```
+
+`check` ends with `ready to import`, and import prints `CORRECTED by coach; N of M labeled rows
+changed from the pre-labels`. The chain stops at the first command that fails, so nothing is deleted
+or committed until the import succeeds. The worksheet holds other programs' cards: only the
+`.jsonl` is committed. Tell the PM the pace the page showed.
+
+The PR-subset files first, from the table in step 3, then the other files in any order: their
+digests are in [`../MANIFEST.md`](../MANIFEST.md#the-selection).
+
+### 5. One PR-subset file blind
+
+The coach labels **one** PR-subset file with the pre-label hidden, as a check that accepting a
+default has not inflated the scores. Choose it before labeling the PR subset, from the files in the
+step 3 table whose label file is still `PRELABELED`, and do not look at its pre-label or worksheet
+first. In blind mode every row starts with no unit and no card, and every row needs its unit's key.
+
+```bash
+f=PASTE_DIGEST_PREFIX_HERE
+uv run python scripts/prelabel_docx.py label "${f}" --out-dir ~/parser-eval-worksheets --blind
+```
+
+A file started blind can only be resumed blind, and one started with the pre-label shown cannot
+become blind. When every row is checked, the block is step 4's with `--labeled-blind` on the
+import, which records it on the label file:
+
+```bash
+uv run python scripts/prelabel_docx.py check "${f}" --worksheet ~/parser-eval-worksheets/${f}.csv &&
+uv run python scripts/prelabel_docx.py import "${f}" --worksheet ~/parser-eval-worksheets/${f}.csv --corrected-by coach --labeled-blind &&
+rm ~/parser-eval-worksheets/${f}.csv ~/parser-eval-worksheets/${f}.progress.json &&
+git switch -c "labels/${f}" &&
+git add tests/fixtures/debate_files/eval/labels &&
+git commit -m "Parser evaluation labels: ${f}, labeled blind" &&
+git push -u origin HEAD &&
+gh pr create --base dev --fill &&
+git switch dev
+```
+
+### 6. The finish
+
+When every file is corrected and merged:
+
+1. **Spot-check three files end to end**: one team, one caselist and one camp file, each against
+   its `.docx` (see [Coach review](#coach-review)). Mark each one reviewed and send it as a small
+   pull request, as in step 4:
+
+   ```bash
+   f=PASTE_DIGEST_PREFIX_HERE
+   uv run python scripts/prelabel_docx.py mark-reviewed "${f}" --reviewer coach &&
+   git switch -c "labels/reviewed-${f}" &&
+   git add tests/fixtures/debate_files/eval/labels &&
+   git commit -m "Parser evaluation: coach review of ${f}" &&
+   git push -u origin HEAD &&
+   gh pr create --base dev --fill &&
+   git switch dev
+   ```
+
+2. **Establish the baseline.** It takes seconds. Read the report before committing it with
+   `tests/evals/baselines/parser.json`, and file every target marked MISSED against `v1-e31-t03`.
+   Its last section, *Labeled blind*, gives the share of the blind file's rows that differ from its
+   pre-label beside the same share for the other files of its stratum. Tell the PM if the blind
+   file's share is much higher.
+
+   ```bash
+   uv run python scripts/run_parser_eval.py --write-baseline --report docs/data/parser-eval-2026-10.md &&
+   uv run pytest tests/evals/parser -m eval
+   ```
+
+3. **Run the corpus health check.** It takes 10 to 20 minutes and writes
+   `docs/data/parser-corpus-health.md`: counts only, no names.
+
+   ```bash
+   uv run python scripts/parser_corpus_health.py \
+     --input "caselist=$HOME/Documents/debate/2026-2027/LD Debate/Opencaselist/hsld26-0901" \
+     --input "caselist=$HOME/Documents/debate/2026-2027/LD Debate/Opencaselist/hsld26-0908" \
+     --input "caselist=$HOME/Documents/debate/2026-2027/LD Debate/Opencaselist/hsld26-0915" \
+     --input "camp=$HOME/Documents/debate/2026-2027/Policy Debate/Camp Files" \
+     --output docs/data/parser-corpus-health.md
+   ```
+
+Then tell the PM: the baseline, its report and the health report go in through the task that
+closes this evaluation.
+
+### The fallback: a spreadsheet
+
+If the page cannot be used for a file, its worksheet goes round the spreadsheet loop the first
+two files went round: open it, label it in the spreadsheet and save, repair and check, then import.
+Set the file's digest, then open its `.docx` and its worksheet side by side:
 
 ```bash
 f=PASTE_DIGEST_PREFIX_HERE
@@ -167,48 +360,6 @@ problems `check` does. The chain stops at the first command that fails, so nothi
 committed until the import succeeds. After it succeeds, the worksheet and its `.numbers` file are
 both deleted: they hold other programs' cards. Only the `.jsonl` is committed.
 
-### 4. The finish
-
-When every file is corrected and merged:
-
-1. **Spot-check three files end to end**: one team, one caselist and one camp file, each against
-   its `.docx` (see [Coach review](#coach-review)). Mark each one reviewed and send it as a small
-   pull request, as in step 3:
-
-   ```bash
-   f=PASTE_DIGEST_PREFIX_HERE
-   uv run python scripts/prelabel_docx.py mark-reviewed "${f}" --reviewer coach &&
-   git switch -c "labels/reviewed-${f}" &&
-   git add tests/fixtures/debate_files/eval/labels &&
-   git commit -m "Parser evaluation: coach review of ${f}" &&
-   git push -u origin HEAD &&
-   gh pr create --base dev --fill &&
-   git switch dev
-   ```
-
-2. **Establish the baseline.** It takes seconds. Read the report before committing it with
-   `tests/evals/baselines/parser.json`, and file every target marked MISSED against `v1-e31-t03`.
-
-   ```bash
-   uv run python scripts/run_parser_eval.py --write-baseline --report docs/data/parser-eval-2026-10.md &&
-   uv run pytest tests/evals/parser -m eval
-   ```
-
-3. **Run the corpus health check.** It takes 10 to 20 minutes and writes
-   `docs/data/parser-corpus-health.md`: counts only, no names.
-
-   ```bash
-   uv run python scripts/parser_corpus_health.py \
-     --input "caselist=$HOME/Documents/debate/2026-2027/LD Debate/Opencaselist/hsld26-0901" \
-     --input "caselist=$HOME/Documents/debate/2026-2027/LD Debate/Opencaselist/hsld26-0908" \
-     --input "caselist=$HOME/Documents/debate/2026-2027/LD Debate/Opencaselist/hsld26-0915" \
-     --input "camp=$HOME/Documents/debate/2026-2027/Policy Debate/Camp Files" \
-     --output docs/data/parser-corpus-health.md
-   ```
-
-Then tell the PM: the baseline, its report and the health report go in through the task that
-closes this evaluation.
-
 This labeling guide says how to label a debate file for the parser evaluation
 (`v1-e31-t05-parser-eval`), and how to settle the cases where two careful people could disagree.
 The coach signs it off before it is used (the `labeling` node's manual criterion).
@@ -228,7 +379,7 @@ says which ones, and the tooling only ever shows you those:
 * the **six PR-subset files in full**: they gate every pull request, so they cannot be partial;
 * about **a quarter of every other file**, in contiguous blocks of at least 20 paragraphs.
 
-The current counts are in the [working reference](#2-label-the-pr-subset-first). Blocks are contiguous because card-boundary accuracy needs
+The current counts are in the [working reference](#3-label-the-pr-subset-first). Blocks are contiguous because card-boundary accuracy needs
 unbroken runs: a card split by a sampling gap cannot be scored at all. Which blocks were chosen is
 fixed and recorded; it is not yours to change, and the worksheet simply starts and stops where the
 plan does. **Row indices therefore jump** — a worksheet may run 0-19 and then 100-128. That is the
@@ -263,7 +414,7 @@ A file of analytics with no cards *is* debate material, and is labeled.
 ## Workflow
 
 The [working reference](#working-reference) is the order to run things in, with blocks to paste.
-Behind it are five `scripts/prelabel_docx.py` commands:
+Behind it are six `scripts/prelabel_docx.py` commands:
 
 * `prelabel` seeds pre-labels over the plan's rows. They hold no text and are kept in the
   repository while they are corrected; `prelabel --all` also removes a rejected file's pre-label.
@@ -275,6 +426,9 @@ Behind it are five `scripts/prelabel_docx.py` commands:
 * `import` reads a corrected worksheet back, `.csv` or `.numbers`, and refuses one with an
   unchecked row or text that differs from the document.
 * `mark-reviewed` records the coach's end-to-end spot-check of a corrected file.
+* `label` serves the labeller: one key per row in a page on this Mac only, writing the same
+  worksheet `check` and `import` take. `label --blind` hides the pre-label, and
+  `import --labeled-blind` records that on the label file.
 
 `open` opens a file's `.docx` by its digest without printing where it is.
 
@@ -283,8 +437,9 @@ A file is named by any unambiguous prefix of its keyed digest — the first colu
 `~/.debate-intelligence/parser-eval-digest.key`; without it the tooling stops rather than falling
 back to a plain digest.
 
-Open the `.docx` beside the worksheet: the worksheet shows text, but a paragraph's *style*, its
-underlining and highlighting are only visible in Word.
+On the spreadsheet route, open the `.docx` beside the worksheet: the worksheet shows text, but a
+paragraph's *style*, its underlining and highlighting are only visible in Word. The labeller
+renders them itself.
 
 **Worksheets hold other programs' cards and sometimes names.** Keep them in one folder outside the
 repository, never attach or upload them, and delete each one once its import succeeds. Only the

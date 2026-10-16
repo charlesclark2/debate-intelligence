@@ -22,8 +22,9 @@ file title for the other — but what happens to each member is the same five st
 
 ## The suppression list is not optional
 
-A removal (`v1-e30-t07`) is undone by the next cumulative archive unless every import consults the
-suppression list, so the pipeline is not built without one: :class:`SourceImportPipeline` takes a
+A removal (`v1-e30-t07`) is undone by the next archive that holds the file, weekly or complete,
+unless every import consults the suppression list, so the pipeline is not built without one:
+:class:`SourceImportPipeline` takes a
 :class:`~debate_core.application.ports.suppression.SuppressionList` as a required constructor
 argument, reads it once at the start of every run, and checks it again at the one place a member's
 bytes and records are written (:meth:`SourceImportPipeline._store`). An importer cannot opt out by
@@ -36,6 +37,23 @@ and — in the manifest writers — no row, because a row would put the requeste
 team code back into the store they asked to be removed from. Only the count survives, in the
 summary row.
 
+## A removed path holds what is uploaded there afterwards
+
+A removal request covers later uploads at the removed file's path, and a later upload is bytes the
+list has never named. So a whole-file removal by `--source` records each caselist path it takes the
+file from (:class:`~debate_core.application.ports.suppression.PathHoldEntry`, `v1-e30-t13`), and a
+member at a held path, in a snapshot dated after the removed file first appeared there, is counted
+as `SUPPRESSED` exactly as a listed one is: no blob, no record, no row. It is also counted under
+the request that holds the path (:attr:`PipelineRun.held_by_request`), which is the import's record
+of whose removal stopped it. The import appends nothing to the list for it: only `caselist remove`
+and `caselist unsuppress` write the takedown's records, and running the same removal again finds
+the upload in the download inbox and puts it on the list
+(:mod:`~debate_core.application.caselist.removal_plan`).
+
+A caller says which snapshot it is importing (`snapshot`, required like `disclosure_scope`), so an
+import cannot ask about a hold without a date to ask with. A camp-file import records no
+disclosures and passes `None`; `v1-e34-t14`'s hold is the camp files'.
+
 The junk around a suppressed file goes with it. A skipped member has no digest, so the list cannot
 name it, but its path can still name the removed file and the team that disclosed it: macOS's
 `__MACOSX/<dir>/._<name>` and Word's `<dir>/~$<name minus two characters>` *shadow* a real file.
@@ -45,8 +63,9 @@ it is still counted as skipped and given no row.
 
 What stays with each service is what genuinely differs: where the baseline comes from (the
 previous weekly snapshot, or the camp release's existing manifest), which records are written,
-and whether a path that has gone is a removal (a weekly archive is cumulative, so yes; an OpenEv
-download is whatever the operator happened to fetch, so no).
+and whether a path that has gone is reported as `REMOVED` (yes for a caselist archive, against the
+one before it, though a weekly window leaves out every file nobody touched that week; no for an
+OpenEv download, which is whatever the operator happened to fetch).
 
 ## One source document per digest, whichever import saw it first
 
@@ -64,6 +83,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Iterable, Mapping
 from dataclasses import dataclass, field
+from datetime import date
 from enum import StrEnum
 from typing import Protocol
 
@@ -72,7 +92,12 @@ from debate_core.application.errors import DomainError
 from debate_core.application.ports.archive import ArchiveEntry, ArchiveMember, SkipReason
 from debate_core.application.ports.caselist import CaselistRepository
 from debate_core.application.ports.persistence import SnapshotStore
-from debate_core.application.ports.suppression import SuppressionList, SuppressionState, disclosure_digest
+from debate_core.application.ports.suppression import (
+    PathHoldEntry,
+    SuppressionList,
+    SuppressionState,
+    disclosure_digest,
+)
 from debate_core.domain.caselist import Sha256Hex, SourceDocument, SourceFormat
 
 __all__ = [
@@ -161,7 +186,9 @@ class SuppressedWriteRefused(DomainError):
 
     def __init__(self, sha256: str) -> None:
         self.sha256 = sha256
-        super().__init__(f"refusing to store {sha256}: it is on the removal suppression list")
+        super().__init__(
+            f"refusing to store {sha256}: the removal suppression list stops it, or holds its path"
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -225,6 +252,13 @@ class PipelineRun[MetadataT]:
     suppression: SuppressionState = field(default_factory=SuppressionState)
     """The suppression list as this run read it, which the manifest writers check every row against."""
 
+    held_by_request: Mapping[str, int] = field(default_factory=lambda: {})
+    """Members refused only because a removal holds their path, counted by that removal's request id.
+
+    Each is one of :attr:`counts`' `SUPPRESSED` too. A member the list also stops by its bytes is
+    not counted here: it was removed by name, not held.
+    """
+
 
 class SourceImportPipeline:
     """Classifies and stores one archive's members for whichever importer hands them in.
@@ -247,6 +281,7 @@ class SourceImportPipeline:
         write: RecordWriter[MetadataT],
         baseline: Mapping[str, str],
         disclosure_scope: str | None,
+        snapshot: date | None,
         dry_run: bool = False,
         report_removed: bool = True,
         find_existing: ExistingSourceLookup | None = None,
@@ -266,9 +301,15 @@ class SourceImportPipeline:
         import that records no disclosures, which only a whole-source suppression stops. Required,
         with no default, so that an importer has to say which it is.
 
+        `snapshot` is the date of the snapshot being imported, which a removed path's hold is asked
+        with: an upload at a held path is refused when its snapshot is dated after the removed file
+        first appeared there (`v1-e30-t13`). `None`, with `disclosure_scope`, for an import that
+        records no disclosures. Required for the same reason.
+
         Writes nothing — no blob and no record — when `dry_run` is set.
         """
         suppression = await load_suppression_state(self._suppression)
+        held_by_request: dict[str, int] = {}
         baseline_digests = frozenset(baseline.values())
         imported: list[ImportedEntry[MetadataT]] = []
         skipped: dict[SkipReason, int] = {}
@@ -290,12 +331,16 @@ class SourceImportPipeline:
             member_count += 1
             seen_paths.add(entry.path)
             parsed = extract(entry.path)
+            listed = _is_suppressed(suppression, entry, disclosure_scope)
+            hold = None if listed else _path_hold(suppression, entry, disclosure_scope, snapshot)
+            if hold is not None:
+                held_by_request[hold.request_id] = held_by_request.get(hold.request_id, 0) + 1
             classification = _classify(
                 entry,
                 baseline=baseline,
                 baseline_digests=baseline_digests,
                 known=stored_digests,
-                suppressed=_is_suppressed(suppression, entry, disclosure_scope),
+                suppressed=listed or hold is not None,
             )
             existing: SourceDocument | None = None
             # Only bytes this run has not already stored: a second copy within one download
@@ -334,6 +379,7 @@ class SourceImportPipeline:
                     write=write,
                     suppression=suppression,
                     disclosure_scope=disclosure_scope,
+                    snapshot=snapshot,
                 )
 
         withheld = withheld_skipped_paths(
@@ -367,6 +413,7 @@ class SourceImportPipeline:
             distinct_digests=len(stored_digests),
             newly_stored_blobs=len(newly_stored),
             suppression=suppression,
+            held_by_request=held_by_request,
         )
 
     async def _store[MetadataT](
@@ -379,13 +426,17 @@ class SourceImportPipeline:
         write: RecordWriter[MetadataT],
         suppression: SuppressionState,
         disclosure_scope: str | None,
+        snapshot: date | None,
     ) -> None:
         """Write one member's bytes and records: the only place an import writes either.
 
         The suppression check is repeated here, at the write, rather than trusted from
-        classification: see :class:`SuppressedWriteRefused`.
+        classification, and so is the removed path's hold: see :class:`SuppressedWriteRefused`.
         """
-        if _is_suppressed(suppression, member, disclosure_scope):
+        if (
+            _is_suppressed(suppression, member, disclosure_scope)
+            or _path_hold(suppression, member, disclosure_scope, snapshot) is not None
+        ):
             raise SuppressedWriteRefused(member.sha256)
         await self._blobs.put(member.data)
         await write(member, parsed, classification, existing)
@@ -451,6 +502,18 @@ def _is_suppressed(
     """Whether the list stops this member: its bytes as a whole, or this one disclosure of them."""
     disclosure = disclosure_digest(disclosure_scope, member.path) if disclosure_scope is not None else None
     return suppression.suppresses(member.sha256, disclosure=disclosure)
+
+
+def _path_hold(
+    suppression: SuppressionState, member: ArchiveMember, disclosure_scope: str | None, snapshot: date | None
+) -> PathHoldEntry | None:
+    """The hold a removal put on this member's path, if this snapshot is one it covers.
+
+    Asked only of an import that records disclosures and says which snapshot it is importing.
+    """
+    if disclosure_scope is None or snapshot is None:
+        return None
+    return suppression.path_hold(caselist=disclosure_scope, path=member.path, snapshot=snapshot)
 
 
 def _classify(

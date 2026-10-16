@@ -63,7 +63,7 @@ uv run pre-commit install
 ```
 
 Then the checks: lint, formatting, a strict type check of the domain core, and the tests, which
-run in parallel, with coverage and the network blocked.
+run in parallel with the network blocked.
 
 ```bash
 uv run ruff check
@@ -72,8 +72,10 @@ uv run pyright packages/debate_core
 uv run pytest
 ```
 
-`pytest` runs with `-n auto`, coverage and sockets disabled, and deselects `slow` and `live`
-tests; opt in with `uv run pytest -m slow` or `-m live`. The project's markers (`slow`, `live`,
+`pytest` runs with `-n auto` and sockets disabled, and deselects `slow` and `live`
+tests; opt in with `uv run pytest -m slow` or `-m live`. It measures no coverage unless asked:
+`uv run pytest --cov --cov-report=term-missing`. `--part K/N` runs one of N parts of the
+selection, which is how CI's `test` job runs it. The project's markers (`slow`, `live`,
 `eval`, `dev`, `prod`) are all registered in the root `pyproject.toml`; `--strict-markers`
 rejects any other.
 

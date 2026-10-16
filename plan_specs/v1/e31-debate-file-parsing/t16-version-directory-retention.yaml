@@ -24,14 +24,22 @@ spec:
     locally and in a bucket, respecting the data-use policy's retention section. The dry run of
     `caselist parse` for a new parser version also reports `new_version: false` and `superseded:
     null`, which read as if nothing new were starting: make the dry run say a new version
-    directory will be started and which it supersedes. Out of scope: removal requests, which
-    delete every version already.
+    directory will be started and which it supersedes. Ruled by the PM, 2026-10-15: the everyday
+    permission set has no `s3:DeleteObject` by design, and only a takedown deletes. So retention
+    does not delete in a bucket. The command tags a superseded directory's objects, and a
+    lifecycle rule on the `parsed/` prefix expires tagged objects and their noncurrent versions
+    after a grace period, during which removing the tag undoes it. The everyday set gains
+    `s3:PutObjectTagging` and `s3:GetObjectTagging` on `parsed/` only. Locally the command
+    deletes the directory, with confirmation. Out of scope: removal requests, which delete every
+    version already.
   priority: 3
   constraints:
-    packages: [debate_core.application, debate_core.integrations.local, debate_core.integrations.s3, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/runbooks, docs/data]
+    packages: [debate_core.application, debate_core.integrations.local, debate_core.integrations.s3, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, infrastructure/modules/evidence_bucket, docs/runbooks, docs/data]
     forbidden:
       - Removing the current version directory, or any directory without a dry run and a confirmation
       - Using the takedown profile for retention
+      - Granting `s3:DeleteObject` or `s3:DeleteObjectVersion` to the everyday permission set, or any grant outside `parsed/`
+      - Applying a Terraform change in a session (the operator applies, after the PM has read the plan)
   context:
     - kind: TaskRef
       name: v1-e31-t06-parse-pipeline
@@ -44,8 +52,9 @@ spec:
         a dry run.
     - id: ac2
       description: >-
-        With confirmation the command removes a superseded directory locally and from a
-        bucket, and refuses the current one, by test against moto.
+        With confirmation the command removes a superseded directory locally and tags its
+        objects in a bucket for the lifecycle rule, and refuses the current one, by test
+        against moto (amended by the PM, 2026-10-15: tag, not delete, in a bucket).
     - id: ac3
       description: >-
         The dry run for a new parser version says a new directory will be started and names
@@ -54,6 +63,13 @@ spec:
       description: >-
         Operator-run: the dev and prod buckets' `2026.09.20-docx-1` directories listed and
         retired under the rule, counts recorded.
+    - id: ac5
+      description: >-
+        Added by the PM, 2026-10-15: the evidence bucket module gains the lifecycle rule on
+        `parsed/` for tagged objects and the two tagging grants on `parsed/` for the everyday
+        set, held by the module's tests (no delete grant added, none outside `parsed/`). The
+        dev and prod `terraform plan` outputs are operator-run and read by the PM before the
+        operator applies.
 status:
   phase: Pending
 ---

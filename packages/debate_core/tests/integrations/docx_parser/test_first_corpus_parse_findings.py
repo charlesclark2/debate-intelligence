@@ -385,7 +385,11 @@ UNDERLINED_ELLIPSIS_AND_YEAR = (
 )
 
 #: A short body paragraph that opens with a capitalised word and a year, as prose often does.
-OPENS_WITH_A_YEAR = "In 2019 the operator revised its forecast upward for the first time in a decade."
+#:
+#: It read *In 2019 the operator …* until `v1-e31-t12`, which stopped the classifier guessing a
+#: cite from a word that opens a sentence. A month is also a surname, so *March 2019* is still a
+#: guess, and still what the rules below are for.
+OPENS_WITH_A_YEAR = "March 2019 was the first time the operator revised its forecast upward in a decade."
 
 SECOND_BODY = (
     "Planners at the utility assumed that load would grow by ",
@@ -493,7 +497,7 @@ class TestABodyParagraphGuessedToBeACite:
     def test_a_small_print_paragraph_that_opens_with_a_year_stays_in_the_body(
         self, parser: DebateDocxParser
     ) -> None:
-        """`In 2019 …` opens the way a short cite does. Inside a body, in small print, it is prose."""
+        """`March 2019 …` opens the way a short cite does. Inside a body, in small print, it is prose."""
         body = (
             tag_paragraph()
             + cite_paragraph()
@@ -517,9 +521,9 @@ class TestABodyParagraphGuessedToBeACite:
     ) -> None:
         """Highlighting is what a debater does to evidence, at any size."""
         highlighted = paragraph_xml(
-            run_xml("In 2019 the operator ", half_points=22)
+            run_xml("March 2019 was the first time the operator ", half_points=22)
             + run_xml("revised its forecast upward", highlight="yellow", half_points=22)
-            + run_xml(" for the first time in a decade.", half_points=22)
+            + run_xml(" in a decade.", half_points=22)
         )
         document = parse(parser, tag_paragraph() + cite_paragraph() + marked_up_paragraph() + highlighted)
 
@@ -1111,7 +1115,7 @@ class TestABodyFiledAsTheCardsCite:
     def test_a_first_body_paragraph_that_opens_with_a_year_opens_the_body(
         self, parser: DebateDocxParser, formatting: str
     ) -> None:
-        """`In 2019 …` opens the way a short cite does. Under the card's cite, set as body, it is prose."""
+        """`March 2019 …` opens the way a short cite does. Under the card's cite, set as body, it is prose."""
         first = (
             small_print_paragraph(OPENS_WITH_A_YEAR)
             if formatting == "small print"

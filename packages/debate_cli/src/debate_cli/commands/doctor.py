@@ -9,9 +9,32 @@ It reports what exists today. The checks that need settings — which data direc
 which providers have credentials, whether the evidence store is reachable — are added here as
 their tasks land, starting with v1-e02-t05 (settings) and v1-e01-t09 (environment profiles).
 
+## The evidence profiles, when asked (`v1-e34-t22`)
+
+`doctor --evidence-profiles` adds one more check: each AWS profile this environment's settings name
+for the evidence bucket, the everyday one (`storage.s3.aws_profile`) and the takedown one when
+`DEBATE_REMOVAL_PROFILE` is set. For each it reports whether this machine's AWS config defines it
+and which permission set it is signed in as, and it fails on a profile that is **not defined**:
+that is the setting that stops every command that reaches the bucket before it starts, the weekly
+pull among them (`v1-e29-t07`). An expired session is reported as expired, with the login, and is
+not a failure; nor is an account that did not answer, or a profile signed in as a permission set
+nobody expected. The check is :class:`~debate_core.application.evidence_profiles.EvidenceProfileCheck`;
+this module only renders it.
+
+**It is an option, and plain `doctor` does not make it.** Plain `doctor` loads no settings, reads no
+AWS config and reaches no network, and it has to stay that way: `scripts/install_channel.sh` runs
+it on every install, and `validate-dev` runs it against every pre-release, on machines that have no
+AWS config at all. A `doctor` that failed there for want of an operator's profile would refuse
+every build. With the option it loads settings, reads the AWS config, and makes one call to AWS for
+each profile that is defined (`GetCallerIdentity`, which needs no grant and changes nothing).
+`ops/launchd/install.sh --check-launchd` runs it under launchd, as the agent will run.
+
+It names a profile, the setting that holds its name and a permission set. Never an account, a
+role's full identifier, the address a session is started at, or where the AWS config is.
+
 ## Exit codes
 
-`doctor` fails on two checks only, the ones it can state precisely:
+`doctor` fails on two checks only, the ones it can state precisely, and on a third when asked:
 
 * **The Unicode database** (`v1-e01-t14`). Under any database but the one the current evidence
   normalizer is pinned to, `normalize` refuses to run (`UnicodeDatabaseMismatchError`), so every
@@ -22,9 +45,13 @@ their tasks land, starting with v1-e02-t05 (settings) and v1-e01-t09 (environmen
   the same logic as the installer's post-install check, so there is no second list to keep up. Each
   module that does not import is named, with why, and a command that uses it would fail.
 
-* `0`: the report was produced, and both checks passed.
-* `1` (`DOMAIN_FAILURE`): a check failed. One failure has its own code, `UNICODE_DATABASE_MISMATCH`
-  or `INTEGRATIONS_DO_NOT_IMPORT`; both at once are `INSTALLATION_CHECKS_FAILED`, with both messages.
+* **The evidence profiles**, with `--evidence-profiles` only: every configured profile must be
+  defined in this machine's AWS config. One that is not is named, with its setting.
+
+* `0`: the report was produced, and every check that was made passed.
+* `1` (`DOMAIN_FAILURE`): a check failed. One failure has its own code, `UNICODE_DATABASE_MISMATCH`,
+  `INTEGRATIONS_DO_NOT_IMPORT` or `STORE_PROFILE_NOT_CONFIGURED` (the code a command stopped by the
+  same setting reports); more than one are `INSTALLATION_CHECKS_FAILED`, with every message.
   `--json` carries the whole report in `error.details`. `scripts/install_channel.sh` runs `doctor`
   before it replaces an install, so a build that fails either check is refused there.
 * `70` (`INTERNAL_ERROR`): `doctor` could not establish a check at all: the normalizer's pinned
@@ -58,6 +85,7 @@ reported as not managed. Either answer leaves the exit status alone.
 
 from __future__ import annotations
 
+import asyncio
 import os
 import platform
 import sys
@@ -65,6 +93,7 @@ import unicodedata
 from collections.abc import Mapping
 from dataclasses import replace
 from pathlib import Path
+from typing import Annotated, cast
 
 import typer
 
@@ -73,6 +102,7 @@ from debate_cli.container import SERVICE_NAMES, ServiceContainer
 from debate_cli.context import cli_context, command_name
 from debate_cli.exit_codes import ExitCode
 from debate_cli.output import CommandFailure, JsonValue, TableSpec
+from debate_core.application.errors import StoreProfileNotConfigured, error_code_of_class
 from debate_core.evidence.normalization import NORMALIZER_VERSION, pinned_unicode_version
 
 __all__ = ["doctor"]
@@ -80,11 +110,30 @@ __all__ = ["doctor"]
 UNICODE_DATABASE_MISMATCH_CODE = "UNICODE_DATABASE_MISMATCH"
 INTEGRATIONS_DO_NOT_IMPORT_CODE = "INTEGRATIONS_DO_NOT_IMPORT"
 INSTALLATION_CHECKS_FAILED_CODE = "INSTALLATION_CHECKS_FAILED"
+PROFILE_NOT_DEFINED_CODE = error_code_of_class(StoreProfileNotConfigured)
+"""`STORE_PROFILE_NOT_CONFIGURED`: the code of the error a command stopped by the same setting reports."""
 NORMALIZATION_POLICY_PAGE = "docs/evidence/normalization.md"
 _MISMATCH_FACTS = ("normalizer_version", "normalizer_unicode_version", "python_unicode_version")
+EVIDENCE_PROFILES = "evidence_profiles"
+"""The report's key for the profile check's findings. Absent unless `--evidence-profiles` was given."""
 
 
-def doctor(ctx: typer.Context) -> None:
+def doctor(
+    ctx: typer.Context,
+    evidence_profiles: Annotated[
+        bool,
+        typer.Option(
+            "--evidence-profiles",
+            help=(
+                "Also check each AWS profile this environment is configured to reach the evidence "
+                "bucket with: whether this machine's AWS config defines it, and which permission set "
+                "it is signed in as. Fails on a profile that is not defined; an expired session is "
+                "reported and does not fail. Reads the AWS config and asks AWS who each profile is; "
+                "without this option doctor does neither."
+            ),
+        ),
+    ] = False,
+) -> None:
     """Report the versions, interpreter and wiring this installation is running with.
 
     Exit codes:
@@ -92,7 +141,9 @@ def doctor(ctx: typer.Context) -> None:
         normalizer is pinned to, and every integration the CLI wires imports
     1   a check failed: the Unicode databases differ, so commands that normalize evidence text
         would refuse to run (the error names both versions and docs/evidence/normalization.md),
-        or a wired integration does not import (the error names each one, with why)
+        or a wired integration does not import (the error names each one, with why), or, with
+        --evidence-profiles, a configured evidence profile is not defined in this machine's AWS
+        config (the error names the profile and the setting that holds its name)
     70  a check could not be made at all (the pinned version is unknown, or the CLI wires an
         integration in a way that cannot be followed), which is a bug in the build
     Every other fact is reported for information and never fails the command, including a
@@ -101,6 +152,9 @@ def doctor(ctx: typer.Context) -> None:
     cli = cli_context(ctx)
     cli.output.detail("collecting environment facts")
     report = environment_report(cli.services)
+    if evidence_profiles:
+        cli.output.detail("asking AWS which permission set each configured evidence profile is signed in as")
+        report[EVIDENCE_PROFILES] = evidence_profile_findings(cli.services)
     failure = doctor_failure(report)
     # A program gets one envelope: the report under `data`, or under `error.details` on a failure.
     # A person gets the table either way, then the failure's panel.
@@ -146,6 +200,16 @@ def environment_report(services: ServiceContainer) -> dict[str, JsonValue]:
     }
 
 
+def evidence_profile_findings(services: ServiceContainer) -> list[JsonValue]:
+    """What the profile check found for each configured evidence profile, in the settings' order.
+
+    One object a profile: the setting that names it, its name, whether it is defined, what asking
+    AWS learnt, the permission set it is signed in as, and a sentence and a fix for a person.
+    """
+    found = asyncio.run(services.evidence_profile_check().run())
+    return [cast("JsonValue", one.as_json()) for one in found]
+
+
 def uv_python_directory(environ: Mapping[str, str], *, windows: bool = os.name == "nt") -> Path:
     """The directory where uv keeps the Pythons it manages, found the way `uv python dir` finds it.
 
@@ -176,7 +240,11 @@ def doctor_failure(report: Mapping[str, JsonValue]) -> CommandFailure | None:
     """What `doctor` reports as its failure, or None: every check it fails on, together."""
     failures = [
         failure
-        for failure in (unicode_database_failure(report), integration_failure(report))
+        for failure in (
+            unicode_database_failure(report),
+            integration_failure(report),
+            evidence_profile_failure(report),
+        )
         if failure is not None
     ]
     if len(failures) <= 1:
@@ -237,6 +305,45 @@ def integration_failure(report: Mapping[str, JsonValue]) -> CommandFailure | Non
     )
 
 
+def evidence_profile_failure(report: Mapping[str, JsonValue]) -> CommandFailure | None:
+    """The configured evidence profiles this machine's AWS config does not define, or None.
+
+    None too when the profiles were not checked. Nothing else the check finds is a failure: an
+    expired session has a login to cure it and does not stop the weekly run capturing, and an
+    account that did not answer says nothing about the profile.
+    """
+    missing = _profiles_not_defined(report)
+    if not missing:
+        return None
+    named = " and ".join(
+        f"AWS profile {str(one['profile'])!r}, named by {one['setting']}," for one in missing
+    )
+    one_or_more = ("is", "it") if len(missing) == 1 else ("are", "them")
+    fixes = dict.fromkeys(str(one["hint"]) for one in missing if one["hint"])
+    return CommandFailure(
+        code=PROFILE_NOT_DEFINED_CODE,
+        message=(
+            f"{named} {one_or_more[0]} not defined in this machine's AWS config, so every command "
+            f"that uses {one_or_more[1]} will refuse to start."
+        ),
+        exit_code=ExitCode.DOMAIN_FAILURE,
+        details=dict(report),
+        hint=". ".join(fixes) or None,
+    )
+
+
+def _evidence_profiles(report: Mapping[str, JsonValue]) -> list[Mapping[str, JsonValue]]:
+    """The profile check's findings in `report`: none when the check was not asked for."""
+    found = report.get(EVIDENCE_PROFILES)
+    if not isinstance(found, list):
+        return []
+    return [one for one in found if isinstance(one, Mapping)]
+
+
+def _profiles_not_defined(report: Mapping[str, JsonValue]) -> list[Mapping[str, JsonValue]]:
+    return [one for one in _evidence_profiles(report) if one["defined"] is False]
+
+
 def _failed_integrations(report: Mapping[str, JsonValue]) -> dict[str, str]:
     failed = report["integrations_failed"]
     if not isinstance(failed, Mapping):  # pragma: no cover - environment_report always writes one
@@ -245,7 +352,11 @@ def _failed_integrations(report: Mapping[str, JsonValue]) -> dict[str, str]:
 
 
 def _failed_facts(report: Mapping[str, JsonValue]) -> dict[str, JsonValue]:
-    """For a person's panel: the two databases if they differ, and each integration that failed."""
+    """For a person's panel: the two databases if they differ, and each integration that failed.
+
+    A profile that is not defined adds nothing here: the failure's own sentence names the profile
+    and its setting, and the row above it says the same.
+    """
     facts: dict[str, JsonValue] = {}
     if unicode_database_failure(report) is not None:
         facts.update({key: report[key] for key in _MISMATCH_FACTS})
@@ -275,7 +386,31 @@ def _rows(report: dict[str, JsonValue]) -> list[list[str]]:
         "integrations_import": "Integrations import",
         "extras_missing_distributions": "Extras' packages missing",
     }
-    return [[labels.get(key, key), _as_text(value)] for key, value in report.items()]
+    rows = [
+        [labels.get(key, key), _as_text(value)] for key, value in report.items() if key != EVIDENCE_PROFILES
+    ]
+    return rows + _profile_rows(report)
+
+
+def _profile_rows(report: Mapping[str, JsonValue]) -> list[list[str]]:
+    """One row for each evidence profile that was checked; no row at all when none was asked about.
+
+    The login that renews an expired session follows its sentence. The fix for a profile that is
+    not defined does not: it is the failure's own hint, in the panel under the table.
+    """
+    if EVIDENCE_PROFILES not in report:
+        return []
+    found = _evidence_profiles(report)
+    if not found:
+        return [["Evidence profiles", "none configured for this environment"]]
+    return [
+        [
+            "Evidence profile",
+            f"{one['profile']} ({one['setting']}): {one['summary']}"
+            + (f" ({one['hint']})" if one["hint"] and one["defined"] else ""),
+        ]
+        for one in found
+    ]
 
 
 def _as_text(value: JsonValue) -> str:

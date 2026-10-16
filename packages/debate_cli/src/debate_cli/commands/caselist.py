@@ -74,7 +74,8 @@ count is in the summary. Exit codes are `import`'s.
     debate-research caselist reimport-openev-metadata --year 2026 --event policy
 
 Re-derives camp, lab, title and warnings for a release already imported, from the paths its
-manifest recorded, with the current alias table
+manifest recorded, with the current alias table, and gives each row its upstream identity
+(`openev_id`, `upstream_path_sha256`) from this machine's OpenEv delivery record (`v1-e30-t14`)
 (:meth:`~debate_core.application.caselist.openev_import_service.OpenEvImportService.reimport_metadata`,
 `v1-e30-t08`). It reads the local manifest, corrects the camp-file records, and writes the manifest
 back to the same key — only when it changed, and never under `--dry-run`. It downloads nothing and
@@ -117,6 +118,16 @@ nothing. `0` only when every snapshot agrees; `1` on any drift, with the per-sna
 `error.details`; `3` when the bucket could not be read. With no `--caselist` it compares every
 caselist either side holds a manifest for.
 
+A checksum mismatch is named by its kind (`v1-e30-t12`), in the message, the table and each
+snapshot's `mismatches` in the JSON. A **manifest** mismatch is this machine's copy rewritten since
+its last publish, by a camp metadata re-import or a removal, and the hint names
+`caselist publish --caselist <slug>` for each caselist affected, complete archives included. A
+**source** mismatch is other bytes under a digest's key, and the hint says it needs a person. A run
+with both prints both. Each snapshot also shows its suppressed rows, and each caselist the current
+objects of suppressed sources still in the bucket, which a removal should have taken: a run whose
+only difference is such an object says that every snapshot agrees and what is left. The exit codes
+are as above.
+
 It also reports what a removal left in the bucket (`v1-e30-t10`): per caselist, the current objects,
 noncurrent versions and delete markers still held under `raw/` and `parsed/` of files the
 suppression list says were removed, later uploads taken down with them included. It lists object
@@ -126,6 +137,13 @@ what to run (`docs/runbooks/caselist-removal.md`). A file is named by the first 
 its sha256 and by counts, in the text and in `removal_residue` of the JSON alike. Where the profile
 may not list versions the caselist is reported as *not checked*, with `null` counts: that is not a
 finding of none, and it does not change the exit code.
+
+And, per caselist a completed removal touched, the manifest and aggregate versions older than it, by
+key role and count (`v1-e30-t15`): versions of the parsed store's `index.jsonl`, `failures.jsonl` and
+`occurrences.jsonl` in every version directory, and of each manifest the removal rewrote other than
+its own rewrite. Found by comparing the listing's times with the removal log's, with the scope each
+removal records beside its log entry; nothing is downloaded. A completed removal whose build recorded
+no scope is named as not checked.
 """
 
 from __future__ import annotations
@@ -155,7 +173,7 @@ from debate_core.application.caselist.openev_manifest import openev_manifest_key
 from debate_core.application.caselist.openev_metadata_reimport import OpenEvMetadataReimport
 from debate_core.application.caselist.publish_plan import SourceAction, validate_publish_target
 from debate_core.application.caselist.publish_service import PublishReport, SourceResult
-from debate_core.application.caselist.removal_residue import CaselistResidue
+from debate_core.application.caselist.removal_residue import RESIDUE_DIGEST_PREFIX_LENGTH, CaselistResidue
 from debate_core.application.caselist.status_service import (
     CASELIST_DRIFT,
     REMOVAL_RESIDUE,
@@ -384,6 +402,7 @@ def reimport_openev_metadata(
             recorded_manifest=read_manifest_lines(manifest_path),
             aliases=aliases,
             dry_run=dry_run,
+            upstream_paths=cli.services.openev_upstream_paths(),
         )
     )
 
@@ -495,12 +514,14 @@ def _status_failure(report: CaselistStatusReport, payload: dict[str, JsonValue])
     drifted = report.drifted
     if report.residue_found and not drifted:
         files = sum(len(one.files) for one in report.residue)
+        held = (
+            f"the bucket still holds versions of {files} removed file(s)"
+            if files
+            else "the bucket still holds versions older than a removal"
+        )
         return CommandFailure(
             code=REMOVAL_RESIDUE,
-            message=(
-                f"the bucket still holds versions of {files} removed file(s): "
-                + "; ".join(_residue_found(one) for one in report.residue if one.found)
-            ),
+            message=f"{held}: " + "; ".join(_residue_found(one) for one in report.residue if one.found),
             exit_code=ExitCode.DOMAIN_FAILURE,
             details=payload,
             hint=(
@@ -508,16 +529,76 @@ def _status_failure(report: CaselistStatusReport, payload: dict[str, JsonValue])
                 'docs/runbooks/caselist-removal.md, "When caselist status reports removal residue".'
             ),
         )
+    differ = (
+        f"{len(drifted)} snapshot(s) differ between this machine and the bucket: "
+        + ", ".join(_drifted_snapshot(entry) for entry in drifted)
+        if drifted
+        else "every snapshot agrees"
+    )
+    leftover = _suppressed_objects_found(report)
     return CommandFailure(
         code=CASELIST_DRIFT,
-        message=(
-            f"{len(drifted)} snapshot(s) differ between this machine and the bucket: "
-            + ", ".join(f"{entry.caselist} {entry.snapshot}" for entry in drifted)
-        ),
+        message=differ if leftover is None else f"{differ}{'; and' if drifted else ', and'} {leftover}",
         exit_code=ExitCode.DOMAIN_FAILURE,
         details=payload,
-        hint="`caselist publish` completes what is missing here; a checksum mismatch needs a person.",
+        hint=" ".join(_drift_hints(report)),
     )
+
+
+def _drifted_snapshot(entry: SnapshotStatus) -> str:
+    """`<caselist> <snapshot>`, and in brackets the mismatches and suppressed rows that differ."""
+    what: list[str] = []
+    if entry.manifest_mismatched:
+        what.append("manifest mismatch")
+    if entry.source_mismatches:
+        what.append(f"{len(entry.source_mismatches)} source mismatch(es)")
+    if entry.suppressed_rows:
+        what.append(f"{len(entry.suppressed_rows)} suppressed row(s)")
+    named = f"{entry.caselist} {entry.snapshot}"
+    return f"{named} ({', '.join(what)})" if what else named
+
+
+def _suppressed_objects_found(report: CaselistStatusReport) -> str | None:
+    """`the bucket still holds N current object(s) of suppressed sources: <caselist> N, …`, or None."""
+    if not report.suppressed_objects:
+        return None
+    counts = [
+        f"{caselist} {len(found)}"
+        for caselist in report.caselists
+        if (found := report.suppressed_objects_of(caselist))
+    ]
+    return (
+        f"the bucket still holds {len(report.suppressed_objects)} current object(s) of suppressed "
+        f"sources: {', '.join(counts)}"
+    )
+
+
+def _drift_hints(report: CaselistStatusReport) -> list[str]:
+    """One sentence per kind of difference found, each naming what clears it (`v1-e30-t12`).
+
+    A manifest mismatch is this machine's rewrite not yet published, and the publish of each
+    caselist affected uploads it. A source mismatch needs a person. What a removal left needs the
+    removal finished. Anything missing is what a publish completes, as before.
+    """
+    drifted = report.drifted
+    hints: list[str] = []
+    if any(entry.incomplete for entry in drifted):
+        hints.append("`caselist publish` completes what is missing here.")
+    manifests = tuple(dict.fromkeys(entry.caselist for entry in report.manifest_mismatched))
+    if manifests:
+        commands = " and ".join(f"`caselist publish --caselist {caselist}`" for caselist in manifests)
+        hints.append(
+            "A manifest mismatch is this machine's copy rewritten since its last publish, by a camp "
+            f"metadata re-import or a removal. Run {commands} to upload it."
+        )
+    if report.source_mismatched:
+        hints.append("A source mismatch needs a person: the bucket holds other bytes under a digest's key.")
+    if report.suppressed_objects or any(entry.suppressed_rows for entry in drifted):
+        hints.append(
+            "A suppressed row or object is what a removal did not finish: "
+            'docs/runbooks/caselist-removal.md, "When caselist status reports removal residue".'
+        )
+    return hints
 
 
 class InvalidStatusRequest(ConfigurationError):
@@ -637,14 +718,34 @@ def status_summary(report: CaselistStatusReport, settings: Settings) -> dict[str
 
     `removal_residue` is one object per caselist compared (`v1-e30-t10`): what a version listing
     shows of its removed files, by digest prefix and count, or `checked: false` with `null` counts
-    where the listing was refused. No whole digest and nothing from a manifest row.
+    where the listing was refused. No whole digest and nothing from a manifest row. Each also gives
+    `older_versions`, by key role and count, and `older_than`, the latest completed removal that
+    touched the caselist (`v1-e30-t15`). `removals_not_checked` names the completed removals no
+    version was compared with, because the build that made them did not record their reach.
+
+    Per snapshot, `mismatches` gives each of `checksum_mismatches` with its kind, `manifest` or
+    `source`, in the same order; `checksum_mismatches` is unchanged (`v1-e30-t12`). Beside them,
+    `suppressed_rows` counts the local manifest's rows the suppression list stops, and
+    `suppressed_row_prefixes` names their files. `suppressed_objects` is one object per caselist
+    compared, because one listing of a caselist's source prefix finds them for all its snapshots:
+    the count of current source objects whose digest is suppressed, and their `sha256_prefixes`.
+    A removed file is named by the first twelve characters of its digest, as in `removal_residue`.
     """
     return {
         "environment": settings.environment.value,
         "bucket": settings.storage.s3.bucket,
         "in_sync": report.in_sync,
         "snapshots": [_status_entry(entry) for entry in report.snapshots],
+        "suppressed_objects": [
+            {
+                "caselist": caselist,
+                "objects": len(found := report.suppressed_objects_of(caselist)),
+                "sha256_prefixes": [_digest_prefix(_digest_of_key(key)) for key in found],
+            }
+            for caselist in report.caselists
+        ],
         "removal_residue": [_residue_entry(one) for one in report.residue],
+        "removals_not_checked": list(report.removals_not_checked),
     }
 
 
@@ -667,17 +768,42 @@ def _residue_entry(residue: CaselistResidue) -> dict[str, JsonValue]:
         "noncurrent_versions": residue.noncurrent_versions,
         "delete_markers": residue.delete_markers,
         "files": files if residue.checked else None,
+        "older_versions": [{"role": one.role, "versions": one.versions} for one in residue.older_versions]
+        if residue.checked
+        else None,
+        "older_than": None
+        if residue.older_than is None
+        else {
+            "request_id": residue.older_than.request_id,
+            "completed_at": _utc_stamp(residue.older_than.completed_at),
+        },
     }
 
 
+def _utc_stamp(when: datetime) -> str:
+    """A moment as the removal log writes one: UTC, `Z`."""
+    return when.astimezone(UTC).isoformat().replace("+00:00", "Z")
+
+
 def _residue_found(residue: CaselistResidue) -> str:
-    """`<caselist>: counts of N file(s) (sha256 <prefix>, …)`, for a caselist with something left."""
-    named = ", ".join(f"sha256 {one.sha256_prefix}" for one in residue.files)
-    return (
-        f"{residue.caselist}: {residue.current_objects} current object(s), "
-        f"{residue.noncurrent_versions} noncurrent version(s) and {residue.delete_markers} delete marker(s) "
-        f"of {len(residue.files)} file(s) ({named})"
-    )
+    """`<caselist>: counts of N file(s) (sha256 <prefix>, …)`, and the versions older than a removal
+    by role and count, for a caselist with something left."""
+    found: list[str] = []
+    if residue.files:
+        named = ", ".join(f"sha256 {one.sha256_prefix}" for one in residue.files)
+        found.append(
+            f"{residue.current_objects} current object(s), {residue.noncurrent_versions} noncurrent "
+            f"version(s) and {residue.delete_markers} delete marker(s) "
+            f"of {len(residue.files)} file(s) ({named})"
+        )
+    if residue.older_versions and residue.older_than is not None:
+        counts = [f"{one.versions} {one.role} version(s)" for one in residue.older_versions]
+        listed = counts[0] if len(counts) == 1 else f"{', '.join(counts[:-1])} and {counts[-1]}"
+        found.append(
+            f"{listed} older than {residue.older_than.request_id}, completed "
+            f"{residue.older_than.completed_at.astimezone(UTC):%Y-%m-%d %H:%M} UTC"
+        )
+    return f"{residue.caselist}: " + "; ".join(found)
 
 
 def _residue_lines(report: CaselistStatusReport) -> list[str]:
@@ -691,11 +817,17 @@ def _residue_lines(report: CaselistStatusReport) -> list[str]:
             f"Removal residue NOT CHECKED for {', '.join(unchecked)}: this profile may not list object "
             "versions there. That is not a finding of none."
         )
+    if report.removals_not_checked:
+        lines.append(
+            f"Manifest and aggregate versions NOT CHECKED against {', '.join(report.removals_not_checked)}: "
+            "the build that made that removal did not record which caselists it touched. That is not a "
+            "finding of none."
+        )
     checked = [one for one in report.residue if one.checked]
     if checked and not report.residue_found:
         lines.append(
-            f"No version of a removed file is left under raw/ or parsed/ ({len(checked)} caselist(s) "
-            "checked; noncurrent manifest versions are not read)."
+            "No version of a removed file is left under raw/ or parsed/, and no manifest or aggregate "
+            f"version is older than a removal that touched its caselist ({len(checked)} caselist(s) checked)."
         )
     return lines
 
@@ -715,7 +847,35 @@ def _status_entry(entry: SnapshotStatus) -> dict[str, JsonValue]:
         "missing_local": list(entry.missing_local),
         "checksum_mismatches": list(entry.checksum_mismatches),
         "suppressed": entry.suppressed,
+        "mismatches": [
+            {"key": key, "kind": entry.mismatch_kind(key).value} for key in entry.checksum_mismatches
+        ],
+        "suppressed_rows": len(entry.suppressed_rows),
+        "suppressed_row_prefixes": [_digest_prefix(digest) for digest in entry.suppressed_rows],
     }
+
+
+def _digest_prefix(digest: str) -> str:
+    """A removed file's name in this report: the first twelve characters of its digest."""
+    return digest[:RESIDUE_DIGEST_PREFIX_LENGTH]
+
+
+def _digest_of_key(key: str) -> str:
+    """The digest a source key ends in: `…/sha256/ab/cd/<digest>`."""
+    return key.rsplit("/", 1)[-1]
+
+
+def _suppressed_object_lines(report: CaselistStatusReport) -> list[str]:
+    """Under the status table, per caselist: the current objects of suppressed sources, by count."""
+    lines: list[str] = []
+    for caselist in report.caselists:
+        found = report.suppressed_objects_of(caselist)
+        if found:
+            named = ", ".join(f"sha256 {_digest_prefix(_digest_of_key(key))}" for key in found)
+            lines.append(
+                f"SUPPRESSED SOURCE OBJECTS in {caselist}: {len(found)} current object(s) ({named})."
+            )
+    return lines
 
 
 def _publish_table(report: PublishReport, settings: Settings) -> TableSpec:
@@ -770,8 +930,9 @@ def _status_table(report: CaselistStatusReport, settings: Settings) -> TableSpec
             f"{entry.local_files}/{entry.sources}" if entry.local_manifest else "no manifest",
             str(entry.published_sources),
             str(len(entry.missing_sources)),
-            "yes" if entry.manifest_present else "no",
-            str(len(entry.checksum_mismatches)),
+            ("differs" if entry.manifest_mismatched else "yes") if entry.manifest_present else "no",
+            str(len(entry.source_mismatches)),
+            str(len(entry.suppressed_rows)),
             "yes" if entry.in_sync else "NO",
         ]
         for entry in report.snapshots
@@ -785,7 +946,8 @@ def _status_table(report: CaselistStatusReport, settings: Settings) -> TableSpec
             "Published",
             "Missing",
             "Manifest",
-            "Mismatches",
+            "Source mismatches",
+            "Suppressed rows",
             "In sync",
         ),
         rows=rows,
@@ -795,6 +957,7 @@ def _status_table(report: CaselistStatusReport, settings: Settings) -> TableSpec
                 "Every snapshot agrees."
                 if not drifted
                 else f"{drifted} snapshot(s) differ; see --json for digests.",
+                *_suppressed_object_lines(report),
                 *_residue_lines(report),
             ]
         ),
@@ -913,6 +1076,9 @@ def import_summary(report: ImportReport, manifest: Path | None) -> dict[str, Jso
     `counts["NEW"]` is week-over-week: not present in `previous_snapshot`. `first_seen` is what is
     new to the caselist — distinct stored digests no earlier snapshot of it held — and is the
     number to sum across weeks (`v1-e30-t08`).
+
+    `held_at_removed_paths` is `{request id: count}` for the uploads refused because a removal
+    holds their path (`v1-e30-t13`): each is one of `counts["SUPPRESSED"]`, and empty when none was.
     """
     return {
         "caselist": report.caselist,
@@ -925,6 +1091,7 @@ def import_summary(report: ImportReport, manifest: Path | None) -> dict[str, Jso
         "archive_sha256": report.archive_sha256,
         "members": report.member_count,
         "counts": {str(name): report.count(name) for name in Classification},
+        "held_at_removed_paths": dict(sorted(report.held_by_request.items())),
         "skipped": {str(reason): count for reason, count in sorted(report.skipped.items(), key=str)},
         "skipped_total": sum(report.skipped.values()),
         "distinct_sha256": report.distinct_digests,
@@ -1017,6 +1184,7 @@ def openev_metadata_reimport_summary(
         "camp_files_updated": report.camp_files_updated,
         "camp_files_missing": report.camp_files_missing,
         "blobs_missing": report.blobs_missing,
+        "identities_added": report.identities_added,
         "manifest_changed": report.manifest_changed,
         "manifest": str(manifest) if manifest is not None else None,
     }
@@ -1043,6 +1211,7 @@ def _reimport_table(report: OpenEvMetadataReimport, manifest: Path | None) -> Ta
         title=f"openev {report.release} metadata ({'dry run' if not report.applied else 're-derived'})",
         caption=(
             f"{report.rows} file(s), {report.titles_changed} title(s) changed, "
+            f"{report.identities_added} row(s) given their upstream identity, "
             f"{report.blobs_missing} not held locally. {outcome}"
         ),
     )
@@ -1063,6 +1232,19 @@ def _summary_table(report: ImportReport, manifest: Path | None) -> TableSpec:
     )
 
 
+def _held_note(report: ImportReport) -> str:
+    """One sentence when a removal's hold refused an upload: how many, under which request, and what next."""
+    if not report.held_by_request:
+        return ""
+    requests = ", ".join(
+        f"{count} under {request}" for request, count in sorted(report.held_by_request.items())
+    )
+    return (
+        f" SUPPRESSED includes {report.held_at_removed_paths} new upload(s) at a removed path ({requests}), "
+        "refused because that removal holds the path: run the same `caselist remove` again to finish."
+    )
+
+
 def _caption(report: ImportReport, manifest: Path | None) -> str:
     """What the numbers mean, in the lines under the table: NEW's baseline, and first-seen beside it."""
     against = (
@@ -1079,7 +1261,7 @@ def _caption(report: ImportReport, manifest: Path | None) -> str:
     first_seen = (
         f"; {report.first_seen} first seen in {report.caselist}" if report.first_seen is not None else ""
     )
-    meaning = f"{new_means}{first_seen}."
+    meaning = f"{new_means}{first_seen}.{_held_note(report)}"
     if not report.applied:
         return (
             f"{report.member_count} member(s), {against}{warned}. {meaning} Planned only; nothing was "

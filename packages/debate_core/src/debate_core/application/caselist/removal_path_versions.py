@@ -52,6 +52,14 @@ reported as :attr:`SamePathEvidence.UPSTREAM_PATH_DIGEST`. Where it does not kno
 machine that never pulled, the rows' names are all there is (:attr:`SamePathEvidence.ROW_NAME`), and
 the plan says so.
 
+## An archive in the download inbox is a snapshot too
+
+A revision in an archive `caselist pull` downloaded is at the removed path whether or not it has
+been imported (`v1-e30-t13`). The planner hands each inbox archive's members in as holdings marked
+:attr:`PathHolding.inbox`, dated as the archive's name dates it, and the same rules above say which
+are later. :attr:`PathVersion.snapshots` stays what the store's manifests show, and
+:attr:`PathVersion.inbox_snapshots` is where only the inbox shows it.
+
 Reads nothing and logs nothing: a function of the rows it is given.
 """
 
@@ -74,6 +82,7 @@ __all__ = [
     "VersionRelation",
     "other_versions",
     "path_identity",
+    "snapshot_date",
 ]
 
 type PathIdentity = tuple[str, ...]
@@ -111,6 +120,8 @@ class PathHolding:
     """As the manifest's key names it: `2026-09-15`, `full/2026-09-15`, or a release, `2026-policy`."""
     path: str
     sha256: Sha256Hex
+    inbox: bool = False
+    """True for a member of an archive in the download inbox, rather than a stored manifest row."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -128,11 +139,20 @@ class PathVersion:
     caselist: str
     path: str
     snapshots: tuple[str, ...]
-    """Every snapshot that holds it at this path, in order."""
+    """Every snapshot whose manifest holds it at this path, in order. Empty for a file only the
+    download inbox holds there."""
     openev_ids: tuple[int, ...]
     """For a camp file, the OpenEv ids its rows at this path name."""
     evidence: SamePathEvidence
     identity: PathIdentity
+    inbox_snapshots: tuple[str, ...] = ()
+    """The snapshots of the inbox archives that hold it at this path and that no manifest shows:
+    downloaded and not imported, or imported by a build that refused it there (`v1-e30-t13`)."""
+
+    @property
+    def only_in_the_inbox(self) -> bool:
+        """Whether no manifest holds it at this path: the store never took it in there."""
+        return not self.snapshots
 
 
 def path_identity(holding: PathHolding) -> PathIdentity | None:
@@ -181,7 +201,12 @@ def other_versions(
                 known = found.get((digest, identity))
                 if version is not None and (known is None or _RANK[version.relation] > _RANK[known.relation]):
                     found[(digest, identity)] = version
-    return tuple(sorted(found.values(), key=lambda one: (one.caselist, one.path, one.snapshots, one.sha256)))
+    return tuple(
+        sorted(
+            found.values(),
+            key=lambda one: (one.caselist, one.path, (*one.snapshots, *one.inbox_snapshots), one.sha256),
+        )
+    )
 
 
 _RANK = {VersionRelation.EARLIER: 0, VersionRelation.SAME_DATE: 1, VersionRelation.LATER: 2}
@@ -231,16 +256,22 @@ def _version_at(
     else:
         relation = VersionRelation.SAME_DATE
     first = theirs[0][1]
+    stored = tuple(dict.fromkeys(holding.snapshot for _, holding in theirs if not holding.inbox))
     return PathVersion(
         sha256=digest,
         relation=relation,
         of_sha256=named_digest,
         caselist=first.caselist,
         path=first.path,
-        snapshots=tuple(dict.fromkeys(holding.snapshot for _, holding in theirs)),
+        snapshots=stored,
         openev_ids=tuple(order[0] for order, _ in theirs) if identity[0] == OPENEV else (),
         evidence=evidence,
         identity=identity,
+        inbox_snapshots=tuple(
+            dict.fromkeys(
+                holding.snapshot for _, holding in theirs if holding.inbox and holding.snapshot not in stored
+            )
+        ),
     )
 
 
@@ -251,13 +282,13 @@ def _placed(holding: PathHolding) -> tuple[PathIdentity, _Order] | None:
         if openev_id is None or not names:
             return None
         return (OPENEV, holding.snapshot, *names), (openev_id,)
-    held_on = _snapshot_date(holding.snapshot)
+    held_on = snapshot_date(holding.snapshot)
     if held_on is None:
         return None
     return (holding.caselist, holding.path), (held_on.toordinal(),)
 
 
-def _snapshot_date(snapshot: str) -> date | None:
+def snapshot_date(snapshot: str) -> date | None:
     """The date a caselist snapshot is ordered by: a weekly's, or a complete archive's own."""
     complete = full_archive_date(snapshot)
     if complete is not None:

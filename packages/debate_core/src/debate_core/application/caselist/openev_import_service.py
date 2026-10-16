@@ -67,6 +67,7 @@ from debate_core.application.caselist.camp_metadata import (
     parse_camp_path,
 )
 from debate_core.application.caselist.openev_manifest import (
+    OpenEvUpstream,
     merged_manifest_lines,
     openev_manifest_key,
     openev_release_name,
@@ -91,7 +92,7 @@ from debate_core.application.ports.archive import ArchiveEntry, ArchiveMember, S
 from debate_core.application.ports.caselist import CaselistRepository
 from debate_core.application.ports.evidence_store import ObjectKey
 from debate_core.application.ports.persistence import SnapshotStore
-from debate_core.application.ports.suppression import SuppressionList
+from debate_core.application.ports.suppression import SuppressionList, camp_path_scope
 from debate_core.domain.caselist import (
     CampFile,
     Event,
@@ -203,6 +204,7 @@ class OpenEvImportService:
         recorded_manifest: Iterable[str] = (),
         aliases: CampAliases | None = None,
         dry_run: bool = False,
+        upstream: OpenEvUpstream | None = None,
     ) -> OpenEvImportReport:
         """Classify and store every member of one download, and merge it into the release manifest.
 
@@ -210,7 +212,10 @@ class OpenEvImportService:
         import); the caller reads it from where it keeps manifests and writes
         :attr:`OpenEvImportReport.manifest_lines` back there. `aliases` defaults to the packaged
         `camp_aliases.yaml`. A file on the removal suppression list is counted as `SUPPRESSED`,
-        stored nowhere and given no manifest row.
+        stored nowhere and given no manifest row: the whole file, or the file at this release's
+        row path when a removal withdrew that camp path (`v1-e30-t14`). `upstream` is which OpenEv
+        file the download was, which the pull knows and a hand import does not; each row this
+        import writes carries it.
 
         Writes nothing — no blob, no record — when `dry_run` is set; the report still carries the
         manifest a real run would write. Raises :class:`UnrecordableImportDate`, before reading or
@@ -239,7 +244,10 @@ class OpenEvImportService:
             extract=lambda path: parse_camp_path(path, aliases=table),
             write=write,
             baseline=recorded.baseline,
-            disclosure_scope=None,
+            # A camp path is withdrawn as a caselist path is (v1-e30-t14); a camp path's hold for a
+            # later upload is the sync's (v1-e34-t14), not a caselist path entry, so no snapshot.
+            disclosure_scope=camp_path_scope(openev_release_name(year, event)),
+            snapshot=None,
             dry_run=dry_run,
             report_removed=False,
             find_existing=self._caselists.find_source,
@@ -261,6 +269,7 @@ class OpenEvImportService:
                 imported_on=imported_on,
                 archive_sha256=archive_sha256,
                 suppression=run.suppression,
+                upstream=upstream,
             ),
             counts=run.counts,
             skipped=run.skipped,
@@ -279,6 +288,7 @@ class OpenEvImportService:
         recorded_manifest: Iterable[str],
         aliases: CampAliases | None = None,
         dry_run: bool = False,
+        upstream_paths: Mapping[int, str] | None = None,
     ) -> OpenEvMetadataReimport:
         """Re-derive camp and title for a release already imported, and correct its camp-file records.
 
@@ -288,6 +298,11 @@ class OpenEvImportService:
         file is read and no blob written: the blob store is only asked whether each digest is held.
         A record is corrected, never created, and keeps its digest, year, event and import date.
         Writes no record when `dry_run`.
+
+        Every row also gets its upstream identity (`v1-e30-t14`): its OpenEv id, from its name, and
+        the digest of that id's upstream path from `upstream_paths`, which is this machine's
+        delivery record (`{openev id: path digest}`). This is how rows written before that task
+        come to carry it.
         """
         suppression = await load_suppression_state(self._suppression)
         release = rederive_release(
@@ -296,6 +311,7 @@ class OpenEvImportService:
             recorded_manifest=recorded_manifest,
             aliases=aliases if aliases is not None else load_camp_aliases(),
             suppression=suppression,
+            upstream_paths=upstream_paths or {},
         )
         updated = missing = 0
         for digest, row in release.camp_file_rows.items():

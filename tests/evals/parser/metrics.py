@@ -18,6 +18,12 @@ What is measured, per Goal criterion ac2:
   `FULL` / `ABBREVIATED` / `CITE_ONLY`.
 * **Character-level underline and highlight F1**, on the sampled paragraphs only.
 
+Beside the scores, and changing none of them, the report lists the files **labeled blind**
+(v1-e31-t18 ac5): corrected with the pre-label hidden. For each, how many of its rows differ from
+the pre-label, beside the same figure for the other corrected files of its stratum. If people who
+can see the pre-label change far fewer rows than one who cannot, accepting a default has inflated
+the scores.
+
 Counts are summed before a ratio is taken (micro-averaging), so a group's score is the score of
 its paragraphs, not the average of its files' scores — a two-paragraph file does not weigh as much
 as a two-hundred-paragraph one.
@@ -38,6 +44,7 @@ from tests.evals.parser.labels_schema import (
     VERBATIM_FAMILIES,
     Block,
     LabelFile,
+    LabelStatus,
     ManifestEntry,
 )
 
@@ -55,6 +62,7 @@ __all__ = [
     "GroupScore",
     "Prediction",
     "Target",
+    "blind_comparison",
     "check_against_baseline",
     "evaluate_targets",
     "group_scores",
@@ -510,8 +518,12 @@ def report_json(
     gate_failures: Sequence[str],
     gate_notes: Sequence[str],
     label_status: Mapping[str, int],
+    blind_labeling: Sequence[Mapping[str, Any]] = (),
 ) -> dict[str, Any]:
-    """The machine-readable report. Keyed by keyed digest; no file name, school or text appears."""
+    """The machine-readable report. Keyed by keyed digest; no file name, school or text appears.
+
+    `blind_labeling` is :func:`blind_comparison`'s list; it changes no score and not the gate.
+    """
     overall = groups.get("overall")
     return {
         "tier": tier,
@@ -529,6 +541,7 @@ def report_json(
         "targets": evaluate_targets(groups),
         "gate": {"passed": not gate_failures, "failures": list(gate_failures), "notes": list(gate_notes)},
         "per_file": {sha: score.as_json() for sha, score in sorted(per_file.items())},
+        "blind_labeling": [dict(row) for row in blind_labeling],
     }
 
 
@@ -536,8 +549,106 @@ def _cell(value: float | None) -> str:
     return "—" if value is None else f"{value:.3f}"
 
 
+# --------------------------------------------------------------------------------------------
+# Files labeled blind (v1-e31-t18 ac5)
+# --------------------------------------------------------------------------------------------
+
+
+def _stratum(entry: ManifestEntry) -> str:
+    """What a blind file is compared within: its category and template family.
+
+    The selection's full stratum adds season, format and PR-subset membership, which leaves most
+    PR-subset files alone in theirs, with nothing to compare against.
+    """
+    return f"{entry.category.value}, {entry.template_family.value}"
+
+
+def _changed(rows: int, changed: int) -> float | None:
+    return _round(changed / rows) if rows else None
+
+
+def blind_comparison(
+    entries: Iterable[ManifestEntry], labels: Mapping[str, LabelFile]
+) -> list[dict[str, Any]]:
+    """Each corrected file labeled blind, with its rows changed from the pre-label beside its stratum's.
+
+    Only corrected files count, blind or not, and only those that recorded how many rows changed.
+    Reads the label files' headers, not the corpus, so it covers every file in `entries`.
+    """
+    counted: list[tuple[ManifestEntry, LabelFile, int]] = []
+    for entry in entries:
+        label_file = labels.get(entry.digest)
+        if label_file is None or label_file.header.status is LabelStatus.PRELABELED:
+            continue
+        changed = label_file.header.rows_changed_from_prelabel
+        if changed is not None:
+            counted.append((entry, label_file, changed))
+    comparison: list[dict[str, Any]] = []
+    for entry, label_file, changed in counted:
+        if not label_file.header.labeled_blind:
+            continue
+        others = [
+            (len(other.paragraphs), other_changed)
+            for other_entry, other, other_changed in counted
+            if _stratum(other_entry) == _stratum(entry) and not other.header.labeled_blind
+        ]
+        other_rows = sum(rows for rows, _ in others)
+        other_changed = sum(count for _, count in others)
+        comparison.append(
+            {
+                "file": entry.digest[:16],
+                "stratum": _stratum(entry),
+                "labeled_rows": len(label_file.paragraphs),
+                "rows_changed": changed,
+                "share_changed": _changed(len(label_file.paragraphs), changed),
+                "stratum_others": {
+                    "files": len(others),
+                    "labeled_rows": other_rows,
+                    "rows_changed": other_changed,
+                    "share_changed": _changed(other_rows, other_changed),
+                },
+            }
+        )
+    return comparison
+
+
+def _blind_lines(blind: Sequence[Mapping[str, Any]]) -> list[str]:
+    lines = [
+        "",
+        "## Labeled blind",
+        "",
+        "A file labeled blind was corrected with the pre-label hidden. Its rows that differ from the",
+        "pre-label, beside the same figure for the other corrected files of its stratum (category and",
+        "template family), show whether accepting a default has inflated the scores. Files are named",
+        "by digest prefix, as `MANIFEST.md` names them.",
+        "",
+    ]
+    if not blind:
+        return [*lines, "No file has been labeled blind."]
+    lines += [
+        "| File | Stratum | Rows differing from the pre-label | Other files of its stratum |",
+        "|---|---|---|---|",
+    ]
+    for row in blind:
+        others = row["stratum_others"]
+        compared = (
+            f"{others['rows_changed']} of {others['labeled_rows']} ({_cell(others['share_changed'])}), "
+            f"in {others['files']} file{'s' if others['files'] != 1 else ''}"
+            if others["files"]
+            else "no other corrected file"
+        )
+        lines.append(
+            f"| `{row['file']}` | {row['stratum']} | {row['rows_changed']} of {row['labeled_rows']} "
+            f"({_cell(row['share_changed'])}) | {compared} |"
+        )
+    return lines
+
+
 def render_markdown(report: Mapping[str, Any]) -> str:
-    """A human-readable summary of :func:`report_json`. Aggregates only; no per-file rows."""
+    """A human-readable summary of :func:`report_json`.
+
+    Aggregates only, except the files labeled blind, which ac5 asks to be listed, by digest prefix.
+    """
     lines = [
         f"# Parser evaluation — {report['tier']} tier",
         "",
@@ -629,4 +740,5 @@ def render_markdown(report: Mapping[str, Any]) -> str:
             f"{_cell(spans['highlight']['f1'])} | "
             f"{_cell(spans['combined_f1'])} |"
         )
+    lines += _blind_lines(report.get("blind_labeling", ()))
     return "\n".join(lines) + "\n"

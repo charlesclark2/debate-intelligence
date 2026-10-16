@@ -1,4 +1,4 @@
-{"record":"file","digest":"4e5d4ca9ceb8217bc81f0494a7592dd4cc312d94c82a537f1851a589ec933ef2","paragraph_count":119,"blocks":[[0,19],[40,59]],"plan_id":"06a5e928bf1fc90f","status":"PRELABELED","prelabel_parser_version":"2026.09.20-docx-1","corrected_by":null,"reviewed_by":null,"rows_changed_from_prelabel":null,"span_sample_fraction":0.2}
+{"record":"file","digest":"4e5d4ca9ceb8217bc81f0494a7592dd4cc312d94c82a537f1851a589ec933ef2","paragraph_count":119,"blocks":[[0,19],[40,59]],"plan_id":"06a5e928bf1fc90f","status":"PRELABELED","prelabel_parser_version":"2026.10.12-docx-3","corrected_by":null,"reviewed_by":null,"rows_changed_from_prelabel":null,"span_sample_fraction":0.2}
 {"record":"paragraph","index":0,"length":31,"text_digest":"7b4f242d11ca415cee12a65bcfc0e7039028fbcc9ba08d44d154212d6c4b0360","unit":"POCKET","card":null}
 {"record":"paragraph","index":1,"length":3,"text_digest":"9066247f0927793646741850536cde3fc425f0910b8f1d629094c4d959d06011","unit":"HAT","card":null}
 {"record":"paragraph","index":2,"length":9,"text_digest":"eab8a85bf111774a4117967179dcc2caefbaf4c866800cd4b120ac47271aa19e","unit":"BLOCK","card":null}
@@ -40,7 +40,7 @@
 {"record":"paragraph","index":58,"length":198,"text_digest":"be6ab88dbeded98f1456a7edc8d871a18932ac5205d449442e90d748f1adfd89","unit":"CITE","card":null}
 {"record":"paragraph","index":59,"length":1454,"text_digest":"f94cebdd76a9923d226a83d315ea15fc8d4e1bb6cad8641f336f3514f349cb01","unit":"EVIDENCE","card":null}
 {"record":"card","card":0,"completeness":"FULL"}
-{"record":"card","card":1,"completeness":"ABBREVIATED"}
+{"record":"card","card":1,"completeness":"FULL"}
 {"record":"card","card":4,"completeness":"FULL"}
 {"record":"spans","index":11,"underline":[],"highlight":[]}
 {"record":"spans","index":42,"underline":[],"highlight":[]}

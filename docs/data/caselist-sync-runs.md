@@ -30,6 +30,8 @@ history and produced a false bug report, which is why it is now the second colum
 | `20260924T042300Z` | dev | `hsld26` | by hand | 5 of 12 wanted | 0 | 255 (12 duplicate, 0 skipped) | 242 | 242 | 34s | The validation run. 13 listed: 5 fetched, 7 deferred by the daily cap, 1 full archive not pulled weekly. No snapshots were held for this caselist beforehand |
 | `20260924T042401Z` | dev | `hspolicy26` | by hand | 0 of 11 wanted | 0 | 0 | 0 | 0 | 1s | A different caselist from the row above, and the store held nothing for it. Nothing fetched because the day's five were already spent: all 11 weeklies deferred, 1 full archive not pulled weekly |
 | `20260924T042413Z` | dev | `hspf26` | by hand | 0 of 11 wanted | 0 | 0 | 0 | 0 | 1s | As above |
+| `20261014T110006Z` | dev | `hsld26`, `hspolicy26`, `hspf26` | **scheduled** | 3 of 3 wanted | 2 | 2,478 | 1,575 | 0 (pending) | 47s | The first run the schedule made by itself, on build `0.1.0.dev60`, 06:00 CDT. 46 archives and 500 OpenEv files listed, 5 fetched, none deferred by the cap. Four snapshots imported: each caselist's 2026-10-13 weekly and one OpenEv release. The AWS session had expired, so the publish was left pending and the report stage with it: the capture-first design, not a failure. See below |
+| `20261014T215249Z` | dev | the same four snapshots | by hand, `--publish-pending` | 0 | 0 | 0 | 0 | 1,575 | 275s | Published what the scheduled run left: 1,575 objects across 4 snapshots, all 4 confirmed in the bucket by its report stage |
 
 ### The cap measurement, 2026-09-25 (`v1-e34-t03` ac5)
 
@@ -82,7 +84,31 @@ Because the cap was reached, **the dev store is not current**: 7 hsld26 weeklies
 hspolicy26 and hspf26 are still outstanding. Those are not pulled ad hoc — they are
 `v1-e30-t06-initial-backfill`'s, which is the task that measures and records them.
 
-One row is still owed, and only the operator can write it: **the first scheduled run**, started by
-launchd rather than by hand ("How it started" = `scheduled`), with its summary checked against the
-S3 manifests (`debate-research caselist status`). That is `v1-e34-t05-enable-schedule`, which waits
-on an installed `debate-research` from `v1-e01-t09`.
+### The first scheduled run, 2026-10-14 (`v1-e34-t05` ac3)
+
+The row owed here is `20261014T110006Z` above: started by launchd (`runs = 1`, last exit code 0),
+on the installed build, reading the store the backfill built (`~/.debate-research/dev`). It
+downloaded and imported everything it wanted, and none of it was deferred by the cap, so ac4 has no
+truncated run to record. Its publish was pending because the operator's AWS session had expired by
+06:00, which is how the run is designed to behave: it captures and imports, and leaves the publish
+for a later run or for `caselist pull --publish-pending`.
+
+After `--publish-pending` (`20261014T215249Z`), `caselist status` exited 0 for each caselist the
+run covered, and the counts agree with the run's:
+
+| Snapshot | Local files | Published | In sync |
+|---|---|---|---|
+| `hsld26` 2026-10-13 | 755 | 755 | yes |
+| `hspolicy26` 2026-10-13 | 672 | 672 | yes |
+| `hspf26` 2026-10-13 | 791 | 791 | yes |
+| `openev` 2026-ld | 260, by difference (its row was not read) | | yes: `status --caselist openev` exited 0 |
+| **Total** | **2,478** | | |
+
+2,478 is the run's `files_imported`, and the 1,575 objects `--publish-pending` uploaded are its new
+blobs. The same evening the agent was reinstalled from `v0.1.0-dev.122`
+(`docs/runbooks/caselist-scheduled-sync.md`, "Reinstalling the agent"), so the next scheduled run is
+the first on that build.
+
+**A 06:00 run will usually find the AWS session expired.** An SSO session lasts hours, not a week.
+Sign in the evening before (`aws sso login --profile debate-dev-evidence`) for the run to publish,
+or run `caselist pull --publish-pending` after it; the runbook says the same.

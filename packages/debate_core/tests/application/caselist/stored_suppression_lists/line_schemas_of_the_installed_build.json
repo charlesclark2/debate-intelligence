@@ -1,0 +1,319 @@
+{
+  "removal_log_line": {
+    "$defs": {
+      "InboxRewriteRecord": {
+        "additionalProperties": false,
+        "description": "One inbox archive a removal rewrote without the removed files: its digest before and after.\n\nThe next pull imports the rewritten file and its manifest names the `after` digest; this pair is\nwhat ties that digest back to the archive as downloaded (`v1-e30-t09`).",
+        "properties": {
+          "from_sha256": {
+            "maxLength": 64,
+            "minLength": 64,
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "From Sha256",
+            "type": "string"
+          },
+          "to_sha256": {
+            "maxLength": 64,
+            "minLength": 64,
+            "pattern": "^[0-9a-f]{64}$",
+            "title": "To Sha256",
+            "type": "string"
+          }
+        },
+        "required": [
+          "from_sha256",
+          "to_sha256"
+        ],
+        "title": "InboxRewriteRecord",
+        "type": "object"
+      },
+      "ReasonCode": {
+        "description": "Why an entry was appended: the register's codes (`caselist-removal.md` step 1), two for reversal.",
+        "enum": [
+          "REQUESTED_BY_TEAM",
+          "REQUESTED_BY_SCHOOL",
+          "REQUESTED_BY_SITE_ADMIN",
+          "REQUESTED_BY_CAMP",
+          "POLICY",
+          "LEGAL",
+          "REMOVED_IN_ERROR",
+          "REQUEST_WITHDRAWN"
+        ],
+        "title": "ReasonCode",
+        "type": "string"
+      },
+      "RemovalLogKind": {
+        "enum": [
+          "REMOVAL",
+          "UNSUPPRESS"
+        ],
+        "title": "RemovalLogKind",
+        "type": "string"
+      },
+      "RemovalOutcome": {
+        "enum": [
+          "COMPLETED",
+          "INCOMPLETE"
+        ],
+        "title": "RemovalOutcome",
+        "type": "string"
+      },
+      "RemovalSelectorKind": {
+        "description": "Whether the operator named a file or a team. Never *which* team.",
+        "enum": [
+          "SOURCE",
+          "TEAM"
+        ],
+        "title": "RemovalSelectorKind",
+        "type": "string"
+      }
+    },
+    "additionalProperties": false,
+    "description": "One line of the removal log: one execution, in sha256 values, counts and codes.\n\nThe request id, the date, the reason code, the environment and the sha256 values, as the policy\nrequires, and counts of what was deleted so the register can be filled in without re-running\nanything. Never a school, a team code, a path or a name \u2014 see the module docstring.",
+    "properties": {
+      "environment": {
+        "pattern": "^(dev|prod|test)$",
+        "title": "Environment",
+        "type": "string"
+      },
+      "error_code": {
+        "anyOf": [
+          {
+            "pattern": "^[A-Z][A-Z0-9_]*$",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Error Code"
+      },
+      "inbox_files_deleted": {
+        "default": 0,
+        "title": "Inbox Files Deleted",
+        "type": "integer"
+      },
+      "inbox_files_rewritten": {
+        "default": 0,
+        "title": "Inbox Files Rewritten",
+        "type": "integer"
+      },
+      "inbox_rewrites": {
+        "default": [],
+        "items": {
+          "$ref": "#/$defs/InboxRewriteRecord"
+        },
+        "title": "Inbox Rewrites",
+        "type": "array"
+      },
+      "include_shared": {
+        "default": false,
+        "title": "Include Shared",
+        "type": "boolean"
+      },
+      "kind": {
+        "$ref": "#/$defs/RemovalLogKind"
+      },
+      "local_files_deleted": {
+        "default": 0,
+        "title": "Local Files Deleted",
+        "type": "integer"
+      },
+      "local_records_deleted": {
+        "default": 0,
+        "title": "Local Records Deleted",
+        "type": "integer"
+      },
+      "manifest_rows_dropped": {
+        "default": 0,
+        "title": "Manifest Rows Dropped",
+        "type": "integer"
+      },
+      "manifests_rewritten": {
+        "default": 0,
+        "title": "Manifests Rewritten",
+        "type": "integer"
+      },
+      "outcome": {
+        "$ref": "#/$defs/RemovalOutcome"
+      },
+      "reason": {
+        "$ref": "#/$defs/ReasonCode"
+      },
+      "recorded_at": {
+        "format": "date-time",
+        "title": "Recorded At",
+        "type": "string"
+      },
+      "removed_sha256": {
+        "default": [],
+        "items": {
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "title": "Removed Sha256",
+        "type": "array"
+      },
+      "request_id": {
+        "anyOf": [
+          {
+            "pattern": "^RM-[0-9]{4}-[0-9]{2,4}$",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Request Id"
+      },
+      "s3_versions_deleted": {
+        "default": 0,
+        "title": "S3 Versions Deleted",
+        "type": "integer"
+      },
+      "schema_version": {
+        "const": 1,
+        "default": 1,
+        "title": "Schema Version",
+        "type": "integer"
+      },
+      "selector": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/RemovalSelectorKind"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null
+      },
+      "unsuppressed_sha256": {
+        "default": [],
+        "items": {
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "title": "Unsuppressed Sha256",
+        "type": "array"
+      },
+      "withdrawn_sha256": {
+        "default": [],
+        "items": {
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "title": "Withdrawn Sha256",
+        "type": "array"
+      }
+    },
+    "required": [
+      "kind",
+      "recorded_at",
+      "reason",
+      "environment",
+      "outcome"
+    ],
+    "title": "RemovalLogEntry",
+    "type": "object"
+  },
+  "suppression_list_line": {
+    "$defs": {
+      "ReasonCode": {
+        "description": "Why an entry was appended: the register's codes (`caselist-removal.md` step 1), two for reversal.",
+        "enum": [
+          "REQUESTED_BY_TEAM",
+          "REQUESTED_BY_SCHOOL",
+          "REQUESTED_BY_SITE_ADMIN",
+          "REQUESTED_BY_CAMP",
+          "POLICY",
+          "LEGAL",
+          "REMOVED_IN_ERROR",
+          "REQUEST_WITHDRAWN"
+        ],
+        "title": "ReasonCode",
+        "type": "string"
+      },
+      "SuppressionAction": {
+        "enum": [
+          "SUPPRESS",
+          "UNSUPPRESS"
+        ],
+        "title": "SuppressionAction",
+        "type": "string"
+      }
+    },
+    "additionalProperties": false,
+    "description": "One line of the suppression list.\n\nA `SUPPRESS` with no :attr:`disclosure` suppresses the whole source; with one, only that\ndisclosure. An `UNSUPPRESS` lifts every suppression of :attr:`sha256` recorded before it.",
+    "properties": {
+      "action": {
+        "$ref": "#/$defs/SuppressionAction"
+      },
+      "disclosure": {
+        "anyOf": [
+          {
+            "maxLength": 64,
+            "minLength": 64,
+            "pattern": "^[0-9a-f]{64}$",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Disclosure"
+      },
+      "reason": {
+        "$ref": "#/$defs/ReasonCode"
+      },
+      "recorded_at": {
+        "format": "date-time",
+        "title": "Recorded At",
+        "type": "string"
+      },
+      "request_id": {
+        "anyOf": [
+          {
+            "pattern": "^RM-[0-9]{4}-[0-9]{2,4}$",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Request Id"
+      },
+      "schema_version": {
+        "const": 1,
+        "default": 1,
+        "title": "Schema Version",
+        "type": "integer"
+      },
+      "sha256": {
+        "maxLength": 64,
+        "minLength": 64,
+        "pattern": "^[0-9a-f]{64}$",
+        "title": "Sha256",
+        "type": "string"
+      }
+    },
+    "required": [
+      "action",
+      "sha256",
+      "recorded_at",
+      "reason"
+    ],
+    "title": "SuppressionEntry",
+    "type": "object"
+  }
+}

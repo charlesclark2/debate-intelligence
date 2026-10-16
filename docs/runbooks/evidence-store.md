@@ -245,6 +245,12 @@ aws sts get-caller-identity --profile debate-dev-evidence-removal --query Arn --
 Success looks like: two ARNs naming `AWSReservedSSO_DebateDevEvidenceOperator` and
 `AWSReservedSSO_DebateDevEvidenceRemoval`.
 
+`debate-research doctor --evidence-profiles` asks the same question through the build, for the
+profiles its settings name: the everyday one, and the takedown one when `DEBATE_REMOVAL_PROFILE`
+is set. It prints each permission set's name and nothing else of the account, and fails on a
+profile this machine's AWS config does not define, naming the setting that holds its name
+(`v1-e34-t22`; [`caselist-scheduled-sync.md`](caselist-scheduled-sync.md#checking-the-evidence-profiles)).
+
 ## Step 5 — Check dev: put, get, and the denies
 
 Real puts and gets (they prove the key and the encryption work end to end), simulated denies.

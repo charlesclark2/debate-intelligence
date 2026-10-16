@@ -1,0 +1,139 @@
+# TASK v1-e31-t18-click-through-labeller - The parser evaluation's labels are corrected one keypress per row, in a local page
+# Epic: E31 Debate File Parsing | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e31-t18-click-through-labeller
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e31-debate-file-parsing
+  annotations:
+    debate/title: "The parser evaluation's labels are corrected one keypress per row, in a local page"
+spec:
+  # Filed by the PM, 2026-10-14, from the operator's request on 2026-10-14 to take the labeling of v1-e31-t05 off the critical path.
+  description: >-
+    v1-e31-t05 is the one open p2 item between E31 and its goal, and what it waits on is people,
+    not code: 1,851 sampled rows across 30 files, of which 2 files are corrected. Correcting a
+    row today means a CSV in Numbers beside the `.docx`, ticking a cell, typing a unit and a
+    card number, and bracketing underlined and highlighted stretches by hand. v1-e31-t07 made
+    that round trip safe, not fast. Build a labeller that shows one sampled paragraph at a time
+    in a page served on this machine only: the paragraph rendered with its formatting, the
+    paragraphs around it, and the parser's pre-label. One key accepts the row, one key sets each
+    unit, one key starts a new card, one sets the card's completeness, and one goes back.
+    Progress is saved after every key, so a person can stop and resume. The underline and
+    highlight a span row shows are read from the document's own XML by the labeller's renderer,
+    not by the parser, and a row where the two disagree is flagged. What it writes is a
+    worksheet that `check` and `import` take unchanged, so every guarantee t05 and t07 built (no
+    pre-label becomes a label without a person, the text is the document's, the plan is the
+    plan) still holds, and the labeller adds none of its own. Also: pre-labels for the files
+    nobody has corrected are regenerated with the current parser, so fewer rows need changing,
+    and a blind mode hides the pre-label so the coach can label one file without it, as a check
+    that accepting a default has not inflated the scores. Out of scope: the labeling rules, the
+    units, the label file's existing fields, the sampling plan and the targets.
+  priority: 1
+  constraints:
+    packages: [scripts, tests/evals/parser, tests/fixtures/debate_files/eval/labels/README.md, pyproject.toml, uv.lock]
+    forbidden:
+      - An action that marks more than one row checked: no accept-all, accept-block or accept-file
+      - Binding the page to any address but loopback, loading anything from the network (fonts, scripts, styles), or the page calling out
+      - Writing paragraph text, worksheet contents or progress inside the repository, into a log, or into test fixtures from real files
+      - Changing `import`'s or `check`'s checks, the labeling rules, the sampling plan or any label already CORRECTED or COACH_REVIEWED
+      - A runtime dependency of debate-core or debate-cli
+      - Running the labeller, the pre-label regeneration or anything else over the real corpus in a session (operator-run only)
+  context:
+    - kind: TaskRef
+      name: v1-e31-t07-worksheet-round-trip
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        `scripts/prelabel_docx.py label <prefix>` serves a page on 127.0.0.1 at a free port
+        and prints only its address. It shows the file's sampled rows one at a time: the
+        paragraph rendered with its headings, bold, underline and highlight, two paragraphs
+        either side, the block it belongs to, the pre-label, and rows done and left. Keys:
+        accept and move on; one key per unit (POCKET, HAT, BLOCK, TAG, CITE, EVIDENCE,
+        ANALYTIC, UNDERTAG, OTHER); start a new card; set the card's completeness; back.
+        Card numbers follow from the card starts, and a card cut off by the end of a block
+        is left unnumbered, as the labeling guide says. Each key is tested against the
+        page's handler without a socket.
+    - id: ac2
+      description: >-
+        Every row is marked checked only by a key pressed on that row. Progress is saved
+        outside the repository after every key, and the labeller resumes where it stopped,
+        with the rows already checked shown as checked. It refuses a progress directory
+        inside the repository, as `worksheet` does.
+    - id: ac3
+      description: >-
+        When the last row is checked, it writes a worksheet that `check` passes and `import`
+        turns into a CORRECTED label file with no change to either (amended by the PM,
+        2026-10-14: apart from `import --labeled-blind`, which records ac5's field and checks
+        nothing). Shown end to end on the
+        invented file `tests/evals/parser/synthetic.py` builds: pre-label, label every row
+        by keys (some accepted, some changed, one new card, one completeness), write, check,
+        import, and the label file holds exactly what the keys said.
+    - id: ac4
+      description: >-
+        On a span row the page shows the underline and highlight as read from the document's
+        XML by the labeller's renderer, which shares no code with the parser's run reading,
+        beside the pre-label's marks, and flags a row where they differ. The renderer reads
+        direct formatting and formatting inherited from a style, by test on an invented
+        document, and a disagreement is flagged by test.
+    - id: ac5
+      description: >-
+        A blind mode hides the pre-label and records `labeled_blind` on the label file. It
+        is an added, optional field: label files written before it still validate. The
+        labeling guide asks the coach to label one PR-subset file blind, and the
+        evaluation's report lists which files were labeled blind and, for each, how many
+        rows differ from its pre-label beside the same figure for the other files of its
+        stratum.
+    - id: ac6
+      description: >-
+        The command that regenerates the pre-labels of every file still PRELABELED with the
+        current parser, under the committed sampling plan, is given as an operator
+        follow-up, with the worksheets that go with them. CORRECTED and COACH_REVIEWED files
+        are left alone, by test. The plan id does not change.
+    - id: ac7
+      description: >-
+        The labeling guide and the operator follow-ups of v1-e31-t05's report are replaced
+        by the labeller's steps: the PR-subset files first, then the rest, the blind file,
+        the spot-check and the baseline. The Numbers route stays documented as the fallback.
+        The page shows rows per minute, so the operator can report the real pace.
+status:
+  phase: Succeeded
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e31-t18-click-through-labeller-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e31-debate-file-parsing
+spec:
+  description: >-
+    A local, keyboard-driven page over the existing pre-labels and import, with an independent
+    span reader, a blind mode and regenerated pre-labels.
+  goalRef:
+    name: v1-e31-t18-click-through-labeller
+  graph:
+    nodes:
+      - id: click-through-labeller
+        kind: Task
+        name: Labels corrected by keypress
+        description: >-
+          The local page, its keys and progress, the worksheet it writes, the span
+          renderer, the blind mode, the pre-label regeneration and the guide.
+        estimatedEffort: 5h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Labelling tests pass
+            command: uv
+            args: [run, pytest, tests/evals/parser]
+status:
+  phase: Pending

@@ -80,12 +80,23 @@ DETAILS_PREFIX = "reports/sync-run-details/"
 FIRST_RUN_ID = "20260916T060000Z"
 SECOND_RUN_ID = "20260923T060000Z"
 
+REFUSAL = "a_refusal_to_start_published_by_the_next_run"
+"""`v1-e34-t22`'s scenario, by the name its stored files have."""
+
 THE_ADAPTERS_FIX = (
     "The bucket refused ListObjectsV2: the AWS profile debate-dev-evidence is signed in and lacks a "
     "grant for this; it is not an expired session, and logging in again changes nothing. "
     "docs/runbooks/evidence-store.md lists what each profile is granted."
 )
 """The fix the bucket's adapter writes into its refusal (`v1-e29-t07`), as the publish stage gives it."""
+
+THE_FIX_FOR_A_PROFILE_NOT_DEFINED = (
+    "The bucket was never reached: set storage.s3.aws_profile to a profile this machine's AWS config "
+    "defines, or add the profile to it: docs/runbooks/evidence-store.md lists the evidence profiles "
+    "and how they are added. It is not an expired session, and logging in changes nothing."
+)
+"""The fix the adapter writes for a profile the AWS config lacks (`v1-e29-t07`), as a run that the
+want of a bucket stopped gives it (`v1-e34-t22`)."""
 
 NO_DETAILS_TO_SPEAK_OF: dict[str, Any] = {"stages": [], "failure_codes": [], "hint": None, "parse": None}
 
@@ -196,6 +207,17 @@ EXPECTED_DETAILS: dict[str, list[dict[str, Any]]] = {
                 "not_published": 0,
             },
         }
+    ],
+    # `v1-e34-t22`: the run the want of a bucket refused, then the run that published its record.
+    "a_refusal_to_start_published_by_the_next_run": [
+        {
+            "run_id": FIRST_RUN_ID,
+            "stages": [],
+            "failure_codes": ["STORE_PROFILE_NOT_CONFIGURED"],
+            "hint": THE_FIX_FOR_A_PROFILE_NOT_DEFINED,
+            "parse": None,
+        },
+        {"run_id": SECOND_RUN_ID, **NO_DETAILS_TO_SPEAK_OF},
     ],
 }
 """What each scenario's runs leave beside their records, written by hand from what the scenario
@@ -365,6 +387,29 @@ async def test_a_refusal_that_carries_the_adapters_fix_is_still_a_record_the_old
         assert ours == theirs
         assert reason.startswith(stored_reason.removesuffix("[redacted]"))
         assert "lacks a grant" in reason and reason != stored_reason
+
+
+def test_the_stored_refusal_is_a_failed_run_that_names_its_error_and_has_no_stage() -> None:
+    """`v1-e34-t22`. What the start commit's code wrote when it was handed a run the want of a
+    bucket stopped, read by hand: an ordinary failed record, the kind every build has always
+    written for a run that stopped on an error, with nothing in it that build did not define. The
+    second line is the run that published it. The scenario tests above hold this build to both."""
+    refused, published = (json.loads(line) for line in stored_lines(REFUSAL))
+
+    assert (refused["run_id"], refused["outcome"], refused["mode"]) == (FIRST_RUN_ID, "failed", "run")
+    assert refused["error_class"] == "StoreProfileNotConfigured"
+    assert refused["error_message"].startswith(
+        "AWS profile 'debate-dev-evidence-typo', named by storage.s3.aws_profile, is not defined in "
+        "this machine's AWS config: set storage.s3.aws_profile to a profile"
+    )
+    assert refused["stages"] == [] and refused["pending_publish"] == []
+    assert (published["run_id"], published["outcome"]) == (SECOND_RUN_ID, "completed")
+    assert sorted(stored_bucket_objects(REFUSAL)) == [
+        f"{RECORDS_PREFIX}2026/{FIRST_RUN_ID}.json",
+        f"{RECORDS_PREFIX}2026/{SECOND_RUN_ID}.json",
+    ], "the older build's next run published the refused run's record"
+    for line in stored_lines(REFUSAL):
+        read_as_an_older_build_reads(json.loads(line))
 
 
 # ------------------------------------------------------------------------------------------------

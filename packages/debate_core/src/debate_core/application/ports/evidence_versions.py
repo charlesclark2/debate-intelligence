@@ -27,7 +27,8 @@ one current version with no id, and deleting it unlinks the file.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
@@ -46,6 +47,10 @@ class ObjectVersion:
     size: int = 0
     is_latest: bool = True
     is_delete_marker: bool = False
+    last_modified: datetime | None = field(default=None, compare=False)
+    """When the store wrote this version, by the store's own clock: S3's `LastModified`, which it
+    states to the second. `None` where the store does not say. What `caselist status` compares with a
+    removal's completion (`v1-e30-t15`)."""
 
 
 @runtime_checkable

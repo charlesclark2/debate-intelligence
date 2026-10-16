@@ -1,0 +1,109 @@
+# TASK v1-e30-t19-residue-clearing-gaps - Removal residue the status reports can always be cleared, and says whose it is
+# Epic: E30 Caselist Evidence Ingestion | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e30-t19-residue-clearing-gaps
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e30-caselist-ingestion
+  annotations:
+    debate/title: "Removal residue the status reports can always be cleared, and says whose it is"
+spec:
+  # Filed by the PM, 2026-10-15, from v1-e30-t15's Follow-up work 1 to 3, v1-e30-t12's Follow-up work 1 and 3, and v1-e30-t16's Follow-up work 2.
+  description: >-
+    Gaps left in clearing what `caselist status` reports after a removal. (1) A rewritten
+    manifest's older version that names nothing removed cannot be cleared: the re-run's sweep
+    deletes only versions that name a removed file (t15 FU1). (2) A request that only withdrew
+    shared files cannot have its aggregate residue cleared, because its re-run resolves the
+    team's paths from records the first run deleted (t15 FU2). (3) The dry run says *Nothing is
+    left to remove* when the execution would sweep a manifest version (t15 FU3). (4) A snapshot
+    with a manifest mismatch and suppressed rows gets the publish hint, though the publisher
+    withholds that manifest; it should say to finish the removal first (t12 FU3). (5) Status
+    cannot say which caselist a withdrawn file's residue belongs to; since v1-e30-t16 the
+    withdrawal record says (t16 FU2). (6) No smoke check covers status's mismatch kinds and
+    suppressed rows through the installed build (t12 FU1); since v1-e01-t21 the S3 stand-in
+    makes one possible. Out of scope: what a removal deletes in the first place, and the exit
+    codes.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, tests/smoke, docs/runbooks]
+    forbidden:
+      - Deleting any key a removal did not reach, or any version that does not name a removed file or belong to a key the removal rewrote
+      - The takedown profile in `caselist status`
+      - Changing any exit code `caselist status` or `caselist remove` returns
+  context:
+    - kind: TaskRef
+      name: v1-e30-t15-manifest-and-aggregate-residue
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e30-t12-status-names-manifest-mismatch
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e30-t16-removal-output-names-holders
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e01-t21-installed-smoke-stand-ins
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        (1) and (2): each case is built as a fixture against moto, shown failing first, and
+        the same removal run again clears it.
+    - id: ac2
+      description: >-
+        (3): a dry run whose execution would sweep a version says so in a plan line, by
+        test.
+    - id: ac3
+      description: >-
+        (4): a snapshot with both a manifest mismatch and suppressed rows gets the removal
+        hint and not the publish hint, by test.
+    - id: ac4
+      description: >-
+        (5): status names the caselist a withdrawn file's residue belongs to, from the
+        withdrawal record, and says *not attributed* for a removal an earlier build made, by
+        test.
+    - id: ac5
+      description: >-
+        (6): a recorded smoke check, against the installed build and `s3_stand_in`, shows a
+        rewritten manifest named as a manifest mismatch with its publish hint, a suppressed
+        row, and a clean status after the publish.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e30-t19-residue-clearing-gaps-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e30-caselist-ingestion
+spec:
+  description: >-
+    Close the clearing gaps, correct two hints, attribute withdrawn residue, and add the smoke
+    check.
+  goalRef:
+    name: v1-e30-t19-residue-clearing-gaps
+  graph:
+    nodes:
+      - id: residue-gaps
+        kind: Task
+        name: Residue can be cleared and is attributed
+        description: >-
+          The two re-run cases, the dry-run line, the hint, the attribution and the smoke
+          check.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Removal and status tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application, -k, removal or status or residue]
+status:
+  phase: Pending

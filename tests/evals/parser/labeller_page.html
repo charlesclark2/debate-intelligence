@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Parser labels</title>
+<style nonce="__NONCE__">
+  :root {
+    --page: #f7f6f2; --ink: #1d1d1b; --muted: #6b6a64; --line: #d9d6cc; --card: #ffffff;
+    --accent: #2f5d8a; --good: #2e7d4f; --warn: #a3541b; --flag: #fff1d6; --flag-line: #e0a84a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --page: #1b1b1a; --ink: #ecebe6; --muted: #a3a29b; --line: #3a3936; --card: #252523;
+      --accent: #8fb6dd; --good: #7fcf9d; --warn: #e3a36d; --flag: #3a2f1c; --flag-line: #b98a3a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--page); color: var(--ink);
+         font: 15px/1.5 -apple-system, "Segoe UI", system-ui, sans-serif; }
+  header { position: sticky; top: 0; background: var(--page); border-bottom: 1px solid var(--line);
+           padding: 10px 16px; display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: baseline; z-index: 1; }
+  header strong { font-size: 16px; }
+  .badge { font-size: 12px; padding: 1px 7px; border-radius: 9px; border: 1px solid var(--line); color: var(--muted); }
+  .badge.blind { border-color: var(--warn); color: var(--warn); }
+  .bar { height: 4px; background: var(--line); flex-basis: 100%; border-radius: 2px; overflow: hidden; }
+  .bar > div { height: 100%; background: var(--good); width: 0; }
+  main { max-width: 980px; margin: 0 auto; padding: 14px 16px 60px; display: grid; gap: 14px; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; }
+  h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 8px; font-weight: 600; }
+  .para { padding: 6px 8px; border-radius: 6px; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .para.context { color: var(--muted); }
+  .para.current { border: 2px solid var(--accent); }
+  .para .meta { display: block; font-size: 11px; color: var(--muted); white-space: normal; margin-bottom: 2px; }
+  .heading-1 { font-size: 22px; font-weight: 700; }
+  .heading-2 { font-size: 19px; font-weight: 700; }
+  .heading-3 { font-size: 17px; font-weight: 700; }
+  .heading-4 { font-size: 16px; font-weight: 700; }
+  .u { text-decoration: underline; text-underline-offset: 2px; }
+  .b { font-weight: 700; }
+  .i { font-style: italic; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 720px) { .grid { grid-template-columns: 1fr; } }
+  .unit { font-size: 24px; font-weight: 700; letter-spacing: .02em; }
+  .unit.none { color: var(--warn); }
+  .differs { color: var(--warn); font-weight: 600; }
+  .checked { color: var(--good); font-weight: 600; }
+  .notes { margin: 6px 0 0; padding-left: 18px; color: var(--warn); }
+  .flag { background: var(--flag); border: 1px solid var(--flag-line); border-radius: 6px; padding: 6px 10px; margin-bottom: 8px; }
+  .marks { white-space: pre-wrap; overflow-wrap: anywhere; padding: 4px 0; }
+  .mark-u { text-decoration: underline; text-decoration-thickness: 2px; }
+  .mark-h { background: #ffe066; color: #1d1d1b; }
+  kbd { font: 12px ui-monospace, Menlo, monospace; border: 1px solid var(--line); border-bottom-width: 2px;
+        border-radius: 4px; padding: 0 5px; background: var(--page); }
+  table.keys { border-collapse: collapse; width: 100%; font-size: 13px; }
+  table.keys td { padding: 3px 6px; border-top: 1px solid var(--line); vertical-align: top; }
+  #message { min-height: 1.5em; color: var(--warn); font-weight: 600; }
+  code { font: 13px ui-monospace, Menlo, monospace; overflow-wrap: anywhere; }
+  .problem { cursor: pointer; text-decoration: underline dotted; }
+  .strip { display: flex; flex-wrap: wrap; gap: 2px; margin-top: 6px; }
+  .strip span { width: 6px; height: 10px; background: var(--line); border-radius: 1px; }
+  .strip span.done { background: var(--good); }
+  .strip span.here { background: var(--accent); }
+</style>
+</head>
+<body>
+<header>
+  <strong>Parser labels</strong>
+  <span class="badge" id="prefix"></span>
+  <span class="badge" id="mode"></span>
+  <span id="where"></span>
+  <span id="counts"></span>
+  <span id="pace"></span>
+  <div class="bar"><div id="bar"></div></div>
+</header>
+<main>
+  <div id="message" role="status" aria-live="polite"></div>
+  <section>
+    <h2 id="paragraphs-title">The paragraph, with two either side</h2>
+    <div id="paragraphs"></div>
+  </section>
+  <div class="grid">
+    <section>
+      <h2>This row's label</h2>
+      <div class="unit" id="unit"></div>
+      <div id="card"></div>
+      <div id="checked"></div>
+      <ul class="notes" id="notes"></ul>
+    </section>
+    <section id="prelabel-section">
+      <h2>The parser's pre-label</h2>
+      <div class="unit" id="prelabel-unit"></div>
+      <div id="prelabel-card"></div>
+    </section>
+  </div>
+  <section id="spans-section" hidden>
+    <h2>Underline and highlight: a span row</h2>
+    <div id="spans-flag"></div>
+    <div><strong>As the document shows them</strong> (what is written)</div>
+    <div class="marks" id="document-marks"></div>
+    <div id="prelabel-marks-block">
+      <div><strong>As the pre-label marked them</strong></div>
+      <div class="marks" id="prelabel-marks"></div>
+    </div>
+  </section>
+  <section id="finished-section" hidden>
+    <h2>Every row is checked</h2>
+    <div id="finished"></div>
+  </section>
+  <section>
+    <h2>Keys</h2>
+    <table class="keys">
+      <tr><td><kbd>Enter</kbd> or <kbd>Space</kbd></td><td>Accept the row as shown: check it and move on</td></tr>
+      <tr><td><kbd>p</kbd> <kbd>h</kbd> <kbd>b</kbd> <kbd>t</kbd> <kbd>c</kbd></td><td>POCKET, HAT, BLOCK, TAG, CITE: set it, check the row, move on</td></tr>
+      <tr><td><kbd>e</kbd> <kbd>a</kbd> <kbd>u</kbd> <kbd>o</kbd></td><td>EVIDENCE, ANALYTIC, UNDERTAG, OTHER: set it, check the row, move on</td></tr>
+      <tr><td><kbd>n</kbd></td><td>Start a card on this row (its TAG, or its CITE when it has no tag), or stop one starting here. Then accept or set the unit</td></tr>
+      <tr><td><kbd>k</kbd></td><td>The card's completeness: FULL, ABBREVIATED, CITE_ONLY, and for a block's first or last card, cut off by the block's edge (left unnumbered)</td></tr>
+      <tr><td><kbd>Backspace</kbd> or <kbd>&larr;</kbd></td><td>Back one row</td></tr>
+    </table>
+    <p>Holding a key down does nothing more than pressing it once. Progress is saved after every key: close the tab and stop the labeller with Ctrl+C whenever you like, and it starts where you stopped.</p>
+  </section>
+</main>
+<script nonce="__NONCE__">
+"use strict";
+const TOKEN = "__TOKEN__";
+const KEYS = new Set(["Enter", " ", "p", "h", "b", "t", "c", "e", "a", "u", "o", "n", "k", "Backspace", "ArrowLeft"]);
+const HIGHLIGHTS = {
+  yellow: "#ffe066", green: "#9be59b", cyan: "#9ee8ee", magenta: "#f2a6ee", blue: "#a9c2ff", red: "#ffa8a8",
+  darkBlue: "#7d95d6", darkCyan: "#6fc1c1", darkGreen: "#7fbf7f", darkMagenta: "#c58bc5", darkRed: "#d98c8c",
+  darkYellow: "#d6c46b", darkGray: "#9c9c9c", lightGray: "#d8d8d8", black: "#777777", white: "#f4f4f4"
+};
+let state = null;
+let busy = false;
+
+function element(tag, className, text) {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+
+async function call(method, path, body) {
+  const response = await fetch(path, {
+    method: method,
+    headers: { "X-Labeller-Token": TOKEN, "Content-Type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+    cache: "no-store"
+  });
+  if (!response.ok) throw new Error(await response.text());
+  return response.json();
+}
+
+function paragraph(view, kind) {
+  const box = element("div", "para " + kind);
+  const where = view.sampled ? "row" : "not sampled";
+  const heading = view.heading_level ? " · Heading " + view.heading_level : "";
+  const unit = view.unit ? " · " + view.unit : "";
+  box.appendChild(element("span", "meta", "paragraph " + view.index + " · " + where + unit + heading +
+    (view.readable ? "" : " · formatting could not be read")));
+  const body = element("span", view.heading_level ? "heading-" + Math.min(view.heading_level, 4) : "");
+  for (const run of view.runs) {
+    const piece = element("span", [run.bold ? "b" : "", run.italic ? "i" : "", run.underline ? "u" : ""].join(" ").trim(), run.text);
+    if (run.highlight) { piece.style.background = HIGHLIGHTS[run.highlight] || "#ffe066"; piece.style.color = "#1d1d1b"; }
+    if (run.size && !view.heading_level) piece.style.fontSize = Math.max(9, Math.min(22, run.size + 3)) + "px";
+    body.appendChild(piece);
+  }
+  if (!view.text) body.appendChild(element("span", "meta", "(blank paragraph)"));
+  box.appendChild(body);
+  return box;
+}
+
+function marks(text, spans) {
+  const holder = document.createDocumentFragment();
+  const cuts = new Set([0, text.length]);
+  for (const kind of ["underline", "highlight"]) for (const [a, b] of spans[kind]) { cuts.add(a); cuts.add(b); }
+  const points = Array.from(cuts).sort((x, y) => x - y);
+  for (let i = 0; i + 1 < points.length; i++) {
+    const [a, b] = [points[i], points[i + 1]];
+    const inside = (kind) => spans[kind].some(([s, e]) => s <= a && b <= e);
+    const piece = element("span", [inside("underline") ? "mark-u" : "", inside("highlight") ? "mark-h" : ""].join(" ").trim(), text.slice(a, b));
+    holder.appendChild(piece);
+  }
+  if (!text) holder.appendChild(element("span", "", "(blank)"));
+  return holder;
+}
+
+function cardText(label) {
+  if (label.card === null && label.card_start === null) return label.starts_card ? "marked as a card start, but no card starts here" : "in no card";
+  if (label.card === null) return "in a card cut off by the block's edge: left unnumbered";
+  const role = label.card_start === state.row.index ? "starts card " : "in card ";
+  return role + label.card + (label.card_state ? " · " + label.card_state : " · no completeness yet");
+}
+
+function render() {
+  const row = state.row;
+  document.getElementById("prefix").textContent = state.prefix;
+  const mode = document.getElementById("mode");
+  mode.textContent = state.mode === "blind" ? "BLIND: pre-label hidden" : "pre-label shown";
+  mode.className = "badge" + (state.mode === "blind" ? " blind" : "");
+  document.getElementById("where").textContent = "row " + row.position + " of " + state.progress.total +
+    " · block " + row.block.number + " of " + row.block.of + " (paragraphs " + row.block.first + " to " + row.block.last + ")" +
+    (row.index === row.block.last ? " · last row of this block" : "");
+  document.getElementById("counts").textContent = state.progress.done + " done, " + state.progress.left + " left";
+  document.getElementById("pace").textContent = state.progress.rows_per_minute === null ? "" : state.progress.rows_per_minute + " rows per minute this sitting";
+  document.getElementById("bar").style.width = (100 * state.progress.done / state.progress.total) + "%";
+  document.getElementById("message").textContent = state.message || "";
+
+  const list = document.getElementById("paragraphs");
+  list.replaceChildren();
+  for (const view of row.before) list.appendChild(paragraph(view, "context"));
+  list.appendChild(paragraph(row.paragraph, "current"));
+  for (const view of row.after) list.appendChild(paragraph(view, "context"));
+  const strip = element("div", "strip");
+  state.rows.forEach((r, i) => strip.appendChild(element("span", i + 1 === row.position ? "here" : (r.checked ? "done" : ""))));
+  list.appendChild(strip);
+
+  const label = row.label;
+  const unit = document.getElementById("unit");
+  unit.textContent = label.unit || "no unit yet";
+  unit.className = "unit" + (label.unit ? "" : " none");
+  document.getElementById("card").textContent = cardText(label);
+  const checked = document.getElementById("checked");
+  checked.textContent = label.checked ? "checked" : "not checked yet";
+  checked.className = label.checked ? "checked" : "";
+  const notes = document.getElementById("notes");
+  notes.replaceChildren(...label.notes.map((note) => element("li", "", note)));
+
+  const pre = document.getElementById("prelabel-section");
+  pre.hidden = !row.prelabel;
+  if (row.prelabel) {
+    const preUnit = document.getElementById("prelabel-unit");
+    preUnit.textContent = row.prelabel.unit;
+    preUnit.className = "unit" + (row.prelabel.unit !== label.unit ? " differs" : "");
+    document.getElementById("prelabel-card").textContent = row.prelabel.card + (row.prelabel.completeness ? " · " + row.prelabel.completeness : "");
+  }
+
+  const spans = document.getElementById("spans-section");
+  spans.hidden = !row.spans;
+  if (row.spans) {
+    const flag = document.getElementById("spans-flag");
+    flag.replaceChildren();
+    if (!row.spans.readable) {
+      flag.appendChild(element("div", "flag", "The labeller could not read this paragraph's formatting, so it marks nothing and leaves this row's underline and highlight cells empty. check names them: fill them in the worksheet before import."));
+    } else if (row.spans.differs) {
+      flag.appendChild(element("div", "flag", "The document's formatting and the pre-label's marks differ on this row. What is written is the document's, as shown first. Look at it in Word if unsure."));
+    }
+    document.getElementById("document-marks").replaceChildren(marks(row.paragraph.text, row.spans.document));
+    const preMarks = document.getElementById("prelabel-marks-block");
+    preMarks.hidden = !row.spans.prelabel;
+    if (row.spans.prelabel) document.getElementById("prelabel-marks").replaceChildren(marks(row.paragraph.text, row.spans.prelabel));
+  }
+
+  const finished = document.getElementById("finished-section");
+  finished.hidden = !state.finished;
+  if (state.finished) {
+    const holder = document.getElementById("finished");
+    holder.replaceChildren();
+    holder.appendChild(element("p", "", "The worksheet " + state.finished.worksheet + " is written beside the progress, and rewritten after any key from here on."));
+    if (state.finished.problems.length) {
+      holder.appendChild(element("p", "differs", "check would refuse it as it stands. Click a problem to go to its row (row numbers count the header as row 1):"));
+      const problems = element("ul", "notes");
+      for (const problem of state.finished.problems) {
+        const item = element("li", "problem", problem);
+        const found = /^row (\d+)/.exec(problem);
+        if (found) item.addEventListener("click", () => go(Number(found[1])));
+        problems.appendChild(item);
+      }
+      holder.appendChild(problems);
+    } else {
+      holder.appendChild(element("p", "checked", "check passes it. Stop the labeller with Ctrl+C, then run these in the terminal:"));
+    }
+    for (const command of state.finished.commands) holder.appendChild(element("p", "")).appendChild(element("code", "", command));
+  }
+}
+
+async function go(rowNumber) {
+  const index = state.indices[rowNumber - 2];
+  if (busy || index === undefined) return;
+  busy = true;
+  try {
+    state = await call("POST", "/goto", { row: index });
+    render();
+  } catch (error) { document.getElementById("message").textContent = String(error.message || error); }
+  finally { busy = false; }
+}
+
+document.addEventListener("keydown", async (event) => {
+  if (event.metaKey || event.ctrlKey || event.altKey || !state) return;
+  const key = event.key.length === 1 && event.key !== " " ? event.key.toLowerCase() : event.key;
+  if (!KEYS.has(key)) return;
+  event.preventDefault();
+  if (event.repeat || busy) return;
+  busy = true;
+  try {
+    state = await call("POST", "/key", { key: key, row: state.row.index });
+    render();
+  } catch (error) { document.getElementById("message").textContent = String(error.message || error); }
+  finally { busy = false; }
+});
+
+call("GET", "/state").then((first) => { state = first; render(); })
+  .catch((error) => { document.getElementById("message").textContent = String(error.message || error); });
+</script>
+</body>
+</html>

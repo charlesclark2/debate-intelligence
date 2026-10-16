@@ -264,7 +264,12 @@ class TestSharedFiles:
     async def test_a_source_removal_of_a_file_no_team_holds_counts_no_other_team(
         self, removal_world: RemovalWorld
     ) -> None:
-        """A camp file no team disclosed, and a digest the store has never held: no team either way."""
+        """A camp file no team disclosed, and a digest the store has never held: no team either way.
+
+        Nor another camp file: the one camp file holding the first is the holder removed. Until
+        `v1-e30-t16` this asserted one camp file holder for it, which the plan printed as "also held by
+        1 camp file(s)".
+        """
         camp_only = hashlib.sha256(CAMP_BODIES["orchard-kritik"]).hexdigest()
         held_nowhere = hashlib.sha256(b"synthetic bytes nothing in the fixture holds").hexdigest()
 
@@ -275,7 +280,8 @@ class TestSharedFiles:
 
             (source,) = plan.sources
             assert source.disposition is Disposition.REMOVE
-            assert (source.other_teams, source.camp_file_holders) == (0, camp_files)
+            assert len(source.camp_files) == camp_files
+            assert (source.other_teams, source.camp_file_holders) == (0, 0)
 
     async def test_junk_that_shadows_a_removed_file_goes_even_when_its_team_stays(
         self, removal_world: RemovalWorld

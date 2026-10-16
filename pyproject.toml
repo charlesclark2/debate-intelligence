@@ -2,7 +2,7 @@
 # the uv workspace definition, the shared dev tooling and every tool's configuration.
 [project]
 name = "debate-intelligence"
-version = "0.1.0"
+version = "1.0.0"
 description = "Workspace root for the Debate Intelligence Platform."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
@@ -44,6 +44,11 @@ dev = [
     "lxml-stubs>=0.5",
     # Answers the S3 adapters in-process (v1-e29-t04). The PR test suite reaches no AWS account.
     "moto[s3]>=5.0",
+    # moto's server mode, which the installed-build smoke checks reach over loopback instead of
+    # patching a process they cannot see (v1-e01-t21). Its own `server` extra would add cfn-lint,
+    # docker and a dozen more for services the evidence store never calls; S3 and STS need only these.
+    "flask>=3.0",
+    "flask-cors>=5.0",
     "numbers-parser>=4.19",
     "pre-commit>=4.0",
     "pre-commit-hooks>=5.0",
@@ -311,6 +316,9 @@ forbidden_modules = ["debate_core.testing"]
 # ---------------------------------------------------------------------------------------------
 [tool.pytest.ini_options]
 minversion = "8.3"
+# Where the one pytest plugin of our own lives: run_in_parts, which adds `--part K/N` and is loaded
+# by the `-p` in addopts below. pytest puts `pythonpath` on sys.path before it loads `-p` plugins.
+pythonpath = ["tests/pytest_plugins"]
 testpaths = [
     "packages/debate_core/tests",
     "packages/debate_cli/tests",
@@ -324,8 +332,16 @@ addopts = [
     "--strict-config",
     "--import-mode=importlib",
     "--numprocesses=auto",
-    "--cov",
-    "--cov-report=term-missing",
+    # No --cov here (v1-e01-t27). Coverage took a third of the suite's wall-clock (182 s against
+    # 123 s on the operator's Mac, 5,812 tests) and nothing is gated on it, so a plain
+    # `uv run pytest` and a pull request's `test` job both run without it. CI measures it on every
+    # push to dev and main, in ci.yml's `coverage` job; locally, ask for it:
+    # `uv run pytest --cov --cov-report=term-missing`. [tool.coverage] below still says what is
+    # measured, so the report is the one this file used to produce on every run.
+    #
+    # `--part K/N` (tests/pytest_plugins/run_in_parts.py) runs one of N parts of the selection; the
+    # N parts together are the whole of it. CI's `test` job is a matrix of them.
+    "-p", "run_in_parts",
     "--disable-socket",
     # The repository contract suite (v1-e02-t04) runs its `async def` tests on a real asyncio
     # loop, and a loop builds its self-pipe from `socket.socketpair()`. AF_UNIX sockets cannot

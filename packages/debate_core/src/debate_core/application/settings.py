@@ -84,6 +84,7 @@ from collections.abc import Callable, Iterator, Mapping
 from enum import StrEnum
 from pathlib import Path
 from typing import Any, Final, cast
+from urllib.parse import urlsplit
 
 from pydantic import (
     BaseModel,
@@ -118,6 +119,7 @@ __all__ = [
     "SECRET_PLACEHOLDER",
     "MAX_CASELIST_BULK_DOWNLOADS_PER_DAY",
     "MAX_CASELIST_DOWNLOADS_PER_MINUTE",
+    "OPENCASELIST_API_BASE_URL",
     "CardFingerprintSettings",
     "CaselistTokenBackend",
     "ConfigurationError",
@@ -156,6 +158,12 @@ PROFILE_SUBDIRECTORY: Final = Path("config") / "profiles"
 
 SECRET_PLACEHOLDER: Final = "***"
 """What a secret renders as. The real value never leaves this module."""
+
+OPENCASELIST_API_BASE_URL: Final = "https://api.opencaselist.com/v1"
+"""The documented OpenCaselist API, and the only one a prod installation will call (`v1-e01-t21`)."""
+
+LOOPBACK_HOSTS: Final = frozenset({"127.0.0.1", "localhost", "::1"})
+"""The host names an endpoint on this machine may be spelled with."""
 
 DEV_DAILY_BUDGET_CAP_USD: Final = 2.0
 """The documented ceiling on the dev environment's daily model spend, in USD.
@@ -304,11 +312,34 @@ class S3StorageSettings(SettingsGroup):
             "size there is nothing to split, so that is the floor."
         ),
     )
+    endpoint_url: str | None = Field(
+        default=None,
+        description=(
+            "Where the evidence store's S3 and STS requests go instead of AWS: a stand-in on this "
+            "machine's loopback address, such as the moto server the installed-build smoke checks "
+            "run (v1-e01-t21). Accepted in the dev environment only; prod and test refuse it. None, "
+            "everywhere by default, is AWS."
+        ),
+    )
 
     @property
     def multipart_threshold_bytes(self) -> int:
         """:attr:`multipart_threshold_mb` in the bytes the S3 adapters take."""
         return self.multipart_threshold_mb * 1024 * 1024
+
+    @field_validator("endpoint_url")
+    @classmethod
+    def _on_this_machine(cls, value: str | None) -> str | None:
+        """Loopback only, even in dev: a dev session's token travels with every request it signs."""
+        if value is None:
+            return None
+        parts = urlsplit(value)
+        if parts.scheme not in {"http", "https"} or parts.hostname not in LOOPBACK_HOSTS:
+            raise ValueError(
+                "must be an http:// or https:// URL on this machine's loopback address "
+                f"({', '.join(sorted(LOOPBACK_HOSTS))}); every request carries the session's token"
+            )
+        return value.rstrip("/")
 
 
 class StorageSettings(SettingsGroup):
@@ -518,9 +549,13 @@ class CaselistSettings(SettingsGroup):
         ),
     )
     api_base_url: str = Field(
-        default="https://api.opencaselist.com/v1",
+        default=OPENCASELIST_API_BASE_URL,
         min_length=1,
-        description="Root of the documented OpenCaselist API. Never the opencaselist.com site.",
+        description=(
+            "Root of the documented OpenCaselist API. Never the opencaselist.com site. Another "
+            "https URL is accepted in dev and test, for a stand-in; prod refuses any other value "
+            "(v1-e01-t21)."
+        ),
     )
     downloads_per_minute: int = Field(
         default=8,
@@ -1231,8 +1266,47 @@ def load_settings(
     except ValidationError as error:
         raise _configuration_error(error, sources) from error
 
+    _refuse_stand_in_endpoints_outside_dev(settings, sources)
     settings.attach_field_sources(sources)
     return settings
+
+
+def _refuse_stand_in_endpoints_outside_dev(settings: Settings, sources: Mapping[str, str]) -> None:
+    """Refuse an endpoint override in an environment that must reach the real services (`v1-e01-t21`).
+
+    The installed-build smoke checks point a dev installation at stand-ins on this machine with
+    `storage.s3.endpoint_url` and `caselist.api_base_url`. Neither may redirect prod: a prod
+    installation reaches AWS and the documented OpenCaselist API, whatever its environment holds.
+    `test` has no bucket and no use for a stand-in, so it refuses the evidence store's too. Checked
+    after the model is built, because which environment a value is for is a fact about the whole.
+    """
+    environment = settings.environment
+    if settings.storage.s3.endpoint_url is not None and environment is not Environment.DEV:
+        raise _refused_setting(
+            "storage.s3.endpoint_url",
+            sources,
+            f"accepted only in the dev environment, never in {environment.value}",
+            "It points the evidence store at a stand-in, which only a smoke check on a dev installation runs",
+        )
+    if environment is Environment.PROD and settings.caselist.api_base_url != OPENCASELIST_API_BASE_URL:
+        raise _refused_setting(
+            "caselist.api_base_url",
+            sources,
+            f"prod reaches OpenCaselist at {OPENCASELIST_API_BASE_URL} and nowhere else",
+            "Any other value is an endpoint override, which only a smoke check on a dev installation "
+            "has a use for",
+        )
+
+
+def _refused_setting(field: str, sources: Mapping[str, str], refusal: str, reason: str) -> ConfigurationError:
+    """A setting this environment refuses, named both ways: its dotted path and its variable."""
+    origin = sources.get(field, "default")
+    variable = f"{ENV_PREFIX}{field.upper().replace('.', ENV_NESTED_DELIMITER)}"
+    return ConfigurationError(
+        f"invalid configuration: {field} (from {origin}): {refusal} ({variable}). {reason}",
+        field=field,
+        source=sources.get(field),
+    )
 
 
 def _anchor_relative_paths(merged: dict[str, Any], config_root: Path | None) -> None:

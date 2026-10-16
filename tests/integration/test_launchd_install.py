@@ -19,6 +19,26 @@ Nothing here loads, bootstraps or enables anything, and nothing writes outside `
 is a temporary directory, the console script is a fake that records how it was called, and the
 launchd check runs against a fake `launchctl`. The one thing this suite must never do is put a
 schedule on the machine it runs on.
+
+## The profile check, and how it is proven off macOS (`v1-e34-t22`)
+
+`install.sh --check-launchd` now also reports each configured evidence profile and fails on one
+the AWS config does not define. It does that by what it already ran under launchd: the installed
+wrapper's `--check`, which runs `debate-research --version` and then
+`debate-research doctor --evidence-profiles`, and ends with that command's exit code. The installer
+itself still only loads the one-off label, waits, prints the log and the exit code, and boots it
+out.
+
+So the part this task adds is the wrapper's `--check`, a POSIX shell script, and it is tested on
+every platform, twice over: against the fake console script, to show which commands it runs, in
+which order, and that the profile check's exit code is the one it ends with; and against this
+checkout's real command, with an AWS config written for the test, to show a profile that is not
+defined ending the check with `1` and naming its setting. The second needs no stub and reaches no
+network, because boto3 refuses the session before any request. What `doctor` does with a profile
+that *is* defined is `packages/debate_cli/tests/commands/test_doctor_evidence_profiles.py`.
+
+The launchd half is macOS's, and stays skipped elsewhere: the tests marked `on_macos` show the
+check's log, its failing exit code and the label booted out, against the fake `launchctl`.
 """
 
 from __future__ import annotations
@@ -78,16 +98,24 @@ CONFIG_SHOW = json.dumps({
 })  # fmt: skip
 
 
+PROFILE_CHECK = "doctor --evidence-profiles"
+"""What the wrapper's `--check` runs after `--version`, written out as the runbook gives it."""
+
+
 def fake_console_script(directory: Path, *, data_directory: str | None = None) -> Path:
     """A `debate-research` that records each call beside itself and answers what is asked of it.
 
     `--json config show` reports a data directory the way the real build does: `data_directory`
     when given, otherwise the profile default `$HOME/.debate-research/$DEBATE_ENV`, so that the
     installer's check of the agent's data directory can be driven from a test.
+
+    `doctor --evidence-profiles` prints one line and exits `0`, or with the number in the file
+    `profile-check-exit` beside the script when a test has written one (:func:`profile_check_exits`).
     """
     directory.mkdir(parents=True, exist_ok=True)
     script = directory / "debate-research"
     record = directory / "calls.log"
+    profile_check_exit = directory / "profile-check-exit"
     reported = data_directory or "${HOME}/.debate-research/${DEBATE_ENV}"
     script.write_text(
         "#!/bin/sh\n"
@@ -96,12 +124,20 @@ def fake_console_script(directory: Path, *, data_directory: str | None = None) -
         "    '--json config show')\n"
         f"        printf '{CONFIG_SHOW}\\n' \"{reported}\" ;;\n"
         "    '--version') echo 'debate-research 0.0.0+fake' ;;\n"
+        f"    '{PROFILE_CHECK}')\n"
+        "        echo 'stand-in doctor: the evidence profiles were checked'\n"
+        f"        if [ -f '{profile_check_exit}' ]; then exit \"$(cat '{profile_check_exit}')\"; fi ;;\n"
         "esac\n"
         "exit 0\n",
         encoding="utf-8",
     )
     script.chmod(0o755)
     return script
+
+
+def profile_check_exits(console_script: Path, exit_code: int) -> None:
+    """Have the fake build's `doctor --evidence-profiles` end with `exit_code` from now on."""
+    (console_script.parent / "profile-check-exit").write_text(f"{exit_code}\n", encoding="utf-8")
 
 
 def calls_to(console_script: Path) -> list[str]:
@@ -528,21 +564,47 @@ def test_a_build_that_cannot_say_where_its_data_is_is_not_installed(home: Path, 
 # --- The wrapper's check mode (ac5) ---------------------------------------------------------------
 
 
-def run_wrapper(*arguments: str, console_script: Path, home: Path) -> subprocess.CompletedProcess[str]:
-    environment = {"HOME": str(home), "PATH": SYSTEM_PATH, "DEBATE_RESEARCH_BIN": str(console_script)}
+def run_wrapper(
+    *arguments: str, console_script: Path, home: Path, **environment: str
+) -> subprocess.CompletedProcess[str]:
+    variables = {"HOME": str(home), "PATH": SYSTEM_PATH, "DEBATE_RESEARCH_BIN": str(console_script)}
     return subprocess.run(
-        [str(WRAPPER_SCRIPT), *arguments], env=environment, capture_output=True, text=True, check=False
+        [str(WRAPPER_SCRIPT), *arguments],
+        env={**variables, **environment},
+        capture_output=True,
+        text=True,
+        check=False,
     )
 
 
-def test_the_wrapper_check_mode_prints_the_version_and_never_pulls(home: Path, console_script: Path) -> None:
-    """ac5. `--check` resolves DEBATE_RESEARCH_BIN and runs `--version`; it can spend nothing."""
+def test_the_wrapper_check_mode_prints_the_version_then_checks_the_profiles_and_never_pulls(
+    home: Path, console_script: Path
+) -> None:
+    """ac5 of `v1-e34-t10`, and ac3 of `v1-e34-t22`. `--check` resolves DEBATE_RESEARCH_BIN, runs
+    `--version` and then the profile check, in that order, and nothing else: it can spend nothing."""
     checked = run_wrapper("--check", console_script=console_script, home=home)
 
     assert checked.returncode == 0, checked.stderr
     assert str(console_script) in checked.stdout
     assert "debate-research 0.0.0+fake" in checked.stdout
-    assert calls_to(console_script) == ["--version"]
+    assert "stand-in doctor: the evidence profiles were checked" in checked.stdout
+    assert calls_to(console_script) == ["--version", "doctor --evidence-profiles"]
+
+
+@pytest.mark.parametrize("exit_code", [1, 2, 70])
+def test_the_wrapper_check_mode_ends_with_the_profile_checks_exit_code(
+    home: Path, console_script: Path, exit_code: int
+) -> None:
+    """A profile that is not defined ends `doctor --evidence-profiles` with `1`, and that is the
+    number launchd records for the check and `install.sh --check-launchd` fails on. The wrapper
+    reads none of them."""
+    profile_check_exits(console_script, exit_code)
+
+    checked = run_wrapper("--check", console_script=console_script, home=home)
+
+    assert checked.returncode == exit_code
+    assert "stand-in doctor: the evidence profiles were checked" in checked.stdout, "what it said is kept"
+    assert calls_to(console_script) == ["--version", "doctor --evidence-profiles"]
 
 
 def test_the_wrapper_check_mode_takes_no_other_arguments(home: Path, console_script: Path) -> None:
@@ -558,6 +620,101 @@ def test_the_wrapper_check_mode_fails_when_the_console_script_is_missing(home: P
 
     assert checked.returncode == 127
     assert "DEBATE_RESEARCH_BIN" in checked.stderr
+
+
+# --- The wrapper's check mode over the real command (v1-e34-t22 ac3, on every platform) ---------
+
+EVERYDAY_PROFILE = "debate-dev-evidence"
+MISSPELT_PROFILE = "debate-dev-evidence-typo"
+AWS_CONFIG_NAME = "an-aws-config-written-for-this-test"
+
+
+def this_checkouts_command(directory: Path) -> Path:
+    """`debate-research` as this checkout's code, behind a script the wrapper can exec.
+
+    The console script's own entry point, run by the interpreter the suite runs on. Nothing is
+    stubbed: what the wrapper's `--check` gets back is what an installed build would give it.
+    """
+    directory.mkdir(parents=True, exist_ok=True)
+    script = directory / "debate-research"
+    script.write_text(
+        f'#!/bin/sh\nexec "{sys.executable}" -c "from debate_cli.app import main; main()" "$@"\n',
+        encoding="utf-8",
+    )
+    script.chmod(0o755)
+    return script
+
+
+def an_installation_whose_profile_setting_names(profile: str, directory: Path) -> dict[str, str]:
+    """The environment of a dev installation: its profile directory, and an AWS config written
+    here that defines the everyday profile and no other. Nothing of the machine's own AWS config
+    is read, and a request, were one made, would go to a port nothing listens on."""
+    directory.mkdir(parents=True, exist_ok=True)
+    config = directory / AWS_CONFIG_NAME
+    config.write_text(f"[profile {EVERYDAY_PROFILE}]\nregion = us-east-1\n", encoding="utf-8")
+    profiles = directory / "profiles"
+    profiles.mkdir()
+    (profiles / "dev.toml").write_text(
+        f'[storage]\ndata_dir = "{directory / "data"}"\n'
+        f'[storage.s3]\nbucket = "debate-dev-evidence-not-a-bucket"\nregion = "us-east-1"\n'
+        f'aws_profile = "{profile}"\n'
+        '[caselist]\nnotifier = "none"\n'
+        f'[models]\nrouting_file = "{directory / "routing.yaml"}"\nbudget_usd_daily = 1.0\n',
+        encoding="utf-8",
+    )
+    return {
+        "DEBATE_ENV": "dev",
+        "DEBATE_PROFILE_DIR": str(profiles),
+        "AWS_CONFIG_FILE": str(config),
+        "AWS_SHARED_CREDENTIALS_FILE": str(directory / "no-credentials"),
+        "AWS_EC2_METADATA_DISABLED": "true",
+        "AWS_ENDPOINT_URL": "http://127.0.0.1:9",
+    }
+
+
+def test_over_the_real_command_the_check_fails_on_a_profile_the_aws_config_lacks_and_names_its_setting(
+    home: Path, tmp_path: Path
+) -> None:
+    """`v1-e34-t22` ac3, as `install.sh --check-launchd` runs it, with nothing standing in for the
+    command: the wrapper's `--check` over this checkout's `debate-research`, in an installation
+    whose `storage.s3.aws_profile` names a profile its AWS config does not define. Not skipped
+    anywhere. boto3 refuses the session before any request, so no identity is stubbed and no
+    network is reached."""
+    command = this_checkouts_command(tmp_path / "bin")
+    installation = an_installation_whose_profile_setting_names(MISSPELT_PROFILE, tmp_path / "installation")
+
+    checked = run_wrapper("--check", console_script=command, home=home, **installation)
+
+    said = " ".join((checked.stdout + checked.stderr).split())
+    assert checked.returncode == 1, said
+    assert "debate-dev-evidence-typo" in said
+    assert "not defined in this" in said
+    assert "storage.s3.aws_profile" in said
+    assert "STORE_PROFILE_NOT_CONFIGURED" in said
+    for forbidden in (str(tmp_path / "installation"), AWS_CONFIG_NAME, "/.aws", "aws sso login"):
+        assert forbidden not in checked.stdout + checked.stderr
+
+
+def test_over_the_real_command_the_check_passes_where_no_evidence_profile_is_configured(
+    home: Path, tmp_path: Path
+) -> None:
+    """The other end of the same check: the `test` environment names no bucket and no profile, so
+    there is nothing to ask about and the check ends with `0`."""
+    command = this_checkouts_command(tmp_path / "bin")
+
+    checked = run_wrapper(
+        "--check",
+        console_script=command,
+        home=home,
+        DEBATE_ENV="test",
+        AWS_CONFIG_FILE=os.devnull,
+        AWS_SHARED_CREDENTIALS_FILE=os.devnull,
+        AWS_EC2_METADATA_DISABLED="true",
+        AWS_ENDPOINT_URL="http://127.0.0.1:9",
+    )
+
+    assert checked.returncode == 0, checked.stdout + checked.stderr
+    assert "none configured for this environment" in " ".join(checked.stdout.split())
 
 
 # --- The installer's launchd check (ac5), against a fake launchctl ------------------------------
@@ -655,9 +812,12 @@ def test_the_launchd_check_runs_the_installed_wrapper_under_its_own_label_and_ne
 
     assert checked.returncode == 0, checked.stdout + checked.stderr
     assert "debate-research 0.0.0+fake" in checked.stdout, "the check's log was not printed"
+    assert "stand-in doctor: the evidence profiles were checked" in checked.stdout
     assert "exit code 0" in checked.stdout
     assert f"{LABEL} runs: 7 before, 7 after" in checked.stdout
-    assert calls_to(console_script) == ["--version"], "the check ran something other than --version"
+    assert calls_to(console_script) == ["--version", "doctor --evidence-profiles"], (
+        "the check ran something other than --version and the profile check"
+    )
     commands = calls.read_text(encoding="utf-8").splitlines()
     touched = {
         line.split()[0]
@@ -688,6 +848,46 @@ def test_the_launchd_check_reports_a_failing_wrapper_and_still_boots_out(
     assert checked.returncode == 1
     assert "exit code 127" in checked.stdout
     assert LABEL + ".check" not in json.loads(state.read_text(encoding="utf-8"))
+
+
+@on_macos
+def test_the_launchd_check_fails_when_a_profile_is_not_defined_prints_what_was_said_and_boots_out(
+    home: Path, console_script: Path, fake_launchctl: tuple[Path, Path, Path]
+) -> None:
+    """`v1-e34-t22` ac3. Under launchd the profile check ends with `1`: the installer prints the
+    check's log, which is where the profile and its setting are named, reports the exit code,
+    boots the one-off label out, and fails."""
+    launchctl_directory, state, _calls = fake_launchctl
+    install_and_load(home, console_script, state)
+    profile_check_exits(console_script, 1)
+
+    checked = check_launchd(home, launchctl_directory)
+
+    assert checked.returncode == 1
+    assert "stand-in doctor: the evidence profiles were checked" in checked.stdout
+    assert f"{LABEL}.check exit code 1" in checked.stdout
+    assert f"{LABEL} runs: 7 before, 7 after" in checked.stdout
+    assert LABEL + ".check" not in json.loads(state.read_text(encoding="utf-8"))
+    assert calls_to(console_script) == ["--version", "doctor --evidence-profiles"]
+
+
+@on_macos
+def test_the_launchd_check_says_a_build_without_the_profile_check_needs_replacing(
+    home: Path, console_script: Path, fake_launchctl: tuple[Path, Path, Path]
+) -> None:
+    """A build installed before `v1-e34-t22` answers `doctor --evidence-profiles` with exit `2`,
+    "no such option". The check fails, and says which build is too old rather than leave a usage
+    error to be read as a verdict on the profile."""
+    launchctl_directory, state, _calls = fake_launchctl
+    install_and_load(home, console_script, state)
+    profile_check_exits(console_script, 2)
+
+    checked = check_launchd(home, launchctl_directory)
+
+    assert checked.returncode == 1
+    assert f"{LABEL}.check exit code 2" in checked.stdout
+    assert "does not have the profile check" in checked.stderr
+    assert "scripts/install_channel.sh" in checked.stderr
 
 
 @on_macos

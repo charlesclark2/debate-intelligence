@@ -5,7 +5,7 @@ OpenCaselist client, the real transport, the real importers, the real manifests 
 answered by respx. Nothing here reaches the network (respx, and `--disable-socket`), and the
 `test` environment names no bucket, so the publish and report stages are skipped with their reason
 and the run still succeeds. Publishing is covered end to end by
-`tests/smoke/test_caselist_pull.py`, against moto.
+`tests/smoke/test_caselist_pull.py`, against the installed build and moto's server (v1-e01-t21).
 
 The archives served are the invented ones from `tests/fixtures/caselist/`; nothing here is real
 caselist content (`docs/policies/caselist-data-use.md`).

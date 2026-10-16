@@ -56,12 +56,19 @@ was computed under.
 * **`card-fingerprint-v2`** (`v1-e31-t08`). Short bodies matched as cuts of the one card that
   contains them, a link that survives a split among a card's full copies, and abbreviations with no
   full copy grouped among themselves. **Exact fingerprints unchanged; cluster ids changed.**
+* **`card-fingerprint-v3`** (`v1-e31-t11`). Two corrections to the short-body step of `v2`. A short
+  cut's share is measured against the smallest body that holds it, where `v2` measured it against
+  whichever sorted first by fingerprint. And bodies that hold one another count as one witness, so
+  a short cut inside nested copies of a card that never merged joins the smallest of them, where
+  `v2` left it out of both. Long bodies are matched as before. **Exact fingerprints unchanged;
+  cluster ids changed** for the short bodies that now join a cluster, and for a cluster one of them
+  now gives its smallest fingerprint to.
 
 The normalization has not changed since `v1`, so an exact fingerprint computed under `v1` is the
-same digest under `v2`, and anything keyed on one (a suppression, a recipe, a cache) still holds.
-Cluster ids are not comparable across versions: under `v2` more cards share one. A consumer that
-compares cluster ids of two versions is comparing two different functions; one that compares exact
-fingerprints of two versions must check this list says they did not change.
+same digest under `v2` and `v3`, and anything keyed on one (a suppression, a recipe, a cache) still
+holds. Cluster ids are not comparable across versions: under each later version more cards share
+one. A consumer that compares cluster ids of two versions is comparing two different functions; one
+that compares exact fingerprints of two versions must check this list says they did not change.
 """
 
 from __future__ import annotations
@@ -86,7 +93,7 @@ __all__ = [
     "normalize_for_matching",
 ]
 
-FINGERPRINT_VERSION: Final = "card-fingerprint-v2"
+FINGERPRINT_VERSION: Final = "card-fingerprint-v3"
 """Version of the matching rules: the normalization above and the clustering and linking built on
 it. Bumped by any change that can change a digest or move a card to another cluster."""
 

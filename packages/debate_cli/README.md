@@ -117,10 +117,10 @@ rather than writing an integer.
 | Code | Name | Means |
 |---|---|---|
 | 0 | `OK` | The command did what it was asked to do. |
-| 1 | `DOMAIN_FAILURE` | The command ran and the answer is a failure: a card is `UNVERIFIED`, a record was not found, a write lost its revision check, a profile setting names a profile the AWS config does not define, `DEBATE_REMOVAL_PROFILE` names a profile that is not signed in as the takedown role, `doctor` found a failed check (the interpreter's Unicode database is not the normalizer's pin, or a wired integration does not import). Running it again gives the same answer. |
+| 1 | `DOMAIN_FAILURE` | The command ran and the answer is a failure: a card is `UNVERIFIED`, a record was not found, a write lost its revision check, a profile setting names a profile the AWS config does not define, `DEBATE_REMOVAL_PROFILE` names a profile that is not signed in as the takedown role, `doctor` found a failed check (the interpreter's Unicode database is not the normalizer's pin, a wired integration does not import, or with `--evidence-profiles` a configured evidence profile is not defined). Running it again gives the same answer. |
 | 2 | `USAGE_ERROR` | The command line was wrong: unknown command or option, missing argument, no command given. Nothing was executed. |
 | 3 | `RETRIEVAL_FAILURE` | Something the command depends on did not answer, so there is no answer yet. An external provider — search, fetch, a model — failed or rate-limited the call, or a store could not be read or written: it was unavailable, the SSO session for it expired, or it refused access (the operating system refusing a data directory included). The same command may well succeed later. |
-| 70 | `INTERNAL_ERROR` | A bug: an exception the CLI does not model. 70 is `EX_SOFTWARE` from `sysexits.h`. |
+| 70 | `INTERNAL_ERROR` | A bug: an exception the CLI does not model. It is reported by its class, never its message (below). 70 is `EX_SOFTWARE` from `sysexits.h`. |
 
 Exceptions are mapped by `exit_code_for`: `ProviderError` → 3; `StoreUnavailable`,
 `StoreCredentialsExpired` and `StoreAccessDenied` (`RETRYABLE_STORE_FAILURES`) → 3 in every
@@ -129,6 +129,33 @@ of those three is what stopped them (`v1-e01-t20`); any other `DomainError` → 
 `NotFound`; a usage error → 2; anything else → 70. A failure that is an *outcome* rather than an
 exception — `verify` finding an unverifiable card — is reported with `output.failure(...)` and then
 `raise typer.Exit(code=ExitCode.DOMAIN_FAILURE)`.
+
+**Exit 70 names the exception's class, never its message** (`v1-e01-t25`). An exception the CLI
+does not model did not get its message from this project: an `OSError` quotes the path it failed
+on, which carries the home directory and, for a file in the inbox, a camp file's title. So the
+panel on stderr, and the envelope with `--json`, say only which class it was and how to see more:
+
+```json
+{"schema_version": 1, "status": "error", "command": "caselist pull", "data": null,
+ "error": {"code": "INTERNAL_ERROR",
+           "message": "debate-research stopped on an unexpected PermissionError. Its message is not printed, because it can quote a path on this machine.",
+           "exit_code": 70, "details": {"exception_type": "PermissionError"},
+           "hint": "This is a bug in debate-research. Re-run with --verbose for the traceback, which includes the error's message."}}
+```
+
+The detail is in the traceback, and `--verbose` is the only thing that prints it, on stderr. Run
+the same command again with the flag; with `--json` too, stdout still carries the envelope above
+and nothing else:
+
+```bash
+debate-research --verbose caselist pull --dry-run
+```
+
+The scheduled agent (`ops/launchd/`) runs `--json caselist pull` without `--verbose`, so its logs
+hold the class and no traceback; the same command by hand with `--verbose` shows it. Errors the CLI
+models keep their own messages and exit codes: every `DomainError`, every usage error, and the
+incomplete-installation message for a missing optional dependency (`v1-e01-t17`), which is exit 70
+with its own fix.
 
 **A profile the AWS config does not define is a `1`, not a `3`** (`v1-e29-t07`). When the
 environment's profile setting (`storage.s3.aws_profile`), `DEBATE_REMOVAL_PROFILE` for a takedown,
@@ -182,8 +209,12 @@ retryable, so nothing exits 3 because nobody classified it. The retryable codes 
   `storage.data_dir` or a grant the profile lacks, never `aws sso login`. The grant's sentence is
   the S3 adapter's, read from the error (`v1-e29-t07`).
   A profile setting that names no profile in the AWS config stops the bucket's adapter being built,
-  so on a real installation it ends the pull before any stage, with `STORE_PROFILE_NOT_CONFIGURED`
-  as `error.code` and exit 1; nothing is fetched, and no run is recorded or announced.
+  so on a real installation it refuses the pull before any stage, with `STORE_PROFILE_NOT_CONFIGURED`
+  as `error.code` and exit 1, and nothing is fetched. The run is still recorded and announced
+  (`v1-e34-t22`): a `failed` record in this machine's run log, details beside it with that code
+  and the fix, which names the setting, and one notification that a person should look. The
+  record is owed to the bucket and the next run that can reach it publishes it.
+  `doctor --evidence-profiles` finds the setting before a run does.
   Whatever ended the publish stage, the pending-work file under `storage.data_dir` then holds every
   snapshot the bucket did not confirm complete, and `--publish-pending` takes one off only when the
   bucket has (`v1-e34-t18`). A pending-work file that cannot be read fails the stage with
@@ -195,7 +226,19 @@ retryable, so nothing exits 3 because nobody classified it. The retryable codes 
 whether settings are wired, the services the container can build, the running Python's Unicode
 database beside the version the evidence normalizer is pinned to (`v1-e01-t14`), and every
 `debate_core.integrations` module the composition root wires with whether it imports (`v1-e01-t22`).
-It fails on two checks only, the ones it can state precisely:
+
+With `--evidence-profiles` it also reports each AWS profile this environment is configured to reach
+the evidence bucket with, `storage.s3.aws_profile` and `DEBATE_REMOVAL_PROFILE` when it is set:
+whether this machine's AWS config defines it, and which permission set it is signed in as
+(`v1-e34-t22`). It fails on a profile that is not defined, with `STORE_PROFILE_NOT_CONFIGURED`,
+naming the profile and its setting; an expired session is reported as expired, with the login, and
+does not fail it. The option reads the AWS config and asks AWS who each defined profile is. Plain
+`doctor` does neither, which is why the installer and `validate-dev` can run it on a machine with
+no AWS config. `ops/launchd/install.sh --check-launchd` runs it under launchd, as the weekly agent
+will run. It names a permission set and never an account, a role's full identifier or the AWS
+config's path.
+
+Without the option it fails on two checks only, the ones it can state precisely:
 
 * **The Unicode database.** Under any database but the pin, `normalize` refuses to run, so every
   command that touches evidence text would fail on first use.

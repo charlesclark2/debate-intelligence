@@ -81,6 +81,15 @@ The takedown access also carries a
 profile, which the preflight asks first: a profile that is not signed in as this environment's
 takedown role is refused before it lists or writes (`v1-e29-t08`).
 
+## Checking the profiles ahead of a run
+
+:meth:`ServiceContainer.evidence_profile_check` asks the same question of every profile these
+settings name, the everyday one and the takedown one when its variable is set, through the same
+port and the same adapter (:meth:`ServiceContainer.caller_identity_for`): is it defined, and
+which permission set is it signed in as. `debate-research doctor --evidence-profiles` runs it
+(`v1-e34-t22`), so that a setting naming a profile this machine does not have is found by a
+person, before the weekly pull finds it.
+
 ## Why the AWS adapters are imported inside the factory
 
 `debate_core.integrations.s3` is imported where it is used rather than at the top of this module,
@@ -127,15 +136,18 @@ from debate_core.application.caselist.removal_service import (
 )
 from debate_core.application.caselist.status_service import CaselistStatusService
 from debate_core.application.caselist.suppression import (
+    REMOVAL_LOG_KEY,
     SUPPRESSION_LIST_KEY,
     LocalFallbackSuppressionList,
     ObjectStoreAppendOnlyRecord,
+    RecordedRemovalLog,
     RecordedSuppressionList,
 )
 from debate_core.application.caselist_card_stats import CaselistCardStatsService
 from debate_core.application.caselist_parse import CaselistParseService
 from debate_core.application.caselist_pull_parse import PullParseStage
 from debate_core.application.caselist_sync import CaselistSyncService, FullArchiveRotation
+from debate_core.application.evidence_profiles import ConfiguredProfile, EvidenceProfileCheck
 from debate_core.application.evidence_sync import (
     EvidenceSyncService,
     SyncJournal,
@@ -143,6 +155,7 @@ from debate_core.application.evidence_sync import (
 )
 from debate_core.application.evidence_verifier import EvidenceVerifier
 from debate_core.application.ports.archive import ArchiveEntry
+from debate_core.application.ports.caller_identity import CallerIdentity
 from debate_core.application.ports.evidence_store import EvidenceObjectStore, ObjectKey
 from debate_core.application.ports.notifier import Notifier, NullNotifier
 from debate_core.application.ports.suppression import SuppressionList
@@ -174,6 +187,8 @@ from debate_core.integrations.local.suppression_list import (
 )
 
 if TYPE_CHECKING:  # pragma: no cover - imported for the type checker only; see the factories
+    from mypy_boto3_s3.client import S3Client
+
     from debate_core.integrations.opencaselist import CaselistTokenStore, OpenCaselistClient
 
 __all__ = [
@@ -195,6 +210,7 @@ SERVICE_NAMES: Final[tuple[str, ...]] = (
     "caselist_sync_history",
     "caselist_sync_monitor",
     "caselist_token_store",
+    "evidence_profile_check",
     "evidence_sync",
     "openev_import",
     "opencaselist_client",
@@ -392,6 +408,14 @@ class ServiceContainer:
         """The SHA-256 an import records for the archive itself, by the same reader's rules."""
         return archive_reader.archive_digest(source)
 
+    def openev_upstream_paths(self) -> dict[int, str]:
+        """What this machine's OpenEv delivery record knows of each id's upstream path, as digests.
+
+        `caselist reimport-openev-metadata` writes it onto release rows imported before they carried
+        it (`v1-e30-t14`). The record is the pull's, in the data directory it keeps its state in.
+        """
+        return self.caselist_inbox().deliveries.upstream_paths()
+
     def evidence_object_path(self, key: ObjectKey) -> Path:
         """The file this machine's evidence store keeps the named object `key` at: a manifest."""
         return FsEvidenceObjectStore(self.settings.storage.data_dir).path_for(key)
@@ -566,7 +590,7 @@ class ServiceContainer:
     def _build_evidence_sync(self, blob_prefix: str | None) -> EvidenceSyncService:
         # Imported here, not at module scope: boto3 is an optional dependency and `--help` must
         # work without it. See this module's docstring.
-        from debate_core.integrations.s3 import S3EvidenceObjectStore, build_s3_client
+        from debate_core.integrations.s3 import S3EvidenceObjectStore
 
         settings = self.settings
         storage = settings.storage
@@ -575,11 +599,7 @@ class ServiceContainer:
 
         # One client for both keyspaces: one set of credentials, one connection pool, and one
         # profile name in any `aws sso login` hint the adapters raise.
-        client = build_s3_client(
-            region=storage.s3.region,
-            profile=storage.s3.aws_profile,
-            profile_setting=_EVERYDAY_PROFILE_SETTING,
-        )
+        client = self._s3_client(profile=storage.s3.aws_profile, profile_setting=_EVERYDAY_PROFILE_SETTING)
 
         def bucket_store() -> S3EvidenceObjectStore:
             return S3EvidenceObjectStore(
@@ -646,13 +666,14 @@ class ServiceContainer:
 
         It can also list object versions, for the removal-residue check `caselist status` asks for
         (`v1-e30-t10`). That client is built with the everyday evidence profile, like the bucket's:
-        the takedown profile is never read here.
+        the takedown profile is never read here. The removal log and the scopes beside it are read
+        from this machine's copy and the bucket's, as the suppression list is (`v1-e30-t15`).
         """
         return self.singleton("caselist_status", self._build_caselist_status)
 
     def _build_caselist_status(self) -> CaselistStatusService:
         # Imported here, not at module scope: boto3 is an optional dependency. See the docstring.
-        from debate_core.integrations.s3 import S3EvidenceVersionStore, build_s3_client
+        from debate_core.integrations.s3 import S3EvidenceVersionStore
 
         storage = self.settings.storage
         bucket = self._evidence_bucket()
@@ -660,14 +681,20 @@ class ServiceContainer:
             local=self._local_evidence(),
             remote=bucket,
             suppression=self.suppression_list(),
+            # Both copies of the log, and of the scopes beside it, read as the list is (`v1-e30-t15`).
+            removal_log=RecordedRemovalLog(
+                local_removal_log_file(storage.data_dir),
+                ObjectStoreAppendOnlyRecord(
+                    bucket, REMOVAL_LOG_KEY, location=f"s3://{storage.s3.bucket}/{REMOVAL_LOG_KEY}"
+                ),
+            ),
+            environment=self.settings.environment.value,
             versions=S3EvidenceVersionStore(
                 bucket=str(storage.s3.bucket),
                 profile=storage.s3.aws_profile,
                 profile_setting=_EVERYDAY_PROFILE_SETTING,
-                client=build_s3_client(
-                    region=storage.s3.region,
-                    profile=storage.s3.aws_profile,
-                    profile_setting=_EVERYDAY_PROFILE_SETTING,
+                client=self._s3_client(
+                    profile=storage.s3.aws_profile, profile_setting=_EVERYDAY_PROFILE_SETTING
                 ),
             ),
         )
@@ -682,7 +709,7 @@ class ServiceContainer:
 
     def _build_caselist_removal(self) -> CaselistRemovalService:
         # Imported here, not at module scope: boto3 is an optional dependency. See the docstring.
-        from debate_core.integrations.s3 import S3EvidenceVersionStore, build_s3_client
+        from debate_core.integrations.s3 import S3EvidenceVersionStore
 
         settings = self.settings
         storage = settings.storage
@@ -702,10 +729,8 @@ class ServiceContainer:
                 bucket=str(storage.s3.bucket),
                 profile=storage.s3.aws_profile,
                 profile_setting=_EVERYDAY_PROFILE_SETTING,
-                client=build_s3_client(
-                    region=storage.s3.region,
-                    profile=storage.s3.aws_profile,
-                    profile_setting=_EVERYDAY_PROFILE_SETTING,
+                client=self._s3_client(
+                    profile=storage.s3.aws_profile, profile_setting=_EVERYDAY_PROFILE_SETTING
                 ),
             ),
             inbox=self.caselist_inbox(),
@@ -739,12 +764,7 @@ class ServiceContainer:
         return self.singleton("takedown_access", self._build_takedown_access)
 
     def _build_takedown_access(self) -> TakedownAccess:
-        from debate_core.integrations.s3 import (
-            S3EvidenceObjectStore,
-            S3EvidenceVersionStore,
-            StsCallerIdentity,
-            build_s3_client,
-        )
+        from debate_core.integrations.s3 import S3EvidenceObjectStore, S3EvidenceVersionStore
 
         settings = self.settings
         storage = settings.storage
@@ -753,9 +773,7 @@ class ServiceContainer:
             raise TakedownNotConfigured
         if not storage.s3.bucket:
             raise EvidenceStoreNotConfigured(settings.environment)
-        client = build_s3_client(
-            region=storage.s3.region, profile=profile, profile_setting=_REMOVAL_PROFILE_SETTING
-        )
+        client = self._s3_client(profile=profile, profile_setting=_REMOVAL_PROFILE_SETTING)
         return TakedownAccess(
             versions=S3EvidenceVersionStore(
                 bucket=str(storage.s3.bucket),
@@ -772,15 +790,86 @@ class ServiceContainer:
             ),
             # Asked first, before the profile lists or writes anything (v1-e29-t08): built from the
             # same profile name as the client above, so it answers for the role that would delete.
-            caller=StsCallerIdentity(
-                bucket=str(storage.s3.bucket),
-                profile=profile,
-                profile_setting=_REMOVAL_PROFILE_SETTING,
-                region=storage.s3.region,
+            caller=self.caller_identity_for(
+                ConfiguredProfile(setting=_REMOVAL_PROFILE_SETTING, name=profile, for_takedowns=True)
             ),
             profile=profile,
             bucket=str(storage.s3.bucket),
         )
+
+    def caller_identity_for(self, profile: ConfiguredProfile) -> CallerIdentity:
+        """Who `profile` is signed in as, asked of STS: the one place that adapter is built.
+
+        The takedown preflight asks it of the takedown profile (`v1-e29-t08`), and the profile
+        check of every profile these settings name (`v1-e34-t22`). Raises
+        :class:`~debate_core.application.errors.StoreProfileNotConfigured`, naming the profile's
+        setting, when this machine's AWS config does not define it: building the adapter builds a
+        session, which is where boto3 refuses one. A test replaces this method to stub the answer.
+        """
+        from debate_core.integrations.s3 import StsCallerIdentity
+
+        s3 = self.settings.storage.s3
+        return StsCallerIdentity(
+            bucket=str(s3.bucket or ""),
+            profile=profile.name,
+            profile_setting=profile.setting,
+            region=s3.region,
+            endpoint_url=s3.endpoint_url,
+            ignore_configured_endpoints=self._ignores_configured_endpoints,
+        )
+
+    def evidence_profile_check(self) -> EvidenceProfileCheck:
+        """Build the check of every evidence profile this environment is configured with (`v1-e34-t22`).
+
+        The everyday profile, when the settings name one, and the takedown profile, when
+        `DEBATE_REMOVAL_PROFILE` is set. An environment with neither, which is what `test` is,
+        has nothing to check. Building the check asks nothing and reads no AWS
+        config: each profile's adapter is built when the check is run.
+        """
+        return self.singleton("evidence_profile_check", self._build_evidence_profile_check)
+
+    def _build_evidence_profile_check(self) -> EvidenceProfileCheck:
+        settings = self.settings
+        s3 = settings.storage.s3
+        configured: list[ConfiguredProfile] = []
+        if s3.aws_profile:
+            configured.append(ConfiguredProfile(setting=_EVERYDAY_PROFILE_SETTING, name=s3.aws_profile))
+        if settings.removal_profile:
+            configured.append(
+                ConfiguredProfile(
+                    setting=_REMOVAL_PROFILE_SETTING, name=settings.removal_profile, for_takedowns=True
+                )
+            )
+        return EvidenceProfileCheck(
+            profiles=configured,
+            caller_for=self.caller_identity_for,
+            environment=settings.environment.value,
+        )
+
+    def _s3_client(self, *, profile: str | None, profile_setting: str) -> S3Client:
+        """An S3 client for this environment's bucket, signed with `profile`: the one place one is built.
+
+        It goes where `storage.s3.endpoint_url` says, which only a dev installation accepts, and
+        otherwise to AWS. A prod installation also ignores the endpoints botocore configures for
+        itself, so no variable or AWS config entry can send its evidence store elsewhere
+        (`v1-e01-t21`).
+        """
+        # Imported here, not at module scope: boto3 is an optional dependency. See the docstring.
+        from debate_core.integrations.s3 import build_s3_client
+
+        s3 = self.settings.storage.s3
+        return build_s3_client(
+            region=s3.region,
+            profile=profile,
+            profile_setting=profile_setting,
+            endpoint_url=s3.endpoint_url,
+            ignore_configured_endpoints=self._ignores_configured_endpoints,
+        )
+
+    @property
+    def _ignores_configured_endpoints(self) -> bool:
+        """Whether botocore's own endpoint routes are ignored: in prod, always."""
+        return self.settings.environment is Environment.PROD
 
     def _local_evidence(self) -> LocalEvidence:
         data_dir = self.settings.storage.data_dir
@@ -799,7 +888,7 @@ class ServiceContainer:
 
     def _build_evidence_bucket(self) -> EvidenceObjectStore:
         # Imported here, not at module scope: boto3 is an optional dependency. See the docstring.
-        from debate_core.integrations.s3 import S3EvidenceObjectStore, build_s3_client
+        from debate_core.integrations.s3 import S3EvidenceObjectStore
 
         settings = self.settings
         storage = settings.storage
@@ -807,11 +896,7 @@ class ServiceContainer:
             raise EvidenceStoreNotConfigured(settings.environment)
         return S3EvidenceObjectStore(
             bucket=str(storage.s3.bucket),
-            client=build_s3_client(
-                region=storage.s3.region,
-                profile=storage.s3.aws_profile,
-                profile_setting=_EVERYDAY_PROFILE_SETTING,
-            ),
+            client=self._s3_client(profile=storage.s3.aws_profile, profile_setting=_EVERYDAY_PROFILE_SETTING),
             profile=storage.s3.aws_profile,
             profile_setting=_EVERYDAY_PROFILE_SETTING,
             multipart_threshold_bytes=storage.s3.multipart_threshold_bytes,
@@ -912,6 +997,13 @@ class ServiceContainer:
         (:func:`~debate_cli.exit_codes.codes_exit_as_a_retrieval_failure`), so that a failed run's
         notification says "the next run retries it" exactly when the command exits `3`
         (`v1-e34-t19`). `debate_core` never decides that for itself.
+
+        It is handed the bucket to build, not the bucket (`v1-e34-t22`). A profile setting that
+        names a profile the AWS config does not define stops the S3 adapter being built
+        (`v1-e29-t07`), and a monitor that needed the adapter to exist could not be built either:
+        the run ended unrecorded and unannounced. Built this way the monitor always exists, the
+        refusal reaches it as the error the run stopped on, and the record it writes here is owed
+        to the bucket until a run can build one.
         """
         return self.singleton("caselist_sync_monitor", self._build_caselist_sync_monitor)
 
@@ -922,7 +1014,8 @@ class ServiceContainer:
             state_dir=settings.storage.data_dir,
             environment=settings.environment.value,
             notifier=self.sync_notifier(),
-            remote=self._evidence_bucket() if settings.storage.s3.bucket else None,
+            remote=None,
+            build_remote=self._evidence_bucket if settings.storage.s3.bucket else None,
             aws_login_command=self._aws_login_command(),
             secrets=lambda: [token.get_secret_value()] if token is not None else [],
             clock=self.clock(),

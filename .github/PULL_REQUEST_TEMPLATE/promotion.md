@@ -48,4 +48,5 @@ installed and links the run. GitHub blocks the merge until it is green for the c
 - [ ] The dev build above is the pre-release the `validate-dev` status names
 - [ ] The release review Gate is approved here, if this promotion completes a release
 - [ ] Charlie has signed off this promotion
+- [ ] Just before merging, *Back-merge main into dev* is run from the Actions tab (Run workflow, from `dev`) and its run is green, and the checks above are still green after it. GitHub runs the scheduled sweep only every few hours, so this makes the guard current
 - [ ] Merge with **Create a merge commit**, never squash or rebase, so dev and main share history

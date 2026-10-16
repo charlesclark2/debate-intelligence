@@ -22,7 +22,8 @@
 #                                           after PM verdict ACCEPTED: checks, push, open PR into dev
 #                                           --partial: the session's work is done and reviewed, but the
 #                                           Goal stays InProgress because criteria that only the operator
-#                                           can close are still open. Verdict must still be ACCEPTED.
+#                                           can close are still open. Verdict must still be ACCEPTED,
+#                                           and the current session's sections must name what is open.
 #   scripts/task finish <task> [--partial] [--abandon] [--force]
 #                                           after the PR is merged: remove worktree + local/remote branch
 #
@@ -509,8 +510,12 @@ cmd_pr() {
     # still applies, so this is never a way past an unreviewed branch - only past an unfinished one.
     [ "$phase" = "InProgress" ] || die "--partial expects status.phase InProgress, found $phase"
     warn "partial merge: $task stays InProgress; the report must name the criteria left open"
-    grep -q 'NOT RUN\|NOT APPLICABLE\|PARTIAL\|FAIL' "$wt/$report_path" \
-      || die "--partial needs the report to record which criteria are still open in $report_path"
+    # Only the current session's part counts: after the last-but-one PM review, the boundary the
+    # verdict uses. An earlier session's NOT RUN says nothing about this session's work (v1-e01-t24).
+    local open_items
+    open_items="$(helper "$wt" open-items "$task")" \
+      || die "--partial needs the current session's sections of $report_path to record which criteria are still open (NOT RUN, NOT APPLICABLE, PARTIAL or FAIL); an earlier session's, before the last-but-one PM review ends, do not count"
+    info "Open items recorded by the current session: $open_items"
   else
     [ "$phase" = "Succeeded" ] || [ "$force" -eq 1 ] || die "spec status.phase is $phase, expected Succeeded (if operator-only criteria are what remain, use --partial)"
   fi

@@ -1,8 +1,8 @@
 """Imported, confirmed downloads leave the sync's inbox (`v1-e34-t11`).
 
 Before this task nothing cleared `<data_dir>/inbox`. Every weekly archive and camp download stayed
-after it was imported, and because the weeklies are cumulative the dev inbox grew by a season's
-caselist every week (25 zips, 527 MB on 2026-10-01, measured by `v1-e30-t09`). The retention stage
+after it was imported, so the dev inbox grew by every week's windows (25 zips, 527 MB on
+2026-10-01, measured by `v1-e30-t09`). The retention stage
 removes a download once it is imported and its snapshot is confirmed in the bucket, under the run
 lock, and the run summary names what went.
 
@@ -763,23 +763,28 @@ async def test_retention_removes_a_revised_camp_file_only_on_the_conditions_any_
     assert installation.inbox_names() == set()
 
 
-async def test_retention_keeps_a_camp_release_of_junk_alone_and_the_next_pull_does_not_import_it_again(
+async def test_retention_removes_a_camp_release_of_junk_alone_and_the_next_pull_does_not_import_it_again(
     installation: Installation,
 ) -> None:
     """A camp release holding only junk (`v1-e30-t09` Follow-up 4) has no manifest row with a
-    classification, so no manifest came from its bytes and retention keeps it as `not_imported`,
-    before `v1-e34-t08` and after. What changed is the next pull: it used to import it again."""
+    classification, so no manifest came from its bytes. Its delivery entry names no member, and
+    since `v1-e34-t15` retention removes it for that, as `junk_only`. Before, `v1-e34-t08` wrote
+    this test as `…_keeps_a_camp_release_of_junk_alone_…`, kept as `not_imported` on every run.
+    The next pull neither fetches nor imports it."""
     source = FakeSource(installation.archives, openev=[(JUNK_RELEASE, junk_release_zip())])
 
     first = await installation.sync(source).run([CASELIST])
 
-    assert kept(first) == {sha256_label(junk_release_zip()): "not_imported"}
+    assert kept(first) == {}
+    assert [(one["name"], one["reason"]) for one in retention_of(first)["removed"]] == [  # type: ignore[index,union-attr]
+        (sha256_label(junk_release_zip()), "junk_only")
+    ]
 
     again = await installation.sync(source).run([CASELIST])
 
     assert source.openev_fetches == [JUNK_RELEASE.openev_id]
     assert again.snapshots_imported == (), "the junk-only release was imported again"
-    assert kept(again) == {sha256_label(junk_release_zip()): "not_imported"}
+    assert installation.inbox_names() == set()
 
 
 async def test_retention_keeps_a_camp_download_the_delivery_record_does_not_cover(

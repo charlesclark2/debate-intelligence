@@ -63,7 +63,9 @@ spec:
         caselist revision with what the path entry does, and the data-use policy's `What
         removal does` names the hold.
 status:
-  phase: Pending
+  # Set by the PM, 2026-10-13, with ac5's policy clause written as data-use policy 1.8 in this
+  # branch.
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

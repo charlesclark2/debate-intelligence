@@ -61,7 +61,7 @@ v2.3's extension work.
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 40 | 40 | 216 |
-| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 74 | 51 | 411 |
+| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 74 | 52 | 411 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 17 | 0 | 179 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 13 | 0 | 108 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 14 | 0 | 96 |
@@ -182,7 +182,7 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [caselist status reports manifest and aggregate versions older than a removal](plan_specs/v1/e30-caselist-ingestion/t15-manifest-and-aggregate-residue.yaml) `v1-e30-t15-manifest-and-aggregate-residue` | Succeeded | 1 | 3.0 |
 | [The removal plan names holders correctly in every case](plan_specs/v1/e30-caselist-ingestion/t16-removal-output-names-holders.yaml) `v1-e30-t16-removal-output-names-holders` | Succeeded | 1 | 2.0 |
 | [No text calls a weekly archive cumulative, and import ordering is checked against the window model](plan_specs/v1/e30-caselist-ingestion/t17-weekly-window-wording-and-ordering.yaml) `v1-e30-t17-weekly-window-wording-and-ordering` | Succeeded | 1 | 3.0 |
-| [A weekly imported late re-measures the weeks after it, and a re-import needs no flag](plan_specs/v1/e30-caselist-ingestion/t18-late-imports-re-measure-later-manifests.yaml) `v1-e30-t18-late-imports-re-measure-later-manifests` | Pending | 1 | 4.0 |
+| [A weekly imported late re-measures the weeks after it, and a re-import needs no flag](plan_specs/v1/e30-caselist-ingestion/t18-late-imports-re-measure-later-manifests.yaml) `v1-e30-t18-late-imports-re-measure-later-manifests` | Succeeded | 1 | 4.0 |
 | [Removal residue the status reports can always be cleared, and says whose it is](plan_specs/v1/e30-caselist-ingestion/t19-residue-clearing-gaps.yaml) `v1-e30-t19-residue-clearing-gaps` | Pending | 4 | 3.0 |
 | [Loose ends in what a removal plan prints and how it decides what to drop](plan_specs/v1/e30-caselist-ingestion/t20-removal-output-loose-ends.yaml) `v1-e30-t20-removal-output-loose-ends` | Pending | 1 | 2.0 |
 | [Loose ends of the removed-path hold: status, the publisher and the inbox](plan_specs/v1/e30-caselist-ingestion/t21-held-path-loose-ends.yaml) `v1-e30-t21-held-path-loose-ends` | Pending | 1 | 3.0 |

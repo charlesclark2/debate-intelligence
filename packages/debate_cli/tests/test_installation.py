@@ -212,7 +212,7 @@ def test_the_check_exits_zero_and_reports_json_for_this_checkout(capsys: pytest.
     report = json.loads(capsys.readouterr().out)
     assert report["complete"] is True
     assert report["covered"] is True
-    assert len(report["imported"]) == len(report["wired"]) == 10
+    assert len(report["imported"]) == len(report["wired"]) == 12
 
 
 # ---------------------------------------------------------------------------------------------

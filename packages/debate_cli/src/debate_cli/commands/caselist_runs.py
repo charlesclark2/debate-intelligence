@@ -6,8 +6,9 @@
     debate-research caselist runs --last 20
     debate-research caselist runs --remote     # from reports/sync-runs/ in the evidence bucket
 
-One row per run: its id, when it started, its outcome, the archives it downloaded, the archives
-the daily download cap deferred, the publish work it left pending, and what its parse stage did.
+One row per run: its id, when it started, its outcome, the codes it failed on and its verdict, the
+archives it downloaded, the archives the daily download cap deferred, the publish work it left
+pending, and what its parse stage did.
 The records and the rules for reading them are :mod:`debate_core.application.sync_runs`
 (`v1-e34-t03-sync-monitoring`); this is the rendering.
 
@@ -33,6 +34,19 @@ records; they are in the run's **details**, kept beside the record under the sam
 
 `--json` gives each run its record's own fields, as before, and a `details` object beside them, or
 `null`: the stages' error codes and hints, the codes the exit status was decided from, and `parse`.
+
+## Codes and verdict (`v1-e34-t23`)
+
+Two columns after the outcome, from the same details:
+
+* `Failed on`: the codes the run's exit status was decided from, or `none` for a run that did not
+  fail on any;
+* `Verdict`: `retry` when every one of them is a failure a retry may cure, the command's own rule
+  for exit `3` (:func:`~debate_cli.exit_codes.codes_exit_as_a_retrieval_failure`), which the run's
+  notification asks too; `person` for any other failure; `none` when there were none.
+
+Both say `not recorded` for a run with no details. `--json` gives the verdict as `verdict`, `retry`
+or `person`, or `null` when there is none or no details.
 """
 
 from __future__ import annotations
@@ -44,6 +58,7 @@ from typing import Annotated, Final, cast
 import typer
 
 from debate_cli.context import cli_context, command_name
+from debate_cli.exit_codes import codes_exit_as_a_retrieval_failure
 from debate_cli.output import JsonValue, TableSpec
 from debate_core.application.sync_runs import RecordedRun, SyncRunHistory, SyncRunRecord
 
@@ -83,19 +98,22 @@ def runs(
                 "Run id",
                 "Started (UTC)",
                 "Outcome",
+                "Failed on",
+                "Verdict",
                 "Downloaded",
                 "Deferred by cap",
                 "Pending publish",
                 "Parse stage",
             ),
-            rows=[[*_row(run.record), _parse_stage(run)] for run in recorded],
+            rows=[_row(run) for run in recorded],
             title=f"caselist pull runs ({settings.environment.value}, {source}, last {last})",
             caption=_caption(history, days, overdue) + _parse_sentence(records[0] if records else None),
         ),
     )
 
 
-def _row(record: SyncRunRecord) -> list[str]:
+def _row(run: RecordedRun) -> list[str]:
+    record = run.record
     downloaded = (
         f"{record.archives_downloaded} of {record.archives_wanted}"
         if record.archives_deferred
@@ -105,23 +123,47 @@ def _row(record: SyncRunRecord) -> list[str]:
         record.run_id,
         record.started_at.astimezone(UTC).strftime("%Y-%m-%d %H:%M"),
         str(record.outcome) + (f" ({record.error_class})" if record.error_class else ""),
+        *_failed_on_and_verdict(run),
         downloaded,
         str(record.archives_deferred),
         str(len(record.pending_publish)),
+        _parse_stage(run),
     ]
 
 
 def _run_as_json(run: RecordedRun) -> JsonValue:
-    """One run for `--json`: the record's fields as they always were, and its details beside them."""
+    """One run for `--json`: the record's fields as they always were, its details beside them, and
+    its verdict (`v1-e34-t23`)."""
     body = cast("dict[str, JsonValue]", run.record.model_dump(mode="json"))
     body["details"] = (
         cast("JsonValue", run.details.model_dump(mode="json")) if run.details is not None else None
     )
+    body["verdict"] = _verdict(run)
     return body
 
 
-PARSE_STAGE_NOT_RECORDED: Final = "not recorded"
+NOT_RECORDED: Final = "not recorded"
 """A run with no details beside its record: a build before `v1-e34-t19` recorded it."""
+
+NONE: Final = "none"
+
+
+def _verdict(run: RecordedRun) -> str | None:
+    """`retry` or `person` for a run that failed, by the command's rule for exit `3`; else `None`."""
+    if run.details is None or not run.details.failure_codes:
+        return None
+    return "retry" if codes_exit_as_a_retrieval_failure(run.details.failure_codes) else "person"
+
+
+def _failed_on_and_verdict(run: RecordedRun) -> tuple[str, str]:
+    """The table's two cells: the codes the exit was decided from, and the verdict on them."""
+    if run.details is None:
+        return NOT_RECORDED, NOT_RECORDED
+    codes = run.details.failure_codes
+    return (", ".join(codes) or NONE), (_verdict(run) or NONE)
+
+
+PARSE_STAGE_NOT_RECORDED: Final = NOT_RECORDED
 
 PARSE_STAGE_DID_NOT_RUN: Final = "did not run"
 """A run whose parse stage parsed nothing: turned off, or nothing was imported."""

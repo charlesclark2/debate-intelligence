@@ -463,7 +463,12 @@ debate-research caselist runs --last 5 --remote
 Its caption says how long ago the newest run started, and says the schedule may have stopped when
 that is more than eight days — the one failure that leaves no record and sends no notification.
 Its last column, `Parse stage`, is each run's parse counts
-([Reading what it did](#reading-what-it-did)).
+([Reading what it did](#reading-what-it-did)). After the outcome, `Failed on` is the codes the
+run's exit code was decided from and `Verdict` is `retry` when every one is a failure a later run
+may not meet (exit `3`) and `person` otherwise, the same rule as the banner's
+([What the exit code says](#what-the-exit-code-says), `v1-e34-t23`). Both say `none` for a run that
+did not fail, and `not recorded` for a run a build before `v1-e34-t19` recorded. In `--json` the
+verdict is `verdict`.
 
 **The 06:00 run and the AWS session.** An SSO session lasts hours, not a week, so the Wednesday
 06:00 run usually finds it expired. That is not a failure: the run downloads and imports
@@ -484,7 +489,7 @@ A run is written down in two places (`v1-e34-t19`):
 | | On this Mac | In the bucket | Holds |
 |---|---|---|---|
 | The **record** | `<data_dir>/caselist-sync-runs.jsonl` | `reports/sync-runs/<yyyy>/<run-id>.json` | What it always has: the outcome, the counts, each stage's outcome and reason |
-| The run's **details** | `<data_dir>/caselist-sync-run-details.jsonl` | `reports/sync-run-details/<yyyy>/<run-id>.json` | Each failed stage's `error_codes` and `hint`, a pending stage's `earlier_findings`, the codes the exit code was decided from, and the parse stage's nine counts |
+| The run's **details** | `<data_dir>/caselist-sync-run-details.jsonl` | `reports/sync-run-details/<yyyy>/<run-id>.json` | Each failed stage's `error_codes` and `hint`, a pending stage's `earlier_findings`, the report stage's `drift` (each snapshot found out of sync, with what differs), the codes the exit code was decided from, the parse stage's nine counts, and `held_by_request`, the uploads a removal's hold refused (`v1-e34-t23`) |
 
 They are two files because the record cannot change. Every build refuses a record with a field
 it does not know, and the agent goes on running the build it was installed with: a record with
@@ -527,7 +532,8 @@ One JSON object per run on stdout. The fields to read first:
 | `inbox_retention` | What left the inbox and the bytes freed, and what stayed and why. See [The download inbox](#the-download-inbox) |
 | `full_archive` | What the complete-archive rotation decided and why (`reason`), what the weeklies left of the day's allowance, and for a complete archive imported, its `bytes` and its `withdrawn` and `superseded` counts. See [The complete archive](#the-complete-archive) |
 | `openev_selections[]` | Each camp file OpenEv listed: its `openev_id`, the run's `decision`, and `inbox_file`, the first twelve hex digits of the download's sha256 once the run had its bytes (the name `inbox_retention` gives the same file) |
-| `stages[]` | One entry per stage, each with the sentence saying why it ended that way (`reason`). A failed stage also carries `error_codes`, the code of each failure behind it, and, when a store refused it, `hint`, the fix that applies (`v1-e34-t13`). A `pending` stage carries `earlier_findings`, the codes of what it had already found when the session expired (`v1-e34-t19`); they never change the exit code. See [What the exit code says](#what-the-exit-code-says) |
+| `stages[]` | One entry per stage, each with the sentence saying why it ended that way (`reason`). A failed stage also carries `error_codes`, the code of each failure behind it, and, when a store refused it, `hint`, the fix that applies (`v1-e34-t13`). A `pending` stage carries `earlier_findings`, the codes of what it had already found when the session expired (`v1-e34-t19`); they never change the exit code. The report stage's `drift` names each snapshot it found out of sync, failed or before an expiry, with its `kinds`: `manifest`, `source`, `missing`, `suppressed_rows` (`v1-e34-t23`). See [What the exit code says](#what-the-exit-code-says) |
+| `held_by_request` | Uploads the imports refused because a removal holds their path, by the removal's request id (`v1-e34-t23`). `{}` when none was |
 | `run_record`, `run_details` | What the run log keeps of this run, and what is kept beside it. See [The record, and the details beside it](#the-record-and-the-details-beside-it) |
 | `schema_version` | `5` since `v1-e34-t17`, which replaced `cards_parsed` and `parse_failures` (always `0`; no stage filled them) with `parse`. `4` since `v1-e34-t13`, which added `error_codes` and `hint` to every stage; a summary written before that says `3` and has neither. `v1-e34-t19` added `earlier_findings` to every stage and left the version at `5`, because nothing is decided from it. Nothing reads a summary back; `caselist runs` reads the run log, which builds of every kind read and write alike |
 

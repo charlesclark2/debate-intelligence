@@ -181,5 +181,8 @@ def test_a_pull_is_listed_by_caselist_runs_locally_and_from_the_bucket(
     rendered = installed_cli.run("caselist", "runs", env={"COLUMNS": "200"})
     table = " ".join(rendered.stdout.split())
     assert "Parse stage" in table
+    # `v1-e34-t23`: the codes the run failed on and its verdict, from the same details: none here.
+    assert "Failed on" in table and "Verdict" in table
+    assert f"{run_id} │" in table and "│ completed │ none │ none │" in table
     assert f"{counted['caselists']} caselist(s), {counted['full_parses']} in full" in table
     assert f"{counted['cards']} card(s)" in table

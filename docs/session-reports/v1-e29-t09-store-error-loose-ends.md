@@ -355,9 +355,35 @@ New:
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-16
 
 **Notes:**
+
+Accepted, and the phase is set `Succeeded` in this branch. The one change asked for is made as
+asked. Everything accepted in the first review stands.
+
+**The sweep is now housekeeping, and only the proof can stop a takedown.** A refused delete of an
+earlier probe is returned, counted and reported, and the takedown goes ahead. A refused delete of
+the preflight's own probe still fails it, still names the probe, and now has a control of its own.
+
+**Deleting one version per call is the right detail.** The adapter stops a batch at its first
+refused delete, so a batch call would have left every probe after the refused one too. Per-version
+deletes mean exactly the refused ones are left. The CLI test against moto proves the whole route:
+exit 0, the count and key in the JSON, the line in the text, and only that probe left.
+
+**Keeping the count out of the removal log entry is right.** The entry has no free-text field, and
+adding one would break the rule that every installed build reads the log's keys
+(`test_suppression_list_is_read_by_every_build.py`). The command's output and JSON carry it, and
+the runbook says what to do with it.
+
+**Red, then green:** the PM's case and its un-suppress twin failed for the reason under review, as
+`TakedownPreflightFailed` and, through the CLI, exit 3 with nothing removed. The four controls
+passed before and after.
+
+The Summary and Decision 2 above still describe the first version. The report's earlier sections
+are not edited, and "Changes after PM review" says Decision 2 is replaced, which is the record.
+
+**Operator follow-up:** the optional `doctor --evidence-profiles` run, recorded when it comes.

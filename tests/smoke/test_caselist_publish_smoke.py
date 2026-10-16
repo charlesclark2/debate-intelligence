@@ -29,6 +29,7 @@ from tests.fixtures.caselist.build_synthetic_archives import (
     build_snapshot_zips,
 )
 from tests.fixtures.caselist.publish_expectations import expected_publish, expected_source_key
+from tests.fixtures.model_routing import EXAMPLE_ROUTING_FILE
 from tests.smoke.installed_build import NETWORK_LOG, InstalledCli
 from tests.smoke.stand_ins.s3 import MOTO_TEST_CREDENTIALS, S3StandIn
 
@@ -57,7 +58,7 @@ def installation(installed_cli: InstalledCli, s3_stand_in: S3StandIn, tmp_path: 
     (profiles / "dev.toml").write_text(
         f'[storage]\ndata_dir = "{tmp_path / "data"}"\n'
         f'[storage.s3]\nbucket = "{BUCKET}"\nregion = "us-east-1"\naws_profile = "{AWS_PROFILE_NAME}"\n'
-        f'[models]\nrouting_file = "{tmp_path / "routing.yaml"}"\nbudget_usd_daily = 1.0\n',
+        f'[models]\nrouting_file = "{EXAMPLE_ROUTING_FILE}"\nbudget_usd_daily = 1.0\n',
         encoding="utf-8",
     )
     installed_cli.configure(
@@ -136,7 +137,7 @@ def test_prod_sends_the_evidence_store_to_aws_whatever_endpoint_botocore_is_give
     """
     (installation / "profiles" / "prod.toml").write_text(
         f'[storage.s3]\nbucket = "{BUCKET}"\nregion = "us-east-1"\naws_profile = "{AWS_PROFILE_NAME}"\n'
-        f'[models]\nrouting_file = "{tmp_path / "routing.yaml"}"\nbudget_usd_daily = 1.0\n',
+        f'[models]\nrouting_file = "{EXAMPLE_ROUTING_FILE}"\nbudget_usd_daily = 1.0\n',
         encoding="utf-8",
     )
     provoked = tmp_path / "provoked.log"

@@ -30,7 +30,7 @@ from typer.core import TyperGroup
 from debate_cli import DISTRIBUTION_NAME
 from debate_cli.build_info import current_build_info, settings_loader
 from debate_cli.commands import register_commands
-from debate_cli.container import ServiceContainer
+from debate_cli.container import ServiceContainer, validating_routing
 from debate_cli.context import CliContext, command_name
 from debate_cli.exit_codes import ExitCode
 from debate_cli.installation import incomplete_installation_failure
@@ -183,8 +183,11 @@ def root_callback(
     output = CliOutput(OutputMode.JSON if json_output else OutputMode.RICH, verbose=verbose)
     # The loader is passed, not called: the container runs it the first time a command asks for
     # settings, so `--help` and `--version` never read a profile file (v1-e02-t05). It knows this
-    # build's channel and bundled configuration (v1-e01-t09, debate_cli.build_info).
-    ctx.obj = CliContext(output=output, services=ServiceContainer(settings_loader=settings_loader()))
+    # build's channel and bundled configuration (v1-e01-t09, debate_cli.build_info), and loads and
+    # validates the routing file the settings name (v1-e05-t03).
+    ctx.obj = CliContext(
+        output=output, services=ServiceContainer(settings_loader=validating_routing(settings_loader()))
+    )
 
     if show_version:
         # Handled here rather than in an option callback so that `--json --version` gets the

@@ -1,4 +1,5 @@
-"""Workspace-wide test setup: the repository root on `sys.path`, and terminal-independent rendering.
+"""Workspace-wide test setup: the repository root on `sys.path`, terminal-independent rendering, and
+the offline model router every package's tests share.
 
 The repository root goes on `sys.path` so that `tests/fixtures/` is importable from any package.
 
@@ -24,6 +25,10 @@ from pathlib import Path
 
 import pytest
 import typer.rich_utils
+
+from debate_core.application.ports.model_router import ModelRouter
+from debate_core.integrations.models.fake_router import DEFAULT_FIXTURE_DIRECTORY, FakeModelRouter
+from debate_core.testing import FixedClock
 
 REPOSITORY_ROOT = Path(__file__).parent
 
@@ -71,3 +76,22 @@ def plain_fixed_width_rendering(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(typer.rich_utils, "FORCE_TERMINAL", False)
     monkeypatch.setattr(typer.rich_utils, "COLOR_SYSTEM", None)
     monkeypatch.setattr(typer.rich_utils, "MAX_WIDTH", RENDER_WIDTH)
+
+
+# --------------------------------------------------------------------------------------------
+# The model router: the fixture-keyed fake, so no test anywhere reaches a model
+# --------------------------------------------------------------------------------------------
+#
+# v1-e05-t03-fake-replay-models. A test in any package that needs a `ModelRouter` asks for
+# `model_router` and gets the fake over the committed fixtures, tests/fixtures/model_outputs/,
+# dated by a fixed clock so its output is the same on every run. A call with no fixture fails with
+# MissingFixtureError naming the prompt and the key; it never reaches a model. A test that needs
+# scripted answers builds `debate_core.testing.ScriptedModelRouter`, and one that needs cassettes
+# builds a replay router; neither changes this default. The `test` settings profile selects the
+# same router through `debate_core.integrations.models.factory.build_model_router`.
+
+
+@pytest.fixture
+def model_router() -> ModelRouter:
+    """The offline, deterministic model router: the fake over the committed fixtures."""
+    return FakeModelRouter(REPOSITORY_ROOT / DEFAULT_FIXTURE_DIRECTORY, clock=FixedClock())

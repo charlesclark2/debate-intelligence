@@ -68,6 +68,7 @@ from collections.abc import Callable, Iterator
 from pathlib import Path
 
 import pytest
+from tests.fixtures.model_routing import EXAMPLE_ROUTING_FILE
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 LAUNCHD_DIRECTORY = REPOSITORY_ROOT / "ops" / "launchd"
@@ -908,7 +909,7 @@ def an_installation_whose_profile_setting_names(profile: str, directory: Path) -
         f'[storage.s3]\nbucket = "debate-dev-evidence-not-a-bucket"\nregion = "us-east-1"\n'
         f'aws_profile = "{profile}"\n'
         '[caselist]\nnotifier = "none"\n'
-        f'[models]\nrouting_file = "{directory / "routing.yaml"}"\nbudget_usd_daily = 1.0\n',
+        f'[models]\nrouting_file = "{EXAMPLE_ROUTING_FILE}"\nbudget_usd_daily = 1.0\n',
         encoding="utf-8",
     )
     return {

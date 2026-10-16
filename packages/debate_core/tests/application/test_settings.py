@@ -480,6 +480,21 @@ def test_a_relative_routing_file_is_anchored_to_the_repository(profiles: Path) -
     assert settings.models.routing_file.name == "routing-dev.yaml"
 
 
+def test_run_from_outside_any_checkout_the_routing_file_is_this_checkouts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The smoke tier and the launchd installer run a checkout's code from a scratch directory, on
+    the built-in profile. Its relative routing file still names this checkout's committed file, which
+    the CLI now loads at startup (v1-e05-t03-fake-replay-models ac6)."""
+    monkeypatch.chdir(tmp_path)
+
+    settings = load_settings(environment="dev", env_file=tmp_path / "no.env")
+
+    assert REPOSITORY_ROOT is not None
+    assert settings.models.routing_file == REPOSITORY_ROOT / "config" / "model_routing.dev.yaml"
+    assert settings.field_sources["models.routing_file"] == "built-in:dev"
+
+
 def test_settings_built_by_hand_report_every_source_as_default(tmp_path: Path) -> None:
     settings = Settings(
         storage=StorageSettings(data_dir=tmp_path),

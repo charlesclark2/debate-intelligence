@@ -105,6 +105,7 @@ from pydantic_settings import (
 
 from debate_core.application.errors import DomainError
 from debate_core.domain.caselist import Event
+from debate_core.domain.model_contracts import ModelProvider
 from debate_core.evidence.near_duplicates import NearDuplicateThresholds
 
 __all__ = [
@@ -865,9 +866,19 @@ class ModelSettings(SettingsGroup):
     """What the ModelRouter is allowed to do and which file tells it where to route.
 
     The routing file itself is validated by :mod:`debate_core.integrations.models.routing_policy`; this
-    group only says which file to read and what the day may cost.
+    group only says which file to read, what the day may cost, and whether the router is a real
+    provider or the offline fake.
     """
 
+    provider: ModelProvider = Field(
+        default=ModelProvider.BEDROCK,
+        description=(
+            "`fake` answers every call from committed fixtures and never reaches a model; `bedrock` "
+            "routes through the routing file, and then whether a call is recorded, replayed or made "
+            "live is the --model-mode option or DEBATE_MODEL_MODE, never a setting "
+            "(debate_core.integrations.models.factory, v1-e05-t03-fake-replay-models)."
+        ),
+    )
     routing_file: Path = Field(description="YAML file mapping each model task class to a route.")
     budget_usd_daily: float = Field(
         default=0.0,
@@ -1065,6 +1076,7 @@ def _builtin_profiles() -> dict[Environment, dict[str, Any]]:
             "storage": {"data_dir": _temporary_data_dir()},
             "providers": {"enabled": ()},
             "models": {
+                "provider": ModelProvider.FAKE,
                 "routing_file": Path("config/model_routing.example.yaml"),
                 "budget_usd_daily": 0.0,
             },
@@ -1259,7 +1271,7 @@ def load_settings(
     for label, values in layers:
         _merge_into(merged, values)
         _record_sources(sources, values, label)
-    _anchor_relative_paths(merged, config_root)
+    _anchor_relative_paths(merged, config_root if config_root is not None else _source_checkout())
 
     try:
         settings = Settings(**merged)
@@ -1309,14 +1321,22 @@ def _refused_setting(field: str, sources: Mapping[str, str], refusal: str, reaso
     )
 
 
+def _source_checkout() -> Path | None:
+    """The checkout this module was imported from, when it runs from source rather than a wheel."""
+    return find_repository_root(Path(__file__).resolve().parent)
+
+
 def _anchor_relative_paths(merged: dict[str, Any], config_root: Path | None) -> None:
     """Make a relative `models.routing_file` mean "relative to the configuration", not to the shell.
 
     `config/model_routing.dev.yaml` in a profile file is written relative to the checkout it is
     committed in, so it has to keep meaning that from whatever directory the command was run in.
     `config_root` is that checkout, or the configuration an installed build carries in its wheel,
-    which is laid out the same way. With neither, the value is left alone and is resolved against
-    the working directory.
+    which is laid out the same way. A source checkout's code run from outside any checkout, as
+    the smoke tier and the launchd installer run it, passes the checkout it was imported from
+    (`v1-e05-t03-fake-replay-models`, where the CLI started validating the routing file at
+    startup). With none of these, the value is left alone and is resolved against the working
+    directory.
     """
     if config_root is None:
         return

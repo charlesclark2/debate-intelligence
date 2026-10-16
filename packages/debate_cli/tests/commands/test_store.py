@@ -27,6 +27,7 @@ from typing import TYPE_CHECKING, Any
 import boto3
 import pytest
 from moto import mock_aws
+from tests.fixtures.model_routing import EXAMPLE_ROUTING_FILE
 from typer.testing import CliRunner, Result
 
 from debate_cli.app import create_app
@@ -105,12 +106,12 @@ def isolated_environment(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Ite
             f'[storage]\ndata_dir = "{tmp_path / environment}"\n'
             f'[storage.s3]\nbucket = "{bucket}"\nregion = "us-east-1"\n'
             f'aws_profile = "{profile}"\n'
-            f'[models]\nrouting_file = "{tmp_path / "routing.yaml"}"\nbudget_usd_daily = 1.0\n',
+            f'[models]\nrouting_file = "{EXAMPLE_ROUTING_FILE}"\nbudget_usd_daily = 1.0\n',
             encoding="utf-8",
         )
     (profiles / "test.toml").write_text(
         f'allow_network = false\n[providers]\nenabled = []\n[storage]\ndata_dir = "{tmp_path / "test"}"\n'
-        f'[models]\nrouting_file = "{tmp_path / "routing.yaml"}"\nbudget_usd_daily = 0.0\n',
+        f'[models]\nrouting_file = "{EXAMPLE_ROUTING_FILE}"\nbudget_usd_daily = 0.0\n',
         encoding="utf-8",
     )
     monkeypatch.setenv("DEBATE_PROFILE_DIR", str(profiles))

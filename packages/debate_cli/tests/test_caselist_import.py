@@ -27,6 +27,7 @@ from tests.fixtures.caselist.build_synthetic_archives import (
     build_snapshot_directories,
     build_snapshot_zips,
 )
+from tests.fixtures.model_routing import EXAMPLE_ROUTING_FILE
 from typer.testing import CliRunner, Result
 
 from debate_cli.app import create_app
@@ -52,7 +53,7 @@ def isolated_environment(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Ite
     profiles.mkdir()
     (profiles / "dev.toml").write_text(
         f'[storage]\ndata_dir = "{tmp_path / "data"}"\n'
-        f'[models]\nrouting_file = "{tmp_path / "routing.yaml"}"\nbudget_usd_daily = 1.0\n',
+        f'[models]\nrouting_file = "{EXAMPLE_ROUTING_FILE}"\nbudget_usd_daily = 1.0\n',
         encoding="utf-8",
     )
     monkeypatch.setenv("DEBATE_PROFILE_DIR", str(profiles))
@@ -180,7 +181,7 @@ def test_a_directory_imports_exactly_as_the_zip_does(
     # A second data directory, so the two runs do not see each other.
     (tmp_path / "profiles" / "dev.toml").write_text(
         f'[storage]\ndata_dir = "{tmp_path / "second"}"\n'
-        f'[models]\nrouting_file = "{tmp_path / "routing.yaml"}"\nbudget_usd_daily = 1.0\n',
+        f'[models]\nrouting_file = "{EXAMPLE_ROUTING_FILE}"\nbudget_usd_daily = 1.0\n',
         encoding="utf-8",
     )
     from_directory = envelope(import_week(directories[FIRST_WEEK], FIRST_WEEK, json_output=True))["data"]

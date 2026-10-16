@@ -36,6 +36,7 @@ from tests.fixtures.caselist.build_synthetic_archives import (
     build_snapshot_zips,
 )
 from tests.fixtures.identity_center_roles import EVERYDAY_ROLE, TAKEDOWN_ROLE, sign_in
+from tests.fixtures.model_routing import EXAMPLE_ROUTING_FILE
 from typer.testing import CliRunner, Result
 
 from debate_cli.app import create_app
@@ -98,7 +99,7 @@ def installation(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[Pa
         f'[storage]\ndata_dir = "{tmp_path / "data"}"\n'
         f'[storage.s3]\nbucket = "{BUCKET}"\nregion = "us-east-1"\naws_profile = "{EVERYDAY_PROFILE}"\n'
         f'[caselist]\nnotifier = "none"\n'
-        f'[models]\nrouting_file = "{tmp_path / "routing.yaml"}"\nbudget_usd_daily = 1.0\n',
+        f'[models]\nrouting_file = "{EXAMPLE_ROUTING_FILE}"\nbudget_usd_daily = 1.0\n',
         encoding="utf-8",
     )
     monkeypatch.setenv("DEBATE_PROFILE_DIR", str(profiles))

@@ -31,6 +31,7 @@ import respx
 from moto import mock_aws
 from tests.fixtures.caselist.build_synthetic_archives import SYNTHETIC_CASELIST
 from tests.fixtures.identity_center_roles import EVERYDAY_ROLE, TAKEDOWN_ROLE, sign_in
+from tests.fixtures.model_routing import EXAMPLE_ROUTING_FILE
 from tests.fixtures.openev.build_synthetic_openev import DOCUMENT_BODIES
 from typer.testing import CliRunner, Result
 
@@ -130,7 +131,7 @@ def installation(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[Pa
 
     profiles = tmp_path / "profiles"
     profiles.mkdir()
-    models = f'[models]\nrouting_file = "{tmp_path / "routing.yaml"}"\nbudget_usd_daily = 1.0\n'
+    models = f'[models]\nrouting_file = "{EXAMPLE_ROUTING_FILE}"\nbudget_usd_daily = 1.0\n'
     (profiles / "dev.toml").write_text(
         "allow_network = true\n"
         f'[storage]\ndata_dir = "{tmp_path / "dev"}"\n'

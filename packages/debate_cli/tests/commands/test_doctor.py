@@ -70,6 +70,7 @@ WIRED_INTEGRATIONS = [
     "debate_core.integrations.local.parsed_store",
     "debate_core.integrations.local.sqlite_caselist_repository",
     "debate_core.integrations.local.suppression_list",
+    "debate_core.integrations.models.routing_policy",
     "debate_core.integrations.opencaselist",
     "debate_core.integrations.s3",
 ]
@@ -185,7 +186,7 @@ def test_an_integration_that_does_not_import_fails_doctor_naming_each_one(
     assert error["exit_code"] == ExitCode.DOMAIN_FAILURE
     for module in s3_and_opencaselist_do_not_import:
         assert module in error["message"]
-    assert "2 of the 9 integrations" in error["message"]
+    assert "2 of the 10 integrations" in error["message"]
     assert error["details"]["integrations_import"] is False
     assert error["details"]["integrations_failed"] == {
         OPENCASELIST: f"ModuleNotFoundError: no module named {OPENCASELIST!r}",

@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from tests.fixtures.model_routing import EXAMPLE_ROUTING_FILE
 from tests.fixtures.openev.build_synthetic_openev import CAMP_ALIASES_PATH
 from typer.testing import CliRunner, Result
 
@@ -45,7 +46,7 @@ def isolated_environment(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Ite
     profiles.mkdir()
     (profiles / "dev.toml").write_text(
         f'[storage]\ndata_dir = "{tmp_path / "data"}"\n'
-        f'[models]\nrouting_file = "{tmp_path / "routing.yaml"}"\nbudget_usd_daily = 1.0\n',
+        f'[models]\nrouting_file = "{EXAMPLE_ROUTING_FILE}"\nbudget_usd_daily = 1.0\n',
         encoding="utf-8",
     )
     monkeypatch.setenv("DEBATE_PROFILE_DIR", str(profiles))

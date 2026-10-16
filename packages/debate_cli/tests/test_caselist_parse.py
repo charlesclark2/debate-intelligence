@@ -17,6 +17,7 @@ import boto3
 import pytest
 from moto import mock_aws
 from tests.fixtures.caselist.publish_expectations import FICTIONAL_IDENTIFIERS
+from tests.fixtures.model_routing import EXAMPLE_ROUTING_FILE
 from tests.fixtures.parse_pipeline.build_parse_world import (
     CASELIST,
     EXPECTED,
@@ -86,12 +87,12 @@ def installation(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[Pa
             f'[storage]\ndata_dir = "{data_dir}"\n'
             f'[storage.s3]\nbucket = "{bucket}"\nregion = "us-east-1"\n'
             f'aws_profile = "{PROFILES[environment]}"\n'
-            f'[models]\nrouting_file = "{tmp_path / "routing.yaml"}"\nbudget_usd_daily = 1.0\n',
+            f'[models]\nrouting_file = "{EXAMPLE_ROUTING_FILE}"\nbudget_usd_daily = 1.0\n',
             encoding="utf-8",
         )
     (profiles / "test.toml").write_text(
         f'allow_network = false\n[providers]\nenabled = []\n[storage]\ndata_dir = "{data_dir}"\n'
-        f'[models]\nrouting_file = "{tmp_path / "routing.yaml"}"\nbudget_usd_daily = 0.0\n',
+        f'[models]\nrouting_file = "{EXAMPLE_ROUTING_FILE}"\nbudget_usd_daily = 0.0\n',
         encoding="utf-8",
     )
     monkeypatch.setenv("DEBATE_PROFILE_DIR", str(profiles))

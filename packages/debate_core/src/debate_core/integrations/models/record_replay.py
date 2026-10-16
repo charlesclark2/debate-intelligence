@@ -82,6 +82,7 @@ __all__ = [
     "CassetteDirectory",
     "RecordReplayModelRouter",
     "RecordedCall",
+    "refuse_recording_in_ci",
 ]
 
 DEFAULT_CASSETTE_DIRECTORY: Final = Path("tests/fixtures/model_cassettes")
@@ -240,13 +241,8 @@ class RecordReplayModelRouter:
         Raises :class:`RecordingRefusedError` for record mode when `CI` is true, and
         `ConfigurationError` for record or live mode with no router to call.
         """
-        if mode is ModelMode.RECORD and running_in_ci(environ):
-            raise RecordingRefusedError(
-                f"record mode is refused when {CI_VARIABLE}=true: CI replays cassettes and never "
-                "records them. Record on a developer machine, with credentials, and commit the cassettes.",
-                field="model_mode",
-                source=f"env:{CI_VARIABLE}",
-            )
+        if mode is ModelMode.RECORD:
+            refuse_recording_in_ci(environ)
         if mode is not ModelMode.REPLAY and delegate is None:
             raise ConfigurationError(
                 f"{mode.value} mode calls a real model router, and none was given", field="model_mode"
@@ -347,6 +343,17 @@ class RecordReplayModelRouter:
                 recorded.path, f"it does not rank each of the {len(documents)} documents once"
             )
         return replayed
+
+
+def refuse_recording_in_ci(environ: Mapping[str, str] | None = None) -> None:
+    """Raise :class:`RecordingRefusedError` when `CI` is true in `environ` (the process environment)."""
+    if running_in_ci(environ):
+        raise RecordingRefusedError(
+            f"record mode is refused when {CI_VARIABLE}=true: CI replays cassettes and never "
+            "records them. Record on a developer machine, with credentials, and commit the cassettes.",
+            field="model_mode",
+            source=f"env:{CI_VARIABLE}",
+        )
 
 
 def _replayed_route(recorded: RecordedCall, route: object) -> ResolvedRoute:

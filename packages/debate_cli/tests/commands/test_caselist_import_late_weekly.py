@@ -23,6 +23,7 @@ from tests.fixtures.caselist.build_window_order_archives import (
     THIRD_WEEK,
     build_weekly_zips,
 )
+from tests.fixtures.model_routing import EXAMPLE_ROUTING_FILE
 from typer.testing import CliRunner, Result
 
 from debate_cli.app import create_app
@@ -52,7 +53,7 @@ class Store:
         self.profiles.mkdir(parents=True)
         (self.profiles / "dev.toml").write_text(
             f'[storage]\ndata_dir = "{self.data_dir}"\n'
-            f'[models]\nrouting_file = "{root / "routing.yaml"}"\nbudget_usd_daily = 1.0\n',
+            f'[models]\nrouting_file = "{EXAMPLE_ROUTING_FILE}"\nbudget_usd_daily = 1.0\n',
             encoding="utf-8",
         )
         self._monkeypatch = monkeypatch

@@ -132,14 +132,24 @@ async def digests_in_earlier_manifests(
     withdrawn and superseded counts
     (:func:`~debate_core.application.caselist.withdrawals.count_withdrawals`), which read every
     earlier snapshot, weekly and complete alike.
+
+    "Before" compares dates, a complete archive's included, so `full_archives=False` alone is what
+    keeps complete archives out. Until `v1-e30-t18` it compared snapshot names as strings, and
+    `full/<date>` sorts after every date, so the comparison kept them out as well and a mutation
+    run could not tell the flag from its absence (`v1-e30-t17`).
     """
-    before = snapshot.isoformat()
     return frozenset(
         source.sha256
         for held in await read_local_snapshots(local, caselist, full_archives=False)
-        if held.snapshot < before
+        if _date_of_snapshot(held.snapshot) < snapshot
         for source in held.sources
     )
+
+
+def _date_of_snapshot(snapshot: str) -> date:
+    """The date a snapshot is of: a weekly's own name, or a complete archive's `full/<date>`."""
+    full = full_archive_date(snapshot)
+    return full if full is not None else date.fromisoformat(snapshot)
 
 
 async def snapshots_before_full_archive(
@@ -159,7 +169,7 @@ async def snapshots_before_full_archive(
     count = 0
     for held in await read_local_snapshots(local, caselist, full_archives=True):
         full = full_archive_date(held.snapshot)
-        held_date = full if full is not None else date.fromisoformat(held.snapshot)
+        held_date = _date_of_snapshot(held.snapshot)
         if held_date >= archive_date:
             continue
         count += 1

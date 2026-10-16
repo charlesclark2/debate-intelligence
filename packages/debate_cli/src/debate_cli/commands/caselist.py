@@ -41,12 +41,22 @@ names the flag, not a guess.
 No blob, no record, no snapshot row and no manifest. It is the rehearsal an operator does first
 on a week that looks odd, and the counts it prints are the counts a real run would produce.
 
+## A weekly imported late measures the later manifests again
+
+After the manifest is written, every weekly manifest dated after it is measured again from the
+store, and the newest complete archive dated after it has its withdrawals counted again
+(:class:`~debate_core.application.caselist.later_manifests.LaterManifests`, `v1-e30-t18`). A week
+imported in date order, or imported again, rewrites none. The summary lists what was rewritten
+(`rewritten_manifests`, `complete_archive_recounted`), and `caselist publish` uploads each as a
+changed manifest. `--allow-out-of-order` is needed only for a weekly older than one already imported
+that has never been imported itself; a week already imported is imported again without it.
+
 ## Exit codes
 
 From :mod:`debate_cli.exit_codes`, and no new numbers. `0` when the import ran. `1` for the
 deterministic refusals an operator has to act on: an archive over the size ceiling, an unreadable
-path, a slug whose event cannot be inferred, or an archive older than one already imported
-without `--allow-out-of-order`. All four arrive as
+path, a slug whose event cannot be inferred, or a weekly older than one already imported and never
+imported itself, without `--allow-out-of-order`. All four arrive as
 :class:`~debate_core.application.errors.DomainError`s and are rendered by the root group.
 
 ## `caselist import-openev`
@@ -162,6 +172,7 @@ from debate_cli.exit_codes import ExitCode, exit_code_for_failure_codes
 from debate_cli.output import CommandFailure, JsonValue, TableSpec
 from debate_core.application.caselist.camp_metadata import load_camp_aliases
 from debate_core.application.caselist.import_service import Classification, ImportReport
+from debate_core.application.caselist.later_manifests import LaterManifestsRemeasured
 from debate_core.application.caselist.manifest import (
     manifest_key,
     read_manifest_lines,
@@ -256,7 +267,10 @@ def import_archive(
         bool,
         typer.Option(
             "--allow-out-of-order",
-            help="Import an archive older than one already imported for this caselist.",
+            help=(
+                "Import a weekly older than one already imported for this caselist, and never imported "
+                "itself. The later manifests are measured again with it."
+            ),
         ),
     ] = False,
 ) -> None:
@@ -285,16 +299,20 @@ def import_archive(
     )
 
     manifest = None
+    remeasured = None
     if not dry_run:
         manifest = write_manifest(
             report, cli.services.evidence_object_path(manifest_key(caselist, published))
         )
         cli.output.detail(f"wrote {manifest.name}")
+        remeasured = _run(cli.services.caselist_later_manifests().after_weekly_import(caselist, published))
+        for snapshot in remeasured.rewritten:
+            cli.output.detail(f"measured {caselist} {snapshot} again and rewrote its manifest")
 
     cli.output.success(
         command_name(ctx),
-        import_summary(report, manifest),
-        display=_summary_table(report, manifest),
+        import_summary(report, manifest, remeasured),
+        display=_summary_table(report, manifest, remeasured),
     )
 
 
@@ -1066,7 +1084,9 @@ class UnknownCaselistEvent(ConfigurationError):
 # ------------------------------------------------------------------------------------------------
 
 
-def import_summary(report: ImportReport, manifest: Path | None) -> dict[str, JsonValue]:
+def import_summary(
+    report: ImportReport, manifest: Path | None, remeasured: LaterManifestsRemeasured | None = None
+) -> dict[str, JsonValue]:
     """The `--json` envelope's `data` for `caselist import`.
 
     Written for a program first, because the scheduled weekly import (`v1-e34-t02`) reads it:
@@ -1079,7 +1099,13 @@ def import_summary(report: ImportReport, manifest: Path | None) -> dict[str, Jso
 
     `held_at_removed_paths` is `{request id: count}` for the uploads refused because a removal
     holds their path (`v1-e30-t13`): each is one of `counts["SUPPRESSED"]`, and empty when none was.
+
+    `rewritten_manifests` names the later snapshots whose manifests were measured again and
+    rewritten, weeklies in date order and then the newest complete archive, and
+    `complete_archive_recounted` is that complete archive's new withdrawal counts, or `null`
+    (`v1-e30-t18`). Both are empty under `--dry-run`, which measures nothing again. Additive keys.
     """
+    recount = remeasured.complete_archive if remeasured is not None else None
     return {
         "caselist": report.caselist,
         "snapshot": report.snapshot.isoformat(),
@@ -1099,6 +1125,17 @@ def import_summary(report: ImportReport, manifest: Path | None) -> dict[str, Jso
         "first_seen": report.first_seen,
         "warnings": report.warning_count,
         "manifest": str(manifest) if manifest is not None else None,
+        "rewritten_manifests": list(remeasured.rewritten) if remeasured is not None else [],
+        "complete_archive_recounted": (
+            {
+                "snapshot": recount.snapshot,
+                "withdrawn": recount.after.withdrawn,
+                "superseded": recount.after.superseded,
+                "earlier_snapshots": recount.after.earlier_snapshots,
+            }
+            if recount is not None
+            else None
+        ),
     }
 
 
@@ -1217,7 +1254,9 @@ def _reimport_table(report: OpenEvMetadataReimport, manifest: Path | None) -> Ta
     )
 
 
-def _summary_table(report: ImportReport, manifest: Path | None) -> TableSpec:
+def _summary_table(
+    report: ImportReport, manifest: Path | None, remeasured: LaterManifestsRemeasured | None = None
+) -> TableSpec:
     """One row per classification, then the skips: what an operator checks the week against."""
     rows = [[str(name), str(report.count(name))] for name in Classification]
     rows.append(["SKIPPED", str(sum(report.skipped.values()))])
@@ -1228,8 +1267,28 @@ def _summary_table(report: ImportReport, manifest: Path | None) -> TableSpec:
             f"{report.caselist} {report.snapshot.isoformat()} "
             f"({'dry run' if not report.applied else 'imported'})"
         ),
-        caption=_caption(report, manifest),
+        caption=_caption(report, manifest) + _remeasured_note(remeasured),
     )
+
+
+def _remeasured_note(remeasured: LaterManifestsRemeasured | None) -> str:
+    """One sentence when the later manifests were rewritten: which, and that a publish uploads them."""
+    if remeasured is None or not remeasured.rewritten:
+        return ""
+    weeklies = (
+        f" Measured again with this week and rewritten: {', '.join(remeasured.weeklies)}."
+        if remeasured.weeklies
+        else ""
+    )
+    recount = remeasured.complete_archive
+    recounted = (
+        f" The complete archive {recount.snapshot} recounted: {recount.after.withdrawn} withdrawn, "
+        f"{recount.after.superseded} superseded against {recount.after.earlier_snapshots} earlier "
+        "snapshot(s)."
+        if recount is not None
+        else ""
+    )
+    return f"{weeklies}{recounted} `caselist publish --caselist {remeasured.caselist}` uploads them."
 
 
 def _held_note(report: ImportReport) -> str:

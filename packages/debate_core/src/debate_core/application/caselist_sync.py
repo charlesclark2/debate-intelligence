@@ -462,6 +462,7 @@ from debate_core.application.caselist.evidence_listing import (
     snapshots_before_full_archive,
 )
 from debate_core.application.caselist.import_service import CaselistImportService, ImportReport
+from debate_core.application.caselist.later_manifests import CompleteArchiveRecount, LaterManifests
 from debate_core.application.caselist.manifest import (
     full_archive_manifest_key,
     manifest_key,
@@ -2025,6 +2026,9 @@ class RunSummary:
     full_archive_imports: tuple[FullArchiveImport, ...] = ()
     """The complete archives this run imported, each with its withdrawal counts (`v1-e34-t04`)."""
 
+    full_archive_recounts: tuple[CompleteArchiveRecount, ...] = ()
+    """Complete archives imported before, counted again after a weekly dated before them (`v1-e30-t18`)."""
+
     @property
     def archives_seen(self) -> int:
         return len(self.archives)
@@ -2148,6 +2152,9 @@ class RunSummary:
                 if self.full_archive is not None
                 else None
             ),
+            # Additive, like `full_archive` (`v1-e30-t18`): a complete archive imported by an earlier
+            # run and counted again by this one, which a run that planned no refresh has as well.
+            "full_archive_recounted": [one.as_json() for one in self.full_archive_recounts],
             "selections": [one.as_json() for one in self.archives],
             "openev_selections": [one.as_json() for one in self.openev],
         }
@@ -2200,6 +2207,10 @@ class _RunTally:
     inbox_retention: InboxRetention | None = None
     full_archive: FullArchivePlan | None = None
     full_archive_imports: list[FullArchiveImport] = field(default_factory=lambda: list[FullArchiveImport]())
+    full_archive_recounts: dict[tuple[str, str], CompleteArchiveRecount] = field(
+        default_factory=lambda: dict[tuple[str, str], CompleteArchiveRecount]()
+    )
+    """Each caselist's newest complete archive, counted again after an earlier-dated weekly; the last wins."""
 
     def record(self, stage: SyncStage, outcome: StageOutcome, reason: str | None = None) -> None:
         self.stages.append(StageRecord(stage=stage, outcome=outcome, reason=reason))
@@ -2354,9 +2365,15 @@ class CaselistSyncService:
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
         full_archive_rotation: FullArchiveRotation | None = None,
         read_full_archive: ArchiveReader | None = None,
+        later_manifests: LaterManifests | None = None,
     ) -> None:
         self._source = source
         self._archives = archive_importer
+        # The importer's own repository, local store and suppression list unless told otherwise, so
+        # that no pull imports a weekly without measuring the later manifests again (`v1-e30-t18`).
+        self._later_manifests = later_manifests or LaterManifests(
+            caselists=archive_importer.caselists, local=local, suppression=suppression
+        )
         self._openev_importer = openev_importer
         self._local = local
         self._read_archive = read_archive
@@ -3115,7 +3132,10 @@ class CaselistSyncService:
                 )
             except (DomainError, OSError) as refused:
                 failures.append(self._failure(refused, about=full_selection.name))
-        withdrawals = "".join(f"; {one.sentence()}" for one in tally.full_archive_imports)
+        withdrawals = "".join(
+            f"; {one.sentence()}"
+            for one in (*tally.full_archive_imports, *tally.full_archive_recounts.values())
+        )
         waiting = (
             f"; {held_back} archive(s) in the inbox held back for a later run, behind an older week"
             if held_back
@@ -3266,11 +3286,23 @@ class CaselistSyncService:
             acquisition=Acquisition.API,
         )
         write_manifest(report, self._manifest_path(manifest_key(selection.caselist, selection.archive_date)))
+        # Before the snapshot is counted as imported: a failure here is this archive's, so it is not
+        # published, its inbox copy is kept, and importing it again measures them all again.
+        remeasured = await self._later_manifests.after_weekly_import(
+            selection.caselist, selection.archive_date
+        )
         self._count_archive(report, tally)
         tally.snapshots_imported.append(f"{report.caselist} {report.snapshot.isoformat()}")
         tally.publish_targets.append(
             PendingSnapshot(caselist=report.caselist, snapshot=report.snapshot.isoformat())
         )
+        for snapshot in remeasured.rewritten:
+            rewritten = PendingSnapshot(caselist=report.caselist, snapshot=snapshot)
+            if rewritten not in tally.publish_targets:
+                tally.publish_targets.append(rewritten)
+        if remeasured.complete_archive is not None:
+            recount = remeasured.complete_archive
+            tally.full_archive_recounts[(recount.caselist, recount.snapshot)] = recount
 
     async def _import_openev(
         self, selection: OpenEvSelection, downloaded: DownloadedFile, tally: _RunTally
@@ -4022,6 +4054,7 @@ class CaselistSyncService:
             inbox_retention=tally.inbox_retention,
             full_archive=tally.full_archive,
             full_archive_imports=tuple(tally.full_archive_imports),
+            full_archive_recounts=tuple(tally.full_archive_recounts.values()),
         )
 
     def _write_summary(self, summary: RunSummary) -> Path:

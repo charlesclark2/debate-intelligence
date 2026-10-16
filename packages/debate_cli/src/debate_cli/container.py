@@ -124,6 +124,7 @@ from debate_cli.exit_codes import codes_exit_as_a_retrieval_failure
 from debate_core.application.caselist.evidence_listing import LocalEvidence, digests_in_earlier_manifests
 from debate_core.application.caselist.import_service import CaselistImportService, EarlierManifestDigests
 from debate_core.application.caselist.inbox_purge import CaselistInbox
+from debate_core.application.caselist.later_manifests import LaterManifests
 from debate_core.application.caselist.openev_import_service import OpenEvImportService
 from debate_core.application.caselist.parse_workers import ProcessPoolParseRunner
 from debate_core.application.caselist.parsed_publish import ParsedStorePublisher
@@ -520,6 +521,19 @@ class ServiceContainer:
             blobs=FsSnapshotStore(self.settings.storage.data_dir),
             suppression=self.local_suppression_list(),
             earlier_manifest_digests=self._earlier_manifest_digests(),
+        )
+
+    def caselist_later_manifests(self) -> LaterManifests:
+        """Build what measures the later manifests again after a weekly import (`v1-e30-t18`).
+
+        Over the same local store and suppression list as :meth:`caselist_import`: `caselist import`
+        calls it after writing the weekly's manifest, and a weekly imported late leaves no later
+        manifest measured without it.
+        """
+        return LaterManifests(
+            caselists=SqliteCaselistRepository(self.database),
+            local=self._local_evidence(),
+            suppression=self.local_suppression_list(),
         )
 
     def _earlier_manifest_digests(self) -> EarlierManifestDigests:

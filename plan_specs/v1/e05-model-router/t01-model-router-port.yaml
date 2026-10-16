@@ -28,7 +28,9 @@ spec:
   constraints:
     packages: [debate_core.application, debate_core.domain, debate_core.integrations]
     forbidden:
-      - Model IDs, regions or inference profiles hard-coded outside config/model_routing.yaml
+      # Amended by the PM, 2026-10-16: the routing file was split per environment by
+      # v1-e01-t09, so every config/model_routing.*.yaml file holds identifiers.
+      - Model IDs, regions or inference profiles hard-coded outside the config/model_routing.*.yaml files
       - Importing boto3/botocore in debate_core.domain or debate_core.application
       - Free-form text return types on the router API used by application services
   context:
@@ -44,8 +46,10 @@ spec:
     - id: ac2
       description: >-
         config/model_routing.yaml maps each task class to provider, model_id, inference profile/region and
-        default parameters; the default file routes complex_reasoning to Claude Sonnet, high_volume to Claude
-        Haiku, embeddings to Titan Text Embeddings V2 and rerank to Cohere Rerank 3.5.
+        default parameters; config/model_routing.example.yaml, the default and template file, routes
+        complex_reasoning to Claude Sonnet, high_volume to Claude Haiku, embeddings to Titan Text Embeddings
+        V2 and rerank to Cohere Rerank 3.5. Amended by the PM, 2026-10-16: the routing file was split per
+        environment by v1-e01-t09.
     - id: ac3
       description: >-
         Loading a routing file with an unknown task class, missing model_id or out-of-range temperature fails
@@ -118,9 +122,10 @@ spec:
             name: Routing policy resolution and validation tests pass
             command: uv
             args: [run, pytest, packages/debate_core/tests/integrations/models/test_routing_policy.py]
+          # Amended by the PM, 2026-10-16: the routing file was split per environment by v1-e01-t09.
           - type: artifact_exists
             name: Default routing config routes rerank to Cohere
-            path: config/model_routing.yaml
+            path: config/model_routing.example.yaml
             contentMatch: "rerank"
       - id: contract-tests
         kind: Task

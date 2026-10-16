@@ -305,9 +305,53 @@ as usual (`docs/runbooks/caselist-scheduled-sync.md`, "Reinstalling the agent").
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-16
 
 **Notes:**
+
+Accepted in full, with the phase `Succeeded`. Items (13) and (14), and ac8 and ac9, are written
+into the spec as the PM's notes asked. The operator's banner check is recorded as PASS.
+
+**The banner is fixed where the operator saw it fail.** The fix command now opens the body, the
+subtitle is the run and fits, and the test that rebuilds the banner of 2026-10-15 shows the old
+layout hiding the command before it shows the new one revealing it. The operator's check on the Mac
+agrees with the test.
+
+**Decision 3 is the honest reading of "retryable".** A manifest mismatch alone is announced with
+the command that clears it, and the banner does not claim the next scheduled run will retry it,
+because nothing owes that snapshot. Saying otherwise would have been a false promise in the one
+place the operator reads.
+
+**The work itself:**
+
+* **Fourteen items, each red before its fix,** and guards that pass on the start commit named as
+  guards rather than counted as evidence. The allowance's two guards were mutated to show they bite.
+* **The forbidden list held three ways:** `exit_codes.py` has no diff and every exit status is
+  asserted unchanged; the record model is schema-for-schema the older builds'; and the agent's build
+  `v0.1.0-dev.122` reads this build's records and details with nothing refused or skipped.
+* **The redaction allowance is matched against the whole token,** and the cases that must still be
+  redacted include the tricky ones (`docs/../../Users/…`, a runbook name inside a home path,
+  `full/<date>` as a directory).
+* **Decision 2, one wording for a non-domain error in every stage's reason,** is what the PM's note
+  asked, carried through to the places that would otherwise have read two ways in one summary.
+
+**Rulings:**
+
+* **Decisions 1 to 9:** accepted. Keeping the `min()` (Decision 1) is right: it guards a
+  policy-bound limit wherever the settings validator is not in front of it.
+* **Follow-up 1 (a manifest write fsyncs the file, not its directory):** filed, E30 p3.
+* **Follow-up 2 (a run whose only pending stage is the report says snapshots wait):** filed, E34 p3.
+* **Follow-up 3 (a drifted snapshot is owed by nothing):** filed, E34 p3, with the PM's ruling: a
+  snapshot whose only drift is a manifest mismatch goes back into the pending-work file, so the next
+  run publishes it again. That amends `v1-e34-t18`'s rule for what is owed in that one case, and
+  the banner can then say the next run retries it.
+* **Follow-up 4 (`caselist runs` showing the banner's words):** filed, E34 p3.
+* **Follow-up 5 (a torn manifest in a quiet week waits):** accepted as the trade-off of Decision 4.
+  `caselist status` reads every manifest, and the runbook should say to run it when a run reports
+  nothing for a while. That sentence goes in at the next PM close-out.
+
+**Operator follow-ups:** the banner check, done and PASS. The agent shows these banners after its
+next reinstall, which follows this merge.

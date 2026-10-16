@@ -51,6 +51,9 @@ spec:
       description: >-
         `compare_card_clusters.py sample` can be pointed at a cluster by id. The operator
         checks 10 pairs from each of the three largest clusters per caselist, tallies only.
+        Amended by the PM, 2026-10-16: the operator checked hsld26's and hspf26's (60 pairs).
+        For every caselist, the share of pairs of distinct texts that share no text, measured
+        read-only over its three largest clusters, stands in for the rest.
     - id: ac3
       description: >-
         Each defect found has a synthetic fixture shown failing first. Recall on both
@@ -61,7 +64,7 @@ spec:
         Operator-run: the counts and both samples again after the rebuild, recorded in
         docs/data/caselist-parse-report.md.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

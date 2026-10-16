@@ -303,3 +303,10 @@ re-parse's build install, follows the runbook's new step 3.
 
 **Merge order:** after the v1.0 release pull request (versions 1.1.0). A merge into `dev` before
 it would fail its pre-release.
+
+### The operator's dry run, recorded (PM, 2026-10-16)
+
+`install.sh --dry-run` over the real agent, on 2026-10-16, before the merge. It kept the
+environment `dev` and the caselists hsld26, hspolicy26 and hspf26, did not carry `AWS_PROFILE`
+over, passed the profile check, and exited 0. The real reinstall the same day, on `v1.1.0-dev.7`
+for the re-parse, kept the same settings and passed `--check-launchd`.

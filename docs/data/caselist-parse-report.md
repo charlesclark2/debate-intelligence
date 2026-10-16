@@ -17,11 +17,11 @@ for `v1-e31-t09` (the parser's fixes) and `v1-e31-t08` (short-card matching). Th
 describe the first parse and are kept as its record. The current figures are in
 [The re-parse, 2026-10-11](#the-re-parse-2026-10-11).
 
-**Not yet re-parsed under `2026.10.12-docx-3`** (`v1-e31-t12`, cites the parser missed or misread).
+**Re-parsed on 2026-10-16 under `2026.10.12-docx-3` and `card-fingerprint-v3`**, in dev and prod,
+for `v1-e31-t12` (cites) and `v1-e31-t11` (card matching).
 [Cites the parser missed or misread](#cites-the-parser-missed-or-misread-v1-e31-t12) says what that
-parser reads differently and what a re-parse is expected to hold. Those are figures from a
-read-only run over the same sources, not from a store. The operator's re-parse is recorded there
-when it has run.
+parser reads differently, from a read-only run before the re-parse. The current figures are in
+[The re-parse, 2026-10-16](#the-re-parse-2026-10-16).
 
 ## Versions
 
@@ -759,12 +759,9 @@ banding (5 to 33 s a caselist), and its one full preview, openev (66 s):
   text; 288 would be put in a cluster with at least one text they share nothing with. That feeds
   the same chains as the largest clusters, so it waits for the by-eye sample.
 
-**After the rebuild under `card-fingerprint-v3`:** not run. It will be taken on
-`2026.10.12-docx-3`, after `v1-e31-t12`'s re-parse, which builds that directory's aggregates under
-`v3` if `v1-e31-t11` has merged by then. Everything above is from `2026.10.10-docx-2`. The
-re-parse changes the text of 2,515 cards and replaces 1,109 card ranges with 1,274, so the figures
-there should be near these, not equal. The counts and both by-eye samples (`v1-e31-t11`, criteria
-ac2 and ac4) are the operator's, recorded here at close-out.
+**After the rebuild under `card-fingerprint-v3`:** measured on `2026.10.12-docx-3`, in
+[Card matching under `card-fingerprint-v3`, measured](#card-matching-under-card-fingerprint-v3-measured-v1-e31-t11).
+Everything above is from `2026.10.10-docx-2`.
 
 ## Cites the parser missed or misread (`v1-e31-t12`)
 
@@ -775,9 +772,10 @@ the stored cards for the "before" figures, and the old and the new parser run si
 process over the same bytes for everything else. Counts, lengths, formatting flags and rule ids
 only. The stored directory's own counts and the old parser's agree on every figure both give.
 
-**Status: the rules are in parser `2026.10.12-docx-3`. The store is unchanged until the operator
-re-parses.** Every "after" figure below is what that parser produced over the 9,741 DOCX sources
-in the read-only run, not what a store holds.
+**Status: the rules are in parser `2026.10.12-docx-3`, and the store was re-parsed with it on
+2026-10-16** ([The re-parse, 2026-10-16](#the-re-parse-2026-10-16)). Every "after" figure below is
+what that parser produced over the 9,741 DOCX sources in the read-only run before it. Over those
+sources the stored figures equal it exactly.
 
 ### The five shapes
 
@@ -1107,3 +1105,153 @@ The one cite line still missed is the second line of a cite in small print, unde
   year at the head is emphasis, by the measure under 2, and that is a change to the earlier rule
   and to one of its fixtures.
 
+## The re-parse, 2026-10-16
+
+Run by the operator from the dev data directory on 2026-10-16, after `v1-e31-t12` (cites) and
+`v1-e31-t11` (card matching) merged: one re-parse covers both, and the weekly agent was reinstalled
+on a build carrying them only after it. It wrote a new version directory, published it to dev, and,
+after the by-eye checks below, to prod. Counts only, as everywhere in this report.
+
+| | |
+|---|---|
+| Parser | `2026.10.12-docx-3` |
+| Fingerprints | `card-fingerprint-v3` |
+| Parsed-store schema | 2 |
+| Version directory | `2026.10.12-docx-3` (first generation) |
+| Superseded | `2026.10.10-docx-2`, locally and in both buckets, byte for byte unchanged by the run. `2026.09.20-docx-1` is still in both buckets; removing superseded directories is `v1-e31-t16` |
+
+**There are 1,575 more sources than on 2026-10-12.** The weekly run of 2026-10-14 imported them,
+and the build it ran (`v0.1.0-dev.122`) did not parse them into `2026.10.10-docx-2`: the count of
+cites in that directory before the run was exactly the 2026-10-12 table above.
+
+### Dev
+
+Every run exited 0. Wall-clock is the run's `elapsed_seconds`: parse, rebuild and publish.
+
+| Caselist | Sources | Parsed | Unsupported | Failed | Cards | Clusters | Uploaded | Wall-clock |
+|---|---|---|---|---|---|---|---|---|
+| hsld26 | 4,970 | 4,855 | 109 | 6 | 74,725 | 11,552 | 4,973 | 544 s |
+| hspf26 | 4,437 | 3,033 | 1,404 | 0 | 49,204 | 9,930 | 4,440 | 399 s |
+| hspolicy26 | 3,190 | 3,159 | 31 | 0 | 101,681 | 18,746 | 3,193 | 940 s |
+| openev | 104 | 101 | 2 | 1 | 8,033 | 5,841 | 107 | 87 s |
+| **Total** | 12,701 | 11,148 | 1,546 | 7 | 233,643 | 46,069 | 12,713 | 1,970 s |
+
+* **The same 7 failures as on 2026-10-11:** hsld26's 5 `MALFORMED_XML` and 1 `NOT_A_ZIP`, and
+  openev's 1 `COMPRESSION_RATIO_EXCEEDED`. None of the new sources failed.
+* **Unsupported** is by format as before: hsld26 66 PDF and 43 other, hspf26 1,387 PDF.
+* **Every occurrence row** is `card-fingerprint-v3`.
+
+**Over the same sources, every figure is the prediction.** Restricted to the sources the
+2026-10-12 read-only run covered, the stored cards' completeness, tag and cite counts equal the
+"after" columns of [Before and after, over the same sources](#before-and-after-over-the-same-sources)
+exactly, and so do the counts by cite rule. Over every source:
+
+| Caselist | Cards | `FULL` | `CITE_ONLY` | No tag | With a cite | Tagged, no cite |
+|---|---|---|---|---|---|---|
+| hsld26 | 74,725 | 74,018 | 707 | 1,495 | 68,921 | 5,804 |
+| hspf26 | 49,204 | 48,796 | 408 | 2,682 | 35,092 | 14,112 |
+| hspolicy26 | 101,681 | 100,430 | 1,251 | 1,072 | 94,309 | 7,372 |
+| openev | 8,033 | 7,955 | 78 | 73 | 7,267 | 766 |
+| **Total** | 233,643 | 231,199 | 2,444 | 5,322 | 205,589 | 28,054 |
+
+No card is `ABBREVIATED`.
+
+**The second run** parsed and uploaded nothing: `attempted` 0, `skipped` equal to the source
+count, `uploaded` 0 for each caselist. Its elapsed time is the rebuild alone, now under
+`card-fingerprint-v3` and with 14% more sources: 345 s, 219 s, 482 s and 68 s (1,114 s in all,
+against 1,051 s on 2026-10-11).
+
+**Five files by eye** (`v1-e31-t12`, step 6), five cards each, tag, cite and evidence text against
+the document: 73 of 75 answers right. In one file two cards have no tag where the document may
+hold one; the operator is to confirm in Word. In two other files four cards have the right tag,
+cite and evidence text and no short cite: an author and a two-digit year with a curly apostrophe
+on its own line above a long bracketed cite. No cite was read as a sentence, and no evidence text
+began with a cite, so the check passed. Both shapes are `v1-e31-t19`'s.
+
+### Prod
+
+Published on 2026-10-16 from the same dev data directory (`DEBATE_ENV=prod`,
+`DEBATE_STORAGE__DATA_DIR` set to the dev directory, `--confirm-prod`), after the checks above. The
+dry run showed `2026.10.12-docx-3`, `card-fingerprint-v3`, nothing to parse and every source
+skipped. Every publish exited 0, parsing and failing nothing, and uploaded 4,973, 4,440, 3,193 and
+107 objects, dev's figures. Each store's listing holds its one index.
+
+Prod went ahead though the join sample below holds one pair of different cards. Nothing reads
+prod's parsed store yet, and the fix (`v1-e31-t20`) rewrites only the occurrence table, which the
+next publish replaces.
+
+### Card matching under `card-fingerprint-v3`, measured (`v1-e31-t11`)
+
+`scripts/compare_card_clusters.py`, read-only on the dev data directory, over
+`2026.10.12-docx-3`'s stored cards.
+
+**Against the rules before `v1-e31-t11`** (`--before-rules` at the commit before it): the same
+stored cards placed by `v2` and by `v3`.
+
+| Caselist | Clusters before | After | Merged into another | New clusters made of several | Divided | Most absorbed by one | Largest before and after | Exact fingerprints changed |
+|---|---|---|---|---|---|---|---|---|
+| hsld26 | 11,570 | 11,552 | 18 | 17 | 0 | 3 | 710, 710 | 0 |
+| hspf26 | 9,944 | 9,930 | 14 | 14 | 0 | 2 | 682, 682 | 0 |
+| hspolicy26 | 18,765 | 18,746 | 19 | 16 | 0 | 3 | 1,602, 1,609 | 0 |
+| openev | 5,841 | 5,841 | 0 | 0 | 0 | 1 | 22, 22 | 0 |
+
+The session estimated 18, 10, 17 and 0 merges and no division. No card is in only one placement.
+Of the short cuts the diagnosis finds within the rule and still apart, 2 are left, both in
+hsld26, as the session predicted.
+
+**Against the rules before `v1-e31-t08`** (`card-fingerprint-v1` to `v3`):
+
+| Caselist | Clusters before | After | Merged into another | Divided | Largest before and after |
+|---|---|---|---|---|---|
+| hsld26 | 11,536 | 11,552 | 15 | 13 | 710, 710 |
+| hspf26 | 9,924 | 9,930 | 12 | 16 | 682, 682 |
+| hspolicy26 | 18,773 | 18,746 | 33 | 5 | 1,603, 1,609 |
+| openev | 5,841 | 5,841 | 1 | 1 | 22, 22 |
+
+Against 21, 18, 11 and 1 divided under `v2` on 2026-10-11. Each of the 56 pairs still divided is
+one the diagnosis explains by a short cut: one left out in this part, or a part joined only
+through a short cut elsewhere. None is a part no short cut links to the rest.
+
+**By-eye samples**, tallies only:
+
+| Sample | Pairs | Same card | Different card | Unsure |
+|---|---|---|---|---|
+| Newly in one cluster, of 51 | 20 | 17 | 1 | 2 |
+| Divided, of 0 | 0 | | | |
+| Three largest clusters, hsld26 (10 pairs each) | 30 | 23 | 7 | 0 |
+| Three largest clusters, hspf26 (10 pairs each) | 30 | 19 | 10 | 1 |
+
+* **The newly joined pair of different cards** is in hspolicy26: two bodies of 59 and 87 words that
+  share no text, joined because a third body of 150 words holds all of both. That body is two
+  cards stored as one, or a card and its neighbour, and `v3` lets a body that contains a cut stand
+  witness for it whatever else the body holds.
+* **The largest clusters lump different cards.** hsld26's second-largest and hspf26's largest each
+  gave 6 of 10 pairs as different cards. The operator stopped the largest-cluster sample after two
+  caselists: telling one long cut from another of the same article by eye is slow and often
+  uncertain, so the rest was measured.
+
+**Measured instead: the share of pairs of distinct texts in a cluster that share no text at all**
+(five-word runs, counts only, read-only):
+
+| Cluster | Cards | Distinct texts | Pairs | Sharing no text |
+|---|---|---|---|---|
+| hspf26, largest | 682 | 89 | 3,916 | 62% |
+| hspolicy26, largest | 1,609 | 194 | 18,721 | 51% |
+| hsld26, second | 441 | 49 | 1,176 | 25% |
+| hspf26, third | 377 | 87 | 3,741 | 19% |
+| hsld26, largest | 710 | 53 | 1,378 | 15% |
+| hspolicy26, second | 692 | 54 | 1,431 | 8% |
+| hsld26, third; hspf26, second; hspolicy26, third | 396; 592; 671 | 14; 75; 20 | 91; 2,775; 190 | 0% |
+
+It agrees with the by-eye samples: the two clusters the operator found worst are the two with a
+quarter or more of their pairs sharing nothing. Each large cluster holds few distinct short cites:
+one article's many passages, chained together through long bodies that hold several of them.
+hspf26's second-largest shares text throughout, but its texts run from 1,414 to 7,485 words, which
+no card is: they are bodies the parser did not divide.
+
+**What one card is (the PM's ruling, 2026-10-16, for `v1-e31-t20`).** A card is a passage. Two
+bodies are one card when one holds the other or they overlap; two passages of one article are two
+cards. Two bodies join only on text they share directly, never through a third body that holds
+both. `v1-e31-t20` is measured by the share of pairs sharing no text, as above, and by a join
+sample with no pair of different cards; a person looks only at pairs whose overlap a rule cannot
+decide.

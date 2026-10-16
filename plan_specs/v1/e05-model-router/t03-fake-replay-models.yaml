@@ -148,7 +148,9 @@ spec:
         dependsOn: [fake-router, record-replay]
         outputs:
           - packages/debate_core/src/debate_core/integrations/models/factory.py
-          - tests/conftest.py
+          # Amended by the PM, 2026-10-16: the repository-root conftest.py, which every package's
+          # tests see; tests/conftest.py would reach only the tests under tests/.
+          - conftest.py
         estimatedEffort: 2h
         acceptanceCriteria:
           - type: test_passes

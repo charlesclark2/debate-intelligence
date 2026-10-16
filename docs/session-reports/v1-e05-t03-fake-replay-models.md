@@ -216,9 +216,57 @@ None. Every command ran in under two minutes, and the default selection ran in p
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-16
 
 **Notes:**
+
+Accepted in full, with the phase `Succeeded`. The three rulings the session asked for:
+
+1. **Deviation 4, ac6's scope: accepted as built.** Plain `doctor`, `--help` and `--version` load
+   no settings by `doctor.py`'s documented contract, and `install_channel.sh` and `validate-dev`
+   depend on that. Every command that reads settings is stopped before it does anything, which is
+   what ac6 is for. An opt-in check that makes `doctor` report a bad routing file, like
+   `--evidence-profiles`, is PM follow-up work, filed in the next batch.
+2. **Deviation 5, the source-checkout anchor in `settings.py`: accepted** under working agreement
+   5, as an edit outside the task's packages, recorded here. It only gives a relative routing file
+   the meaning the settings module already promised ("must not depend on the working directory").
+   The order is unchanged: bundled configuration first, then the checkout around the working
+   directory, then the checkout `debate_core` was imported from. The installed smoke test of dev
+   and prod's routing files still asserts that the bundled configuration is the one read, and
+   mutant 32 shows the fallback is held.
+3. **Deviation 3, where the shared fixture lives: accepted.** The PM amended the settings-wiring
+   node's `outputs` entry from `tests/conftest.py` to `conftest.py` in this review. The fixture is
+   opt-in, not autouse, so no existing test changes behaviour.
+
+**ac6 now couples every settings-reading command to the routing file, including the weekly sync,
+which never calls a model.** That is the intent of the 2026-10-16 ruling: a broken configuration
+fails at the start of a run, not halfway through one. The installed smoke test runs `config show`
+under dev and prod against the routing files the wheel ships, so a build whose own files are bad
+cannot pass validate-dev. The operator's next agent reinstall adds one check: dev's `config show`
+exits 0 with the installed build.
+
+**The work itself:**
+
+* **The key is exactly ac2's four parts,** with hand-hashed goldens, fresh interpreters under two
+  hash seeds, and property tests that were checked for what they generate. Refusing NaN, infinity
+  and lone surrogates rather than hashing them is right.
+* **Nothing falls back to a real model.** Replay never holds the real router, `MissingFixtureError`
+  is a `DomainError` so it is never retried as a provider failure, and record and live without
+  t02 fail on configuration.
+* **Redaction is shown on a real-shaped route,** with AWS's documentation placeholders, and a guard
+  fails CI on any committed fixture holding what the scrubber removes.
+* **33 mutants and a combined one, all caught,** with the survivor that exposed a weak factory test
+  fixed by splitting the test.
+* **ac6 was shown failing first,** and the 26 test profiles that named a routing file that never
+  existed now name the committed example.
+
+**Follow-up work the PM files in the next batch:**
+
+* `doctor --routing` (or a name the task chooses), opt-in, reporting a bad routing file (E05).
+* Plain `doctor` tries to open a socket in `test_doctor_renders_a_table`, against its "reaches no
+  network" contract. Find and remove the attempt (E01).
+* t02, t04, t05 and the first model command take the session's notes under Follow-up work into
+  their specs.

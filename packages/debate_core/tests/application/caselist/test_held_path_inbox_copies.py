@@ -210,6 +210,31 @@ async def test_a_copy_that_changed_after_its_import_is_left_for_retention(
     assert TAKEN_OUT not in import_reason(summary)
 
 
+async def test_an_archive_with_junk_the_hold_does_not_explain_is_left_for_retention(
+    removal_world: RemovalWorld, tmp_path: Path
+) -> None:
+    """Week four's re-upload and a Finder `.DS_Store` at the top of the archive, beside no file of
+    the team's: junk, never imported, but not withheld with the removed file either. The archive
+    holds something not removed or held, so it is not removed."""
+    await remove_bayview(removal_world)
+    path = tmp_path / "published" / weekly_name(WEEK_4)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr(f"testcl26-0922/{BAYVIEW_PATH}", REUPLOADED)
+        archive.writestr("testcl26-0922/.DS_Store", b"invented Finder folder attributes")
+    installation = installation_of(removal_world, path)
+
+    summary = await installation.sync(
+        FakeSource(installation.archives, weeks=[WEEK_4]),
+        publish_to=ExpiredBucket(),
+        compare_with=ExpiredBucket(),
+    ).run([CASELIST])
+
+    assert week_four_counts(removal_world).get("SUPPRESSED") == 1
+    assert installation.inbox_names() == {weekly_name(WEEK_4)}
+    assert "taken out of the inbox" not in import_reason(summary)
+
+
 async def test_an_archive_holding_only_the_removed_file_itself_is_left_for_retention(
     removal_world: RemovalWorld, tmp_path: Path
 ) -> None:

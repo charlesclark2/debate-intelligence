@@ -65,6 +65,7 @@ from debate_core.application.caselist.status_service import CaselistStatusReport
 from debate_core.application.caselist.suppression import RecordedSuppressionList
 from debate_core.application.ports.archive import InventoriedEntry
 from debate_core.application.ports.suppression import (
+    PathHoldEntry,
     ReasonCode,
     SuppressionAction,
     SuppressionEntry,
@@ -263,6 +264,31 @@ async def test_status_and_the_publisher_find_a_held_row_in_a_complete_archive_to
     assert [one.withholding_rows for one in plan.snapshots] == [(UPLOADED_AFTER_IN_A_COMPLETE_ARCHIVE,)]
 
 
+async def test_a_held_row_the_list_now_names_is_a_suppressed_row_and_not_a_held_one(
+    world: RemovalWorld, tmp_path: Path
+) -> None:
+    """The same removal run again and stopped after its suppress step: the held upload is on the list
+    under the request, and the manifest is not yet rewritten. The row is what a removal did not
+    finish, a suppressed row, which is drift; it is not reported twice."""
+    await remove_the_named_file(world)
+    await an_older_build_imports_next_week(world, tmp_path)
+    await world.suppression().append(
+        [
+            SuppressionEntry(
+                action=SuppressionAction.SUPPRESS,
+                sha256=UPLOADED_AFTER,
+                recorded_at=datetime(2026, 10, 9, 12, 0, tzinfo=UTC),
+                reason=ReasonCode.REQUESTED_BY_TEAM,
+                request_id=REQUEST,
+            )
+        ]
+    )
+
+    report = await status_service(world).status(CASELIST, "2026-10-08")
+
+    assert [(one.suppressed_rows, one.held_rows) for one in report.snapshots] == [((UPLOADED_AFTER,), ())]
+
+
 async def test_a_held_row_does_not_change_the_verdict(world: RemovalWorld, tmp_path: Path) -> None:
     """The bucket holds what this machine holds, so the comparison agrees, and `caselist status`
     exits 0 as before. The held row is reported beside the verdict, not in it."""
@@ -305,6 +331,40 @@ async def test_status_reports_each_upload_held_in_the_inbox_by_caselist_snapshot
     assert report.held_in_inbox_of(OTHER_CASELIST) == ()
     assert report.removals_owed == (REQUEST,)
     names_no_one(report)
+
+
+async def test_an_upload_another_caselist_holds_is_reported_only_for_that_caselist(
+    world: RemovalWorld, tmp_path: Path
+) -> None:
+    """With `testclb26`'s path held too, its upload in the inbox is its own caselist's: a comparison
+    of `testcl26` alone does not report it, and one of every caselist does."""
+    await remove_the_named_file(world)
+    put_in_the_inbox(world, tmp_path)
+    await world.suppression().append_path_holds(
+        [
+            PathHoldEntry(
+                caselist=OTHER_CASELIST,
+                disclosure=disclosure_digest(OTHER_CASELIST, REVISED_PATH),
+                sha256=OTHER_CASELIST_FILE,
+                after_snapshot=date(2026, 9, 15),
+                recorded_at=datetime(2026, 10, 9, 12, 0, tzinfo=UTC),
+                reason=ReasonCode.REQUESTED_BY_TEAM,
+                request_id="RM-2026-02",
+            )
+        ]
+    )
+    other = (
+        OTHER_CASELIST,
+        "2026-10-08",
+        arriving_digest_of("uploaded-after-in-another-caselist"),
+        "RM-2026-02",
+    )
+
+    one = await status_service(world).status(CASELIST, held_in_inbox=True)
+    every = await status_service(world).status(held_in_inbox=True)
+
+    assert other not in uploads_of(one.held_in_inbox) and len(uploads_of(one.held_in_inbox)) == 3
+    assert other in uploads_of(every.held_in_inbox)
 
 
 async def test_the_removed_file_itself_in_a_later_archive_is_the_lists_and_not_reported_as_held(
@@ -559,6 +619,16 @@ async def test_the_removal_rewrites_a_waiting_archive_without_a_link_named_as_th
     with zipfile.ZipFile(waiting) as archive:
         assert archive.read(KEPT_PATH) == BODIES["kept"]
     assert digest_of("kept") not in {entry.sha256 for entry in plan.suppression_entries}
+
+
+async def test_a_link_at_the_held_path_is_not_a_held_upload(world: RemovalWorld) -> None:
+    """Status reports uploads, which an import would refuse. A link is skipped, never imported."""
+    await remove_the_named_file(world)
+    write_archive_with_a_link(world.data_dir / "inbox" / f"{CASELIST}-weekly-2026-10-11.zip")
+
+    report = await status_service(world).status(CASELIST, held_in_inbox=True)
+
+    assert uploads_of(report.held_in_inbox) == []
 
 
 async def test_a_link_at_the_held_path_in_a_waiting_archive_dated_before_the_hold_is_kept(

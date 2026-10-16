@@ -16,6 +16,7 @@ from debate_core.application.errors import (
     DomainError,
     InvalidCursor,
     InvalidModelOutput,
+    ModelUnavailableError,
     NotFound,
     ProviderError,
     ProviderRateLimited,
@@ -41,6 +42,7 @@ EVERY_ERROR = (
     InvalidModelOutput("select-passage", "1.0.0", "missing field"),
     ProviderError("openalex", "broke"),
     ProviderUnavailable("openalex"),
+    ModelUnavailableError("bedrock", "a-model"),
     ProviderRateLimited("openalex"),
 )
 
@@ -78,6 +80,15 @@ def test_rate_limiting_carries_the_wait_the_provider_asked_for() -> None:
     error = ProviderRateLimited("crossref", retry_after_seconds=30.0)
     assert error.retry_after_seconds == 30.0
     assert "retry after 30.0s" in str(error)
+
+
+def test_an_unreachable_model_is_a_provider_outage_that_names_the_model() -> None:
+    """It keeps PROVIDER_UNAVAILABLE, the code the CLI and `caselist pull` treat as retryable."""
+    error = ModelUnavailableError("bedrock", "a-model", "model not ready")
+    assert isinstance(error, ProviderUnavailable)
+    assert error.model_id == "a-model"
+    assert "a-model: model not ready" in str(error)
+    assert error_code_of(error) == error_code_of(ProviderUnavailable("bedrock")) == "PROVIDER_UNAVAILABLE"
 
 
 def test_invalid_model_output_identifies_the_prompt_version_that_produced_it() -> None:

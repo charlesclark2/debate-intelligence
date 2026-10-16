@@ -64,7 +64,7 @@ dev = [
     # on a laptop and on a CI runner. scripts/site_deploy.sh (v1-e36-t05) is the first shell script
     # with a lint criterion of its own.
     "shellcheck-py>=0.10",
-    # PyYAML ships no inline types; debate_core.application.routing_config is type-checked strictly.
+    # PyYAML ships no inline types; debate_core.integrations.models.routing_policy is type-checked strictly.
     "types-pyyaml>=6.0",
 ]
 
@@ -148,6 +148,7 @@ source_modules = [
     "debate_core.application",
     "debate_core.testing",
     "debate_core.integrations.local",
+    "debate_core.integrations.models",
     "debate_core.integrations.docx_parser",
     "debate_core.integrations.file_streaming",
     "debate_core.integrations.opencaselist",

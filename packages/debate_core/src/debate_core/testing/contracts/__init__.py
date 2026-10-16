@@ -6,7 +6,11 @@ A V1 adapter built on SQLite and the local filesystem and a V2 adapter built on 
 are interchangeable only if both are held to the same rules, and the way to make that true is for
 both to run the same suite (architecture proposal §16, §17).
 
-Five contract classes, one per port::
+A sixth, :class:`~debate_core.testing.contracts.model_router.ModelRouterContract`, holds every
+`ModelRouter` to one set of rules the same way: the Bedrock adapter, the fake and replay routers
+(v1-e05-t01-model-router-port). Its module docstring explains how a router opts in.
+
+Five persistence contract classes, one per port::
 
     from debate_core.testing.contracts import CardRepositoryContract
 
@@ -40,6 +44,15 @@ from debate_core.testing.contracts.harness import (
     SnapshotStoreFactory,
     walk_all_pages,
 )
+from debate_core.testing.contracts.model_router import (
+    EmbeddingAnswer,
+    ModelRouterContract,
+    ModelRouterFactory,
+    PlannedAnswer,
+    RerankAnswer,
+    RouteExpectation,
+    StructuredAnswer,
+)
 from debate_core.testing.contracts.repositories import (
     ArticleRepositoryContract,
     CardRepositoryContract,
@@ -48,6 +61,13 @@ from debate_core.testing.contracts.repositories import (
 from debate_core.testing.contracts.snapshot_store import SnapshotStoreContract
 
 __all__ = [
+    "StructuredAnswer",
+    "RouteExpectation",
+    "RerankAnswer",
+    "PlannedAnswer",
+    "ModelRouterFactory",
+    "ModelRouterContract",
+    "EmbeddingAnswer",
     "ASYNC_BACKEND",
     "AdapterContract",
     "ArticleRepositoryContract",

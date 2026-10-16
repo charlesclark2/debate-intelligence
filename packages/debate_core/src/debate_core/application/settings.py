@@ -864,7 +864,7 @@ class ParseSettings(SettingsGroup):
 class ModelSettings(SettingsGroup):
     """What the ModelRouter is allowed to do and which file tells it where to route.
 
-    The routing file itself is validated by :mod:`debate_core.application.routing_config`; this
+    The routing file itself is validated by :mod:`debate_core.integrations.models.routing_policy`; this
     group only says which file to read and what the day may cost.
     """
 

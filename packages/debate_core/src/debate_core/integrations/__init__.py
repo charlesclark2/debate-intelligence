@@ -5,6 +5,8 @@ port has more than one adapter and the technology is what a reader needs to know
 
 * :mod:`debate_core.integrations.local` — the filesystem and SQLite, which is all V1 needs
   (v1-e02-t03-local-repositories).
+* :mod:`debate_core.integrations.models` — the model-routing policy and, with
+  v1-e05-t03-fake-replay-models, the offline model routers.
 * `debate_core.integrations.s3` and the DynamoDB adapters arrive with V2 and satisfy the same
   ports, so no use case changes when the platform moves to the cloud (architecture proposal §17).
 

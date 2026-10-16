@@ -23,7 +23,7 @@ and the local filesystem while V2 runs the same use cases on DynamoDB, S3 and Be
 | `SearchProvider` | `providers` | One discovery source |
 | `ArticleFetcher` | `providers` | HTTP retrieval |
 | `ContentExtractor` | `providers` | Readable-text extraction |
-| `ModelRouter` | `providers` | Every LLM call |
+| `ModelRouter` | `model_router` | Every LLM call: structured generation, embeddings, rerank |
 | `Clock` | `providers` | The current time |
 | `IdGenerator` | `providers` | New entity ids |
 
@@ -63,6 +63,7 @@ from debate_core.application.ports.evidence_store import (
     ObjectKey,
     validate_object_key,
 )
+from debate_core.application.ports.model_router import ModelRouter, RoutingConfigError
 from debate_core.application.ports.notifier import Notification, Notifier
 from debate_core.application.ports.parsed_store import ParsedStore
 from debate_core.application.ports.persistence import (
@@ -83,10 +84,6 @@ from debate_core.application.ports.providers import (
     ExtractionQuality,
     FetchResult,
     IdGenerator,
-    ModelInvocation,
-    ModelInvocationMetadata,
-    ModelRouter,
-    ModelTaskClass,
     ProviderQuery,
     ProviderResponse,
     SearchProvider,
@@ -120,10 +117,7 @@ __all__ = [
     "ExtractionQuality",
     "FetchResult",
     "IdGenerator",
-    "ModelInvocation",
-    "ModelInvocationMetadata",
     "ModelRouter",
-    "ModelTaskClass",
     "Notification",
     "Notifier",
     "ObjectInfo",
@@ -133,6 +127,7 @@ __all__ = [
     "ParsedStore",
     "ProviderQuery",
     "ProviderResponse",
+    "RoutingConfigError",
     "SearchProvider",
     "SearchRepository",
     "SkipReason",

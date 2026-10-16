@@ -61,8 +61,11 @@ spec:
         the one it supersedes, shown failing first.
     - id: ac4
       description: >-
-        Operator-run: the dev and prod buckets' `2026.09.20-docx-1` directories listed and
-        retired under the rule, counts recorded.
+        Operator-run, after the merge: `2026.09.20-docx-1` retired under the rule in the dev
+        and prod buckets (it is already gone from the dev data directory), and
+        `2026.10.10-docx-2` retired in the dev data directory and in both buckets, each listed
+        in a dry run first, counts recorded (amended by the PM, 2026-10-16: since the
+        2026-10-16 re-parse `2026.10.10-docx-2` is superseded too).
     - id: ac5
       description: >-
         Added by the PM, 2026-10-15: the evidence bucket module gains the lifecycle rule on

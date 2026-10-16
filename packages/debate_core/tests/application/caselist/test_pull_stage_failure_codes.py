@@ -588,7 +588,7 @@ async def test_an_error_nobody_modelled_is_recorded_as_the_cli_would_report_it(
 
     downloaded = stage(summary, SyncStage.DOWNLOAD)
     assert downloaded["outcome"] == "failed"
-    assert downloaded["reason"] == "0 fetched, then: openev-777: PermissionError"
+    assert downloaded["reason"] == "0 fetched, then: openev-777: PermissionError (errno 13)"
     assert downloaded.get("error_codes") == ["INTERNAL_ERROR"]
     assert_names_nothing_of_this_machine(summary, installation)
 

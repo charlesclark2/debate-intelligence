@@ -579,7 +579,9 @@ async def test_an_operating_system_error_that_is_not_the_archives_fails_its_impo
 
     imported = stage(summary, SyncStage.IMPORT)
     assert imported["outcome"] == "failed"
-    assert imported["reason"] == "1 imported; 1 refused: testcl26-weekly-2026-09-01.zip: OSError"
+    assert imported["reason"] == (
+        f"1 imported; 1 refused: testcl26-weekly-2026-09-01.zip: OSError (errno {errno.ENOSPC})"
+    )
     assert imported.get("error_codes") == ["INTERNAL_ERROR"]
     assert summary.snapshots_imported == ("othercl26 2026-09-01",)
     assert summary.failure_codes == ("INTERNAL_ERROR",)
@@ -644,7 +646,10 @@ async def test_an_operating_system_error_that_is_not_a_complete_archives_fails_i
 
     imported = stage(summary, SyncStage.IMPORT)
     assert imported["outcome"] == "failed"
-    assert imported["reason"] == "1 imported; 1 refused: testcl26-all-2026-09-01.zip: OSError"
+    assert (
+        imported["reason"]
+        == f"1 imported; 1 refused: testcl26-all-2026-09-01.zip: OSError (errno {errno.ENOSPC})"
+    )
     assert imported.get("error_codes") == ["INTERNAL_ERROR"]
     assert summary.snapshots_imported == ("testcl26 2026-09-01",)
     assert stage(summary, SyncStage.PUBLISH)["outcome"] == "completed"

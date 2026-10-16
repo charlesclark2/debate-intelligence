@@ -245,6 +245,7 @@ def test_its_details_name_the_code_and_the_setting(
             "failure_codes": ["STORE_PROFILE_NOT_CONFIGURED"],
             "hint": THE_FIX,
             "parse": None,
+            "held_by_request": {},
         }
     ]
     assert PROFILE_SETTING in THE_FIX

@@ -98,7 +98,13 @@ THE_FIX_FOR_A_PROFILE_NOT_DEFINED = (
 """The fix the adapter writes for a profile the AWS config lacks (`v1-e29-t07`), as a run that the
 want of a bucket stopped gives it (`v1-e34-t22`)."""
 
-NO_DETAILS_TO_SPEAK_OF: dict[str, Any] = {"stages": [], "failure_codes": [], "hint": None, "parse": None}
+NO_DETAILS_TO_SPEAK_OF: dict[str, Any] = {
+    "stages": [],
+    "failure_codes": [],
+    "hint": None,
+    "parse": None,
+    "held_by_request": {},
+}
 
 EXPECTED_DETAILS: dict[str, list[dict[str, Any]]] = {
     "a_week_imported_and_published": [{"run_id": FIRST_RUN_ID, **NO_DETAILS_TO_SPEAK_OF}],
@@ -117,6 +123,7 @@ EXPECTED_DETAILS: dict[str, list[dict[str, Any]]] = {
             "failure_codes": ["STORE_UNAVAILABLE"],
             "hint": None,
             "parse": None,
+            "held_by_request": {},
         }
     ],
     "a_publish_the_bucket_refused": [
@@ -134,6 +141,7 @@ EXPECTED_DETAILS: dict[str, list[dict[str, Any]]] = {
             "failure_codes": ["STORE_ACCESS_DENIED"],
             "hint": None,
             "parse": None,
+            "held_by_request": {},
         }
     ],
     "a_week_that_cannot_be_read": [
@@ -151,6 +159,7 @@ EXPECTED_DETAILS: dict[str, list[dict[str, Any]]] = {
             "failure_codes": ["UNREADABLE_ARCHIVE"],
             "hint": None,
             "parse": None,
+            "held_by_request": {},
         }
     ],
     "a_publish_left_for_a_login_and_then_drained": [
@@ -172,6 +181,7 @@ EXPECTED_DETAILS: dict[str, list[dict[str, Any]]] = {
             "failure_codes": [],
             "hint": None,
             "parse": None,
+            "held_by_request": {},
         }
     ],
     "a_run_stopped_by_an_expired_token": [
@@ -181,6 +191,7 @@ EXPECTED_DETAILS: dict[str, list[dict[str, Any]]] = {
             "failure_codes": ["CASELIST_AUTH_EXPIRED"],
             "hint": None,
             "parse": None,
+            "held_by_request": {},
         }
     ],
     "a_run_stopped_by_an_error_nobody_modelled": [
@@ -190,6 +201,7 @@ EXPECTED_DETAILS: dict[str, list[dict[str, Any]]] = {
             "failure_codes": ["INTERNAL_ERROR"],
             "hint": None,
             "parse": None,
+            "held_by_request": {},
         }
     ],
     "two_weeks_imported_and_parsed": [
@@ -210,6 +222,7 @@ EXPECTED_DETAILS: dict[str, list[dict[str, Any]]] = {
                 "uploaded": 9,
                 "not_published": 0,
             },
+            "held_by_request": {},
         }
     ],
     # `v1-e34-t22`: the run the want of a bucket refused, then the run that published its record.
@@ -220,6 +233,7 @@ EXPECTED_DETAILS: dict[str, list[dict[str, Any]]] = {
             "failure_codes": ["STORE_PROFILE_NOT_CONFIGURED"],
             "hint": THE_FIX_FOR_A_PROFILE_NOT_DEFINED,
             "parse": None,
+            "held_by_request": {},
         },
         {"run_id": SECOND_RUN_ID, **NO_DETAILS_TO_SPEAK_OF},
     ],

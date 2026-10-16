@@ -240,6 +240,7 @@ async def test_its_details_carry_the_code_and_the_fix_which_names_the_setting(wo
             "failure_codes": ["STORE_PROFILE_NOT_CONFIGURED"],
             "hint": THE_FIX,
             "parse": None,
+            "held_by_request": {},
         }
     ]
     assert PROFILE_SETTING in THE_FIX

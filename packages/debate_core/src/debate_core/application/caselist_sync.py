@@ -660,9 +660,10 @@ A key added since leaves the version as it is (`v1-e34-t07`'s rule): it changes 
 nothing reads a summary back. Under version 2 these were `note`, `openev_skipped_as_removed`
 (`v1-e34-t07`), `inbox_retention` (`v1-e34-t11`) and an OpenEv selection's `revision_of`
 (`v1-e34-t08`). Under version 5 it is `earlier_findings` on every entry of `stages` (`v1-e34-t19`):
-unlike `error_codes`, nothing is decided from it, so the rule applies and the version stays. So is
-`drift` on every entry of `stages` (`v1-e34-t23`), the report stage's findings with their kind, for
-the same reason. So are `openev_id` and `reason` on an `inbox_retention` entry removed as a camp release of junk alone
+unlike `error_codes`, nothing is decided from it, so the rule applies and the version stays. So are
+`drift` on every entry of `stages` and the top-level `held_by_request` (`v1-e34-t23`): the report
+stage's findings with their kind, and the uploads a removal's hold refused, by request. So are
+`openev_id` and `reason` on an `inbox_retention` entry removed as a camp release of junk alone
 (`v1-e34-t15`): a removed entry carried no `reason` before, and its one value, `junk_only`, is one
 no `kept` entry carries, so a filter on `kept[].reason` reads what it read before.
 
@@ -2148,6 +2149,11 @@ class RunSummary:
     full_archive_recounts: tuple[CompleteArchiveRecount, ...] = ()
     """Complete archives imported before, counted again after a weekly dated before them (`v1-e30-t18`)."""
 
+    held_by_request: Mapping[str, int] = field(default_factory=lambda: dict[str, int]())
+    """Uploads the imports refused because a removal holds their path, by that removal's request id
+    (`v1-e30-t13`'s :attr:`~debate_core.application.caselist.import_service.ImportReport.held_by_request`,
+    summed over the run's imports, `v1-e34-t23`). Request ids and counts: never a path."""
+
     @property
     def archives_seen(self) -> int:
         return len(self.archives)
@@ -2274,6 +2280,8 @@ class RunSummary:
             # Additive, like `full_archive` (`v1-e30-t18`): a complete archive imported by an earlier
             # run and counted again by this one, which a run that planned no refresh has as well.
             "full_archive_recounted": [one.as_json() for one in self.full_archive_recounts],
+            # Additive (`v1-e34-t23`): uploads a removal's hold refused, by request id.
+            "held_by_request": dict(sorted(self.held_by_request.items())),
             "selections": [one.as_json() for one in self.archives],
             "openev_selections": [one.as_json() for one in self.openev],
         }
@@ -2332,6 +2340,12 @@ class _RunTally:
     """Each caselist's newest complete archive, counted again after an earlier-dated weekly; the last wins."""
     held_copies_taken_out: int = 0
     """Archives that held nothing but removed or held files, taken out of the inbox once imported."""
+    held_by_request: dict[str, int] = field(default_factory=lambda: dict[str, int]())
+    """Uploads the imports refused at a held path, by request id (`v1-e34-t23`)."""
+
+    def count_held(self, held_by_request: Mapping[str, int]) -> None:
+        for request_id, count in held_by_request.items():
+            self.held_by_request[request_id] = self.held_by_request.get(request_id, 0) + count
 
     def record(self, stage: SyncStage, outcome: StageOutcome, reason: str | None = None) -> None:
         self.stages.append(StageRecord(stage=stage, outcome=outcome, reason=reason))
@@ -3294,7 +3308,16 @@ class CaselistSyncService:
             if held_back
             else ""
         )
-        taken_out = (
+        held = (
+            f"; {sum(tally.held_by_request.values())} upload(s) refused at a path a removal holds ("
+            + ", ".join(
+                f"{request_id}: {count}" for request_id, count in sorted(tally.held_by_request.items())
+            )
+            + ")"
+            if tally.held_by_request
+            else ""
+        )
+        taken_out = held + (
             f"; {tally.held_copies_taken_out} archive(s) taken out of the inbox, which held only files "
             "removed or held at a removed path"
             if tally.held_copies_taken_out
@@ -3395,6 +3418,7 @@ class CaselistSyncService:
             report, self._manifest_path(full_archive_manifest_key(selection.caselist, selection.archive_date))
         )
         self._count_archive(report, tally)
+        tally.count_held(report.held_by_request)
         snapshot = full_archive_snapshot(selection.archive_date)
         tally.snapshots_imported.append(f"{report.caselist} {snapshot}")
         tally.publish_targets.append(PendingSnapshot(caselist=report.caselist, snapshot=snapshot))
@@ -3452,6 +3476,7 @@ class CaselistSyncService:
         remeasured = await self._later_manifests.after_weekly_import(report)
         self._take_out_if_removed_or_held_alone(report, downloaded, tally)
         self._count_archive(report, tally)
+        tally.count_held(report.held_by_request)
         tally.snapshots_imported.append(f"{report.caselist} {report.snapshot.isoformat()}")
         tally.publish_targets.append(
             PendingSnapshot(caselist=report.caselist, snapshot=report.snapshot.isoformat())
@@ -4200,11 +4225,13 @@ class CaselistSyncService:
         """One failure as a stage records it: a sentence, the error's code, and its fix if it has one.
 
         The sentence is the error's own message when this project wrote it, and its class alone
-        when it did not, as the run log gives any such error: an `OSError` quotes the path it
-        failed on. `about` names what failed, an archive or a snapshot, in front of it. A directory
-        of this machine that a message quotes is replaced by its name.
+        when it did not, with an `OSError`'s errno: its text quotes the path it failed on. It is
+        :func:`~debate_core.application.errors.reported_error_message`, so that one `OSError` reads
+        the same in a stage's reason as everywhere else (`v1-e29-t09`, `v1-e34-t23`). `about` names
+        what failed, an archive or a snapshot, in front of it. A directory of this machine that a
+        message quotes is replaced by its name.
         """
-        message = str(error) if isinstance(error, DomainError) else type(error).__name__
+        message = reported_error_message(error)
         sentence = f"{about}: {message}" if about else message
         return _StageFailure(
             self._naming_no_local_directory(sentence), (reported_error_code(error),), fix_for(error)
@@ -4262,6 +4289,7 @@ class CaselistSyncService:
             full_archive=tally.full_archive,
             full_archive_imports=tuple(tally.full_archive_imports),
             full_archive_recounts=tuple(tally.full_archive_recounts.values()),
+            held_by_request=dict(tally.held_by_request),
         )
 
     def _write_summary(self, summary: RunSummary) -> Path:
@@ -4715,13 +4743,15 @@ def _camp_download_refused(selection: OpenEvSelection, refused: DomainError | OS
     by its inbox name (`openev-<id>-<file name>`), and a camp file's name is its title. Every name the
     file goes by, here and upstream, is replaced by "the download" (`v1-e34-t12`).
 
-    An `OSError` — the inbox refusing the write, or the file the read — is given by its class alone,
-    as the run log gives any error this project did not write: its message quotes the path it failed
-    on. It used to end the run, and `caselist pull --json` printed that message as the command's
-    error; it is now the fetch or import failing, like any other refusal of that file.
+    An `OSError` — the inbox refusing the write — is given by its class and errno alone
+    (:func:`~debate_core.application.errors.reported_error_message`): its message quotes the path it
+    failed on. It used to end the run, and `caselist pull --json` printed that message as the
+    command's error; it is now the fetch failing, like any other refusal of that file. A file the
+    import cannot read is :class:`~debate_core.application.errors.UnreadableArchive` by then
+    (`v1-e34-t23`).
     """
     if not isinstance(refused, DomainError):
-        return f"{selection.label}: {type(refused).__name__}"
+        return f"{selection.label}: {reported_error_message(refused)}"
     message = str(refused)
     file = selection.file
     names = {selection.inbox_name}

@@ -145,6 +145,7 @@ from debate_core.application.ports.notifier import Notification, Notifier
 
 __all__ = [
     "BACKLOG_GROWTH_RUNS",
+    "HELD_BY_A_REMOVAL_TITLE",
     "MANIFEST_PUBLISHED_AGAIN",
     "MANIFEST_PUBLISHED_AGAIN_TITLE",
     "NEEDS_A_PERSON",
@@ -436,6 +437,11 @@ class SyncRunDetails(BaseModel):
     parse: ParseCounts | None = None
     """The parse stage's counts, or `None` when the stage did not run."""
 
+    held_by_request: dict[str, int] = Field(default_factory=lambda: dict[str, int]())
+    """Uploads the run's imports refused because a removal holds their path, by request id
+    (:attr:`~debate_core.application.caselist_sync.RunSummary.held_by_request`, `v1-e34-t23`).
+    Request ids and counts, never a path. A key a build from before it passes over."""
+
     def stage(self, name: str) -> StageDetails | None:
         return next((one for one in self.stages if one.stage == name), None)
 
@@ -653,6 +659,7 @@ def details_for_summary(summary: RunSummary, *, secrets: Sequence[str] = ()) -> 
         ),
         failure_codes=summary.failure_codes,
         parse=ParseCounts(**summary.parse.as_json()) if summary.parse is not None else None,
+        held_by_request=dict(summary.held_by_request),
     )
 
 
@@ -763,6 +770,13 @@ NEEDS_A_PERSON: Final = (
 """The verdict in every other case (exit 1, and a bug). The runbook quotes this one too."""
 
 _WHAT_WAS_CAPTURED_IS_KEPT: Final = "What was captured is kept."
+
+STATUS_COMMAND: Final = "debate-research caselist status"
+"""What says whether a removal is owed again: a held upload in the inbox, or a row at a held path
+(`v1-e30-t21`)."""
+
+HELD_BY_A_REMOVAL_TITLE: Final = "caselist pull: uploads held by a removal"
+"""The title of a run whose imports refused an upload at a path a removal holds (`v1-e34-t23`)."""
 
 PUBLISH_A_CASELIST_COMMAND: Final = "debate-research caselist publish --caselist"
 """What uploads a caselist's manifests this machine rewrote since they were published (`v1-e30-t12`)."""
@@ -942,6 +956,22 @@ def notifications_for(
                     )
                 ),
                 fix_command=f"{aws_login_command} && {PUBLISH_PENDING_COMMAND}",
+            )
+        )
+    if details.held_by_request:
+        # A hold that refused an upload did its job; whether the removal is owed again is what
+        # `caselist status` says (`v1-e30-t21`). By request id and count only (`v1-e34-t23`).
+        held = ", ".join(
+            f"{request_id} {count}" for request_id, count in sorted(details.held_by_request.items())
+        )
+        sent.append(
+            Notification(
+                title=HELD_BY_A_REMOVAL_TITLE,
+                message=(
+                    f"{where}: the import refused {sum(details.held_by_request.values())} upload(s) at a "
+                    f"path a removal holds, by request: {held}. Nothing of them was stored."
+                ),
+                fix_command=STATUS_COMMAND,
             )
         )
     if record.backlog_growing:

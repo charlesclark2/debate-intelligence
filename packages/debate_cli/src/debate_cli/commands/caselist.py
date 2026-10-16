@@ -148,6 +148,12 @@ its sha256 and by counts, in the text and in `removal_residue` of the JSON alike
 may not list versions the caselist is reported as *not checked*, with `null` counts: that is not a
 finding of none, and it does not change the exit code.
 
+It says when a removal is owed again (`v1-e30-t21`): a stored row at a path a removal holds, which a
+build from before `v1-e30-t13` imported, and an upload at a held path in an archive in the download
+inbox. Each is named by the first twelve characters of its sha256 and the request id of the removal
+holding its path, with the hint to run that removal again; never by its path or the archive's name.
+Neither is a difference from the bucket, so neither changes the exit code.
+
 And, per caselist a completed removal touched, the manifest and aggregate versions older than it, by
 key role and count (`v1-e30-t15`): versions of the parsed store's `index.jsonl`, `failures.jsonl` and
 `occurrences.jsonl` in every version directory, and of each manifest the removal rewrote other than
@@ -159,7 +165,7 @@ no scope is named as not checked.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Coroutine
+from collections.abc import Coroutine, Iterable
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Annotated, Any, Final
@@ -510,7 +516,7 @@ def status(
         validate_publish_target(caselist, snapshot)
     _refuse(cli, ctx, _no_bucket(settings, writing=False))
 
-    report = _run(cli.services.caselist_status().status(caselist, snapshot, residue=True))
+    report = _run(cli.services.caselist_status().status(caselist, snapshot, residue=True, held_in_inbox=True))
     payload = status_summary(report, settings)
     display = _status_table(report, settings)
     if report.in_sync:
@@ -616,7 +622,18 @@ def _drift_hints(report: CaselistStatusReport) -> list[str]:
             "A suppressed row or object is what a removal did not finish: "
             'docs/runbooks/caselist-removal.md, "When caselist status reports removal residue".'
         )
+    if report.removals_owed:
+        hints.append(_removals_owed(report))
     return hints
+
+
+def _removals_owed(report: CaselistStatusReport) -> str:
+    """The hint for a held row or a held upload in the inbox: which removals to run again, and how."""
+    return (
+        f"A held row or a held upload in the inbox means {', '.join(report.removals_owed)} is owed again: "
+        "run the same removal again, dry run first, then --execute "
+        "(docs/runbooks/caselist-removal.md, step 9)."
+    )
 
 
 class InvalidStatusRequest(ConfigurationError):
@@ -744,7 +761,12 @@ def status_summary(report: CaselistStatusReport, settings: Settings) -> dict[str
     Per snapshot, `mismatches` gives each of `checksum_mismatches` with its kind, `manifest` or
     `source`, in the same order; `checksum_mismatches` is unchanged (`v1-e30-t12`). Beside them,
     `suppressed_rows` counts the local manifest's rows the suppression list stops, and
-    `suppressed_row_prefixes` names their files. `suppressed_objects` is one object per caselist
+    `suppressed_row_prefixes` names their files; `held_rows`, `held_row_prefixes` and
+    `held_row_requests` do the same for its rows at a path a removal holds (`v1-e30-t21`), which an
+    older build imported. `held_in_inbox` is one object per caselist compared: the uploads at a held
+    path in the download inbox's archives, by count, `sha256_prefixes` and `requests`.
+    `removals_owed` is every request either names, whose removal is owed again. None of these is
+    part of `in_sync`. `suppressed_objects` is one object per caselist
     compared, because one listing of a caselist's source prefix finds them for all its snapshots:
     the count of current source objects whose digest is suppressed, and their `sha256_prefixes`.
     A removed file is named by the first twelve characters of its digest, as in `removal_residue`.
@@ -764,6 +786,16 @@ def status_summary(report: CaselistStatusReport, settings: Settings) -> dict[str
         ],
         "removal_residue": [_residue_entry(one) for one in report.residue],
         "removals_not_checked": list(report.removals_not_checked),
+        "held_in_inbox": [
+            {
+                "caselist": caselist,
+                "uploads": len(found := report.held_in_inbox_of(caselist)),
+                "sha256_prefixes": [_digest_prefix(upload.sha256) for upload in found],
+                "requests": sorted({upload.request_id for upload in found}),
+            }
+            for caselist in report.caselists
+        ],
+        "removals_owed": list(report.removals_owed),
     }
 
 
@@ -870,6 +902,9 @@ def _status_entry(entry: SnapshotStatus) -> dict[str, JsonValue]:
         ],
         "suppressed_rows": len(entry.suppressed_rows),
         "suppressed_row_prefixes": [_digest_prefix(digest) for digest in entry.suppressed_rows],
+        "held_rows": len(entry.held_rows),
+        "held_row_prefixes": [_digest_prefix(row.sha256) for row in entry.held_rows],
+        "held_row_requests": sorted({row.request_id for row in entry.held_rows}),
     }
 
 
@@ -894,6 +929,30 @@ def _suppressed_object_lines(report: CaselistStatusReport) -> list[str]:
                 f"SUPPRESSED SOURCE OBJECTS in {caselist}: {len(found)} current object(s) ({named})."
             )
     return lines
+
+
+def _held_lines(report: CaselistStatusReport) -> list[str]:
+    """Under the status table: rows and inbox uploads at a held path, by digest prefix and request."""
+    lines = [
+        f"HELD PATH ROWS in {entry.caselist} {entry.snapshot}: {len(entry.held_rows)} row(s) at a path a "
+        f"removal holds ({_held_named((row.sha256, row.request_id) for row in entry.held_rows)})."
+        for entry in report.held_snapshots
+    ]
+    for caselist in report.caselists:
+        found = report.held_in_inbox_of(caselist)
+        if found:
+            lines.append(
+                f"HELD UPLOADS IN THE DOWNLOAD INBOX for {caselist}: {len(found)} upload(s) at a path a "
+                f"removal holds ({_held_named((one.sha256, one.request_id) for one in found)})."
+            )
+    if report.removals_owed:
+        lines.append(_removals_owed(report))
+    return lines
+
+
+def _held_named(held: Iterable[tuple[str, str]]) -> str:
+    """`sha256 <prefix>, <request id>` for each held file, comma-separated."""
+    return ", ".join(f"sha256 {_digest_prefix(digest)}, {request_id}" for digest, request_id in held)
 
 
 def _publish_table(report: PublishReport, settings: Settings) -> TableSpec:
@@ -976,6 +1035,7 @@ def _status_table(report: CaselistStatusReport, settings: Settings) -> TableSpec
                 if not drifted
                 else f"{drifted} snapshot(s) differ; see --json for digests.",
                 *_suppressed_object_lines(report),
+                *_held_lines(report),
                 *_residue_lines(report),
             ]
         ),

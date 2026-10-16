@@ -27,7 +27,8 @@ part-way all leave a key outside that set, and the manifest is withheld.
 
 A required constructor argument, read at the start of every plan (`v1-e30-t07`). A suppressed
 source is never uploaded, and a manifest that still has a stored row the list stops is withheld
-rather than published (`publish_plan`, "A manifest that still names a suppressed file").
+rather than published (`publish_plan`, "A manifest that still names a suppressed file"). So is one
+with a stored row at a path a removal holds, with the same outcome and the same code (`v1-e30-t21`).
 
 ## Idempotent and resumable
 
@@ -121,7 +122,8 @@ the adapter's thread pool are not the bottleneck being tuned.
 
 
 MANIFEST_NAMES_SUPPRESSED_SOURCE: Final = "MANIFEST_NAMES_SUPPRESSED_SOURCE"
-"""The code of a manifest withheld because the local copy still has a row the suppression list stops.
+"""The code of a manifest withheld because the local copy still has a row the suppression list stops,
+or a row at a path a removal holds (`v1-e30-t21`).
 
 An outcome's code, like `CHECKSUM_MISMATCH` and `MISSING_LOCALLY` on a source: nothing was raised,
 and running the publish again gives the same answer until `caselist remove` rewrites the manifest.
@@ -245,7 +247,7 @@ class PublishReport:
         """True for a dry run whose plan blocks nothing, and for a run that completed every snapshot."""
         if not self.applied:
             return all(
-                not snapshot.blocked and not snapshot.suppressed_rows for snapshot in self.plan.snapshots
+                not snapshot.blocked and not snapshot.withholding_rows for snapshot in self.plan.snapshots
             )
         return all(snapshot.complete for snapshot in self.snapshots)
 
@@ -270,6 +272,11 @@ class PublishReport:
     def suppressed_rows(self) -> tuple[Sha256Hex, ...]:
         """Digests of suppressed rows that withheld (or, dry, would withhold) a manifest."""
         return tuple(sorted({digest for plan in self.plan.snapshots for digest in plan.suppressed_rows}))
+
+    @property
+    def held_rows(self) -> tuple[Sha256Hex, ...]:
+        """Digests of rows at a held path that withheld (or, dry, would withhold) a manifest."""
+        return tuple(sorted({row.sha256 for plan in self.plan.snapshots for row in plan.held_rows}))
 
     def count(self, result: SourceResult) -> int:
         """How many *distinct* source objects ended with `result` across the run."""
@@ -364,18 +371,14 @@ class CaselistPublishService:
             limit=self._concurrency,
         )
 
-        if plan.suppressed_rows:
+        if plan.withholding_rows:
             return SnapshotOutcome(
                 caselist=plan.caselist,
                 snapshot=plan.snapshot,
                 manifest_key=plan.manifest_key,
                 sources=tuple(sources),
                 manifest=ManifestOutcome.WITHHELD,
-                manifest_error=(
-                    f"the local manifest still has {len(plan.suppressed_rows)} row(s) for suppressed "
-                    f"source(s): {', '.join(plan.suppressed_rows)}; re-run `caselist remove` for them "
-                    "on this machine to rewrite it"
-                ),
+                manifest_error=_withheld_for_rows(plan),
                 manifest_error_code=MANIFEST_NAMES_SUPPRESSED_SOURCE,
             )
 
@@ -516,6 +519,22 @@ class CaselistPublishService:
 # ------------------------------------------------------------------------------------------------
 # Helpers
 # ------------------------------------------------------------------------------------------------
+
+
+def _withheld_for_rows(plan: SnapshotPlan) -> str:
+    """Why a manifest with a suppressed or held row is withheld: the rows by digest, and the fix."""
+    rows: list[str] = []
+    if plan.suppressed_rows:
+        rows.append(
+            f"{len(plan.suppressed_rows)} row(s) for suppressed source(s): {', '.join(plan.suppressed_rows)}"
+        )
+    if plan.held_rows:
+        held = ", ".join(f"{row.sha256} ({row.request_id})" for row in plan.held_rows)
+        rows.append(f"{len(plan.held_rows)} row(s) at a path a removal holds: {held}")
+    return (
+        f"the local manifest still has {'; and '.join(rows)}; re-run `caselist remove` for them on this "
+        "machine to rewrite it"
+    )
 
 
 def _presence_problem(planned: PlannedSource, present: ObjectInfo) -> str | None:

@@ -71,6 +71,14 @@ and team code all over again. A manifest written after the removal has no such r
 give a suppressed member none, and `caselist remove` rewrites the manifests it touches), so this
 only fires for a manifest the removal never reached, and the fix is to run the removal on this
 machine.
+
+A stored row at a path a removal holds (`v1-e30-t13`), in a snapshot the hold covers, withholds the
+manifest the same way (:attr:`SnapshotPlan.held_rows`, `v1-e30-t21`), with the same outcome and the
+same code. Its bytes are not on the list, so the row is the requester's later upload at the removed
+path, and uploading the manifest would publish that path. This build's importer never writes such a
+row; a build from before `v1-e30-t13` imported one, because it reads no hold. Like a withdrawn
+disclosure, the hold is on the path and not on the bytes, so the source's own action is decided by
+the table above as before. Running the same removal again takes the row out.
 """
 
 from __future__ import annotations
@@ -109,9 +117,12 @@ __all__ = [
     "digest_of_local_blob_key",
     "full_archive_date",
     "full_archive_snapshot",
+    "HeldRow",
+    "held_rows",
     "local_blob_key",
     "manifest_prefix",
     "remote_source_prefix",
+    "snapshot_date",
     "snapshot_manifest_key",
     "snapshot_of_manifest_key",
     "source_key",
@@ -417,6 +428,50 @@ def suppressed_rows(local: LocalSnapshot, suppression: SuppressionState) -> tupl
     return tuple(sorted(stopped))
 
 
+@dataclass(frozen=True, slots=True, order=True)
+class HeldRow:
+    """A stored manifest row at a path a removal holds: its digest, and the request holding the path."""
+
+    sha256: Sha256Hex
+    request_id: str
+
+
+def held_rows(local: LocalSnapshot, suppression: SuppressionState) -> tuple[HeldRow, ...]:
+    """The local manifest's stored rows at a path a removal holds, sorted by digest, once each.
+
+    A row is held when a removal holds its caselist path and the snapshot is dated after the removed
+    file first appeared there: the rule the importer refuses an upload by
+    (:meth:`~debate_core.application.ports.suppression.SuppressionState.path_hold`, `v1-e30-t13`).
+    A row the list already stops is :func:`suppressed_rows`', not this. A camp release's rows are at
+    no caselist path, so none is held. Where one digest is held at two paths, the first hold found
+    names it.
+    """
+    snapshot = snapshot_date(local.snapshot)
+    if local.caselist == OPENEV or snapshot is None:
+        return ()
+    held: dict[Sha256Hex, str] = {}
+    for digest, path in local.stored_rows:
+        if suppression.suppresses(digest, disclosure=disclosure_digest(local.caselist, path)):
+            continue
+        hold = suppression.path_hold(caselist=local.caselist, path=path, snapshot=snapshot)
+        if hold is not None:
+            held.setdefault(digest, hold.request_id)
+    return tuple(HeldRow(sha256=digest, request_id=held[digest]) for digest in sorted(held))
+
+
+def snapshot_date(snapshot: str) -> date | None:
+    """The date a caselist snapshot's name states: a weekly's `2026-09-15`, a complete archive's
+    `full/2026-10-06`. `None` for any other name, such as a camp release's."""
+    full = full_archive_date(snapshot)
+    if full is not None:
+        return full
+    try:
+        parsed = date.fromisoformat(snapshot)
+    except ValueError:
+        return None
+    return parsed if parsed.isoformat() == snapshot else None
+
+
 # ------------------------------------------------------------------------------------------------
 # The plan
 # ------------------------------------------------------------------------------------------------
@@ -472,6 +527,13 @@ class SnapshotPlan:
     manifest_action: ManifestAction
     suppressed_rows: tuple[Sha256Hex, ...] = ()
     """Digests of stored rows in the local manifest the suppression list stops; any withholds it."""
+    held_rows: tuple[HeldRow, ...] = ()
+    """Stored rows at a path a removal holds (`v1-e30-t21`); any withholds it, as a suppressed row does."""
+
+    @property
+    def withholding_rows(self) -> tuple[Sha256Hex, ...]:
+        """The digests of every row that withholds the manifest, suppressed or held, sorted, once each."""
+        return tuple(sorted({*self.suppressed_rows, *(row.sha256 for row in self.held_rows)}))
 
     def of(self, *actions: SourceAction) -> tuple[PlannedSource, ...]:
         wanted = set(actions)
@@ -561,6 +623,7 @@ def build_publish_plan(
                 manifest_size=local.manifest_size,
                 manifest_action=ManifestAction.VERIFY if manifest_key in remote else ManifestAction.UPLOAD,
                 suppressed_rows=suppressed_rows(local, suppression),
+                held_rows=held_rows(local, suppression),
             )
         )
     return PublishPlan(caselist=caselist, snapshots=tuple(plans))

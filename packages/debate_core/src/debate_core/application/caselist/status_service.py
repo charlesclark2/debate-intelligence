@@ -49,6 +49,24 @@ removal log, which it reads as it reads the suppression list: this machine's cop
 as one, with the scopes beside them. Only entries recorded in this environment are compared: in
 prod the command runs against the dev data directory, whose copy holds dev's removals.
 
+## What a removal's hold says is owed
+
+A removal by `--source` holds the removed file's path (`v1-e30-t13`), and the importer of this build
+refuses an upload there. Two things still say the same removal has to be run again, and the
+comparison reports both (`v1-e30-t21`):
+
+* a stored row at a held path, in a snapshot the hold covers (:attr:`SnapshotStatus.held_rows`):
+  an import by a build from before `v1-e30-t13`, which reads no hold, wrote it;
+* an upload at a held path in an archive in the download inbox (:attr:`CaselistStatusReport.held_in_inbox`),
+  asked for with `held_in_inbox=True` from a service built with the inbox: refused at import, or
+  waiting to be.
+
+Neither is a difference between this machine and the bucket, so neither changes
+:attr:`CaselistStatusReport.in_sync` or the command's exit status. Each is named by its digest and
+the request that holds its path, never by the path. The inbox is read only when asked, because it
+means reading every archive in it: `caselist status` asks, and `caselist pull` does not. An archive
+there that cannot be read is passed over; a removal's dry run names it.
+
 ## A manifest mismatch and a source mismatch
 
 A checksum mismatch is one of two kinds (:class:`MismatchKind`, `v1-e30-t12`), told apart by
@@ -66,8 +84,9 @@ manifest's digest is compared, and its body is never read back from the bucket.
 
 ## What it reports
 
-Counts, digests and keys — which are digests, or a caselist and a date. The school, team code and
-filename in a manifest row never leave the manifest (`docs/policies/caselist-data-use.md`, rule 4).
+Counts, digests and keys — which are digests, or a caselist and a date — and the request ids of the
+removals a hold says are owed. The school, team code and filename in a manifest row never leave the
+manifest (`docs/policies/caselist-data-use.md`, rule 4), and neither does an inbox archive's name.
 """
 
 from __future__ import annotations
@@ -76,7 +95,7 @@ import asyncio
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Final
+from typing import Final, Protocol
 
 from debate_core.application.caselist.evidence_listing import (
     LocalEvidence,
@@ -87,8 +106,10 @@ from debate_core.application.caselist.evidence_listing import (
     read_local_snapshots,
 )
 from debate_core.application.caselist.publish_plan import (
+    HeldRow,
     LocalSnapshot,
     digest_of_local_blob_key,
+    held_rows,
     remote_source_prefix,
     snapshot_manifest_key,
     snapshot_of_manifest_key,
@@ -119,6 +140,8 @@ __all__ = [
     "REMOVAL_RESIDUE",
     "CaselistStatusReport",
     "CaselistStatusService",
+    "HeldInboxUpload",
+    "InboxHolds",
     "MismatchKind",
     "NoCaselistEvidence",
     "SnapshotStatus",
@@ -144,6 +167,33 @@ class MismatchKind(StrEnum):
     """The snapshot's own manifest. `caselist publish` uploads this machine's copy."""
     SOURCE = "source"
     """A source, filed by the digest of its bytes. A person finds out why the bucket holds others."""
+
+
+@dataclass(frozen=True, slots=True, order=True)
+class HeldInboxUpload:
+    """An upload at a path a removal holds, in an archive in the download inbox (`v1-e30-t21`).
+
+    Its caselist, the snapshot its archive is (`2026-10-08`, or `full/2026-10-09`), its digest and
+    the request holding the path. Never the archive's file name or the path.
+    """
+
+    caselist: str
+    snapshot: str
+    sha256: Sha256Hex
+    request_id: str
+
+
+class InboxHolds(Protocol):
+    """The download inbox, asked which of its uploads a removal's hold covers.
+
+    :class:`~debate_core.application.caselist.inbox_purge.CaselistInbox` is one. A protocol, because
+    the inbox module imports the pull, and the pull imports this comparison.
+    """
+
+    def held_uploads(self, suppression: SuppressionState) -> tuple[HeldInboxUpload, ...]:
+        """Every real member of a weekly or complete archive there at a held path, in a snapshot the
+        hold covers, that the list does not already stop. Reads only."""
+        ...
 
 
 class NoCaselistEvidence(DomainError):
@@ -184,6 +234,9 @@ class SnapshotStatus:
     suppressed: int = 0
     suppressed_rows: tuple[Sha256Hex, ...] = ()
     """Digests of stored rows in the local manifest the suppression list stops. A removal leftover."""
+    held_rows: tuple[HeldRow, ...] = ()
+    """Stored rows in the local manifest at a path a removal holds (`v1-e30-t21`): the same removal is
+    owed again. Not a difference from the bucket, so not part of :attr:`in_sync`."""
 
     @property
     def in_sync(self) -> bool:
@@ -234,6 +287,9 @@ class CaselistStatusReport:
     removals_not_checked: tuple[str, ...] = ()
     """Request ids of completed removals whose log entries do not say which caselists they touched,
     so that no manifest or aggregate version is checked against them (`v1-e30-t15`)."""
+    held_in_inbox: tuple[HeldInboxUpload, ...] = ()
+    """Uploads at a held path in the download inbox's archives, of the caselists compared
+    (`v1-e30-t21`). Empty when the caller did not ask. Not part of :attr:`in_sync`."""
 
     @property
     def in_sync(self) -> bool:
@@ -277,6 +333,21 @@ class CaselistStatusReport:
         return tuple(key for key in self.suppressed_objects if key.startswith(prefix))
 
     @property
+    def held_snapshots(self) -> tuple[SnapshotStatus, ...]:
+        """The snapshots with a stored row at a held path."""
+        return tuple(snapshot for snapshot in self.snapshots if snapshot.held_rows)
+
+    @property
+    def removals_owed(self) -> tuple[str, ...]:
+        """The request ids whose removal a held row or a held inbox upload says to run again, sorted."""
+        rows = {row.request_id for snapshot in self.snapshots for row in snapshot.held_rows}
+        return tuple(sorted(rows | {upload.request_id for upload in self.held_in_inbox}))
+
+    def held_in_inbox_of(self, caselist: str) -> tuple[HeldInboxUpload, ...]:
+        """The :attr:`held_in_inbox` uploads of `caselist`."""
+        return tuple(upload for upload in self.held_in_inbox if upload.caselist == caselist)
+
+    @property
     def residue_found(self) -> bool:
         """Whether a version listing showed anything left of a removed file."""
         return any(one.found for one in self.residue)
@@ -300,6 +371,8 @@ class CaselistStatusService:
             manifest and aggregate versions older than a removal (`v1-e30-t15`). Read only when
             :meth:`status` is asked for residue. Without one, no removal is known.
         environment: This environment, `dev` or `prod`. Only its own removals are compared.
+        inbox: The download inbox, for the uploads a removal's hold covers there (`v1-e30-t21`).
+            Read only when :meth:`status` is asked for them.
         concurrency: `HeadObject` calls in flight at once.
     """
 
@@ -312,6 +385,7 @@ class CaselistStatusService:
         versions: EvidenceVersionStore | None = None,
         removal_log: RemovalLog | None = None,
         environment: str | None = None,
+        inbox: InboxHolds | None = None,
         concurrency: int = _DEFAULT_CONCURRENCY,
     ) -> None:
         if concurrency < 1:
@@ -324,21 +398,31 @@ class CaselistStatusService:
         self._versions = versions
         self._removal_log = removal_log
         self._environment = environment
+        self._inbox = inbox
         self._semaphore_size = concurrency
 
     async def status(
-        self, caselist: str | None = None, snapshot: str | None = None, *, residue: bool = False
+        self,
+        caselist: str | None = None,
+        snapshot: str | None = None,
+        *,
+        residue: bool = False,
+        held_in_inbox: bool = False,
     ) -> CaselistStatusReport:
         """Compare one caselist, or every caselist either side holds a manifest for.
 
         With `residue`, also list object versions and report what is left of each compared
         caselist's removed files, whichever snapshot was asked about: see "What a removal left
-        behind" in the module docstring.
+        behind" in the module docstring. With `held_in_inbox`, also read the download inbox for
+        uploads a removal's hold covers, of the caselists compared and the snapshot asked about:
+        see "What a removal's hold says is owed".
 
         Raises :class:`NoCaselistEvidence` when neither side holds anything that was asked about.
         """
         if residue and self._versions is None:
             raise ValueError("the residue check needs a version store; this service was built without one")
+        if held_in_inbox and self._inbox is None:
+            raise ValueError("the inbox check needs the inbox; this service was built without one")
         if caselist is None:
             if snapshot is not None:
                 raise ValueError("a snapshot is only meaningful with a caselist")
@@ -367,11 +451,21 @@ class CaselistStatusService:
         if residue and self._versions is not None:
             removals = await self._completed_removals()
             left = [await removal_residue(self._versions, name, suppression, removals) for name in caselists]
+        inbox: tuple[HeldInboxUpload, ...] = ()
+        if held_in_inbox and self._inbox is not None:
+            inbox = tuple(
+                sorted(
+                    upload
+                    for upload in self._inbox.held_uploads(suppression)
+                    if upload.caselist in caselists and snapshot in (None, upload.snapshot)
+                )
+            )
         return CaselistStatusReport(
             snapshots=tuple(compared),
             suppressed_objects=tuple(sorted(set(leftovers))),
             residue=tuple(left),
             removals_not_checked=removals.not_checked,
+            held_in_inbox=inbox,
         )
 
     async def _completed_removals(self) -> CompletedRemovals:
@@ -487,6 +581,7 @@ class CaselistStatusService:
             checksum_mismatches=tuple(sorted(mismatched)),
             suppressed=len(local.sources) - len(sources),
             suppressed_rows=suppressed_rows(local, suppression),
+            held_rows=held_rows(local, suppression),
         )
 
     async def _head(self, key: ObjectKey, semaphore: asyncio.Semaphore) -> ObjectInfo | None:

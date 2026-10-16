@@ -333,7 +333,8 @@ async def test_the_everyday_profile_signed_in_as_the_takedown_permission_set_is_
             "prod",
             EVERYDAY_ROLE,
             "defined, and signed in as DebateDevEvidenceOperator, which is dev's permission set and not "
-            "prod's: prod's bucket grants it nothing, so every command that reaches the bucket will be refused",
+            "prod's: prod's bucket grants it nothing, so every command that reaches the bucket will be "
+            "refused",
             id="dev's everyday set, in prod",
         ),
         pytest.param(

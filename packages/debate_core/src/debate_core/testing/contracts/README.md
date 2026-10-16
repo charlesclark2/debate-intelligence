@@ -5,7 +5,8 @@
 tests, so that swapping V1's SQLite and filesystem adapters for V2's DynamoDB and S3 ones is a
 change of wiring and not a change of behaviour (architecture proposal §16, §17).
 
-There are five contract classes, one per port:
+There are five persistence contract classes, one per port, and a sixth for the model router
+(`ModelRouterContract`, in `model_router.py`, whose docstring explains its opt-in):
 
 | Contract | Port | Factory type |
 |---|---|---|

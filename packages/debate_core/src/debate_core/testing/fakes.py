@@ -106,6 +106,7 @@ from debate_core.domain.model_contracts import (
 )
 
 __all__ = [
+    "ScriptedModelResponse",
     "FAKE_EPOCH",
     "FakeArticleFetcher",
     "FakeContentExtractor",

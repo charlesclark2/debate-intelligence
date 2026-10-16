@@ -259,7 +259,13 @@ Before the first change the command checks the takedown profile in two steps. Fi
 account which role the profile is signed in as, and stops unless that is this environment's
 `EvidenceRemoval` permission set (`v1-e29-t08`). Asking needs no grant and writes nothing. Then it
 proves the profile can list, write and delete a probe version under
-`manifests/_suppression/preflight/`.
+`manifests/_suppression/preflight/`. `caselist unsuppress --execute`
+([If you removed the wrong thing](#if-you-removed-the-wrong-thing)) runs the same check, in the same
+two steps, before it appends anything, and stops in the same ways.
+
+Once its own probe is gone, a check that passed deletes every probe it found under
+`manifests/_suppression/preflight/` before it wrote its own: what earlier checks left
+(`v1-e29-t09`). It deletes them with the takedown profile, and nothing outside that prefix.
 
 An unset `DEBATE_REMOVAL_PROFILE`, one that names a profile your AWS config lacks, a signed-out
 session, or the everyday profile named by mistake stops it at or before the first step: nothing
@@ -270,8 +276,8 @@ session exits 3 with the `aws sso login` line to run.
 
 A probe is left behind only when the takedown role itself is refused the delete, which means its
 grants are not what [evidence-store.md](evidence-store.md) says they are. The error gives the
-probe's key, and [A probe a preflight left behind](#a-probe-a-preflight-left-behind) says how to
-remove it.
+probe's key. Once the grant is fixed, the next `--execute` removes it;
+[A probe a preflight left behind](#a-probe-a-preflight-left-behind) says when to remove one by hand.
 
 It then appends the suppression entries and the path entries first, deletes from the bucket, then
 from this machine — the store, then the download inbox (step 8) — and writes one removal-log entry. The `DONE` output says
@@ -844,8 +850,25 @@ One can be left in two ways:
 - **At any time**, by the takedown role being refused the delete. Fix the grant first
   ([evidence-store.md, If something is wrong](evidence-store.md#if-something-is-wrong)).
 
-Either way the error named the key: *its probe object was left at …*. Nothing removes a probe by
-itself. It is a current version, and no lifecycle rule expires one outside `exports/`.
+Either way the error named the key: *its probe object was left at …*. It is a current version,
+and no lifecycle rule expires one outside `exports/`.
+
+**The next takedown removes it** (`v1-e29-t09`). A `caselist remove --execute` or
+`caselist unsuppress --execute` whose check passes deletes, with the takedown profile, every version
+it found under `manifests/_suppression/preflight/` before it wrote its own probe. So a probe left in
+an environment goes with the next request carried out there, and nothing is needed by hand.
+
+**Remove one by hand only when** one of these is true:
+
+- **You want the prefix empty before the next request**, and none is due. The count below says
+  whether there is anything to remove.
+- **The takedown role is the one refused the delete.** Its check never passes, so nothing removes
+  probes until the grant is fixed. Fix the grant first
+  ([evidence-store.md, If something is wrong](evidence-store.md#if-something-is-wrong)); after
+  that the next request removes them, and removing them by hand is only for not waiting.
+- **A probe is still there after a request was carried out.** The check leaves alone a probe written
+  after it listed the prefix, which only another takedown running at the same moment writes. Count
+  again once neither is running; the next request removes any that is left.
 
 **Count them.** Read-only, with the everyday profile. For prod, use `debate-prod-evidence` and
 `debate-prod-evidence-a7508de8`.
@@ -859,7 +882,7 @@ aws s3api list-object-versions --profile debate-dev-evidence --bucket debate-dev
 `{"versions": 0, "delete_markers": 0}` means there is nothing to do.
 
 **Delete them**, with the takedown profile, each version by its id. This is the one place this
-runbook deletes with the AWS CLI, because no command owns a probe. The suppression list and the
+runbook deletes with the AWS CLI, because no command removes a probe outside a takedown. The suppression list and the
 removal log are one level up, under `manifests/_suppression/`, and are never deleted: keep the
 prefix exactly as written, ending in `preflight/`. The loop also skips any key that is not under
 it. For prod, set `PROFILE=debate-prod-evidence-removal` and `BUCKET=debate-prod-evidence-a7508de8`.
@@ -960,7 +983,9 @@ register keeps the original one.
   profile's read-only version listing, which the dry run's version counts and the residue report
   both use.
 - `plan_specs/v1/e29-cloud-evidence-store/t08-takedown-preflight-identity.yaml` — the check of
-  which role the takedown profile is signed in as, and the probe clean-up.
+  which role the takedown profile is signed in as, and the probe clean-up by hand.
+- `plan_specs/v1/e29-cloud-evidence-store/t09-store-error-loose-ends.yaml` — a passing check
+  removes the probes earlier checks left, and `unsuppress` runs the same check.
 - `plan_specs/v1/e29-cloud-evidence-store/t03-evidence-buckets.yaml` — bucket lifecycle and the
   `EvidenceOperator` and `EvidenceRemoval` permission sets.
 - `plan_specs/v2/e35-debate-tub/t05-tub-access-and-removal.yaml` — the V2 takedown flow built on

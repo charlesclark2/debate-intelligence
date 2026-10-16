@@ -27,7 +27,8 @@ all but a takedown role whose own grants are broken fail before anything is writ
 The question comes first because nothing the bucket allows tells the two profiles apart short of a
 delete. From `v1-e29-t06`, which let the everyday profile list versions, until `v1-e29-t08`, that
 profile named by mistake listed, wrote the probe and was refused only at the delete, leaving the
-probe behind. `docs/runbooks/caselist-removal.md` says how to remove one left from then.
+probe behind. A preflight that passes now deletes every probe it found there before it wrote its
+own (`v1-e29-t09`); `docs/runbooks/caselist-removal.md` says when one is still removed by hand.
 
 ## The order is the safety
 
@@ -56,8 +57,8 @@ probe behind. `docs/runbooks/caselist-removal.md` says how to remove one left fr
 
 ## What it never deletes
 
-Anything under `manifests/_suppression/` but its own preflight probe
-(:func:`refuse_protected_versions`): the suppression list and the removal log are append-only and
+Anything under `manifests/_suppression/` but the preflight's probes, its own and those earlier
+preflights left (:func:`refuse_protected_versions`): the suppression list and the removal log are append-only and
 their versions are the record of what was asked. And nothing under `reports/`, which IAM would refuse
 anyway.
 """
@@ -420,6 +421,13 @@ async def preflight(access: TakedownAccess, *, environment: str) -> None:
 
     A takedown role whose own delete grant is missing still gets as far as the delete, since nothing
     short of a delete shows that. It leaves its probe, and the error names the key.
+
+    A preflight that passes then deletes every version its first listing found under
+    :data:`PREFLIGHT_PREFIX` (`v1-e29-t09`): probes that earlier preflights wrote and were refused
+    the delete of. They were there before its own probe was written, so they are older than it, and
+    the credential has just shown it may delete there. A probe written after that listing, by a
+    preflight running beside this one, is not touched. A refused sweep fails the preflight with the
+    takedown not begun, as any other refused step does.
     """
     required = takedown_permission_set(environment)
     key = f"{PREFLIGHT_PREFIX}{uuid.uuid4().hex}.txt"
@@ -432,7 +440,11 @@ async def preflight(access: TakedownAccess, *, environment: str) -> None:
                 access.profile, role_name=role_name, required=required, environment=environment
             )
         step = "list object versions"
-        await access.versions.list_versions(PREFLIGHT_PREFIX)
+        earlier = tuple(
+            version
+            for version in await access.versions.list_versions(PREFLIGHT_PREFIX)
+            if version.key.startswith(PREFLIGHT_PREFIX)
+        )
         step = "write a probe under manifests/_suppression/"
         with tempfile.TemporaryDirectory(prefix="debate-preflight-") as directory:
             probe = Path(directory) / "probe.txt"
@@ -452,6 +464,13 @@ async def preflight(access: TakedownAccess, *, environment: str) -> None:
             raise StoreAccessDenied(
                 "DeleteObject", f"s3://{access.bucket}/{key}", hint="a version survived the delete"
             )
+        written = False
+        if earlier:
+            # Listed before its own probe was written, so older than it: what earlier preflights
+            # left (`v1-e29-t09`). Deleted with the credential that has just shown it may.
+            step = "delete the probes an earlier preflight left"
+            refuse_protected_versions(earlier)
+            await access.versions.delete_versions(earlier)
     except (StoreError, DomainError) as failure:
         raise TakedownPreflightFailed(
             access.profile, step, failure, left=key if written else None

@@ -16,18 +16,34 @@
 # (~/Library/Mobile Documents), ~/Library/CloudStorage (Dropbox, Google Drive and other File
 # Provider folders) or /Volumes.
 #
-#   ops/launchd/install.sh --caselist hsld26 --caselist hspolicy26 --dry-run
-#   ops/launchd/install.sh --caselist hsld26 --env prod --aws-profile debate-prod-evidence
+#   ops/launchd/install.sh --caselist hsld26 --caselist hspolicy26 --env prod --dry-run
+#   ops/launchd/install.sh --debate-research "$HOME/.local/bin/debate-research"
 #   ops/launchd/install.sh --check-launchd
 #
+# Over an installed agent (a plist already at ~/Library/LaunchAgents/<label>.plist) the installed
+# plist is read first, and an option left out keeps what it says: the agent's environment and its
+# caselists are changed only by an option that says so, and the installer says what it kept
+# (v1-e34-t24). Before it writes anything, a dry run included, it asks the build where the agent's
+# data will be and runs the build's own checks with the agent's evidence profile,
+# `debate-research doctor --evidence-profiles`, as the agent will run them. It refuses a profile
+# this machine's AWS config does not define, and a build whose checks fail.
+#
+# The AWS profile the run uses is the build's setting `storage.s3.aws_profile`, not an option
+# here. There is no --aws-profile: it wrote AWS_PROFILE into the plist, which nothing the agent
+# runs reads (v1-e34-t24).
+#
 # Options
-#   --caselist SLUG      A caselist the weekly run covers. Repeatable. At least one is required:
-#                        which caselists this installation follows is the operator's decision and
-#                        is not written down in this repository.
-#   --env ENVIRONMENT    DEBATE_ENV for the agent. Default: prod.
-#   --aws-profile NAME   The SSO profile for that environment's evidence bucket.
-#                        Default: debate-<env>-evidence.
-#   --weekday N          1 = Monday … 7 = Sunday. Default: 3 (Wednesday), the day after the site
+#   --caselist SLUG      A caselist the weekly run covers. Repeatable. A first install needs at
+#                        least one: which caselists this installation follows is the operator's
+#                        decision and is not written down in this repository. Over an installed
+#                        agent the default is the caselists it follows, and any given replace them.
+#   --env ENVIRONMENT    DEBATE_ENV for the agent, dev or prod. Default: the installed agent's, or
+#                        prod for a first install. A different one from the installed agent's is
+#                        refused without --confirm-env-change.
+#   --confirm-env-change Confirm an install that switches the installed agent to another
+#                        environment, or that moves its data directory: another store, and with
+#                        another environment another evidence bucket.
+#   --weekday N         1 = Monday … 7 = Sunday. Default: 3 (Wednesday), the day after the site
 #                        has published the week's archives.
 #   --hour N             Default: 6.  --minute N   Default: 0.
 #   --label NAME         launchd label. Default: com.debate-intelligence.caselist-sync.
@@ -37,7 +53,9 @@
 #   --debate-research P  Full path to the console script the agent runs, written into the plist
 #                        as DEBATE_RESEARCH_BIN. Default: whatever `command -v debate-research`
 #                        finds, as found (a symlink stays a symlink).
-#   --dry-run            Render the plist to stdout and write nothing at all.
+#   --dry-run            Make every check an install makes, the profile check included, render the
+#                        plist to stdout and write nothing at all. What is kept or changed over an
+#                        installed agent is said on stderr.
 #   --check-launchd      Prove launchd can run the installed agent's wrapper, and that the AWS
 #                        profile the weekly run uses is defined, without a sync: load a one-off
 #                        copy of the installed plist as <label>.check, running the wrapper's
@@ -62,8 +80,9 @@ WRAPPER_NAME="run-caselist-sync.sh"
 SYSTEM_PATH="/usr/bin:/bin:/usr/sbin:/sbin"
 
 LABEL="com.debate-intelligence.caselist-sync"
-DEBATE_ENVIRONMENT="prod"
-AWS_PROFILE_NAME=""
+DEBATE_ENVIRONMENT=""
+ENVIRONMENT_GIVEN=0
+CONFIRM_ENV_CHANGE=0
 WEEKDAY=3
 HOUR=6
 MINUTE=0
@@ -83,6 +102,16 @@ usage() {
 fail() {
     echo "install.sh: $1" >&2
     exit 2
+}
+
+# What the installer kept or changed, said beside the plist rather than in it: on stderr for a dry
+# run, whose stdout is the plist, and on stdout otherwise.
+note() {
+    if [ "${DRY_RUN}" -eq 1 ]; then
+        printf '%s\n' "$1" >&2
+    else
+        printf '%s\n' "$1"
+    fi
 }
 
 lower() {
@@ -187,8 +216,9 @@ runs_of() {
 while [ $# -gt 0 ]; do
     case "$1" in
         --caselist) [ $# -ge 2 ] || fail "--caselist needs a slug"; CASELISTS="${CASELISTS} $2"; shift 2 ;;
-        --env) [ $# -ge 2 ] || fail "--env needs a value"; DEBATE_ENVIRONMENT="$2"; shift 2 ;;
-        --aws-profile) [ $# -ge 2 ] || fail "--aws-profile needs a value"; AWS_PROFILE_NAME="$2"; shift 2 ;;
+        --env) [ $# -ge 2 ] || fail "--env needs a value"; DEBATE_ENVIRONMENT="$2"; ENVIRONMENT_GIVEN=1; shift 2 ;;
+        --confirm-env-change) CONFIRM_ENV_CHANGE=1; shift ;;
+        --aws-profile) fail "there is no --aws-profile any more: it wrote AWS_PROFILE into the plist, which nothing the agent runs reads. The run's AWS profile is the build's setting storage.s3.aws_profile, and this script checks that profile before it installs (docs/runbooks/caselist-scheduled-sync.md)" ;;
         --weekday) [ $# -ge 2 ] || fail "--weekday needs a value"; WEEKDAY="$2"; shift 2 ;;
         --hour) [ $# -ge 2 ] || fail "--hour needs a value"; HOUR="$2"; shift 2 ;;
         --minute) [ $# -ge 2 ] || fail "--minute needs a value"; MINUTE="$2"; shift 2 ;;
@@ -210,7 +240,8 @@ PHYSICAL_HOME=$(physical_path "${HOME}")
 # --- The launchd check: a one-off label running the installed wrapper's `--check` -------------
 
 if [ "${CHECK_LAUNCHD}" -eq 1 ]; then
-    [ -z "${CASELISTS}" ] && [ "${DRY_RUN}" -eq 0 ] || fail "--check-launchd takes no options but --label"
+    [ -z "${CASELISTS}" ] && [ "${DRY_RUN}" -eq 0 ] && [ "${ENVIRONMENT_GIVEN}" -eq 0 ] \
+        && [ "${CONFIRM_ENV_CHANGE}" -eq 0 ] || fail "--check-launchd takes no options but --label"
     for tool in launchctl plutil; do
         command -v "${tool}" >/dev/null 2>&1 || fail "--check-launchd needs macOS's ${tool}"
     done
@@ -307,10 +338,91 @@ fi
 # --- Installing ---------------------------------------------------------------------------------
 
 [ -f "${TEMPLATE}" ] || fail "the plist template is missing at ${TEMPLATE}"
+AGENT_DIRECTORY="${HOME}/Library/LaunchAgents"
+DESTINATION="${AGENT_DIRECTORY}/${LABEL}.plist"
+
+# --- Over an installed agent, what it runs with is kept unless an option says otherwise ----------
+#
+# A reinstall is for a new build, a new wrapper or a new schedule. At the reinstall of 2026-10-14
+# the agent was a dev agent and --env defaulted to prod, so the runbook's example would have
+# switched it to prod's data directory and bucket (v1-e34-t24). The installed plist is read first,
+# and its environment and caselists are the defaults.
+
+# The variables this script writes. Any other in an installed plist was put there by hand, and a
+# reinstall writes the plist afresh without it.
+WRITTEN_VARIABLES="DEBATE_ENV HOME DEBATE_RESEARCH_BIN PATH"
+INSTALLED_ENVIRONMENT=""
+INSTALLED_CASELISTS=""
+INSTALLED_ARGUMENTS_UNKNOWN=0
+DROPPED_VARIABLES=""
+if [ -f "${DESTINATION}" ]; then
+    command -v plutil >/dev/null 2>&1 \
+        || fail "an agent is installed at ${DESTINATION}, and reading its environment and caselists needs macOS's plutil; nothing was installed"
+    if ! INSTALLED_ENVIRONMENT=$(plutil -extract EnvironmentVariables.DEBATE_ENV raw -o - "${DESTINATION}" 2>/dev/null); then
+        [ "${ENVIRONMENT_GIVEN}" -eq 1 ] && [ "${CONFIRM_ENV_CHANGE}" -eq 1 ] \
+            || fail "the agent installed at ${DESTINATION} names no DEBATE_ENV, so which environment it runs as is unknown; nothing was installed. Give --env and --confirm-env-change to say which it is to run as"
+        INSTALLED_ENVIRONMENT=""
+    fi
+
+    # Its arguments after the wrapper, as this script writes them: `--caselist <slug>`, repeated.
+    position=1
+    while argument=$(plutil -extract "ProgramArguments.${position}" raw -o - "${DESTINATION}" 2>/dev/null); do
+        slug=""
+        if [ "${argument}" = "--caselist" ]; then
+            slug=$(plutil -extract "ProgramArguments.$((position + 1))" raw -o - "${DESTINATION}" 2>/dev/null) || slug=""
+        fi
+        if [ -z "${slug}" ]; then
+            [ -n "${CASELISTS}" ] \
+                || fail "the agent installed at ${DESTINATION} runs its wrapper with '${argument}', which this script does not write, so which caselists it follows is unknown; nothing was installed. Give --caselist for each caselist it is to follow"
+            INSTALLED_ARGUMENTS_UNKNOWN=1
+            break
+        fi
+        INSTALLED_CASELISTS="${INSTALLED_CASELISTS} ${slug}"
+        position=$((position + 2))
+    done
+
+    # `raw` lists a dictionary's keys, one to a line.
+    for variable in $(plutil -extract EnvironmentVariables raw -o - "${DESTINATION}" 2>/dev/null); do
+        case " ${WRITTEN_VARIABLES} " in
+            *" ${variable} "*) continue ;;
+        esac
+        case "${variable}" in
+            ''|[0-9]*|*[!A-Za-z0-9_]*) fail "the agent installed at ${DESTINATION} sets '${variable}', which is not a variable name; nothing was installed" ;;
+        esac
+        DROPPED_VARIABLES="${DROPPED_VARIABLES} ${variable}"
+    done
+
+    if [ "${ENVIRONMENT_GIVEN}" -eq 0 ]; then
+        DEBATE_ENVIRONMENT=${INSTALLED_ENVIRONMENT}
+        note "Keeping the installed agent's environment, ${INSTALLED_ENVIRONMENT} (--env changes it)."
+    elif [ "${DEBATE_ENVIRONMENT}" != "${INSTALLED_ENVIRONMENT}" ]; then
+        [ "${CONFIRM_ENV_CHANGE}" -eq 1 ] \
+            || fail "the agent installed at ${DESTINATION} runs as ${INSTALLED_ENVIRONMENT}, and --env ${DEBATE_ENVIRONMENT} would switch it to ${DEBATE_ENVIRONMENT}: another data directory and another evidence bucket. Nothing was installed. Leave --env out to keep ${INSTALLED_ENVIRONMENT}, or add --confirm-env-change if the switch is meant"
+        note "Switching the agent from ${INSTALLED_ENVIRONMENT:-an environment its plist does not name} to ${DEBATE_ENVIRONMENT}, as --confirm-env-change says."
+    fi
+
+    if [ -z "${CASELISTS}" ]; then
+        CASELISTS=${INSTALLED_CASELISTS}
+        note "Keeping the installed agent's caselists:${CASELISTS} (--caselist replaces them)."
+    elif [ "${INSTALLED_ARGUMENTS_UNKNOWN}" -eq 1 ]; then
+        note "Replacing the installed agent's arguments, which this script did not write, with the caselists${CASELISTS}."
+    elif [ "${CASELISTS}" != "${INSTALLED_CASELISTS}" ]; then
+        note "Replacing the installed agent's caselists${INSTALLED_CASELISTS} with${CASELISTS}."
+    fi
+
+    for variable in ${DROPPED_VARIABLES}; do
+        if [ "${variable}" = "AWS_PROFILE" ]; then
+            note "Not carried over from the installed plist: AWS_PROFILE. Nothing the agent runs reads it; the run's AWS profile is the build's storage.s3.aws_profile, which is checked below."
+        else
+            note "Not carried over from the installed plist: ${variable}, which this script does not write."
+        fi
+    done
+fi
+
 [ -n "${CASELISTS}" ] || fail "at least one --caselist is required; see --help"
+[ -n "${DEBATE_ENVIRONMENT}" ] || DEBATE_ENVIRONMENT="prod"
 [ -n "${LOG_DIRECTORY}" ] || LOG_DIRECTORY="${HOME}/Library/Logs/debate-research"
 [ -n "${WRAPPER_DIRECTORY}" ] || WRAPPER_DIRECTORY="${HOME}/.local/share/debate-research/launchd"
-[ -n "${AWS_PROFILE_NAME}" ] || AWS_PROFILE_NAME="debate-${DEBATE_ENVIRONMENT}-evidence"
 
 case "${DEBATE_ENVIRONMENT}" in
     dev|prod) ;;
@@ -353,21 +465,63 @@ refuse_unsafe_path "log directory" "${LOG_DIRECTORY}"
 WRAPPER="${WRAPPER_DIRECTORY}/${WRAPPER_NAME}"
 
 # Where the agent will keep its data comes from the profile bundled into the installed build, so
-# the build is asked, with the environment the plist gives it and nothing of this shell's.
-# `config show` only reads.
-REPORTED_SETTINGS=$(cd -- "${HOME}" && env -i HOME="${HOME}" PATH="${AGENT_PATH}" \
-    DEBATE_ENV="${DEBATE_ENVIRONMENT}" AWS_PROFILE="${AWS_PROFILE_NAME}" \
-    "${DEBATE_RESEARCH_PATH}" --json config show) \
+# the build is asked: with the agent's HOME and PATH, from HOME, with the variables given and
+# nothing of this shell's. `config show` only reads. Prints nothing when the build does not say.
+data_directory_as_run_with() {
+    reported=$(cd -- "${HOME}" && env -i HOME="${HOME}" PATH="${AGENT_PATH}" "$@" \
+        "${DEBATE_RESEARCH_PATH}" --json config show) || return 1
+    # The value under `settings`, not the one under `sources`, which names the same key with the
+    # file it came from. The settings object holds no braces, so a value that ever did would make
+    # this find nothing and refuse, rather than read the wrong thing.
+    printf '%s\n' "${reported}" \
+        | sed -n 's/.*"settings": *{\([^{}]*\)}.*/\1/p' \
+        | sed -n 's/.*"storage\.data_dir": *"\([^"\\]*\)".*/\1/p' | head -n 1
+}
+
+DATA_DIRECTORY=$(data_directory_as_run_with DEBATE_ENV="${DEBATE_ENVIRONMENT}") \
     || fail "${DEBATE_RESEARCH_PATH} --json config show failed, so the agent's data directory is unknown; nothing was installed"
-# The value under `settings`, not the one under `sources`, which names the same key with the file
-# it came from. The settings object holds no braces, so a value that ever did would make this
-# find nothing and refuse, rather than read the wrong thing.
-DATA_DIRECTORY=$(printf '%s\n' "${REPORTED_SETTINGS}" \
-    | sed -n 's/.*"settings": *{\([^{}]*\)}.*/\1/p' \
-    | sed -n 's/.*"storage\.data_dir": *"\([^"\\]*\)".*/\1/p' | head -n 1)
 [ -n "${DATA_DIRECTORY}" ] \
     || fail "${DEBATE_RESEARCH_PATH} --json config show did not report storage.data_dir, so the agent's data directory is unknown; nothing was installed"
 refuse_unsafe_path "data directory" "${DATA_DIRECTORY}"
+
+# A variable put in the installed plist by hand is not carried over, and that must not move the
+# agent's data unannounced: the build is asked again with the installed plist's whole environment,
+# and the two answers compared. A switch of environment has been confirmed already.
+if [ -n "${DROPPED_VARIABLES}" ] && [ "${CONFIRM_ENV_CHANGE}" -eq 0 ]; then
+    set --
+    for variable in ${DROPPED_VARIABLES}; do
+        set -- "$@" "${variable}=$(plutil -extract "EnvironmentVariables.${variable}" raw -o - "${DESTINATION}")"
+    done
+    INSTALLED_DATA_DIRECTORY=$(data_directory_as_run_with DEBATE_ENV="${INSTALLED_ENVIRONMENT}" "$@") \
+        || fail "${DEBATE_RESEARCH_PATH} --json config show failed with the installed agent's environment, so whether this install moves its data is unknown; nothing was installed"
+    [ "${INSTALLED_DATA_DIRECTORY}" = "${DATA_DIRECTORY}" ] \
+        || fail "this install would move the agent's data from ${INSTALLED_DATA_DIRECTORY} to ${DATA_DIRECTORY}, because it does not carry over${DROPPED_VARIABLES} from the installed plist. Nothing was installed. Add --confirm-env-change if the move is meant"
+fi
+
+# The build's own checks and the agent's evidence profile, as the agent will run them (v1-e34-t24):
+# `doctor --evidence-profiles` with the environment the plist gives the agent and nothing of this
+# shell's, so the AWS config it reads is the one launchd's HOME leads to. The runbook's reinstall
+# makes the same check by hand. It exits 1 for a configured profile the AWS config does not define,
+# which the scheduled run would be refused for, and for the build's own failed checks, and not for
+# an expired session; 2 is a build from before the check. It asks AWS one question for each
+# profile that is defined, and names a profile, its setting and a permission set, never an account
+# or where the AWS config is.
+PROFILE_CHECK_STATUS=0
+PROFILE_CHECK_OUTPUT=$(cd -- "${HOME}" && env -i HOME="${HOME}" PATH="${AGENT_PATH}" \
+    DEBATE_ENV="${DEBATE_ENVIRONMENT}" "${DEBATE_RESEARCH_PATH}" doctor --evidence-profiles 2>&1) \
+    || PROFILE_CHECK_STATUS=$?
+case "${PROFILE_CHECK_STATUS}" in
+    0)
+        note "The build's checks and its evidence profile pass as the agent will run them (debate-research doctor --evidence-profiles)."
+        ;;
+    2)
+        fail "the build ${DEBATE_RESEARCH_PATH} does not have the profile check (doctor --evidence-profiles), so whether this machine's AWS config defines the agent's profile is unknown; nothing was installed. Install a newer build with scripts/install_channel.sh, then run this again"
+        ;;
+    *)
+        printf '%s\n' "${PROFILE_CHECK_OUTPUT}" >&2
+        fail "the build's checks failed as the agent will run them (debate-research doctor --evidence-profiles, exit ${PROFILE_CHECK_STATUS}); nothing was installed. A profile this machine's AWS config does not define is named above, with the setting that holds it; docs/runbooks/caselist-scheduled-sync.md, under \"A profile the AWS config does not define\", says what to correct"
+        ;;
+esac
 
 # `awk` rather than `sed`, because several of the values are paths that may contain a `/` and one
 # is a multi-line block; awk's index/substr replacement treats every value as a literal.
@@ -380,7 +534,6 @@ render() {
         -v hour="${HOUR}" \
         -v minute="${MINUTE}" \
         -v debate_env="${DEBATE_ENVIRONMENT}" \
-        -v aws_profile="${AWS_PROFILE_NAME}" \
         -v debate_research_bin="${DEBATE_RESEARCH_PATH}" \
         -v home_directory="${HOME}" \
         -v path_value="${AGENT_PATH}" \
@@ -413,7 +566,6 @@ render() {
             line = fill(line, "@HOUR@", hour)
             line = fill(line, "@MINUTE@", minute)
             line = fill(line, "@DEBATE_ENV@", debate_env)
-            line = fill(line, "@AWS_PROFILE@", aws_profile)
             line = fill(line, "@DEBATE_RESEARCH_BIN@", debate_research_bin)
             line = fill(line, "@HOME_DIRECTORY@", home_directory)
             line = fill(line, "@PATH_VALUE@", path_value)
@@ -429,8 +581,6 @@ if [ "${DRY_RUN}" -eq 1 ]; then
     exit 0
 fi
 
-AGENT_DIRECTORY="${HOME}/Library/LaunchAgents"
-DESTINATION="${AGENT_DIRECTORY}/${LABEL}.plist"
 mkdir -p "${AGENT_DIRECTORY}" "${LOG_DIRECTORY}" "${WRAPPER_DIRECTORY}"
 
 render > "${DESTINATION}.incoming"

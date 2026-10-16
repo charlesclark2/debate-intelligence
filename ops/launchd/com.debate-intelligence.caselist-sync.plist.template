@@ -20,7 +20,8 @@
     back-catalogue of the weekly archives — but there is no reason to take even the delay.
 
   The agent runs the wrapper and nothing else. All the logic is in `debate-research caselist
-  pull`; the wrapper sets DEBATE_ENV and the AWS profile and execs it.
+  pull`; the wrapper sets DEBATE_ENV and execs it. The AWS profile the run uses is the build's
+  setting storage.s3.aws_profile, so this file names none (v1-e34-t24).
 
   Nothing this plist names is inside a git working tree or under a folder macOS protects from
   background processes (~/Documents, ~/Desktop, ~/Downloads, iCloud Drive, ~/Library/CloudStorage,
@@ -60,8 +61,6 @@
     <dict>
         <key>DEBATE_ENV</key>
         <string>@DEBATE_ENV@</string>
-        <key>AWS_PROFILE</key>
-        <string>@AWS_PROFILE@</string>
         <key>HOME</key>
         <string>@HOME_DIRECTORY@</string>
         <!-- The console script by its full path, so that nothing earlier on PATH can stand in

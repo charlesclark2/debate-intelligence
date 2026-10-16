@@ -71,7 +71,7 @@ spec:
         dev and prod `terraform plan` outputs are operator-run and read by the PM before the
         operator applies.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

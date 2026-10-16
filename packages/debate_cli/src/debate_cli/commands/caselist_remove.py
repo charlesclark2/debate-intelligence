@@ -134,8 +134,14 @@ from debate_core.application.caselist.removal_plan import (
     SourceSelector,
     parse_team_selector,
 )
-from debate_core.application.caselist.removal_service import RemovalReport, UnsuppressPlan, UnsuppressReport
+from debate_core.application.caselist.removal_service import (
+    PREFLIGHT_PREFIX,
+    RemovalReport,
+    UnsuppressPlan,
+    UnsuppressReport,
+)
 from debate_core.application.ports.caselist_source import openev_id_of_inbox_name
+from debate_core.application.ports.evidence_versions import ObjectVersion
 from debate_core.application.ports.suppression import (
     REINSTATEMENT_REASONS,
     REMOVAL_REASONS,
@@ -340,6 +346,7 @@ def render_plan(plan: RemovalPlan, report: RemovalReport | None) -> str:
             f"{report.inbox_files_rewritten} rewritten."
         )
         lines.append(f"It covered {_what_the_plan_covers(plan, carried_out=True)}.")
+        lines += _probes_left_lines(report.preflight_probes_left)
     lines.append(f"Request {plan.request_id}, reason {plan.reason}, selector {_describe(plan.selector)}.")
     if plan.nothing_to_do and not skipped:
         lines += ["", "Nothing is left to remove: everything this selects is already gone and suppressed."]
@@ -926,6 +933,7 @@ def plan_summary(plan: RemovalPlan, settings: Settings, report: RemovalReport | 
     if report is not None:
         data["outcome"] = str(report.log_entry.outcome)
         data["log_entry"] = report.log_entry.to_line()
+        data["preflight_probes_left"] = _probes_left_json(report.preflight_probes_left)
     return data
 
 
@@ -998,6 +1006,7 @@ def render_unsuppress(plan: UnsuppressPlan, report: UnsuppressReport | None) -> 
     )
     lines = [
         head,
+        *(_probes_left_lines(report.preflight_probes_left) if report is not None else []),
         f"{plan.sha256} is suppressed now ({', '.join(scopes)}), "
         f"by {plan.previous.request_id or 'no request id'}"
         f" ({plan.previous.reason}).",
@@ -1043,7 +1052,28 @@ def unsuppress_summary(
     }
     if report is not None:
         data["log_entry"] = report.log_entry.to_line()
+        data["preflight_probes_left"] = _probes_left_json(report.preflight_probes_left)
     return data
+
+
+def _probes_left_lines(left: tuple[ObjectVersion, ...]) -> list[str]:
+    """What a person reads about earlier probes the preflight could not delete: a count, and the fix.
+
+    Never a failure (the PM's review of `v1-e29-t09`): the takedown went ahead, and the probes are
+    removed by hand as the runbook describes.
+    """
+    if not left:
+        return []
+    return [
+        f"{len(left)} probe version(s) an earlier preflight left under {PREFLIGHT_PREFIX} could not be "
+        'deleted: remove them by hand (docs/runbooks/caselist-removal.md, "A probe a preflight left '
+        'behind").'
+    ]
+
+
+def _probes_left_json(left: tuple[ObjectVersion, ...]) -> dict[str, JsonValue]:
+    """The same for a program: how many versions, and their keys, which are random hex under the prefix."""
+    return {"versions": len(left), "keys": sorted({version.key for version in left})}
 
 
 def _run[T](awaitable: Coroutine[Any, Any, T]) -> T:

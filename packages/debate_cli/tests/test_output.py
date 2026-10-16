@@ -450,6 +450,56 @@ def test_a_removal_stopped_by_anything_else_stays_a_domain_failure(
     assert exit_code_for(raised_from(wrapper, unconfigured)) is ExitCode.DOMAIN_FAILURE
 
 
+@pytest.mark.parametrize(
+    ("cause", "exit_code", "cause_details"),
+    [
+        pytest.param(
+            StoreCredentialsExpired("the AWS session is not usable", hint="aws sso login --profile p"),
+            ExitCode.RETRIEVAL_FAILURE,
+            {"cause_code": "STORE_CREDENTIALS_EXPIRED"},
+            id="an expired session",
+        ),
+        pytest.param(
+            StoreProfileNotConfigured("a-typo", setting="DEBATE_REMOVAL_PROFILE", hint="set it"),
+            ExitCode.DOMAIN_FAILURE,
+            {
+                "cause_code": "STORE_PROFILE_NOT_CONFIGURED",
+                "cause_profile": "a-typo",
+                "cause_setting": "DEBATE_REMOVAL_PROFILE",
+            },
+            id="a profile the AWS config lacks",
+        ),
+        pytest.param(
+            StoreUnavailable("ListObjectVersions", "s3://b", "503"),
+            ExitCode.RETRIEVAL_FAILURE,
+            {
+                "cause_code": "STORE_UNAVAILABLE",
+                "cause_operation": "ListObjectVersions",
+                "cause_resource": "s3://b",
+            },
+            id="a store that did not answer",
+        ),
+    ],
+)
+def test_a_preflight_failure_carries_its_causes_code_and_details_with_the_exit_unchanged(
+    cause: DomainError, exit_code: ExitCode, cause_details: dict[str, object]
+) -> None:
+    """`v1-e29-t09` ac3: what the wrapper used to drop. The cause's hint is the envelope's hint, once."""
+    failure = CommandFailure.from_exception(raised_from(preflight_failed, cause))
+
+    assert failure.code == "TAKEDOWN_PREFLIGHT_FAILED"
+    assert failure.exit_code is exit_code
+    assert failure.details == {
+        "profile": "debate-dev-evidence-removal",
+        "step": "list object versions",
+        **cause_details,
+    }
+    assert failure.hint == (
+        getattr(cause, "hint", None) or "aws sso login --profile debate-dev-evidence-removal"
+    )
+    assert "cause_hint" not in failure.details
+
+
 def test_a_removal_that_completed_unlogged_is_not_retried_whatever_refused_the_log() -> None:
     """Running it again finds nothing left and logs zero counts, so it is never a 3."""
     unlogged = raised_from(completed_unlogged, StoreUnavailable("PutObject", "s3://b/k", "503"))

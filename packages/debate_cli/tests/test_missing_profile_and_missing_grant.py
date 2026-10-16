@@ -240,7 +240,14 @@ class TestAProfileTheAwsConfigLacks:
         assert "STORE_PROFILE_NOT_CONFIGURED" in error["message"]
         assert MISSPELT_PROFILE in error["message"] and TAKEDOWN_SETTING in error["message"]
         assert TAKEDOWN_SETTING in error["hint"] and RUNBOOK in error["hint"]
-        assert error["details"] == {"profile": MISSPELT_PROFILE, "step": "start an AWS session"}
+        assert error["details"] == {
+            "profile": MISSPELT_PROFILE,
+            "step": "start an AWS session",
+            # The cause's code and its own fields, so a script reads the setting (`v1-e29-t09` ac3).
+            "cause_code": "STORE_PROFILE_NOT_CONFIGURED",
+            "cause_profile": MISSPELT_PROFILE,
+            "cause_setting": TAKEDOWN_SETTING,
+        }
         said = json.dumps(envelope)
         assert EVERYDAY_SETTING not in said
         assert "aws sso login" not in said and "signed in" not in said, "no login cures it"
@@ -306,6 +313,14 @@ class TestATakedownThatNamesTheEverydayProfile:
         assert "DebateDevEvidenceOperator" in error["message"], "what the profile is signed in as"
         assert "DebateDevEvidenceRemoval" in error["message"], "what a takedown runs as"
         assert TAKEDOWN_SETTING in error["hint"] and TAKEDOWN_PROFILE in error["hint"]
+        assert error["details"] == {
+            "profile": EVERYDAY_PROFILE,
+            "step": "show it is signed in as DebateDevEvidenceRemoval",
+            "cause_code": "NOT_THE_TAKEDOWN_ROLE",
+            "cause_profile": EVERYDAY_PROFILE,
+            "cause_signed_in_as": "DebateDevEvidenceOperator",
+            "cause_required": "DebateDevEvidenceRemoval",
+        }
         assert "aws sso login" not in json.dumps(envelope), "it is signed in; a login changes nothing"
         assert (everything_under(installation / "data"), every_version_in(bucket)) == before, (
             "nothing written here or in the bucket: no probe, no suppression entry"
@@ -338,6 +353,46 @@ class TestATakedownThatNamesTheEverydayProfile:
 
         assert exit_code == ExitCode.OK, envelope
         assert [key for key, _ in every_version_in(bucket) if "/preflight/" in key] == []
+        assert envelope["data"]["preflight_probes_left"] == {"versions": 0, "keys": []}
+
+    def test_an_earlier_probe_it_may_not_delete_is_reported_and_the_takedown_goes_ahead(
+        self, installation: Path, bucket: S3Client, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The PM's review of `v1-e29-t09`: the sweep of earlier probes is housekeeping. One the
+        bucket refuses to delete is counted in the output and the JSON, and the removal exits 0."""
+        from debate_core.application.errors import StoreAccessDenied
+        from debate_core.application.ports.evidence_versions import ObjectVersion
+        from debate_core.integrations.s3 import S3EvidenceVersionStore
+
+        refused_probe = "manifests/_suppression/preflight/" + "0" * 32 + ".txt"
+        deleted_probe = "manifests/_suppression/preflight/" + "1" * 32 + ".txt"
+        for key in (refused_probe, deleted_probe):
+            bucket.put_object(Bucket=BUCKET, Key=key, Body=b"caselist remove preflight\n")
+        real_delete = S3EvidenceVersionStore.delete_versions
+
+        async def delete_versions(self: S3EvidenceVersionStore, versions: list[ObjectVersion]) -> int:
+            if any(version.key == refused_probe for version in versions):
+                raise StoreAccessDenied("DeleteObject", f"s3://{BUCKET}/{refused_probe}")
+            return await real_delete(self, versions)
+
+        monkeypatch.setattr(S3EvidenceVersionStore, "delete_versions", delete_versions)
+        import_the_first_week(installation)
+        assert run("caselist", "publish", "--caselist", SYNTHETIC_CASELIST)[0] == ExitCode.OK
+        monkeypatch.setenv("DEBATE_REMOVAL_PROFILE", TAKEDOWN_PROFILE)
+
+        exit_code, envelope = run(*REMOVE, "--execute")
+        shown = runner.invoke(create_app(), [*REMOVE, "--execute"], terminal_width=200)
+
+        assert exit_code == ExitCode.OK, envelope
+        assert envelope["data"]["preflight_probes_left"] == {"versions": 1, "keys": [refused_probe]}
+        assert shown.exit_code == ExitCode.OK, shown.stderr
+        said = " ".join(shown.stdout.split())
+        assert (
+            "1 probe version(s) an earlier preflight left under manifests/_suppression/preflight/ could "
+            "not be deleted: remove them by hand (docs/runbooks/caselist-removal.md, "
+            '"A probe a preflight left behind").'
+        ) in said
+        assert [key for key, _ in every_version_in(bucket) if "/preflight/" in key] == [refused_probe]
 
 
 # ------------------------------------------------------------------------------------------------

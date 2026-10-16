@@ -34,6 +34,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final, cast
 
 import pytest
+from tests.fixtures.caselist.interruptible_bucket import ScriptedBucket
 from tests.fixtures.caselist.publish_expectations import FICTIONAL_IDENTIFIERS
 from tests.fixtures.parse_pipeline.build_parse_world import (
     BODIES,
@@ -62,6 +63,7 @@ from debate_core.application.caselist.publish_service import SourceResult
 from debate_core.application.caselist.suppression import RecordedSuppressionList
 from debate_core.application.caselist_card_stats import CardPlacement, CaselistCardStatsService
 from debate_core.application.caselist_parse import CaselistParseService, ParseRunReport
+from debate_core.application.errors import StoreProfileNotConfigured
 from debate_core.application.ports.debate_files import DebateFileParser
 from debate_core.application.ports.parsed_store import (
     AGGREGATE_NAMES,
@@ -977,7 +979,7 @@ def bucket(evidence_bucket: str, s3_client: S3Client) -> S3EvidenceObjectStore:
     return S3EvidenceObjectStore(bucket=evidence_bucket, client=s3_client)
 
 
-def publisher(world: World, bucket: S3EvidenceObjectStore) -> ParsedStorePublisher:
+def publisher(world: World, bucket: Any) -> ParsedStorePublisher:
     local = FsEvidenceObjectStore(world.data_dir, subdirectory=Path("parsed"))
     return ParsedStorePublisher(
         local=local, local_path_for=local.path_for, remote=bucket, suppression=world.suppression
@@ -1120,3 +1122,46 @@ async def test_publish_names_nothing_but_digests_and_versions(
         metadata = s3_client.head_object(Bucket=evidence_bucket, Key=key)["Metadata"]
         assert set(metadata) == {"sha256"}
     assert all(SourceOutcome.PARSED.value not in key for key in listed)
+
+
+@pytest.mark.anyio
+async def test_publish_stops_at_the_first_object_when_the_profile_is_not_defined(
+    world: World, bucket: S3EvidenceObjectStore, s3_client: S3Client, evidence_bucket: str
+) -> None:
+    """Raised as an expired session is, not recorded once per object (`v1-e29-t09` ac1)."""
+    await world.run()
+    missing = StoreProfileNotConfigured("debate-dev-evidence-typo", setting="storage.s3.aws_profile")
+
+    def not_defined(_: str, count: int) -> None:
+        raise missing
+
+    scripted = ScriptedBucket(bucket, not_defined)
+
+    with pytest.raises(StoreProfileNotConfigured) as raised:
+        await publisher(world, scripted).publish(CASELIST, DOCX_PARSER_VERSION)
+
+    assert raised.value is missing, "raised, where it used to be recorded once per object"
+    assert s3_client.list_objects_v2(Bucket=evidence_bucket).get("Contents", []) == []
+
+
+@pytest.mark.anyio
+async def test_publish_names_an_os_error_by_its_class_and_errno_and_never_its_text(
+    world: World, bucket: S3EvidenceObjectStore
+) -> None:
+    """`v1-e29-t09` ac7: an `OSError` quotes its path, which holds a home directory and a camp's title."""
+    await world.run()
+    probe = "/Users/zqxprobe-home/debate-data/inbox/Zqxprobe Lantern Camp Release.docx"
+
+    def refused_by_the_os(_: str, count: int) -> None:
+        raise PermissionError(13, "Permission denied", probe)
+
+    report = await publisher(world, ScriptedBucket(bucket, refused_by_the_os)).publish(
+        CASELIST, DOCX_PARSER_VERSION
+    )
+
+    failed = [outcome for outcome in report.objects if outcome.result is SourceResult.FAILED]
+    assert failed, "every upload was refused"
+    assert {(outcome.error_code, outcome.error_message) for outcome in failed} == {
+        ("PERMISSION_ERROR", "PermissionError (errno 13)")
+    }
+    assert "zqxprobe" not in repr(report).lower()

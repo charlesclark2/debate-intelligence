@@ -85,13 +85,13 @@ from debate_core.application.caselist.publish_plan import (
 )
 from debate_core.application.caselist.suppression import load_suppression_state
 from debate_core.application.errors import (
+    STORE_ERRORS_TRUE_OF_EVERY_OBJECT,
     UNMODELLED_ERROR_CODE,
     BlobIntegrityError,
     DomainError,
     NotFound,
-    StoreAccessDenied,
-    StoreCredentialsExpired,
     error_code_of,
+    reported_error_message,
 )
 from debate_core.application.ports.evidence_store import EvidenceObjectStore, ObjectInfo, ObjectKey
 from debate_core.application.ports.suppression import SuppressionList
@@ -182,6 +182,9 @@ class SourceOutcome:
     result: SourceResult
     error_code: str | None = None
     error_message: str | None = None
+    """Why it failed, for a person. An error this project did not write is named by its class and an
+    `OSError` by its errno too, never by its text, which can quote a path on this machine
+    (:func:`~debate_core.application.errors.reported_error_message`, `v1-e29-t09`)."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -194,7 +197,9 @@ class SnapshotOutcome:
     sources: tuple[SourceOutcome, ...]
     manifest: ManifestOutcome
     manifest_error: str | None = None
-    """Why the manifest was withheld or failed, for a person. Never read for a decision."""
+    """Why the manifest was withheld or failed, for a person. Never read for a decision. An error
+    this project did not write is named by its class and an `OSError` by its errno too, never by
+    its text (:func:`~debate_core.application.errors.reported_error_message`, `v1-e29-t09`)."""
 
     manifest_error_code: str | None = None
     """The error code of a manifest that failed on its own, for a program (`v1-e34-t13`).
@@ -344,8 +349,10 @@ class CaselistPublishService:
 
         Failures of one source are collected, not raised: the report names every one and the
         command's exit code comes from :attr:`PublishReport.succeeded`. The exceptions are an
-        expired or refused credential, which would be true of every remaining object and end the
-        run at once — with no manifest written for the snapshot in progress.
+        expired or refused credential and a profile the AWS config does not define
+        (:data:`~debate_core.application.errors.STORE_ERRORS_TRUE_OF_EVERY_OBJECT`), which would be
+        true of every remaining object and end the run at once — with no manifest written for the
+        snapshot in progress.
         """
         confirmed: set[ObjectKey] = set()
         failed: dict[ObjectKey, SourceOutcome] = {}
@@ -406,11 +413,11 @@ class CaselistPublishService:
         manifest_error_code: str | None = None
         try:
             manifest = await self._publish_manifest(plan)
-        except (StoreCredentialsExpired, StoreAccessDenied):
+        except STORE_ERRORS_TRUE_OF_EVERY_OBJECT:
             raise
         except (DomainError, OSError) as failure:
             manifest = ManifestOutcome.FAILED
-            manifest_error = str(failure) or type(failure).__name__
+            manifest_error = reported_error_message(failure)
             manifest_error_code = error_code_of(failure)
         return SnapshotOutcome(
             caselist=plan.caselist,
@@ -466,10 +473,10 @@ class CaselistPublishService:
                     confirmed.add(planned.key)
                     return _outcome(planned, SourceResult.SKIPPED)
             await self._upload(planned)
-        except (StoreCredentialsExpired, StoreAccessDenied):
+        except STORE_ERRORS_TRUE_OF_EVERY_OBJECT:
             raise
         except (DomainError, OSError) as failure:
-            return self._failed(planned, failed, error_code_of(failure), str(failure))
+            return self._failed(planned, failed, error_code_of(failure), reported_error_message(failure))
         confirmed.add(planned.key)
         return _outcome(planned, SourceResult.UPLOADED)
 

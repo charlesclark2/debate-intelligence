@@ -182,15 +182,20 @@ row says:
 |---|---|---|
 | `debate-prod-evidence (storage.s3.aws_profile): defined, and signed in as DebateProdEvidenceOperator` | The profile is in this Mac's AWS config and its session is live. The name is the permission set's: `DebateProdEvidenceOperator` for prod's everyday profile, `DebateDevEvidenceOperator` for dev's | `0` |
 | `… defined; its session has expired or was never started, so AWS cannot be asked which permission set it is (aws sso login --profile debate-prod-evidence)` | The profile is defined. Run the login it gives to see the permission set. This does not fail the check: a run without a session still captures and imports | `0` |
-| `… defined; AWS did not answer when asked which permission set it is signed in as` | No verdict on the profile. Run it again when the Mac is online | `0` |
+| `… defined; AWS did not answer when asked which permission set it is signed in as` | No verdict on the profile. The question waits 10 seconds for each profile and then gives up (`v1-e29-t09`), so an offline Mac adds at most that to the check, to `install.sh` and to `--check-launchd`. Run it again when the Mac is online | `0` |
 | `… not defined in this machine's AWS config` | The setting names a profile this Mac does not have. The command fails with `STORE_PROFILE_NOT_CONFIGURED`, naming the profile and the setting, and a scheduled run would be refused before it starts. See [A profile the AWS config does not define](#a-profile-the-aws-config-does-not-define) | `1` |
 | `Evidence profiles: none configured for this environment` | The environment names no bucket, as `test` does | `0` |
 
 A profile signed in as something unexpected is said in the same row and does not fail the check.
 The takedown profile is compared with the permission set a takedown runs as: one signed in as
 anything else reads `… a takedown runs only as DebateProdEvidenceRemoval, so caselist remove
---execute will refuse this profile`. The row names a profile, the setting that holds its name and
-a permission set, and never an account, a role's full identifier or where the AWS config is.
+--execute will refuse this profile`. The everyday profile signed in as the other environment's
+permission set reads `… DebateDevEvidenceOperator, which is dev's permission set and not prod's:
+prod's bucket grants it nothing, so every command that reaches the bucket will be refused`
+(`v1-e29-t09`): the profile's block in the AWS config names the other environment's
+`sso_role_name`, most likely copied from it. The row names a profile, the setting that holds its
+name and a permission set, and never an account, a role's full identifier or where the AWS config
+is.
 
 ## Step 1 — rehearse, in dev
 

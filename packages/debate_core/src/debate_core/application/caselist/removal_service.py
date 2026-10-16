@@ -27,7 +27,8 @@ all but a takedown role whose own grants are broken fail before anything is writ
 The question comes first because nothing the bucket allows tells the two profiles apart short of a
 delete. From `v1-e29-t06`, which let the everyday profile list versions, until `v1-e29-t08`, that
 profile named by mistake listed, wrote the probe and was refused only at the delete, leaving the
-probe behind. `docs/runbooks/caselist-removal.md` says how to remove one left from then.
+probe behind. A preflight that passes now deletes every probe it found there before it wrote its
+own (`v1-e29-t09`); `docs/runbooks/caselist-removal.md` says when one is still removed by hand.
 
 ## The order is the safety
 
@@ -56,10 +57,10 @@ probe behind. `docs/runbooks/caselist-removal.md` says how to remove one left fr
 
 ## What it never deletes
 
-Anything under `manifests/_suppression/` but its own preflight probe
-(:func:`refuse_protected_versions`): the suppression list and the removal log are append-only and
-their versions are the record of what was asked. And nothing under `reports/`, which IAM would refuse
-anyway.
+Anything under `manifests/_suppression/` but the preflight's probes, its own and those earlier
+preflights left (:func:`refuse_protected_versions`): the suppression list and the removal log are
+append-only and their versions are the record of what was asked. And nothing under `reports/`,
+which IAM would refuse anyway.
 """
 
 from __future__ import annotations
@@ -103,6 +104,7 @@ from debate_core.application.errors import (
     StoreCredentialsExpired,
     StoreError,
     StoreProfileNotConfigured,
+    reported_error_message,
 )
 from debate_core.application.ports.caller_identity import CallerIdentity
 from debate_core.application.ports.caselist import CaselistRepository
@@ -224,6 +226,13 @@ class TakedownPreflightFailed(DomainError):
     the command's exit status is read from: an expired session or a store that did not answer may
     be cured by running the command again, and a profile that is not defined or not the takedown
     role is a setting to correct.
+
+    It carries the cause's code as :attr:`cause_code`, and each of the cause's own facts as an
+    attribute named `cause_` and the fact's name (`v1-e29-t09`): `cause_setting` for a profile the
+    AWS config does not define, `cause_signed_in_as` and `cause_required` for the wrong role. They
+    are what a script reads from the `--json` envelope's `error.details`, which until then held only
+    the profile and the step, and the setting to correct was in the message alone. The cause's
+    `hint` is not among them: it is this error's own :attr:`hint`.
     """
 
     def __init__(
@@ -231,6 +240,10 @@ class TakedownPreflightFailed(DomainError):
     ) -> None:
         self.profile = profile
         self.step = step
+        self.cause_code = error_code_of(failure)
+        """The error code of what failed, e.g. `"STORE_PROFILE_NOT_CONFIGURED"`."""
+        for name, value in _facts_of(failure).items():
+            setattr(self, f"cause_{name}", value)
         self.hint = getattr(failure, "hint", None) or (
             f"aws sso login --profile {profile}" if profile else "set DEBATE_REMOVAL_PROFILE"
         )
@@ -240,6 +253,21 @@ class TakedownPreflightFailed(DomainError):
             f"({error_code_of(failure)}), so it "
             f"cannot carry out a removal: {_what_to_correct(failure)}; nothing was deleted{leftover}"
         )
+
+
+def _facts_of(failure: BaseException) -> dict[str, str | int | float | bool | None]:
+    """The facts a :class:`DomainError` keeps as attributes, as the CLI reports them; none for another.
+
+    Public, single-valued attributes only, and never its `hint`. Anything that is not this
+    project's error has no facts this project chose, and its message is not passed on either.
+    """
+    if not isinstance(failure, DomainError):
+        return {}
+    return {
+        name: value
+        for name, value in vars(failure).items()
+        if not name.startswith("_") and name != "hint" and isinstance(value, str | int | float | bool | None)
+    }
 
 
 def _what_to_correct(failure: BaseException) -> str:
@@ -267,6 +295,9 @@ class RemovalIncomplete(DomainError):
     The message says what is true of this run: whether the suppression entries reached every copy
     before it stopped (if appending them is what failed, nothing was deleted either), and whether
     the `INCOMPLETE` log entry could be written. `failure` is always the first thing that went wrong.
+    It is quoted by :func:`~debate_core.application.errors.reported_error_message`: an `OSError` by
+    its class and errno, never by its text, which names the path it failed on (`v1-e29-t09`). The
+    same goes for :class:`RemovalCompletedUnlogged`.
     """
 
     def __init__(
@@ -290,10 +321,11 @@ class RemovalIncomplete(DomainError):
             ""
             if unlogged is None
             else f" The removal log entry could not be written either "
-            f"({error_code_of(unlogged)}): {unlogged}."
+            f"({error_code_of(unlogged)}): {reported_error_message(unlogged)}."
         )
         super().__init__(
-            f"the removal stopped part-way ({self.error_code}): {failure}. {state}{logged} "
+            f"the removal stopped part-way ({self.error_code}): {reported_error_message(failure)}. "
+            f"{state}{logged} "
             "Re-run the same command to finish."
         )
 
@@ -341,7 +373,8 @@ class RemovalCompletedUnlogged(DomainError):
             f"version(s) deleted; {report.manifests_rewritten} manifest(s) rewritten without "
             f"{report.manifest_rows_dropped} row(s); {report.inbox_files_deleted} inbox file(s) deleted and "
             f"{report.inbox_files_rewritten} rewritten. Its removal-log entry was not written to "
-            f"{self.log_copies_without_entry} ({self.error_code}: {failure}).{held} Record these counts "
+            f"{self.log_copies_without_entry} ({self.error_code}: {reported_error_message(failure)}).{held} "
+            "Record these counts "
             "in the register from this output: running the command again finds nothing left to remove "
             "and would log zero counts."
         )
@@ -377,7 +410,7 @@ def refuse_protected_versions(versions: Sequence[ObjectVersion]) -> None:
             )
 
 
-async def preflight(access: TakedownAccess, *, environment: str) -> None:
+async def preflight(access: TakedownAccess, *, environment: str) -> tuple[ObjectVersion, ...]:
     """Prove the credential is the takedown's and can write, list and delete, before any real change.
 
     First asks which role the credential is signed in as, and stops unless it is the role of
@@ -394,6 +427,20 @@ async def preflight(access: TakedownAccess, *, environment: str) -> None:
 
     A takedown role whose own delete grant is missing still gets as far as the delete, since nothing
     short of a delete shows that. It leaves its probe, and the error names the key.
+
+    A preflight that passes then deletes every version its first listing found under
+    :data:`PREFLIGHT_PREFIX` (`v1-e29-t09`): probes that earlier preflights wrote and were refused
+    the delete of. They were there before its own probe was written, so they are older than it, and
+    the credential has just shown it may delete there. A probe written after that listing, by a
+    preflight running beside this one, is not touched.
+
+    That sweep is housekeeping, and never holds a takedown back (the PM's review of `v1-e29-t09`):
+    a takedown withdraws someone's data, and an old probe that cannot be deleted for a reason of
+    its own would otherwise stop every takedown after it. Each version is deleted on its own, a
+    refusal of one does not stop the others, and the versions that could not be deleted are
+    returned, for the run's report to count; they are removed by hand
+    (`docs/runbooks/caselist-removal.md`). The preflight's own probe is its proof, and a refused
+    delete of that one still fails it.
     """
     required = takedown_permission_set(environment)
     key = f"{PREFLIGHT_PREFIX}{uuid.uuid4().hex}.txt"
@@ -406,7 +453,12 @@ async def preflight(access: TakedownAccess, *, environment: str) -> None:
                 access.profile, role_name=role_name, required=required, environment=environment
             )
         step = "list object versions"
-        await access.versions.list_versions(PREFLIGHT_PREFIX)
+        earlier = tuple(
+            version
+            for version in await access.versions.list_versions(PREFLIGHT_PREFIX)
+            if version.key.startswith(PREFLIGHT_PREFIX)
+        )
+        refuse_protected_versions(earlier)
         step = "write a probe under manifests/_suppression/"
         with tempfile.TemporaryDirectory(prefix="debate-preflight-") as directory:
             probe = Path(directory) / "probe.txt"
@@ -430,6 +482,26 @@ async def preflight(access: TakedownAccess, *, environment: str) -> None:
         raise TakedownPreflightFailed(
             access.profile, step, failure, left=key if written else None
         ) from failure
+    return await _sweep_earlier_probes(access, earlier)
+
+
+async def _sweep_earlier_probes(
+    access: TakedownAccess, earlier: Sequence[ObjectVersion]
+) -> tuple[ObjectVersion, ...]:
+    """Delete each version an earlier preflight left; return the ones the store would not delete.
+
+    Listed before the preflight wrote its own probe, so older than it (`v1-e29-t09`), and deleted
+    with the credential that has just shown it may delete there. One at a time, because the store
+    stops a batch at its first refusal, and a refusal is counted rather than raised: this is
+    housekeeping, and the takedown goes ahead whatever it leaves.
+    """
+    left: list[ObjectVersion] = []
+    for version in earlier:
+        try:
+            await access.versions.delete_versions((version,))
+        except StoreError:
+            left.append(version)
+    return tuple(left)
 
 
 @dataclass(slots=True)
@@ -457,6 +529,10 @@ class RemovalReport:
     s3_versions_deleted: int
     inbox_files_deleted: int = 0
     inbox_files_rewritten: int = 0
+    preflight_probes_left: tuple[ObjectVersion, ...] = ()
+    """Versions earlier preflights left under :data:`PREFLIGHT_PREFIX` that this run's preflight
+    could not delete (`v1-e29-t09`). Counted in the command's output, and removed by hand; never a
+    failure. Empty when the preflight ran in an earlier call of the same service."""
 
     @property
     def completed(self) -> bool:
@@ -486,6 +562,10 @@ class UnsuppressPlan:
 class UnsuppressReport:
     plan: UnsuppressPlan
     log_entry: RemovalLogEntry
+    preflight_probes_left: tuple[ObjectVersion, ...] = ()
+    """Versions earlier preflights left under :data:`PREFLIGHT_PREFIX` that this run's preflight
+    could not delete (`v1-e29-t09`). Counted in the command's output, and removed by hand; never a
+    failure. Empty when the preflight ran in an earlier call of the same service."""
 
 
 @dataclass
@@ -548,7 +628,7 @@ class CaselistRemovalService:
         :class:`RemovalCompletedUnlogged` if every step succeeded and only the log entry could not be
         written to every copy.
         """
-        access = await self._authorised()
+        access, probes_left = await self._authorised()
         suppression = RecordedSuppressionList(
             self.local_suppression, self._bucket_record(access, SUPPRESSION_LIST_KEY)
         )
@@ -593,6 +673,7 @@ class CaselistRemovalService:
             s3_versions_deleted=counts.s3_versions_deleted,
             inbox_files_deleted=counts.inbox.deleted,
             inbox_files_rewritten=counts.inbox.rewritten,
+            preflight_probes_left=probes_left,
         )
         if failure is not None:
             raise RemovalIncomplete(report, failure, suppressed=suppressed, unlogged=unlogged) from failure
@@ -774,7 +855,7 @@ class CaselistRemovalService:
         imported again. The entry also lifts the hold on each path the file's removal took it from,
         with nothing more appended: a hold follows the file it came from.
         """
-        access = await self._authorised()
+        access, probes_left = await self._authorised()
         suppression = RecordedSuppressionList(
             self.local_suppression, self._bucket_record(access, SUPPRESSION_LIST_KEY)
         )
@@ -791,14 +872,19 @@ class CaselistRemovalService:
         await RecordedRemovalLog(self.local_removal_log, self._bucket_record(access, REMOVAL_LOG_KEY)).append(
             [entry]
         )
-        return UnsuppressReport(plan=plan, log_entry=entry)
+        return UnsuppressReport(plan=plan, log_entry=entry, preflight_probes_left=probes_left)
 
     # --------------------------------------------------------------------------------------
     # The takedown credential
     # --------------------------------------------------------------------------------------
 
-    async def _authorised(self) -> TakedownAccess:
-        """The takedown credential, proven by :func:`preflight`. Built and checked once per service."""
+    async def _authorised(self) -> tuple[TakedownAccess, tuple[ObjectVersion, ...]]:
+        """The takedown credential, proven by :func:`preflight`. Built and checked once per service.
+
+        With it, the earlier probes this call's preflight could not delete: none when the
+        credential was proven by an earlier call.
+        """
+        probes_left: tuple[ObjectVersion, ...] = ()
         if self._access is None:
             try:
                 access = self.takedown()
@@ -807,9 +893,9 @@ class CaselistRemovalService:
                 # what an operator who typed `--execute` reads first is that nothing was deleted.
                 named = refused.profile if isinstance(refused, StoreProfileNotConfigured) else None
                 raise TakedownPreflightFailed(named, "start an AWS session", refused) from refused
-            await preflight(access, environment=self.environment)
+            probes_left = await preflight(access, environment=self.environment)
             self._access = access
-        return self._access
+        return self._access, probes_left
 
     def _bucket_record(self, access: TakedownAccess, key: ObjectKey) -> ObjectStoreAppendOnlyRecord:
         """The bucket's copy: appended with the takedown credential, read with the everyday one."""

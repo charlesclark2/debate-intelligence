@@ -44,7 +44,11 @@ from debate_core.application.caselist.publish_service import (
     SourceResult,
 )
 from debate_core.application.caselist.suppression import RecordedSuppressionList
-from debate_core.application.errors import StoreCredentialsExpired, StoreUnavailable
+from debate_core.application.errors import (
+    StoreCredentialsExpired,
+    StoreProfileNotConfigured,
+    StoreUnavailable,
+)
 from debate_core.application.ports.evidence_store import ObjectKey
 from debate_core.application.ports.suppression import (
     ReasonCode,
@@ -497,6 +501,27 @@ class TestFailedSourcesWithholdTheManifest:
         with pytest.raises(StoreCredentialsExpired):
             await publish(service_over(local, ScriptedBucket(bucket, expire)))
 
+        assert not any(key.startswith("manifests/") for key in bucket_keys(s3_client, evidence_bucket))
+
+    async def test_a_profile_the_aws_config_lacks_ends_the_run_at_the_first_object(
+        self,
+        local: LocalEvidence,
+        bucket: S3EvidenceObjectStore,
+        s3_client: S3Client,
+        evidence_bucket: str,
+    ) -> None:
+        """Ended as an expired session ends it, not recorded once per source (`v1-e29-t09` ac1)."""
+        missing = StoreProfileNotConfigured("debate-dev-evidence-typo", setting="storage.s3.aws_profile")
+
+        def not_defined(_: ObjectKey, count: int) -> None:
+            raise missing
+
+        scripted = ScriptedBucket(bucket, not_defined)
+
+        with pytest.raises(StoreProfileNotConfigured) as raised:
+            await publish(service_over(local, scripted))
+
+        assert raised.value is missing, "raised, where it used to be recorded once per source"
         assert not any(key.startswith("manifests/") for key in bucket_keys(s3_client, evidence_bucket))
 
 

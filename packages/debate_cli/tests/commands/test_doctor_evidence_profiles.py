@@ -281,6 +281,25 @@ def test_a_removal_profile_signed_in_as_the_everyday_set_is_reported_and_does_no
     ]
 
 
+def test_an_everyday_profile_signed_in_as_prods_set_is_reported_and_does_not_fail_the_check(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`v1-e29-t09` ac5: the dev installation's everyday profile signed in as prod's permission set."""
+    prod_operator = "AWSReservedSSO_DebateProdEvidenceOperator_00000000000000aa"
+    who_each_profile_is(monkeypatch, {EVERYDAY_PROFILE: SignedInAs(prod_operator)})
+
+    exit_code, envelope = doctor("--evidence-profiles")
+
+    assert exit_code == ExitCode.OK, envelope
+    [found] = profiles_in(envelope)
+    assert found["permission_set"] == "DebateProdEvidenceOperator"
+    assert found["summary"] == (
+        "defined, and signed in as DebateProdEvidenceOperator, which is prod's permission set and not "
+        "dev's: dev's bucket grants it nothing, so every command that reaches the bucket will be refused"
+    )
+    assert AN_ACCOUNT_OR_AN_ADDRESS.search(json.dumps(envelope)) is None
+
+
 def test_an_environment_with_no_bucket_has_no_everyday_profile_to_check(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

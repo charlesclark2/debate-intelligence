@@ -19,19 +19,41 @@ name here and dropped. None of the three is logged, returned or put in an error,
 built from this adapter can carry one (`v1-e29-t08`, spec forbidden list). A failure to ask is
 translated like every other call in this package (:mod:`debate_core.integrations.s3.errors`) and
 names the bucket the credential was for, which the caller already had.
+
+## How long it waits
+
+At most :data:`IDENTITY_TIME_LIMIT_SECONDS`, and then it raises
+:class:`~debate_core.application.errors.StoreUnavailable`, saying AWS did not answer
+(`v1-e29-t09`). botocore has timeouts of its own, but they are per attempt and it retries: with
+packets to AWS dropped, a question could outlast the 60 seconds `ops/launchd/install.sh
+--check-launchd` waits for `doctor --evidence-profiles`, and the install that runs the same check
+before it writes anything would wait as long. The call runs in a thread of its own, marked as a
+daemon, so that a question given up on does not keep the command from exiting while botocore is
+still waiting: a thread from asyncio's own pool would be waited for at the end of the run.
 """
 
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import re
+import threading
 from collections.abc import Mapping
 from typing import Final, Protocol, cast
 
+from debate_core.application.errors import StoreUnavailable
 from debate_core.integrations.s3.client import build_sts_client
 from debate_core.integrations.s3.errors import S3Call, mapped_s3_errors
 
-__all__ = ["StsCallerIdentity"]
+__all__ = ["IDENTITY_TIME_LIMIT_SECONDS", "StsCallerIdentity"]
+
+IDENTITY_TIME_LIMIT_SECONDS: Final = 10.0
+"""How long the question waits for AWS before it reports that AWS did not answer.
+
+STS answers in well under a second, and a session's credentials are fetched first in a second or
+two more. Two profiles unanswered take twenty seconds, a third of the 60 seconds
+`ops/launchd/install.sh --check-launchd` waits for the agent's check, and a test holds it there.
+"""
 
 
 class _StsClient(Protocol):
@@ -59,6 +81,8 @@ class StsCallerIdentity:
             given. The composition root passes the S3 client's, so the two reach one service.
         ignore_configured_endpoints: Whether botocore's own endpoint routes are ignored, as for the
             S3 client (:func:`~debate_core.integrations.s3.client.build_sts_client`).
+        time_limit_seconds: How long the question waits for an answer; :data:`IDENTITY_TIME_LIMIT_SECONDS`
+            unless a test says otherwise.
     """
 
     def __init__(
@@ -71,8 +95,10 @@ class StsCallerIdentity:
         region: str | None = None,
         endpoint_url: str | None = None,
         ignore_configured_endpoints: bool = False,
+        time_limit_seconds: float = IDENTITY_TIME_LIMIT_SECONDS,
     ) -> None:
         self._bucket = bucket
+        self._time_limit_seconds = time_limit_seconds
         self._profile = profile
         self._profile_setting = profile_setting
         self._client = cast(
@@ -89,7 +115,36 @@ class StsCallerIdentity:
         )
 
     async def assumed_role_name(self) -> str | None:
-        return await asyncio.to_thread(self._assumed_role_name)
+        loop = asyncio.get_running_loop()
+        answer: asyncio.Future[str | None] = loop.create_future()
+
+        def settle(outcome: str | None | BaseException) -> None:
+            if answer.done():  # given up on already
+                return
+            if isinstance(outcome, BaseException):
+                answer.set_exception(outcome)
+            else:
+                answer.set_result(outcome)
+
+        def ask() -> None:
+            outcome: str | None | BaseException
+            try:
+                outcome = self._assumed_role_name()
+            except BaseException as failed:  # handed to the waiting coroutine, which raises it
+                outcome = failed
+            # A RuntimeError here is the run that asked having ended, with nobody left waiting.
+            with contextlib.suppress(RuntimeError):
+                loop.call_soon_threadsafe(settle, outcome)
+
+        threading.Thread(target=ask, name="sts-get-caller-identity", daemon=True).start()
+        try:
+            return await asyncio.wait_for(answer, timeout=self._time_limit_seconds)
+        except TimeoutError:
+            raise StoreUnavailable(
+                "GetCallerIdentity",
+                f"s3://{self._bucket}",
+                f"AWS did not answer within {self._time_limit_seconds:g} seconds",
+            ) from None
 
     def _assumed_role_name(self) -> str | None:
         with mapped_s3_errors(

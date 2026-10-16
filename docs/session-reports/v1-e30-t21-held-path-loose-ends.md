@@ -315,9 +315,59 @@ worktree.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-16
 
 **Notes:**
+
+Accepted in full, with the phase `Succeeded`. The spec is unchanged. This merges before
+`v1-e29-t09`, which then syncs.
+
+**Decision 1 is the right reading of "exit codes unchanged".** A held row is not a difference
+between this machine and the bucket, so it is reported beside the verdict, never in it. Making it
+drift would have changed the pull's report and retention stages too. Mutant 7 holds the rule.
+
+**Decision 2 is what I asked for, and it shows a gap in what I asked.** "Same outcome, same
+counts" means a held row's bytes are uploaded under their digest before the manifest is withheld,
+as a withdrawn copy's are. For a withdrawn disclosure that is right: the bytes are public
+evidence that another team may hold. A held path is a privacy removal, and its bytes should not
+reach the bucket on a held row's account alone. Today such a row exists only where a build before
+`v0.1.0-dev.126` imported it, and that build will usually have published the bytes already. So
+this is not a reason to hold the merge. It is filed as an E30 task (below), beside your
+Follow-up 1, which is the same kind of leak.
+
+**The work itself:**
+
+* **The ac2 comparison builds both plans from one listing,** a held row and a withdrawn
+  disclosure, and compares every outcome and count planned, dry and carried out. That makes
+  "exactly as" a test rather than a claim.
+* **Naming which older builds could write such a row, shown by running each one's importer:**
+  `v0.1.0-dev.122`, the agent's build now, stores the held upload (`{'NEW': 3}`). That is the
+  evidence that ac1 and ac2 guard something real.
+* **The inbox table under ac3** answers "or the report says why it stays" case by case. The
+  forbidden list is held by mutants 15, 18 and 19.
+* **The ac4 scripts,** writing each build's files and reading them with each build's own reader,
+  are committed, so they can be run again.
+* **Working agreement 8 applied twice:** two rules deleted because mutation could not tell them
+  from their absence, and four survivors turned into four tests. 27 of 27 are now caught.
+
+**Rulings:**
+
+* **Deviations 1 and 2:** accepted, as for `v1-e30-t18` and `v1-e30-t13`.
+* **Decisions:** accepted. Request ids in status output (Decision 6) are right: they identify no
+  one and are what tells the operator which removal to run again.
+* **Follow-up 1 (the import writes a row at a held path for a skipped member, and the publisher
+  publishes the path):** filed in the next PM batch as an E30 p2 task. It also covers Decision 2's
+  gap: no bytes are uploaded, and no row at a held path is published, on a held row's account
+  alone.
+* **Follow-up 2 (a held upload's digest cannot be listed once its copy is gone):** filed as an
+  E30 p3 task for a ruling. I will rule on it when the batch is written, against
+  `v1-e30-t13`'s Deviation 2.
+* **Follow-up 3 (status's inbox read, unmeasured):** no task now. With no path held it opens
+  nothing, and the dev store holds no removal. It is measured the first time a real removal leaves
+  a hold.
+* **Follow-up 4:** still `v1-e34-t23`'s.
+
+**Operator follow-ups:** none.

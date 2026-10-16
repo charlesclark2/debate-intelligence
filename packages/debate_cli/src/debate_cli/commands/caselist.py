@@ -305,7 +305,7 @@ def import_archive(
             report, cli.services.evidence_object_path(manifest_key(caselist, published))
         )
         cli.output.detail(f"wrote {manifest.name}")
-        remeasured = _run(cli.services.caselist_later_manifests().after_weekly_import(caselist, published))
+        remeasured = _run(cli.services.caselist_later_manifests().after_weekly_import(report))
         for snapshot in remeasured.rewritten:
             cli.output.detail(f"measured {caselist} {snapshot} again and rewrote its manifest")
 

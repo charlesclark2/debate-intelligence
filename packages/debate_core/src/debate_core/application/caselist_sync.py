@@ -3288,9 +3288,7 @@ class CaselistSyncService:
         write_manifest(report, self._manifest_path(manifest_key(selection.caselist, selection.archive_date)))
         # Before the snapshot is counted as imported: a failure here is this archive's, so it is not
         # published, its inbox copy is kept, and importing it again measures them all again.
-        remeasured = await self._later_manifests.after_weekly_import(
-            selection.caselist, selection.archive_date
-        )
+        remeasured = await self._later_manifests.after_weekly_import(report)
         self._count_archive(report, tally)
         tally.snapshots_imported.append(f"{report.caselist} {report.snapshot.isoformat()}")
         tally.publish_targets.append(

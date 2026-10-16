@@ -25,6 +25,7 @@ import pytest
 from tests.fixtures.caselist.build_window_order_archives import (
     BODIES,
     CASELIST,
+    EXPECTED_AFTER_A_REMOVAL,
     EXPECTED_HOLDS,
     EXPECTED_IMPORTS,
     EXPECTED_LATER_UPLOADS,
@@ -130,7 +131,7 @@ class OrderedImports:
                 caselists=self.repository,
                 local=self.local,
                 suppression=suppression or empty_suppression_list(),
-            ).after_weekly_import(CASELIST, step.day)
+            ).after_weekly_import(report)
             return report
         archive = self.complete[step.day]
         previous, earlier = await snapshots_before_full_archive(self.local, CASELIST, step.day)
@@ -559,3 +560,65 @@ async def test_a_removal_after_a_late_week_finds_the_later_uploads_by_date(
         EXPECTED_LATER_UPLOADS.later_uploads,
         EXPECTED_LATER_UPLOADS.earlier_versions,
     )
+
+
+# ------------------------------------------------------------------------------------------------
+# Measuring again after a removal (`v1-e30-t18`)
+# ------------------------------------------------------------------------------------------------
+
+
+def second_bucket(client: S3Client, name: str) -> str:
+    """Another empty, versioned bucket like `evidence_bucket`, for a second store's publish."""
+    client.create_bucket(Bucket=name)
+    client.put_bucket_versioning(Bucket=name, VersioningConfiguration={"Status": "Enabled"})
+    return name
+
+
+async def test_a_late_week_after_a_removal_leaves_the_manifest_the_date_order_run_and_removal_leave(
+    tmp_path: Path, s3_client: S3Client, evidence_bucket: str
+) -> None:
+    """The removal's dropped row stays dropped, its SUPPRESSED count and its first-seen count stay."""
+    in_order = await removal_world(
+        tmp_path / "in-order", SCENARIOS["weeklies in date order"], s3_client, evidence_bucket
+    )
+    await remove(in_order, "third-version")
+    late = await removal_world(
+        tmp_path / "late",
+        (Step("weekly", FIRST_WEEK), Step("weekly", THIRD_WEEK)),
+        s3_client,
+        second_bucket(s3_client, f"{evidence_bucket}-late"),
+    )
+    await remove(late, "third-version")
+    store = OrderedImports(tmp_path / "late")
+
+    await store.run(
+        Step("weekly", SECOND_WEEK, allow_out_of_order=True),
+        RecordedSuppressionList(local_suppression_list_file(late.data_dir)),
+    )
+
+    assert store.remeasured is not None and store.remeasured.weeklies == ("2026-09-15",)
+    ordered = OrderedImports(tmp_path / "in-order")
+    for snapshot in WEEKS:
+        assert store.manifest_bytes(snapshot) == ordered.manifest_bytes(snapshot), snapshot
+    summary = store.summary("2026-09-15")
+    assert {name: summary[name] for name in EXPECTED_AFTER_A_REMOVAL} == EXPECTED_AFTER_A_REMOVAL
+
+
+async def test_an_older_week_imported_again_after_a_removal_changes_no_other_manifest(
+    tmp_path: Path, s3_client: S3Client, evidence_bucket: str
+) -> None:
+    """ac2 with a removal in the store: the removal runbook's Step 6, then an older week again."""
+    world = await removal_world(tmp_path, SCENARIOS["weeklies in date order"], s3_client, evidence_bucket)
+    await remove(world, "second-version")
+    store = OrderedImports(tmp_path)
+    suppression = RecordedSuppressionList(local_suppression_list_file(world.data_dir))
+
+    for week, others in (
+        (SECOND_WEEK, ("2026-09-01", "2026-09-15")),
+        (FIRST_WEEK, ("2026-09-08", "2026-09-15")),
+    ):
+        before = {snapshot: store.manifest_bytes(snapshot) for snapshot in others}
+        await store.run(Step("weekly", week), suppression)
+        assert store.remeasured is not None and store.remeasured.rewritten == (), week
+        assert {snapshot: store.manifest_bytes(snapshot) for snapshot in others} == before, week
+    assert store.summary("2026-09-15")["first_seen"] == 1, "as the removal kept it"

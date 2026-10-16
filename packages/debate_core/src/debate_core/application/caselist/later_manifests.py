@@ -1,4 +1,4 @@
-"""After a weekly is imported, measure the manifests dated after it again (`v1-e30-t18`).
+"""After a weekly is imported late, measure the manifests dated after it again (`v1-e30-t18`).
 
 A weekly is classified against the latest weekly dated before it, so one imported late is
 classified as it would have been in date order. What it changes is in the snapshots after it, whose
@@ -13,9 +13,15 @@ manifests were written without it (`v1-e30-t17`):
 The archives are usually gone by then (the inbox keeps them only until they are published), so
 :class:`LaterManifests` measures again from what the store already holds, and never reads an
 archive (PM ruling, `v1-e30-t18`). After every weekly import, `caselist import` and `caselist pull`
-call :meth:`LaterManifests.after_weekly_import`, and it rewrites each manifest whose bytes the
-measuring changes, to the manifest a date-order run writes. A manifest that does not change is not
-written, so a weekly imported in date order, or a week imported again, rewrites nothing.
+hand the import's report to :meth:`LaterManifests.after_weekly_import`, which rewrites each manifest
+whose bytes the measuring changes, to the manifest a date-order run writes. A manifest that does not
+change is not written, so a weekly imported in date order rewrites nothing.
+
+**Only a weekly's first import is measured in.** A week already imported was there when the weeks
+after it were measured (:attr:`~debate_core.application.caselist.import_service.ImportReport.
+imported_before`), so importing it again measures nothing again and writes its own manifest alone
+(PM ruling 2). That is what leaves a removal's rewrite of a later week as the removal left it when
+an older week is imported again, which the removal runbook's Step 6 does.
 
 ## A later weekly
 
@@ -28,13 +34,18 @@ before:
 * **Each member row's classification** is decided by the importer's own rule
   (:func:`~debate_core.application.caselist.pipeline.classify_stored`), against that week's
   disclosures and the digests the rows before it in this manifest name.
-* **`REMOVED` rows** are the previous week's paths no member row names, as the importer adds them,
-  except a path a removal holds for this week's date (`v1-e30-t13`). See "What this cannot see".
+* **`REMOVED` rows** are the previous week's paths the archive did not hold, as the importer adds
+  them. What the archive held is its member rows' paths, and also each path of its old previous
+  week that its old `REMOVED` rows leave out: a member the suppression list stopped has no row, but
+  the import saw its path, and did not report that path `REMOVED`.
 * **The summary's `classifications`** are counted from those rows, with the `SUPPRESSED` count kept
-  as it was, and **`first_seen`** is taken again against the weekly manifests dated before it
-  (:func:`~debate_core.application.caselist.evidence_listing.digests_in_earlier_manifests`). Every
-  other summary key is a fact about the archive and is kept. A manifest written before first-seen
-  existed, or without a way to count it, keeps what it had.
+  as it was. Every other summary key but two is a fact about the archive and is kept.
+* **`previous_snapshot`** is the new previous week, and **`first_seen`** moves by what the late
+  weekly brings: less each digest of this week's rows that it holds and no other weekly manifest
+  dated before this week does. Not counted afresh from the rows, because a removal keeps a
+  manifest's first-seen count as the import recorded it when it drops a row
+  (:mod:`~debate_core.application.caselist.removal_plan`), and a count from the rows would undo
+  that. A manifest written before first-seen existed, or without a way to count it, keeps what it had.
 
 ## The newest complete archive
 
@@ -43,21 +54,17 @@ before it, weekly and complete, as its import counts them
 (:func:`~debate_core.application.caselist.evidence_listing.snapshots_before_full_archive`), and
 against the stored rows of its own manifest. Only its summary's `withdrawn`, `superseded` and
 `earlier_snapshots` change, and its member rows are kept byte for byte. Only the newest one is
-counted again (PM ruling, `v1-e30-t18`); an older complete archive keeps the count it was imported
-with. Nothing waits for a gap in the weekly series to close: the complete archive is imported when
-it arrives, and counted again when the weekly does.
+counted again (PM ruling 3); an older complete archive keeps the count it was imported with. Nothing
+waits for a gap in the weekly series to close: the complete archive is imported when it arrives, and
+counted again when the weekly does.
 
 ## What this cannot see
 
-A member the suppression list stopped has no manifest row, so measuring again cannot know its path
-or its digest. Two numbers can then differ from what the import counted:
-
-* A path the previous week held, where a later week's member was stopped by its bytes or by its
-  team's withdrawn copy, is reported `REMOVED`. One a removal holds for that week's date is not,
-  as `caselist remove` drops a `REMOVED` row at a path that held the removed file.
-* A complete archive's import counts a stopped member as still present, and its recount cannot.
-
-Neither changes what is stored, and neither arises without a removal and a late import together.
+A member the suppression list stopped has no manifest row. Measuring again infers the paths of a
+later week's stopped members from its old previous week, as above, which misses one the old
+previous week did not hold: if the late week holds that path, it is reported `REMOVED`. And a
+complete archive's import counts a stopped member as still present, which its recount cannot. Neither
+changes what is stored, and neither arises without a removal and a late import together.
 
 ## What it never touches
 
@@ -67,9 +74,9 @@ suppression list are read and never written. Nothing is logged but counts and sn
 
 ## If it stops partway
 
-Each manifest is written atomically and on its own, so a failure leaves some rewritten and some
-not. Importing the late week again, now with no flag, measures them all again, and the ones already
-rewritten are left alone.
+Every rewrite is worked out before the first is written, so an unreadable manifest stops it before
+anything is written. Each manifest is then written atomically and on its own: a failure to write one
+leaves those before it rewritten, and those after it as they were.
 """
 
 from __future__ import annotations
@@ -83,13 +90,14 @@ from pathlib import Path
 
 from debate_core.application.caselist.evidence_listing import (
     LocalEvidence,
-    digests_in_earlier_manifests,
+    digests_in_each_earlier_manifest,
     snapshots_before_full_archive,
 )
 from debate_core.application.caselist.import_service import (
     STORED_CLASSIFICATIONS,
     Classification,
     ImportedEntry,
+    ImportReport,
 )
 from debate_core.application.caselist.manifest import (
     DISCLOSURE_FIELDS,
@@ -199,10 +207,10 @@ class LaterManifests:
             local=local_evidence,
             suppression=RecordedSuppressionList(local_suppression_list_file(data_dir)),
         )
-        remeasured = await later.after_weekly_import("hsld26", date(2026, 9, 8))
+        remeasured = await later.after_weekly_import(report)  # the weekly import's own report
 
     The suppression list is the one the import read: every row is checked against it again as it is
-    rendered, and a removal's hold decides which `REMOVED` rows are left out.
+    rendered, before any manifest is written.
     """
 
     def __init__(
@@ -212,12 +220,16 @@ class LaterManifests:
         self._local = local
         self._suppression = suppression
 
-    async def after_weekly_import(self, caselist: str, snapshot: date) -> LaterManifestsRemeasured:
-        """Measure again every weekly manifest dated after `snapshot`, and the newest complete archive.
+    async def after_weekly_import(self, report: ImportReport) -> LaterManifestsRemeasured:
+        """Measure again every weekly manifest dated after `report`'s, and the newest complete archive.
 
-        Call it after the weekly of `snapshot` is imported and its manifest written, since the
-        later weeks' first-seen counts read it. Rewrites only the manifests that change.
+        Call it with a weekly's report once its manifest is written, since the later weeks'
+        first-seen counts read that manifest. Measures nothing for a dry run, a complete archive, or
+        a week imported before; otherwise rewrites only the manifests that change.
         """
+        caselist, snapshot = report.caselist, report.snapshot
+        if not report.applied or report.full_archive or report.imported_before:
+            return LaterManifestsRemeasured(caselist=caselist)
         weeklies, complete_archives = await self._manifest_dates(caselist)
         later = sorted(day for day in weeklies if day > snapshot)
         newest_complete = max(complete_archives, default=None)
@@ -227,16 +239,22 @@ class LaterManifests:
 
         suppression = await load_suppression_state(self._suppression)
         held = sorted(stored.snapshot for stored in await self._caselists.list_snapshots(caselist))
+        writes: list[tuple[Path, list[str]]] = []
         rewritten: list[str] = []
         for day in later:
             previous = max((one for one in held if one < day), default=None)
-            if await self._measure_weekly_again(caselist, day, previous, suppression):
+            measured = await self._measured_again(caselist, day, previous, suppression, late=snapshot)
+            if measured is not None:
+                writes.append(measured)
                 rewritten.append(day.isoformat())
-        recount = (
-            await self._recount_complete_archive(caselist, newest_complete, suppression)
-            if recount_due and newest_complete is not None
-            else None
-        )
+        recount = None
+        if recount_due and newest_complete is not None:
+            recounted = await self._recounted(caselist, newest_complete, suppression)
+            if recounted is not None:
+                recount, written = recounted
+                writes.append(written)
+        for path, lines in writes:
+            write_manifest_lines(lines, path)
         result = LaterManifestsRemeasured(
             caselist=caselist, weeklies=tuple(rewritten), complete_archive=recount
         )
@@ -255,21 +273,22 @@ class LaterManifests:
     # A later weekly
     # --------------------------------------------------------------------------------------
 
-    async def _measure_weekly_again(
-        self, caselist: str, day: date, previous: date | None, suppression: SuppressionState
-    ) -> bool:
-        """Rewrite one weekly's manifest if measuring it again changes it; whether it did."""
+    async def _measured_again(
+        self, caselist: str, day: date, previous: date | None, suppression: SuppressionState, *, late: date
+    ) -> tuple[Path, list[str]] | None:
+        """One weekly's manifest measured again, as `(path, lines)`, or `None` when it does not change."""
         key = manifest_key(caselist, day)
         path = self._path_for(key)
         lines = read_manifest_lines(path)
         if not lines:
-            return False
+            return None
         members, summary = _rows_and_summary(key, lines)
         baseline = await self._disclosures_in(caselist, previous)
         rows, counts, stored = _classified_again(key, members, baseline=baseline)
-        for gone in sorted(baseline.keys() - _member_paths(members)):
-            if suppression.path_hold(caselist=caselist, path=gone, snapshot=day) is not None:
-                continue
+        held_paths = _member_paths(members) | await self._stopped_paths(
+            key, len(lines), caselist, members, summary
+        )
+        for gone in sorted(baseline.keys() - held_paths):
             counts[_REMOVED] = counts.get(_REMOVED, 0) + 1
             rows.append(_removed_row(gone))
         suppressed = _suppressed_count(summary)
@@ -280,12 +299,53 @@ class LaterManifests:
             "previous_snapshot": previous.isoformat() if previous is not None else None,
             "classifications": {name: counts[name] for name in sorted(counts) if counts[name] > 0},
         }
-        if summary.get("first_seen") is not None:
-            measured["first_seen"] = len(
-                stored - await digests_in_earlier_manifests(self._local, caselist, day)
+        first_seen = summary.get("first_seen")
+        if isinstance(first_seen, int):
+            measured["first_seen"] = first_seen - await self._first_seen_only_through(
+                caselist, day, stored, late=late
             )
         rows.sort(key=lambda row: str(row["path"]))
-        return self._write_if_changed(path, lines, [*rows, measured], suppression, caselist)
+        rendered = render_rows([*rows, measured], suppression=suppression, disclosure_scope=caselist)
+        return None if rendered == list(lines) else (path, rendered)
+
+    async def _stopped_paths(
+        self,
+        key: ObjectKey,
+        line: int,
+        caselist: str,
+        members: Sequence[Mapping[str, object]],
+        summary: Mapping[str, object],
+    ) -> set[str]:
+        """Paths the archive held whose members have no row: its old previous week's, not reported gone.
+
+        The import reported `REMOVED` each path of its previous week that the archive did not hold.
+        So a path of that week with no `REMOVED` row and no member row is one the archive held, for
+        a member the suppression list stopped.
+        """
+        named = summary.get("previous_snapshot")
+        if named is None:
+            return set()
+        if not isinstance(named, str):
+            raise UnreadableManifest(key, line, "the summary's previous snapshot is not a date")
+        try:
+            old_previous = date.fromisoformat(named)
+        except ValueError as unreadable:
+            raise UnreadableManifest(
+                key, line, "the summary's previous snapshot is not a date"
+            ) from unreadable
+        reported_gone = {str(row["path"]) for row in members if row.get("classification") == _REMOVED}
+        return set((await self._disclosures_in(caselist, old_previous)).keys()) - reported_gone
+
+    async def _first_seen_only_through(
+        self, caselist: str, day: date, stored: set[str], *, late: date
+    ) -> int:
+        """How many of `stored` the late weekly's manifest holds and no other weekly before `day` does."""
+        earlier = await digests_in_each_earlier_manifest(self._local, caselist, day)
+        brought = earlier.get(late.isoformat(), frozenset())
+        elsewhere = frozenset[str]().union(
+            *(digests for name, digests in earlier.items() if name != late.isoformat())
+        )
+        return len((stored & brought) - elsewhere)
 
     async def _disclosures_in(self, caselist: str, snapshot: date | None) -> dict[str, str]:
         """What a weekly said, as `{source path: sha256}`: the importer's baseline, read the same way."""
@@ -306,10 +366,10 @@ class LaterManifests:
     # The newest complete archive
     # --------------------------------------------------------------------------------------
 
-    async def _recount_complete_archive(
+    async def _recounted(
         self, caselist: str, archive_date: date, suppression: SuppressionState
-    ) -> CompleteArchiveRecount | None:
-        """Count the complete archive's withdrawals again; rewrite its summary if they changed."""
+    ) -> tuple[CompleteArchiveRecount, tuple[Path, list[str]]] | None:
+        """The complete archive's withdrawals counted again, and its manifest; `None` if unchanged."""
         key = full_archive_manifest_key(caselist, archive_date)
         path = self._path_for(key)
         lines = read_manifest_lines(path)
@@ -327,10 +387,11 @@ class LaterManifests:
             "superseded": after.superseded,
             "earlier_snapshots": after.earlier_snapshots,
         }
-        self._write_if_changed(path, lines, [*members, recounted], suppression, caselist)
-        return CompleteArchiveRecount(
+        recount = CompleteArchiveRecount(
             caselist=caselist, snapshot=full_archive_snapshot(archive_date), before=before, after=after
         )
+        rendered = render_rows([*members, recounted], suppression=suppression, disclosure_scope=caselist)
+        return recount, (path, rendered)
 
     # --------------------------------------------------------------------------------------
     # The store
@@ -356,21 +417,6 @@ class LaterManifests:
         if path_for is None:
             raise LaterManifestsNotWritable
         return path_for(key)
-
-    @staticmethod
-    def _write_if_changed(
-        path: Path,
-        lines: Sequence[str],
-        rows: Sequence[Mapping[str, object]],
-        suppression: SuppressionState,
-        caselist: str,
-    ) -> bool:
-        """Render `rows` as the importer renders them, and write them only if they differ from `lines`."""
-        rendered = render_rows(rows, suppression=suppression, disclosure_scope=caselist)
-        if rendered == list(lines):
-            return False
-        write_manifest_lines(rendered, path)
-        return True
 
 
 def _rows_and_summary(

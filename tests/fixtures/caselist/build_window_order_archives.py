@@ -134,12 +134,13 @@ removed; no earlier version.
 
 ## Measured again after a late weekly (`v1-e30-t18`)
 
-After every weekly import, the weeklies dated after it are measured again from what the store
+After a weekly's first import, the weeklies dated after it are measured again from what the store
 holds, never from their archives: each is classified against the latest weekly dated before it, as
-a date-order import would be, and its first-seen count is taken against the weekly manifests dated
-before it. A manifest whose bytes that changes is rewritten; one it does not is left alone. Then
-the newest complete archive, if it is dated after the weekly, has its withdrawals counted again
-against every manifest dated before it. Worked out by hand, scenario by scenario:
+a date-order import would be, and its first-seen count loses each file the new weekly holds and no
+other earlier weekly does. A manifest whose bytes that changes is rewritten; one it does not is left
+alone. Then the newest complete archive, if it is dated after the weekly, has its withdrawals counted
+again against every manifest dated before it. A week imported again measures nothing again: the weeks
+after it were measured with it. Worked out by hand, scenario by scenario:
 
 * **A weekly after a later one.** When `2026-09-08` is allowed in, `2026-09-15` is measured against
   it: CHANGED 1 (`third-version` over `second-version`), UNCHANGED 2 (`carried`,
@@ -153,7 +154,7 @@ against every manifest dated before it. Worked out by hand, scenario by scenario
   it is rewritten. `2026-09-15` keeps `2026-09-08` as its previous week, and `third-version` is in
   no earlier week, so its manifest is the same bytes and is not rewritten.
 * **An older week imported again**: the three weeks in date order, then `2026-09-08` again, with no
-  flag. Nothing after it changes, so nothing is rewritten.
+  flag. It was imported before, so nothing is measured again and nothing is rewritten.
 * **A complete archive imported before an earlier-dated weekly.** `2026-09-08` arrives after
   `full/2026-09-12`, the newest complete archive, and is dated before it, so its withdrawals are
   counted again, against `2026-09-01` and `2026-09-08`: withdrawn 1 (`second-week-only`),
@@ -167,9 +168,35 @@ against every manifest dated before it. Worked out by hand, scenario by scenario
   them all**: no weekly is dated before the newest complete archive when it is imported, and no
   weekly arrives after a later one, so nothing is rewritten.
 
-:data:`EXPECTED_IMPORTS`, :data:`EXPECTED_HOLDS`, :data:`EXPECTED_LATER_UPLOADS` and
-:data:`EXPECTED_REMEASURED` state those answers as literals. Nothing here runs the importer, and no
-test may derive them from it (`docs/process/working-agreements.md` §6).
+### After a removal
+
+A removal drops a removed file's rows from every manifest, counts each dropped member `SUPPRESSED`,
+and keeps the first-seen count as the import recorded it. Measuring again has to leave that alone.
+
+* **A late week after a removal**: `2026-09-01` and `2026-09-15`, then `caselist remove --source
+  <third-version>`, then `2026-09-08` allowed out of order; against the date-order run of the three
+  weeks followed by the same removal. In date order `2026-09-15` was CHANGED 1, UNCHANGED 2, REMOVED 1
+  (`ONE_WEEK_PATH`), first seen 1 (`third-version`), and the removal dropped the `third-version` row:
+  UNCHANGED 2, REMOVED 1, SUPPRESSED 1, first seen still 1, two distinct files. In the late order it
+  was CHANGED 1, UNCHANGED 1, NEW 1, first seen 2, and after the removal UNCHANGED 1, NEW 1,
+  SUPPRESSED 1, first seen 2. `2026-09-08` (dated before the hold, so `second-version` is imported)
+  then measures it against itself: `carried` and `from-the-second-week-on` UNCHANGED; `ONE_WEEK_PATH`
+  REMOVED; `REVISED_PATH` not REMOVED, because its old previous week `2026-09-01` held that path and
+  its old `REMOVED` rows do not name it, so the archive held a member there that the list stopped;
+  first seen 2, less `from-the-second-week-on`, which `2026-09-08` holds and `2026-09-01` does not:
+  1. UNCHANGED 2, REMOVED 1, SUPPRESSED 1, first seen 1, previous `2026-09-08`: the date-order
+  manifest, byte for byte (:data:`EXPECTED_AFTER_A_REMOVAL`).
+* **An older week imported again after a removal**: the three weeks in date order, then `caselist
+  remove --source <second-version>` (the hold covers snapshots after `2026-09-08`, and
+  `third-version` is a later upload, removed too), then `2026-09-08` imported again, as the removal
+  runbook's Step 6 does, and then `2026-09-01`. Each was imported before, so no other manifest
+  changes. Counting `2026-09-15`'s first-seen afresh from its rows would have given 0 where the
+  removal kept 1.
+
+:data:`EXPECTED_IMPORTS`, :data:`EXPECTED_HOLDS`, :data:`EXPECTED_LATER_UPLOADS`,
+:data:`EXPECTED_REMEASURED` and :data:`EXPECTED_AFTER_A_REMOVAL` state those answers as literals.
+Nothing here runs the importer, and no test may derive them from it
+(`docs/process/working-agreements.md` §6).
 
 Run it by hand to look at what it makes::
 
@@ -203,6 +230,7 @@ __all__ = [
     "COMPLETE_ARCHIVES",
     "EXPECTED_HOLDS",
     "EXPECTED_IMPORTS",
+    "EXPECTED_AFTER_A_REMOVAL",
     "EXPECTED_LATER_UPLOADS",
     "EXPECTED_REMEASURED",
     "FIRST_WEEK",
@@ -516,6 +544,15 @@ EXPECTED_LATER_UPLOADS: Final = ExpectedHold(
     late_week=_SECOND_IN_ORDER,
 )
 """`2026-09-01`, `2026-09-15`, `2026-09-08` allowed out of order, then the removal of `first-version`."""
+
+EXPECTED_AFTER_A_REMOVAL: Final[dict[str, object]] = {
+    "previous_snapshot": "2026-09-08",
+    "classifications": {"REMOVED": 1, "SUPPRESSED": 1, "UNCHANGED": 2},
+    "first_seen": 1,
+    "members": 3,
+    "distinct_sha256": 2,
+}
+"""`2026-09-15`'s summary after the removal of `third-version` and the late `2026-09-08`, in either order."""
 
 
 def digest_of(body: str) -> str:

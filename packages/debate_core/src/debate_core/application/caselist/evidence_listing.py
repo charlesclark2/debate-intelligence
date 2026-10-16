@@ -43,6 +43,7 @@ from debate_core.domain import Sha256Hex
 
 __all__ = [
     "LocalEvidence",
+    "digests_in_each_earlier_manifest",
     "digests_in_earlier_manifests",
     "list_local_caselists",
     "list_remote_caselists",
@@ -138,12 +139,24 @@ async def digests_in_earlier_manifests(
     `full/<date>` sorts after every date, so the comparison kept them out as well and a mutation
     run could not tell the flag from its absence (`v1-e30-t17`).
     """
-    return frozenset(
-        source.sha256
+    return frozenset[Sha256Hex]().union(
+        *(await digests_in_each_earlier_manifest(local, caselist, snapshot)).values()
+    )
+
+
+async def digests_in_each_earlier_manifest(
+    local: LocalEvidence, caselist: str, snapshot: date
+) -> dict[str, frozenset[Sha256Hex]]:
+    """:func:`digests_in_earlier_manifests`, manifest by manifest: `{weekly snapshot: digests}`.
+
+    The same manifests by the same rule. What measuring a later manifest again after a late weekly
+    reads (`v1-e30-t18`), which needs to know what the late weekly's own manifest adds.
+    """
+    return {
+        held.snapshot: frozenset(source.sha256 for source in held.sources)
         for held in await read_local_snapshots(local, caselist, full_archives=False)
         if _date_of_snapshot(held.snapshot) < snapshot
-        for source in held.sources
-    )
+    }
 
 
 def _date_of_snapshot(snapshot: str) -> date:

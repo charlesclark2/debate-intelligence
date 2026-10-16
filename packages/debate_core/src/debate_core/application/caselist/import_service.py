@@ -98,11 +98,16 @@ manifest whose bytes that changes is rewritten, to the manifest a date-order run
 rows are the same rows: only their classifications, its `REMOVED` rows and its summary change. The
 rewritten manifests are published as any changed manifest is.
 
+Only a weekly imported for the first time is measured into the weeks after it. A week already
+imported is imported again without the flag, and writes its own manifest again and no other: it is
+classified against the same week as before, so its manifest is the same bytes, and the weeks after it
+were measured with it already (:attr:`ImportReport.imported_before`). That is also what keeps a
+removal's rewrite of a later week as the removal left it when an older week is imported again
+(`docs/runbooks/caselist-removal.md`, Step 6).
+
 A weekly older than the newest one already imported, and never imported itself, is still refused
 (:class:`SnapshotOutOfOrder`) unless the caller passes `allow_out_of_order`, because importing it
-rewrites other weeks' manifests: the refusal says which. A week already imported is imported again
-without the flag. It is classified against the same week as before and writes its own manifest again,
-the same bytes, and measuring the weeks after it again finds nothing to change.
+rewrites other weeks' manifests: the refusal says which.
 
 A complete archive writes no snapshot record, so it is never the newest weekly a weekly is refused
 for, and the weekly series never sees one. Its withdrawals are counted against the manifests on
@@ -275,6 +280,14 @@ class ImportReport:
     withdrawals: WithdrawalCount | None = None
     """For a complete archive: what earlier snapshots held and it does not. `None` for a weekly."""
 
+    imported_before: bool = False
+    """For a weekly: whether this snapshot was already imported before this run (`v1-e30-t18`).
+
+    A fact about the run, not the archive, so no manifest carries it. A week imported again writes
+    its own manifest and no other; one imported for the first time, late, has the later manifests
+    measured again (:class:`~debate_core.application.caselist.later_manifests.LaterManifests`).
+    """
+
     suppression: SuppressionState = field(default_factory=SuppressionState)
     """The suppression list this import read, which the manifest writer checks every row against."""
 
@@ -371,6 +384,9 @@ class CaselistImportService:
         never been, unless `allow_out_of_order` is set. Writes nothing when `dry_run` is set. The
         caller writes the manifest and then measures the later ones again ("Ordering", above).
         """
+        imported_before = snapshot in {
+            stored.snapshot for stored in await self._caselists.list_snapshots(caselist)
+        }
         previous = await self._previous_snapshot(caselist, snapshot, allow_out_of_order=allow_out_of_order)
         baseline = await self._disclosures_in(caselist, previous)
 
@@ -418,6 +434,7 @@ class CaselistImportService:
             suppression=run.suppression,
             held_by_request=run.held_by_request,
             first_seen=await self._first_seen(caselist, snapshot, run.entries),
+            imported_before=imported_before,
         )
         _log_counts(report)
         return report

@@ -509,11 +509,29 @@ At the next import (or immediately, if you have the next archive on hand):
       import's table then says, under its counts, *SUPPRESSED includes N new upload(s) at a removed
       path (N under RM-…), refused because that removal holds the path*, and `--json` gives
       `held_at_removed_paths` as request ids and counts. The upload is not in the store, the bucket
-      or any manifest. It is still inside the archive in the download inbox, and its sha256 is not
-      on the suppression list yet, because only `caselist remove` writes the list.
+      or any manifest. Its sha256 is not on the suppression list yet, because only `caselist remove`
+      writes the list.
+- [ ] **Where the upload is now** (`v1-e30-t21`). A weekly archive whose every member was removed or
+      held leaves the inbox when `caselist pull` finishes importing it, and the import stage's
+      reason says *N archive(s) taken out of the inbox, which held only files removed or held at a
+      removed path*. Any other archive, and every complete archive, holds other teams' files as
+      well, so it stays until retention removes it, once its snapshot is confirmed in the bucket
+      (usually the same run). An archive you imported by hand with `caselist import` stays where it
+      is either way.
+- [ ] **`caselist status` says when the removal is owed again** (`v1-e30-t21`). Under its table:
+      - *HELD UPLOADS IN THE DOWNLOAD INBOX for `<caselist>`*: an upload at a held path in an
+        archive in the inbox, refused at import or waiting to be;
+      - *HELD PATH ROWS in `<caselist>` `<snapshot>`*: a stored row at a held path, which a build from
+        before `v1-e30-t13` imported. `caselist publish` withholds that snapshot's manifest, with the
+        code `MANIFEST_NAMES_SUPPRESSED_SOURCE`, as it withholds one with a suppressed row;
+      - then *RM-… is owed again*. Each file is named by the first twelve characters of its sha256
+        and the request holding its path, and `--json` gives the same as `held_in_inbox`, each
+        snapshot's `held_rows`, `held_row_prefixes` and `held_row_requests`, and `removals_owed`.
+      Neither changes the exit code: the command still exits 0 when the bucket agrees.
 - [ ] **Finish it by running the same removal again**, dry run first: the same `--source`, the same
       `--request` and `--reason`, in dev and then prod. Do this after any pull that reported a held
-      upload, and after every pull while the agent runs a build from before `v1-e30-t13`.
+      upload or after which `caselist status` says the removal is owed, and after every pull while
+      the agent runs a build from before `v1-e30-t13`.
 
       ```bash
       DEBATE_ENV=dev uv run debate-research caselist remove --source <sha256> --request RM-2026-01 --reason REQUESTED_BY_TEAM
@@ -522,11 +540,16 @@ At the next import (or immediately, if you have the next archive on hand):
       The removed file's own rows are gone, so the plan finds its path from the path entry. Under
       *LATER UPLOADS AT A REMOVED PATH* it lists whatever is at that path in a later snapshot:
       - *in the download inbox …, not in the store*: this build refused it. `--execute` puts its
-        sha256 on the list under the request and deletes the imported archive from the inbox.
+        sha256 on the list under the request and deletes the imported archive from the inbox. If
+        the archive has already left the inbox, the plan cannot see the upload's bytes, so its
+        sha256 is never put on the list; the path entry still refuses it there.
       - *held in `<snapshot>`*: a build from before `v1-e30-t13` imported it. `--execute` removes it
         from the store and the bucket as it removes any later upload, every version.
       - nothing, and *Nothing is left to remove*: nothing arrived.
-      Then execute as in step 5, and verify as in step 6. The path stays held afterwards.
+      Then execute as in step 5, and verify as in step 6. The path stays held afterwards. A
+      symbolic link or other skipped member at the held path, in an archive waiting to be
+      imported, is taken out of it in the same rewrite (`v1-e30-t21`); its body is often the file's
+      name. `caselist status` then says nothing is owed.
 - [ ] **After a `--team` removal**, run the same `--team` dry run again once the next weekly is
       imported: it selects by the team's directories, so it lists anything new there, and
       `--execute` removes it under the same request id. A `--team` removal holds no path, so until

@@ -210,6 +210,31 @@ async def test_a_copy_that_changed_after_its_import_is_left_for_retention(
     assert TAKEN_OUT not in import_reason(summary)
 
 
+async def test_an_archive_holding_only_the_removed_file_itself_is_left_for_retention(
+    removal_world: RemovalWorld, tmp_path: Path
+) -> None:
+    """The Bayview file's own bytes at its own path, the week after: the list stops it, the hold
+    refuses nothing (`SUPPRESSED` 1, none held), so the import met no hold and leaves the archive to
+    retention, which removes it once the publish is confirmed, as it always has."""
+    await remove_bayview(removal_world)
+    path = tmp_path / "published" / weekly_name(WEEK_4)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr(f"testcl26-0922/{BAYVIEW_PATH}", DOCUMENT_BODIES["bayview-semis-neg"])
+    installation = installation_of(removal_world, path)
+
+    summary = await installation.sync(
+        FakeSource(installation.archives, weeks=[WEEK_4]),
+        publish_to=ExpiredBucket(),
+        compare_with=ExpiredBucket(),
+    ).run([CASELIST])
+
+    assert week_four_counts(removal_world).get("SUPPRESSED") == 1
+    assert installation.inbox_names() == {weekly_name(WEEK_4)}
+    assert "taken out of the inbox" not in import_reason(summary)
+    assert kept(summary) == {label(WEEK_4): "not_confirmed"}
+
+
 # ------------------------------------------------------------------------------------------------
 # An archive that also holds another team's file stays for retention, and status reports it
 # ------------------------------------------------------------------------------------------------

@@ -308,24 +308,18 @@ class ImportReport:
         """Whether this import met a hold and the archive held nothing else (`v1-e30-t21`).
 
         Every member is `SUPPRESSED`, by the list or by a hold, at least one of them by a hold, and
-        every skipped member is junk withheld with them or sits at a path the hold covers. Such an
-        archive stored nothing, and nothing in it can be imported by anyone, so its inbox copy can
-        go as soon as the import has finished. One that holds anything else is someone's disclosure.
+        every skipped member is junk withheld with them. Such an archive stored nothing, and nothing
+        in it can be imported by anyone, so its inbox copy can go as soon as the import has finished.
+        One that holds anything else, a skipped member included, is left for retention.
         """
         if not self.held_at_removed_paths:
             return False
-        for entry in self.entries:
-            if entry.classification is Classification.REMOVED:
-                continue
-            if entry.classification is not None:
-                if entry.classification is not Classification.SUPPRESSED:
-                    return False
-            elif not entry.withheld and (
-                self.suppression.path_hold(caselist=self.caselist, path=entry.path, snapshot=self.snapshot)
-                is None
-            ):
-                return False
-        return True
+        return all(
+            entry.classification in (Classification.SUPPRESSED, Classification.REMOVED)
+            if entry.classification is not None
+            else entry.withheld
+            for entry in self.entries
+        )
 
     @property
     def member_count(self) -> int:

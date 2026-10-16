@@ -29,7 +29,7 @@ import json
 import shutil
 import stat
 import zipfile
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -49,8 +49,10 @@ from tests.fixtures.caselist.build_revised_path_archives import (
     digest_of,
 )
 
+from debate_core.application.caselist.evidence_listing import snapshots_before_full_archive
 from debate_core.application.caselist.import_service import CaselistImportService
-from debate_core.application.caselist.inbox_purge import InboxAction, read_inbox
+from debate_core.application.caselist.inbox_purge import CaselistInbox, InboxAction, read_inbox
+from debate_core.application.caselist.manifest import full_archive_manifest_key, write_manifest
 from debate_core.application.caselist.publish_service import (
     MANIFEST_NAMES_SUPPRESSED_SOURCE,
     CaselistPublishService,
@@ -61,6 +63,7 @@ from debate_core.application.caselist.publish_service import (
 from debate_core.application.caselist.removal_plan import SourceSelector
 from debate_core.application.caselist.status_service import CaselistStatusReport, CaselistStatusService
 from debate_core.application.caselist.suppression import RecordedSuppressionList
+from debate_core.application.ports.archive import InventoriedEntry
 from debate_core.application.ports.suppression import (
     ReasonCode,
     SuppressionAction,
@@ -68,11 +71,20 @@ from debate_core.application.ports.suppression import (
     SuppressionList,
     disclosure_digest,
 )
-from debate_core.integrations.local import FsSnapshotStore
+from debate_core.domain.caselist import Event
+from debate_core.integrations.local import FsEvidenceObjectStore, FsSnapshotStore
+from debate_core.integrations.local.archive_reader import archive_digest, read_archive
 from debate_core.testing.fakes import InMemoryAppendOnlyRecord
 
 from .conftest import REQUEST, RemovalWorld
-from .test_removal_covers_later_uploads import NAMED, NAMES, remove_the_named_file, revised_path_world
+from .test_removal_covers_later_uploads import (
+    LIMITS,
+    NAMED,
+    NAMES,
+    OTHER_CASELIST_FILE,
+    remove_the_named_file,
+    revised_path_world,
+)
 from .test_removed_path_holds_later_imports import import_weekly, manifest_rows
 
 if TYPE_CHECKING:  # pragma: no cover - import for the type checker only
@@ -132,6 +144,30 @@ async def an_older_build_imports_next_week(
     if publish:
         publisher = CaselistPublishService(local=world.local, remote=world.bucket, suppression=older)
         assert (await publisher.execute(await publisher.plan(CASELIST))).succeeded
+
+
+async def an_older_build_imports_the_next_complete_archive(world: RemovalWorld, scratch: Path) -> None:
+    """After the removal, the complete archive of 2026-10-09 imported by an older build, unpublished."""
+    day = date(2026, 10, 9)
+    archive = build_arriving_complete_archive_zips(scratch / "arriving")[(CASELIST, day)]
+    importer = CaselistImportService(
+        caselists=world.repository,
+        blobs=FsSnapshotStore(world.data_dir),
+        suppression=AnOlderBuildsList(world.suppression()),
+    )
+    previous, earlier = await snapshots_before_full_archive(world.local, CASELIST, day)
+    report = await importer.import_full_archive(
+        read_archive(archive, **LIMITS),
+        caselist=CASELIST,
+        archive_date=day,
+        event=Event.LD,
+        archive_sha256=archive_digest(archive),
+        previous=previous,
+        earlier=earlier,
+    )
+    write_manifest(
+        report, FsEvidenceObjectStore(world.data_dir).path_for(full_archive_manifest_key(CASELIST, day))
+    )
 
 
 def status_service(world: RemovalWorld) -> CaselistStatusService:
@@ -208,6 +244,25 @@ async def test_status_reports_a_row_an_older_build_imported_at_a_held_path(
     names_no_one(report)
 
 
+async def test_status_and_the_publisher_find_a_held_row_in_a_complete_archive_too(
+    world: RemovalWorld, tmp_path: Path
+) -> None:
+    """`full/2026-10-09` holds `uploaded-after-in-a-complete-archive` at the held path, dated after
+    the hold's date: the complete archive's name gives the date the hold is asked with."""
+    await remove_the_named_file(world)
+    await an_older_build_imports_the_next_complete_archive(world, tmp_path)
+
+    report = await status_service(world).status(CASELIST, "full/2026-10-09")
+    plan = await CaselistPublishService(
+        local=world.local, remote=world.bucket, suppression=world.suppression()
+    ).plan(CASELIST, "full/2026-10-09")
+
+    assert [rows_of(one.held_rows) for one in report.snapshots] == [
+        [(UPLOADED_AFTER_IN_A_COMPLETE_ARCHIVE, REQUEST)]
+    ]
+    assert [one.withholding_rows for one in plan.snapshots] == [(UPLOADED_AFTER_IN_A_COMPLETE_ARCHIVE,)]
+
+
 async def test_a_held_row_does_not_change_the_verdict(world: RemovalWorld, tmp_path: Path) -> None:
     """The bucket holds what this machine holds, so the comparison agrees, and `caselist status`
     exits 0 as before. The held row is reported beside the verdict, not in it."""
@@ -252,6 +307,23 @@ async def test_status_reports_each_upload_held_in_the_inbox_by_caselist_snapshot
     names_no_one(report)
 
 
+async def test_the_removed_file_itself_in_a_later_archive_is_the_lists_and_not_reported_as_held(
+    world: RemovalWorld,
+) -> None:
+    """A complete archive holds the removed file until the team takes it down upstream. At the held
+    path, dated after the hold, it is still not a held upload: the list stops it by its bytes, and
+    the removal's inbox step is what takes it out."""
+    await remove_the_named_file(world)
+    later = world.data_dir / "inbox" / f"{CASELIST}-all-2026-10-12.zip"
+    with zipfile.ZipFile(later, "w") as archive:
+        archive.writestr(REVISED_PATH, BODIES["named-version"])
+        archive.writestr(KEPT_PATH, BODIES["kept"])
+
+    report = await status_service(world).status(CASELIST, held_in_inbox=True)
+
+    assert uploads_of(report.held_in_inbox) == []
+
+
 async def test_an_upload_this_build_refused_at_import_is_still_reported_while_its_archive_waits_in_the_inbox(
     world: RemovalWorld, tmp_path: Path
 ) -> None:
@@ -294,12 +366,33 @@ async def test_the_inbox_is_read_only_when_asked_and_the_pull_never_asks(
         await without.status(CASELIST, held_in_inbox=True)
 
 
-async def test_with_no_path_held_the_inbox_is_not_read(world: RemovalWorld, tmp_path: Path) -> None:
-    """Before any removal nothing is held: the inbox is not even listed, so no archive is opened."""
-    put_in_the_inbox(world, tmp_path)
-    (world.data_dir / "inbox" / f"{CASELIST}-weekly-2026-10-12.zip").write_bytes(b"not a zip")
+class NoArchiveMayBeOpened:
+    """An archive reader that fails the test if it is asked to open anything."""
 
-    report = await status_service(world).status(CASELIST, held_in_inbox=True)
+    def inventory(self, source: Path) -> tuple[InventoriedEntry, ...]:
+        raise AssertionError(f"an archive was opened: {source.name}")
+
+    def rewrite_without(
+        self, source: Path, destination: Path, *, drop: Collection[str], comment: bytes
+    ) -> None:
+        raise AssertionError("an archive was rewritten")
+
+
+async def test_with_no_path_held_no_archive_in_the_inbox_is_opened(
+    world: RemovalWorld, tmp_path: Path
+) -> None:
+    """Before any removal nothing is held, so the question is answered without reading the inbox."""
+    put_in_the_inbox(world, tmp_path)
+    inbox = CaselistInbox(
+        directory=world.data_dir / "inbox",
+        state_dir=world.data_dir,
+        archives=NoArchiveMayBeOpened(),
+    )
+    service = CaselistStatusService(
+        local=world.local, remote=world.bucket, suppression=world.suppression(), inbox=inbox
+    )
+
+    report = await service.status(CASELIST, held_in_inbox=True)
 
     assert report.held_in_inbox == ()
 
@@ -496,6 +589,27 @@ async def test_an_imported_archive_holding_only_such_a_link_and_other_files_is_n
     assert imported.name not in {one.name for one in plan.inbox}
     assert (await service.execute(plan)).completed
     assert imported.read_bytes() == before
+
+
+async def test_another_requests_removal_leaves_a_held_upload_in_a_waiting_archive_for_its_own_request(
+    world: RemovalWorld, tmp_path: Path
+) -> None:
+    """Only a skipped member is taken out for the hold alone. A held upload's bytes go on the list,
+    under the request that holds its path, when that removal is run again; an unrelated removal
+    that took it out of the archive first would leave that request nothing to find."""
+    await remove_the_named_file(world)
+    put_in_the_inbox(world, tmp_path)
+    waiting = world.data_dir / "inbox" / f"{CASELIST}-weekly-2026-10-08.zip"
+    before = waiting.read_bytes()
+
+    service = world.service()
+    other = await service.plan(
+        SourceSelector(OTHER_CASELIST_FILE), request_id="RM-2026-02", reason=ReasonCode.REQUESTED_BY_TEAM
+    )
+
+    assert waiting.name not in {one.name for one in other.inbox}
+    assert (await service.execute(other)).completed
+    assert waiting.read_bytes() == before
 
 
 async def test_the_link_is_still_read_as_a_skipped_member(world: RemovalWorld) -> None:

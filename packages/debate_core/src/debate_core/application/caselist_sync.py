@@ -151,11 +151,12 @@ removes nothing. A file goes only when all of these hold:
   what lets the next run recognise a camp release as imported or removed (`v1-e34-t07`); without
   it the next run would download the file again.
 
-**An archive whose every member was removed or held** goes before retention, at the end of the
-import that met the hold (`v1-e30-t21`). Every member was refused, by the suppression list or because
-a removal holds its path, at least one by the hold, and its skipped members are junk withheld with
-them or sit at a held path. Its import stored nothing, and nothing in it can be imported again, so no
-publish has to be confirmed before it goes. It goes only as the bytes imported, and the import
+**A weekly whose every member was removed or held** goes before retention, at the end of the import
+that met the hold (`v1-e30-t21`). Every member was refused, by the suppression list or because a
+removal holds its path, at least one by the hold, and its skipped members are junk withheld with
+them. Its import stored nothing, and nothing in it can be imported again, so no publish has to be
+confirmed before it goes. A complete archive holds the whole caselist, so it never holds removed or
+held files alone, and retention judges it as before. It goes only as the bytes imported, and the import
 stage's reason counts it. An archive that also holds anything else stays for retention, like every
 imported archive: the rest is other teams' disclosures, which wait for their publish to be
 confirmed, and a copy rewritten without the held upload would match no manifest and never leave.
@@ -3252,7 +3253,6 @@ class CaselistSyncService:
         write_manifest(
             report, self._manifest_path(full_archive_manifest_key(selection.caselist, selection.archive_date))
         )
-        self._take_out_if_removed_or_held_alone(report, downloaded, tally)
         self._count_archive(report, tally)
         snapshot = full_archive_snapshot(selection.archive_date)
         tally.snapshots_imported.append(f"{report.caselist} {snapshot}")

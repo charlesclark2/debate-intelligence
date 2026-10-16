@@ -15,6 +15,7 @@ Everything in this table is in :mod:`debate_core.application.errors`:
 | `NoSuchKey`, `NotFound`, HTTP 404 | `NotFound` |
 | `NoSuchBucket` | `NotFound`, naming the bucket rather than the key |
 | `AccessDenied`, HTTP 403, `KMS.AccessDeniedException` | `StoreAccessDenied` |
+| `InvalidAccessKeyId`, `SignatureDoesNotMatch` | `StoreAccessDenied`, saying the credential was not accepted |
 | An expired or absent SSO token, no credentials at all | `StoreCredentialsExpired` |
 | `ExpiredToken`, `RequestExpired`, `InvalidClientTokenId` | `StoreCredentialsExpired` |
 | A profile the AWS config does not define (`ProfileNotFound`) | `StoreProfileNotConfigured` |
@@ -58,6 +59,13 @@ carries a hint that says so, names the profile when there is one, and points at
 weekly pull; it is here so that `caselist publish`, `caselist status`, `store sync` and
 `caselist remove` say it too (`v1-e29-t07` ac4), and the pull reads it from the error.
 
+Two refusals are not about a grant, and their first sentence says so (`v1-e29-t09`):
+:data:`CREDENTIAL_FAULT_CODES`, an access key AWS does not know or a secret that does not match
+it, are faults in the credential itself. They stay :class:`StoreAccessDenied`, with its code and
+exit: what changes is the sentence. And the "listing is granted per prefix" sentence is for a
+listing of the bucket root (:data:`LISTING_OPERATIONS`), not for any refused call that names no
+key, which since `v1-e29-t08` includes the caller-identity question.
+
 ## What never goes in a message
 
 The operation, the bucket, the key and the response code; a profile's name and the name of the
@@ -99,8 +107,10 @@ from debate_core.application.errors import (
 
 __all__ = [
     "ACCESS_DENIED_CODES",
+    "CREDENTIAL_FAULT_CODES",
     "EXPIRED_CREDENTIAL_CODES",
     "GRANTS_ARE_LISTED_IN",
+    "LISTING_OPERATIONS",
     "NOT_FOUND_CODES",
     "S3Call",
     "mapped_s3_errors",
@@ -135,6 +145,18 @@ policy. The message names the resource the adapter passed, and
 :meth:`~debate_core.application.errors.StoreAccessDenied.hint` is where the adapter says which grant
 is missing.
 """
+
+CREDENTIAL_FAULT_CODES = frozenset({"InvalidAccessKeyId", "SignatureDoesNotMatch"})
+"""The refusals in :data:`ACCESS_DENIED_CODES` that are about the credential, not about a grant.
+
+AWS does not know the access key, or the request was signed with a secret that does not match it.
+No policy is consulted before either, so telling the operator the profile "lacks a grant" would
+send them to the wrong place. Not reachable with an SSO profile's session today; a profile that
+supplies a key of its own can meet both.
+"""
+
+LISTING_OPERATIONS = frozenset({"ListObjectsV2", "ListObjectVersions"})
+"""The operations whose refusal, with no prefix, is the bucket root's listing being denied by design."""
 
 EXPIRED_CREDENTIAL_CODES = frozenset(
     {
@@ -323,13 +345,22 @@ def _translate_response_code(code: str, error: BaseException, call: S3Call) -> D
 def _denial_hint(code: str, call: S3Call) -> str:
     """What a refusal means and where to look: the grant that is missing, and never a login.
 
-    Two denials have a more specific first sentence, because the grant to look for is knowable.
-    Every one ends by saying where the grants are listed (`v1-e29-t07` ac4).
+    Two denials have a more specific first sentence, because the grant to look for is knowable,
+    and a credential fault is not about a grant at all (`v1-e29-t09`). Every one ends by saying
+    where the grants are listed (`v1-e29-t07` ac4).
     """
     listed = f"{GRANTS_ARE_LISTED_IN} lists what each profile is granted"
+    if code in CREDENTIAL_FAULT_CODES:
+        whose = f"the credentials of the AWS profile {call.profile}" if call.profile else "the credentials"
+        supplier = "the profile supplies" if call.profile else "in use"
+        return (
+            f"AWS did not accept {whose}: it does not know their access key, or their secret does not "
+            "match it. That is the credential itself, not a missing grant: renew or replace the "
+            f"credentials {supplier}. {listed}"
+        )
     if code.startswith("KMS") or code.startswith("KMS."):
         return f"the credential may read the bucket but not use its KMS key; it needs kms:Decrypt. {listed}"
-    if code == "AccessDenied" and call.s3_key is None:
+    if code == "AccessDenied" and call.s3_key is None and call.operation in LISTING_OPERATIONS:
         # Listing the bucket root is denied by design; the grant is per prefix (v1-e29-t03).
         return f"listing is granted per prefix, not at the bucket root; list one prefix at a time. {listed}"
     who = f"the AWS profile {call.profile} is signed in and lacks" if call.profile else "the credentials lack"

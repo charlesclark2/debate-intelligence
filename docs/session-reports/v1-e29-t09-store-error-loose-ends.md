@@ -186,9 +186,60 @@ set*, the dev profile's block in the AWS config names prod's role: paste the row
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** CHANGES_REQUESTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-16
 
 **Notes:**
+
+One change, to Decision 2. Everything else is accepted as it stands, and the phase stays
+`InProgress` until the change is in.
+
+**Decision 2 is the one thing to change: a refused sweep must not stop a takedown.** The preflight
+exists to prove that this credential, signed in as this environment's takedown set, may write,
+list and delete under `preflight/`. Its own probe proves that. Deleting the earlier probes is
+housekeeping. A takedown withdraws a student's data; holding it back over leftover probes puts
+the housekeeping above the duty. The case is unlikely but sticky: if an old probe version could
+not be deleted for a reason particular to it, every later takedown would fail on it until someone
+removed it by hand. So:
+
+1. **A sweep that is refused, or partly refused, leaves the preflight passed.** The takedown goes
+   ahead. What was not deleted is reported, as a count, in the command's output and JSON and in
+   the removal log entry if it has a free-text field for it, never as a failure. Keys are fine in
+   the JSON, since they are random hex under `preflight/`.
+2. **Its own probe's delete still fails the preflight exactly as now.** That is the proof, and
+   nothing about it changes.
+3. **Tests, against moto:**
+   * one earlier probe whose delete is refused while the others are deleted: the takedown
+     completes, and the leftover count is 1;
+   * the existing controls still hold.
+
+   Show the new test failing first against the current code.
+4. **The runbook's by-hand section** says when a sweep leaves probes: when the output reports
+   some, remove them as it describes.
+
+**What is accepted:**
+
+* **ac1 to ac3, ac5 to ac7, and ac4's other half** (the runbook naming `unsuppress`), each shown
+  failing first.
+* **Decision 1, call order rather than clock,** is right. S3's second-granularity timestamps
+  cannot order two probes, and the listing-before-writing order can. A version already deleted by
+  a concurrent preflight is a no-op delete in S3, so the race you describe cannot fail either run.
+* **Decision 7, a daemon thread under a deadline,** keeps an abandoned question from holding the
+  process at exit. The test that reads the 60 seconds from `install.sh` ties the limit to the
+  thing it protects.
+* **"What an install now waits for"** is exactly what I asked for: at most 10 seconds for the one
+  question, where before it was unbounded with packets dropped.
+* **Decisions 3 to 6 and 8:** accepted.
+
+**Follow-ups:**
+
+* **1 (merge order with `v1-e30-t21`):** as you say. Whichever merges second syncs and keeps both.
+* **2 (the takedown profile signed in as the other environment's set) and 3
+  (`caselist_sync._failure` without the errno):** go in the next PM batch, E34 p3, beside
+  t24's follow-ups.
+* **4 (short botocore timeouts on STS):** no task while nothing long-lived asks the question.
+* **5 (`install.sh`'s comment):** with t24's Follow-up 2, the next task that touches `ops/launchd`.
+
+**Operator follow-up:** the optional `doctor --evidence-profiles` run is recorded when it comes.

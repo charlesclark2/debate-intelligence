@@ -853,7 +853,10 @@ async def test_a_snapshot_the_bucket_does_not_hold_in_sync_fails_report_as_drift
 
     reported = stage(summary, SyncStage.REPORT)
     assert reported["outcome"] == "failed"
-    assert reported["reason"] == "0 snapshot(s) confirmed; not in sync: testcl26 2026-09-01"
+    assert (
+        reported["reason"] == "0 snapshot(s) confirmed; not in sync: testcl26 2026-09-01 (something missing)"
+    )
+    assert reported["drift"] == [{"caselist": "testcl26", "snapshot": "2026-09-01", "kinds": ["missing"]}]
     assert reported.get("error_codes") == ["CASELIST_DRIFT"]
     assert summary.succeeded
 
@@ -976,7 +979,8 @@ async def test_from_summary_schema_version_4_every_stage_carries_the_new_fields(
     """`error_codes` and `hint` were new on every stage in version 4, so the version moved (PM
     decision). `v1-e34-t17` moved it again, to 5, for the parse stage's counts; the stages kept
     both fields. `v1-e34-t19` added `earlier_findings` beside them, which decides nothing, so by
-    `v1-e34-t07`'s rule the version stayed."""
+    `v1-e34-t07`'s rule the version stayed; and `v1-e34-t23` added `drift`, the report stage's
+    findings with their kind, by the same rule."""
     source = FakeSource(installation.archives, weeks=[WEEK_1])
 
     summary = await installation.sync(source).run([CASELIST])
@@ -984,10 +988,19 @@ async def test_from_summary_schema_version_4_every_stage_carries_the_new_fields(
     assert RUN_SUMMARY_SCHEMA_VERSION >= 4
     assert summary.as_json()["schema_version"] == RUN_SUMMARY_SCHEMA_VERSION
     for one in stages_of(summary):
-        assert sorted(one) == ["earlier_findings", "error_codes", "hint", "outcome", "reason", "stage"]
+        assert sorted(one) == [
+            "drift",
+            "earlier_findings",
+            "error_codes",
+            "hint",
+            "outcome",
+            "reason",
+            "stage",
+        ]
         assert one["error_codes"] == []
         assert one["hint"] is None
         assert one["earlier_findings"] == []
+        assert one["drift"] == []
 
 
 def test_the_stored_summary_is_a_schema_3_one() -> None:

@@ -510,6 +510,7 @@ from debate_core.application.caselist.status_service import (
     CASELIST_DRIFT,
     CaselistStatusService,
     NoCaselistEvidence,
+    SnapshotStatus,
 )
 from debate_core.application.caselist.suppression import LocalFallbackSuppressionList, load_suppression_state
 from debate_core.application.caselist_parse import PARSE_FAILURE_RATE_EXCEEDED
@@ -565,6 +566,7 @@ __all__ = [
     "CaselistSyncService",
     "DailyDownloadLimitReached",
     "DownloadLedger",
+    "DriftKind",
     "FullArchiveImport",
     "FullArchivePlan",
     "FullArchiveRefused",
@@ -588,6 +590,7 @@ __all__ = [
     "RetentionDecision",
     "RunSummary",
     "SelectionDecision",
+    "SnapshotDrift",
     "StageOutcome",
     "StageRecord",
     "SyncPlan",
@@ -657,8 +660,9 @@ A key added since leaves the version as it is (`v1-e34-t07`'s rule): it changes 
 nothing reads a summary back. Under version 2 these were `note`, `openev_skipped_as_removed`
 (`v1-e34-t07`), `inbox_retention` (`v1-e34-t11`) and an OpenEv selection's `revision_of`
 (`v1-e34-t08`). Under version 5 it is `earlier_findings` on every entry of `stages` (`v1-e34-t19`):
-unlike `error_codes`, nothing is decided from it, so the rule applies and the version stays. So are
-`openev_id` and `reason` on an `inbox_retention` entry removed as a camp release of junk alone
+unlike `error_codes`, nothing is decided from it, so the rule applies and the version stays. So is
+`drift` on every entry of `stages` (`v1-e34-t23`), the report stage's findings with their kind, for
+the same reason. So are `openev_id` and `reason` on an `inbox_retention` entry removed as a camp release of junk alone
 (`v1-e34-t15`): a removed entry carried no `reason` before, and its one value, `junk_only`, is one
 no `kept` entry carries, so a filter on `kept[].reason` reads what it read before.
 
@@ -749,6 +753,67 @@ class StageOutcome(StrEnum):
     """
 
 
+class DriftKind(StrEnum):
+    """What differs in a snapshot the report stage found not in sync (`v1-e34-t23`).
+
+    The first two are `v1-e30-t12`'s :class:`~debate_core.application.caselist.status_service.
+    MismatchKind`; the other two are the rest of what makes a snapshot drift.
+    """
+
+    MANIFEST = "manifest"
+    """The bucket holds the snapshot's manifest with other bytes: this machine rewrote it after it
+    was published, and `caselist publish` uploads it again."""
+
+    SOURCE = "source"
+    """The bucket holds a source with other bytes than its key names, which needs a person."""
+
+    MISSING = "missing"
+    """A manifest or a source is missing on one side."""
+
+    SUPPRESSED_ROWS = "suppressed_rows"
+    """This machine's manifest has a stored row the suppression list stops: a removal unfinished."""
+
+
+_DRIFT_KIND_WORDS: Final = {
+    DriftKind.MANIFEST: "manifest mismatch",
+    DriftKind.SOURCE: "source mismatch",
+    DriftKind.MISSING: "something missing",
+    DriftKind.SUPPRESSED_ROWS: "suppressed rows",
+}
+
+
+@dataclass(frozen=True, slots=True)
+class SnapshotDrift:
+    """One snapshot the report stage found not in sync, and what differs. A slug, a name and kinds."""
+
+    caselist: str
+    snapshot: str
+    kinds: tuple[DriftKind, ...]
+
+    @classmethod
+    def of(cls, status: SnapshotStatus) -> SnapshotDrift:
+        kinds = (
+            (DriftKind.MANIFEST,) * status.manifest_mismatched
+            + (DriftKind.SOURCE,) * bool(status.source_mismatches)
+            + (DriftKind.MISSING,) * status.incomplete
+            + (DriftKind.SUPPRESSED_ROWS,) * bool(status.suppressed_rows)
+        )
+        return cls(caselist=status.caselist, snapshot=status.snapshot, kinds=kinds)
+
+    @property
+    def sentence(self) -> str:
+        """`<caselist> <snapshot> (<what differs>)`, as the stage's reason names it."""
+        named = f"{self.caselist} {self.snapshot}"
+        return f"{named} ({', '.join(_DRIFT_KIND_WORDS[one] for one in self.kinds)})" if self.kinds else named
+
+    def as_json(self) -> dict[str, object]:
+        return {
+            "caselist": self.caselist,
+            "snapshot": self.snapshot,
+            "kinds": [str(one) for one in self.kinds],
+        }
+
+
 @dataclass(frozen=True, slots=True)
 class StageRecord:
     """One stage's outcome, and the one sentence that says why it was that."""
@@ -784,6 +849,11 @@ class StageRecord:
     failed stage's codes are its :attr:`error_codes`.
     """
 
+    drift: tuple[SnapshotDrift, ...] = ()
+    """The report stage's findings: each snapshot it found not in sync, and what differs
+    (`v1-e34-t23`). On a failed stage, and on one pending on an expired session for what it found
+    before the session expired. Empty for every other stage."""
+
     def as_json(self) -> dict[str, object]:
         return {
             "stage": str(self.stage),
@@ -792,6 +862,7 @@ class StageRecord:
             "error_codes": list(self.error_codes),
             "hint": self.hint,
             "earlier_findings": list(self.earlier_findings),
+            "drift": [one.as_json() for one in self.drift],
         }
 
 
@@ -2265,11 +2336,19 @@ class _RunTally:
     def record(self, stage: SyncStage, outcome: StageOutcome, reason: str | None = None) -> None:
         self.stages.append(StageRecord(stage=stage, outcome=outcome, reason=reason))
 
-    def pend(self, stage: SyncStage, reason: str, found_first: Sequence[_StageFailure] = ()) -> None:
+    def pend(
+        self,
+        stage: SyncStage,
+        reason: str,
+        found_first: Sequence[_StageFailure] = (),
+        *,
+        drift: Sequence[SnapshotDrift] = (),
+    ) -> None:
         """Record `stage` as pending on a login, with what it had already found as earlier findings.
 
         Their codes go to :attr:`StageRecord.earlier_findings` and never to its `error_codes`: a
-        pending stage decides nothing about the exit (`v1-e34-t13`).
+        pending stage decides nothing about the exit (`v1-e34-t13`). The report stage's `drift`
+        goes with them (`v1-e34-t23`).
         """
         self.stages.append(
             StageRecord(
@@ -2277,11 +2356,18 @@ class _RunTally:
                 outcome=StageOutcome.PENDING,
                 reason=reason,
                 earlier_findings=tuple(dict.fromkeys(code for one in found_first for code in one.codes)),
+                drift=tuple(drift),
             )
         )
 
     def fail(
-        self, stage: SyncStage, reason: str, failures: Sequence[_StageFailure], *, fix: str | None = None
+        self,
+        stage: SyncStage,
+        reason: str,
+        failures: Sequence[_StageFailure],
+        *,
+        fix: str | None = None,
+        drift: Sequence[SnapshotDrift] = (),
     ) -> None:
         """Record `stage` as failed on `failures`: every code once, and each distinct fix.
 
@@ -2295,6 +2381,7 @@ class _RunTally:
                 reason=reason,
                 error_codes=tuple(dict.fromkeys(code for one in failures for code in one.codes)),
                 hint=" ".join(hints) or None,
+                drift=tuple(drift),
             )
         )
 
@@ -3754,6 +3841,7 @@ class CaselistSyncService:
             return
         confirmed = 0
         drifted: list[_StageFailure] = []
+        found: list[SnapshotDrift] = []
         # Snapshot by snapshot, and only the ones this run published. A caselist-wide check would
         # report an older snapshot somebody imported by hand and never published as drift of this
         # run, which it is not: completing that one is `caselist publish`'s job.
@@ -3762,7 +3850,19 @@ class CaselistSyncService:
             try:
                 report = await self._status.status(target.caselist, target.snapshot)
             except StoreCredentialsExpired as expired:
-                tally.record(SyncStage.REPORT, StageOutcome.PENDING, str(expired))
+                # What was found before the expiry is kept (`v1-e34-t23`): the retry after the login
+                # compares only what it publishes, and these were published already.
+                if not drifted:
+                    tally.record(SyncStage.REPORT, StageOutcome.PENDING, str(expired))
+                    return
+                tally.pend(
+                    SyncStage.REPORT,
+                    f"{confirmed} snapshot(s) confirmed; not in sync before the session expired: "
+                    + ", ".join(one.sentence for one in drifted)
+                    + f"; {expired}",
+                    found_first=drifted,
+                    drift=found,
+                )
                 return
             except StoreAccessDenied as refused:
                 # True of every snapshot still to compare, and not a login: the stage fails here.
@@ -3771,6 +3871,7 @@ class CaselistSyncService:
                     SyncStage.REPORT,
                     f"{confirmed} snapshot(s) confirmed; the comparison was refused: {failure.sentence}",
                     [*drifted, failure],
+                    drift=found,
                 )
                 return
             except (NoCaselistEvidence, DomainError) as failed:
@@ -3779,15 +3880,17 @@ class CaselistSyncService:
             in_sync = [snapshot for snapshot in report.snapshots if snapshot.in_sync]
             confirmed += len(in_sync)
             tally.confirmed.update(PendingSnapshot(one.caselist, one.snapshot) for one in in_sync)
-            drifted.extend(
-                _StageFailure(f"{one.caselist} {one.snapshot}", (CASELIST_DRIFT,)) for one in report.drifted
-            )
+            for one in report.drifted:
+                drift = SnapshotDrift.of(one)
+                found.append(drift)
+                drifted.append(_StageFailure(drift.sentence, (CASELIST_DRIFT,)))
         if drifted:
             tally.fail(
                 SyncStage.REPORT,
                 f"{confirmed} snapshot(s) confirmed; not in sync: "
                 + ", ".join(one.sentence for one in drifted),
                 drifted,
+                drift=found,
             )
             return
         tally.record(

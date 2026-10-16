@@ -990,7 +990,13 @@ def test_a_mismatch_and_then_an_expired_session_exits_zero_and_says_a_person_is_
     assert stages["publish"]["earlier_findings"] == ["CHECKSUM_MISMATCH"]
     assert data["run_details"]["failure_codes"] == []
     assert data["run_details"]["stages"] == [
-        {"stage": "publish", "error_codes": [], "hint": None, "earlier_findings": ["CHECKSUM_MISMATCH"]}
+        {
+            "stage": "publish",
+            "error_codes": [],
+            "hint": None,
+            "earlier_findings": ["CHECKSUM_MISMATCH"],
+            "drift": [],
+        }
     ]
     [notification] = notified.sent
     assert notification.title == "caselist publish waiting for an AWS login"

@@ -1640,6 +1640,7 @@ async def test_each_run_writes_a_json_summary_with_no_school_team_code_or_token(
         "error_codes",
         "hint",
         "earlier_findings",
+        "drift",
     }
 
     text = written.read_text(encoding="utf-8")

@@ -120,8 +120,10 @@ from typing import Final, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from debate_core.application.caselist.status_service import CASELIST_DRIFT
 from debate_core.application.caselist_sync import (
     REQUIRED_STAGES,
+    DriftKind,
     RunSummary,
     StageOutcome,
     SyncStage,
@@ -143,6 +145,8 @@ from debate_core.application.ports.notifier import Notification, Notifier
 
 __all__ = [
     "BACKLOG_GROWTH_RUNS",
+    "MANIFEST_PUBLISHED_AGAIN",
+    "MANIFEST_PUBLISHED_AGAIN_TITLE",
     "NEEDS_A_PERSON",
     "NEEDS_A_PERSON_TITLE",
     "PENDING_RECORDS_FILENAME",
@@ -152,6 +156,7 @@ __all__ = [
     "SYNC_RUN_DETAILS_KEY_PREFIX",
     "SYNC_RUN_KEY_PREFIX",
     "SYNC_RUN_LOG_FILENAME",
+    "DriftFinding",
     "MonitoredRun",
     "NoRemoteRunLog",
     "ParseCounts",
@@ -346,6 +351,21 @@ def sync_run_details_key(record_key: str) -> str:
 # ------------------------------------------------------------------------------------------------
 
 
+class DriftFinding(BaseModel):
+    """One snapshot the report stage found not in sync, and what differs (`v1-e34-t23`).
+
+    `kinds` are :class:`~debate_core.application.caselist_sync.DriftKind` values: `manifest`,
+    `source`, `missing`, `suppressed_rows`. A caselist slug, a snapshot name and words: nothing a
+    record may not hold.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="ignore")
+
+    caselist: str
+    snapshot: str
+    kinds: tuple[str, ...] = ()
+
+
 class StageDetails(BaseModel):
     """What one stage has to say that its :class:`StageEntry` has no field for."""
 
@@ -362,6 +382,11 @@ class StageDetails(BaseModel):
     earlier_findings: tuple[str, ...] = ()
     """What a pending stage had found before the session expired
     (:attr:`~debate_core.application.caselist_sync.StageRecord.earlier_findings`)."""
+
+    drift: tuple[DriftFinding, ...] = ()
+    """The report stage's findings, each snapshot with what differs, failed or pending
+    (:attr:`~debate_core.application.caselist_sync.StageRecord.drift`, `v1-e34-t23`). A key a
+    build from before it passes over."""
 
 
 class ParseCounts(BaseModel):
@@ -614,9 +639,17 @@ def details_for_summary(summary: RunSummary, *, secrets: Sequence[str] = ()) -> 
                 error_codes=record.error_codes,
                 hint=hint_for_a_record(record.hint, secrets=secrets) if record.hint else None,
                 earlier_findings=record.earlier_findings,
+                drift=tuple(
+                    DriftFinding(
+                        caselist=one.caselist,
+                        snapshot=one.snapshot,
+                        kinds=tuple(str(kind) for kind in one.kinds),
+                    )
+                    for one in record.drift
+                ),
             )
             for record in summary.stages
-            if record.error_codes or record.hint or record.earlier_findings
+            if record.error_codes or record.hint or record.earlier_findings or record.drift
         ),
         failure_codes=summary.failure_codes,
         parse=ParseCounts(**summary.parse.as_json()) if summary.parse is not None else None,
@@ -731,6 +764,19 @@ NEEDS_A_PERSON: Final = (
 
 _WHAT_WAS_CAPTURED_IS_KEPT: Final = "What was captured is kept."
 
+PUBLISH_A_CASELIST_COMMAND: Final = "debate-research caselist publish --caselist"
+"""What uploads a caselist's manifests this machine rewrote since they were published (`v1-e30-t12`)."""
+
+MANIFEST_PUBLISHED_AGAIN_TITLE: Final = "caselist pull: publish a manifest again"
+"""The title of a run whose only failed stage is the report, on a manifest mismatch alone (`v1-e34-t23`)."""
+
+MANIFEST_PUBLISHED_AGAIN: Final = (
+    "Publishing again should clear it: this machine rewrote the manifest after it was published, "
+    "and the publish uploads this machine's copy. Nothing here needs a person."
+)
+"""What such a run says instead of a verdict: the publish command is the retry that clears it. The
+next scheduled run would not: the snapshot is published, so nothing owes it. The runbook quotes it."""
+
 type RetryRule = Callable[[Sequence[str]], bool]
 """Whether a run that failed on exactly these error codes may succeed on a retry.
 
@@ -800,7 +846,25 @@ def notifications_for(
             )
         )
     failed = [entry.stage for entry in record.stages if entry.outcome == str(StageOutcome.FAILED)]
-    if failed:
+    publish_again = (
+        _manifest_mismatches_alone(details.stage(str(SyncStage.REPORT)))
+        if failed == [str(SyncStage.REPORT)]
+        else ()
+    )
+    if publish_again:
+        # A manifest this machine rewrote is uploaded by a publish, and needs nobody (`v1-e34-t23`).
+        sent.append(
+            Notification(
+                title=MANIFEST_PUBLISHED_AGAIN_TITLE,
+                message=(
+                    f"{where}: the report stage found the bucket's {_manifests_of(publish_again)} "
+                    f"{'differ' if len(publish_again) > 1 else 'differs'} from this machine's. "
+                    f"{MANIFEST_PUBLISHED_AGAIN}"
+                ),
+                fix_command=_publish_commands(publish_again),
+            )
+        )
+    elif failed:
         required = {str(stage) for stage in REQUIRED_STAGES}
         only_publish = set(failed) == {str(SyncStage.PUBLISH)}
         only_parse = set(failed) == {str(SyncStage.PARSE)}
@@ -840,9 +904,13 @@ def notifications_for(
         )
         # What a stage had already found when the session expired that no later run cures by
         # itself. Only a pending stage records an earlier finding, so there is no outcome to ask.
+        # A manifest the report found rewritten is the exception: a publish after the login clears
+        # it, and it is said so below (`v1-e34-t23`).
+        to_publish_again = _manifest_mismatches_alone(details.stage(str(SyncStage.REPORT)))
         found_first = dict.fromkeys(
             code
             for one in details.stages
+            if not (to_publish_again and one.stage == str(SyncStage.REPORT))
             for code in one.earlier_findings
             if not may_succeed_on_retry([code])
         )
@@ -856,6 +924,15 @@ def notifications_for(
                         " A person should look as well: before the session expired a snapshot ended "
                         f"incomplete on {', '.join(found_first)}, which the login will not fix."
                         if found_first
+                        else ""
+                    )
+                    + (
+                        f" Before the session expired, the bucket's {_manifests_of(to_publish_again)} "
+                        f"{'were' if len(to_publish_again) > 1 else 'was'} found to differ from this "
+                        f"machine's; after the login, publishing "
+                        f"{'them' if len(to_publish_again) > 1 else 'it'} again clears it: "
+                        f"{_publish_commands(to_publish_again)}"
+                        if to_publish_again
                         else ""
                     )
                     + (
@@ -882,6 +959,36 @@ def notifications_for(
             )
         )
     return sent
+
+
+def _manifest_mismatches_alone(report: StageDetails | None) -> tuple[DriftFinding, ...]:
+    """The report stage's findings when each is a manifest mismatch and nothing else; else none.
+
+    "Nothing else" is the stage's every code being `CASELIST_DRIFT`, failed or found before an
+    expiry, and every snapshot's only kind being `manifest`: one snapshot with a source mismatch, a
+    missing source, or a comparison that failed outright, and a person is still asked to look.
+    """
+    if report is None or not report.drift:
+        return ()
+    if {*report.error_codes, *report.earlier_findings} != {CASELIST_DRIFT}:
+        return ()
+    if any(one.kinds != (str(DriftKind.MANIFEST),) for one in report.drift):
+        return ()
+    return report.drift
+
+
+def _manifests_of(findings: Sequence[DriftFinding]) -> str:
+    """`manifest of <caselist> <snapshot>`, or `manifests of …, …` for more than one."""
+    named = ", ".join(f"{one.caselist} {one.snapshot}" for one in findings)
+    return f"manifest{'s' if len(findings) > 1 else ''} of {named}"
+
+
+def _publish_commands(findings: Sequence[DriftFinding]) -> str:
+    """One `caselist publish --caselist <slug>` for each caselist named, in order, joined by `&&`."""
+    return " && ".join(
+        f"{PUBLISH_A_CASELIST_COMMAND} {caselist}"
+        for caselist in dict.fromkeys(one.caselist for one in findings)
+    )
 
 
 def _retried_by_the_next_run(codes: Sequence[str], may_succeed_on_retry: RetryRule) -> bool:

@@ -111,6 +111,7 @@ EXPECTED_DETAILS: dict[str, list[dict[str, Any]]] = {
                     "error_codes": ["STORE_UNAVAILABLE"],
                     "hint": None,
                     "earlier_findings": [],
+                    "drift": [],
                 }
             ],
             "failure_codes": ["STORE_UNAVAILABLE"],
@@ -127,6 +128,7 @@ EXPECTED_DETAILS: dict[str, list[dict[str, Any]]] = {
                     "error_codes": ["STORE_ACCESS_DENIED"],
                     "hint": None,
                     "earlier_findings": [],
+                    "drift": [],
                 }
             ],
             "failure_codes": ["STORE_ACCESS_DENIED"],
@@ -143,6 +145,7 @@ EXPECTED_DETAILS: dict[str, list[dict[str, Any]]] = {
                     "error_codes": ["UNREADABLE_ARCHIVE"],
                     "hint": None,
                     "earlier_findings": [],
+                    "drift": [],
                 }
             ],
             "failure_codes": ["UNREADABLE_ARCHIVE"],
@@ -163,6 +166,7 @@ EXPECTED_DETAILS: dict[str, list[dict[str, Any]]] = {
                     "error_codes": [],
                     "hint": None,
                     "earlier_findings": ["CHECKSUM_MISMATCH"],
+                    "drift": [],
                 }
             ],
             "failure_codes": [],

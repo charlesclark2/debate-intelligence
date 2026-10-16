@@ -267,9 +267,51 @@ read a real store.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-16
 
 **Notes:**
+
+Accepted in full, with the phase `Succeeded`. The spec is unchanged.
+
+**Decision 1 is the right reading of rulings 1 and 2 together.** Ruling 1 was about what a late
+week does once it is let in: it re-measures the weeks after it rather than leaving them stale.
+It did not take away the flag that lets it in. A week never imported that is older than the
+newest rewrites other weeks' manifests, so it stays a deliberate act. A re-import writes only its
+own manifest, so it needs no flag. The refusal now says exactly that.
+
+**The removal cases are the best part of this report.** Working the removal through by hand after
+the first green found that a recount of first-seen would have rewritten a later manifest on the
+removal runbook's own Step 6, and that a stopped member could be reported `REMOVED`. Decisions 2
+to 4 fix both, the late-order-then-removal test compares against the date-order run plus the same
+removal byte for byte, and mutants 10 and 12 show it catches each. Mutant 14 surviving at first,
+then caught by a test you added, is the same care.
+
+**The work itself:**
+
+* **ac1 with the archives deleted before the late week arrives,** for both late orders, proves
+  "no archive re-read" by construction rather than by inspection.
+* **ac4 shown both ways:** with the date comparison the flag's mutant is caught, and with t17's
+  string comparison put back it is not. That settles t17's surviving mutant.
+* **ac5's two builds,** each from its own exported source, read and publish the rewritten
+  manifests with the same summary keys and `schema_version` 1. A store rewritten by this build
+  stays readable by the agent's installed build.
+* **The mutation run:** 19 of 19 caught, the 14th after its test was added.
+
+**Rulings:**
+
+* **Deviation 1 (smoke checks outside the packages):** accepted, as working agreement 5 asks.
+* **Decisions:** accepted. Decision 8, the refusal's JSON `details` losing `already_imported`:
+  nothing in the repository reads it, and the key could only ever be false now.
+* **Follow-up 1 (the backfill runbook's reason):** your proposed sentence goes in at the next PM
+  close-out.
+* **Follow-up 2:** no task. The newest complete archive is the one the pull reports.
+* **Follow-up 3 (a `caselist remeasure` command):** no task unless a stale manifest is seen. The
+  backfill runbook forbade the flag, so none is expected.
+* **Follow-up 4 (the run record redacts `full/<date>`):** filed in the next PM batch, E34 p3.
+* **Follow-up 5 (what a re-measure cannot see):** accepted as documented in the module. Both cases
+  need a removal and a late import together.
+
+**Operator follow-ups:** none.

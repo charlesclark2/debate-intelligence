@@ -927,6 +927,12 @@ class ServiceContainer:
     def _build_caselist_sync(self, event_for_caselist: Callable[[str], Event | None]) -> CaselistSyncService:
         settings = self.settings
         caselist = settings.caselist
+        # The bucket first (`v1-e34-t24`). A profile the AWS config does not define stops it being
+        # built, and a run stopped there, a dry run included, used to have created the data
+        # directory and an empty database on its way. It is one per run, so the services below
+        # are handed this same one.
+        if settings.storage.s3.bucket:
+            self._evidence_bucket()
         repository = SqliteCaselistRepository(self.database)
         blobs = FsSnapshotStore(settings.storage.data_dir)
         publisher: CaselistPublishService | None = None

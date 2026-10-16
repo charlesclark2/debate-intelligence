@@ -224,6 +224,13 @@ class TakedownPreflightFailed(DomainError):
     the command's exit status is read from: an expired session or a store that did not answer may
     be cured by running the command again, and a profile that is not defined or not the takedown
     role is a setting to correct.
+
+    It carries the cause's code as :attr:`cause_code`, and each of the cause's own facts as an
+    attribute named `cause_` and the fact's name (`v1-e29-t09`): `cause_setting` for a profile the
+    AWS config does not define, `cause_signed_in_as` and `cause_required` for the wrong role. They
+    are what a script reads from the `--json` envelope's `error.details`, which until then held only
+    the profile and the step, and the setting to correct was in the message alone. The cause's
+    `hint` is not among them: it is this error's own :attr:`hint`.
     """
 
     def __init__(
@@ -231,6 +238,10 @@ class TakedownPreflightFailed(DomainError):
     ) -> None:
         self.profile = profile
         self.step = step
+        self.cause_code = error_code_of(failure)
+        """The error code of what failed, e.g. `"STORE_PROFILE_NOT_CONFIGURED"`."""
+        for name, value in _facts_of(failure).items():
+            setattr(self, f"cause_{name}", value)
         self.hint = getattr(failure, "hint", None) or (
             f"aws sso login --profile {profile}" if profile else "set DEBATE_REMOVAL_PROFILE"
         )
@@ -240,6 +251,21 @@ class TakedownPreflightFailed(DomainError):
             f"({error_code_of(failure)}), so it "
             f"cannot carry out a removal: {_what_to_correct(failure)}; nothing was deleted{leftover}"
         )
+
+
+def _facts_of(failure: BaseException) -> dict[str, str | int | float | bool | None]:
+    """The facts a :class:`DomainError` keeps as attributes, as the CLI reports them; none for another.
+
+    Public, single-valued attributes only, and never its `hint`. Anything that is not this
+    project's error has no facts this project chose, and its message is not passed on either.
+    """
+    if not isinstance(failure, DomainError):
+        return {}
+    return {
+        name: value
+        for name, value in vars(failure).items()
+        if not name.startswith("_") and name != "hint" and isinstance(value, str | int | float | bool | None)
+    }
 
 
 def _what_to_correct(failure: BaseException) -> str:

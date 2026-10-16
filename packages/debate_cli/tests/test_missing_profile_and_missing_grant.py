@@ -240,7 +240,14 @@ class TestAProfileTheAwsConfigLacks:
         assert "STORE_PROFILE_NOT_CONFIGURED" in error["message"]
         assert MISSPELT_PROFILE in error["message"] and TAKEDOWN_SETTING in error["message"]
         assert TAKEDOWN_SETTING in error["hint"] and RUNBOOK in error["hint"]
-        assert error["details"] == {"profile": MISSPELT_PROFILE, "step": "start an AWS session"}
+        assert error["details"] == {
+            "profile": MISSPELT_PROFILE,
+            "step": "start an AWS session",
+            # The cause's code and its own fields, so a script reads the setting (`v1-e29-t09` ac3).
+            "cause_code": "STORE_PROFILE_NOT_CONFIGURED",
+            "cause_profile": MISSPELT_PROFILE,
+            "cause_setting": TAKEDOWN_SETTING,
+        }
         said = json.dumps(envelope)
         assert EVERYDAY_SETTING not in said
         assert "aws sso login" not in said and "signed in" not in said, "no login cures it"
@@ -306,6 +313,14 @@ class TestATakedownThatNamesTheEverydayProfile:
         assert "DebateDevEvidenceOperator" in error["message"], "what the profile is signed in as"
         assert "DebateDevEvidenceRemoval" in error["message"], "what a takedown runs as"
         assert TAKEDOWN_SETTING in error["hint"] and TAKEDOWN_PROFILE in error["hint"]
+        assert error["details"] == {
+            "profile": EVERYDAY_PROFILE,
+            "step": "show it is signed in as DebateDevEvidenceRemoval",
+            "cause_code": "NOT_THE_TAKEDOWN_ROLE",
+            "cause_profile": EVERYDAY_PROFILE,
+            "cause_signed_in_as": "DebateDevEvidenceOperator",
+            "cause_required": "DebateDevEvidenceRemoval",
+        }
         assert "aws sso login" not in json.dumps(envelope), "it is signed in; a login changes nothing"
         assert (everything_under(installation / "data"), every_version_in(bucket)) == before, (
             "nothing written here or in the bucket: no probe, no suppression entry"

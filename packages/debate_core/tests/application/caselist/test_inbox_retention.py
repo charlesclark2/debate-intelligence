@@ -48,6 +48,7 @@ from debate_core.application.caselist.publish_service import CaselistPublishServ
 from debate_core.application.caselist.removal_plan import SourceSelector
 from debate_core.application.caselist.status_service import CaselistStatusService
 from debate_core.application.caselist_sync import (
+    DEFAULT_BULK_DOWNLOADS_PER_DAY,
     LOCK_FILENAME,
     OPENEV_DELIVERIES_FILENAME,
     CaselistParseStage,
@@ -345,7 +346,9 @@ class Installation:
             ),
             parse=parse,
             clock=lambda: RUN_CLOCK,
-            **({} if bulk_downloads_per_day is None else {"bulk_downloads_per_day": bulk_downloads_per_day}),
+            bulk_downloads_per_day=(
+                DEFAULT_BULK_DOWNLOADS_PER_DAY if bulk_downloads_per_day is None else bulk_downloads_per_day
+            ),
         )
 
     async def publish(self, caselist: str = CASELIST) -> None:

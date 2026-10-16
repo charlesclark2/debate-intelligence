@@ -415,7 +415,7 @@ def test_every_kind_of_banner_shows_its_fix_whole_within_the_observed_limits() -
 
     assert len(sent) == 5
     for notification in sent:
-        title, subtitle, _ = as_the_banner_shows(notification)
+        _, subtitle, _ = as_the_banner_shows(notification)
         assert subtitle == THE_RUN
         assert_the_fix_is_shown_whole(notification)
         assert_names_no_exception_class(notification)

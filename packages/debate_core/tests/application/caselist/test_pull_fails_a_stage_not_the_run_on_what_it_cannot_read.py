@@ -115,7 +115,7 @@ async def test_a_camp_download_that_cannot_be_read_fails_its_import_as_unreadabl
     )
     assert summary.failure_codes == ("UNREADABLE_ARCHIVE",)
     assert summary.snapshots_imported == (f"{CASELIST} {WEEK_1.isoformat()}",), "the week is imported"
-    assert camp_file.filename not in str(imported["reason"])
+    assert camp_file.filename is not None and camp_file.filename not in str(imported["reason"])
     assert_names_nothing_of_this_machine(summary, installation)
 
 

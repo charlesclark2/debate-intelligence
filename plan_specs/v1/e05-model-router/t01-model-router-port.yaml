@@ -55,7 +55,7 @@ spec:
         Per-call parameter overrides are merged over task-class defaults and the resolved route (model_id,
         profile/region, temperature) is returned on every ModelResponse for provenance.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

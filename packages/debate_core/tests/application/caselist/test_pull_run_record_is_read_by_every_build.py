@@ -38,7 +38,7 @@ import logging
 from collections.abc import Mapping
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Final, cast
 
 import jsonschema
 import pytest
@@ -273,6 +273,20 @@ def stored_bucket_objects(name: str) -> dict[str, str]:
     return stored
 
 
+WORDS_THIS_BUILD_KEEPS: Final = {
+    "[redacted] lists the evidence profiles": "docs/runbooks/evidence-store.md lists the evidence profiles"
+}
+"""What the start commit's redaction took and this build's keeps (`v1-e34-t23`): the runbook the
+refusal's message points at. The stored files stay as that build wrote them; the comparison reads
+them with these words in place of those, and with nothing else changed."""
+
+
+def as_this_build_words_it(text: str) -> str:
+    for theirs, ours in WORDS_THIS_BUILD_KEEPS.items():
+        text = text.replace(theirs, ours)
+    return text
+
+
 def details_file(world: World) -> Path:
     return world.installation.data_dir / DETAILS_FILE
 
@@ -338,7 +352,7 @@ async def test_the_run_log_this_build_writes_is_read_by_the_older_builds(name: s
     await SCENARIOS[name](world)
 
     written = world.run_log().decode("utf-8").splitlines()
-    stored = stored_lines(name)
+    stored = [as_this_build_words_it(line) for line in stored_lines(name)]
     assert len(written) == len(stored) == len(EXPECTED_DETAILS[name])
     for ours, theirs in zip(written, stored, strict=True):
         read_as_an_older_build_reads(json.loads(ours))
@@ -356,7 +370,7 @@ async def test_the_bucket_prefix_an_older_build_lists_holds_only_records_it_read
     await SCENARIOS[name](world)
 
     ours = world.records_in_the_bucket()
-    theirs = stored_bucket_objects(name)
+    theirs = {key: as_this_build_words_it(body) for key, body in stored_bucket_objects(name).items()}
     assert sorted(ours) == sorted(theirs)
     for key, body in ours.items():
         assert key.startswith(RECORDS_PREFIX)

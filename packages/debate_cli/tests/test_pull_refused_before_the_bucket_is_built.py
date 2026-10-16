@@ -72,8 +72,8 @@ THE_FIX = (
 THE_RECORDED_MESSAGE = (
     "AWS profile 'debate-dev-evidence-typo', named by storage.s3.aws_profile, is not defined in this "
     "machine's AWS config: set storage.s3.aws_profile to a profile this machine's AWS config defines, "
-    "or add the profile to it: [redacted] lists the evidence profiles and how they are added. It is "
-    "not an expired session, and logging in changes nothing"
+    "or add the profile to it: docs/runbooks/evidence-store.md lists the evidence profiles and how "
+    "they are added. It is not an expired session, and logging in changes nothing"
 )
 
 STORED_BY_THE_OLDER_BUILD = (
@@ -286,7 +286,13 @@ def test_the_record_is_the_line_the_older_builds_code_wrote_for_the_same_refusal
     pull_with_the_misspelt_profile(monkeypatch)
 
     [written] = (installation / "data" / RUN_LOG).read_text("utf-8").splitlines()
-    stored = STORED_BY_THE_OLDER_BUILD.read_text("utf-8").splitlines()[0]
+    as_stored = STORED_BY_THE_OLDER_BUILD.read_text("utf-8").splitlines()[0]
+    # Those words but one: since `v1-e34-t23` the redaction keeps the runbook the message points at.
+    stored = as_stored.replace(
+        "[redacted] lists the evidence profiles",
+        "docs/runbooks/evidence-store.md lists the evidence profiles",
+    )
+    assert stored != as_stored
     assert json.loads(written) == json.loads(stored)
     assert list(json.loads(written)) == list(json.loads(stored)), "the same keys in the same order"
     assert written == stored, "byte for byte"

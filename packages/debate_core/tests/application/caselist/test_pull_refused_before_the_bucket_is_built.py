@@ -77,11 +77,11 @@ PERSON = "A person should look: at least one failure here will be the same on th
 THE_RECORDED_MESSAGE = (
     "AWS profile 'debate-dev-evidence-typo', named by storage.s3.aws_profile, is not defined in this "
     "machine's AWS config: set storage.s3.aws_profile to a profile this machine's AWS config defines, "
-    "or add the profile to it: [redacted] lists the evidence profiles and how they are added. It is "
-    "not an expired session, and logging in changes nothing"
+    "or add the profile to it: docs/runbooks/evidence-store.md lists the evidence profiles and how "
+    "they are added. It is not an expired session, and logging in changes nothing"
 )
-"""The error's own sentence as a record keeps it. The record's redaction takes the runbook the
-sentence points at for a path (`v1-e34-t19`'s Follow-up 9); the fix beside the record is whole."""
+"""The error's own sentence as a record keeps it, the runbook it points at included. Until
+`v1-e34-t23` the record's redaction took that runbook for a path (`v1-e34-t19`'s Follow-up 9)."""
 
 THE_FIX = (
     "The bucket was never reached: set storage.s3.aws_profile to a profile this machine's AWS config "

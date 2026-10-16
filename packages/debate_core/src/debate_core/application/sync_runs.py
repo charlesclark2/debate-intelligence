@@ -433,12 +433,28 @@ _URL_QUERY = re.compile(r"(https?://[^\s\"'?#]+)\?[^\s\"'#]*")
 _QUOTED_PATH = re.compile(r"""(['"])[^'"\n]*[/\\][^'"\n]*\1""")
 _PATH_TOKEN = re.compile(r"[^\s'\"]*[/\\][^\s'\"]*")
 
+_NOT_A_PATH = re.compile(
+    r"[(\[]?(?:full/\d{4}-\d{2}-\d{2}|docs/(?:[A-Za-z0-9_-]+/)*[A-Za-z0-9_-]+\.md)[)\]:;,.]*"
+)
+"""The two things with a `/` in them that a record's reason names and that are no path (`v1-e34-t23`):
+a complete archive's snapshot name, `full/<date>`, and a runbook of this repository, `docs/....md`,
+which a refusal's fix points at. Matched against the whole token, brackets and trailing punctuation
+allowed: a path on a machine starts at `/` or `~/`, and a disclosure's path is neither of these."""
+
+
+def _redacted_unless_not_a_path(match: re.Match[str]) -> str:
+    token = match.group(0)
+    return token if _NOT_A_PATH.fullmatch(token) else REDACTED
+
 
 def redact(message: str, *, secrets: Iterable[str] = (), limit: int = _MAX_MESSAGE_CHARACTERS) -> str:
     """`message` with secrets, URL queries and anything path-shaped removed, on one short line.
 
     A path goes whole, including a quoted one with spaces in it, because a disclosure path names a
-    school, a team code and a round, and `OSError` quotes the path it failed on.
+    school, a team code and a round, and `OSError` quotes the path it failed on. A complete
+    archive's snapshot name and a runbook of this repository stay (:data:`_NOT_A_PATH`): until
+    `v1-e34-t23` both went too, and a refusal's reason said "[redacted] lists what each profile is
+    granted".
     """
     text = message
     for secret in secrets:
@@ -447,7 +463,7 @@ def redact(message: str, *, secrets: Iterable[str] = (), limit: int = _MAX_MESSA
     text = _COOKIE_VALUE.sub(lambda match: match.group(1) + REDACTED, text)
     text = _URL_QUERY.sub(lambda match: match.group(1) + "?" + REDACTED, text)
     text = _QUOTED_PATH.sub(REDACTED, text)
-    text = _PATH_TOKEN.sub(REDACTED, text)
+    text = _PATH_TOKEN.sub(_redacted_unless_not_a_path, text)
     text = " ".join(text.split())
     if len(text) > limit:
         text = text[: limit - 1] + "…"

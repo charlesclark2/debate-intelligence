@@ -54,7 +54,7 @@ spec:
         Archives and records written by the build at the start commit and by the build the
         agent runs are read unchanged.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

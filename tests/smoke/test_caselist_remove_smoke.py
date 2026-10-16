@@ -1154,6 +1154,27 @@ def test_a_removed_path_holds_next_weeks_upload_and_the_same_removal_run_again_f
     assert run("caselist", "publish", "--caselist", SYNTHETIC_CASELIST)["exit_code"] == ExitCode.OK
     assert not bucket_holds(bucket, UPLOADED_AFTER)
 
+    # Status says the removal is owed again: the upload waits in the inbox archive (v1-e30-t21). It
+    # names it by prefix and request, never by path or archive, and still exits 0: nothing differs.
+    owed = raw_json("caselist", "status")
+    data = json.loads(owed)["data"]
+    assert (data["in_sync"], data["removals_owed"]) == (True, ["RM-2026-03"])
+    assert data["held_in_inbox"] == [
+        {
+            "caselist": SYNTHETIC_CASELIST,
+            "uploads": 1,
+            "sha256_prefixes": [UPLOADED_AFTER[:12]],
+            "requests": ["RM-2026-03"],
+        }
+    ]
+    told = invoke("caselist", "status", width=200).stdout
+    assert (
+        f"for {SYNTHETIC_CASELIST}: 1 upload(s) at a path a removal holds (sha256 {UPLOADED_AFTER[:12]}"
+        in told
+    )
+    assert "RM-2026-03 is owed again" in told
+    assert not [name for name in (*IDENTIFYING, NEXT_WEEK, HELD_PATH) if name in owed + told]
+
     # The same removal, run again, finds it in the inbox archive, and takes the archive out.
     again = run(*REMOVE_REVISION)
     assert [
@@ -1171,7 +1192,9 @@ def test_a_removed_path_holds_next_weeks_upload_and_the_same_removal_run_again_f
     listed = (data_dir / "suppression" / "suppression-list.jsonl").read_text(encoding="utf-8")
     assert UPLOADED_AFTER in [json.loads(line)["sha256"] for line in listed.splitlines()]
     assert {json.loads(line)["request_id"] for line in listed.splitlines()} == {"RM-2026-03"}
-    assert run("caselist", "status")["exit_code"] == ExitCode.OK
+    finished = run("caselist", "status")
+    assert finished["exit_code"] == ExitCode.OK
+    assert finished["data"]["removals_owed"] == [], "the re-run finished what status said was owed"
 
     # Letting the removed file back in would release the path.
     lifted = run("caselist", "unsuppress", "--sha256", REVISION, "--reason", "REMOVED_IN_ERROR")

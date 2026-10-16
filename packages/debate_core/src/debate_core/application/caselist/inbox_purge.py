@@ -21,6 +21,13 @@ removal's entries are appended, stops it:
   rows (:func:`~debate_core.application.caselist.pipeline.withheld_skipped_paths`). A Word lock
   file holds the name of whoever had the document open, so leaving it would leave the very name.
 
+In a weekly or complete archive that is waiting to be imported, a skipped member at a path a removal
+holds is taken out too, when the archive is dated after the removed file first appeared there
+(`v1-e30-t21`). The importer never stores one, so the list cannot name it (`v1-e30-t13`), but a
+symbolic link named as the removed file carries the removed file's path, and its body is often its
+name. An archive already imported is not deleted for one alone, because everything else in it is
+someone's disclosure: retention removes it once its snapshot is confirmed in the bucket.
+
 Every other entry is kept byte for byte — another team's disclosure in the same archive, another
 holder's copy of a withdrawn file, a camp file the list does not stop. An earlier removal's
 leftovers are taken out too, because the list stops them; that is how running a removal again
@@ -30,6 +37,10 @@ A revision of a removed file that is waiting in an archive here, at the removed 
 stopped by the list like any other: the removal plan reads these archives as snapshots
 (:func:`read_inbox`), finds it as a later upload, and appends its entry before this step runs
 (`v1-e30-t13`).
+
+`caselist status` asks the inbox which uploads a hold covers (:meth:`CaselistInbox.held_uploads`,
+`v1-e30-t21`), to say that the removal is owed again. That reads only, and names an upload by its
+caselist, snapshot, digest and request.
 
 ## Imported or waiting: what happens to each file
 
@@ -132,6 +143,8 @@ from pathlib import Path
 from typing import Final
 
 from debate_core.application.caselist.pipeline import withheld_skipped_paths
+from debate_core.application.caselist.publish_plan import full_archive_snapshot
+from debate_core.application.caselist.status_service import HeldInboxUpload
 from debate_core.application.caselist_sync import (
     LOCK_FILENAME,
     OPENEV_DELIVERIES_FILENAME,
@@ -206,6 +219,42 @@ class CaselistInbox:
     @property
     def deliveries(self) -> OpenEvDeliveries:
         return OpenEvDeliveries(self.state_dir / OPENEV_DELIVERIES_FILENAME)
+
+    def held_uploads(self, suppression: SuppressionState) -> tuple[HeldInboxUpload, ...]:
+        """Every upload at a held path in a weekly or complete archive here, sorted (`v1-e30-t21`).
+
+        A real member at a path a removal holds, in an archive dated after the removed file first
+        appeared there, that the list does not already stop: what the importer refuses, or refused,
+        because of the hold. Reads only, and reads nothing when no path is held. An archive that
+        cannot be read, or is gone by the time it is read, is passed over.
+        """
+        if not suppression.held_paths:
+            return ()
+        found: set[HeldInboxUpload] = set()
+        for path in inbox_files(self.directory):
+            kind, caselist, snapshot, _ = _kind_of(path.relative_to(self.directory).as_posix())
+            if kind not in (InboxFileKind.WEEKLY_ARCHIVE, InboxFileKind.FULL_ARCHIVE):
+                continue
+            if caselist is None or snapshot is None:  # pragma: no cover - both kinds are named with both
+                continue
+            try:
+                entries = self.archives_for(kind).inventory(path)
+            except (UnreadableArchive, ArchiveTooLarge, OSError):
+                continue
+            named = (
+                full_archive_snapshot(snapshot)
+                if kind is InboxFileKind.FULL_ARCHIVE
+                else snapshot.isoformat()
+            )
+            for entry in entries:
+                if entry.skip_reason is not None or entry.sha256 is None:
+                    continue
+                if suppression.suppresses(entry.sha256, disclosure=disclosure_digest(caselist, entry.path)):
+                    continue
+                hold = suppression.path_hold(caselist=caselist, path=entry.path, snapshot=snapshot)
+                if hold is not None:
+                    found.add(HeldInboxUpload(caselist, named, entry.sha256, hold.request_id))
+        return tuple(sorted(found))
 
 
 class InboxFileKind(StrEnum):
@@ -512,10 +561,12 @@ def _plan_file(
 
     archive = kind in (InboxFileKind.WEEKLY_ARCHIVE, InboxFileKind.FULL_ARCHIVE)
     scope = caselist if archive else None
-    dropped, removed = entries_to_drop(entries, suppression=suppression, disclosure_scope=scope)
-    real = [entry for entry in entries if entry.skip_reason is None and entry.sha256 is not None]
     imported = imported_full_archives if kind is InboxFileKind.FULL_ARCHIVE else imported_weeks
     waiting = archive and (caselist, snapshot) not in imported
+    dropped, removed = entries_to_drop(
+        entries, suppression=suppression, disclosure_scope=scope, snapshot=snapshot if waiting else None
+    )
+    real = [entry for entry in entries if entry.skip_reason is None and entry.sha256 is not None]
     team_files = (
         _team_files_left(entries, dropped, team)
         if team is not None and waiting and caselist == team[0]
@@ -567,13 +618,19 @@ def _plan_file(
 
 
 def entries_to_drop(
-    entries: Sequence[InventoriedEntry], *, suppression: SuppressionState, disclosure_scope: str | None
+    entries: Sequence[InventoriedEntry],
+    *,
+    suppression: SuppressionState,
+    disclosure_scope: str | None,
+    snapshot: date | None = None,
 ) -> tuple[frozenset[str], frozenset[str]]:
     """The names of the entries the list stops, and the suppressed digests among them.
 
     `disclosure_scope` is the caselist of a weekly archive, whose members are disclosures, or `None`
     for anything else, which only a whole-source entry stops (as the OpenEv importer reads the list).
-    See the module docstring for the junk rule and for directory entries.
+    `snapshot`, given for an archive waiting to be imported, is its date: a skipped member at a path a
+    removal holds for that date is dropped too (`v1-e30-t21`). See the module docstring for the junk
+    rule and for directory entries.
     """
     stopped: set[str] = set()
     removed: set[str] = set()
@@ -590,6 +647,15 @@ def entries_to_drop(
         if hit:
             stopped.add(entry.name)
             removed.add(entry.sha256)
+        elif (
+            entry.skip_reason is not None
+            and disclosure_scope is not None
+            and snapshot is not None
+            and suppression.path_hold(caselist=disclosure_scope, path=entry.path, snapshot=snapshot)
+            is not None
+        ):
+            # Named as the removed file: the list cannot name it, and its digest is not a removed file's.
+            stopped.add(entry.name)
         if entry.skip_reason is None:
             real[entry.path] = hit or real.get(entry.path, False)
     shadowing = withheld_skipped_paths(

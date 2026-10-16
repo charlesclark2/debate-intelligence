@@ -681,7 +681,9 @@ class ServiceContainer:
         It can also list object versions, for the removal-residue check `caselist status` asks for
         (`v1-e30-t10`). That client is built with the everyday evidence profile, like the bucket's:
         the takedown profile is never read here. The removal log and the scopes beside it are read
-        from this machine's copy and the bucket's, as the suppression list is (`v1-e30-t15`).
+        from this machine's copy and the bucket's, as the suppression list is (`v1-e30-t15`). It is
+        given the inbox the pull downloads into, which it reads only when asked for the uploads a
+        removal's hold covers there (`v1-e30-t21`); the pull never asks.
         """
         return self.singleton("caselist_status", self._build_caselist_status)
 
@@ -703,6 +705,7 @@ class ServiceContainer:
                 ),
             ),
             environment=self.settings.environment.value,
+            inbox=self.caselist_inbox(),
             versions=S3EvidenceVersionStore(
                 bucket=str(storage.s3.bucket),
                 profile=storage.s3.aws_profile,

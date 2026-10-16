@@ -151,6 +151,16 @@ removes nothing. A file goes only when all of these hold:
   what lets the next run recognise a camp release as imported or removed (`v1-e34-t07`); without
   it the next run would download the file again.
 
+**A weekly whose every member was removed or held** goes before retention, at the end of the import
+that met the hold (`v1-e30-t21`). Every member was refused, by the suppression list or because a
+removal holds its path, at least one by the hold, and its skipped members are junk withheld with
+them. Its import stored nothing, and nothing in it can be imported again, so no publish has to be
+confirmed before it goes. A complete archive holds the whole caselist, so it never holds removed or
+held files alone, and retention judges it as before. It goes only as the bytes imported, and the import
+stage's reason counts it. An archive that also holds anything else stays for retention, like every
+imported archive: the rest is other teams' disclosures, which wait for their publish to be
+confirmed, and a copy rewritten without the held upload would match no manifest and never leave.
+
 **A camp release of junk alone** goes on a condition of its own (`v1-e34-t15`). Its import keeps
 nothing, so no manifest row comes from its bytes and there is no snapshot to confirm: by the rules
 above it stayed as `not_imported` for good, although no run imports it again (`v1-e34-t08`), and
@@ -2211,6 +2221,8 @@ class _RunTally:
         default_factory=lambda: dict[tuple[str, str], CompleteArchiveRecount]()
     )
     """Each caselist's newest complete archive, counted again after an earlier-dated weekly; the last wins."""
+    held_copies_taken_out: int = 0
+    """Archives that held nothing but removed or held files, taken out of the inbox once imported."""
 
     def record(self, stage: SyncStage, outcome: StageOutcome, reason: str | None = None) -> None:
         self.stages.append(StageRecord(stage=stage, outcome=outcome, reason=reason))
@@ -3141,11 +3153,18 @@ class CaselistSyncService:
             if held_back
             else ""
         )
+        taken_out = (
+            f"; {tally.held_copies_taken_out} archive(s) taken out of the inbox, which held only files "
+            "removed or held at a removed path"
+            if tally.held_copies_taken_out
+            else ""
+        )
         if failures:
             tally.fail(
                 SyncStage.IMPORT,
                 f"{len(tally.snapshots_imported)} imported{withdrawals}; {len(failures)} refused: "
                 + "; ".join(one.sentence for one in failures)
+                + taken_out
                 + waiting,
                 failures,
             )
@@ -3155,6 +3174,7 @@ class CaselistSyncService:
             StageOutcome.COMPLETED,
             f"{len(tally.snapshots_imported)} snapshot(s) imported, {tally.blobs_stored} new file(s) stored"
             + withdrawals
+            + taken_out
             + waiting,
         )
 
@@ -3289,6 +3309,7 @@ class CaselistSyncService:
         # Before the snapshot is counted as imported: a failure here is this archive's, so it is not
         # published, its inbox copy is kept, and importing it again measures them all again.
         remeasured = await self._later_manifests.after_weekly_import(report)
+        self._take_out_if_removed_or_held_alone(report, downloaded, tally)
         self._count_archive(report, tally)
         tally.snapshots_imported.append(f"{report.caselist} {report.snapshot.isoformat()}")
         tally.publish_targets.append(
@@ -3942,6 +3963,28 @@ class CaselistSyncService:
     # --------------------------------------------------------------------------------------
     # Counting, summarising, writing
     # --------------------------------------------------------------------------------------
+
+    def _take_out_if_removed_or_held_alone(
+        self, report: ImportReport, downloaded: DownloadedFile, tally: _RunTally
+    ) -> None:
+        """Remove the inbox copy of an archive that held only removed or held files, once imported.
+
+        See "What leaves the inbox". Only the bytes imported: a copy that changed since, or cannot be
+        read, is left for retention to judge, and so is one the file system refuses to remove.
+        """
+        if not report.removed_or_held_alone or _digest_of(downloaded.path) != downloaded.sha256:
+            return
+        try:
+            downloaded.path.unlink()
+        except OSError as refused:
+            logger.warning(
+                "caselist sync: an imported archive of %s held only removed or held files and could not "
+                "be taken out of the inbox (%s); retention judges it",
+                report.caselist,
+                type(refused).__name__,
+            )
+            return
+        tally.held_copies_taken_out += 1
 
     def _count_archive(self, report: ImportReport, tally: _RunTally) -> None:
         tally.files_imported += sum(

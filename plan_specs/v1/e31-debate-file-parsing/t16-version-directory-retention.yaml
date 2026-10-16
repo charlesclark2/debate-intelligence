@@ -27,8 +27,11 @@ spec:
     directory will be started and which it supersedes. Ruled by the PM, 2026-10-15: the everyday
     permission set has no `s3:DeleteObject` by design, and only a takedown deletes. So retention
     does not delete in a bucket. The command tags a superseded directory's objects, and a
-    lifecycle rule on the `parsed/` prefix expires tagged objects and their noncurrent versions
-    after a grace period, during which removing the tag undoes it. The everyday set gains
+    lifecycle rule on parsed/ expires a tagged object's current version at its next run, and its
+    noncurrent version after the grace period. Until that first run, caselist retire --restore
+    undoes it. After it, and for the grace period, copying the noncurrent versions back does
+    (amended by the PM, 2026-10-16: S3 counts Expiration from creation, so the grace runs on
+    noncurrent versions). The everyday set gains
     `s3:PutObjectTagging` and `s3:GetObjectTagging` on `parsed/` only. Locally the command
     deletes the directory, with confirmation. Out of scope: removal requests, which delete every
     version already.
@@ -54,7 +57,12 @@ spec:
       description: >-
         With confirmation the command removes a superseded directory locally and tags its
         objects in a bucket for the lifecycle rule, and refuses the current one, by test
-        against moto (amended by the PM, 2026-10-15: tag, not delete, in a bucket).
+        against moto (amended by the PM, 2026-10-15: tag, not delete, in a bucket). A lifecycle
+        rule on parsed/ expires a tagged object's current version at its next run, and its
+        noncurrent version after the grace period. Until that first run, caselist retire
+        --restore undoes it. After it, and for the grace period, copying the noncurrent
+        versions back does (amended by the PM, 2026-10-16: S3 counts Expiration from creation,
+        so the grace runs on noncurrent versions).
     - id: ac3
       description: >-
         The dry run for a new parser version says a new directory will be started and names

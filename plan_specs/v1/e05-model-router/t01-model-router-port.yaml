@@ -45,11 +45,11 @@ spec:
         rerank(query, documents) with typed request/response models.
     - id: ac2
       description: >-
-        config/model_routing.yaml maps each task class to provider, model_id, inference profile/region and
-        default parameters; config/model_routing.example.yaml, the default and template file, routes
-        complex_reasoning to Claude Sonnet, high_volume to Claude Haiku, embeddings to Titan Text Embeddings
-        V2 and rerank to Cohere Rerank 3.5. Amended by the PM, 2026-10-16: the routing file was split per
-        environment by v1-e01-t09.
+        the config/model_routing.*.yaml files map each task class to provider, model_id, inference
+        profile/region and default parameters; config/model_routing.example.yaml, the default and template
+        file, routes complex_reasoning to Claude Sonnet, high_volume to Claude Haiku, embeddings to Titan Text
+        Embeddings V2 and rerank to Cohere Rerank 3.5. Amended by the PM, 2026-10-16: the routing file was
+        split per environment by v1-e01-t09.
     - id: ac3
       description: >-
         Loading a routing file with an unknown task class, missing model_id or out-of-range temperature fails
@@ -59,7 +59,7 @@ spec:
         Per-call parameter overrides are merged over task-class defaults and the resolved route (model_id,
         profile/region, temperature) is returned on every ModelResponse for provenance.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan
@@ -137,9 +137,12 @@ spec:
         outputs: [packages/debate_core/tests/contracts/model_router_contract.py]
         estimatedEffort: 2h
         acceptanceCriteria:
+          # Amended by the PM, 2026-10-16: since v1-e02-t04 every reusable contract lives in
+          # debate_core.testing.contracts, because nothing under tests/ is importable under
+          # --import-mode=importlib.
           - type: artifact_exists
             name: Contract suite exists
-            path: packages/debate_core/tests/contracts/model_router_contract.py
+            path: packages/debate_core/src/debate_core/testing/contracts/model_router.py
           - type: command_succeeds
             name: Import boundaries hold
             command: uv

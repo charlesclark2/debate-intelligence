@@ -356,7 +356,7 @@ def test_re_importing_stores_no_further_blobs(harness: ImportHarness) -> None:
 
 
 def test_an_archive_older_than_the_latest_imported_is_refused(harness: ImportHarness) -> None:
-    """ac3. The weeks after it were measured without it (`test_import_window_ordering.py`)."""
+    """ac3. Importing it rewrites the later weeks, so it takes the flag (`test_import_window_ordering.py`)."""
     harness.import_one(SNAPSHOTS[-1].snapshot)
 
     with pytest.raises(SnapshotOutOfOrder) as raised:

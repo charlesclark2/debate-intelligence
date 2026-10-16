@@ -59,7 +59,7 @@ spec:
         confirmed. Shown failing first. The runbook's reinstall step reads the environment
         and caselists from the installed plist.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

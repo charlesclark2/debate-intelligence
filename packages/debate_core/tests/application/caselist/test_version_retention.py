@@ -489,3 +489,93 @@ def test_the_retirement_tag_is_the_one_the_lifecycle_rule_and_the_grant_name() -
     assert prefix is not None, "main.tf no longer defines retired_parsed_prefix"
     assert (tags[1], tags[2]) == (RETIREMENT_TAG_KEY, RETIREMENT_TAG_VALUE)
     assert prefix[1] == f"{PARSED_PREFIX}/"
+
+
+# ------------------------------------------------------------------------------------------------
+# Edges: links on this machine, names, and a partly tagged directory
+# ------------------------------------------------------------------------------------------------
+
+
+@pytest.mark.anyio
+async def test_a_link_inside_a_retired_directory_is_deleted_and_what_it_names_is_kept(
+    data_dir: Path, tmp_path: Path
+) -> None:
+    outside = tmp_path / "outside"
+    (outside / "kept").mkdir(parents=True)
+    (outside / "kept" / "file.jsonl").write_bytes(b"{}\n")
+    (outside / "single.jsonl").write_bytes(b"{}\n")
+    directory = data_dir / "parsed" / CASELIST / FIRST
+    (directory / "linked-directory").symlink_to(outside / "kept", target_is_directory=True)
+    (directory / "linked-file.jsonl").symlink_to(outside / "single.jsonl")
+    retention = local_retention(data_dir)
+    plan = await retention.plan(caselists=[CASELIST], versions=[FIRST])
+
+    await retention.execute(plan, confirmation=plan.confirmation)
+
+    assert not directory.exists()
+    assert sorted(path.relative_to(outside).as_posix() for path in outside.rglob("*")) == [
+        "kept",
+        "kept/file.jsonl",
+        "single.jsonl",
+    ]
+
+
+@pytest.mark.anyio
+async def test_a_version_directory_that_is_a_link_is_not_deleted(data_dir: Path, tmp_path: Path) -> None:
+    elsewhere = tmp_path / "elsewhere"
+    write_directories(elsewhere, CASELIST, FIRST)
+    linked = data_dir / "parsed" / CASELIST / "2026.01.01-docx-0"
+    linked.symlink_to(elsewhere / "parsed" / CASELIST / FIRST, target_is_directory=True)
+
+    with pytest.raises(ValueError, match="not a version directory"):
+        await LocalVersionDirectories(data_dir).retire(CASELIST, "2026.01.01-docx-0")
+
+    assert (elsewhere / "parsed" / CASELIST / FIRST / "index.jsonl").exists()
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("name", ["", ".", "..", "a/b"])
+async def test_the_bucket_refuses_a_name_that_is_not_one_directorys(
+    s3_client: S3Client, bucket: str, name: str
+) -> None:
+    with pytest.raises(ValueError, match="not a caselist or version directory name"):
+        await S3VersionDirectories(bucket=bucket, client=s3_client).retire(CASELIST, name)
+
+
+@pytest.mark.anyio
+async def test_restoring_a_partly_tagged_directory_writes_only_the_tagged_objects(
+    s3_client: S3Client, bucket: str
+) -> None:
+    key = f"parsed/{CASELIST}/{FIRST}/index.jsonl"
+    s3_client.put_object_tagging(
+        Bucket=bucket,
+        Key=key,
+        Tagging={"TagSet": [{"Key": RETIREMENT_TAG_KEY, "Value": RETIREMENT_TAG_VALUE}]},
+    )
+    retention = bucket_retention(s3_client, bucket)
+
+    plan = await retention.plan(caselists=[CASELIST], versions=[FIRST], restore=True)
+    result = await retention.execute(plan, confirmation=plan.confirmation)
+
+    assert [row.contents.tagged for row in plan.selected] == [1]
+    assert [count for _, count in result.acted_on] == [1]
+    assert {
+        stored: tags for stored, tags in tags_by_key(s3_client, bucket).items() if f"/{FIRST}/" in stored
+    } == {
+        f"parsed/{CASELIST}/{FIRST}/{name}": (
+            {RETIREMENT_TAG_KEY: RESTORED_TAG_VALUE} if name == "index.jsonl" else {}
+        )
+        for name in FILES
+    }
+
+
+@pytest.mark.anyio
+async def test_an_empty_directory_in_the_bucket_lists_and_tags_nothing(
+    s3_client: S3Client, bucket: str
+) -> None:
+    place = S3VersionDirectories(bucket=bucket, client=s3_client)
+
+    contents = await place.contents(CASELIST, "2026.01.01-docx-0", count_tagged=True)
+
+    assert (contents.objects, contents.bytes, contents.tagged) == (0, 0, 0)
+    assert await place.retire(CASELIST, "2026.01.01-docx-0") == 0

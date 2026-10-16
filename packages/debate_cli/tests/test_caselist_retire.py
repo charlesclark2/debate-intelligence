@@ -76,6 +76,11 @@ def data_dir(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[Path]:
             f'[models]\nrouting_file = "{tmp_path / "routing.yaml"}"\nbudget_usd_daily = 1.0\n',
             encoding="utf-8",
         )
+    (profiles / "test.toml").write_text(
+        f'allow_network = false\n[providers]\nenabled = []\n[storage]\ndata_dir = "{data}"\n'
+        f'[models]\nrouting_file = "{tmp_path / "routing.yaml"}"\nbudget_usd_daily = 0.0\n',
+        encoding="utf-8",
+    )
     monkeypatch.setenv("DEBATE_PROFILE_DIR", str(profiles))
     monkeypatch.setenv("DEBATE_ENV", "dev")
     for version in (OLDER, DOCX_PARSER_VERSION):
@@ -258,3 +263,14 @@ def test_changing_prod_needs_confirm_prod(buckets: S3Client, monkeypatch: pytest
     assert envelope_of(refused)["error"]["code"] == "CONFIRMATION_REQUIRED"
     assert confirmed.exit_code == ExitCode.OK, confirmed.stdout
     assert envelope_of(confirmed)["data"]["location"] == f"s3://{PROD_BUCKET}"
+
+
+def test_the_bucket_is_refused_in_an_environment_without_one(
+    data_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DEBATE_ENV", "test")
+
+    result = invoke("caselist", "retire", "--bucket", "--json")
+
+    assert result.exit_code == ExitCode.DOMAIN_FAILURE
+    assert envelope_of(result)["error"]["code"] == "EVIDENCE_STORE_NOT_CONFIGURED"

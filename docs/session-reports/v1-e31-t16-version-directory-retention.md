@@ -15,15 +15,15 @@ against the build's parser version, and retires the superseded ones after a dry 
 confirmation code. On this machine it deletes the directory. In a bucket it tags each object
 `debate-retention=superseded`, using the everyday profile, and deletes nothing. The `caselist
 parse` dry run now says `new_version: true` for a parser bump and a first parse, and names the
-directory the new one supersedes. The evidence bucket module gains the lifecycle rule and the two
-tagging grants on `parsed/`, all held by the module's tests.
+directory the new one supersedes. The evidence bucket module gains two lifecycle rules on
+`parsed/` and the two tagging grants on `parsed/` only, all held by the module's tests.
 
-**Look first at Deviation 1.** As ruled, a tag-filtered `Expiration` counts days from an object's
-creation, not from when it was tagged. A 30-day rule would therefore expire a directory older than
-30 days at the next lifecycle run, with no grace period at all. I built the rule so that the
-30-day grace counts from retirement (expire the tagged current version after 1 day, then keep the
-noncurrent version 30 days). That needs the PM's ruling. ac4 (the retirements) and the `terraform
-plan` reads in ac5 are operator steps for after the review, so the Goal stays `InProgress`.
+The PM ruled on 2026-10-16 (see [the ruling and what it changed](#pm-ruling-of-2026-10-16-and-what-it-changed)).
+The grace runs on noncurrent versions, as built. The spec's description and ac2 are amended. A
+second rule removes the delete markers retirement leaves, because none did. The runbook's
+copy-back is now run as written by a moto test, against a hand-written simulation of the
+lifecycle rules. ac4 (the retirements) and the `terraform plan` reads in ac5 are operator steps
+for after the review, so the Goal stays `InProgress`.
 
 ## Plan nodes
 
@@ -35,12 +35,12 @@ plan` reads in ac5 are operator steps for after the review, so the Goal stays `I
 
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
-| Node `retention`: Parse tests pass | PASS | `uv run pytest packages/debate_core/tests/application -k "parse or retention"` → `287 passed in 23.84s` at `4932758`. The selection includes all 31 tests of `caselist/test_version_retention.py` and the new dry-run tests |
+| Node `retention`: Parse tests pass | PASS | `uv run pytest packages/debate_core/tests/application -k "parse or retention"` → `293 passed in 10.69s` at `a00ed2f`. The selection includes all 31 tests of `caselist/test_version_retention.py`, the 6 of `caselist/test_version_retention_lifecycle.py`, and the new dry-run tests |
 | ac1: a retention rule in `docs/data/parsed-card-store.md`, consistent with the policy's retention section, and the command lists superseded directories in a dry run | PASS | [Retention](../data/parsed-card-store.md#retention) gives the four standings, what retiring does in each place, the 30-day grace and why it keeps within the policy (Decision 2). `test_the_dry_run_lists_every_directory_with_its_standing_and_counts_and_changes_nothing`, `test_the_bucket_dry_run_counts_tags_only_where_it_might_retire`, CLI `test_the_dry_run_lists_each_directory_with_its_standing_and_changes_nothing` and smoke `test_a_superseded_directory_is_listed_refused_when_current_and_retired_with_its_code` all pass. The policy itself has no row for retired `parsed/` directories yet; a proposed row is under Follow-up work |
-| ac2: with confirmation the command removes a superseded directory locally and tags it in a bucket, and refuses the current one, by test against moto | PASS | `caselist/test_version_retention.py`, 31 passed. Locally: `test_a_named_superseded_directory_is_deleted_in_every_caselist_and_nothing_else_changes`. In moto: `test_retiring_in_the_bucket_tags_every_object_of_the_directory_and_deletes_nothing`, which also asserts that every version is still there and that the client sent only `ListObjectsV2`, `GetObjectTagging` and `PutObjectTagging`. Refusals: `test_the_current_directory_is_refused_and_nothing_is_deleted`, `test_a_directory_newer_than_this_build_is_refused_and_nothing_is_deleted`, `test_the_bucket_refuses_its_current_directory_and_one_newer_than_this_build`. **Both refusals shown failing first**, by mutants that remove each guard (below) |
+| ac2: with confirmation the command removes a superseded directory locally and tags it in a bucket, and refuses the current one, by test against moto; the lifecycle expires the current version at its next run and the noncurrent one after the grace period, `--restore` undoes it until that run and copying back does after it (amended by the PM, 2026-10-16) | PASS | **The lifecycle half**, in `caselist/test_version_retention_lifecycle.py` (6 passed): the module's rules, read from `main.tf`, run against moto by a simulation written from AWS's documentation. `test_a_retired_directory_expires_at_the_first_run_and_is_gone_after_the_grace_period[dev, prod]` checks that day 1 expires every tagged current version, day 30 still holds every retired version, day 31 has deleted them, and day 32 has removed the markers. The current directory is untouched throughout. In prod, an untagged older aggregate version stays under the 365-day rule. `test_restore_before_the_first_run_leaves_an_object_no_rule_expires` checks that a restored object survives runs on days 1, 2, 31 and 40. `test_the_runbook_copy_back_restores_the_directory_byte_for_byte_with_the_everyday_grants` runs the runbook's two blocks as written after the first run: the newest version of each key comes back byte for byte, tagged `restored`, and survives later runs. Every request it makes is granted by the everyday set as `operator_access.tf` writes it, with no delete. **The command half**: `caselist/test_version_retention.py`, 31 passed. Locally: `test_a_named_superseded_directory_is_deleted_in_every_caselist_and_nothing_else_changes`. In moto: `test_retiring_in_the_bucket_tags_every_object_of_the_directory_and_deletes_nothing`, which also asserts that every version is still there and that the client sent only `ListObjectsV2`, `GetObjectTagging` and `PutObjectTagging`. Refusals: `test_the_current_directory_is_refused_and_nothing_is_deleted`, `test_a_directory_newer_than_this_build_is_refused_and_nothing_is_deleted`, `test_the_bucket_refuses_its_current_directory_and_one_newer_than_this_build`. **Both refusals shown failing first**, by mutants that remove each guard (below) |
 | ac3: the dry run for a new parser version says a new directory will be started and names the one it supersedes, shown failing first | PASS | Red, against the start commit's source (`a80e285`): the five new service tests failed with `assert ('2099.01.01-..., False, None) == ('2099.01.01-...10.12-docx-3')` and the like, `5 failed, 1 passed` (the one that passed is the reuse case, which was already right). The CLI test failed with `assert ('2026.10.12-..., False, None) == ('2026.10.12-...01.01-docx-0')`, which is today's `new_version: false`, `superseded: null`. Green after the fix: `75 passed` over both parse test files |
-| ac4: operator-run: `2026.09.20-docx-1` retired in both buckets and `2026.10.10-docx-2` in the dev data directory and both buckets, counts recorded (amended by the PM, 2026-10-16) | NOT RUN | Operator-run after the merge, the Terraform apply and the PM's ruling on Deviation 1. Steps are in [parsed-store-retention.md](../runbooks/parsed-store-retention.md#retiring-20260920-docx-1-and-20261010-docx-2-v1-e31-t16-ac4), and the counts go in [Retired so far](../data/parsed-card-store.md#retired-so-far) |
-| ac5: the module gains the lifecycle rule and the two tagging grants on `parsed/`, held by its tests; the dev and prod plans are operator-run and read by the PM | PASS (module and tests) / NOT RUN (plans) | `terraform -chdir=infrastructure/modules/evidence_bucket test` → `Success! 12 passed, 0 failed`. Red first: against the unchanged module the new lifecycle run failed (`retired_parsed_version_directories_expire_after_a_grace_period ... fail`, `Attempt to get attribute from null value`). With the rule added and the grants not yet, the permission-set run failed on the exact action set and on `length(...) == 1` (`- 0 + 1`). Nine Terraform mutants are caught (below). The plans are under Operator follow-ups |
+| ac4: operator-run: `2026.09.20-docx-1` retired in both buckets and `2026.10.10-docx-2` in the dev data directory and both buckets, counts recorded (amended by the PM, 2026-10-16) | NOT RUN | Operator-run after the merge and the Terraform apply. Steps are in [parsed-store-retention.md](../runbooks/parsed-store-retention.md#retiring-20260920-docx-1-and-20261010-docx-2-v1-e31-t16-ac4), and the counts go in [Retired so far](../data/parsed-card-store.md#retired-so-far) |
+| ac5: the module gains the lifecycle rule and the two tagging grants on `parsed/`, held by its tests; the dev and prod plans are operator-run and read by the PM | PASS (module and tests) / NOT RUN (plans) | `terraform -chdir=infrastructure/modules/evidence_bucket test` → `Success! 13 passed, 0 failed` at `a00ed2f`, the delete-marker rule's run included. It was red first: `orphaned_delete_markers_under_parsed_are_removed ... fail` on the unchanged rule set. Before that, the tagged rule and the grants were red too: against the unchanged module the new lifecycle run failed (`retired_parsed_version_directories_expire_after_a_grace_period ... fail`, `Attempt to get attribute from null value`). With the rule added and the grants not yet, the permission-set run failed on the exact action set and on `length(...) == 1` (`- 0 + 1`). Nine Terraform mutants are caught (below). The plans are under Operator follow-ups |
 
 ### The refusals and checks, each shown failing
 
@@ -62,6 +62,20 @@ of running the retention tests with the mutant in place.
 | Current version waits 30 days from creation / grace period 365 days | `retired_parsed_version_directories_expire_after_a_grace_period` |
 | Tagging grant on the whole bucket / tagging statement also deletes / tagging joins the read-and-publish statement | `operator_permission_set_reads_and_publishes_but_cannot_delete` |
 
+The lifecycle tests and the delete-marker rule (after the PM's ruling), each mutant applied the
+same way:
+
+| Mutant | Caught by |
+|---|---|
+| Grace period 1 day in `main.tf` | the grace-period test, dev and prod |
+| Current version waits 30 days in `main.tf` | the grace-period test (dev, prod) and the copy-back test |
+| `restored` written as `superseded` in the port | the restore test, the copy-back test, `test_the_retirement_tag_is_not_restored` |
+| Tagging grant moved to `raw/*`, or `PutObjectTagging` dropped | the copy-back test's grants check, and the grants reader's own test |
+| Runbook: `awk` keeps the older version / `--tagging-directive COPY` / the copy tagged `superseded` / `IsLatest==true` / the takedown profile | the copy-back test, each one |
+| The simulated configuration without the delete-marker rule | the grace-period test, on markers left at day 32 |
+| `main.tf`: the marker rule gains a tag filter, covers the whole bucket, or also deletes noncurrent versions | `orphaned_delete_markers_under_parsed_are_removed` |
+| `main.tf`: the marker rule also expires objects after 400 days | `dev_ages_out_superseded_versions_after_thirty_days`, whose "no current expiry outside exports/" check refuses it |
+
 When a lifecycle assertion fails, Terraform 1.16.3 panics while printing it ("value has marks, so
 it cannot be serialized as JSON") instead of showing the error message. The run still fails, so
 every mutant above counts as caught. This predates the task: breaking the existing `exports/`
@@ -69,13 +83,11 @@ expiry assertion crashes the same way. See Follow-up work.
 
 ### The whole suite and the static checks
 
-Run as four parts one after another (working agreement 1), each under a 115-second kill: part 2
-at `8bfccea`, parts 1, 3 and 4 at `e25e37e`. The only test change between those two commits is in
-part 3, and the commits after `e25e37e` change Terraform and docs only.
-`uv run --frozen pytest -n auto -m "not slow and not live" --part K/4` gave 1861 passed;
-1869 passed and 1 xfailed; 1871 passed and 1 skipped; 1866 passed and 1 xfailed. The first part,
-run earlier at a load average of 27, took 106 s and had one failure, which is the next paragraph;
-the re-run took 58 s. `uv run --frozen pyright` gave 0 errors. `ruff check` and `ruff format
+At `a00ed2f`, run as four parts one after another (working agreement 1), each under a 115-second
+kill, `uv run --frozen pytest -n auto -m "not slow and not live" --part K/4` gave 1863 passed (52 s);
+1870 passed and 1 xfailed (47 s); 1872 passed and 1 skipped (47 s); 1868 passed and 1 xfailed
+(50 s). Before the ruling, part 1, run at a load average of 27, took 106 s and had one failure,
+which is the next paragraph. `uv run --frozen pyright` gave 0 errors. `ruff check` and `ruff format
 --check` are clean, `lint-imports` kept 12 of 12 contracts, and `tflint` on the module is clean.
 `terraform validate` passes for `envs/dev` and `envs/prod`. `scripts/check_command_blocks.py`
 found no `#` comments in 275 shell blocks, and `scripts/docs_index.py --check-descriptions` passed.
@@ -104,10 +116,11 @@ imported the submodule.
   `container.py`: the command and its wiring. The bucket uses the everyday profile only.
 * `packages/debate_cli/src/debate_cli/commands/caselist_parse.py`: the version row says when a dry
   run would start a directory and what it supersedes.
-* `infrastructure/modules/evidence_bucket/`: the lifecycle rule `expire-retired-parsed-version-directories`
-  (last in the list), the `TagSupersededParsedVersionDirectories` statement, the permission set's
+* `infrastructure/modules/evidence_bucket/`: the lifecycle rules `expire-retired-parsed-version-directories`
+  and `remove-orphaned-parsed-delete-markers` (the last two in the list), the `TagSupersededParsedVersionDirectories` statement, the permission set's
   description, the README, and the module tests.
-* Tests: `caselist/test_version_retention.py` (new, 31), `test_caselist_parse.py` (core, +5 and one
+* Tests: `caselist/test_version_retention.py` (new, 31), `caselist/test_version_retention_lifecycle.py`
+  (new, 6) and its `lifecycle_simulation.py` (the rules run by hand against moto), `test_caselist_parse.py` (core, +5 and one
   first-run assertion corrected), CLI `test_caselist_retire.py` (new, 12), CLI `test_caselist_parse.py`
   (+1), `test_installation.py` and `commands/test_doctor.py` (the wired list), and
   `tests/smoke/test_caselist_retire.py` (new).
@@ -115,34 +128,24 @@ imported the submodule.
   table of retirements), `docs/runbooks/parsed-store-retention.md` (new), and
   `docs/runbooks/evidence-store.md` (the grant, the rule, and a Later applies row marked "not
   applied yet").
-* Spec: ac4 rewritten as the PM amended it on 2026-10-16, with that note.
+* Spec: ac4 rewritten as the PM amended it on 2026-10-16, and the description and ac2 as the PM
+  ruled the same day, each with its note.
 
 ## Deviations from the spec
 
-1. **The grace period cannot be an `Expiration` on tagged objects, as the 2026-10-15 ruling words
-   it.** The spec says "a lifecycle rule on the `parsed/` prefix expires tagged objects and their
-   noncurrent versions after a grace period, during which removing the tag undoes it." S3 counts
-   an `Expiration`'s days from the object's creation. AWS's own example: a 30-day rule "will queue
-   for removal any existing objects that are more than 30 days old"
-   ([lifecycle-expire-general-considerations](https://docs.aws.amazon.com/AmazonS3/latest/userguide/lifecycle-expire-general-considerations.html)).
-   Tagging does not reset that clock. So `Expiration { days = 30 }` gives a directory written 30 or
-   more days before it is retired no grace at all, and gives the two ac4 directories whatever is
-   left of 30 days since they were published. `NoncurrentVersionExpiration` counts from the day a
-   version became noncurrent. **What is built:** the tagged current version expires 1 day after
-   creation (in practice, at the next daily lifecycle run), and the noncurrent version is deleted
-   30 days after that. The grace period is then 30 days from retirement for every directory. The
-   cost is that "removing the tag undoes it" holds only until that first run. After it, the undo
-   is to copy the noncurrent versions back, which the everyday set can already do with
-   `GetObjectVersion` and `PutObject`. The runbook has both undos. Switching to the ruling as
-   written is a change of two numbers in `main.tf` and in the test file. The relay prompt for the
-   PM gives the options.
-2. **Restoring sets the tag to `restored`; it does not remove the tag.** The everyday set has no
-   `s3:DeleteObjectTagging`, and moto rejects an empty tag set (`PutObjectTagging` with
-   `TagSet: []`). I could not confirm that S3 accepts one either. `restored` is not matched by the
-   rule, works with the two granted actions, and leaves a record that the directory came back.
-3. **A smoke check outside `constraints.packages`.** `tests/smoke/test_caselist_retire.py` is
-   required by working agreement 5 for a new CLI command, but `tests/smoke` is not among the
-   task's packages. It is offline and local-only.
+1. **The grace period runs on noncurrent versions, not on an `Expiration` of tagged objects.**
+   Resolved by the PM on 2026-10-16 (option B), and the spec's description and ac2 are amended.
+   S3 counts an `Expiration`'s days from the object's creation
+   ([lifecycle-expire-general-considerations](https://docs.aws.amazon.com/AmazonS3/latest/userguide/lifecycle-expire-general-considerations.html)),
+   so the 2026-10-15 wording would have given an old directory no grace at all.
+2. **Restoring sets the tag to `restored`; it does not remove the tag.** Accepted by the PM,
+   2026-10-16. The everyday set has no `s3:DeleteObjectTagging`, and moto rejects an empty tag set.
+   The lifecycle filter matches the exact pair `debate-retention=superseded`, and a restored object
+   survives every run in `test_restore_before_the_first_run_leaves_an_object_no_rule_expires`.
+3. **A smoke check outside `constraints.packages`.** Accepted by the PM, 2026-10-16, under working
+   agreement 5. `tests/smoke/test_caselist_retire.py` is offline and local-only.
+4. **A second lifecycle rule** the spec did not name, `remove-orphaned-parsed-delete-markers`,
+   added on the PM's instruction of 2026-10-16. See the ruling's section below.
 
 ## Decisions and assumptions
 
@@ -178,15 +181,55 @@ imported the submodule.
    link and never followed.
 7. **The new lifecycle rule goes last**, so a plan shows one rule added rather than a changed
    multipart rule.
-8. **Restore after the lifecycle has run** is documented as an `aws s3api` loop, not a CLI flag.
-   It depends on Deviation 1, and building it before the ruling would be scope the ruling might
-   remove.
+8. **Restore after the lifecycle has run** is an `aws s3api` loop in the runbook, not a CLI flag,
+   as the ruling describes. The loop is held by a test that reads it from the runbook and runs it:
+   its `--query` through `jmespath` (the library the AWS CLI applies `--query` with), its `awk`
+   program through `awk`, and each `copy-object` with exactly its flags. A flag the test does not
+   know fails the test, so the two cannot drift apart.
+9. **The lifecycle is simulated, because moto stores a configuration and never runs it.**
+   `lifecycle_simulation.py` implements the documented actions these rules use (`Expiration` with
+   `Days`, `ExpiredObjectDeleteMarker`, `NoncurrentVersionExpiration`, prefix and tag filters, a
+   marker having no tags), counting ages in simulated days. It leaves out transitions, dates,
+   `NewerNoncurrentVersions`, size filters and rounding to midnight. It was written from AWS's
+   pages, and the configuration it runs is built from `main.tf`'s own values.
+10. **The grants check reads `operator_access.tf`** rather than restating the policy. For each
+    request the copy-back makes, it works out the actions IAM requires: `ListObjectVersions` needs
+    `s3:ListBucketVersions` under the prefix condition, and `CopyObject` from a version needs
+    `s3:GetObjectVersion` on the source, `s3:PutObject` on the destination, and
+    `s3:PutObjectTagging` when it writes tags. Each must be granted by a statement of the everyday
+    set. A test shows the reader refusing what the set does not hold.
+
+## PM ruling of 2026-10-16, and what it changed
+
+* **Option B, and the spec amended**: the description and ac2 now carry the ruling's wording, each
+  marked "Amended by the PM, 2026-10-16: S3 counts Expiration from creation, so the grace runs on
+  noncurrent versions".
+* **The copy-back is tested against moto**: retired, expired by the simulated lifecycle, copied
+  back by the runbook's blocks as written, byte for byte, with the everyday grants only (ac2 above).
+* **Item 5, the tag filter on noncurrent versions**: if it does not reach them, they fall to the
+  general rule and are kept longer, never deleted sooner. The 32-day check is in the runbook and
+  under Operator follow-ups, and its result goes in the
+  [Retired so far](../data/parsed-card-store.md#retired-so-far) table.
+* **Delete markers.** No existing rule cleared expired delete markers under `parsed/`.
+  `age-out-superseded-evidence-versions` (`filter {}`) has only `noncurrent_version_expiration`
+  and no `expiration`. `expire-bulk-export-archives` has `Expiration { Days = 1 }`, which per AWS
+  also cleans up expired delete markers ("When you specify the Days tag, Amazon S3 automatically
+  performs ExpiredObjectDeleteMarker cleanup"), but only under `exports/`. The new tagged rule's
+  `Days` cleanup cannot reach a marker under `parsed/`, because a marker carries no tags. And S3
+  refuses `ExpiredObjectDeleteMarker` beside a tag filter
+  ([lifecycle-configuration-examples](https://docs.aws.amazon.com/AmazonS3/latest/userguide/lifecycle-configuration-examples.html)).
+  So `remove-orphaned-parsed-delete-markers` was added, with `filter { prefix = "parsed/" }`, no
+  tags, and `expiration { expired_object_delete_marker = true }` and nothing else. The module's
+  test `orphaned_delete_markers_under_parsed_are_removed` holds it to that, and the "no current
+  expiry outside `exports/`" assertion allows an expiration that removes markers only. It cannot
+  expire an object: an expired delete marker is one with no version behind it.
+* **Items 1 to 4** accepted; item 6 stays as follow-up work.
 
 ## Operator follow-ups
 
 All of these wait for the PM. The plans are run and read before anything is applied, and nothing
-is applied in a session. The commands assume the ruling on Deviation 1 leaves the Terraform as it
-is; if it changes, I re-commit and these are re-run.
+is applied in a session. The Terraform is as the PM's ruling of 2026-10-16
+asked, at `a00ed2f`.
 
 ### 1. The dev and prod `terraform plan` (for the PM to read)
 
@@ -218,12 +261,24 @@ terraform -chdir=infrastructure/envs/prod plan -input=false -out=/tmp/t16-eviden
 
 | Resource | Change |
 |---|---|
-| `module.evidence_store.aws_s3_bucket_lifecycle_configuration.evidence` | update in place: one `rule` added at the end, `id = "expire-retired-parsed-version-directories"`, `status = "Enabled"`, `filter { and { prefix = "parsed/", tags = { "debate-retention" = "superseded" } } }`, `expiration { days = 1 }`, `noncurrent_version_expiration { noncurrent_days = 30 }`. The other three rules are unchanged: 30 days in dev, and in prod Standard-IA at 30 and expiry at 365 |
+| `module.evidence_store.aws_s3_bucket_lifecycle_configuration.evidence` | update in place: two `rule` blocks added after the existing three, which are unchanged (30 days in dev; in prod, Standard-IA at 30 and expiry at 365). First, `id = "expire-retired-parsed-version-directories"`, `status = "Enabled"`, `filter { and { prefix = "parsed/", tags = { "debate-retention" = "superseded" } } }`, `expiration { days = 1 }`, `noncurrent_version_expiration { noncurrent_days = 30 }`. Second, `id = "remove-orphaned-parsed-delete-markers"`, `status = "Enabled"`, `filter { prefix = "parsed/" }` with no tags, `expiration { expired_object_delete_marker = true }`, and no `days`, `date` or noncurrent action |
 | `module.evidence_store.aws_ssoadmin_permission_set.evidence_operator[0]` | update in place: `description` only, which gains "and tags superseded parsed/ directories" |
 | `module.evidence_store.aws_ssoadmin_permission_set_inline_policy.evidence_operator[0]` | update in place: `inline_policy` gains one statement, `Sid = "TagSupersededParsedVersionDirectories"`, `Action = ["s3:GetObjectTagging", "s3:PutObjectTagging"]`, `Resource = "arn:aws:s3:::debate-<env>-evidence-a7508de8/parsed/*"`. Every other statement is unchanged, and there is no `Delete` anywhere in the diff |
 | Everything else | No change: the key, the alias, the bucket and its policy, versioning, encryption, the removal set and its policy, every account assignment, and the site resources |
 
-The summary should be `Plan: 0 to add, 3 to change, 0 to destroy.` in each environment. Stop on
+The three lifecycle actions of a retirement, and the rule each sits in:
+
+| Action | Rule | What it matches |
+|---|---|---|
+| Expire the current version (put a delete marker in front of it), 1 day after creation | `expire-retired-parsed-version-directories` | `parsed/` objects tagged `debate-retention=superseded`, exactly |
+| Delete the noncurrent version, 30 days after it became noncurrent | `expire-retired-parsed-version-directories` | the same, on each version's own tags |
+| Remove the delete marker once nothing is behind it | `remove-orphaned-parsed-delete-markers` | `parsed/` by prefix (a marker has no tags) |
+
+Nothing in either plan deletes, and nothing changes outside `parsed/`. Both grants are on
+`parsed/*`, both new rules filter on `parsed/`, the marker rule removes only markers with no
+version behind them, and the rest of the bucket's configuration, the bucket policy, the key and the
+removal set are untouched. The summary should be `Plan: 0 to add, 3 to change, 0 to destroy.` in
+each environment. Stop on
 anything else. Most likely, `dev` has moved and this branch is stale (run `scripts/task sync
 v1-e31-t16-version-directory-retention` and plan again), or a plan wants to destroy an assignment
 (a missing or wrong `owner.auto.tfvars`). Paste both plans' resource lists and summaries to the PM.
@@ -247,10 +302,10 @@ export AWS_PROFILE=debate-admin
 OPERATOR=$(aws iam list-roles --query 'Roles[?starts_with(RoleName, `AWSReservedSSO_DebateDevEvidenceOperator`)].Arn' --output text)
 aws iam simulate-principal-policy --policy-source-arn "${OPERATOR}" --action-names s3:GetObjectTagging s3:PutObjectTagging --resource-arns "arn:aws:s3:::debate-dev-evidence-a7508de8/parsed/probe" --query 'EvaluationResults[].{Action:EvalActionName,Decision:EvalDecision}' --output table
 aws iam simulate-principal-policy --policy-source-arn "${OPERATOR}" --action-names s3:PutObjectTagging s3:DeleteObject s3:DeleteObjectTagging --resource-arns "arn:aws:s3:::debate-dev-evidence-a7508de8/raw/caselist/probe" --query 'EvaluationResults[].{Action:EvalActionName,Decision:EvalDecision}' --output table
-aws s3api get-bucket-lifecycle-configuration --bucket debate-dev-evidence-a7508de8 --query 'Rules[?ID==`expire-retired-parsed-version-directories`]'
+aws s3api get-bucket-lifecycle-configuration --bucket debate-dev-evidence-a7508de8 --query 'Rules[?starts_with(ID, `expire-retired-parsed`) || starts_with(ID, `remove-orphaned-parsed`)]'
 ```
 
-The last command should print the rule as the plan showed it. Repeat for prod with `prod` in
+The last command should print the two rules as the plan showed them. Repeat for prod with `prod` in
 place of `dev` and `Prod` in place of `Dev`, and the prod plan file. Record the dates in
 [Later applies](../runbooks/evidence-store.md#later-applies).
 
@@ -266,10 +321,16 @@ bytes in [Retired so far](../data/parsed-card-store.md#retired-so-far). One prec
 says `not_yet_superseded`.
 
 The next day, the dry run should no longer list the retired directories, which shows the lifecycle
-ran. **If Deviation 1 is accepted as built, please also check the noncurrent half about 31 days
-later.** The `list-object-versions` count in the runbook should be `0`. AWS's documentation does
-not say outright that a tag filter is evaluated on a noncurrent version's own tags, though tags
-are stored per version. That check is what confirms it.
+ran.
+
+### 4. Thirty-two days after the first lifecycle run: the check the PM asked to keep
+
+For each bucket and one caselist, the runbook's
+[check](../runbooks/parsed-store-retention.md#the-next-day-check-the-lifecycle-ran) counts what
+is left under the retired directory's `sha256/`. It should print `0` and `0`. A first number above
+0 means the tag filter did not reach the noncurrent versions. They then fall to the general rule
+and are kept longer, never deleted sooner, so record it and tell the PM. Record the numbers in the
+last column of [Retired so far](../data/parsed-card-store.md#retired-so-far).
 
 ## Follow-up work
 
@@ -285,17 +346,13 @@ are stored per version. That check is what confirms it.
    nobody sees the error message. This predates the task (breaking the existing `exports/`
    assertion crashes the same way). It belongs to E01 or E29: pin the test runner's Terraform
    version, or reshape the assertions so they compare unmarked values.
-3. **Delete markers left behind after the grace period.** A tag-filtered rule cannot also remove
-   expired-object delete markers (S3 refuses that combination). They hold no data and cost nothing
-   to store, but they stay in version listings. A prefix-only `parsed/` rule with
-   `expired_object_delete_marker = true` would clear them. E29.
-4. **The everyday set may put any tag on `parsed/` objects**, including the retirement tag on a
+3. **The everyday set may put any tag on `parsed/` objects**, including the retirement tag on a
    current directory, if the aws CLI is used directly; the command refuses. An
    `s3:RequestObjectTagKeys` condition could limit the grant to the one key. It would need the
    module test's "no condition on object statements" rule extended. E29, if wanted.
-5. **No CLI flag to restore after the lifecycle has run**, only the runbook's `aws s3api` loop.
-   Worth a flag if Deviation 1 stands and retirements become routine. E31.
-6. Commit `908b7df` went in while a test was red: pytest piped into `tail` inside an `&&` chain.
+4. **No CLI flag to restore after the lifecycle has run**, only the runbook's `aws s3api` loop,
+   which a test now holds. Worth a flag if retirements become routine. E31.
+5. Commit `908b7df` went in while a test was red: pytest piped into `tail` inside an `&&` chain.
    The next commit fixed it. I am recording it because the branch history shows it.
 
 ## PM review

@@ -26,7 +26,10 @@ spec:
     eval runner and test in the project: the env var `DEBATE_MODEL_MODE=record|replay|live` and the
     equivalent `--model-mode record|replay|live` CLI option (the option wins), default replay. Fixtures
     must never contain secrets or student-identifying data. This task does not implement Bedrock (t02),
-    prompt files (t04) or validation/repair (t05); it only makes their tests reproducible.
+    prompt files (t04) or validation/repair (t05); it only makes their tests reproducible. The scripted
+    router e02 shipped in debate_core.testing as FakeModelRouter is renamed ScriptedModelRouter, so the
+    project has one class of each name. Because t02 is not built, RecordReplayModelRouter is tested around
+    an in-test stand-in router that itself passes the shared contract. Amended by the PM, 2026-10-16.
   priority: 1
   constraints:
     packages: [debate_core.integrations, tests/fixtures/model_cassettes]
@@ -35,7 +38,9 @@ spec:
       - Recording in CI (record mode requires DEBATE_MODEL_MODE=record or --model-mode record and is
         refused when CI=true)
       - Any other flag, env var or setting name for choosing record/replay/live
-      - Credentials, request signatures or student names inside cassette files
+      # Amended by the PM, 2026-10-16: every cassette and fixture is invented.
+      - Credentials, request signatures, student names or real card text in any cassette or fixture
+      - Network or AWS access in any test
   context:
     - kind: TaskRef
       name: v1-e05-t01-model-router-port
@@ -47,7 +52,9 @@ spec:
     - id: ac2
       description: >-
         The fixture key is sha256(prompt_id, prompt_version, canonical JSON of inputs, schema name) and is
-        identical across runs, platforms and dict ordering.
+        identical across runs, platforms and dict ordering. The schema name is the dotted path that
+        v1-e05-t01's ModelRequest carries, so two schemas with one class name never share a key; property
+        tests cover dict ordering and unicode. Amended by the PM, 2026-10-16.
     - id: ac3
       description: >-
         An unrecorded call in fake or replay mode raises MissingFixtureError naming the prompt_id and key.
@@ -55,9 +62,16 @@ spec:
       description: >-
         Record mode writes one pretty-printed JSON cassette per call with authorization headers and account
         identifiers redacted, and refuses to run when CI=true.
+    # Amended by the PM, 2026-10-16: the mode has exactly one control, so settings never choose replay.
     - id: ac5
       description: >-
-        Setting models.provider=fake or replay in settings selects the implementation with no code change.
+        models.provider=fake selects the fixture-keyed fake; with a real provider, DEBATE_MODEL_MODE or
+        --model-mode selects record, replay or live, with no code change.
+    # Added by the PM, 2026-10-16, from v1-e05-t01-model-router-port's follow-up work.
+    - id: ac6
+      description: >-
+        The CLI loads and validates the routing file at startup (RoutingPolicy.from_settings), so a bad file
+        fails before any command runs, with a typed RoutingConfigError naming the key. Shown failing first.
 status:
   phase: InProgress
 ---
@@ -128,8 +142,9 @@ spec:
         kind: Task
         name: Provider selection and pytest fixture
         description: >-
-          Add a router factory keyed by settings.models.provider (fake | replay | bedrock) and a shared
-          `model_router` pytest fixture defaulting to fake so every package's tests are offline.
+          Add a router factory keyed by settings.models.provider (fake | bedrock; amended by the PM,
+          2026-10-16: settings never choose replay, the mode does) and a shared `model_router` pytest
+          fixture defaulting to fake so every package's tests are offline.
         dependsOn: [fake-router, record-replay]
         outputs:
           - packages/debate_core/src/debate_core/integrations/models/factory.py

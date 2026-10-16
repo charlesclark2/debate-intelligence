@@ -289,11 +289,22 @@ resource "aws_s3_bucket_lifecycle_configuration" "evidence" {
     }
   }
 
+  rule {
+    id     = "abort-incomplete-multipart-uploads"
+    status = "Enabled"
+
+    filter {}
+
+    abort_incomplete_multipart_upload {
+      days_after_initiation = local.abort_incomplete_multipart_upload_days
+    }
+  }
+
   # The one rule beside exports/ that expires current versions, and only those the operator tagged:
   # a superseded parsed/ version directory, which nothing reads and `caselist parse` can rebuild from
   # the sources (v1-e31-t16). Untagged parsed/ objects, the current directory among them, are never
   # touched by it. In prod its noncurrent expiry is shorter than the 365 days of the rule above; the
-  # earlier deletion applies.
+  # earlier deletion applies. Last in the list, so adding it changes no rule before it in a plan.
   rule {
     id     = "expire-retired-parsed-version-directories"
     status = "Enabled"
@@ -311,17 +322,6 @@ resource "aws_s3_bucket_lifecycle_configuration" "evidence" {
 
     noncurrent_version_expiration {
       noncurrent_days = local.retired_parsed_grace_period_days
-    }
-  }
-
-  rule {
-    id     = "abort-incomplete-multipart-uploads"
-    status = "Enabled"
-
-    filter {}
-
-    abort_incomplete_multipart_upload {
-      days_after_initiation = local.abort_incomplete_multipart_upload_days
     }
   }
 }

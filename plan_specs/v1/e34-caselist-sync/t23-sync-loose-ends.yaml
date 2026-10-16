@@ -102,7 +102,7 @@ spec:
         run record's redaction, while a real path from the operator's machine is still
         redacted, by a test shown failing first.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

@@ -244,6 +244,22 @@ That writes `~/Library/LaunchAgents/com.debate-intelligence.caselist-sync.plist`
 wrapper out of the checkout, creates the log directory and lints the plist with `plutil`. **It
 starts nothing**, and `RunAtLoad` is false, so even loading the agent does not trigger a pull.
 
+Before it writes anything, the dry run included, the installer asks the build where the agent's
+data will be and runs `debate-research doctor --evidence-profiles` as the agent will run it, with
+the plist's `HOME`, `PATH` and `DEBATE_ENV` and nothing of your shell's (`v1-e34-t24`). If that
+fails it prints what the build said and installs nothing. The usual reason is a profile this Mac's
+AWS config does not define ([A profile the AWS config does not define](#a-profile-the-aws-config-does-not-define)).
+A build older than that check is refused too, by name. An expired session does not fail it.
+
+The AWS profile the run uses is the build's setting `storage.s3.aws_profile`: `debate-prod-evidence`
+for prod and `debate-dev-evidence` for dev. The installer has no option for it. Its old
+`--aws-profile` wrote `AWS_PROFILE` into the plist, which nothing the agent runs reads, so it chose
+nothing.
+
+To install over an agent that is already installed, use
+[Reinstalling the agent](#reinstalling-the-agent): the installer then keeps the installed agent's
+environment and caselists unless told otherwise.
+
 `--weekday`, `--hour` and `--minute` move the schedule; the default is Wednesday 06:00, the day
 after the site publishes the week's archives.
 
@@ -340,34 +356,61 @@ does not define before the agent is replaced, and the second finds it as launchd
    install and refuses a build that fails its checks, leaving the one the agent runs untouched
    ([Checking an installed build](#checking-an-installed-build)).
 
-2. **Check the evidence profile, as the agent will run.** Sign in first, so that the check can
-   say which permission set the profile is (`debate-dev-evidence` for an agent installed with
-   `--env dev`). The environment is read from the installed plist, not typed:
+2. **Check the evidence profile, as the agent will run.** The environment is read from the
+   installed plist, not typed, and the sign-in uses it, so that the check can say which
+   permission set the profile is:
 
    ```bash
-   aws sso login --profile debate-prod-evidence
    AGENT_PATH=$(plutil -extract EnvironmentVariables.PATH raw ~/Library/LaunchAgents/com.debate-intelligence.caselist-sync.plist)
    AGENT_ENV=$(plutil -extract EnvironmentVariables.DEBATE_ENV raw ~/Library/LaunchAgents/com.debate-intelligence.caselist-sync.plist)
+   aws sso login --profile "debate-${AGENT_ENV}-evidence"
    env -i HOME="${HOME}" PATH="${AGENT_PATH}" DEBATE_ENV="${AGENT_ENV}" sh -c 'debate-research doctor --evidence-profiles; echo "doctor exit=$?"'
    ```
 
-   Success is `doctor exit=0` and the row `Evidence profile` reading `debate-prod-evidence
-   (storage.s3.aws_profile): defined, and signed in as DebateProdEvidenceOperator`. A session that
+   Success is `doctor exit=0` and the row `Evidence profile` reading, for a prod agent,
+   `debate-prod-evidence (storage.s3.aws_profile): defined, and signed in as
+   DebateProdEvidenceOperator`, and for a dev agent the same with `debate-dev-evidence` and
+   `DebateDevEvidenceOperator`. A session that
    has expired does not fail the check: the row says `expired` and gives the login, and the exit
-   is still `0`. **Stop if it exits `1` with `STORE_PROFILE_NOT_CONFIGURED`**: the setting
+   is still `0`. The installer makes the same check in step 3 and installs nothing if it fails;
+   this step shows the row before anything is replaced, signed in.
+   **Stop if it exits `1` with `STORE_PROFILE_NOT_CONFIGURED`**: the setting
    `storage.s3.aws_profile` names a profile this Mac's AWS config does not define, and the weekly
    run would be refused before it starts. Correct it as
    [A profile the AWS config does not define](#a-profile-the-aws-config-does-not-define) says,
    then run the check again. An exit of `2`, "No such option", means the build installed in step
    1 is older than the check.
 
-3. **Install the agent** with the caselists it already follows. The first command prints them,
-   and the second is [Step 2](#step-2--install-the-agent)'s, with those caselists:
+3. **Install the agent**, with no `--env` and no `--caselist`. Over an installed agent the
+   installer reads the installed plist and keeps its environment and its caselists
+   (`v1-e34-t24`). The first two commands print them from the installed plist, so you can see
+   what will be kept; the third is the install:
 
    ```bash
+   plutil -extract EnvironmentVariables.DEBATE_ENV raw ~/Library/LaunchAgents/com.debate-intelligence.caselist-sync.plist
    plutil -extract ProgramArguments json -o - ~/Library/LaunchAgents/com.debate-intelligence.caselist-sync.plist
-   ops/launchd/install.sh --caselist hsld26 --caselist hspolicy26 --env prod --debate-research "$HOME/.local/bin/debate-research"
+   ops/launchd/install.sh --debate-research "$HOME/.local/bin/debate-research"
    ```
+
+   It says what it kept, and the environment and caselists should be the ones the first two
+   commands printed:
+   `Keeping the installed agent's environment, dev (--env changes it).` and
+   `Keeping the installed agent's caselists: hsld26 hspolicy26 (--caselist replaces them).`
+   Then it runs step 2's check itself and installs nothing if that fails. Success ends, as a first
+   install does, with `Wrote …` and the data directory the agent keeps its data in, which should
+   be the one it had.
+
+   * **`--caselist`** replaces the caselists, and the installer says so.
+   * **`--env` with a different environment** is refused unless `--confirm-env-change` is given
+     too, because it moves the agent to another data directory and another bucket. Before
+     `v1-e34-t24` the default was `--env prod`, so a dev agent reinstalled without `--env` became
+     a prod agent with an empty store, and only the data directory's name said so.
+   * **A variable added to the plist by hand**, such as the parse stage's switch, is not carried
+     over: `Not carried over from the installed plist: …` names each one. If dropping it would
+     move the agent's data directory, the install is refused, naming both directories, unless
+     `--confirm-env-change` is given.
+   * **An agent installed before `v1-e34-t24`** has `AWS_PROFILE` in its plist. The reinstall
+     drops it, and says that nothing reads it.
 
 4. **Reload it.** launchd keeps the plist it loaded:
 
@@ -620,7 +663,8 @@ the bucket once a later run has published it.
 `debate-prod-evidence` for prod, unless `DEBATE_STORAGE__S3__AWS_PROFILE` in the plist says
 otherwise. So either this Mac's AWS config has lost that profile, and
 [`evidence-store.md`](evidence-store.md) says how the evidence profiles are added, or the
-override misspells it. Then confirm it, as the agent runs:
+override misspells it. The installer never writes that override: one in the plist was added by
+hand, and a reinstall drops it and says so. Then confirm it, as the agent runs:
 
 ```bash
 AGENT_PATH=$(plutil -extract EnvironmentVariables.PATH raw ~/Library/LaunchAgents/com.debate-intelligence.caselist-sync.plist)
@@ -875,7 +919,8 @@ launchctl bootstrap gui/$UID ~/Library/LaunchAgents/com.debate-intelligence.case
 
 The stage is then `skipped`, with the setting's name as its reason, and `caselist parse` does the
 same work by hand. Running `ops/launchd/install.sh` again writes the plist afresh, without the
-line. `parse_imported_sources = false` under `[caselist]` in a profile does the same for a build
+line, and says so: `Not carried over from the installed plist:
+DEBATE_CASELIST__PARSE_IMPORTED_SOURCES, which this script does not write.` `parse_imported_sources = false` under `[caselist]` in a profile does the same for a build
 made from it.
 
 ### Reading what it did

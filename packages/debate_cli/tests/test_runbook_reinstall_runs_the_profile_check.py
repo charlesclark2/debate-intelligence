@@ -28,6 +28,9 @@ RUNBOOK = Path(__file__).resolve().parents[3] / "docs" / "runbooks" / "caselist-
 
 PROFILE_CHECK = "doctor --evidence-profiles"
 LAUNCHD_CHECK = "ops/launchd/install.sh --check-launchd"
+REINSTALL = 'ops/launchd/install.sh --debate-research "$HOME/.local/bin/debate-research"'
+INSTALLER = RUNBOOK.parents[2] / "ops" / "launchd" / "install.sh"
+PLIST = "~/Library/LaunchAgents/com.debate-intelligence.caselist-sync.plist"
 
 
 def section(heading: str) -> str:
@@ -66,7 +69,7 @@ def test_the_reinstall_steps_check_the_profile_before_the_agent_is_replaced_and_
         return found[0]
 
     profile_check = first(PROFILE_CHECK)
-    install = first("ops/launchd/install.sh --caselist")
+    install = first(REINSTALL)
     bootout, bootstrap = first("launchctl bootout"), first("launchctl bootstrap")
     launchd_check = first(LAUNCHD_CHECK)
     assert profile_check < install < bootout < bootstrap < launchd_check, commands
@@ -76,6 +79,48 @@ def test_the_reinstall_steps_check_the_profile_before_the_agent_is_replaced_and_
     assert 'DEBATE_ENV="${AGENT_ENV}"' in commands[profile_check]
     assert first("AGENT_ENV=$(plutil -extract EnvironmentVariables.DEBATE_ENV raw") < profile_check
     assert first("AGENT_PATH=$(plutil -extract EnvironmentVariables.PATH raw") < profile_check
+
+
+def test_the_reinstall_reads_the_environment_and_caselists_from_the_plist_and_types_neither() -> None:
+    """`v1-e34-t24` ac4. The reinstall of 2026-10-14 ran this section's example, which typed
+    `--env prod` and the caselists, over a dev agent: as written, it would have switched the agent
+    to prod and an empty store. The installer now keeps what the installed plist says, so the
+    reinstall types neither, shows both from the plist first, and signs in with the profile of the
+    environment the plist names rather than one typed."""
+    commands = commands_in(section("## Reinstalling the agent"))
+    installs = [command for command in commands if command.startswith("ops/launchd/install.sh")]
+    assert installs == [REINSTALL, LAUNCHD_CHECK], installs
+    install = commands.index(REINSTALL)
+
+    shows_environment = commands.index(f"plutil -extract EnvironmentVariables.DEBATE_ENV raw {PLIST}")
+    shows_caselists = commands.index(f"plutil -extract ProgramArguments json -o - {PLIST}")
+    assert shows_environment < install and shows_caselists < install
+    typed = [command for command in commands if "debate-prod-evidence" in command or "--env" in command]
+    assert typed == [], (
+        "a reinstall that types prod checks prod's profile, or switches the agent, whatever it was"
+    )
+    login = next(command for command in commands if command.startswith("aws sso login"))
+    assert login == 'aws sso login --profile "debate-${AGENT_ENV}-evidence"'
+    assert commands.index(login) > first_index(commands, "AGENT_ENV=$(plutil")
+
+
+def first_index(commands: list[str], fragment: str) -> int:
+    return next(index for index, command in enumerate(commands) if fragment in command)
+
+
+def test_what_the_reinstall_says_it_kept_is_what_the_installer_says() -> None:
+    """The runbook quotes the installer's own sentences, and holds to them."""
+    steps = on_one_line(section("## Reinstalling the agent"))
+    installer = INSTALLER.read_text(encoding="utf-8")
+
+    for sentence in (
+        "Keeping the installed agent's environment, ",
+        "Keeping the installed agent's caselists:",
+        "Not carried over from the installed plist:",
+    ):
+        assert sentence in steps, sentence
+        assert sentence in installer, f"the installer no longer says {sentence!r}"
+    assert "--confirm-env-change" in steps and "--confirm-env-change)" in installer
 
 
 def test_the_reinstall_steps_say_what_each_check_shows_and_what_fails_it() -> None:

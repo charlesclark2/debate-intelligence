@@ -213,7 +213,7 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [The parser evaluation's labels are corrected one keypress per row, in a local page](plan_specs/v1/e31-debate-file-parsing/t18-click-through-labeller.yaml) `v1-e31-t18-click-through-labeller` | Succeeded | 1 | 5.0 |
 | [The cite shapes the parser still misses, counted first](plan_specs/v1/e31-debate-file-parsing/t19-remaining-cite-shapes.yaml) `v1-e31-t19-remaining-cite-shapes` | Pending | 1 | 6.0 |
 | [Long cuts join the one cluster that holds them, and the matching limits are set from samples](plan_specs/v1/e31-debate-file-parsing/t20-long-cuts-and-limits.yaml) `v1-e31-t20-long-cuts-and-limits` | Pending | 2 | 6.0 |
-| [Measure cluster shapes, and ask a person only about the pairs a rule cannot decide](plan_specs/v1/e31-debate-file-parsing/t21-cluster-shapes-and-sampler.yaml) `v1-e31-t21-cluster-shapes-and-sampler` | Pending | 1 | 4.0 |
+| [Measure cluster shapes, and ask a person only about the pairs a rule cannot decide](plan_specs/v1/e31-debate-file-parsing/t21-cluster-shapes-and-sampler.yaml) `v1-e31-t21-cluster-shapes-and-sampler` | InProgress | 1 | 4.0 |
 | [Bodies too long to be one card, and two cards stored as one](plan_specs/v1/e31-debate-file-parsing/t22-card-boundaries.yaml) `v1-e31-t22-card-boundaries` | Pending | 2 | 6.0 |
 | [In-round markers kept in a card's evidence text](plan_specs/v1/e31-debate-file-parsing/t23-in-round-markers.yaml) `v1-e31-t23-in-round-markers` | Pending | 1 | 3.0 |
 

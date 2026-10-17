@@ -294,10 +294,53 @@ async def test_the_takedown_permission_set_is_the_environments() -> None:
     [right] = await check([takedown()], {TAKEDOWN_PROFILE: SignedInAs(prod_role)}, environment="prod")
 
     assert wrong["summary"] == (
-        "defined, and signed in as DebateDevEvidenceRemoval; a takedown runs only as "
-        "DebateProdEvidenceRemoval, so `caselist remove --execute` will refuse this profile"
+        "defined, and signed in as DebateDevEvidenceRemoval, which is dev's takedown permission set and "
+        "not prod's; a takedown runs only as DebateProdEvidenceRemoval, so `caselist remove --execute` "
+        "will refuse this profile"
     )
     assert right["summary"] == "defined, and signed in as DebateProdEvidenceRemoval"
+
+
+@pytest.mark.parametrize(
+    ("environment", "role_name", "summary"),
+    [
+        pytest.param(
+            "dev",
+            "AWSReservedSSO_DebateProdEvidenceRemoval_00000000000000bb",
+            "defined, and signed in as DebateProdEvidenceRemoval, which is prod's takedown permission set "
+            "and not dev's; a takedown runs only as DebateDevEvidenceRemoval, so `caselist remove "
+            "--execute` will refuse this profile",
+            id="prod's takedown set, in dev",
+        ),
+        pytest.param(
+            "prod",
+            TAKEDOWN_ROLE,
+            "defined, and signed in as DebateDevEvidenceRemoval, which is dev's takedown permission set "
+            "and not prod's; a takedown runs only as DebateProdEvidenceRemoval, so `caselist remove "
+            "--execute` will refuse this profile",
+            id="dev's takedown set, in prod",
+        ),
+        pytest.param(
+            "dev",
+            "AWSReservedSSO_DebateProdEvidenceOperator_00000000000000aa",
+            "defined, and signed in as DebateProdEvidenceOperator, which is prod's permission set and not "
+            "dev's; a takedown runs only as DebateDevEvidenceRemoval, so `caselist remove --execute` will "
+            "refuse this profile",
+            id="prod's everyday set, in dev",
+        ),
+    ],
+)
+async def test_a_takedown_profile_signed_in_as_the_other_environments_set_is_told_whose_set_it_is(
+    environment: str, role_name: str, summary: str
+) -> None:
+    """`v1-e34-t25` ac3, from `v1-e29-t09`'s Follow-up 2. A takedown profile copied from the other
+    environment's block of the AWS config: the sentence said only that a takedown would refuse it,
+    and now says which environment's set it is signed in as, as the everyday profile's does."""
+    [found] = await check([takedown()], {TAKEDOWN_PROFILE: SignedInAs(role_name)}, environment=environment)
+
+    assert found["summary"] == summary
+    assert (found["defined"], found["session"]) == (True, "signed_in")
+    assert role_name not in str(found), "the permission set's name and never the role's own"
 
 
 async def test_a_takedown_profile_that_is_no_permission_sets_role_is_told_the_same() -> None:

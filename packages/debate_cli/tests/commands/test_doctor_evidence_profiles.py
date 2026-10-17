@@ -491,6 +491,31 @@ def test_a_person_sees_one_row_for_each_profile(monkeypatch: pytest.MonkeyPatch)
     ) in shown
 
 
+def test_a_person_sees_whose_takedown_set_a_removal_profile_from_the_other_environment_is_signed_in_as(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`v1-e34-t25` ac3. A dev installation whose `DEBATE_REMOVAL_PROFILE` is signed in as prod's
+    takedown set: the row names prod's set as prod's, as the everyday profile's row does."""
+    monkeypatch.setenv("DEBATE_REMOVAL_PROFILE", TAKEDOWN_PROFILE)
+    prod_takedown = "AWSReservedSSO_DebateProdEvidenceRemoval_00000000000000bb"
+    who_each_profile_is(
+        monkeypatch,
+        {EVERYDAY_PROFILE: SignedInAs(EVERYDAY_ROLE), TAKEDOWN_PROFILE: SignedInAs(prod_takedown)},
+    )
+
+    exit_code, shown = as_a_person_sees_it("--evidence-profiles")
+    json_exit_code, envelope = doctor("--evidence-profiles")
+
+    assert exit_code == ExitCode.OK == json_exit_code, shown
+    assert (
+        "Evidence profile debate-dev-evidence-removal (DEBATE_REMOVAL_PROFILE): defined, and signed in "
+        "as DebateProdEvidenceRemoval, which is prod's takedown permission set and not dev's; a takedown "
+        "runs only as DebateDevEvidenceRemoval, so `caselist remove --execute` will refuse this profile"
+    ) in shown
+    assert profiles_in(envelope)[1]["permission_set"] == "DebateProdEvidenceRemoval"
+    assert not AN_ACCOUNT_OR_AN_ADDRESS.search(shown + json.dumps(envelope))
+
+
 def test_a_person_sees_the_report_and_then_the_profile_that_is_not_defined(
     installation: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

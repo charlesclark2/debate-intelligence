@@ -26,7 +26,9 @@ nothing but an edit cures, and the one that makes a scheduled run refuse to star
   the comparison the takedown's own preflight refuses on; here it is advice, given early. An
   everyday profile signed in as the **other environment's** permission set is said to be, since
   this environment's bucket grants that set nothing (`v1-e29-t09`): most likely a profile copied
-  from the other environment's block of the AWS config.
+  from the other environment's block of the AWS config. A takedown profile signed in as the other
+  environment's set is told whose set it is in the same words, before it is told what a takedown
+  runs as (`v1-e34-t25`).
 
 ## What a finding may hold
 
@@ -223,8 +225,12 @@ class EvidenceProfileCheck:
                 "nothing, so every command that reaches the bucket will be refused"
             )
         if profile.for_takedowns and permission_set != takedown:
+            whose = ""
+            if other is not None and other != self._environment:
+                kind = "takedown permission set" if permission_set == takedown_permission_set(other) else "permission set"
+                whose = f", which is {other}'s {kind} and not {self._environment}'s"
             return (
-                f"{who}; a takedown runs only as {takedown}, so `caselist remove --execute` will "
+                f"{who}{whose}; a takedown runs only as {takedown}, so `caselist remove --execute` will "
                 "refuse this profile"
             )
         if not profile.for_takedowns and permission_set == takedown:

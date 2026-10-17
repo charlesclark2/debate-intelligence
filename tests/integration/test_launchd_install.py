@@ -55,6 +55,7 @@ run it, and refuses a profile this machine's AWS config does not define.
 
 from __future__ import annotations
 
+import itertools
 import json
 import os
 import platform
@@ -128,8 +129,9 @@ PLUTIL_STAND_IN = '''#!@PYTHON@
 """A stand-in for macOS's plutil over plistlib: the verbs install.sh uses, answering as plutil does.
 
 `-lint`; `-extract <keypath> raw`, which prints a string as it is, a boolean as true or false, an
-array's length and a dictionary's keys, sorted, one to a line; `-replace` and `-insert` with
-`-string`, `-bool` or `-array`; and `-remove`. A key path is keys and array indices joined by dots.
+array's length and a dictionary's keys, sorted, one to a line, and with `-expect <type>` refuses a
+value of another type; `-replace` and `-insert` with `-string`, `-bool` or `-array`; and
+`-remove`. A key path is keys and array indices joined by dots.
 On macOS, `test_the_plutil_stand_in_answers_as_plutil_does` holds it to the real one.
 """
 import plistlib, sys
@@ -173,6 +175,12 @@ if verb == "-extract":
         value = container[last]
     except (KeyError, IndexError, TypeError):
         refuse(f"Could not extract value, error: No value at that key path or invalid key path: {keypath}")
+    if rest[2] == "-expect":
+        types = [(bool, "bool"), (int, "integer"), (float, "float"), (str, "string"),
+                 (dict, "dictionary"), (list, "array"), (bytes, "data")]
+        actual = next(name for kind, name in types if isinstance(value, kind))
+        if rest[3] != actual:
+            refuse(f"Value at [{keypath}] expected to be {rest[3]} but is {actual}")
     if isinstance(value, bool):
         print("true" if value else "false")
     elif isinstance(value, dict):
@@ -456,6 +464,15 @@ def test_the_plutil_stand_in_answers_as_plutil_does(home: Path, tmp_path: Path, 
         ("-extract", "EnvironmentVariables.NOT_SET", "raw", "-o", "-"),
         ("-extract", "StandardOutPath", "raw", "-o", "-"),
         ("-extract", "RunAtLoad", "raw", "-o", "-"),
+        ("-extract", "StartCalendarInterval.Hour", "raw", "-expect", "integer", "-o", "-"),
+        ("-extract", "StartCalendarInterval.Hour", "raw", "-expect", "string", "-o", "-"),
+        ("-extract", "StartCalendarInterval.Second", "raw", "-expect", "integer", "-o", "-"),
+        ("-extract", "StartCalendarInterval", "raw", "-expect", "integer", "-o", "-"),
+        ("-extract", "StandardOutPath", "raw", "-expect", "string", "-o", "-"),
+        ("-extract", "ProgramArguments.0", "raw", "-expect", "string", "-o", "-"),
+        ("-extract", "ProgramArguments", "raw", "-expect", "string", "-o", "-"),
+        ("-replace", "StartCalendarInterval.Hour", "-string", "7"),
+        ("-extract", "StartCalendarInterval.Hour", "raw", "-expect", "integer", "-o", "-"),
         ("-replace", "Label", "-string", "renamed"),
         ("-remove", "ProgramArguments.1"),
         ("-insert", "ProgramArguments.1", "-string", "--check"),
@@ -1650,19 +1667,20 @@ def a_wrapper_of_another_name(plist: dict[str, object]) -> None:
 @pytest.mark.parametrize(
     ("change", "named", "option", "given"),
     [
-        pytest.param(string_hour, "StartCalendarInterval.Hour", "--hour", "7", id="an hour that is a string"),
-        pytest.param(no_minute, "StartCalendarInterval.Minute", "--minute", "30", id="no minute"),
-        pytest.param(sunday_as_zero, "StartCalendarInterval.Weekday", "--weekday", "7", id="Sunday as 0"),
+        pytest.param(string_hour, "StartCalendarInterval.Hour", "--hour", ("--hour", "7"),
+                     id="an hour that is a string"),
+        pytest.param(no_minute, "StartCalendarInterval.Minute", "--minute", ("--minute", "30"), id="no minute"),
+        pytest.param(sunday_as_zero, "StartCalendarInterval.Weekday", "--weekday", ("--weekday", "7"),
+                     id="Sunday as 0"),
+        pytest.param(two_intervals, "StartCalendarInterval.Weekday", "--weekday", THURSDAY_AGENT,
+                     id="two calendar intervals"),
         pytest.param(
-            two_intervals, "StartCalendarInterval.Weekday", "--weekday", "4", id="two calendar intervals"
-        ),
-        pytest.param(
-            logs_split_across_directories, "StandardErrorPath", "--log-dir", "@HOME@/agent-logs",
+            logs_split_across_directories, "StandardErrorPath", "--log-dir", ("--log-dir", "@HOME@/agent-logs"),
             id="logs in two directories",
         ),
         pytest.param(
-            a_wrapper_of_another_name, "ProgramArguments.0", "--wrapper-dir", "@HOME@/agent-wrapper",
-            id="a wrapper of another name",
+            a_wrapper_of_another_name, "ProgramArguments.0", "--wrapper-dir",
+            ("--wrapper-dir", "@HOME@/agent-wrapper"), id="a wrapper of another name",
         ),
     ],
 )  # fmt: skip
@@ -1672,11 +1690,11 @@ def test_a_setting_the_installed_plist_does_not_hold_readably_is_refused_never_r
     change: Callable[[dict[str, object]], None],
     named: str,
     option: str,
-    given: str,
+    given: tuple[str, ...],
 ) -> None:
     """ac1. A value this script cannot read back as one it writes is not guessed at, and not set to
     the default: the reinstall is refused, naming the key and the option that sets it, and the
-    installed plist is left as it is. Given the option, the reinstall goes ahead."""
+    installed plist is left as it is. Given the options it cannot read, the reinstall goes ahead."""
     install_a_thursday_agent(home, console_script)
     before = write_installed_plist(home, change)
     asked_before = calls_to(console_script)
@@ -1693,8 +1711,9 @@ def test_a_setting_the_installed_plist_does_not_hold_readably_is_refused_never_r
     assert dry.returncode == 2 and dry.stdout == "", "a dry run rendered a plist with a default in it"
 
     given_now = install(
-        option, given.replace("@HOME@", str(home)), "--debate-research", str(console_script), home=home
-    )
+        *(argument.replace("@HOME@", str(home)) for argument in given),
+        "--debate-research", str(console_script), home=home,
+    )  # fmt: skip
     assert given_now.returncode == 0, given_now.stderr
 
 
@@ -1817,6 +1836,58 @@ def test_the_shell_scripts_pass_shellcheck() -> None:
     )
 
     assert checked.returncode == 0, checked.stdout + checked.stderr
+
+
+def header_of(script: Path) -> str:
+    """The comment at the top of a shell script, less its `#` marks."""
+    lines = script.read_text(encoding="utf-8").splitlines()[1:]
+    return "\n".join(line[1:] for line in itertools.takewhile(lambda line: line.startswith("#"), lines))
+
+
+def comment_above(script: Path, code: str) -> str:
+    """The comment lines directly above the first line that is `code`, on one line."""
+    lines = script.read_text(encoding="utf-8").splitlines()
+    at = lines.index(code)
+    start = at
+    while start > 0 and lines[start - 1].startswith("#"):
+        start -= 1
+    return " ".join(" ".join(line.lstrip("#") for line in lines[start:at]).split())
+
+
+def test_the_wrapper_says_the_installer_writes_into_the_plist_only_what_it_writes(
+    home: Path, console_script: Path
+) -> None:
+    """`v1-e34-t25` ac2. Until this task the wrapper listed `AWS_PROFILE` among the variables
+    "templated into the plist by install.sh", which `v1-e34-t24` stopped writing."""
+    plist = rendered_plist(
+        install("--caselist", "testcl26", "--debate-research", str(console_script), "--dry-run", home=home)
+    )
+    header = header_of(WRAPPER_SCRIPT)
+    listed = re.findall(r"^   ([A-Z][A-Z_]+) {2,}", header, flags=re.MULTILINE)
+
+    assert listed, "the wrapper's comment no longer lists the variables it is run with"
+    assert set(listed) <= set(environment_of(plist)), listed
+    assert "AWS_PROFILE" not in environment_of(plist)
+    assert "AWS_PROFILE is not in the plist" in " ".join(header.split())
+    assert "templated into the plist" not in header
+
+
+def test_the_installers_comment_on_the_profile_check_says_how_long_the_aws_question_may_wait() -> None:
+    """`v1-e34-t25` ac2, from `v1-e29-t09`: the comment said the check asks AWS a question for each
+    profile, and not that each question gives up after the time limit `v1-e29-t09` set. The limit
+    is read from its source, because importing the S3 integration opens a socket."""
+    source = (
+        REPOSITORY_ROOT / "packages" / "debate_core" / "src" / "debate_core" / "integrations" / "s3"
+        / "caller_identity.py"
+    ).read_text(encoding="utf-8")  # fmt: skip
+    [limit] = re.findall(r"^IDENTITY_TIME_LIMIT_SECONDS: Final = ([0-9.]+)$", source, flags=re.MULTILINE)
+    time_limit = float(limit)
+
+    comment = comment_above(INSTALL_SCRIPT, "PROFILE_CHECK_STATUS=0")
+
+    assert "IDENTITY_TIME_LIMIT_SECONDS" in comment
+    assert f"waits at most {time_limit:g} seconds for each answer" in comment
+    assert f"at most {time_limit:g} seconds on top of doctor's local checks" in comment
 
 
 def test_the_wrapper_only_calls_the_command(home: Path) -> None:

@@ -25,15 +25,19 @@
 # to start. What that check asks, and what does not fail it, is the command's to say, not this
 # file's.
 #
-# Environment, all optional, all templated into the plist by install.sh:
+# Environment, all optional when this file is run by hand. install.sh writes these two into the
+# plist, beside HOME and PATH:
 #
 #   DEBATE_ENV            dev or prod. Defaults to prod, because the schedule is the prod job;
 #                         the dev validation run is one an operator types.
-#   AWS_PROFILE           The SSO profile for that environment's evidence bucket. If its session
-#                         has expired the run still captures and imports, and records the publish
-#                         as pending for the next run or `caselist pull --publish-pending`.
 #   DEBATE_RESEARCH_BIN   The console script, by its full path. The installer always writes it, so
 #                         nothing earlier on PATH can stand in for the installed build.
+#
+# AWS_PROFILE is not in the plist (v1-e34-t24). The AWS profile the run uses is the build's setting
+# storage.s3.aws_profile, which the bundled dev and prod profiles both set, and a profile named by
+# the setting is the one used whatever AWS_PROFILE says. Set anyway, by a run typed in a shell, it
+# is exported as it came. If the profile's session has expired the run still captures and imports,
+# and records the publish as pending for the next run or `caselist pull --publish-pending`.
 set -eu
 
 : "${DEBATE_ENV:=prod}"

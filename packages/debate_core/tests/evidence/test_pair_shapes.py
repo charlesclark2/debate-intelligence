@@ -230,9 +230,14 @@ def test_the_json_names_shapes_and_counts_alone() -> None:
         "sharing a little": 7,
         "sharing nothing": 6,
     }
+    # Of 21 pairs, to four places.
     assert shown["share_of_pairs_by_shape"] == {
-        shape: round(count / 21, 4)
-        for shape, count in shown["pairs_by_shape"].items()  # type: ignore[union-attr]
+        "identical": 0.0476,
+        "contained, under a third of the larger": 0.0952,
+        "contained, a third or more of the larger": 0.0952,
+        "overlapping": 0.1429,
+        "sharing a little": 0.3333,
+        "sharing nothing": 0.2857,
     }
     text = repr(shown)
     assert not [word for word in ("w1", "Invented", "a-small", "elsewhere") if word in text]

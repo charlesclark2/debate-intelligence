@@ -128,6 +128,13 @@ matching-word function that disagrees with itself. The other uncovered lines are
 lint-imports` → `Contracts: 12 kept, 0 broken.`; `uv run scripts/validate_specs.py` → `OK: 362
 files, 38 epics, 304 tasks, 20 releases`.
 
+**Correction, 2026-10-17, after CI's `typecheck` failed on the PR:** the pyright figure above came
+from a run before the last `ruff format`. That reformat split a line in `test_pair_shapes.py` and
+left `round(count / 21, 4)` outside its `# type: ignore`, so CI's pyright found `Argument type is
+unknown` (`reportUnknownArgumentType`, line 234). The test now states the six shares by hand, with
+no ignore. `uv run --frozen pyright` on the committed version reproduces CI's error locally, and on
+the fix gives `0 errors, 0 warnings, 0 informations`.
+
 ## Files changed
 
 * `packages/debate_core/src/debate_core/evidence/pair_shapes.py` (new): `PairShape`, the four

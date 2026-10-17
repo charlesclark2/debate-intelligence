@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any, Final
 
 import pytest
+from tests.fixtures.model_routing import EXAMPLE_ROUTING_FILE
 from tests.smoke.installed_build import CliRun, InstalledCli
 
 from debate_cli.exit_codes import ExitCode
@@ -30,7 +31,7 @@ def installation(installed_cli: InstalledCli, tmp_path: Path) -> Iterator[Path]:
     profiles.mkdir()
     (profiles / "dev.toml").write_text(
         f'[storage]\ndata_dir = "{tmp_path / "data"}"\n'
-        f'[models]\nrouting_file = "{tmp_path / "routing.yaml"}"\nbudget_usd_daily = 1.0\n',
+        f'[models]\nrouting_file = "{EXAMPLE_ROUTING_FILE}"\nbudget_usd_daily = 1.0\n',
         encoding="utf-8",
     )
     installed_cli.configure(DEBATE_PROFILE_DIR=str(profiles), DEBATE_ENV="dev", DEBATE_STORAGE__DATA_DIR=None)

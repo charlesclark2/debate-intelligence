@@ -47,7 +47,7 @@ SMALL = numbered("w", 104)
 
 def test_the_thresholds_are_the_ones_the_pm_measured_with() -> None:
     assert (IDENTICAL_SHARE, CONTAINED_SHARE, OVERLAPPING_SHARE) == (0.98, 0.9, 0.3)
-    assert SMALL_PART_OF_THE_LARGER == pytest.approx(1 / 3)
+    assert SMALL_PART_OF_THE_LARGER == 1 / 3
 
 
 def test_shares_are_directional() -> None:
@@ -231,7 +231,8 @@ def test_the_json_names_shapes_and_counts_alone() -> None:
         "sharing nothing": 6,
     }
     assert shown["share_of_pairs_by_shape"] == {
-        shape: round(count / 21, 4) for shape, count in shown["pairs_by_shape"].items()  # type: ignore[union-attr]
+        shape: round(count / 21, 4)
+        for shape, count in shown["pairs_by_shape"].items()  # type: ignore[union-attr]
     }
     text = repr(shown)
     assert not [word for word in ("w1", "Invented", "a-small", "elsewhere") if word in text]

@@ -405,6 +405,7 @@ async def test_bytes_only_a_held_row_names_are_not_uploaded(world: RemovalWorld,
     assert (report.held_rows, report.suppressed_rows) == ((UPLOADED_AFTER,), ())
     assert outcome.manifest_error is not None
     assert f"1 row(s) at a path a removal holds: {UPLOADED_AFTER} ({REQUEST})" in outcome.manifest_error
+    assert "whose bytes no other row names and were not uploaded (1)" in outcome.manifest_error
     assert not [word for word in (*NAMES, REVISED_PATH) if word in outcome.manifest_error]
     assert bucket_manifest(world, HELD_WEEK_MANIFEST) is None
 

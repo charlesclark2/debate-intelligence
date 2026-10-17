@@ -20,6 +20,7 @@ import json
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 import boto3
@@ -46,6 +47,7 @@ from debate_core.domain.model_contracts import (
 )
 from debate_core.integrations.bedrock import RenderedPrompt, bedrock_model_router
 from debate_core.integrations.bedrock.failures import RETRIED_CODES
+from debate_core.integrations.bedrock.first_call import PROBE_MAX_TOKENS, run_first_call
 from debate_core.integrations.bedrock.router import (
     CONNECT_TIMEOUT_SECONDS,
     BedrockModelRouter,
@@ -854,3 +856,140 @@ def plan(stubbed: StubbedBedrock, answer: PlannedAnswer) -> None:
                 {"index": index, "relevance_score": score} for index, score in enumerate(answer.scores)
             ]
             stubbed.add_invoke({"results": results})
+
+
+# ---------------------------------------------------------------------------------------------
+# The first real call (ac7): the operator's probe, against the Stubber
+# ---------------------------------------------------------------------------------------------
+
+FIRST_CALL_PROBES = [
+    "toolChoice any",
+    "toolChoice tool",
+    "temperature 0.5",
+    "effort low",
+    "structured output",
+    "strict tool",
+]
+
+
+def first_call_policy() -> RoutingPolicy:
+    """One Claude-like route and the two scoring routes: what one probe run covers per class."""
+    every = routing_policy()
+    return RoutingPolicy(
+        routes={
+            task_class: every.routes[task_class]
+            for task_class in (TaskClass.HIGH_VOLUME, TaskClass.EMBEDDINGS, TaskClass.RERANK)
+        }
+    )
+
+
+async def test_first_call_asks_each_question_by_changing_the_adapters_request_in_one_way(
+    stubbed: StubbedBedrock,
+) -> None:
+    sent: list[dict[str, Any]] = []
+    stubbed.client.meta.events.register(
+        "provide-client-params.bedrock-runtime.Converse",
+        lambda params, **_: sent.append(params),  # pyright: ignore[reportUnknownLambdaType, reportUnknownArgumentType]
+    )
+    stubbed.add_answer({"colour": "blue"}, name="ProbeAnswer")
+    for _ in FIRST_CALL_PROBES:
+        stubbed.add_converse([{"text": "ok"}], stop_reason="end_turn")
+    stubbed.add_invoke({"embedding": [0.1, 0.2], "inputTextTokenCount": 2})
+    stubbed.add_invoke(
+        {"results": [{"index": 0, "relevance_score": 0.8}, {"index": 1, "relevance_score": 0.1}]}
+    )
+
+    findings = await run_first_call(first_call_policy(), client_factory=stubbed.factory)
+
+    adapter_call, *variants = sent
+    assert adapter_call["toolConfig"]["toolChoice"] == {"auto": {}}
+    assert adapter_call["inferenceConfig"] == {"maxTokens": PROBE_MAX_TOKENS}
+    assert [request["toolConfig"]["toolChoice"] for request in variants[:2]] == [
+        {"any": {}},
+        {"tool": {"name": "ProbeAnswer"}},
+    ]
+    assert variants[2]["inferenceConfig"] == {"maxTokens": PROBE_MAX_TOKENS, "temperature": 0.5}
+    assert variants[3]["outputConfig"] == {"effort": "low"}
+    assert "toolConfig" not in variants[4]
+    assert variants[4]["outputConfig"]["textFormat"]["type"] == "json_schema"
+    assert variants[5]["toolConfig"]["tools"][0]["toolSpec"]["strict"] is True
+    assert [finding.outcome for finding in findings] == ["accepted"] * 9
+    assert [finding.probe for finding in findings][1:7] == FIRST_CALL_PROBES
+
+
+async def test_first_call_records_each_refusal_with_bedrocks_code_and_message(
+    stubbed: StubbedBedrock,
+) -> None:
+    policy = RoutingPolicy(routes={TaskClass.HIGH_VOLUME: routing_policy().routes[TaskClass.HIGH_VOLUME]})
+    stubbed.add_answer({"colour": "blue"}, name="ProbeAnswer")
+    stubbed.add_error(
+        "converse", "ValidationException", 400, "tool_choice any is not supported for this model"
+    )
+    stubbed.add_error(
+        "converse", "ValidationException", 400, "tool_choice tool is not supported for this model"
+    )
+    stubbed.add_error("converse", "ValidationException", 400, "temperature: only the default is supported")
+    stubbed.add_converse([{"text": "ok"}], stop_reason="end_turn")
+    stubbed.add_error("converse", "ValidationException", 400, "structured outputs are not supported")
+    stubbed.add_converse([{"text": "ok"}], stop_reason="end_turn")
+
+    findings = await run_first_call(policy, client_factory=stubbed.factory)
+
+    outcomes = {finding.probe: finding.outcome for finding in findings}
+    assert outcomes == {
+        "toolChoice auto (the adapter's call)": "accepted",
+        "toolChoice any": "refused",
+        "toolChoice tool": "refused",
+        "temperature 0.5": "refused",
+        "effort low": "accepted",
+        "structured output": "refused",
+        "strict tool": "accepted",
+    }
+    refusal = next(finding for finding in findings if finding.probe == "temperature 0.5")
+    assert "ValidationException" in refusal.detail
+    assert "only the default is supported" in refusal.detail
+
+
+async def test_first_call_denied_access_stops_a_route_without_sending_the_rest(
+    stubbed: StubbedBedrock,
+) -> None:
+    policy = RoutingPolicy(routes={TaskClass.HIGH_VOLUME: routing_policy().routes[TaskClass.HIGH_VOLUME]})
+    stubbed.add_error(
+        "converse", "AccessDeniedException", 403, "not authorized to perform bedrock:InvokeModel"
+    )
+
+    findings = await run_first_call(policy, client_factory=stubbed.factory)
+
+    assert [finding.outcome for finding in findings] == ["refused"] + ["not tried"] * len(FIRST_CALL_PROBES)
+    assert "bedrock:InvokeModel" in findings[0].detail
+
+
+def test_first_call_table_is_markdown_the_report_can_hold(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from debate_core.integrations.bedrock import first_call
+
+    canned = [
+        first_call.Finding(TaskClass.HIGH_VOLUME, "geo.provider-model", "toolChoice any", "refused", "a | b"),
+        first_call.Finding(TaskClass.RERANK, "provider-reranker", "rerank two documents", "not tried", "x"),
+    ]
+
+    async def fake_run(policy: RoutingPolicy, **_: Any) -> list[first_call.Finding]:
+        return canned
+
+    monkeypatch.setattr(first_call, "run_first_call", fake_run)
+    routing = tmp_path / "routing.yaml"
+    routing.write_text(
+        "routes:\n  rerank:\n    provider: bedrock\n    model_id: m\n    region: r\n    timeout_seconds: 5\n",
+        encoding="utf-8",
+    )
+
+    status = first_call.main(["--routing-file", str(routing)])
+
+    assert status == 1  # a probe that could not run is not a finding
+    assert capsys.readouterr().out.splitlines() == [
+        "| Class | Called as | Probe | Outcome | Detail |",
+        "|---|---|---|---|---|",
+        "| high_volume | `geo.provider-model` | toolChoice any | refused | a \\| b |",
+        "| rerank | `provider-reranker` | rerank two documents | not tried | x |",
+    ]

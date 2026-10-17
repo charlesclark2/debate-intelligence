@@ -578,6 +578,25 @@ async def test_store_sync_pushes_bytes_another_teams_row_names(world: RemovalWor
     assert planned_blob(plan, UPLOADED_AFTER_AT_TWO_PATHS)[0] is SyncAction.NEW
 
 
+async def test_store_sync_pushes_bytes_another_weeks_row_names_at_a_path_nothing_holds(
+    world: RemovalWorld, tmp_path: Path
+) -> None:
+    """Held only in `2026-10-08`, and the other team's file at its own path in `2026-10-12`. A blob
+    names no corpus or snapshot, so another manifest's row is another holder's copy, which a push
+    never holds back."""
+    await remove_the_named_file(world)
+    await an_older_build_imports_next_week(world, tmp_path, publish=False)
+    later = write_weekly(
+        tmp_path / "arriving" / f"{CASELIST}-weekly-2026-10-12.zip",
+        {OTHER_TEAM_PATH: ARRIVING_BODIES["uploaded-after-the-removal"], KEPT_PATH: BODIES["kept"]},
+    )
+    await import_archive(world, later, date(2026, 10, 12))
+
+    plan = await store_sync(world).plan(prefix=f"raw/caselist/{CASELIST}/", direction=SyncDirection.PUSH)
+
+    assert planned_blob(plan, UPLOADED_AFTER)[0] is SyncAction.NEW
+
+
 # ------------------------------------------------------------------------------------------------
 # The same removal run again: what goes, here and in the bucket
 # ------------------------------------------------------------------------------------------------

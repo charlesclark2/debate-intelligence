@@ -57,7 +57,7 @@ spec:
         Operator-run: `install.sh --dry-run` over the real agent shows Wednesday 06:00 and
         the current options kept, recorded in the report.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

@@ -53,7 +53,7 @@ spec:
         A manifest an earlier build wrote with such a row is named by `caselist status`, and
         running the removal again takes it out, by test.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

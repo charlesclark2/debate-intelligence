@@ -421,7 +421,9 @@ def test_a_route_with_no_effort_sends_none(write_routing: WriteRouting) -> None:
 
 
 @pytest.mark.parametrize("effort", ["extreme", "HIGH", "1"])
-def test_an_unknown_effort_is_refused_at_load_naming_the_key(effort: str, write_routing: WriteRouting) -> None:
+def test_an_unknown_effort_is_refused_at_load_naming_the_key(
+    effort: str, write_routing: WriteRouting
+) -> None:
     body = f"routes:\n  high_volume:\n    model_id: m\n    effort: {effort}\n{ROUTE}"
 
     assert refusal(write_routing, body).field == "routes.high_volume.effort"

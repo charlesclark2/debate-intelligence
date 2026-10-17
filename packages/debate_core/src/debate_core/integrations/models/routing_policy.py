@@ -68,7 +68,13 @@ from debate_core.domain.model_contracts import (
     TaskClass,
 )
 
-__all__ = ["DEFAULT_MAX_ATTEMPTS", "MAX_ATTEMPTS_CEILING", "ROUTING_SCHEMA_VERSION", "ModelRoute", "RoutingPolicy"]
+__all__ = [
+    "DEFAULT_MAX_ATTEMPTS",
+    "MAX_ATTEMPTS_CEILING",
+    "ROUTING_SCHEMA_VERSION",
+    "ModelRoute",
+    "RoutingPolicy",
+]
 
 ROUTING_SCHEMA_VERSION = 1
 """Version of the routing file's own shape. Bumped only by a change that breaks existing files."""
@@ -133,7 +139,7 @@ class ModelRoute(BaseModel):
     )
     effort: Effort | None = Field(
         default=None,
-        description="Default effort level for a generative call; unset sends none, so the model's default applies.",
+        description="Default effort of a generative call; unset sends none, so the model's default applies.",
     )
     max_attempts: int = Field(
         default=DEFAULT_MAX_ATTEMPTS,

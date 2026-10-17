@@ -557,7 +557,7 @@ class ModelAccessDenied(ProviderError):
 
 
 class ModelRequestRejected(ProviderError):
-    """The model provider refused the request itself: a parameter it does not accept, or a model it does not know.
+    """The model provider refused the request itself: a parameter it refuses, or a model it does not know.
 
     A defect in the request or the routing file, never a passing condition, so it is never
     retried: sending the same request again would be refused again, and billed nothing for it only

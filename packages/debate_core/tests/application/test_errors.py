@@ -185,7 +185,9 @@ def test_a_refused_model_call_is_a_provider_failure_no_retry_cures(kind: type[Pr
 
 
 def test_a_rejected_request_keeps_the_providers_code_and_names_the_model() -> None:
-    error = ModelRequestRejected("bedrock", "geo.a-model", "ValidationException", "temperature is not supported")
+    error = ModelRequestRejected(
+        "bedrock", "geo.a-model", "ValidationException", "temperature is not supported"
+    )
 
     assert error.provider_code == "ValidationException"
     assert error.model_id == "geo.a-model"

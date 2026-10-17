@@ -17,21 +17,28 @@ disable sockets.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import os
 from collections.abc import Iterator
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import boto3
 import pytest
 from moto import mock_aws
+from tests.fixtures.caselist.build_revised_path_archives import CASELIST as HELD_CASELIST
+from tests.fixtures.caselist.build_revised_path_archives import KEPT_PATH, REVISED_PATH
 from tests.fixtures.model_routing import EXAMPLE_ROUTING_FILE
 from typer.testing import CliRunner, Result
 
 from debate_cli.app import create_app
 from debate_cli.exit_codes import ExitCode
+from debate_core.application.caselist.suppression import RecordedSuppressionList
+from debate_core.application.ports.suppression import PathHoldEntry, ReasonCode, disclosure_digest
+from debate_core.integrations.local.suppression_list import local_suppression_list_file
 from debate_core.integrations.s3 import SHA256_METADATA_NAME
 
 if TYPE_CHECKING:  # pragma: no cover - import for the type checker only
@@ -293,6 +300,60 @@ class TestSyncPlansByDefault:
 
         assert data["journal"] == str(dev_data_dir / "sync-journal" / "dev.jsonl")
         assert Path(data["journal"]).is_file()
+
+    def test_a_push_leaves_out_bytes_only_a_row_at_a_held_path_names(
+        self, buckets: S3Client, dev_data_dir: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """`v1-e30-t22`, through the composition root. A removal holds a path of the synthetic
+        caselist after 2026-09-08, and a manifest an older build wrote for 2026-10-08 has a row
+        there; another row names a file at a path nothing holds. `caselist publish` uploads only
+        the second, and `store sync` must not push the first behind its back."""
+        monkeypatch.setenv("HOME", str(tmp_path / "home"))
+        held = write_local_blob(dev_data_dir, b"uploaded again after the removal")
+        other = write_local_blob(dev_data_dir, b"the other team's file")
+        rows = [
+            {
+                "kind": "member",
+                "path": path,
+                "classification": "NEW",
+                "sha256": key.rsplit("/", 1)[-1],
+                "byte_size": size,
+            }
+            for path, key, size in (
+                (REVISED_PATH, held, len(b"uploaded again after the removal")),
+                (KEPT_PATH, other, len(b"the other team's file")),
+            )
+        ]
+        write_local_object(
+            dev_data_dir,
+            f"manifests/{HELD_CASELIST}/2026-10-08.jsonl",
+            "".join(json.dumps(row) + "\n" for row in rows).encode(),
+        )
+        asyncio.run(
+            RecordedSuppressionList(local_suppression_list_file(dev_data_dir)).append_path_holds(
+                [
+                    PathHoldEntry(
+                        caselist=HELD_CASELIST,
+                        disclosure=disclosure_digest(HELD_CASELIST, REVISED_PATH),
+                        sha256="0" * 64,
+                        after_snapshot=date(2026, 9, 8),
+                        recorded_at=datetime(2026, 10, 1, 12, 0, tzinfo=UTC),
+                        reason=ReasonCode.REQUESTED_BY_TEAM,
+                        request_id="RM-2026-01",
+                    )
+                ]
+            )
+        )
+        prefix = f"raw/caselist/{HELD_CASELIST}"
+
+        result = invoke(
+            "--json", "store", "sync", "--prefix", f"{prefix}/", "--blob-prefix", prefix, "--apply"
+        )
+
+        assert result.exit_code == ExitCode.OK, result.stdout
+        data = envelope_of(result)["data"]
+        assert (data["counts"]["new"], data["counts"]["skipped"]) == (1, 1)
+        assert remote_keys(buckets, DEV_BUCKET) == [f"{prefix}/{other}"]
 
 
 # ------------------------------------------------------------------------------------------------

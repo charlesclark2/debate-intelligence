@@ -61,6 +61,12 @@ name it, but its path can still name the removed file and the team that disclose
 a suppressed file, or when every real file in its directory is suppressed (a whole team removed);
 it is still counted as skipped and given no row.
 
+So is a skipped member at a path a removal holds, in a snapshot the hold covers
+(:func:`hold_on_skipped_member`, `v1-e30-t22`): a symbolic link named as the removed file is not a
+later upload, since nothing in it can be imported, but its row would name the removed path, and
+its body is often the file's name. The removal's manifest rewrite and `caselist status` ask the
+same question of a row an earlier build wrote.
+
 What stays with each service is what genuinely differs: where the baseline comes from (the
 previous weekly snapshot, or the camp release's existing manifest), which records are written,
 and whether a path that has gone is reported as `REMOVED` (yes for a caselist archive, against the
@@ -113,6 +119,7 @@ __all__ = [
     "SuppressedWriteRefused",
     "classify_stored",
     "file_source",
+    "hold_on_skipped_member",
     "withheld_skipped_paths",
 ]
 
@@ -225,7 +232,8 @@ class ImportedEntry[MetadataT]:
     """
 
     withheld: bool = False
-    """A skipped member that shadows suppressed files: counted as skipped, given no manifest row."""
+    """A skipped member that shadows suppressed files, or is at a path a removal holds (`v1-e30-t22`):
+    counted as skipped, given no manifest row."""
 
     @property
     def is_skipped(self) -> bool:
@@ -390,7 +398,15 @@ class SourceImportPipeline:
                 if entry.classification is not None
             },
             [entry.path for entry in imported if entry.is_skipped],
-        )
+        ) | {
+            entry.path
+            for entry in imported
+            if entry.is_skipped
+            and hold_on_skipped_member(
+                suppression, caselist=disclosure_scope, path=entry.path, snapshot=snapshot
+            )
+            is not None
+        }
         if withheld:
             imported = [
                 ImportedEntry(
@@ -470,6 +486,22 @@ def withheld_skipped_paths(real: Mapping[str, bool], skipped: Iterable[str]) -> 
         if everything_suppressed or any(real.get(shadowed, False) for shadowed in _shadowed(path, real)):
             withheld.add(path)
     return frozenset(withheld)
+
+
+def hold_on_skipped_member(
+    suppression: SuppressionState, *, caselist: str | None, path: str, snapshot: date | None
+) -> PathHoldEntry | None:
+    """The hold on a skipped member's path, when a removal holds it in this snapshot (`v1-e30-t22`).
+
+    The rule an upload is refused by (:meth:`~debate_core.application.ports.suppression.
+    SuppressionState.path_hold`), asked of a member that was never read: such a member gets no
+    manifest row. `None` for a camp release or an archive of no date, which no hold covers. Shared by
+    the importer, the removal's rewrite of a manifest and of an inbox archive, and `caselist status`,
+    so all four leave out the same rows.
+    """
+    if caselist is None or snapshot is None:
+        return None
+    return suppression.path_hold(caselist=caselist, path=path, snapshot=snapshot)
 
 
 def _directory_of(path: str) -> str:

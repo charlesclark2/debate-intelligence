@@ -205,7 +205,11 @@ def names_no_one(report: CaselistStatusReport) -> None:
     """What the comparison reports of a hold names no path, school, team code or file name."""
     said = json.dumps(
         [
-            [one.snapshot, list(one.held_skipped_rows), [[row.sha256, row.request_id] for row in one.held_rows]]
+            [
+                one.snapshot,
+                list(one.held_skipped_rows),
+                [[row.sha256, row.request_id] for row in one.held_rows],
+            ]
             for one in report.snapshots
         ]
     )
@@ -236,7 +240,9 @@ async def test_a_link_at_the_held_path_imports_with_no_row_at_that_path(
         KEPT_PATH
     ]
     assert {str(reason): count for reason, count in report.skipped.items()} == {"SYMLINK": 1}
-    assert [entry.withheld for entry in report.entries if entry.is_skipped and entry.path == REVISED_PATH] == [True]
+    assert [
+        entry.withheld for entry in report.entries if entry.is_skipped and entry.path == REVISED_PATH
+    ] == [True]
 
 
 async def test_a_link_at_a_path_no_removal_holds_keeps_its_row(world: RemovalWorld, tmp_path: Path) -> None:
@@ -259,7 +265,9 @@ async def test_a_link_at_the_held_path_in_the_week_the_hold_dates_from_keeps_its
         world, a_week_with_a_link(tmp_path, week=HOLD_DATE), HOLD_DATE, dry_run=True, allow_out_of_order=True
     )
 
-    assert [entry.withheld for entry in report.entries if entry.is_skipped and entry.path == REVISED_PATH] == [False]
+    assert [
+        entry.withheld for entry in report.entries if entry.is_skipped and entry.path == REVISED_PATH
+    ] == [False]
 
 
 # ------------------------------------------------------------------------------------------------
@@ -426,7 +434,9 @@ async def test_bytes_a_held_row_and_another_teams_row_name_are_uploaded(
     await import_weekly(world, tmp_path, CASELIST, TWO_PATHS_WEEK, importer=an_older_builds_importer(world))
     assert rows_at(world, f"manifests/{CASELIST}/2026-10-10.jsonl", REVISED_PATH), "the precondition"
 
-    report = await this_builds_publisher(world).execute(await this_builds_publisher(world).plan(CASELIST, "2026-10-10"))
+    report = await this_builds_publisher(world).execute(
+        await this_builds_publisher(world).plan(CASELIST, "2026-10-10")
+    )
 
     assert in_the_bucket(world, UPLOADED_AFTER_AT_TWO_PATHS), "another team's copy was held back"
     (outcome,) = report.snapshots
@@ -467,7 +477,9 @@ async def test_status_does_not_count_bytes_the_publisher_left_out_as_missing(
     bytes, so they are not among the missing sources."""
     await remove_the_named_file(world)
     await an_older_build_imports_next_week(world, tmp_path, publish=False)
-    await this_builds_publisher(world).execute(await this_builds_publisher(world).plan(CASELIST, "2026-10-08"))
+    await this_builds_publisher(world).execute(
+        await this_builds_publisher(world).plan(CASELIST, "2026-10-08")
+    )
 
     held_week = of_snapshot(await status_service(world).status(CASELIST), "2026-10-08")
 
@@ -534,7 +546,9 @@ def planned_blob(plan: SyncPlan, digest: str) -> tuple[SyncAction, str]:
     return found.action, found.reason
 
 
-async def test_store_sync_does_not_push_bytes_only_a_held_row_names(world: RemovalWorld, tmp_path: Path) -> None:
+async def test_store_sync_does_not_push_bytes_only_a_held_row_names(
+    world: RemovalWorld, tmp_path: Path
+) -> None:
     """`store sync` compares every local blob with the bucket. A blob absent there is planned `new`
     and pushed, which would put the held bytes in the bucket after all. It is planned `skipped`."""
     await remove_the_named_file(world)
@@ -576,16 +590,22 @@ async def test_running_the_removal_again_takes_the_held_only_bytes_off_this_mach
     goes, the manifest is rewritten, and the next publish completes the week."""
     await remove_the_named_file(world)
     await an_older_build_imports_next_week(world, tmp_path, publish=False)
-    await this_builds_publisher(world).execute(await this_builds_publisher(world).plan(CASELIST, "2026-10-08"))
+    await this_builds_publisher(world).execute(
+        await this_builds_publisher(world).plan(CASELIST, "2026-10-08")
+    )
     assert local_blob(world, UPLOADED_AFTER).exists(), "the precondition: the older build stored it"
 
     await remove_the_named_file(world)
 
     assert not local_blob(world, UPLOADED_AFTER).exists()
-    listed = {(entry.sha256, entry.disclosure, entry.request_id) for entry in await world.suppression().entries()}
+    listed = {
+        (entry.sha256, entry.disclosure, entry.request_id) for entry in await world.suppression().entries()
+    }
     assert (UPLOADED_AFTER, None, REQUEST) in listed, "the list does not name it as a whole file"
     assert rows_at(world, HELD_WEEK_MANIFEST, REVISED_PATH) == []
     assert not in_the_bucket(world, UPLOADED_AFTER)
-    assert (await this_builds_publisher(world).execute(await this_builds_publisher(world).plan(CASELIST))).succeeded
+    assert (
+        await this_builds_publisher(world).execute(await this_builds_publisher(world).plan(CASELIST))
+    ).succeeded
     report = await status_service(world).status(CASELIST)
     assert report.in_sync and report.removals_owed == (), report.drifted

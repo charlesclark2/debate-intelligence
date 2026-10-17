@@ -28,7 +28,9 @@ part-way all leave a key outside that set, and the manifest is withheld.
 A required constructor argument, read at the start of every plan (`v1-e30-t07`). A suppressed
 source is never uploaded, and a manifest that still has a stored row the list stops is withheld
 rather than published (`publish_plan`, "A manifest that still names a suppressed file"). So is one
-with a stored row at a path a removal holds, with the same outcome and the same code (`v1-e30-t21`).
+with a stored row at a path a removal holds, with the same outcome and the same code (`v1-e30-t21`),
+and bytes that only such rows name are not uploaded at all (`v1-e30-t22`; `publish_plan`, "Bytes
+only held rows name are not uploaded").
 
 ## Idempotent and resumable
 
@@ -538,6 +540,8 @@ def _withheld_for_rows(plan: SnapshotPlan) -> str:
     if plan.held_rows:
         held = ", ".join(f"{row.sha256} ({row.request_id})" for row in plan.held_rows)
         rows.append(f"{len(plan.held_rows)} row(s) at a path a removal holds: {held}")
+        if plan.held_back:
+            rows[-1] += f", whose bytes no other row names and were not uploaded ({len(plan.held_back)})"
     return (
         f"the local manifest still has {'; and '.join(rows)}; re-run `caselist remove` for them on this "
         "machine to rewrite it"

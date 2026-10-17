@@ -52,6 +52,11 @@ not.
   a sync from a store that still held a copy must not put it back. Planned as `skipped`. The list
   is a required constructor argument, like every other path that can store a source (`v1-e30-t07`).
 
+A push also leaves out **a blob that only rows at a path a removal holds name** (`v1-e30-t22`): the
+bytes a build from before `v1-e30-t13` imported at a removed file's path, which `caselist publish`
+does not upload. Planned as `skipped`, from :data:`HeldBackDigests`, which the composition root
+gives the service; a pull, which writes to this machine, is not affected.
+
 ## How few HeadObject calls this makes
 
 `list_objects` states no digest, by design, in either implementation — S3's `ListObjectsV2` does not
@@ -98,7 +103,7 @@ from __future__ import annotations
 import json
 import os
 import tempfile
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -128,6 +133,7 @@ __all__ = [
     "EVIDENCE_PREFIXES",
     "JOURNAL_DIRECTORY",
     "EvidenceSyncService",
+    "HeldBackDigests",
     "JournalEntry",
     "PlannedObject",
     "SyncAction",
@@ -158,6 +164,13 @@ set may call `ListBucket` on, **one prefix at a time**, so listing the bucket *r
 planner that asked for every key under `""` would get `AccessDenied` against the real bucket while
 passing every test against moto, which grants everything. So an unfiltered run lists these eight in
 turn, and an object whose key is under none of them is reported and not transferred.
+"""
+
+type HeldBackDigests = Callable[[SuppressionState], Awaitable[frozenset[Sha256Hex]]]
+"""The digests a push leaves out because only rows at a held path name them (`v1-e30-t22`).
+
+:func:`~debate_core.application.caselist.evidence_listing.held_back_digests` over this machine's
+store is the one the composition root passes. Given the suppression state the plan read.
 """
 
 BLOB_KEY_SEGMENT = "sha256/"
@@ -585,6 +598,8 @@ class EvidenceSyncService:
         journal: Where verified transfers are recorded and read back from. A dry run is given
             :meth:`SyncJournal.unwritten`, which remembers nothing.
         remote_name: The bucket, for the journal's entries. Never a credential.
+        held_back: The digests a push leaves out because only rows at a held path name them
+            (:data:`HeldBackDigests`, `v1-e30-t22`). Without it, none is left out.
         clock: Supplies the journal's timestamps. Optional, and the only clock in this package that
             has a default: a journal timestamp is operational bookkeeping an operator reads, not
             provenance a card depends on. A test that asserts on journal contents injects
@@ -599,6 +614,7 @@ class EvidenceSyncService:
         journal: SyncJournal | None = None,
         remote_name: str = "",
         clock: Clock | None = None,
+        held_back: HeldBackDigests | None = None,
     ) -> None:
         if not keyspaces:
             raise ValueError("a sync needs at least one keyspace")
@@ -607,6 +623,7 @@ class EvidenceSyncService:
         self._journal = journal if journal is not None else SyncJournal.unwritten(remote=remote_name)
         self._remote_name = remote_name
         self._clock = clock
+        self._held_back = held_back
 
     @property
     def keyspaces(self) -> tuple[SyncKeyspace, ...]:
@@ -634,8 +651,15 @@ class EvidenceSyncService:
         planned: list[PlannedObject] = []
         heads = 0
         suppression = await load_suppression_state(self._suppression)
+        held_back = (
+            await self._held_back(suppression)
+            if self._held_back is not None and direction is SyncDirection.PUSH
+            else frozenset[Sha256Hex]()
+        )
         for keyspace in self._keyspaces:
-            objects, keyspace_heads = await self._plan_keyspace(keyspace, prefix, direction, suppression)
+            objects, keyspace_heads = await self._plan_keyspace(
+                keyspace, prefix, direction, suppression, held_back
+            )
             planned.extend(objects)
             heads += keyspace_heads
         planned.sort(key=lambda entry: (entry.keyspace, entry.remote_key))
@@ -647,7 +671,12 @@ class EvidenceSyncService:
         )
 
     async def _plan_keyspace(
-        self, keyspace: SyncKeyspace, prefix: str, direction: SyncDirection, suppression: SuppressionState
+        self,
+        keyspace: SyncKeyspace,
+        prefix: str,
+        direction: SyncDirection,
+        suppression: SuppressionState,
+        held_back: frozenset[Sha256Hex],
     ) -> tuple[list[PlannedObject], int]:
         local_filter = _local_filter_for(keyspace, prefix)
         if local_filter is None:
@@ -669,7 +698,7 @@ class EvidenceSyncService:
         heads = 0
         for key in sorted(source):
             entry, cost = await self._classify(
-                keyspace, side, key, source[key], destination.get(key), suppression
+                keyspace, side, key, source[key], destination.get(key), suppression, held_back
             )
             planned.append(entry)
             heads += cost
@@ -687,6 +716,7 @@ class EvidenceSyncService:
         source: ObjectInfo,
         destination: ObjectInfo | None,
         suppression: SuppressionState,
+        held_back: frozenset[Sha256Hex],
     ) -> tuple[PlannedObject, int]:
         """Decide one object's action, spending as few `HeadObject` calls as the answer allows."""
         remote_key = keyspace.remote_key(key)
@@ -711,6 +741,18 @@ class EvidenceSyncService:
                         SyncAction.SKIPPED,
                         source.size,
                         "on the removal suppression list",
+                        digest,
+                    ),
+                    0,
+                )
+            if digest is not None and digest in held_back:
+                return (
+                    _planned(
+                        keyspace,
+                        key,
+                        SyncAction.SKIPPED,
+                        source.size,
+                        "named only by manifest rows at a path a removal holds",
                         digest,
                     ),
                     0,

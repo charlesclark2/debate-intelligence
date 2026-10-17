@@ -30,8 +30,10 @@ from debate_core.application.caselist.publish_plan import (
     LocalSnapshot,
     digest_of_local_blob_key,
     full_archive_date,
+    held_only_digests,
     manifest_prefix,
     remote_source_prefix,
+    skipped_paths_in_manifest,
     snapshot_of_manifest_key,
     sources_in_manifest,
     stored_rows_in_manifest,
@@ -39,12 +41,14 @@ from debate_core.application.caselist.publish_plan import (
 )
 from debate_core.application.caselist.withdrawals import EarlierSnapshots
 from debate_core.application.ports.evidence_store import EvidenceObjectStore, ObjectKey
+from debate_core.application.ports.suppression import SuppressionState
 from debate_core.domain import Sha256Hex
 
 __all__ = [
     "LocalEvidence",
     "digests_in_each_earlier_manifest",
     "digests_in_earlier_manifests",
+    "held_back_digests",
     "list_local_caselists",
     "list_remote_caselists",
     "list_remote_evidence",
@@ -107,9 +111,31 @@ async def read_local_snapshots(
                 sources=sources_in_manifest(info.key, lines),
                 manifest_size=info.size,
                 stored_rows=stored_rows_in_manifest(lines),
+                skipped_paths=skipped_paths_in_manifest(lines),
             )
         )
     return tuple(sorted(found, key=lambda local_snapshot: local_snapshot.snapshot))
+
+
+async def held_back_digests(local: LocalEvidence, suppression: SuppressionState) -> frozenset[Sha256Hex]:
+    """Every digest this machine's manifests name only in rows at a path a removal holds (`v1-e30-t22`).
+
+    What `store sync` does not push: the bytes the publisher leaves out of a snapshot
+    (:func:`~debate_core.application.caselist.publish_plan.held_only_digests`), less any that a row of
+    another manifest names at a path nothing holds, in any caselist or camp release. A blob carries no
+    record of which corpus it belongs to, so another row anywhere is another holder's copy, which is
+    never held back. Reads nothing when no path is held.
+    """
+    if not suppression.held_paths:
+        return frozenset()
+    held: set[Sha256Hex] = set()
+    unheld: set[Sha256Hex] = set()
+    for caselist in await list_local_caselists(local):
+        for snapshot in await read_local_snapshots(local, caselist, full_archives=True):
+            only = held_only_digests(snapshot, suppression)
+            held |= only
+            unheld |= {source.sha256 for source in snapshot.sources} - only
+    return frozenset(held - unheld)
 
 
 async def digests_in_earlier_manifests(

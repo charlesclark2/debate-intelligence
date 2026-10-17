@@ -333,13 +333,14 @@ class TestStatus:
         ]
         for entry in data["snapshots"]:
             # Every field from before v1-e30-t12 is still here; `mismatches` and the two
-            # suppressed-row fields were added beside them, and the three held-row fields
-            # beside those (v1-e30-t21).
+            # suppressed-row fields were added beside them, the three held-row fields
+            # beside those (v1-e30-t21), and the two held skipped-row fields (v1-e30-t22).
             assert set(entry) == {
                 "caselist", "snapshot", "manifest_key", "in_sync", "local_manifest", "manifest_present",
                 "sources", "local_files", "published_sources", "missing_sources", "missing_local",
                 "checksum_mismatches", "suppressed", "mismatches", "suppressed_rows",
                 "suppressed_row_prefixes", "held_rows", "held_row_prefixes", "held_row_requests",
+                "held_skipped_rows", "held_skipped_row_requests",
             }  # fmt: skip
             assert (entry["mismatches"], entry["suppressed_rows"], entry["suppressed_row_prefixes"]) == (
                 [],
@@ -347,6 +348,7 @@ class TestStatus:
                 [],
             )
             assert (entry["held_rows"], entry["held_row_prefixes"], entry["held_row_requests"]) == (0, [], [])
+            assert (entry["held_skipped_rows"], entry["held_skipped_row_requests"]) == (0, [])
         assert data["suppressed_objects"] == [
             {"caselist": SYNTHETIC_CASELIST, "objects": 0, "sha256_prefixes": []}
         ]

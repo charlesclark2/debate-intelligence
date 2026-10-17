@@ -142,7 +142,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Final
 
-from debate_core.application.caselist.pipeline import withheld_skipped_paths
+from debate_core.application.caselist.pipeline import hold_on_skipped_member, withheld_skipped_paths
 from debate_core.application.caselist.publish_plan import full_archive_snapshot
 from debate_core.application.caselist.status_service import HeldInboxUpload
 from debate_core.application.caselist_sync import (
@@ -649,9 +649,9 @@ def entries_to_drop(
             removed.add(entry.sha256)
         elif (
             entry.skip_reason is not None
-            and disclosure_scope is not None
-            and snapshot is not None
-            and suppression.path_hold(caselist=disclosure_scope, path=entry.path, snapshot=snapshot)
+            and hold_on_skipped_member(
+                suppression, caselist=disclosure_scope, path=entry.path, snapshot=snapshot
+            )
             is not None
         ):
             # Named as the removed file: the list cannot name it, and its digest is not a removed file's.

@@ -307,9 +307,62 @@ to `Succeeded`.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-17
 
 **Notes:**
+
+Accepted as a partial merge. ac2 and ac4 are the operator's, and the Goal stays `InProgress` until
+they are recorded.
+
+**This is the task that takes the operator out of the loop for what a rule can decide,** and it
+does it without guessing. A pair is decided only when the ruling decides it, and every pair the
+person is asked about is tallied under its shape. So ac4's tallies will say whether the band can
+narrow, not my intuition.
+
+**The work itself:**
+
+* **ac2 compares like with like.** `shapes` reads `diagnose`'s texts, and a test proves the two give
+  the same count of pairs sharing nothing. My figures came from `diagnose`.
+* **The classification is a pure module** that t20 can import. Each threshold is met exactly on one
+  side of its boundary and missed by one shingle on the other, and the constants-pinning test was
+  deselected so the boundary tests had to catch the threshold mutants alone.
+* **30 of 30 mutants caught,** including the one that matters most: a decided pair being shown.
+* **What a sample saves holds no text**, checked across five modes for words, tags, cites, schools,
+  file names, path separators and hex runs.
+* **The display is built for a person reading real cards:** shared text underlined, each side's own
+  text bold, nothing dimmed, long texts trimmed with the count of what was cut. One key answers, and
+  a key pressed before the question is discarded.
+
+**Rulings:**
+
+* **Deviation 1, the rule decides only pairs of two full cards:** accepted, and it is part of the
+  ruling from now on. An abbreviation's runs across its ellipsis are in no copy of the card, so
+  "sharing nothing" means nothing for it.
+* **Deviation 2, `counts --save-before` still writes digests and cluster ids:** accepted. That file
+  holds no text and is the input of every later comparison.
+* **Decisions 1 to 7:** accepted. The trimming inside a long shared region was the right addition.
+* **Follow-up 1, rule-decided samples of cuts:** for t20. A cut under a third of its container is
+  the `MIN_CUT_SHARE` question, and a short quote in two articles is contained in both without
+  being one card. t20 may add an option that shows a decided shape to the person. It is a sampling
+  option, not a change to `RULE_VERDICTS`'s default. The PM writes it into t20 in the next batch.
+* **Follow-up 2:** no task.
+
+**Operator follow-ups, corrected.** Step 2 as written cannot run:
+
+* The PM's step 8 cleanup of t11 on 2026-10-16 removed `card-clusters-before-t11`.
+* The tallies file is no longer in the home folder.
+
+The seed of t11's join sample is 151389273, from its tallies, now kept in the PM's records. So
+step 2 first rebuilds the "before" (t11's step 2, 15 to 25 minutes, unattended), then samples with
+that seed. The PM gives the operator the corrected commands. Step 1 needs no change. Both run after
+the merge, from the main checkout on `dev`.
+
+Under the ruling, the expected step 2 result against t11's by-eye tallies:
+
+* The pair the operator called different shares no text, so it is now decided different by rule.
+* The two he was unsure of are each wholly inside the other body, so they are now decided same.
+
+The close-out that records ac2 and ac4 sets the Goal `Succeeded`.

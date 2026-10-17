@@ -360,9 +360,64 @@ last column of [Retired so far](../data/parsed-card-store.md#retired-so-far).
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-16
 
 **Notes:**
+
+Accepted as a partial merge. ac4 and the plans in ac5 are operator steps, and the Goal stays
+`InProgress` until they are recorded.
+
+**You found the flaw in my 2026-10-15 ruling before building on it.** An `Expiration` counts from
+creation, so "30 days on tagged objects" would have given an old directory no grace at all. Option
+B makes the grace mean the same thing for every directory. Then, asked about delete markers, you
+showed that no existing rule cleared them under `parsed/`, added the one rule that can (prefix only,
+markers only), and held it to that by the module's tests.
+
+**The work itself:**
+
+* **Nothing a session controls can delete a current directory.** The service refuses anything not
+  superseded, the local adapter refuses the newest directory by itself, and a bucket only ever gets
+  a tag. The client sends only `ListObjectsV2`, `GetObjectTagging` and `PutObjectTagging`. Each
+  refusal was shown failing by a mutant.
+* **The confirmation code is better than a prompt.** It ties `--execute` to the state the dry run
+  showed, and it refuses a directory that changed since.
+* **The lifecycle is tested, not assumed.** moto stores a configuration and never runs it, so you
+  wrote a simulation from AWS's documentation and fed it `main.tf`'s own values. Days 1, 30, 31 and
+  32 are checked in dev and prod.
+* **The runbook's copy-back is run as written** by a test, which checks every request it makes
+  against the everyday set's grants as `operator_access.tf` writes them. The runbook and the test
+  cannot drift apart.
+* **"Current" is judged per place,** so a bucket the new directory has not reached is never left
+  with nothing to read.
+* **The honest dry run (ac3)** was shown failing first against the start commit.
+
+**Rulings:**
+
+* **Deviations 1 to 4 and the decisions:** accepted.
+* **Follow-up 1, the policy row:** accepted as worded. The PM adds it at the close-out that sets
+  this task `Succeeded`, after the applies, so the policy never describes a rule that is not live.
+* **Follow-up 2, the Terraform panic:** E01 tooling work, filed with the deferred E01 list.
+* **Follow-up 3, limiting the tagging grant to one key:** filed as E29 p3. A mistaken tag on a
+  current directory is recoverable for 30 days, but a condition is cheap and removes the risk.
+* **Follow-up 4, a restore flag:** no task until retirements are routine.
+* **Follow-up 5:** noted. The next commit fixed it, and the suite at `a00ed2f` is green.
+
+**The order of the operator's steps.** This changes Operator follow-up 2 as written:
+
+1. **The plans, now, from this worktree,** as your step 1 says. The operator pastes both resource
+   lists and summaries to the PM. Nothing is applied from a task branch.
+2. **Dev apply, after the merge,** from the `dev-preview` worktree updated to `dev`. A fresh plan
+   there must show the same three changes and nothing else, and the PM reads it before the apply.
+   Then come the grant simulation and the rule listing from your step 2.
+3. **The dev retirements, after the next agent reinstall.** The runbook needs an installed build
+   that carries `caselist retire`, and the reinstall planned for `v1-e34-t23` and `v1-e05-t03` is
+   that build. Steps 1, 2 and 4 of the runbook: the dev bucket, then this machine.
+4. **Prod apply, after the next promotion,** from `prod-deploy` on `main`, with a fresh plan the
+   PM reads, as for every prod apply. Then the prod retirement, the runbook's step 3.
+5. **The next-day check and the 32-day check,** recorded in the Retired so far table.
+
+The close-out after step 4 records each run and sets the Goal `Succeeded`. The 32-day check is
+recorded at a later close-out and does not hold the Goal.

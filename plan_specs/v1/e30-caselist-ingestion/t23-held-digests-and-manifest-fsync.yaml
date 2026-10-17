@@ -1,0 +1,84 @@
+# TASK v1-e30-t23-held-digests-and-manifest-fsync - Held digests are remembered once the copy is gone, and a manifest write survives a power cut
+# Epic: E30 Caselist Evidence Ingestion | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e30-t23-held-digests-and-manifest-fsync
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e30-caselist-ingestion
+  annotations:
+    debate/title: "Held digests are remembered once the copy is gone, and a manifest write survives a power cut"
+spec:
+  # Filed by the PM, 2026-10-16, from v1-e30-t21's Follow-up work 2, with the PM's ruling, and v1-e34-t23's Follow-up work 1.
+  description: >-
+    (1) Once a held upload's archive leaves the inbox, running the removal again cannot list its
+    sha256: retention or the take-out removed the copy, the import stored nothing, and the
+    import writes no takedown record (v1-e30-t13's Deviation 2). If the same bytes come back at
+    another path, the list does not stop them. The PM's ruling, 2026-10-16, reversing that
+    deviation: the import writes the digests it held, with the request holding each path, to a
+    sidecar beside the path holds, which running the removal again reads. Digests and request
+    ids only, never a path or a name, and a file an earlier build can ignore. (2)
+    `write_manifest_lines` fsyncs the file and renames it into place, but does not fsync the
+    directory, so the rename can be lost to a power cut.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/runbooks, docs/policies]
+    forbidden:
+      - A path, school, team code or file name in the sidecar, a record or a log
+      - A file or record an earlier build refuses to read
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e30-t22-held-rows-publish-nothing
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        (1): after a held upload's copy is gone, running the removal again lists its digest
+        under its request, by test shown failing first; an earlier build reading the data
+        directory still works, by test.
+    - id: ac2
+      description: >-
+        (2): the manifest writer fsyncs the directory after the rename, by test.
+    - id: ac3
+      description: >-
+        The runbook's note that the list cannot stop such bytes is removed, and the policy's
+        list of sidecar records names the new one, in a sentence the PM approves.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e30-t23-held-digests-and-manifest-fsync-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e30-caselist-ingestion
+spec:
+  description: >-
+    Record held digests for the removal, and fsync the manifest directory.
+  goalRef:
+    name: v1-e30-t23-held-digests-and-manifest-fsync
+  graph:
+    nodes:
+      - id: held-digests
+        kind: Task
+        name: Held digests and manifest fsync
+        description: >-
+          The held-digest sidecar, the removal reading it, and the directory fsync.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Caselist tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, caselist and (removal or manifest)]
+status:
+  phase: Pending

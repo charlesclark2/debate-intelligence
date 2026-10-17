@@ -1,0 +1,88 @@
+# TASK v1-e30-t22-held-rows-publish-nothing - A held path's bytes and skipped rows never reach the bucket
+# Epic: E30 Caselist Evidence Ingestion | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e30-t22-held-rows-publish-nothing
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e30-caselist-ingestion
+  annotations:
+    debate/title: "A held path's bytes and skipped rows never reach the bucket"
+spec:
+  # Filed by the PM, 2026-10-16, from v1-e30-t21's Follow-up work 1 and its Decision 2, with the PM's ruling.
+  description: >-
+    Two ways a removed path still reaches the bucket after v1-e30-t21. (1) The import writes a
+    manifest row for a skipped member at a held path: an archive holding a symbolic link at the
+    removed path got a `member` row with `skip_reason` `SYMLINK` at that path, so the path, with
+    its school and team code, is in the new manifest, and the publisher publishes it. The
+    importer withholds that row, as it withholds junk beside a suppressed file
+    (`withheld_skipped_paths`), and the removal's manifest rewrite and `caselist status` follow
+    the same rule. (2) The publisher uploads the bytes a held row names under their digest
+    before it withholds the manifest (t21's Decision 2), so the removed file's bytes are in the
+    bucket until the removal is run again. The PM's ruling, 2026-10-16: bytes named only by held
+    rows are not uploaded; bytes that an unheld row also names are, so another team's copy is
+    never held back. Exit codes and the held report are unchanged.
+  priority: 2
+  constraints:
+    packages: [debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/runbooks]
+    forbidden:
+      - A path, school, team code or file name in status output, a record or a log
+      - Holding back bytes that an unheld row names
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e30-t21-held-path-loose-ends
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        (1): an archive with a skipped member at a held path imports with no row at that
+        path, and the removal's rewrite and status agree, by tests shown failing first.
+    - id: ac2
+      description: >-
+        (2): a digest named only by held rows is not uploaded, and one also named by an
+        unheld row is, by moto tests shown failing first; the publish output's held counts
+        are unchanged.
+    - id: ac3
+      description: >-
+        A manifest an earlier build wrote with such a row is named by `caselist status`, and
+        running the removal again takes it out, by test.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e30-t22-held-rows-publish-nothing-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e30-caselist-ingestion
+spec:
+  description: >-
+    Withhold skipped rows at held paths, and upload no bytes on held rows alone.
+  goalRef:
+    name: v1-e30-t22-held-rows-publish-nothing
+  graph:
+    nodes:
+      - id: held-rows
+        kind: Task
+        name: Held rows publish nothing
+        description: >-
+          The importer's withheld rows, the publisher's upload rule, and the earlier
+          build's manifests.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Caselist tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, caselist and (hold or held or publish)]
+status:
+  phase: Pending

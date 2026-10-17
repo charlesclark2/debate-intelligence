@@ -24,7 +24,13 @@ spec:
     highlighting; take one only when a body follows. (4) v1-e31-t09's cite-style hold: a cite
     style that marks no name and year at the head is emphasis, not a cite, so change the hold,
     including v1-e31-t09's 300-word fixture (ruled in t12's review). (5) Short plain lines
-    inside a body are read as nothing: measure that whole population first, then decide. Counts
+    inside a body are read as nothing: measure that whole population first, then decide. (6) A
+    short cite on its own line: an author and a two-digit year with a curly apostrophe (as in
+    "Smith ’24"), alone on the line above a long bracketed cite, leaves the card's short_cite
+    empty though tag, cite and evidence are right (4 cards in 2 of the 5 files the operator
+    checked by eye on 2026-10-16). (7) Two cards in one checked file have no tag where the
+    document may hold one, read under the bracketed heuristic cite line; the operator confirms in
+    Word before the session counts it. (6) and (7) added by the PM, 2026-10-16. Counts
     come first for every shape, from the operator's corpus, before any rule changes. Out of
     scope: the four short cites in the corrected files (v1-e31-t13), the second line of a cite
     in small print, and the sentence openers t12 left.
@@ -58,6 +64,12 @@ spec:
       description: >-
         `parser_version` is bumped, and the operator's re-parse records the cards whose cite
         changed, in docs/data/caselist-parse-report.md.
+    - id: ac5
+      description: >-
+        (6): the short cite is read from the line above, curly or straight apostrophe, by
+        synthetic fixture shown failing first, with the corpus count of cards it fills. (7): if
+        the operator confirms the tag is in the document, the shape is counted and fixed the same
+        way; if not, the report says so and nothing changes. Added by the PM, 2026-10-16.
 status:
   phase: Pending
 ---

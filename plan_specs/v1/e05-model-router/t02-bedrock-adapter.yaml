@@ -19,8 +19,11 @@ spec:
   description: >-
     Implement BedrockModelRouter, the production ModelRouter adapter, using the Bedrock Runtime Converse API
     (InvokeModel for Titan embeddings and Cohere rerank). Structured output is requested through tool use
-    with the Pydantic schema's JSON Schema as the single forced tool, so the model returns arguments rather
-    than prose. Inference profile and region come from the routing config; credentials come only from the
+    with the Pydantic schema's JSON Schema as the single tool and `toolChoice` `auto`, so the model returns
+    arguments rather than prose; a response that skips the tool or fails the schema goes to t05's
+    validation and repair. Amended by the PM, 2026-10-16: the current Claude models reject a forced
+    tool choice, and Bedrock lists structured outputs as not supported for them (model cards checked
+    2026-10-16, cited in v1-e05-t01's report). Inference profile and region come from the routing config; credentials come only from the
     standard AWS credential chain (profile/SSO/env), never from repo files. Throttling and transient
     service errors are retried with bounded backoff. boto3 is an optional extra (debate-core[bedrock]) so
     students without AWS access can run the CLI on the fake router. Out of scope: schema validation and
@@ -44,8 +47,9 @@ spec:
         Converse (tool-use output), Titan embeddings and Cohere rerank.
     - id: ac2
       description: >-
-        generate_structured sends the schema as a forced toolConfig tool and parses the toolUse input into
-        the schema type; a response with no toolUse block raises a typed ModelOutputError.
+        generate_structured sends the schema as the single toolConfig tool with toolChoice auto, never a
+        forced choice, and parses the toolUse input into the schema type; a response with no toolUse
+        block raises a typed ModelOutputError, which t05's guard repairs. Amended by the PM, 2026-10-16.
     - id: ac3
       description: >-
         ThrottlingException, ServiceUnavailable and ModelNotReady are retried up to the configured attempts
@@ -57,6 +61,18 @@ spec:
     - id: ac5
       description: >-
         The resolved model_id, inference profile ARN/region and request id are returned on every response.
+    - id: ac6
+      description: >-
+        `effort` (Converse `output_config.effort`) is a route default and a per-call parameter, merged like
+        the other overrides, validated at load, and reported on the resolved route. Added by the PM,
+        2026-10-16, from v1-e05-t01's Follow-up work.
+    - id: ac7
+      description: >-
+        Operator-run, the first real call on each Claude route, with the operator's credentials, recorded
+        in the report: which toolChoice types and structured-output options the model accepts, whether a
+        non-default temperature is refused (if not, a route may set one again), and that each model id
+        and inference profile in the routing files resolves. A Stubber test pins each answer. Added by
+        the PM, 2026-10-16.
 status:
   phase: Pending
 ---
@@ -109,10 +125,11 @@ spec:
             args: [run, pytest, packages/debate_core/tests/integrations/bedrock/test_router.py, -k, client]
       - id: structured-tool-use
         kind: Task
-        name: Structured output via forced tool use
+        name: Structured output via tool use
         description: >-
-          Translate the Pydantic schema to a toolSpec, force toolChoice, parse the toolUse input, and map
-          stopReason/usage fields into ModelResponse.
+          Translate the Pydantic schema to a toolSpec with toolChoice auto (amended by the PM,
+          2026-10-16: never forced), parse the toolUse input, and map stopReason/usage fields into
+          ModelResponse.
         dependsOn: [converse-client]
         estimatedEffort: 3h
         acceptanceCriteria:

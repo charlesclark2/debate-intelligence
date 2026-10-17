@@ -1,0 +1,84 @@
+# TASK v1-e31-t23-in-round-markers - In-round markers kept in a card's evidence text
+# Epic: E31 Debate File Parsing | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e31-t23-in-round-markers
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e31-debate-file-parsing
+  annotations:
+    debate/title: "In-round markers kept in a card's evidence text"
+spec:
+  # Filed by the PM, 2026-10-16, from the operator's by-eye checks of 2026-10-16.
+  description: >-
+    A debater who stops reading a card in a round marks the place, and files carry the mark into
+    later copies: a short line such as "Marked 10:42" inside or at the end of the evidence. The
+    parser keeps it as evidence text, so two copies of one card differ by the marker, and a
+    reader of the card sees a line that is not the author's. Count marker lines by form and
+    position (end of body, inside it) per caselist, from the operator's corpus. Then decide with
+    the PM: the marker must not be deleted from what the snapshot holds (evidence is addressed
+    by offsets into the snapshot), so the choice is between recording it as a marker beside the
+    evidence and leaving it, and whether fingerprints ignore it. Counts first; the PM rules
+    before any rule changes.
+  priority: 3
+  constraints:
+    packages: [debate_core.evidence, debate_core.integrations.docx_parser, packages/debate_core/tests, scripts, tests/fixtures/debate_files, docs/data]
+    forbidden:
+      - Removing marker text from a stored snapshot or changing evidence offsets into it
+      - Running the corpus counts or a re-parse in a session (operator-run only)
+      - Card text, a school, team code or file name in any fixture, file the tool writes, report or commit; the operator's checks are tallies only
+  context:
+    - kind: TaskRef
+      name: v1-e31-t12-cite-detection
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The report gives the operator-run counts of marker lines by form and position per
+        caselist, and how many clusters they split.
+    - id: ac2
+      description: >-
+        The PM's ruling is written into this spec, and what it asks is built with synthetic
+        fixtures shown failing first.
+    - id: ac3
+      description: >-
+        If the parser or the fingerprint changes, its version is bumped and the operator's
+        re-parse records the counts before and after in docs/data/caselist-parse-report.md.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e31-t23-in-round-markers-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e31-debate-file-parsing
+spec:
+  description: >-
+    Count in-round markers, take the PM's ruling, and build it.
+  goalRef:
+    name: v1-e31-t23-in-round-markers
+  graph:
+    nodes:
+      - id: markers
+        kind: Task
+        name: In-round markers
+        description: >-
+          The counts, the ruling and its fixtures.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Parser tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, docx or parser or fingerprint]
+status:
+  phase: Pending

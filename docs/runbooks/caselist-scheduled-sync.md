@@ -470,6 +470,15 @@ may not meet (exit `3`) and `person` otherwise, the same rule as the banner's
 did not fail, and `not recorded` for a run a build before `v1-e34-t19` recorded. In `--json` the
 verdict is `verdict`.
 
+**A quiet week can hide a torn manifest.** A week that imports and publishes nothing reads no
+manifest rows, so a torn line in one is found only when something reads them. When the runs report
+nothing for a while, run `caselist status` for each caselist: it reads every manifest, and exits 1
+on one it cannot read (`v1-e34-t23`).
+
+```bash
+DEBATE_ENV=dev debate-research caselist status --caselist hsld26
+```
+
 **The 06:00 run and the AWS session.** An SSO session lasts hours, not a week, so the Wednesday
 06:00 run usually finds it expired. That is not a failure: the run downloads and imports
 everything, records the publish as `pending` (outcome `publish_pending`), and the next run, or this,

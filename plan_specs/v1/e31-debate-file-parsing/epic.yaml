@@ -510,6 +510,7 @@ spec:
         goalRef: v1-e31-t20-long-cuts-and-limits
       dependsOn:
       - t11
+      - t21
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e31-t20-long-cuts-and-limits reports phase Succeeded
@@ -519,5 +520,66 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e31-t20-long-cuts-and-limits
+    - id: t21
+      kind: Task
+      name: 'Measure cluster shapes, and ask a person only about the pairs a rule cannot decide'
+      description: >-
+        Measure cluster shapes automatically, and ask a person only about the pairs a rule
+        cannot decide.
+      inputs:
+        specRef: plan_specs/v1/e31-debate-file-parsing/t21-cluster-shapes-and-sampler.yaml
+        goalRef: v1-e31-t21-cluster-shapes-and-sampler
+      dependsOn:
+      - t11
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e31-t21-cluster-shapes-and-sampler reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e31-t21-cluster-shapes-and-sampler
+    - id: t22
+      kind: Task
+      name: 'Bodies too long to be one card, and two cards stored as one'
+      description: >-
+        Bodies too long to be one card, and two cards stored as one, counted and fixed where
+        they are parser defects.
+      inputs:
+        specRef: plan_specs/v1/e31-debate-file-parsing/t22-card-boundaries.yaml
+        goalRef: v1-e31-t22-card-boundaries
+      dependsOn:
+      - t12
+      - t21
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e31-t22-card-boundaries reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e31-t22-card-boundaries
+    - id: t23
+      kind: Task
+      name: 'In-round markers kept in a card''s evidence text'
+      description: >-
+        In-round markers such as 'Marked 10:42' kept in evidence text, counted, then handled
+        as the PM rules.
+      inputs:
+        specRef: plan_specs/v1/e31-debate-file-parsing/t23-in-round-markers.yaml
+        goalRef: v1-e31-t23-in-round-markers
+      dependsOn:
+      - t12
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e31-t23-in-round-markers reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e31-t23-in-round-markers
 status:
   phase: Pending

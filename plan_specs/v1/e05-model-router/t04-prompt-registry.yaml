@@ -53,6 +53,11 @@ spec:
       description: >-
         A lock file (prompts/prompts.lock.json) records the sha256 of each released version's body, and a
         test fails if a released body changes without a version bump.
+    - id: ac5
+      description: >-
+        The registry refuses a prompt_id that is not letters, digits, `.`, `_` and `-` starting with a
+        letter or digit, because prompt ids name the fixture and cassette directories of v1-e05-t03.
+        Added by the PM, 2026-10-16, from v1-e05-t03's Follow-up work.
 status:
   phase: Pending
 ---

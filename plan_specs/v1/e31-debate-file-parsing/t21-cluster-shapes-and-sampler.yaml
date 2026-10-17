@@ -62,7 +62,7 @@ spec:
         Operator-run: a 20-pair join sample with the new sampler, timed. The report gives
         how many pairs the person was asked about and how long it took.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

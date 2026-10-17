@@ -227,7 +227,11 @@ class EvidenceProfileCheck:
         if profile.for_takedowns and permission_set != takedown:
             whose = ""
             if other is not None and other != self._environment:
-                kind = "takedown permission set" if permission_set == takedown_permission_set(other) else "permission set"
+                kind = (
+                    "takedown permission set"
+                    if permission_set == takedown_permission_set(other)
+                    else "permission set"
+                )
                 whose = f", which is {other}'s {kind} and not {self._environment}'s"
             return (
                 f"{who}{whose}; a takedown runs only as {takedown}, so `caselist remove --execute` will "

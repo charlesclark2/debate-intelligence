@@ -1584,9 +1584,11 @@ def test_a_first_install_takes_the_default_schedule_and_directories(home: Path, 
             "Changing the installed agent's schedule from Thursday at 07:30 to Thursday at 07:00 (--minute).",
             id="minute",
         ),
-        pytest.param("--log-dir", "@HOME@/new-logs", {"logs": "@HOME@/new-logs"},
-                     "Moving the installed agent's logs from @HOME@/agent-logs to @HOME@/new-logs (--log-dir).",
-                     id="log-dir"),
+        pytest.param(
+            "--log-dir", "@HOME@/new-logs", {"logs": "@HOME@/new-logs"},
+            "Moving the installed agent's logs from @HOME@/agent-logs to @HOME@/new-logs (--log-dir).",
+            id="log-dir",
+        ),
         pytest.param(
             "--wrapper-dir", "@HOME@/new-wrapper", {"wrapper": "@HOME@/new-wrapper"},
             "Moving the installed agent's wrapper from @HOME@/agent-wrapper to @HOME@/new-wrapper "
@@ -1669,14 +1671,15 @@ def a_wrapper_of_another_name(plist: dict[str, object]) -> None:
     [
         pytest.param(string_hour, "StartCalendarInterval.Hour", "--hour", ("--hour", "7"),
                      id="an hour that is a string"),
-        pytest.param(no_minute, "StartCalendarInterval.Minute", "--minute", ("--minute", "30"), id="no minute"),
+        pytest.param(no_minute, "StartCalendarInterval.Minute", "--minute", ("--minute", "30"),
+                     id="no minute"),
         pytest.param(sunday_as_zero, "StartCalendarInterval.Weekday", "--weekday", ("--weekday", "7"),
                      id="Sunday as 0"),
         pytest.param(two_intervals, "StartCalendarInterval.Weekday", "--weekday", THURSDAY_AGENT,
                      id="two calendar intervals"),
         pytest.param(
-            logs_split_across_directories, "StandardErrorPath", "--log-dir", ("--log-dir", "@HOME@/agent-logs"),
-            id="logs in two directories",
+            logs_split_across_directories, "StandardErrorPath", "--log-dir",
+            ("--log-dir", "@HOME@/agent-logs"), id="logs in two directories",
         ),
         pytest.param(
             a_wrapper_of_another_name, "ProgramArguments.0", "--wrapper-dir",

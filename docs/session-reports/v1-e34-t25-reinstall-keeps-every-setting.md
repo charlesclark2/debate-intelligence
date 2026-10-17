@@ -233,9 +233,43 @@ it, and it now keeps Wednesday 06:00 by itself.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-17
 
 **Notes:**
+
+Accepted in full, with the phase `Succeeded` as committed in `03847f6`. One stale line: "Files
+changed" still says the spec is unchanged and the phase stays `InProgress`, which was true before
+the operator's run. The spec's phase line is the record.
+
+**A reinstall can no longer move the agent without being asked.** That was the last of the
+settings a reinstall reset silently. The rule is the right one: keep what reads back, refuse what
+does not, and never fall back to a default. Reading with `-expect` is what makes "reads back" mean
+something. Normalising a weekday of 0 to 7, or a string hour to an integer, would have been a
+silent rewrite of a value launchd may not have honoured.
+
+**The work itself:**
+
+* **15 of 17 cases red first against the start commit's installer,** and the two that passed pin
+  what must not change.
+* **The `plutil` stand-in is held to the real `plutil`** on macOS, so the CI results on Linux mean
+  the same thing.
+* **16 mutants, all caught,** one for each kept option and each refusal.
+* **The operator's dry run over the real agent** reads Wednesday at 06:00, both directories, dev
+  and the three caselists, with nothing carried over by hand.
+* **The doctor sentence** names only the permission set, never a role, an ARN or an account. A test
+  holds that.
+
+**Rulings:**
+
+* **Deviation 1, the 14 lines in `debate_core.application.evidence_profiles`:** accepted under
+  working agreement 5. One sentence belongs in one package, beside the sentence it matches.
+* **Deviation 2, the earlier tasks' expectations:** accepted.
+* **Deviation 3, `--check-launchd` refusing until the next reinstall:** accepted. The agent was
+  reinstalled on `v1.1.0-dev.18` today, before this merges. So the next reinstall, after this task's
+  merge, clears it and keeps Wednesday 06:00 by itself. The agent runs as before in between.
+* **Decisions 1 to 10:** accepted.
+* **Follow-ups 1 and 2,** the wrapper's `AWS_PROFILE` export and `--check-launchd` accepting options
+  it ignores: one E34 p3 task in the next PM batch.

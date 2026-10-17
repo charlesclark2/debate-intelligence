@@ -270,7 +270,8 @@ async def test_a_first_run_parses_every_source_and_reports_the_hand_derived_coun
         expected["occurrences"],
     )
     assert report.plan.version == DOCX_PARSER_VERSION
-    assert not report.plan.new_version
+    assert report.plan.new_version
+    assert report.plan.superseded is None
 
 
 @pytest.mark.anyio
@@ -442,6 +443,76 @@ async def test_a_dry_run_plans_and_writes_nothing(world: World) -> None:
     assert len(plan.to_parse) == EXPECTED["after_0908"]["sources"]
     assert report.attempted == 0
     assert not (world.data_dir / "parsed").exists()
+
+
+# ------------------------------------------------------------------------------------------------
+# The dry run says when a new version directory starts, and which it supersedes (v1-e31-t16 ac3)
+# ------------------------------------------------------------------------------------------------
+#
+# Before v1-e31-t16 a plan said `new_version: false` and `superseded: null` for a parser version
+# bump, which starts a new directory and leaves the previous parser's behind, and for the first
+# parse of a caselist. Only a new generation of the same parser version was reported.
+
+
+@pytest.mark.anyio
+async def test_a_dry_run_for_a_parser_version_bump_names_the_directory_it_supersedes(world: World) -> None:
+    await world.run()
+    service = world.service(CountingParser(parser_version="2099.01.01-docx-99"))
+
+    plan = await service.plan(CASELIST)
+    service.dry_run(plan)
+
+    assert (plan.version, plan.new_version, plan.superseded) == (
+        "2099.01.01-docx-99",
+        True,
+        DOCX_PARSER_VERSION,
+    )
+    assert not (world.store.root / CASELIST / "2099.01.01-docx-99").exists()
+
+
+@pytest.mark.anyio
+async def test_a_parser_version_bump_supersedes_the_newest_generation_of_the_parser_before(
+    world: World,
+) -> None:
+    await world.run()
+    await world.run(reparse=True)
+
+    plan = await world.service(CountingParser(parser_version="2099.01.01-docx-99")).plan(CASELIST)
+
+    assert (plan.new_version, plan.superseded) == (True, version_directory_name(DOCX_PARSER_VERSION, 2))
+
+
+@pytest.mark.anyio
+async def test_a_first_parse_starts_a_new_directory_and_supersedes_nothing(world: World) -> None:
+    plan = await world.service().plan(CASELIST)
+
+    assert (plan.version, plan.new_version, plan.superseded) == (DOCX_PARSER_VERSION, True, None)
+
+
+@pytest.mark.anyio
+async def test_a_run_into_the_current_directory_is_not_new(world: World) -> None:
+    await world.run()
+
+    plan = await world.service().plan(CASELIST)
+
+    assert (plan.version, plan.new_version, plan.superseded) == (DOCX_PARSER_VERSION, False, None)
+
+
+@pytest.mark.anyio
+async def test_a_directory_written_by_a_newer_build_is_never_what_a_new_directory_supersedes(
+    world: World,
+) -> None:
+    """An older build starting its own directory supersedes the newest directory older than it."""
+    await world.run()
+    await world.run(CountingParser(parser_version="2099.01.01-docx-99"))
+
+    plan = await world.service(CountingParser(parser_version="2050.01.01-docx-50")).plan(CASELIST)
+
+    assert (plan.version, plan.new_version, plan.superseded) == (
+        "2050.01.01-docx-50",
+        True,
+        DOCX_PARSER_VERSION,
+    )
 
 
 @pytest.mark.anyio

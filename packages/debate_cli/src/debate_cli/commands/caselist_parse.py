@@ -261,7 +261,7 @@ def _parse_table(
     plan = report.plan
     store = report.store
     rows = [
-        ["Version", plan.version + (f" (new; {plan.superseded} left as it was)" if plan.new_version else "")],
+        ["Version", plan.version + _new_version_note(report)],
         ["Sources", str(plan.in_scope)],
         ["Skipped (already parsed)", str(plan.skipped)],
         ["Suppressed", str(plan.suppressed)],
@@ -292,6 +292,17 @@ def _parse_table(
     return TableSpec(
         columns=("", plan.caselist), rows=rows, title=f"caselist parse {plan.caselist}", caption=caption
     )
+
+
+def _new_version_note(report: ParseRunReport) -> str:
+    """What the version row adds when this run starts the directory (`v1-e31-t16`)."""
+    plan = report.plan
+    if not plan.new_version:
+        return ""
+    started = "new" if report.applied else "new: a run would start it"
+    if plan.superseded is None:
+        return f" ({started})"
+    return f" ({started}; it supersedes {plan.superseded}, which is left as it was)"
 
 
 def _failures_table(listing: FailureListing) -> TableSpec:

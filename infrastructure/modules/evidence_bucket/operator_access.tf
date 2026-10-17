@@ -3,8 +3,10 @@
 #   EvidenceOperator - everyday work: list the documented prefixes, read, write, use the key,
 #                      and list (never delete) the versions a takedown would remove, so a
 #                      removal's dry run can count them and `caselist status` can report what a
-#                      removal left. No DeleteObject at all. This is what the operator and
-#                      `debate-research store sync|ls|get` (v1-e29-t05) run as.
+#                      removal left. Read and write object tags under parsed/ only, so that
+#                      `caselist retire --bucket` can mark a superseded version directory for the
+#                      lifecycle rule (v1-e31-t16). No DeleteObject at all. This is what the
+#                      operator and `debate-research store sync|ls|get` (v1-e29-t05) run as.
 #   EvidenceRemoval  - takedowns only: delete objects and their noncurrent versions under the five
 #                      prefixes that hold disclosed material, and append to the suppression list.
 #                      Assigned to one accountable person.
@@ -117,6 +119,21 @@ locals {
         Resource = "${aws_s3_bucket.evidence.arn}/*"
       },
       {
+        # Retiring a superseded parsed-store version directory (v1-e31-t16, PM ruling 2026-10-15):
+        # `caselist retire --bucket` reads each object's tags and adds debate-retention=superseded,
+        # which the lifecycle rule `expire-retired-parsed-version-directories` in main.tf expires
+        # after a grace period. Under parsed/ and nowhere else, and still no delete: a tag on a
+        # source, a manifest or a built file would mean nothing to any rule, and the deletion is the
+        # lifecycle rule's, not this set's. A statement of its own, so its resource is its alone.
+        Sid    = "TagSupersededParsedVersionDirectories"
+        Effect = "Allow"
+        Action = [
+          "s3:GetObjectTagging",
+          "s3:PutObjectTagging",
+        ]
+        Resource = "${aws_s3_bucket.evidence.arn}/${local.retired_parsed_prefix}*"
+      },
+      {
         # Encrypt and GenerateDataKey for writes, Decrypt for reads. No kms:* and no key or
         # grant administration: this set cannot change who else may read the evidence.
         Sid    = "UseEvidenceKey"
@@ -186,7 +203,7 @@ resource "aws_ssoadmin_permission_set" "evidence_operator" {
   count = local.create_permission_sets ? 1 : 0
 
   name             = local.operator_permission_set_name
-  description      = "Reads and publishes ${var.environment} evidence in ${local.bucket_name}. No DeleteObject, no bucket-policy or KMS-policy changes (v1-e29-t03)."
+  description      = "Reads and publishes ${var.environment} evidence in ${local.bucket_name}, and tags superseded parsed/ directories. No DeleteObject, no bucket-policy or KMS-policy changes (v1-e29-t03)."
   instance_arn     = var.identity_center_instance_arn
   session_duration = "PT8H"
 }

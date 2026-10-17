@@ -42,7 +42,14 @@ beside it, and neither touches the old one:
   `2026.09.20-docx-1_reparse-2`, then `_reparse-3`.
 
 The current directory of a caselist is the newest generation of the parser version the reader
-runs. Nothing ever writes into an older one again; the local adapter refuses to.
+runs. Nothing ever writes into an older one again; the local adapter refuses to. An older one is
+superseded, and is retired under the rule in [Retention](#retention).
+
+`caselist parse --dry-run` says which directory a run would write, whether it would start it
+(`new_version`), and which directory it supersedes (`superseded`): the newest one below it, of an
+earlier parser version or an earlier generation, never one a newer build wrote. A caselist's first
+parse starts a directory and supersedes nothing. Before `v1-e31-t16` a parser version bump was
+reported as `new_version: false` and `superseded: null`.
 
 A parser version is bumped whenever what the parser emits changes, and also when the only change
 is that a file once refused is now read: a refusal is a recorded entry like any other, so under the
@@ -394,6 +401,77 @@ files go first and the aggregates last, so the bucket never holds an index namin
 not hold. An object already in the bucket with the same SHA-256 is skipped, so a re-run uploads
 nothing. A per-source file the bucket holds with a different checksum is reported and left alone; an
 aggregate is replaced. Only the current version directory is ever published.
+
+## Retention
+
+A superseded version directory is a full copy of the store that nothing reads or writes again, about
+5.8 GB in each place. `debate-research caselist retire` lists the directories and retires the
+superseded ones (`v1-e31-t16`); the procedure is
+[parsed-store-retention.md](../runbooks/parsed-store-retention.md).
+
+**Which directory is current.** In each place (this machine, the dev bucket, the prod bucket) and
+for each caselist, every directory is judged against the parser version of the build that runs the
+command, by the order the store sorts them in: parser version, then generation.
+
+| Standing | Which directories | Retired? |
+|---|---|---|
+| `current` | The newest generation of this build's parser version | Never: the command refuses it |
+| `newer_than_this_build` | A parser version after this build's, written by a newer build | Never by this build: the command refuses it |
+| `superseded` | Every directory below the current one | On request, with a dry run and a confirmation |
+| `not_yet_superseded` | An older directory in a place that has no directory of this build's parser version yet, such as a bucket the new directory has not been published to | No: that place would be left with nothing to read |
+
+So a directory is retired in a bucket only once its successor has been published there.
+
+**What retiring does.**
+
+* **On this machine** the directory is deleted at once.
+* **In a bucket** nothing is deleted by the command: the everyday permission set has no
+  `s3:DeleteObject`, by design, and only a takedown deletes (PM ruling, 2026-10-15). Each current
+  object of the directory is tagged `debate-retention=superseded`, and a lifecycle rule on
+  `parsed/` expires what carries that tag. Expiry is counted from an object's creation, not its
+  tagging, so the rule expires the tagged current version a day after creation, which for any
+  directory worth retiring is the next daily lifecycle run, and then keeps it as a noncurrent
+  version for a **30-day grace period** before deleting it. Until that first run,
+  `caselist retire --bucket --restore` undoes it by setting the tag to `restored`. After it, and for
+  the grace period, copying the noncurrent versions back does (amended by the PM, 2026-10-16: S3
+  counts Expiration from creation, so the grace runs on noncurrent versions). Expiring a current
+  version leaves a delete marker, which carries no tags; once the version behind it is deleted, a
+  second rule on `parsed/`, by prefix alone, removes it. That rule removes only a marker with
+  nothing behind it, and expires no object.
+
+**Why 30 days, and why that agrees with the data-use policy.** The
+[retention section](../policies/caselist-data-use.md#retention) sets an upper bound: parsed cards
+are kept on the clock of their sources and deleted with them, and noncurrent versions expire after
+365 days in prod and 30 in dev. Retiring a superseded directory early keeps within it. Every card
+in the superseded directory is in the current directory too, read again from the same sources, and
+those cards stay on their sources' clock. What is retired is derived, holds no personal data (see
+[What the store does not hold](#what-the-store-does-not-hold)), and can be rebuilt from the sources
+by the parser version that wrote it. Thirty days is the window dev already gives every superseded
+version and the policy's dev exception names. It is four weekly pulls, which is long enough to
+notice a reader that still needed the old directory. Prod's 365-day window exists to recover from
+a bad publish of evidence, and a retired directory is not one: keeping it a year would hold a second
+5.8 GB copy for no reader. The policy's table does not yet have a row for retired `parsed/`
+directories; the session report of `v1-e31-t16` proposes one.
+
+**Removal beats retention, as everywhere.** A `caselist remove --execute` during the grace period
+deletes a removed source's per-source files, tagged or not, current and noncurrent, as it always has.
+
+### Retired so far
+
+Counts from the operator's runs (`docs/runbooks/parsed-store-retention.md`). Objects and bytes are
+what the dry run listed; nothing else is recorded here.
+
+The last column is the runbook's check of a bucket 32 days after the first lifecycle run: the
+versions and the delete markers left under one caselist's `sha256/`, which should both be `0`.
+
+| Directory | Place | Retired on | Objects | Bytes | Left after 32 days |
+|---|---|---|---|---|---|
+| `2026.09.20-docx-1` | this machine | 2026-10-11, by hand, before the command existed | not counted | about 5.8 GB | |
+| `2026.09.20-docx-1` | dev bucket | not yet | | | |
+| `2026.09.20-docx-1` | prod bucket | not yet | | | |
+| `2026.10.10-docx-2` | this machine | not yet | | | |
+| `2026.10.10-docx-2` | dev bucket | not yet | | | |
+| `2026.10.10-docx-2` | prod bucket | not yet | | | |
 
 ## Reading it from a shell
 

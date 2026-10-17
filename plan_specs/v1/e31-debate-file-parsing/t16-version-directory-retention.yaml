@@ -27,8 +27,11 @@ spec:
     directory will be started and which it supersedes. Ruled by the PM, 2026-10-15: the everyday
     permission set has no `s3:DeleteObject` by design, and only a takedown deletes. So retention
     does not delete in a bucket. The command tags a superseded directory's objects, and a
-    lifecycle rule on the `parsed/` prefix expires tagged objects and their noncurrent versions
-    after a grace period, during which removing the tag undoes it. The everyday set gains
+    lifecycle rule on parsed/ expires a tagged object's current version at its next run, and its
+    noncurrent version after the grace period. Until that first run, caselist retire --restore
+    undoes it. After it, and for the grace period, copying the noncurrent versions back does
+    (amended by the PM, 2026-10-16: S3 counts Expiration from creation, so the grace runs on
+    noncurrent versions). The everyday set gains
     `s3:PutObjectTagging` and `s3:GetObjectTagging` on `parsed/` only. Locally the command
     deletes the directory, with confirmation. Out of scope: removal requests, which delete every
     version already.
@@ -54,15 +57,23 @@ spec:
       description: >-
         With confirmation the command removes a superseded directory locally and tags its
         objects in a bucket for the lifecycle rule, and refuses the current one, by test
-        against moto (amended by the PM, 2026-10-15: tag, not delete, in a bucket).
+        against moto (amended by the PM, 2026-10-15: tag, not delete, in a bucket). A lifecycle
+        rule on parsed/ expires a tagged object's current version at its next run, and its
+        noncurrent version after the grace period. Until that first run, caselist retire
+        --restore undoes it. After it, and for the grace period, copying the noncurrent
+        versions back does (amended by the PM, 2026-10-16: S3 counts Expiration from creation,
+        so the grace runs on noncurrent versions).
     - id: ac3
       description: >-
         The dry run for a new parser version says a new directory will be started and names
         the one it supersedes, shown failing first.
     - id: ac4
       description: >-
-        Operator-run: the dev and prod buckets' `2026.09.20-docx-1` directories listed and
-        retired under the rule, counts recorded.
+        Operator-run, after the merge: `2026.09.20-docx-1` retired under the rule in the dev
+        and prod buckets (it is already gone from the dev data directory), and
+        `2026.10.10-docx-2` retired in the dev data directory and in both buckets, each listed
+        in a dry run first, counts recorded (amended by the PM, 2026-10-16: since the
+        2026-10-16 re-parse `2026.10.10-docx-2` is superseded too).
     - id: ac5
       description: >-
         Added by the PM, 2026-10-15: the evidence bucket module gains the lifecycle rule on
@@ -71,7 +82,7 @@ spec:
         dev and prod `terraform plan` outputs are operator-run and read by the PM before the
         operator applies.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

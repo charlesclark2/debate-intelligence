@@ -151,6 +151,7 @@ from debate_core.application.caselist.suppression import (
     RecordedRemovalLog,
     RecordedSuppressionList,
 )
+from debate_core.application.caselist.version_retention import VersionDirectoryRetention
 from debate_core.application.caselist_card_stats import CaselistCardStatsService
 from debate_core.application.caselist_parse import CaselistParseService
 from debate_core.application.caselist_pull_parse import PullParseStage
@@ -193,6 +194,7 @@ from debate_core.integrations.local.suppression_list import (
     local_removal_log_file,
     local_suppression_list_file,
 )
+from debate_core.integrations.local.version_directories import LocalVersionDirectories
 from debate_core.integrations.models.routing_policy import RoutingPolicy
 
 if TYPE_CHECKING:  # pragma: no cover - imported for the type checker only; see the factories
@@ -511,6 +513,41 @@ class ServiceContainer:
             remote=self._evidence_bucket(),
             suppression=self.suppression_list(),
         )
+
+    def version_retention(self, *, bucket: bool) -> VersionDirectoryRetention:
+        """Build the retirement of superseded parsed-store version directories (`v1-e31-t16`).
+
+        On this machine without `bucket`; in this environment's bucket with it, signed with the
+        everyday profile and never the takedown's: retiring there tags, and deletes nothing.
+        Directories are judged against the parser version `caselist parse` runs. Raises
+        :class:`EvidenceStoreNotConfigured` for `bucket` when this environment names none.
+        """
+        name = "version_retention_bucket" if bucket else "version_retention_local"
+        return self.singleton(name, lambda: self._build_version_retention(bucket=bucket))
+
+    def _build_version_retention(self, *, bucket: bool) -> VersionDirectoryRetention:
+        # Imported here, not at module scope: lxml is loaded only by a command that needs the parser.
+        from debate_core.integrations.docx_parser import DebateDocxParser
+
+        parser_version = DebateDocxParser().parser_version
+        if not bucket:
+            return VersionDirectoryRetention(
+                LocalVersionDirectories(self.settings.storage.data_dir), parser_version=parser_version
+            )
+        # Imported here, not at module scope: boto3 is an optional dependency. See the docstring.
+        from debate_core.integrations.s3.version_directories import S3VersionDirectories
+
+        settings = self.settings
+        s3 = settings.storage.s3
+        if not s3.bucket:
+            raise EvidenceStoreNotConfigured(settings.environment)
+        place = S3VersionDirectories(
+            bucket=str(s3.bucket),
+            client=self._s3_client(profile=s3.aws_profile, profile_setting=_EVERYDAY_PROFILE_SETTING),
+            profile=s3.aws_profile,
+            profile_setting=_EVERYDAY_PROFILE_SETTING,
+        )
+        return VersionDirectoryRetention(place, parser_version=parser_version)
 
     def verify_manifest(self) -> VerifyManifest:
         """Build `debate-research verify` over this environment's local evidence store (`v1-e03-t06`).

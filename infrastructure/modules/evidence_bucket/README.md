@@ -19,7 +19,7 @@ provider.
 |---|---|
 | `aws_kms_key.evidence` + `aws_kms_alias.evidence` | A customer-managed key per environment, rotation on, 30-day deletion window. Separate, ordinary resources with outputs of their own so `v2-e10-t04` can adopt them with `moved` blocks instead of creating a second key and re-encrypting the corpus |
 | `aws_s3_bucket` + public access block, ownership controls, encryption, versioning | Private, ACLs disabled, SSE-KMS with that key, S3 Bucket Keys on, versioned. `force_destroy` stays false and `prevent_destroy` is set |
-| `aws_s3_bucket_lifecycle_configuration` | Superseded versions age out; `exports/` expires after a day; incomplete multipart uploads abort after 7. **No rule expires a current version outside `exports/`** |
+| `aws_s3_bucket_lifecycle_configuration` | Superseded versions age out; `exports/` expires after a day; a `parsed/` object tagged `debate-retention=superseded` (a retired version directory, `v1-e31-t16`) expires a day after creation and is kept 30 days as a noncurrent version, and a prefix-only rule removes the delete markers under `parsed/` left with nothing behind them; incomplete multipart uploads abort after 7. **No rule expires a current version outside `exports/`, except a `parsed/` object the operator tagged** |
 | `aws_s3_bucket_policy` | Denies non-TLS requests and uploads that ask for another encryption key. No `Allow` at all unless `additional_reader_principal_arns` is set |
 | `aws_ssoadmin_permission_set` ×2 + inline policies + assignments | `EvidenceOperator` and `EvidenceRemoval`, below |
 
@@ -56,9 +56,9 @@ one that is left signed in.
 | SSO profile | `debate-dev-evidence`, `debate-prod-evidence` | `debate-dev-evidence-removal`, `debate-prod-evidence-removal` |
 | Session | 8 hours | 1 hour |
 | Who | Adult maintainers | One accountable person |
-| S3 | `ListBucket` (scoped to the documented prefixes), `ListBucketVersions` (read-only, scoped to the takedown's prefixes, so a removal's dry run can count versions and `caselist status` can report what a removal left), `GetObject`, `GetObjectVersion`, `PutObject` | `ListBucketVersions`, `GetObjectVersion`, `DeleteObject`, `DeleteObjectVersion` under `raw/`, `parsed/`, `files/`, `manifests/`, `quarantine/`; `GetObject`/`PutObject` under `manifests/_suppression/` only |
+| S3 | `ListBucket` (scoped to the documented prefixes), `ListBucketVersions` (read-only, scoped to the takedown's prefixes, so a removal's dry run can count versions and `caselist status` can report what a removal left), `GetObject`, `GetObjectVersion`, `PutObject`; `GetObjectTagging` and `PutObjectTagging` under `parsed/` only, so `caselist retire --bucket` can tag a superseded version directory for the lifecycle rule (`v1-e31-t16`) | `ListBucketVersions`, `GetObjectVersion`, `DeleteObject`, `DeleteObjectVersion` under `raw/`, `parsed/`, `files/`, `manifests/`, `quarantine/`; `GetObject`/`PutObject` under `manifests/_suppression/` only |
 | KMS | `Encrypt`, `Decrypt`, `GenerateDataKey` on this key | `Decrypt`, `GenerateDataKey` on this key |
-| Cannot | Delete anything. Change a bucket policy, a lifecycle rule or a key policy | Delete under `reports/`. Delete the bucket. Change a bucket policy, a lifecycle rule or a key policy |
+| Cannot | Delete anything. Tag anything outside `parsed/`. Change a bucket policy, a lifecycle rule or a key policy | Delete under `reports/`. Delete the bucket. Change a bucket policy, a lifecycle rule or a key policy |
 
 Two consequences worth knowing before they surprise someone:
 

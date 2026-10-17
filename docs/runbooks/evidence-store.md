@@ -34,6 +34,7 @@ to prove that a takedown will work when one is needed.
 | Bucket | `debate-dev-evidence-a7508de8` | `debate-prod-evidence-a7508de8` |
 | KMS key alias | `alias/debate-dev-evidence` | `alias/debate-prod-evidence` |
 | Superseded versions | expire after 30 days | Standard-IA at 30 days, expire at 365 |
+| Retired `parsed/` version directories (`v1-e31-t16`) | current version expires a day after creation, then kept 30 days; the delete marker left behind is removed after that | the same |
 | Everyday permission set | `DebateDevEvidenceOperator` | `DebateProdEvidenceOperator` |
 | Everyday SSO profile | `debate-dev-evidence` | `debate-prod-evidence` |
 | Takedown permission set | `DebateDevEvidenceRemoval` | `DebateProdEvidenceRemoval` |
@@ -44,15 +45,19 @@ to prove that a takedown will work when one is needed.
 Both buckets are private (all four block-public-access flags, ACLs disabled, no website hosting),
 versioned, encrypted with their own customer-managed KMS key with rotation on, and refuse any
 request that is not over TLS. **No lifecycle rule expires a current object version** except under
-`exports/`, which holds regenerable zip downloads and expires after a day.
+`exports/`, which holds regenerable zip downloads and expires after a day, and under `parsed/` an
+object tagged `debate-retention=superseded`: a superseded version directory the operator retired
+with `caselist retire --bucket` ([parsed-store-retention.md](parsed-store-retention.md)).
 
 ## The two credentials, and why
 
 `DebateEvidenceOperator` is everyday work: list the documented prefixes, read, publish, use the
 key, and list object versions under the prefixes a takedown removes from (`v1-e29-t06`). That
 listing has two uses: a removal's dry run counts what it will delete, and `caselist status` reports
-what a removal left behind (`v1-e30-t10`). Listing versions is read-only. It has **no
-`s3:DeleteObject` at all**. `DebateEvidenceRemoval` is the only credential in the
+what a removal left behind (`v1-e30-t10`). Listing versions is read-only. It may read and write
+object tags under `parsed/` and nowhere else (`v1-e31-t16`): retiring a superseded version
+directory tags it, and the lifecycle rule does the deleting. It has **no `s3:DeleteObject` at
+all**. `DebateEvidenceRemoval` is the only credential in the
 account that can delete evidence; it is scoped to `raw/`, `parsed/`, `files/`, `manifests/` and
 `quarantine/`, may write only the suppression list under `manifests/_suppression/`, and is
 assigned to one person. A removal purges noncurrent versions too, so there is nothing to restore
@@ -516,6 +521,7 @@ ones step 5 lists for that change.
 | Change | dev | prod |
 |---|---|---|
 | `v1-e29-t06`: `DebateEvidenceOperator` may list object versions under `raw/`, `parsed/`, `files/`, `manifests/` and `quarantine/` (one statement added to one inline policy) | 2026-10-08 | 2026-10-08 |
+| `v1-e31-t16`: `DebateEvidenceOperator` may get and put object tags under `parsed/` (one statement added to one inline policy), a lifecycle rule `expire-retired-parsed-version-directories` expires `parsed/` objects tagged `debate-retention=superseded`, and `remove-orphaned-parsed-delete-markers` removes the delete markers under `parsed/` with nothing behind them (two rules added) | not applied yet | not applied yet |
 
 ## If something is wrong
 

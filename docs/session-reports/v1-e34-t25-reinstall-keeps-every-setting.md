@@ -6,7 +6,7 @@
 | Spec | [`plan_specs/v1/e34-caselist-sync/t25-reinstall-keeps-every-setting.yaml`](../../plan_specs/v1/e34-caselist-sync/t25-reinstall-keeps-every-setting.yaml) |
 | Epic / release | `v1-e34-caselist-sync` / `v1.1` |
 | Branch | `task/v1-e34-t25-reinstall-keeps-every-setting` |
-| Session status | PARTIAL <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | COMPLETE <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
@@ -25,9 +25,11 @@ comment on the profile check says the AWS question waits at most 10 seconds. `do
 --evidence-profiles` now says whose set a takedown profile from the other environment is signed
 in as, in the everyday profile's words.
 
-**The phase stays `InProgress`, because ac4 is the operator's** dry run over the real agent (your
-note, and the spec's forbidden list). Every other criterion passed. Look at Deviation 1 first: the
-doctor sentence is built in `debate_core`, which is not in the spec's package list.
+**ac4 was the operator's** dry run over the real agent (your note, and the spec's forbidden list).
+The operator ran it on 2026-10-17 and it passed: it kept dev, hsld26 hspolicy26 hspf26, Wednesday
+at 06:00 and both directories, and exited 0. Every criterion has passed, so the phase is
+`Succeeded`. Look at Deviation 1 first: the doctor sentence is built in `debate_core`, which is
+not in the spec's package list.
 
 ## Plan nodes
 
@@ -42,7 +44,7 @@ doctor sentence is built in `debate_core`, which is not in the spec's package li
 | ac1: a reinstall without the options keeps each from the installed plist, and an explicit option still changes it, by tests against a fake launchctl and a scratch plist, shown failing first | PASS | Seven new tests (17 cases) in `tests/integration/test_launchd_install.py`, section "A reinstall keeps the schedule and the other options too". Each runs the installer under a temporary HOME, with the fake `launchctl` and the `plutil` stand-in first on its PATH. **Red first**, at commit `3737cf9` against the start commit's installer: `15 failed, 2 passed`. The two that passed pin behaviour that does not change: a first install takes the defaults, and an option repeating the installed value says nothing. The failures were the intended ones. A Thursday 07:30 agent came back as `{'Weekday': 3, 'Hour': 6, 'Minute': 0}`, the dry run had no `Keeping the installed agent's schedule` line, and every unreadable value was installed rather than refused. **Green:** `uv run pytest tests/integration/test_launchd_install.py` → `108 passed in 36.72s`, macOS, so both real-`plutil` tests ran. The same file with both scripts' shebangs set to `/bin/dash`, the `/bin/sh` of CI's Ubuntu, then restored from git → `106 passed` (shellcheck and the committed-files test left out). **The stand-in** learned `plutil -extract … raw -expect <type>`. `test_the_plutil_stand_in_answers_as_plutil_does` holds it to the real `plutil` over nine new steps: a match, a mismatch, a missing key, a dictionary, an array, and an hour replaced by a string. **Mutants:** 14 of 14 installer mutants caught (below) |
 | ac2: (2) and (3), the comments say what the code does | PASS | `test_the_wrapper_says_the_installer_writes_into_the_plist_only_what_it_writes` checks two things: every variable the wrapper's comment lists as written into the plist is in a rendered plist, and `AWS_PROFILE` is said not to be. `test_the_installers_comment_on_the_profile_check_says_how_long_the_aws_question_may_wait` checks that the comment above the profile check names `IDENTITY_TIME_LIMIT_SECONDS` and its value, which it reads from `caller_identity.py`. **Red first**, with the start commit's two scripts written back and then restored from git: `2 failed`. The failures were `AssertionError: ['DEBATE_ENV', 'AWS_PROFILE', 'DEBATE_RESEARCH_BIN']` and `assert 'IDENTITY_TIME_LIMIT_SECONDS' in "The build's own checks …"`. Green → both pass |
 | ac3: (4), doctor names the other environment's removal set for a takedown profile, by test | PASS | In `debate_core`: `test_a_takedown_profile_signed_in_as_the_other_environments_set_is_told_whose_set_it_is`, three cases: prod's takedown set in dev, dev's in prod, and prod's everyday set in dev. In the CLI: `test_a_person_sees_whose_takedown_set_a_removal_profile_from_the_other_environment_is_signed_in_as`, which checks the row a person sees and the JSON. The row reads `debate-dev-evidence-removal (DEBATE_REMOVAL_PROFILE): defined, and signed in as DebateProdEvidenceRemoval, which is prod's takedown permission set and not dev's; a takedown runs only as DebateDevEvidenceRemoval, so caselist remove --execute will refuse this profile`. The test also checks that no account id, ARN, address or role name is in the output. **Red first:** `5 failed, 37 passed`, including t22's `test_the_takedown_permission_set_is_the_environments`, whose expected sentence now carries the clause (Deviation 2). Green → `42 passed`. Mutants: 2 of 2 caught |
-| ac4: Operator-run: `install.sh --dry-run` over the real agent shows Wednesday 06:00 and the current options kept, recorded in the report | NOT RUN | The session may not read the real agent (spec, forbidden list). The command and what success looks like are under Operator follow-ups. The same shape is shown offline: `test_an_agent_installed_with_the_defaults_is_reinstalled_with_them_and_says_wednesday_at_06_00`, and a dry run over a scratch dev agent following hsld26, hspolicy26 and hspf26, which printed `Keeping the installed agent's schedule, Wednesday at 06:00, from its plist's StartCalendarInterval (--weekday, --hour and --minute change it).` |
+| ac4: Operator-run: `install.sh --dry-run` over the real agent shows Wednesday 06:00 and the current options kept, recorded in the report | PASS | **Run by the operator on 2026-10-17**, in this worktree on this branch's last commit: `ops/launchd/install.sh --debate-research "$HOME/.local/bin/debate-research" --dry-run > /dev/null`, then `echo "install.sh exit=$?"`. Output, with the home directory written `~`: `Keeping the installed agent's environment, dev, from its plist's DEBATE_ENV (--env changes it).` / `Keeping the installed agent's caselists: hsld26 hspolicy26 hspf26, from its plist's ProgramArguments (--caselist replaces them).` / `Keeping the installed agent's schedule, Wednesday at 06:00, from its plist's StartCalendarInterval (--weekday, --hour and --minute change it).` / `Keeping the installed agent's log directory, ~/Library/Logs/debate-research, from its plist's StandardOutPath and StandardErrorPath (--log-dir changes it).` / `Keeping the installed agent's wrapper directory, ~/.local/share/debate-research/launchd, from its plist's ProgramArguments (--wrapper-dir changes it).` / `The build's checks and its evidence profile pass as the agent will run them (debate-research doctor --evidence-profiles).` / `install.sh exit=0`. There was no `Not carried over` line, so nothing in the plist was added by hand. The session itself read nothing of the real agent. Before that run, the same shape was shown offline: `test_an_agent_installed_with_the_defaults_is_reinstalled_with_them_and_says_wednesday_at_06_00`, and a dry run over a scratch dev agent following hsld26, hspolicy26 and hspf26, which printed `Keeping the installed agent's schedule, Wednesday at 06:00, from its plist's StartCalendarInterval (--weekday, --hour and --minute change it).` |
 | Node `reinstall-settings`: `uv run pytest tests/integration/test_launchd_install.py` | PASS | `108 passed in 36.72s` |
 | Default suite, in four parts | PASS | `uv run pytest --part K/4`, one after another, each under a hard 115 s stop. The load average was 16 to 21 at the time. Results: `1934 passed` (73 s); `1941 passed, 1 xfailed` (68 s); `1944 passed, 1 skipped` (61 s); `1941 passed, 1 xfailed` (77 s). The warnings come from the network-guard tests, which trip the socket block on purpose |
 | Static checks | PASS | Over the five changed Python files: `ruff format --check` → `5 files already formatted`; `ruff check` → `All checks passed!`; `pyright` → `0 errors`. `lint-imports` → `Contracts: 12 kept, 0 broken`. `shellcheck` over both scripts, inside the installer tests. `scripts/check_command_blocks.py` → `OK: no # comments in 276 shell code blocks`. `uv run scripts/validate_specs.py` → `OK: 362 files, 38 epics, 304 tasks, 20 releases` |
@@ -183,7 +185,9 @@ The spec is unchanged; its phase stays `InProgress`.
 
 ## Operator follow-ups
 
-**ac4, the dry run over the real agent** (a few seconds; at most 10 more if AWS does not answer).
+**ac4, the dry run over the real agent: done.** The operator ran it on 2026-10-17 and it passed; the
+output is recorded in the ac4 row. The command is kept here for the record (a few seconds; at most
+10 more if AWS does not answer).
 It is read-only. It reads the installed plist and runs the installed build's `config show` and
 `doctor --evidence-profiles` as the agent would. Nothing is written, and the plist it would install
 goes to `/dev/null`. Where: your Mac, in this task's worktree.
@@ -202,8 +206,6 @@ Success looks like these lines, then `install.sh exit=0`:
 * `Keeping the installed agent's log directory, …/Library/Logs/debate-research, from its plist's StandardOutPath and StandardErrorPath (--log-dir changes it).`
 * `Keeping the installed agent's wrapper directory, …/.local/share/debate-research/launchd, from its plist's ProgramArguments (--wrapper-dir changes it).`
 * `The build's checks and its evidence profile pass as the agent will run them (debate-research doctor --evidence-profiles).`
-
-Paste the output back, and ac4 is recorded from it.
 
 * **A `Not carried over from the installed plist: …` line** means a variable was added to the
   plist by hand, such as the parse stage's switch.

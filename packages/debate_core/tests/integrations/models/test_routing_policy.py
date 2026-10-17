@@ -20,8 +20,9 @@ import pytest
 
 from debate_core.application.ports.model_router import RoutingConfigError
 from debate_core.application.settings import ConfigurationError, find_repository_root, load_settings
-from debate_core.domain.model_contracts import ModelParams, ModelProvider, ResolvedRoute, TaskClass
+from debate_core.domain.model_contracts import Effort, ModelParams, ModelProvider, ResolvedRoute, TaskClass
 from debate_core.integrations.models import ROUTING_SCHEMA_VERSION, ModelRoute, RoutingPolicy
+from debate_core.integrations.models.routing_policy import DEFAULT_MAX_ATTEMPTS
 
 REPOSITORY_ROOT = find_repository_root(Path(__file__).parent)
 
@@ -263,7 +264,7 @@ def test_a_nonsensical_max_tokens_is_refused(max_tokens: str, write_routing: Wri
     assert refusal(write_routing, body).field == "routes.high_volume.max_tokens"
 
 
-@pytest.mark.parametrize("parameter", ["temperature: 0.5", "max_tokens: 100"])
+@pytest.mark.parametrize("parameter", ["temperature: 0.5", "max_tokens: 100", "effort: low"])
 @pytest.mark.parametrize("scoring_class", ["embeddings", "rerank"])
 def test_a_scoring_class_takes_no_sampling_parameters(
     parameter: str, scoring_class: str, write_routing: WriteRouting
@@ -372,12 +373,93 @@ def test_resolving_an_unrouted_class_is_refused(write_routing: WriteRouting) -> 
         RoutingPolicy.load(write_routing(VALID)).resolve(TaskClass.DEEP_AUDIT)
 
 
-@pytest.mark.parametrize("params", [ModelParams(temperature=0.5), ModelParams(max_tokens=10)])
+@pytest.mark.parametrize(
+    "params", [ModelParams(temperature=0.5), ModelParams(max_tokens=10), ModelParams(effort=Effort.LOW)]
+)
 def test_a_sampling_override_on_a_scoring_class_is_a_caller_error(
     params: ModelParams, write_routing: WriteRouting
 ) -> None:
-    with pytest.raises(ValueError, match="embeddings call takes no temperature or max_tokens"):
+    with pytest.raises(ValueError, match="embeddings call takes no temperature, max_tokens or effort"):
         RoutingPolicy.load(write_routing(VALID)).resolve(TaskClass.EMBEDDINGS, params)
+
+
+# ---------------------------------------------------------------------------------------------
+# Effort, attempts and dimensions (v1-e05-t02-bedrock-adapter)
+# ---------------------------------------------------------------------------------------------
+
+
+def test_effort_is_a_route_default_reported_on_the_resolved_route(write_routing: WriteRouting) -> None:
+    body = f"routes:\n  deep_audit:\n    model_id: m\n    effort: xhigh\n{ROUTE}"
+
+    resolved = RoutingPolicy.load(write_routing(body)).resolve(TaskClass.DEEP_AUDIT)
+
+    assert resolved.effort is Effort.XHIGH
+
+
+def test_a_per_call_effort_replaces_the_route_default(write_routing: WriteRouting) -> None:
+    body = f"routes:\n  deep_audit:\n    model_id: m\n    effort: xhigh\n    max_tokens: 99\n{ROUTE}"
+    policy = RoutingPolicy.load(write_routing(body))
+
+    resolved = policy.resolve(TaskClass.DEEP_AUDIT, ModelParams(effort=Effort.LOW))
+
+    assert resolved.effort is Effort.LOW
+    assert resolved.max_tokens == 99  # the other defaults stand
+
+
+def test_an_effort_override_leaves_the_other_overrides_alone(write_routing: WriteRouting) -> None:
+    policy = RoutingPolicy.load(write_routing(VALID))
+
+    resolved = policy.resolve(TaskClass.COMPLEX_REASONING, ModelParams(max_tokens=10))
+
+    assert (resolved.effort, resolved.max_tokens) == (None, 10)
+
+
+def test_a_route_with_no_effort_sends_none(write_routing: WriteRouting) -> None:
+    resolved = RoutingPolicy.load(write_routing(VALID)).resolve(TaskClass.HIGH_VOLUME)
+
+    assert resolved.effort is None
+
+
+@pytest.mark.parametrize("effort", ["extreme", "HIGH", "1"])
+def test_an_unknown_effort_is_refused_at_load_naming_the_key(effort: str, write_routing: WriteRouting) -> None:
+    body = f"routes:\n  high_volume:\n    model_id: m\n    effort: {effort}\n{ROUTE}"
+
+    assert refusal(write_routing, body).field == "routes.high_volume.effort"
+
+
+def test_every_effort_level_loads(write_routing: WriteRouting) -> None:
+    for effort in Effort:
+        body = f"routes:\n  high_volume:\n    model_id: m\n    effort: {effort.value}\n{ROUTE}"
+
+        assert RoutingPolicy.load(write_routing(body)).route_for(TaskClass.HIGH_VOLUME).effort is effort
+
+
+def test_a_route_with_no_attempts_gets_the_default(write_routing: WriteRouting) -> None:
+    route = RoutingPolicy.load(write_routing(VALID)).route_for(TaskClass.HIGH_VOLUME)
+
+    assert route.max_attempts == DEFAULT_MAX_ATTEMPTS
+
+
+@pytest.mark.parametrize("attempts", ["0", "-1", "9"])
+def test_a_nonsensical_attempt_count_is_refused(attempts: str, write_routing: WriteRouting) -> None:
+    body = f"routes:\n  high_volume:\n    model_id: m\n    max_attempts: {attempts}\n{ROUTE}"
+
+    assert refusal(write_routing, body).field == "routes.high_volume.max_attempts"
+
+
+def test_dimensions_are_read_on_an_embeddings_route(write_routing: WriteRouting) -> None:
+    body = f"routes:\n  embeddings:\n    model_id: m\n    dimensions: 512\n{ROUTE}"
+
+    assert RoutingPolicy.load(write_routing(body)).route_for(TaskClass.EMBEDDINGS).dimensions == 512
+
+
+@pytest.mark.parametrize("task_class", ["high_volume", "rerank"])
+def test_dimensions_on_a_route_that_returns_no_vectors_are_refused(
+    task_class: str, write_routing: WriteRouting
+) -> None:
+    error = refusal(write_routing, f"routes:\n  {task_class}:\n    model_id: m\n    dimensions: 512\n{ROUTE}")
+
+    assert f"routes.{task_class}.dimensions" in str(error)
 
 
 def test_a_timeout_override_on_a_scoring_class_is_allowed(write_routing: WriteRouting) -> None:

@@ -1170,6 +1170,19 @@ def test_a_long_side_is_trimmed_to_its_shared_region_and_says_how_much_was_left_
     assert "[… 125 words after not shown …]" in second
 
 
+def test_a_long_side_keeps_some_of_its_own_text_on_each_side_of_the_region_it_shares() -> None:
+    """100 words of its own, 20 shared, 100 more of its own: 25 kept each side of the shared 20."""
+    marked = [(f"before{index}", False) for index in range(100)]
+    marked += [(f"s{index}", True) for index in range(20)]
+    marked += [(f"after{index}", False) for index in range(100)]
+    runs, shown = script._trimmed(marked)
+    assert runs[0].words == ("[… 75 words before not shown …]",)
+    assert runs[1].words[0] == "before75"
+    assert runs[-2].words[-1] == "after24"
+    assert runs[-1].words == ("[… 75 words after not shown …]",)
+    assert shown == 25 + 20 + 25
+
+
 def test_runs_of_a_side_s_own_text_inside_its_shared_region_keep_their_ends() -> None:
     marked = [(f"s{index}", True) for index in range(20)]
     marked += [(f"own{index}", False) for index in range(200)]
@@ -1306,7 +1319,7 @@ def test_a_cluster_sample_asks_about_five_of_its_ten_pairs_and_saves_counts_alon
     ("store", "answers", "options"),
     [
         ("shaped_dir", ["d", "s", "u", "d", "s"], ["--largest", "1", "--count", "10"]),
-        ("shaped_dir", ["s", script.STOP_KEY], ["--largest", "1", "--least-alike"]),
+        ("shaped_dir", ["s", "q"], ["--largest", "1", "--least-alike"]),
         ("nested_dir", [], ["--kept-apart-by", "long-cut-within-the-share"]),
         ("data_dir", ["s", "d"], []),
         ("data_dir", [], ["--divided"]),

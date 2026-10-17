@@ -1235,6 +1235,38 @@ def test_written_words_are_marked_by_the_matching_words_they_hold() -> None:
     assert all(flag for _, flag in script._marked_words(text, shingles_of(text)))
 
 
+def test_where_written_words_cannot_be_lined_up_the_matching_words_are_shown(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No text found in writing defeats the alignment above, so a matching-word function that
+    runs any two written words together stands in for one: the matching words are shown instead,
+    each marked by its own shingles."""
+    from debate_core.evidence import near_duplicates
+
+    real = near_duplicates.matching_words
+    other = shingles_of("one two three four five six")
+
+    def runs_two_together(text: str) -> list[str]:
+        words = real(text)
+        return ["".join(words[:2]), *words[2:]] if len(text.split()) > 1 else words
+
+    monkeypatch.setattr(near_duplicates, "matching_words", runs_two_together)
+    marked = script._marked_words("Alpha beta one two three four five six", other)
+    assert marked == [
+        ("alphabeta", False),
+        *((word, True) for word in ("one", "two", "three", "four", "five", "six")),
+    ]
+
+
+def test_a_card_with_no_body_is_shown_by_its_cite_and_left_for_a_person() -> None:
+    (empty, full) = _cards((CardCompleteness.CITE_ONLY, []), (FULL, _numbered("mid", 30)))
+    assert script.classify_pair(empty, full) == (script.NO_WORDS, None)
+    shown = ANSI.sub("", script.render_pair(empty, full, script.NO_WORDS, 80))
+    assert f"Shape: {script.NO_WORDS}." in shown
+    assert "A: CITE_ONLY, 0 words, cite Invented 26; no five-word runs." in shown
+    assert f"[… no body; cite {empty.full_cite} …]" in shown
+
+
 def shingles_of(text: str) -> frozenset[str]:
     from debate_core.evidence.near_duplicates import shingles
 

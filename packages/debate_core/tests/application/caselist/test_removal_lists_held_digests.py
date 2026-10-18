@@ -34,7 +34,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
-from tests.fixtures.caselist.build_held_path_archives import ARRIVING_BODIES, arriving_digest_of
+from tests.fixtures.caselist.build_held_path_archives import (
+    ARRIVING_BODIES,
+    arriving_digest_of,
+    build_arriving_weekly_zips,
+)
 from tests.fixtures.caselist.build_revised_path_archives import (
     CASELIST,
     ONE_WEEK_PATH,
@@ -384,6 +388,31 @@ async def test_after_the_re_run_bytes_another_path_holds_still_import_at_a_path_
     rows = manifest_rows(world, f"manifests/{CASELIST}/2026-10-13.jsonl")
     assert classification_at(rows, ONE_WEEK_PATH) != [str(Classification.SUPPRESSED)]
     assert held_at(rows, ONE_WEEK_PATH) == {UPLOADED_AFTER_AT_TWO_PATHS}
+
+
+async def test_a_held_copy_the_inbox_still_shows_is_withdrawn_from_the_held_path_once(
+    world: RemovalWorld, tmp_path: Path
+) -> None:
+    """Both the record and an archive waiting in the inbox name it there: one path, one entry.
+
+    The inbox gives the path's text, so the plan withdraws it as the later upload it is, and the
+    record adds nothing more to it.
+    """
+    for week in (WEEK_OF_THE_HELD_UPLOAD, WEEK_OF_THE_SHARED_UPLOAD):
+        archive = (world.data_dir / "inbox") / f"{CASELIST}-weekly-{week.isoformat()}.zip"
+        built = build_arriving_weekly_zips(tmp_path / "arriving")[(CASELIST, week)]
+        archive.write_bytes(built.read_bytes())
+        await import_archive(world, archive, week)
+    assert line_for(UPLOADED_AFTER_AT_TWO_PATHS) in local_record(world), "the precondition"
+
+    plan = await plan_again(world)
+
+    planned = plan.source(UPLOADED_AFTER_AT_TWO_PATHS)
+    assert planned is not None
+    assert (planned.inclusion.value, planned.disposition.value) == ("later_upload", "withdraw")
+    assert [entry.disclosure for entry in entries_for(plan, UPLOADED_AFTER_AT_TWO_PATHS)] == [HELD_PATH]
+    assert planned.requester_paths == ((CASELIST, REVISED_PATH),)
+    assert planned.held_at_import == ()
 
 
 # ------------------------------------------------------------------------------------------------

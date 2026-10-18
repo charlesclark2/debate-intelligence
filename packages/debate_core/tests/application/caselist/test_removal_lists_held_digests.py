@@ -40,6 +40,7 @@ from tests.fixtures.caselist.build_revised_path_archives import (
     ONE_WEEK_PATH,
     OTHER_TEAM_PATH,
     REVISED_PATH,
+    digest_of,
 )
 
 from debate_core.application.caselist.import_service import CaselistImportService, Classification
@@ -290,6 +291,20 @@ async def test_running_it_a_third_time_has_nothing_left_to_do_for_it(
 
     assert plan.source(UPLOADED_AFTER) is None
     assert plan.nothing_to_do
+
+
+async def test_a_removal_of_another_file_under_the_same_request_does_not_list_it(
+    world: RemovalWorld, tmp_path: Path
+) -> None:
+    """The hold that refused it is on the named version: a `--source` of any other file holds nothing
+    there, though one request may name several files."""
+    await import_weekly(world, tmp_path, CASELIST, WEEK_OF_THE_HELD_UPLOAD)
+
+    plan = await world.service().plan(
+        SourceSelector(digest_of("kept")), request_id=REQUEST, reason=ReasonCode.REQUESTED_BY_TEAM
+    )
+
+    assert plan.source(UPLOADED_AFTER) is None
 
 
 async def test_another_requests_removal_does_not_list_it(world: RemovalWorld, tmp_path: Path) -> None:

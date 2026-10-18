@@ -377,10 +377,6 @@ class HeldDigestEntry(DomainModel):
     request_id: RequestId
     """The request holding the path."""
 
-    def refused_by(self, hold: PathHoldEntry) -> bool:
-        """Whether `hold` is the one that refused these bytes: the same path and the same request."""
-        return (hold.disclosure, hold.request_id) == (self.disclosure, self.request_id)
-
     def to_line(self) -> str:
         return canonical_line(self)
 

@@ -684,7 +684,6 @@ class RemovalPlan:
                 continue
             touched.update(ref.caselist for ref in source.disclosures)
             touched.update(caselist for caselist, _ in source.requester_paths)
-            touched.update(caselist for caselist, _ in source.held_at_import)
             touched.update(source.withdrawn_earlier_from)
             if source.camp_files:
                 touched.add(OPENEV)
@@ -1599,12 +1598,9 @@ class RemovalPlanner:
                 # by this machine's records or by any manifest on either side. A camp path's release
                 # year's copy goes only when no other release of that year holds it (v1-e30-t14).
                 # A re-run also takes the caselists the withdrawal record names, whose paths the
-                # first run's deletions left nothing to show (v1-e30-t19), and those of the held
-                # paths an import refused it at (v1-e30-t23).
-                withdrawn_from = (
-                    {name for name, _ in source.requester_paths}
-                    | {name for name, _ in source.held_at_import}
-                    | set(source.withdrawn_earlier_from)
+                # first run's deletions left nothing to show (v1-e30-t19).
+                withdrawn_from = {name for name, _ in source.requester_paths} | set(
+                    source.withdrawn_earlier_from
                 )
                 parsed_caselists = sorted(withdrawn_from - set(source.kept_in))
                 raw_prefixes = [
@@ -1999,17 +1995,16 @@ def _refused_at_import(
 ) -> dict[Sha256Hex, tuple[tuple[str, Sha256Hex], ...]]:
     """For each upload an import refused under this request, the held paths it was refused at (`v1-e30-t23`).
 
-    `(caselist, disclosure digest)`, from the hold that refused it: one of this request's holds in
-    force, on a file the selector names, as :func:`_recorded_paths` asks of a row. A hold an
-    un-suppress lifted refuses nothing any more, and its uploads are not planned. A named file is
-    planned as named.
+    `(caselist, disclosure digest)`, from a hold in force at the entry's path on a file the selector
+    names, as :func:`_recorded_paths` asks of a row. A hold an un-suppress lifted refuses nothing
+    any more, and its uploads are not planned. A named file is planned as named.
     """
     found: dict[Sha256Hex, set[tuple[str, Sha256Hex]]] = {}
     for entry in held:
         if entry.request_id != request_id or entry.sha256 in named:
             continue
         for hold in state.held_paths.get(entry.disclosure, ()):
-            if entry.refused_by(hold) and hold.sha256 in named:
+            if hold.sha256 in named:
                 found.setdefault(entry.sha256, set()).add((hold.caselist, hold.disclosure))
     return {digest: tuple(sorted(paths)) for digest, paths in sorted(found.items())}
 

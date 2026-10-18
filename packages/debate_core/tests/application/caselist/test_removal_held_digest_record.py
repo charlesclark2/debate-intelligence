@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import inspect
 import json
+from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
@@ -31,17 +32,13 @@ from debate_core.application.ports.suppression import (
     AppendOnlyViolation,
     HeldDigestEntry,
     HeldDigestList,
-    PathHoldEntry,
-    ReasonCode,
+    SuppressionEntry,
 )
 from debate_core.integrations.local import FsEvidenceObjectStore
 from debate_core.integrations.local.suppression_list import local_suppression_list_file
 from debate_core.testing.fakes import InMemoryAppendOnlyRecord
 
-from .test_suppression_path_holds import (
-    REMOVED_AT,
-    _BucketNeedingALogin,  # pyright: ignore[reportPrivateUsage]
-)
+from .test_suppression_path_holds import _BucketNeedingALogin  # pyright: ignore[reportPrivateUsage]
 
 pytestmark = pytest.mark.anyio
 
@@ -104,23 +101,6 @@ def test_a_line_has_no_field_a_name_or_a_path_could_be_written_into(extra: dict[
 def test_the_request_id_is_the_registers_and_cannot_carry_a_name(request_id: str) -> None:
     with pytest.raises(ValidationError):
         held(request_id=request_id)
-
-
-def test_a_line_names_the_hold_that_refused_it_by_its_path_and_request() -> None:
-    hold = PathHoldEntry(
-        caselist="testcl26",
-        disclosure=HELD_PATH,
-        sha256="a" * 64,
-        after_snapshot=REMOVED_AT.date(),
-        recorded_at=REMOVED_AT,
-        reason=ReasonCode.REQUESTED_BY_TEAM,
-        request_id="RM-2026-01",
-    )
-    assert held().refused_by(hold)
-    assert not held(request_id="RM-2026-02").refused_by(hold)
-    assert not HeldDigestEntry(sha256=HELD_UPLOAD, disclosure="c" * 64, request_id="RM-2026-01").refused_by(
-        hold
-    )
 
 
 # ------------------------------------------------------------------------------------------------
@@ -213,6 +193,22 @@ async def test_a_list_that_keeps_no_record_beside_it_refuses_an_entry_rather_tha
     assert await listed.held_digests() == ()
     with pytest.raises(AppendOnlyViolation):
         await record_held_digests(listed, [held()])
+
+
+class _AListOfLinesAlone:
+    """A suppression list that is not a held-digest list at all, as a build's own fake might be."""
+
+    async def entries(self) -> tuple[SuppressionEntry, ...]:
+        return ()
+
+    async def append(self, entries: Sequence[SuppressionEntry]) -> None:
+        raise AssertionError("nothing here appends to the list")
+
+
+async def test_a_list_of_another_kind_refuses_an_entry_too() -> None:
+    with pytest.raises(AppendOnlyViolation):
+        await record_held_digests(_AListOfLinesAlone(), [held()])
+    await record_held_digests(_AListOfLinesAlone(), [])
 
 
 def test_every_suppression_list_the_platform_builds_keeps_the_held_digests() -> None:

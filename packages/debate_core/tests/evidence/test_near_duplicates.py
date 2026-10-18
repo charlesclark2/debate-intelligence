@@ -773,3 +773,193 @@ def test_a_cut_with_two_witnesses_is_measured_against_the_smallest_once_they_are
     assert len(word_shingles(cut)) < MIN_CUT_SHARE * len(word_shingles(card))
     assert partition(card, near_copy, short_copy) == [[0, 1, 2]]
     assert partition(card, near_copy, short_copy, cut) == [[0, 1, 2, 3]]
+
+
+# ------------------------------------------------------------------------------------------------
+# Long cuts, and joins only on text two bodies share (`v1-e31-t20`)
+# ------------------------------------------------------------------------------------------------
+#
+# The PM's ruling of 2026-10-16: a card is a passage. Two bodies are one card when one holds the
+# other or they overlap; two passages of one article are two cards. Bodies join only on text they
+# share directly, never through a third body that holds both, and a body that holds the passages
+# of two or more clusters is not a witness for joining any of them.
+
+
+def shares_text_throughout(*bodies: list[str]) -> bool:
+    """Whether every two of `bodies` that `clustered` puts in one cluster share a shingle."""
+    clusters = clustered(*bodies)
+    sets = [frozenset(word_shingles(body)) for body in bodies]
+    return all(
+        not sets[left].isdisjoint(sets[right])
+        for left, right in itertools.combinations(range(len(bodies)), 2)
+        if clusters[left] == clusters[right]
+    )
+
+
+FIRST_PASSAGE: Final = numbered("first", 59)
+"""Fifty-nine words (55 shingles): a short body."""
+
+SECOND_PASSAGE: Final = numbered("second", 87)
+"""Eighty-seven words (83 shingles), none of them the first passage's."""
+
+BOTH_PASSAGES: Final = [*FIRST_PASSAGE, *SECOND_PASSAGE, *numbered("then", 4)]
+"""A 150-word body holding all of both: two cards stored as one, or a card and its neighbour."""
+
+
+@pytest.mark.parametrize("ordering", list(itertools.permutations(range(3))))
+def test_two_bodies_sharing_no_text_are_not_joined_through_a_third_that_holds_both(
+    ordering: tuple[int, ...],
+) -> None:
+    """`v1-e31-t11`'s false join, the shape the operator's join sample found on 2026-10-16: two
+    bodies of 59 and 87 words that share no text, joined because a 150-word body holds all of both.
+    The body holding both passages is a witness for neither, so under any fingerprints all three
+    stay apart."""
+    shares = [
+        len(word_shingles(passage)) / len(word_shingles(BOTH_PASSAGES))
+        for passage in (FIRST_PASSAGE, SECOND_PASSAGE)
+    ]
+    assert min(shares) >= MIN_CUT_SHARE
+    keys = [f"{position:064x}" for position in ordering]
+    bodies = dict(zip(keys, (FIRST_PASSAGE, SECOND_PASSAGE, BOTH_PASSAGES), strict=True))
+    assert keyed_partition(bodies) == sorted([key] for key in keys)
+
+
+def test_a_body_holding_one_passage_is_that_passages_card() -> None:
+    """The same bodies two at a time. Among them the long body holds one passage, and each passage
+    joins it, the long one by the same step as the short one."""
+    assert partition(FIRST_PASSAGE, BOTH_PASSAGES) == [[0, 1]]
+    assert partition(SECOND_PASSAGE, BOTH_PASSAGES) == [[0, 1]]
+
+
+def test_a_body_holding_two_passages_is_no_witness_even_for_a_passage_nothing_else_claims() -> None:
+    """The second passage is also inside a card of its own. The body holding both passages is still
+    no witness: the first passage, which nothing else holds, stays out of it, and the second joins
+    the card that holds it alone."""
+    own_card = [*numbered("before", 30), *SECOND_PASSAGE, *numbered("after", 30)]
+    assert partition(FIRST_PASSAGE, SECOND_PASSAGE, BOTH_PASSAGES, own_card) == [[0], [1, 3], [2]]
+
+
+def test_a_long_cut_joins_the_one_card_it_is_inside() -> None:
+    """A hundred words of a 300-word card, a third of its shingles. Before `v1-e31-t20` a long cut
+    joined a card only when the banding happened to pair the two; its containers are now found the
+    way a short cut's are."""
+    card = numbered("word", 300)
+    cut = card[100:200]
+    assert len(word_shingles(cut)) >= SHORT_BODY_SHINGLES
+    assert partition(card, cut) == [[0, 1]]
+
+
+def test_a_long_cut_joins_a_card_no_more_than_four_times_its_size() -> None:
+    """`MIN_CUT_SHARE` holds for a long cut as for a short one: 60 shingles of 240 join, of 241 not."""
+    cut = numbered("word", 300)[100:164]
+    assert len(word_shingles(cut)) == SHORT_BODY_SHINGLES
+    assert partition(numbered("word", 244), cut) == [[0, 1]]
+    assert partition(numbered("word", 245), cut) == [[0], [1]]
+
+
+def test_a_short_cut_and_the_long_copies_it_sits_between_are_one_cluster() -> None:
+    """The shape behind the pairs divided since `v1-e31-t08`: a 30-word cut of a 90-word copy of a
+    330-word card, which the banding never paired with the copy. `card-fingerprint-v3` put the cut
+    with the copy and left the card apart. The copy is over a quarter of the card, so it now joins
+    the card, and the cut is with both."""
+    whole = numbered("word", 330)
+    copy = whole[100:190]
+    cut = copy[10:40]
+    assert len(word_shingles(copy)) >= MIN_CUT_SHARE * len(word_shingles(whole))
+    assert partition(whole, copy) == [[0, 1]]
+    assert partition(whole, copy, cut) == [[0, 1, 2]]
+
+
+def test_two_passages_held_by_two_copies_of_one_card_join_neither() -> None:
+    """A 200-word card and a copy of it cut twenty words later, one cluster by Jaccard. The card
+    holds a 55-word opening, the copy a 55-word close, and the two share nothing. Each has one
+    witness, that cluster, and either alone joins it; both would put two texts sharing nothing in
+    one cluster, so neither does. The cluster holds two passages through two of its bodies."""
+    article = numbered("word", 220)
+    card, later = article[:200], article[20:220]
+    opening, closing = article[:55], article[165:220]
+    assert jaccard(frozenset(word_shingles(card)), frozenset(word_shingles(later))) >= 0.8
+    assert frozenset(word_shingles(opening)).isdisjoint(word_shingles(closing))
+    assert partition(card, later, opening) == [[0, 1, 2]]
+    assert partition(card, later, closing) == [[0, 1, 2]]
+    assert partition(card, later, opening, closing) == [[0, 1], [2], [3]]
+
+
+def test_copies_a_few_words_apart_never_chain_into_a_cluster_of_texts_that_share_nothing() -> None:
+    """Eleven 100-word extents of one article, each ten words on from the last: each pair of
+    neighbours is one card by Jaccard (86 of 106 shingles), and the first and last share nothing.
+    Copies are joined strongest first, then by fingerprint, and a join that would put two texts
+    sharing nothing in one cluster is refused: here the last extent stays apart."""
+    article = numbered("word", 200)
+    extents = [article[10 * step : 10 * step + 100] for step in range(11)]
+    neighbours = jaccard(frozenset(word_shingles(extents[0])), frozenset(word_shingles(extents[1])))
+    assert neighbours >= 0.8
+    assert frozenset(word_shingles(extents[0])).isdisjoint(word_shingles(extents[10]))
+    assert shares_text_throughout(*extents)
+    assert partition(*extents) == [list(range(10)), [10]]
+
+
+def test_a_cut_already_with_a_body_that_holds_it_does_not_take_that_cluster_into_another() -> None:
+    """`v1-e31-t11`'s Follow-up 6. A 40-word passage and a copy of it five words longer, one cluster
+    by Jaccard: the copy holds the passage. An 80-word card elsewhere holds the passage and not the
+    copy. The passage's own cluster is one witness and the card another, neither holds the other,
+    and the passage joins neither. Without the copy, it joins the card."""
+    passage = numbered("passage", 40)
+    longer = [*passage, *numbered("more", 5)]
+    card = [*numbered("before", 20), *passage, *numbered("after", 20)]
+    assert partition(passage, longer) == [[0, 1]]
+    assert partition(passage, card) == [[0, 1]]
+    assert partition(passage, longer, card) == [[0, 1], [2]]
+
+
+def test_a_long_cut_already_with_a_body_that_holds_it_does_not_pull_in_a_second() -> None:
+    """The same for a long cut, the case `v1-e31-t11`'s Decision 1 held long cuts back for: joined
+    naively, a cut already in a cluster with one body that holds it would pull in the cluster of a
+    second."""
+    passage = numbered("passage", 100)
+    longer = [*passage, *numbered("more", 5)]
+    card = [*numbered("before", 40), *passage, *numbered("after", 40)]
+    assert partition(passage, longer) == [[0, 1]]
+    assert partition(passage, card) == [[0, 1]]
+    assert partition(passage, longer, card) == [[0, 1], [2]]
+
+
+def test_a_cut_whose_copy_does_not_hold_it_still_joins_the_card_that_does() -> None:
+    """The boundary of the rule above: a copy that ends in two other words is one card with the
+    passage by Jaccard but does not hold it, so the passage's cluster is no witness of its own. It
+    joins the card that holds the passage, and the copy, which shares the passage's text with the
+    card, comes with it."""
+    passage = numbered("passage", 40)
+    variant = [*passage[:38], *numbered("ending", 2)]
+    card = [*numbered("before", 20), *passage, *numbered("after", 20)]
+    assert partition(passage, variant) == [[0, 1]]
+    assert partition(passage, variant, card) == [[0, 1, 2]]
+
+
+def test_a_short_cut_of_a_card_whose_copies_join_one_another_is_compared_once_they_have() -> None:
+    """`MAX_CONTAINER_CLUSTERS` is counted against the clusters as they stand, after long cuts have
+    joined. Nine copies of a 513-word card, each the opening of the next and about four-fifths of
+    it, are ten clusters to start with: none is one card with another by Jaccard. A 20-word cut of
+    the opening is inside all ten, more than the limit, so at first it is left alone. Each copy
+    joins the next and the last joins the card, and then the cut is inside one cluster."""
+    lengths = [64, 81, 102, 128, 161, 203, 256, 323, 407]
+    card = numbered("word", 513)
+    copies = [card[:length] for length in lengths]
+    cut = card[10:30]
+    sets = [frozenset(word_shingles(body)) for body in (*copies, card)]
+    assert max(jaccard(sets[position], sets[position + 1]) for position in range(9)) < 0.8
+    assert len(sets) > MAX_CONTAINER_CLUSTERS
+    assert partition(*copies, card) == [list(range(10))]
+    assert partition(*copies, card, cut) == [list(range(11))]
+
+
+def test_a_short_body_nine_tenths_inside_a_body_lacking_one_of_its_ends_stays_out() -> None:
+    """`v1-e31-t08`'s rule, kept until the operator's `lacking-an-end` sample says otherwise: a
+    40-word passage with one stray word after it is 36 of its 37 shingles inside the card, but its
+    last shingle is not, so it is not compared."""
+    card = numbered("word", 100)
+    stray = [*card[20:60], "stray"]
+    stray_set = frozenset(word_shingles(stray))
+    assert containment(stray_set, frozenset(word_shingles(card))) >= 0.9
+    assert word_shingles(stray)[-1] not in frozenset(word_shingles(card))
+    assert partition(card, stray) == [[0], [1]]

@@ -853,6 +853,11 @@ class TestStatusHintsTheRemovalForAManifestThePublisherWithholds:
     asks the publisher's own rule, so these tests hold the hint to what the publish then does.
     """
 
+    @pytest.fixture(autouse=True)
+    def a_home_of_its_own(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        """Nothing here may reach the operator's `~/.debate-research` or `~/.aws`."""
+        monkeypatch.setenv("HOME", str(tmp_path / "home"))
+
     def test_a_manifest_mismatch_with_a_suppressed_row_gets_the_removal_hint_and_not_the_publish_hint(
         self, buckets: S3Client, imported: Path
     ) -> None:

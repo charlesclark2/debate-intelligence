@@ -125,7 +125,7 @@ async def read_path_holds(suppression: SuppressionList) -> tuple[PathHoldEntry, 
 
 
 async def read_withdrawals(suppression: SuppressionList) -> tuple[WithdrawalEntry, ...]:
-    """Every withdrawal entry beside `suppression`'s copies (`v1-e30-t16`). None for a list that keeps none."""
+    """Every withdrawal entry beside `suppression`'s copies (`v1-e30-t16`); none for a list keeping none."""
     return await suppression.withdrawals() if isinstance(suppression, WithdrawalList) else ()
 
 

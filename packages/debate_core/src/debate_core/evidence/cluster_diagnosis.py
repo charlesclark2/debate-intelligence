@@ -1,4 +1,4 @@
-"""Why near-duplicate clustering left a body where it did, in counts (`v1-e31-t11`).
+"""Why near-duplicate clustering left a body where it did, in counts (`v1-e31-t11`, `v1-e31-t20`).
 
 :mod:`debate_core.evidence.near_duplicates` answers *which* bodies share a cluster. This module
 answers the question a person asks of a finished placement: this body is plainly inside that one,
@@ -8,35 +8,36 @@ takes no part in placing a card.
 
 ## A cut and its containers
 
-A body is a **cut** of another when the other is at least as large, holds the cut's first and last
-shingle, and is *confirmed*: nine-tenths of the cut's shingles are in it, or the cut is short and
-in it but for one word (:func:`~debate_core.evidence.near_duplicates.confirms_a_cut`, the test the
-clusterer itself applies). :func:`diagnose_cuts` reports every body with a container **outside its
-own cluster** that no container inside its cluster accounts for, and says what kept it out
-(:class:`CutOutcome`):
+A body is a **cut** of another when the other contains it as the clusterer reads containment
+(:class:`~debate_core.evidence.near_duplicates.CutIndex`, which this module reads it from, so the
+diagnosis cannot drift from the rule it explains): at least as large, holding the cut's first and
+last shingle (a long cut's first or last), and confirmed. :func:`diagnose_cuts` reports every body
+with a container **outside its own cluster** that no container inside its cluster accounts for, and
+says what kept it out (:class:`CutOutcome`), in the order the cut step applies its limits
+(`card-fingerprint-v4`, short and long cuts alike):
 
-* **Short cuts** are governed by the short-body step, so the outcome names the limit of that step
-  that applied: its witnesses are in more than one cluster, it is under
-  :data:`~debate_core.evidence.near_duplicates.MIN_CUT_SHARE` of the smallest body that holds it,
-  or its ends are held by more than
-  :data:`~debate_core.evidence.near_duplicates.MAX_CONTAINER_CLUSTERS` clusters. A short cut the
-  step's own conditions would join, and that is still apart, is reported as exactly that: on a
-  placement made by the current rules it is one whose cluster holds another short body pointing
-  elsewhere, and on a placement made by earlier rules it is what those rules got wrong.
-* **Long cuts** have no step of their own. A long cut and its container are compared only if the
-  LSH banding happens to pair them, and a pair that was compared would have merged. So a long cut
-  with a container outside its cluster is one the banding never paired.
-* A short body nine-tenths inside a body that **lacks one of its ends** is reported too: before the
-  short-body step such a pair merged when the banding paired it, and since it they are never
-  compared.
+* its ends are held by more than
+  :data:`~debate_core.evidence.near_duplicates.MAX_CONTAINER_CLUSTERS` other clusters (a short cut);
+* every body outside that holds it also holds a passage sharing nothing with it, and so witnesses
+  nothing for it;
+* its witnesses are in more than one cluster, its own cluster among them or not;
+* it is under :data:`~debate_core.evidence.near_duplicates.MIN_CUT_SHARE` of its smallest witness;
+* joining its cluster to its witness's would put two texts that share nothing in one cluster.
 
-**Witnesses.** As in the clusterer since `card-fingerprint-v3`, containers that hold one another
-count once. When every confirmed container outside the cluster of the smallest one holds a
-container inside that cluster, the cut has one witness (:attr:`CutFinding.containers_nested`). And a container
-outside the cut's cluster that holds a container *inside* it is accounted for: a cut that has
-joined its smallest container is not reported for the larger bodies that container is a cut of.
-Such cuts are kept apart from the findings (:attr:`CutCensus.with_a_copy`) and counted on their
-own, because one of them may be the cut through which earlier rules joined two clusters.
+A cut none of these apply to is *within the rule*. On a placement made by the current rules it is
+one whose cluster holds another body pointing elsewhere, or one refused beside another cluster
+joining the same one that shares nothing with it; on a placement made by earlier rules it is what
+those rules got wrong. A short body nine-tenths inside a body that **lacks one of its ends** is
+reported too: before the short-body step such a pair merged when the banding paired it, and since
+it they are never compared.
+
+**Witnesses.** As in the clusterer, containers that hold one another count once. When every
+confirmed container outside the cluster of the smallest one holds a container inside that cluster,
+the cut has one witness (:attr:`CutFinding.containers_nested`). And a container outside the cut's
+cluster that holds a container *inside* it is accounted for: a cut that has joined its smallest
+container is not reported for the larger bodies that container is a cut of. Such cuts are kept
+apart from the findings (:attr:`CutCensus.with_a_copy`) and counted on their own, because one of
+them may be the cut through which earlier rules joined two clusters.
 
 ## Containers in more than one cluster: one card, or two?
 
@@ -68,7 +69,7 @@ from __future__ import annotations
 
 import statistics
 from collections import Counter, defaultdict
-from collections.abc import Mapping, Sequence, Set
+from collections.abc import Callable, Mapping, Sequence, Set
 from dataclasses import dataclass, replace
 from enum import StrEnum
 from typing import Final
@@ -77,16 +78,19 @@ from debate_core.evidence.abbreviated_links import SPLIT_COPY_OVERLAP
 from debate_core.evidence.near_duplicates import (
     LSH_BANDS,
     LSH_ROWS_PER_BAND,
-    MAX_CONTAINER_CLUSTERS,
     MIN_CUT_SHARE,
     MINHASH_SEED,
     SHORT_BODY_SHINGLES,
+    CutIndex,
     NearDuplicateThresholds,
     confirms_a_cut,
     containment,
     jaccard,
+    joining_target,
     matching_words,
     minhash_signature,
+    too_common,
+    witnesses,
     word_shingles,
 )
 
@@ -112,15 +116,19 @@ banding. A much-read card has hundreds of copies; a spread of them by size says 
 
 
 class CutOutcome(StrEnum):
-    """What kept a cut out of the cluster of a body that contains it."""
+    """What kept a cut out of the cluster of a body that contains it, in the order the cut step
+    applies its limits."""
 
-    SEVERAL_CLUSTERS = "short: its witnesses are in more than one cluster"
-    UNDER_MIN_CUT_SHARE = "short: under the minimum share of the smallest body that holds it"
     TOO_MANY_HOLDERS = "short: its ends are held by too many clusters"
-    WITHIN_THE_RULE = "short: one cluster is its witness, within the share, and it is still apart"
+    HELD_WITH_ANOTHER_PASSAGE = (
+        "every body outside that holds it also holds a passage sharing nothing with it"
+    )
+    OWN_CLUSTER_AND_ANOTHER = "a body in its own cluster holds it, and so does one in another"
+    SEVERAL_CLUSTERS = "its witnesses are in more than one cluster"
+    UNDER_MIN_CUT_SHARE = "under the minimum share of the smallest body that witnesses it"
+    UNRELATED_TEXTS = "joining it would put two texts that share nothing in one cluster"
+    WITHIN_THE_RULE = "one cluster is its witness, within the share, and it is still apart"
     ENDS_NOT_BOTH_INSIDE = "short: nine-tenths inside a body that lacks one of its ends"
-    LONG_NEVER_PAIRED = "long: its containers are one cluster the banding never paired it with"
-    LONG_SEVERAL_CLUSTERS = "long: its containers are in more than one cluster"
 
 
 class CopiesRead(StrEnum):
@@ -133,9 +141,9 @@ class CopiesRead(StrEnum):
 class KeptApartBy(StrEnum):
     """Which limit left two copies that read as one card in different clusters."""
 
-    BANDING = "pass the thresholds, never paired by the banding"
+    BANDING = "one card by Jaccard, never paired by the banding"
+    CUT_STEP = "one holds the other, and the cut step kept them apart"
     THRESHOLDS = "share at least half, under the Jaccard and containment thresholds"
-    SHORT_BODY_STEP = "the smaller copy is a short body the short-body step left out"
 
 
 @dataclass(frozen=True, slots=True)
@@ -158,7 +166,8 @@ class CutFinding:
     kept_apart_by: tuple[KeptApartBy, ...] = ()
     """For container clusters that read as one card: the limit between each connected pair."""
     share_of_smallest_container: float = 0.0
-    """Its shingles over those of the smallest confirmed container: 0.0 when none was confirmed."""
+    """Its shingles over those of the smallest confirmed container that may witness it (or, when
+    none may, the smallest of all): 0.0 when none was confirmed."""
     banded_with_a_container: bool = False
     """Whether the banding pairs it with one of the containers compared: for a short cut, the pair
     the rules before the short-body step would have merged."""
@@ -166,8 +175,12 @@ class CutFinding:
     """For :attr:`CutOutcome.WITHIN_THE_RULE` with one container cluster: the container that sorts
     first by fingerprint there is over the share, although a smaller one is within it. What
     `card-fingerprint-v2` measured the share against."""
+    another_body_points_elsewhere: bool = False
+    """For :attr:`CutOutcome.WITHIN_THE_RULE`: another body of its cluster keeps the cluster from
+    joining this cut's witness, by a witness of its own elsewhere or by being too common."""
     smallest_container: str | None = None
-    """The smallest confirmed container: the body a rule that joined this cut would join it to."""
+    """The smallest confirmed container that may witness it: the body a rule that joined this cut
+    would join it to."""
     witness_cluster_texts: int = 0
     """Distinct bodies in the smallest container's cluster."""
     witness_cluster_texts_sharing_nothing: int = 0
@@ -215,9 +228,10 @@ class DividedPart:
     """The cut is in a cluster with a copy that the bodies it left also hold: `outcome` is what
     kept the cut out were that copy not there, and the copy is apart for its own reason."""
 
-    LEFT_OUT = "a short cut in this part was left out"
-    THROUGH_A_CUT = "this part was joined only through a short cut elsewhere"
-    UNEXPLAINED = "no short cut links this part to the rest"
+    LEFT_OUT = "a cut in this part was left out"
+    THROUGH_A_CUT = "this part was joined only through a cut elsewhere"
+    COPIES_APART = "a text in this part is a copy of one in the rest"
+    UNEXPLAINED = "no cut or copy links this part to the rest"
 
 
 @dataclass(frozen=True, slots=True)
@@ -238,7 +252,7 @@ class ClusterShape:
     """Pairs sharing some shingle, and under :data:`SPLIT_COPY_OVERLAP` of the smaller text."""
     pairs_sharing_half_or_more: int
     pairs_matching: int
-    """Pairs the rules would confirm if compared: Jaccard, long containment, or a short cut."""
+    """Pairs the rules would confirm if compared: Jaccard, or one a cut of the other."""
     groups_sharing_half: int
     """Connected groups when only texts sharing at least half of the smaller are joined."""
     largest_group_texts: int
@@ -301,18 +315,23 @@ def diagnose_cuts(
     that nothing contains, is not among the findings.
     """
     limits = thresholds or NearDuplicateThresholds()
-    held = _Bodies(bodies)
-    ends = {
-        fingerprint: (ordered[0], ordered[-1]) for fingerprint, ordered in held.ordered.items() if ordered
+    index = CutIndex(bodies, limits)
+    cluster_of: Callable[[str], str] = clusters.__getitem__
+    members: defaultdict[str, list[str]] = defaultdict(list)
+    for fingerprint in index.fingerprints:
+        members[clusters[fingerprint]].append(fingerprint)
+    cuts_of = {
+        cluster: [fingerprint for fingerprint in held if index.candidates(fingerprint)]
+        for cluster, held in members.items()
     }
-    short = {fingerprint for fingerprint in ends if held.size(fingerprint) < SHORT_BODY_SHINGLES}
+    short = {fingerprint for fingerprint in index.ends if index.size(fingerprint) < SHORT_BODY_SHINGLES}
 
-    end_shingles = {shingle for pair in ends.values() for shingle in pair}
-    short_shingles = {shingle for fingerprint in short for shingle in held.sets[fingerprint]}
-    indexed = end_shingles | short_shingles
+    # Every body holding a shingle of a short body: what finds one nine-tenths inside a body that
+    # lacks one of its ends, which is never among its candidates.
+    short_shingles = {shingle for fingerprint in short for shingle in index.sets[fingerprint]}
     holders: defaultdict[str, set[str]] = defaultdict(set)
-    for fingerprint in held.fingerprints:
-        for shingle in held.sets[fingerprint] & indexed:
+    for fingerprint in index.fingerprints:
+        for shingle in index.sets[fingerprint] & short_shingles:
             holders[shingle].add(fingerprint)
 
     signatures: dict[str, tuple[int, ...]] = {}
@@ -320,45 +339,32 @@ def diagnose_cuts(
     def banded(left: str, right: str) -> bool:
         for fingerprint in (left, right):
             if fingerprint not in signatures:
-                signatures[fingerprint] = minhash_signature(held.sets[fingerprint], seed)
+                signatures[fingerprint] = minhash_signature(index.sets[fingerprint], seed)
         return _share_a_band(signatures[left], signatures[right])
-
-    def holds(holder: str, cut: str) -> bool:
-        return held.size(holder) >= held.size(cut) and confirms_a_cut(
-            held.sets[cut], held.sets[holder], held.words[cut], held.words[holder], limits
-        )
-
-    members: defaultdict[str, list[str]] = defaultdict(list)
-    for fingerprint in held.fingerprints:
-        members[clusters[fingerprint]].append(fingerprint)
 
     findings: list[CutFinding] = []
     set_aside: list[CutFinding] = []
-    for cut in sorted(ends):
-        first, last = ends[cut]
-        cut_set, cluster = held.sets[cut], clusters[cut]
-        holding_both_ends = {
-            holder
-            for holder in holders[first] & holders[last]
-            if holder != cut and held.size(holder) >= len(cut_set)
-        }
-        outside_holders = {holder for holder in holding_both_ends if clusters[holder] != cluster}
+    for cut in sorted(index.ends):
+        cut_set, cluster = index.sets[cut], clusters[cut]
+        # A copy of the cut (a body of its size that each holds the other) is counted as holding it
+        # here, although the clusterer joins copies by their own step: a copy kept apart is a body
+        # holding the cut outside its cluster as much as a container is.
+        containers = [holder for holder in index.candidates(cut) if index.holds(holder, cut)]
         # The smallest containers it is already with: a body outside that holds one of them is
         # accounted for, as a larger copy of something the cut has joined.
-        with_it = [
-            holder for holder in held.by_size(holding_both_ends - outside_holders) if holds(holder, cut)
-        ][:MAX_CONTAINERS_COMPARED]
+        with_it = [holder for holder in containers if clusters[holder] == cluster][:MAX_CONTAINERS_COMPARED]
 
         def accounted_for(holder: str, with_it: Sequence[str] = with_it) -> bool:
-            return any(holds(holder, inside) for inside in with_it)
+            return any(index.holds(holder, inside) for inside in with_it)
 
         confirmed: defaultdict[str, list[str]] = defaultdict(list)
         every_confirmed: defaultdict[str, list[str]] = defaultdict(list)
-        for holder in held.by_size(outside_holders):
-            if holds(holder, cut):
-                every_confirmed[clusters[holder]].append(holder)
-                if not accounted_for(holder):
-                    confirmed[clusters[holder]].append(holder)
+        for holder in containers:
+            if clusters[holder] == cluster:
+                continue
+            every_confirmed[clusters[holder]].append(holder)
+            if not accounted_for(holder):
+                confirmed[clusters[holder]].append(holder)
 
         lacking_an_end: set[str] = set()
         every_lacking_an_end: set[str] = set()
@@ -366,13 +372,14 @@ def diagnose_cuts(
             sharing: Counter[str] = Counter()
             for shingle in cut_set:
                 sharing.update(holders[shingle])
+            candidates = set(index.candidates(cut))
             every_lacking_an_end = {
                 other
                 for other, shared in sharing.items()
                 if other != cut
-                and other not in holding_both_ends
+                and other not in candidates
                 and clusters[other] != cluster
-                and held.size(other) >= len(cut_set)
+                and index.size(other) >= len(cut_set)
                 and shared >= limits.containment * len(cut_set)
             }
             lacking_an_end = {other for other in every_lacking_an_end if not accounted_for(other)}
@@ -382,29 +389,29 @@ def diagnose_cuts(
         if not confirmed and not lacking_an_end:
             continue
 
-        finding = _finding(held, cut, cluster, outside_holders, confirmed, lacking_an_end, clusters, limits)
+        finding = _finding(index, cut, cluster, confirmed, lacking_an_end, cluster_of, members, cuts_of)
         if finding.smallest_container is not None:
             beside = members[clusters[finding.smallest_container]]
             finding = replace(
                 finding,
                 witness_cluster_texts=len(beside),
-                witness_cluster_texts_sharing_nothing=sum(cut_set.isdisjoint(held.sets[b]) for b in beside),
+                witness_cluster_texts_sharing_nothing=sum(cut_set.isdisjoint(index.sets[b]) for b in beside),
             )
         if cut in short:
             # Only a short cut's pairing matters: a long pair the banding made would have merged.
-            compared = [holder for members in confirmed.values() for holder in _spread(members)]
-            compared += held.by_size(lacking_an_end)[:MAX_CONTAINERS_COMPARED]
+            compared = [holder for held in confirmed.values() for holder in _spread(held)]
+            compared += index.by_size(lacking_an_end)[:MAX_CONTAINERS_COMPARED]
             finding = replace(
                 finding,
                 banded_with_a_container=any(
                     banded(cut, holder)
                     for holder in compared
-                    if len(cut_set & held.sets[holder]) >= limits.containment * len(cut_set)
+                    if len(cut_set & index.sets[holder]) >= limits.containment * len(cut_set)
                 ),
             )
         (set_aside if with_a_copy else findings).append(finding)
     return CutCensus(
-        texts=len(held.fingerprints),
+        texts=len(index.fingerprints),
         short_texts=len(short),
         findings=tuple(findings),
         with_a_copy=tuple(set_aside),
@@ -412,38 +419,39 @@ def diagnose_cuts(
 
 
 def _finding(
-    held: _Bodies,
+    index: CutIndex,
     cut: str,
     cluster: str,
-    outside_holders: Set[str],
     confirmed: Mapping[str, list[str]],
     lacking_an_end: Set[str],
-    clusters: Mapping[str, str],
-    limits: NearDuplicateThresholds,
+    cluster_of: Callable[[str], str],
+    members: Mapping[str, Sequence[str]],
+    cuts_of: Mapping[str, Sequence[str]],
 ) -> CutFinding:
-    """The finding for one cut, before the banding check. `confirmed` is by cluster, smallest first."""
-    size = held.size(cut)
-    is_short = size < SHORT_BODY_SHINGLES
-    everything = held.by_size([holder for members in confirmed.values() for holder in members])
-    smallest = everything[0] if everything else None
+    """The finding for one cut, before the banding check. `confirmed` is by cluster, smallest first.
+
+    The outcome is decided by the clusterer's own functions, against `cluster_of`.
+    """
+    size = index.size(cut)
+    everything = index.by_size([holder for held in confirmed.values() for holder in held])
+    copies = [holder for holder in everything if index.holds(cut, holder)]
+    eligible = [
+        holder
+        for holder in everything
+        if holder not in copies and not index.holds_a_passage_apart_from(holder, cut)
+    ]
+    smallest = (eligible or everything)[0] if everything else None
     home = [
-        holder for holder in everything if smallest is not None and clusters[holder] == clusters[smallest]
+        holder for holder in everything if smallest is not None and cluster_of(holder) == cluster_of(smallest)
     ]
     nested = len(confirmed) > 1 and all(
-        any(
-            confirms_a_cut(
-                held.sets[inside], held.sets[holder], held.words[inside], held.words[holder], limits
-            )
-            for inside in home
-        )
-        for holder in everything
-        if holder not in home
+        any(index.holds(holder, inside) for inside in home) for holder in everything if holder not in home
     )
     copies_read, kept_apart_by = (
-        _read_container_clusters(held, confirmed, limits) if len(confirmed) > 1 else (None, ())
+        _read_container_clusters(index, confirmed) if len(confirmed) > 1 else (None, ())
     )
 
-    def finding(outcome: CutOutcome, *, first_container_over_the_share: bool = False) -> CutFinding:
+    def finding(outcome: CutOutcome, **flags: bool) -> CutFinding:
         return CutFinding(
             fingerprint=cut,
             cluster_id=cluster,
@@ -452,31 +460,44 @@ def _finding(
             container_clusters=tuple(sorted(confirmed)),
             containers=frozenset(everything) | frozenset(lacking_an_end),
             containers_nested=nested,
-            share_of_smallest_container=size / held.size(smallest) if smallest is not None else 0.0,
+            share_of_smallest_container=size / index.size(smallest) if smallest is not None else 0.0,
             smallest_container=smallest,
             copies_read=copies_read,
             kept_apart_by=kept_apart_by,
-            first_container_over_the_share=first_container_over_the_share,
+            **flags,
         )
 
     if smallest is None:
         return finding(CutOutcome.ENDS_NOT_BOTH_INSIDE)
-    if not is_short:
-        return finding(
-            CutOutcome.LONG_SEVERAL_CLUSTERS if len(confirmed) > 1 else CutOutcome.LONG_NEVER_PAIRED
-        )
-    # The short-body step counts the clusters holding both ends before it compares any of them.
-    if len({clusters[holder] for holder in outside_holders}) > MAX_CONTAINER_CLUSTERS:
+    if too_common(cut, cluster_of, index):
         return finding(CutOutcome.TOO_MANY_HOLDERS)
-    if len(confirmed) > 1 and not nested:
-        return finding(CutOutcome.SEVERAL_CLUSTERS)
-    if size < MIN_CUT_SHARE * held.size(smallest):
+    if len(copies) == len(everything):
+        # Only copies hold it outside: they are joined unless the join puts unrelated texts together.
+        apart = any(
+            not index.share_text_throughout(members[cluster], members[cluster_of(copy)]) for copy in copies
+        )
+        return finding(CutOutcome.UNRELATED_TEXTS if apart else CutOutcome.WITHIN_THE_RULE)
+    seen = witnesses(cut, cluster_of, index)
+    if not eligible or seen is None:
+        return finding(CutOutcome.HELD_WITH_ANOTHER_PASSAGE)
+    if len(seen.clusters) > 1:
+        own = cluster in seen.clusters
+        return finding(CutOutcome.OWN_CLUSTER_AND_ANOTHER if own else CutOutcome.SEVERAL_CLUSTERS)
+    (target,) = seen.clusters
+    # A witness in its own cluster that the bodies outside hold: the cut is with it. What the cut
+    # is then described by is the rest of the rule, as it would be were that witness not there.
+    witness = eligible[0] if target == cluster else seen.smallest
+    if size < MIN_CUT_SHARE * index.size(witness):
         return finding(CutOutcome.UNDER_MIN_CUT_SHARE)
+    joins = joining_target(cuts_of[cluster], cluster, cluster_of, index)
+    if joins == target and not index.share_text_throughout(members[cluster], members[target]):
+        return finding(CutOutcome.UNRELATED_TEXTS)
     first_by_fingerprint = min(everything)
     return finding(
         CutOutcome.WITHIN_THE_RULE,
         first_container_over_the_share=len(confirmed) == 1
-        and size < MIN_CUT_SHARE * held.size(first_by_fingerprint),
+        and size < MIN_CUT_SHARE * index.size(first_by_fingerprint),
+        another_body_points_elsewhere=joins != target,
     )
 
 
@@ -489,7 +510,7 @@ def _spread(members: Sequence[str]) -> list[str]:
 
 
 def _read_container_clusters(
-    held: _Bodies, confirmed: Mapping[str, list[str]], limits: NearDuplicateThresholds
+    index: CutIndex, confirmed: Mapping[str, list[str]]
 ) -> tuple[CopiesRead, tuple[KeptApartBy, ...]]:
     """Whether a cut's container clusters read as one card, and what split each connected pair."""
     names = sorted(confirmed)
@@ -499,7 +520,7 @@ def _read_container_clusters(
         for right in names[position + 1 :]:
             best = max(
                 (
-                    (containment(held.sets[a], held.sets[b]), a, b)
+                    (containment(index.sets[a], index.sets[b]), a, b)
                     for a in _spread(confirmed[left])
                     for b in _spread(confirmed[right])
                 ),
@@ -509,7 +530,7 @@ def _read_container_clusters(
                 continue
             linked[left].add(right)
             linked[right].add(left)
-            gaps.append(_kept_apart_by(held, best[1], best[2], limits))
+            gaps.append(_kept_apart_by(index, best[1], best[2]))
     reached, frontier = {names[0]}, [names[0]]
     while frontier:
         for neighbour in linked[frontier.pop()] - reached:
@@ -520,16 +541,13 @@ def _read_container_clusters(
     return CopiesRead.ONE_CARD_SPLIT, tuple(sorted(gaps))
 
 
-def _kept_apart_by(held: _Bodies, left: str, right: str, limits: NearDuplicateThresholds) -> KeptApartBy:
-    left_set, right_set = held.sets[left], held.sets[right]
-    overlap = containment(left_set, right_set)
-    if min(len(left_set), len(right_set)) < SHORT_BODY_SHINGLES:
-        if jaccard(left_set, right_set) >= limits.jaccard:
-            return KeptApartBy.BANDING
-        return KeptApartBy.SHORT_BODY_STEP if overlap >= limits.containment else KeptApartBy.THRESHOLDS
-    if jaccard(left_set, right_set) >= limits.jaccard or overlap >= limits.containment:
+def _kept_apart_by(index: CutIndex, left: str, right: str) -> KeptApartBy:
+    """Since `card-fingerprint-v4` copies are joined by Jaccard through the banding, and a body
+    inside another by the cut step, whatever their size."""
+    if jaccard(index.sets[left], index.sets[right]) >= index.limits.jaccard:
         return KeptApartBy.BANDING
-    return KeptApartBy.THRESHOLDS
+    smaller, larger = sorted((left, right), key=lambda body: (index.size(body), body))
+    return KeptApartBy.CUT_STEP if index.holds(larger, smaller) else KeptApartBy.THRESHOLDS
 
 
 def _share_a_band(left: Sequence[int], right: Sequence[int]) -> bool:
@@ -545,7 +563,10 @@ def tally_cuts(findings: Sequence[CutFinding], with_a_copy: Sequence[CutFinding]
 
     `with_a_copy` is :attr:`CutCensus.with_a_copy`: counted on their own, never among the findings.
     """
-    by_outcome: Counter[str] = Counter(finding.outcome.value for finding in findings)
+
+    def by_outcome(chosen: Sequence[CutFinding]) -> dict[str, int]:
+        counted = Counter(finding.outcome.value for finding in chosen)
+        return {outcome.value: counted.get(outcome.value, 0) for outcome in CutOutcome}
 
     def several(chosen: Sequence[CutFinding]) -> dict[str, object]:
         """Cuts whose containers are in more than one cluster: how those clusters read."""
@@ -561,11 +582,11 @@ def tally_cuts(findings: Sequence[CutFinding], with_a_copy: Sequence[CutFinding]
             ),
         }
 
-    def shares(outcome: CutOutcome) -> dict[str, int]:
+    def shares(chosen: Sequence[CutFinding]) -> dict[str, int]:
         counted = Counter(
             _share_band(finding.share_of_smallest_container)
-            for finding in findings
-            if finding.outcome is outcome
+            for finding in chosen
+            if finding.outcome is CutOutcome.UNDER_MIN_CUT_SHARE
         )
         return {band: counted.get(band, 0) for _, band in SHARE_BANDS}
 
@@ -573,45 +594,38 @@ def tally_cuts(findings: Sequence[CutFinding], with_a_copy: Sequence[CutFinding]
         within = [finding for finding in chosen if finding.outcome is CutOutcome.WITHIN_THE_RULE]
         nested = sum(finding.containers_nested for finding in within)
         first = sum(finding.first_container_over_the_share for finding in within)
+        elsewhere = sum(
+            finding.another_body_points_elsewhere
+            and not finding.containers_nested
+            and not finding.first_container_over_the_share
+            for finding in within
+        )
         return {
             "cuts": len(within),
             "its containers are nested copies in several clusters": nested,
             "the container first by fingerprint is over the share": first,
-            "neither: another short body of its cluster points elsewhere": len(within) - nested - first,
-        }
-
-    def one_witness_within_the_share(chosen: Sequence[CutFinding]) -> dict[str, int]:
-        """Cuts with one witness and within the share: what a step like the short one would join."""
-        joining = [
-            finding
-            for finding in chosen
-            if finding.has_one_witness and finding.share_of_smallest_container >= MIN_CUT_SHARE
-        ]
-        beside_all = [f for f in joining if f.witness_cluster_texts_sharing_nothing == 0]
-        return {
-            "cuts": len(joining),
-            "sharing text with every text of the witness's cluster": len(beside_all),
-            "of which that cluster is one text": sum(f.witness_cluster_texts == 1 for f in beside_all),
-            "sharing nothing with at least one text of it": len(joining) - len(beside_all),
+            "another body of its cluster points elsewhere": elsewhere,
+            "none of these: refused beside another join, or placed by other rules": (
+                len(within) - nested - first - elsewhere
+            ),
         }
 
     short = [finding for finding in findings if finding.is_short]
+    long = [finding for finding in findings if not finding.is_short]
     banded = [finding for finding in short if finding.banded_with_a_container]
     short_with_a_copy = [finding for finding in with_a_copy if finding.is_short]
     banded_with_a_copy = [f for f in short_with_a_copy if f.banded_with_a_container]
     return {
         "bodies_with_a_container_outside_their_cluster": len(findings),
-        "by_outcome": {outcome.value: by_outcome.get(outcome.value, 0) for outcome in CutOutcome},
+        "by_outcome": by_outcome(findings),
+        "short_by_outcome": by_outcome(short),
+        "long_by_outcome": by_outcome(long),
         "short_with_containers_in_several_clusters": several(short),
-        "long_with_containers_in_several_clusters": several(
-            [finding for finding in findings if not finding.is_short]
-        ),
+        "long_with_containers_in_several_clusters": several(long),
         "short_within_the_rule_and_apart": within_the_rule(short),
-        "short_under_the_minimum_share_by_share": shares(CutOutcome.UNDER_MIN_CUT_SHARE),
-        "long_never_paired_by_share": shares(CutOutcome.LONG_NEVER_PAIRED),
-        "long_with_one_witness_within_the_share": one_witness_within_the_share(
-            [finding for finding in findings if not finding.is_short]
-        ),
+        "long_within_the_rule_and_apart": within_the_rule(long),
+        "short_under_the_minimum_share_by_share": shares(short),
+        "long_under_the_minimum_share_by_share": shares(long),
         "short_the_banding_pairs_with_a_container": {
             "cuts": len(banded),
             "by_outcome": dict(sorted(Counter(finding.outcome.value for finding in banded).items())),
@@ -649,16 +663,19 @@ def explain_divided_part(
     rest: Set[str],
     findings: Mapping[str, CutFinding],
     with_a_copy: Mapping[str, CutFinding] | None = None,
+    *,
+    are_copies: Callable[[str, str], bool] | None = None,
 ) -> DividedPart:
-    """Why `part` and `rest`, once one cluster, are apart: the short cut that used to join them.
+    """Why `part` and `rest`, once one cluster, are apart: the cut, or the copy, that joined them.
 
     `part` and `rest` are the exact fingerprints of two sides of an earlier cluster. `findings` and
     `with_a_copy` are the two lists of :func:`diagnose_cuts` over the later placement, by
-    fingerprint. Under the rules before the short-body step the only join that step removed was a
-    short body merged with a body the banding paired it with, on containment. So the part either
-    holds such a cut, whose containers are in the rest, or was joined to the rest only through such
-    a cut on the other side. The findings are looked through first, then the cuts set aside
-    because a copy in their own cluster accounts for the bodies outside it.
+    fingerprint. A cut, short or long, whose containers are on the other side explains the
+    division: the part holds it, or was joined to the rest only through it. The findings are looked
+    through first, then the cuts set aside because a copy in their own cluster accounts for the
+    bodies outside it. Failing those, `are_copies` says whether a text of the part and one of the
+    rest are one text by the copies' rule, which are kept apart only when joining them would put
+    two texts sharing nothing in one cluster, or when the banding never paired them.
     """
     for known, set_aside in ((findings, False), (with_a_copy or {}, True)):
         for kind, cuts, others in (
@@ -667,7 +684,7 @@ def explain_divided_part(
         ):
             for cut in sorted(cuts):
                 finding = known.get(cut)
-                if finding is not None and finding.is_short and finding.containers & others:
+                if finding is not None and finding.containers & others:
                     return DividedPart(
                         kind,
                         finding.outcome,
@@ -677,6 +694,10 @@ def explain_divided_part(
                         finding.kept_apart_by,
                         with_a_copy=set_aside,
                     )
+    if are_copies is not None and any(
+        are_copies(one, other) for one in sorted(part) for other in sorted(rest)
+    ):
+        return DividedPart(DividedPart.COPIES_APART)
     return DividedPart(DividedPart.UNEXPLAINED)
 
 
@@ -796,8 +817,12 @@ def _would_match(held: _Bodies, left: str, right: str, limits: NearDuplicateThre
     smaller, larger = sorted((left, right), key=lambda text: (held.size(text), text))
     ordered = held.ordered[smaller]
     if not (ordered[0] in held.sets[larger] and ordered[-1] in held.sets[larger]):
-        return held.size(smaller) >= SHORT_BODY_SHINGLES and (
-            containment(left_set, right_set) >= limits.containment
+        # A long cut lacking one of its ends is still found from the other (`card-fingerprint-v4`).
+        either_end = ordered[0] in held.sets[larger] or ordered[-1] in held.sets[larger]
+        return (
+            held.size(smaller) >= SHORT_BODY_SHINGLES
+            and either_end
+            and containment(left_set, right_set) >= limits.containment
         )
     return confirms_a_cut(
         held.sets[smaller], held.sets[larger], held.words[smaller], held.words[larger], limits

@@ -270,9 +270,48 @@ v1-e30-t22 asks the PM, 2026-10-17:
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-18
 
 **Notes:**
+
+Accepted in full, with the phase `Succeeded`.
+
+**You found the second door.** I asked you to check every comparison of local blobs with the bucket.
+`store sync --apply` would have pushed the very bytes the publisher now holds back, and status would
+have called a correct bucket drift. Closing the publisher alone would have left the leak open under
+another command. Both are fixed, by tests that were red on the start commit.
+
+**The work itself:**
+
+* **One rule, four callers.** `hold_on_skipped_member` is shared by the importer, the manifest
+  rewrite, the inbox rewrite and status. The test that a removal's rewrite and a fresh import leave
+  the same file byte for byte is the strongest evidence that they agree.
+* **"Held only" is per manifest, and "another row" is any unheld row.** That keeps another team's
+  copy uploading, in the same week or a later one. Mutant 4, the plan-wide alternative, shows why.
+* **No new key in the publish JSON,** and every outcome, code and failure equal to t21's
+  like-for-like case. The only count that moves is the one the ruling moves.
+* **Every build reads what this build writes:** six cross-reads, the agent's build included.
+* **24 mutants, all caught.** Row 19's survivor exposed a missing test, and the test was written.
+
+**Rulings:**
+
+* **Deviations 1 to 4:** accepted. Deviation 4 is the change I asked for in all but name.
+* **Decisions 1 to 9:** accepted.
+* **PM question 1: (b), withhold a manifest with a held skipped row,** with the same outcome and code
+  as a held stored row. A held path's name reaching the bucket is what this work exists to stop. A
+  publish that fails and names its fix, the removal run again, is the right trade. It goes into
+  `v1-e30-t23`, which already depends on this task and touches the same files. The exit-code note in
+  my brief was about this task's own changes, not a rule against this one.
+* **PM question 2: file it.** `store sync` of `manifests/` is not meant to be a raw mirror of what
+  the publisher withholds. It will ask the publisher's withholding rule, in a new E30 task with your
+  Follow-up 3 (junk shadowing a held link).
+* **Follow-up 4, the parsed store:** filed for E31. `caselist parse --publish` must not send a held
+  upload's parsed file.
+* **Follow-up 5, the guide's `skipped` row:** the PM adds it at the next close-out.
+
+**Before the agent runs this build,** `v1.1.0-dev.7` and later builds up to this merge can still
+write and publish a skipped row at a held path. Status names it, and the removal run again takes it
+out. The next agent reinstall after this merge closes it at the source.

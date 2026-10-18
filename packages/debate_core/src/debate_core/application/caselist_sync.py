@@ -1524,13 +1524,19 @@ installation's size ceilings and passes the result; the application layer names 
 
 
 class SyncRunInProgress(DomainError):
-    """Another `caselist pull` holds the run lock. This one did nothing at all."""
+    """Another `caselist pull` holds the run lock. This one did nothing at all.
+
+    The message names the lock by its file name in the data directory and never by its path, which
+    is under the home directory: the command prints it, and the agent's stdout log keeps it
+    (`v1-e34-t16`). :attr:`lock_path` is where it is.
+    """
 
     def __init__(self, lock_path: Path) -> None:
         self.lock_path = lock_path
         super().__init__(
-            f"another caselist sync is already running (lock held at {lock_path}); this run did "
-            "nothing. Wait for it to finish, or remove the lock file if no process holds it."
+            f"another caselist sync is already running (it holds the run lock, {lock_path.name} in "
+            "the data directory); this run did nothing. Wait for it to finish, or remove the lock "
+            "file if no process holds it."
         )
 
 
@@ -3141,7 +3147,8 @@ class CaselistSyncService:
         tally.record(
             SyncStage.DOWNLOAD,
             StageOutcome.PLANNED,
-            f"would download {fetch} file(s) into {self._inbox}",
+            # The inbox by its role, never its path, which is under the home directory (`v1-e34-t16`).
+            f"would download {fetch} file(s) into the inbox",
         )
         tally.record(
             SyncStage.IMPORT,

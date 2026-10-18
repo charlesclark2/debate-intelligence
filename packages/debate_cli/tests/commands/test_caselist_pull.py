@@ -189,7 +189,8 @@ def test_a_run_downloads_imports_and_reports_this_weeks_archives(
         if call.request.url.host == "files.opencaselist.example.invalid"
     ]
     assert fetched == [weekly_name(snapshot.snapshot) for snapshot in SNAPSHOTS]
-    assert Path(data["summary_written_to"]).is_file()
+    assert data["summary_written_to"] == f"caselist-sync-runs/{data['run_id']}.json"
+    assert (installation / data["summary_written_to"]).is_file()
 
 
 def test_a_second_run_downloads_nothing_and_says_nothing_is_new(
@@ -662,7 +663,9 @@ def test_a_run_summary_reaches_the_data_directory_where_the_run_log_will_read_it
     """ac4's second half: one JSON file per run, with counts and no school or team code."""
     envelope = pull("--caselist", SYNTHETIC_CASELIST)
 
-    written = Path(envelope["data"]["summary_written_to"])
+    # A path inside the data directory, never the absolute one, which is under the home directory
+    # (`v1-e34-t16`).
+    written = installation / envelope["data"]["summary_written_to"]
     assert written.parent == installation / "caselist-sync-runs"
     body = json.loads(written.read_text(encoding="utf-8"))
     assert body["archives_downloaded"] == 3
@@ -751,7 +754,7 @@ def test_no_output_of_a_pull_names_a_camp_file_by_its_title(
     ]
     assert all(one["inbox_file"].startswith("sha256 ") for one in selections)
     assert all("inbox_name" not in one for one in selections)
-    summary_file = Path(envelope["error"]["details"]["summary_written_to"])
+    summary_file = installation / envelope["error"]["details"]["summary_written_to"]
     assert_no_probe("the run-summary file", summary_file.read_text(encoding="utf-8"))
 
     rendered = printed("caselist", "pull", "--caselist", SYNTHETIC_CASELIST)

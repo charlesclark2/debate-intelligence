@@ -577,7 +577,13 @@ named by its OpenEv id, `openev-777`, with `(sha256 2b912c191a8a)` once the run 
 never by its file name, which is its title (`v1-e34-t12`). Summaries and logs written before that
 change may still name camp files, so check older ones before pasting them. A failed stage's reason,
 codes and hint name no path on this Mac either: a folder the operating system refused is named by
-what it is for, and the data directory and the inbox by those names (`v1-e34-t13`). A run that ended
+what it is for, and the data directory and the inbox by those names (`v1-e34-t13`). Nor does any
+other output of a pull, by hand or from the agent, with `--json` or without, and `caselist runs` in
+both forms: a dry run plans its downloads `into the inbox`, `summary_written_to` is the summary
+file's path inside the data directory (`caselist-sync-runs/<run id>.json`), and a run refused
+because another holds the lock names `caselist-sync.lock in the data directory` (`v1-e34-t16`). A
+summary or envelope written before that change may hold the data directory's path in one of those
+three places, so check older ones before pasting them. A run that ended
 on a bug, exit `70`, prints the error envelope instead of the summary, and it names the exception's
 class and not its message (`v1-e01-t25`). An envelope written before that change may quote a path
 in `error.message`, so check older exit-`70` lines before pasting them.

@@ -24,7 +24,12 @@ spec:
     sidecar beside the path holds, which running the removal again reads. Digests and request
     ids only, never a path or a name, and a file an earlier build can ignore. (2)
     `write_manifest_lines` fsyncs the file and renames it into place, but does not fsync the
-    directory, so the rename can be lost to a power cut.
+    directory, so the rename can be lost to a power cut. (3) PM amendment 2026-10-18, from
+    v1-e30-t22's PM question 1: the publisher withholds a manifest that has a skipped member's row
+    (a symbolic link) at a held path, exactly as it withholds one with a held stored row: the same
+    outcome and the same code (`MANIFEST_NAMES_SUPPRESSED_SOURCE`). A publish that succeeds today
+    over such a manifest then fails, and that is intended. This one change lifts "keep the exit
+    codes" for this case only. The store-sync push of withheld manifests is a separate E30 task.
   priority: 3
   constraints:
     packages: [debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/runbooks, docs/policies]
@@ -49,6 +54,12 @@ spec:
       description: >-
         The runbook's note that the list cannot stop such bytes is removed, and the policy's
         list of sidecar records names the new one, in a sentence the PM approves.
+    - id: ac4
+      description: >-
+        (3), PM amendment 2026-10-18: by tests shown failing first, (a) a manifest with a skipped
+        member's row at a held path is withheld with `MANIFEST_NAMES_SUPPRESSED_SOURCE` and nothing
+        of it reaches the bucket, and (b) `caselist status` gives the removal hint, not the publish
+        hint, for it.
 status:
   phase: InProgress
 ---

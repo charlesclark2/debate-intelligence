@@ -629,3 +629,23 @@ async def test_running_the_removal_again_takes_the_held_only_bytes_off_this_mach
     ).succeeded
     report = await status_service(world).status(CASELIST)
     assert report.in_sync and report.removals_owed == (), report.drifted
+
+
+async def test_running_the_removal_again_keeps_bytes_another_teams_row_names(
+    world: RemovalWorld, tmp_path: Path
+) -> None:
+    """`2026-10-10`, imported by an older build: the re-run withdraws the upload from the held path
+    only. The other team's copy keeps its row, its blob here and its object in the bucket."""
+    await remove_the_named_file(world)
+    await import_weekly(world, tmp_path, CASELIST, TWO_PATHS_WEEK, importer=an_older_builds_importer(world))
+    await this_builds_publisher(world).execute(
+        await this_builds_publisher(world).plan(CASELIST, "2026-10-10")
+    )
+
+    await remove_the_named_file(world)
+
+    week = f"manifests/{CASELIST}/2026-10-10.jsonl"
+    assert rows_at(world, week, REVISED_PATH) == []
+    assert [row["sha256"] for row in rows_at(world, week, OTHER_TEAM_PATH)] == [UPLOADED_AFTER_AT_TWO_PATHS]
+    assert local_blob(world, UPLOADED_AFTER_AT_TWO_PATHS).exists()
+    assert in_the_bucket(world, UPLOADED_AFTER_AT_TWO_PATHS)

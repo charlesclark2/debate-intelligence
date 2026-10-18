@@ -834,7 +834,8 @@ def hold_the_link(data_dir: Path) -> None:
 
 #: What else is in the weekly of 2026-09-15's local manifest beside its rewrite, and whether the
 #: publisher of this build withholds it then. Written from `publish_plan` ("A manifest that still
-#: names a suppressed file is withheld") and `v1-e30-t22`'s Decision 5, not from a run.
+#: names a suppressed file is withheld") and the PM's amendment of 2026-10-18 to `v1-e30-t23`, which
+#: withholds a manifest for a held skipped row too, not from a run.
 BESIDE_THE_REWRITE = {
     "nothing": (lambda data_dir: None, False),
     "a suppressed row": (
@@ -842,15 +843,16 @@ BESIDE_THE_REWRITE = {
         True,
     ),
     "a held row": (the_removal_holds_the_path, True),
-    "a held skipped row": (hold_the_link, False),
+    "a held skipped row": (hold_the_link, True),
 }
 
 
 class TestStatusHintsTheRemovalForAManifestThePublisherWithholds:
     """`v1-e30-t12`'s Follow-up 3: the publish hint for a manifest the publisher will not upload.
 
-    Since `v1-e30-t22` the publisher withholds a manifest for a suppressed row or a held row. Status
-    asks the publisher's own rule, so these tests hold the hint to what the publish then does.
+    Since `v1-e30-t22` the publisher withholds a manifest for a suppressed row or a held row, and
+    since `v1-e30-t23` for a held skipped row too. Status asks the publisher's own rule, so these
+    tests hold the hint to what the publish then does.
     """
 
     @pytest.fixture(autouse=True)

@@ -171,6 +171,18 @@ def test_a_cut_held_only_by_a_body_that_holds_another_passage_has_no_witness() -
     assert findings["first"].share_of_smallest_container == pytest.approx(55 / 146)
 
 
+def test_a_cut_with_a_copy_beside_it_and_outside_only_bodies_holding_another_passage() -> None:
+    """The first passage with a copy of it five words longer in its own cluster, and outside only
+    the body holding both passages: its own cluster is its one witness, and what keeps it from the
+    body outside is that body's other passage."""
+    longer = [*FIRST_PASSAGE, *numbered("more", 5)]
+    bodies = {"first": FIRST_PASSAGE, "longer": longer, "second": SECOND_PASSAGE, "both": BOTH_PASSAGES}
+    clusters = {"first": "own", "longer": "own", "second": "second", "both": "both"}
+    finding = diagnosed(bodies, clusters)["first"]
+    assert finding.outcome is CutOutcome.HELD_WITH_ANOTHER_PASSAGE
+    assert finding.container_clusters == ("both",)
+
+
 def test_a_cut_its_own_cluster_holds_and_another_does_too() -> None:
     """A 40-word passage with its copy five words longer, one cluster, and a card elsewhere that
     holds the passage and not the copy: two witnesses, one of them its own cluster."""

@@ -70,6 +70,8 @@ from debate_core.application.ports.suppression import (
     RemovalOutcome,
     RemovalScopeEntry,
     RemovalSelectorKind,
+    SuppressionAction,
+    SuppressionEntry,
 )
 from debate_core.domain.caselist import Event
 from debate_core.integrations.local import FsEvidenceObjectStore, FsSnapshotStore
@@ -97,7 +99,10 @@ from .test_manifest_and_aggregate_residue import (
 )
 from .test_removal_covers_later_uploads import LIMITS
 from .test_removal_names_other_holders import (
+    ANOTHER_TEAMS_PATH,
     BAYVIEW_PATH,
+    NAMED,
+    NEXT_WEEK,
     OTHER_CASELIST,
     REVISION,
     import_and_publish_another_caselists_week,
@@ -257,6 +262,33 @@ class TestARewrittenManifestsOlderVersion:
         await remove(world)
 
         assert old in versions_of(world, REWRITTEN_KEY)
+
+    async def test_a_version_stamped_in_the_same_moment_as_the_rewrite_is_not_older_than_it(
+        self, removed: RemovalWorld, tmp_path: Path
+    ) -> None:
+        """S3 states a version's time to the second. Two versions of one second are not ordered by it,
+        so the sweep keeps both: the rewrite, and one put in the same moment. A re-publish sits on top
+        of them, so neither is current."""
+        world = removed
+        rewrite = rewrite_of(world)
+        same_moment = put(world, REWRITTEN_KEY, AN_OLD_BODY, written=INSIDE_THE_RUN)
+        same_bytes = tmp_path / "republished.jsonl"
+        same_bytes.write_bytes(current_bytes(world, REWRITTEN_KEY))
+        await world.bucket.put_file(REWRITTEN_KEY, same_bytes)
+
+        await remove(world)
+
+        assert {same_moment, rewrite} <= set(versions_of(world, REWRITTEN_KEY))
+
+    async def test_a_delete_marker_older_than_the_rewrite_is_left(self, removed: RemovalWorld) -> None:
+        """A marker holds nothing, and is no version the purge should have taken."""
+        world = removed
+        marker = str(world.client.delete_object(Bucket=world.bucket_name, Key=REWRITTEN_KEY)["VersionId"])
+        backdate(world, REWRITTEN_KEY, marker, LONG_BEFORE)
+
+        await remove(world)
+
+        assert (REWRITTEN_KEY, marker) in world.versions()
 
     @pytest.mark.parametrize(
         ("request_id", "environment"),
@@ -531,3 +563,59 @@ class TestAWithdrawnCopysResidue:
 
         assert of(report, SYNTHETIC_CASELIST).withdrawn_copies == ()
         assert report.withdrawals_not_attributed == ()
+
+
+class TestWhatTheWithdrawalRecordDoesNotDo:
+    async def test_a_withdrawn_row_still_on_this_machine_is_no_holder_of_the_copy(
+        self, removal_world: RemovalWorld, tmp_path: Path
+    ) -> None:
+        """A run that stopped before this machine's manifests: `testcl26`'s 2026-09-22 still has the
+        revision's row at the withdrawn path. The list stops that row, so the caselist keeps no
+        holder of the file, and the copy left there is still the withdrawal's."""
+        world = removal_world
+        await import_and_publish_next_week(world, tmp_path / "next-week", (BAYVIEW_PATH,))
+        await import_and_publish_another_caselists_week(world, tmp_path / "other-caselist")
+        local_manifest = world.local.object_path_for(manifest_key(SYNTHETIC_CASELIST, NEXT_WEEK))
+        before = local_manifest.read_bytes()
+        await remove_the_named_file(world)
+        local_manifest.write_bytes(before)
+        world.client.put_object(
+            Bucket=world.bucket_name, Key=revision_copy_in(SYNTHETIC_CASELIST), Body=b"left"
+        )
+
+        report = await status(world)
+
+        assert [copy.sha256 for copy in of(report, SYNTHETIC_CASELIST).withdrawn_copies] == [REVISION]
+
+    async def test_a_withdrawal_since_unsuppressed_is_not_reported(
+        self, withdrawn_from_one_caselist: RemovalWorld
+    ) -> None:
+        """`caselist unsuppress` lifts every suppression of the file: its copy may come back."""
+        world = withdrawn_from_one_caselist
+        lifted = SuppressionEntry(
+            action=SuppressionAction.UNSUPPRESS,
+            sha256=REVISION,
+            recorded_at=COMPLETED + timedelta(days=1),
+            reason=ReasonCode.REMOVED_IN_ERROR,
+            request_id=BAYVIEW_REQUEST,
+        )
+        await world.suppression().append([lifted])
+
+        report = await status(world)
+
+        assert of(report, SYNTHETIC_CASELIST).withdrawn_copies == ()
+        assert report.withdrawals_not_attributed == ()
+
+    async def test_it_never_has_a_file_removed_whole(self, withdrawn_from_one_caselist: RemovalWorld) -> None:
+        """`testclb26`'s holder gone as well, by hand: planned on the record's account, the revision
+        would now be held nowhere and removed whole. It is not planned at all."""
+        world = withdrawn_from_one_caselist
+        assert await world.repository.delete_disclosure(OTHER_CASELIST, NEXT_WEEK, ANOTHER_TEAMS_PATH)
+        world.local.object_path_for(manifest_key(OTHER_CASELIST, NEXT_WEEK)).unlink()
+        world.client.delete_object(Bucket=world.bucket_name, Key=manifest_key(OTHER_CASELIST, NEXT_WEEK))
+
+        plan = await world.planner().plan(
+            SourceSelector(NAMED), request_id=BAYVIEW_REQUEST, reason=ReasonCode.REQUESTED_BY_TEAM
+        )
+
+        assert plan.source(REVISION) is None

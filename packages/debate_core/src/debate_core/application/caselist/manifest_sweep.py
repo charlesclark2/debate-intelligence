@@ -88,7 +88,8 @@ async def older_than_their_rewrite(
 ) -> tuple[ObjectVersion, ...]:
     """The noncurrent data versions of each rewritten key that are older than its rewrite.
 
-    See "What it never takes" in the module docstring for every version this leaves.
+    See "What it never takes" in the module docstring for every version this leaves. Strictly
+    older is what keeps the rewrite itself, and a version stamped in the same second as it.
     """
     found: list[ObjectVersion] = []
     listed: dict[ObjectKey, list[ObjectVersion]] = {}
@@ -111,7 +112,6 @@ async def older_than_their_rewrite(
             for one in of_the_key
             if not one.is_latest
             and not one.is_delete_marker
-            and one.version_id != record.version_id
             and one.last_modified is not None
             and one.last_modified < rewrite.last_modified
         ]

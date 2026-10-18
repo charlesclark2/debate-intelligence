@@ -142,7 +142,8 @@ type = "forbidden"
 # which is what keeps `debate-core` installable and usable with no AWS SDK present at all.
 # `debate_core.integrations` is named by its subpackages rather than whole, because listing the
 # parent would include `integrations.s3` itself; a new adapter subpackage is added to this list in
-# the PR that creates it.
+# the PR that creates it. `integrations.bedrock` (v1-e05-t02-bedrock-adapter) is the other adapter
+# allowed the SDK, so it is not listed; it is on the httpx and lxml lists below instead.
 source_modules = [
     "debate_core.domain",
     "debate_core.application",
@@ -171,6 +172,7 @@ source_modules = [
     "debate_core.integrations.local",
     "debate_core.integrations.file_streaming",
     "debate_core.integrations.s3",
+    "debate_core.integrations.bedrock",
     "debate_api",
     "debate_workers",
 ]
@@ -215,6 +217,7 @@ source_modules = [
     "debate_core.testing",
     "debate_core.integrations.local",
     "debate_core.integrations.s3",
+    "debate_core.integrations.bedrock",
     "debate_core.integrations.file_streaming",
     "debate_api",
     "debate_workers",

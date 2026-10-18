@@ -179,8 +179,10 @@ def test_record_in_ci_is_refused_before_a_real_router_is_built(tmp_path: Path) -
 
 
 @pytest.mark.parametrize("mode", ["record", "live"])
-def test_record_and_live_without_a_real_router_say_which_task_builds_it(tmp_path: Path, mode: str) -> None:
-    with pytest.raises(ConfigurationError, match="v1-e05-t02-bedrock-adapter") as raised:
+def test_record_and_live_without_a_real_router_name_the_one_to_pass(tmp_path: Path, mode: str) -> None:
+    with pytest.raises(
+        ConfigurationError, match="debate_core.integrations.bedrock.bedrock_model_router"
+    ) as raised:
         build_model_router(settings_with(tmp_path, provider="bedrock"), mode=mode, environ=NO_CI)
 
     assert raised.value.field == "models.provider"

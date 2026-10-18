@@ -31,7 +31,9 @@ The hierarchy::
     └── ProviderError
         ├── ProviderUnavailable
         │   └── ModelUnavailableError
-        └── ProviderRateLimited
+        ├── ProviderRateLimited
+        ├── ModelAccessDenied
+        └── ModelRequestRejected
 
 Each class keeps the facts of the failure as attributes rather than only in its message, so a CLI
 can render "card 01J… was edited by someone else" instead of parsing a string.
@@ -64,6 +66,8 @@ __all__ = [
     "InvalidCursor",
     "InvalidModelOutput",
     "LocalStoreAccessDenied",
+    "ModelAccessDenied",
+    "ModelRequestRejected",
     "ModelUnavailableError",
     "NotFound",
     "ProviderError",
@@ -533,6 +537,41 @@ class ModelUnavailableError(ProviderUnavailable):
         self.model_id = model_id
         """The routed model that could not be reached."""
         super().__init__(provider, f"{model_id}: {message}")
+
+
+class ModelAccessDenied(ProviderError):
+    """The model provider refused the caller: no usable credentials, or none allowed to call this model.
+
+    Not retried, because no retry changes the answer. Either the session has expired or was never
+    there (log in again: :attr:`hint`), or the role the credentials belong to is not granted the
+    call, or the model has not been enabled in the account. The message names the model and never
+    a credential (v1-e05-t02-bedrock-adapter, ac3).
+    """
+
+    def __init__(self, provider: str, model_id: str, message: str, *, hint: str | None = None) -> None:
+        self.model_id = model_id
+        """The routed model, or inference profile, the call was addressed to."""
+        self.hint = hint
+        """One line on what to do about it, when there is one to give."""
+        super().__init__(provider, f"{model_id}: {message}" + (f" ({hint})" if hint else ""))
+
+
+class ModelRequestRejected(ProviderError):
+    """The model provider refused the request itself: a parameter it refuses, or a model it does not know.
+
+    A defect in the request or the routing file, never a passing condition, so it is never
+    retried: sending the same request again would be refused again, and billed nothing for it only
+    by luck. `provider_code` is the provider's own name for the refusal (`ValidationException`,
+    `ResourceNotFoundException`), kept because the first real call on a route records which
+    parameters a model refuses (v1-e05-t02-bedrock-adapter, ac3 and ac7).
+    """
+
+    def __init__(self, provider: str, model_id: str, provider_code: str, message: str) -> None:
+        self.model_id = model_id
+        """The routed model, or inference profile, the call was addressed to."""
+        self.provider_code = provider_code
+        """The provider's error code for the refusal."""
+        super().__init__(provider, f"{model_id}: {provider_code}: {message}")
 
 
 # --------------------------------------------------------------------------------------------

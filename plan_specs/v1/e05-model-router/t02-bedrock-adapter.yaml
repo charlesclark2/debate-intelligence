@@ -25,14 +25,18 @@ spec:
     tool choice, and Bedrock lists structured outputs as not supported for them (model cards checked
     2026-10-16, cited in v1-e05-t01's report). Inference profile and region come from the routing config; credentials come only from the
     standard AWS credential chain (profile/SSO/env), never from repo files. Throttling and transient
-    service errors are retried with bounded backoff. boto3 is an optional extra (debate-core[bedrock]) so
-    students without AWS access can run the CLI on the fake router. Out of scope: schema validation and
+    service errors are retried with bounded backoff. boto3 is an optional extra (debate-core[aws]; amended
+    by the PM, 2026-10-17: the aws extra already carries boto3, so no second extra is added) so students
+    without AWS access can run the CLI on the fake router. Out of scope: schema validation and
     repair retries (t05), fixtures/replay (t03), cost accounting (t07).
   priority: 1
   constraints:
     packages: [debate_core.integrations]
     forbidden:
-      - Importing boto3/botocore anywhere outside debate_core.integrations.bedrock
+      - >-
+        A new boto3 or botocore import outside debate_core.integrations.bedrock, and any in
+        debate_core.domain or debate_core.application, as the import contracts already enforce.
+        Amended by the PM, 2026-10-17: debate_core.integrations.s3 already imports it.
       - Hard-coded AWS keys, account IDs or model IDs in code or tests
       - Live Bedrock calls in the unit/CI test suite (botocore Stubber or recorded fixtures only)
       - Retrying non-idempotent or validation (4xx other than throttling) errors
@@ -56,8 +60,10 @@ spec:
         with jittered backoff; AccessDenied and ValidationException fail immediately with typed errors.
     - id: ac4
       description: >-
-        `uv sync` without the bedrock extra installs no boto3, and selecting provider bedrock without it
-        raises a clear configuration error recommending the extra.
+        Without the aws extra no boto3 is installed, and selecting provider bedrock without it raises a
+        clear configuration error naming debate-core[aws]. Amended by the PM, 2026-10-17: boto3 is
+        already debate-core's aws extra, which the CLI depends on; no second extra for the same
+        package.
     - id: ac5
       description: >-
         The resolved model_id, inference profile ARN/region and request id are returned on every response.
@@ -74,7 +80,7 @@ spec:
         and inference profile in the routing files resolves. A Stubber test pins each answer. Added by
         the PM, 2026-10-16.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan
@@ -96,10 +102,11 @@ spec:
     nodes:
       - id: optional-extra
         kind: Task
-        name: bedrock optional extra and lazy import
+        name: aws optional extra and lazy import
         description: >-
-          Declare boto3 under [project.optional-dependencies] bedrock in debate_core, import it lazily inside
-          the adapter module, and raise BedrockNotInstalledError when absent.
+          Use the boto3 already declared under [project.optional-dependencies] aws in debate_core (amended
+          by the PM, 2026-10-17), import it lazily inside the adapter module, and raise
+          BedrockNotInstalledError when absent.
         outputs:
           - packages/debate_core/pyproject.toml
           - packages/debate_core/src/debate_core/integrations/bedrock/__init__.py

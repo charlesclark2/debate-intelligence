@@ -30,6 +30,7 @@ __all__ = [
     "MAX_TEMPERATURE",
     "MAX_TIMEOUT_SECONDS",
     "MIN_TEMPERATURE",
+    "Effort",
     "EmbeddingResponse",
     "ModelParams",
     "ModelPrompt",
@@ -108,6 +109,22 @@ class ModelProvider(StrEnum):
     """
 
 
+class Effort(StrEnum):
+    """How much thinking and output a Claude model spends on a call: its quality lever.
+
+    Sent as Converse's `outputConfig.effort`. The current Claude models take no temperature but their
+    default and always think, so effort is the one knob that trades quality against tokens on them
+    (v1-e05-t01-model-router-port, Follow-up work). Unset sends none, and the model's own default
+    applies; that default differs by model, so a route that cares names a level.
+    """
+
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    XHIGH = "xhigh"
+    MAX = "max"
+
+
 class ModelParams(DomainModel):
     """Per-call overrides of a task class's default parameters.
 
@@ -132,6 +149,9 @@ class ModelParams(DomainModel):
         gt=0,
         le=MAX_TIMEOUT_SECONDS,
         description="Wall-clock limit for this call; unset keeps the route's.",
+    )
+    effort: Effort | None = Field(
+        default=None, description="Effort level for this call; unset keeps the route's."
     )
 
 
@@ -222,6 +242,9 @@ class ResolvedRoute(DomainModel):
     )
     timeout_seconds: float = Field(
         gt=0, le=MAX_TIMEOUT_SECONDS, description="Wall-clock limit the call ran under."
+    )
+    effort: Effort | None = Field(
+        default=None, description="Effort level sent with the call; None means none was sent."
     )
 
     @property

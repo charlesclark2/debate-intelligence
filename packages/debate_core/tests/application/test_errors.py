@@ -16,6 +16,8 @@ from debate_core.application.errors import (
     DomainError,
     InvalidCursor,
     InvalidModelOutput,
+    ModelAccessDenied,
+    ModelRequestRejected,
     ModelUnavailableError,
     NotFound,
     ProviderError,
@@ -44,6 +46,8 @@ EVERY_ERROR = (
     ProviderUnavailable("openalex"),
     ModelUnavailableError("bedrock", "a-model"),
     ProviderRateLimited("openalex"),
+    ModelAccessDenied("bedrock", "a-model", "not allowed"),
+    ModelRequestRejected("bedrock", "a-model", "ValidationException", "bad parameter"),
 )
 
 
@@ -171,3 +175,27 @@ def test_a_recorded_failure_quotes_only_what_this_project_wrote(error: BaseExcep
     """`v1-e29-t09` ac7: what a result or a message of its own says of a failure that did not end the
     command. An error this project did not write is named, never quoted."""
     assert reported_error_message(error) == reported
+
+
+@pytest.mark.parametrize("kind", [ModelAccessDenied, ModelRequestRejected])
+def test_a_refused_model_call_is_a_provider_failure_no_retry_cures(kind: type[ProviderError]) -> None:
+    """Neither is unavailability or rate: retrying the same call gets the same refusal."""
+    assert issubclass(kind, ProviderError)
+    assert not issubclass(kind, (ProviderUnavailable, ProviderRateLimited))
+
+
+def test_a_rejected_request_keeps_the_providers_code_and_names_the_model() -> None:
+    error = ModelRequestRejected(
+        "bedrock", "geo.a-model", "ValidationException", "temperature is not supported"
+    )
+
+    assert error.provider_code == "ValidationException"
+    assert error.model_id == "geo.a-model"
+    assert str(error) == "bedrock: geo.a-model: ValidationException: temperature is not supported"
+
+
+def test_a_denied_model_call_gives_its_hint() -> None:
+    error = ModelAccessDenied("bedrock", "geo.a-model", "no usable credentials", hint="log in again")
+
+    assert error.hint == "log in again"
+    assert str(error) == "bedrock: geo.a-model: no usable credentials (log in again)"

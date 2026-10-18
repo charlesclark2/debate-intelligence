@@ -5,6 +5,7 @@
   "request": {
     "output_schema": "debate_core.testing.contracts.model_router.ContractPassage",
     "params": {
+      "effort": null,
       "max_tokens": null,
       "temperature": null,
       "timeout_seconds": null

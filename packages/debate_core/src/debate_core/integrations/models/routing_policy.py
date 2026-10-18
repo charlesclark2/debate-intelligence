@@ -15,6 +15,8 @@ like this::
         region: us-east-1
         max_tokens: 8192
         timeout_seconds: 300
+        effort: high          # optional; Converse's outputConfig.effort
+        max_attempts: 3       # optional; attempts for a throttled or unavailable call
 
 Identifiers live only in `config/model_routing.*.yaml`: the example file, which is the default
 and the template, and one file per environment (`v1-e01-t09-dev-prerelease-channel`). Which one a
@@ -23,8 +25,9 @@ composition root loads it.
 
 ## Validated once, when the file loads
 
-A key that is not a task class, a missing `model_id`, a temperature outside 0.0 to 1.0, a stray
-field, an inference profile that belongs to a different model, a Bedrock route with no region:
+A key that is not a task class, a missing `model_id`, a temperature outside 0.0 to 1.0, an effort
+that is not one of the five levels, a stray field, an inference profile that belongs to a different
+model, a Bedrock route with no region, a sampling field or effort on a scoring route:
 each is refused by :meth:`RoutingPolicy.load` with a
 :class:`~debate_core.application.ports.model_router.RoutingConfigError` naming the key. A file
 that cannot load cannot start anything, and the alternative is finding the typo halfway through a
@@ -39,7 +42,8 @@ reports. A class with no route is refused rather than sent to another class's mo
 
 History: `v1-e02-t05-settings-config` wrote the first schema and loader, as
 `debate_core.application.routing_config`; `v1-e05-t01-model-router-port` moved them here and added
-the provider, inference profile, region, timeout and resolution.
+the provider, inference profile, region, timeout and resolution; `v1-e05-t02-bedrock-adapter` added
+`effort`, `max_attempts` and `dimensions`.
 """
 
 from __future__ import annotations
@@ -57,16 +61,33 @@ from debate_core.domain.model_contracts import (
     MAX_TEMPERATURE,
     MAX_TIMEOUT_SECONDS,
     MIN_TEMPERATURE,
+    Effort,
     ModelParams,
     ModelProvider,
     ResolvedRoute,
     TaskClass,
 )
 
-__all__ = ["ROUTING_SCHEMA_VERSION", "ModelRoute", "RoutingPolicy"]
+__all__ = [
+    "DEFAULT_MAX_ATTEMPTS",
+    "MAX_ATTEMPTS_CEILING",
+    "ROUTING_SCHEMA_VERSION",
+    "ModelRoute",
+    "RoutingPolicy",
+]
 
 ROUTING_SCHEMA_VERSION = 1
 """Version of the routing file's own shape. Bumped only by a change that breaks existing files."""
+
+DEFAULT_MAX_ATTEMPTS = 3
+"""Attempts a call gets when its route names none, the first included (v1-e05-t02-bedrock-adapter)."""
+
+MAX_ATTEMPTS_CEILING = 8
+"""Most attempts a route may ask for. Every attempt of a throttled call is a wait, and past this the
+right answer is a lower rate, not a longer queue."""
+
+_GENERATIVE_ONLY_FIELDS = ("temperature", "max_tokens", "effort")
+"""Route fields that only mean something to a call that generates output."""
 
 _ARN_PREFIX = "arn:"
 
@@ -116,6 +137,24 @@ class ModelRoute(BaseModel):
     timeout_seconds: float = Field(
         gt=0, le=MAX_TIMEOUT_SECONDS, description="Default wall-clock limit for a call, in seconds."
     )
+    effort: Effort | None = Field(
+        default=None,
+        description="Default effort of a generative call; unset sends none, so the model's default applies.",
+    )
+    max_attempts: int = Field(
+        default=DEFAULT_MAX_ATTEMPTS,
+        ge=1,
+        le=MAX_ATTEMPTS_CEILING,
+        description=(
+            "Attempts a call gets when the provider throttles it or is briefly unavailable, the first "
+            "included. A refused or invalid request is never retried, whatever this says."
+        ),
+    )
+    dimensions: int | None = Field(
+        default=None,
+        gt=0,
+        description="Length of the vectors an embeddings route asks for; unset takes the model's default.",
+    )
 
     @model_validator(mode="after")
     def _check_route(self) -> Self:
@@ -154,12 +193,16 @@ class RoutingPolicy(BaseModel):
             raise ValueError("routes must name at least one task class")
         for task_class, route in self.routes.items():
             if not task_class.is_generative:
-                for name in ("temperature", "max_tokens"):
+                for name in _GENERATIVE_ONLY_FIELDS:
                     if getattr(route, name) is not None:
                         raise ValueError(
                             f"routes.{task_class.value}.{name}: a {task_class.value} call does not "
                             f"generate output, so it takes no {name}"
                         )
+            if task_class is not TaskClass.EMBEDDINGS and route.dimensions is not None:
+                raise ValueError(
+                    f"routes.{task_class.value}.dimensions: only an embeddings route returns vectors"
+                )
         return self
 
     @classmethod
@@ -238,10 +281,10 @@ class RoutingPolicy(BaseModel):
         caller's mistake rather than the file's.
         """
         overrides = params if params is not None else ModelParams()
-        if not task_class.is_generative and (
-            overrides.temperature is not None or overrides.max_tokens is not None
+        if not task_class.is_generative and any(
+            getattr(overrides, name) is not None for name in _GENERATIVE_ONLY_FIELDS
         ):
-            raise ValueError(f"a {task_class.value} call takes no temperature or max_tokens")
+            raise ValueError(f"a {task_class.value} call takes no temperature, max_tokens or effort")
         route = self.route_for(task_class)
         return ResolvedRoute(
             task_class=task_class,
@@ -254,6 +297,7 @@ class RoutingPolicy(BaseModel):
             timeout_seconds=(
                 overrides.timeout_seconds if overrides.timeout_seconds is not None else route.timeout_seconds
             ),
+            effort=overrides.effort if overrides.effort is not None else route.effort,
         )
 
 

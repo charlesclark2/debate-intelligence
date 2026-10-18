@@ -16,10 +16,11 @@ either replays and reaches no model. For a real provider the routing file is loa
 first (:meth:`~debate_core.integrations.models.routing_policy.RoutingPolicy.from_settings`), so a
 bad file fails before any router exists.
 
-The real router is the Bedrock adapter, `v1-e05-t02-bedrock-adapter`, which is not built yet. Until
-it is, record and live need a `real_router` passed in, and without one they fail with a
-configuration error naming `models.provider`. Nothing here falls back to a real model, or from one
-mode to another.
+The real router is the Bedrock adapter (`v1-e05-t02-bedrock-adapter`). This module may not import
+it, because nothing in `debate_core.integrations.models` may depend on the AWS SDK, so a
+composition root passes it in: `real_router=debate_core.integrations.bedrock.bedrock_model_router`.
+Without one, record and live fail with a configuration error naming `models.provider`. Nothing here
+falls back to a real model, or from one mode to another.
 """
 
 from __future__ import annotations
@@ -43,7 +44,7 @@ from debate_core.integrations.models.routing_policy import RoutingPolicy
 __all__ = ["RealRouterFactory", "build_model_router"]
 
 type RealRouterFactory = Callable[[RoutingPolicy], ModelRouter]
-"""Builds the real router for a validated routing policy; the Bedrock adapter's constructor (t02)."""
+"""Builds the real router for a validated routing policy (`integrations.bedrock.bedrock_model_router`)."""
 
 
 def build_model_router(
@@ -83,8 +84,9 @@ def build_model_router(
         refuse_recording_in_ci(environ)
     if real_router is None:
         raise ConfigurationError(
-            f"{model_mode.value} mode needs the {settings.models.provider.value} model router, which "
-            "is not built yet (v1-e05-t02-bedrock-adapter); replay, or set models.provider to fake",
+            f"{model_mode.value} mode needs the {settings.models.provider.value} model router passed in as "
+            "real_router (debate_core.integrations.bedrock.bedrock_model_router), and none was; replay, "
+            "or set models.provider to fake",
             field="models.provider",
         )
     return RecordReplayModelRouter(

@@ -33,6 +33,8 @@ from a queue. Each is held to :mod:`debate_core.testing.contracts.model_router`.
 | :class:`~debate_core.application.errors.InvalidModelOutput` | The answer does not validate as the schema. |
 | :class:`~debate_core.application.errors.ModelUnavailableError` | The routed model could not be reached. |
 | :class:`~debate_core.application.errors.ProviderRateLimited` | The provider refused the call for rate. |
+| :class:`~debate_core.application.errors.ModelAccessDenied` | No usable credentials, or not allowed. |
+| :class:`~debate_core.application.errors.ModelRequestRejected` | A refused parameter, or an unknown model. |
 | `ValueError` | A caller mistake: `generate_structured` on a scoring class, nothing to embed or rerank. |
 """
 

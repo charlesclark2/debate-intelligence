@@ -143,6 +143,7 @@ __all__ = [
     "divided_parts",
     "joined_pairs",
     "kept_apart",
+    "kept_apart_kind",
     "largest_clusters",
     "main",
     "placements_now",
@@ -844,6 +845,20 @@ def kept_apart(findings: Sequence[CutFinding], limit: str) -> list[tuple[str, st
     ]
 
 
+def kept_apart_kind(limit: str, cut: str, holder: str) -> str:
+    """What a kept-apart pair is tallied under: the limit, whether the cut is short or long, and its
+    share of the body it is shown beside, in the diagnosis's bands. Counts only, as every kind is.
+    The bands are what a limit is set by: `MIN_CUT_SHARE` is the end of the second."""
+    from debate_core.evidence.cluster_diagnosis import SHARE_BANDS
+    from debate_core.evidence.near_duplicates import SHORT_BODY_SHINGLES, shingles
+
+    cut_set, holder_set = shingles(cut), shingles(holder)
+    size = "short cut" if len(cut_set) < SHORT_BODY_SHINGLES else "long cut"
+    share = len(cut_set) / len(holder_set) if holder_set else 0.0
+    band = next(name for below, name in SHARE_BANDS if share < below)
+    return f"{limit}, {size}, {band} of the body beside it"
+
+
 def cluster_pairs(
     cards: Mapping[CardKey, ParsedCard],
     placed: Mapping[CardKey, Placement],
@@ -1456,7 +1471,8 @@ def _sample_kept_apart(arguments: argparse.Namespace, store: LocalParsedStore, s
             if placed[key].completeness == "FULL":
                 first.setdefault(placed[key].exact_fingerprint, key)
         for cut, holder in kept_apart(diagnose_cuts(bodies, clusters).findings, arguments.kept_apart_by):
-            pair = Joined(kind=arguments.kept_apart_by, joiner=first[cut], host=first[holder])
+            kind = kept_apart_kind(arguments.kept_apart_by, bodies[cut], bodies[holder])
+            pair = Joined(kind=kind, joiner=first[cut], host=first[holder])
             candidates.append((caselist, version, pair))
     drawn = random.Random(seed).sample(candidates, min(arguments.count, len(candidates)))
     pairs: list[tuple[str, Joined, ParsedCard, ParsedCard]] = []

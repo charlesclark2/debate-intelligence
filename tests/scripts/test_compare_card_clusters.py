@@ -763,7 +763,10 @@ def test_sample_by_limit_draws_a_cut_beside_the_smallest_body_that_holds_it(
     assert shown.endswith(
         "Drew 2 of 2 cuts kept apart by within-the-rule, seed 3.\n"
         "  Decided by rule 2 of 2; asked 0; answered 0 in 0 seconds.\n"
-        "  by rule: within-the-rule: contained, under a third of the larger: same card: 2\n"
+        "  by rule: within-the-rule, long cut, a quarter to a half of the body beside it: "
+        "contained, under a third of the larger: same card: 1\n"
+        "  by rule: within-the-rule, short cut, a quarter to a half of the body beside it: "
+        "contained, under a third of the larger: same card: 1\n"
     )
 
 
@@ -785,7 +788,10 @@ def test_the_closing_lines_of_each_sample_are_appended_to_a_file_of_counts(
         "  Decided by rule 0 of 0; asked 0; answered 0 in 0 seconds.",
         "Drew 2 of 2 cuts kept apart by within-the-rule, seed 3.",
         "  Decided by rule 2 of 2; asked 0; answered 0 in 0 seconds.",
-        "  by rule: within-the-rule: contained, under a third of the larger: same card: 2",
+        "  by rule: within-the-rule, long cut, a quarter to a half of the body beside it: "
+        "contained, under a third of the larger: same card: 1",
+        "  by rule: within-the-rule, short cut, a quarter to a half of the body beside it: "
+        "contained, under a third of the larger: same card: 1",
     ]
     assert not [word for word in NUMBERED_TELLTALE if word in "\n".join(kept)]
 
@@ -1519,6 +1525,13 @@ def test_the_newly_joined_pairs_of_a_saved_placement_are_drawn_against_the_store
     )
 
 
+def _answered(size: str, verdict: str) -> str:
+    return (
+        f"  asked of a shape the rule decides: within-the-rule, {size}, a quarter to a half of the body "
+        f"beside it: contained, under a third of the larger: rule same card: person {verdict}: 1"
+    )
+
+
 def test_a_sample_shows_the_pairs_of_a_decided_shape_it_is_asked_to_and_tallies_them_apart(
     nested_dir: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -1534,20 +1547,24 @@ def test_a_sample_shows_the_pairs_of_a_decided_shape_it_is_asked_to_and_tallies_
     )
     shown = capsys.readouterr().out
     assert shown.count("to judge; the rule decided 0 of the 2 drawn.") == 2
-    assert "same card" not in shown.split("Drew 2 of 2")[0].replace("[s] same card", "")
+    assert "same card" not in shown.split("Drew 2 of 2")[0]
+    # The draw decides which is shown first: the cut is A, 30 words if short and 90 if long.
+    first = "short cut" if shown.index("A: FULL, 30 words") < shown.index("A: FULL, 90 words") else "long cut"
+    verdicts = {first: "same card", ({"short cut", "long cut"} - {first}).pop(): "different card"}
     _as_a_terminal(monkeypatch, [])
     assert script.main([*arguments, "--ask-shape", "sharing-nothing"]) == 0
     capsys.readouterr()
     assert re.sub(r"in \d+ seconds", "in N seconds", saved.read_text(encoding="utf-8")).splitlines() == [
         "Drew 2 of 2 cuts kept apart by within-the-rule, seed 3.",
         "  Decided by rule 0 of 2; asked 2, 2 of them of a shape the rule decides; answered 2 in N seconds.",
-        "  asked of a shape the rule decides: within-the-rule: contained, under a third of the larger: "
-        "rule same card: person different card: 1",
-        "  asked of a shape the rule decides: within-the-rule: contained, under a third of the larger: "
-        "rule same card: person same card: 1",
+        _answered("long cut", verdicts["long cut"]),
+        _answered("short cut", verdicts["short cut"]),
         "Drew 2 of 2 cuts kept apart by within-the-rule, seed 3.",
         "  Decided by rule 2 of 2; asked 0; answered 0 in N seconds.",
-        "  by rule: within-the-rule: contained, under a third of the larger: same card: 2",
+        "  by rule: within-the-rule, long cut, a quarter to a half of the body beside it: "
+        "contained, under a third of the larger: same card: 1",
+        "  by rule: within-the-rule, short cut, a quarter to a half of the body beside it: "
+        "contained, under a third of the larger: same card: 1",
     ]
 
 

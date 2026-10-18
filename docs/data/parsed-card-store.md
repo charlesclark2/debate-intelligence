@@ -88,7 +88,7 @@ Every line of every file is one JSON object with sorted keys, and every one carr
 | `source_sha256` | The source file's SHA-256 |
 | `parser_version` | The parser that read it, e.g. `2026.09.20-docx-1` |
 | `profile_version` | The style profile it resolved through, e.g. `2026.09.20-verbatim-1` |
-| `fingerprint_version` | The card matching rules, e.g. `card-fingerprint-v3`. What it says depends on the record: see [Fingerprint versions](#fingerprint-versions) |
+| `fingerprint_version` | The card matching rules, e.g. `card-fingerprint-v4`. What it says depends on the record: see [Fingerprint versions](#fingerprint-versions) |
 
 ### Schema versions
 
@@ -342,6 +342,7 @@ each version and what it changed).
 | `card-fingerprint-v1` | `v1-e31-t04` | | |
 | `card-fingerprint-v2` | `v1-e31-t08` | the same as `v1` | changed: short cards and abbreviated disclosures that `v1` left apart now share clusters |
 | `card-fingerprint-v3` | `v1-e31-t11` | the same as `v1` | changed for short cards only: a short cut inside nested copies of a card joins the smallest of them, and its size is compared with the smallest body that holds it. A long card's cluster changes only by gaining such a cut, which can give the cluster a smaller id |
+| `card-fingerprint-v4` | `v1-e31-t20` | the same as `v1` | changed for long and short cards: a long cut joins the one cluster that holds it by the step short cuts use, where `v3` joined it only when the banding paired the two. A body holding a cut and another passage that shares nothing with it is no witness for the cut, a cut's own cluster counts among its witnesses, and no join puts two bodies sharing no text in one cluster. Clusters `v3` chained together through bodies holding several passages come apart; nested and overlapping copies come together |
 
 **What the stamp says depends on the record.**
 
@@ -353,6 +354,15 @@ each version and what it changed).
   on it. A parsed document holds cards as the parser read them: no fingerprint, no cluster id.
   These records are never rewritten, so after a version change they go on saying the old one,
   beside sources parsed since that say the new one. That is not staleness.
+
+**Every build reads every version.** No code compares a row's `fingerprint_version` with its own:
+the field is free text to the models, and the tools that read the table, such as
+`scripts/compare_card_clusters.py`, report it. What differs between builds is what they *write*.
+Every `caselist parse`, and the parse stage of every `caselist pull`, rebuilds the whole table of the
+caselist it parses under the running build's version. So a build from before a version change
+rewrites the table under the older version the next time it parses that caselist, and publishes it
+where that run publishes. After a version change, reinstall the agent on a build that carries it
+before its next scheduled run ([`caselist-scheduled-sync.md`](../runbooks/caselist-scheduled-sync.md#reinstalling-the-agent)).
 
 **A version change re-parses nothing.** The skip key has no fingerprint version in it, and does not
 need one: the only records a fingerprint version decides are the occurrence rows, and the next

@@ -59,7 +59,7 @@ spec:
         letter or digit, because prompt ids name the fixture and cassette directories of v1-e05-t03.
         Added by the PM, 2026-10-16, from v1-e05-t03's Follow-up work.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

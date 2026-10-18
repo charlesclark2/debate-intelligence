@@ -989,3 +989,15 @@ def test_a_long_body_nine_tenths_inside_a_card_lacking_one_of_its_ends_joins_it(
     assert word_shingles(copy)[0] not in frozenset(word_shingles(card))
     assert containment(copy_set, frozenset(word_shingles(card))) >= 0.9
     assert partition(card, copy) == [[0, 1]]
+
+
+def test_a_card_lacking_the_end_of_a_short_copy_does_not_hold_it_and_is_a_second_witness() -> None:
+    """The same rule inside the nested test: a 40-word copy with a stray word after it, and a
+    20-word cut inside the copy, both inside a 200-word card but for that stray word. The card does
+    not hold the copy, so the copy and the card are two witnesses of the cut, which joins neither.
+    `card-fingerprint-v3` read "holds" as nine-tenths alone, and joined the cut to the copy."""
+    card = numbered("word", 200)
+    copy = [*card[50:90], "stray"]
+    cut = card[60:80]
+    assert containment(frozenset(word_shingles(copy)), frozenset(word_shingles(card))) >= 0.9
+    assert partition(card, copy, cut) == [[0], [1], [2]]

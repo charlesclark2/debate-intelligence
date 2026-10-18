@@ -46,7 +46,7 @@ spec:
         Operator-run: after the merge, a reinstall and `--check-launchd` pass, recorded in
         the report.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

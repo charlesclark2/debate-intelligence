@@ -490,8 +490,9 @@ def the_row_withdrawn_instead(world_entries: Sequence[SuppressionEntry]) -> Reco
     return RecordedSuppressionList(InMemoryAppendOnlyRecord("the list, the row withdrawn", lines))
 
 
-def what_the_publish_did(report: PublishReport) -> dict[str, object]:
-    """Every outcome and count of a publish, and no message."""
+def what_the_publish_did(report: PublishReport, *, results: bool = True) -> dict[str, object]:
+    """Every outcome and count of a publish, and no message; without `results`, every count but
+    the source results."""
     return {
         "succeeded": report.succeeded,
         "failed_sha256": report.failed_sha256,
@@ -501,7 +502,7 @@ def what_the_publish_did(report: PublishReport) -> dict[str, object]:
                 "snapshot": one.snapshot,
                 "manifest": one.manifest,
                 "manifest_error_code": one.manifest_error_code,
-                "results": {result: len(one.of(result)) for result in SourceResult},
+                "results": {result: len(one.of(result)) for result in SourceResult} if results else None,
                 "complete": one.complete,
             }
             for one in report.snapshots
@@ -509,13 +510,17 @@ def what_the_publish_did(report: PublishReport) -> dict[str, object]:
     }
 
 
-async def test_the_publisher_withholds_a_manifest_with_a_held_row_exactly_as_one_with_a_suppressed_row(
+async def test_the_publisher_withholds_a_manifest_with_a_held_row_as_one_with_a_suppressed_row(
     world: RemovalWorld, tmp_path: Path
 ) -> None:
     """Two plans of the same snapshot from the same listing: one where the hold stops the row, one
-    where a withdrawn disclosure does. Each is planned, dry, and carried out: every outcome and
-    count is the same, and only the message says which it was. The older build imported the week
-    and did not publish it, so the bucket holds no manifest for it before or after."""
+    where a withdrawn disclosure does. Each is planned, dry, and carried out: every outcome, code and
+    count is the same but one, and the message says which it was. The older build imported the week
+    and did not publish it, so the bucket holds no manifest for it before or after.
+
+    The one difference is `v1-e30-t22`'s, the PM's ruling of 2026-10-16: the held row's bytes, which
+    no other row names, are not uploaded, where the withdrawn copy's are. Until then this test had
+    every count equal (`v1-e30-t21`'s Decision 2)."""
     await remove_the_named_file(world)
     await an_older_build_imports_next_week(world, tmp_path, publish=False)
     held = CaselistPublishService(local=world.local, remote=world.bucket, suppression=world.suppression())
@@ -533,7 +538,16 @@ async def test_the_publisher_withholds_a_manifest_with_a_held_row_exactly_as_one
     done_held = await held.execute(by_hold)
     done_withdrawn = await withdrawn.execute(by_withdrawal)
 
-    assert what_the_publish_did(done_held) == what_the_publish_did(done_withdrawn)
+    assert what_the_publish_did(done_held, results=False) == what_the_publish_did(
+        done_withdrawn, results=False
+    )
+    held_results, withdrawn_results = (
+        {result: report.count(result) for result in SourceResult} for report in (done_held, done_withdrawn)
+    )
+    assert {
+        **held_results,
+        SourceResult.UPLOADED: held_results[SourceResult.UPLOADED] + 1,
+    } == withdrawn_results
     (outcome,) = done_held.snapshots
     assert (outcome.manifest, outcome.manifest_error_code) == (
         ManifestOutcome.WITHHELD,
@@ -543,7 +557,8 @@ async def test_the_publisher_withholds_a_manifest_with_a_held_row_exactly_as_one
     assert listed.get("KeyCount") == 0, "the withheld manifest went up"
     assert dry_held.succeeded is dry_withdrawn.succeeded is False
     (held_plan,), (withdrawn_plan,) = by_hold.snapshots, by_withdrawal.snapshots
-    assert held_plan.counts == withdrawn_plan.counts
+    assert {**held_plan.counts, "upload": held_plan.counts["upload"] + 1} == withdrawn_plan.counts
+    assert (held_plan.held_back, withdrawn_plan.held_back) == ((UPLOADED_AFTER,), ())
     assert rows_of(held_plan.held_rows) == [(UPLOADED_AFTER, REQUEST)]
     assert (held_plan.suppressed_rows, withdrawn_plan.held_rows) == ((), ())
     assert withdrawn_plan.suppressed_rows == (UPLOADED_AFTER,)

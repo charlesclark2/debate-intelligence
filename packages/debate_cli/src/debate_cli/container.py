@@ -128,7 +128,11 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Final, cast
 
 from debate_cli.exit_codes import codes_exit_as_a_retrieval_failure
-from debate_core.application.caselist.evidence_listing import LocalEvidence, digests_in_earlier_manifests
+from debate_core.application.caselist.evidence_listing import (
+    LocalEvidence,
+    digests_in_earlier_manifests,
+    held_back_digests,
+)
 from debate_core.application.caselist.import_service import CaselistImportService, EarlierManifestDigests
 from debate_core.application.caselist.inbox_purge import CaselistInbox
 from debate_core.application.caselist.later_manifests import LaterManifests
@@ -721,6 +725,8 @@ class ServiceContainer:
                 remote=str(storage.s3.bucket),
             ),
             remote_name=str(storage.s3.bucket),
+            # A push leaves out the bytes `caselist publish` does not upload (v1-e30-t22).
+            held_back=functools.partial(held_back_digests, self._local_evidence()),
         )
 
     def caselist_publish(self) -> CaselistPublishService:

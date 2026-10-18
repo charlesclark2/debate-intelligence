@@ -25,6 +25,7 @@ from __future__ import annotations
 import configparser
 import hashlib
 import json
+import stat
 import zipfile
 from collections.abc import Iterator
 from datetime import UTC, date, datetime, timedelta
@@ -1223,6 +1224,42 @@ def test_after_only_named_no_path_is_held_and_next_weeks_upload_is_imported(
     assert (
         data_dir / "blobs" / "sha256" / UPLOADED_AFTER[0:2] / UPLOADED_AFTER[2:4] / UPLOADED_AFTER
     ).exists()
+
+
+def test_a_link_at_a_held_path_imports_with_no_row_and_nothing_is_owed_for_it(
+    installation: Path, bucket: S3Client, published: Any
+) -> None:
+    """`v1-e30-t22`. After the `--source` removal, next week's archive holds a symbolic link at the
+    held path, whose body is the removed file's name, beside another team's file. The import still
+    counts it as skipped, and gives it no row; the publish completes, and status owes nothing."""
+    data_dir = installation / "dev"
+    environment(DEBATE_REMOVAL_PROFILE=REMOVAL_PROFILE)
+    assert run(*REMOVE_REVISION, "--execute")["exit_code"] == ExitCode.OK
+    environment(DEBATE_REMOVAL_PROFILE=None)
+    archive = installation / "next-week" / NEXT_WEEK
+    archive.parent.mkdir(parents=True)
+    with zipfile.ZipFile(archive, "w") as written:
+        link = zipfile.ZipInfo(HELD_PATH, date_time=(1980, 1, 1, 0, 0, 0))
+        link.external_attr = (stat.S_IFLNK | 0o777) << 16
+        written.writestr(link, HELD_PATH.rsplit("/", 1)[1].encode())
+        written.writestr(
+            "Cedar Hollow/ZaLu/Cedar Hollow-ZaLu-AFF-Harbor Classic.docx", DOCUMENT_BODIES["harbor-aff"]
+        )
+
+    imported = import_next_week(archive)
+
+    assert imported["exit_code"] == ExitCode.OK, imported
+    assert imported["data"]["skipped"] == {"SYMLINK": 1}
+    manifest = (data_dir / "objects" / "manifests" / SYNTHETIC_CASELIST / "2026-09-22.jsonl").read_text()
+    assert HELD_PATH not in manifest
+    assert run("caselist", "publish", "--caselist", SYNTHETIC_CASELIST)["exit_code"] == ExitCode.OK
+    status = run("caselist", "status")
+    assert status["exit_code"] == ExitCode.OK, status
+    assert status["data"]["removals_owed"] == []
+    assert {
+        (one["held_skipped_rows"], tuple(one["held_skipped_row_requests"]))
+        for one in status["data"]["snapshots"]
+    } == {(0, ())}
 
 
 # ------------------------------------------------------------------------------------------------

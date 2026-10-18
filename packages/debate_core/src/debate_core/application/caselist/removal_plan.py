@@ -111,6 +111,12 @@ selector names, a row or an inbox member at the held path stands in for the remo
 one this build refused at import, which is still in its archive in the inbox, and one an older
 build imported, which is in the store.
 
+**A skipped member's row at a held path** goes in every rewrite, the first run's included, for a
+snapshot the hold covers (`v1-e30-t22`): a symbolic link named as the removed file, to which every
+build before `v1-e30-t22` gave a row. This build's importer withholds it by the same rule
+(:func:`~debate_core.application.caselist.pipeline.hold_on_skipped_member`), so a manifest the removal
+rewrote and the same archive imported again afterwards leave out the same rows.
+
 ## The complete archive
 
 A caselist's complete archive (`v1-e34-t04`) is its own snapshot, with its manifest at
@@ -184,6 +190,7 @@ from debate_core.application.caselist.openev_manifest import (
 from debate_core.application.caselist.pipeline import (
     STORED_CLASSIFICATIONS,
     Classification,
+    hold_on_skipped_member,
     withheld_skipped_paths,
 )
 from debate_core.application.caselist.publish_plan import (
@@ -1525,6 +1532,15 @@ def _rows_to_drop(
     ]
     shadowing = withheld_skipped_paths(real, skipped)
     dropped |= {index for index, (_, row) in enumerate(copy.rows) if row.get("path") in shadowing}
+    caselist = None if copy.caselist == OPENEV else copy.caselist
+    snapshot = snapshot_date(copy.snapshot)
+    dropped |= {
+        index
+        for index, (_, row) in enumerate(copy.rows)
+        if row.get("skip_reason") is not None
+        and isinstance(path := row.get("path"), str)
+        and hold_on_skipped_member(after, caselist=caselist, path=path, snapshot=snapshot) is not None
+    }
     return dropped
 
 

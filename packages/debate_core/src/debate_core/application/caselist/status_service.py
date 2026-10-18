@@ -57,15 +57,27 @@ comparison reports both (`v1-e30-t21`):
 
 * a stored row at a held path, in a snapshot the hold covers (:attr:`SnapshotStatus.held_rows`):
   an import by a build from before `v1-e30-t13`, which reads no hold, wrote it;
+* a skipped member's row at a held path, in a snapshot the hold covers
+  (:attr:`SnapshotStatus.held_skipped_rows`, `v1-e30-t22`): a symbolic link named as the removed
+  file, which every build before `v1-e30-t22` gave a row and this build's importer withholds;
 * an upload at a held path in an archive in the download inbox (:attr:`CaselistStatusReport.held_in_inbox`),
   asked for with `held_in_inbox=True` from a service built with the inbox: refused at import, or
   waiting to be.
 
-Neither is a difference between this machine and the bucket, so neither changes
-:attr:`CaselistStatusReport.in_sync` or the command's exit status. Each is named by its digest and
-the request that holds its path, never by the path. The inbox is read only when asked, because it
+None is a difference between this machine and the bucket, so none changes
+:attr:`CaselistStatusReport.in_sync` or the command's exit status. Each is named by the request that
+holds its path, and a file by its digest too, never by the path. The inbox is read only when asked, because it
 means reading every archive in it: `caselist status` asks, and `caselist pull` does not. An archive
 there that cannot be read is passed over; a removal's dry run names it.
+
+## Bytes the publisher does not upload
+
+Bytes that only held rows of a manifest name are never uploaded (`v1-e30-t22`; `publish_plan`,
+"Bytes only held rows name are not uploaded"), so the comparison does not expect them in the bucket:
+they are not among a snapshot's :attr:`SnapshotStatus.sources`, and neither the bucket nor this
+machine lacking them is drift or owed. The build that imported the held row stored them on this
+machine; running the same removal again deletes them here, and a re-run is what the held row already
+says is owed.
 
 ## A manifest mismatch and a source mismatch
 
@@ -109,7 +121,9 @@ from debate_core.application.caselist.publish_plan import (
     HeldRow,
     LocalSnapshot,
     digest_of_local_blob_key,
+    held_only_digests,
     held_rows,
+    held_skipped_rows,
     remote_source_prefix,
     snapshot_manifest_key,
     snapshot_of_manifest_key,
@@ -220,7 +234,8 @@ class SnapshotStatus:
     manifest_present: bool
     """Whether the bucket holds a manifest at :attr:`manifest_key`."""
     sources: int
-    """Distinct sources the local manifest names, suppressed ones excluded. 0 with no local manifest."""
+    """Distinct sources the local manifest names, less suppressed ones and those only held rows name
+    (`v1-e30-t22`), which are never uploaded. 0 with no local manifest."""
     local_files: int
     """How many of :attr:`sources` this machine's blob store holds."""
     published_sources: int
@@ -237,6 +252,9 @@ class SnapshotStatus:
     held_rows: tuple[HeldRow, ...] = ()
     """Stored rows in the local manifest at a path a removal holds (`v1-e30-t21`): the same removal is
     owed again. Not a difference from the bucket, so not part of :attr:`in_sync`."""
+    held_skipped_rows: tuple[str, ...] = ()
+    """The request holding the path of each skipped member's row at a held path (`v1-e30-t22`), which
+    an earlier build wrote: the same removal is owed again. Not part of :attr:`in_sync` either."""
 
     @property
     def in_sync(self) -> bool:
@@ -334,14 +352,17 @@ class CaselistStatusReport:
 
     @property
     def held_snapshots(self) -> tuple[SnapshotStatus, ...]:
-        """The snapshots with a stored row at a held path."""
-        return tuple(snapshot for snapshot in self.snapshots if snapshot.held_rows)
+        """The snapshots with a row at a held path: a stored row, or a skipped member's."""
+        return tuple(
+            snapshot for snapshot in self.snapshots if snapshot.held_rows or snapshot.held_skipped_rows
+        )
 
     @property
     def removals_owed(self) -> tuple[str, ...]:
         """The request ids whose removal a held row or a held inbox upload says to run again, sorted."""
         rows = {row.request_id for snapshot in self.snapshots for row in snapshot.held_rows}
-        return tuple(sorted(rows | {upload.request_id for upload in self.held_in_inbox}))
+        skipped = {request for snapshot in self.snapshots for request in snapshot.held_skipped_rows}
+        return tuple(sorted(rows | skipped | {upload.request_id for upload in self.held_in_inbox}))
 
     def held_in_inbox_of(self, caselist: str) -> tuple[HeldInboxUpload, ...]:
         """The :attr:`held_in_inbox` uploads of `caselist`."""
@@ -531,7 +552,11 @@ class CaselistStatusService:
         head: Callable[[ObjectKey], Awaitable[ObjectInfo | None]],
         suppression: SuppressionState,
     ) -> SnapshotStatus:
-        sources = [source for source in local.sources if not suppression.suppresses_source(source.sha256)]
+        suppressed = [source for source in local.sources if suppression.suppresses_source(source.sha256)]
+        held_back = held_only_digests(local, suppression)
+        sources = [
+            source for source in local.sources if source not in suppressed and source.sha256 not in held_back
+        ]
         missing_local = tuple(
             source.sha256 for source in sources if local_blobs.get(source.sha256) != source.size
         )
@@ -579,9 +604,10 @@ class CaselistStatusService:
             missing_sources=tuple(sorted(missing_remote)),
             missing_local=tuple(sorted(missing_local)),
             checksum_mismatches=tuple(sorted(mismatched)),
-            suppressed=len(local.sources) - len(sources),
+            suppressed=len(suppressed),
             suppressed_rows=suppressed_rows(local, suppression),
             held_rows=held_rows(local, suppression),
+            held_skipped_rows=held_skipped_rows(local, suppression),
         )
 
     async def _head(self, key: ObjectKey, semaphore: asyncio.Semaphore) -> ObjectInfo | None:

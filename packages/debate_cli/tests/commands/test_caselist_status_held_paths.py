@@ -151,3 +151,78 @@ def test_a_drifted_report_still_fails_as_drift_and_its_hint_names_the_removal_ow
         "A held row or a held upload in the inbox means RM-2026-05 is owed again: run the same removal "
         "again, dry run first, then --execute (docs/runbooks/caselist-removal.md, step 9)."
     )
+
+
+# ------------------------------------------------------------------------------------------------
+# A skipped member's row at a held path, which an earlier build wrote (`v1-e30-t22`)
+# ------------------------------------------------------------------------------------------------
+
+
+def in_sync_with_a_held_skipped_row() -> CaselistStatusReport:
+    """A symbolic link at the held path in `2026-10-11`, given a row by an earlier build."""
+    return CaselistStatusReport(
+        snapshots=(snapshot("2026-10-06"), snapshot("2026-10-11", held_skipped_rows=(REQUEST,))),
+    )
+
+
+def test_a_held_skipped_row_does_not_change_the_verdict_and_says_the_removal_is_owed() -> None:
+    report = in_sync_with_a_held_skipped_row()
+
+    assert report.in_sync is True
+    assert [one.snapshot for one in report.held_snapshots] == ["2026-10-11"]
+    assert report.removals_owed == (REQUEST,)
+
+
+def test_the_json_counts_each_held_skipped_row_by_request() -> None:
+    data = status_summary(in_sync_with_a_held_skipped_row(), SETTINGS)
+
+    entries = {entry["snapshot"]: entry for entry in data["snapshots"]}  # type: ignore[index,union-attr]
+    held = entries["2026-10-11"]
+    assert (held["held_skipped_rows"], held["held_skipped_row_requests"]) == (1, [REQUEST])
+    assert (held["held_rows"], held["held_row_prefixes"]) == (0, [])
+    assert (
+        entries["2026-10-06"]["held_skipped_rows"],
+        entries["2026-10-06"]["held_skipped_row_requests"],
+    ) == (
+        0,
+        [],
+    )
+    assert data["removals_owed"] == [REQUEST]
+    assert data["in_sync"] is True
+    names_no_one(json.dumps(data))
+
+
+def test_the_table_names_a_held_skipped_row_by_its_request_alone() -> None:
+    """It has no digest to name, and no line for the snapshot's stored rows, of which none is held."""
+    caption = _status_table(in_sync_with_a_held_skipped_row(), SETTINGS).caption or ""
+
+    assert caption.splitlines() == [
+        "Every snapshot agrees.",
+        "HELD PATH ROWS in testcl26 2026-10-11: 1 skipped member row(s) at a path a removal holds "
+        "(RM-2026-05).",
+        "A held row or a held upload in the inbox means RM-2026-05 is owed again: run the same removal "
+        "again, dry run first, then --execute (docs/runbooks/caselist-removal.md, step 9).",
+    ]
+    names_no_one(caption)
+
+
+def test_a_snapshot_with_both_kinds_of_held_row_gets_a_line_for_each() -> None:
+    report = CaselistStatusReport(
+        snapshots=(
+            snapshot(
+                "2026-10-11",
+                held_rows=(HeldRow(sha256=HELD_ROW, request_id=REQUEST),),
+                held_skipped_rows=(OTHER_REQUEST, REQUEST),
+            ),
+        ),
+    )
+
+    lines = (_status_table(report, SETTINGS).caption or "").splitlines()
+
+    assert lines[1:3] == [
+        "HELD PATH ROWS in testcl26 2026-10-11: 1 row(s) at a path a removal holds "
+        "(sha256 a1b2c3d4e5f6, RM-2026-05).",
+        "HELD PATH ROWS in testcl26 2026-10-11: 2 skipped member row(s) at a path a removal holds "
+        "(RM-2026-05, RM-2026-06).",
+    ]
+    assert report.removals_owed == (REQUEST, OTHER_REQUEST)

@@ -763,8 +763,11 @@ def status_summary(report: CaselistStatusReport, settings: Settings) -> dict[str
     `suppressed_rows` counts the local manifest's rows the suppression list stops, and
     `suppressed_row_prefixes` names their files; `held_rows`, `held_row_prefixes` and
     `held_row_requests` do the same for its rows at a path a removal holds (`v1-e30-t21`), which an
-    older build imported. `held_in_inbox` is one object per caselist compared: the uploads at a held
-    path in the download inbox's archives, by count, `sha256_prefixes` and `requests`.
+    older build imported. `held_skipped_rows` and `held_skipped_row_requests` count the skipped
+    members' rows at such a path, a symbolic link named as the removed file, which have no digest to
+    name and which every build before `v1-e30-t22` wrote. `held_in_inbox` is one object per caselist
+    compared: the uploads at a held path in the download inbox's archives, by count,
+    `sha256_prefixes` and `requests`.
     `removals_owed` is every request either names, whose removal is owed again. None of these is
     part of `in_sync`. `suppressed_objects` is one object per caselist
     compared, because one listing of a caselist's source prefix finds them for all its snapshots:
@@ -905,6 +908,8 @@ def _status_entry(entry: SnapshotStatus) -> dict[str, JsonValue]:
         "held_rows": len(entry.held_rows),
         "held_row_prefixes": [_digest_prefix(row.sha256) for row in entry.held_rows],
         "held_row_requests": sorted({row.request_id for row in entry.held_rows}),
+        "held_skipped_rows": len(entry.held_skipped_rows),
+        "held_skipped_row_requests": sorted(set(entry.held_skipped_rows)),
     }
 
 
@@ -932,12 +937,22 @@ def _suppressed_object_lines(report: CaselistStatusReport) -> list[str]:
 
 
 def _held_lines(report: CaselistStatusReport) -> list[str]:
-    """Under the status table: rows and inbox uploads at a held path, by digest prefix and request."""
-    lines = [
-        f"HELD PATH ROWS in {entry.caselist} {entry.snapshot}: {len(entry.held_rows)} row(s) at a path a "
-        f"removal holds ({_held_named((row.sha256, row.request_id) for row in entry.held_rows)})."
-        for entry in report.held_snapshots
-    ]
+    """Under the status table: rows and inbox uploads at a held path, by digest prefix and request.
+
+    A skipped member's row has no digest, so it is named by the request holding its path alone.
+    """
+    lines: list[str] = []
+    for entry in report.held_snapshots:
+        named = f"HELD PATH ROWS in {entry.caselist} {entry.snapshot}"
+        if entry.held_rows:
+            held = _held_named((row.sha256, row.request_id) for row in entry.held_rows)
+            lines.append(f"{named}: {len(entry.held_rows)} row(s) at a path a removal holds ({held}).")
+        if entry.held_skipped_rows:
+            requests = ", ".join(sorted(set(entry.held_skipped_rows)))
+            lines.append(
+                f"{named}: {len(entry.held_skipped_rows)} skipped member row(s) at a path a removal "
+                f"holds ({requests})."
+            )
     for caselist in report.caselists:
         found = report.held_in_inbox_of(caselist)
         if found:

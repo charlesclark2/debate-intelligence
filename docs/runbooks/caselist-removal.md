@@ -531,13 +531,24 @@ At the next import (or immediately, if you have the next archive on hand):
 - [ ] **`caselist status` says when the removal is owed again** (`v1-e30-t21`). Under its table:
       - *HELD UPLOADS IN THE DOWNLOAD INBOX for `<caselist>`*: an upload at a held path in an
         archive in the inbox, refused at import or waiting to be;
-      - *HELD PATH ROWS in `<caselist>` `<snapshot>`*: a stored row at a held path, which a build from
-        before `v1-e30-t13` imported. `caselist publish` withholds that snapshot's manifest, with the
-        code `MANIFEST_NAMES_SUPPRESSED_SOURCE`, as it withholds one with a suppressed row;
+      - *HELD PATH ROWS in `<caselist>` `<snapshot>`: N row(s) at a path a removal holds*: a stored
+        row at a held path, which a build from before `v1-e30-t13` imported. `caselist publish`
+        withholds that snapshot's manifest, with the code `MANIFEST_NAMES_SUPPRESSED_SOURCE`, as it
+        withholds one with a suppressed row. It does not upload the row's bytes either, unless
+        another row names them, such as another team's copy at its own path (`v1-e30-t22`), and
+        `store sync` does not push them. They stay in this machine's store until the re-run below.
+        Bytes a build before `v1-e30-t22` published are in the bucket until then;
+      - *HELD PATH ROWS in `<caselist>` `<snapshot>`: N skipped member row(s) at a path a removal
+        holds*: the row of a symbolic link or other skipped member at a held path, which every build
+        before `v1-e30-t22` wrote. Its body is often the removed file's name. This build's import
+        gives such a member no row. A row an earlier build wrote is published with its manifest
+        until the re-run below drops it;
       - then *RM-… is owed again*. Each file is named by the first twelve characters of its sha256
-        and the request holding its path, and `--json` gives the same as `held_in_inbox`, each
-        snapshot's `held_rows`, `held_row_prefixes` and `held_row_requests`, and `removals_owed`.
-      Neither changes the exit code: the command still exits 0 when the bucket agrees.
+        and the request holding its path, a skipped member by the request alone, and `--json` gives
+        the same as `held_in_inbox`, each snapshot's `held_rows`, `held_row_prefixes`,
+        `held_row_requests`, `held_skipped_rows` and `held_skipped_row_requests`, and
+        `removals_owed`.
+      None changes the exit code: the command still exits 0 when the bucket agrees.
 - [ ] **Finish it by running the same removal again**, dry run first: the same `--source`, the same
       `--request` and `--reason`, in dev and then prod. Do this after any pull that reported a held
       upload or after which `caselist status` says the removal is owed, and after every pull while
@@ -554,12 +565,16 @@ At the next import (or immediately, if you have the next archive on hand):
         the archive has already left the inbox, the plan cannot see the upload's bytes, so its
         sha256 is never put on the list; the path entry still refuses it there.
       - *held in `<snapshot>`*: a build from before `v1-e30-t13` imported it. `--execute` removes it
-        from the store and the bucket as it removes any later upload, every version.
+        from the store and the bucket as it removes any later upload, every version: its blob on
+        this machine goes too, unless another team's row names the same bytes at its own path, when
+        only its row at the held path goes. Its bytes are in the bucket only if a build before
+        `v1-e30-t22` published them.
       - nothing, and *Nothing is left to remove*: nothing arrived.
       Then execute as in step 5, and verify as in step 6. The path stays held afterwards. A
       symbolic link or other skipped member at the held path, in an archive waiting to be
       imported, is taken out of it in the same rewrite (`v1-e30-t21`); its body is often the file's
-      name. `caselist status` then says nothing is owed.
+      name. A row an earlier build wrote for one in a manifest is dropped from that manifest, here
+      and in the bucket (`v1-e30-t22`). `caselist status` then says nothing is owed.
 - [ ] **After a `--team` removal**, run the same `--team` dry run again once the next weekly is
       imported: it selects by the team's directories, so it lists anything new there, and
       `--execute` removes it under the same request id. A `--team` removal holds no path, so until

@@ -18,6 +18,10 @@ dependencies = [
     # reference implementation, so the schema's meaning is the standard's, not ours. It resolves
     # only the schemas it is handed and never fetches a `$ref`.
     "jsonschema>=4.23",
+    # Prompt templates (v1-e05-t04-prompt-registry): debate_core.integrations.models.prompt_registry
+    # renders the reviewed files under prompts/ in a sandboxed environment with strict undefined
+    # variables. Templates are compiled from strings; nothing is loaded from a path a template names.
+    "jinja2>=3.1",
 ]
 
 # boto3 is optional on purpose. The domain and application layers never import it — the

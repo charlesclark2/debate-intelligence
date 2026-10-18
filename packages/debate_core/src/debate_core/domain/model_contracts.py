@@ -38,6 +38,7 @@ __all__ = [
     "ModelRequest",
     "ModelResponse",
     "ModelUsage",
+    "RenderedPrompt",
     "RerankResponse",
     "RerankResult",
     "ResolvedRoute",
@@ -169,6 +170,20 @@ class ModelPrompt(DomainModel):
     variables: dict[str, JsonValue] = Field(
         default_factory=dict[str, JsonValue], description="Values for the prompt's placeholders."
     )
+
+
+class RenderedPrompt(DomainModel):
+    """The text one generative call sends: the user turn, and a system prompt when the prompt has one.
+
+    What the prompt registry's `render` returns for a :class:`ModelPrompt`
+    (v1-e05-t04-prompt-registry), and what a real router sends. It holds the reviewed prompt's
+    wording and the caller's variables, nothing else. It is defined here, beside the prompt it
+    renders, so that the registry and the adapters that send it share one type without either
+    importing the other.
+    """
+
+    user: NonEmptyText = Field(description="The user turn.")
+    system: NonEmptyText | None = Field(default=None, description="The system prompt, when there is one.")
 
 
 class ModelRequest(DomainModel):

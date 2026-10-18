@@ -348,6 +348,7 @@ name = "debate-core"
 version = "1.1.0"
 source = { editable = "packages/debate_core" }
 dependencies = [
+    { name = "jinja2" },
     { name = "jsonschema" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
@@ -371,6 +372,7 @@ opencaselist = [
 requires-dist = [
     { name = "boto3", marker = "extra == 'aws'", specifier = ">=1.35" },
     { name = "httpx", marker = "extra == 'opencaselist'", specifier = ">=0.28" },
+    { name = "jinja2", specifier = ">=3.1" },
     { name = "jsonschema", specifier = ">=4.23" },
     { name = "keyring", marker = "extra == 'opencaselist'", specifier = ">=25" },
     { name = "lxml", marker = "extra == 'docx'", specifier = ">=5.3" },

@@ -1,4 +1,9 @@
-"""What the offline model routers raise when a recorded answer is missing, unusable or not allowed.
+"""What the offline routers and the prompt registry raise when something a call needs is not there.
+
+The routers' errors are for a recorded answer that is missing, unusable or not allowed
+(v1-e05-t03-fake-replay-models). The prompt registry's are for a prompt file that cannot be loaded,
+a prompt that is not registered, a render that is missing a variable, and a lock file that no longer
+matches the released prompts (v1-e05-t04-prompt-registry).
 
 None of these is a :class:`~debate_core.application.errors.ProviderError`, on purpose. A provider
 error is a normal condition that a caller may absorb, retry or report as a partial result. A missing
@@ -14,7 +19,16 @@ from pathlib import Path
 from debate_core.application.errors import DomainError
 from debate_core.application.settings import ConfigurationError
 
-__all__ = ["FixtureFileError", "MissingFixtureError", "ModelModeError", "RecordingRefusedError"]
+__all__ = [
+    "FixtureFileError",
+    "MissingFixtureError",
+    "ModelModeError",
+    "PromptLockError",
+    "PromptRegistryError",
+    "PromptRenderError",
+    "RecordingRefusedError",
+    "UnknownPromptError",
+]
 
 
 class MissingFixtureError(DomainError):
@@ -67,3 +81,37 @@ class ModelModeError(ConfigurationError):
 
 class RecordingRefusedError(ConfigurationError):
     """Record mode was asked for where it may not run: in CI (`CI=true`), or without a real router."""
+
+
+class PromptRegistryError(ConfigurationError):
+    """A prompt file cannot be registered: unreadable, malformed, or in conflict with another file.
+
+    A configuration error, because the prompt files are configuration the repository ships. `source`
+    is the file, and `field` the front-matter key at fault when the failure is about one key.
+    """
+
+
+class UnknownPromptError(PromptRegistryError):
+    """A prompt id, or a version of it, that the registry does not hold."""
+
+
+class PromptRenderError(DomainError):
+    """A prompt cannot be rendered with the variables it was given (ac2).
+
+    Raised for a variable the template uses that the call did not give, for one the call gave that
+    the template never uses, and for anything else the template fails on. Nothing is sent: a prompt
+    that renders without one of its inputs is a call that quietly asks the wrong question.
+    """
+
+    def __init__(self, prompt_id: str, prompt_version: str, reason: str) -> None:
+        self.prompt_id = prompt_id
+        """The prompt that could not be rendered."""
+        self.prompt_version = prompt_version
+        """Its version."""
+        self.reason = reason
+        """What is wrong with the variables."""
+        super().__init__(f"prompt {prompt_id}@{prompt_version} cannot be rendered: {reason}")
+
+
+class PromptLockError(DomainError):
+    """`prompts/prompts.lock.json` disagrees with a released prompt, and relocking would hide it (ac4)."""

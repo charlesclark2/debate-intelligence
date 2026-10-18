@@ -241,9 +241,61 @@ No Terraform was written: it is outside this task's packages.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-17
 
 **Notes:**
+
+Accepted as a partial merge. ac7, the first real call, cannot run until a profile may call
+`bedrock:InvokeModel`, and the Goal stays `InProgress` until it is recorded.
+
+**The adapter fails closed everywhere it could guess.** It never forces a tool, never picks one of
+two tool calls, and never accepts a `max_tokens` stop. It never retries a call the model may have
+run and billed. Until the registry exists it sends no structured call at all, rather than inventing
+prompt text. Each is pinned by a mutant.
+
+**The work itself:**
+
+* **34 of 34 mutants caught,** including the three families I asked for: `toolChoice`, the retry
+  classification and `effort` merging.
+* **ac4 is shown from the lockfile,** not asserted. The base closure of `debate-core` holds no
+  boto3, and planting it fails the test.
+* **The import contracts were broken on purpose and held,** and the report explains why
+  `build_model_router` cannot default to the Bedrock router.
+* **Retries are bounded by the route,** jittered, doubled and capped, with botocore's own retries
+  off, so attempts cannot multiply.
+* **The IAM a profile needs is written out**: one action, and the resources by profile and
+  foundation model, with the inference-profile condition.
+
+**On fail-first.** The tests were written beside the code, so the mutants are the evidence that
+each test reads its behaviour. I accept that here because every behaviour has its mutant. The
+working agreement still asks for red first, and the next task should show it.
+
+**Rulings:**
+
+* **Deviation 1, `InvalidModelOutput` in place of a `ModelOutputError` that t05 has not built:**
+  accepted. It is the port's error, the contract requires it, and t05's guard catches it.
+* **Deviation 2, the domain and application edits:** accepted under working agreement 5. `effort`
+  is a domain parameter, and port errors live with the port.
+* **Deviation 3, the PM's two amendments:** applied as instructed.
+* **Deviation 4, no structured call until t04:** accepted, and it is the right seam. t04 provides
+  the renderer, and the PM's notes for t04 say how they meet.
+* **Deviation 5, the hand-edited cassette:** accepted. Replay that breaks on every new optional
+  parameter is a defect in t03's format: filed as a follow-up for the E05 batch.
+* **Deviation 6, `InternalServerException` retried:** accepted. It is a transient service error,
+  and the spec's description asks for those.
+* **Deviation 7, eight parts:** accepted.
+* **Decisions:** accepted. On `effort`, no route sets one until a task with evals has a reason to.
+  The model defaults stand.
+
+**Follow-up work, filed by the PM:**
+
+* **A permission set that may call `bedrock:InvokeModel`,** as written under Operator follow-ups,
+  and the account's model access. That is a new E05 task with Terraform the PM reads before
+  apply. ac7 runs after it.
+* **Cassette comparison that tolerates a new optional field:** E05.
+* **The exit code for `ModelAccessDenied` and `ModelRequestRejected`** goes into the spec of the
+  first CLI command that calls a model. They must not exit 3, the retryable code.
+* **t04 wires its renderer,** and **t07 takes the token and latency notes.**

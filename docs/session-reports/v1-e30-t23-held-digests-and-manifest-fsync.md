@@ -6,7 +6,7 @@
 | Spec | [`plan_specs/v1/e30-caselist-ingestion/t23-held-digests-and-manifest-fsync.yaml`](../../plan_specs/v1/e30-caselist-ingestion/t23-held-digests-and-manifest-fsync.yaml) |
 | Epic / release | `v1-e30-caselist-ingestion` / `v1.1` |
 | Branch | `task/v1-e30-t23-held-digests-and-manifest-fsync` |
-| Session status | COMPLETE but for one sign-off. ac3's policy sentence is yours to approve, so the Goal stays `InProgress` and ac3 is NOT RUN |
+| Session status | COMPLETE. Every criterion passed, ac3 once the PM approved its policy wording, and the Goal is `Succeeded` |
 
 ## Summary
 
@@ -29,9 +29,8 @@ the test failed until the publisher changed.
 
 **Four things to look at first:**
 
-1. **ac3 is NOT RUN, by your notes.** The runbook is changed. The policy sentence I propose is under
-   PM questions, with the runbook text I removed. The Goal stays `InProgress` until you approve or
-   reword it.
+1. **ac3 passed after your review.** The runbook is changed, and the policy has (a) and (b) as
+   proposed under PM questions and (c) in your wording. The Goal is `Succeeded`.
 2. **The import writes this machine's copy alone, and the removal writes the bucket's** (Decision
    3). Only the takedown credential writes under `manifests/_suppression/`. The pull's list appends
    locally even with a live session. The first thing a removal's execution does is give the bucket's
@@ -66,7 +65,7 @@ LaunchAgents, and none touched AWS or the network.
 |---|---|---|
 | **ac1**: after a held upload's copy is gone, running the removal again lists its digest under its request, by test shown failing first; an earlier build reading the data directory still works, by test | PASS | **Red first.** The red commit is `2d3345a`. Its three new core test files and the CLI hint test, run on the start commit's source → `18 failed, 12 passed in 8.36s`, every failure an assertion. The item (1) failures: no record (`assert [] == [{'schema_version': 1, 'sha256': 'c8c495e6…', 'disclosure': 'de162f10…', 'request_id': 'RM-2026-01'}]`); the re-run does not list it (`AssertionError: the re-run does not list the held upload / assert None is not None`); the same bytes at another path come back (`AssertionError: the bytes came back in at another path / assert 0 == 1`); a record that cannot be written does not fail the import (`Failed: DID NOT RAISE OSError`). The 12 that pass are the "must not" cases (a dry run, a path no removal holds, another request) and the hint test's three other cases. The pull test, added later, was red on that source the same way (`assert [] == [{…'RM-2026-01'}]`). **Green.** `test_removal_lists_held_digests.py` (17 tests) covers these. *The point*: `test_running_the_removal_again_lists_a_held_upload_whose_archive_has_left_the_inbox` plans the upload as `held_at_import`/`remove` with one whole-file entry under `RM-2026-01`. `…executing_it_puts_the_digest_on_the_list_in_both_copies_and_the_record_in_the_bucket` checks both copies. `test_after_the_re_run_the_same_bytes_at_another_path_are_stopped_at_import` gets `SUPPRESSED 1`, with no blob. *The holder rule*: `test_bytes_another_path_holds_are_withdrawn_from_the_held_path_only` gives one entry, disclosure the held path's digest, and `kept_in == ("testcl26",)`. `…are_never_put_on_the_list_whole` shows no whole entry; the other team's row and blob stay; `withdrawals.jsonl` names `testcl26`. `…still_import_at_a_path_nothing_holds` shows the other team's bytes are not stopped. *The record*: idempotent on re-import, nothing on a dry run, named no one. A pull writes this machine's copy and not the bucket's. The record's own 17 tests are in `test_removal_held_digest_record.py`. **Earlier build.** `check_an_older_build_reads_this_builds_files.py`, against `v1.1.0-dev.18` (`0268cf7`, by `git archive`): five checks, exit 0. With the record in both places, the first check prints `import of the next week: SUPPRESSED 4, completed` and `publish: succeeded True; status in sync: True`. The new check prints `removal of RM-2026-02 run again beside the record: 1 source(s) planned; the same plan as without it: True` and `executed: completed True; the record as placed, both copies: True`. The start commit prints the same. This build prints `2 source(s)` and `False`, because it lists the upload. t13's `written_by_this_build/` was not regenerated, because its history writes no record (Decision 10). Its byte-for-byte test still passes |
 | **ac2**: the manifest writer fsyncs the directory after the rename, by test | PASS | `test_manifest_write_fsyncs_its_directory.py` uses a recording `os.fsync`, `os.open` and `os.replace`, with no real power cut. It asserts the exact sequence `fsync file (inode N)`, `replace <manifest>`, `open <directory>`, `fsync directory <directory>`, for `write_manifest_lines` and `write_manifest_text`. Further tests cover a rewrite over an existing manifest, and a directory fsync that fails raising `OSError`. Red on the start commit: `Right contains 2 more items, first extra item: ('open', …/manifests/testcl26)`, and `Failed: DID NOT RAISE OSError`. No `F_FULLFSYNC` |
-| **ac3**: the runbook's note that the list cannot stop such bytes is removed, and the policy's list of sidecar records names the new one, in a sentence the PM approves | NOT RUN (runbook part done) | The runbook's note is removed, and the new text says where the import records the bytes and what the re-run lists (Files changed). The policy is yours: my proposed sentences and the removed runbook text are under PM questions. This closes when you approve or reword them |
+| **ac3**: the runbook's note that the list cannot stop such bytes is removed, and the policy's list of sidecar records names the new one, in a sentence the PM approves | PASS | **Runbook**: the note is removed, and the new text says where the import records the bytes and what the re-run lists (Files changed). **Policy**, after the PM review of 2026-10-18 (ACCEPTED): `docs/policies/caselist-data-use.md` has (a) and (b) as proposed under PM questions, and (c) in the PM's wording. (a): rule 6 of Personal data ends "…; and the sha256 of each upload an import refused at a held path, beside that path's digest and the request holding it (v1-e30-t23)." (b): the report table's row lists `v1-e30-t13, t14, t15, t16, t23`. (c): What removal does adds "An import that refuses an upload at a held path records its sha256 in the same way, beside that path's digest and under the request holding it (`v1-e30-t23`). The same removal run again then stops those bytes after the archive they came in has gone: whole when no other path holds them, and withdrawn from the held path alone when one does." (d) is not added. The cross-reference in version 1.9's notes ("Personal data rule 6, the report table and What removal does name the records kept beside the suppression list and the removal log since `v1-e30-t13`, `t15`, `t16` and `t14`") is still true: all three still name those records. It describes version 1.9 and does not name t23's record; no version was bumped (see the hand-over note). `uv run scripts/check_links.py` and `uv run scripts/validate_specs.py` pass |
 | **ac4**: (3) by tests shown failing first, (a) such a manifest is withheld with that code and nothing of it reaches the bucket, and (b) status gives the removal hint, not the publish hint | PASS | **Red first** (same run as ac1): `assert <ManifestOutcome.UPLOADED: 'uploaded'> is <ManifestOutcome.WITHHELD: 'withheld'>`; the dry run `assert True is False`; status `manifest_withheld=False`; and `test_the_hint_is_the_removals_exactly_when_the_publish_withholds_the_manifest[a held skipped row]` failed. **(a)** `test_held_skipped_rows_withhold_the_manifest.py`. An earlier build imports the week with a link at the held path, and this build's publisher gives `WITHHELD`, `MANIFEST_NAMES_SUPPRESSED_SOURCE`, `failure_codes == (that code,)` and `succeeded False`. The manifest is absent from the bucket, and every key and version in the bucket is what it was before the publish. The message is `1 skipped member row(s) at a path a removal holds (RM-2026-01)` with the re-run fix, and names no one. A link at a path nothing holds still publishes, and the re-run lets the week publish without the row. **(b)** `BESIDE_THE_REWRITE["a held skipped row"]` is `True`, and that case now passes; status's `manifest_withheld` is `True`. No status code changed |
 | Node `held-digests`: `uv run pytest packages/debate_core/tests -k "caselist and (removal or manifest)"` | PASS | `508 passed in 32.45s`, as the spec writes it, after the sync |
 | Full suite, in eighths (`uv run --frozen pytest -n auto -m "not slow and not live" --part K/8`), at load 4 to 11 | PASS but for the known failure | Each part ran under a hard stop at 110 s and finished in 31 to 39 s: `1035 passed`; `1039 passed`; `1036 passed, 2 warnings`; `1031 passed, 1 warning`; `1027 passed`; `1036 passed, 1 xfailed`; `1 failed, 1036 passed`; `1034 passed, 1 xfailed`. The one failure is the known parser-evaluation test. The warnings are `pytest_socket`'s |
@@ -330,9 +329,69 @@ Reply with: the sentences you approve (or your wording) for 1, and "ok" or a rul
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-18
 
 **Notes:**
+
+Accepted, on condition that the policy wording below is applied. The session applies it, records
+ac3 as PASS, sets the phase to `Succeeded`, and commits before the PR is opened.
+
+**ac3, the policy wording (docs/policies/caselist-data-use.md):**
+
+* **(a), Personal data rule 6:** approved as proposed.
+* **(b), the table row:** approved. Add t23 to the list of tasks.
+* **(c), What removal does:** approved with this wording, because "puts those bytes on the list"
+  overstated the case for bytes another path holds:
+  "An import that refuses an upload at a held path records its sha256 in the same way, beside that
+  path's digest and under the request holding it (`v1-e30-t23`). The same removal run again then
+  stops those bytes after the archive they came in has gone: whole when no other path holds them,
+  and withdrawn from the held path alone when one does."
+* **(d):** not added. (c) says it, and the runbook carries the procedure.
+* **Check that the cross-reference near the end of the policy** ("Personal data rule 6, the report
+  table and What removal does name ...") is still true after the change.
+
+**PM question 2, the import writing this machine's copy alone:** ok. Only the takedown credential
+may write under `manifests/_suppression/`. The removal is the record's one reader, and it reads the
+copies as one and reconciles them first. One machine holds the data directory for both
+environments, so no removal runs where the import's copy is absent.
+
+**The work itself:**
+
+* **Red first**, with every failure an assertion, and the start commit's source pinned by
+  `__file__`.
+* **The holder rule reuses `_plan_other_source`**, so held-only bytes and bytes held elsewhere follow
+  t16's and t22's rule exactly. The test that the same bytes at another path are stopped at import
+  proves the point of item (1).
+* **Idempotence by construction** (no date in the line), and it is tested.
+* **The directory fsync's order is pinned**: file, rename, directory. A failed directory fsync is
+  raised. The inventory of which writers go through `write_manifest_text` is what the notes asked
+  for.
+* **Item (3) moved status's hint with no status change**, through t19's single source of truth. The
+  flipped test is the evidence.
+* **27 mutants.** Row 15's survivor led to a real missing case, now tested, and three checks that
+  decided nothing were removed.
+* **The cross-build check against `v1.1.0-dev.18`** now plans the same with and without the record.
+
+**Rulings on the rest:**
+
+* **Deviation 1:** accepted. The ruling reverses t13's premise, and every other file is still byte
+  for byte the same.
+* **Deviation 2:** accepted. This is the second session to pipe a check into `tail` inside an `&&`
+  chain. The working agreements will say so in words.
+* **Decisions 1 to 11:** accepted.
+* **Decision 9** (`withholding_rows` holding request ids beside digests): accepted. It keeps status
+  untouched, and the tuple's one consumer treats it as "withheld or not".
+
+**Follow-ups:**
+
+* **1, three rename-into-place writers without a directory fsync:** filed at p3. `inbox_purge.py`
+  goes to E30; `token_store.py` and `_recorded_files.py` go to E34.
+* **2, `caselist status` not reading the record:** the more important one. It is folded into the
+  new E30 status task from t19's review, which already makes withdrawn-copy residue fail status and
+  gives status and the sweep one rule. Status reports a held digest the re-run has not yet listed
+  as a removal owed, read from the record, whether or not the archive is still in the inbox.
+* **3, agent reinstall:** done once, after this merges and the dev pre-release that holds it is
+  published, from that build. That same reinstall is `v1-e34-t27`'s ac3.

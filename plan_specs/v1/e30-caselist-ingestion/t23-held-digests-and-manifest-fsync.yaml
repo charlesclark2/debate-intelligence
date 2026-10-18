@@ -61,7 +61,7 @@ spec:
         of it reaches the bucket, and (b) `caselist status` gives the removal hint, not the publish
         hint, for it.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

@@ -205,6 +205,7 @@ async def test_a_manifest_that_drifted_is_owed_again_and_the_next_run_publishes_
     assert first.summary.as_json()["pending_publish"] == [WEEK_ONE]
     assert first.pulled.record is not None
     assert first.pulled.record.pending_publish == (WEEK_ONE,)
+    assert first.pulled.record.outcome == "incomplete", "a failed report stage, as before: no login waits"
     assert first.summary.succeeded and first.summary.failure_codes == (), "the exit is untouched: 0"
     assert bucket.manifest(WEEK_1) == OTHER_BYTES
     [notification] = first.notifier.sent

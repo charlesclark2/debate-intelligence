@@ -1394,6 +1394,13 @@ drain them now:
 debate-research caselist pull --publish-pending
 ```
 
+**`pending_publish` is not empty, and `publish` is `completed`.** The report stage found the
+bucket's copy of a manifest differing from this Mac's and owed the snapshot again (`v1-e34-t26`):
+its reason ends `owed again, for the next run to publish:` and names it. Nothing is needed. The run
+is `incomplete`, not `publish_pending`, because no login waits: the next scheduled run publishes it,
+or drain it now with the same command. If the reason says instead that it `drifted again`, see
+[A manifest that drifted again](#what-a-notification-says).
+
 **`publish` is `pending`, and its `earlier_findings` is not empty.** The session expired, and
 before it did a snapshot ended incomplete on the code shown. Log in and drain it as above. If the
 banner said *a person should look as well*, the drain will report that snapshot as a failed publish

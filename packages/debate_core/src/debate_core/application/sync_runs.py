@@ -692,7 +692,11 @@ def details_for_failure(error: BaseException, *, run_id: str, secrets: Sequence[
 def _outcome_of(summary: RunSummary) -> SyncRunOutcome:
     if not summary.succeeded:
         return SyncRunOutcome.FAILED
-    if summary.pending_publish or _stage_is(summary, SyncStage.PUBLISH, StageOutcome.PENDING):
+    # Pending on the publish stage itself, not on `pending_publish`: a publish that did not pend
+    # and did not fail leaves something owed only when the report stage owed a drifted manifest
+    # again (`v1-e34-t26`), which waits for the next run and not for a login. Before that the two
+    # tests were the same, so no run's outcome moves.
+    if _stage_is(summary, SyncStage.PUBLISH, StageOutcome.PENDING):
         return SyncRunOutcome.PUBLISH_PENDING
     if _stage_is(summary, SyncStage.PARSE, StageOutcome.PENDING):
         # The parsed store's publish is a publish, and it waits for the same login (`v1-e34-t17`).

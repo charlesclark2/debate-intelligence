@@ -1003,15 +1003,16 @@ def install_and_load(home: Path, console_script: Path, state: Path) -> None:
 
 
 def check_launchd(
-    home: Path, launchctl_directory: Path, **environment: str
+    home: Path, launchctl_directory: Path, *arguments: str, **environment: str
 ) -> subprocess.CompletedProcess[str]:
+    """`install.sh --check-launchd`, then `arguments`, under the temporary HOME and the stand-ins."""
     search_path = os.pathsep.join([str(launchctl_directory), os.environ["PATH"]])
     for tool in ("launchctl", "plutil"):
         assert shutil.which(tool, path=search_path) == str(launchctl_directory / tool), (
             f"the stand-in {tool} is not the one the installer would run"
         )
     return subprocess.run(
-        [str(INSTALL_SCRIPT), "--check-launchd"],
+        [str(INSTALL_SCRIPT), "--check-launchd", *arguments],
         capture_output=True,
         text=True,
         check=False,
@@ -1137,6 +1138,89 @@ def test_the_launchd_check_refuses_an_agent_installed_before_the_wrapper_was_cop
     assert not any(line.startswith("bootstrap") for line in called)
 
 
+# --- The launchd check takes no option it would ignore (v1-e34-t27) -----------------------------
+
+
+def options_the_installer_parses() -> dict[str, bool]:
+    """Every option `install.sh`'s argument loop has a branch for, read from the loop itself, and
+    whether it takes a value (`shift 2`). Read rather than listed, so that an option added to the
+    installer is a case below without anybody remembering to add it."""
+    lines = INSTALL_SCRIPT.read_text(encoding="utf-8").splitlines()
+    start = lines.index("while [ $# -gt 0 ]; do")
+    end = lines.index("done", start)
+    options: dict[str, bool] = {}
+    for line in lines[start + 1 : end]:
+        branch = re.match(r"^\s+(-[-a-z|]+)\)", line)
+        if branch:
+            for option in branch.group(1).split("|"):
+                options[option] = "shift 2" in line
+    return options
+
+
+INSTALLER_OPTIONS = options_the_installer_parses()
+CHECK_LAUNCHD_ACCEPTS = {"--check-launchd", "--label"}
+"""What `--check-launchd` uses: which installed agent to check, by its label."""
+NOT_ABOUT_THE_CHECK = {"--aws-profile", "-h", "--help"}
+"""Refused whatever else is given (`--aws-profile`), or the help text and nothing else."""
+IGNORED_BY_THE_CHECK = sorted(set(INSTALLER_OPTIONS) - CHECK_LAUNCHD_ACCEPTS - NOT_ABOUT_THE_CHECK)
+SAMPLE_VALUES = {"--caselist": "testcl26", "--env": "dev", "--weekday": "4", "--hour": "7", "--minute": "30"}
+
+
+def test_the_options_are_read_from_the_installers_argument_loop() -> None:
+    """The cases below come from the loop; this is what keeps a change in its shape from leaving
+    them empty."""
+    named_by_the_task = {"--weekday", "--hour", "--minute", "--log-dir", "--wrapper-dir"}
+
+    assert named_by_the_task <= set(IGNORED_BY_THE_CHECK), INSTALLER_OPTIONS
+    assert set(INSTALLER_OPTIONS) >= CHECK_LAUNCHD_ACCEPTS | NOT_ABOUT_THE_CHECK
+    assert INSTALLER_OPTIONS["--weekday"] and not INSTALLER_OPTIONS["--dry-run"]
+
+
+@pytest.mark.parametrize("option", IGNORED_BY_THE_CHECK)
+def test_the_launchd_check_refuses_every_option_it_would_ignore_naming_it(
+    home: Path, console_script: Path, fake_launchctl: tuple[Path, Path, Path], option: str
+) -> None:
+    """`v1-e34-t27` (2). The check reads the installed plist and nothing else, so `--check-launchd
+    --weekday 4` checked the Wednesday agent and said nothing of Thursday. Every option the
+    installer parses but the check does not use is refused, by name, before anything is loaded."""
+    launchctl_directory, state, calls = fake_launchctl
+    install_and_load(home, console_script, state)
+    installed = installed_plist_bytes(home)
+    value = SAMPLE_VALUES.get(option, str(home / "elsewhere"))
+    arguments = [option, value] if INSTALLER_OPTIONS[option] else [option]
+
+    refused = check_launchd(home, launchctl_directory, *arguments)
+
+    assert refused.returncode == 2, refused.stdout + refused.stderr
+    assert re.search(rf"(?<![\w-]){re.escape(option)}(?![\w-])", refused.stderr), refused.stderr
+    assert "--label" in refused.stderr, "the refusal does not say what the check does take"
+    called = calls.read_text(encoding="utf-8").splitlines() if calls.exists() else []
+    assert [line for line in called if not line.startswith("print")] == [], "the check loaded something"
+    assert calls_to(console_script) == []
+    assert installed_plist_bytes(home) == installed
+
+
+def test_the_launchd_check_takes_the_label_of_the_agent_to_check(
+    home: Path, console_script: Path, fake_launchctl: tuple[Path, Path, Path]
+) -> None:
+    """`--label` is the one option the check uses: which installed agent it checks."""
+    launchctl_directory, state, calls = fake_launchctl
+    other = "org.example.caselist-sync"
+    installed = install(
+        "--caselist", "testcl26", "--label", other, "--debate-research", str(console_script), home=home
+    )
+    assert installed.returncode == 0, installed.stderr
+    state.write_text(json.dumps({other: {"runs": 2, "last_exit_code": 0}}), encoding="utf-8")
+
+    checked = check_launchd(home, launchctl_directory, "--label", other)
+
+    assert checked.returncode == 0, checked.stdout + checked.stderr
+    assert f"{other}.check exit code 0" in checked.stdout
+    assert f"{other} runs: 2 before, 2 after" in checked.stdout
+    assert any(line.startswith("bootstrap gui/") and f"{other}.check.plist" in line
+               for line in calls.read_text(encoding="utf-8").splitlines())  # fmt: skip
+
+
 # --- The AWS profile is the build's, and is checked before anything is written (v1-e34-t24) ------
 
 
@@ -1248,6 +1332,157 @@ def test_over_the_real_command_the_installer_refuses_a_profile_the_aws_config_la
     assert "nothing was installed" in said
     assert sorted(home.rglob("*")) == before, "the refused install created something under HOME"
     assert str(home / ".aws") not in said and ".aws/config" not in said
+
+
+# --- The wrapper sets no AWS_PROFILE, and the run uses the setting's profile (v1-e34-t27) --------
+
+
+def test_the_wrapper_sets_no_aws_profile() -> None:
+    """`v1-e34-t27` (1). The wrapper exported `AWS_PROFILE` when it was set. A variable a POSIX
+    shell inherits is exported already, so the two lines changed nothing, and under launchd it is
+    never set: the plist names none (`v1-e34-t24`). They went, and this is what keeps them gone.
+    The comment still says what becomes of one set by hand."""
+    code = [
+        line for line in WRAPPER_SCRIPT.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]  # fmt: skip
+    header = " ".join(header_of(WRAPPER_SCRIPT).split())
+
+    assert [line for line in code if "AWS_PROFILE" in line] == []
+    assert "it is exported" not in header
+    assert "storage.s3.aws_profile" in header
+
+
+STORE_BUCKET = "debate-dev-evidence-launchd-moto"
+SETTING_PROFILE = "debate-dev-evidence"
+OTHER_PROFILE = "someone-elses-profile"
+
+RECORDING_BUILD = '''#!@PYTHON@
+"""The build at the path the plist names: this checkout's `debate-research`, in an installation
+written for the test. It records the environment the wrapper ran it with, before it adds the
+installation's profile directory, and the profile of every boto3 session the run builds. moto
+answers S3, every socket is refused, and nothing of the machine's own AWS config is read: the
+AWS config is the one under the HOME the plist gives the agent."""
+import json, os, socket, sys
+from pathlib import Path
+
+record = Path(@RECORD@)
+given = dict(os.environ)
+os.environ["DEBATE_PROFILE_DIR"] = @PROFILES@
+os.environ["AWS_EC2_METADATA_DISABLED"] = "true"
+
+
+def no_network(*arguments, **keywords):
+    raise OSError("this test reaches no network")
+
+
+socket.socket.connect = no_network
+socket.create_connection = no_network
+
+import boto3
+import boto3.session
+from moto import mock_aws
+
+profiles = []
+build_session = boto3.session.Session.__init__
+
+
+def recording(self, *arguments, **keywords):
+    profiles.append(keywords.get("profile_name"))
+    build_session(self, *arguments, **keywords)
+
+
+boto3.session.Session.__init__ = recording
+with mock_aws():
+    store = boto3.session.Session(profile_name=@SETTING_PROFILE@).client("s3", region_name="us-east-1")
+    store.create_bucket(Bucket=@BUCKET@)
+    del profiles[:]
+    from debate_cli.app import main
+
+    exit_code = 0
+    try:
+        main()
+    except SystemExit as ended:
+        exit_code = ended.code if isinstance(ended.code, int) else 1
+    keys = [item["Key"] for item in store.list_objects_v2(Bucket=@BUCKET@).get("Contents", [])]
+record.write_text(json.dumps({"argv": sys.argv[1:], "environment": given, "profiles": profiles,
+                              "keys": keys, "exit_code": exit_code}))
+sys.exit(exit_code)
+'''
+
+
+def a_dev_installation_reaching_the_store(home: Path, directory: Path) -> tuple[Path, Path]:
+    """The recording build at `directory/debate-research`, and the file it records the run in.
+
+    Its profile is a dev one whose `storage.s3.aws_profile` is the everyday profile, with the
+    OpenCaselist API off, so the run is refused at its first guard, before any download, and the
+    run monitor publishes its record to the bucket through the store the setting's profile
+    signs. The AWS config, under the agent's HOME, defines that profile and another one."""
+    profiles = directory / "profiles"
+    profiles.mkdir(parents=True)
+    (profiles / "dev.toml").write_text(
+        f'[storage]\ndata_dir = "{directory / "data"}"\n'
+        f'[storage.s3]\nbucket = "{STORE_BUCKET}"\nregion = "us-east-1"\naws_profile = "{SETTING_PROFILE}"\n'
+        '[caselist]\napi_enabled = false\nnotifier = "none"\n'
+        f'[models]\nrouting_file = "{EXAMPLE_ROUTING_FILE}"\nbudget_usd_daily = 1.0\n',
+        encoding="utf-8",
+    )
+    (home / ".aws").mkdir()
+    (home / ".aws" / "config").write_text(
+        "".join(
+            f"[profile {name}]\nregion = us-east-1\n"
+            "aws_access_key_id = testing\naws_secret_access_key = testing\n"
+            for name in (SETTING_PROFILE, OTHER_PROFILE)
+        ),
+        encoding="utf-8",
+    )
+    record = directory / "the-run.json"
+    build = directory / "debate-research"
+    build.write_text(
+        RECORDING_BUILD.replace("@PYTHON@", sys.executable)
+        .replace("@RECORD@", repr(str(record)))
+        .replace("@PROFILES@", repr(str(profiles)))
+        .replace("@SETTING_PROFILE@", repr(SETTING_PROFILE))
+        .replace("@BUCKET@", repr(STORE_BUCKET)),
+        encoding="utf-8",
+    )
+    build.chmod(0o755)
+    return build, record
+
+
+@pytest.mark.parametrize("plist", ["as installed", "with AWS_PROFILE added by hand"])
+def test_a_scheduled_run_reaches_the_store_with_the_settings_profile_and_no_aws_profile(
+    home: Path, console_script: Path, fake_launchctl: tuple[Path, Path, Path], plist: str
+) -> None:
+    """`v1-e34-t27` ac1. The agent, kickstarted under the fake launchctl as launchd runs it: the
+    plist's program and environment and nothing else. The run reaches the bucket and publishes its
+    record there through a store whose session names `storage.s3.aws_profile`, and the wrapper
+    hands the build no `AWS_PROFILE`. With one put in the plist by hand, as every agent installed
+    before `v1-e34-t24` had, the setting's profile still signs the store, which is why the
+    variable never chose anything."""
+    launchctl_directory, _state, _calls = fake_launchctl
+    install_first(home, console_script, "--caselist", "testcl26", "--env", "dev")
+    build, record = a_dev_installation_reaching_the_store(home, console_script.parent)
+    assert build == console_script, "the recording build is not at the path the plist names"
+    if plist == "with AWS_PROFILE added by hand":
+        edit_installed_plist(home, AWS_PROFILE=OTHER_PROFILE)
+    launchctl = str(launchctl_directory / "launchctl")
+    agent = home / "Library" / "LaunchAgents" / f"{LABEL}.plist"
+
+    subprocess.run([launchctl, "bootstrap", f"gui/{os.getuid()}", str(agent)], check=True)
+    subprocess.run([launchctl, "kickstart", f"gui/{os.getuid()}/{LABEL}"], check=True)
+
+    run = json.loads(record.read_text(encoding="utf-8"))
+    errors = (home / "Library" / "Logs" / "debate-research" / "caselist-sync.err.log").read_text(
+        encoding="utf-8"
+    )
+    assert run["argv"] == ["--json", "caselist", "pull", "--caselist", "testcl26"], run["argv"]
+    assert run["profiles"] and set(run["profiles"]) == {SETTING_PROFILE}, (run["profiles"], errors)
+    assert [key for key in run["keys"] if key.startswith("reports/sync-runs/")], (run["keys"], errors)
+    if plist == "as installed":
+        assert "AWS_PROFILE" not in run["environment"]
+    else:
+        assert run["environment"]["AWS_PROFILE"] == OTHER_PROFILE
 
 
 # --- A reinstall keeps what is installed (v1-e34-t24 ac4) ----------------------------------------

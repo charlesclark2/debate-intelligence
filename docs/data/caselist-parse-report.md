@@ -1489,3 +1489,40 @@ Before the labels moved, on 2026-10-18, the same comparison gave the same cite f
   cites among both. Widening either needs its own counts and its own sample.
 * **19,544 tagged cards still have no cite.**
 * **The short plain lines** are the later task's, with the figures above.
+
+## The re-cluster under `card-fingerprint-v4` (`v1-e31-t20`)
+
+**Status: not run.** Nothing below has been measured on the store yet. The steps are in
+[the task's session report](../session-reports/v1-e31-t20-long-cuts-and-limits.md#operator-follow-ups):
+a preview from the task worktree before the merge, which writes nothing to the store, and the
+rebuild in dev after it. This is a re-cluster, not a re-parse: the parser and `2026.10.12-docx-3`
+are unchanged, `caselist parse` rebuilds each caselist's `occurrences.jsonl` under the new rules,
+and `--publish` uploads that file alone.
+
+**What changed** (the PM's ruling of 2026-10-16, in
+[`near_duplicates.py`](../../packages/debate_core/src/debate_core/evidence/near_duplicates.py)):
+
+* A long cut joins the one cluster that holds it by the step short cuts use, where `v3` joined it
+  only when the banding happened to pair the two. `MIN_CUT_SHARE` applies to both.
+* A body that holds a cut and another passage sharing no text with it is no witness for the cut.
+  `v1-e31-t11`'s false join is the case: two bodies sharing no text, joined because a third held
+  both.
+* A cut's own cluster counts among its witnesses, so a cut already with a body that holds it is not
+  taken into a second cluster.
+* No join puts two bodies that share no text in one cluster. So, by construction, every pair of
+  full texts in a cluster shares at least one five-word run, and ac5's measure, the share of pairs
+  sharing nothing, is 0 in every cluster.
+* `MAX_CONTAINER_CLUSTERS` is counted against the clusters as they stand when a cut is considered,
+  after long copies have joined one another.
+
+**To be recorded here**, from the operator's runs:
+
+| Measure | Preview, before the merge | After the dev rebuild |
+|---|---|---|
+| Counts against `card-fingerprint-v3`: clusters, merged, divided, largest | not run | not run |
+| ac5: share of pairs sharing nothing, three largest clusters per caselist | not run | not run |
+| ac1: join sample of 20 newly joined pairs | not run | not run, same seed |
+| `MIN_CUT_SHARE`: contained pairs under a third, joined and kept apart, by share band | not run | |
+| Lacking an end: short bodies nine-tenths inside a body lacking one of their ends | not run | |
+| `MAX_CONTAINER_CLUSTERS`: cuts whose ends too many clusters hold, re-measured | not run | |
+| Divided pairs against `v3`, by reason | not run | |

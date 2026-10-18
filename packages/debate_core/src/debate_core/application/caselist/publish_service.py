@@ -531,7 +531,11 @@ class CaselistPublishService:
 
 
 def _withheld_for_rows(plan: SnapshotPlan) -> str:
-    """Why a manifest with a suppressed or held row is withheld: the rows by digest, and the fix."""
+    """Why a manifest with a suppressed or held row is withheld: the rows by digest, and the fix.
+
+    A skipped member's row at a held path has no digest, and is named by the request holding the path
+    alone (`v1-e30-t23`).
+    """
     rows: list[str] = []
     if plan.suppressed_rows:
         rows.append(
@@ -542,6 +546,11 @@ def _withheld_for_rows(plan: SnapshotPlan) -> str:
         rows.append(f"{len(plan.held_rows)} row(s) at a path a removal holds: {held}")
         if plan.held_back:
             rows[-1] += f", whose bytes no other row names and were not uploaded ({len(plan.held_back)})"
+    if plan.held_skipped_rows:
+        requests = ", ".join(sorted(set(plan.held_skipped_rows)))
+        rows.append(
+            f"{len(plan.held_skipped_rows)} skipped member row(s) at a path a removal holds ({requests})"
+        )
     return (
         f"the local manifest still has {'; and '.join(rows)}; re-run `caselist remove` for them on this "
         "machine to rewrite it"

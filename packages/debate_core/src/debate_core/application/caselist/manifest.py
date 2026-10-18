@@ -310,12 +310,12 @@ def _is_regular_file(path: Path) -> bool:
 
 
 def write_manifest(report: ImportReport, destination: Path) -> Path:
-    """Write the manifest to `destination`, atomically, and return the path.
+    """Write the manifest to `destination`, atomically and durably, and return the path.
 
     Atomic for the same reason a blob is: a sync running against a half-written manifest would
     publish a truncated provenance record, and a truncated JSONL file is one a reader cannot tell
     from a complete one. The temp file is created in the destination's own directory so the
-    rename stays within one filesystem.
+    rename stays within one filesystem. Durable as :func:`write_manifest_text` says.
 
     The caller chooses the path — normally
     `FsEvidenceObjectStore(data_dir).path_for(manifest_key(...))` — because where the evidence
@@ -325,12 +325,19 @@ def write_manifest(report: ImportReport, destination: Path) -> Path:
 
 
 def write_manifest_lines(lines: Iterable[str], destination: Path) -> Path:
-    """Write manifest lines, each newline-terminated, to `destination`, atomically."""
+    """Write manifest lines, each newline-terminated, to `destination`, atomically and durably."""
     return write_manifest_text("".join(f"{line}\n" for line in lines), destination)
 
 
 def write_manifest_text(text: str, destination: Path) -> Path:
-    """Write already-rendered manifest text to `destination`, atomically, and return the path.
+    """Write already-rendered manifest text to `destination`, atomically and durably, and return the path.
+
+    The temporary file is fsynced, renamed into place, and then its directory is fsynced, because the
+    rename is an entry in the directory: until that is on the disk a power cut can bring back the
+    manifest the rename replaced, or none (`v1-e30-t23`). Every manifest writer on this machine
+    comes through here. A directory fsync that fails is a write that failed, raised as the
+    operating system's own `OSError`, as a failed file fsync is; the new manifest is in place by
+    then, and writing it again is the fix.
 
     Raises :class:`~debate_core.application.errors.LocalStoreAccessDenied` when the operating
     system will not let the manifest directory be written to, leaving any manifest already there
@@ -352,7 +359,17 @@ def write_manifest_text(text: str, destination: Path) -> Path:
         except BaseException:
             temporary_path.unlink(missing_ok=True)
             raise
+        _fsync_directory(path.parent)
     return path
+
+
+def _fsync_directory(directory: Path) -> None:
+    """Put `directory`'s own entries on the disk: the rename that just happened in it."""
+    descriptor = os.open(directory, os.O_RDONLY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
 
 
 # ------------------------------------------------------------------------------------------------

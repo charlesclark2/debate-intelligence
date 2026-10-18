@@ -99,6 +99,23 @@ Nothing is appended to release one.
     the sha256 among `withdrawn_sha256` by request. A file of its own, for the reason each record
     above is: the list's lines and the log's are pinned to what every installed build reads, and so
     are the scope record's, which the build before this one reads on every `caselist status`.
+
+## A sixth record: what an import held at a held path
+
+`held-digests.jsonl`
+    One :class:`HeldDigestEntry` per upload an import refused because a removal holds its path, kept
+    beside the path holds in both places (`v1-e30-t23`): the upload's sha256, the hold's own
+    :attr:`PathHoldEntry.disclosure`, and the request holding the path. The import stores nothing of
+    such an upload, and once retention or the take-out removes the archive it came in, nothing else
+    names its bytes. Running the same removal again reads this record and lists each digest under
+    its request, so the same bytes arriving later at another path are stopped as well.
+
+The import writes it, to this machine's copy alone: it runs offline (`caselist import`), or in a
+pull that may not reach the bucket, and only the takedown credential writes under the bucket's
+`manifests/_suppression/`. The removal reads every copy and gives each the lines it lacks, which is
+how the bucket's copy is written. A line has no date, so the same upload held again, by an import of
+the same archive, is the same line, and a set-union append adds it once. No build before this one
+opens the file, for the reason each record above is a file of its own.
 """
 
 from __future__ import annotations
@@ -119,6 +136,7 @@ from debate_core.domain.base import DomainModel, UtcDatetime
 from debate_core.domain.caselist import CASELIST_SLUG_PATTERN
 
 __all__ = [
+    "HELD_DIGESTS_FILENAME",
     "PATH_HOLDS_FILENAME",
     "REINSTATEMENT_REASONS",
     "REMOVAL_REASONS",
@@ -128,6 +146,8 @@ __all__ = [
     "TOUCHED_CASELIST_PATTERN",
     "AppendOnlyRecord",
     "AppendOnlyViolation",
+    "HeldDigestEntry",
+    "HeldDigestList",
     "InboxRewriteRecord",
     "KeepsRecordsBesideIt",
     "ManifestRewriteRecord",
@@ -161,6 +181,8 @@ SUPPRESSION_SCHEMA_VERSION: Final = 1
 
 PATH_HOLDS_FILENAME: Final = "path-holds.jsonl"
 """The path-hold record's file name, beside the suppression list on this machine and in the bucket."""
+HELD_DIGESTS_FILENAME: Final = "held-digests.jsonl"
+"""The held-digest record's file name, beside the path holds in both places (`v1-e30-t23`)."""
 REMOVAL_SCOPES_FILENAME: Final = "removal-scopes.jsonl"
 """The removal-scope record's file name, beside the removal log in both places (`v1-e30-t15`)."""
 WITHDRAWALS_FILENAME: Final = "withdrawals.jsonl"
@@ -335,6 +357,31 @@ class PathHoldEntry(DomainModel):
 
     @classmethod
     def from_line(cls, line: str) -> PathHoldEntry:
+        return cls.model_validate_json(line)
+
+
+class HeldDigestEntry(DomainModel):
+    """One line of the held-digest record: one upload an import refused at a path a removal holds.
+
+    Written by the import that refused it (`v1-e30-t23`), and read by the same removal run again,
+    which lists :attr:`sha256` under :attr:`request_id`. No field can hold a school, a team code, a
+    path or a file name: two digests and a request id. Nor a date, so the same upload held twice is
+    one line.
+    """
+
+    schema_version: Literal[1] = SUPPRESSION_SCHEMA_VERSION
+    sha256: Sha256Hex
+    """The bytes the import refused."""
+    disclosure: Sha256Hex
+    """The held path, as the hold that refused them names it: its :attr:`PathHoldEntry.disclosure`."""
+    request_id: RequestId
+    """The request holding the path."""
+
+    def to_line(self) -> str:
+        return canonical_line(self)
+
+    @classmethod
+    def from_line(cls, line: str) -> HeldDigestEntry:
         return cls.model_validate_json(line)
 
 
@@ -704,6 +751,19 @@ class PathHoldList(Protocol):
     async def path_holds(self) -> tuple[PathHoldEntry, ...]: ...
 
     async def append_path_holds(self, entries: Sequence[PathHoldEntry]) -> None: ...
+
+
+@runtime_checkable
+class HeldDigestList(Protocol):
+    """A suppression list that keeps the held-digest record beside it (`v1-e30-t23`)."""
+
+    async def held_digests(self) -> tuple[HeldDigestEntry, ...]:
+        """Every held-digest entry on every copy, deduplicated. A record that does not exist has none."""
+        ...
+
+    async def append_held_digests(self, entries: Sequence[HeldDigestEntry]) -> None:
+        """Append `entries`, and give each copy what another holds and it lacks."""
+        ...
 
 
 @runtime_checkable

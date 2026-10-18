@@ -366,17 +366,24 @@ async def test_a_file_the_list_stops_by_its_bytes_is_not_counted_as_held(
     assert report.held_by_request == {}
 
 
-async def test_the_import_appends_nothing_to_the_list_or_beside_it(
+async def test_the_import_appends_nothing_to_the_list_and_beside_it_only_the_upload_it_held(
     world: RemovalWorld, tmp_path: Path
 ) -> None:
-    """Only `caselist remove` and `caselist unsuppress` write the takedown's records."""
+    """Only `caselist remove` and `caselist unsuppress` write the list and the records beside it,
+    but for one: since `v1-e30-t23` (the PM's ruling of 2026-10-16, reversing this task's Deviation
+    2) the import records the upload it held, by digest and request, in `held-digests.jsonl`."""
     await remove_the_named_file(world)
     suppression = world.data_dir / "suppression"
     before = {path.name: path.read_bytes() for path in sorted(suppression.iterdir())}
 
     await import_weekly(world, tmp_path, CASELIST, date(2026, 10, 8))
 
-    assert {path.name: path.read_bytes() for path in sorted(suppression.iterdir())} == before
+    after = {path.name: path.read_bytes() for path in sorted(suppression.iterdir())}
+    held = after.pop("held-digests.jsonl")
+    assert after == before
+    assert [sorted(json.loads(line)) for line in held.splitlines()] == [
+        ["disclosure", "request_id", "schema_version", "sha256"]
+    ]
 
 
 async def test_if_classification_ever_let_a_held_upload_through_the_write_would_refuse_it(

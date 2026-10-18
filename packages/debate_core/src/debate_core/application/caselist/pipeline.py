@@ -46,9 +46,13 @@ member at a held path, in a snapshot dated after the removed file first appeared
 as `SUPPRESSED` exactly as a listed one is: no blob, no record, no row. It is also counted under
 the request that holds the path (:attr:`PipelineRun.held_by_request`), which is the import's record
 of whose removal stopped it. The import appends nothing to the list for it: only `caselist remove`
-and `caselist unsuppress` write the takedown's records, and running the same removal again finds
-the upload in the download inbox and puts it on the list
-(:mod:`~debate_core.application.caselist.removal_plan`).
+and `caselist unsuppress` write the list, and running the same removal again puts the upload on it
+(:mod:`~debate_core.application.caselist.removal_plan`). What the import does write is the upload's
+sha256 and the request holding the path, to the held-digest record beside the path holds
+(:class:`~debate_core.application.ports.suppression.HeldDigestEntry`, `v1-e30-t23`), as it meets
+the member and before anything else happens to the run: once retention or the take-out removes the
+archive, that line is the only thing that names the bytes. A dry run writes none, and an import
+that cannot write it fails.
 
 A caller says which snapshot it is importing (`snapshot`, required like `disclosure_scope`), so an
 import cannot ask about a hold without a date to ask with. A camp-file import records no
@@ -93,12 +97,13 @@ from datetime import date
 from enum import StrEnum
 from typing import Protocol
 
-from debate_core.application.caselist.suppression import load_suppression_state
+from debate_core.application.caselist.suppression import load_suppression_state, record_held_digests
 from debate_core.application.errors import DomainError
 from debate_core.application.ports.archive import ArchiveEntry, ArchiveMember, SkipReason
 from debate_core.application.ports.caselist import CaselistRepository
 from debate_core.application.ports.persistence import SnapshotStore
 from debate_core.application.ports.suppression import (
+    HeldDigestEntry,
     PathHoldEntry,
     SuppressionList,
     SuppressionState,
@@ -315,7 +320,9 @@ class SourceImportPipeline:
         first appeared there (`v1-e30-t13`). `None`, with `disclosure_scope`, for an import that
         records no disclosures. Required for the same reason.
 
-        Writes nothing — no blob and no record — when `dry_run` is set.
+        A member a hold refuses is appended to the held-digest record beside the list as it is met
+        (`v1-e30-t23`). Writes nothing — no blob, no record and no held digest — when `dry_run` is
+        set.
         """
         suppression = await load_suppression_state(self._suppression)
         held_by_request: dict[str, int] = {}
@@ -344,6 +351,15 @@ class SourceImportPipeline:
             hold = None if listed else _path_hold(suppression, entry, disclosure_scope, snapshot)
             if hold is not None:
                 held_by_request[hold.request_id] = held_by_request.get(hold.request_id, 0) + 1
+                if not dry_run:
+                    await record_held_digests(
+                        self._suppression,
+                        [
+                            HeldDigestEntry(
+                                sha256=entry.sha256, disclosure=hold.disclosure, request_id=hold.request_id
+                            )
+                        ],
+                    )
             classification = _classify(
                 entry,
                 baseline=baseline,

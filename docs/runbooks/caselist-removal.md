@@ -417,6 +417,14 @@ DEBATE_ENV=prod DEBATE_STORAGE__DATA_DIR="$HOME/.debate-research/dev" uv run deb
       are. A removal made by a build from before `v1-e30-t16` wrote none, so its withdrawals have no
       caselist recorded. A camp path withdrawn on its own (`v1-e30-t14`) has a line here too, which
       names `openev`; its disclosure digest is of `openev/<release>/<row path>`.
+- [ ] After running a `--source` removal again, if any import since refused an upload at a held
+      path, confirm the same lines are beside the list in both places (`v1-e30-t23`):
+      `<data_dir>/suppression/held-digests.jsonl` on this machine and
+      `manifests/_suppression/held-digests.jsonl` in each bucket. Each is one upload the import
+      refused: its sha256, the held path's digest and the request holding the path, and nothing
+      else. The import writes this machine's copy, as it refuses the upload; the removal writes the
+      bucket's. It is append-only and merged like the list, and a file of its own for the reason
+      the path entries are.
 - [ ] Find every built file whose provenance sidecar cites a removed sha256 (E33). Withdraw it from
       use immediately and rebuild it without those cards before anyone reads it in a round.
 - [ ] If the file was shared inside the team outside the evidence store — a copy in someone's
@@ -520,7 +528,9 @@ At the next import (or immediately, if you have the next archive on hand):
       path (N under RM-…), refused because that removal holds the path*, and `--json` gives
       `held_at_removed_paths` as request ids and counts. The upload is not in the store, the bucket
       or any manifest. Its sha256 is not on the suppression list yet, because only `caselist remove`
-      writes the list.
+      writes the list. The import does write its sha256 and the request, and nothing else, to
+      `held-digests.jsonl` beside the path entries on this machine (`v1-e30-t23`), so running the
+      removal again lists it however long after, once the archive is gone too.
 - [ ] **Where the upload is now** (`v1-e30-t21`). A weekly archive whose every member was removed or
       held leaves the inbox when `caselist pull` finishes importing it, and the import stage's
       reason says *N archive(s) taken out of the inbox, which held only files removed or held at a
@@ -541,8 +551,10 @@ At the next import (or immediately, if you have the next archive on hand):
       - *HELD PATH ROWS in `<caselist>` `<snapshot>`: N skipped member row(s) at a path a removal
         holds*: the row of a symbolic link or other skipped member at a held path, which every build
         before `v1-e30-t22` wrote. Its body is often the removed file's name. This build's import
-        gives such a member no row. A row an earlier build wrote is published with its manifest
-        until the re-run below drops it;
+        gives such a member no row. `caselist publish` withholds a manifest that has one an earlier
+        build wrote, with the code `MANIFEST_NAMES_SUPPRESSED_SOURCE`, as it withholds one with a
+        held row (`v1-e30-t23`), so a publish that succeeded over it now fails until the re-run below
+        drops the row. A manifest an earlier build published is in the bucket until then;
       - then *RM-… is owed again*. Each file is named by the first twelve characters of its sha256
         and the request holding its path, a skipped member by the request alone, and `--json` gives
         the same as `held_in_inbox`, each snapshot's `held_rows`, `held_row_prefixes`,
@@ -561,14 +573,18 @@ At the next import (or immediately, if you have the next archive on hand):
       The removed file's own rows are gone, so the plan finds its path from the path entry. Under
       *LATER UPLOADS AT A REMOVED PATH* it lists whatever is at that path in a later snapshot:
       - *in the download inbox …, not in the store*: this build refused it. `--execute` puts its
-        sha256 on the list under the request and deletes the imported archive from the inbox. If
-        the archive has already left the inbox, the plan cannot see the upload's bytes, so its
-        sha256 is never put on the list; the path entry still refuses it there.
+        sha256 on the list under the request and deletes the imported archive from the inbox.
       - *held in `<snapshot>`*: a build from before `v1-e30-t13` imported it. `--execute` removes it
         from the store and the bucket as it removes any later upload, every version: its blob on
         this machine goes too, unless another team's row names the same bytes at its own path, when
         only its row at the held path goes. Its bytes are in the bucket only if a build before
         `v1-e30-t22` published them.
+      - under its own heading, *REFUSED AT IMPORT AT A HELD PATH*: this build refused it, and its
+        archive has since left the inbox. The plan finds it in `held-digests.jsonl` (`v1-e30-t23`)
+        and names it by its sha256 and the caselist alone, since nothing else records its path.
+        `--execute` puts its sha256 on the list under the request, so the same bytes are refused at
+        any path from then on. Where another team's row names the same bytes at its own path, only
+        the held path is suppressed, and their copy stays.
       - nothing, and *Nothing is left to remove*: nothing arrived.
       Then execute as in step 5, and verify as in step 6. The path stays held afterwards. A
       symbolic link or other skipped member at the held path, in an archive waiting to be

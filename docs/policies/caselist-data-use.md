@@ -249,7 +249,8 @@ personal data about a minor (architecture proposal §14).
    sha256 values, dates, reason codes and request ids (v1-e30-t07). The records beside them carry
    the same, plus the digest of a held path (v1-e30-t13), the keys a removal reached (v1-e30-t15)
    and the caselist a withdrawn copy was taken from, by its slug, `openev` for a camp path
-   (v1-e30-t16, v1-e30-t14).
+   (v1-e30-t16, v1-e30-t14); and the sha256 of each upload an import refused at a held path,
+   beside that path's digest and the request holding it (v1-e30-t23).
 7. **Never in a model prompt.** See [Model provider use](#model-provider-use).
 8. **Names in document bodies are not extracted.** They are never parsed into a field, indexed as
    a name, or surfaced in a report. They remain where they are, inside a private source document
@@ -267,7 +268,7 @@ provenance sidecar of a built file, and the per-school landscape view.
 | Per-school and trend views (v1-e32-t04) | **School plus team code, as disclosed. Never more.** |
 | Operator import/publish summaries (`docs/data/`) | Aggregate counts only. |
 | Built-file provenance line and sidecar (E33) | School, team code, side, tournament, round — inside the team only. |
-| Removal log and suppression list (v1-e30-t07), and the records beside them (v1-e30-t13, t14, t15, t16) | sha256, date, reason code, request id; a held path's digest, the keys a removal reached, and a caselist slug. |
+| Removal log and suppression list (v1-e30-t07), and the records beside them (v1-e30-t13, t14, t15, t16, t23) | sha256, date, reason code, request id; a held path's digest, the keys a removal reached, and a caselist slug. |
 
 **Access.** In V1, the operator only. In V2, authenticated members of the team's organization
 only, audited — see [the debate tub gate](#v2-e35--debate-tub-v21).
@@ -380,6 +381,10 @@ weighed.
   school, team code or name. Beside the suppression list and the removal log it keeps, in the same
   way and with no school, team code or name, the paths a removal holds, what each removal reached,
   and the caselist each withdrawn copy was taken from, by its slug (`openev` for a camp path).
+  An import that refuses an upload at a held path records its sha256 in the same way, beside that
+  path's digest and under the request holding it (`v1-e30-t23`). The same removal run again then
+  stops those bytes after the archive they came in has gone: whole when no other path holds them,
+  and withdrawn from the held path alone when one does.
 
 **What removal does not do**
 

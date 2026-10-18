@@ -6,9 +6,11 @@ what each printed. It writes nothing outside pytest's temporary directory.
 
 It carries out the stored history with the source it is run against, then puts
 `stored_suppression_lists/written_by_this_build/` where that build keeps the records, on this
-machine and in the bucket, the path entries included. Then it does what the weekly agent does with
-a suppression list: reads it, imports next Monday's archive against it, publishes, and asks for the
-status.
+machine and in the bucket, the path entries included, and since `v1-e30-t23` the held-digest record
+from `stored_suppression_lists/held_digests_written_by_this_build/`. Then it does what the weekly
+agent does with a suppression list: reads it, imports next Monday's archive against it, publishes,
+and asks for the status. The last check runs the removal again beside the held-digest record, the
+one command of this build that reads it.
 """
 
 from __future__ import annotations
@@ -41,28 +43,61 @@ from .conftest import RemovalWorld
 from .suppression_list_scenario import (
     REMOVED_BY_SOURCE,
     REMOVED_WITH_THE_TEAM,
+    SECOND_REQUEST,
     SUPPRESSION_PREFIX,
     UNSUPPRESSED,
     WITHDRAWN_FROM_THE_TEAM,
+    _takedown,  # pyright: ignore[reportPrivateUsage]
     a_team_removal_a_source_removal_and_an_unsuppress,
 )
 
 pytestmark = pytest.mark.anyio
 
 WRITTEN_BY_THIS_BUILD = Path(__file__).parent / "stored_suppression_lists" / "written_by_this_build"
+HELD_DIGESTS_BY_THIS_BUILD = (
+    Path(__file__).parent / "stored_suppression_lists" / "held_digests_written_by_this_build"
+)
 LIMITS = {"max_archive_bytes": 64 * 1024 * 1024, "max_unpacked_bytes": 64 * 1024 * 1024}
 
 
-def put_this_builds_files_where_the_records_are_kept(world: RemovalWorld) -> list[str]:
+def put_this_builds_files_where_the_records_are_kept(
+    world: RemovalWorld, *, held_digests: bool = True
+) -> list[str]:
+    """This build's records in both places; with `held_digests`, its held-digest record too (`v1-e30-t23`)."""
     placed: list[str] = []
-    for stored in sorted((WRITTEN_BY_THIS_BUILD / "local").iterdir()):
+    stored_in = [WRITTEN_BY_THIS_BUILD, *([HELD_DIGESTS_BY_THIS_BUILD] if held_digests else [])]
+    for stored in sorted(one for directory in stored_in for one in (directory / "local").iterdir()):
         (world.data_dir / "suppression" / stored.name).write_bytes(stored.read_bytes())
         placed.append(f"suppression/{stored.name}")
-    for stored in sorted((WRITTEN_BY_THIS_BUILD / "bucket").iterdir()):
+    for stored in sorted(one for directory in stored_in for one in (directory / "bucket").iterdir()):
         key = f"{SUPPRESSION_PREFIX}{stored.name}"
         world.client.put_object(Bucket=world.bucket_name, Key=key, Body=stored.read_bytes())
         placed.append(f"s3://<bucket>/{key}")
     return placed
+
+
+def put_this_builds_held_digest_record_where_it_is_kept(world: RemovalWorld) -> dict[str, bytes]:
+    """The held-digest record alone, on this machine and in the bucket, as placed."""
+    placed: dict[str, bytes] = {}
+    for stored in sorted((HELD_DIGESTS_BY_THIS_BUILD / "local").iterdir()):
+        (world.data_dir / "suppression" / stored.name).write_bytes(stored.read_bytes())
+        placed[f"suppression/{stored.name}"] = stored.read_bytes()
+    for stored in sorted((HELD_DIGESTS_BY_THIS_BUILD / "bucket").iterdir()):
+        key = f"{SUPPRESSION_PREFIX}{stored.name}"
+        world.client.put_object(Bucket=world.bucket_name, Key=key, Body=stored.read_bytes())
+        placed[key] = stored.read_bytes()
+    return placed
+
+
+def held_digest_record_now(world: RemovalWorld, placed: dict[str, bytes]) -> dict[str, bytes]:
+    """The same two copies as they are now."""
+    now: dict[str, bytes] = {}
+    for where in placed:
+        if where.startswith(SUPPRESSION_PREFIX):
+            now[where] = world.client.get_object(Bucket=world.bucket_name, Key=where)["Body"].read()
+        else:
+            now[where] = (world.data_dir / where).read_bytes()
+    return now
 
 
 async def test_this_source_reads_the_records_as_this_task_writes_them(
@@ -265,3 +300,51 @@ async def test_this_sources_status_with_the_residue_check_reads_the_log_and_scop
         checked = [one.caselist for one in report.residue if one.checked]
         print(f"status with the residue check: completed; caselists checked: {', '.join(checked)}")
         print(f"removals not checked: {len(report.removals_not_checked)}")
+
+
+async def test_this_sources_removal_run_again_beside_the_held_digest_record(
+    removal_world: RemovalWorld, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """What an older build's removal, the one command of this build that reads the record, does with it.
+
+    This carries out the history with the source it is run against and puts this build's other
+    records in place. It plans the `--source` removal under `RM-2026-02` again; then puts the
+    held-digest record in place, on this machine and in the bucket, plans again, and executes. A
+    source from before `v1-e30-t23` plans the same with the record as without it, and its execution
+    leaves both copies of the record byte for byte as they were placed. This build's plan lists the
+    held upload, and is not the same.
+    """
+    assert os.environ.get("CHECK_AN_OLDER_BUILD_READS") == "this-builds-files", (
+        "run by its path against an older build's source; see stored_suppression_lists/README.md"
+    )
+    from debate_core.application.caselist.removal_plan import SourceSelector
+    from debate_core.application.ports.suppression import ReasonCode
+
+    world = removal_world
+    await a_team_removal_a_source_removal_and_an_unsuppress(world)
+    put_this_builds_files_where_the_records_are_kept(world, held_digests=False)
+    service = world.service(takedown=lambda: _takedown(world))
+
+    async def plan_again():  # noqa: ANN202 - the source's own plan type
+        return await service.plan(
+            SourceSelector(REMOVED_BY_SOURCE),
+            request_id=SECOND_REQUEST,
+            reason=ReasonCode.REQUESTED_BY_SCHOOL,
+        )
+
+    without = await plan_again()
+    placed = put_this_builds_held_digest_record_where_it_is_kept(world)
+    beside = await plan_again()
+    report = await service.execute(beside)
+
+    with capsys.disabled():
+        print()
+        print(f"reader: the debate_core source at {_source()}")
+        named = [where.replace(SUPPRESSION_PREFIX, f"s3://<bucket>/{SUPPRESSION_PREFIX}") for where in placed]
+        print(f"placed: {', '.join(named)}")
+        print(
+            f"removal of {SECOND_REQUEST} run again beside the record: {len(beside.sources)} source(s) "
+            f"planned; the same plan as without it: {beside == without}"
+        )
+        unchanged = held_digest_record_now(world, placed) == placed
+        print(f"executed: completed {report.completed}; the record as placed, both copies: {unchanged}")

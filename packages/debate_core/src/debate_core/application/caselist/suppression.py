@@ -36,6 +36,14 @@ WithdrawalEntry` says why). The list finds it beside its copies as it finds the 
 removal log beside its own, which is the same file: :func:`caselist_withdrawn_from` attributes a
 suppression entry by it, and :func:`caselists_withdrawn_by` a removal log entry.
 
+## And the held-digest record
+
+What an import refused at a held path (`v1-e30-t23`) is a fourth record beside the list,
+`held-digests.jsonl` (:class:`~debate_core.application.ports.suppression.HeldDigestEntry` says
+why), found as the path holds are. Its writer is the one exception to the rule below: the import
+appends it, to this machine's copy alone (:func:`record_held_digests`), and the removal, which holds
+every copy, gives the bucket's copy what it lacks.
+
 ## Which copies a command holds
 
 The composition root decides, by one rule: a command reads every copy it can reach without being
@@ -59,11 +67,14 @@ from pydantic import ValidationError
 from debate_core.application.errors import NotFound, StoreCredentialsExpired
 from debate_core.application.ports.evidence_store import EvidenceObjectStore, ObjectKey, validate_object_key
 from debate_core.application.ports.suppression import (
+    HELD_DIGESTS_FILENAME,
     PATH_HOLDS_FILENAME,
     REMOVAL_SCOPES_FILENAME,
     WITHDRAWALS_FILENAME,
     AppendOnlyRecord,
     AppendOnlyViolation,
+    HeldDigestEntry,
+    HeldDigestList,
     KeepsRecordsBesideIt,
     PathHoldEntry,
     PathHoldList,
@@ -78,6 +89,7 @@ from debate_core.application.ports.suppression import (
 )
 
 __all__ = [
+    "HELD_DIGESTS_KEY",
     "PATH_HOLDS_KEY",
     "REMOVAL_LOG_KEY",
     "SUPPRESSION_LIST_KEY",
@@ -90,8 +102,10 @@ __all__ = [
     "caselists_withdrawn_by",
     "is_suppression_key",
     "load_suppression_state",
+    "read_held_digests",
     "read_path_holds",
     "read_withdrawals",
+    "record_held_digests",
 ]
 
 logger = logging.getLogger(__name__)
@@ -103,8 +117,11 @@ SUPPRESSION_LIST_KEY: Final = validate_object_key(f"{SUPPRESSION_PREFIX}suppress
 REMOVAL_LOG_KEY: Final = validate_object_key(f"{SUPPRESSION_PREFIX}removal-log.jsonl")
 PATH_HOLDS_KEY: Final = validate_object_key(f"{SUPPRESSION_PREFIX}{PATH_HOLDS_FILENAME}")
 """The bucket's copy of the path-hold record: beside the list, under the takedown's one prefix."""
+HELD_DIGESTS_KEY: Final = validate_object_key(f"{SUPPRESSION_PREFIX}{HELD_DIGESTS_FILENAME}")
+"""The bucket's copy of the held-digest record (`v1-e30-t23`), which only a removal writes."""
 
 _PATH_HOLDS_CALLED: Final = "path-hold list"
+_HELD_DIGESTS_CALLED: Final = "held-digest record"
 _REMOVAL_SCOPES_CALLED: Final = "removal-scope record"
 _WITHDRAWALS_CALLED: Final = "withdrawal record"
 
@@ -122,6 +139,25 @@ async def load_suppression_state(suppression: SuppressionList) -> SuppressionSta
 async def read_path_holds(suppression: SuppressionList) -> tuple[PathHoldEntry, ...]:
     """Every path-hold entry `suppression` keeps, lifted or not. None for a list that keeps none."""
     return await suppression.path_holds() if isinstance(suppression, PathHoldList) else ()
+
+
+async def read_held_digests(suppression: SuppressionList) -> tuple[HeldDigestEntry, ...]:
+    """Every held-digest entry beside `suppression`'s copies (`v1-e30-t23`); none for a list keeping none."""
+    return await suppression.held_digests() if isinstance(suppression, HeldDigestList) else ()
+
+
+async def record_held_digests(suppression: SuppressionList, entries: Sequence[HeldDigestEntry]) -> None:
+    """Append what an import held at a held path to the record beside `suppression` (`v1-e30-t23`).
+
+    Nothing to append writes nothing. A list that holds paths keeps this record beside the same
+    copies, so one that cannot take it is refused rather than passed over: an import that lost the
+    only record of the bytes would let them back in at another path.
+    """
+    if not entries:
+        return
+    if not isinstance(suppression, HeldDigestList):
+        raise AppendOnlyViolation("the suppression list", "it keeps no held-digest record")
+    await suppression.append_held_digests(entries)
 
 
 async def read_withdrawals(suppression: SuppressionList) -> tuple[WithdrawalEntry, ...]:
@@ -218,6 +254,7 @@ class RecordedSuppressionList:
         ]
         self._path_hold_lines = _MergedLines(beside) if beside else None
         self._withdrawal_lines = _beside(records, WITHDRAWALS_FILENAME, _WITHDRAWALS_CALLED)
+        self._held_digest_lines = _beside(records, HELD_DIGESTS_FILENAME, _HELD_DIGESTS_CALLED)
 
     @property
     def records(self) -> tuple[AppendOnlyRecord, ...]:
@@ -260,6 +297,27 @@ class RecordedSuppressionList:
         """Every withdrawal entry on every copy, deduplicated. A record that does not exist has none."""
         return await _read_withdrawals(self._withdrawal_lines)
 
+    async def held_digests(self) -> tuple[HeldDigestEntry, ...]:
+        """Every held-digest entry on every copy, deduplicated (`v1-e30-t23`). None where none exists."""
+        if self._held_digest_lines is None:
+            return ()
+        return tuple(_parse(HeldDigestEntry, *read) for read in await self._held_digest_lines.read())
+
+    async def append_held_digests(self, entries: Sequence[HeldDigestEntry]) -> None:
+        """Append to every copy's held-digest record, by the rule :meth:`append_path_holds` follows.
+
+        With nothing new, each copy is still given what another holds and it lacks: that is how a
+        removal writes the bucket's copy of what an import recorded on this machine.
+        """
+        if self._held_digest_lines is None:
+            if entries:
+                raise AppendOnlyViolation(
+                    self._lines.records[0].location,
+                    "no copy of this list keeps a held-digest record beside it",
+                )
+            return
+        await self._held_digest_lines.append([entry.to_line() for entry in entries])
+
     async def append_withdrawals(self, entries: Sequence[WithdrawalEntry]) -> None:
         """Append to every copy's withdrawal record, by the rule :meth:`append_path_holds` follows.
 
@@ -283,6 +341,8 @@ class RecordedSuppressionList:
             await self._path_hold_lines.append([])
         if self._withdrawal_lines is not None:
             await self._withdrawal_lines.append([])
+        if self._held_digest_lines is not None:
+            await self._held_digest_lines.append([])
 
 
 class LocalFallbackSuppressionList:
@@ -359,6 +419,29 @@ class LocalFallbackSuppressionList:
             raise AppendOnlyViolation("the suppression list", "it keeps no path-hold record")
         await self._union.append_path_holds(entries)
 
+    async def held_digests(self) -> tuple[HeldDigestEntry, ...]:
+        """The held digests, by the rule :meth:`path_holds` follows: this machine's alone without a login."""
+        try:
+            return await read_held_digests(self._union)
+        except StoreCredentialsExpired as expired:
+            held = await read_held_digests(self._local)
+            self.fallbacks += 1
+            self.local_only_reason = f"the bucket's copy could not be read without a login ({expired})"
+            logger.warning(
+                "suppression list: the bucket's held-digest record needs a login, so this machine's "
+                "copy alone was read"
+            )
+            return held
+
+    async def append_held_digests(self, entries: Sequence[HeldDigestEntry]) -> None:
+        """Append to this machine's copy alone, whatever the session (`v1-e30-t23`).
+
+        The pull's importers append here, with the everyday credential, which may not write under
+        the bucket's `manifests/_suppression/`. The removal run again gives the bucket's copy what
+        this one holds. Unlike every other append, this is never the union's.
+        """
+        await record_held_digests(self._local, entries)
+
 
 class RecordedRemovalLog:
     """A :class:`~debate_core.application.ports.suppression.RemovalLog` over one or more copies.
@@ -432,9 +515,16 @@ async def _read_withdrawals(lines: _MergedLines | None) -> tuple[WithdrawalEntry
     return tuple(_parse(WithdrawalEntry, *read) for read in await lines.read())
 
 
-def _parse[EntryT: (SuppressionEntry, RemovalLogEntry, PathHoldEntry, RemovalScopeEntry, WithdrawalEntry)](
-    kind: type[EntryT], line: str, location: str, number: int
-) -> EntryT:
+def _parse[
+    EntryT: (
+        SuppressionEntry,
+        RemovalLogEntry,
+        PathHoldEntry,
+        RemovalScopeEntry,
+        WithdrawalEntry,
+        HeldDigestEntry,
+    )
+](kind: type[EntryT], line: str, location: str, number: int) -> EntryT:
     try:
         return kind.model_validate_json(line)
     except ValidationError as refused:

@@ -276,9 +276,56 @@ None.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-18
 
 **Notes:**
+
+Accepted in full, with the phase `Succeeded`.
+
+**This is what I asked for after t02.** The red run is real: the tests were written against a
+committed skeleton that refused nothing, and they failed 138 times for their own reasons. The
+wiring's red run restored t02's files and showed record and live refused, then fixed. Then 43
+mutants, all caught. Mutant 37's first survival found a test naming the wrong path, and you fixed
+the test rather than deleting the check, which was the right call.
+
+**The design decisions that matter:**
+
+* **A prompt version is immutable in what it answers and how it is routed, not only in its words.**
+  The lock pins the schema and the task class beside the body hash, and it flags a release that is
+  deleted or set back to draft.
+* **Variables are exact, both ways, and `prompt()` checks them.** Under the fake and replay routers
+  nothing else renders, so this is what keeps a misspelt variable from passing every offline test.
+* **Rendering is deterministic down to mapping order,** in step with the fixture key, across
+  interpreters and hash seeds.
+* **Templates run sandboxed, with no file reads and no randomness,** checked when the file loads.
+* **The metadata is a property of the response,** so no router can report provenance that
+  disagrees with its own route, and no cassette changed.
+* **`bedrock_router_factory(registry)`** completes t02's seam without letting `integrations.models`
+  import the AWS package.
+
+**Rulings:**
+
+* **Deviation 1, `RenderedPrompt` moved into the domain:** done as the notes asked, with t02's 90
+  tests passing on an import change.
+* **Deviation 2, the files outside the packages:** accepted under working agreement 5. Jinja2 as a
+  base dependency of debate-core is right, since the routing policy beside it is wired on every
+  run. It must stay out of the domain and application layers: see below.
+* **Deviation 3, the sample as a test fixture and an empty lock:** accepted. The lock test was shown
+  biting on the real tree with a planted prompt.
+* **Deviation 4, no `model.repair` prompt:** accepted. It is t05's output.
+* **Deviation 5, `README.md` skipped:** accepted, and any other note without front matter is
+  refused, which is the safe side.
+
+**Follow-up work, filed by the PM:**
+
+* **An import contract keeping `jinja2` out of the domain and application layers:** added to the
+  next E05 loose-ends task.
+* **The schema and task class a call names are checked against the prompt's:** added to t05, whose
+  guard sits on every structured call.
+* **`prompts/` bundled in installed builds,** and the composition root loading the registry: these
+  go into the spec of the first CLI command that calls a model, with t09's exit-code rule.
+* **t06 stores `response.metadata.with_inputs(...)` with each generated artifact,** as a required
+  field. This is noted on t06's spec.

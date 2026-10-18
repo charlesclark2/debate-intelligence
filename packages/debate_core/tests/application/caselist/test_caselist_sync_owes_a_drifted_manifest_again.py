@@ -39,6 +39,15 @@ from debate_core.application.caselist.manifest import manifest_key
 from debate_core.application.caselist.status_service import CaselistStatusReport, CaselistStatusService
 from debate_core.application.caselist_sync import PENDING_WORK_FILENAME, SyncStage
 from debate_core.application.errors import StoreCredentialsExpired
+from debate_core.application.sync_runs import (
+    DriftFinding,
+    StageDetails,
+    StageEntry,
+    SyncRunDetails,
+    SyncRunOutcome,
+    SyncRunRecord,
+    snapshots_owed_again_for_drift,
+)
 from debate_core.integrations.s3 import S3EvidenceObjectStore
 from debate_core.testing.fakes import empty_suppression_list
 
@@ -430,3 +439,104 @@ async def test_a_drift_is_not_written_over_a_pending_work_file_that_cannot_be_re
     )
     assert watched.pulled.record is not None
     assert WEEK_ONE not in watched.pulled.record.pending_publish
+
+
+# ------------------------------------------------------------------------------------------------
+# The rule that tells "drifted again" from a first drift, on records and details written by hand
+# ------------------------------------------------------------------------------------------------
+
+
+def a_run(
+    day: int,
+    *,
+    owed: tuple[str, ...] = (),
+    drift: tuple[tuple[str, tuple[str, ...]], ...] | None = None,
+    stages: bool = True,
+) -> tuple[SyncRunRecord, SyncRunDetails | None]:
+    """A run on `day` of September: the record's `pending_publish`, and its report stage's drift as
+    (`<caselist> <snapshot>`, kinds) pairs, or no details at all when `drift` is `None`."""
+    moment = datetime(2026, 9, day, 6, 0, tzinfo=UTC)
+    record = SyncRunRecord(
+        run_id=f"{moment:%Y%m%dT%H%M%SZ}",
+        environment="dev",
+        mode="run",
+        started_at=moment,
+        finished_at=moment,
+        outcome=SyncRunOutcome.INCOMPLETE if stages else SyncRunOutcome.FAILED,
+        pending_publish=owed,
+        stages=(StageEntry(stage="publish", outcome="completed"), StageEntry(stage="report", outcome="failed"))
+        if stages
+        else (),
+    )
+    if drift is None:
+        return record, None
+    findings = tuple(
+        DriftFinding(caselist=named.split(" ")[0], snapshot=named.split(" ")[1], kinds=kinds)
+        for named, kinds in drift
+    )
+    return record, SyncRunDetails(
+        run_id=record.run_id, stages=(StageDetails(stage="report", drift=findings),) if findings else ()
+    )
+
+
+def owed_for_drift(*runs: tuple[SyncRunRecord, SyncRunDetails | None]) -> list[str]:
+    records = [record for record, _ in runs]
+    details = {record.run_id: one for record, one in runs if one is not None}
+    return [f"{one.caselist} {one.snapshot}" for one in snapshots_owed_again_for_drift(records, details)]
+
+
+MANIFEST = ("manifest",)
+
+
+def test_no_run_has_owed_anything_again() -> None:
+    assert owed_for_drift() == []
+
+
+def test_a_run_that_found_a_manifest_alone_drifting_and_owed_it_owed_it_again_for_drift() -> None:
+    assert owed_for_drift(a_run(16, owed=(WEEK_ONE,), drift=((WEEK_ONE, MANIFEST),))) == [WEEK_ONE]
+
+
+def test_a_drift_the_run_did_not_owe_was_not_owed_again() -> None:
+    """The run that refused a third time, or could not write the file, did not owe it."""
+    assert owed_for_drift(a_run(16, owed=(), drift=((WEEK_ONE, MANIFEST),))) == []
+
+
+def test_a_drift_of_another_kind_beside_the_manifest_was_not_owed_for_drift() -> None:
+    """Owed, but for another reason: the report stage never owes a manifest beside a source."""
+    assert owed_for_drift(a_run(16, owed=(WEEK_ONE,), drift=((WEEK_ONE, ("manifest", "source")),))) == []
+
+
+def test_owed_for_drift_lasts_while_every_later_run_owes_it() -> None:
+    assert owed_for_drift(
+        a_run(16, owed=(WEEK_ONE,), drift=((WEEK_ONE, MANIFEST),)),
+        a_run(23, owed=(WEEK_ONE, WEEK_TWO), drift=()),
+    ) == [WEEK_ONE]
+
+
+def test_a_later_run_that_did_not_owe_it_ends_it() -> None:
+    assert owed_for_drift(
+        a_run(16, owed=(WEEK_ONE,), drift=((WEEK_ONE, MANIFEST),)),
+        a_run(23, owed=(), drift=()),
+        a_run(30, owed=(WEEK_ONE,), drift=()),
+    ) == []
+
+
+def test_a_run_with_no_stages_is_passed_over() -> None:
+    """The lock, a refused start, an error that escaped: it touched nothing it owed."""
+    assert owed_for_drift(
+        a_run(16, owed=(WEEK_ONE,), drift=((WEEK_ONE, MANIFEST),)),
+        a_run(23, stages=False, drift=()),
+    ) == [WEEK_ONE]
+
+
+def test_a_drift_run_with_no_details_says_nothing_of_drift() -> None:
+    """An older build's run, or one whose details were lost: the guard is one run late, never wrong
+    the other way."""
+    assert owed_for_drift(a_run(16, owed=(WEEK_ONE,), drift=None)) == []
+
+
+def test_only_the_snapshot_that_drifted_is_owed_for_drift() -> None:
+    assert owed_for_drift(
+        a_run(16, owed=(WEEK_ONE, WEEK_TWO), drift=((WEEK_ONE, MANIFEST),)),
+        a_run(23, owed=(WEEK_ONE, WEEK_TWO), drift=()),
+    ) == [WEEK_ONE]

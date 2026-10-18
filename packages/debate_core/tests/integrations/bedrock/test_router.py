@@ -43,9 +43,10 @@ from debate_core.domain.model_contracts import (
     ModelParams,
     ModelPrompt,
     ModelProvider,
+    RenderedPrompt,
     TaskClass,
 )
-from debate_core.integrations.bedrock import RenderedPrompt, bedrock_model_router
+from debate_core.integrations.bedrock import bedrock_model_router
 from debate_core.integrations.bedrock.failures import RETRIED_CODES
 from debate_core.integrations.bedrock.first_call import PROBE_MAX_TOKENS, run_first_call
 from debate_core.integrations.bedrock.router import (

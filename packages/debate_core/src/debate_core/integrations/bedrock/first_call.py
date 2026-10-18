@@ -44,9 +44,14 @@ from botocore.exceptions import BotoCoreError, ClientError
 from pydantic import BaseModel, ConfigDict
 
 from debate_core.application.errors import DomainError, ModelAccessDenied, ModelRequestRejected
-from debate_core.domain.model_contracts import ModelParams, ModelPrompt, ResolvedRoute, TaskClass
+from debate_core.domain.model_contracts import (
+    ModelParams,
+    ModelPrompt,
+    RenderedPrompt,
+    ResolvedRoute,
+    TaskClass,
+)
 from debate_core.integrations.bedrock.failures import translate_bedrock_error
-from debate_core.integrations.bedrock.prompt_rendering import RenderedPrompt
 from debate_core.integrations.bedrock.router import (
     BedrockModelRouter,
     ClientFactory,

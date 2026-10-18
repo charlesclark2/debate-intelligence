@@ -18,7 +18,9 @@ bad file fails before any router exists.
 
 The real router is the Bedrock adapter (`v1-e05-t02-bedrock-adapter`). This module may not import
 it, because nothing in `debate_core.integrations.models` may depend on the AWS SDK, so a
-composition root passes it in: `real_router=debate_core.integrations.bedrock.bedrock_model_router`.
+composition root passes it in, bound to the prompt registry that renders its prompts
+(v1-e05-t04-prompt-registry): `real_router=bedrock_router_factory(registry)`, from
+`debate_core.integrations.bedrock`.
 Without one, record and live fail with a configuration error naming `models.provider`. Nothing here
 falls back to a real model, or from one mode to another.
 """
@@ -44,7 +46,7 @@ from debate_core.integrations.models.routing_policy import RoutingPolicy
 __all__ = ["RealRouterFactory", "build_model_router"]
 
 type RealRouterFactory = Callable[[RoutingPolicy], ModelRouter]
-"""Builds the real router for a validated routing policy (`integrations.bedrock.bedrock_model_router`)."""
+"""Builds the real router for a validated routing policy: `bedrock_router_factory(registry)`."""
 
 
 def build_model_router(
@@ -85,7 +87,7 @@ def build_model_router(
     if real_router is None:
         raise ConfigurationError(
             f"{model_mode.value} mode needs the {settings.models.provider.value} model router passed in as "
-            "real_router (debate_core.integrations.bedrock.bedrock_model_router), and none was; replay, "
+            "real_router (debate_core.integrations.bedrock.bedrock_router_factory), and none was; replay, "
             "or set models.provider to fake",
             field="models.provider",
         )

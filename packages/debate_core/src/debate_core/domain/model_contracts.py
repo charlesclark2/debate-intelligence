@@ -19,11 +19,16 @@ Nothing here holds a model identifier. Identifiers live only in the routing file
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Final, Self
+from typing import TYPE_CHECKING, Final, Self
 
 from pydantic import BaseModel, Field, JsonValue, model_validator
 
 from debate_core.domain.base import DomainModel, NonEmptyText, UtcDatetime
+
+if (
+    TYPE_CHECKING
+):  # pragma: no cover - provenance imports this module, so only the type checker imports it here
+    from debate_core.domain.provenance import GeneratedArtifactMetadata
 
 __all__ = [
     "MAX_OUTPUT_TOKENS",
@@ -38,6 +43,7 @@ __all__ = [
     "ModelRequest",
     "ModelResponse",
     "ModelUsage",
+    "RenderedPrompt",
     "RerankResponse",
     "RerankResult",
     "ResolvedRoute",
@@ -171,6 +177,20 @@ class ModelPrompt(DomainModel):
     )
 
 
+class RenderedPrompt(DomainModel):
+    """The text one generative call sends: the user turn, and a system prompt when the prompt has one.
+
+    What the prompt registry's `render` returns for a :class:`ModelPrompt`
+    (v1-e05-t04-prompt-registry), and what a real router sends. It holds the reviewed prompt's
+    wording and the caller's variables, nothing else. It is defined here, beside the prompt it
+    renders, so that the registry and the adapters that send it share one type without either
+    importing the other.
+    """
+
+    user: NonEmptyText = Field(description="The user turn.")
+    system: NonEmptyText | None = Field(default=None, description="The system prompt, when there is one.")
+
+
 class ModelRequest(DomainModel):
     """One generative call as a value: everything that decides its answer, minus the Python type.
 
@@ -282,6 +302,25 @@ class ModelResponse[OutputT: BaseModel](DomainModel):
         default=None, description="The provider's id for the request, when it gives one."
     )
     invoked_at: UtcDatetime = Field(description="When the call was made, in UTC.")
+
+    @property
+    def metadata(self) -> GeneratedArtifactMetadata:
+        """The provenance anything made from this output is persisted with (v1-e05-t04, ac3).
+
+        Built from this response's own route, prompt, request id and time, so every router's result
+        carries it and none can carry a different one. It is not a field: a response's JSON, and so
+        every recorded cassette, is unchanged. Add the snapshots and retrieved items the prompt was
+        given with :meth:`~debate_core.domain.provenance.GeneratedArtifactMetadata.with_inputs`.
+        """
+        from debate_core.domain.provenance import GeneratedArtifactMetadata  # provenance imports this module
+
+        return GeneratedArtifactMetadata(
+            prompt_id=self.prompt_id,
+            prompt_version=self.prompt_version,
+            route=self.route,
+            provider_request_id=self.provider_request_id,
+            created_at=self.invoked_at,
+        )
 
 
 class EmbeddingResponse(DomainModel):

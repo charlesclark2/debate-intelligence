@@ -224,5 +224,46 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e05-t07-usage-telemetry
+    - id: t08
+      kind: Task
+      name: 'A profile that may call Bedrock, and the model access its first call needs'
+      description: >-
+        A profile per environment that may call the routed Bedrock models, and the setting
+        the client is built from.
+      inputs:
+        specRef: plan_specs/v1/e05-model-router/t08-bedrock-invoke-access.yaml
+        goalRef: v1-e05-t08-bedrock-invoke-access
+      dependsOn:
+      - t02
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e05-t08-bedrock-invoke-access reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e05-t08-bedrock-invoke-access
+    - id: t09
+      kind: Task
+      name: 'Replay tolerates a new optional parameter, a refused model call is not retryable, and doctor can check the routing file'
+      description: >-
+        Replay tolerates a new optional parameter, refused model calls exit 1, and doctor
+        can check the routing file.
+      inputs:
+        specRef: plan_specs/v1/e05-model-router/t09-replay-and-model-exit-codes.yaml
+        goalRef: v1-e05-t09-replay-and-model-exit-codes
+      dependsOn:
+      - t02
+      - t03
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e05-t09-replay-and-model-exit-codes reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e05-t09-replay-and-model-exit-codes
 status:
   phase: Pending

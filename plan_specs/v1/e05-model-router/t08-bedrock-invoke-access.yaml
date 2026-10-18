@@ -1,0 +1,96 @@
+# TASK v1-e05-t08-bedrock-invoke-access - A profile that may call Bedrock, and the model access its first call needs
+# Epic: E05 Model Router & Structured LLM Contracts | Release: v1.2 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e05-t08-bedrock-invoke-access
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e05-model-router
+  annotations:
+    debate/title: "A profile that may call Bedrock, and the model access its first call needs"
+spec:
+  # Filed by the PM, 2026-10-17, from v1-e05-t02's Operator follow-ups and Follow-up work.
+  description: >-
+    v1-e05-t02's first real call (ac7) cannot run: no permission set the operator holds may call
+    Bedrock. Add one per environment, in the Terraform root that already holds the evidence
+    permission sets: `bedrock:InvokeModel` and nothing else, on the three geographic inference
+    profiles the routing files name, the foundation models behind them in the regions a `us.`
+    profile routes to (limited by `bedrock:InferenceProfileArn`), and the Titan embedding and
+    Cohere rerank models, exactly as t02's report lists them. Add a setting,
+    `models.aws_profile`, set per environment like `storage.s3.aws_profile`, that the Bedrock
+    client is built from, so a model call never depends on whatever `AWS_PROFILE` the shell
+    holds. The runbook gains the profile's SSO configuration and the one-time account steps that
+    are not Terraform: the Anthropic use-case form and any Marketplace subscription the first
+    call asks for. Then the operator runs t02's probe with the new profile, and t02's ac7 is
+    recorded.
+  priority: 2
+  constraints:
+    packages: [infrastructure, debate_core.application, debate_core.integrations, packages/debate_core/tests, config, docs/runbooks]
+    forbidden:
+      - A Terraform apply in a session; the PM reads both plans first
+      - Any Bedrock action but bedrock:InvokeModel, or a resource the routing files do not name
+      - An account id, ARN with an account id, or SSO start URL in a committed file or the report
+      - A real model call in a test
+  context:
+    - kind: TaskRef
+      name: v1-e05-t02-bedrock-adapter
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The module adds one permission set per environment holding `bedrock:InvokeModel` on
+        exactly the listed resources, with the inference-profile condition on the foundation
+        models, held by the module's Terraform tests and shown failing first.
+    - id: ac2
+      description: >-
+        `models.aws_profile` is a setting with a value in each bundled profile, the Bedrock
+        client is built from it and never from `AWS_PROFILE`, and doctor's evidence-profile
+        check reports it in the same words, by tests.
+    - id: ac3
+      description: >-
+        The runbook gives the profile's configuration, the account's one-time model-access
+        steps, and the plan, apply and check commands.
+    - id: ac4
+      description: >-
+        Operator-run: the dev and prod plans are read by the PM before apply; after the dev
+        apply, t02's probe runs with the new profile and its tables are recorded in t02's
+        report.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e05-t08-bedrock-invoke-access-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e05-model-router
+spec:
+  description: >-
+    Grant one profile per environment the right to call the routed models, and wire the setting.
+  goalRef:
+    name: v1-e05-t08-bedrock-invoke-access
+  graph:
+    nodes:
+      - id: invoke-access
+        kind: Task
+        name: Bedrock invoke access
+        description: >-
+          The permission sets, the setting, the runbook and the operator's probe.
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: custom
+            name: Module tests and settings tests pass
+            description: >-
+              terraform test in the evidence module's directory passes, and uv run
+              pytest packages/debate_core/tests -k 'settings or bedrock' passes.
+status:
+  phase: Pending

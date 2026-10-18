@@ -421,3 +421,32 @@ markers only), and held it to that by the module's tests.
 
 The close-out after step 4 records each run and sets the Goal `Succeeded`. The 32-day check is
 recorded at a later close-out and does not hold the Goal.
+
+### Dev, recorded (PM, 2026-10-17)
+
+* **The plans, 2026-10-17:** dev and prod each showed the three expected changes, all updates in
+  place: `Plan: 0 to add, 3 to change, 0 to destroy.`
+* **The dev apply, 2026-10-17**, from `dev-preview` on `dev`, after the PM read a fresh plan's
+  contents:
+  * the five rules, the existing three unchanged;
+  * one statement added (tagging on `parsed/*` only) and none removed;
+  * the description line.
+
+  Afterwards:
+  * the simulation allowed both tagging actions under `parsed/` and denied tagging and both
+    deletes under `raw/`;
+  * the bucket listed both new rules.
+* **The provider adds `ObjectSizeGreaterThan: 0`** to the tagged rule's filter, so an empty object
+  is never expired: it is kept, never deleted early. The two directories retired held no empty
+  object in the dev bucket, and `2026.10.10-docx-2` held none on this machine. The runbook now
+  says so. A fix is filed (E29).
+* **The agent was reinstalled on `v1.1.0-dev.18` the same day**, which carries `caselist retire`.
+* **Retired, 2026-10-17:**
+  * the dev bucket: `2026.09.20-docx-1` and `2026.10.10-docx-2`, 8 directories and 22,276 objects
+    tagged, and a second dry run showing every object tagged;
+  * this machine: `2026.10.10-docx-2`, 4 directories and 11,138 objects deleted, about 6.3 GB,
+    leaving only `2026.10.12-docx-3`.
+
+  The counts are in [Retired so far](../data/parsed-card-store.md#retired-so-far).
+* **Still to come:** the next-day check, the prod apply and retirement after the next promotion,
+  and the 32-day check.

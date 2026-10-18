@@ -373,3 +373,22 @@ Under the ruling, the expected step 2 result against t11's by-eye tallies:
 * The two he was unsure of are each wholly inside the other body, so they are now decided same.
 
 The close-out that records ac2 and ac4 sets the Goal `Succeeded`.
+
+### The operator's runs, recorded (PM, 2026-10-17)
+
+Both run on 2026-10-17 from the main checkout on `dev`, read-only, counts only. The Goal is
+`Succeeded`. The figures are in
+[Card matching under `card-fingerprint-v3`, measured](../data/caselist-parse-report.md#card-matching-under-card-fingerprint-v3-measured-v1-e31-t11).
+
+* **ac2:** `shapes` over each caselist's three largest clusters gave the 2026-10-16 shares
+  exactly: hsld26 15.4%, 24.7% and 0%; hspf26 62.0%, 0% and 18.8%; hspolicy26 51.0%, 7.6% and 0%.
+  The texts and pairs match too, and every card in those clusters is full. openev's three are new:
+  0%, 40.7% and 0%.
+* **ac4:** t11's "before" was rebuilt first, as corrected in the review. Its counts equal t11's
+  step 2 exactly. The join sample with seed 151389273 drew the same 20 pairs the operator judged
+  by eye on 2026-10-16:
+  * 19 were decided by rule: 18 contained (same card) and the one sharing nothing (different card);
+  * 1 overlapping pair was asked, and answered the same card in 29 seconds, 36 seconds in all.
+
+  The rule agrees with every by-eye verdict: the pair called different shares no text, and the two
+  called unsure are each inside the other body.

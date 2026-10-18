@@ -521,7 +521,7 @@ ones step 5 lists for that change.
 | Change | dev | prod |
 |---|---|---|
 | `v1-e29-t06`: `DebateEvidenceOperator` may list object versions under `raw/`, `parsed/`, `files/`, `manifests/` and `quarantine/` (one statement added to one inline policy) | 2026-10-08 | 2026-10-08 |
-| `v1-e31-t16`: `DebateEvidenceOperator` may get and put object tags under `parsed/` (one statement added to one inline policy), a lifecycle rule `expire-retired-parsed-version-directories` expires `parsed/` objects tagged `debate-retention=superseded`, and `remove-orphaned-parsed-delete-markers` removes the delete markers under `parsed/` with nothing behind them (two rules added) | not applied yet | not applied yet |
+| `v1-e31-t16`: `DebateEvidenceOperator` may get and put object tags under `parsed/` (one statement added to one inline policy), a lifecycle rule `expire-retired-parsed-version-directories` expires `parsed/` objects tagged `debate-retention=superseded`, and `remove-orphaned-parsed-delete-markers` removes the delete markers under `parsed/` with nothing behind them (two rules added) | 2026-10-17 | not applied yet |
 
 ## If something is wrong
 

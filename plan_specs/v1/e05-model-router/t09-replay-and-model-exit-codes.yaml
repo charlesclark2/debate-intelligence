@@ -1,0 +1,94 @@
+# TASK v1-e05-t09-replay-and-model-exit-codes - Replay tolerates a new optional parameter, a refused model call is not retryable, and doctor can check the routing file
+# Epic: E05 Model Router & Structured LLM Contracts | Release: v1.2 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e05-t09-replay-and-model-exit-codes
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e05-model-router
+  annotations:
+    debate/title: "Replay tolerates a new optional parameter, a refused model call is not retryable, and doctor can check the routing file"
+spec:
+  # Filed by the PM, 2026-10-17, from v1-e05-t02's Deviation 5 and Follow-up work, and v1-e05-t03's Follow-up work.
+  description: >-
+    (1) Replay compares a cassette's recorded request with the call field for field, so adding
+    an optional field to `ModelParams` broke every recorded cassette (t02 hand-edited the one
+    committed). Compare the parsed `ModelRequest`, where a field the cassette lacks takes its
+    default, so an optional parameter is backward compatible and a changed value still is not.
+    (2) `exit_code_for` sends every `ProviderError` to the retryable exit 3, including
+    `ModelAccessDenied` and `ModelRequestRejected`, which no retry fixes: they exit 1. (3) An
+    opt-in doctor check of the routing file, like `--evidence-profiles`, so a bad file can be
+    found without loading settings in plain doctor (t03's Deviation 4). (4) Plain doctor tries
+    to open a socket in `test_doctor_renders_a_table`, against its "reaches no network"
+    contract: find and remove it.
+  priority: 3
+  constraints:
+    packages: [debate_core.integrations, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, tests/fixtures/model_cassettes, docs/runbooks]
+    forbidden:
+      - Plain doctor loading settings or reaching the network
+      - A cassette that replays for a call whose recorded values differ
+      - A real model call in a test
+  context:
+    - kind: TaskRef
+      name: v1-e05-t02-bedrock-adapter
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e05-t03-fake-replay-models
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        (1): a cassette recorded before a new optional field replays, and one whose recorded
+        value differs does not, by tests shown failing first; the committed cassette needs
+        no hand edit.
+    - id: ac2
+      description: >-
+        (2): `ModelAccessDenied` and `ModelRequestRejected` exit 1, and throttling still
+        exits 3, by test.
+    - id: ac3
+      description: >-
+        (3): the opt-in check names a bad routing file's key and exits 1; plain doctor is
+        unchanged, by test.
+    - id: ac4
+      description: >-
+        (4): plain doctor opens no socket, shown by the socket guard failing on the start
+        commit and passing after.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e05-t09-replay-and-model-exit-codes-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e05-model-router
+spec:
+  description: >-
+    Make replay tolerant of new optional fields, fix the model exit codes, and add the routing
+    check.
+  goalRef:
+    name: v1-e05-t09-replay-and-model-exit-codes
+  graph:
+    nodes:
+      - id: replay-exit-doctor
+        kind: Task
+        name: Replay, exit codes and doctor
+        description: >-
+          The request comparison, the exit codes, the opt-in check and the socket.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Model and doctor tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/models, packages/debate_cli/tests, -k, replay or exit or doctor]
+status:
+  phase: Pending

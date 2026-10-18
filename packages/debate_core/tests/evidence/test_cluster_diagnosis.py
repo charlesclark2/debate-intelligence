@@ -172,10 +172,11 @@ def test_a_cut_held_only_by_a_body_that_holds_another_passage_has_no_witness() -
 
 
 def test_a_cut_with_a_copy_beside_it_and_outside_only_bodies_holding_another_passage() -> None:
-    """The first passage with a copy of it five words longer in its own cluster, and outside only
-    the body holding both passages: its own cluster is its one witness, and what keeps it from the
-    body outside is that body's other passage."""
-    longer = [*FIRST_PASSAGE, *numbered("more", 5)]
+    """The first passage with a copy of it three words longer in its own cluster (58 shingles, a
+    short body, which the body outside does not hold), and outside only the body holding both
+    passages: its own cluster is its one witness, and what keeps it from the body outside is that
+    body's other passage."""
+    longer = [*FIRST_PASSAGE, *numbered("more", 3)]
     bodies = {"first": FIRST_PASSAGE, "longer": longer, "second": SECOND_PASSAGE, "both": BOTH_PASSAGES}
     clusters = {"first": "own", "longer": "own", "second": "second", "both": "both"}
     finding = diagnosed(bodies, clusters)["first"]

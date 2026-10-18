@@ -381,6 +381,7 @@ def render_plan(plan: RemovalPlan, report: RemovalReport | None) -> str:
             lines += _source_lines(number, source, plan)
 
     lines += _later_upload_lines(plan)
+    lines += _held_at_import_lines(plan)
     lines += _earlier_version_lines(plan)
 
     if plan.manifests:
@@ -520,8 +521,12 @@ def _path_hold_lines(plan: RemovalPlan) -> list[str]:
     return [*lines, f"  (none: {why})"]
 
 
+_AT_A_REMOVED_PATH = frozenset({Inclusion.LATER_UPLOAD, Inclusion.HELD_AT_IMPORT})
+"""Files a plan adds because they are at a path it takes a named file from, each in its own section."""
+
+
 def _not_later_uploads(plan: RemovalPlan, disposition: Disposition) -> tuple[PlannedSource, ...]:
-    return tuple(source for source in plan.of(disposition) if source.inclusion is not Inclusion.LATER_UPLOAD)
+    return tuple(source for source in plan.of(disposition) if source.inclusion not in _AT_A_REMOVED_PATH)
 
 
 def _what_the_plan_covers(plan: RemovalPlan, *, carried_out: bool = False) -> str:
@@ -539,6 +544,8 @@ def _what_the_plan_covers(plan: RemovalPlan, *, carried_out: bool = False) -> st
         )
     kept = found - plan.later_uploads_added
     also = f" ({kept} more is shared and kept)" if kept else ""
+    refused = len(plan.included_as(Inclusion.HELD_AT_IMPORT))
+    also += f", and {refused} upload(s) an import refused at a held path" if refused else ""
     later = f"{plan.later_uploads_added} later upload(s) at the removed path(s){also}"
     if carried_out:
         return f"the {named} file(s) named and {later}"
@@ -608,6 +615,30 @@ def _later_upload_lines(plan: RemovalPlan) -> list[str]:
             if version.sha256 == digest
         ]
         lines += detail[1:]
+    return lines
+
+
+def _held_at_import_lines(plan: RemovalPlan) -> list[str]:
+    """Uploads an import refused at a held path, known from the held-digest record alone (`v1-e30-t23`)."""
+    refused = plan.included_as(Inclusion.HELD_AT_IMPORT)
+    if not refused:
+        return []
+    lines = [
+        "",
+        f"REFUSED AT IMPORT AT A HELD PATH, ADDED TO THIS PLAN: {len(refused)} file(s)",
+        "  An import refused each at a path this request holds, and recorded its sha256 under the request",
+        "  beside the path entries. Its archive has left the download inbox and the store never took it",
+        "  in, so that record is all that names it. Each goes through what a later upload goes through.",
+    ]
+    for number, source in enumerate(refused, start=1):
+        detail = _source_lines(number, source, plan)
+        caselists = ", ".join(sorted({caselist for caselist, _ in source.held_at_import}))
+        outcome = (
+            "suppressed whole: no other path holds it"
+            if source.disposition is Disposition.REMOVE
+            else _LATER_UPLOAD_OUTCOMES[LaterUploadOutcome.WITHDRAWN_FROM_THE_PATH]
+        )
+        lines += [detail[0], f"     refused at a held path in {caselists}: {outcome}", *detail[1:]]
     return lines
 
 
@@ -760,12 +791,14 @@ def _source_lines(number: int, source: PlannedSource, plan: RemovalPlan) -> list
     if source.disposition is Disposition.WITHDRAW:
         for caselist, path in source.requester_paths:
             lines.append(f"     withdraw {caselist}  {_withdrawn_path_label(caselist, path)}")
+        for caselist, _ in source.held_at_import:
+            lines.append(f"     withdraw {caselist}  the held path an import refused it at, by its digest")
         if source.withdrawn_earlier_from:
             lines.append(
                 f"     withdrawn earlier from {', '.join(source.withdrawn_earlier_from)}, as the withdrawal "
                 "record says: its paths there are gone"
             )
-        elif not source.requester_paths:
+        elif not source.requester_paths and not source.held_at_import:
             lines += [
                 "     withdrawn earlier: no withdrawal record names the caselist it was withdrawn from (a",
                 "     run by a build from before v1-e30-t16), so nothing of it is planned again there",
@@ -773,9 +806,7 @@ def _source_lines(number: int, source: PlannedSource, plan: RemovalPlan) -> list
         if source.kept_in:
             # A --team withdrawal is kept for another team; a later upload, or what a --source run
             # left, for any path the removal does not take, which may be the same team's.
-            holder = (
-                "team" if _names_a_team(plan) and source.inclusion is not Inclusion.LATER_UPLOAD else "path"
-            )
+            holder = "team" if _names_a_team(plan) and source.inclusion not in _AT_A_REMOVED_PATH else "path"
             lines.append(f"     kept in  {', '.join(source.kept_in)} (another {holder} there still holds it)")
     for planned in plan.objects:
         if planned.sha256 != source.sha256:
@@ -815,6 +846,11 @@ def _confirmation(plan: RemovalPlan) -> list[str]:
         lines.append(
             f"  - Not removed: {plan.later_uploads_found} later upload(s) at the same path(s), because the "
             "request was about one version."
+        )
+    if refused := plan.included_as(Inclusion.HELD_AT_IMPORT):
+        lines.append(
+            "  - Also stopped, as later uploads an import refused at the same path(s): "
+            f"{len(refused)} file(s)."
         )
     if snapshots:
         lines.append(
@@ -1031,6 +1067,12 @@ def _source_json(source: PlannedSource) -> dict[str, JsonValue]:
         "withdrawn_disclosures": [
             {"caselist": caselist, "disclosure": disclosure_digest(caselist, path)}
             for caselist, path in source.requester_paths
+        ]
+        + [
+            # A held path an import refused it at, which only its digest names (v1-e30-t23).
+            {"caselist": caselist, "disclosure": disclosure}
+            for caselist, disclosure in source.held_at_import
+            if source.disposition is Disposition.WITHDRAW
         ],
         "local_blob": source.local_blob,
         "deletes_source_record": source.delete_source_record,

@@ -633,6 +633,9 @@ class CaselistRemovalService:
         failure: BaseException | None = None
         suppressed = False
         try:
+            # What this machine's imports held at a held path, given to the bucket's copy, which
+            # only the takedown credential writes (v1-e30-t23). Nothing new is appended.
+            await suppression.append_held_digests(())
             await suppression.append_withdrawals(plan.withdrawals)
             await suppression.append(plan.suppression_entries)
             await suppression.append_path_holds(plan.path_holds)

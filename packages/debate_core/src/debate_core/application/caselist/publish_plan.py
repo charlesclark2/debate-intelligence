@@ -79,6 +79,13 @@ path, and uploading the manifest would publish that path. This build's importer 
 row; a build from before `v1-e30-t13` imported one, because it reads no hold. Running the same
 removal again takes the row out.
 
+So does a skipped member's row at a held path, such as a symbolic link, in a snapshot the hold
+covers (:attr:`SnapshotPlan.held_skipped_rows`; the PM's amendment of 2026-10-18 to `v1-e30-t23`).
+Its path names the school and the team, and the link's body is often the removed file's name. A
+build from before `v1-e30-t22` writes one, and before this task the publisher published it. It has
+no bytes, so nothing else of it changes: the same outcome, the same code, and the fix the message
+names is the same removal run again.
+
 ## Bytes only held rows name are not uploaded
 
 A held row's bytes are the requester's later upload at the removed path, and a removal is a privacy
@@ -625,16 +632,23 @@ class SnapshotPlan:
     """Stored rows at a path a removal holds (`v1-e30-t21`); any withholds it, as a suppressed row does."""
     held_back: tuple[Sha256Hex, ...] = ()
     """Digests only held rows name, sorted: left out of :attr:`sources`, so never uploaded (`v1-e30-t22`)."""
+    held_skipped_rows: tuple[str, ...] = ()
+    """The request holding the path of each skipped member row at a held path, sorted (`v1-e30-t23`);
+    any withholds the manifest, as a held stored row does."""
 
     @property
-    def withholding_rows(self) -> tuple[Sha256Hex, ...]:
-        """The digests of every row that withholds the manifest, suppressed or held, sorted, once each.
+    def withholding_rows(self) -> tuple[str, ...]:
+        """Every row that withholds the manifest, sorted, once each.
 
-        The publisher's rule: any withholds the manifest. `caselist status` asks this same property
-        for the hint it gives a manifest mismatch (`v1-e30-t19`), so a change to what withholds a
-        manifest is made here, and the hint follows it.
+        A stored row by its digest, suppressed or held; a skipped member's row at a held path, which
+        has no digest, by the request holding the path (`v1-e30-t23`). The publisher's rule: any
+        withholds the manifest. `caselist status` asks this same property for the hint it gives a
+        manifest mismatch (`v1-e30-t19`), so a change to what withholds a manifest is made here, and
+        the hint follows it.
         """
-        return tuple(sorted({*self.suppressed_rows, *(row.sha256 for row in self.held_rows)}))
+        return tuple(
+            sorted({*self.suppressed_rows, *(row.sha256 for row in self.held_rows), *self.held_skipped_rows})
+        )
 
     def of(self, *actions: SourceAction) -> tuple[PlannedSource, ...]:
         wanted = set(actions)
@@ -729,6 +743,7 @@ def build_publish_plan(
                 suppressed_rows=suppressed_rows(local, suppression),
                 held_rows=held_rows(local, suppression),
                 held_back=tuple(sorted(held_back)),
+                held_skipped_rows=held_skipped_rows(local, suppression),
             )
         )
     return PublishPlan(caselist=caselist, snapshots=tuple(plans))

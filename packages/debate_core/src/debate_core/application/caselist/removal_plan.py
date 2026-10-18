@@ -111,6 +111,18 @@ selector names, a row or an inbox member at the held path stands in for the remo
 one this build refused at import, which is still in its archive in the inbox, and one an older
 build imported, which is in the store.
 
+**An upload refused at import whose archive has gone** (`v1-e30-t23`). Once retention or the
+take-out removes the archive, neither the inbox nor the store holds anything at the held path, and
+the hold keeps the path only as a digest. The import wrote the upload's sha256 to the held-digest
+record beside the path holds (:class:`~debate_core.application.ports.suppression.HeldDigestEntry`),
+with the hold's path digest and request. A re-run of that request reads it for the holds of the
+files the selector names (:func:`_refused_at_import`), and plans each such digest
+(:attr:`Inclusion.HELD_AT_IMPORT`) by the rule a later upload follows: held at no other path, it is
+`REMOVE`d and suppressed whole; held at another live path too, it is `WITHDRAW`n from the held path
+only, by the path's digest (:attr:`PlannedSource.held_at_import`). A digest the list already stops
+at that path is not planned again, and one the inbox or a manifest still shows there is planned as
+the later upload it is, with the record's path among those it is taken from.
+
 **A skipped member's row at a held path** goes in every rewrite, the first run's included, for a
 snapshot the hold covers (`v1-e30-t22`): a symbolic link named as the removed file, to which every
 build before `v1-e30-t22` gave a row. This build's importer withholds it by the same rule
@@ -228,7 +240,7 @@ from debate_core.application.caselist.removal_path_versions import (
     path_identity,
     snapshot_date,
 )
-from debate_core.application.caselist.suppression import read_path_holds, read_withdrawals
+from debate_core.application.caselist.suppression import read_held_digests, read_path_holds, read_withdrawals
 from debate_core.application.errors import DomainError, StoreAccessDenied
 from debate_core.application.ports.caselist import CaselistRepository
 from debate_core.application.ports.caselist_source import openev_id_of_inbox_name
@@ -239,6 +251,7 @@ from debate_core.application.ports.providers import Clock
 from debate_core.application.ports.suppression import (
     REMOVAL_REASONS,
     REQUEST_ID_PATTERN,
+    HeldDigestEntry,
     ManifestRewriteRecord,
     PathHoldEntry,
     ReasonCode,
@@ -374,6 +387,9 @@ class Inclusion(StrEnum):
     """Held at a path the removal takes a named file from, in a later snapshot (`v1-e30-t11`)."""
     UNFINISHED = "unfinished"
     """Suppressed by an earlier run of this request, with something of it still on this machine."""
+    HELD_AT_IMPORT = "held_at_import"
+    """Refused at import at a path this request holds, and known only from the held-digest record:
+    its archive has left the inbox, and the store never took it in (`v1-e30-t23`)."""
 
 
 class LaterUploadOutcome(StrEnum):
@@ -481,6 +497,11 @@ class PlannedSource:
     withdrawal record says (`v1-e30-t19`). Its first run deleted the records and rows that named the
     paths, so a re-run finds none of them; this is what still says where the copies were taken
     from, and the re-run plans those caselists' copies and aggregates again as the first run did."""
+
+    held_at_import: tuple[tuple[str, Sha256Hex], ...] = ()
+    """`(caselist, disclosure digest)` of each held path an import refused these bytes at, as the
+    held-digest record says (`v1-e30-t23`), where no row or inbox member gives the path's text. A
+    withdrawal takes the file from each of them, by the digest alone."""
 
     @property
     def shared(self) -> bool:
@@ -613,10 +634,11 @@ class RemovalPlan:
         """
         entries: list[WithdrawalEntry] = []
         for source in self.sources:
-            # Every entry of one disclosure is planned for a path it is withdrawn from.
+            # Every entry of one disclosure is planned for a path it is withdrawn from: by its text,
+            # or by its digest alone where an import refused it there (v1-e30-t23).
             caselist_of = {
                 disclosure_digest(caselist, path): caselist for caselist, path in source.requester_paths
-            }
+            } | {disclosure: caselist for caselist, disclosure in source.held_at_import}
             entries += [
                 WithdrawalEntry(
                     sha256=entry.sha256,
@@ -662,6 +684,7 @@ class RemovalPlan:
                 continue
             touched.update(ref.caselist for ref in source.disclosures)
             touched.update(caselist for caselist, _ in source.requester_paths)
+            touched.update(caselist for caselist, _ in source.held_at_import)
             touched.update(source.withdrawn_earlier_from)
             if source.camp_files:
                 touched.add(OPENEV)
@@ -811,7 +834,9 @@ class RemovalPlanner:
         inbox: The sync's download inbox in this environment. Required, with no default, so that no
             removal can be built that forgets it.
         suppression: The suppression list (local and bucket copies), with the withdrawal record
-            beside it, which a re-run reads for the caselists a copy was withdrawn from (`v1-e30-t19`).
+            beside it, which a re-run reads for the caselists a copy was withdrawn from (`v1-e30-t19`),
+            and the held-digest record, which it reads for the uploads an import refused at a held
+            path (`v1-e30-t23`).
         removal_log: The removal log, both copies, for the scopes beside it: the manifests earlier
             runs of the same request rewrote, which the sweep holds their older versions to
             (`v1-e30-t19`). Required, with no default, like the inbox.
@@ -913,6 +938,10 @@ class RemovalPlanner:
             upstream_path_digests={**self._inbox.deliveries.upstream_paths(), **_row_upstream_paths(copies)},
         )
         later = tuple(one for one in versions if one.relation is VersionRelation.LATER)
+        # What an import refused at a held path, which nothing else may name any more (v1-e30-t23).
+        refused = _refused_at_import(
+            await read_held_digests(self._suppression), state, named=selected, request_id=request_id
+        )
         added: list[PlannedSource] = []
         if not only_named:
             for digest in sorted({one.sha256 for one in later}):
@@ -926,6 +955,23 @@ class RemovalPlanner:
                         request_id=request_id,
                         reason=reason,
                         recorded_at=recorded_at,
+                        refused_at=refused.get(digest, ()),
+                    )
+                )
+            for digest in sorted(set(refused) - selected - {one.sha256 for one in later}):
+                if all(state.suppresses(digest, disclosure=disclosure) for _, disclosure in refused[digest]):
+                    continue  # listed already: whatever is left of it is an unfinished run's
+                added.append(
+                    await self._plan_other_source(
+                        digest,
+                        [],
+                        holdings,
+                        Inclusion.HELD_AT_IMPORT,
+                        state=state,
+                        request_id=request_id,
+                        reason=reason,
+                        recorded_at=recorded_at,
+                        refused_at=refused[digest],
                     )
                 )
 
@@ -1334,6 +1380,7 @@ class RemovalPlanner:
         reason: ReasonCode,
         recorded_at: datetime,
         withdrawn_earlier_from: tuple[str, ...] = (),
+        refused_at: Sequence[tuple[str, Sha256Hex]] = (),
     ) -> PlannedSource:
         """Plan a file the selector does not name: a later upload, or one a stopped run left.
 
@@ -1346,6 +1393,10 @@ class RemovalPlanner:
         `withdrawn_earlier_from` is where the withdrawal record says an earlier run of this request
         withdrew the file from (`v1-e30-t19`): a copy there that is still in the bucket is withdrawn
         again, though no row or record shows its path any more.
+
+        `refused_at` is where the held-digest record says an import refused the file
+        (`v1-e30-t23`): `(caselist, disclosure digest)` of each held path. Each is a taken path
+        known by its digest alone, never a live one.
         """
         source = await self._caselists.find_source(digest)
         disclosures = [
@@ -1393,9 +1444,15 @@ class RemovalPlanner:
         taken_releases = {path.split("/", 1)[0] for caselist, path in taken if caselist == OPENEV} | orphaned
         shared = bool(live_paths or live_releases)
 
+        # A held path the record names and no row or inbox member shows (v1-e30-t23).
+        taken_by_digest = {
+            disclosure_digest(caselist, path) for caselist, path in taken if caselist != OPENEV
+        }
+        refused_only = tuple(sorted({one for one in refused_at if one[1] not in taken_by_digest}))
+
         if (state.suppresses_source(digest) and finishing) or not shared:
             disposition = Disposition.REMOVE
-        elif taken or orphaned or withdrawn_earlier_from:
+        elif taken or orphaned or withdrawn_earlier_from or refused_only:
             disposition = Disposition.WITHDRAW
         else:
             # Another holder has it, and nothing here says which path of it to take.
@@ -1429,6 +1486,9 @@ class RemovalPlanner:
                 digest_of_path = disclosure_digest(caselist, path)
                 if not state.suppresses(digest, disclosure=digest_of_path):
                     entries.append(_suppression(digest, digest_of_path, recorded_at, reason, request_id))
+            for _, digest_of_path in refused_only:
+                if not state.suppresses(digest, disclosure=digest_of_path):
+                    entries.append(_suppression(digest, digest_of_path, recorded_at, reason, request_id))
 
         return PlannedSource(
             sha256=digest,
@@ -1450,6 +1510,7 @@ class RemovalPlanner:
             suppression=tuple(entries),
             already_suppressed=finishing,
             inclusion=inclusion,
+            held_at_import=refused_only,
         )
 
     # --------------------------------------------------------------------------------------
@@ -1538,9 +1599,12 @@ class RemovalPlanner:
                 # by this machine's records or by any manifest on either side. A camp path's release
                 # year's copy goes only when no other release of that year holds it (v1-e30-t14).
                 # A re-run also takes the caselists the withdrawal record names, whose paths the
-                # first run's deletions left nothing to show (v1-e30-t19).
-                withdrawn_from = {name for name, _ in source.requester_paths} | set(
-                    source.withdrawn_earlier_from
+                # first run's deletions left nothing to show (v1-e30-t19), and those of the held
+                # paths an import refused it at (v1-e30-t23).
+                withdrawn_from = (
+                    {name for name, _ in source.requester_paths}
+                    | {name for name, _ in source.held_at_import}
+                    | set(source.withdrawn_earlier_from)
                 )
                 parsed_caselists = sorted(withdrawn_from - set(source.kept_in))
                 raw_prefixes = [
@@ -1928,6 +1992,26 @@ def _recorded_paths(
                 )
             )
     return tuple(sorted(stand_ins, key=lambda one: (one.caselist, one.snapshot, one.path, one.sha256)))
+
+
+def _refused_at_import(
+    held: Sequence[HeldDigestEntry], state: SuppressionState, *, named: Collection[str], request_id: str
+) -> dict[Sha256Hex, tuple[tuple[str, Sha256Hex], ...]]:
+    """For each upload an import refused under this request, the held paths it was refused at (`v1-e30-t23`).
+
+    `(caselist, disclosure digest)`, from the hold that refused it: one of this request's holds in
+    force, on a file the selector names, as :func:`_recorded_paths` asks of a row. A hold an
+    un-suppress lifted refuses nothing any more, and its uploads are not planned. A named file is
+    planned as named.
+    """
+    found: dict[Sha256Hex, set[tuple[str, Sha256Hex]]] = {}
+    for entry in held:
+        if entry.request_id != request_id or entry.sha256 in named:
+            continue
+        for hold in state.held_paths.get(entry.disclosure, ()):
+            if entry.refused_by(hold) and hold.sha256 in named:
+                found.setdefault(entry.sha256, set()).add((hold.caselist, hold.disclosure))
+    return {digest: tuple(sorted(paths)) for digest, paths in sorted(found.items())}
 
 
 def taken_path(caselist: str, snapshot: str, path: str) -> tuple[str, str]:

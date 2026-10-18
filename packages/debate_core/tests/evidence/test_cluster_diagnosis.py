@@ -409,14 +409,17 @@ def test_the_tally_of_the_nested_copies_left_alone() -> None:
     set by hand so the figures do not rest on which pairs the seed makes."""
     findings = diagnosed(NESTED)
     cut = replace(findings["cut"], banded_with_a_container=True)
-    several = {
+    several: dict[str, object] = {
         "cuts": 1,
         "of which the containers are nested": 1,
         "as one card, split": 1,
         "as different cards": 0,
         "one card split, by what kept the copies apart": {KeptApartBy.CUT_STEP.value: 1},
     }
-    none_several = {**dict.fromkeys(several, 0), "one card split, by what kept the copies apart": {}}
+    none_several: dict[str, object] = {
+        **dict.fromkeys(several, 0),
+        "one card split, by what kept the copies apart": {},
+    }
     within = {
         "cuts": 1,
         "its containers are nested copies in several clusters": 1,

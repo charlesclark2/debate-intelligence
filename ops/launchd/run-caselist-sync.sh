@@ -33,19 +33,18 @@
 #   DEBATE_RESEARCH_BIN   The console script, by its full path. The installer always writes it, so
 #                         nothing earlier on PATH can stand in for the installed build.
 #
-# AWS_PROFILE is not in the plist (v1-e34-t24). The AWS profile the run uses is the build's setting
-# storage.s3.aws_profile, which the bundled dev and prod profiles both set, and a profile named by
-# the setting is the one used whatever AWS_PROFILE says. Set anyway, by a run typed in a shell, it
-# is exported as it came. If the profile's session has expired the run still captures and imports,
-# and records the publish as pending for the next run or `caselist pull --publish-pending`.
+# AWS_PROFILE is not in the plist (v1-e34-t24), and this file does not set it (v1-e34-t27). The AWS
+# profile the run uses is the build's setting storage.s3.aws_profile, which the bundled dev and
+# prod profiles both set, and a profile named by the setting is the one used whatever AWS_PROFILE
+# says. One set in a shell that runs this file by hand reaches the command as the shell's other
+# variables do, and changes nothing. If the profile's session has expired the run still captures
+# and imports, and records the publish as pending for the next run or `caselist pull
+# --publish-pending`.
 set -eu
 
 : "${DEBATE_ENV:=prod}"
 : "${DEBATE_RESEARCH_BIN:=debate-research}"
 export DEBATE_ENV
-if [ -n "${AWS_PROFILE:-}" ]; then
-    export AWS_PROFILE
-fi
 
 if ! command -v "${DEBATE_RESEARCH_BIN}" >/dev/null 2>&1; then
     echo "run-caselist-sync: ${DEBATE_RESEARCH_BIN} is not on PATH." >&2

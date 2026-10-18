@@ -49,7 +49,7 @@ spec:
         (4): the withdrawn-set check is removed from `_dropped`, and every removal test
         passes unchanged, with the mutant that removed it before now the code.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

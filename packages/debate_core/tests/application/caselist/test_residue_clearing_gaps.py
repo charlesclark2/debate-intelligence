@@ -575,7 +575,9 @@ class TestWhatTheWithdrawalRecordDoesNotDo:
         world = removal_world
         await import_and_publish_next_week(world, tmp_path / "next-week", (BAYVIEW_PATH,))
         await import_and_publish_another_caselists_week(world, tmp_path / "other-caselist")
-        local_manifest = world.local.object_path_for(manifest_key(SYNTHETIC_CASELIST, NEXT_WEEK))
+        local_manifest = FsEvidenceObjectStore(world.data_dir).path_for(
+            manifest_key(SYNTHETIC_CASELIST, NEXT_WEEK)
+        )
         before = local_manifest.read_bytes()
         await remove_the_named_file(world)
         local_manifest.write_bytes(before)
@@ -611,7 +613,7 @@ class TestWhatTheWithdrawalRecordDoesNotDo:
         would now be held nowhere and removed whole. It is not planned at all."""
         world = withdrawn_from_one_caselist
         assert await world.repository.delete_disclosure(OTHER_CASELIST, NEXT_WEEK, ANOTHER_TEAMS_PATH)
-        world.local.object_path_for(manifest_key(OTHER_CASELIST, NEXT_WEEK)).unlink()
+        FsEvidenceObjectStore(world.data_dir).path_for(manifest_key(OTHER_CASELIST, NEXT_WEEK)).unlink()
         world.client.delete_object(Bucket=world.bucket_name, Key=manifest_key(OTHER_CASELIST, NEXT_WEEK))
 
         plan = await world.planner().plan(

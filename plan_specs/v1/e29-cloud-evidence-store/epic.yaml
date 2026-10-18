@@ -92,6 +92,14 @@ spec:
       inputs:
         goalRef: v1-e01-t20-retryable-failures-exit-3
         specRef: plan_specs/v1/e01-repo-foundation/t20-retryable-failures-exit-3.yaml
+    - id: ext-v1-e31-t16-version-directory-retention
+      kind: External
+      name: 'Prerequisite from E31: Superseded parsed-store version directories are retired, locally and in both buckets'
+      description: >-
+        Cross-epic prerequisite owned by v1-e31-debate-file-parsing (release v1.1).
+      inputs:
+        goalRef: v1-e31-t16-version-directory-retention
+        specRef: plan_specs/v1/e31-debate-file-parsing/t16-version-directory-retention.yaml
     - id: t01
       kind: Task
       name: AWS account baseline
@@ -280,5 +288,25 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e29-t09-store-error-loose-ends
+    - id: t10
+      kind: Task
+      name: 'The retirement rule reaches empty objects, the tagging grant names its one tag, and the module''s failures print'
+      description: >-
+        The retirement rule reaches empty objects, the tagging grant names its one tag, and
+        module test failures print.
+      inputs:
+        specRef: plan_specs/v1/e29-cloud-evidence-store/t10-retention-rule-and-grant-loose-ends.yaml
+        goalRef: v1-e29-t10-retention-rule-and-grant-loose-ends
+      dependsOn:
+      - ext-v1-e31-t16-version-directory-retention
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e29-t10-retention-rule-and-grant-loose-ends reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e29-t10-retention-rule-and-grant-loose-ends
 status:
   phase: Pending

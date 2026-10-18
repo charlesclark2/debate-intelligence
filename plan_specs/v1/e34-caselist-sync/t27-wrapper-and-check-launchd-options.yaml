@@ -1,0 +1,80 @@
+# TASK v1-e34-t27-wrapper-and-check-launchd-options - The wrapper exports no AWS_PROFILE, and --check-launchd refuses options it ignores
+# Epic: E34 Caselist Sync | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e34-t27-wrapper-and-check-launchd-options
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e34-caselist-sync
+  annotations:
+    debate/title: "The wrapper exports no AWS_PROFILE, and --check-launchd refuses options it ignores"
+spec:
+  # Filed by the PM, 2026-10-17, from v1-e34-t25's Follow-up work 1 and 2.
+  description: >-
+    (1) The wrapper still exports `AWS_PROFILE` when it is set. The plist no longer sets it, and
+    the run's profile is `storage.s3.aws_profile`, so the two lines do nothing under launchd and
+    mislead a reader; remove them. (2) `--check-launchd` accepts `--weekday`, `--hour`,
+    `--minute`, `--log-dir` and `--wrapper-dir` and ignores them; its "takes no options but
+    --label" guard predates them. Refuse them. Changing the wrapper's bytes makes
+    `--check-launchd` ask for a reinstall, as v1-e34-t25 did: the runbook says so.
+  priority: 3
+  constraints:
+    packages: [ops/launchd, tests/integration, docs/runbooks]
+    forbidden:
+      - Changing an installed agent's settings without an explicit option
+      - Reading the operator's real agent, AWS config or data directory in a session
+  context:
+    - kind: TaskRef
+      name: v1-e34-t25-reinstall-keeps-every-setting
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        (1): the wrapper sets no `AWS_PROFILE`, and a run under the fake launchctl still
+        reaches the store with the setting's profile, by test.
+    - id: ac2
+      description: >-
+        (2): each ignored option is refused by `--check-launchd` with the option named, by
+        tests shown failing first.
+    - id: ac3
+      description: >-
+        Operator-run: after the merge, a reinstall and `--check-launchd` pass, recorded in
+        the report.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e34-t27-wrapper-and-check-launchd-options-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e34-caselist-sync
+spec:
+  description: >-
+    Remove the wrapper's AWS_PROFILE export and guard --check-launchd's options.
+  goalRef:
+    name: v1-e34-t27-wrapper-and-check-launchd-options
+  graph:
+    nodes:
+      - id: wrapper-and-guard
+        kind: Task
+        name: Wrapper and guard
+        description: >-
+          The two lines and the option guard.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Installer tests pass
+            command: uv
+            args: [run, pytest, tests/integration/test_launchd_install.py]
+status:
+  phase: Pending

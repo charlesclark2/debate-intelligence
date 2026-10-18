@@ -36,7 +36,14 @@ spec:
     task is measured by v1-e31-t21's cluster shapes, not by a person reading large clusters; a
     person sees only the pairs whose overlap a rule cannot decide, through v1-e31-t21's sampler.
     t11's tallies and the shapes before this task are in docs/data/caselist-parse-report.md
-    ("Card matching under card-fingerprint-v3, measured"). Amended by the PM, 2026-10-16.
+    ("Card matching under card-fingerprint-v3, measured"). Amended by the PM, 2026-10-16. (8)
+    t21's sampler decides contained pairs as the same card without showing them, but a short
+    quote that two articles both carry is contained in each without being one card: that is the
+    `MIN_CUT_SHARE` question of (2). Give `sample` an option that shows the person the pairs of
+    one decided shape (for example contained, under a third of the larger), tallied apart from
+    the rule's, without changing the rule's default. t21's join sample with the rule decided 19
+    of 20 and asked 1, and openev's second-largest cluster holds 41% of pairs sharing no text.
+    (8) added by the PM, 2026-10-17, from v1-e31-t21's Follow-up work 1.
   priority: 2
   constraints:
     packages: [debate_core.evidence, debate_core.application, packages/debate_core/tests, scripts, docs/data]
@@ -75,6 +82,11 @@ spec:
         each caselist's three largest clusters, against 62% and 51% before, with the figures in
         the report. A cluster over 5% is listed with its shape, and the PM decides whether it
         is a defect. Added by the PM, 2026-10-16.
+    - id: ac6
+      description: >-
+        (8): `sample` can show the pairs of a decided shape the person names, tallied apart, by
+        test; the operator's sample of contained pairs under a third of the larger, through it,
+        sets or confirms `MIN_CUT_SHARE` with ac2. Added by the PM, 2026-10-17.
 status:
   phase: Pending
 ---

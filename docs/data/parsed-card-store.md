@@ -467,10 +467,10 @@ versions and the delete markers left under one caselist's `sha256/`, which shoul
 | Directory | Place | Retired on | Objects | Bytes | Left after 32 days |
 |---|---|---|---|---|---|
 | `2026.09.20-docx-1` | this machine | 2026-10-11, by hand, before the command existed | not counted | about 5.8 GB | |
-| `2026.09.20-docx-1` | dev bucket | not yet | | | |
+| `2026.09.20-docx-1` | dev bucket | 2026-10-17, tagged | 11,138 | about 6.2 GB | |
 | `2026.09.20-docx-1` | prod bucket | not yet | | | |
-| `2026.10.10-docx-2` | this machine | not yet | | | |
-| `2026.10.10-docx-2` | dev bucket | not yet | | | |
+| `2026.10.10-docx-2` | this machine | 2026-10-17, deleted | 11,138 | about 6.3 GB | |
+| `2026.10.10-docx-2` | dev bucket | 2026-10-17, tagged | 11,138 | about 6.3 GB | |
 | `2026.10.10-docx-2` | prod bucket | not yet | | | |
 
 ## Reading it from a shell

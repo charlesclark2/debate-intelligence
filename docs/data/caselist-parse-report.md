@@ -1255,3 +1255,23 @@ cards. Two bodies join only on text they share directly, never through a third b
 both. `v1-e31-t20` is measured by the share of pairs sharing no text, as above, and by a join
 sample with no pair of different cards; a person looks only at pairs whose overlap a rule cannot
 decide.
+
+**The same measures, built into the tools (`v1-e31-t21`, 2026-10-17).**
+`compare_card_clusters.py shapes` gives every figure in the table above exactly. It reads the same
+texts as `diagnose`. openev's three largest clusters, not in the table, hold 0%, 41% and 0% of
+pairs sharing no text, in clusters of 22, 21 and 18 cards and 14 texts each.
+
+The sampler now decides by rule:
+* a pair of two full cards that is identical or contained is the same card;
+* a pair sharing no text is two different cards.
+
+It asks a person about the rest. Run again on the join sample above (the same seed, so the same
+20 pairs):
+
+| Join sample of 20 | Same card | Different card | Unsure | Judged by a person |
+|---|---|---|---|---|
+| By eye, 2026-10-16 | 17 | 1 | 2 | 20 |
+| With the rule, 2026-10-17 | 19 (18 by rule, 1 by eye) | 1 (by rule) | 0 | 1, in 29 seconds |
+
+The rule agrees with every verdict given by eye. The pair called different shares no text, and the
+two called unsure are each wholly inside the other body.

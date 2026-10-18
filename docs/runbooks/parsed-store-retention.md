@@ -112,6 +112,16 @@ a dry run no longer lists the directory, because nothing current is left under i
 DEBATE_ENV=dev debate-research caselist retire --bucket
 ```
 
+**An empty object is never expired.** As applied, the rule's filter also holds
+`ObjectSizeGreaterThan: 0`, which the AWS provider adds to a filter with a prefix and a tag, so a
+zero-byte object under a retired directory keeps its current version. Nothing is deleted early by
+this, and the directories retired on 2026-10-17 held no empty object. If a dry run still lists a
+retired directory the day after, count its empty objects before anything else:
+
+```bash
+aws s3api list-objects-v2 --bucket debate-dev-evidence-a7508de8 --prefix parsed/hsld26/2026.10.10-docx-2/ --profile debate-dev-evidence --query 'Contents[?Size==`0`].Key' --output text | wc -w
+```
+
 The versions are kept 30 days as noncurrent and then deleted, and the next run removes the delete
 markers left behind. **Thirty-two days after the first lifecycle run, check the per-source files are
 gone**, in each bucket and for one caselist, and record the two numbers in

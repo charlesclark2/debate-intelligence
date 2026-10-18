@@ -1,0 +1,95 @@
+# TASK v1-e29-t10-retention-rule-and-grant-loose-ends - The retirement rule reaches empty objects, the tagging grant names its one tag, and the module's failures print
+# Epic: E29 Cloud Evidence Store | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e29-t10-retention-rule-and-grant-loose-ends
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e29-cloud-evidence-store
+  annotations:
+    debate/title: "The retirement rule reaches empty objects, the tagging grant names its one tag, and the module's failures print"
+spec:
+  # Filed by the PM, 2026-10-17, from v1-e31-t16's dev apply of 2026-10-17 and its Follow-up work 2 and 3.
+  description: >-
+    (1) As applied, the rule `expire-retired-parsed-version-directories` holds
+    `ObjectSizeGreaterThan: 0`: the AWS provider adds it to a filter with a prefix and a tag, so
+    an empty object under a retired directory is never expired. Change the module or the
+    provider version so the applied rule carries no size condition, and show it in the plan's
+    JSON. (2) The everyday set may put any tag on `parsed/` objects, including the retirement
+    tag on a current directory if the aws CLI is used directly. Limit the grant to the one key
+    with `s3:RequestObjectTagKeys`, extending the module test's rule on object-statement
+    conditions. (3) `caselist retire --bucket` over a directory whose every object is tagged
+    still says `would be tagged`; it says `already tagged`. (4) Terraform 1.16.3 panics printing
+    a failed lifecycle assertion in this module's tests: pin the runner's version or reshape the
+    assertions so a failure prints its message.
+  priority: 3
+  constraints:
+    packages: [infrastructure, debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/runbooks]
+    forbidden:
+      - A Terraform apply in a session; the PM reads both plans first
+      - Any delete permission for the everyday set
+      - A rule that could expire an untagged object outside exports/
+  context:
+    - kind: TaskRef
+      name: v1-e31-t16-version-directory-retention
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        (1): the planned rule's filter holds no size condition, shown in the plan JSON by a
+        module test that fails on the start commit.
+    - id: ac2
+      description: >-
+        (2): the tagging statement allows only the retirement key, by module test shown
+        failing first; `caselist retire` and the runbook's copy-back still pass their tests.
+    - id: ac3
+      description: >-
+        (3): a fully tagged directory's dry run says `already tagged`, by test.
+    - id: ac4
+      description: >-
+        (4): a deliberately failed lifecycle assertion prints its message, shown in the
+        report.
+    - id: ac5
+      description: >-
+        Operator-run: the dev and prod plans, read by the PM before apply.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e29-t10-retention-rule-and-grant-loose-ends-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e29-cloud-evidence-store
+spec:
+  description: >-
+    Fix the empty-object gap, narrow the tagging grant, and tidy the retire dry run and the
+    module tests.
+  goalRef:
+    name: v1-e29-t10-retention-rule-and-grant-loose-ends
+  graph:
+    nodes:
+      - id: retention-loose-ends
+        kind: Task
+        name: Retention loose ends
+        description: >-
+          The rule's filter, the grant's condition, the dry-run word and the assertion
+          output.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: custom
+            name: Module and retention tests pass
+            description: >-
+              terraform test in the evidence module's directory passes, and uv run
+              pytest packages/debate_core/tests -k retention passes.
+status:
+  phase: Pending

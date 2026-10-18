@@ -335,7 +335,10 @@ THE_LONGEST_HINTS = (
 def every_kind_of_banner() -> list[Notification]:
     """One notification of every kind the monitor sends, each at its longest: every stage failed
     with the longest hints together, a login banner with both its added sentences and the longest
-    login command, the backlog, a held upload and a manifest to publish again."""
+    login command, the backlog, a held upload and a manifest to publish again. Since `v1-e34-t26`
+    also three manifests that drifted again after their republish, and a report-only login banner
+    with every sentence it can carry: the check cut short, a manifest that drifted again, and the
+    parsed store."""
     login = "aws sso login --profile debate-prod-evidence"
     failed_everywhere = a_record(
         ("select", "failed"),
@@ -387,6 +390,23 @@ def every_kind_of_banner() -> list[Notification]:
             ),
         ),
     )
+    owed_again = a_record(
+        ("report", "failed"), pending=("hsld26 2026-09-01", "hspolicy26 2026-09-01", "ndtceda26 2026-09-01")
+    )
+    report_alone = a_record(("publish", "completed"), ("parse", "pending"), ("report", "pending"))
+    report_alone_found = SyncRunDetails(
+        run_id=report_alone.run_id,
+        stages=(
+            StageDetails(
+                stage="report",
+                earlier_findings=("CASELIST_DRIFT",),
+                drift=tuple(
+                    DriftFinding(caselist=caselist, snapshot="2026-09-01", kinds=("manifest",))
+                    for caselist in ("hsld26", "hspolicy26", "ndtceda26")
+                ),
+            ),
+        ),
+    )
     backlog_and_held = a_record(growing=("hsld26", "hspolicy26", "ndtceda26"))
     held = SyncRunDetails(
         run_id=backlog_and_held.run_id, held_by_request={"RM-2026-01": 2, "RM-2026-02": 1, "RM-2026-03": 4}
@@ -396,6 +416,8 @@ def every_kind_of_banner() -> list[Notification]:
         (failed_everywhere, loud, False),
         (waiting, found_first, True),
         (manifest, manifest_details, False),
+        (owed_again, manifest_details, False),
+        (report_alone, report_alone_found, True),
         (backlog_and_held, held, False),
     ):
         sent.extend(
@@ -413,7 +435,11 @@ def every_kind_of_banner() -> list[Notification]:
 def test_every_kind_of_banner_shows_its_fix_whole_within_the_observed_limits() -> None:
     sent = every_kind_of_banner()
 
-    assert len(sent) == 5
+    assert len(sent) == 7
+    assert {one.title for one in sent} >= {
+        "caselist pull: a manifest drifted again",
+        "caselist pull: publish a manifest again",
+    }
     for notification in sent:
         _, subtitle, _ = as_the_banner_shows(notification)
         assert subtitle == THE_RUN
@@ -496,6 +522,27 @@ def test_the_runbook_shows_the_lock_and_the_fix_first_wordings_and_they_are_the_
     assert sync_runs.MANIFEST_PUBLISHED_AGAIN_TITLE in section
     assert sync_runs.MANIFEST_PUBLISHED_AGAIN in section
     assert sync_runs.HELD_BY_A_REMOVAL_TITLE in section
+    # `v1-e34-t26`: a manifest that drifted again, and what waits for the login, as the banners say them.
+    assert sync_runs.DRIFTED_AGAIN_TITLE in section
+    assert sync_runs.THE_CHECK_WAS_CUT_SHORT.strip() in section
+    prod = WHERE.replace("20260916T060000Z", "20261014T100000Z").replace("dev", "prod")
+    [drifted_again] = notifications_for(
+        a_record(("report", "failed")),
+        SyncRunDetails(
+            run_id="20260916T060000Z",
+            stages=(
+                StageDetails(
+                    stage="report",
+                    error_codes=("CASELIST_DRIFT",),
+                    drift=(DriftFinding(caselist="hsld26", snapshot="2026-10-13", kinds=("manifest",)),),
+                ),
+            ),
+        ),
+        aws_login_command="aws sso login --profile debate-prod-evidence",
+        credentials_expired=False,
+        may_succeed_on_retry=a_retry_may_cure,
+    )
+    assert f"> {drifted_again.message.replace(WHERE, prod)}" in section
 
 
 def test_nothing_here_was_given_a_retry_rule_of_its_own() -> None:

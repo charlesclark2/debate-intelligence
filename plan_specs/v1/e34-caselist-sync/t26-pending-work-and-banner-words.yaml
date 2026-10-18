@@ -58,7 +58,7 @@ spec:
         (4): a stage reason for an OSError names its class and errno, never its message, by
         test.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

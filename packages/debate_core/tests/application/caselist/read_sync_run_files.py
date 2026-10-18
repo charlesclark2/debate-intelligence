@@ -4,8 +4,10 @@ A plain script that imports nothing from the test suite, so that the code readin
 `debate_core.application.sync_runs` and nothing else (`v1-e34-t23`). Each scenario's run log is
 read with the build's `SyncRunLog`, which skips and logs a line it cannot validate; its details with
 `SyncRunDetailsLog`, when the build has one; the file of records still owed with the build's own
-reader of it; and every object under `reports/` in the bucket with the model of its kind. Any line
-or object the build skips or refuses is counted and printed, and makes the exit status `1`.
+reader of it; the pending-work file, when a scenario has one, with the build's own `PendingWork`
+(`v1-e34-t26`); and every object under `reports/` in the bucket with the model of its kind. Any line
+or object the build skips or refuses is counted and printed, and makes the exit status `1`. It also
+reads what `write_drift_owed_again_files.py` writes.
 
     python read_sync_run_files.py <directory written> <label of the reader>
 """
@@ -19,7 +21,7 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
-from debate_core.application import sync_runs
+from debate_core.application import caselist_sync, sync_runs
 
 
 class Counting(logging.Handler):
@@ -69,6 +71,18 @@ def main(directory: Path, reader: str) -> int:
             if not owed:
                 refused += 1
                 print("  REFUSED: the file of records still owed read as nothing")
+        pending_work = scenario / caselist_sync.PENDING_WORK_FILENAME
+        if pending_work.is_file():
+            try:
+                owed_snapshots = caselist_sync.PendingWork(pending_work).read()
+            except caselist_sync.PendingWorkUnreadable as unreadable:
+                refused += 1
+                print(f"  REFUSED: the pending-work file: {unreadable}")
+            else:
+                print(f"  pending-work file: {[f'{one.caselist} {one.snapshot}' for one in owed_snapshots]}")
+        for record in records:
+            if record.pending_publish:
+                print(f"  record {record.run_id} pending_publish: {list(record.pending_publish)}")
         objects: dict[str, str] = json.loads((scenario / "bucket.json").read_text("utf-8"))
         for key, body in sorted(objects.items()):
             model = (

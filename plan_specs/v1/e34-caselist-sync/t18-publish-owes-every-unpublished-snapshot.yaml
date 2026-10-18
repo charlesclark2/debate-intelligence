@@ -15,6 +15,15 @@ metadata:
     debate/title: "A publish stopped by an expired session still owes every snapshot it did not finish"
 spec:
   # Filed by the PM, 2026-10-10, from v1-e34-t13's Follow-up work (pre-existing, noticed).
+  # Amended by the PM, 2026-10-16 (v1-e34-t26): what is owed is every snapshot this machine has
+  # imported that the bucket has not confirmed complete, as below, and also every snapshot the
+  # report stage finds with the bucket's manifest differing from this machine's and nothing else
+  # differing. The report stage puts such a snapshot back into the pending-work file, as an entry of
+  # the same shape, so the next run publishes it again: the local manifest is the record and the
+  # bucket's copy follows it. Once only: a snapshot already owed again for that, whose republish the
+  # bucket confirmed, that drifts again is not owed a third time and is reported for a person by
+  # caselist and date. A manifest the bucket lacks, a source with other bytes, or either beside a
+  # manifest mismatch, is not owed by the report stage.
   description: >-
     When the AWS session expires part-way through `caselist pull`'s publish stage, the run marks
     publish pending and writes the snapshots it still owes to the pending-work file, so

@@ -488,6 +488,12 @@ may not meet (exit `3`) and `person` otherwise, the same rule as the banner's
 did not fail, and `not recorded` for a run a build before `v1-e34-t19` recorded. In `--json` the
 verdict is `verdict`.
 
+Two banners have words of their own beside the verdict, and `Verdict` shows them after it in
+brackets (`v1-e34-t26`): `person (skipped)` for a run another held the lock against, and
+`retry (retry once fixed)` for a refusal the next run gets past only once its fix is made. In
+`--json` they are `banner`, `skipped` or `retry once fixed`, and `null` for every other run and
+for a run with no details.
+
 **A quiet week can hide a torn manifest.** A week that imports and publishes nothing reads no
 manifest rows, so a torn line in one is found only when something reads them. When the runs report
 nothing for a while, run `caselist status` for each caselist: it reads every manifest, and exits 1
@@ -555,7 +561,7 @@ One JSON object per run on stdout. The fields to read first:
 | `files_imported`, `blobs_stored` | What the importers filed, and how much of it was new |
 | `objects_published` | What reached the bucket from the raw store: sources and manifests |
 | `parse` | The parse stage's counts and nothing else: `caselists`, `full_parses`, `attempted`, `skipped`, `unsupported`, `failed`, `cards`, `uploaded`, `not_published`. `null` when the stage parsed nothing. See [The parse stage](#the-parse-stage) |
-| `pending_publish` | Every snapshot this Mac has imported that the bucket had not confirmed complete when the publish stage ended: what [the pending-work file](#the-pending-work-file) holds after the run. Whether that waits for a login or for something else is the `publish` stage's outcome, not this list |
+| `pending_publish` | What [the pending-work file](#the-pending-work-file) holds after the run: every snapshot this Mac has imported that the bucket had not confirmed complete when the publish stage ended, and any the report stage then owed again because the bucket's manifest drifted (`v1-e34-t26`). Whether that waits for a login or for something else is the `publish` stage's outcome, not this list |
 | `inbox_retention` | What left the inbox and the bytes freed, and what stayed and why. See [The download inbox](#the-download-inbox) |
 | `full_archive` | What the complete-archive rotation decided and why (`reason`), what the weeklies left of the day's allowance, and for a complete archive imported, its `bytes` and its `withdrawn` and `superseded` counts. See [The complete archive](#the-complete-archive) |
 | `openev_selections[]` | Each camp file OpenEv listed: its `openev_id`, the run's `decision`, and `inbox_file`, the first twelve hex digits of the download's sha256 once the run had its bytes (the name `inbox_retention` gives the same file) |
@@ -746,7 +752,8 @@ enough to be shown whole too.
 | `caselist pull failed: needs a person` | The same, and at least one failure will be the same next week. Also a run that stopped on a bug | `1`, `70` |
 | `caselist pull skipped: another was running` | Another `caselist pull` held the run lock, so this one did nothing (`v1-e34-t23`) | `1` |
 | `caselist pull finished with a failed stage` | Only a stage that did not have to finish failed: parse, report or retention | `0` |
-| `caselist pull: publish a manifest again` | Only the report stage failed, and only because the bucket's copy of a manifest differs from this Mac's (`v1-e34-t23`) | `0` |
+| `caselist pull: publish a manifest again` | Only the report stage failed, and only because the bucket's copy of a manifest differs from this Mac's. The run owes it again, and the next run publishes it (`v1-e34-t23`, `v1-e34-t26`) | `0` |
+| `caselist pull: a manifest drifted again` | The same, for a manifest a run had already owed again, published and seen confirmed, so it is not owed a third time (`v1-e34-t26`) | `0` |
 | `caselist publish waiting for an AWS login` | The SSO session had expired | `0` |
 | `caselist pull stopped: OpenCaselist login expired` | The `caselist_token` expired | `1` |
 | `caselist pull: uploads held by a removal` | An import refused an upload at a path a removal holds (`v1-e34-t23`) | as the rest of the run |
@@ -790,16 +797,30 @@ Its command is `debate-research caselist runs`, which shows what the other run r
 finishes. See [When something goes wrong](#when-something-goes-wrong) if no other run is going.
 
 **A manifest to publish again.** When the report stage's only finding is that the bucket's copy
-of a snapshot's manifest differs from this Mac's, the banner names the snapshots and the command
-that uploads this Mac's copy, and says nobody else is needed (`v1-e34-t23`, after `v1-e30-t12`):
+of a snapshot's manifest differs from this Mac's, the run puts the snapshot back into
+[the pending-work file](#the-pending-work-file), and the banner names the snapshots and says
+nobody is needed (`v1-e34-t23`, after `v1-e30-t12`; owed again since `v1-e34-t26`):
 
-> Run 20261014T100000Z (prod): the report stage found the bucket's manifest of hsld26 2026-10-13 differs from this machine's. Publishing again should clear it: this machine rewrote the manifest after it was published, and the publish uploads this machine's copy. Nothing here needs a person.
+> Run 20261014T100000Z (prod): the report stage found the bucket's manifest of hsld26 2026-10-13 differs from this machine's. The next scheduled run publishes it again: this machine rewrote the manifest after it was published, and the publish uploads this machine's copy. Nothing here needs a person.
 
-Its command is `debate-research caselist publish --caselist hsld26`, one for each caselist named.
-The next scheduled run does not do it for you: the snapshot is published, so nothing owes it. Any
-other kind of drift (a source, something missing, suppressed rows) keeps the banner
+Its command is `debate-research caselist pull --publish-pending`, which publishes it now; the next
+scheduled run does it otherwise. Until `v1-e34-t26` nothing owed such a snapshot, and the command
+was `caselist publish --caselist <slug>`. Any other kind of drift (a source, something missing,
+suppressed rows), alone or beside a manifest mismatch, is owed nothing and keeps the banner
 `caselist pull finished with a failed stage`. The report stage's reason names each snapshot with
 what differs, and the run's details carry it as `drift`.
+
+**A manifest that drifted again.** A snapshot is owed again for a drifted manifest once. If the run
+that publishes it again sees the bucket confirm it, and the report stage then finds the manifest
+differing again, publishing it a third time would not clear it: something keeps changing it. The
+run does not owe it again, and says so, naming the snapshot by caselist and date (`v1-e34-t26`):
+
+> Run 20261014T100000Z (prod): the bucket's manifest of hsld26 2026-10-13 differs from this machine's again, after a run published it again and the bucket confirmed it. Publishing it a third time would not clear it, so it is not owed again: a person should look.
+
+Its command is `debate-research caselist status --caselist hsld26`, one for each caselist named,
+which compares every snapshot of the caselist with the bucket. Look at what else writes to the
+bucket's `manifests/` prefix, or rewrites the manifest on this Mac, before publishing it by hand.
+The exit is still `0`: the report stage is not one the exit is decided from (`v1-e34-t13`).
 
 **Uploads a removal's hold refused.** An import that refused an upload because a removal holds its
 path says how many, by the removal's request id, and nothing else about it (`v1-e34-t23`, after
@@ -834,8 +855,19 @@ The report stage keeps what it found the same way (`v1-e34-t23`). When the sessi
 it compares, a snapshot it had already found out of sync is kept as an earlier finding,
 `CASELIST_DRIFT`, with its kind, and the banner says so. The drain does not find it again: it
 compares only what it publishes, and that snapshot was published. If the only finding was a
-manifest that differs, the banner says instead which manifest to publish again after the login, and
-with which command.
+manifest that differs, it is owed again, and the banner says instead that the publish after the
+login uploads this Mac's copy (`v1-e34-t26`); or, for one that drifted again, that a person should
+look.
+
+**What waits for the login** (`v1-e34-t26`). The banner counts the snapshots owed and names the run
+record, which waits too. When nothing is owed it says so: a run whose only pending stage is the
+report stage published everything and then lost its session while it compared, and its banner
+used to say `0 snapshot(s) and the run record wait to be published`. It now says what waits, and
+what does not come back by itself:
+
+> Run 20261014T100000Z (prod) kept everything it fetched; no snapshot waits to be published, only the run record. The report stage's check that the bucket holds what this run published was cut short; caselist pull --publish-pending does not make it again, and debate-research caselist status does, after the login.
+
+The drain publishes the record. Run `caselist status` for each caselist to make the check.
 
 Notification Centre shows the first lines of a body and the rest when the banner is opened. The
 whole of it is also in the run's details:
@@ -1232,11 +1264,34 @@ Measure the inbox before and after with `du -sh <data_dir>/inbox`.
 `<data_dir>/caselist-sync-pending.json` is the list of publishes this Mac owes (`v1-e34-t18`).
 
 **What it holds.** Every snapshot this Mac has imported that the bucket has not confirmed
-complete, and nothing else. It does not matter what ended the publish stage: an expired session, a
-bucket that refused or did not answer, an upload that failed, or the Mac shutting down part-way.
-A run writes the file before its first upload and again when the publish stage ends, so a run
-that is killed has already written down what it owes. After a killed run the file can name a
+complete, and every snapshot whose manifest in the bucket the report stage found differing from
+this Mac's, once; nothing else. It does not matter what ended the publish stage: an expired
+session, a bucket that refused or did not answer, an upload that failed, or the Mac shutting down
+part-way. A run writes the file before its first upload and again when the publish stage ends, so
+a run that is killed has already written down what it owes. After a killed run the file can name a
 snapshot the bucket does hold; the next run finds it complete and takes it off.
+
+**A manifest that drifted is owed again, once** (`v1-e34-t26`, the PM's ruling of 2026-10-16).
+This Mac's manifest is the record, and the bucket's copy follows it. So when the report stage finds
+a snapshot whose manifest in the bucket differs from this Mac's, and nothing else differs, it adds
+the snapshot to the end of the file, and the next run, or `caselist pull --publish-pending`,
+publishes it again. Only that: a manifest the bucket has lost, a source with other bytes, or
+either beside a manifest mismatch, is a failed report stage for a person, and owes nothing. The
+stage's reason ends `owed again, for the next run to publish:` and the snapshots.
+
+It never loops by itself. A snapshot a run owed again for this, that every run since has still
+owed, and whose republish the bucket then confirmed, is not owed a third time when the report stage
+finds its manifest differing again. The reason ends `drifted again after it was owed again and
+published, so not owed a third time; a person should look:` and the snapshots, and the banner is
+`caselist pull: a manifest drifted again`
+([What a notification says](#what-a-notification-says)). Which of the two a drift is, the run
+reads from the run log and the details beside it: the run that owed it again lists it in
+`pending_publish` and its report stage's `drift` has it with the kind `manifest` alone. A run whose
+details are missing says nothing of drift, so the guard can be one run late, owing a snapshot a
+third time; the run after stops it.
+
+The entries are the same shape as every other (below), so a build installed before `v1-e34-t26`
+reads them and publishes them as it publishes any snapshot it owes. It never adds one itself.
 
 **When it is there.** Only while something is owed. A run that owes nothing removes it, so no
 file means nothing is owed.
@@ -1282,7 +1337,9 @@ gone.
 `1`, and the run leaves the file exactly as it found it. A run never writes over a file it could
 not read, because the file may name snapshots nothing else remembers. What that run imported
 itself is still published; if the bucket did not confirm some of it, the stage's `reason` ends
-with `not recorded as owed:` and their names. To repair it:
+with `not recorded as owed:` and their names. A manifest the report stage would owe again is not
+written either; its reason ends `not recorded as owed, because the pending-work file could not be
+read:` and the snapshots (`v1-e34-t26`). To repair it:
 
 1. Look at it with `cat "${PENDING}"`. A file cut short usually still shows which snapshots it
    named.
@@ -1336,6 +1393,13 @@ drain them now:
 ```bash
 debate-research caselist pull --publish-pending
 ```
+
+**`pending_publish` is not empty, and `publish` is `completed`.** The report stage found the
+bucket's copy of a manifest differing from this Mac's and owed the snapshot again (`v1-e34-t26`):
+its reason ends `owed again, for the next run to publish:` and names it. Nothing is needed. The run
+is `incomplete`, not `publish_pending`, because no login waits: the next scheduled run publishes it,
+or drain it now with the same command. If the reason says instead that it `drifted again`, see
+[A manifest that drifted again](#what-a-notification-says).
 
 **`publish` is `pending`, and its `earlier_findings` is not empty.** The session expired, and
 before it did a snapshot ended incomplete on the code shown. Log in and drain it as above. If the

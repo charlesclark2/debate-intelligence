@@ -70,14 +70,30 @@ Both facts come from the scope a removal records beside its log entry
 scope was made by a build from before it, which did not say which caselists it touched; nothing is
 compared with it, and the report names it as not checked.
 
+## A copy withdrawn from a caselist (`v1-e30-t19`)
+
+A file withdrawn from one team and kept for another is suppressed for one disclosure, not whole,
+so nothing in a key says it was removed. But a caselist's copy is its own object
+(`raw/caselist/<slug>/…`, and its parsed file under `parsed/<slug>/`), and a withdrawal deletes it
+when no other holder in that caselist keeps the file. The withdrawal record (`withdrawals.jsonl`,
+`v1-e30-t16`) says which caselist each withdrawn copy was taken from, and by which request. So for
+each caselist, a file withdrawn from it whose disclosure the list still suppresses, and which no
+manifest of the caselist on this machine names at a path the list does not stop, is counted here
+as its whole-removed files are, under :attr:`CaselistResidue.withdrawn_copies`, with the request
+that withdrew it. The caller works out which those are
+(:meth:`~debate_core.application.caselist.status_service.CaselistStatusService.status`).
+
+They are reported and not part of :attr:`CaselistResidue.found`: the command's exit status is as it
+was before this check (the spec of `v1-e30-t19` forbids changing it). A withdrawal an earlier build
+made has no record, so nothing says which caselist it was taken from; the report names its request
+as *not attributed* instead.
+
 ## What it does not see
 
 * **A manifest version older than a removal, of a manifest it did not rewrite**, which names a
   removed row: the sweep should have taken it. Telling it from one that names nothing would mean
   downloading it. Every executed removal sweeps those, a re-run included.
-* **A file withdrawn from one team and kept for another.** It is suppressed for one disclosure, not
-  whole, and the other holders' copy is the same object. Nothing in a key says which holder a
-  version was for.
+* **A withdrawn copy with no withdrawal record**, which an earlier build made: see above.
 * **`manifests/_suppression/`**: the list, the log, the path holds and the scopes are appended to,
   and their old versions are the record of what was asked, which no removal deletes.
 
@@ -102,7 +118,7 @@ suppression list.
 from __future__ import annotations
 
 import re
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Final
@@ -131,6 +147,7 @@ __all__ = [
     "OlderVersions",
     "RemovalCompletion",
     "ResidueFile",
+    "WithdrawnCopy",
     "completed_removals",
     "removal_residue",
     "residue_prefixes",
@@ -163,6 +180,22 @@ class ResidueFile:
     """One removed file, and what the bucket still holds under keys named for it."""
 
     sha256: Sha256Hex
+    current_objects: int = 0
+    noncurrent_versions: int = 0
+    delete_markers: int = 0
+
+    @property
+    def sha256_prefix(self) -> str:
+        return self.sha256[:RESIDUE_DIGEST_PREFIX_LENGTH]
+
+
+@dataclass(frozen=True, slots=True)
+class WithdrawnCopy:
+    """A file withdrawn from one caselist that keeps no holder of it, and what is left of its copy
+    there (`v1-e30-t19`). Named by its digest and the request the withdrawal record gives."""
+
+    sha256: Sha256Hex
+    request_id: str
     current_objects: int = 0
     noncurrent_versions: int = 0
     delete_markers: int = 0
@@ -216,6 +249,9 @@ class CaselistResidue:
     """Manifest and aggregate versions older than a removal that touched this caselist, by role."""
     older_than: RemovalCompletion | None = None
     """The latest completed removal that touched this caselist, or `None` when none did."""
+    withdrawn_copies: tuple[WithdrawnCopy, ...] = ()
+    """Files withdrawn from this caselist, by the withdrawal record, of whose copy here something is
+    left, in digest order (`v1-e30-t19`). Not part of :attr:`found`."""
 
     @property
     def found(self) -> bool:
@@ -244,30 +280,31 @@ async def removal_residue(
     caselist: str,
     suppression: SuppressionState,
     removals: CompletedRemovals | None = None,
+    withdrawn: Mapping[Sha256Hex, str] | None = None,
 ) -> CaselistResidue:
     """Count what the bucket still holds of `caselist`'s removed files and older versions. Lists only.
 
     With `removals`, also the manifest and aggregate versions older than the latest completed
-    removal that touched `caselist`: see "Manifests and aggregates" in the module docstring.
+    removal that touched `caselist`: see "Manifests and aggregates" in the module docstring. With
+    `withdrawn`, each file withdrawn from `caselist` that it keeps no holder of, and the request
+    that withdrew it: see "A copy withdrawn from a caselist".
     """
     completion = removals.by_caselist.get(caselist) if removals is not None else None
+    withdrawn = withdrawn or {}
     counts: dict[Sha256Hex, list[int]] = {}
+    copies: dict[Sha256Hex, list[int]] = {}
     listed: list[ObjectVersion] = []
     try:
         for prefix in residue_prefixes(caselist):
             for version in await versions.list_versions(prefix):
                 listed.append(version)
                 digest = _digest_named_by(version.key)
-                if digest is None or not suppression.suppresses_source(digest):
+                if digest is None:
                     continue
-                current, noncurrent, markers = counts.setdefault(digest, [0, 0, 0])
-                if version.is_delete_marker:
-                    markers += 1
-                elif version.is_latest:
-                    current += 1
-                else:
-                    noncurrent += 1
-                counts[digest] = [current, noncurrent, markers]
+                if suppression.suppresses_source(digest):
+                    _count(counts, digest, version)
+                elif digest in withdrawn:
+                    _count(copies, digest, version)
         if completion is not None:
             listed.extend(await versions.list_versions(manifest_prefix(caselist)))
     except StoreAccessDenied as refused:
@@ -283,7 +320,29 @@ async def removal_residue(
         ),
         older_versions=_older_versions(caselist, listed, removals, completion),
         older_than=completion,
+        withdrawn_copies=tuple(
+            WithdrawnCopy(
+                sha256=digest,
+                request_id=withdrawn[digest],
+                current_objects=current,
+                noncurrent_versions=noncurrent,
+                delete_markers=markers,
+            )
+            for digest, (current, noncurrent, markers) in sorted(copies.items())
+        ),
     )
+
+
+def _count(counts: dict[Sha256Hex, list[int]], digest: Sha256Hex, version: ObjectVersion) -> None:
+    """Add one version of `digest` to its counts: current objects, noncurrent versions, markers."""
+    current, noncurrent, markers = counts.setdefault(digest, [0, 0, 0])
+    if version.is_delete_marker:
+        markers += 1
+    elif version.is_latest:
+        current += 1
+    else:
+        noncurrent += 1
+    counts[digest] = [current, noncurrent, markers]
 
 
 def _older_versions(

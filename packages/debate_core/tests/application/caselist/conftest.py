@@ -14,6 +14,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
+from inspect import signature
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -207,6 +208,13 @@ class RemovalWorld:
         )
 
     def planner(self, *, versions: EvidenceVersionStore | None = None) -> RemovalPlanner:
+        # The removal log is the planner's since v1-e30-t19. The older builds' sources that
+        # `check_an_older_build_reads_this_builds_files.py` runs this world against take none.
+        log = (
+            {"removal_log": self.removal_log()}
+            if "removal_log" in signature(RemovalPlanner).parameters
+            else {}
+        )
         return RemovalPlanner(
             caselists=self.repository,
             local=self.local,
@@ -219,6 +227,7 @@ class RemovalWorld:
             clock=FixedClock(REMOVAL_TIME),
             environment="dev",
             bucket=self.bucket_name,
+            **log,
         )
 
     def takedown(self) -> TakedownAccess:

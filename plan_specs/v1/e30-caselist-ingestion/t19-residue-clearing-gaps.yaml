@@ -73,7 +73,7 @@ spec:
         rewritten manifest named as a manifest mismatch with its publish hint, a suppressed
         row, and a clean status after the publish.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

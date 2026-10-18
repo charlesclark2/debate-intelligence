@@ -90,6 +90,24 @@ rewrites one in place after a camp metadata re-import (`v1-e30-t08`) or a remova
 copy differs until the next `caselist publish`, which uploads a manifest whose recorded digest
 differs. Both kinds are drift, as they always were.
 
+Unless the publisher withholds that manifest (`v1-e30-t19`): a manifest with a row a removal stops
+or holds is never uploaded, so a publish does not clear its mismatch, and the removal run again
+does. Whether it does is the publisher's own rule, asked of the snapshot's publish plan
+(:attr:`~debate_core.application.caselist.publish_plan.SnapshotPlan.withholding_rows`) rather than
+restated here, so the two cannot part ways: :attr:`SnapshotStatus.manifest_withheld`.
+
+## A withdrawn copy's residue (`v1-e30-t19`)
+
+With the residue check, the withdrawal record beside the list (`withdrawals.jsonl`, `v1-e30-t16`)
+says which caselist each copy a removal withdrew was taken from. For a caselist that no longer
+holds the file (no manifest of it on this machine names the file at a path the list does not stop)
+what is left of that caselist's copy is counted, and named by the caselist and the request
+(:mod:`~debate_core.application.caselist.removal_residue`, "A copy withdrawn from a caselist"). A
+withdrawal an earlier build made has no record, and its request is named as not attributed
+(:attr:`CaselistStatusReport.withdrawals_not_attributed`). Neither is part of
+:attr:`CaselistStatusReport.in_sync`: they are new findings, and the command's exit status is as it
+was.
+
 Checksums are the bucket's *recorded* digests, read with one `HeadObject` per listed source — the
 listing states none (`debate_core.application.ports.evidence_store`). Nothing is downloaded: a
 manifest's digest is compared, and its body is never read back from the bucket.
@@ -104,7 +122,7 @@ manifest (`docs/policies/caselist-data-use.md`, rule 4), and neither does an inb
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Final, Protocol
@@ -118,8 +136,10 @@ from debate_core.application.caselist.evidence_listing import (
     read_local_snapshots,
 )
 from debate_core.application.caselist.publish_plan import (
+    OPENEV,
     HeldRow,
     LocalSnapshot,
+    build_publish_plan,
     digest_of_local_blob_key,
     held_only_digests,
     held_rows,
@@ -137,15 +157,22 @@ from debate_core.application.caselist.removal_residue import (
     completed_removals,
     removal_residue,
 )
-from debate_core.application.caselist.suppression import load_suppression_state
+from debate_core.application.caselist.suppression import (
+    caselist_withdrawn_from,
+    load_suppression_state,
+    read_withdrawals,
+)
 from debate_core.application.errors import DomainError, NotFound
 from debate_core.application.ports.evidence_store import EvidenceObjectStore, ObjectInfo, ObjectKey
 from debate_core.application.ports.evidence_versions import EvidenceVersionStore
 from debate_core.application.ports.suppression import (
     RemovalLog,
     RemovalScopeLog,
+    SuppressionAction,
     SuppressionList,
     SuppressionState,
+    camp_path_scope,
+    disclosure_digest,
 )
 from debate_core.domain import Sha256Hex
 
@@ -255,6 +282,10 @@ class SnapshotStatus:
     held_skipped_rows: tuple[str, ...] = ()
     """The request holding the path of each skipped member's row at a held path (`v1-e30-t22`), which
     an earlier build wrote: the same removal is owed again. Not part of :attr:`in_sync` either."""
+    manifest_withheld: bool = False
+    """Whether the publisher withholds this snapshot's manifest for its rows, by its own rule
+    (`v1-e30-t19`): a publish then does not clear a mismatch of it, and the removal must be
+    finished first. False for a snapshot this machine holds no manifest of."""
 
     @property
     def in_sync(self) -> bool:
@@ -308,6 +339,10 @@ class CaselistStatusReport:
     held_in_inbox: tuple[HeldInboxUpload, ...] = ()
     """Uploads at a held path in the download inbox's archives, of the caselists compared
     (`v1-e30-t21`). Empty when the caller did not ask. Not part of :attr:`in_sync`."""
+    withdrawals_not_attributed: tuple[str, ...] = ()
+    """Request ids of withdrawals the list still suppresses that no withdrawal record attributes to
+    a caselist: made by a build from before `v1-e30-t16`, so what is left of their copies is not
+    checked (`v1-e30-t19`). Empty when the caller did not ask for the residue check."""
 
     @property
     def in_sync(self) -> bool:
@@ -372,6 +407,12 @@ class CaselistStatusReport:
     def residue_found(self) -> bool:
         """Whether a version listing showed anything left of a removed file."""
         return any(one.found for one in self.residue)
+
+    @property
+    def withdrawn_copies_left(self) -> bool:
+        """Whether a version listing showed anything left of a copy withdrawn from a caselist
+        (`v1-e30-t19`). Not part of :attr:`in_sync`."""
+        return any(one.withdrawn_copies for one in self.residue)
 
     @property
     def residue_not_checked(self) -> tuple[str, ...]:
@@ -469,9 +510,14 @@ class CaselistStatusService:
             raise NoCaselistEvidence(caselist, snapshot)
         left: list[CaselistResidue] = []
         removals = CompletedRemovals()
+        not_attributed: tuple[str, ...] = ()
         if residue and self._versions is not None:
             removals = await self._completed_removals()
-            left = [await removal_residue(self._versions, name, suppression, removals) for name in caselists]
+            withdrawn, not_attributed = await self._withdrawn_copies(suppression, caselists)
+            left = [
+                await removal_residue(self._versions, name, suppression, removals, withdrawn.get(name))
+                for name in caselists
+            ]
         inbox: tuple[HeldInboxUpload, ...] = ()
         if held_in_inbox and self._inbox is not None:
             inbox = tuple(
@@ -487,7 +533,54 @@ class CaselistStatusService:
             residue=tuple(left),
             removals_not_checked=removals.not_checked,
             held_in_inbox=inbox,
+            withdrawals_not_attributed=not_attributed,
         )
+
+    async def _withdrawn_copies(
+        self, suppression: SuppressionState, caselists: Sequence[str]
+    ) -> tuple[dict[str, dict[Sha256Hex, str]], tuple[str, ...]]:
+        """Per caselist, the files withdrawn from it that it keeps no holder of, with the request that
+        withdrew each; and the requests of withdrawals no record attributes (`v1-e30-t19`).
+
+        Each withdrawal the list still suppresses, whole files apart (the residue check counts those
+        as removed), is attributed by the withdrawal record. A caselist still holds a file where a
+        manifest of it on this machine names the file at a path the list does not stop; its copy
+        is then that holder's, as the removal itself leaves it (`kept_in`).
+        """
+        attributed: dict[str, dict[Sha256Hex, str]] = {}
+        not_attributed: set[str] = set()
+        withdrawals = await read_withdrawals(self._suppression)
+        for entry in await self._suppression.entries():
+            # A whole file's entry is the residue check's own; one since lifted is no longer withdrawn.
+            if (
+                entry.action is not SuppressionAction.SUPPRESS
+                or suppression.suppresses_source(entry.sha256)
+                or not suppression.suppresses(entry.sha256, disclosure=entry.disclosure)
+            ):
+                continue
+            caselist = caselist_withdrawn_from(entry, withdrawals)
+            if caselist is None:
+                not_attributed.add(entry.request_id or "a removal with no request id")
+            elif caselist in caselists and entry.request_id is not None:
+                attributed.setdefault(caselist, {}).setdefault(entry.sha256, entry.request_id)
+        for caselist, digests in attributed.items():
+            held = await self._held_in(caselist, suppression)
+            attributed[caselist] = {
+                digest: request for digest, request in digests.items() if digest not in held
+            }
+        return attributed, tuple(sorted(not_attributed))
+
+    async def _held_in(self, caselist: str, suppression: SuppressionState) -> frozenset[Sha256Hex]:
+        """The files a manifest of `caselist` on this machine names at a path the list does not stop."""
+        held: set[Sha256Hex] = set()
+        for local in await read_local_snapshots(self._local, caselist, None, full_archives=True):
+            scope = camp_path_scope(local.snapshot) if caselist == OPENEV else caselist
+            held.update(
+                digest
+                for digest, path in local.stored_rows
+                if not suppression.suppresses(digest, disclosure=disclosure_digest(scope, path))
+            )
+        return frozenset(held)
 
     async def _completed_removals(self) -> CompletedRemovals:
         """This environment's completed removals, from both copies of the log and of its scopes."""
@@ -608,6 +701,7 @@ class CaselistStatusService:
             suppressed_rows=suppressed_rows(local, suppression),
             held_rows=held_rows(local, suppression),
             held_skipped_rows=held_skipped_rows(local, suppression),
+            manifest_withheld=_publisher_withholds(local, local_blobs, remote, suppression),
         )
 
     async def _head(self, key: ObjectKey, semaphore: asyncio.Semaphore) -> ObjectInfo | None:
@@ -617,6 +711,20 @@ class CaselistStatusService:
             except NotFound:
                 # Listed a moment ago and gone now.
                 return None
+
+
+def _publisher_withholds(
+    local: LocalSnapshot,
+    local_blobs: dict[Sha256Hex, int],
+    remote: dict[ObjectKey, int],
+    suppression: SuppressionState,
+) -> bool:
+    """Whether the publisher withholds `local`'s manifest for its rows: asked of its own plan
+    (:attr:`~debate_core.application.caselist.publish_plan.SnapshotPlan.withholding_rows`)."""
+    (plan,) = build_publish_plan(
+        local.caselist, [local], local_blobs=local_blobs, remote=remote, suppression=suppression
+    ).snapshots
+    return bool(plan.withholding_rows)
 
 
 def _suppressed_source_key(caselist: str, key: ObjectKey, suppression: SuppressionState) -> bool:

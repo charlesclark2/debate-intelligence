@@ -153,6 +153,23 @@ is forgotten. For `--source` that is a later upload this request suppressed, onc
 that showed it at the removed path have been rewritten: it is planned again while this machine
 still holds a record or the blob of it (:attr:`Inclusion.UNFINISHED`), with or without `--only-named`.
 
+A re-run also reads two records its first run left beside the list and the log (`v1-e30-t19`):
+
+* **The withdrawal record** (`withdrawals.jsonl`, `v1-e30-t16`). A first run that withdrew a shared
+  file deleted the records and rows that named the team's paths, and no record anywhere holds a
+  path, so the re-run cannot find them. What it needs from them is where each copy was taken from,
+  and the record says that by caselist (:attr:`PlannedSource.withdrawn_earlier_from`): that
+  caselist's aggregates are planned again, and its copy when no other holder there keeps it, as the
+  first run planned them. A `--source` re-run plans a withdrawn later upload again only for a copy
+  still in such a caselist, and never removes it whole on the record's account. A withdrawal an
+  earlier build made has no record, and nothing of it is planned again.
+* **The scopes beside the log** (`v1-e30-t15`): the manifests each earlier run of the request
+  rewrote, with the version of the rewrite (:attr:`RemovalPlan.earlier_rewrites`). The sweep takes
+  the noncurrent versions of each that are older than its rewrite
+  (:mod:`~debate_core.application.caselist.manifest_sweep`), and the dry run counts what the sweep
+  will delete (:attr:`RemovalPlan.superseded_versions`), so a plan with a version to sweep is never
+  "nothing to do".
+
 ## What it never puts in a log or an error
 
 The selector's school and team code. They appear in the plan (the operator's own terminal, which
@@ -165,7 +182,7 @@ import json
 import re
 import tempfile
 from collections.abc import Collection, Mapping, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, datetime
 from enum import StrEnum
 from pathlib import Path
@@ -182,6 +199,7 @@ from debate_core.application.caselist.inbox_purge import (
     read_inbox,
 )
 from debate_core.application.caselist.manifest import MANIFEST_DIRECTORY, read_manifest_file, render_rows
+from debate_core.application.caselist.manifest_sweep import swept_manifest_versions
 from debate_core.application.caselist.openev_manifest import (
     openev_release_name,
     row_upstream_identity,
@@ -210,7 +228,7 @@ from debate_core.application.caselist.removal_path_versions import (
     path_identity,
     snapshot_date,
 )
-from debate_core.application.caselist.suppression import read_path_holds
+from debate_core.application.caselist.suppression import read_path_holds, read_withdrawals
 from debate_core.application.errors import DomainError, StoreAccessDenied
 from debate_core.application.ports.caselist import CaselistRepository
 from debate_core.application.ports.caselist_source import openev_id_of_inbox_name
@@ -221,8 +239,10 @@ from debate_core.application.ports.providers import Clock
 from debate_core.application.ports.suppression import (
     REMOVAL_REASONS,
     REQUEST_ID_PATTERN,
+    ManifestRewriteRecord,
     PathHoldEntry,
     ReasonCode,
+    RemovalScopeLog,
     RemovalSelectorKind,
     SuppressionAction,
     SuppressionEntry,
@@ -456,6 +476,11 @@ class PlannedSource:
     already_suppressed: bool = False
     """The list already carries this removal's suppression of it: a re-run finishing the job."""
     inclusion: Inclusion = Inclusion.NAMED
+    withdrawn_earlier_from: tuple[str, ...] = ()
+    """For a file withdrawn, the caselists an earlier run of this request withdrew it from, as the
+    withdrawal record says (`v1-e30-t19`). Its first run deleted the records and rows that named the
+    paths, so a re-run finds none of them; this is what still says where the copies were taken
+    from, and the re-run plans those caselists' copies and aggregates again as the first run did."""
 
     @property
     def shared(self) -> bool:
@@ -526,6 +551,15 @@ class RemovalPlan:
     """The path entries this removal appends: one for each caselist path a `--source` removal takes
     a file from whole (`v1-e30-t13`). None with `--only-named`, none for a file withdrawn or
     skipped, and none that is already in force."""
+    earlier_rewrites: tuple[ManifestRewriteRecord, ...] = ()
+    """Each manifest an earlier run of this request rewrote in the bucket, with the version its
+    rewrite is, from the scopes beside the removal log (`v1-e30-t15`). The sweep takes the versions
+    of each key older than its rewrite (`v1-e30-t19`; :mod:`~debate_core.application.caselist.
+    manifest_sweep`)."""
+    superseded_versions: tuple[ObjectVersion, ...] | None = ()
+    """The noncurrent manifest versions the execution's sweep would delete, as the dry run's
+    credential lists and reads them (`v1-e30-t19`); `None` where it may not, so they were not
+    counted. The execution works them out again with the takedown credential."""
 
     def of(self, disposition: Disposition) -> tuple[PlannedSource, ...]:
         return tuple(source for source in self.sources if source.disposition is disposition)
@@ -628,6 +662,7 @@ class RemovalPlan:
                 continue
             touched.update(ref.caselist for ref in source.disclosures)
             touched.update(caselist for caselist, _ in source.requester_paths)
+            touched.update(source.withdrawn_earlier_from)
             if source.camp_files:
                 touched.add(OPENEV)
         return tuple(sorted(touched))
@@ -642,7 +677,50 @@ class RemovalPlan:
             and not self.path_holds
             and not any(source.local_blob for source in self.sources)
             and not self.inbox
+            and self.superseded_versions == ()
         )
+
+    async def swept_from(self, versions: EvidenceVersionStore) -> tuple[ObjectVersion, ...]:
+        """The noncurrent manifest versions this plan's sweep deletes, as `versions` lists them.
+
+        The dry run asks with the everyday credential, the execution with the takedown's: see
+        :mod:`~debate_core.application.caselist.manifest_sweep`. Lists and reads only.
+        """
+        return await swept_manifest_versions(
+            versions,
+            caselists=self.affected_caselists,
+            rewritten_now={rewrite.key for rewrite in self.manifests_on(Side.BUCKET)},
+            earlier_rewrites=self.earlier_rewrites,
+            names_removed=self.names_removed,
+        )
+
+    def names_removed(self, caselist: str, line: str, key: ObjectKey) -> bool:
+        """Whether one manifest line names something this removal took out: what the sweep looks for.
+
+        `key` is the manifest's: a camp release's rows are asked about at their camp path in the
+        release the key names (`v1-e30-t14`), as a caselist's are at their caselist path.
+        """
+        try:
+            row: object = json.loads(line)
+        except json.JSONDecodeError:
+            return False
+        if not isinstance(row, dict) or row.get("kind") != "member":  # pyright: ignore[reportUnknownMemberType]
+            return False
+        fields: dict[str, object] = row  # pyright: ignore[reportUnknownVariableType]
+        path, digest = fields.get("path"), fields.get("sha256")
+        if (
+            isinstance(self.selector, TeamSelector)
+            and isinstance(path, str)
+            and self.selector.holds(caselist, path)
+        ):
+            return True
+        if isinstance(digest, str):
+            release = key.rsplit("/", 1)[-1].removesuffix(".jsonl")
+            scope = camp_path_scope(release) if caselist == OPENEV else caselist
+            return self.suppression_after.suppresses(
+                digest, disclosure=disclosure_digest(scope, path) if isinstance(path, str) else None
+            )
+        return False
 
 
 # ------------------------------------------------------------------------------------------------
@@ -732,7 +810,11 @@ class RemovalPlanner:
             gives it; a denial means "not counted", not failure.
         inbox: The sync's download inbox in this environment. Required, with no default, so that no
             removal can be built that forgets it.
-        suppression: The suppression list (local and bucket copies).
+        suppression: The suppression list (local and bucket copies), with the withdrawal record
+            beside it, which a re-run reads for the caselists a copy was withdrawn from (`v1-e30-t19`).
+        removal_log: The removal log, both copies, for the scopes beside it: the manifests earlier
+            runs of the same request rewrote, which the sweep holds their older versions to
+            (`v1-e30-t19`). Required, with no default, like the inbox.
         clock: The time entries are recorded at.
         environment: `dev` or `prod`, for the plan and the log.
         bucket: The bucket's name, for the plan.
@@ -749,6 +831,7 @@ class RemovalPlanner:
         remote_versions: EvidenceVersionStore,
         inbox: CaselistInbox,
         suppression: SuppressionList,
+        removal_log: RemovalScopeLog,
         clock: Clock,
         environment: str,
         bucket: str,
@@ -761,6 +844,7 @@ class RemovalPlanner:
         self._remote_versions = remote_versions
         self._inbox = inbox
         self._suppression = suppression
+        self._removal_log = removal_log
         self._clock = clock
         self._environment = environment
         self._bucket = bucket
@@ -789,6 +873,9 @@ class RemovalPlanner:
         existing = await self._suppression.entries()
         existing_holds = await read_path_holds(self._suppression)
         state = SuppressionState.from_entries(existing, existing_holds)
+        # Where this request's earlier runs withdrew a copy from, and what they rewrote (v1-e30-t19).
+        recorded = _withdrawn_by_the_request(await read_withdrawals(self._suppression), request_id)
+        earlier_rewrites = await self._earlier_rewrites(request_id)
         caselists = await self._known_caselists()
         copies = [copy for caselist in caselists for copy in await self._manifest_copies(caselist)]
 
@@ -843,6 +930,7 @@ class RemovalPlanner:
                 )
 
         # A re-run after a partial failure: whatever this request already suppressed is still its.
+        index = _BucketIndex(self._remote, self._remote_versions)
         unfinished: list[PlannedSource] = []
         planned = selected | {source.sha256 for source in added}
         for digest in sorted(_suppressed_by(state, request_id) - planned):
@@ -870,9 +958,33 @@ class RemovalPlanner:
                         request_id=request_id,
                         reason=reason,
                         recorded_at=recorded_at,
+                        withdrawn_earlier_from=recorded.get(digest, ()),
                     )
                 )
-        sources = [*sorted([*named, *unfinished], key=lambda source: source.sha256), *added]
+            elif digest in recorded:
+                # Withdrawn by an earlier run, with nothing of it left on this machine: planned again
+                # only to take a copy still in a caselist that keeps no holder of it (v1-e30-t19),
+                # and never removed whole on the record's account.
+                again = await self._plan_other_source(
+                    digest,
+                    [],
+                    holdings,
+                    Inclusion.UNFINISHED,
+                    state=state,
+                    request_id=request_id,
+                    reason=reason,
+                    recorded_at=recorded_at,
+                    withdrawn_earlier_from=recorded[digest],
+                )
+                unkept = sorted(set(recorded[digest]) - set(again.kept_in))
+                if again.disposition is Disposition.WITHDRAW and await _left_in_the_bucket(
+                    digest, unkept, index
+                ):
+                    unfinished.append(again)
+        sources = [
+            _with_its_recorded_withdrawals(source, recorded)
+            for source in [*sorted([*named, *unfinished], key=lambda source: source.sha256), *added]
+        ]
 
         after = SuppressionState.from_entries(
             [*existing, *(entry for source in sources for entry in source.suppression)],
@@ -885,7 +997,6 @@ class RemovalPlanner:
             if source.disposition is Disposition.WITHDRAW
             for caselist, path in source.requester_paths
         }
-        index = _BucketIndex(self._remote, self._remote_versions)
         rewrites = await self._manifest_rewrites(copies, selector, removed, withdrawn, after, index)
         objects, counted = await self._objects(sources, caselists, copies, index)
         inbox, team_files_left = plan_inbox(
@@ -900,7 +1011,7 @@ class RemovalPlanner:
             files=inbox_files,
             withdrawn_camp_documents=_withdrawn_camp_documents(sources),
         )
-        return RemovalPlan(
+        plan = RemovalPlan(
             selector=selector,
             request_id=request_id,
             reason=reason,
@@ -923,7 +1034,31 @@ class RemovalPlanner:
             later_uploads=later,
             earlier_versions=tuple(one for one in versions if one.relation is not VersionRelation.LATER),
             path_holds=path_holds,
+            earlier_rewrites=earlier_rewrites,
         )
+        return replace(plan, superseded_versions=await self._swept(plan))
+
+    async def _earlier_rewrites(self, request_id: str) -> tuple[ManifestRewriteRecord, ...]:
+        """The manifests this request's earlier runs in this environment rewrote, from their scopes.
+
+        Every run's, completed or stopped: a scope records a rewrite only once its purge is done.
+        Another request's, or another environment's, are not this request's to sweep.
+        """
+        found = {
+            rewrite: None
+            for scope in await self._removal_log.scopes()
+            if scope.request_id == request_id and scope.environment == self._environment
+            for rewrite in scope.manifest_rewrites
+        }
+        return tuple(found)
+
+    async def _swept(self, plan: RemovalPlan) -> tuple[ObjectVersion, ...] | None:
+        """What the execution's sweep would delete, as the everyday credential sees it; `None` where
+        it may not list or read noncurrent manifest versions, so they are not counted."""
+        try:
+            return await plan.swept_from(self._remote_versions)
+        except StoreAccessDenied:
+            return None
 
     # --------------------------------------------------------------------------------------
     # Reading
@@ -1198,6 +1333,7 @@ class RemovalPlanner:
         request_id: str,
         reason: ReasonCode,
         recorded_at: datetime,
+        withdrawn_earlier_from: tuple[str, ...] = (),
     ) -> PlannedSource:
         """Plan a file the selector does not name: a later upload, or one a stopped run left.
 
@@ -1206,6 +1342,10 @@ class RemovalPlanner:
         the bytes stay for that path and only the taken paths' rows and records go; with none, the
         file goes everywhere, exactly as a named file does. `--include-shared` plays no part: it
         is the operator's decision about the files the request names.
+
+        `withdrawn_earlier_from` is where the withdrawal record says an earlier run of this request
+        withdrew the file from (`v1-e30-t19`): a copy there that is still in the bucket is withdrawn
+        again, though no row or record shows its path any more.
         """
         source = await self._caselists.find_source(digest)
         disclosures = [
@@ -1255,7 +1395,7 @@ class RemovalPlanner:
 
         if (state.suppresses_source(digest) and finishing) or not shared:
             disposition = Disposition.REMOVE
-        elif taken or orphaned:
+        elif taken or orphaned or withdrawn_earlier_from:
             disposition = Disposition.WITHDRAW
         else:
             # Another holder has it, and nothing here says which path of it to take.
@@ -1397,13 +1537,20 @@ class RemovalPlanner:
                 # Withdrawn: a caselist's own copy goes only when no other team there still holds it,
                 # by this machine's records or by any manifest on either side. A camp path's release
                 # year's copy goes only when no other release of that year holds it (v1-e30-t14).
-                parsed_caselists = sorted({name for name, _ in source.requester_paths} - set(source.kept_in))
+                # A re-run also takes the caselists the withdrawal record names, whose paths the
+                # first run's deletions left nothing to show (v1-e30-t19).
+                withdrawn_from = {name for name, _ in source.requester_paths} | set(
+                    source.withdrawn_earlier_from
+                )
+                parsed_caselists = sorted(withdrawn_from - set(source.kept_in))
                 raw_prefixes = [
                     f"{CASELIST_SOURCE_PREFIX}/{name}/" for name in parsed_caselists if name != OPENEV
                 ]
-                raw_prefixes += [
-                    f"{OPENEV_SOURCE_PREFIX}/{year}/" for year in _camp_years_withdrawn(source, copies)
-                ]
+                years = set(_camp_years_withdrawn(source, copies))
+                if OPENEV in source.withdrawn_earlier_from and OPENEV not in source.kept_in:
+                    # No release holds it any more, so no year's copy is any release's.
+                    years |= set(openev_years)
+                raw_prefixes += [f"{OPENEV_SOURCE_PREFIX}/{year}/" for year in sorted(years)]
 
             for prefix in raw_prefixes:
                 key = f"{prefix}{local_blob_key(digest)}"
@@ -1445,7 +1592,11 @@ class RemovalPlanner:
                 )
             # Every caselist with a row derived from this source or one of the withdrawn disclosures,
             # including one where another team keeps the file: its occurrence rows still go.
-            touched = {*parsed_caselists, *(name for name, _ in source.requester_paths)}
+            touched = {
+                *parsed_caselists,
+                *(name for name, _ in source.requester_paths),
+                *source.withdrawn_earlier_from,
+            }
             for caselist in sorted(touched):
                 prefix = f"parsed/{caselist}/"
                 listed = await index.versions(prefix)
@@ -1881,6 +2032,52 @@ def _suppressed_by(state: SuppressionState, request_id: str) -> set[str]:
         for digest, latest in state.latest.items()
         if latest.action is SuppressionAction.SUPPRESS and latest.request_id == request_id
     }
+
+
+def _withdrawn_by_the_request(
+    withdrawals: Sequence[WithdrawalEntry], request_id: str
+) -> dict[str, tuple[str, ...]]:
+    """For each file this request withdrew a copy of, the caselists it withdrew them from (`v1-e30-t19`).
+
+    From the withdrawal record (`v1-e30-t16`), which a removal appends just before the suppression
+    entries it attributes, so every copy a build since then withdrew is in it. This request's
+    alone: another request's withdrawal of the same file reached another caselist, not this one's.
+    An earlier build's withdrawal is not in it, and that file has no caselist here. Whether the list
+    still suppresses one is not asked: a caselist here only joins a file this plan withdraws again
+    under the same request, which reached it either way.
+    """
+    found: dict[str, set[str]] = {}
+    for one in withdrawals:
+        if one.request_id == request_id:
+            found.setdefault(one.sha256, set()).add(one.caselist)
+    return {digest: tuple(sorted(caselists)) for digest, caselists in found.items()}
+
+
+def _with_its_recorded_withdrawals(
+    source: PlannedSource, recorded: Mapping[str, tuple[str, ...]]
+) -> PlannedSource:
+    """A withdrawn file, with the caselists the request's earlier runs withdrew it from (`v1-e30-t19`)."""
+    if source.disposition is not Disposition.WITHDRAW or source.sha256 not in recorded:
+        return source
+    return replace(source, withdrawn_earlier_from=recorded[source.sha256])
+
+
+async def _left_in_the_bucket(digest: str, caselists: Sequence[str], index: _BucketIndex) -> bool:
+    """Whether any version of `digest`'s copy, or of a parsed file of it, is in a caselist it was
+    withdrawn from (`v1-e30-t19`): what a `--source` re-run plans a withdrawn later upload again for.
+
+    A listing this credential may not make is read as maybe: the plan then includes the file, and
+    says its versions were not counted.
+    """
+    for caselist in caselists:
+        source_prefix = (
+            f"{OPENEV_SOURCE_PREFIX}/" if caselist == OPENEV else f"{CASELIST_SOURCE_PREFIX}/{caselist}/"
+        )
+        for prefix in (source_prefix, f"parsed/{caselist}/"):
+            listed = await index.versions(prefix)
+            if listed is None or any(_names_digest(key, digest) for key in listed):
+                return True
+    return False
 
 
 def _affected_caselists(sources: Sequence[PlannedSource], caselists: Sequence[str]) -> tuple[str, ...]:

@@ -74,6 +74,7 @@ from debate_core.application.ports.suppression import (
     SuppressionState,
     UnreadableAppendOnlyRecord,
     WithdrawalEntry,
+    WithdrawalList,
 )
 
 __all__ = [
@@ -90,6 +91,7 @@ __all__ = [
     "is_suppression_key",
     "load_suppression_state",
     "read_path_holds",
+    "read_withdrawals",
 ]
 
 logger = logging.getLogger(__name__)
@@ -120,6 +122,11 @@ async def load_suppression_state(suppression: SuppressionList) -> SuppressionSta
 async def read_path_holds(suppression: SuppressionList) -> tuple[PathHoldEntry, ...]:
     """Every path-hold entry `suppression` keeps, lifted or not. None for a list that keeps none."""
     return await suppression.path_holds() if isinstance(suppression, PathHoldList) else ()
+
+
+async def read_withdrawals(suppression: SuppressionList) -> tuple[WithdrawalEntry, ...]:
+    """Every withdrawal entry beside `suppression`'s copies (`v1-e30-t16`); none for a list keeping none."""
+    return await suppression.withdrawals() if isinstance(suppression, WithdrawalList) else ()
 
 
 def caselist_withdrawn_from(entry: SuppressionEntry, withdrawals: Sequence[WithdrawalEntry]) -> str | None:

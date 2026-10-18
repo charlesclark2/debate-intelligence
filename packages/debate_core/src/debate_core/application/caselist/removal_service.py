@@ -40,8 +40,11 @@ own (`v1-e29-t09`); `docs/runbooks/caselist-removal.md` says when one is still r
    so no suppressed disclosure is on a copy without its caselist beside it.
 2. **The bucket**: every version of every `raw/` and `parsed/` object, listed again with the
    takedown credential so nothing the dry run could not see is missed; then each rewritten
-   manifest, written and every superseded version of it purged; then every noncurrent version of
-   any other manifest of the same caselists that still names what was removed.
+   manifest, written and every superseded version of it purged; then the sweep
+   (:mod:`~debate_core.application.caselist.manifest_sweep`): every noncurrent version of any other
+   manifest of the same caselists that still names what was removed, and of each manifest an
+   earlier run of the same request rewrote, every version older than that rewrite (`v1-e30-t19`).
+   The dry run counted the same sweep with the everyday credential.
 3. **This machine**: blobs and parsed files, then manifests, then the sync's download inbox
    (`v1-e30-t09`: removed camp files and imported archives deleted, archives still waiting to be
    imported rewritten without the removed files; see
@@ -65,7 +68,6 @@ which IAM would refuse anyway.
 
 from __future__ import annotations
 
-import json
 import re
 import tempfile
 import uuid
@@ -76,7 +78,6 @@ from typing import Final
 
 from debate_core.application.caselist.evidence_listing import LocalEvidence
 from debate_core.application.caselist.inbox_purge import CaselistInbox, InboxPurge, purge_inbox
-from debate_core.application.caselist.publish_plan import OPENEV
 from debate_core.application.caselist.publish_service import error_code_of
 from debate_core.application.caselist.removal_plan import (
     Disposition,
@@ -87,7 +88,6 @@ from debate_core.application.caselist.removal_plan import (
     RemovalPlanner,
     RemovalSelector,
     Side,
-    TeamSelector,
 )
 from debate_core.application.caselist.suppression import (
     REMOVAL_LOG_KEY,
@@ -125,9 +125,6 @@ from debate_core.application.ports.suppression import (
     SuppressionAction,
     SuppressionEntry,
     SuppressionList,
-    SuppressionState,
-    camp_path_scope,
-    disclosure_digest,
 )
 from debate_core.domain import SHA256_HEX_PATTERN
 
@@ -715,29 +712,17 @@ class CaselistRemovalService:
     async def _sweep_superseded_manifests(
         self, plan: RemovalPlan, access: TakedownAccess, counts: _Counts
     ) -> None:
-        """Noncurrent versions of the affected caselists' other manifests that still name what was removed.
+        """The sweep, as the takedown credential lists and reads the versions now.
 
-        The current version of each was checked by the plan; an earlier one may hold a row the
-        current one no longer does — a manifest re-published after a re-import, say — and a
-        restorable version of a removed row is the row not removed.
+        The current version of each manifest was checked by the plan; an earlier one may hold a row
+        the current one no longer does — a manifest re-published after a re-import, say — and a
+        restorable version of a removed row is the row not removed. A version of a key an earlier
+        run of this request rewrote, older than that rewrite, is one its purge should have taken.
         """
-        rewritten = {rewrite.key for rewrite in plan.manifests_on(Side.BUCKET)}
-        for caselist in plan.affected_caselists:
-            for version in await access.versions.list_versions(f"manifests/{caselist}/"):
-                if version.is_latest or version.is_delete_marker or version.key in rewritten:
-                    continue
-                if await self._version_names_removed(plan, access, caselist, version):
-                    refuse_protected_versions([version])
-                    counts.s3_versions_deleted += await access.versions.delete_versions([version])
-
-    async def _version_names_removed(
-        self, plan: RemovalPlan, access: TakedownAccess, caselist: str, version: ObjectVersion
-    ) -> bool:
-        with tempfile.TemporaryDirectory(prefix="debate-removal-") as directory:
-            staged = Path(directory) / "version.jsonl"
-            await access.versions.get_version_file(version, staged)
-            lines = staged.read_text(encoding="utf-8").splitlines()
-        return any(_names_removed(plan, caselist, line, key=version.key) for line in lines if line.strip())
+        swept = await plan.swept_from(access.versions)
+        refuse_protected_versions(swept)
+        if swept:
+            counts.s3_versions_deleted += await access.versions.delete_versions(swept)
 
     async def _delete_local_files(self, plan: RemovalPlan, counts: _Counts) -> None:
         for planned in plan.objects_on(Side.LOCAL):
@@ -917,33 +902,3 @@ async def _copies_holding(
             present = False
         (holding if present else missing).append(record.location)
     return tuple(holding), tuple(missing)
-
-
-def _names_removed(plan: RemovalPlan, caselist: str, line: str, *, key: str) -> bool:
-    """Whether one manifest line names something this removal took out: what the sweep looks for.
-
-    `key` is the manifest's: a camp release's rows are asked about at their camp path in the release
-    the key names (`v1-e30-t14`), as a caselist's are at their caselist path.
-    """
-    try:
-        row: object = json.loads(line)
-    except json.JSONDecodeError:
-        return False
-    if not isinstance(row, dict) or row.get("kind") != "member":  # pyright: ignore[reportUnknownMemberType]
-        return False
-    fields: dict[str, object] = row  # pyright: ignore[reportUnknownVariableType]
-    path, digest = fields.get("path"), fields.get("sha256")
-    if (
-        isinstance(plan.selector, TeamSelector)
-        and isinstance(path, str)
-        and plan.selector.holds(caselist, path)
-    ):
-        return True
-    if isinstance(digest, str):
-        release = key.rsplit("/", 1)[-1].removesuffix(".jsonl")
-        scope = camp_path_scope(release) if caselist == OPENEV else caselist
-        after: SuppressionState = plan.suppression_after
-        return after.suppresses(
-            digest, disclosure=disclosure_digest(scope, path) if isinstance(path, str) else None
-        )
-    return False

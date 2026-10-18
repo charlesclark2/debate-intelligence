@@ -1037,12 +1037,23 @@ def test_versions_older_than_a_removal_are_cleared_by_running_it_again_under_the
     assert clean["data"]["removal_residue"] == [NOTHING_LEFT]
 
 
-def test_an_old_manifest_version_alone_is_cleared_by_executing_a_plan_that_says_nothing_is_left(
+def test_an_old_manifest_version_alone_is_counted_by_the_dry_run_and_cleared_by_its_execution(
     installation: Path, bucket: S3Client, an_old_manifest_version: str
 ) -> None:
-    """The plan reads current manifests only, so it finds nothing to do; the sweep runs at execution."""
+    """The sweep the execution will make is planned too (`v1-e30-t19`): the dry run counts the one
+    version, prints the command to carry it out, and never says nothing is left. Until then it read
+    current manifests only and said *Nothing is left to remove*, and the runbook said to execute
+    anyway."""
     assert run("caselist", "status")["error"]["code"] == "REMOVAL_RESIDUE"
-    assert "Nothing is left to remove" in invoke(*REMOVE_FIRST_VERSION).stdout
+    planned = invoke(*REMOVE_FIRST_VERSION, width=200).stdout
+    assert "Nothing is left to remove" not in planned
+    lines = planned.splitlines()
+    assert (
+        "MANIFEST VERSIONS SWEPT from the bucket by --execute: 1 noncurrent version(s) of 1 manifest(s)."
+        in lines
+    )
+    assert f"  bucket {an_old_manifest_version}  (1 version(s))" in lines
+    assert "TO CARRY IT OUT" in lines
 
     environment(DEBATE_REMOVAL_PROFILE=REMOVAL_PROFILE)
     done = run(*REMOVE_FIRST_VERSION, "--execute")

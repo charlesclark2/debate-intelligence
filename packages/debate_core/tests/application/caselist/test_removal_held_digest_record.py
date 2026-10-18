@@ -38,9 +38,9 @@ from debate_core.integrations.local import FsEvidenceObjectStore
 from debate_core.integrations.local.suppression_list import local_suppression_list_file
 from debate_core.testing.fakes import InMemoryAppendOnlyRecord
 
-from .test_suppression_path_holds import (  # pyright: ignore[reportPrivateUsage]
+from .test_suppression_path_holds import (
     REMOVED_AT,
-    _BucketNeedingALogin,
+    _BucketNeedingALogin,  # pyright: ignore[reportPrivateUsage]
 )
 
 pytestmark = pytest.mark.anyio

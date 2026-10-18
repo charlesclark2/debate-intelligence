@@ -671,7 +671,8 @@ def explain_divided_part(
     `part` and `rest` are the exact fingerprints of two sides of an earlier cluster. `findings` and
     `with_a_copy` are the two lists of :func:`diagnose_cuts` over the later placement, by
     fingerprint. A cut, short or long, whose containers are on the other side explains the
-    division: the part holds it, or was joined to the rest only through it. The findings are looked
+    division: the part holds it, or was joined to the rest only through it. The smallest such cut
+    is the one named. The findings are looked
     through first, then the cuts set aside because a copy in their own cluster accounts for the
     bodies outside it. Failing those, `are_copies` says whether a text of the part and one of the
     rest are one text by the copies' rule, which are kept apart only when joining them would put
@@ -682,7 +683,8 @@ def explain_divided_part(
             (DividedPart.LEFT_OUT, part, rest),
             (DividedPart.THROUGH_A_CUT, rest, part),
         ):
-            for cut in sorted(cuts):
+            # The smallest first, then by fingerprint: the innermost cut, whatever its digest.
+            for cut in sorted(cuts, key=lambda body: (known[body].shingles if body in known else 0, body)):
                 finding = known.get(cut)
                 if finding is not None and finding.containers & others:
                     return DividedPart(

@@ -472,8 +472,8 @@ def test_the_share_bands_end_at_the_minimum_cut_share() -> None:
 
 def test_a_divided_part_is_explained_by_the_cut_that_used_to_join_it() -> None:
     """An earlier cluster of all three nested bodies, now three clusters. The cut's part left
-    because the cut was left out. The whole card's part was joined to the rest only through a cut:
-    the long copy, first by fingerprint, which is under a quarter of the card."""
+    because the cut was left out; the whole card's part was joined to the rest only through it, the
+    smallest of the two cuts in the rest (the long copy, under a quarter of the card, is the other)."""
     findings = diagnosed(NESTED)
     left_out = explain_divided_part({"cut"}, {"whole", "copy"}, findings)
     assert left_out.kind == DividedPart.LEFT_OUT
@@ -484,7 +484,12 @@ def test_a_divided_part_is_explained_by_the_cut_that_used_to_join_it() -> None:
     )
 
     through = explain_divided_part({"whole"}, {"copy", "cut"}, findings)
-    assert (through.kind, through.outcome) == (DividedPart.THROUGH_A_CUT, CutOutcome.UNDER_MIN_CUT_SHARE)
+    assert (through.kind, through.outcome) == (DividedPart.THROUGH_A_CUT, CutOutcome.WITHIN_THE_RULE)
+    by_the_copy = explain_divided_part({"whole"}, {"copy"}, findings)
+    assert (by_the_copy.kind, by_the_copy.outcome) == (
+        DividedPart.THROUGH_A_CUT,
+        CutOutcome.UNDER_MIN_CUT_SHARE,
+    )
 
 
 def test_a_divided_part_no_cut_links_is_explained_by_a_copy_or_not_at_all() -> None:

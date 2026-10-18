@@ -6,7 +6,7 @@
 | Spec | [`plan_specs/v1/e31-debate-file-parsing/t20-long-cuts-and-limits.yaml`](../../plan_specs/v1/e31-debate-file-parsing/t20-long-cuts-and-limits.yaml) |
 | Epic / release | `v1-e31-debate-file-parsing` / `v1.1` |
 | Branch | `task/v1-e31-t20-long-cuts-and-limits` |
-| Session status | PARTIAL: the rules (`card-fingerprint-v4`), the diagnosis, the preview and the sampler option are built, tested red first, and mutated 39 of 39. Every measurement is the operator's and NOT RUN. One finding needs a PM ruling before merge: the ruling costs two hand-labelled cards their trim pairs, and with them t08's 0.90 recall target on two rows |
+| Session status | PARTIAL: the rules (`card-fingerprint-v4`), the diagnosis, the preview, the sampler option and the stock-phrase count are built, tested red first, and mutated 53 of 53. The PM's ruling of 2026-10-18 on the labelled sets is built: t08's two targets amended, the loss pinned to two cards by row id. Every measurement is the operator's and NOT RUN |
 
 ## Summary
 
@@ -23,15 +23,15 @@ ac1, ac2, ac3, ac5 and ac6 from this worktree before the merge, writing nothing 
 
 **Read these first:**
 
-1. **The ruling and t08's labelled set disagree on two cards, and no design satisfies both.** In
-   each, a trimmed-start and a trimmed-end copy share no text. One of them, Brannock's (t06's rows),
-   is word for word t11's false join at a smaller size: the original is the trimmed end followed by
-   the trimmed start. The labels call all of each card's copies one card, and the ruling says the
-   two trims are two passages, joined through nothing. Precision stays 1.000 everywhere. Recall
-   falls on exactly those two cards' pairs, and the t08 target of 0.90 on "full short cards" fails
-   on two rows: 19/24 and 23/37. Those two checks are strict xfails naming the pending ruling. The
-   relay prompt for the PM is at the end of this summary. See
-   [Labelled sets, before and after](#labelled-sets-before-and-after).
+1. **The ruling stands against two hand-labelled cards (the PM, 2026-10-18).** In each, a
+   trimmed-start and a trimmed-end copy share no text; Brannock's (t06's rows) is word for word
+   t11's false join at a smaller size. The labels stay as the coach wrote them, so the lost pairs
+   show as misses. t08's ac1 targets for "full short cards" are now the measured 19/24 (0.792) and
+   23/37 (0.622), with the ruling as the reason. The guardrail the PM asked for is two tests: the
+   pairs lost since t08 are exactly these two cards', pinned by row id, and recall over every other
+   labelled card is what t08 left. A pair lost anywhere else fails them, whatever the figures.
+   Recovering these pairs needs evidence beyond the bodies, which the parse report records as out
+   of scope. See [Labelled sets, before and after](#labelled-sets-before-and-after).
 2. **ac5 is 0% by construction, and that is a claim for the operator's preview to confirm.** Every
    join checks that the joiner shares at least one five-word run with every body already in its
    target. On an invented article cut at 600 extents, v3 put 584 of them in one cluster with
@@ -41,57 +41,56 @@ ac1, ac2, ac3, ac5 and ac6 from this worktree before the merge, writing nothing 
    ruling ("two passages of one article are two cards"), but it will show in `counts` as divided
    clusters, and the PM should expect many. The join sample (ac1) and the divided-pairs diagnosis
    (step 7) are what to read.
-4. **Two places where I chose and the PM may rule otherwise:** two joiners that share nothing are
-   both refused rather than one winning by order (Decision 3), and a long cut nine-tenths inside a
-   body lacking one of its ends still joins it, as the banding used to (Decision 4). Short ones wait
-   for item (4)'s sample.
+4. **The PM agreed the three choices on 2026-10-18.** Two joiners that share nothing are both
+   refused (Decision 3). A long cut nine-tenths inside a body lacking one of its ends joins it
+   (Decision 4), on the PM's condition that the container rule still applies; it does, and a new
+   test pins it, the only test that catches a mutant exempting such a cut. "Shares no text" is no
+   five-word run in common (Decision 2), and `shapes` now counts the pairs in one cluster sharing
+   only one or two runs, so the PM can decide from the number whether stock phrases bridge cards.
+   None on the labelled sets; the store's figure is steps 3 and 13.
 5. **An installed agent rewrites the table as `v3`.** Every build reads a `v4` table, since no code
    compares the version. But every parse stage rebuilds the table under the running build's version,
    so `v1.1.0-dev.18` would put `v3` back on its next run. Reinstall the agent on the first
    pre-release carrying this task before the dev rebuild (step 9).
 
 **The Goal stays `InProgress`.** ac1's sample, ac2's figures, ac3's sample, ac4's re-cluster, ac5's
-shapes and ac6's sample all need the operator's store. Merge with `scripts/task pr --partial` once
-the PM has ruled on item 1.
+shapes and ac6's sample all need the operator's store. Nothing is waiting on a ruling now: the next
+thing is the operator's preview, steps 1 to 8, then the limits set by test before the merge.
+
+**The PM's ruling of 2026-10-18**, on the question this report put (the trims of two labelled
+cards, and three choices to confirm):
+
+* **1(a): the ruling stands.** The two text-disjoint trims of each card are two passages; precision
+  at 1.000 matters more than these pairs. `short_cards.jsonl` is unchanged. t08's ac1 for the two
+  "full short cards" rows is amended to 0.792 and 0.622, naming the two cards. Guardrail: a test
+  pins the lost pairs to these two cards by card id, and recall over every other card is unchanged.
+  The parse report records that recovering them needs evidence beyond the bodies; the PM will
+  consider that as a separate task.
+* **2: all three go ahead.** Symmetric refusal, agreed. The long near-containment join, agreed, on
+  condition that the container rule still applies, confirmed in the report. "Shares no text" as no
+  common five-word run, agreed, with one count added to the report: joined cluster pairs sharing
+  only one or two runs. No change to behaviour from it now.
+
+All of it is built (`cafab61`, `790a42b`, `7d7e73d`, `bff30f6`), red first and mutated.
 
 **For the PM** (paste-ready):
 
 ```text
-v1-e31-t20 needs one ruling before merge, and records three choices for you to confirm.
+v1-e31-t20: your 2026-10-18 ruling is built. Nothing is waiting on you until the operator's preview.
 
-1. The ruling against t08's labels (needs a ruling).
-   Two labelled cards in short_cards.jsonl have a trimmed-start and a trimmed-end copy that share no
-   five-word run. In Brannock's (t06's rows) the original is the trimmed-end copy followed by the
-   trimmed-start one, word for word: t11's false join at 29 words instead of 150. Under the ruling
-   the two trims are two passages; "never transitively" keeps them apart, and the bodies holding
-   both witness neither. Labels say one card.
-   Measured, before -> after (precision 1.000 throughout):
-     short-card set, full short cards: 24/0/0 -> 19/0/5 (t08 target 0.90, now 0.792)
-     extended set, full short cards: 35/0/2 -> 23/0/14 (target 0.90, now 0.622)
-     short-card set, abbreviated with a full copy: 44 -> 39; abbreviated pairs: 12 -> 11
-     every other row unchanged; every lost pair is one of these two cards'.
-   Options:
-     (a) The ruling stands: the two trims of each card are two cards. Record the new figures as
-         expected, and amend t08's ac1 target for the two "full short cards" rows to the measured
-         values, with the ruling as the reason. The two strict xfails become plain expectations.
-     (b) The labels stand: keep text-disjoint trims of one card in one cluster. No rule on the
-         bodies alone tells these two cards from t11's false join, so this undoes ac1's fixture
-         and the ruling's "never transitively".
-     (c) Relabel the two cards' trims as different cards. Their pairs with the full copies would
-         still be lost, because the full copy holding both trims witnesses neither.
-   Recommendation: (a). The labels predate the ruling, and Brannock's rows are the false join's
-   shape exactly. Keeping them one card means a coach-checked "different card" pair joins again.
-
-2. FYI, proceeding unless told otherwise:
-   - Two clusters that would both join a third, and share no text with each other, are both
-     refused (symmetric), not one by fingerprint order. That keeps "not a witness for joining any
-     of them" literal; it loses more recall than letting one win.
-   - A long cut nine-tenths inside a body that lacks one of its ends joins it, as v3's banding did
-     when it paired them. Short ones are still not compared until item (4)'s sample.
-   - "Shares no text" means no five-word run in common: the shape ac5 counts and the sampler
-     decides by rule. Two passages sharing a single run are not refused.
-
-Reply with 1(a), 1(b) or 1(c), and anything on 2 you want changed.
+1(a). t08's ac1 now reads 0.792 (19/24) and 0.622 (23/37) for full short cards, naming
+  brannock-ferry-fares and kessler-night-buses. short_cards.jsonl is unchanged. The strict xfails
+  are gone; two tests replace them. The pairs missed now must equal t08's 12 misses plus 18 pinned
+  pairs (11 Brannock, 7 Kessler), and recall over every other card must equal t08's. Red against
+  t08's code; five mutants caught, one of which keeps the totals but swaps a pinned pair for
+  another card's. The parse report says recovering these needs evidence beyond the bodies.
+2. The container rule holds for the long near-containment join: a body that also holds a passage
+  sharing nothing with the long copy is no witness for it. A new test pins it, and it is the only
+  test in the suite that catches a mutant exempting such cuts.
+  Stock phrases: shapes counts, per described cluster and with --every-cluster over every cluster,
+  the pairs in one cluster sharing exactly one and exactly two five-word runs. Labelled sets: none,
+  of 59, 15 and 18 pairs in one cluster on the variant, short-card and extended sets. The store's figure comes with the preview (step 3) and after the
+  rebuild (step 13).
 ```
 
 ## Plan nodes
@@ -106,7 +105,7 @@ Every command ran from the task worktree on 2026-10-18, against invented fixture
 
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
-| **ac1** — (1), (5) and (7) built on synthetic fixtures, shown failing first, including two disjoint bodies and a third holding both, which stay apart | PASS | The 13 tests of "Long cuts, and joins only on text two bodies share" in `test_near_duplicates.py`, committed red (`a295999`) against the v3 rules: `14 failed, 4 passed`. Now `uv run pytest packages/debate_core/tests/evidence/test_near_duplicates.py -n0` → `106 passed`. t11's false join stays `[[A], [B], [C]]` under all six orders of fingerprint. See [Shown failing first](#shown-failing-first) |
+| **ac1** — (1), (5) and (7) built on synthetic fixtures, shown failing first, including two disjoint bodies and a third holding both, which stay apart | PASS | The 13 tests of "Long cuts, and joins only on text two bodies share" in `test_near_duplicates.py`, committed red (`a295999`) against the v3 rules: `14 failed, 4 passed`. Now `uv run pytest packages/debate_core/tests/evidence/test_near_duplicates.py -n0` → `107 passed`. t11's false join stays `[[A], [B], [C]]` under all six orders of fingerprint. See [Shown failing first](#shown-failing-first) |
 | **ac1** — the operator's join sample of 20 newly joined pairs, through t21's sampler, has no pair the coach calls different | **NOT RUN** | Needs the store and a person. Operator follow-ups, step 4 (before the merge) and step 14 (after it, same seed) |
 | **ac2** — each limit set from the recorded samples, with the figures in the report, and re-measured after (1) | **NOT RUN** | The samples need the store. The tools are built: `--kept-apart-by` now tallies each pair by cut size and share band, and `diagnose --after` re-measures every limit on v4's placement. Steps 5 and 7. `MIN_CUT_SHARE` stays 0.25 and `MAX_CONTAINER_CLUSTERS` 8 until then; both are mutation-tested at their boundaries |
 | **ac3** — (4): the sample decides, and the rule follows it, by test | **NOT RUN** (the sample); the rule as it stands is pinned | `test_a_short_body_nine_tenths_inside_a_body_lacking_one_of_its_ends_stays_out` and `test_a_card_lacking_the_end_of_a_short_copy_does_not_hold_it_and_is_a_second_witness` pin today's rule. The mutant that lets short bodies be compared by one end is caught. Step 6 is the sample; if it says "copies", the change is that mutant, with these two tests turned round |
@@ -121,12 +120,12 @@ Every command ran from the task worktree on 2026-10-18, against invented fixture
 
 | Check | Result |
 |---|---|
-| Default suite, `uv run --frozen pytest -n auto -m "not slow and not live" --part K/4`, one command each, on the final tree | `2023 passed, 1 xfailed` (51 s); `2031 passed, 1 xfailed` (48 s); `2031 passed, 1 skipped, 1 xfailed, 2 warnings` (45 s); `2023 passed, 3 xfailed, 1 warning` (52 s): 8,108 passed. The skip is the parser eval waiting on corrections; two xfails are t12's; four are this task's pending-ruling xfails |
+| Default suite, `uv run --frozen pytest -n auto -m "not slow and not live" --part K/4`, one command each, on the final tree | `2027 passed` (61 s); `2033 passed, 1 xfailed` (54 s); `2034 passed, 1 skipped, 2 warnings` (50 s); `2027 passed, 1 xfailed, 1 warning` (65 s): 8,121 passed. The skip is the parser eval waiting on corrections; the two xfails are t12's. The four pending-ruling xfails are gone |
 | `uv run --frozen ruff check .`; `ruff format --check .` | `All checks passed!`; `785 files already formatted` |
 | `uv run --frozen pyright` (after the last format) | `0 errors, 0 warnings, 0 informations` |
 | `uv run --frozen lint-imports` | `Contracts: 12 kept, 0 broken.` |
 | `check_thin_handlers.py`, `check_links.py`, `docs_index.py --check-descriptions` | all OK |
-| Coverage of the changed modules, lines and branches | `cluster_diagnosis.py` 100%, `fingerprints.py` 100%, `near_duplicates.py` 99%: line 540 (`_Clusters.join` given one root twice, which no caller does) and 563 (`v1-e31-t04`'s empty-body exit in the banding loop) |
+| Coverage of the changed modules, lines and branches | `cluster_diagnosis.py` 100%, `fingerprints.py` 100%, `pair_shapes.py` 100%, `near_duplicates.py` 99%: line 540 (`_Clusters.join` given one root twice, which no caller does) and 563 (`v1-e31-t04`'s empty-body exit in the banding loop) |
 | `uv run scripts/validate_specs.py` | `OK: 366 files, 38 epics, 308 tasks, 20 releases` (the Goal left `InProgress`) |
 | `scripts/check_command_blocks.py --base origin/dev` | `OK: no # comments in 295 shell code blocks in 123 Markdown files` |
 
@@ -220,10 +219,24 @@ anything, so Kessler's own one-word copies lost the original too. The rule is no
 cut: a container is no witness for a cut when it holds another passage sharing nothing with that
 cut. A copy of the whole body shares text with both passages and is witnessed as before.
 
-**t08's target fails on two rows**: 0.90 on "full short cards", now 0.792 and 0.622. Every other
-target holds; "extended set, abbreviated with abbreviated" is exactly at its 0.75. The two checks
-are `xfail(strict=True)` with the reason `PASSAGE_RULING_PENDING`, as is t08's mechanism test that
-Kessler's trims join the original. Strict, so whichever way the PM rules, the suite says so.
+**The PM's ruling of 2026-10-18 keeps these figures.** t08's ac1 for the two "full short cards" rows
+is amended to 0.792 (19 of 24) and 0.622 (23 of 37), and `REQUIRED_RECALL` holds those exact
+fractions. Every other target holds; "extended set, abbreviated with abbreviated" is exactly at its
+0.75. The labels are unchanged.
+
+**The guardrail on the lower target**, in `test_short_card_recall.py`:
+
+* `test_the_passage_ruling_loses_only_two_cards_pairs`, on each of the three sets: the same-card
+  pairs placed apart are exactly `MISSED_BEFORE_THE_PASSAGE_RULING` (t08's 12 misses on the extended
+  set, from a run against t08's code, none on the other two) together with
+  `LOST_TO_THE_PASSAGE_RULING` (Brannock's 11 pairs, and on the extended set Kessler's 7), pinned by
+  row id. Every pinned lost pair's rows are labelled `brannock-ferry-fares` or `kessler-night-buses`.
+* `test_recall_over_every_other_card_is_as_t08_left_it`: with those two cards' rows left out, the
+  found and missed pairs are t08's.
+
+A pair lost anywhere else fails both, even when every row's total still matches. t08's mechanism
+test that Kessler's trims join the original is now the opposite expectation: each trim is a cluster
+of its own.
 
 ## Shown failing first
 
@@ -241,15 +254,19 @@ changed module's `__file__` to confirm it was the one imported.
 | The two round tests | v3; the commit before the fix | Both `[[0, 1, 2, 3, 4]]` on v3; the waiting cut `[[0, 1], [2], [3], [4]]` before the fix |
 | The diagnosis (`test_cluster_diagnosis.py`) | v3's diagnosis | `14 failed, 20 passed`: the new outcomes and the v4 readings |
 | The six new script tests | the start commit's script | `SystemExit: 2` for the four options it lacks, `TypeError` for `ask_shapes`, and no `within-the-rule` selector. A missing option proves little; the mutants are the evidence |
+| The guardrail and the passage mechanism test (after the PM's ruling) | t08's code, `git archive 47d454d` | `4 failed, 11 passed`: the pinned losses on the short-card and extended sets, and both k1 trims. The amended targets and the other cards' recall pass there, as they should: t08 found those pairs |
+| The container rule for a long body lacking an end | v3; and a mutant | On v3 the control fails first (`[[0], [1]] == [[0, 1]]`: v3 never pairs them). The rule itself is shown by the mutant exempting such a cut from the passage check: this test alone fails |
+| The stock-phrase count | the code before it | `ImportError` for `pairs_sharing_few_runs`, and `KeyError: 'pairs_sharing_only_few_runs'` from `shapes` |
 
 ## Mutation runs
 
-39 mutants, each one exact replacement that had to match exactly once, run one at a time against
-the seven test files that read matching (`348 passed, 4 xfailed` unmutated, 10 s). Each run had a
+48 mutants, each one exact replacement that had to match exactly once, run one at a time against
+the seven test files that read matching (`360 passed` unmutated, 10 s), and five more against the
+guardrail's tests alone. Each run had a
 new empty `HYPOTHESIS_STORAGE_DIRECTORY`, checked empty first; none of these tests is a Hypothesis
 property, so the isolation cannot affect them. The file was restored from saved bytes and compared,
-and `git status --porcelain` was checked after every batch. The final run, on the final code: **39
-of 39 caught.**
+and `git status --porcelain` was checked after every batch. The final runs, on the final code: **53
+of 53 caught.**
 
 | Group | Mutants (each caught) |
 |---|---|
@@ -263,6 +280,9 @@ of 39 caught.**
 | The version | not bumped (3) |
 | The diagnosis | no passage outcome (1); own cluster read as several (1); no unrelated-texts outcome (1); never "points elsewhere" (1); set-aside judged by its own copy (1); copies not holders (2); divided parts by first digest (3) |
 | The script | `--ask-shape` not shown (2); also counted by rule (2); tallied with the rest (2); `--after` ignored by one-placement commands (1); ignored when comparing (1); `--save-after` saves *before* (2); `--preview` ignored (2); kept-apart kind without its band (3); sizes swapped (1) |
+| The PM's condition on the long join | the passage check skipped for a long cut lacking an end (1: the new test, and no other) |
+| The stock-phrase count | `FEW_RUNS` 3 (2); zero runs counted, in the shapes (2) and in the function (1); every cluster counted as having such a pair (1); lone clusters counted (1); pairs miscounted (1); abbreviated cards read (1); `--every-cluster` ignored (1) |
+| The guardrail, its two tests alone | the one-word tolerance gone (6); the split-word change gone (6); abbreviation anchors needing four words (4); a pinned Kessler pair swapped for another card's, totals unchanged (1); one of t08's misses left out of the pins (2) |
 
 **What the earlier runs found**, each fixed before the final run:
 
@@ -298,25 +318,33 @@ of 39 caught.**
 **Tests**: `tests/evidence/test_near_duplicates.py` (a new section of 18 tests; t11's fixtures moved
 from a 330-word to a 400-word card so its copy stays under a quarter of it, and the long-cut test
 rewritten to the new rule); `test_cluster_diagnosis.py` (new outcomes; v4's readings);
-`test_short_card_recall.py` (the hand-worked table and the pending-ruling xfails);
+`test_short_card_recall.py` (the hand-worked table, the amended targets and the guardrail);
+`test_pair_shapes.py` (the stock-phrase count);
 `test_fingerprints.py` (one literal); `tests/application/test_caselist_card_stats.py` (one case
 through `place` moved to 400 words, one added at 330); `tests/scripts/test_compare_card_clusters.py`
 (v4's placements and seven new tests); `tests/smoke/test_caselist_cards.py` (one literal).
 
+**Matching, beside the rules**: `pair_shapes.py` (`FEW_RUNS`, `pairs_sharing_few_runs`, and the
+count in each cluster's shapes).
+
+**Spec**: `plan_specs/v1/e31-debate-file-parsing/t08-short-card-recall.yaml`, ac1's two targets, by
+the PM's ruling.
+
 **Operator tool**: `scripts/compare_card_clusters.py`: `counts --save-after`; `--after` on `counts`,
-`sample`, `diagnose` and `shapes`; `shapes --preview`; `sample --ask-shape`; `--kept-apart-by`
+`sample`, `diagnose` and `shapes`; `shapes --preview` and `--every-cluster`; `sample --ask-shape`; `--kept-apart-by`
 names v4's outcomes; kept-apart pairs tallied by cut size and share band; copies in the divided-pair
 explanation.
 
-**Docs**: `docs/data/caselist-parse-report.md` (the re-cluster section, not run);
+**Docs**: `docs/data/caselist-parse-report.md` (the re-cluster section, not run; the ruling's cost
+and what recovering it needs; the stock-phrase count);
 `docs/data/parsed-card-store.md` (the `v4` row, and which builds read and write which version).
 
 ## Deviations from the spec
 
-1. **The ruling contradicts two hand-labelled cards, and t08's recall target on two rows fails.**
-   The PM's notes say "recall must not fall without a reason I can rule on": this is the reason,
-   above and in the relay prompt. I built to the ruling and did not edit t08's targets; the two
-   failing checks are strict xfails until the PM rules.
+1. **The ruling contradicts two hand-labelled cards, and t08's recall target on two rows fell.**
+   Put to the PM as the reason the notes ask for; the PM ruled 1(a) on 2026-10-18 and directed
+   t08's ac1 amended, which this session wrote in t08's spec (outside `constraints.packages`, at the
+   PM's direction) with the ruling and the two cards named. The labels are unchanged.
 2. **Outside `constraints.packages`**: `tests/scripts/test_compare_card_clusters.py`, the tests of
    the script the spec asks to change, and `tests/smoke/test_caselist_cards.py`, one literal the
    suite fails without. The same two t11 recorded and the PM accepted.
@@ -334,15 +362,20 @@ explanation.
    that is at least `MIN_CUT_SHARE` of it, the same line a cut must clear to join it. Read for the
    whole body instead, the labelled sets lost their one-word copies as well (Labelled sets).
 2. **"Shares no text" is no five-word run in common**: the shape ac5 counts and the sampler decides
-   by rule. Two passages sharing one run are not refused.
+   by rule. Two passages sharing one run are not refused. Agreed by the PM on 2026-10-18, with the
+   count of pairs sharing only one or two runs added to measure what that lets through.
 3. **Conflicting joiners are both refused.** Two clusters that would join a third, and share nothing
    with each other, both stay out: the cluster holds two passages through two bodies, and the ruling
    says such a holder witnesses neither. Letting one win by fingerprint would lose fewer pairs and
-   make a digest decide.
+   make a digest decide. Agreed by the PM on 2026-10-18.
 4. **A long cut is found from either end.** A long body nine-tenths inside another that lacks its
    first or last shingle was joined by `v3` whenever the banding paired them; requiring both ends
    would have divided those joins. Item (4) and t08's guard are about short bodies, which still need
-   both.
+   both. Agreed by the PM on 2026-10-18 on condition that the container rule applies to this join.
+   It does: `witnesses` drops every container that holds another passage sharing nothing with the
+   cut before it counts anything, whichever ends the cut has.
+   `test_a_body_holding_another_passage_is_no_witness_for_a_long_body_lacking_one_of_its_ends` pins
+   it, alone and with the other passage in a card of its own.
 5. **"Holds" is one test everywhere**: at least as large, both ends (a long cut's either), and
    confirmed. `v3`'s nested check read nine-tenths alone, though its docstring said "by the same
    test a cut is confirmed by". The new test of a card lacking a short copy's end fails on `v3`.
@@ -405,15 +438,19 @@ joining. `largest_after` should be far under `largest_before` for hspf26 (682) a
 (1,609). Anything under `absorbed` at `6 to 20` or above: send it before going on.
 `shapes --preview` gives step 3 without this file, at this step's cost each time.
 
-**Step 3. ac5: the three largest clusters' shapes** (seconds).
+**Step 3. ac5: the three largest clusters' shapes, and the pairs sharing only one or two runs**
+(3 to 6 minutes: `--every-cluster` reads every caselist's bodies).
 
 ```zsh
-uv run python scripts/compare_card_clusters.py shapes --caselist hsld26 --caselist hspf26 --caselist hspolicy26 --caselist openev --largest-clusters 3 --after ~/.debate-research/dev/card-clusters-t20-preview > ~/t20-preview-shapes.json; echo "exit $?"
-jq -c 'to_entries[] | {caselist: .key, placement: .value.placement, version: .value.fingerprint_version, clusters: [.value.described_clusters[] | {rank, cards, not_full: .cards_not_full, texts: .distinct_texts, pairs, nothing: .share_of_pairs_by_shape["sharing nothing"], words: [.words_smallest, .words_median, .words_largest]}]}' ~/t20-preview-shapes.json
+uv run python scripts/compare_card_clusters.py shapes --caselist hsld26 --caselist hspf26 --caselist hspolicy26 --caselist openev --largest-clusters 3 --every-cluster --after ~/.debate-research/dev/card-clusters-t20-preview > ~/t20-preview-shapes.json; echo "exit $?"
+jq -c 'to_entries[] | {caselist: .key, placement: .value.placement, version: .value.fingerprint_version, clusters: [.value.described_clusters[] | {rank, cards, not_full: .cards_not_full, texts: .distinct_texts, pairs, nothing: .share_of_pairs_by_shape["sharing nothing"], few_runs: .pairs_sharing_only_few_runs, words: [.words_smallest, .words_median, .words_largest]}]}' ~/t20-preview-shapes.json
+jq -c 'to_entries[] | {caselist: .key} + .value.pairs_sharing_only_few_runs_over_every_cluster' ~/t20-preview-shapes.json
 ```
 
 Expected: `exit 0`; `placement` `a placement counts saved`, `version` `card-fingerprint-v4`, and
-`nothing` 0 in all twelve clusters. Above 0 anywhere is a defect: send the line. hspf26's
+`nothing` 0 in all twelve clusters. Above 0 anywhere is a defect: send the line. The last line per
+caselist is the PM's stock-phrase count: of `pairs` in one cluster, how many share exactly one
+(`"1"`) and exactly two (`"2"`) five-word runs, and in how many clusters. hspf26's
 long-bodied cluster may still be among the largest; the PM said to leave it alone, and nothing here
 special-cases it.
 
@@ -528,14 +565,16 @@ jq -c 'to_entries[] | {caselist: .key} + (.value | {before_version, after_versio
 
 Expected: step 2's figures exactly, if no source arrived between.
 
-**Step 13. Shapes** (seconds).
+**Step 13. Shapes** (3 to 6 minutes, as step 3).
 
 ```zsh
-uv run python scripts/compare_card_clusters.py shapes --caselist hsld26 --caselist hspf26 --caselist hspolicy26 --caselist openev --largest-clusters 3 > ~/t20-shapes.json; echo "exit $?"
+uv run python scripts/compare_card_clusters.py shapes --caselist hsld26 --caselist hspf26 --caselist hspolicy26 --caselist openev --largest-clusters 3 --every-cluster > ~/t20-shapes.json; echo "exit $?"
 jq -c 'to_entries[] | {caselist: .key, version: .value.fingerprint_version, clusters: [.value.described_clusters[] | {rank, cards, texts: .distinct_texts, pairs, nothing: .share_of_pairs_by_shape["sharing nothing"]}]}' ~/t20-shapes.json
+jq -c 'to_entries[] | {caselist: .key} + .value.pairs_sharing_only_few_runs_over_every_cluster' ~/t20-shapes.json
 ```
 
-Expected: step 3's figures, from the store's table: `version` `card-fingerprint-v4`, `nothing` 0.
+Expected: step 3's figures, from the store's table: `version` `card-fingerprint-v4`, `nothing` 0,
+and the same stock-phrase count.
 
 **Step 14. The join sample, with step 4's seed** (seconds, then the person's time). The same 20
 pairs as step 4. Put the seed step 4 printed in place of `SEED`.
@@ -583,18 +622,21 @@ rm ~/t20-preview-counts-*.json ~/t20-preview-shapes.json ~/t20-preview-diagnosis
 
 ## Follow-up work
 
-1. **The two pending-ruling xfails (E31, this task):** once the PM rules, either the expectations
-   follow the ruling and the xfails go, or the design changes.
-2. **Setting the limits (E31, this task, after step 8):** `MIN_CUT_SHARE`, `MAX_CONTAINER_CLUSTERS`
+1. **Text-disjoint trims of one card (E31, a new task if the PM files one).** Recovering Brannock's
+   and Kessler's pairs needs evidence beyond the bodies: a cite, a tag, or the files the copies came
+   from. The PM said on 2026-10-18 they will consider it separately.
+2. **Stock phrases (E31, the PM's call from the count).** Whether pairs sharing only one or two
+   five-word runs are bridging different cards; steps 3 and 13 give the store's figure.
+3. **Setting the limits (E31, this task, after step 8):** `MIN_CUT_SHARE`, `MAX_CONTAINER_CLUSTERS`
    and, from step 6, whether short bodies lacking an end are compared. Each change is a constant or
    one condition, and the tests that pin them are written.
-3. **A publish-only path for the parsed store (E31 or E34).** `caselist parse --publish` always
+4. **A publish-only path for the parsed store (E31 or E34).** `caselist parse --publish` always
    rebuilds, so the PM's order (rebuild, read, then publish) costs a second rebuild of about 19
    minutes, and prod a third.
-4. **The agent rewrites a newer table with an older version (E34).** Any build older than the
+5. **The agent rewrites a newer table with an older version (E34).** Any build older than the
    table's version puts its own back on the next parse stage. A guard could refuse to publish an
    occurrence table older than the one the bucket holds; today it is the reinstall in step 9.
-5. **`tests/scripts/test_compare_card_clusters.py` has four pyright errors outside CI's scope**
+6. **`tests/scripts/test_compare_card_clusters.py` has four pyright errors outside CI's scope**
    (`include = ["packages"]`): one unresolved import and three `object is not iterable`, the same in
    the start commit's file. Not this task's.
 

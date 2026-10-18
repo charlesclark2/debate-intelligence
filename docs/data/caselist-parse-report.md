@@ -1514,6 +1514,31 @@ and `--publish` uploads that file alone.
   sharing nothing, is 0 in every cluster.
 * `MAX_CONTAINER_CLUSTERS` is counted against the clusters as they stand when a cut is considered,
   after long copies have joined one another.
+* A long body nine-tenths inside a body that lacks one of its ends joins it, as `v3`'s banding did
+  when it paired the two. The container rule applies to that join as to every other: a body that
+  also holds a passage sharing no text with the long body is no witness for it (the PM's
+  condition, 2026-10-18).
+
+**What it costs on the labelled sets, and what recovering it would need.** Precision stays 1.000.
+Two labelled cards have a trimmed-start and a trimmed-end copy that share no five-word run:
+Brannock's ferry fares and Kessler's night buses, both invented. The labels call each one card. Under
+the ruling they are two passages, and the bodies holding both are no witness for either, so their
+pairs are lost: 19 of 24 full-short-card pairs found on the short-card set (was 24) and 23 of 37 on
+the extended set (was 35). The PM held the ruling against the labels on 2026-10-18, kept the labels
+as the coach wrote them, and amended `v1-e31-t08`'s two full-short-card targets to these figures. A
+test pins the lost pairs to these two cards by row id and holds every other card's recall where
+`v1-e31-t08` left it. **Recovering these pairs needs evidence beyond the bodies**: on the bodies
+alone, two trims of one card that share no text have the same shape as `v1-e31-t11`'s false join of
+two cards. A cite, a tag or the files the copies came from might tell the two apart; that is outside
+this task, and the PM will consider it as a separate one.
+
+**Stock phrases.** No join puts two texts that share nothing in one cluster, but one shared
+five-word run is enough to pass that guard, and a stock phrase is one run. `shapes` therefore counts
+the pairs in one cluster sharing only one or two runs, for each cluster it describes and, with
+`--every-cluster`, over every cluster of a caselist (the PM's request of 2026-10-18; no change to
+the rules follows from it here). On the labelled sets, all invented text, there are none: 0 of 59
+pairs of distinct full texts in one cluster on the variant set, 0 of 15 on the short-card set and 0
+of 18 on the extended set.
 
 **To be recorded here**, from the operator's runs:
 
@@ -1526,3 +1551,4 @@ and `--publish` uploads that file alone.
 | Lacking an end: short bodies nine-tenths inside a body lacking one of their ends | not run | |
 | `MAX_CONTAINER_CLUSTERS`: cuts whose ends too many clusters hold, re-measured | not run | |
 | Divided pairs against `v3`, by reason | not run | |
+| Pairs in one cluster sharing only one or two five-word runs, every cluster | not run | not run |

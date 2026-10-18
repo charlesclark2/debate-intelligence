@@ -43,7 +43,7 @@ from collections.abc import Sequence
 from dataclasses import replace
 from datetime import date, timedelta
 from pathlib import Path
-from typing import Final
+from typing import TYPE_CHECKING, Final
 
 import pytest
 from tests.fixtures.caselist.build_synthetic_archives import DOCUMENT_BODIES, SYNTHETIC_CASELIST
@@ -72,6 +72,8 @@ from debate_core.application.ports.suppression import (
     RemovalSelectorKind,
     SuppressionAction,
     SuppressionEntry,
+    WithdrawalEntry,
+    disclosure_digest,
 )
 from debate_core.domain.caselist import Event
 from debate_core.integrations.local import FsEvidenceObjectStore, FsSnapshotStore
@@ -97,6 +99,12 @@ from .test_manifest_and_aggregate_residue import (
     status,
     versions_of,
 )
+from .test_removal_covers_later_camp_uploads import (
+    REVISED_SHA256,
+    a_team_discloses_the_revised_camp_file,
+    pulled_then_revised,
+)
+from .test_removal_covers_later_camp_uploads import raw_key as camp_raw_key
 from .test_removal_covers_later_uploads import LIMITS
 from .test_removal_names_other_holders import (
     ANOTHER_TEAMS_PATH,
@@ -110,6 +118,11 @@ from .test_removal_names_other_holders import (
     remove_the_named_file,
 )
 from .test_removal_names_other_holders import REQUEST as BAYVIEW_REQUEST
+from .test_removal_withdraws_one_camp_path import remove as remove_the_camp_file
+from .test_sync_skips_suppressed_downloads import CASELIST as CAMP_CASELIST
+
+if TYPE_CHECKING:  # pragma: no cover - import for the type checker only
+    from mypy_boto3_s3.client import S3Client
 
 pytestmark = pytest.mark.anyio
 
@@ -453,6 +466,47 @@ class TestAWithdrawalOnlyRequest:
         assert aggregates_planned(rerun) == []
         assert [one.sha256 for one in rerun.of(Disposition.WITHDRAW)] == [SHARED]
 
+    async def test_another_requests_withdrawal_of_the_same_file_is_not_this_requests(
+        self, withdrawn_only: RemovalWorld
+    ) -> None:
+        """`RM-2026-12` withdrew the same bytes from `testclb26`, before Oak Ridge's request: its
+        caselist is no caselist `RM-2026-11` reached, and the re-run plans nothing there."""
+        world = withdrawn_only
+        elsewhere = disclosure_digest(OTHER_CASELIST, ANOTHER_TEAMS_PATH)
+        earlier = COMPLETED - timedelta(days=1)
+        await world.suppression().append_withdrawals(
+            [
+                WithdrawalEntry(
+                    sha256=SHARED,
+                    disclosure=elsewhere,
+                    caselist=OTHER_CASELIST,
+                    recorded_at=earlier,
+                    reason=ReasonCode.REQUESTED_BY_TEAM,
+                    request_id="RM-2026-12",
+                )
+            ]
+        )
+        await world.suppression().append(
+            [
+                SuppressionEntry(
+                    action=SuppressionAction.SUPPRESS,
+                    sha256=SHARED,
+                    disclosure=elsewhere,
+                    recorded_at=earlier,
+                    reason=ReasonCode.REQUESTED_BY_TEAM,
+                    request_id="RM-2026-12",
+                )
+            ]
+        )
+
+        rerun = await world.planner().plan(
+            parse_team_selector(OAK_RIDGE), request_id=WITHDRAWAL_ONLY, reason=ReasonCode.REQUESTED_BY_TEAM
+        )
+
+        replanned = rerun.source(SHARED)
+        assert replanned is not None
+        assert replanned.withdrawn_earlier_from == (SYNTHETIC_CASELIST,)
+
 
 # ------------------------------------------------------------------------------------------------
 # Gap 3: the dry run says what the execution's sweep will delete
@@ -655,3 +709,36 @@ class TestWhatTheWithdrawalRecordDoesNotDo:
         )
 
         assert plan.source(REVISION) is None
+
+
+@pytest.fixture
+def camp_world(tmp_path: Path, s3_client: S3Client, evidence_bucket: str) -> RemovalWorld:
+    return RemovalWorld(data_dir=tmp_path / "evidence", bucket_name=evidence_bucket, client=s3_client)
+
+
+class TestACampPathsWithdrawnCopy:
+    """`v1-e30-t14`'s world: camp file 640 is a later upload at a removed camp path, and a team
+    disclosed the same bytes too, so it is withdrawn from its camp path and kept for the team, and
+    no release holds it any more. A copy left under `raw/openev/` is the withdrawal's."""
+
+    async def test_status_names_it_under_openev_and_the_same_removal_run_again_takes_it(
+        self, camp_world: RemovalWorld, tmp_path: Path
+    ) -> None:
+        world = camp_world
+        await pulled_then_revised(world)
+        await a_team_discloses_the_revised_camp_file(world, tmp_path / "weekly")
+        await remove_the_camp_file(world)
+        team_copy = (
+            f"raw/caselist/{CAMP_CASELIST}/sha256/{REVISED_SHA256[:2]}/{REVISED_SHA256[2:4]}/{REVISED_SHA256}"
+        )
+        assert versions_of(world, camp_raw_key(REVISED_SHA256)) == []
+        world.client.put_object(Bucket=world.bucket_name, Key=camp_raw_key(REVISED_SHA256), Body=b"left")
+
+        before = await status(world)
+        await remove_the_camp_file(world)
+        after = await status(world)
+
+        assert [copy.sha256 for copy in of(before, "openev").withdrawn_copies] == [REVISED_SHA256]
+        assert versions_of(world, camp_raw_key(REVISED_SHA256)) == []
+        assert len(versions_of(world, team_copy)) == 1, "the team's copy is its holder's"
+        assert of(after, "openev").withdrawn_copies == ()

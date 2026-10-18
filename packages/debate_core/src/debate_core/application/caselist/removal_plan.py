@@ -874,7 +874,7 @@ class RemovalPlanner:
         existing_holds = await read_path_holds(self._suppression)
         state = SuppressionState.from_entries(existing, existing_holds)
         # Where this request's earlier runs withdrew a copy from, and what they rewrote (v1-e30-t19).
-        recorded = _withdrawn_by_the_request(await read_withdrawals(self._suppression), state, request_id)
+        recorded = _withdrawn_by_the_request(await read_withdrawals(self._suppression), request_id)
         earlier_rewrites = await self._earlier_rewrites(request_id)
         caselists = await self._known_caselists()
         copies = [copy for caselist in caselists for copy in await self._manifest_copies(caselist)]
@@ -2035,18 +2035,20 @@ def _suppressed_by(state: SuppressionState, request_id: str) -> set[str]:
 
 
 def _withdrawn_by_the_request(
-    withdrawals: Sequence[WithdrawalEntry], state: SuppressionState, request_id: str
+    withdrawals: Sequence[WithdrawalEntry], request_id: str
 ) -> dict[str, tuple[str, ...]]:
     """For each file this request withdrew a copy of, the caselists it withdrew them from (`v1-e30-t19`).
 
     From the withdrawal record (`v1-e30-t16`), which a removal appends just before the suppression
-    entries it attributes, so every copy a build since then withdrew is in it. Only withdrawals the
-    list still suppresses: an un-suppress lifts them. An earlier build's withdrawal is not in it,
-    and that file has no caselist here.
+    entries it attributes, so every copy a build since then withdrew is in it. This request's
+    alone: another request's withdrawal of the same file reached another caselist, not this one's.
+    An earlier build's withdrawal is not in it, and that file has no caselist here. Whether the list
+    still suppresses one is not asked: a caselist here only joins a file this plan withdraws again
+    under the same request, which reached it either way.
     """
     found: dict[str, set[str]] = {}
     for one in withdrawals:
-        if one.request_id == request_id and state.suppresses(one.sha256, disclosure=one.disclosure):
+        if one.request_id == request_id:
             found.setdefault(one.sha256, set()).add(one.caselist)
     return {digest: tuple(sorted(caselists)) for digest, caselists in found.items()}
 

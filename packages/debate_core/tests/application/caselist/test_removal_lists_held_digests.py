@@ -26,6 +26,7 @@ Every test runs offline: moto for the bucket, a temporary data directory, and a 
 
 from __future__ import annotations
 
+import dataclasses
 import json
 from collections.abc import Sequence
 from datetime import date
@@ -43,7 +44,7 @@ from tests.fixtures.caselist.build_revised_path_archives import (
 
 from debate_core.application.caselist.import_service import CaselistImportService, Classification
 from debate_core.application.caselist.removal_plan import RemovalPlan, SourceSelector
-from debate_core.application.caselist.suppression import RecordedSuppressionList
+from debate_core.application.caselist.suppression import LocalFallbackSuppressionList, RecordedSuppressionList
 from debate_core.application.ports.suppression import (
     ReasonCode,
     SuppressionEntry,
@@ -368,3 +369,51 @@ async def test_after_the_re_run_bytes_another_path_holds_still_import_at_a_path_
     rows = manifest_rows(world, f"manifests/{CASELIST}/2026-10-13.jsonl")
     assert classification_at(rows, ONE_WEEK_PATH) != [str(Classification.SUPPRESSED)]
     assert held_at(rows, ONE_WEEK_PATH) == {UPLOADED_AFTER_AT_TWO_PATHS}
+
+
+# ------------------------------------------------------------------------------------------------
+# The weekly pull records it too, on this machine alone
+# ------------------------------------------------------------------------------------------------
+
+
+async def test_a_pull_records_the_upload_it_held_on_this_machine_and_not_in_the_bucket(
+    removal_world: RemovalWorld, tmp_path: Path
+) -> None:
+    """`test_held_path_inbox_copies.py`'s world: week four re-uploads the removed file at its path.
+
+    The pull holds the everyday credential, which may not write under `manifests/_suppression/`. Its
+    list is built as the composition root builds it (`ServiceContainer.caselist_sync`): every copy,
+    falling back to this machine's without a login.
+    """
+    from .test_held_path_inbox_copies import (
+        BAYVIEW_PATH,
+        REUPLOADED_SHA256,
+        WEEK_4,
+        installation_of,
+        remove_bayview,
+        week_four,
+    )
+    from .test_inbox_retention import FakeSource
+    from .test_pull_stage_failure_codes import pull
+
+    await remove_bayview(removal_world)
+    installation = dataclasses.replace(
+        installation_of(removal_world, week_four(tmp_path / "published", another_teams_file=True)),
+        suppression=LocalFallbackSuppressionList(
+            removal_world.suppression(),
+            local=RecordedSuppressionList(local_suppression_list_file(removal_world.data_dir)),
+        ),
+    )
+
+    watched = await pull(installation, installation.sync(FakeSource(installation.archives, weeks=[WEEK_4])))
+
+    assert watched.summary.succeeded
+    assert local_record(removal_world) == [
+        {
+            "schema_version": 1,
+            "sha256": REUPLOADED_SHA256,
+            "disclosure": disclosure_digest("testcl26", BAYVIEW_PATH),
+            "request_id": REQUEST,
+        }
+    ]
+    assert bucket_record(removal_world) == []

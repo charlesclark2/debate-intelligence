@@ -947,7 +947,7 @@ def test_a_manifest_the_publisher_cannot_read_fails_publish_with_one_and_the_run
     assert stages["publish"]["error_codes"] == ["UNREADABLE_MANIFEST"]
     assert data["pending_publish"] == [f"{SYNTHETIC_CASELIST} 2026-09-01"]
     assert owed_in_the_file(installation) == [f"{SYNTHETIC_CASELIST} 2026-09-01"]
-    assert Path(data["summary_written_to"]).is_file()
+    assert (installation / "data" / data["summary_written_to"]).is_file()
     assert data["run_record"]["outcome"] == "failed"
     assert data["run_record"]["error_class"] is None
     assert stages["report"]["outcome"] == "completed"

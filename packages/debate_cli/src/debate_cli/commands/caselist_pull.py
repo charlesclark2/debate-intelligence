@@ -112,6 +112,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Coroutine
+from pathlib import Path
 from typing import Annotated, Any, cast
 
 import typer
@@ -121,6 +122,7 @@ from debate_cli.context import cli_context, command_name
 from debate_cli.exit_codes import ExitCode, exit_code_for_failure_codes
 from debate_cli.output import CommandFailure, JsonValue, TableSpec
 from debate_core.application.caselist_sync import (
+    RUN_SUMMARY_DIRECTORY,
     RunSummary,
     StageOutcome,
     StageRecord,
@@ -220,7 +222,7 @@ class ConflictingPullMode(typer.BadParameter):
 def pull_summary(
     summary: RunSummary,
     settings: Settings,
-    written_to: Any = None,
+    written_to: Path | None = None,
     record: SyncRunRecord | None = None,
     details: SyncRunDetails | None = None,
 ) -> dict[str, JsonValue]:
@@ -230,13 +232,20 @@ def pull_summary(
     :meth:`~debate_core.application.caselist_sync.RunSummary.as_json` unchanged, so the object a
     monitoring check reads out of `<data_dir>/caselist-sync-runs/` and the object this command
     prints are the same shape. `v1-e34-t03`'s run log reads one or the other and never both.
+
+    `summary_written_to` is the summary file's path inside the data directory,
+    `caselist-sync-runs/<run id>.json`, and never its absolute path, which is under the home
+    directory: the agent's stdout log keeps this object, and the runbook says it may be pasted as
+    it is (`v1-e34-t16`).
     """
     # `as_json` is declared `dict[str, object]` because `debate_core` may not name the CLI's
     # JSON alias; every value in it is a number, a string, a bool, `None` or a list of those.
     body = cast("dict[str, JsonValue]", dict(summary.as_json()))
     body["environment"] = settings.environment.value
     body["bucket"] = settings.storage.s3.bucket
-    body["summary_written_to"] = str(written_to) if written_to is not None else None
+    body["summary_written_to"] = (
+        f"{RUN_SUMMARY_DIRECTORY}/{written_to.name}" if written_to is not None else None
+    )
     # The run log's record of this run (v1-e34-t03), or `None` for a dry run, which records nothing.
     body["run_record"] = cast("JsonValue", record.model_dump(mode="json")) if record is not None else None
     # What is kept beside the record, because the record's shape is frozen (v1-e34-t19): each

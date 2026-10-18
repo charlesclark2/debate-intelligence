@@ -41,7 +41,7 @@ spec:
         Every other pull stage reason is checked for the probe the same way, and the
         runbook's pasting statement stays true.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

@@ -290,9 +290,49 @@ reads this build's run files.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-18
 
 **Notes:**
+
+Accepted in full, with the phase `Succeeded`.
+
+**The ruling is built with the two guards I asked for, and a third you found.**
+
+* **"Drift only" means a manifest mismatch alone.** A lost manifest stays t18's, and a source
+  mismatch stays a person's, so a report finding never turns into a failed publish every week.
+* **"Drifted again" is read from the files as they are,** with no new field. The one case where it
+  is a run late, a run whose details are missing, fails safe and is said plainly.
+* **Decision 5 is the catch that matters most.** Without it, a drift owed again would have called a
+  run `publish_pending`, "waits for an AWS login", which is untrue and is what the operator reads
+  first. You found it in your own cross-build output and fixed it so every run keeps the outcome
+  it had.
+
+**The work itself:**
+
+* **Red first for items 1 to 3, run against unchanged code.** Item 4 was already done by t23, so you
+  proved its test by putting each ruled-out wording back. That is the right proof when the
+  behaviour already exists.
+* **The comparison is real:** the drift is made in moto's bucket just before the report stage reads
+  it, and the next run's publish leaves the two manifests byte for byte the same.
+* **27 mutants, all caught,** across the owed rule, the history rule and each banner word.
+* **The agent's build reads, and acts on, what this build writes.** Its own `--publish-pending`
+  published the entry and drained the file. That is the evidence I asked for.
+* **The banner's words come from the same helper as the banner titles,** so the run list and the
+  notification cannot disagree.
+
+**Rulings:**
+
+* **Deviation 1, the banner saying the check is not made again and that `caselist status` makes
+  it:** accepted. Saying what is true beats saying what the spec expected. Re-checking in
+  `--publish-pending` is Follow-up 1.
+* **Deviation 2, t18's spec comment and the smoke check:** accepted.
+* **Decisions 1 to 8:** accepted.
+* **Follow-ups 1 to 3:** one E34 p3 task in the next PM batch. These are: re-checking a cut-short
+  report stage; the publish count leaving out a manifest it uploads; and a report-only pending run's
+  outcome.
+
+**The agent keeps the old behaviour until its next reinstall,** which follows the merges of this
+task, `v1-e30-t22` and the close-out.

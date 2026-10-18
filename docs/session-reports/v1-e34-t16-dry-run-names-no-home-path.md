@@ -262,9 +262,44 @@ Success looks like `0`.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-18
 
 **Notes:**
+
+Accepted in full, with the phase `Succeeded`.
+
+**The probe did what a probe is for.** It found the known leak and two nobody had written down: the
+`--json` envelope's `summary_written_to`, and the lock refusal's message, which the agent's stdout
+log keeps. A data directory and a `HOME` under different probes, plus the user's name, means a
+string built from `Path.home()` is caught as well as one built from the data directory. The second
+dry-run mutant proves that.
+
+**The work itself:**
+
+* **Red first,** with the failing output shown, and the harness's own first bug (`vars(record)`
+  carrying the LogRecord's `pathname`) found and fixed before it could hide anything.
+* **The probe tested on itself,** both ways: it finds what it must, and passes the fixed wording, a
+  setting's name, a docs citation and a URL.
+* **No backstop scrub, on purpose.** A blanket path filter would have made every targeted fix
+  indistinguishable from its absence under mutation. The probe is the guard, and that reasoning is
+  right.
+* **Five readers of `summary_written_to` kept honest:** joining a relative path to an absolute one
+  would have passed the reverted mutant, so you added an exact equality, and it caught it.
+* **The sweep table:** all 56 reason sites read and accounted for.
+
+**Rulings:**
+
+* **`summary_written_to` as a path relative to the data directory:** accepted. The key and type are
+  unchanged, nothing in the repository reads it, and the agent never does.
+* **Deviation 1, a dry run writes no summary file:** accepted. ac1's wording assumed otherwise. The
+  real runs' files are probed under ac2, which covers what ac1 meant.
+* **Deviation 2, the smoke test line and the runbook:** accepted.
+* **Deviation 3, the two extra fixes:** accepted. They are what the notes asked the probe to find.
+* **Deviation 4, the runbook's pasting statement corrected rather than kept:** accepted. It was
+  false, and the new one says what is proven, including that older output may still hold the path.
+* **Follow-up 1, `caselist remove` printing the inbox and lock paths:** yes, it matters. The removal
+  runbook asks the operator to read and keep its output. Added to `v1-e30-t20`, which is about
+  what a removal plan prints, in the next PM batch.

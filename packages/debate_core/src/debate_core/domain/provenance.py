@@ -70,8 +70,6 @@ class GeneratedArtifactMetadata(DomainModel):
         """The temperature sent; `None` when the model's default applied."""
         return self.route.temperature
 
-    def with_inputs(
-        self, *, snapshot_ids: Iterable[str] = (), retrieval_ids: Iterable[str] = ()
-    ) -> Self:
+    def with_inputs(self, *, snapshot_ids: Iterable[str] = (), retrieval_ids: Iterable[str] = ()) -> Self:
         """This metadata with the snapshots and retrieved items the call's variables came from."""
         return self.evolve(snapshot_ids=tuple(snapshot_ids), retrieval_ids=tuple(retrieval_ids))

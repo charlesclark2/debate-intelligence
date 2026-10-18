@@ -48,7 +48,9 @@ def test_versions_order_by_number_not_by_text() -> None:
     ]
 
 
-@pytest.mark.parametrize("version", ["1.0", "1.0.0.0", "01.0.0", "1.0.0-rc.1", "x.y.z", "", " 1.0.0", "1.0.0\n"])
+@pytest.mark.parametrize(
+    "version", ["1.0", "1.0.0.0", "01.0.0", "1.0.0-rc.1", "x.y.z", "", " 1.0.0", "1.0.0\n"]
+)
 def test_a_version_that_is_not_major_minor_patch_has_no_key(version: str) -> None:
     with pytest.raises(ValueError, match="MAJOR.MINOR.PATCH"):
         prompt_version_key(version)

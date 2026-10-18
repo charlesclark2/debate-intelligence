@@ -22,7 +22,9 @@ BODY_SHA256 = "feb58c2ecc3fad96a9727679ca876d7c217a634a3428848fbc51d84cef80cc95"
 """`printf 'Choose the passage that best supports this tag: {{ tag }}\\n' | shasum -a 256`"""
 
 
-def write_prompt(directory: Path, name: str, *, version: str = "1.0.0", status: str = "released", body: str = BODY) -> None:
+def write_prompt(
+    directory: Path, name: str, *, version: str = "1.0.0", status: str = "released", body: str = BODY
+) -> None:
     (directory / name).write_text(
         "---\n"
         f"prompt_id: card.select\nversion: {version}\nstatus: {status}\ntask_class: high_volume\n"
@@ -57,7 +59,9 @@ def test_check_fails_on_an_unlocked_release_and_writes_nothing(
     assert (prompts / "prompts.lock.json").read_bytes() == before
 
 
-def test_locking_adds_the_release_and_check_then_passes(prompts: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_locking_adds_the_release_and_check_then_passes(
+    prompts: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
     write_prompt(prompts, "select.md")
     write_prompt(prompts, "select@1.1.0.md", version="1.1.0", status="draft")
 
@@ -65,7 +69,9 @@ def test_locking_adds_the_release_and_check_then_passes(prompts: Path, capsys: p
 
     assert "locked card.select@1.0.0" in capsys.readouterr().out
     assert lock_entries(prompts) == {
-        "card.select": {"1.0.0": {"body_sha256": BODY_SHA256, "output_schema": SCHEMA, "task_class": "high_volume"}}
+        "card.select": {
+            "1.0.0": {"body_sha256": BODY_SHA256, "output_schema": SCHEMA, "task_class": "high_volume"}
+        }
     }
     assert lock_prompts.main(["--check", "--prompts", str(prompts)]) == 0
     assert lock_prompts.main(["--prompts", str(prompts)]) == 0

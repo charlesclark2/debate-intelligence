@@ -17,6 +17,7 @@ from debate_core.integrations.models.errors import FixtureFileError
 
 __all__ = ["read_json_object", "safe_directory_name", "write_pretty_json"]
 
+
 def safe_directory_name(prompt_id: str) -> str:
     """`prompt_id`, which names the directory its answers are filed in, or a `ValueError`.
 

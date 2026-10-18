@@ -38,7 +38,9 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
     parser.add_argument("--check", action="store_true", help="report what is out of date instead of writing")
     parser.add_argument(
         "--prompts",
@@ -46,7 +48,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         default=ROOT / DEFAULT_PROMPT_DIRECTORY,
         help="the prompt directory (default: prompts/ in this checkout)",
     )
-    parser.add_argument("--lock", type=Path, default=None, help="the lock file (default: <prompts>/prompts.lock.json)")
+    parser.add_argument(
+        "--lock", type=Path, default=None, help="the lock file (default: <prompts>/prompts.lock.json)"
+    )
     args = parser.parse_args(argv)
     lock_path: Path = args.lock or args.prompts / LOCK_FILE_NAME
 

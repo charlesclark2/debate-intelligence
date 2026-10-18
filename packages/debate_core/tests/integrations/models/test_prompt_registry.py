@@ -14,6 +14,7 @@ import datetime
 import os
 import subprocess
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -30,6 +31,9 @@ from debate_core.integrations.models.prompt_registry import LATEST, PromptRegist
 from debate_core.testing.contracts.model_router import ContractPassage
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[5]
+
+type PromptWriter = Callable[..., Path]
+"""The `write_prompt` fixture of this directory's conftest."""
 SAMPLE_PROMPTS = REPOSITORY_ROOT / "tests" / "fixtures" / "prompts"
 SAMPLE_FILE = SAMPLE_PROMPTS / "example" / "select-passage.md"
 
@@ -73,7 +77,7 @@ def test_the_repository_prompts_directory_loads() -> None:
 
 
 def test_every_markdown_file_under_the_directory_is_loaded_except_readmes(
-    prompt_dir: Path, write_prompt
+    prompt_dir: Path, write_prompt: PromptWriter
 ) -> None:
     write_prompt("top.md", prompt_id="area.top")
     write_prompt("card/select.md", prompt_id="card.select")
@@ -118,7 +122,7 @@ def test_a_markdown_file_without_front_matter_is_refused_naming_it(prompt_dir: P
     ids=["list", "scalar", "invalid-yaml"],
 )
 def test_front_matter_that_is_not_a_yaml_mapping_is_refused(
-    prompt_dir: Path, write_prompt, front_matter: str
+    prompt_dir: Path, write_prompt: PromptWriter, front_matter: str
 ) -> None:
     path = write_prompt("bad.md", front_matter=front_matter)
 
@@ -128,11 +132,29 @@ def test_front_matter_that_is_not_a_yaml_mapping_is_refused(
     assert caught.value.source == str(path)
 
 
+def test_a_front_matter_key_given_twice_is_refused(prompt_dir: Path, write_prompt: PromptWriter) -> None:
+    path = write_prompt(
+        "bad.md",
+        front_matter=(
+            "prompt_id: card.select\nversion: 1.0.0\nversion: 1.1.0\nstatus: draft\ntask_class: high_volume\n"
+            f"output_schema: {ContractPassage.__module__}.ContractPassage\nowner: v1-e05-model-router\n"
+            "changelog:\n  - version: 1.0.0\n    date: 2026-10-17\n    summary: x\n"
+        ),
+    )
+
+    with pytest.raises(PromptRegistryError, match="given twice") as caught:
+        load(prompt_dir)
+
+    assert caught.value.source == str(path)
+
+
 def test_two_files_with_the_same_prompt_and_version_are_refused_naming_both(
-    prompt_dir: Path, write_prompt
+    prompt_dir: Path, write_prompt: PromptWriter
 ) -> None:
     first = write_prompt("card/select.md", prompt_id="card.select", version="1.0.0")
-    second = write_prompt("card/select-copy.md", prompt_id="card.select", version="1.0.0", body="Other {{ tag }}\n")
+    second = write_prompt(
+        "card/select-copy.md", prompt_id="card.select", version="1.0.0", body="Other {{ tag }}\n"
+    )
 
     with pytest.raises(PromptRegistryError) as caught:
         load(prompt_dir)
@@ -144,7 +166,7 @@ def test_two_files_with_the_same_prompt_and_version_are_refused_naming_both(
 
 
 def test_the_same_id_at_two_versions_and_two_ids_at_one_version_are_both_allowed(
-    prompt_dir: Path, write_prompt
+    prompt_dir: Path, write_prompt: PromptWriter
 ) -> None:
     write_prompt("card/select.md", prompt_id="card.select", version="1.0.0")
     write_prompt("card/select@1.1.0.md", prompt_id="card.select", version="1.1.0")
@@ -154,7 +176,7 @@ def test_the_same_id_at_two_versions_and_two_ids_at_one_version_are_both_allowed
 
 
 def test_a_duplicate_is_refused_when_the_registry_is_built_from_prompts_directly(
-    prompt_dir: Path, write_prompt
+    prompt_dir: Path, write_prompt: PromptWriter
 ) -> None:
     write_prompt("one.md", prompt_id="card.select")
     [prompt] = load(prompt_dir).prompts
@@ -184,7 +206,7 @@ def test_a_duplicate_is_refused_when_the_registry_is_built_from_prompts_directly
     ],
 )
 def test_an_invalid_version_is_refused_naming_the_file_and_the_field(
-    prompt_dir: Path, write_prompt, version: str
+    prompt_dir: Path, write_prompt: PromptWriter, version: str
 ) -> None:
     path = write_prompt("bad.md", version=version, changelog_version="1.0.0")
 
@@ -195,7 +217,9 @@ def test_an_invalid_version_is_refused_naming_the_file_and_the_field(
     assert caught.value.field == "version"
 
 
-def test_an_unquoted_yaml_number_is_not_mistaken_for_a_version(prompt_dir: Path, write_prompt) -> None:
+def test_an_unquoted_yaml_number_is_not_mistaken_for_a_version(
+    prompt_dir: Path, write_prompt: PromptWriter
+) -> None:
     write_prompt("bad.md", version="1.0", changelog_version="'1.0'")
 
     with pytest.raises(PromptRegistryError) as caught:
@@ -205,7 +229,9 @@ def test_an_unquoted_yaml_number_is_not_mistaken_for_a_version(prompt_dir: Path,
 
 
 @pytest.mark.parametrize("version", ["0.0.0", "0.1.0", "1.0.10", "10.20.30", "'2.0.0'"])
-def test_a_major_minor_patch_version_is_accepted(prompt_dir: Path, write_prompt, version: str) -> None:
+def test_a_major_minor_patch_version_is_accepted(
+    prompt_dir: Path, write_prompt: PromptWriter, version: str
+) -> None:
     write_prompt("ok.md", version=version)
 
     [prompt] = load(prompt_dir).prompts
@@ -236,7 +262,7 @@ def test_a_major_minor_patch_version_is_accepted(prompt_dir: Path, write_prompt,
     ],
 )
 def test_an_output_schema_that_is_not_a_pydantic_model_is_refused(
-    prompt_dir: Path, write_prompt, output_schema: str
+    prompt_dir: Path, write_prompt: PromptWriter, output_schema: str
 ) -> None:
     path = write_prompt("bad.md", output_schema=output_schema)
 
@@ -249,7 +275,7 @@ def test_an_output_schema_that_is_not_a_pydantic_model_is_refused(
 
 
 def test_an_output_schema_named_by_a_re_export_is_refused_naming_where_it_is_defined(
-    prompt_dir: Path, write_prompt
+    prompt_dir: Path, write_prompt: PromptWriter
 ) -> None:
     # `debate_core.domain` re-exports ResolvedRoute, which is defined in debate_core.domain.model_contracts.
     write_prompt("bad.md", output_schema="debate_core.domain.ResolvedRoute")
@@ -280,7 +306,7 @@ BAD_IDS = [
 
 @pytest.mark.parametrize("prompt_id", BAD_IDS)
 def test_a_prompt_id_that_cannot_name_a_directory_is_refused(
-    prompt_dir: Path, write_prompt, prompt_id: str
+    prompt_dir: Path, write_prompt: PromptWriter, prompt_id: str
 ) -> None:
     path = write_prompt("bad.md", prompt_id=prompt_id)
 
@@ -293,7 +319,7 @@ def test_a_prompt_id_that_cannot_name_a_directory_is_refused(
 
 @pytest.mark.parametrize("prompt_id", GOOD_IDS)
 def test_a_prompt_id_of_letters_digits_dots_underscores_and_dashes_is_accepted(
-    prompt_dir: Path, write_prompt, prompt_id: str
+    prompt_dir: Path, write_prompt: PromptWriter, prompt_id: str
 ) -> None:
     write_prompt("ok.md", prompt_id=prompt_id)
 
@@ -332,7 +358,7 @@ def test_the_registry_and_the_fixture_directories_apply_one_id_rule(prompt_id: s
 
 @pytest.mark.parametrize("task_class", ["embeddings", "rerank", "creative_writing"])
 def test_a_task_class_that_does_not_generate_text_is_refused(
-    prompt_dir: Path, write_prompt, task_class: str
+    prompt_dir: Path, write_prompt: PromptWriter, task_class: str
 ) -> None:
     write_prompt("bad.md", task_class=task_class)
 
@@ -342,7 +368,9 @@ def test_a_task_class_that_does_not_generate_text_is_refused(
     assert caught.value.field == "task_class"
 
 
-def test_the_changelog_must_describe_the_files_own_version(prompt_dir: Path, write_prompt) -> None:
+def test_the_changelog_must_describe_the_files_own_version(
+    prompt_dir: Path, write_prompt: PromptWriter
+) -> None:
     write_prompt("bad.md", version="1.1.0", changelog_version="1.0.0")
 
     with pytest.raises(PromptRegistryError) as caught:
@@ -354,7 +382,9 @@ def test_the_changelog_must_describe_the_files_own_version(prompt_dir: Path, wri
 @pytest.mark.parametrize(
     "missing", ["prompt_id", "version", "status", "task_class", "output_schema", "owner", "changelog"]
 )
-def test_every_front_matter_key_is_required(prompt_dir: Path, write_prompt, missing: str) -> None:
+def test_every_front_matter_key_is_required(
+    prompt_dir: Path, write_prompt: PromptWriter, missing: str
+) -> None:
     lines = {
         "prompt_id": "prompt_id: card.select\n",
         "version": "version: 1.0.0\n",
@@ -373,7 +403,9 @@ def test_every_front_matter_key_is_required(prompt_dir: Path, write_prompt, miss
     assert caught.value.field == missing
 
 
-def test_an_unknown_front_matter_key_is_refused_naming_it(prompt_dir: Path, write_prompt) -> None:
+def test_an_unknown_front_matter_key_is_refused_naming_it(
+    prompt_dir: Path, write_prompt: PromptWriter
+) -> None:
     write_prompt(
         "bad.md",
         front_matter=(
@@ -404,7 +436,7 @@ def test_an_unknown_front_matter_key_is_refused_naming_it(prompt_dir: Path, writ
     ids=["unclosed-expression", "unclosed-block", "unknown-filter", "random-filter"],
 )
 def test_a_template_that_does_not_compile_is_refused_at_load(
-    prompt_dir: Path, write_prompt, body: str
+    prompt_dir: Path, write_prompt: PromptWriter, body: str
 ) -> None:
     path = write_prompt("bad.md", body=body)
 
@@ -425,7 +457,7 @@ def test_a_template_that_does_not_compile_is_refused_at_load(
     ids=["include", "extends", "import", "from-import"],
 )
 def test_a_template_that_reads_another_file_is_refused_at_load(
-    prompt_dir: Path, write_prompt, body: str
+    prompt_dir: Path, write_prompt: PromptWriter, body: str
 ) -> None:
     write_prompt("bad.md", body=body)
 
@@ -455,7 +487,7 @@ def test_a_template_that_reads_another_file_is_refused_at_load(
     ],
 )
 def test_a_body_whose_sections_are_malformed_is_refused_at_load(
-    prompt_dir: Path, write_prompt, body: str
+    prompt_dir: Path, write_prompt: PromptWriter, body: str
 ) -> None:
     path = write_prompt("bad.md", body=body)
 
@@ -465,10 +497,12 @@ def test_a_body_whose_sections_are_malformed_is_refused_at_load(
     assert caught.value.source == str(path)
 
 
-def test_a_body_with_no_markers_is_the_user_turn_alone(prompt_dir: Path, write_prompt) -> None:
+def test_a_body_with_no_markers_is_the_user_turn_alone(prompt_dir: Path, write_prompt: PromptWriter) -> None:
     write_prompt("plain.md", prompt_id="plain", body="\nOnly a user turn about {{ tag }}.\n\n")
 
-    rendered = load(prompt_dir).render(ModelPrompt(prompt_id="plain", prompt_version="1.0.0", variables={"tag": "x"}))
+    rendered = load(prompt_dir).render(
+        ModelPrompt(prompt_id="plain", prompt_version="1.0.0", variables={"tag": "x"})
+    )
 
     assert rendered == RenderedPrompt(user="Only a user turn about x.")
 
@@ -477,10 +511,15 @@ def test_a_body_with_no_markers_is_the_user_turn_alone(prompt_dir: Path, write_p
 
 
 @pytest.fixture
-def versioned(prompt_dir: Path, write_prompt) -> PromptRegistry:
-    """card.select at 1.2.0, 1.9.0 and 1.10.0 (released) and 2.0.0 (draft); card.draft-only at 0.1.0 (draft)."""
+def versioned(prompt_dir: Path, write_prompt: PromptWriter) -> PromptRegistry:
+    """card.select at 1.2.0, 1.9.0 and 1.10.0, released, and 2.0.0, a draft; card.draft-only, a draft."""
     for version in ("1.2.0", "1.9.0", "1.10.0"):
-        write_prompt(f"card/select@{version}.md", prompt_id="card.select", version=version, body=f"v{version} {{{{ tag }}}}\n")
+        write_prompt(
+            f"card/select@{version}.md",
+            prompt_id="card.select",
+            version=version,
+            body=f"v{version} {{{{ tag }}}}\n",
+        )
     write_prompt("card/select@2.0.0.md", prompt_id="card.select", version="2.0.0", status="draft")
     write_prompt("card/draft-only.md", prompt_id="card.draft-only", version="0.1.0", status="draft")
     return load(prompt_dir)
@@ -518,8 +557,17 @@ def test_prompt_builds_a_model_prompt_pinned_to_the_version_latest_resolved_to(
 ) -> None:
     prompt = versioned.prompt("card.select", {"tag": "Warming kills"})
 
-    assert prompt == ModelPrompt(prompt_id="card.select", prompt_version="1.10.0", variables={"tag": "Warming kills"})
+    assert prompt == ModelPrompt(
+        prompt_id="card.select", prompt_version="1.10.0", variables={"tag": "Warming kills"}
+    )
     assert versioned.prompt("card.select", {"tag": "x"}, version="1.2.0").prompt_version == "1.2.0"
+
+
+def test_prompt_checks_the_variables_so_a_call_site_fails_even_where_nothing_renders(
+    versioned: PromptRegistry,
+) -> None:
+    with pytest.raises(PromptRenderError, match="tag"):
+        versioned.prompt("card.select", {"tags": "Warming kills"})
 
 
 # Rendering --------------------------------------------------------------------------------------
@@ -529,13 +577,16 @@ def test_rendering_the_sample_gives_the_hand_written_system_and_user_text() -> N
     registry = load(SAMPLE_PROMPTS)
 
     rendered = registry.render(
-        ModelPrompt(prompt_id="example.select-passage", prompt_version="1.0.0", variables={"tag": "Warming kills"})
+        ModelPrompt(
+            prompt_id="example.select-passage", prompt_version="1.0.0", variables={"tag": "Warming kills"}
+        )
     )
 
     assert rendered == RenderedPrompt(
         system=(
             "You choose one passage from a numbered list of paragraphs.\n"
-            "Answer with the paragraph's number and the character offsets where the passage starts and ends.\n"
+            "Answer with the paragraph's number and the character offsets where the passage starts "
+            "and ends.\n"
             "Never copy any of the paragraph's words into your answer."
         ),
         user="Choose the passage that best supports this tag: Warming kills",
@@ -554,7 +605,7 @@ def test_rendering_the_sample_gives_the_hand_written_system_and_user_text() -> N
     ids=["expression", "condition", "loop", "default-filter", "system-turn"],
 )
 def test_a_missing_variable_raises_prompt_render_error_naming_it(
-    prompt_dir: Path, write_prompt, body: str
+    prompt_dir: Path, write_prompt: PromptWriter, body: str
 ) -> None:
     write_prompt("p.md", prompt_id="card.select", body=body)
     registry = load(prompt_dir)
@@ -567,15 +618,19 @@ def test_a_missing_variable_raises_prompt_render_error_naming_it(
     assert "tag" in caught.value.reason
 
 
-def test_a_missing_key_inside_a_variable_raises_prompt_render_error(prompt_dir: Path, write_prompt) -> None:
+def test_a_missing_key_inside_a_variable_raises_prompt_render_error(
+    prompt_dir: Path, write_prompt: PromptWriter
+) -> None:
     write_prompt("p.md", prompt_id="card.select", body="Paragraph {{ tag.number }}: {{ tag.label }}\n")
     registry = load(prompt_dir)
 
     with pytest.raises(PromptRenderError, match="label"):
-        registry.render(ModelPrompt(prompt_id="card.select", prompt_version="1.0.0", variables={"tag": {"number": 3}}))
+        registry.render(
+            ModelPrompt(prompt_id="card.select", prompt_version="1.0.0", variables={"tag": {"number": 3}})
+        )
 
 
-def test_a_variable_the_template_never_uses_is_refused(prompt_dir: Path, write_prompt) -> None:
+def test_a_variable_the_template_never_uses_is_refused(prompt_dir: Path, write_prompt: PromptWriter) -> None:
     write_prompt("p.md", prompt_id="card.select")
     registry = load(prompt_dir)
 
@@ -585,7 +640,7 @@ def test_a_variable_the_template_never_uses_is_refused(prompt_dir: Path, write_p
         )
 
 
-def test_a_call_must_name_the_exact_version_it_renders(prompt_dir: Path, write_prompt) -> None:
+def test_a_call_must_name_the_exact_version_it_renders(prompt_dir: Path, write_prompt: PromptWriter) -> None:
     write_prompt("p.md", prompt_id="card.select")
     registry = load(prompt_dir)
 
@@ -599,9 +654,13 @@ def test_rendering_an_unregistered_prompt_is_refused(prompt_dir: Path) -> None:
 
 
 def test_a_mapping_renders_the_same_whatever_order_its_keys_were_given_in(
-    prompt_dir: Path, write_prompt
+    prompt_dir: Path, write_prompt: PromptWriter
 ) -> None:
-    write_prompt("p.md", prompt_id="card.select", body="{% for key, value in tag.items() %}{{ key }}={{ value }};{% endfor %}\n")
+    write_prompt(
+        "p.md",
+        prompt_id="card.select",
+        body="{% for key, value in tag.items() %}{{ key }}={{ value }};{% endfor %}\n",
+    )
     registry = load(prompt_dir)
 
     def render(mapping: dict[str, object]) -> RenderedPrompt:
@@ -617,12 +676,14 @@ def test_a_mapping_renders_the_same_whatever_order_its_keys_were_given_in(
 
 
 def test_rendering_is_deterministic_across_registries_and_calls() -> None:
-    prompt = ModelPrompt(prompt_id="example.select-passage", prompt_version="1.0.0", variables={"tag": "Warming kills"})
+    prompt = ModelPrompt(
+        prompt_id="example.select-passage", prompt_version="1.0.0", variables={"tag": "Warming kills"}
+    )
 
     first = load(SAMPLE_PROMPTS)
-    renders = {first.render(prompt) for _ in range(3)} | {load(SAMPLE_PROMPTS).render(prompt)}
+    renders = [first.render(prompt) for _ in range(3)] + [load(SAMPLE_PROMPTS).render(prompt)]
 
-    assert len(renders) == 1
+    assert all(render == renders[0] for render in renders)
 
 
 def test_rendering_is_deterministic_across_interpreters_and_hash_seeds() -> None:
@@ -636,7 +697,7 @@ def test_rendering_is_deterministic_across_interpreters_and_hash_seeds() -> None
         " variables={'tag': 'Warming kills'})\n"
         "print(registry.render(prompt).model_dump_json())\n"
     )
-    outputs = set()
+    outputs: set[str] = set()
     for seed in ("0", "4242"):
         completed = subprocess.run(
             [sys.executable, "-c", script, str(SAMPLE_PROMPTS)],
@@ -648,23 +709,27 @@ def test_rendering_is_deterministic_across_interpreters_and_hash_seeds() -> None
         outputs.add(completed.stdout)
 
     in_process = load(SAMPLE_PROMPTS).render(
-        ModelPrompt(prompt_id="example.select-passage", prompt_version="1.0.0", variables={"tag": "Warming kills"})
+        ModelPrompt(
+            prompt_id="example.select-passage", prompt_version="1.0.0", variables={"tag": "Warming kills"}
+        )
     )
     assert outputs == {in_process.model_dump_json() + "\n"}
 
 
-def test_variables_are_rendered_verbatim_not_escaped(prompt_dir: Path, write_prompt) -> None:
+def test_variables_are_rendered_verbatim_not_escaped(prompt_dir: Path, write_prompt: PromptWriter) -> None:
     write_prompt("p.md", prompt_id="card.select", body="Tag: {{ tag }}\n")
     registry = load(prompt_dir)
 
     rendered = registry.render(
-        ModelPrompt(prompt_id="card.select", prompt_version="1.0.0", variables={"tag": "<b>A & B</b> \"quoted\""})
+        ModelPrompt(
+            prompt_id="card.select", prompt_version="1.0.0", variables={"tag": '<b>A & B</b> "quoted"'}
+        )
     )
 
-    assert rendered.user == "Tag: <b>A & B</b> \"quoted\""
+    assert rendered.user == 'Tag: <b>A & B</b> "quoted"'
 
 
-def test_a_template_cannot_reach_python_internals(prompt_dir: Path, write_prompt) -> None:
+def test_a_template_cannot_reach_python_internals(prompt_dir: Path, write_prompt: PromptWriter) -> None:
     write_prompt("p.md", prompt_id="card.select", body="{{ tag.__class__.__mro__ }}\n")
     registry = load(prompt_dir)
 
@@ -672,7 +737,7 @@ def test_a_template_cannot_reach_python_internals(prompt_dir: Path, write_prompt
         registry.render(ModelPrompt(prompt_id="card.select", prompt_version="1.0.0", variables={"tag": "x"}))
 
 
-def test_a_template_has_no_random_text_generator(prompt_dir: Path, write_prompt) -> None:
+def test_a_template_has_no_random_text_generator(prompt_dir: Path, write_prompt: PromptWriter) -> None:
     write_prompt("p.md", prompt_id="card.select", body="{{ lipsum(1) }}\n")
     registry = load(prompt_dir)
 
@@ -681,8 +746,6 @@ def test_a_template_has_no_random_text_generator(prompt_dir: Path, write_prompt)
 
 
 def test_the_registry_render_is_a_prompt_renderer_for_a_real_router() -> None:
-    from collections.abc import Callable
-
     renderer: Callable[[ModelPrompt], RenderedPrompt] = load(SAMPLE_PROMPTS).render
     rendered = renderer(
         ModelPrompt(prompt_id="example.select-passage", prompt_version="1.0.0", variables={"tag": "x"})

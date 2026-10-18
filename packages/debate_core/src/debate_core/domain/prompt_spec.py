@@ -114,7 +114,9 @@ class ChangelogEntry(DomainModel):
 class PromptSpec(DomainModel):
     """The front matter of one prompt file: which prompt, which version, and what it must answer."""
 
-    prompt_id: PromptId = Field(description="The prompt's identifier; it names fixture and cassette directories.")
+    prompt_id: PromptId = Field(
+        description="The prompt's identifier; it names fixture and cassette directories."
+    )
     version: PromptVersion = Field(description="This version of the prompt, `MAJOR.MINOR.PATCH`.")
     status: PromptStatus = Field(description="`draft` while it may change, `released` once it may not.")
     task_class: TaskClass = Field(description="The generative task class the prompt is written for.")
@@ -123,7 +125,7 @@ class PromptSpec(DomainModel):
         description="Dotted path of the Pydantic model the answer must validate as, `module.QualifiedName`.",
     )
     owner: NonEmptyText = Field(
-        description="The epic or area that maintains the prompt, such as `v1-e05-model-router`; never a person."
+        description="The epic or area that maintains the prompt, such as `v1-e05-model-router`; not a person."
     )
     changelog: tuple[ChangelogEntry, ...] = Field(
         min_length=1, description="The prompt's history, one entry per version, this one included."
@@ -133,7 +135,9 @@ class PromptSpec(DomainModel):
     @classmethod
     def _require_generative_class(cls, task_class: TaskClass) -> TaskClass:
         if not task_class.is_generative:
-            raise ValueError(f"task class {task_class.value!r} does not generate output, so it takes no prompt")
+            raise ValueError(
+                f"task class {task_class.value!r} does not generate output, so it takes no prompt"
+            )
         return task_class
 
     @field_validator("changelog")

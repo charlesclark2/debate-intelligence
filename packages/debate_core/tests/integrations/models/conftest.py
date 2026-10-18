@@ -47,7 +47,7 @@ def prompt_text(
 
 
 type PromptWriter = Callable[..., Path]
-"""`write_prompt(relative_path, **prompt_text_arguments)`: writes one file under the test's prompt directory."""
+"""`write_prompt(relative_path, **prompt_text_arguments)`: writes one file under `prompt_dir`."""
 
 
 @pytest.fixture

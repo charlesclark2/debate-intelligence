@@ -11,6 +11,7 @@ matter, not read back from the code.
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from pathlib import Path
 
 import pytest
@@ -28,6 +29,9 @@ from debate_core.integrations.models.prompt_lock import (
 from debate_core.integrations.models.prompt_registry import PromptRegistry
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[5]
+
+type PromptWriter = Callable[..., Path]
+"""The `write_prompt` fixture of this directory's conftest."""
 SAMPLE_PROMPTS = REPOSITORY_ROOT / "tests" / "fixtures" / "prompts"
 SCHEMA = "debate_core.testing.contracts.model_router.ContractPassage"
 
@@ -66,7 +70,9 @@ def test_the_committed_lock_file_is_in_the_form_the_lock_script_writes() -> None
 # Hashes -------------------------------------------------------------------------------------------
 
 
-def test_a_body_hash_is_the_sha256_of_the_text_after_the_front_matter(prompt_dir: Path, write_prompt) -> None:
+def test_a_body_hash_is_the_sha256_of_the_text_after_the_front_matter(
+    prompt_dir: Path, write_prompt: PromptWriter
+) -> None:
     write_prompt("p.md")
 
     [prompt] = load(prompt_dir).prompts
@@ -97,7 +103,7 @@ def test_a_body_with_windows_line_endings_hashes_like_the_same_body_with_unix_on
 # What comparison finds ----------------------------------------------------------------------------
 
 
-def test_a_tree_that_matches_its_lock_has_no_problems(prompt_dir: Path, write_prompt) -> None:
+def test_a_tree_that_matches_its_lock_has_no_problems(prompt_dir: Path, write_prompt: PromptWriter) -> None:
     write_prompt("card/select.md", prompt_id="card.select")
     write_prompt("card/markup.md", prompt_id="card.markup", version="2.0.0")
     registry = load(prompt_dir)
@@ -105,7 +111,9 @@ def test_a_tree_that_matches_its_lock_has_no_problems(prompt_dir: Path, write_pr
     assert compare_lock(registry, locked(registry)) == ()
 
 
-def test_editing_a_released_body_without_a_version_bump_is_found(prompt_dir: Path, write_prompt) -> None:
+def test_editing_a_released_body_without_a_version_bump_is_found(
+    prompt_dir: Path, write_prompt: PromptWriter
+) -> None:
     write_prompt("card/select.md", prompt_id="card.select")
     lock = locked(load(prompt_dir))
     write_prompt("card/select.md", prompt_id="card.select", body="Choose the best passage for: {{ tag }}\n")
@@ -118,10 +126,16 @@ def test_editing_a_released_body_without_a_version_bump_is_found(prompt_dir: Pat
     assert DEFAULT_BODY_SHA256 in problems[0].detail
 
 
-def test_a_one_character_edit_of_a_released_body_is_found(prompt_dir: Path, write_prompt) -> None:
+def test_a_one_character_edit_of_a_released_body_is_found(
+    prompt_dir: Path, write_prompt: PromptWriter
+) -> None:
     write_prompt("card/select.md", prompt_id="card.select")
     lock = locked(load(prompt_dir))
-    write_prompt("card/select.md", prompt_id="card.select", body="Choose the passage that best supports this tag: {{ tag }}.\n")
+    write_prompt(
+        "card/select.md",
+        prompt_id="card.select",
+        body="Choose the passage that best supports this tag: {{ tag }}.\n",
+    )
 
     [problem] = compare_lock(load(prompt_dir), lock)
 
@@ -133,7 +147,7 @@ def test_a_one_character_edit_of_a_released_body_is_found(prompt_dir: Path, writ
     [("output_schema", "debate_core.domain.model_contracts.ModelUsage"), ("task_class", "complex_reasoning")],
 )
 def test_changing_what_a_released_version_answers_or_how_it_is_routed_is_found(
-    prompt_dir: Path, write_prompt, field: str, value: str
+    prompt_dir: Path, write_prompt: PromptWriter, field: str, value: str
 ) -> None:
     write_prompt("card/select.md", prompt_id="card.select")
     lock = locked(load(prompt_dir))
@@ -145,7 +159,9 @@ def test_changing_what_a_released_version_answers_or_how_it_is_routed_is_found(
     assert field in problem.detail
 
 
-def test_editing_the_owner_or_changelog_of_a_released_version_is_allowed(prompt_dir: Path, write_prompt) -> None:
+def test_editing_the_owner_or_changelog_of_a_released_version_is_allowed(
+    prompt_dir: Path, write_prompt: PromptWriter
+) -> None:
     write_prompt("card/select.md", prompt_id="card.select")
     lock = locked(load(prompt_dir))
     write_prompt(
@@ -160,15 +176,22 @@ def test_editing_the_owner_or_changelog_of_a_released_version_is_allowed(prompt_
     assert compare_lock(load(prompt_dir), lock) == ()
 
 
-def test_a_version_bump_is_a_new_lock_entry_beside_the_old_one(prompt_dir: Path, write_prompt) -> None:
+def test_a_version_bump_is_a_new_lock_entry_beside_the_old_one(
+    prompt_dir: Path, write_prompt: PromptWriter
+) -> None:
     write_prompt("card/select.md", prompt_id="card.select")
     lock = locked(load(prompt_dir))
     write_prompt(
-        "card/select@1.1.0.md", prompt_id="card.select", version="1.1.0", body="Choose the best passage for: {{ tag }}\n"
+        "card/select@1.1.0.md",
+        prompt_id="card.select",
+        version="1.1.0",
+        body="Choose the best passage for: {{ tag }}\n",
     )
     registry = load(prompt_dir)
 
-    assert [(p.kind, p.version) for p in compare_lock(registry, lock)] == [(LockProblemKind.UNLOCKED, "1.1.0")]
+    assert [(p.kind, p.version) for p in compare_lock(registry, lock)] == [
+        (LockProblemKind.UNLOCKED, "1.1.0")
+    ]
 
     extended = extend_lock(registry, lock)
 
@@ -177,7 +200,9 @@ def test_a_version_bump_is_a_new_lock_entry_beside_the_old_one(prompt_dir: Path,
     assert compare_lock(registry, extended) == ()
 
 
-def test_a_released_version_missing_from_the_lock_is_found(prompt_dir: Path, write_prompt) -> None:
+def test_a_released_version_missing_from_the_lock_is_found(
+    prompt_dir: Path, write_prompt: PromptWriter
+) -> None:
     write_prompt("card/select.md", prompt_id="card.select")
 
     problems = compare_lock(load(prompt_dir), PromptLock({}))
@@ -193,27 +218,33 @@ def test_a_released_version_missing_from_the_lock_is_found(prompt_dir: Path, wri
     assert "lock_prompts.py" in problems[0].detail
 
 
-def test_a_locked_version_whose_file_is_gone_is_found(prompt_dir: Path, write_prompt) -> None:
+def test_a_locked_version_whose_file_is_gone_is_found(prompt_dir: Path, write_prompt: PromptWriter) -> None:
     path = write_prompt("card/select.md", prompt_id="card.select")
     lock = locked(load(prompt_dir))
     path.unlink()
 
     [problem] = compare_lock(load(prompt_dir), lock)
 
-    assert (problem.kind, problem.prompt_id, problem.version) == (LockProblemKind.MISSING, "card.select", "1.0.0")
+    assert (problem.kind, problem.prompt_id, problem.version) == (
+        LockProblemKind.MISSING,
+        "card.select",
+        "1.0.0",
+    )
 
 
-def test_a_locked_version_set_back_to_draft_is_found(prompt_dir: Path, write_prompt) -> None:
+def test_a_locked_version_set_back_to_draft_is_found(prompt_dir: Path, write_prompt: PromptWriter) -> None:
     write_prompt("card/select.md", prompt_id="card.select")
     lock = locked(load(prompt_dir))
-    write_prompt("card/select.md", prompt_id="card.select", status="draft", body="Now free to edit {{ tag }}\n")
+    write_prompt(
+        "card/select.md", prompt_id="card.select", status="draft", body="Now free to edit {{ tag }}\n"
+    )
 
     [problem] = compare_lock(load(prompt_dir), lock)
 
     assert problem.kind is LockProblemKind.UNRELEASED
 
 
-def test_a_draft_may_change_freely_and_is_never_locked(prompt_dir: Path, write_prompt) -> None:
+def test_a_draft_may_change_freely_and_is_never_locked(prompt_dir: Path, write_prompt: PromptWriter) -> None:
     write_prompt("card/select.md", prompt_id="card.select", status="draft")
     lock = locked(load(prompt_dir))
     write_prompt("card/select.md", prompt_id="card.select", status="draft", body="Rewritten {{ tag }}\n")
@@ -223,7 +254,7 @@ def test_a_draft_may_change_freely_and_is_never_locked(prompt_dir: Path, write_p
     assert compare_lock(registry, lock) == ()
 
 
-def test_problems_are_reported_in_a_stable_order(prompt_dir: Path, write_prompt) -> None:
+def test_problems_are_reported_in_a_stable_order(prompt_dir: Path, write_prompt: PromptWriter) -> None:
     write_prompt("b.md", prompt_id="b.prompt")
     write_prompt("a.md", prompt_id="a.prompt", version="1.10.0")
     write_prompt("a2.md", prompt_id="a.prompt", version="1.9.0")
@@ -240,7 +271,9 @@ def test_problems_are_reported_in_a_stable_order(prompt_dir: Path, write_prompt)
 # Extending the lock -------------------------------------------------------------------------------
 
 
-def test_extending_the_lock_refuses_to_rehash_a_changed_body(prompt_dir: Path, write_prompt) -> None:
+def test_extending_the_lock_refuses_to_rehash_a_changed_body(
+    prompt_dir: Path, write_prompt: PromptWriter
+) -> None:
     write_prompt("card/select.md", prompt_id="card.select")
     lock = locked(load(prompt_dir))
     write_prompt("card/select.md", prompt_id="card.select", body="Choose the best passage for: {{ tag }}\n")
@@ -250,7 +283,9 @@ def test_extending_the_lock_refuses_to_rehash_a_changed_body(prompt_dir: Path, w
 
 
 @pytest.mark.parametrize("change", ["deleted", "drafted"])
-def test_extending_the_lock_refuses_to_drop_a_locked_version(prompt_dir: Path, write_prompt, change: str) -> None:
+def test_extending_the_lock_refuses_to_drop_a_locked_version(
+    prompt_dir: Path, write_prompt: PromptWriter, change: str
+) -> None:
     path = write_prompt("card/select.md", prompt_id="card.select")
     lock = locked(load(prompt_dir))
     if change == "deleted":
@@ -266,7 +301,7 @@ def test_extending_the_lock_refuses_to_drop_a_locked_version(prompt_dir: Path, w
 
 
 def test_the_lock_file_names_each_released_version_with_its_hash_schema_and_class(
-    prompt_dir: Path, write_prompt, tmp_path: Path
+    prompt_dir: Path, write_prompt: PromptWriter, tmp_path: Path
 ) -> None:
     write_prompt("card/select.md", prompt_id="card.select")
     write_prompt("card/draft.md", prompt_id="card.draft", status="draft")

@@ -246,9 +246,45 @@ git worktree remove ../debate-intelligence-worktrees/agent-reinstall-after-t27
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-18
 
 **Notes:**
+
+Accepted. The phase stays `InProgress` until ac3, the operator's reinstall and `--check-launchd`
+after the merge, is recorded under a later heading in this report.
+
+**The work itself:**
+
+* **The guard now lists what the check takes, not what it refuses.** That is the fix for how the
+  old one went stale. The test draws its cases from the installer's own argument loop, and the
+  `--timeout` run shows that an option nobody has written a case for is refused by default.
+* **The loop records option names only.** Each branch shifts past its value, and an unknown option
+  fails before the guard. So no value is ever matched against the guard, and none is printed.
+* **The mutation table covers every option.** The correction to the first "does not name the
+  option" mutant was the right call: it had removed only one of the two mentions, and the message
+  names the option twice.
+* **The script was run under dash**, which CI's `/bin/sh` is, and shellcheck is clean.
+
+**Rulings:**
+
+* **Deviation 1, `--debate-research` refused too:** accepted. It was ignored in the same way, and
+  accepting it would let a check pass against the old build while naming a new one. That is worse
+  than any of the five. The spec's item (2) is read as "every option but `--label`".
+* **Deviation 2, the hand runs:** accepted. None touched the real agent, config or AWS.
+* **Decision 1, ac1's behaviour cannot be red first:** accepted, and the reasoning is right. A
+  POSIX shell already exports what it inherited, so the two lines were a no-op. The run test passing
+  on both sides is the evidence they could go. The code test, red first, keeps them gone, and the
+  run test catches a wrapper that sets a profile of its own.
+* **Decisions 2 to 6:** accepted. "Reaches the store" is proven by the run record in the moto
+  bucket, with the profile read from boto3's sessions themselves, not from a message.
+
+**Follow-ups:**
+
+* **1, the parse time-limit test under load:** filed against E31 at p3 in the next PM batch. The fix
+  is a test that does not measure a time limit by the wall clock (an injected clock or a parse that
+  blocks until told), not a longer limit.
+* **ac3:** the operator runs it from a detached worktree of `origin/dev` after the merge, as
+  written. Steps 3 and 5 are recorded here by the PM.

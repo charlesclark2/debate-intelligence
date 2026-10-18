@@ -18,6 +18,7 @@ import pytest
 from pydantic import ValidationError
 
 from debate_core.domain.model_contracts import (
+    Effort,
     ModelParams,
     ModelProvider,
     ModelResponse,
@@ -124,7 +125,7 @@ FULL_METADATA_JSON = (
     '{"prompt_id":"card.select","prompt_version":"1.10.0",'
     '"route":{"task_class":"complex_reasoning","provider":"bedrock","model_id":"example-model-id",'
     '"inference_profile":"example-profile","region":"example-region-1","temperature":0.3,'
-    '"max_tokens":2048,"timeout_seconds":45.5},'
+    '"max_tokens":2048,"timeout_seconds":45.5,"effort":"high"},'
     '"provider_request_id":"example-request-0002",'
     '"snapshot_ids":["01JA8G6Z9R4M2K7Q5W3E1T0Y8B","01JA8G6Z9R4M2K7Q5W3E1T0Y8C"],'
     '"retrieval_ids":["search-result-7","01JA8G6Z9R4M2K7Q5W3E1T0Y8D"],'
@@ -139,6 +140,7 @@ def test_metadata_round_trips_through_json_unchanged() -> None:
     assert metadata.model_dump_json() == FULL_METADATA_JSON
     assert GeneratedArtifactMetadata.model_validate_json(metadata.model_dump_json()) == metadata
     assert metadata.inference_profile == "example-profile"
+    assert metadata.route.effort is Effort.HIGH
     assert metadata.created_at == datetime(2026, 10, 17, 12, 30, 45, 123456, tzinfo=UTC)
 
 

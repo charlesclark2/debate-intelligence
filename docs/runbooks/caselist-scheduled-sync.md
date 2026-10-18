@@ -340,7 +340,16 @@ with no schedule, running the copied wrapper's `--check`. That prints the path
 no listing call to OpenCaselist, no download. The installer kickstarts it, waits for it, prints
 its log (`~/Library/Logs/debate-research/caselist-sync-check.log`) and exit code, and boots it out.
 It reads the agent's `runs` count before and after and fails if it changed. It refuses to run
-against an agent whose wrapper is not this checkout's copied out, so reinstall first.
+against an agent whose wrapper is not this checkout's copied out, so reinstall first. That
+includes an agent installed before a change to `ops/launchd/run-caselist-sync.sh` reached this
+checkout, such as `v1-e34-t27`'s: until the reinstall, the check says `the installed agent's
+wrapper … is not this checkout's …; reinstall with this script first`.
+
+It takes no option but `--label`, which names the agent to check. It checks the installed agent
+as its plist stands, so any other option would be ignored, and is refused instead, by name, with
+nothing checked (`v1-e34-t27`). Before that, `--check-launchd --weekday 4` checked the Wednesday
+agent and said nothing about Thursday. To change a setting, reinstall with its option
+([Reinstalling the agent](#reinstalling-the-agent)), then run the check on its own.
 
 The log is `doctor`'s report as launchd runs the build: with the plist's `HOME`, `PATH` and
 `DEBATE_ENV`, and nothing of a shell's. Its `Evidence profile` row is the one
@@ -360,6 +369,14 @@ weekly run will use. Success is `exit code 0`, the version you installed, that r
 For a new build, a changed wrapper, or a changed schedule. Nothing here fetches anything, and
 the two checks are the point of doing it in this order: the first finds a profile the AWS config
 does not define before the agent is replaced, and the second finds it as launchd will meet it.
+
+**The wrapper changed in `v1-e34-t27`.** It no longer exports `AWS_PROFILE`, which did nothing:
+the plist sets none, and the run's profile is `storage.s3.aws_profile`. The agent's own runs are
+unaffected, but until the agent is reinstalled from a checkout with the change, `--check-launchd`
+refuses it, saying `the installed agent's wrapper … is not this checkout's …; reinstall with this
+script first`. These steps, with no option but the build in step 3, are the reinstall. They keep
+the agent's schedule, Wednesday at 06:00 by default, and its other settings by themselves: no
+`--weekday`, `--hour` or `--minute` is needed.
 
 1. **Install the build**: `scripts/install_channel.sh` with the tag to install. It rehearses the
    install and refuses a build that fails its checks, leaving the one the agent runs untouched
@@ -457,6 +474,7 @@ does not define before the agent is replaced, and the second finds it as launchd
    in step 2, and the same `runs` before and after
    ([Step 3](#step-3--enable-it) has the table of exit codes). This is the check that counts: it
    is launchd's environment, not a shell's, reading the AWS config launchd's `HOME` leads to.
+   Run it as it is written: it takes no option but `--label`, and refuses any other by name.
 
 The next scheduled run is the first with the new build. If the profile is not defined on the day
 after all, that run is no longer silent:

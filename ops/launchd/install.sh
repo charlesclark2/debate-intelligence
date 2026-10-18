@@ -71,7 +71,8 @@
 #                        evidence profile, whether this machine's AWS config defines it and which
 #                        permission set it is signed in as; the check fails (exit 1) on a profile
 #                        that is not defined, and not on an expired session. The agent itself is
-#                        only read, and its run count is shown before and after.
+#                        only read, and its run count is shown before and after. It takes no
+#                        option but --label, and refuses any other by name: each would be ignored.
 #   -h, --help           This text.
 set -eu
 
@@ -103,6 +104,7 @@ DEBATE_RESEARCH_PATH=""
 DRY_RUN=0
 CHECK_LAUNCHD=0
 CASELISTS=""
+OPTIONS_GIVEN=""
 
 usage() {
     # Every comment line at the top of this file, less its `# `, and stopping at the first line
@@ -316,6 +318,8 @@ without_trailing_slashes() {
 }
 
 while [ $# -gt 0 ]; do
+    # Each option by name, without its value, for the launchd check's guard below.
+    OPTIONS_GIVEN="${OPTIONS_GIVEN} $1"
     case "$1" in
         --caselist) [ $# -ge 2 ] || fail "--caselist needs a slug"; CASELISTS="${CASELISTS} $2"; shift 2 ;;
         --env) [ $# -ge 2 ] || fail "--env needs a value"; DEBATE_ENVIRONMENT="$2"; ENVIRONMENT_GIVEN=1; shift 2 ;;
@@ -342,8 +346,17 @@ PHYSICAL_HOME=$(physical_path "${HOME}")
 # --- The launchd check: a one-off label running the installed wrapper's `--check` -------------
 
 if [ "${CHECK_LAUNCHD}" -eq 1 ]; then
-    [ -z "${CASELISTS}" ] && [ "${DRY_RUN}" -eq 0 ] && [ "${ENVIRONMENT_GIVEN}" -eq 0 ] \
-        && [ "${CONFIRM_ENV_CHANGE}" -eq 0 ] || fail "--check-launchd takes no options but --label"
+    # The check runs the installed agent as its plist stands, so every option but the label of the
+    # agent to check would be ignored. This lists what the check takes, not what it refuses, so an
+    # option added to the loop above is refused here until the check uses it. Until v1-e34-t27 the
+    # guard listed four, and --weekday, --hour, --minute, --log-dir, --wrapper-dir and
+    # --debate-research were taken and ignored.
+    for option in ${OPTIONS_GIVEN}; do
+        case "${option}" in
+            --check-launchd|--label) ;;
+            *) fail "--check-launchd takes no option but --label, and would ignore ${option}: it checks the installed agent as its plist stands. Nothing was checked. Run it without ${option}; a reinstall is what changes the agent" ;;
+        esac
+    done
     for tool in launchctl plutil; do
         command -v "${tool}" >/dev/null 2>&1 || fail "--check-launchd needs macOS's ${tool}"
     done

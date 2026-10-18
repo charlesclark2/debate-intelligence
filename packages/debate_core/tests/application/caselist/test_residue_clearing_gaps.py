@@ -463,6 +463,25 @@ class TestTheDryRun:
             [(REWRITTEN_KEY, older), (NOT_REWRITTEN, naming)]
         )
 
+    async def test_a_manifest_the_plan_rewrites_again_is_counted_as_rewritten_and_not_swept(
+        self, removed: RemovalWorld, tmp_path: Path
+    ) -> None:
+        """A version naming the removed file published over the rewrite: the re-run rewrites the
+        key again and purges every other version of it, which the plan counts there. Its older
+        versions are not counted a second time as swept."""
+        world = removed
+        put(world, REWRITTEN_KEY, AN_OLD_BODY, written=LONG_BEFORE)
+        *rows, summary = current_bytes(world, REWRITTEN_KEY).decode().splitlines()
+        naming = tmp_path / "naming.jsonl"
+        lines = [*rows, a_member_row_of(REMOVED).decode().strip(), summary]
+        naming.write_text("".join(f"{line}\n" for line in lines), encoding="utf-8")
+        await world.bucket.put_file(REWRITTEN_KEY, naming)
+
+        plan = await plan_again(world)
+
+        assert [(rewrite.key, rewrite.side) for rewrite in plan.manifests] == [(REWRITTEN_KEY, Side.BUCKET)]
+        assert plan.superseded_versions == ()
+
     async def test_the_execution_deletes_the_versions_its_dry_run_counted(
         self, removed: RemovalWorld
     ) -> None:

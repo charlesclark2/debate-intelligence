@@ -296,10 +296,6 @@ class _Bodies:
     def size(self, fingerprint: str) -> int:
         return len(self.sets[fingerprint])
 
-    def by_size(self, fingerprints: Set[str] | Sequence[str]) -> list[str]:
-        """Smallest first, then by fingerprint: an order that depends on nothing else."""
-        return sorted(fingerprints, key=lambda fingerprint: (self.size(fingerprint), fingerprint))
-
 
 def diagnose_cuts(
     bodies: Mapping[str, str],

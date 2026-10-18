@@ -95,9 +95,11 @@ last round left them, and a join is refused if it would put two texts sharing no
 Then a cluster that others would join and that is joining nothing itself takes in each of them,
 except any two that share nothing with each other, which it takes in neither of: that cluster holds
 two passages through two of its bodies. A cluster whose own join is refused that way takes in the
-clusters that would join it, by the same test, in the same round. Two clusters that would each join
-the other are one join. A cluster that is itself joining another waits for the next round, so a
-chain of copies, each a cut of the next, joins from the top. Rounds repeat until one joins nothing.
+clusters that would join it, by the same test, in the same round. A cluster that is itself joining
+another waits for the next round, so a chain of copies, each a cut of the next, joins from the top.
+Rounds repeat until one joins nothing. (Two clusters that would each join the other would wait for
+each other and join neither; the copies' step, which joins two bodies that each hold the other,
+leaves no such pair that a test could build.)
 
 ## Why the cluster id cannot depend on input order
 
@@ -636,18 +638,14 @@ def _accepted_joins(
     """Which of a round's joins happen: see "The order joins happen in" in this module's docstring.
 
     `proposed` maps a cluster to the one it would join, each already sharing text throughout with
-    its target. Two clusters that would join each other are one join. A cluster takes in the
-    clusters that would join it once it is joining nothing itself, or once its own join has been
-    refused: every one of them, except two that share nothing with each other, which it takes in
-    neither of.
+    its target. A cluster takes in the clusters that would join it once it is joining nothing
+    itself, or once its own join has been refused: every one of them, except two that share nothing
+    with each other, which it takes in neither of.
     """
-    accepted = [
-        (own, target) for own, target in proposed.items() if proposed.get(target) == own and own < target
-    ]
+    accepted: list[tuple[str, str]] = []
     joining: defaultdict[str, list[str]] = defaultdict(list)
     for own, target in proposed.items():
-        if proposed.get(target) != own:
-            joining[target].append(own)
+        joining[target].append(own)
     settled = [target for target in joining if target not in proposed]
     while settled:
         refused: list[str] = []

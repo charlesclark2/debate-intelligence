@@ -94,9 +94,10 @@ The cut step runs in rounds. In each, every cluster's join is worked out from th
 last round left them, and a join is refused if it would put two texts sharing nothing together.
 Then a cluster that others would join and that is joining nothing itself takes in each of them,
 except any two that share nothing with each other, which it takes in neither of: that cluster holds
-two passages through two of its bodies. Two clusters that would each join the other are one join.
-A cluster that is itself joining another waits for the next round, so a chain of copies, each a cut
-of the next, joins from the top. Rounds repeat until one joins nothing.
+two passages through two of its bodies. A cluster whose own join is refused that way takes in the
+clusters that would join it, by the same test, in the same round. Two clusters that would each join
+the other are one join. A cluster that is itself joining another waits for the next round, so a
+chain of copies, each a cut of the next, joins from the top. Rounds repeat until one joins nothing.
 
 ## Why the cluster id cannot depend on input order
 
@@ -635,25 +636,33 @@ def _accepted_joins(
     """Which of a round's joins happen: see "The order joins happen in" in this module's docstring.
 
     `proposed` maps a cluster to the one it would join, each already sharing text throughout with
-    its target. Two clusters that would join each other are accepted as one join. A cluster joining
-    nothing itself takes in every cluster that would join it, except two that share nothing with
-    each other: those it takes in neither of.
+    its target. Two clusters that would join each other are one join. A cluster takes in the
+    clusters that would join it once it is joining nothing itself, or once its own join has been
+    refused: every one of them, except two that share nothing with each other, which it takes in
+    neither of.
     """
     accepted = [
         (own, target) for own, target in proposed.items() if proposed.get(target) == own and own < target
     ]
     joining: defaultdict[str, list[str]] = defaultdict(list)
     for own, target in proposed.items():
-        if target not in proposed:
+        if proposed.get(target) != own:
             joining[target].append(own)
-    for target, owns in joining.items():
-        for own in owns:
-            if all(
-                index.share_text_throughout(clusters.members[own], clusters.members[other])
-                for other in owns
-                if other != own
-            ):
-                accepted.append((own, target))
+    settled = [target for target in joining if target not in proposed]
+    while settled:
+        refused: list[str] = []
+        for target in settled:
+            owns = joining[target]
+            for own in owns:
+                if all(
+                    index.share_text_throughout(clusters.members[own], clusters.members[other])
+                    for other in owns
+                    if other != own
+                ):
+                    accepted.append((own, target))
+                else:
+                    refused.append(own)
+        settled = [own for own in refused if own in joining]
     return sorted(accepted)
 
 

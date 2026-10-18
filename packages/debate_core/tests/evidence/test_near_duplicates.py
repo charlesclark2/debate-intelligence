@@ -1001,3 +1001,27 @@ def test_a_card_lacking_the_end_of_a_short_copy_does_not_hold_it_and_is_a_second
     cut = card[60:80]
     assert containment(frozenset(word_shingles(copy)), frozenset(word_shingles(card))) >= 0.9
     assert partition(card, copy, cut) == [[0], [1], [2]]
+
+
+def test_a_cut_does_not_join_a_cluster_that_already_holds_a_passage_sharing_nothing_with_it() -> None:
+    """A later round. A 200-word card and its copy twenty words on are one cluster by Jaccard. A
+    160-word cut of the card's middle and the copy's 55-word close each join that cluster in the
+    first round, and they share text. A 50-word passage of the 160-word cut waits for it, and then
+    would join a cluster holding the close, with which it shares nothing: it stays out."""
+    article = numbered("word", 220)
+    card, later = article[:200], article[20:220]
+    middle, closing, passage = article[40:200], article[165:220], article[40:90]
+    assert frozenset(word_shingles(passage)).isdisjoint(word_shingles(closing))
+    assert partition(card, later, middle, closing) == [[0, 1, 2, 3]]
+    assert partition(card, later, middle, passage) == [[0, 1, 2, 3]]
+    assert partition(card, later, middle, closing, passage) == [[0, 1, 2, 3], [4]]
+
+
+def test_a_cut_waiting_on_a_cluster_whose_own_join_is_refused_joins_it() -> None:
+    """A 100-word cut of the card's opening waits on its join to the card's cluster. That join is
+    refused, beside the copy's close, which shares nothing with it. The 50-word passage inside the
+    opening then joins the opening in the same round, which a refused join no longer holds back."""
+    article = numbered("word", 220)
+    card, later = article[:200], article[20:220]
+    opening, closing, passage = article[:100], article[165:220], article[:50]
+    assert partition(card, later, opening, closing, passage) == [[0, 1], [2, 4], [3]]

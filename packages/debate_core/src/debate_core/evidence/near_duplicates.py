@@ -6,6 +6,14 @@ kept an extra paragraph, a third pasted it out of a PDF that split `installation
 ation`. This module groups those copies into one cluster without comparing every card with every
 other card, which at caselist scale would be tens of billions of comparisons.
 
+## What one card is
+
+The PM's ruling of 2026-10-16 (`v1-e31-t20`): a card is a passage. Two bodies are one card when one
+holds the other or they overlap, and two passages of one article are two cards. Bodies join only on
+text they share directly, never through a third body that holds both of them, and a body that
+holds the passages of two or more clusters is not a witness for joining any of them. Every step
+below is one of those sentences.
+
 ## How a cluster is found
 
 1. **Words.** The body is put through the fingerprint normalization, a line-break hyphenation
@@ -19,78 +27,83 @@ other card, which at caselist scale would be tens of billions of comparisons.
    `PYTHONHASHSEED`. Python's `hash()` and the unseeded `random` module are never used.
 4. **LSH buckets.** The signature is cut into :data:`LSH_BANDS` bands of :data:`LSH_ROWS_PER_BAND`
    values. Two bodies that agree on every value of any one band are *candidates*.
-5. **Confirmation.** A candidate pair is a match when its real shingle sets have Jaccard
-   similarity at least the configured threshold (0.8 by default). When both bodies are long, it is
-   also a match on containment — the overlap divided by the smaller set — at least its threshold
-   (0.9), which is what lets a card cut a paragraph shorter still join its cluster.
-6. **Short bodies** are matched as cuts by their own step, below, not by the banding.
-7. **Union-find.** Confirmed pairs are merged. The cluster id is the smallest exact fingerprint in
-   the cluster.
+5. **Copies.** A candidate pair is one text when its real shingle sets have Jaccard similarity at
+   least the configured threshold (0.8 by default), and so is a pair of bodies of one size that
+   each hold the other (a word changed). Copies are joined strongest first, then by fingerprint.
+6. **Cuts.** A body inside a larger one joins the cluster that holds it, by the cut step below.
+   Since `v1-e31-t20` that is true of long bodies as well as short ones: before it, a long body
+   joined a body containing it only when the banding happened to pair the two.
+7. **Never two texts that share nothing.** No join, of copies or of a cut, puts two bodies that
+   have no shingle in common in one cluster: one that would is refused.
+8. **The cluster id** is the smallest exact fingerprint in the cluster.
 
-## Short bodies (`v1-e31-t08`)
+## Cuts and their containers
 
-Steps 4 and 5 were built for long cards and fail short ones in two ways `v1-e31-t06` measured.
-One changed word costs a body the :data:`SHINGLE_SIZE` shingles that contain it, a tenth of a long
-card and a third of a 19-word one, so a typo or an OCR split drops a short card under the 0.9
-containment threshold. And a short cut of a card shares so few shingles with it that the banding
-rarely makes the pair a candidate at all: a third of the original is found about one time in four.
-A third way was found while fixing those: the banding pairs a short body with only *some* of the
-bodies that contain it, so a fragment two different cards share joined whichever it happened to be
-paired with, and would have merged the two had it been paired with both.
+A body's **containers** are found, not sampled: every body at least as large that holds both its
+first and its last shingle, and is *confirmed* to contain it (:func:`confirms_a_cut`): at least the
+containment threshold (0.9) of its shingles, or, for a short body, all of it *but for one word*:
+changed, split in two, run together from two, dropped or added, with at least
+:data:`SHINGLE_SIZE` unchanged words on each side (:func:`contained_but_for_one_word`). Both ends
+inside the other body is what a cut of a card looks like, and looking them up is exact, so which
+bodies are compared does not depend on the hash seed. A body that holds the cut and that the cut
+holds as well is a copy of it (step 5), not a container. :class:`CutIndex` holds all of this,
+worked out from the bodies alone.
 
-A body is **short** when it has fewer than :data:`SHORT_BODY_SHINGLES` shingles (64 words). The
-line is where the long-card rule stops needing help: the costliest change the short rule tolerates,
-a word split in two inside a cut of a longer body, takes `SHINGLE_SIZE + 1` shingles from the cut,
-which is a tenth of 60. At and above the line the 0.9 containment threshold already admits it.
+A cut's cluster joins a container's cluster when that is not a guess:
 
-A short body is never merged on containment through the banding. Instead:
+* **A body holding two passages witnesses neither.** A *passage* of a body is a body it holds that
+  is at least :data:`MIN_CUT_SHARE` of it. A body that holds the cut and also a passage sharing no
+  shingle with it holds two cards, by the ruling, and is not a witness for the cut
+  (:meth:`CutIndex.holds_a_passage_apart_from`). This is the join `v1-e31-t11`'s sample found wrong:
+  two bodies sharing no text, joined because a third held both. The same body is still a witness
+  for a copy of itself, which shares text with both passages.
+* **One witness.** Every other container is a witness, the ones in the cut's own cluster included:
+  a cut already with a body that holds it is not taken into the cluster of a second (`v1-e31-t11`'s
+  Follow-up 6). The cut joins only when its witnesses are one cluster; a body inside two is a cut
+  of either, so it stays out of both.
+* **Containers that hold one another are one witness** (`v1-e31-t11`). When every witness outside
+  the cluster of the smallest also holds a witness inside that cluster, by the same test a cut is
+  confirmed by, the smallest is the only one. "A witness inside that cluster", not "the smallest":
+  two copies of one size in one cluster are told apart only by fingerprint, and a digest must not
+  decide the outcome. A cut of a team's ninety-word copy is inside the three-hundred-word card that
+  copy was cut from as well, and the longer says nothing about the cut that the shorter did not.
+  Two containers neither of which holds the other are still two witnesses, however much they
+  overlap: which of two extents of a text a cut belongs to is a guess.
+* **Its share is of the smallest witness** (`v1-e31-t11`). The cut must be at least
+  :data:`MIN_CUT_SHARE` of it, so the container is at most `1 / MIN_CUT_SHARE` times its size.
+  Containers are tried smallest first, then by fingerprint, which is what makes "the smallest" the
+  same body on every run. The limit keeps a body that is really a whole section of a file, parsed
+  as one card, from gathering the cards it contains, and a short quote two articles both carry from
+  joining either.
+* **A short body that opens and closes like many others is left alone.** One whose two end
+  shingles are both held by more than :data:`MAX_CONTAINER_CLUSTERS` other clusters opens and
+  closes with stock phrases, and is not compared with them at all, which also bounds the step's
+  cost. The clusters are counted as they stand when the cut is considered, so a much-read card
+  whose long copies have joined one another counts once.
+* **The whole cluster.** A cluster joins when each of its cuts has at most one witness, they name
+  one other cluster, and at least one of them is within the share. One body too common to compare
+  holds the whole cluster back.
 
-* **Its containers are enumerated, not sampled.** Every body holding both the short body's first
-  and its last shingle, and at least as large, is compared with it. Both ends inside the other body
-  is what a cut of a card looks like, and looking them up is exact, so which bodies are compared no
-  longer depends on the hash seed.
-* **A container is confirmed** on the same containment threshold as before, or when the short body
-  is in it as one run *but for one word*: changed, split in two, run together from two, dropped or
-  added, with at least :data:`SHINGLE_SIZE` unchanged words on each side
-  (:func:`contained_but_for_one_word`). One word, because a tenth of a short body's shingles is less
-  than one word's worth. Unchanged words on both sides, because two cards from one article that
-  open alike and then diverge differ from the point of divergence to the end, and a changed word
-  does not.
-* **It joins only when that is not a guess.** A short body joins a container's cluster when every
-  container that counts as a *witness* is in that one cluster. A body inside two clusters is a cut
-  of either, so it stays out of both; this is the rule abbreviated disclosures are linked by.
-* **Containers that hold one another are one witness** (`v1-e31-t11`). When every confirmed
-  container outside the cluster of the smallest one also holds a container inside that cluster, by
-  the same test a cut is confirmed by, the smallest is the only witness and the short body joins
-  its cluster. "A container inside that cluster", not "the smallest": two copies of one size in
-  one cluster are told apart only by fingerprint, and a digest must not decide the outcome.
-  A cut of a team's ninety-word copy is inside the three-hundred-word card that copy was cut from
-  as well; if the banding never paired those two long bodies they are two clusters, but the longer
-  says nothing about the cut that the shorter did not. Two containers neither of which holds the
-  other are still two witnesses, however much they overlap: which of two extents of a text a cut
-  belongs to is a guess. The cut joins one cluster and the long bodies stay where they were.
-* **Its share is of the smallest body that holds it** (`v1-e31-t11`). The short body must be at
-  least :data:`MIN_CUT_SHARE` of the smallest confirmed container, so the container is at most
-  `1 / MIN_CUT_SHARE` times its size. Containers are tried smallest first, then by fingerprint,
-  which is what makes "the smallest" the same body on every run. The size limit keeps a body that
-  is really a whole section of a file, parsed as one card, from gathering the short cards it
-  contains into one cluster.
-* **A body that opens and closes like many others is left alone.** One whose two end shingles are
-  both held by more than :data:`MAX_CONTAINER_CLUSTERS` other clusters opens and closes with stock
-  phrases, and is not compared with them at all, which is also what bounds the step's cost.
+## The order joins happen in
 
-Two long bodies are matched exactly as before this step existed.
+The cut step runs in rounds. In each, every cluster's join is worked out from the clusters as the
+last round left them, and a join is refused if it would put two texts sharing nothing together.
+Then a cluster that others would join and that is joining nothing itself takes in each of them,
+except any two that share nothing with each other, which it takes in neither of: that cluster holds
+two passages through two of its bodies. Two clusters that would each join the other are one join.
+A cluster that is itself joining another waits for the next round, so a chain of copies, each a cut
+of the next, joins from the top. Rounds repeat until one joins nothing.
 
 ## Why the cluster id cannot depend on input order
 
-Every step above is a function of the *set* of bodies: candidate pairs come from bucket membership
-and from which bodies hold a shingle, confirmation is symmetric, and the union always makes the
-smaller root the parent, so the root of a component is its smallest member however the merges
-happened to be ordered. Joining a short body's cluster to its one container cluster can only make
-another short body's containers fewer clusters, never more, so repeating it until nothing changes
-ends in the same place whatever order it ran in. The same bodies, read from files in any order, in
-any process, produce the same ids. Which containers are a short body's witnesses is decided once,
-from the bodies and the clusters the banding left, before any of them is joined.
+Every step is a function of the *set* of bodies: candidate pairs come from bucket membership and
+from which bodies hold a shingle, confirmation is a property of two bodies, copies are joined in
+the order of their similarity and then of their fingerprints, and every round decides all of its
+joins from the clusters before it, symmetrically. The union always makes the smaller root the
+parent, so the root of a component is its smallest member however the merges happened. The same
+bodies, read from files in any order, in any process, produce the same ids. Which of two copies of
+equal similarity is refused, when joining both would put two texts sharing nothing together, is
+the one place a fingerprint decides.
 
 ## What a cluster is not
 
@@ -101,8 +114,9 @@ Nothing here calls a model or an embedding service; the task forbids both for de
 
 Which bodies share a cluster id is part of what
 :data:`~debate_core.evidence.fingerprints.FINGERPRINT_VERSION` names. A change here that can move a
-body to another cluster bumps it, as the short-body step did (`card-fingerprint-v2`) and its two
-corrections did (`card-fingerprint-v3`), although the exact fingerprint itself is unchanged.
+body to another cluster bumps it, as the short-body step did (`card-fingerprint-v2`), its two
+corrections did (`card-fingerprint-v3`) and the long cuts and the ruling did
+(`card-fingerprint-v4`), although the exact fingerprint itself is unchanged.
 
 :mod:`debate_core.evidence.cluster_diagnosis` reads a finished placement and says, in counts, which
 of the limits above kept each cut out of a cluster that holds it. Measure with it before changing
@@ -115,7 +129,8 @@ import hashlib
 import re
 import struct
 from collections import defaultdict
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
+from dataclasses import dataclass
 from typing import Final
 
 from pydantic import Field
@@ -132,15 +147,20 @@ __all__ = [
     "MIN_CUT_SHARE",
     "SHINGLE_SIZE",
     "SHORT_BODY_SHINGLES",
+    "CutIndex",
     "NearDuplicateThresholds",
+    "Witnesses",
     "cluster_near_duplicates",
     "confirms_a_cut",
     "contained_but_for_one_word",
     "containment",
     "jaccard",
+    "joining_target",
     "matching_words",
     "minhash_signature",
     "shingles",
+    "too_common",
+    "witnesses",
     "word_shingles",
 ]
 
@@ -165,10 +185,12 @@ step. `(SHINGLE_SIZE + 1) / (1 - 0.9)`: from here up, the default containment th
 admits the one changed word the short step tolerates, at its costliest."""
 
 MIN_CUT_SHARE: Final = 0.25
-"""The smallest share of a container's shingles a short body may be and still join its cluster."""
+"""The smallest share of its smallest witness's shingles a cut may be and still join that cluster;
+also the smallest share of a body a passage it holds is (:meth:`CutIndex.holds_a_passage_apart_from`)."""
 
 MAX_CONTAINER_CLUSTERS: Final = 8
-"""A short body whose end shingles are both held by more other clusters than this is left alone."""
+"""A short body whose end shingles are both held by more other clusters than this, as the clusters
+stand when it is considered, is left alone."""
 
 _SIGNATURE_BYTES: Final = 4 * MINHASH_PERMUTATIONS
 _SIGNATURE_LAYOUT: Final = struct.Struct(f"<{MINHASH_PERMUTATIONS}I")
@@ -288,6 +310,226 @@ def confirms_a_cut(
     return len(cut_set) < SHORT_BODY_SHINGLES and contained_but_for_one_word(cut_words, holder_words)
 
 
+class CutIndex:
+    """Which bodies hold which, worked out from the bodies alone, before any cluster exists.
+
+    The clusterer and :mod:`debate_core.evidence.cluster_diagnosis` both read containment from
+    here, so a diagnosis cannot drift from the rule it explains. Every answer is cached: a body is
+    asked about many times, in every round of the cut step.
+    """
+
+    def __init__(self, bodies: Mapping[str, str], thresholds: NearDuplicateThresholds | None = None) -> None:
+        self.limits = thresholds or NearDuplicateThresholds()
+        self.fingerprints: list[str] = sorted(bodies)
+        self.words = {fingerprint: matching_words(bodies[fingerprint]) for fingerprint in self.fingerprints}
+        ordered = {fingerprint: word_shingles(self.words[fingerprint]) for fingerprint in self.fingerprints}
+        self.sets = {fingerprint: frozenset(ordered[fingerprint]) for fingerprint in self.fingerprints}
+        self.ends = {fingerprint: (runs[0], runs[-1]) for fingerprint, runs in ordered.items() if runs}
+
+        end_shingles = {shingle for pair in self.ends.values() for shingle in pair}
+        holders: defaultdict[str, set[str]] = defaultdict(set)
+        for fingerprint in self.fingerprints:
+            for shingle in self.sets[fingerprint] & end_shingles:
+                holders[shingle].add(fingerprint)
+        self._holding_both_ends: dict[str, list[str]] = {}
+        for cut, (first, last) in self.ends.items():
+            size = self.size(cut)
+            found = [
+                holder
+                for holder in holders[first] & holders[last]
+                if holder != cut and self.size(holder) >= size
+            ]
+            if found:
+                self._holding_both_ends[cut] = self.by_size(found)
+
+        self._held: dict[tuple[str, str], bool] = {}
+        self._sharing: dict[tuple[str, str], bool] = {}
+        self._containers: dict[str, list[str]] = {}
+        self._apart: dict[tuple[str, str], bool] = {}
+        # A body's passages, worked out now: the bodies it holds that are at least the share of it.
+        # Only these can join it, and they are few, since they are at least a quarter of its size.
+        self._passages: defaultdict[str, list[str]] = defaultdict(list)
+        for cut, holding in self._holding_both_ends.items():
+            largest = self.size(cut) / MIN_CUT_SHARE
+            for holder in holding:
+                if self.size(holder) > largest:
+                    break
+                if self.holds(holder, cut):
+                    self._passages[holder].append(cut)
+
+    def size(self, fingerprint: str) -> int:
+        """Shingles in the body."""
+        return len(self.sets[fingerprint])
+
+    def by_size(self, fingerprints: Iterable[str]) -> list[str]:
+        """Smallest first, then by fingerprint: the order a body's containers are tried in."""
+        return sorted(fingerprints, key=lambda fingerprint: (self.size(fingerprint), fingerprint))
+
+    def holding_both_ends(self, cut: str) -> Sequence[str]:
+        """Every other body at least as large holding the cut's first and last shingle, unconfirmed."""
+        return self._holding_both_ends.get(cut, ())
+
+    def holds(self, holder: str, cut: str) -> bool:
+        """Whether `holder` contains `cut`: at least as large, both its ends, and confirmed."""
+        key = (holder, cut)
+        known = self._held.get(key)
+        if known is None:
+            ends = self.ends.get(cut)
+            held = self.sets[holder]
+            known = (
+                ends is not None
+                and holder != cut
+                and self.size(holder) >= self.size(cut)
+                and ends[0] in held
+                and ends[1] in held
+                and confirms_a_cut(self.sets[cut], held, self.words[cut], self.words[holder], self.limits)
+            )
+            self._held[key] = known
+        return known
+
+    def containers(self, cut: str) -> list[str]:
+        """The bodies that hold `cut` and that it does not hold back, smallest first."""
+        found = self._containers.get(cut)
+        if found is None:
+            found = [
+                holder
+                for holder in self.holding_both_ends(cut)
+                if self.holds(holder, cut) and not self.holds(cut, holder)
+            ]
+            self._containers[cut] = found
+        return found
+
+    def copies(self) -> list[tuple[str, str]]:
+        """Pairs of bodies of one size that each hold the other: one text, give or take a word."""
+        found = {
+            (min(holder, cut), max(holder, cut))
+            for holder, held in self._passages.items()
+            for cut in held
+            if self.size(cut) == self.size(holder) and self.holds(cut, holder)
+        }
+        return sorted(found)
+
+    def passages(self, holder: str) -> Sequence[str]:
+        """The bodies `holder` holds that are at least :data:`MIN_CUT_SHARE` of it."""
+        return self._passages.get(holder, ())
+
+    def share_text(self, left: str, right: str) -> bool:
+        """Whether two bodies have a shingle in common."""
+        key = (left, right) if left < right else (right, left)
+        known = self._sharing.get(key)
+        if known is None:
+            known = not self.sets[left].isdisjoint(self.sets[right])
+            self._sharing[key] = known
+        return known
+
+    def holds_a_passage_apart_from(self, holder: str, cut: str) -> bool:
+        """Whether `holder` holds a passage sharing no shingle with `cut`: then the two are two
+        cards, both in `holder`, and `holder` is no witness for either."""
+        key = (holder, cut)
+        known = self._apart.get(key)
+        if known is None:
+            known = any(
+                passage != cut and not self.share_text(passage, cut) for passage in self.passages(holder)
+            )
+            self._apart[key] = known
+        return known
+
+    def share_text_throughout(self, left: Iterable[str], right: Sequence[str]) -> bool:
+        """Whether every body of `left` shares a shingle with every body of `right`."""
+        return all(self.share_text(one, other) for one in left for other in right)
+
+
+@dataclass(frozen=True, slots=True)
+class Witnesses:
+    """The clusters that hold a cut, as the cut step counts them."""
+
+    clusters: frozenset[str]
+    smallest: str
+    """The smallest witness: the body the cut's share is of."""
+    nested: bool = False
+    """Witnesses in several clusters that hold one another, counted as one."""
+
+
+def witnesses(cut: str, cluster_of: Callable[[str], str], index: CutIndex) -> Witnesses | None:
+    """The clusters that witness `cut`, or `None` when no body that may witness it holds it.
+
+    A container that also holds a passage sharing nothing with `cut` is no witness for it.
+    `cluster_of` gives a body's cluster as the placement stands. The cut's own cluster is counted
+    like any other. One cluster is returned when the witnesses are in one, or when every witness
+    outside the cluster of the smallest holds a witness inside it.
+    """
+    held = [holder for holder in index.containers(cut) if not index.holds_a_passage_apart_from(holder, cut)]
+    if not held:
+        return None
+    smallest = held[0]
+    home = cluster_of(smallest)
+    inside = [holder for holder in held if cluster_of(holder) == home]
+    outside = [holder for holder in held if cluster_of(holder) != home]
+    if all(any(index.holds(holder, within) for within in inside) for holder in outside):
+        return Witnesses(frozenset((home,)), smallest, nested=bool(outside))
+    return Witnesses(frozenset(cluster_of(holder) for holder in held), smallest)
+
+
+def too_common(cut: str, cluster_of: Callable[[str], str], index: CutIndex) -> bool:
+    """Whether a short body's ends are both held by more than :data:`MAX_CONTAINER_CLUSTERS` other
+    clusters, as the placement stands."""
+    if index.size(cut) >= SHORT_BODY_SHINGLES:
+        return False
+    own = cluster_of(cut)
+    seen: set[str] = set()
+    for holder in index.holding_both_ends(cut):
+        cluster = cluster_of(holder)
+        if cluster != own:
+            seen.add(cluster)
+            if len(seen) > MAX_CONTAINER_CLUSTERS:
+                return True
+    return False
+
+
+def joining_target(
+    cuts: Iterable[str], own: str, cluster_of: Callable[[str], str], index: CutIndex
+) -> str | None:
+    """The cluster that the cluster `own` joins by the cut step, given those of its bodies that
+    have a body holding both their ends; `None` when it joins none."""
+    target: str | None = None
+    within_the_share = False
+    for cut in cuts:
+        if too_common(cut, cluster_of, index):
+            return None
+        seen = witnesses(cut, cluster_of, index)
+        if seen is None:
+            continue
+        if len(seen.clusters) > 1:
+            return None
+        (cluster,) = seen.clusters
+        if cluster == own:
+            continue
+        if target is not None and cluster != target:
+            return None
+        target = cluster
+        within_the_share = within_the_share or index.size(cut) >= MIN_CUT_SHARE * index.size(seen.smallest)
+    return target if within_the_share else None
+
+
+class _Clusters:
+    """Union-find over fingerprints that also keeps each cluster's bodies, for the refusal."""
+
+    def __init__(self, fingerprints: Sequence[str]) -> None:
+        self.parent = {fingerprint: fingerprint for fingerprint in fingerprints}
+        self.members = {fingerprint: [fingerprint] for fingerprint in fingerprints}
+
+    def find(self, fingerprint: str) -> str:
+        return _find(self.parent, fingerprint)
+
+    def join(self, left: str, right: str) -> None:
+        """Merge two clusters, always under the smaller root, so a root is its cluster's minimum."""
+        smaller, larger = sorted((self.find(left), self.find(right)))
+        if smaller == larger:
+            return
+        self.parent[larger] = smaller
+        self.members[smaller].extend(self.members.pop(larger))
+
+
 def cluster_near_duplicates(
     bodies: Mapping[str, str],
     thresholds: NearDuplicateThresholds | None = None,
@@ -300,12 +542,11 @@ def cluster_near_duplicates(
     matter: they normalize identically). The result maps every fingerprint to its cluster id, the
     smallest fingerprint in its cluster; a body that matched nothing is its own cluster.
     """
-    limits = thresholds or NearDuplicateThresholds()
-    fingerprints = sorted(bodies)
-    shingle_sets = {fingerprint: shingles(bodies[fingerprint]) for fingerprint in fingerprints}
+    index = CutIndex(bodies, thresholds)
+    shingle_sets = index.sets
 
     buckets: defaultdict[tuple[int, tuple[int, ...]], list[str]] = defaultdict(list)
-    for fingerprint in fingerprints:
+    for fingerprint in index.fingerprints:
         if not shingle_sets[fingerprint]:
             continue
         signature = minhash_signature(shingle_sets[fingerprint], seed)
@@ -319,115 +560,92 @@ def cluster_near_duplicates(
             for right in members[position + 1 :]:
                 candidates.add((left, right) if left < right else (right, left))
 
-    parent = {fingerprint: fingerprint for fingerprint in fingerprints}
-    for left, right in sorted(candidates):
-        left_set, right_set = shingle_sets[left], shingle_sets[right]
-        # Containment through the banding is for two long bodies; a short one is matched as a cut
-        # by the step below, which finds every body that contains it instead of the ones sampled.
-        both_long = min(len(left_set), len(right_set)) >= SHORT_BODY_SHINGLES
-        if jaccard(left_set, right_set) >= limits.jaccard or (
-            both_long and containment(left_set, right_set) >= limits.containment
+    # Copies: the pairs that are one text, strongest first. Containment is the cut step's, which
+    # finds every body that contains a cut instead of the ones the banding sampled.
+    clusters = _Clusters(index.fingerprints)
+    _join_copies(
+        clusters,
+        index,
+        {
+            pair: similarity
+            for pair in candidates
+            if (similarity := jaccard(shingle_sets[pair[0]], shingle_sets[pair[1]])) >= index.limits.jaccard
+        },
+    )
+    # Then bodies of one size that each hold the other: a word changed, which in a short body costs
+    # more shingles than Jaccard forgives. A short one too common to compare is left alone, counted
+    # against the copies above and before any of these joins, so the order of these does not count.
+    _join_copies(
+        clusters,
+        index,
+        {
+            pair: jaccard(shingle_sets[pair[0]], shingle_sets[pair[1]])
+            for pair in index.copies()
+            if not any(too_common(fingerprint, clusters.find, index) for fingerprint in pair)
+        },
+    )
+    _join_cuts_to_their_one_container(clusters, index)
+    return {fingerprint: clusters.find(fingerprint) for fingerprint in index.fingerprints}
+
+
+def _join_copies(clusters: _Clusters, index: CutIndex, pairs: Mapping[tuple[str, str], float]) -> None:
+    """Join each pair's clusters, most similar first, then by fingerprint, unless the join would put
+    two bodies sharing no shingle in one cluster."""
+    for left, right in sorted(pairs, key=lambda pair: (-pairs[pair], pair)):
+        left_root, right_root = clusters.find(left), clusters.find(right)
+        if left_root != right_root and index.share_text_throughout(
+            clusters.members[left_root], clusters.members[right_root]
         ):
-            _union(parent, left, right)
-    _join_short_bodies_to_their_one_container(parent, bodies, shingle_sets, limits)
-    return {fingerprint: _find(parent, fingerprint) for fingerprint in fingerprints}
+            clusters.join(left_root, right_root)
 
 
-def _join_short_bodies_to_their_one_container(
-    parent: dict[str, str],
-    bodies: Mapping[str, str],
-    shingle_sets: Mapping[str, frozenset[str]],
-    limits: NearDuplicateThresholds,
-) -> None:
-    """The short-body step of this module's docstring, applied to `parent` in place."""
-    fingerprints = sorted(bodies)
-    words: dict[str, list[str]] = {}
+def _join_cuts_to_their_one_container(clusters: _Clusters, index: CutIndex) -> None:
+    """The cut step of this module's docstring, in rounds, applied to `clusters` in place."""
+    cuts = [fingerprint for fingerprint in index.fingerprints if index.holding_both_ends(fingerprint)]
+    while True:
+        by_cluster: defaultdict[str, list[str]] = defaultdict(list)
+        for cut in cuts:
+            by_cluster[clusters.find(cut)].append(cut)
+        proposed: dict[str, str] = {}
+        for own, members in by_cluster.items():
+            target = joining_target(members, own, clusters.find, index)
+            if target is not None and index.share_text_throughout(
+                clusters.members[own], clusters.members[target]
+            ):
+                proposed[own] = target
+        accepted = _accepted_joins(proposed, clusters, index)
+        if not accepted:
+            return
+        for joiner, target in accepted:
+            clusters.join(joiner, target)
 
-    def words_of(fingerprint: str) -> list[str]:
-        if fingerprint not in words:
-            words[fingerprint] = matching_words(bodies[fingerprint])
-        return words[fingerprint]
 
-    ends: dict[str, tuple[str, str]] = {}
-    for fingerprint in fingerprints:
-        if 0 < len(shingle_sets[fingerprint]) < SHORT_BODY_SHINGLES:
-            ordered = word_shingles(words_of(fingerprint))
-            ends[fingerprint] = (ordered[0], ordered[-1])
-    if not ends:
-        return
+def _accepted_joins(
+    proposed: Mapping[str, str], clusters: _Clusters, index: CutIndex
+) -> list[tuple[str, str]]:
+    """Which of a round's joins happen: see "The order joins happen in" in this module's docstring.
 
-    end_shingles = {shingle for pair in ends.values() for shingle in pair}
-    holders: defaultdict[str, set[str]] = defaultdict(set)
-    for fingerprint in fingerprints:
-        for shingle in shingle_sets[fingerprint] & end_shingles:
-            holders[shingle].add(fingerprint)
-
-    def by_size(members: Iterable[str]) -> list[str]:
-        """Smallest first, then by fingerprint: the order a body's containers are tried in."""
-        return sorted(members, key=lambda member: (len(shingle_sets[member]), member))
-
-    def holds(holder: str, cut: str) -> bool:
-        return confirms_a_cut(
-            shingle_sets[cut], shingle_sets[holder], words_of(cut), words_of(holder), limits
-        )
-
-    def witnesses(short: str, others: Mapping[str, Sequence[str]]) -> list[str]:
-        """The containers of `short` that each say something of their own, smallest first.
-
-        The smallest confirmed container of each cluster in `others`; or, when every confirmed
-        container outside the cluster of the smallest of them all holds a container of `short`
-        inside that cluster, that smallest one alone.
-        """
-        confirmed = {
-            cluster: held
-            for cluster, members in others.items()
-            if (held := [holder for holder in by_size(members) if holds(holder, short)])
-        }
-        smallest_in_each = by_size(held[0] for held in confirmed.values())
-        if len(smallest_in_each) < 2:
-            return smallest_in_each
-        home = next(held for held in confirmed.values() if held[0] == smallest_in_each[0])
-        nested = all(
-            any(holds(holder, inside) for inside in home)
-            for held in confirmed.values()
-            if held is not home
-            for holder in held
-        )
-        return smallest_in_each[:1] if nested else smallest_in_each
-
-    # Per cluster as the banding left it: the witnesses of its short bodies, and whether any short
-    # body is large enough to join. `None` marks a cluster with a body too common to compare.
-    containers: defaultdict[str, set[str] | None] = defaultdict(set)
-    joinable: set[str] = set()
-    for short, (first, last) in ends.items():
-        cluster = _find(parent, short)
-        short_set = shingle_sets[short]
-        found = containers[cluster]
-        if found is None:
-            continue
-        others: defaultdict[str, list[str]] = defaultdict(list)
-        for holder in sorted(holders[first] & holders[last]):
-            if len(shingle_sets[holder]) >= len(short_set) and _find(parent, holder) != cluster:
-                others[_find(parent, holder)].append(holder)
-        if len(others) > MAX_CONTAINER_CLUSTERS:
-            containers[cluster] = None
-            continue
-        seen = witnesses(short, others)
-        found.update(seen)
-        # The share is of the smallest body that holds it, whatever that body's fingerprint.
-        if seen and len(short_set) >= MIN_CUT_SHARE * len(shingle_sets[seen[0]]):
-            joinable.add(cluster)
-
-    pending = {cluster: found for cluster, found in containers.items() if found and cluster in joinable}
-    joined = True
-    while joined:
-        joined = False
-        for cluster in sorted(pending):
-            own = _find(parent, cluster)
-            targets = {_find(parent, holder) for holder in pending[cluster]} - {own}
-            if len(targets) == 1:
-                _union(parent, own, targets.pop())
-                joined = True
+    `proposed` maps a cluster to the one it would join, each already sharing text throughout with
+    its target. Two clusters that would join each other are accepted as one join. A cluster joining
+    nothing itself takes in every cluster that would join it, except two that share nothing with
+    each other: those it takes in neither of.
+    """
+    accepted = [
+        (own, target) for own, target in proposed.items() if proposed.get(target) == own and own < target
+    ]
+    joining: defaultdict[str, list[str]] = defaultdict(list)
+    for own, target in proposed.items():
+        if target not in proposed:
+            joining[target].append(own)
+    for target, owns in joining.items():
+        for own in owns:
+            if all(
+                index.share_text_throughout(clusters.members[own], clusters.members[other])
+                for other in owns
+                if other != own
+            ):
+                accepted.append((own, target))
+    return sorted(accepted)
 
 
 def _find(parent: dict[str, str], fingerprint: str) -> str:
@@ -437,12 +655,3 @@ def _find(parent: dict[str, str], fingerprint: str) -> str:
     while parent[fingerprint] != root:  # path compression
         parent[fingerprint], fingerprint = root, parent[fingerprint]
     return root
-
-
-def _union(parent: dict[str, str], left: str, right: str) -> None:
-    """Merge two components, always under the smaller root, so a root is its component's minimum."""
-    left_root, right_root = _find(parent, left), _find(parent, right)
-    if left_root == right_root:
-        return
-    smaller, larger = sorted((left_root, right_root))
-    parent[larger] = smaller

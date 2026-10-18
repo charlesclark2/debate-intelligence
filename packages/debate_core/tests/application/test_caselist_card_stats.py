@@ -433,11 +433,11 @@ def test_a_cut_that_matches_two_different_full_cards_is_not_grouped_with_a_third
 
 
 def test_a_short_cut_is_placed_with_the_smallest_of_the_nested_copies_that_hold_it() -> None:
-    """Through the step the parse pipeline builds its occurrence table with: a 330-word card, a
-    90-word copy from inside it that the banding never pairs with it, and a 30-word cut from inside
-    the copy. `card-fingerprint-v2` left the cut a cluster of its own, inside two clusters. It is
-    placed with the copy, and the two long cards are where they were."""
-    whole = [f"word{index}" for index in range(330)]
+    """Through the step the parse pipeline builds its occurrence table with: a 400-word card, a
+    90-word copy from inside it, under a quarter of it, and a 30-word cut from inside the copy.
+    `card-fingerprint-v2` left the cut a cluster of its own, inside two clusters. It is placed with
+    the copy, and the two long cards are where they were."""
+    whole = [f"word{index}" for index in range(400)]
     copy, cut = whole[100:190], whole[110:140]
     cards = [
         card(source, 0, " ".join(body)) for source, body in ((FILE_A, whole), (FILE_B, copy), (FILE_C, cut))
@@ -449,6 +449,18 @@ def test_a_short_cut_is_placed_with_the_smallest_of_the_nested_copies_that_hold_
     assert copy_cluster == min(card_fingerprint(item).exact_fingerprint for item in cards[1:])
     (whole_alone, _), (copy_alone, _) = place(*cards[:2])
     assert whole_alone == whole_cluster != copy_alone
+
+
+def test_a_long_copy_over_a_quarter_of_its_card_is_placed_with_it_and_the_cut_with_both() -> None:
+    """The same through `place` with a 330-word card, of which the 90-word copy is over a quarter:
+    the copy is a long cut of the card and joins it (`card-fingerprint-v4`), and the cut with it."""
+    whole = [f"word{index}" for index in range(330)]
+    copy, cut = whole[100:190], whole[110:140]
+    cards = [
+        card(source, 0, " ".join(body)) for source, body in ((FILE_A, whole), (FILE_B, copy), (FILE_C, cut))
+    ]
+    clusters = {cluster for cluster, _ in place(*cards)}
+    assert clusters == {min(card_fingerprint(item).exact_fingerprint for item in cards)}
 
 
 def test_cutter_mark_is_recorded_on_the_occurrence_and_nowhere_else() -> None:

@@ -63,9 +63,15 @@ was computed under.
   `v2` left it out of both. Long bodies are matched as before. **Exact fingerprints unchanged;
   cluster ids changed** for the short bodies that now join a cluster, and for a cluster one of them
   now gives its smallest fingerprint to.
+* **`card-fingerprint-v4`** (`v1-e31-t20`). The PM's ruling of 2026-10-16: a card is a passage, and
+  bodies join only on text they share. Long cuts join the one cluster that holds them by the step
+  short cuts are joined by, where `v3` joined them only when the banding paired a cut with its
+  container. A body that holds a cut and another passage sharing nothing with it is no witness for
+  the cut. A cut's own cluster is one of its witnesses. No join puts two bodies that share no
+  shingle in one cluster. **Exact fingerprints unchanged; cluster ids changed.**
 
 The normalization has not changed since `v1`, so an exact fingerprint computed under `v1` is the
-same digest under `v2` and `v3`, and anything keyed on one (a suppression, a recipe, a cache) still
+same digest under `v2`, `v3` and `v4`, and anything keyed on one (a suppression, a recipe, a cache) still
 holds. Cluster ids are not comparable across versions: under each later version more cards share
 one. A consumer that compares cluster ids of two versions is comparing two different functions; one
 that compares exact fingerprints of two versions must check this list says they did not change.
@@ -94,7 +100,7 @@ __all__ = [
     "normalize_for_matching",
 ]
 
-FINGERPRINT_VERSION: Final = "card-fingerprint-v3"
+FINGERPRINT_VERSION: Final = "card-fingerprint-v4"
 """Version of the matching rules: the normalization above and the clustering and linking built on
 it. Bumped by any change that can change a digest or move a card to another cluster."""
 

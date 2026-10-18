@@ -562,11 +562,11 @@ def test_a_cluster_with_one_body_too_common_to_compare_joins_nothing() -> None:
     assert len(set(clusters)) == MAX_CONTAINER_CLUSTERS + 2
 
 
-def test_a_long_bodys_cut_is_still_left_to_the_banding() -> None:
-    """The short step is for short bodies. Two long bodies are matched exactly as before it existed:
-    a 64-word cut of a 400-word card shares a seventh of its shingles, the banding does not pair
-    them, and nothing else looks. One word shorter, the cut is short and is not a quarter of the
-    card, so it does not join either; cut from a card four times its size, it does."""
+def test_a_cut_on_either_side_of_the_short_line_is_held_to_the_same_share() -> None:
+    """A 64-word cut of a 400-word card is a seventh of it, and stays out; one word shorter, the cut
+    is short and stays out for the same reason. Cut from a card four times their size, both join.
+    Until `v1-e31-t20` the long one stayed out of that card too: long bodies were matched only when
+    the banding paired them, and a cut a quarter of its card is rarely paired."""
     card = numbered("word", 400)
     long_cut = card[100:164]
     assert len(word_shingles(long_cut)) == SHORT_BODY_SHINGLES
@@ -575,8 +575,9 @@ def test_a_long_bodys_cut_is_still_left_to_the_banding() -> None:
     smaller_card = card[80:320]  # 236 shingles: four times 59
     short_cut = card[100:163]
     assert len(word_shingles(short_cut)) == SHORT_BODY_SHINGLES - 1
+    assert len(set(clustered(card, short_cut))) == 2
     assert len(set(clustered(smaller_card, short_cut))) == 1
-    assert len(set(clustered(smaller_card, long_cut))) == 2
+    assert len(set(clustered(smaller_card, long_cut))) == 1
 
 
 # ------------------------------------------------------------------------------------------------
@@ -627,20 +628,21 @@ def test_a_short_cut_under_a_quarter_of_every_body_that_holds_it_still_stays_out
     assert keyed_partition({"a": smaller, "b": larger, "c": smaller[:18]}) == [["a", "b"], ["c"]]
 
 
-WHOLE: Final = numbered("word", 330)
-"""A long card. No copy below shares enough of it for the banding to pair them: checked in the
-tests that rely on it, since which pairs the banding makes is the seed's doing, not arithmetic."""
+WHOLE: Final = numbered("word", 400)
+"""A long card. Every copy below is under a quarter of it, so it joins none of them: checked in the
+tests that rely on it. Before `v1-e31-t20` this card was 330 words, and what kept the copies out
+was that the banding never paired them; now a long copy over a quarter of a card joins it."""
 
 LONG_COPY: Final = WHOLE[100:190]
-"""Ninety words of it (86 shingles): a long body, and just over a quarter of the whole."""
+"""Ninety words of it (86 shingles): a long body, and under a quarter of the whole."""
 
 CUT_OF_THE_COPY: Final = LONG_COPY[10:40]
 """Thirty words (26 shingles) of the copy: a short body, three-tenths of the copy."""
 
 
 def test_a_short_cut_inside_nested_copies_joins_the_smallest_of_them() -> None:
-    """The cut is inside the copy, and the copy is inside the whole card. The banding never paired
-    the two long bodies, so they are two clusters, and the cut was "inside more than one cluster"
+    """The cut is inside the copy, and the copy is inside the whole card. The copy is under a
+    quarter of the card, so they are two clusters, and the cut was "inside more than one cluster"
     and left out of both. But the larger holds everything the smaller does: being inside it says
     nothing the smaller did not. One witness, not two, so the cut joins the smaller copy."""
     assert partition(WHOLE, LONG_COPY) == [[0], [1]]  # the split among the longer copies

@@ -522,13 +522,67 @@ AFTER_GROUPING_UNMATCHED_MISSES: Final[dict[str, dict[Miss, int]]] = AFTER_SPLIT
     "extended set, abbreviated with abbreviated": {Miss.NO_FULL_COPY: 4},
 }
 
+#: After the PM's ruling of 2026-10-16 (`v1-e31-t20`): bodies join only on text they share, never
+#: through a third body holding both, and a body holding two passages that share nothing is no
+#: witness for either. Worked out by hand from the rows before the run. Two labelled cards have a
+#: trimmed-start and a trimmed-end copy that share no shingle, and only their pairs move.
+#:
+#: * Brannock (t06's rows): the original is the trimmed-end copy followed by the trimmed-start one,
+#:   word for word, the shape of `v1-e31-t11`'s false join. The original and the typo copy hold both
+#:   trims, so neither trim has a witness and each is a cluster of its own. Full pairs lost: the
+#:   original and the typo copy with each trim, three wholly inside (candidates) and the typo copy
+#:   with the trimmed end (the typo is in it, confirmation), and the two trims (confirmation). The
+#:   four-four abbreviation links to the original's cluster and loses both trims; the abbreviation
+#:   of the trimmed start links to that trim and loses the original, the typo copy and the other
+#:   trim: five pairs with a full copy, and the two abbreviations apart (one): "other", since each
+#:   matches full copies in one cluster.
+#: * Kessler (t08's rows): the original holds both trims and witnesses neither. The OCR-joined copy
+#:   holds the trimmed start, the dropped-word copy the trimmed end, and both join the original. The
+#:   two trims then each have one witness, that cluster, and would put two texts sharing nothing in
+#:   it: it takes in neither. Seven full pairs lost: four wholly inside (candidates), and the OCR
+#:   copy with the trimmed end, the dropped-word copy with the trimmed start and the two trims
+#:   (confirmation).
+AFTER_THE_PASSAGE_RULING_TABLE: Final[dict[str, tuple[int, int, int]]] = AFTER_GROUPING_UNMATCHED_TABLE | {
+    "short-card set, all pairs": (70, 0, 11),
+    "short-card set, full short cards": (19, 0, 5),
+    "short-card set, abbreviated with a full copy": (39, 0, 5),
+    "short-card set, abbreviated with abbreviated": (11, 0, 1),
+    "extended set, all pairs": (86, 0, 30),
+    "extended set, full short cards": (23, 0, 14),
+    "extended set, abbreviated with a full copy": (46, 0, 9),
+    "extended set, abbreviated with abbreviated": (15, 0, 5),
+}
+
+AFTER_THE_PASSAGE_RULING_MISSES: Final[dict[str, dict[Miss, int]]] = AFTER_GROUPING_UNMATCHED_MISSES | {
+    "short-card set, all pairs": {Miss.CANDIDATES: 3, Miss.CONFIRMATION: 2, Miss.OTHER: 6},
+    "short-card set, full short cards": {Miss.CANDIDATES: 3, Miss.CONFIRMATION: 2},
+    "short-card set, abbreviated with a full copy": {Miss.OTHER: 5},
+    "short-card set, abbreviated with abbreviated": {Miss.OTHER: 1},
+    "extended set, all pairs": {
+        Miss.CANDIDATES: 7,
+        Miss.CONFIRMATION: 9,
+        Miss.SPLIT_FULL_COPIES: 4,
+        Miss.NO_FULL_COPY: 4,
+        Miss.OTHER: 6,
+    },
+    "extended set, full short cards": {Miss.CANDIDATES: 7, Miss.CONFIRMATION: 7},
+    "extended set, abbreviated with a full copy": {Miss.SPLIT_FULL_COPIES: 4, Miss.OTHER: 5},
+    "extended set, abbreviated with abbreviated": {Miss.NO_FULL_COPY: 4, Miss.OTHER: 1},
+}
+
+PASSAGE_RULING_PENDING: Final = (
+    "v1-e31-t20: under the PM's ruling of 2026-10-16 a card's trimmed-start and trimmed-end copies "
+    "that share no text are two passages, which the labels call one card. Awaiting the PM's ruling "
+    "on the labels and on t08's 0.90 target (session report, Deviations)."
+)
+
 BASELINE_TABLE: Final = T06_TABLE | BASELINE_EXTENDED_TABLE
 """Every row against the code as t06 left it: what each fix is measured from."""
 
-EXPECTED_TABLE: Final = AFTER_GROUPING_UNMATCHED_TABLE
+EXPECTED_TABLE: Final = AFTER_THE_PASSAGE_RULING_TABLE
 """What the code under test should measure today. Each fix replaces the rows it changes."""
 
-EXPECTED_MISSES: Final = AFTER_GROUPING_UNMATCHED_MISSES
+EXPECTED_MISSES: Final = AFTER_THE_PASSAGE_RULING_MISSES
 
 #: Goal criterion ac1's recall targets, by the rows they are read from. Precision is 1.000 or the
 #: task has failed, whatever the recall.
@@ -552,12 +606,20 @@ def test_every_miss_comes_from_one_of_t06s_three_mechanisms(measured: dict[str, 
     assert {name: row.by_mechanism for name, row in measured.items()} == EXPECTED_MISSES
 
 
-def test_recall_reaches_the_targets_with_precision_held(measured: dict[str, Row]) -> None:
+@pytest.mark.parametrize(
+    "name",
+    [
+        pytest.param(name, marks=pytest.mark.xfail(strict=True, reason=PASSAGE_RULING_PENDING))
+        if name in {"short-card set, full short cards", "extended set, full short cards"}
+        else name
+        for name in REQUIRED_RECALL
+    ],
+)
+def test_recall_reaches_the_targets_with_precision_held(measured: dict[str, Row], name: str) -> None:
     """Goal criterion ac1, on t06's rows and on the extended set."""
-    for name, required in REQUIRED_RECALL.items():
-        counts = measured[name].counts
-        assert counts.precision == 1.0, name
-        assert counts.recall >= required, name
+    counts = measured[name].counts
+    assert counts.precision == 1.0, name
+    assert counts.recall >= REQUIRED_RECALL[name], name
 
 
 def test_no_row_is_worse_than_before_the_fixes(measured: dict[str, Row]) -> None:
@@ -589,6 +651,7 @@ def test_mechanism_1_one_changed_word_keeps_a_short_card_in_its_cluster(
     assert extended_clusters[copy] == extended_clusters[original]
 
 
+@pytest.mark.xfail(strict=True, reason=PASSAGE_RULING_PENDING)
 @pytest.mark.parametrize("copy", ["k1-trimmed-end", "k1-trimmed-start"])
 def test_mechanism_1_a_short_cards_trimmed_copy_is_compared_with_it(
     extended_clusters: dict[str, str], copy: str

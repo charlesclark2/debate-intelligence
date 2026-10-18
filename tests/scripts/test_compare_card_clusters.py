@@ -1462,6 +1462,18 @@ def test_counts_saves_the_placement_it_previews_and_every_command_reads_it_back(
         compared = json.loads(capsys.readouterr().out)[CASELIST]
         assert {**compared, "seconds": 0} == {**previewed, "seconds": 0}
 
+    # The file is what is read, not a placement made again: put the unrelated card in the large
+    # cluster of a copy of it, and the counts follow the copy.
+    edited = nested_dir / "edited" / f"{CASELIST}.jsonl"
+    edited.parent.mkdir()
+    rows = [json.loads(line) for line in kept.splitlines()]
+    largest = min(row["cluster_id"] for row in rows if row["exact_fingerprint"] != _fingerprint_of(ELSEWHERE))
+    for row in rows:
+        row["cluster_id"] = largest
+    edited.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+    assert script.main([*base, "counts", "--caselist", CASELIST, "--after", str(edited)]) == 0
+    assert json.loads(capsys.readouterr().out)[CASELIST]["clusters_after"] == 1
+
     assert (
         script.main(
             [*base, "shapes", "--caselist", CASELIST, "--largest-clusters", "1", "--after", str(saved)]

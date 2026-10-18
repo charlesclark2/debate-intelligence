@@ -247,7 +247,7 @@ def test_a_major_minor_patch_version_is_accepted(
         "debate_core.testing.contracts.model_router.StructuredAnswer",
         "debate_core.testing.contracts.model_router",
         "ContractPassage",
-        "pydantic.BaseModel",
+        "pydantic.main.BaseModel",
         "debate_core.testing.contracts.model_router.ContractPassage.paragraph_id",
     ],
     ids=[

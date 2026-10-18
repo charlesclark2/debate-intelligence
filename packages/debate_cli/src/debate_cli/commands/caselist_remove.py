@@ -106,6 +106,7 @@ from __future__ import annotations
 
 import asyncio
 import shlex
+from collections import Counter
 from collections.abc import Coroutine
 from typing import Annotated, Any
 
@@ -377,6 +378,7 @@ def render_plan(plan: RemovalPlan, report: RemovalReport | None) -> str:
         for rewrite in plan.manifests:
             versions = "" if rewrite.versions is None else f", {rewrite.versions} version(s) replaced by one"
             lines.append(f"  {rewrite.side.value:6} {rewrite.key}  -{rewrite.rows_dropped} row(s){versions}")
+    lines += _swept_version_lines(plan)
 
     lines += ["", *_inbox_lines(plan)]
 
@@ -417,6 +419,33 @@ def render_plan(plan: RemovalPlan, report: RemovalReport | None) -> str:
             f"  {_execute_command(plan)}",
         ]
     return "\n".join(lines)
+
+
+def _swept_version_lines(plan: RemovalPlan) -> list[str]:
+    """The manifest versions the execution's sweep deletes, by manifest and count (`v1-e30-t19`).
+
+    Until then the plan read current manifests only, and a plan whose execution would sweep a
+    version said *Nothing is left to remove* and printed no command to carry it out.
+    """
+    swept = plan.superseded_versions
+    if swept is None:
+        return [
+            "",
+            "MANIFEST VERSIONS SWEPT from the bucket by --execute: not counted.",
+            "  The everyday profile may not list or read noncurrent manifest versions here. --execute lists",
+            "  them with the takedown profile and deletes each that names a removed file, or is older than",
+            "  this request's own rewrite of its manifest.",
+        ]
+    if not swept:
+        return []
+    by_manifest = Counter(version.key for version in swept)
+    return [
+        "",
+        f"MANIFEST VERSIONS SWEPT from the bucket by --execute: {len(swept)} noncurrent version(s) of "
+        f"{len(by_manifest)} manifest(s).",
+        "  Each names a removed file, or is older than this request's own rewrite of its manifest.",
+        *(f"  bucket {key}  ({count} version(s))" for key, count in sorted(by_manifest.items())),
+    ]
 
 
 def _shared_kept_heading(plan: RemovalPlan, files: int) -> list[str]:
@@ -721,6 +750,16 @@ def _source_lines(number: int, source: PlannedSource, plan: RemovalPlan) -> list
     if source.disposition is Disposition.WITHDRAW:
         for caselist, path in source.requester_paths:
             lines.append(f"     withdraw {caselist}  {_withdrawn_path_label(caselist, path)}")
+        if source.withdrawn_earlier_from:
+            lines.append(
+                f"     withdrawn earlier from {', '.join(source.withdrawn_earlier_from)}, as the withdrawal "
+                "record says: its paths there are gone"
+            )
+        elif not source.requester_paths:
+            lines += [
+                "     withdrawn earlier: no withdrawal record names the caselist it was withdrawn from (a",
+                "     run by a build from before v1-e30-t16), so nothing of it is planned again there",
+            ]
         if source.kept_in:
             # A --team withdrawal is kept for another team; a later upload, or what a --source run
             # left, for any path the removal does not take, which may be the same team's.

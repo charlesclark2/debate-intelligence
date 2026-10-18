@@ -216,6 +216,7 @@ class RemovalWorld:
             remote_versions=versions or S3EvidenceVersionStore(bucket=self.bucket_name, client=self.client),
             inbox=self.inbox,
             suppression=self.suppression(),
+            removal_log=self.removal_log(),
             clock=FixedClock(REMOVAL_TIME),
             environment="dev",
             bucket=self.bucket_name,

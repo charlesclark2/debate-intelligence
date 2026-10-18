@@ -628,7 +628,12 @@ class SnapshotPlan:
 
     @property
     def withholding_rows(self) -> tuple[Sha256Hex, ...]:
-        """The digests of every row that withholds the manifest, suppressed or held, sorted, once each."""
+        """The digests of every row that withholds the manifest, suppressed or held, sorted, once each.
+
+        The publisher's rule: any withholds the manifest. `caselist status` asks this same property
+        for the hint it gives a manifest mismatch (`v1-e30-t19`), so a change to what withholds a
+        manifest is made here, and the hint follows it.
+        """
         return tuple(sorted({*self.suppressed_rows, *(row.sha256 for row in self.held_rows)}))
 
     def of(self, *actions: SourceAction) -> tuple[PlannedSource, ...]:

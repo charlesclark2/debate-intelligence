@@ -46,7 +46,13 @@ def noncurrent(key: str, version_id: str) -> ObjectVersion:
 def finished_plan() -> RemovalPlan:
     """A re-run that finds the named file already gone and suppressed: nothing else to do."""
     return plan_of(
-        (dataclasses.replace(source(NAMED, Inclusion.NAMED, Disposition.REMOVE), local_blob=False),)
+        (
+            dataclasses.replace(
+                source(NAMED, Inclusion.NAMED, Disposition.REMOVE),
+                local_blob=False,
+                delete_source_record=False,
+            ),
+        )
     )
 
 

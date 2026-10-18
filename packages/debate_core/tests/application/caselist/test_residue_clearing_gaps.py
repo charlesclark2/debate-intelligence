@@ -194,7 +194,7 @@ class TestARewrittenManifestsOlderVersion:
 
         await remove(world)
 
-        assert sorted(versions_of(world, REWRITTEN_KEY)) == sorted([current, newer, rewrite])
+        assert set(versions_of(world, REWRITTEN_KEY)) == {current, newer, rewrite}
         assert old not in versions_of(world, REWRITTEN_KEY)
         assert {key: versions_of(world, key) for key in (NOT_REWRITTEN, OPENEV_MANIFEST)} == others_before
         assert never_rewritten in versions_of(world, NOT_REWRITTEN)

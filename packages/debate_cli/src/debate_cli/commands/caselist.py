@@ -601,19 +601,33 @@ def _drift_hints(report: CaselistStatusReport) -> list[str]:
     """One sentence per kind of difference found, each naming what clears it (`v1-e30-t12`).
 
     A manifest mismatch is this machine's rewrite not yet published, and the publish of each
-    caselist affected uploads it. A source mismatch needs a person. What a removal left needs the
-    removal finished. Anything missing is what a publish completes, as before.
+    caselist affected uploads it, unless the publisher withholds that manifest for a row a removal
+    stops or holds (`v1-e30-t19`): then the removal is finished first. Whether it does is the
+    publisher's own rule, which status asked (:attr:`SnapshotStatus.manifest_withheld`). A source
+    mismatch needs a person. What a removal left needs the removal finished. Anything missing is
+    what a publish completes, as before.
     """
     drifted = report.drifted
     hints: list[str] = []
     if any(entry.incomplete for entry in drifted):
         hints.append("`caselist publish` completes what is missing here.")
-    manifests = tuple(dict.fromkeys(entry.caselist for entry in report.manifest_mismatched))
+    manifests = tuple(
+        dict.fromkeys(entry.caselist for entry in report.manifest_mismatched if not entry.manifest_withheld)
+    )
     if manifests:
         commands = " and ".join(f"`caselist publish --caselist {caselist}`" for caselist in manifests)
         hints.append(
             "A manifest mismatch is this machine's copy rewritten since its last publish, by a camp "
             f"metadata re-import or a removal. Run {commands} to upload it."
+        )
+    withheld = [entry for entry in report.manifest_mismatched if entry.manifest_withheld]
+    if withheld:
+        named = ", ".join(f"{entry.caselist} {entry.snapshot}" for entry in withheld)
+        hints.append(
+            f"A manifest mismatch in {named} is not cleared by a publish: the publisher withholds that "
+            "manifest while it has a row a removal stops or holds. Finish the removal first: run it "
+            "again, dry run first, then --execute, and publish after it "
+            '(docs/runbooks/caselist-removal.md, "When caselist status reports removal residue").'
         )
     if report.source_mismatched:
         hints.append("A source mismatch needs a person: the bucket holds other bytes under a digest's key.")
@@ -769,7 +783,11 @@ def status_summary(report: CaselistStatusReport, settings: Settings) -> dict[str
     compared: the uploads at a held path in the download inbox's archives, by count,
     `sha256_prefixes` and `requests`.
     `removals_owed` is every request either names, whose removal is owed again. None of these is
-    part of `in_sync`. `suppressed_objects` is one object per caselist
+    part of `in_sync`. `withdrawn_copies_left` is one object per file withdrawn from a caselist that
+    keeps no holder of it, of whose copy there something is left, by caselist, digest prefix, the
+    request the withdrawal record gives and counts; `withdrawals_not_attributed` the requests of
+    withdrawals no record attributes, which an earlier build made (`v1-e30-t19`). Neither is part of
+    `in_sync` either. `suppressed_objects` is one object per caselist
     compared, because one listing of a caselist's source prefix finds them for all its snapshots:
     the count of current source objects whose digest is suppressed, and their `sha256_prefixes`.
     A removed file is named by the first twelve characters of its digest, as in `removal_residue`.
@@ -799,6 +817,19 @@ def status_summary(report: CaselistStatusReport, settings: Settings) -> dict[str
             for caselist in report.caselists
         ],
         "removals_owed": list(report.removals_owed),
+        "withdrawn_copies_left": [
+            {
+                "caselist": residue.caselist,
+                "sha256_prefix": copy.sha256_prefix,
+                "request_id": copy.request_id,
+                "current_objects": copy.current_objects,
+                "noncurrent_versions": copy.noncurrent_versions,
+                "delete_markers": copy.delete_markers,
+            }
+            for residue in report.residue
+            for copy in residue.withdrawn_copies
+        ],
+        "withdrawals_not_attributed": list(report.withdrawals_not_attributed),
     }
 
 
@@ -876,11 +907,42 @@ def _residue_lines(report: CaselistStatusReport) -> list[str]:
             "the build that made that removal did not record which caselists it touched. That is not a "
             "finding of none."
         )
+    lines += _withdrawn_copy_lines(report)
     checked = [one for one in report.residue if one.checked]
-    if checked and not report.residue_found:
+    if checked and not report.residue_found and not report.withdrawn_copies_left:
         lines.append(
             "No version of a removed file is left under raw/ or parsed/, and no manifest or aggregate "
             f"version is older than a removal that touched its caselist ({len(checked)} caselist(s) checked)."
+        )
+    return lines
+
+
+def _withdrawn_copy_lines(report: CaselistStatusReport) -> list[str]:
+    """What is left of copies withdrawn from a caselist, by caselist and request, and the withdrawals
+    no record attributes (`v1-e30-t19`). Neither changes the exit status."""
+    lines: list[str] = []
+    for residue in report.residue:
+        copies = residue.withdrawn_copies
+        if not copies:
+            continue
+        named = ", ".join(f"sha256 {copy.sha256_prefix}, {copy.request_id}" for copy in copies)
+        lines.append(
+            f"WITHDRAWN COPIES LEFT in {residue.caselist}: "
+            f"{sum(copy.current_objects for copy in copies)} current object(s), "
+            f"{sum(copy.noncurrent_versions for copy in copies)} noncurrent version(s) and "
+            f"{sum(copy.delete_markers for copy in copies)} delete marker(s) of {len(copies)} file(s) "
+            f"withdrawn from {residue.caselist} ({named})."
+        )
+    if lines:
+        lines.append(
+            "Run that removal again, dry run first, then --execute: docs/runbooks/caselist-removal.md, "
+            '"When caselist status reports removal residue".'
+        )
+    if report.withdrawals_not_attributed:
+        lines.append(
+            f"Withdrawals NOT ATTRIBUTED to a caselist: {', '.join(report.withdrawals_not_attributed)}. The "
+            "build that made that removal recorded no caselist for the copies it withdrew, so what is "
+            "left of them is not checked. That is not a finding of none."
         )
     return lines
 

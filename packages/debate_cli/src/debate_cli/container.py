@@ -821,6 +821,14 @@ class ServiceContainer:
             ),
             inbox=self.caselist_inbox(),
             suppression=suppression,
+            # Both copies of the log, read with the everyday profile as status reads them: the dry
+            # run needs the scopes of the request's earlier runs for its sweep (v1-e30-t19).
+            removal_log=RecordedRemovalLog(
+                local_removal_log_file(data_dir),
+                ObjectStoreAppendOnlyRecord(
+                    bucket, REMOVAL_LOG_KEY, location=f"s3://{storage.s3.bucket}/{REMOVAL_LOG_KEY}"
+                ),
+            ),
             clock=clock,
             environment=settings.environment.value,
             bucket=str(storage.s3.bucket),

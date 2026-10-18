@@ -53,7 +53,7 @@ async def test_this_builds_entry_is_published_by_this_source(
     written = os.environ.get("CHECK_AN_OLDER_BUILD_PUBLISHES")
     if not written:
         pytest.skip("set CHECK_AN_OLDER_BUILD_PUBLISHES to the pending-work file this build wrote")
-    source_root = Path(debate_core.__file__).resolve().parents[3]
+    source_root = Path(debate_core.__file__).resolve().parents[4]
     print(f"\nreader: the debate_core source at {source_root.name}")
     installation = Installation(
         data_dir=tmp_path / "evidence",

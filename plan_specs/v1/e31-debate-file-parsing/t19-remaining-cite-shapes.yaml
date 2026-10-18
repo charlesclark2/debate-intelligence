@@ -71,7 +71,7 @@ spec:
         the operator confirms the tag is in the document, the shape is counted and fixed the same
         way; if not, the report says so and nothing changes. Added by the PM, 2026-10-16.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

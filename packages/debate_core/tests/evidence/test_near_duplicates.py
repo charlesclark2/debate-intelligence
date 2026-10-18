@@ -991,6 +991,21 @@ def test_a_long_body_nine_tenths_inside_a_card_lacking_one_of_its_ends_joins_it(
     assert partition(card, copy) == [[0, 1]]
 
 
+def test_a_body_holding_another_passage_is_no_witness_for_a_long_body_lacking_one_of_its_ends() -> None:
+    """The PM's condition on the join above (2026-10-18): the container rule still applies. The
+    body holds the long copy but for its first word, and a second 100-word passage sharing nothing
+    with it, so it is a witness for neither: all three stay apart. With the second passage in a card
+    of its own as well, the passage joins that card and the copy still stays out."""
+    first, second = numbered("first", 100), numbered("second", 100)
+    body = [*first, *second]
+    copy = ["changed", *first[1:]]
+    assert word_shingles(copy)[0] not in frozenset(word_shingles(body))
+    assert partition(body, copy) == [[0, 1]]
+    assert partition(body, copy, second) == [[0], [1], [2]]
+    own_card = [*numbered("before", 30), *second, *numbered("after", 30)]
+    assert partition(body, copy, second, own_card) == [[0], [1], [2, 3]]
+
+
 def test_a_card_lacking_the_end_of_a_short_copy_does_not_hold_it_and_is_a_second_witness() -> None:
     """The same rule inside the nested test: a 40-word copy with a stray word after it, and a
     20-word cut inside the copy, both inside a 200-word card but for that stray word. The card does

@@ -782,6 +782,132 @@ class TestStatusShowsSuppressedRowsAndObjects:
 
 
 # ------------------------------------------------------------------------------------------------
+# v1-e30-t19: a manifest mismatch the publisher withholds the manifest of gets the removal hint
+# ------------------------------------------------------------------------------------------------
+
+BAYVIEW_PATH = "Maple Grove/QX/Maple Grove-QX-Neg-Bayview Open [2]-Semis.docx"
+"""The Bayview semifinal negative's one path, in the weekly of 2026-09-15 alone."""
+LINK_PATH = "Cedar Hollow/ZaLu/latest-aff.docx"
+"""The symbolic link the weekly of 2026-09-15 holds: a skipped member's row."""
+FINISH_THE_REMOVAL = "Finish the removal first"
+
+
+def withheld_hint_for(snapshots: str) -> str:
+    """The start of the hint for manifest mismatches whose manifest the publisher withholds."""
+    return f"A manifest mismatch in {snapshots} is not cleared by a publish"
+
+
+def withdraw_at(data_dir: Path, sha256: str, path: str) -> None:
+    """Suppress one disclosure on this machine's list, as a `--team` withdrawal that stopped does."""
+    from debate_core.application.ports.suppression import SuppressionAction, SuppressionEntry
+    from debate_core.integrations.local.suppression_list import local_suppression_list_file
+
+    record = local_suppression_list_file(data_dir).path
+    record.parent.mkdir(parents=True, exist_ok=True)
+    entry = SuppressionEntry(
+        action=SuppressionAction.SUPPRESS,
+        sha256=sha256,
+        disclosure=disclosure_digest(SYNTHETIC_CASELIST, path),
+        recorded_at=datetime(2026, 9, 30, 12, 0, tzinfo=UTC),
+        reason=ReasonCode.REQUESTED_BY_TEAM,
+        request_id="RM-2026-01",
+    )
+    with record.open("a", encoding="utf-8") as stream:
+        stream.write(entry.to_line() + "\n")
+
+
+def hold_the_link(data_dir: Path) -> None:
+    """A removal's hold on the link's path after 2026-09-01: the row an earlier build wrote there."""
+    entry = PathHoldEntry(
+        caselist=SYNTHETIC_CASELIST,
+        disclosure=disclosure_digest(SYNTHETIC_CASELIST, LINK_PATH),
+        sha256=FIRST,
+        after_snapshot=date(2026, 9, 1),
+        recorded_at=datetime(2026, 9, 2, 12, 0, tzinfo=UTC),
+        reason=ReasonCode.REQUESTED_BY_TEAM,
+        request_id=REQUEST,
+    )
+    record = data_dir / "suppression" / "path-holds.jsonl"
+    record.parent.mkdir(parents=True, exist_ok=True)
+    record.write_text(entry.to_line() + "\n", encoding="utf-8")
+
+
+#: What else is in the weekly of 2026-09-15's local manifest beside its rewrite, and whether the
+#: publisher of this build withholds it then. Written from `publish_plan` ("A manifest that still
+#: names a suppressed file is withheld") and `v1-e30-t22`'s Decision 5, not from a run.
+BESIDE_THE_REWRITE = {
+    "nothing": (lambda data_dir: None, False),
+    "a suppressed row": (
+        lambda data_dir: withdraw_at(data_dir, digest_of_body("bayview-semis-neg"), BAYVIEW_PATH),
+        True,
+    ),
+    "a held row": (the_removal_holds_the_path, True),
+    "a held skipped row": (hold_the_link, False),
+}
+
+
+class TestStatusHintsTheRemovalForAManifestThePublisherWithholds:
+    """`v1-e30-t12`'s Follow-up 3: the publish hint for a manifest the publisher will not upload.
+
+    Since `v1-e30-t22` the publisher withholds a manifest for a suppressed row or a held row. Status
+    asks the publisher's own rule, so these tests hold the hint to what the publish then does.
+    """
+
+    def test_a_manifest_mismatch_with_a_suppressed_row_gets_the_removal_hint_and_not_the_publish_hint(
+        self, buckets: S3Client, imported: Path
+    ) -> None:
+        publish()
+        withdraw_at(imported, digest_of_body("bayview-semis-neg"), BAYVIEW_PATH)
+        rewrite_local_manifest(imported, SYNTHETIC_CASELIST, "2026-09-15")
+
+        error = status_error()
+
+        assert error["message"] == (
+            "1 snapshot(s) differ between this machine and the bucket: "
+            f"{SYNTHETIC_CASELIST} 2026-09-15 (manifest mismatch, 1 suppressed row(s))"
+        )
+        assert "caselist publish --caselist" not in error["hint"]
+        assert withheld_hint_for(f"{SYNTHETIC_CASELIST} 2026-09-15") in error["hint"]
+        assert FINISH_THE_REMOVAL in error["hint"]
+        assert "caselist-removal.md" in error["hint"]
+
+    def test_a_mismatch_the_publisher_would_upload_beside_one_it_withholds_gets_both_hints(
+        self, buckets: S3Client, imported: Path
+    ) -> None:
+        """The publish clears the first week, and the removal is what the third one waits on."""
+        publish()
+        withdraw_at(imported, digest_of_body("bayview-semis-neg"), BAYVIEW_PATH)
+        rewrite_local_manifest(imported, SYNTHETIC_CASELIST, "2026-09-01")
+        rewrite_local_manifest(imported, SYNTHETIC_CASELIST, "2026-09-15")
+
+        hint = status_error()["hint"]
+
+        assert PUBLISH_HINT.format(SYNTHETIC_CASELIST) in hint
+        assert withheld_hint_for(f"{SYNTHETIC_CASELIST} 2026-09-15") in hint
+        assert FINISH_THE_REMOVAL in hint
+
+    @pytest.mark.parametrize("beside", list(BESIDE_THE_REWRITE))
+    def test_the_hint_is_the_removals_exactly_when_the_publish_withholds_the_manifest(
+        self, buckets: S3Client, imported: Path, beside: str
+    ) -> None:
+        """Whatever the rule becomes: status asks it, so the two cannot part ways."""
+        set_up, withheld_by_this_build = BESIDE_THE_REWRITE[beside]
+        publish()
+        set_up(imported)
+        rewrite_local_manifest(imported, SYNTHETIC_CASELIST, "2026-09-15")
+
+        hint = status_error()["hint"]
+        published = envelope_of(publish())
+        snapshots = (published.get("data") or published["error"]["details"])["snapshots"]
+        (third_week,) = [one for one in snapshots if one["snapshot"] == "2026-09-15"]
+        withheld = third_week["manifest"] == "withheld"
+
+        assert withheld is withheld_by_this_build
+        assert (FINISH_THE_REMOVAL in hint) is withheld
+        assert (PUBLISH_HINT.format(SYNTHETIC_CASELIST) in hint) is not withheld
+
+
+# ------------------------------------------------------------------------------------------------
 # What a person sees
 # ------------------------------------------------------------------------------------------------
 

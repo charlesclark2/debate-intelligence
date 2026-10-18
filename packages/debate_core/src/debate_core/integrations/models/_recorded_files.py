@@ -9,21 +9,21 @@ from __future__ import annotations
 
 import json
 import os
-import re
 from pathlib import Path
-from typing import Any, Final, cast
+from typing import Any, cast
 
+from debate_core.domain.prompt_spec import is_prompt_id
 from debate_core.integrations.models.errors import FixtureFileError
 
 __all__ = ["read_json_object", "safe_directory_name", "write_pretty_json"]
 
-_SAFE_NAME: Final = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
-"""A prompt id that is also a directory name on every platform: no separators, no leading dot."""
-
-
 def safe_directory_name(prompt_id: str) -> str:
-    """`prompt_id`, which names the directory its answers are filed in, or a `ValueError`."""
-    if not _SAFE_NAME.fullmatch(prompt_id):
+    """`prompt_id`, which names the directory its answers are filed in, or a `ValueError`.
+
+    The rule is the prompt registry's (:data:`~debate_core.domain.prompt_spec.PROMPT_ID_PATTERN`):
+    an id the registry accepts always names a directory here, and one it refuses never does.
+    """
+    if not is_prompt_id(prompt_id):
         raise ValueError(
             f"prompt id {prompt_id!r} cannot name a fixture directory; use letters, digits, '.', '_' "
             "and '-', starting with a letter or digit"

@@ -110,6 +110,11 @@ class Bucket:
 
 @pytest.fixture
 def bucket(tmp_path: Path, s3_client: S3Client, evidence_bucket: str) -> Bucket:
+    return a_bucket(tmp_path, s3_client, evidence_bucket)
+
+
+def a_bucket(tmp_path: Path, s3_client: S3Client, evidence_bucket: str) -> Bucket:
+    """An installation of its own under `tmp_path`, and the moto bucket it publishes to."""
     installation = Installation(
         data_dir=tmp_path / "evidence",
         bucket=S3EvidenceObjectStore(bucket=evidence_bucket, client=s3_client),

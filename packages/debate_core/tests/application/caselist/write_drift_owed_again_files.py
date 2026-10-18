@@ -25,8 +25,10 @@ from __future__ import annotations
 import json
 import os
 import shutil
+from collections.abc import Callable
+from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING
 
 import pytest
 
@@ -37,15 +39,19 @@ from debate_core.application.sync_runs import (
     SYNC_RUN_LOG_FILENAME,
 )
 
+from . import test_inbox_retention as inbox_retention
 from .test_caselist_sync_owes_a_drifted_manifest_again import (
+    FIRST_RUN,
     SECOND_RUN,
     Bucket,
     DriftBeforeTheComparison,
+    a_bucket,
     a_pull,
-    bucket,  # noqa: F401 - a fixture, used by name
-    clock,  # noqa: F401 - a fixture, used by name
 )
 from .test_inbox_retention import WEEK_1
+
+if TYPE_CHECKING:  # pragma: no cover - import for the type checker only
+    from mypy_boto3_s3.client import S3Client
 
 pytestmark = pytest.mark.anyio
 
@@ -64,6 +70,20 @@ def anyio_backend() -> str:
     return "asyncio"
 
 
+@pytest.fixture
+def bucket(tmp_path: Path, s3_client: S3Client, evidence_bucket: str) -> Bucket:
+    return a_bucket(tmp_path, s3_client, evidence_bucket)
+
+
+@pytest.fixture
+def clock(monkeypatch: pytest.MonkeyPatch) -> Callable[[datetime], None]:
+    def set_clock(moment: datetime) -> None:
+        monkeypatch.setattr(inbox_retention, "RUN_CLOCK", moment)
+
+    set_clock(FIRST_RUN)
+    return set_clock
+
+
 def keep(written: Bucket, scenario: str) -> None:
     into = out() / scenario
     if into.exists():
@@ -80,7 +100,9 @@ def keep(written: Bucket, scenario: str) -> None:
             shutil.copyfile(data_dir / name, into / name)
     listed = written.s3_client.list_objects_v2(Bucket=written.name, Prefix=REPORTS_PREFIX)
     objects = {
-        one["Key"]: written.s3_client.get_object(Bucket=written.name, Key=one["Key"])["Body"]
+        str(one.get("Key")): written.s3_client.get_object(Bucket=written.name, Key=str(one.get("Key")))[
+            "Body"
+        ]
         .read()
         .decode("utf-8")
         for one in listed.get("Contents", [])
@@ -88,13 +110,13 @@ def keep(written: Bucket, scenario: str) -> None:
     (into / "bucket.json").write_text(json.dumps(objects, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
-async def test_drift_owed_again(bucket: Bucket, clock: Any) -> None:  # noqa: F811
+async def test_drift_owed_again(bucket: Bucket, clock: Callable[[datetime], None]) -> None:
     out()
     await a_pull(bucket, comparison=DriftBeforeTheComparison(bucket, rewrite=(WEEK_1,)))
     keep(bucket, "drift_owed_again")
 
 
-async def test_drifted_again(bucket: Bucket, clock: Any) -> None:  # noqa: F811
+async def test_drifted_again(bucket: Bucket, clock: Callable[[datetime], None]) -> None:
     out()
     await a_pull(bucket, comparison=DriftBeforeTheComparison(bucket, rewrite=(WEEK_1,)))
     clock(SECOND_RUN)

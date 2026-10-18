@@ -61,7 +61,7 @@ v2.3's extension work.
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 40 | 40 | 216 |
-| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 83 | 60 | 439 |
+| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 83 | 61 | 439 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 19 | 3 | 186 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 13 | 0 | 108 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 14 | 0 | 96 |
@@ -247,7 +247,7 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [Loose ends in the weekly sync's findings, records and notifications](plan_specs/v1/e34-caselist-sync/t23-sync-loose-ends.yaml) `v1-e34-t23-sync-loose-ends` | Succeeded | 1 | 3.0 |
 | [The agent's installer checks what it can, and never changes an agent's environment by default](plan_specs/v1/e34-caselist-sync/t24-agent-install-loose-ends.yaml) `v1-e34-t24-agent-install-loose-ends` | Succeeded | 1 | 3.0 |
 | [A reinstall keeps the agent's schedule and options, and doctor names a takedown profile's environment](plan_specs/v1/e34-caselist-sync/t25-reinstall-keeps-every-setting.yaml) `v1-e34-t25-reinstall-keeps-every-setting` | Succeeded | 2 | 2.0 |
-| [A drifted snapshot is owed again, and the banner and run list say what is pending](plan_specs/v1/e34-caselist-sync/t26-pending-work-and-banner-words.yaml) `v1-e34-t26-pending-work-and-banner-words` | Pending | 2 | 3.0 |
+| [A drifted snapshot is owed again, and the banner and run list say what is pending](plan_specs/v1/e34-caselist-sync/t26-pending-work-and-banner-words.yaml) `v1-e34-t26-pending-work-and-banner-words` | Succeeded | 2 | 3.0 |
 | [The wrapper exports no AWS_PROFILE, and --check-launchd refuses options it ignores](plan_specs/v1/e34-caselist-sync/t27-wrapper-and-check-launchd-options.yaml) `v1-e34-t27-wrapper-and-check-launchd-options` | Pending | 1 | 1.0 |
 
 

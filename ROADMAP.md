@@ -248,7 +248,7 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [The agent's installer checks what it can, and never changes an agent's environment by default](plan_specs/v1/e34-caselist-sync/t24-agent-install-loose-ends.yaml) `v1-e34-t24-agent-install-loose-ends` | Succeeded | 1 | 3.0 |
 | [A reinstall keeps the agent's schedule and options, and doctor names a takedown profile's environment](plan_specs/v1/e34-caselist-sync/t25-reinstall-keeps-every-setting.yaml) `v1-e34-t25-reinstall-keeps-every-setting` | Succeeded | 2 | 2.0 |
 | [A drifted snapshot is owed again, and the banner and run list say what is pending](plan_specs/v1/e34-caselist-sync/t26-pending-work-and-banner-words.yaml) `v1-e34-t26-pending-work-and-banner-words` | Succeeded | 2 | 3.0 |
-| [The wrapper exports no AWS_PROFILE, and --check-launchd refuses options it ignores](plan_specs/v1/e34-caselist-sync/t27-wrapper-and-check-launchd-options.yaml) `v1-e34-t27-wrapper-and-check-launchd-options` | Pending | 1 | 1.0 |
+| [The wrapper exports no AWS_PROFILE, and --check-launchd refuses options it ignores](plan_specs/v1/e34-caselist-sync/t27-wrapper-and-check-launchd-options.yaml) `v1-e34-t27-wrapper-and-check-launchd-options` | InProgress | 1 | 1.0 |
 
 
 ### v1.2 — Argument landscape & file building

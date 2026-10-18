@@ -472,9 +472,85 @@ v1-e30-t19 asks the PM, 2026-10-18:
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-18
 
 **Notes:**
+
+Accepted, with the phase `Succeeded`. One gap between status and the sweep is found below. It
+goes to a follow-up task rather than holding the merge, because no removal so far can reach it.
+
+**The work itself:**
+
+* **Red first, and honest about what counts as red.** An `AttributeError` on a missing field is
+  not counted as red evidence, and mutants A1 to A10 are used to show those tests bite instead.
+* **The sweep is one function** shared by the dry run and `--execute`, so the count the dry run
+  prints is the set the execution deletes. There is a test for that.
+* **Its guards are each pinned by their own test:** the current version, the rewrite, newer, same
+  second, delete markers, a prefix-only key, a rewrite no longer held, and another request or
+  environment.
+* **40 of 40 mutants caught.** The four that first survived each led to a missing test, and three
+  checks that decided nothing were removed.
+* **The hint asks the publisher's own rule.** The hint therefore cannot drift from what the
+  publish does, and the test over the four row kinds ties the two together.
+* **The smoke check ran against an installed, stamped build.** `v1.1.0-dev.18` reads this build's
+  files.
+
+**Rulings:**
+
+* **Deviation 1, and PM question 1: (b).** A withdrawn copy left in the bucket is an unfinished
+  removal, the same as a removed file's residue. It should fail `caselist status` as
+  `REMOVAL_RESIDUE`. A new E30 task in the next PM batch lifts that one forbidden entry.
+  *Withdrawals NOT ATTRIBUTED* stays reported and outside the exit code, like *NOT CHECKED*: it says
+  what was not looked at, not that something was found.
+* **Deviation 2, held skipped rows get the publish hint until t23:** accepted. Following the
+  publisher's rule is what the notes asked for, and the notes' wording ran ahead of t22's
+  publisher. Follow-up 2 goes into `v1-e30-t23`'s notes: t23 flips
+  `BESIDE_THE_REWRITE["a held skipped row"]`.
+* **Deviation 3, t15's smoke test rewritten:** accepted. (3) reverses its premise.
+* **Deviation 4, two commits with a failing check:** accepted. No reported run was made at either,
+  and running checks without pipes is the right lesson.
+* **Decisions 1 to 8:** accepted. Decision 2's gap (a build between t15 and t16) holds no real
+  removal: prod has had none, and dev's RM-2026-90 predates t15.
+* **PM question 2, the parser-evaluation gate:** a correction first. The gate does not fail in
+  `ci`. `_run_real_tier` skips wherever there is no path map or digest key, and by policy neither
+  reaches a runner. It fails only on the operator's Mac, where the corpus is. The PR subset (six
+  files) has been fully corrected since `#308`, and the baseline is not written yet. The baseline is
+  written at the labelling finish (step 6 of the labels guide): three coach reviews, then
+  `scripts/run_parser_eval.py --write-baseline`, run by the operator. Until then, task sessions
+  treat that one failure as known and do not investigate it. It goes in the PM notes.
+
+**A gap for the new task: status can count a manifest version the sweep never takes.** For a
+manifest the run rewrote:
+
+* status counts a noncurrent version other than the rewrite if it is older than *the run's
+  completion minus 15 minutes* (`removal_residue._older_versions`);
+* the sweep takes it only if it is strictly older than *the rewrite*
+  (`manifest_sweep.older_than_their_rewrite`).
+
+So a version stamped between the rewrite and completion minus 15 minutes is counted, never swept,
+and "can always be cleared" fails for it. Examples are a version in the same second as the rewrite,
+or a publish from another machine during the run. It can only happen when a run carries on more than
+15 minutes after its own rewrite, which no removal so far has done. That is why this is accepted
+now.
+
+The new task makes the two one rule:
+
+* one predicate, shared by status and the sweep, for completed runs;
+* the property tested over the fixture states: after the same removal runs again, status counts no
+  manifest version. The states include a run that carries on more than 15 minutes past its rewrite,
+  and a same-second version.
+
+Narrowing status to the sweep's rule is not the fix. Status cannot read a version's contents, so it
+would stop reporting a version in that window that names a removed file.
+
+**Follow-ups:**
+
+* 1: the new E30 task (above).
+* 2: `v1-e30-t23`'s notes.
+* 3: shown by the operator's next dev dry run.
+* 4: added to `v1-e30-t20`.
+* 5: covered by PM question 2.
+* 6: noted.

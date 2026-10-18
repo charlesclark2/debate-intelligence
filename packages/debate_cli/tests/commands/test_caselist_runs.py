@@ -33,6 +33,7 @@ from debate_cli.exit_codes import ExitCode
 from debate_core.application.caselist_sync import DOWNLOAD_LEDGER_FILENAME, DownloadLedger
 from debate_core.application.sync_runs import (
     SYNC_RUN_LOG_FILENAME,
+    StageEntry,
     SyncRunLog,
     SyncRunOutcome,
     SyncRunRecord,
@@ -530,4 +531,88 @@ def test_runs_shows_each_runs_codes_and_verdict_from_its_details(installation: P
         ["UNREADABLE_ARCHIVE", "STORE_UNAVAILABLE"],
         [],
         None,
+    ]
+
+
+def test_runs_shows_the_banners_own_words_beside_the_verdict(installation: Path) -> None:
+    """`v1-e34-t26`, item 3. Five runs, newest first: one the lock refused, a publish refused with a
+    fix, a run stopped by a refusal with a fix, a retry with no fix, and an older build's lock refusal
+    with no details. The first three banners had words of their own beside the verdict, and the table
+    and `--json` now say them: `skipped` and `retry once fixed`. A retry with no fix has none, and a
+    run with no details has none known."""
+    day = datetime.now(UTC).replace(microsecond=0) - timedelta(days=5)
+    locked = a_failed_record(day + timedelta(days=4)).model_copy(update={"error_class": "SyncRunInProgress"})
+    refused = a_failed_record(day + timedelta(days=3)).model_copy(
+        update={"stages": (StageEntry(stage="publish", outcome="failed"),)}
+    )
+    stopped = a_failed_record(day + timedelta(days=2)).model_copy(update={"error_class": "StoreAccessDenied"})
+    retried = a_failed_record(day + timedelta(days=1)).model_copy(
+        update={"stages": (StageEntry(stage="publish", outcome="failed"),)}
+    )
+    older = a_failed_record(day).model_copy(update={"error_class": "SyncRunInProgress"})
+    log = SyncRunLog(installation / SYNC_RUN_LOG_FILENAME)
+    for record in (older, retried, stopped, refused, locked):
+        log.append(record)
+    grant = "the AWS profile lacks a grant for this; docs/runbooks/evidence-store.md lists what each has"
+    (installation / DETAILS_FILE).write_text(
+        "\n".join(
+            (
+                details_line(locked.run_id, "SYNC_RUN_IN_PROGRESS"),
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "run_id": refused.run_id,
+                        "stages": [{"stage": "publish", "error_codes": ["STORE_ACCESS_DENIED"], "hint": grant}],
+                        "failure_codes": ["STORE_ACCESS_DENIED"],
+                    }
+                ),
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "run_id": stopped.run_id,
+                        "failure_codes": ["STORE_ACCESS_DENIED"],
+                        "hint": grant,
+                    }
+                ),
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "run_id": retried.run_id,
+                        "stages": [{"stage": "publish", "error_codes": ["STORE_UNAVAILABLE"]}],
+                        "failure_codes": ["STORE_UNAVAILABLE"],
+                    }
+                ),
+            )
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    table = " ".join(invoke("caselist", "runs").stdout.split())
+
+    assert (
+        f"{locked.run_id} │ {locked.started_at:%Y-%m-%d %H:%M} │ failed (SyncRunInProgress) │ "
+        "SYNC_RUN_IN_PROGRESS │ person (skipped) │"
+    ) in table
+    assert (
+        f"{refused.run_id} │ {refused.started_at:%Y-%m-%d %H:%M} │ failed │ STORE_ACCESS_DENIED │ "
+        "retry (retry once fixed) │"
+    ) in table
+    assert (
+        f"{stopped.run_id} │ {stopped.started_at:%Y-%m-%d %H:%M} │ failed (StoreAccessDenied) │ "
+        "STORE_ACCESS_DENIED │ retry (retry once fixed) │"
+    ) in table
+    assert f"{retried.run_id} │ {retried.started_at:%Y-%m-%d %H:%M} │ failed │ STORE_UNAVAILABLE │ retry │" in table
+    assert (
+        f"{older.run_id} │ {older.started_at:%Y-%m-%d %H:%M} │ failed (SyncRunInProgress) │ not recorded │ "
+        "not recorded │"
+    ) in table
+
+    runs = as_json("caselist", "runs")["data"]["runs"]
+    assert [(one["run_id"], one["verdict"], one["banner"]) for one in runs] == [
+        (locked.run_id, "person", "skipped"),
+        (refused.run_id, "retry", "retry once fixed"),
+        (stopped.run_id, "retry", "retry once fixed"),
+        (retried.run_id, "retry", None),
+        (older.run_id, None, None),
     ]

@@ -516,10 +516,9 @@ def _diagnosed(data_dir: Path, capsys: pytest.CaptureFixture[str], *options: str
     return json.loads(output)[CASELIST]
 
 
-WITHIN_THE_RULE = "short: one cluster is its witness, within the share, and it is still apart"
-LONG_NEVER_PAIRED = "long: its containers are one cluster the banding never paired it with"
+WITHIN_THE_RULE = "one cluster is its witness, within the share, and it is still apart"
 NESTED_DETAIL = "its containers are nested copies in several clusters"
-SPLIT_BY_THE_BANDING = "pass the thresholds, never paired by the banding"
+SPLIT_BY_THE_CUT_STEP = "one holds the other, and the cut step kept them apart"
 
 
 def test_diagnose_says_which_limit_kept_each_cut_out_and_prints_counts_only(
@@ -528,8 +527,8 @@ def test_diagnose_says_which_limit_kept_each_cut_out_and_prints_counts_only(
     """By hand: five cards, four texts, one of them short. Two bodies have a container outside
     their cluster. The cut (26 shingles) is inside the copy (86) and the card (326), which are two
     clusters, and the card holds the copy: nested, three-tenths of the copy, still apart. The copy
-    is 86 of the card's 326 shingles, a long cut the banding never paired with its one container,
-    whose cluster is that one text."""
+    is 86 of the card's 326 shingles, over a quarter: a long cut that `card-fingerprint-v4` joins,
+    and that the `v2` table this store holds left alone."""
     result = _diagnosed(nested_dir, capsys, "--largest-clusters", "1")
     assert result["placement"] == "the store's table"
     assert result["fingerprint_version"] == "card-fingerprint-v2"
@@ -540,34 +539,28 @@ def test_diagnose_says_which_limit_kept_each_cut_out_and_prints_counts_only(
     cuts = result["cuts"]
     assert isinstance(cuts, dict)
     assert cuts["bodies_with_a_container_outside_their_cluster"] == 2
-    assert {name: count for name, count in cuts["by_outcome"].items() if count} == {
-        WITHIN_THE_RULE: 1,
-        LONG_NEVER_PAIRED: 1,
-    }
+    assert {name: count for name, count in cuts["by_outcome"].items() if count} == {WITHIN_THE_RULE: 2}
+    assert {name: count for name, count in cuts["long_by_outcome"].items() if count} == {WITHIN_THE_RULE: 1}
     assert cuts["short_with_containers_in_several_clusters"] == {
         "cuts": 1,
         "of which the containers are nested": 1,
         "as one card, split": 1,
         "as different cards": 0,
-        "one card split, by what kept the copies apart": {SPLIT_BY_THE_BANDING: 1},
+        "one card split, by what kept the copies apart": {SPLIT_BY_THE_CUT_STEP: 1},
     }
     assert cuts["short_within_the_rule_and_apart"] == {
         "cuts": 1,
         NESTED_DETAIL: 1,
         "the container first by fingerprint is over the share": 0,
-        "neither: another short body of its cluster points elsewhere": 0,
+        "another body of its cluster points elsewhere": 0,
+        "none of these: refused beside another join, or placed by other rules": 0,
     }
-    assert cuts["long_never_paired_by_share"] == {
-        "under a tenth": 0,
-        "a tenth to a quarter": 0,
-        "a quarter to a half": 1,
-        "half or more": 0,
-    }
-    assert cuts["long_with_one_witness_within_the_share"] == {
+    assert cuts["long_within_the_rule_and_apart"] == {
         "cuts": 1,
-        "sharing text with every text of the witness's cluster": 1,
-        "of which that cluster is one text": 1,
-        "sharing nothing with at least one text of it": 0,
+        NESTED_DETAIL: 0,
+        "the container first by fingerprint is over the share": 0,
+        "another body of its cluster points elsewhere": 0,
+        "none of these: refused beside another join, or placed by other rules": 1,
     }
 
     # The largest cluster is the copy's: one text, disclosed twice.
@@ -619,31 +612,31 @@ def test_diagnose_explains_each_divided_pair_from_a_saved_table(
         "outcome": WITHIN_THE_RULE,
         "detail": NESTED_DETAIL,
         "containers_read": "as one card, split",
-        "copies_kept_apart_by": [SPLIT_BY_THE_BANDING],
+        "copies_kept_apart_by": [SPLIT_BY_THE_CUT_STEP],
     }
     assert divided["by_reason"] == [
-        {**common, "kind": "a short cut in this part was left out"},
-        {**common, "kind": "this part was joined only through a short cut elsewhere"},
+        {**common, "kind": "a cut in this part was left out"},
+        {**common, "kind": "this part was joined only through a cut elsewhere"},
     ]
 
 
 def test_diagnose_previews_the_placement_the_checked_out_rules_would_make(
     nested_dir: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """Under the current rules the cut joins the copy: three clusters, nothing divided, and the one
-    body still outside a cluster that holds it is the long copy. The largest cluster is the copy's
-    two cards and the cut: two texts, one pair, the cut wholly inside the copy."""
+    """Under the current rules the copy joins the card and the cut both: two clusters, nothing
+    divided and nothing left outside a cluster that holds it. The largest cluster is the card, the
+    copy's two cards and the cut: three texts, three pairs, each one inside the other."""
     result = _diagnosed(nested_dir, capsys, "--preview", "--largest-clusters", "1")
     assert result["placement"] == "the checked-out rules, in memory"
     assert result["fingerprint_version"] == FINGERPRINT_VERSION
-    assert (result["cards"], result["clusters"]) == (5, 3)
+    assert (result["cards"], result["clusters"]) == (5, 2)
     cuts = result["cuts"]
     assert isinstance(cuts, dict)
-    assert {name: count for name, count in cuts["by_outcome"].items() if count} == {LONG_NEVER_PAIRED: 1}
+    assert cuts["bodies_with_a_container_outside_their_cluster"] == 0
     assert result["divided_pairs"] == {"pairs": 0, "by_reason": []}
     (largest,) = result["largest_clusters"]
-    assert (largest["cards"], largest["distinct_texts"], largest["short_texts"]) == (3, 2, 1)
-    assert (largest["pairs"], largest["pairs_sharing_half_or_more"], largest["pairs_matching"]) == (1, 1, 1)
+    assert (largest["cards"], largest["distinct_texts"], largest["short_texts"]) == (4, 3, 1)
+    assert (largest["pairs"], largest["pairs_sharing_half_or_more"], largest["pairs_matching"]) == (3, 3, 3)
 
 
 def _placed_and_cards(
@@ -705,9 +698,9 @@ def test_pairs_inside_a_cluster_are_of_different_texts_one_card_each(nested_dir:
 
 
 def test_cuts_are_drawn_by_the_limit_that_keeps_them_apart(nested_dir: Path) -> None:
-    """The store holds one long cut within the share, the copy, whose smallest container is the
-    card. The short cut is within the rule and apart, which is no limit's doing, so no limit draws
-    it."""
+    """The store's `v2` table leaves two cuts apart that no limit keeps apart: the long copy,
+    beside the card, and the short cut, beside the copy. Both are drawn as within the rule, and no
+    limit draws either."""
     from debate_core.evidence.cluster_diagnosis import diagnose_cuts
 
     store = LocalParsedStore(nested_dir)
@@ -716,7 +709,10 @@ def test_cuts_are_drawn_by_the_limit_that_keeps_them_apart(nested_dir: Path) -> 
     bodies, clusters = script.full_bodies(script.read_bodies(store, CASELIST, version, placed), placed)
     findings = diagnose_cuts(bodies, clusters).findings
     drawn = {limit: script.kept_apart(findings, limit) for limit in script.KEPT_APART_BY}
-    assert drawn.pop("long-cut-within-the-share") == [(_fingerprint_of(LONG_COPY), _fingerprint_of(WHOLE))]
+    assert set(drawn.pop("within-the-rule")) == {
+        (_fingerprint_of(LONG_COPY), _fingerprint_of(WHOLE)),
+        (_fingerprint_of(CUT), _fingerprint_of(LONG_COPY)),
+    }
     assert all(pairs == [] for pairs in drawn.values())
 
 
@@ -732,12 +728,12 @@ def _as_a_terminal(monkeypatch: pytest.MonkeyPatch, answers: list[str]) -> None:
 def test_sample_by_cluster_draws_from_the_largest_cluster_and_lets_the_rule_decide_a_cut(
     nested_dir: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The store rebuilt under the current rules: the largest cluster is the copy's two cards and
-    the cut, two texts, one pair of different texts. `--cluster` with its id draws the same pair.
-    The cut's 26 shingles are all inside the copy's 86, under a third of them: the rule says it
-    is the same card, and nothing is shown (`v1-e31-t21`)."""
+    """The store rebuilt under the current rules: the largest cluster is the card, the copy's two
+    cards and the cut, three texts, three pairs of different texts. `--cluster` with its id draws
+    the same pairs. Each pair is one text wholly inside another under a third its size: the rule
+    says they are the same card, and nothing is shown (`v1-e31-t21`)."""
     _rebuilt_under_todays_rules(nested_dir)
-    cluster_id = min(_fingerprint_of(CUT), _fingerprint_of(LONG_COPY))  # the smallest in the cluster
+    cluster_id = min(_fingerprint_of(body) for body in (CUT, LONG_COPY, WHOLE))  # the smallest in it
     for chosen in (["--largest", "1"], ["--cluster", cluster_id[:16]]):
         _as_a_terminal(monkeypatch, [])
         arguments = ["--data-dir", str(nested_dir), "sample", "--caselist", CASELIST, "--seed", "3", *chosen]
@@ -746,27 +742,28 @@ def test_sample_by_cluster_draws_from_the_largest_cluster_and_lets_the_rule_deci
         assert not [word for word in NUMBERED_TELLTALE if word in shown]
         assert "to judge" not in shown
         assert shown.endswith(
-            "Drew 1 of 1 pairs of different texts, at random, from testcl26's cluster of 3 cards and "
-            "2 texts (size rank 1), seed 3.\n"
-            "  Decided by rule 1 of 1; asked 0; answered 0 in 0 seconds.\n"
-            "  by rule: full with full: contained, under a third of the larger: same card: 1\n"
+            "Drew 3 of 3 pairs of different texts, at random, from testcl26's cluster of 4 cards and "
+            "3 texts (size rank 1), seed 3.\n"
+            "  Decided by rule 3 of 3; asked 0; answered 0 in 0 seconds.\n"
+            "  by rule: full with full: contained, under a third of the larger: same card: 3\n"
         )
 
 
 def test_sample_by_limit_draws_a_cut_beside_the_smallest_body_that_holds_it(
     nested_dir: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The copy's 86 shingles are all inside the card's 326, under a third of it: a cut held by a
-    body is contained, the same card by rule, and is counted without being shown."""
+    """The copy's 86 shingles are all inside the card's 326, and the cut's 26 inside the copy's 86,
+    each under a third: a cut held by a body is contained, the same card by rule, and is counted
+    without being shown."""
     _as_a_terminal(monkeypatch, [])
     arguments = ["--data-dir", str(nested_dir), "sample", "--caselist", CASELIST, "--seed", "3"]
-    assert script.main([*arguments, "--kept-apart-by", "long-cut-within-the-share"]) == 0
+    assert script.main([*arguments, "--kept-apart-by", "within-the-rule"]) == 0
     shown = capsys.readouterr().out
     assert not [word for word in NUMBERED_TELLTALE if word in shown]
     assert shown.endswith(
-        "Drew 1 of 1 cuts kept apart by long-cut-within-the-share, seed 3.\n"
-        "  Decided by rule 1 of 1; asked 0; answered 0 in 0 seconds.\n"
-        "  by rule: long-cut-within-the-share: contained, under a third of the larger: same card: 1\n"
+        "Drew 2 of 2 cuts kept apart by within-the-rule, seed 3.\n"
+        "  Decided by rule 2 of 2; asked 0; answered 0 in 0 seconds.\n"
+        "  by rule: within-the-rule: contained, under a third of the larger: same card: 2\n"
     )
 
 
@@ -777,7 +774,7 @@ def test_the_closing_lines_of_each_sample_are_appended_to_a_file_of_counts(
     The file keeps them, and holds no word of a card."""
     saved = nested_dir / "kept" / "tallies.txt"
     arguments = ["--data-dir", str(nested_dir), "sample", "--caselist", CASELIST, "--seed", "3"]
-    for chosen in (["--largest", "1"], ["--kept-apart-by", "long-cut-within-the-share"]):
+    for chosen in (["--largest", "1"], ["--kept-apart-by", "within-the-rule"]):
         _as_a_terminal(monkeypatch, [])
         assert script.main([*arguments, *chosen, "--save-tallies", str(saved)]) == 0
     capsys.readouterr()
@@ -786,9 +783,9 @@ def test_the_closing_lines_of_each_sample_are_appended_to_a_file_of_counts(
         "Drew 0 of 0 pairs of different texts, at random, from testcl26's cluster of 2 cards and 1 texts "
         "(size rank 1), seed 3.",
         "  Decided by rule 0 of 0; asked 0; answered 0 in 0 seconds.",
-        "Drew 1 of 1 cuts kept apart by long-cut-within-the-share, seed 3.",
-        "  Decided by rule 1 of 1; asked 0; answered 0 in 0 seconds.",
-        "  by rule: long-cut-within-the-share: contained, under a third of the larger: same card: 1",
+        "Drew 2 of 2 cuts kept apart by within-the-rule, seed 3.",
+        "  Decided by rule 2 of 2; asked 0; answered 0 in 0 seconds.",
+        "  by rule: within-the-rule: contained, under a third of the larger: same card: 2",
     ]
     assert not [word for word in NUMBERED_TELLTALE if word in "\n".join(kept)]
 
@@ -847,19 +844,18 @@ def test_diagnose_reads_the_earlier_rules_from_a_git_ref(
 ) -> None:
     """With `--before-rules HEAD`, before is the committed rules and after is the store's table,
     which here is the one `v2` left. So the comparison reads backwards, as it does for `counts`:
-    the committed rules put the cut with the copy, the table has it alone, and that one pair is
-    divided, the cut being a short cut that was left out."""
+    the committed rules put the card, the copy and the cut in one cluster, the table has each
+    alone, and two pairs are divided: the cut was left out, and the card was joined to the copy's
+    part only through it."""
     divided = _diagnosed(nested_dir, capsys, "--before-rules", "HEAD", "--largest-clusters", "0")[
         "divided_pairs"
     ]
     assert isinstance(divided, dict)
-    assert divided["pairs"] == 1
-    (reason,) = divided["by_reason"]
-    assert (reason["kind"], reason["outcome"], reason["detail"]) == (
-        "a short cut in this part was left out",
-        WITHIN_THE_RULE,
-        NESTED_DETAIL,
-    )
+    assert divided["pairs"] == 2
+    assert [(reason["kind"], reason["outcome"], reason["detail"]) for reason in divided["by_reason"]] == [
+        ("a cut in this part was left out", WITHIN_THE_RULE, NESTED_DETAIL),
+        ("this part was joined only through a cut elsewhere", WITHIN_THE_RULE, NESTED_DETAIL),
+    ]
 
 
 # ------------------------------------------------------------------------------------------------
@@ -1352,7 +1348,7 @@ def test_a_cluster_sample_asks_about_five_of_its_ten_pairs_and_saves_counts_alon
     [
         ("shaped_dir", ["d", "s", "u", "d", "s"], ["--largest", "1", "--count", "10"]),
         ("shaped_dir", ["s", "q"], ["--largest", "1", "--least-alike"]),
-        ("nested_dir", [], ["--kept-apart-by", "long-cut-within-the-share"]),
+        ("nested_dir", [], ["--kept-apart-by", "within-the-rule"]),
         ("data_dir", ["s", "d"], []),
         ("data_dir", [], ["--divided"]),
     ],
@@ -1383,3 +1379,217 @@ def test_nothing_a_sample_saves_holds_text_a_tag_a_cite_a_path_or_a_digest(
     assert not [word for word in forbidden if word in kept]
     assert not DIGEST_OR_PATH.findall(kept)
     assert str(data_dir) not in kept
+
+
+# ------------------------------------------------------------------------------------------------
+# A placement read before the rebuild, and a decided shape shown to a person (`v1-e31-t20`)
+# ------------------------------------------------------------------------------------------------
+#
+# The nested store holds `v2`'s table: the card, the copy and the cut each alone. The checked-out
+# rules put all three in one cluster, by hand: the copy is 86 of the card's 326 shingles, over a
+# quarter, and the cut is inside both. The unrelated card stays alone.
+
+PREVIEWED_LARGEST = {
+    "rank": 1,
+    "cards": 4,
+    "cards_not_full": 0,
+    "distinct_texts": 3,
+    "pairs": 3,
+    "contained, under a third of the larger": 3,
+}
+
+
+def _largest_described(output: str) -> dict[str, object]:
+    result = json.loads(output)[CASELIST]
+    largest = result["described_clusters"][0]
+    return {
+        "placement": result["placement"],
+        "clusters": result["clusters"],
+        **{name: largest[name] for name in ("rank", "cards", "cards_not_full", "distinct_texts", "pairs")},
+        "contained, under a third of the larger": largest["pairs_by_shape"][
+            "contained, under a third of the larger"
+        ],
+    }
+
+
+def test_shapes_previews_the_placement_the_checked_out_rules_would_make(
+    nested_dir: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """`shapes --preview` places the store's cards in memory and describes that placement, not the
+    store's table, whose largest cluster is the copy's two cards. Nothing is written."""
+    table = next(nested_dir.rglob("occurrences.jsonl"))
+    before = table.read_bytes()
+    arguments = ["--data-dir", str(nested_dir), "shapes", "--caselist", CASELIST, "--largest-clusters", "1"]
+    assert script.main([*arguments, "--preview"]) == 0
+    output = capsys.readouterr().out
+    assert not [word for word in NUMBERED_TELLTALE if word in output]
+    assert _largest_described(output) == {
+        "placement": "the checked-out rules, in memory",
+        "clusters": 2,
+        **PREVIEWED_LARGEST,
+    }
+    assert table.read_bytes() == before
+
+    assert script.main(arguments) == 0
+    stored = json.loads(capsys.readouterr().out)[CASELIST]
+    assert (stored["placement"], stored["clusters"], stored["described_clusters"][0]["cards"]) == (
+        "the store's table",
+        4,
+        2,
+    )
+
+
+def test_counts_saves_the_placement_it_previews_and_every_command_reads_it_back(
+    nested_dir: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`counts --save-after` keeps the in-memory placement; `--after` reads it in place of the
+    store's table: `counts` compares it with the table without placing again, `shapes` and
+    `diagnose` describe it, and `sample` draws from it."""
+    saved = nested_dir / "after"
+    base = ["--data-dir", str(nested_dir)]
+    assert script.main([*base, "counts", "--caselist", CASELIST, "--save-after", str(saved)]) == 0
+    previewed = json.loads(capsys.readouterr().out)[CASELIST]
+    kept = (saved / f"{CASELIST}.jsonl").read_text(encoding="utf-8")
+    assert not [word for word in NUMBERED_TELLTALE if word in kept]
+    assert (previewed["clusters_before"], previewed["clusters_after"], previewed["clusters_divided"]) == (
+        4,
+        2,
+        0,
+    )
+
+    for after in (saved, saved / f"{CASELIST}.jsonl"):
+        assert script.main([*base, "counts", "--caselist", CASELIST, "--after", str(after)]) == 0
+        compared = json.loads(capsys.readouterr().out)[CASELIST]
+        assert {**compared, "seconds": 0} == {**previewed, "seconds": 0}
+
+    assert (
+        script.main(
+            [*base, "shapes", "--caselist", CASELIST, "--largest-clusters", "1", "--after", str(saved)]
+        )
+        == 0
+    )
+    assert _largest_described(capsys.readouterr().out) == {
+        "placement": "a placement counts saved",
+        "clusters": 2,
+        **PREVIEWED_LARGEST,
+    }
+
+    diagnosed = _diagnosed(nested_dir, capsys, "--after", str(saved), "--largest-clusters", "1")
+    assert (diagnosed["placement"], diagnosed["clusters"]) == ("a placement counts saved", 2)
+    assert diagnosed["divided_pairs"] == {"pairs": 0, "by_reason": []}
+
+    _as_a_terminal(monkeypatch, [])
+    sample = [*base, "sample", "--caselist", CASELIST, "--seed", "3", "--largest", "1", "--after", str(saved)]
+    assert script.main(sample) == 0
+    assert capsys.readouterr().out.endswith(
+        "Drew 3 of 3 pairs of different texts, at random, from testcl26's cluster of 4 cards and "
+        "3 texts (size rank 1), seed 3.\n"
+        "  Decided by rule 3 of 3; asked 0; answered 0 in 0 seconds.\n"
+        "  by rule: full with full: contained, under a third of the larger: same card: 3\n"
+    )
+
+
+def test_the_newly_joined_pairs_of_a_saved_placement_are_drawn_against_the_stores_table(
+    nested_dir: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Before the rebuild, the join sample reads the store's table as before and the saved
+    placement as after. Two earlier clusters joined the copy's: the card and the cut."""
+    saved = nested_dir / "after"
+    base = ["--data-dir", str(nested_dir)]
+    assert script.main([*base, "counts", "--caselist", CASELIST, "--save-after", str(saved)]) == 0
+    capsys.readouterr()
+    _as_a_terminal(monkeypatch, [])
+    assert script.main([*base, "sample", "--caselist", CASELIST, "--seed", "3", "--after", str(saved)]) == 0
+    assert capsys.readouterr().out.endswith(
+        "Drew 2 of 2 newly joined pairs, seed 3.\n"
+        "  Decided by rule 2 of 2; asked 0; answered 0 in 0 seconds.\n"
+        "  by rule: full with full: contained, under a third of the larger: same card: 2\n"
+    )
+
+
+def test_a_sample_shows_the_pairs_of_a_decided_shape_it_is_asked_to_and_tallies_them_apart(
+    nested_dir: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Item (8): the two cuts the `v2` table keeps apart are each under a third of the body that
+    holds them. The rule calls them the same card; asked to, the sample shows them and keeps the
+    person's answers beside the rule's. Another shape asked for changes nothing here."""
+    saved = nested_dir / "kept" / "tallies.txt"
+    arguments = ["--data-dir", str(nested_dir), "sample", "--caselist", CASELIST, "--seed", "3"]
+    arguments += ["--kept-apart-by", "within-the-rule", "--save-tallies", str(saved)]
+    _as_a_terminal(monkeypatch, ["s", "d"])
+    assert (
+        script.main([*arguments, "--ask-shape", "contained-under-a-third", "--ask-shape", "identical"]) == 0
+    )
+    shown = capsys.readouterr().out
+    assert shown.count("to judge; the rule decided 0 of the 2 drawn.") == 2
+    assert "same card" not in shown.split("Drew 2 of 2")[0].replace("[s] same card", "")
+    _as_a_terminal(monkeypatch, [])
+    assert script.main([*arguments, "--ask-shape", "sharing-nothing"]) == 0
+    capsys.readouterr()
+    assert re.sub(r"in \d+ seconds", "in N seconds", saved.read_text(encoding="utf-8")).splitlines() == [
+        "Drew 2 of 2 cuts kept apart by within-the-rule, seed 3.",
+        "  Decided by rule 0 of 2; asked 2, 2 of them of a shape the rule decides; answered 2 in N seconds.",
+        "  asked of a shape the rule decides: within-the-rule: contained, under a third of the larger: "
+        "rule same card: person different card: 1",
+        "  asked of a shape the rule decides: within-the-rule: contained, under a third of the larger: "
+        "rule same card: person same card: 1",
+        "Drew 2 of 2 cuts kept apart by within-the-rule, seed 3.",
+        "  Decided by rule 2 of 2; asked 0; answered 0 in N seconds.",
+        "  by rule: within-the-rule: contained, under a third of the larger: same card: 2",
+    ]
+
+
+def test_a_decided_shape_asked_about_is_shown_and_the_rest_still_decided() -> None:
+    """`run_sample` directly: of four drawn pairs, the contained one is asked about because its
+    shape was named; the pair sharing nothing is still decided; the two no rule decides are asked
+    as before. A stop keeps what was answered."""
+    shown: list[str] = []
+    replies = iter(["d", "s", "q"])
+    tallies = script.run_sample(
+        DRAWN,
+        ask=lambda _prompt: next(replies),
+        show=shown.append,
+        columns=120,
+        clock=iter([0.0, 9.0]).__next__,
+        ask_shapes={"contained, under a third of the larger"},
+    )
+    assert tallies.lines() == [
+        "  Decided by rule 1 of 4; asked 3, 1 of them of a shape the rule decides; answered 2 in 9 seconds, "
+        "stopped with 1 not answered.",
+        "  by rule: full with full: sharing nothing: different card: 1",
+        "  asked: full with full: overlapping: same card: 1",
+        "  asked of a shape the rule decides: full with full: contained, under a third of the larger: "
+        "rule same card: person different card: 1",
+    ]
+    assert sum("to judge" in text for text in shown) == 3
+
+
+def test_each_limit_draws_the_cuts_of_its_own_outcome() -> None:
+    """`--kept-apart-by` names each of the diagnosis's outcomes once, and draws the cuts of that
+    outcome and no other, each beside the smallest body that may witness it."""
+    from dataclasses import replace
+
+    from debate_core.evidence.cluster_diagnosis import CutFinding, CutOutcome
+
+    finding = CutFinding(
+        fingerprint="cut",
+        cluster_id="cut",
+        shingles=20,
+        outcome=CutOutcome.WITHIN_THE_RULE,
+        container_clusters=("held",),
+        containers=frozenset({"held", "other"}),
+        smallest_container="held",
+    )
+    findings = [
+        replace(finding, fingerprint=f"cut-{outcome.name}", outcome=outcome) for outcome in CutOutcome
+    ]
+    drawn = {limit: script.kept_apart(findings, limit) for limit in script.KEPT_APART_BY}
+    assert len(script.KEPT_APART_BY) == len(CutOutcome)
+    assert sorted(cut for pairs in drawn.values() for cut, _ in pairs) == sorted(
+        f.fingerprint for f in findings
+    )
+    assert all(len(pairs) == 1 and pairs[0][1] == "held" for pairs in drawn.values())
+    assert drawn["lacking-an-end"] == [(f"cut-{CutOutcome.ENDS_NOT_BOTH_INSIDE.name}", "held")]
+    assert drawn["held-with-another-passage"] == [
+        (f"cut-{CutOutcome.HELD_WITH_ANOTHER_PASSAGE.name}", "held")
+    ]

@@ -562,7 +562,9 @@ def test_runs_shows_the_banners_own_words_beside_the_verdict(installation: Path)
                     {
                         "schema_version": 1,
                         "run_id": refused.run_id,
-                        "stages": [{"stage": "publish", "error_codes": ["STORE_ACCESS_DENIED"], "hint": grant}],
+                        "stages": [
+                            {"stage": "publish", "error_codes": ["STORE_ACCESS_DENIED"], "hint": grant}
+                        ],
                         "failure_codes": ["STORE_ACCESS_DENIED"],
                     }
                 ),
@@ -602,7 +604,10 @@ def test_runs_shows_the_banners_own_words_beside_the_verdict(installation: Path)
         f"{stopped.run_id} │ {stopped.started_at:%Y-%m-%d %H:%M} │ failed (StoreAccessDenied) │ "
         "STORE_ACCESS_DENIED │ retry (retry once fixed) │"
     ) in table
-    assert f"{retried.run_id} │ {retried.started_at:%Y-%m-%d %H:%M} │ failed │ STORE_UNAVAILABLE │ retry │" in table
+    assert (
+        f"{retried.run_id} │ {retried.started_at:%Y-%m-%d %H:%M} │ failed │ STORE_UNAVAILABLE │ retry │"
+        in table
+    )
     assert (
         f"{older.run_id} │ {older.started_at:%Y-%m-%d %H:%M} │ failed (SyncRunInProgress) │ not recorded │ "
         "not recorded │"

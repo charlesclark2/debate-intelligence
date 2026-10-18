@@ -190,7 +190,9 @@ def test_a_pull_is_listed_by_caselist_runs_locally_and_from_the_bucket(
     assert f"{counted['cards']} card(s)" in table
     for listed in (local, remote):
         [record] = listed["data"]["runs"]
-        assert record["banner"] is None, "`v1-e34-t26`: no words of a banner's own for a run that did not fail"
+        assert record["banner"] is None, (
+            "`v1-e34-t26`: no words of a banner's own for a run that did not fail"
+        )
 
 
 def test_a_pull_the_lock_refused_is_listed_with_its_banners_word(
@@ -204,6 +206,10 @@ def test_a_pull_the_lock_refused_is_listed_with_its_banners_word(
     assert refused["exit_code"] == ExitCode.DOMAIN_FAILURE, "the exit is untouched: 1"
 
     [record] = run("caselist", "runs", "--last", "5")["data"]["runs"]
-    assert (record["error_class"], record["verdict"], record["banner"]) == ("SyncRunInProgress", "person", "skipped")
+    assert (record["error_class"], record["verdict"], record["banner"]) == (
+        "SyncRunInProgress",
+        "person",
+        "skipped",
+    )
     table = " ".join(installed_cli.run("caselist", "runs", env={"COLUMNS": "200"}).stdout.split())
     assert "│ SYNC_RUN_IN_PROGRESS │ person (skipped) │" in table

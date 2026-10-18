@@ -369,7 +369,9 @@ which the exit status never reads, so that the run can say a login alone will no
 ## What the pending-work file holds
 
 Every snapshot this machine has imported and the bucket has not confirmed complete: nothing more
-is promised of it, and nothing less (`v1-e34-t18`). One function says what that is,
+is promised of it, and nothing less (`v1-e34-t18`). And, since the PM's ruling of 2026-10-16
+(`v1-e34-t26`), every snapshot the report stage found with the bucket's manifest differing from
+this machine's and nothing else, once (below). One function says what the publish stage owes,
 :func:`snapshots_still_owed`, and the publish stage writes its answer down however the stage ends:
 completed, failed on a code, stopped by a refusal or an outage, or pending on an expired session.
 No ending keeps a rule of its own. Before this, the expired-session ending wrote only the snapshots
@@ -389,6 +391,17 @@ owed from before that the stage had just published stayed in the file.
   (:class:`~debate_core.application.caselist.publish_service.NothingToPublish`). No run here can
   ever publish it, so owing it would fail every run from then on. The stage reports it, with its
   code, in the run that finds it, and it leaves the file.
+* **A drifted manifest is owed again, once** (`v1-e34-t26`). This machine's manifest is the
+  record and the bucket's copy follows it. The report stage compares what the publisher just
+  confirmed; a snapshot it finds with a manifest mismatch alone goes back into the file, behind
+  what is there, so the next run publishes it again and the mismatch is retried by itself. Any other
+  drift, a manifest the bucket lacks or a source with other bytes, alone or beside it, is a
+  person's and is owed nothing. Never a third time: a snapshot an earlier run owed again for this,
+  and every run since still owed, that drifts again after its republish is reported for a person
+  instead. The run log says which is which
+  (:func:`~debate_core.application.sync_runs.snapshots_owed_again_for_drift`); :func:`run_pull`
+  reads it and hands it to the run. The entries are the shape every other entry has, so a build
+  from before this reads and publishes them.
 * **A file that cannot be read is never written over** (:class:`PendingWorkUnreadable`). It may
   name snapshots nothing else remembers, and a run that took it for empty would replace it. The
   publish stage fails on it, with a hint naming the file by what it is for, and leaves it for a
@@ -3976,7 +3989,10 @@ class CaselistSyncService:
             try:
                 owed_before = self._pending.read()
             except PendingWorkUnreadable:
-                said += "; not recorded as owed, because the pending-work file could not be read: " + _snapshots_named(owe)
+                said += (
+                    "; not recorded as owed, because the pending-work file could not be read: "
+                    + _snapshots_named(owe)
+                )
             else:
                 owed = tuple(dict.fromkeys((*owed_before, *owe)))
                 self._pending.write(owed)
@@ -4439,7 +4455,9 @@ async def run_pull(
             if not caselists:
                 raise NoCaselistsConfigured
             progress(f"pulling {', '.join(caselists)}")
-            return await sync_service().run(caselists, full_archive=full_archive, owed_for_drift=owed_for_drift)
+            return await sync_service().run(
+                caselists, full_archive=full_archive, owed_for_drift=owed_for_drift
+            )
 
         monitored = await watching.watch(
             one_run, caselists=caselists, mode="publish_pending" if publish_pending else "run"

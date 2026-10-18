@@ -13,7 +13,10 @@
   bytes, which needs a person; and the snapshot's manifest, which this machine rewrites in place
   and `caselist publish` uploads again. The stage's finding now carries the kind, in the summary
   and in the run's details, and a run whose only drift is a manifest mismatch is announced with
-  the publish command, as something publishing again clears, and not as needing a person.
+  the publish command, as something publishing again clears, and not as needing a person. Since
+  `v1-e34-t26` the report stage owes such a snapshot again, so the announcement says the next run
+  publishes it, and its command is `--publish-pending`
+  (`test_caselist_sync_owes_a_drifted_manifest_again.py`).
 
 The comparison is the real one, against moto, with one thing scripted on top of it: a mismatch on
 a snapshot, or the session expiring at a given comparison. Every expectation is written by hand.

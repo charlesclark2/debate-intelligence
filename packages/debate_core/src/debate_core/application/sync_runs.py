@@ -1234,7 +1234,8 @@ def _also_owed_again(findings: Sequence[DriftFinding]) -> str:
 def _status_commands(findings: Sequence[DriftFinding]) -> str:
     """One `caselist status --caselist <slug>` for each caselist named, in order, joined by `&&`."""
     return " && ".join(
-        f"{STATUS_COMMAND} --caselist {caselist}" for caselist in dict.fromkeys(one.caselist for one in findings)
+        f"{STATUS_COMMAND} --caselist {caselist}"
+        for caselist in dict.fromkeys(one.caselist for one in findings)
     )
 
 

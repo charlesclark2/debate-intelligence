@@ -50,13 +50,17 @@ pytestmark = pytest.mark.anyio
 
 WHERE = "Run 20260916T060000Z (dev)"
 AWS_LOGIN = "aws sso login --profile debate-dev-evidence"
-NO_SNAPSHOT_WAITS = f"{WHERE} kept everything it fetched; no snapshot waits to be published, only the run record."
+NO_SNAPSHOT_WAITS = (
+    f"{WHERE} kept everything it fetched; no snapshot waits to be published, only the run record."
+)
 THE_CHECK_WAS_CUT_SHORT = (
     " The report stage's check that the bucket holds what this run published was cut short; "
     "caselist pull --publish-pending does not make it again, and debate-research caselist status "
     "does, after the login."
 )
-PARSE_WAITS = " The parsed store waits too; after the login: debate-research caselist parse --caselist <slug> --publish"
+PARSE_WAITS = (
+    " The parsed store waits too; after the login: debate-research caselist parse --caselist <slug> --publish"
+)
 
 
 def a_retry_may_cure(codes: Sequence[str]) -> bool:
@@ -191,7 +195,11 @@ def test_a_run_the_lock_refused_says_skipped() -> None:
 
     assert words(record, details) == "skipped"
     [notification] = notifications_for(
-        record, details, aws_login_command=AWS_LOGIN, credentials_expired=False, may_succeed_on_retry=a_retry_may_cure
+        record,
+        details,
+        aws_login_command=AWS_LOGIN,
+        credentials_expired=False,
+        may_succeed_on_retry=a_retry_may_cure,
     )
     assert notification.title == "caselist pull skipped: another was running"
 
@@ -206,7 +214,11 @@ def test_a_failed_stage_refused_with_a_fix_says_retry_once_fixed() -> None:
 
     assert words(record, details) == "retry once fixed"
     [notification] = notifications_for(
-        record, details, aws_login_command=AWS_LOGIN, credentials_expired=False, may_succeed_on_retry=a_retry_may_cure
+        record,
+        details,
+        aws_login_command=AWS_LOGIN,
+        credentials_expired=False,
+        may_succeed_on_retry=a_retry_may_cure,
     )
     assert notification.title == "caselist pull failed: retried once fixed"
 
@@ -282,7 +294,11 @@ def manifest_drift(*caselists: str) -> SyncRunDetails:
 
 def sent_for(record: SyncRunRecord, details: SyncRunDetails) -> list[Notification]:
     return notifications_for(
-        record, details, aws_login_command=AWS_LOGIN, credentials_expired=False, may_succeed_on_retry=a_retry_may_cure
+        record,
+        details,
+        aws_login_command=AWS_LOGIN,
+        credentials_expired=False,
+        may_succeed_on_retry=a_retry_may_cure,
     )
 
 
@@ -323,7 +339,9 @@ def test_a_manifest_not_owed_again_needs_a_person_named_by_caselist_and_date() -
 
 
 def test_one_owed_again_and_one_drifted_again_says_both_and_asks_for_a_person() -> None:
-    record = a_record(*REPORT_FAILED, outcome=SyncRunOutcome.INCOMPLETE, pending_publish=("hsld26 2026-09-01",))
+    record = a_record(
+        *REPORT_FAILED, outcome=SyncRunOutcome.INCOMPLETE, pending_publish=("hsld26 2026-09-01",)
+    )
 
     [notification] = sent_for(record, manifest_drift("hsld26", "hspolicy26"))
 

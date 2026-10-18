@@ -145,7 +145,9 @@ class DriftBeforeTheComparison(CaselistStatusService):
         rewrite_source_of: tuple[date, ...] = (),
     ) -> None:
         super().__init__(
-            local=bucket.installation.local, remote=bucket.installation.bucket, suppression=empty_suppression_list()
+            local=bucket.installation.local,
+            remote=bucket.installation.bucket,
+            suppression=empty_suppression_list(),
         )
         self.bucket = bucket
         self._rewrite = rewrite
@@ -348,7 +350,9 @@ async def test_a_first_drift_of_a_snapshot_owed_for_another_reason_is_owed_again
     assert owed(bucket.installation) == [WEEK_ONE]
 
 
-async def test_a_snapshot_confirmed_in_sync_between_two_drifts_starts_again(bucket: Bucket, clock: Any) -> None:
+async def test_a_snapshot_confirmed_in_sync_between_two_drifts_starts_again(
+    bucket: Bucket, clock: Any
+) -> None:
     """Owed again, then published and confirmed in sync, then drifting at a later publish: a first drift
     again, because a run in between did not owe it."""
     await a_pull(bucket, comparison=DriftBeforeTheComparison(bucket, rewrite=(WEEK_1,)))
@@ -381,7 +385,9 @@ async def test_a_snapshot_confirmed_in_sync_between_two_drifts_starts_again(buck
 async def test_a_manifest_the_bucket_lost_is_not_owed_by_the_report_stage(bucket: Bucket, clock: Any) -> None:
     watched = await a_pull(bucket, comparison=DriftBeforeTheComparison(bucket, delete=(WEEK_1,)))
 
-    assert report(watched)["drift"] == [{"caselist": CASELIST, "snapshot": "2026-09-01", "kinds": ["missing"]}]
+    assert report(watched)["drift"] == [
+        {"caselist": CASELIST, "snapshot": "2026-09-01", "kinds": ["missing"]}
+    ]
     assert "owed again" not in str(report(watched)["reason"])
     assert owed(bucket.installation) == []
 
@@ -464,7 +470,10 @@ def a_run(
         finished_at=moment,
         outcome=SyncRunOutcome.INCOMPLETE if stages else SyncRunOutcome.FAILED,
         pending_publish=owed,
-        stages=(StageEntry(stage="publish", outcome="completed"), StageEntry(stage="report", outcome="failed"))
+        stages=(
+            StageEntry(stage="publish", outcome="completed"),
+            StageEntry(stage="report", outcome="failed"),
+        )
         if stages
         else (),
     )
@@ -514,11 +523,14 @@ def test_owed_for_drift_lasts_while_every_later_run_owes_it() -> None:
 
 
 def test_a_later_run_that_did_not_owe_it_ends_it() -> None:
-    assert owed_for_drift(
-        a_run(16, owed=(WEEK_ONE,), drift=((WEEK_ONE, MANIFEST),)),
-        a_run(23, owed=(), drift=()),
-        a_run(30, owed=(WEEK_ONE,), drift=()),
-    ) == []
+    assert (
+        owed_for_drift(
+            a_run(16, owed=(WEEK_ONE,), drift=((WEEK_ONE, MANIFEST),)),
+            a_run(23, owed=(), drift=()),
+            a_run(30, owed=(WEEK_ONE,), drift=()),
+        )
+        == []
+    )
 
 
 def test_a_run_with_no_stages_is_passed_over() -> None:

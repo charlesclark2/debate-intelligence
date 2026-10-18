@@ -124,6 +124,7 @@ from debate_core.application.caselist.status_service import CASELIST_DRIFT
 from debate_core.application.caselist_sync import (
     REQUIRED_STAGES,
     DriftKind,
+    PendingSnapshot,
     RunSummary,
     StageOutcome,
     SyncRunInProgress,
@@ -149,7 +150,10 @@ __all__ = [
     "ANOTHER_RUN_HELD_THE_LOCK",
     "ANOTHER_RUN_HELD_THE_LOCK_TITLE",
     "BACKLOG_GROWTH_RUNS",
+    "DRIFTED_AGAIN_TITLE",
+    "FIX_FIRST_BANNER_WORDS",
     "HELD_BY_A_REMOVAL_TITLE",
+    "LOCK_BANNER_WORDS",
     "MANIFEST_PUBLISHED_AGAIN",
     "MANIFEST_PUBLISHED_AGAIN_TITLE",
     "NEEDS_A_PERSON",
@@ -179,6 +183,7 @@ __all__ = [
     "SyncRunMonitor",
     "SyncRunOutcome",
     "SyncRunRecord",
+    "banner_words",
     "details_for_failure",
     "details_for_summary",
     "hint_for_a_record",
@@ -188,6 +193,7 @@ __all__ = [
     "record_for_failure",
     "record_for_summary",
     "redact",
+    "snapshots_owed_again_for_drift",
     "sync_run_details_key",
     "sync_run_key",
 ]
@@ -834,14 +840,45 @@ PUBLISH_A_CASELIST_COMMAND: Final = "debate-research caselist publish --caselist
 """What uploads a caselist's manifests this machine rewrote since they were published (`v1-e30-t12`)."""
 
 MANIFEST_PUBLISHED_AGAIN_TITLE: Final = "caselist pull: publish a manifest again"
-"""The title of a run whose only failed stage is the report, on a manifest mismatch alone (`v1-e34-t23`)."""
+"""The title of a run whose only failed stage is the report, on a manifest mismatch alone that the
+run owed again (`v1-e34-t23`, `v1-e34-t26`)."""
 
-MANIFEST_PUBLISHED_AGAIN: Final = (
-    "Publishing again should clear it: this machine rewrote the manifest after it was published, "
-    "and the publish uploads this machine's copy. Nothing here needs a person."
+
+def _published_again(count: int) -> str:
+    them, were = ("them", "manifests after they were") if count > 1 else ("it", "manifest after it was")
+    return (
+        f"The next scheduled run publishes {them} again: this machine rewrote the {were} published, "
+        "and the publish uploads this machine's copy. Nothing here needs a person."
+    )
+
+
+MANIFEST_PUBLISHED_AGAIN: Final = _published_again(1)
+"""What such a run says instead of a verdict. Since `v1-e34-t26` the report stage owes the snapshot
+again, so the next scheduled run, or `--publish-pending` before it, is the retry that clears it.
+Before, nothing owed it, and this sent the operator to `caselist publish`. The runbook quotes it."""
+
+DRIFTED_AGAIN_TITLE: Final = "caselist pull: a manifest drifted again"
+"""The title of a run whose report stage found a manifest drifting again after the run that owed it
+again published it and the bucket confirmed it (`v1-e34-t26`). It is not owed a third time, and the
+banner asks for a person, naming each snapshot by caselist and date. The runbook quotes it."""
+
+LOCK_BANNER_WORDS: Final = "skipped"
+"""What `caselist runs` shows beside the verdict of a run the lock refused (`v1-e34-t26`): the word
+:data:`ANOTHER_RUN_HELD_THE_LOCK_TITLE` puts beside `caselist pull`."""
+
+FIX_FIRST_BANNER_WORDS: Final = "retry once fixed"
+"""What `caselist runs` shows beside the verdict of a refusal a retry gets past only once its fix is
+made (`v1-e34-t26`): the run :data:`RETRIED_AFTER_ITS_FIX_TITLE` is the title of."""
+
+THE_CHECK_WAS_CUT_SHORT: Final = (
+    " The report stage's check that the bucket holds what this run published was cut short; "
+    f"caselist pull --publish-pending does not make it again, and {STATUS_COMMAND} does, after the login."
 )
-"""What such a run says instead of a verdict: the publish command is the retry that clears it. The
-next scheduled run would not: the snapshot is published, so nothing owes it. The runbook quotes it."""
+"""What the login banner adds when the report stage is pending and the publish is not (`v1-e34-t26`).
+
+The publish confirmed what it published, and the session then expired while the report stage
+compared it with the bucket. `--publish-pending` compares only what it publishes itself, and
+nothing of this run is owed, so it never makes that check: `caselist status` does."""
 
 type RetryRule = Callable[[Sequence[str]], bool]
 """Whether a run that failed on exactly these error codes may succeed on a retry.
@@ -894,6 +931,17 @@ def notifications_for(
     stopped says on what in words (:data:`_WHAT_STOPPED_A_RUN`), and no notification names an
     exception's class. Every notification's subtitle is the run and its environment, which a banner
     shows whole; the command is the first thing in its body (:attr:`Notification.body`).
+
+    **The login banner names what waits** (`v1-e34-t26`): the snapshots owed, when there are any,
+    and the run record; and, when the report stage was cut short with the publish already done, the
+    check `--publish-pending` will not make (:data:`THE_CHECK_WAS_CUT_SHORT`).
+
+    **A manifest owed again, and one that drifted again** (`v1-e34-t26`). A report stage's manifest
+    mismatch alone is announced as published again by the next run when the record lists it as
+    owed (:data:`MANIFEST_PUBLISHED_AGAIN`). One it does not list was not owed again, because it had
+    been owed again already, published and confirmed, and drifted again: that run asks for a
+    person (:data:`DRIFTED_AGAIN_TITLE`). Whether `caselist runs` shows words of a banner's own
+    beside its verdict is :func:`banner_words`, which this function's titles agree with.
     """
     where = f"Run {record.run_id} ({record.environment})"
     sent: list[Notification] = []
@@ -915,7 +963,7 @@ def notifications_for(
         )
     elif record.error_class is not None:
         retried = _retried_by_the_next_run(details.failure_codes, may_succeed_on_retry)
-        title, verdict = _verdict(retried, fix_first=details.hint is not None)
+        title, verdict = _verdict(retried, fix_first=_a_fix_comes_first(record, details))
         sent.append(
             Notification(
                 title=title,
@@ -925,22 +973,34 @@ def notifications_for(
             )
         )
     failed = [entry.stage for entry in record.stages if entry.outcome == str(StageOutcome.FAILED)]
-    publish_again = (
+    owed_again, drifted_again = _owed_again_or_not(
         _manifest_mismatches_alone(details.stage(str(SyncStage.REPORT)))
         if failed == [str(SyncStage.REPORT)]
-        else ()
+        else (),
+        record,
     )
-    if publish_again:
-        # A manifest this machine rewrote is uploaded by a publish, and needs nobody (`v1-e34-t23`).
+    if drifted_again:
+        # Owed again once already, published and confirmed, and drifting again: never a third time
+        # by itself, and never silently (`v1-e34-t26`).
+        sent.append(
+            Notification(
+                title=DRIFTED_AGAIN_TITLE,
+                message=f"{where}: {_drifted_again(drifted_again)}"
+                + (f" {_also_owed_again(owed_again)}" if owed_again else ""),
+                fix_command=_status_commands(drifted_again),
+            )
+        )
+    elif owed_again:
+        # A manifest this machine rewrote is owed again, and the next run uploads it (`v1-e34-t26`).
         sent.append(
             Notification(
                 title=MANIFEST_PUBLISHED_AGAIN_TITLE,
                 message=(
-                    f"{where}: the report stage found the bucket's {_manifests_of(publish_again)} "
-                    f"{'differ' if len(publish_again) > 1 else 'differs'} from this machine's. "
-                    f"{MANIFEST_PUBLISHED_AGAIN}"
+                    f"{where}: the report stage found the bucket's {_manifests_of(owed_again)} "
+                    f"{'differ' if len(owed_again) > 1 else 'differs'} from this machine's. "
+                    f"{_published_again(len(owed_again))}"
                 ),
-                fix_command=_publish_commands(publish_again),
+                fix_command=PUBLISH_PENDING_COMMAND,
             )
         )
     elif failed:
@@ -956,12 +1016,7 @@ def notifications_for(
         hints = list(dict.fromkeys(one.hint for one in said if one is not None and one.hint))
         if required.intersection(failed):
             retried = _retried_by_the_next_run(details.failure_codes, may_succeed_on_retry)
-            fix_first = any(
-                one is not None and one.hint
-                for stage, one in zip(failed, said, strict=True)
-                if stage in required
-            )
-            title, verdict = _verdict(retried, fix_first=fix_first)
+            title, verdict = _verdict(retried, fix_first=_a_fix_comes_first(record, details))
             verdict += " "
         else:
             title = "caselist pull finished with a failed stage"
@@ -988,22 +1043,33 @@ def notifications_for(
         )
         # What a stage had already found when the session expired that no later run cures by
         # itself. Only a pending stage records an earlier finding, so there is no outcome to ask.
-        # A manifest the report found rewritten is the exception: a publish after the login clears
-        # it, and it is said so below (`v1-e34-t23`).
-        to_publish_again = _manifest_mismatches_alone(details.stage(str(SyncStage.REPORT)))
+        # A manifest the report found rewritten is the exception: it is owed again, and the publish
+        # after the login uploads it (`v1-e34-t23`, `v1-e34-t26`); or it drifted again after it was,
+        # and it is said so on its own.
+        found_before = _manifest_mismatches_alone(details.stage(str(SyncStage.REPORT)))
+        owed_again, drifted_again = _owed_again_or_not(found_before, record)
         found_first = dict.fromkeys(
             code
             for one in details.stages
-            if not (to_publish_again and one.stage == str(SyncStage.REPORT))
+            if not (found_before and one.stage == str(SyncStage.REPORT))
             for code in one.earlier_findings
             if not may_succeed_on_retry([code])
+        )
+        # The report stage cut short after a publish that was not: nothing redoes its check.
+        report_alone = _stage_outcome(record, SyncStage.REPORT) == str(StageOutcome.PENDING) and (
+            _stage_outcome(record, SyncStage.PUBLISH) != str(StageOutcome.PENDING)
         )
         sent.append(
             Notification(
                 title="caselist publish waiting for an AWS login",
                 message=(
-                    f"{where} kept everything it fetched; {owed} snapshot(s) and the run record "
-                    "wait to be published."
+                    f"{where} kept everything it fetched; "
+                    + (
+                        f"{owed} snapshot(s) and the run record wait to be published."
+                        if owed
+                        else "no snapshot waits to be published, only the run record."
+                    )
+                    + (THE_CHECK_WAS_CUT_SHORT if report_alone else "")
                     + (
                         " A person should look as well: before the session expired a snapshot ended "
                         f"incomplete on {', '.join(found_first)}, which the login will not fix."
@@ -1011,12 +1077,21 @@ def notifications_for(
                         else ""
                     )
                     + (
-                        f" Before the session expired, the bucket's {_manifests_of(to_publish_again)} "
-                        f"{'were' if len(to_publish_again) > 1 else 'was'} found to differ from this "
-                        f"machine's; after the login, publishing "
-                        f"{'them' if len(to_publish_again) > 1 else 'it'} again clears it: "
-                        f"{_publish_commands(to_publish_again)}"
-                        if to_publish_again
+                        f" Before the session expired, the bucket's {_manifests_of(owed_again)} "
+                        f"{'were' if len(owed_again) > 1 else 'was'} found to differ from this "
+                        f"machine's; {'they are' if len(owed_again) > 1 else 'it is'} owed again, and "
+                        "the publish after the login uploads this machine's copy."
+                        if owed_again
+                        else ""
+                    )
+                    + (
+                        " A person should look as well: before the session expired, the bucket's "
+                        f"{_manifests_of(drifted_again)} {'were' if len(drifted_again) > 1 else 'was'} "
+                        "found to differ from this machine's again, after a run published "
+                        f"{_them_or_it(drifted_again)} again and the bucket confirmed "
+                        f"{_them_or_it(drifted_again)}; "
+                        f"{'they are' if len(drifted_again) > 1 else 'it is'} not owed again."
+                        if drifted_again
                         else ""
                     )
                     + (
@@ -1071,6 +1146,98 @@ def _verdict(retried: bool, *, fix_first: bool) -> tuple[str, str]:
     return RETRIED_BY_THE_NEXT_RUN_TITLE, RETRIED_BY_THE_NEXT_RUN
 
 
+def _a_fix_comes_first(record: SyncRunRecord, details: SyncRunDetails) -> bool:
+    """Whether the failure behind a failed run's verdict carries a fix to make before a retry helps.
+
+    For a run that stopped on an error, the error's own hint; for one that recorded its stages, a
+    hint on a failed stage the exit is decided from. One answer for the banner's title and for the
+    words `caselist runs` shows beside the verdict (`v1-e34-t23`, `v1-e34-t26`).
+    """
+    if record.error_class is not None:
+        return details.hint is not None
+    required = {str(stage) for stage in REQUIRED_STAGES}
+    for entry in record.stages:
+        if entry.outcome != str(StageOutcome.FAILED) or entry.stage not in required:
+            continue
+        said = details.stage(entry.stage)
+        if said is not None and said.hint:
+            return True
+    return False
+
+
+def banner_words(
+    record: SyncRunRecord,
+    details: SyncRunDetails | None,
+    *,
+    may_succeed_on_retry: RetryRule = _no_failure_is_known_to_be_transient,
+) -> str | None:
+    """The words a run's banner put beside its verdict, for `caselist runs` (`v1-e34-t26`); else `None`.
+
+    :data:`LOCK_BANNER_WORDS` for a run the lock refused, whose title is
+    :data:`ANOTHER_RUN_HELD_THE_LOCK_TITLE`, and :data:`FIX_FIRST_BANNER_WORDS` for a failure the
+    next run retries once its fix is made, whose title is :data:`RETRIED_AFTER_ITS_FIX_TITLE`. Decided
+    as :func:`notifications_for` decides those titles, from the same record, details and rule. `None`
+    for a run with no details: an older build recorded it, and the banner it showed is not known.
+    """
+    if details is None:
+        return None
+    if record.error_class == SyncRunInProgress.__name__:
+        return LOCK_BANNER_WORDS
+    if record.error_class == CaselistAuthExpired.__name__:
+        return None
+    retried = _retried_by_the_next_run(details.failure_codes, may_succeed_on_retry)
+    return FIX_FIRST_BANNER_WORDS if retried and _a_fix_comes_first(record, details) else None
+
+
+def _stage_outcome(record: SyncRunRecord, stage: SyncStage) -> str | None:
+    return next((entry.outcome for entry in record.stages if entry.stage == str(stage)), None)
+
+
+def _owed_again_or_not(
+    findings: Sequence[DriftFinding], record: SyncRunRecord
+) -> tuple[tuple[DriftFinding, ...], tuple[DriftFinding, ...]]:
+    """`findings` split into those the record lists as owed and those it does not (`v1-e34-t26`).
+
+    A manifest mismatch alone that the record does not list was not owed again by the report stage:
+    it had been owed again already and drifted again after its republish, or the pending-work file
+    could not be read. A person should look either way.
+    """
+    owed = set(record.pending_publish)
+    listed = tuple(one for one in findings if f"{one.caselist} {one.snapshot}" in owed)
+    return listed, tuple(one for one in findings if one not in listed)
+
+
+def _them_or_it(findings: Sequence[DriftFinding]) -> str:
+    return "them" if len(findings) > 1 else "it"
+
+
+def _drifted_again(findings: Sequence[DriftFinding]) -> str:
+    many = len(findings) > 1
+    it = _them_or_it(findings)
+    return (
+        f"the bucket's {_manifests_of(findings)} {'differ' if many else 'differs'} from this machine's "
+        f"again, after a run published {it} again and the bucket confirmed {it}. Publishing {it} a "
+        f"third time would not clear it, so {'they are' if many else 'it is'} not owed again: a person "
+        "should look."
+    )
+
+
+def _also_owed_again(findings: Sequence[DriftFinding]) -> str:
+    many = len(findings) > 1
+    named = ", ".join(f"{one.caselist} {one.snapshot}" for one in findings)
+    return (
+        f"The manifest{'s' if many else ''} of {named} {'are' if many else 'is'} owed again, and the "
+        f"next scheduled run publishes {_them_or_it(findings)}."
+    )
+
+
+def _status_commands(findings: Sequence[DriftFinding]) -> str:
+    """One `caselist status --caselist <slug>` for each caselist named, in order, joined by `&&`."""
+    return " && ".join(
+        f"{STATUS_COMMAND} --caselist {caselist}" for caselist in dict.fromkeys(one.caselist for one in findings)
+    )
+
+
 def _manifest_mismatches_alone(report: StageDetails | None) -> tuple[DriftFinding, ...]:
     """The report stage's findings when each is a manifest mismatch and nothing else; else none.
 
@@ -1093,14 +1260,6 @@ def _manifests_of(findings: Sequence[DriftFinding]) -> str:
     return f"manifest{'s' if len(findings) > 1 else ''} of {named}"
 
 
-def _publish_commands(findings: Sequence[DriftFinding]) -> str:
-    """One `caselist publish --caselist <slug>` for each caselist named, in order, joined by `&&`."""
-    return " && ".join(
-        f"{PUBLISH_A_CASELIST_COMMAND} {caselist}"
-        for caselist in dict.fromkeys(one.caselist for one in findings)
-    )
-
-
 def _retried_by_the_next_run(codes: Sequence[str], may_succeed_on_retry: RetryRule) -> bool:
     """Whether a run that failed on `codes` is one the next scheduled run should retry.
 
@@ -1108,6 +1267,64 @@ def _retried_by_the_next_run(codes: Sequence[str], may_succeed_on_retry: RetryRu
     classified it.
     """
     return bool(codes) and may_succeed_on_retry(codes)
+
+
+# ------------------------------------------------------------------------------------------------
+# What earlier runs owed again for drift (`v1-e34-t26`)
+# ------------------------------------------------------------------------------------------------
+
+
+def snapshots_owed_again_for_drift(
+    records: Sequence[SyncRunRecord], details: Mapping[str, SyncRunDetails]
+) -> frozenset[PendingSnapshot]:
+    """What an earlier run owed again because its manifest drifted, and every run since still owed.
+
+    The report stage owes again a snapshot whose bucket manifest no longer matches this machine's,
+    once (:class:`~debate_core.application.caselist_sync.CaselistSyncService`'s
+    `_owe_drifted_manifests_again`). This is how it tells "drifted again" from a first drift, from
+    the run log and the details as they are, with nothing added to either:
+
+    * **Owed again for drift** at a run whose details say its report stage found the snapshot's
+      manifest, and nothing else, differing from the bucket's (:attr:`StageDetails.drift`, kind
+      `manifest` alone), and whose record lists the snapshot as owed (`pending_publish`, which is
+      what the pending-work file held after the run).
+    * **Still owed for that reason** while every later run's record lists it as owed too. A run in
+      between that waited for a login keeps it so; one that confirmed it, or never owed it, ends it:
+      the snapshot's next drift is a first one again.
+    * **A run with no stages is passed over.** It stopped before any stage (the lock, a refused
+      start, an error that escaped the run), so it touched nothing it owed, and its record lists
+      nothing.
+
+    A run whose details are missing, one an older build recorded or whose details could not be
+    written, says nothing of drift. The guard is then one run late: it owes the snapshot a third
+    time, and the run after it, whose details say, stops it.
+
+    Args:
+        records: The run log, oldest first (:meth:`SyncRunLog.read`).
+        details: Each run's details, by run id (:meth:`SyncRunDetailsLog.read`).
+    """
+    report = str(SyncStage.REPORT)
+    manifest_alone = (str(DriftKind.MANIFEST),)
+    chain: set[str] | None = None
+    found: set[str] = set()
+    for record in reversed(records):
+        if not record.stages:
+            continue
+        owed_here = set(record.pending_publish)
+        chain = owed_here if chain is None else chain & owed_here
+        beside = details.get(record.run_id)
+        said = beside.stage(report) if beside is not None else None
+        drifted_here = {
+            f"{one.caselist} {one.snapshot}"
+            for one in (said.drift if said is not None else ())
+            if one.kinds == manifest_alone
+        }
+        settled = chain & drifted_here
+        found |= settled
+        chain -= settled
+        if not chain:
+            break
+    return frozenset(PendingSnapshot(*one.split(" ", 1)) for one in sorted(found))
 
 
 # ------------------------------------------------------------------------------------------------
@@ -1428,6 +1645,19 @@ class SyncRunMonitor:
     def pending_record_ids(self) -> list[str]:
         """Run ids whose record is still waiting to be published."""
         return self._pending.read()
+
+    def snapshots_owed_again_for_drift(self) -> frozenset[PendingSnapshot]:
+        """:func:`snapshots_owed_again_for_drift` over this machine's run log and details.
+
+        A log this user cannot read says nothing, rather than stopping the run: the guard is then
+        late, never the run (`v1-e34-t26`).
+        """
+        try:
+            records = self.log.read()
+        except (OSError, UnicodeDecodeError) as unreadable:
+            logger.warning("caselist run log: could not be read (%s)", type(unreadable).__name__)
+            return frozenset()
+        return snapshots_owed_again_for_drift(records, self.details.read())
 
     async def _finish(
         self, record: SyncRunRecord, details: SyncRunDetails, *, publish_pending_stage: bool

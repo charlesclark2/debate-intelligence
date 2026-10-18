@@ -460,7 +460,7 @@ import json
 import logging
 import os
 import re
-from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Collection, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, date, datetime, timedelta
 from enum import StrEnum
@@ -1745,6 +1745,11 @@ def snapshots_still_owed(
     return tuple(dict.fromkeys(one for one in (*previously_owed, *targets) if one not in settled))
 
 
+def _snapshots_named(snapshots: Iterable[PendingSnapshot]) -> str:
+    """`<caselist> <snapshot>, …`, as a stage's reason names snapshots."""
+    return ", ".join(f"{one.caselist} {one.snapshot}" for one in snapshots)
+
+
 class DownloadLedger:
     """When this machine started each bulk archive download, counted over a rolling 24 hours.
 
@@ -2342,6 +2347,10 @@ class _RunTally:
     """Archives that held nothing but removed or held files, taken out of the inbox once imported."""
     held_by_request: dict[str, int] = field(default_factory=lambda: dict[str, int]())
     """Uploads the imports refused at a held path, by request id (`v1-e34-t23`)."""
+    owed_for_drift: frozenset[PendingSnapshot] = frozenset()
+    """What an earlier run owed again because its manifest drifted, and every run since has still
+    owed (`v1-e34-t26`): the report stage owes none of these a third time. From the caller, which
+    reads the run log (:func:`~debate_core.application.sync_runs.snapshots_owed_again_for_drift`)."""
 
     def count_held(self, held_by_request: Mapping[str, int]) -> None:
         for request_id, count in held_by_request.items():
@@ -2611,9 +2620,18 @@ class CaselistSyncService:
         )
 
     async def run(
-        self, caselists: Sequence[str], *, dry_run: bool = False, full_archive: str | None = None
+        self,
+        caselists: Sequence[str],
+        *,
+        dry_run: bool = False,
+        full_archive: str | None = None,
+        owed_for_drift: Collection[PendingSnapshot] = (),
     ) -> RunSummary:
         """One whole pull. Holds the run lock for its duration.
+
+        `owed_for_drift` is what earlier runs owed again because the bucket's manifest drifted from
+        this machine's, and every run since has still owed; see "What the pending-work file holds"
+        in the module docstring (`v1-e34-t26`). :func:`run_pull` reads it from the run log.
 
         Raises :class:`SyncRunInProgress` at once if another run holds the lock, and
         :class:`NoCaselistsConfigured` if asked to pull nothing. Everything else is an outcome in
@@ -2633,7 +2651,7 @@ class CaselistSyncService:
             raise NoCaselistsConfigured
         started = self._clock()
         with RunLock(self._state_dir / LOCK_FILENAME):
-            tally = _RunTally()
+            tally = _RunTally(owed_for_drift=frozenset(owed_for_drift))
             fallbacks = self._suppression_fallbacks()
             plan = await self._selection_stage(caselists, tally, full_archive=full_archive)
             self._note_local_copy_only(tally, SyncStage.SELECT, since=fallbacks)
@@ -2650,18 +2668,19 @@ class CaselistSyncService:
         _log_summary(summary)
         return summary
 
-    async def publish_pending(self) -> RunSummary:
+    async def publish_pending(self, *, owed_for_drift: Collection[PendingSnapshot] = ()) -> RunSummary:
         """Complete the publishes an earlier run deferred, and nothing else.
 
         What `caselist pull --publish-pending` runs after `aws sso login`. It takes the same lock,
         so it cannot overlap a scheduled run, and it drains the pending-work file: each snapshot
         the bucket confirms complete is removed from it, and everything else stays owed, whatever
         ended the stage (:func:`snapshots_still_owed`). A file that cannot be read is left as it
-        is, and the publish stage fails on it (:class:`PendingWorkUnreadable`).
+        is, and the publish stage fails on it (:class:`PendingWorkUnreadable`). `owed_for_drift` is
+        :meth:`run`'s.
         """
         started = self._clock()
         with RunLock(self._state_dir / LOCK_FILENAME):
-            tally = _RunTally()
+            tally = _RunTally(owed_for_drift=frozenset(owed_for_drift))
             try:
                 selected = f"{len(self._pending.read())} snapshot(s) owed"
             except PendingWorkUnreadable:
@@ -3848,6 +3867,10 @@ class CaselistSyncService:
         rather than claiming a confirmation nobody made. It pends for that and nothing else
         (`v1-e34-t13`): after a publish that failed it confirms what did publish, and a bucket that
         refuses the comparison fails this stage, with the fix that applies.
+
+        A snapshot it finds with a manifest mismatch and nothing else is owed again, however the
+        stage ends, unless it was owed again for that already (:meth:`_owe_drifted_manifests_again`,
+        `v1-e34-t26`).
         """
         if self._status is None:
             tally.record(SyncStage.REPORT, StageOutcome.SKIPPED, _NO_BUCKET)
@@ -3884,6 +3907,7 @@ class CaselistSyncService:
                     SyncStage.REPORT,
                     f"{confirmed} snapshot(s) confirmed; not in sync before the session expired: "
                     + ", ".join(one.sentence for one in drifted)
+                    + self._owe_drifted_manifests_again(tally, found)
                     + f"; {expired}",
                     found_first=drifted,
                     drift=found,
@@ -3894,7 +3918,8 @@ class CaselistSyncService:
                 failure = self._failure(refused, about=named)
                 tally.fail(
                     SyncStage.REPORT,
-                    f"{confirmed} snapshot(s) confirmed; the comparison was refused: {failure.sentence}",
+                    f"{confirmed} snapshot(s) confirmed; the comparison was refused: {failure.sentence}"
+                    + self._owe_drifted_manifests_again(tally, found),
                     [*drifted, failure],
                     drift=found,
                 )
@@ -3913,7 +3938,8 @@ class CaselistSyncService:
             tally.fail(
                 SyncStage.REPORT,
                 f"{confirmed} snapshot(s) confirmed; not in sync: "
-                + ", ".join(one.sentence for one in drifted),
+                + ", ".join(one.sentence for one in drifted)
+                + self._owe_drifted_manifests_again(tally, found),
                 drifted,
                 drift=found,
             )
@@ -3921,6 +3947,47 @@ class CaselistSyncService:
         tally.record(
             SyncStage.REPORT, StageOutcome.COMPLETED, f"{confirmed} snapshot(s) confirmed in the bucket"
         )
+
+    def _owe_drifted_manifests_again(self, tally: _RunTally, found: Sequence[SnapshotDrift]) -> str:
+        """Owe again each snapshot in `found` whose manifest alone drifted, once; say so for the reason.
+
+        The PM's ruling of 2026-10-16, amending `v1-e34-t18`'s rule (see "What the pending-work file
+        holds" in the module docstring). This machine's manifest is the record and the bucket's copy
+        follows it, so a manifest mismatch with nothing else beside it goes back into the
+        pending-work file, behind what is there, and the next run publishes it again. Any other
+        drift, a source with other bytes or something missing, alone or beside it, is a person's.
+
+        Never a third time: a snapshot an earlier run owed again for this, and every run since still
+        owed (:attr:`_RunTally.owed_for_drift`), was published again and confirmed, and drifted
+        again. Owing it again would loop silently, so the reason says a person should look. A file
+        that cannot be read is not written over (:class:`PendingWorkUnreadable`), and the reason
+        says what it could not record.
+
+        :attr:`_RunTally.pending_publish` becomes what the file then holds, so the run's record lists
+        what is owed again, and the notification can tell it from what is not.
+        """
+        drifted = [
+            PendingSnapshot(one.caselist, one.snapshot) for one in found if one.kinds == (DriftKind.MANIFEST,)
+        ]
+        again = [one for one in drifted if one in tally.owed_for_drift]
+        owe = [one for one in drifted if one not in tally.owed_for_drift]
+        said = ""
+        if owe:
+            try:
+                owed_before = self._pending.read()
+            except PendingWorkUnreadable:
+                said += "; not recorded as owed, because the pending-work file could not be read: " + _snapshots_named(owe)
+            else:
+                owed = tuple(dict.fromkeys((*owed_before, *owe)))
+                self._pending.write(owed)
+                tally.pending_publish = list(owed)
+                said += "; owed again, for the next run to publish: " + _snapshots_named(owe)
+        if again:
+            said += (
+                "; drifted again after it was owed again and published, so not owed a third time; "
+                "a person should look: " + _snapshots_named(again)
+            )
+        return said
 
     async def _retention_stage(self, tally: _RunTally, *, plan: SyncPlan, dry_run: bool) -> None:
         """Remove what nothing can need again from the inbox; a dry run lists it and removes nothing.
@@ -4359,19 +4426,22 @@ async def run_pull(
         progress(f"pulling {', '.join(caselists)} (dry run)")
         summary = await sync_service().run(caselists, dry_run=True, full_archive=full_archive)
     else:
+        watching = monitor()
 
         async def one_run() -> RunSummary:
             # Inside the monitor, so that a refusal — no caselist, the API not turned on, an
             # expired token, another run holding the lock — is recorded and announced too.
+            # What earlier runs owed again for drift is read from their records (`v1-e34-t26`).
+            owed_for_drift = watching.snapshots_owed_again_for_drift()
             if publish_pending:
                 progress("completing the publishes an earlier run deferred")
-                return await sync_service().publish_pending()
+                return await sync_service().publish_pending(owed_for_drift=owed_for_drift)
             if not caselists:
                 raise NoCaselistsConfigured
             progress(f"pulling {', '.join(caselists)}")
-            return await sync_service().run(caselists, full_archive=full_archive)
+            return await sync_service().run(caselists, full_archive=full_archive, owed_for_drift=owed_for_drift)
 
-        monitored = await monitor().watch(
+        monitored = await watching.watch(
             one_run, caselists=caselists, mode="publish_pending" if publish_pending else "run"
         )
         summary, record, details = monitored.summary, monitored.record, monitored.details

@@ -52,9 +52,9 @@ WHERE = "Run 20260916T060000Z (dev)"
 AWS_LOGIN = "aws sso login --profile debate-dev-evidence"
 NO_SNAPSHOT_WAITS = f"{WHERE} kept everything it fetched; no snapshot waits to be published, only the run record."
 THE_CHECK_WAS_CUT_SHORT = (
-    " The report stage's check that the bucket holds what this run published was cut short, and "
-    "caselist pull --publish-pending does not make it again; after the login: "
-    "debate-research caselist status"
+    " The report stage's check that the bucket holds what this run published was cut short; "
+    "caselist pull --publish-pending does not make it again, and debate-research caselist status "
+    "does, after the login."
 )
 PARSE_WAITS = " The parsed store waits too; after the login: debate-research caselist parse --caselist <slug> --publish"
 

@@ -52,11 +52,13 @@ pytestmark = pytest.mark.anyio
 WHERE = "Run 20260916T060000Z (dev)"
 LOGIN_TITLE = "caselist publish waiting for an AWS login"
 PUBLISH_AGAIN_TITLE = "caselist pull: publish a manifest again"
-PUBLISH_TESTCL26 = "debate-research caselist publish --caselist testcl26"
+PUBLISH_PENDING = "debate-research caselist pull --publish-pending"
 PUBLISH_AGAIN = (
-    "Publishing again should clear it: this machine rewrote the manifest after it was published, "
-    "and the publish uploads this machine's copy. Nothing here needs a person."
+    "The next scheduled run publishes it again: this machine rewrote the manifest after it was "
+    "published, and the publish uploads this machine's copy. Nothing here needs a person."
 )
+"""Since `v1-e34-t26` the report stage owes the snapshot again, so the next run is the retry. Until
+then the wording sent the operator to `caselist publish --caselist testcl26`: nothing owed it."""
 
 
 @pytest.fixture
@@ -183,10 +185,14 @@ async def test_a_manifest_mismatch_found_before_the_session_expired_is_kept_and_
     [login] = watched.notifier.sent
     assert login.title == LOGIN_TITLE
     assert "A person should look" not in login.message
-    assert login.message.endswith(
-        " Before the session expired, the bucket's manifest of testcl26 2026-09-01 was found to differ "
-        f"from this machine's; after the login, publishing it again clears it: {PUBLISH_TESTCL26}"
-    )
+    assert login.message == (
+        f"{WHERE} kept everything it fetched; 1 snapshot(s) and the run record wait to be published. "
+        "The report stage's check that the bucket holds what this run published was cut short; "
+        "caselist pull --publish-pending does not make it again, and debate-research caselist status "
+        "does, after the login. Before the session expired, the bucket's manifest of testcl26 "
+        "2026-09-01 was found to differ from this machine's; it is owed again, and the publish after "
+        "the login uploads this machine's copy."
+    ), "owed again since v1-e34-t26, so the publish after the login is the one that clears it"
 
 
 async def test_an_expiry_at_the_first_comparison_found_nothing_and_says_nothing_more(
@@ -220,7 +226,10 @@ async def test_a_manifest_mismatch_alone_is_announced_with_the_publish_command_a
     assert report["outcome"] == "failed"
     assert report["error_codes"] == ["CASELIST_DRIFT"]
     assert report["drift"] == [{"caselist": CASELIST, "snapshot": "2026-09-01", "kinds": ["manifest"]}]
-    assert report["reason"] == "1 snapshot(s) confirmed; not in sync: testcl26 2026-09-01 (manifest mismatch)"
+    assert report["reason"] == (
+        "1 snapshot(s) confirmed; not in sync: testcl26 2026-09-01 (manifest mismatch); "
+        "owed again, for the next run to publish: testcl26 2026-09-01"
+    ), "owed again since v1-e34-t26"
     assert summary.succeeded and summary.failure_codes == (), "the exit is untouched: 0"
     assert report_details(watched)["drift"] == [
         {"caselist": CASELIST, "snapshot": "2026-09-01", "kinds": ["manifest"]}
@@ -231,7 +240,7 @@ async def test_a_manifest_mismatch_alone_is_announced_with_the_publish_command_a
         f"{WHERE}: the report stage found the bucket's manifest of testcl26 2026-09-01 differs from "
         f"this machine's. {PUBLISH_AGAIN}"
     )
-    assert notification.fix_command == PUBLISH_TESTCL26
+    assert notification.fix_command == PUBLISH_PENDING
     assert "person should look" not in notification.text
 
 

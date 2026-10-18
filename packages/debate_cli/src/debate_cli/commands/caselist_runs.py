@@ -47,6 +47,15 @@ Two columns after the outcome, from the same details:
 
 Both say `not recorded` for a run with no details. `--json` gives the verdict as `verdict`, `retry`
 or `person`, or `null` when there is none or no details.
+
+## The banner's own words (`v1-e34-t26`)
+
+Two banners put words of their own beside the verdict, and the `Verdict` cell shows them after it, in
+brackets: `person (skipped)` for a run the lock refused, and `retry (retry once fixed)` for a refusal
+the next run gets past only once its fix is made. `--json` gives them as `banner`, or `null` for
+every other run and for a run with no details. They are
+:func:`~debate_core.application.sync_runs.banner_words`, decided as the banner's title is, by the
+same rule as the verdict.
 """
 
 from __future__ import annotations
@@ -60,7 +69,7 @@ import typer
 from debate_cli.context import cli_context, command_name
 from debate_cli.exit_codes import codes_exit_as_a_retrieval_failure
 from debate_cli.output import JsonValue, TableSpec
-from debate_core.application.sync_runs import RecordedRun, SyncRunHistory, SyncRunRecord
+from debate_core.application.sync_runs import RecordedRun, SyncRunHistory, SyncRunRecord, banner_words
 
 __all__ = ["runs"]
 
@@ -139,6 +148,7 @@ def _run_as_json(run: RecordedRun) -> JsonValue:
         cast("JsonValue", run.details.model_dump(mode="json")) if run.details is not None else None
     )
     body["verdict"] = _verdict(run)
+    body["banner"] = _banner(run)
     return body
 
 
@@ -155,12 +165,20 @@ def _verdict(run: RecordedRun) -> str | None:
     return "retry" if codes_exit_as_a_retrieval_failure(run.details.failure_codes) else "person"
 
 
+def _banner(run: RecordedRun) -> str | None:
+    """`skipped` or `retry once fixed`, the words the run's banner put beside its verdict; else `None`."""
+    return banner_words(run.record, run.details, may_succeed_on_retry=codes_exit_as_a_retrieval_failure)
+
+
 def _failed_on_and_verdict(run: RecordedRun) -> tuple[str, str]:
-    """The table's two cells: the codes the exit was decided from, and the verdict on them."""
+    """The table's two cells: the codes the exit was decided from, and the verdict on them, with the
+    banner's own words beside it in brackets when it had some (`v1-e34-t26`)."""
     if run.details is None:
         return NOT_RECORDED, NOT_RECORDED
     codes = run.details.failure_codes
-    return (", ".join(codes) or NONE), (_verdict(run) or NONE)
+    verdict = _verdict(run) or NONE
+    words = _banner(run)
+    return (", ".join(codes) or NONE), (f"{verdict} ({words})" if words else verdict)
 
 
 PARSE_STAGE_NOT_RECORDED: Final = NOT_RECORDED

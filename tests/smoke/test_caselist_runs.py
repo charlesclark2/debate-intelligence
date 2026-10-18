@@ -35,6 +35,7 @@ from tests.smoke.stand_ins.opencaselist import OpenCaselistStandIn
 from tests.smoke.stand_ins.s3 import MOTO_TEST_CREDENTIALS, S3StandIn
 
 from debate_cli.exit_codes import ExitCode
+from debate_core.application.caselist_sync import LOCK_FILENAME, RunLock
 
 if TYPE_CHECKING:  # pragma: no cover - import for the type checker only
     from mypy_boto3_s3.client import S3Client
@@ -187,3 +188,22 @@ def test_a_pull_is_listed_by_caselist_runs_locally_and_from_the_bucket(
     assert f"{run_id} │" in table and "│ completed │ none │ none │" in table
     assert f"{counted['caselists']} caselist(s), {counted['full_parses']} in full" in table
     assert f"{counted['cards']} card(s)" in table
+    for listed in (local, remote):
+        [record] = listed["data"]["runs"]
+        assert record["banner"] is None, "`v1-e34-t26`: no words of a banner's own for a run that did not fail"
+
+
+def test_a_pull_the_lock_refused_is_listed_with_its_banners_word(
+    installation: Path, bucket: S3Client, site: OpenCaselistStandIn, run: Any, installed_cli: InstalledCli
+) -> None:
+    """`v1-e34-t26`, item 3: the run another held the lock against says `skipped` beside its verdict,
+    in the table and in `--json`, as its banner did. The lock is held here, from the test, on the file
+    the installed build's run takes it on."""
+    with RunLock(installation / "data" / LOCK_FILENAME):
+        refused = run("caselist", "pull")
+    assert refused["exit_code"] == ExitCode.DOMAIN_FAILURE, "the exit is untouched: 1"
+
+    [record] = run("caselist", "runs", "--last", "5")["data"]["runs"]
+    assert (record["error_class"], record["verdict"], record["banner"]) == ("SyncRunInProgress", "person", "skipped")
+    table = " ".join(installed_cli.run("caselist", "runs", env={"COLUMNS": "200"}).stdout.split())
+    assert "│ SYNC_RUN_IN_PROGRESS │ person (skipped) │" in table

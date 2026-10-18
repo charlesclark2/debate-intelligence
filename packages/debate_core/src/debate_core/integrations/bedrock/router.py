@@ -217,8 +217,9 @@ def converse_request(
 class BedrockModelRouter:
     """A `ModelRouter` that calls Amazon Bedrock, routed by a validated routing policy.
 
-    `render_prompt` turns a registered prompt into text; until the prompt registry provides one
-    (v1-e05-t04), the default refuses, so `generate_structured` sends nothing. `client_factory`
+    `render_prompt` turns a registered prompt into text: the prompt registry's `render`
+    (v1-e05-t04-prompt-registry, through `bedrock_router_factory`). Without one the default refuses,
+    so `generate_structured` sends nothing. `client_factory`
     builds a client per region and read timeout (the standard credential chain by default; a
     Stubber-holding client in tests). `sleep` and `jitter` are the backoff's wait and its random
     part, injected so a test can count waits without taking them.

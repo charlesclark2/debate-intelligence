@@ -2,47 +2,39 @@
 
 A :class:`~debate_core.domain.model_contracts.ModelPrompt` names a registered prompt by id and
 version and carries its variables; it holds no text. Turning it into the system and user text a
-model reads is the prompt registry's job (v1-e05-t04-prompt-registry), which is not built yet. So
-the adapter takes a :data:`PromptRenderer`, and until the registry exists the only one shipped is
-:func:`refuse_unregistered_prompt`, which fails closed. Prompt text is never written into an
-adapter, so a production call can only ever send a registered, versioned prompt.
+model reads, a :class:`~debate_core.domain.model_contracts.RenderedPrompt`, is the prompt registry's
+job (v1-e05-t04-prompt-registry). So the adapter takes a :data:`PromptRenderer`, and
+:func:`~debate_core.integrations.bedrock.bedrock_router_factory` gives it
+:meth:`PromptRegistry.render <debate_core.integrations.models.prompt_registry.PromptRegistry.render>`.
+
+A router built without one gets :func:`refuse_unregistered_prompt`, which fails closed. Prompt text
+is never written into an adapter, so a production call can only ever send a registered, versioned
+prompt.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
-from dataclasses import dataclass
 
 from debate_core.application.settings import ConfigurationError
-from debate_core.domain.model_contracts import ModelPrompt
+from debate_core.domain.model_contracts import ModelPrompt, RenderedPrompt
 
-__all__ = ["PromptRenderer", "RenderedPrompt", "refuse_unregistered_prompt"]
-
-
-@dataclass(frozen=True, slots=True)
-class RenderedPrompt:
-    """The text one call sends: an optional system prompt and the user turn."""
-
-    user: str
-    system: str | None = None
-
-    def __post_init__(self) -> None:
-        if not self.user.strip():
-            raise ValueError("a rendered prompt needs a user turn")
+__all__ = ["PromptRenderer", "refuse_unregistered_prompt"]
 
 
 type PromptRenderer = Callable[[ModelPrompt], RenderedPrompt]
-"""Renders a registered prompt with its variables. The prompt registry provides one (t04)."""
+"""Renders a registered prompt with its variables: `PromptRegistry.render`."""
 
 
 def refuse_unregistered_prompt(prompt: ModelPrompt) -> RenderedPrompt:
-    """The renderer a Bedrock router has until it is given the registry's: it renders nothing.
+    """The renderer of a Bedrock router that was given none: it renders nothing.
 
-    Raises `ConfigurationError` naming the prompt, so a `generate_structured` call made before
-    v1-e05-t04-prompt-registry wires its renderer in stops before anything is sent or billed.
+    Raises `ConfigurationError` naming the prompt, so a `generate_structured` call on a router built
+    without the prompt registry stops before anything is sent or billed.
     """
     raise ConfigurationError(
         f"no prompt renderer is configured, so prompt {prompt.prompt_id}@{prompt.prompt_version} cannot be "
-        "sent to Bedrock; the prompt registry (v1-e05-t04-prompt-registry) provides one",
+        "sent to Bedrock; build the router with bedrock_router_factory(registry), which renders from the "
+        "prompt registry (v1-e05-t04-prompt-registry)",
         field="models.provider",
     )

@@ -189,7 +189,10 @@ row says:
 A profile signed in as something unexpected is said in the same row and does not fail the check.
 The takedown profile is compared with the permission set a takedown runs as: one signed in as
 anything else reads `… a takedown runs only as DebateProdEvidenceRemoval, so caselist remove
---execute will refuse this profile`. The everyday profile signed in as the other environment's
+--execute will refuse this profile`. Signed in as the other environment's set, it says whose set
+that is first, as the everyday profile's row does: `… DebateDevEvidenceRemoval, which is dev's
+takedown permission set and not prod's; a takedown runs only as DebateProdEvidenceRemoval, …`
+(`v1-e34-t25`). The everyday profile signed in as the other environment's
 permission set reads `… DebateDevEvidenceOperator, which is dev's permission set and not prod's:
 prod's bucket grants it nothing, so every command that reaches the bucket will be refused`
 (`v1-e29-t09`): the profile's block in the AWS config names the other environment's
@@ -263,10 +266,11 @@ nothing.
 
 To install over an agent that is already installed, use
 [Reinstalling the agent](#reinstalling-the-agent): the installer then keeps the installed agent's
-environment and caselists unless told otherwise.
+environment, caselists, schedule, log directory and wrapper directory unless told otherwise.
 
-`--weekday`, `--hour` and `--minute` move the schedule; the default is Wednesday 06:00, the day
-after the site publishes the week's archives.
+`--weekday`, `--hour` and `--minute` set the schedule. A first install defaults to Wednesday 06:00,
+the day after the site publishes the week's archives; over an installed agent, each one left out
+keeps what the agent has (`v1-e34-t25`).
 
 ### What the agent runs, and where it is
 
@@ -386,26 +390,40 @@ does not define before the agent is replaced, and the second finds it as launchd
    then run the check again. An exit of `2`, "No such option", means the build installed in step
    1 is older than the check.
 
-3. **Install the agent**, with no `--env` and no `--caselist`. Over an installed agent the
-   installer reads the installed plist and keeps its environment and its caselists
-   (`v1-e34-t24`). The first two commands print them from the installed plist, so you can see
-   what will be kept; the third is the install:
+3. **Install the agent**, with no option but the build. Over an installed agent the installer
+   reads the installed plist and keeps its environment and its caselists (`v1-e34-t24`), and its
+   schedule, its log directory and its wrapper directory (`v1-e34-t25`). The first three commands
+   print them from the installed plist, so you can see what will be kept; the fourth is the
+   install:
 
    ```bash
    plutil -extract EnvironmentVariables.DEBATE_ENV raw ~/Library/LaunchAgents/com.debate-intelligence.caselist-sync.plist
    plutil -extract ProgramArguments json -o - ~/Library/LaunchAgents/com.debate-intelligence.caselist-sync.plist
+   plutil -extract StartCalendarInterval json -o - ~/Library/LaunchAgents/com.debate-intelligence.caselist-sync.plist
    ops/launchd/install.sh --debate-research "$HOME/.local/bin/debate-research"
    ```
 
-   It says what it kept, and the environment and caselists should be the ones the first two
-   commands printed:
-   `Keeping the installed agent's environment, dev (--env changes it).` and
-   `Keeping the installed agent's caselists: hsld26 hspolicy26 (--caselist replaces them).`
+   It says what it kept, and which key of the plist it read each from, and each should be what the
+   first three commands printed. For a dev agent on the default schedule:
+
+   * `Keeping the installed agent's environment, dev, from its plist's DEBATE_ENV (--env changes it).`
+   * `Keeping the installed agent's caselists: hsld26 hspolicy26, from its plist's ProgramArguments (--caselist replaces them).`
+   * `Keeping the installed agent's schedule, Wednesday at 06:00, from its plist's StartCalendarInterval (--weekday, --hour and --minute change it).`
+   * `Keeping the installed agent's log directory, …/Library/Logs/debate-research, from its plist's StandardOutPath and StandardErrorPath (--log-dir changes it).`
+   * `Keeping the installed agent's wrapper directory, …/.local/share/debate-research/launchd, from its plist's ProgramArguments (--wrapper-dir changes it).`
+
    Then it runs step 2's check itself and installs nothing if that fails. Success ends, as a first
    install does, with `Wrote …` and the data directory the agent keeps its data in, which should
-   be the one it had.
+   be the one it had. Adding `--dry-run` shows the same lines and writes nothing.
 
    * **`--caselist`** replaces the caselists, and the installer says so.
+   * **`--weekday`, `--hour`, `--minute`, `--log-dir` or `--wrapper-dir`** changes that setting
+     alone, and the installer says from what to what. Before `v1-e34-t25` each went back to its
+     default on a reinstall that did not repeat it, so an agent installed for Thursday moved to
+     Wednesday 06:00. A wrapper directory changed leaves the old copy where it is.
+   * **A setting the plist does not hold as the installer writes it**, such as a calendar
+     interval edited by hand, is refused, naming the plist key and the option that sets it. It is
+     never replaced by the default. Give the option to say what it is to be.
    * **`--env` with a different environment** is refused unless `--confirm-env-change` is given
      too, because it moves the agent to another data directory and another bucket. Before
      `v1-e34-t24` the default was `--env prod`, so a dev agent reinstalled without `--env` became

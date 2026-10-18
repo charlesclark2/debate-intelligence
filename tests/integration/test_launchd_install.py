@@ -55,6 +55,7 @@ run it, and refuses a profile this machine's AWS config does not define.
 
 from __future__ import annotations
 
+import itertools
 import json
 import os
 import platform
@@ -128,8 +129,9 @@ PLUTIL_STAND_IN = '''#!@PYTHON@
 """A stand-in for macOS's plutil over plistlib: the verbs install.sh uses, answering as plutil does.
 
 `-lint`; `-extract <keypath> raw`, which prints a string as it is, a boolean as true or false, an
-array's length and a dictionary's keys, sorted, one to a line; `-replace` and `-insert` with
-`-string`, `-bool` or `-array`; and `-remove`. A key path is keys and array indices joined by dots.
+array's length and a dictionary's keys, sorted, one to a line, and with `-expect <type>` refuses a
+value of another type; `-replace` and `-insert` with `-string`, `-bool` or `-array`; and
+`-remove`. A key path is keys and array indices joined by dots.
 On macOS, `test_the_plutil_stand_in_answers_as_plutil_does` holds it to the real one.
 """
 import plistlib, sys
@@ -173,6 +175,12 @@ if verb == "-extract":
         value = container[last]
     except (KeyError, IndexError, TypeError):
         refuse(f"Could not extract value, error: No value at that key path or invalid key path: {keypath}")
+    if rest[2] == "-expect":
+        types = [(bool, "bool"), (int, "integer"), (float, "float"), (str, "string"),
+                 (dict, "dictionary"), (list, "array"), (bytes, "data")]
+        actual = next(name for kind, name in types if isinstance(value, kind))
+        if rest[3] != actual:
+            refuse(f"Value at [{keypath}] expected to be {rest[3]} but is {actual}")
     if isinstance(value, bool):
         print("true" if value else "false")
     elif isinstance(value, dict):
@@ -456,6 +464,15 @@ def test_the_plutil_stand_in_answers_as_plutil_does(home: Path, tmp_path: Path, 
         ("-extract", "EnvironmentVariables.NOT_SET", "raw", "-o", "-"),
         ("-extract", "StandardOutPath", "raw", "-o", "-"),
         ("-extract", "RunAtLoad", "raw", "-o", "-"),
+        ("-extract", "StartCalendarInterval.Hour", "raw", "-expect", "integer", "-o", "-"),
+        ("-extract", "StartCalendarInterval.Hour", "raw", "-expect", "string", "-o", "-"),
+        ("-extract", "StartCalendarInterval.Second", "raw", "-expect", "integer", "-o", "-"),
+        ("-extract", "StartCalendarInterval", "raw", "-expect", "integer", "-o", "-"),
+        ("-extract", "StandardOutPath", "raw", "-expect", "string", "-o", "-"),
+        ("-extract", "ProgramArguments.0", "raw", "-expect", "string", "-o", "-"),
+        ("-extract", "ProgramArguments", "raw", "-expect", "string", "-o", "-"),
+        ("-replace", "StartCalendarInterval.Hour", "-string", "7"),
+        ("-extract", "StartCalendarInterval.Hour", "raw", "-expect", "integer", "-o", "-"),
         ("-replace", "Label", "-string", "renamed"),
         ("-remove", "ProgramArguments.1"),
         ("-insert", "ProgramArguments.1", "-string", "--check"),
@@ -1442,6 +1459,288 @@ def test_an_installed_agent_whose_arguments_this_script_did_not_write_needs_its_
     assert program_of(installed_plist(home))[1:] == ["--caselist", "testcl26"]
 
 
+# --- A reinstall keeps the schedule and the other options too (v1-e34-t25 ac1) -------------------
+#
+# `v1-e34-t24` kept the environment and the caselists. The schedule, the log directory and the
+# wrapper directory still went back to their defaults, so an agent installed for Thursday was moved
+# to Wednesday 06:00 by a reinstall that did not repeat `--weekday`. Each is now read from the
+# installed plist as the environment is, and an option still changes it.
+
+THURSDAY_AGENT = ("--weekday", "4", "--hour", "7", "--minute", "30")
+"""A schedule that is none of the defaults, so that a value kept and a default are told apart."""
+
+
+def schedule_of(plist: dict[str, object]) -> dict[str, int]:
+    interval = plist["StartCalendarInterval"]
+    assert isinstance(interval, dict)
+    return {str(key): int(value) for key, value in interval.items()}
+
+
+def logs_of(plist: dict[str, object]) -> tuple[str, str]:
+    return str(plist["StandardOutPath"]), str(plist["StandardErrorPath"])
+
+
+def install_a_thursday_agent(home: Path, console_script: Path) -> tuple[Path, Path]:
+    """A dev agent installed with every option this task keeps set away from its default; its log
+    and wrapper directories are returned."""
+    log_directory, wrapper_directory = home / "agent-logs", home / "agent-wrapper"
+    install_first(
+        home, console_script, "--caselist", "testcl26", "--env", "dev", *THURSDAY_AGENT,
+        "--log-dir", str(log_directory), "--wrapper-dir", str(wrapper_directory),
+    )  # fmt: skip
+    return log_directory, wrapper_directory
+
+
+def write_installed_plist(home: Path, change: Callable[[dict[str, object]], None]) -> bytes:
+    """Change the installed plist as an edit by hand would, and return its bytes afterwards."""
+    plist_file = home / "Library" / "LaunchAgents" / f"{LABEL}.plist"
+    plist = plistlib.loads(plist_file.read_bytes())
+    change(plist)
+    plist_file.write_bytes(plistlib.dumps(plist))
+    return plist_file.read_bytes()
+
+
+@pytest.mark.parametrize("dry_run", [False, True], ids=["install", "dry run"])
+def test_a_reinstall_with_no_options_keeps_the_schedule_and_both_directories_and_says_where_each_came_from(
+    home: Path, console_script: Path, dry_run: bool
+) -> None:
+    """ac1. Every value is the installed one, and the installer names each, with the plist key it
+    read it from: the operator's dry run over the real agent reads Wednesday 06:00 off this."""
+    log_directory, wrapper_directory = install_a_thursday_agent(home, console_script)
+
+    again = install("--debate-research", str(console_script), *(["--dry-run"] if dry_run else []), home=home)
+
+    assert again.returncode == 0, again.stderr
+    plist = rendered_plist(again) if dry_run else installed_plist(home)
+    assert schedule_of(plist) == {"Weekday": 4, "Hour": 7, "Minute": 30}
+    assert logs_of(plist) == (
+        f"{log_directory}/caselist-sync.jsonl",
+        f"{log_directory}/caselist-sync.err.log",
+    )
+    assert program_of(plist)[0] == f"{wrapper_directory}/run-caselist-sync.sh"
+    said = " ".join((again.stderr if dry_run else again.stdout).split())
+    assert (
+        "Keeping the installed agent's schedule, Thursday at 07:30, from its plist's "
+        "StartCalendarInterval (--weekday, --hour and --minute change it)."
+    ) in said
+    assert (
+        f"Keeping the installed agent's log directory, {log_directory}, from its plist's "
+        "StandardOutPath and StandardErrorPath (--log-dir changes it)."
+    ) in said
+    assert (
+        f"Keeping the installed agent's wrapper directory, {wrapper_directory}, from its plist's "
+        "ProgramArguments (--wrapper-dir changes it)."
+    ) in said
+    assert "Keeping the installed agent's environment, dev, from its plist's DEBATE_ENV" in said
+    assert "Keeping the installed agent's caselists: testcl26, from its plist's ProgramArguments" in said
+    if not dry_run:
+        assert (wrapper_directory / "run-caselist-sync.sh").read_bytes() == WRAPPER_SCRIPT.read_bytes()
+        assert not (home / ".local" / "share" / "debate-research" / "launchd").exists(), (
+            "the reinstall copied the wrapper to the default directory as well"
+        )
+
+
+def test_an_agent_installed_with_the_defaults_is_reinstalled_with_them_and_says_wednesday_at_06_00(
+    home: Path, console_script: Path
+) -> None:
+    """ac4's shape, offline: the real agent runs Wednesday at 06:00, and the dry run says so."""
+    install_first(home, console_script, "--caselist", "testcl26", "--env", "dev")
+
+    rendered = install("--debate-research", str(console_script), "--dry-run", home=home)
+
+    assert schedule_of(rendered_plist(rendered)) == {"Weekday": 3, "Hour": 6, "Minute": 0}
+    assert "Keeping the installed agent's schedule, Wednesday at 06:00, from its plist's" in " ".join(
+        rendered.stderr.split()
+    )
+
+
+def test_a_first_install_takes_the_default_schedule_and_directories(home: Path, console_script: Path) -> None:
+    """Unchanged: with no plist installed there is nothing to keep, and nothing is said kept."""
+    first = install("--caselist", "testcl26", "--debate-research", str(console_script), home=home)
+
+    assert first.returncode == 0, first.stderr
+    plist = installed_plist(home)
+    assert schedule_of(plist) == {"Weekday": 3, "Hour": 6, "Minute": 0}
+    assert logs_of(plist)[0] == f"{home}/Library/Logs/debate-research/caselist-sync.jsonl"
+    assert program_of(plist)[0] == f"{home}/.local/share/debate-research/launchd/run-caselist-sync.sh"
+    assert "Keeping" not in first.stdout
+
+
+@pytest.mark.parametrize(
+    ("option", "value", "expected", "said"),
+    [
+        pytest.param(
+            "--weekday", "1", {"schedule": {"Weekday": 1, "Hour": 7, "Minute": 30}},
+            "Changing the installed agent's schedule from Thursday at 07:30 to Monday at 07:30 (--weekday).",
+            id="weekday",
+        ),
+        pytest.param(
+            "--hour", "6", {"schedule": {"Weekday": 4, "Hour": 6, "Minute": 30}},
+            "Changing the installed agent's schedule from Thursday at 07:30 to Thursday at 06:30 (--hour).",
+            id="hour",
+        ),
+        pytest.param(
+            "--minute", "0", {"schedule": {"Weekday": 4, "Hour": 7, "Minute": 0}},
+            "Changing the installed agent's schedule from Thursday at 07:30 to Thursday at 07:00 (--minute).",
+            id="minute",
+        ),
+        pytest.param(
+            "--log-dir", "@HOME@/new-logs", {"logs": "@HOME@/new-logs"},
+            "Moving the installed agent's logs from @HOME@/agent-logs to @HOME@/new-logs (--log-dir).",
+            id="log-dir",
+        ),
+        pytest.param(
+            "--wrapper-dir", "@HOME@/new-wrapper", {"wrapper": "@HOME@/new-wrapper"},
+            "Moving the installed agent's wrapper from @HOME@/agent-wrapper to @HOME@/new-wrapper "
+            "(--wrapper-dir); the copy in @HOME@/agent-wrapper is left where it is.",
+            id="wrapper-dir",
+        ),
+    ],
+)  # fmt: skip
+def test_an_option_given_over_an_installed_agent_changes_that_setting_alone_and_says_so(
+    home: Path, console_script: Path, option: str, value: str, expected: dict[str, object], said: str
+) -> None:
+    """ac1. The option changes what it names, and every option left out is still kept."""
+    log_directory, wrapper_directory = install_a_thursday_agent(home, console_script)
+
+    def at_home(text: str) -> str:
+        return text.replace("@HOME@", str(home))
+
+    changed = install(option, at_home(value), "--debate-research", str(console_script), home=home)
+
+    assert changed.returncode == 0, changed.stderr
+    plist = installed_plist(home)
+    assert schedule_of(plist) == expected.get("schedule", {"Weekday": 4, "Hour": 7, "Minute": 30})
+    logs = Path(at_home(str(expected.get("logs", log_directory))))
+    assert logs_of(plist) == (f"{logs}/caselist-sync.jsonl", f"{logs}/caselist-sync.err.log")
+    wrapper = Path(at_home(str(expected.get("wrapper", wrapper_directory))))
+    assert program_of(plist)[0] == f"{wrapper}/run-caselist-sync.sh"
+    assert (wrapper / "run-caselist-sync.sh").read_bytes() == WRAPPER_SCRIPT.read_bytes()
+    assert at_home(said) in " ".join(changed.stdout.split())
+    assert environment_of(plist)["DEBATE_ENV"] == "dev"
+
+
+def test_an_option_given_with_the_installed_value_is_no_change_and_says_none(
+    home: Path, console_script: Path
+) -> None:
+    log_directory, _wrapper_directory = install_a_thursday_agent(home, console_script)
+
+    again = install(
+        *THURSDAY_AGENT, "--log-dir", str(log_directory), "--debate-research", str(console_script), home=home
+    )
+
+    assert again.returncode == 0, again.stderr
+    assert schedule_of(installed_plist(home)) == {"Weekday": 4, "Hour": 7, "Minute": 30}
+    assert "Changing" not in again.stdout and "Moving" not in again.stdout
+
+
+def string_hour(plist: dict[str, object]) -> None:
+    interval = plist["StartCalendarInterval"]
+    assert isinstance(interval, dict)
+    interval["Hour"] = "7"
+
+
+def no_minute(plist: dict[str, object]) -> None:
+    interval = plist["StartCalendarInterval"]
+    assert isinstance(interval, dict)
+    del interval["Minute"]
+
+
+def sunday_as_zero(plist: dict[str, object]) -> None:
+    interval = plist["StartCalendarInterval"]
+    assert isinstance(interval, dict)
+    interval["Weekday"] = 0
+
+
+def two_intervals(plist: dict[str, object]) -> None:
+    plist["StartCalendarInterval"] = [plist["StartCalendarInterval"], {"Weekday": 1, "Hour": 7, "Minute": 30}]
+
+
+def logs_split_across_directories(plist: dict[str, object]) -> None:
+    plist["StandardErrorPath"] = str(Path(str(plist["StandardOutPath"])).parent.parent / "elsewhere.err.log")
+
+
+def a_wrapper_of_another_name(plist: dict[str, object]) -> None:
+    arguments = plist["ProgramArguments"]
+    assert isinstance(arguments, list)
+    arguments[0] = str(Path(arguments[0]).parent / "my-own-sync.sh")
+
+
+@pytest.mark.parametrize(
+    ("change", "named", "option", "given"),
+    [
+        pytest.param(string_hour, "StartCalendarInterval.Hour", "--hour", ("--hour", "7"),
+                     id="an hour that is a string"),
+        pytest.param(no_minute, "StartCalendarInterval.Minute", "--minute", ("--minute", "30"),
+                     id="no minute"),
+        pytest.param(sunday_as_zero, "StartCalendarInterval.Weekday", "--weekday", ("--weekday", "7"),
+                     id="Sunday as 0"),
+        pytest.param(two_intervals, "StartCalendarInterval.Weekday", "--weekday", THURSDAY_AGENT,
+                     id="two calendar intervals"),
+        pytest.param(
+            logs_split_across_directories, "StandardErrorPath", "--log-dir",
+            ("--log-dir", "@HOME@/agent-logs"), id="logs in two directories",
+        ),
+        pytest.param(
+            a_wrapper_of_another_name, "ProgramArguments.0", "--wrapper-dir",
+            ("--wrapper-dir", "@HOME@/agent-wrapper"), id="a wrapper of another name",
+        ),
+    ],
+)  # fmt: skip
+def test_a_setting_the_installed_plist_does_not_hold_readably_is_refused_never_replaced_by_the_default(
+    home: Path,
+    console_script: Path,
+    change: Callable[[dict[str, object]], None],
+    named: str,
+    option: str,
+    given: tuple[str, ...],
+) -> None:
+    """ac1. A value this script cannot read back as one it writes is not guessed at, and not set to
+    the default: the reinstall is refused, naming the key and the option that sets it, and the
+    installed plist is left as it is. Given the options it cannot read, the reinstall goes ahead."""
+    install_a_thursday_agent(home, console_script)
+    before = write_installed_plist(home, change)
+    asked_before = calls_to(console_script)
+
+    refused = install("--debate-research", str(console_script), home=home)
+    dry = install("--debate-research", str(console_script), "--dry-run", home=home)
+
+    said = " ".join(refused.stderr.split())
+    assert refused.returncode == 2, refused.stdout
+    assert named in said and "cannot be kept" in said and "nothing was installed" in said
+    assert f"Give {option}" in said
+    assert installed_plist_bytes(home) == before
+    assert calls_to(console_script) == asked_before, "the build was asked something before the refusal"
+    assert dry.returncode == 2 and dry.stdout == "", "a dry run rendered a plist with a default in it"
+
+    given_now = install(
+        *(argument.replace("@HOME@", str(home)) for argument in given),
+        "--debate-research", str(console_script), home=home,
+    )  # fmt: skip
+    assert given_now.returncode == 0, given_now.stderr
+
+
+def test_a_kept_wrapper_directory_inside_a_checkout_is_refused_and_says_the_option_moves_it(
+    home: Path, console_script: Path
+) -> None:
+    """An agent installed before `v1-e34-t10` runs the checkout's own wrapper. Kept, that directory
+    is refused as any wrapper destination inside a working tree is, and the refusal says it is the
+    installed agent's and which option moves it."""
+    install_first(home, console_script, "--caselist", "testcl26", "--env", "dev")
+
+    def the_checkouts_wrapper(plist: dict[str, object]) -> None:
+        plist["ProgramArguments"] = [str(WRAPPER_SCRIPT), "--caselist", "testcl26"]
+
+    write_installed_plist(home, the_checkouts_wrapper)
+
+    refused = install("--debate-research", str(console_script), home=home)
+
+    said = " ".join(refused.stderr.split())
+    assert refused.returncode == 2, refused.stdout
+    assert f"the wrapper destination {LAUNCHD_DIRECTORY}" in said and "git working tree" in said
+    assert "--wrapper-dir" in said and "installed agent's" in said
+
+
 # --- What the installer says to do next -----------------------------------------------------------
 
 
@@ -1540,6 +1839,58 @@ def test_the_shell_scripts_pass_shellcheck() -> None:
     )
 
     assert checked.returncode == 0, checked.stdout + checked.stderr
+
+
+def header_of(script: Path) -> str:
+    """The comment at the top of a shell script, less its `#` marks."""
+    lines = script.read_text(encoding="utf-8").splitlines()[1:]
+    return "\n".join(line[1:] for line in itertools.takewhile(lambda line: line.startswith("#"), lines))
+
+
+def comment_above(script: Path, code: str) -> str:
+    """The comment lines directly above the first line that is `code`, on one line."""
+    lines = script.read_text(encoding="utf-8").splitlines()
+    at = lines.index(code)
+    start = at
+    while start > 0 and lines[start - 1].startswith("#"):
+        start -= 1
+    return " ".join(" ".join(line.lstrip("#") for line in lines[start:at]).split())
+
+
+def test_the_wrapper_says_the_installer_writes_into_the_plist_only_what_it_writes(
+    home: Path, console_script: Path
+) -> None:
+    """`v1-e34-t25` ac2. Until this task the wrapper listed `AWS_PROFILE` among the variables
+    "templated into the plist by install.sh", which `v1-e34-t24` stopped writing."""
+    plist = rendered_plist(
+        install("--caselist", "testcl26", "--debate-research", str(console_script), "--dry-run", home=home)
+    )
+    header = header_of(WRAPPER_SCRIPT)
+    listed = re.findall(r"^   ([A-Z][A-Z_]+) {2,}", header, flags=re.MULTILINE)
+
+    assert listed, "the wrapper's comment no longer lists the variables it is run with"
+    assert set(listed) <= set(environment_of(plist)), listed
+    assert "AWS_PROFILE" not in environment_of(plist)
+    assert "AWS_PROFILE is not in the plist" in " ".join(header.split())
+    assert "templated into the plist" not in header
+
+
+def test_the_installers_comment_on_the_profile_check_says_how_long_the_aws_question_may_wait() -> None:
+    """`v1-e34-t25` ac2, from `v1-e29-t09`: the comment said the check asks AWS a question for each
+    profile, and not that each question gives up after the time limit `v1-e29-t09` set. The limit
+    is read from its source, because importing the S3 integration opens a socket."""
+    source = (
+        REPOSITORY_ROOT / "packages" / "debate_core" / "src" / "debate_core" / "integrations" / "s3"
+        / "caller_identity.py"
+    ).read_text(encoding="utf-8")  # fmt: skip
+    [limit] = re.findall(r"^IDENTITY_TIME_LIMIT_SECONDS: Final = ([0-9.]+)$", source, flags=re.MULTILINE)
+    time_limit = float(limit)
+
+    comment = comment_above(INSTALL_SCRIPT, "PROFILE_CHECK_STATUS=0")
+
+    assert "IDENTITY_TIME_LIMIT_SECONDS" in comment
+    assert f"waits at most {time_limit:g} seconds for each answer" in comment
+    assert f"at most {time_limit:g} seconds on top of doctor's local checks" in comment
 
 
 def test_the_wrapper_only_calls_the_command(home: Path) -> None:

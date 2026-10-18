@@ -21,12 +21,15 @@
 #   ops/launchd/install.sh --check-launchd
 #
 # Over an installed agent (a plist already at ~/Library/LaunchAgents/<label>.plist) the installed
-# plist is read first, and an option left out keeps what it says: the agent's environment and its
-# caselists are changed only by an option that says so, and the installer says what it kept
-# (v1-e34-t24). Before it writes anything, a dry run included, it asks the build where the agent's
-# data will be and runs the build's own checks with the agent's evidence profile,
-# `debate-research doctor --evidence-profiles`, as the agent will run them. It refuses a profile
-# this machine's AWS config does not define, and a build whose checks fail.
+# plist is read first, and an option left out keeps what it says: the agent's environment, its
+# caselists (v1-e34-t24), its schedule, its log directory and its wrapper directory (v1-e34-t25)
+# are changed only by an option that says so, and the installer says what it kept and which key of
+# the plist it read it from. A setting the plist does not hold as this script writes it is refused,
+# naming the option that sets it, and never replaced by the default. Before it writes anything, a
+# dry run included, it asks the build where the agent's data will be and runs the build's own
+# checks with the agent's evidence profile, `debate-research doctor --evidence-profiles`, as the
+# agent will run them. It refuses a profile this machine's AWS config does not define, and a build
+# whose checks fail.
 #
 # The AWS profile the run uses is the build's setting `storage.s3.aws_profile`, not an option
 # here. There is no --aws-profile: it wrote AWS_PROFILE into the plist, which nothing the agent
@@ -43,13 +46,16 @@
 #   --confirm-env-change Confirm an install that switches the installed agent to another
 #                        environment, or that moves its data directory: another store, and with
 #                        another environment another evidence bucket.
-#   --weekday N         1 = Monday … 7 = Sunday. Default: 3 (Wednesday), the day after the site
-#                        has published the week's archives.
-#   --hour N             Default: 6.  --minute N   Default: 0.
+#   --weekday N          1 = Monday … 7 = Sunday. Default: the installed agent's, or 3 (Wednesday)
+#                        for a first install, the day after the site has published the week's
+#                        archives.
+#   --hour N             Default: the installed agent's, or 6.
+#   --minute N           Default: the installed agent's, or 0.
 #   --label NAME         launchd label. Default: com.debate-intelligence.caselist-sync.
-#   --log-dir PATH       Default: $HOME/Library/Logs/debate-research.
-#   --wrapper-dir PATH   Where the wrapper is copied for the agent to run.
-#                        Default: $HOME/.local/share/debate-research/launchd.
+#   --log-dir PATH       Default: the installed agent's, or $HOME/Library/Logs/debate-research.
+#   --wrapper-dir PATH   Where the wrapper is copied for the agent to run. Default: the installed
+#                        agent's, or $HOME/.local/share/debate-research/launchd. A copy left in
+#                        the old directory is not removed.
 #   --debate-research P  Full path to the console script the agent runs, written into the plist
 #                        as DEBATE_RESEARCH_BIN. Default: whatever `command -v debate-research`
 #                        finds, as found (a symlink stays a symlink).
@@ -83,11 +89,16 @@ LABEL="com.debate-intelligence.caselist-sync"
 DEBATE_ENVIRONMENT=""
 ENVIRONMENT_GIVEN=0
 CONFIRM_ENV_CHANGE=0
-WEEKDAY=3
-HOUR=6
-MINUTE=0
+WEEKDAY=""
+WEEKDAY_GIVEN=0
+HOUR=""
+HOUR_GIVEN=0
+MINUTE=""
+MINUTE_GIVEN=0
 LOG_DIRECTORY=""
+LOG_DIRECTORY_GIVEN=0
 WRAPPER_DIRECTORY=""
+WRAPPER_DIRECTORY_GIVEN=0
 DEBATE_RESEARCH_PATH=""
 DRY_RUN=0
 CHECK_LAUNCHD=0
@@ -213,18 +224,109 @@ runs_of() {
     printf '%s\n' "${runs:-not loaded}"
 }
 
+# A whole number as written, less its leading zeros, so that `--hour 07` and an installed 7 are one
+# value and `printf %02d` never reads `08` as octal.
+without_leading_zeros() {
+    printf '%s\n' "$1" | sed 's/^0*\([0-9]\)/\1/'
+}
+
+# 1 to 7, as launchd's Weekday and this script's --weekday count them.
+weekday_name() {
+    case "$1" in
+        1) echo Monday ;; 2) echo Tuesday ;; 3) echo Wednesday ;; 4) echo Thursday ;;
+        5) echo Friday ;; 6) echo Saturday ;; 7) echo Sunday ;;
+    esac
+}
+
+# `Wednesday at 06:00`, from a weekday, an hour and a minute.
+schedule_of() {
+    printf '%s at %02d:%02d\n' "$(weekday_name "$1")" "$2" "$3"
+}
+
+# --- Reading an installed agent's settings back (v1-e34-t25) -------------------------------------
+#
+# Each prints the setting as this script would write it, or, returning 1, why it cannot be read
+# back as one: a value written by hand, a key missing, or plutil's own refusal less the file's
+# name. A setting that cannot be read is never replaced by its default; the caller refuses.
+
+# One of the calendar interval's integers: StartCalendarInterval.<key>, between the two bounds.
+installed_calendar_integer() {
+    if ! answer=$(plutil -extract "StartCalendarInterval.$1" raw -expect integer -o - "${DESTINATION}" 2>&1); then
+        printf '%s\n' "${answer#"${DESTINATION}": }"
+        return 1
+    fi
+    case "${answer}" in
+        ''|*[!0-9]*) printf 'it is %s, not a whole number\n' "${answer}"; return 1 ;;
+    esac
+    if [ "${answer}" -lt "$2" ] || [ "${answer}" -gt "$3" ]; then
+        printf 'it is %s, and this script writes %s to %s\n' "${answer}" "$2" "$3"
+        return 1
+    fi
+    without_leading_zeros "${answer}"
+}
+
+# The one directory both logs are in, under the names the template gives them.
+installed_log_directory() {
+    if ! out_log=$(plutil -extract StandardOutPath raw -expect string -o - "${DESTINATION}" 2>&1); then
+        printf 'StandardOutPath: %s\n' "${out_log#"${DESTINATION}": }"
+        return 1
+    fi
+    if ! error_log=$(plutil -extract StandardErrorPath raw -expect string -o - "${DESTINATION}" 2>&1); then
+        printf 'StandardErrorPath: %s\n' "${error_log#"${DESTINATION}": }"
+        return 1
+    fi
+    logs=$(dirname -- "${out_log}")
+    if [ "${out_log}" != "${logs}/caselist-sync.jsonl" ]; then
+        printf 'StandardOutPath is %s, not a caselist-sync.jsonl\n' "${out_log}"
+        return 1
+    fi
+    if [ "${error_log}" != "${logs}/caselist-sync.err.log" ]; then
+        printf 'StandardErrorPath is %s, not the caselist-sync.err.log beside StandardOutPath, %s/caselist-sync.err.log\n' \
+            "${error_log}" "${logs}"
+        return 1
+    fi
+    printf '%s\n' "${logs}"
+}
+
+# The directory the wrapper the agent runs is in, when it is a copy of this script's wrapper.
+installed_wrapper_directory() {
+    if ! wrapper=$(plutil -extract ProgramArguments.0 raw -expect string -o - "${DESTINATION}" 2>&1); then
+        printf '%s\n' "${wrapper#"${DESTINATION}": }"
+        return 1
+    fi
+    if [ "$(basename -- "${wrapper}")" != "${WRAPPER_NAME}" ]; then
+        printf 'it is %s, not a %s\n' "${wrapper}" "${WRAPPER_NAME}"
+        return 1
+    fi
+    dirname -- "${wrapper}"
+}
+
+# Refuse a reinstall that would have to replace an installed setting it cannot read with a default.
+cannot_keep() {
+    fail "the agent installed at ${DESTINATION} holds no ${1} this script can read back (${2}), so ${3} cannot be kept; nothing was installed. Give ${4} to say what it is to be"
+}
+
+# A directory as given, less any trailing `/`, so that it reads back from the plist as given.
+without_trailing_slashes() {
+    trimmed=$1
+    while [ "${trimmed}" != "/" ] && [ "${trimmed%/}" != "${trimmed}" ]; do
+        trimmed=${trimmed%/}
+    done
+    printf '%s\n' "${trimmed}"
+}
+
 while [ $# -gt 0 ]; do
     case "$1" in
         --caselist) [ $# -ge 2 ] || fail "--caselist needs a slug"; CASELISTS="${CASELISTS} $2"; shift 2 ;;
         --env) [ $# -ge 2 ] || fail "--env needs a value"; DEBATE_ENVIRONMENT="$2"; ENVIRONMENT_GIVEN=1; shift 2 ;;
         --confirm-env-change) CONFIRM_ENV_CHANGE=1; shift ;;
         --aws-profile) fail "there is no --aws-profile any more: it wrote AWS_PROFILE into the plist, which nothing the agent runs reads. The run's AWS profile is the build's setting storage.s3.aws_profile, and this script checks that profile before it installs (docs/runbooks/caselist-scheduled-sync.md)" ;;
-        --weekday) [ $# -ge 2 ] || fail "--weekday needs a value"; WEEKDAY="$2"; shift 2 ;;
-        --hour) [ $# -ge 2 ] || fail "--hour needs a value"; HOUR="$2"; shift 2 ;;
-        --minute) [ $# -ge 2 ] || fail "--minute needs a value"; MINUTE="$2"; shift 2 ;;
+        --weekday) [ $# -ge 2 ] || fail "--weekday needs a value"; WEEKDAY="$2"; WEEKDAY_GIVEN=1; shift 2 ;;
+        --hour) [ $# -ge 2 ] || fail "--hour needs a value"; HOUR="$2"; HOUR_GIVEN=1; shift 2 ;;
+        --minute) [ $# -ge 2 ] || fail "--minute needs a value"; MINUTE="$2"; MINUTE_GIVEN=1; shift 2 ;;
         --label) [ $# -ge 2 ] || fail "--label needs a value"; LABEL="$2"; shift 2 ;;
-        --log-dir) [ $# -ge 2 ] || fail "--log-dir needs a path"; LOG_DIRECTORY="$2"; shift 2 ;;
-        --wrapper-dir) [ $# -ge 2 ] || fail "--wrapper-dir needs a path"; WRAPPER_DIRECTORY="$2"; shift 2 ;;
+        --log-dir) [ $# -ge 2 ] || fail "--log-dir needs a path"; LOG_DIRECTORY="$2"; LOG_DIRECTORY_GIVEN=1; shift 2 ;;
+        --wrapper-dir) [ $# -ge 2 ] || fail "--wrapper-dir needs a path"; WRAPPER_DIRECTORY="$2"; WRAPPER_DIRECTORY_GIVEN=1; shift 2 ;;
         --debate-research) [ $# -ge 2 ] || fail "--debate-research needs a path"; DEBATE_RESEARCH_PATH="$2"; shift 2 ;;
         --dry-run) DRY_RUN=1; shift ;;
         --check-launchd) CHECK_LAUNCHD=1; shift ;;
@@ -341,12 +443,37 @@ fi
 AGENT_DIRECTORY="${HOME}/Library/LaunchAgents"
 DESTINATION="${AGENT_DIRECTORY}/${LABEL}.plist"
 
+# The schedule's options are checked as given, before an installed agent is compared with them.
+for given in "${WEEKDAY_GIVEN}:${WEEKDAY}" "${HOUR_GIVEN}:${HOUR}" "${MINUTE_GIVEN}:${MINUTE}"; do
+    case "${given}" in
+        1:|1:*[!0-9]*) fail "--weekday, --hour and --minute take whole numbers; got '${given#1:}'" ;;
+    esac
+done
+if [ "${WEEKDAY_GIVEN}" -eq 1 ]; then
+    WEEKDAY=$(without_leading_zeros "${WEEKDAY}")
+    [ "${WEEKDAY}" -ge 1 ] && [ "${WEEKDAY}" -le 7 ] || fail "--weekday is 1 (Monday) to 7 (Sunday)"
+fi
+if [ "${HOUR_GIVEN}" -eq 1 ]; then
+    HOUR=$(without_leading_zeros "${HOUR}")
+    [ "${HOUR}" -le 23 ] || fail "--hour is 0 to 23"
+fi
+if [ "${MINUTE_GIVEN}" -eq 1 ]; then
+    MINUTE=$(without_leading_zeros "${MINUTE}")
+    [ "${MINUTE}" -le 59 ] || fail "--minute is 0 to 59"
+fi
+[ "${LOG_DIRECTORY_GIVEN}" -eq 0 ] || LOG_DIRECTORY=$(without_trailing_slashes "${LOG_DIRECTORY}")
+[ "${WRAPPER_DIRECTORY_GIVEN}" -eq 0 ] || WRAPPER_DIRECTORY=$(without_trailing_slashes "${WRAPPER_DIRECTORY}")
+LOG_DIRECTORY_ADVICE=""
+WRAPPER_DIRECTORY_ADVICE=""
+
 # --- Over an installed agent, what it runs with is kept unless an option says otherwise ----------
 #
 # A reinstall is for a new build, a new wrapper or a new schedule. At the reinstall of 2026-10-14
 # the agent was a dev agent and --env defaulted to prod, so the runbook's example would have
 # switched it to prod's data directory and bucket (v1-e34-t24). The installed plist is read first,
-# and its environment and caselists are the defaults.
+# and its environment, caselists, schedule, log directory and wrapper directory are the defaults:
+# an agent installed for Thursday stays on Thursday through a reinstall for a new build
+# (v1-e34-t25).
 
 # The variables this script writes. Any other in an installed plist was put there by hand, and a
 # reinstall writes the plist afresh without it.
@@ -392,9 +519,35 @@ if [ -f "${DESTINATION}" ]; then
         DROPPED_VARIABLES="${DROPPED_VARIABLES} ${variable}"
     done
 
+    # The schedule, the log directory and the wrapper directory, read whether or not an option
+    # gives them, so that a change can be said; a setting no option gives must read back
+    # (v1-e34-t25). Before v1-e34-t25 they went back to their defaults on every reinstall.
+    if ! INSTALLED_WEEKDAY=$(installed_calendar_integer Weekday 1 7); then
+        [ "${WEEKDAY_GIVEN}" -eq 1 ] || cannot_keep StartCalendarInterval.Weekday "${INSTALLED_WEEKDAY}" "its schedule" --weekday
+        INSTALLED_WEEKDAY=""
+    fi
+    if ! INSTALLED_HOUR=$(installed_calendar_integer Hour 0 23); then
+        [ "${HOUR_GIVEN}" -eq 1 ] || cannot_keep StartCalendarInterval.Hour "${INSTALLED_HOUR}" "its schedule" --hour
+        INSTALLED_HOUR=""
+    fi
+    if ! INSTALLED_MINUTE=$(installed_calendar_integer Minute 0 59); then
+        [ "${MINUTE_GIVEN}" -eq 1 ] || cannot_keep StartCalendarInterval.Minute "${INSTALLED_MINUTE}" "its schedule" --minute
+        INSTALLED_MINUTE=""
+    fi
+    if ! INSTALLED_LOG_DIRECTORY=$(installed_log_directory); then
+        [ "${LOG_DIRECTORY_GIVEN}" -eq 1 ] \
+            || cannot_keep "log directory in its StandardOutPath and StandardErrorPath" "${INSTALLED_LOG_DIRECTORY}" "its log directory" --log-dir
+        INSTALLED_LOG_DIRECTORY=""
+    fi
+    if ! INSTALLED_WRAPPER_DIRECTORY=$(installed_wrapper_directory); then
+        [ "${WRAPPER_DIRECTORY_GIVEN}" -eq 1 ] \
+            || cannot_keep "wrapper directory in its ProgramArguments.0" "${INSTALLED_WRAPPER_DIRECTORY}" "its wrapper directory" --wrapper-dir
+        INSTALLED_WRAPPER_DIRECTORY=""
+    fi
+
     if [ "${ENVIRONMENT_GIVEN}" -eq 0 ]; then
         DEBATE_ENVIRONMENT=${INSTALLED_ENVIRONMENT}
-        note "Keeping the installed agent's environment, ${INSTALLED_ENVIRONMENT} (--env changes it)."
+        note "Keeping the installed agent's environment, ${INSTALLED_ENVIRONMENT}, from its plist's DEBATE_ENV (--env changes it)."
     elif [ "${DEBATE_ENVIRONMENT}" != "${INSTALLED_ENVIRONMENT}" ]; then
         [ "${CONFIRM_ENV_CHANGE}" -eq 1 ] \
             || fail "the agent installed at ${DESTINATION} runs as ${INSTALLED_ENVIRONMENT}, and --env ${DEBATE_ENVIRONMENT} would switch it to ${DEBATE_ENVIRONMENT}: another data directory and another evidence bucket. Nothing was installed. Leave --env out to keep ${INSTALLED_ENVIRONMENT}, or add --confirm-env-change if the switch is meant"
@@ -403,11 +556,47 @@ if [ -f "${DESTINATION}" ]; then
 
     if [ -z "${CASELISTS}" ]; then
         CASELISTS=${INSTALLED_CASELISTS}
-        note "Keeping the installed agent's caselists:${CASELISTS} (--caselist replaces them)."
+        note "Keeping the installed agent's caselists:${CASELISTS}, from its plist's ProgramArguments (--caselist replaces them)."
     elif [ "${INSTALLED_ARGUMENTS_UNKNOWN}" -eq 1 ]; then
         note "Replacing the installed agent's arguments, which this script did not write, with the caselists${CASELISTS}."
     elif [ "${CASELISTS}" != "${INSTALLED_CASELISTS}" ]; then
         note "Replacing the installed agent's caselists${INSTALLED_CASELISTS} with${CASELISTS}."
+    fi
+
+    SCHEDULE_OPTIONS=""
+    [ "${WEEKDAY_GIVEN}" -eq 0 ] || SCHEDULE_OPTIONS="${SCHEDULE_OPTIONS}, --weekday"
+    [ "${HOUR_GIVEN}" -eq 0 ] || SCHEDULE_OPTIONS="${SCHEDULE_OPTIONS}, --hour"
+    [ "${MINUTE_GIVEN}" -eq 0 ] || SCHEDULE_OPTIONS="${SCHEDULE_OPTIONS}, --minute"
+    SCHEDULE_OPTIONS=${SCHEDULE_OPTIONS#, }
+    [ "${WEEKDAY_GIVEN}" -eq 1 ] || WEEKDAY=${INSTALLED_WEEKDAY}
+    [ "${HOUR_GIVEN}" -eq 1 ] || HOUR=${INSTALLED_HOUR}
+    [ "${MINUTE_GIVEN}" -eq 1 ] || MINUTE=${INSTALLED_MINUTE}
+    if [ -z "${SCHEDULE_OPTIONS}" ]; then
+        note "Keeping the installed agent's schedule, $(schedule_of "${WEEKDAY}" "${HOUR}" "${MINUTE}"), from its plist's StartCalendarInterval (--weekday, --hour and --minute change it)."
+    elif [ -z "${INSTALLED_WEEKDAY}" ] || [ -z "${INSTALLED_HOUR}" ] || [ -z "${INSTALLED_MINUTE}" ]; then
+        note "Setting the installed agent's schedule to $(schedule_of "${WEEKDAY}" "${HOUR}" "${MINUTE}") (${SCHEDULE_OPTIONS}); its plist's StartCalendarInterval does not read back as one this script writes."
+    elif [ "${WEEKDAY}:${HOUR}:${MINUTE}" != "${INSTALLED_WEEKDAY}:${INSTALLED_HOUR}:${INSTALLED_MINUTE}" ]; then
+        note "Changing the installed agent's schedule from $(schedule_of "${INSTALLED_WEEKDAY}" "${INSTALLED_HOUR}" "${INSTALLED_MINUTE}") to $(schedule_of "${WEEKDAY}" "${HOUR}" "${MINUTE}") (${SCHEDULE_OPTIONS})."
+    fi
+
+    if [ "${LOG_DIRECTORY_GIVEN}" -eq 0 ]; then
+        LOG_DIRECTORY=${INSTALLED_LOG_DIRECTORY}
+        LOG_DIRECTORY_ADVICE="it is the installed agent's log directory, and --log-dir moves it"
+        note "Keeping the installed agent's log directory, ${LOG_DIRECTORY}, from its plist's StandardOutPath and StandardErrorPath (--log-dir changes it)."
+    elif [ -z "${INSTALLED_LOG_DIRECTORY}" ]; then
+        note "Setting the installed agent's log directory to ${LOG_DIRECTORY} (--log-dir); its plist's StandardOutPath and StandardErrorPath do not read back as one this script writes."
+    elif [ "${LOG_DIRECTORY}" != "${INSTALLED_LOG_DIRECTORY}" ]; then
+        note "Moving the installed agent's logs from ${INSTALLED_LOG_DIRECTORY} to ${LOG_DIRECTORY} (--log-dir)."
+    fi
+
+    if [ "${WRAPPER_DIRECTORY_GIVEN}" -eq 0 ]; then
+        WRAPPER_DIRECTORY=${INSTALLED_WRAPPER_DIRECTORY}
+        WRAPPER_DIRECTORY_ADVICE="it is the installed agent's wrapper directory, and --wrapper-dir moves it"
+        note "Keeping the installed agent's wrapper directory, ${WRAPPER_DIRECTORY}, from its plist's ProgramArguments (--wrapper-dir changes it)."
+    elif [ -z "${INSTALLED_WRAPPER_DIRECTORY}" ]; then
+        note "Setting the installed agent's wrapper directory to ${WRAPPER_DIRECTORY} (--wrapper-dir); its plist's ProgramArguments.0 does not read back as one this script writes."
+    elif [ "${WRAPPER_DIRECTORY}" != "${INSTALLED_WRAPPER_DIRECTORY}" ]; then
+        note "Moving the installed agent's wrapper from ${INSTALLED_WRAPPER_DIRECTORY} to ${WRAPPER_DIRECTORY} (--wrapper-dir); the copy in ${INSTALLED_WRAPPER_DIRECTORY} is left where it is."
     fi
 
     for variable in ${DROPPED_VARIABLES}; do
@@ -421,21 +610,18 @@ fi
 
 [ -n "${CASELISTS}" ] || fail "at least one --caselist is required; see --help"
 [ -n "${DEBATE_ENVIRONMENT}" ] || DEBATE_ENVIRONMENT="prod"
-[ -n "${LOG_DIRECTORY}" ] || LOG_DIRECTORY="${HOME}/Library/Logs/debate-research"
-[ -n "${WRAPPER_DIRECTORY}" ] || WRAPPER_DIRECTORY="${HOME}/.local/share/debate-research/launchd"
+# The defaults, for a first install: over an installed agent each was kept or given above.
+[ -n "${WEEKDAY}" ] || WEEKDAY=3
+[ -n "${HOUR}" ] || HOUR=6
+[ -n "${MINUTE}" ] || MINUTE=0
+[ "${LOG_DIRECTORY_GIVEN}" -eq 1 ] || [ -n "${LOG_DIRECTORY}" ] || LOG_DIRECTORY="${HOME}/Library/Logs/debate-research"
+[ "${WRAPPER_DIRECTORY_GIVEN}" -eq 1 ] || [ -n "${WRAPPER_DIRECTORY}" ] \
+    || WRAPPER_DIRECTORY="${HOME}/.local/share/debate-research/launchd"
 
 case "${DEBATE_ENVIRONMENT}" in
     dev|prod) ;;
     *) fail "--env is dev or prod, not '${DEBATE_ENVIRONMENT}' (docs/process/branching-and-environments.md)" ;;
 esac
-for number in "${WEEKDAY}" "${HOUR}" "${MINUTE}"; do
-    case "${number}" in
-        ''|*[!0-9]*) fail "--weekday, --hour and --minute take whole numbers; got '${number}'" ;;
-    esac
-done
-[ "${WEEKDAY}" -ge 1 ] && [ "${WEEKDAY}" -le 7 ] || fail "--weekday is 1 (Monday) to 7 (Sunday)"
-[ "${HOUR}" -le 23 ] || fail "--hour is 0 to 23"
-[ "${MINUTE}" -le 59 ] || fail "--minute is 0 to 59"
 
 # A caselist slug is letters then a two-digit season year (debate_core.domain.caselist). Checked
 # here as well as in the command, because anything else would be written straight into an XML
@@ -460,8 +646,8 @@ refuse_unsafe_path "console script" "${DEBATE_RESEARCH_PATH}"
 AGENT_PATH="$(dirname -- "${DEBATE_RESEARCH_PATH}"):${SYSTEM_PATH}"
 
 refuse_unsafe_path "home directory" "${HOME}"
-refuse_unsafe_path "wrapper destination" "${WRAPPER_DIRECTORY}"
-refuse_unsafe_path "log directory" "${LOG_DIRECTORY}"
+refuse_unsafe_path "wrapper destination" "${WRAPPER_DIRECTORY}" "${WRAPPER_DIRECTORY_ADVICE}"
+refuse_unsafe_path "log directory" "${LOG_DIRECTORY}" "${LOG_DIRECTORY_ADVICE}"
 WRAPPER="${WRAPPER_DIRECTORY}/${WRAPPER_NAME}"
 
 # Where the agent will keep its data comes from the profile bundled into the installed build, so
@@ -504,8 +690,12 @@ fi
 # makes the same check by hand. It exits 1 for a configured profile the AWS config does not define,
 # which the scheduled run would be refused for, and for the build's own failed checks, and not for
 # an expired session; 2 is a build from before the check. It asks AWS one question for each
-# profile that is defined, and names a profile, its setting and a permission set, never an account
-# or where the AWS config is.
+# profile that is defined, and waits at most 10 seconds for each answer
+# (IDENTITY_TIME_LIMIT_SECONDS in debate_core.integrations.s3.caller_identity, v1-e29-t09). Run
+# here, with no DEBATE_REMOVAL_PROFILE, it asks about the everyday profile alone, so an AWS that
+# does not answer holds the install up by at most 10 seconds on top of doctor's local checks: the
+# profile's row then says AWS did not answer, the check exits 0, and the install goes on. It names
+# a profile, its setting and a permission set, never an account or where the AWS config is.
 PROFILE_CHECK_STATUS=0
 PROFILE_CHECK_OUTPUT=$(cd -- "${HOME}" && env -i HOME="${HOME}" PATH="${AGENT_PATH}" \
     DEBATE_ENV="${DEBATE_ENVIRONMENT}" "${DEBATE_RESEARCH_PATH}" doctor --evidence-profiles 2>&1) \

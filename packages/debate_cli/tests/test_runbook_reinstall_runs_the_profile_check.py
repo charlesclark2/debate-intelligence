@@ -116,11 +116,33 @@ def test_what_the_reinstall_says_it_kept_is_what_the_installer_says() -> None:
     for sentence in (
         "Keeping the installed agent's environment, ",
         "Keeping the installed agent's caselists:",
+        "Keeping the installed agent's schedule, ",
+        "Keeping the installed agent's log directory, ",
+        "Keeping the installed agent's wrapper directory, ",
         "Not carried over from the installed plist:",
     ):
         assert sentence in steps, sentence
         assert sentence in installer, f"the installer no longer says {sentence!r}"
+    for source in (
+        "from its plist's DEBATE_ENV (--env changes it).",
+        "from its plist's StartCalendarInterval (--weekday, --hour and --minute change it).",
+        "from its plist's StandardOutPath and StandardErrorPath (--log-dir changes it).",
+        "from its plist's ProgramArguments (--wrapper-dir changes it).",
+    ):
+        assert source in steps and source in installer, source
     assert "--confirm-env-change" in steps and "--confirm-env-change)" in installer
+
+
+def test_the_reinstall_shows_the_schedule_from_the_plist_and_types_no_schedule_option() -> None:
+    """`v1-e34-t25`. A reinstall kept the environment and the caselists and reset the schedule, so
+    an agent installed for Thursday moved to Wednesday 06:00. The installer now keeps it too, so
+    the reinstall shows it from the plist first and types none of the options that change it."""
+    commands = commands_in(section("## Reinstalling the agent"))
+    install = commands.index(REINSTALL)
+
+    assert commands.index(f"plutil -extract StartCalendarInterval json -o - {PLIST}") < install
+    for option in ("--weekday", "--hour", "--minute", "--log-dir", "--wrapper-dir"):
+        assert not [command for command in commands if option in command], option
 
 
 def test_the_reinstall_steps_say_what_each_check_shows_and_what_fails_it() -> None:

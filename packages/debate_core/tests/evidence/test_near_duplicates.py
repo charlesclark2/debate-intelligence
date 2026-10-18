@@ -841,6 +841,16 @@ def test_a_body_holding_two_passages_is_no_witness_even_for_a_passage_nothing_el
     assert partition(FIRST_PASSAGE, SECOND_PASSAGE, BOTH_PASSAGES, own_card) == [[0], [1, 3], [2]]
 
 
+def test_a_quote_too_small_to_join_a_card_does_not_stop_a_passage_joining_it() -> None:
+    """A passage of a body is at least `MIN_CUT_SHARE` of it. The card holds its first fifty words
+    and, apart from them, a twelve-word quote, a twelfth of it: the quote is too small to join the
+    card, and so is no passage of it, and the fifty words join the card as they would alone."""
+    card = numbered("word", 100)
+    opening, quote = card[:50], card[80:92]
+    assert len(word_shingles(quote)) < MIN_CUT_SHARE * len(word_shingles(card))
+    assert partition(card, opening, quote) == [[0, 1], [2]]
+
+
 def test_a_long_cut_joins_the_one_card_it_is_inside() -> None:
     """A hundred words of a 300-word card, a third of its shingles. Before `v1-e31-t20` a long cut
     joined a card only when the banding happened to pair the two; its containers are now found the

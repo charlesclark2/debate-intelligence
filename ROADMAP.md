@@ -258,7 +258,7 @@ Weekly argument-landscape reports show which positions are being read and with w
 | Task | Status | Prereqs | Est. hours |
 |---|---|---|---|
 | [ModelRouter interface and routing config](plan_specs/v1/e05-model-router/t01-model-router-port.yaml) `v1-e05-t01-model-router-port` | Succeeded | 1 | 9.0 |
-| [Amazon Bedrock adapter](plan_specs/v1/e05-model-router/t02-bedrock-adapter.yaml) `v1-e05-t02-bedrock-adapter` | Pending | 1 | 10.0 |
+| [Amazon Bedrock adapter](plan_specs/v1/e05-model-router/t02-bedrock-adapter.yaml) `v1-e05-t02-bedrock-adapter` | InProgress | 1 | 10.0 |
 | [Deterministic fake and record/replay models](plan_specs/v1/e05-model-router/t03-fake-replay-models.yaml) `v1-e05-t03-fake-replay-models` | Succeeded | 1 | 9.0 |
 | [Versioned prompt registry](plan_specs/v1/e05-model-router/t04-prompt-registry.yaml) `v1-e05-t04-prompt-registry` | Pending | 1 | 8.0 |
 | [Structured output validation and repair](plan_specs/v1/e05-model-router/t05-structured-output-validation.yaml) `v1-e05-t05-structured-output-validation` | Pending | 2 | 7.0 |

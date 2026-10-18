@@ -280,6 +280,21 @@ class TestARewrittenManifestsOlderVersion:
 
         assert {same_moment, rewrite} <= set(versions_of(world, REWRITTEN_KEY))
 
+    async def test_a_key_that_only_begins_with_the_rewritten_one_is_another_key(
+        self, removed: RemovalWorld
+    ) -> None:
+        """The rewritten key is listed by its own name as a prefix. A key that starts with it, such as
+        a copy someone saved beside it, is another key, and no removal reached it."""
+        world = removed
+        beside = f"{REWRITTEN_KEY}.bak"
+        put(world, beside, AN_OLD_BODY, written=LONG_BEFORE)
+        kept = put(world, beside, AN_OLD_BODY, written=LONG_BEFORE + timedelta(hours=1))
+
+        await remove(world)
+
+        assert len(versions_of(world, beside)) == 2
+        assert kept in versions_of(world, beside)
+
     async def test_a_delete_marker_older_than_the_rewrite_is_left(self, removed: RemovalWorld) -> None:
         """A marker holds nothing, and is no version the purge should have taken."""
         world = removed

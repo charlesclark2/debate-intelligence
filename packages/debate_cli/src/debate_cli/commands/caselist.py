@@ -160,6 +160,13 @@ key role and count (`v1-e30-t15`): versions of the parsed store's `index.jsonl`,
 its own rewrite. Found by comparing the listing's times with the removal log's, with the scope each
 removal records beside its log entry; nothing is downloaded. A completed removal whose build recorded
 no scope is named as not checked.
+
+Three more things since `v1-e30-t19`. A manifest mismatch whose manifest the publisher withholds,
+for a row a removal stops or holds, gets the hint to finish the removal first and not the publish
+hint: status asks the publisher's own rule. A copy withdrawn from a caselist that keeps no holder of
+it is named, if anything is left of it, by that caselist and the request the withdrawal record
+gives, by digest prefix and count; and a withdrawal no record attributes, which an earlier build
+made, by its request as not attributed. Neither of those two changes the exit code.
 """
 
 from __future__ import annotations

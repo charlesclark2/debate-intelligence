@@ -153,6 +153,23 @@ is forgotten. For `--source` that is a later upload this request suppressed, onc
 that showed it at the removed path have been rewritten: it is planned again while this machine
 still holds a record or the blob of it (:attr:`Inclusion.UNFINISHED`), with or without `--only-named`.
 
+A re-run also reads two records its first run left beside the list and the log (`v1-e30-t19`):
+
+* **The withdrawal record** (`withdrawals.jsonl`, `v1-e30-t16`). A first run that withdrew a shared
+  file deleted the records and rows that named the team's paths, and no record anywhere holds a
+  path, so the re-run cannot find them. What it needs from them is where each copy was taken from,
+  and the record says that by caselist (:attr:`PlannedSource.withdrawn_earlier_from`): that
+  caselist's aggregates are planned again, and its copy when no other holder there keeps it, as the
+  first run planned them. A `--source` re-run plans a withdrawn later upload again only for a copy
+  still in such a caselist, and never removes it whole on the record's account. A withdrawal an
+  earlier build made has no record, and nothing of it is planned again.
+* **The scopes beside the log** (`v1-e30-t15`): the manifests each earlier run of the request
+  rewrote, with the version of the rewrite (:attr:`RemovalPlan.earlier_rewrites`). The sweep takes
+  the noncurrent versions of each that are older than its rewrite
+  (:mod:`~debate_core.application.caselist.manifest_sweep`), and the dry run counts what the sweep
+  will delete (:attr:`RemovalPlan.superseded_versions`), so a plan with a version to sweep is never
+  "nothing to do".
+
 ## What it never puts in a log or an error
 
 The selector's school and team code. They appear in the plan (the operator's own terminal, which

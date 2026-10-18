@@ -677,6 +677,19 @@ some of these:
   before `v1-e30-t15`, which did not record which caselists it touched, so nothing is compared with
   it. That is not a finding of none either, and it does not change the exit code. It stays for as
   long as that log entry is the request's.
+- *WITHDRAWN COPIES LEFT in `<caselist>`: N current object(s), N noncurrent version(s) and N delete
+  marker(s) of N file(s) withdrawn from `<caselist>` (sha256 `<twelve characters>`, `RM-…`, …).*
+  (`v1-e30-t19`.) A shared file withdrawn from one team is suppressed for that team's path, not
+  whole, so the lines above never name it. But a caselist's copy is its own object, and the
+  withdrawal deleted it because no other holder in that caselist kept the file. The withdrawal
+  record beside the list (`withdrawals.jsonl`, `v1-e30-t16`) says which caselist each copy was taken
+  from and under which request, so this line names both. **It does not change the exit code.** Clear
+  it as [Versions older than a removal](#versions-older-than-a-removal) says: run that request's
+  command again.
+- *Withdrawals NOT ATTRIBUTED to a caselist: `RM-…`.* A withdrawal the list still suppresses that no
+  withdrawal record attributes: a removal by a build from before `v1-e30-t16`, which recorded no
+  caselist. What is left of its copies is not checked. That is not a finding of none, and it does
+  not change the exit code.
 
 Each file is one removed file, named by the first twelve characters of its sha256 and by counts.
 The report prints no school, team code, path or file name, in the text or in `removal_residue` of
@@ -804,21 +817,34 @@ DEBATE_ENV=dev uv run debate-research caselist remove --source <sha256> --reques
 - **Aggregates.** The plan lists every aggregate under *WILL BE REMOVED*, the old versions with
   the new ones, because a removal of a whole file deletes every caselist's. `--execute` deletes
   them all. Rebuild them afterwards as in step 5.
-- **A manifest version alone.** The plan reads current manifests only, so it may say *Nothing is
-  left to remove* and print no command to carry it out. Run it with `--execute` anyway. The sweep
-  happens during the execution: it reads each noncurrent manifest version of every caselist with
-  the takedown profile and deletes the ones that name the removed file.
+- **A manifest version alone.** The plan prints *MANIFEST VERSIONS SWEPT from the bucket by
+  --execute: N noncurrent version(s) of N manifest(s)*, each manifest with its count, and the
+  command under *TO CARRY IT OUT* (`v1-e30-t19`). Until then it read current manifests only and said
+  *Nothing is left to remove*. The sweep deletes two kinds, and only these: a noncurrent version of
+  a manifest of the caselist that names the removed file, and a noncurrent version of a manifest
+  this request rewrote that is older than its rewrite, whatever it names. It never deletes the
+  current version, the rewrite, a version written after it, or a version of a manifest no run of
+  this request rewrote that names nothing removed. Where the everyday profile may not list or read
+  those versions the line says *not counted*, and the command is still printed.
+- **A request that removed no whole file** (its `removed_sha256` is empty, only `withdrawn_sha256`).
+  Run the request's own command again: the same `--team`, `--request` and `--reason`. Its first run
+  deleted the team's records and rows, so nothing shows the team's paths any more; the plan names
+  each file *withdrawn earlier from `<caselist>`, as the withdrawal record says*, and lists that
+  caselist's aggregates, and the copy in the caselist when no other holder there keeps it. A
+  `--source` request's withdrawn later upload is planned again the same way when its copy is still
+  in such a caselist.
 
-Then run `caselist status` again. Both kinds are cleared that way, and
+Then run `caselist status` again. Every kind is cleared that way, and
 `test_versions_older_than_a_removal_are_cleared_by_running_it_again_under_the_same_request` and
-`test_an_old_manifest_version_alone_is_cleared_by_executing_a_plan_that_says_nothing_is_left`
-(`tests/smoke/test_caselist_remove_smoke.py`) prove it. Two cases are not cleared that way. Tell
-the PM about either, and do not delete anything by hand:
+`test_an_old_manifest_version_alone_is_counted_by_the_dry_run_and_cleared_by_its_execution`
+(`tests/smoke/test_caselist_remove_smoke.py`), and `test_residue_clearing_gaps.py`
+(`packages/debate_core/tests/application/caselist/`), prove it. Two cases are still not cleared
+that way. Tell the PM about either, and do not delete anything by hand:
 
-- the same manifest count after the re-run: that version names nothing the removal took, since the
-  sweep reads each one;
-- a request that removed no whole file (its `removed_sha256` is empty, only `withdrawn_sha256`):
-  running it again plans no aggregates.
+- a manifest count that stays after the re-run, where the plan swept nothing of that manifest:
+  something deleted the rewrite the request recorded, so no version can be shown older than it;
+- a withdrawal-only request whose plan says *no withdrawal record names the caselist it was
+  withdrawn from*: a build from before `v1-e30-t16` made its first run.
 
 **What the report does not see.** It matches `raw/` and `parsed/` objects by their key, which is
 the file's sha256, and the aggregates and the rewritten manifests by their time. So:
@@ -830,8 +856,10 @@ the file's sha256, and the aggregates and the rewritten manifests by their time.
   version by design. Every executed removal sweeps them again, a re-run included.
 - It compares nothing with a removal whose build did not record its scope (the *NOT CHECKED
   against `RM-…`* line), and nothing in a caselist no removal touched.
-- It does not report a shared file that was withdrawn from one team and kept for another. That file
-  is suppressed for one path, not whole, and the other holder's copy is the same object.
+- It reports a shared file withdrawn from one team and kept for another only by the withdrawal
+  record (*WITHDRAWN COPIES LEFT*, above), and only in a caselist that keeps no holder of it, where
+  its copy is the withdrawal's to have deleted. In a caselist another holder keeps it in, its copy
+  is that holder's. A withdrawal with no record is *NOT ATTRIBUTED*, and nothing of it is checked.
 - `manifests/_suppression/` is never residue. The list, the removal log, the path holds and the
   scopes are appended to, and their old versions hold sha256 values and request ids, the record of
   what was asked. No removal deletes them.

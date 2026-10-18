@@ -73,6 +73,16 @@ file's name. How two uploads were found to be at one camp path is said on the la
 by the upstream path both ids' rows, or this machine's delivery record, put them at, or by the rows'
 names alone, which is all a release written before `v1-e30-t14` and not yet re-derived offers.
 
+## What the sweep will delete (`v1-e30-t19`)
+
+The plan counts the noncurrent manifest versions the execution's sweep will delete, under
+*MANIFEST VERSIONS SWEPT*, by manifest: those that name a removed file, and those of a manifest an
+earlier run of the request rewrote that are older than its rewrite. A plan with any is never
+*Nothing is left to remove*, and prints the command that carries it out. Where the everyday
+profile may not list or read them it says they were not counted. A file a re-run plans again from
+the withdrawal record, with no path left to show, says which caselist the record names, or that
+none does.
+
 ## What is printed and what is not
 
 The plan's text names the team's paths, school and team code: this is the operator's own terminal,

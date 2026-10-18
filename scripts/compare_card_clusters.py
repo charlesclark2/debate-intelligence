@@ -47,7 +47,10 @@ needed, so both take seconds on the store's own table:
   texts by shape (`debate_core.evidence.pair_shapes`: identical, contained, overlapping,
   sharing a little, sharing nothing), the cluster's distinct short cites and texts with none, and
   its texts' word counts. Its texts are the ones `diagnose` describes the largest clusters by, so
-  its share sharing nothing is the figure `diagnose` gives.
+  its share sharing nothing is the figure `diagnose` gives. Each cluster's pairs sharing only one
+  or two five-word runs are counted too, and `--every-cluster` counts them over every cluster of
+  the caselist (`v1-e31-t20`): one run is enough to pass the clusterer's guard against joining
+  texts that share nothing, so the count says whether a stock phrase is bridging different cards.
 
 **Every `sample` asks a person only what a rule cannot decide.** Of the pairs it draws, a pair of
 two full cards that is identical, or one inside the other, is the same card, and a pair sharing no
@@ -138,6 +141,7 @@ __all__ = [
     "common_cards",
     "compare",
     "describe_cluster_shapes",
+    "describe_pairs_sharing_few_runs",
     "describe_largest_clusters",
     "diagnose",
     "divided_parts",
@@ -768,6 +772,38 @@ def describe_cluster_shapes(
     return described
 
 
+def describe_pairs_sharing_few_runs(
+    read: Callable[[Sequence[CardKey]], Mapping[CardKey, str]], placed: Mapping[CardKey, Placement]
+) -> dict[str, object]:
+    """Over every cluster of `placed`, the pairs of its distinct full texts sharing only one or two
+    five-word runs (`debate_core.evidence.pair_shapes.pairs_sharing_few_runs`). Counts only.
+
+    `read` returns the stored bodies at the keys it is given; every full card's is read.
+    """
+    from debate_core.evidence.pair_shapes import FEW_RUNS, pairs_sharing_few_runs
+
+    full = [key for key in sorted(placed) if placed[key].completeness == "FULL"]
+    bodies, clusters = full_bodies(read(full), placed)
+    texts: defaultdict[str, dict[str, str]] = defaultdict(dict)
+    for fingerprint, body in bodies.items():
+        texts[clusters[fingerprint]][fingerprint] = body
+    together = [cluster for cluster in texts.values() if len(cluster) > 1]
+    totals = dict.fromkeys(range(1, FEW_RUNS + 1), 0)
+    pairs = with_one = 0
+    for cluster in together:
+        counts = pairs_sharing_few_runs(cluster)
+        pairs += len(cluster) * (len(cluster) - 1) // 2
+        with_one += any(counts.values())
+        for runs, count in counts.items():
+            totals[runs] += count
+    return {
+        "clusters_with_two_or_more_texts": len(together),
+        "pairs": pairs,
+        "pairs_sharing_only_few_runs": {str(runs): count for runs, count in totals.items()},
+        "clusters_with_a_pair_sharing_only_few_runs": with_one,
+    }
+
+
 def _divided_tally(
     parts: Sequence[tuple[set[str], set[str], bool]],
     findings: Sequence[CutFinding],
@@ -1382,8 +1418,15 @@ def _shapes(arguments: argparse.Namespace) -> int:
                 chosen,
                 show_cluster_ids=arguments.show_cluster_ids,
             ),
-            "seconds": round(time.monotonic() - started, 1),
         }
+        if arguments.every_cluster:
+            results[caselist]["pairs_sharing_only_few_runs_over_every_cluster"] = (
+                describe_pairs_sharing_few_runs(
+                    lambda keys: read_bodies(store, caselist, version, keys),  # noqa: B023 - called in this pass
+                    placed,
+                )
+            )
+        results[caselist]["seconds"] = round(time.monotonic() - started, 1)
     print(json.dumps(results, indent=2, sort_keys=True))
     return 0
 
@@ -1598,6 +1641,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "--show-cluster-ids",
                 action="store_true",
                 help="Print each described cluster's id, a digest, for `sample --cluster`.",
+            )
+            command.add_argument(
+                "--every-cluster",
+                action="store_true",
+                help="Also count, over every cluster, the pairs of distinct full texts sharing only one "
+                "or two five-word runs. Reads every full card's body.",
             )
             continue  # one placement, the store's: no before
         earlier = command.add_mutually_exclusive_group()

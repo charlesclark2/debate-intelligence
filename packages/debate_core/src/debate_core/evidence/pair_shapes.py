@@ -45,6 +45,16 @@ the two ends of the scale, and :func:`rule_verdict` does:
 `scripts/compare_card_clusters.py` counts the pairs a rule decides and shows a person only the rest.
 Narrowing the band a person sees (deciding some overlapping pairs by rule, say) is a change to
 :data:`RULE_VERDICTS`, made from the tallies of the shapes people were asked about.
+
+## Pairs sharing only a few runs
+
+The clusterer refuses a join that would put two texts sharing no shingle in one cluster
+(`card-fingerprint-v4`, `v1-e31-t20`), so one shingle in common is enough to get past that guard. A
+stock phrase five words long is one shingle. :func:`pairs_sharing_few_runs` counts a cluster's pairs
+that share at least one shingle and no more than :data:`FEW_RUNS`, by how many they share: the PM's
+measure (2026-10-18) of whether stock phrases bridge different cards. It is a count beside the
+shapes, not a shape: such a pair is usually sharing a little, but two bodies of a few words can be
+identical on one shingle.
 """
 
 from __future__ import annotations
@@ -59,6 +69,7 @@ from debate_core.evidence.near_duplicates import SHINGLE_SIZE, matching_words, w
 
 __all__ = [
     "CONTAINED_SHARE",
+    "FEW_RUNS",
     "IDENTICAL_SHARE",
     "OVERLAPPING_SHARE",
     "RULE_VERDICTS",
@@ -70,6 +81,7 @@ __all__ = [
     "cluster_pair_shapes",
     "pair_shape",
     "pair_shares",
+    "pairs_sharing_few_runs",
     "rule_verdict",
     "shared_words",
 ]
@@ -88,6 +100,9 @@ under it, they share a little."""
 
 SMALL_PART_OF_THE_LARGER: Final = 1 / 3
 """A contained body under this share of the larger body's size is a small part of it."""
+
+FEW_RUNS: Final = 2
+"""A pair sharing at least one shingle and no more than this many shares only a few runs."""
 
 
 class PairShape(StrEnum):
@@ -197,6 +212,8 @@ class ClusterPairShapes:
     """Pairs of distinct texts that both have words."""
     by_shape: Mapping[PairShape, int]
     """Every shape, a zero included."""
+    pairs_sharing_few_runs: Mapping[int, int]
+    """Pairs by the shingles they share, for each count from 1 to :data:`FEW_RUNS`, a zero included."""
     distinct_short_cites: int
     """Short cites of the texts' cards, compared with case and spacing ignored."""
     texts_with_no_short_cite: int
@@ -214,6 +231,9 @@ class ClusterPairShapes:
             "share_of_pairs_by_shape": {
                 shape.value: round(self.by_shape[shape] / self.pairs, 4) if self.pairs else 0.0
                 for shape in PairShape
+            },
+            "pairs_sharing_only_few_runs": {
+                str(runs): count for runs, count in sorted(self.pairs_sharing_few_runs.items())
             },
             "distinct_short_cites": self.distinct_short_cites,
             "texts_with_no_short_cite": self.texts_with_no_short_cite,
@@ -236,9 +256,13 @@ def cluster_pair_shapes(
     sets = {fingerprint: frozenset(word_shingles(text)) for fingerprint, text in words.items()}
     texts = sorted(fingerprint for fingerprint in bodies if sets[fingerprint])
     by_shape = dict.fromkeys(PairShape, 0)
+    few_runs = dict.fromkeys(range(1, FEW_RUNS + 1), 0)
     for position, left in enumerate(texts):
         for right in texts[position + 1 :]:
-            by_shape[pair_shape(pair_shares(sets[left], sets[right]))] += 1
+            shares = pair_shares(sets[left], sets[right])
+            by_shape[pair_shape(shares)] += 1
+            if shares.shared in few_runs:
+                few_runs[shares.shared] += 1
 
     def cite_key(cite: str | None) -> str:
         return " ".join((cite or "").split()).casefold()
@@ -253,9 +277,27 @@ def cluster_pair_shapes(
         texts_with_no_words=len(bodies) - len(texts),
         pairs=sum(by_shape.values()),
         by_shape=by_shape,
+        pairs_sharing_few_runs=few_runs,
         distinct_short_cites=len(set[str]().union(*cites.values())),
         texts_with_no_short_cite=sum(not held for held in cites.values()),
         words_smallest=counts[0] if counts else 0,
         words_median=int(statistics.median(counts)) if counts else 0,
         words_largest=counts[-1] if counts else 0,
     )
+
+
+def pairs_sharing_few_runs(bodies: Mapping[str, str]) -> dict[int, int]:
+    """One cluster's pairs of distinct texts by the shingles they share, for each count from 1 to
+    :data:`FEW_RUNS`, a zero included. `bodies` maps each text's exact fingerprint to its body.
+
+    The count :class:`ClusterPairShapes` holds, without the rest of the description: what a count
+    over every cluster of a caselist needs.
+    """
+    sets = [frozenset(word_shingles(matching_words(body))) for body in bodies.values()]
+    counts = dict.fromkeys(range(1, FEW_RUNS + 1), 0)
+    for position, left in enumerate(sets):
+        for right in sets[position + 1 :]:
+            shared = len(left & right)
+            if shared in counts:
+                counts[shared] += 1
+    return counts

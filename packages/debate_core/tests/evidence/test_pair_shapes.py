@@ -13,6 +13,7 @@ from debate_core.evidence.cluster_diagnosis import cluster_shape
 from debate_core.evidence.near_duplicates import shingles, word_shingles
 from debate_core.evidence.pair_shapes import (
     CONTAINED_SHARE,
+    FEW_RUNS,
     IDENTICAL_SHARE,
     OVERLAPPING_SHARE,
     RULE_VERDICTS,
@@ -23,6 +24,7 @@ from debate_core.evidence.pair_shapes import (
     cluster_pair_shapes,
     pair_shape,
     pair_shares,
+    pairs_sharing_few_runs,
     rule_verdict,
     shared_words,
 )
@@ -239,5 +241,27 @@ def test_the_json_names_shapes_and_counts_alone() -> None:
         "sharing a little": 0.3333,
         "sharing nothing": 0.2857,
     }
+    assert shown["pairs_sharing_only_few_runs"] == {"1": 0, "2": 0}
     text = repr(shown)
     assert not [word for word in ("w1", "Invented", "a-small", "elsewhere") if word in text]
+
+
+def test_pairs_sharing_only_one_or_two_runs_are_counted_by_the_runs_they_share() -> None:
+    """The PM's count of 2026-10-18 (`v1-e31-t20`): pairs the clusterer's guard lets through on as
+    little as a stock phrase. A body shares its first five words with one text, six words with
+    another (two runs) and seven with a third (three runs, not counted); the three share nothing
+    with one another."""
+    body = numbered("w", 100)
+    one = [*body[:5], *numbered("one", 60)]
+    two = [*body[50:56], *numbered("two", 60)]
+    three = [*body[20:27], *numbered("three", 60)]
+    runs = [
+        len(frozenset(word_shingles(body)) & frozenset(word_shingles(text))) for text in (one, two, three)
+    ]
+    assert (runs, FEW_RUNS) == ([1, 2, 3], 2)
+    bodies = {name: " ".join(words) for name, words in {"a": body, "b": one, "c": two, "d": three}.items()}
+    assert pairs_sharing_few_runs(bodies) == {1: 1, 2: 1}
+    shapes = cluster_pair_shapes(bodies, {})
+    assert shapes.pairs_sharing_few_runs == {1: 1, 2: 1}
+    assert shapes.as_json()["pairs_sharing_only_few_runs"] == {"1": 1, "2": 1}
+    assert pairs_sharing_few_runs({"a": " ".join(body)}) == {1: 0, 2: 0}

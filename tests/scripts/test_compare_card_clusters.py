@@ -960,6 +960,7 @@ def test_shapes_counts_the_pairs_of_each_largest_cluster_by_shape_and_names_no_t
             "overlapping": 0.1667,
             "sharing nothing": 0.6667,
         },
+        "pairs_sharing_only_few_runs": {"1": 0, "2": 0},
         "distinct_short_cites": 2,  # the passage's two spellings are one
         "texts_with_no_short_cite": 1,
         "words_smallest": 60,
@@ -975,6 +976,7 @@ def test_shapes_counts_the_pairs_of_each_largest_cluster_by_shape_and_names_no_t
         "pairs": 0,
         "pairs_by_shape": NO_PAIRS,
         "share_of_pairs_by_shape": dict.fromkeys(NO_PAIRS, 0.0),
+        "pairs_sharing_only_few_runs": {"1": 0, "2": 0},
         "distinct_short_cites": 1,
         "texts_with_no_short_cite": 0,
         "words_smallest": 40,
@@ -1035,6 +1037,66 @@ def test_shapes_shares_the_texts_and_the_count_sharing_nothing_with_diagnose(
             )
             for entry in described["largest_clusters"]  # type: ignore[union-attr]
         ]
+
+
+#: A store for the PM's count of pairs sharing only one or two five-word runs (2026-10-18,
+#: `v1-e31-t20`). One cluster: a 100-word card sharing its first five words with one text (one
+#: run) and six of its middle words with another (two runs), the two sharing nothing, and an
+#: abbreviated cut of the card's first seven words, which shares a run with the first text but is in
+#: no pair. A second cluster: two texts sharing one run. A third: a card and a 30-word cut of it,
+#: sharing 26 runs. A fourth: a card alone.
+FEW_RUN_CARD = _numbered("stock", 100)
+ONE_RUN = [*FEW_RUN_CARD[:5], *_numbered("onerun", 60)]
+TWO_RUNS = [*FEW_RUN_CARD[50:56], *_numbered("tworuns", 60)]
+FEW_RUN_CUT = FEW_RUN_CARD[:7]
+PAIR_LEFT = _numbered("pair", 70)
+PAIR_RIGHT = [*PAIR_LEFT[30:35], *_numbered("other", 60)]
+MANY_RUNS = _numbered("many", 60)
+FEW_RUN_TELLTALE = ("stock3", "onerun", "tworuns", "pair31", "other2", "many7")
+
+
+@pytest.fixture
+def few_run_dir(tmp_path: Path) -> Path:
+    full, abbreviated = CardCompleteness.FULL, CardCompleteness.ABBREVIATED
+    cards = (
+        ("Invented 26", full, " ".join(FEW_RUN_CARD)),
+        ("Invented 26", full, " ".join(ONE_RUN)),
+        ("Invented 26", full, " ".join(TWO_RUNS)),
+        ("Invented 26", abbreviated, " ".join(FEW_RUN_CUT)),
+        ("Other 25", full, " ".join(PAIR_LEFT)),
+        ("Other 25", full, " ".join(PAIR_RIGHT)),
+        ("Many 23", full, " ".join(MANY_RUNS)),
+        ("Many 23", full, " ".join(MANY_RUNS[:30])),
+        ("Lone 24", full, " ".join(LONE)),
+    )
+    first = [_fingerprint_of(body) for body in (FEW_RUN_CARD, ONE_RUN, TWO_RUNS, FEW_RUN_CUT)]
+    second = [_fingerprint_of(body) for body in (PAIR_LEFT, PAIR_RIGHT)]
+    cluster_of = {fingerprint: min(first) for fingerprint in first}
+    cluster_of |= {fingerprint: min(second) for fingerprint in second}
+    third = [_fingerprint_of(body) for body in (MANY_RUNS, MANY_RUNS[:30])]
+    cluster_of |= {fingerprint: min(third) for fingerprint in third}
+    cluster_of[_fingerprint_of(LONE)] = _fingerprint_of(LONE)
+    _write_store(tmp_path, [_document("few", cards)], cluster_of)
+    return tmp_path
+
+
+def test_shapes_counts_the_pairs_sharing_only_one_or_two_runs_over_every_cluster(
+    few_run_dir: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Three pairs sharing only a few runs, in two of three clusters, of five pairs of full texts in
+    one cluster: the count says whether a stock phrase is bridging different cards. Counts only."""
+    plain = _shapes(few_run_dir, capsys, "--largest-clusters", "1")
+    assert "pairs_sharing_only_few_runs_over_every_cluster" not in plain
+    (largest,) = plain["described_clusters"]  # type: ignore[misc]
+    assert largest["pairs_sharing_only_few_runs"] == {"1": 1, "2": 1}
+    result = _shapes(few_run_dir, capsys, "--largest-clusters", "1", "--every-cluster")
+    assert result["pairs_sharing_only_few_runs_over_every_cluster"] == {
+        "clusters_with_two_or_more_texts": 3,
+        "pairs": 5,
+        "pairs_sharing_only_few_runs": {"1": 2, "2": 1},
+        "clusters_with_a_pair_sharing_only_few_runs": 2,
+    }
+    assert not [word for word in FEW_RUN_TELLTALE if word in json.dumps(result)]
 
 
 def _cards(*bodies: tuple[CardCompleteness, list[str]]) -> list[ParsedCard]:

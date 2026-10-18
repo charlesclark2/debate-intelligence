@@ -40,14 +40,18 @@ below is one of those sentences.
 ## Cuts and their containers
 
 A body's **containers** are found, not sampled: every body at least as large that holds both its
-first and its last shingle, and is *confirmed* to contain it (:func:`confirms_a_cut`): at least the
-containment threshold (0.9) of its shingles, or, for a short body, all of it *but for one word*:
-changed, split in two, run together from two, dropped or added, with at least
-:data:`SHINGLE_SIZE` unchanged words on each side (:func:`contained_but_for_one_word`). Both ends
-inside the other body is what a cut of a card looks like, and looking them up is exact, so which
-bodies are compared does not depend on the hash seed. A body that holds the cut and that the cut
-holds as well is a copy of it (step 5), not a container. :class:`CutIndex` holds all of this,
-worked out from the bodies alone.
+first and its last shingle (for a long body, either of them), and is *confirmed* to contain it
+(:func:`confirms_a_cut`): at least the containment threshold (0.9) of its shingles, or, for a short
+body, all of it *but for one word*: changed, split in two, run together from two, dropped or added,
+with at least :data:`SHINGLE_SIZE` unchanged words on each side
+(:func:`contained_but_for_one_word`). Both ends inside the other body is what a cut of a card looks
+like, and looking them up is exact, so which bodies are compared does not depend on the hash seed.
+A long body nine-tenths inside another that lacks one of its ends is a copy with a word changed at
+that end, which the banding used to join when it paired the two; a short one is not compared
+(`v1-e31-t08`'s guard against two cards that open alike and then diverge), until the operator's
+sample of them says otherwise. A body that holds the cut and that the cut holds as well is a copy
+of it (step 5), not a container. :class:`CutIndex` holds all of this, worked out from the bodies
+alone.
 
 A cut's cluster joins a container's cluster when that is not a guess:
 
@@ -331,16 +335,17 @@ class CutIndex:
         for fingerprint in self.fingerprints:
             for shingle in self.sets[fingerprint] & end_shingles:
                 holders[shingle].add(fingerprint)
-        self._holding_both_ends: dict[str, list[str]] = {}
+        self._candidates: dict[str, list[str]] = {}
         for cut, (first, last) in self.ends.items():
             size = self.size(cut)
-            found = [
-                holder
-                for holder in holders[first] & holders[last]
-                if holder != cut and self.size(holder) >= size
-            ]
+            ends = (
+                holders[first] & holders[last]
+                if size < SHORT_BODY_SHINGLES
+                else holders[first] | holders[last]
+            )
+            found = [holder for holder in ends if holder != cut and self.size(holder) >= size]
             if found:
-                self._holding_both_ends[cut] = self.by_size(found)
+                self._candidates[cut] = self.by_size(found)
 
         self._held: dict[tuple[str, str], bool] = {}
         self._sharing: dict[tuple[str, str], bool] = {}
@@ -349,7 +354,7 @@ class CutIndex:
         # A body's passages, worked out now: the bodies it holds that are at least the share of it.
         # Only these can join it, and they are few, since they are at least a quarter of its size.
         self._passages: defaultdict[str, list[str]] = defaultdict(list)
-        for cut, holding in self._holding_both_ends.items():
+        for cut, holding in self._candidates.items():
             largest = self.size(cut) / MIN_CUT_SHARE
             for holder in holding:
                 if self.size(holder) > largest:
@@ -365,12 +370,14 @@ class CutIndex:
         """Smallest first, then by fingerprint: the order a body's containers are tried in."""
         return sorted(fingerprints, key=lambda fingerprint: (self.size(fingerprint), fingerprint))
 
-    def holding_both_ends(self, cut: str) -> Sequence[str]:
-        """Every other body at least as large holding the cut's first and last shingle, unconfirmed."""
-        return self._holding_both_ends.get(cut, ())
+    def candidates(self, cut: str) -> Sequence[str]:
+        """Every other body at least as large that holds the cut's first and last shingle (for a
+        long cut, either of them), smallest first and unconfirmed."""
+        return self._candidates.get(cut, ())
 
     def holds(self, holder: str, cut: str) -> bool:
-        """Whether `holder` contains `cut`: at least as large, both its ends, and confirmed."""
+        """Whether `holder` contains `cut`: at least as large, holding its ends (a long cut's
+        first or last), and confirmed."""
         key = (holder, cut)
         known = self._held.get(key)
         if known is None:
@@ -380,8 +387,10 @@ class CutIndex:
                 ends is not None
                 and holder != cut
                 and self.size(holder) >= self.size(cut)
-                and ends[0] in held
-                and ends[1] in held
+                and (
+                    (ends[0] in held and ends[1] in held)
+                    or (self.size(cut) >= SHORT_BODY_SHINGLES and (ends[0] in held or ends[1] in held))
+                )
                 and confirms_a_cut(self.sets[cut], held, self.words[cut], self.words[holder], self.limits)
             )
             self._held[key] = known
@@ -393,7 +402,7 @@ class CutIndex:
         if found is None:
             found = [
                 holder
-                for holder in self.holding_both_ends(cut)
+                for holder in self.candidates(cut)
                 if self.holds(holder, cut) and not self.holds(cut, holder)
             ]
             self._containers[cut] = found
@@ -477,7 +486,7 @@ def too_common(cut: str, cluster_of: Callable[[str], str], index: CutIndex) -> b
         return False
     own = cluster_of(cut)
     seen: set[str] = set()
-    for holder in index.holding_both_ends(cut):
+    for holder in index.candidates(cut):
         cluster = cluster_of(holder)
         if cluster != own:
             seen.add(cluster)
@@ -490,7 +499,7 @@ def joining_target(
     cuts: Iterable[str], own: str, cluster_of: Callable[[str], str], index: CutIndex
 ) -> str | None:
     """The cluster that the cluster `own` joins by the cut step, given those of its bodies that
-    have a body holding both their ends; `None` when it joins none."""
+    have candidate containers (:meth:`CutIndex.candidates`); `None` when it joins none."""
     target: str | None = None
     within_the_share = False
     for cut in cuts:
@@ -601,7 +610,7 @@ def _join_copies(clusters: _Clusters, index: CutIndex, pairs: Mapping[tuple[str,
 
 def _join_cuts_to_their_one_container(clusters: _Clusters, index: CutIndex) -> None:
     """The cut step of this module's docstring, in rounds, applied to `clusters` in place."""
-    cuts = [fingerprint for fingerprint in index.fingerprints if index.holding_both_ends(fingerprint)]
+    cuts = [fingerprint for fingerprint in index.fingerprints if index.candidates(fingerprint)]
     while True:
         by_cluster: defaultdict[str, list[str]] = defaultdict(list)
         for cut in cuts:

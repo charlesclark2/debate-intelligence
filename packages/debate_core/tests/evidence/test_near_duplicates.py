@@ -917,9 +917,10 @@ def test_a_cut_already_with_a_body_that_holds_it_does_not_take_that_cluster_into
 def test_a_long_cut_already_with_a_body_that_holds_it_does_not_pull_in_a_second() -> None:
     """The same for a long cut, the case `v1-e31-t11`'s Decision 1 held long cuts back for: joined
     naively, a cut already in a cluster with one body that holds it would pull in the cluster of a
-    second."""
+    second. The copy here is fifteen words longer, so the card holds 96 of its 107 shingles, under
+    nine-tenths: the card does not hold the copy."""
     passage = numbered("passage", 100)
-    longer = [*passage, *numbered("more", 5)]
+    longer = [*passage, *numbered("more", 15)]
     card = [*numbered("before", 40), *passage, *numbered("after", 40)]
     assert partition(passage, longer) == [[0, 1]]
     assert partition(passage, card) == [[0, 1]]
@@ -965,3 +966,16 @@ def test_a_short_body_nine_tenths_inside_a_body_lacking_one_of_its_ends_stays_ou
     assert containment(stray_set, frozenset(word_shingles(card))) >= 0.9
     assert word_shingles(stray)[-1] not in frozenset(word_shingles(card))
     assert partition(card, stray) == [[0], [1]]
+
+
+def test_a_long_body_nine_tenths_inside_a_card_lacking_one_of_its_ends_joins_it() -> None:
+    """A hundred words of a 300-word card with one changed word at its start: 96 of its 97
+    shingles are in the card, its first is not. A long copy with a word changed at one end is one
+    the banding used to join when it paired the two; it is now found from its other end."""
+    card = numbered("word", 300)
+    copy = ["changed", *card[101:200]]
+    copy_set = frozenset(word_shingles(copy))
+    assert len(copy_set) >= SHORT_BODY_SHINGLES
+    assert word_shingles(copy)[0] not in frozenset(word_shingles(card))
+    assert containment(copy_set, frozenset(word_shingles(card))) >= 0.9
+    assert partition(card, copy) == [[0, 1]]

@@ -551,9 +551,9 @@ class CaselistStatusService:
         not_attributed: set[str] = set()
         withdrawals = await read_withdrawals(self._suppression)
         for entry in await self._suppression.entries():
+            # A whole file's entry is the residue check's own; one since lifted is no longer withdrawn.
             if (
                 entry.action is not SuppressionAction.SUPPRESS
-                or entry.disclosure is None
                 or suppression.suppresses_source(entry.sha256)
                 or not suppression.suppresses(entry.sha256, disclosure=entry.disclosure)
             ):

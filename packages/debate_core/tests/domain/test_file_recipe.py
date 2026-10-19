@@ -391,6 +391,8 @@ def test_a_title_is_required_text(title: str) -> None:
         ("team_code", "Jane Rivera"),
         ("school", ""),
         ("snapshot", "last week"),
+        ("snapshot", 20260915),
+        ("snapshot", "2026-09-15T10:00:00"),
         ("side", "BOTH"),
         ("round", ""),
     ],

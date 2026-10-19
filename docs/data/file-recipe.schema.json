@@ -377,7 +377,8 @@
       "enum": [
         "card-fingerprint-v1",
         "card-fingerprint-v2",
-        "card-fingerprint-v3"
+        "card-fingerprint-v3",
+        "card-fingerprint-v4"
       ]
     },
     "status": {

@@ -108,7 +108,7 @@ FINGERPRINT_VERSION: Final = "card-fingerprint-v4"
 it. Bumped by any change that can change a digest or move a card to another cluster."""
 
 EXACT_FINGERPRINT_VERSIONS: Final = frozenset(
-    {"card-fingerprint-v1", "card-fingerprint-v2", "card-fingerprint-v3"}
+    {"card-fingerprint-v1", "card-fingerprint-v2", "card-fingerprint-v3", "card-fingerprint-v4"}
 )
 """Every version whose exact fingerprints are the digests :func:`card_fingerprint` computes now.
 
@@ -116,7 +116,8 @@ The list "Changing the rules" above, as data, for a consumer that keeps an exact
 across versions: a file recipe (`v1-e33-t01`) names one, and is resolved against occurrence rows
 stamped with any version here. A bump that changes only clusters adds the new version; a bump that
 changes the normalization replaces the set with the new version alone, and every recipe written
-under an older one is refused until its fingerprints are recomputed."""
+under an older one is refused until its fingerprints are recomputed. `card-fingerprint-v4`
+(`v1-e31-t20`) changed only clusters, so it was added."""
 
 _SINGLE_QUOTES: Final = "\u2018\u2019\u201a\u201b\u2032\u2035`\u00b4\u02bc\uff07"
 _DOUBLE_QUOTES: Final = "\u201c\u201d\u201e\u201f\u2033\u2036\u00ab\u00bb\uff02"

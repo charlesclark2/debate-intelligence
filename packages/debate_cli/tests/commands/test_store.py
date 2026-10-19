@@ -171,6 +171,42 @@ def remote_keys(client: S3Client, bucket: str) -> list[str]:
     return sorted(str(stored.get("Key", "")) for stored in listing.get("Contents", []))
 
 
+def hold_the_revised_path(data_dir: Path) -> None:
+    """A removal's hold on `REVISED_PATH` of the held caselist after 2026-09-08, on this machine's list."""
+    asyncio.run(
+        RecordedSuppressionList(local_suppression_list_file(data_dir)).append_path_holds(
+            [
+                PathHoldEntry(
+                    caselist=HELD_CASELIST,
+                    disclosure=disclosure_digest(HELD_CASELIST, REVISED_PATH),
+                    sha256="0" * 64,
+                    after_snapshot=date(2026, 9, 8),
+                    recorded_at=datetime(2026, 10, 1, 12, 0, tzinfo=UTC),
+                    reason=ReasonCode.REQUESTED_BY_TEAM,
+                    request_id="RM-2026-01",
+                )
+            ]
+        )
+    )
+
+
+def manifest_of(rows: list[tuple[str, str, int]]) -> bytes:
+    """A manifest an older build wrote, one stored `NEW` row per `(path, blob key, size)`."""
+    return "".join(
+        json.dumps(
+            {
+                "kind": "member",
+                "path": path,
+                "classification": "NEW",
+                "sha256": key.rsplit("/", 1)[-1],
+                "byte_size": size,
+            }
+        )
+        + "\n"
+        for path, key, size in rows
+    ).encode()
+
+
 def envelope_of(result: Result) -> dict[str, Any]:
     """Parse the result's stdout, asserting it is exactly one JSON object."""
     lines = result.stdout.splitlines()
@@ -311,39 +347,17 @@ class TestSyncPlansByDefault:
         monkeypatch.setenv("HOME", str(tmp_path / "home"))
         held = write_local_blob(dev_data_dir, b"uploaded again after the removal")
         other = write_local_blob(dev_data_dir, b"the other team's file")
-        rows = [
-            {
-                "kind": "member",
-                "path": path,
-                "classification": "NEW",
-                "sha256": key.rsplit("/", 1)[-1],
-                "byte_size": size,
-            }
-            for path, key, size in (
-                (REVISED_PATH, held, len(b"uploaded again after the removal")),
-                (KEPT_PATH, other, len(b"the other team's file")),
-            )
-        ]
         write_local_object(
             dev_data_dir,
             f"manifests/{HELD_CASELIST}/2026-10-08.jsonl",
-            "".join(json.dumps(row) + "\n" for row in rows).encode(),
-        )
-        asyncio.run(
-            RecordedSuppressionList(local_suppression_list_file(dev_data_dir)).append_path_holds(
+            manifest_of(
                 [
-                    PathHoldEntry(
-                        caselist=HELD_CASELIST,
-                        disclosure=disclosure_digest(HELD_CASELIST, REVISED_PATH),
-                        sha256="0" * 64,
-                        after_snapshot=date(2026, 9, 8),
-                        recorded_at=datetime(2026, 10, 1, 12, 0, tzinfo=UTC),
-                        reason=ReasonCode.REQUESTED_BY_TEAM,
-                        request_id="RM-2026-01",
-                    )
+                    (REVISED_PATH, held, len(b"uploaded again after the removal")),
+                    (KEPT_PATH, other, len(b"the other team's file")),
                 ]
-            )
+            ),
         )
+        hold_the_revised_path(dev_data_dir)
         prefix = f"raw/caselist/{HELD_CASELIST}"
 
         result = invoke(
@@ -354,6 +368,40 @@ class TestSyncPlansByDefault:
         data = envelope_of(result)["data"]
         assert (data["counts"]["new"], data["counts"]["skipped"]) == (1, 1)
         assert remote_keys(buckets, DEV_BUCKET) == [f"{prefix}/{other}"]
+
+    def test_a_push_leaves_out_a_manifest_the_publisher_withholds(
+        self, buckets: S3Client, dev_data_dir: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        """`v1-e30-t25`, through the composition root. The same hold, and the manifest an older build
+        wrote for 2026-10-08 with a row at the held path; `caselist publish` withholds it, and so must a
+        push. The week after, with only the other team's row, is pushed beside it."""
+        monkeypatch.setenv("HOME", str(tmp_path / "home"))
+        held = write_local_blob(dev_data_dir, b"uploaded again after the removal")
+        other = write_local_blob(dev_data_dir, b"the other team's file")
+        withheld = f"manifests/{HELD_CASELIST}/2026-10-08.jsonl"
+        pushed = f"manifests/{HELD_CASELIST}/2026-10-15.jsonl"
+        write_local_object(
+            dev_data_dir,
+            withheld,
+            manifest_of(
+                [
+                    (REVISED_PATH, held, len(b"uploaded again after the removal")),
+                    (KEPT_PATH, other, len(b"the other team's file")),
+                ]
+            ),
+        )
+        write_local_object(
+            dev_data_dir, pushed, manifest_of([(KEPT_PATH, other, len(b"the other team's file"))])
+        )
+        hold_the_revised_path(dev_data_dir)
+
+        result = invoke("--json", "store", "sync", "--prefix", f"manifests/{HELD_CASELIST}/", "--apply")
+
+        assert result.exit_code == ExitCode.OK, result.stdout
+        data = envelope_of(result)["data"]
+        assert (data["counts"]["new"], data["counts"]["skipped"]) == (1, 1)
+        assert remote_keys(buckets, DEV_BUCKET) == [pushed]
+        assert REVISED_PATH not in result.stdout
 
 
 # ------------------------------------------------------------------------------------------------

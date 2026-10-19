@@ -1273,6 +1273,53 @@ def test_a_link_at_a_held_path_imports_with_no_row_and_nothing_is_owed_for_it(
     } == {(0, ())}
 
 
+def test_junk_beside_a_held_link_has_no_row_and_a_push_sends_no_manifest_the_publisher_withholds(
+    installation: Path, bucket: S3Client, published: Any
+) -> None:
+    """`v1-e30-t25`. As above, with the AppleDouble junk macOS writes beside the link: it is skipped
+    and given no row either. Then a manifest an older build wrote for 2026-09-29, with the link's row
+    at the held path, which `caselist publish` withholds: `store sync --apply` leaves it on this
+    machine, pushes the week beside it, and prints no path."""
+    data_dir = installation / "dev"
+    environment(DEBATE_REMOVAL_PROFILE=REMOVAL_PROFILE)
+    assert run(*REMOVE_REVISION, "--execute")["exit_code"] == ExitCode.OK
+    environment(DEBATE_REMOVAL_PROFILE=None)
+    directory, name = HELD_PATH.rsplit("/", 1)
+    junk = f"__MACOSX/{directory}/._{name}"
+    archive = installation / "next-week" / NEXT_WEEK
+    archive.parent.mkdir(parents=True)
+    with zipfile.ZipFile(archive, "w") as written:
+        link = zipfile.ZipInfo(HELD_PATH, date_time=(1980, 1, 1, 0, 0, 0))
+        link.external_attr = (stat.S_IFLNK | 0o777) << 16
+        written.writestr(link, name.encode())
+        written.writestr(junk, b"\x00\x05\x16\x07\x00\x02\x00\x00Mac OS X        ")
+        written.writestr(
+            "Cedar Hollow/ZaLu/Cedar Hollow-ZaLu-AFF-Harbor Classic.docx", DOCUMENT_BODIES["harbor-aff"]
+        )
+
+    imported = import_next_week(archive)
+
+    assert imported["exit_code"] == ExitCode.OK, imported
+    assert imported["data"]["skipped"] == {"SYMLINK": 1, "MACOS_METADATA": 1}
+    manifests = data_dir / "objects" / "manifests" / SYNTHETIC_CASELIST
+    assert name not in (manifests / "2026-09-22.jsonl").read_text(), "a row names the held path"
+
+    withheld = f"manifests/{SYNTHETIC_CASELIST}/2026-09-29.jsonl"
+    (manifests / "2026-09-29.jsonl").write_text(
+        json.dumps({"kind": "member", "path": HELD_PATH, "skip_reason": "SYMLINK"}) + "\n"
+    )
+    pushed = f"manifests/{SYNTHETIC_CASELIST}/2026-09-22.jsonl"
+    synced = run("store", "sync", "--prefix", f"manifests/{SYNTHETIC_CASELIST}/", "--apply")
+
+    assert synced["exit_code"] == ExitCode.OK, synced
+    assert synced["data"]["counts"]["new"] == 1
+    listed = bucket.list_objects_v2(Bucket=BUCKET, Prefix=f"manifests/{SYNTHETIC_CASELIST}/")
+    keys = {str(item.get("Key")) for item in listed.get("Contents", [])}
+    assert pushed in keys
+    assert withheld not in keys, "the push sent a manifest the publisher withholds"
+    assert name not in json.dumps(synced)
+
+
 # ------------------------------------------------------------------------------------------------
 # A --source plan names only holders other than the one removed, and no team as "this team"
 # (v1-e30-t16)

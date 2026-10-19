@@ -100,7 +100,10 @@ before, with the same outcome, code and held count.
 
 Such bytes are still in this machine's blob store, put there by the build that imported the row,
 so every comparison of this machine with the bucket leaves them out too: `caselist status` does not
-expect them in the bucket, and `store sync` does not push them.
+expect them in the bucket, and `store sync` does not push them. Nor does it push a manifest this
+module's plan withholds (`v1-e30-t25`): a push asks :attr:`SnapshotPlan.withholding_rows` of each
+manifest it would send, through
+:func:`~debate_core.application.caselist.publish_service.withheld_manifest_reason`.
 """
 
 from __future__ import annotations

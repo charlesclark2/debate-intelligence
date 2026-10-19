@@ -69,7 +69,9 @@ So is a skipped member at a path a removal holds, in a snapshot the hold covers
 (:func:`hold_on_skipped_member`, `v1-e30-t22`): a symbolic link named as the removed file is not a
 later upload, since nothing in it can be imported, but its row would name the removed path, and
 its body is often the file's name. The removal's manifest rewrite and `caselist status` ask the
-same question of a row an earlier build wrote.
+same question of a row an earlier build wrote. An AppleDouble member `__MACOSX/<dir>/._<name>` is
+asked about the file it shadows as well as its own path (`v1-e30-t25`), so the junk macOS zips
+beside such a link is held with it.
 
 What stays with each service is what genuinely differs: where the baseline comes from (the
 previous weekly snapshot, or the camp release's existing manifest), which records are written,
@@ -514,10 +516,19 @@ def hold_on_skipped_member(
     manifest row. `None` for a camp release or an archive of no date, which no hold covers. Shared by
     the importer, the removal's rewrite of a manifest and of an inbox archive, and `caselist status`,
     so all four leave out the same rows.
+
+    macOS's `__MACOSX/<dir>/._<name>` names the file `<dir>/<name>` it shadows, so it is asked about
+    that path too (`v1-e30-t25`): junk beside a link at a held path is held with the link, and so is
+    such junk with nothing beside it, since its name gives the held path all the same.
     """
     if caselist is None or snapshot is None:
         return None
-    return suppression.path_hold(caselist=caselist, path=path, snapshot=snapshot)
+    shadowed = _apple_double_target(path)
+    for named in (path,) if shadowed is None else (path, shadowed):
+        hold = suppression.path_hold(caselist=caselist, path=named, snapshot=snapshot)
+        if hold is not None:
+            return hold
+    return None
 
 
 def _directory_of(path: str) -> str:
@@ -528,13 +539,23 @@ def _directory_of(path: str) -> str:
     return "/".join(parts[:-1])
 
 
+def _apple_double_target(path: str) -> str | None:
+    """`<dir>/<name>` for `__MACOSX/<dir>/._<name>`, the file macOS wrote that sidecar for; else `None`."""
+    name = path.rsplit("/", 1)[-1]
+    if path.split("/")[0] != _MACOS_METADATA_DIRECTORY or not name.startswith(_APPLE_DOUBLE_PREFIX):
+        return None
+    directory = _directory_of(path)
+    prefix = f"{directory}/" if directory else ""
+    return prefix + name[len(_APPLE_DOUBLE_PREFIX) :]
+
+
 def _shadowed(path: str, real: Mapping[str, bool]) -> list[str]:
     """The real paths a junk member is metadata for, if it is one."""
+    apple_double = _apple_double_target(path)
+    if apple_double is not None:
+        return [apple_double]
     directory = _directory_of(path)
     name = path.rsplit("/", 1)[-1]
-    prefix = f"{directory}/" if directory else ""
-    if path.split("/")[0] == _MACOS_METADATA_DIRECTORY and name.startswith(_APPLE_DOUBLE_PREFIX):
-        return [prefix + name[len(_APPLE_DOUBLE_PREFIX) :]]
     if name.startswith(_WORD_LOCK_PREFIX):
         rest = name[len(_WORD_LOCK_PREFIX) :]
         return [

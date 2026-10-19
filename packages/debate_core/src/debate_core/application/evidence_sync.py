@@ -57,6 +57,16 @@ bytes a build from before `v1-e30-t13` imported at a removed file's path, which 
 does not upload. Planned as `skipped`, from :data:`HeldBackDigests`, which the composition root
 gives the service; a pull, which writes to this machine, is not affected.
 
+And it leaves out **a manifest `caselist publish` withholds** (`v1-e30-t25`): one with a row the
+list stops or at a path a removal holds, whose upload would publish the removed path, school and
+team code again. The push asks the publisher, through :data:`WithheldManifests`, about each key
+under `manifests/` it would otherwise send, `new` or `changed`, and plans it `skipped` with the
+publisher's own message as the reason. The rule stays the publisher's, so it cannot drift from
+what a publish does. A manifest the publisher cannot read, which a publish refuses whole, is
+skipped with that refusal, which names the key and the line number. Asking costs no request: the
+manifest is read from the local listing's entry, once per manifest the push would send, and one
+already in the bucket, identical or journaled, is not asked about. A pull is not affected.
+
 ## How few HeadObject calls this makes
 
 `list_objects` states no digest, by design, in either implementation — S3's `ListObjectsV2` does not
@@ -109,6 +119,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
 
+from debate_core.application.caselist.manifest import MANIFEST_DIRECTORY
 from debate_core.application.caselist.suppression import is_suppression_key, load_suppression_state
 from debate_core.application.errors import (
     STORE_ERRORS_TRUE_OF_EVERY_OBJECT,
@@ -144,6 +155,7 @@ __all__ = [
     "SyncReport",
     "TransferOutcome",
     "UnsyncableKeyspace",
+    "WithheldManifests",
 ]
 
 EVIDENCE_PREFIXES: tuple[str, ...] = (
@@ -164,6 +176,14 @@ set may call `ListBucket` on, **one prefix at a time**, so listing the bucket *r
 planner that asked for every key under `""` would get `AccessDenied` against the real bucket while
 passing every test against moto, which grants everything. So an unfiltered run lists these eight in
 turn, and an object whose key is under none of them is reported and not transferred.
+"""
+
+type WithheldManifests = Callable[[ObjectInfo, SuppressionState], Awaitable[str | None]]
+"""Why `caselist publish` withholds a local manifest, or `None` when it does not (`v1-e30-t25`).
+
+:func:`~debate_core.application.caselist.publish_service.withheld_manifest_reason` over this machine's
+store is the one the composition root passes. Given the local listing's entry for the manifest and
+the suppression state the plan read.
 """
 
 type HeldBackDigests = Callable[[SuppressionState], Awaitable[frozenset[Sha256Hex]]]
@@ -600,6 +620,8 @@ class EvidenceSyncService:
         remote_name: The bucket, for the journal's entries. Never a credential.
         held_back: The digests a push leaves out because only rows at a held path name them
             (:data:`HeldBackDigests`, `v1-e30-t22`). Without it, none is left out.
+        withheld_manifests: Why the publisher withholds a manifest a push would send
+            (:data:`WithheldManifests`, `v1-e30-t25`). Without it, none is left out.
         clock: Supplies the journal's timestamps. Optional, and the only clock in this package that
             has a default: a journal timestamp is operational bookkeeping an operator reads, not
             provenance a card depends on. A test that asserts on journal contents injects
@@ -615,6 +637,7 @@ class EvidenceSyncService:
         remote_name: str = "",
         clock: Clock | None = None,
         held_back: HeldBackDigests | None = None,
+        withheld_manifests: WithheldManifests | None = None,
     ) -> None:
         if not keyspaces:
             raise ValueError("a sync needs at least one keyspace")
@@ -624,6 +647,7 @@ class EvidenceSyncService:
         self._remote_name = remote_name
         self._clock = clock
         self._held_back = held_back
+        self._withheld_manifests = withheld_manifests
 
     @property
     def keyspaces(self) -> tuple[SyncKeyspace, ...]:
@@ -700,6 +724,8 @@ class EvidenceSyncService:
             entry, cost = await self._classify(
                 keyspace, side, key, source[key], destination.get(key), suppression, held_back
             )
+            if direction is SyncDirection.PUSH and entry.transfers:
+                entry = await self._unless_withheld(keyspace, entry, source[key], suppression)
             planned.append(entry)
             heads += cost
         planned.extend(
@@ -843,6 +869,25 @@ class EvidenceSyncService:
             )
         reason = "no digest recorded at the destination" if destination_digest is None else "different digest"
         return _planned(keyspace, key, SyncAction.CHANGED, source.size, reason, source_digest), heads
+
+    async def _unless_withheld(
+        self, keyspace: SyncKeyspace, entry: PlannedObject, source: ObjectInfo, suppression: SuppressionState
+    ) -> PlannedObject:
+        """`entry`, or `skipped` with the publisher's reason when it is a manifest a publish withholds.
+
+        Asked only of a named object under `manifests/` that the push would send; `_suppression/` was
+        planned `skipped` before this is reached.
+        """
+        if (
+            self._withheld_manifests is None
+            or keyspace.content_addressed
+            or not entry.remote_key.startswith(f"{MANIFEST_DIRECTORY}/")
+        ):
+            return entry
+        reason = await self._withheld_manifests(source, suppression)
+        if reason is None:
+            return entry
+        return _planned(keyspace, entry.local_key, SyncAction.SKIPPED, entry.size, reason, entry.sha256)
 
     async def _list_remote(self, keyspace: SyncKeyspace, local_filter: str) -> tuple[ObjectInfo, ...]:
         """List the remote side, never asking for the bucket root.

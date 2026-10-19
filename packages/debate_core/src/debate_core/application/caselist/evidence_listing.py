@@ -40,7 +40,7 @@ from debate_core.application.caselist.publish_plan import (
     validate_publish_target,
 )
 from debate_core.application.caselist.withdrawals import EarlierSnapshots
-from debate_core.application.ports.evidence_store import EvidenceObjectStore, ObjectKey
+from debate_core.application.ports.evidence_store import EvidenceObjectStore, ObjectInfo, ObjectKey
 from debate_core.application.ports.suppression import SuppressionState
 from debate_core.domain import Sha256Hex
 
@@ -54,6 +54,7 @@ __all__ = [
     "list_remote_evidence",
     "local_blob_sizes",
     "local_file",
+    "read_local_manifest",
     "read_local_snapshots",
     "snapshots_before_full_archive",
 ]
@@ -101,20 +102,38 @@ async def read_local_snapshots(
         named = snapshot_of_manifest_key(caselist, info.key, full_archives=with_full)
         if named is None or (snapshot is not None and named != snapshot):
             continue
-        async with local_file(local.objects, local.object_path_for, info.key) as path:
-            # By its path, so through the one reader that says a refused file is a refusal.
-            lines = read_manifest_file(path)
-        found.append(
-            LocalSnapshot(
-                caselist=caselist,
-                snapshot=named,
-                sources=sources_in_manifest(info.key, lines),
-                manifest_size=info.size,
-                stored_rows=stored_rows_in_manifest(lines),
-                skipped_paths=skipped_paths_in_manifest(lines),
-            )
-        )
+        found.append(await _read_snapshot(local, caselist, named, info))
     return tuple(sorted(found, key=lambda local_snapshot: local_snapshot.snapshot))
+
+
+async def read_local_manifest(local: LocalEvidence, manifest: ObjectInfo) -> LocalSnapshot | None:
+    """The snapshot one local manifest is, from the listing that found it (`v1-e30-t25`).
+
+    `None` when its key is not a snapshot's manifest, weekly, complete or a camp release's: anything
+    else under `manifests/`, which no publish ever uploads. Read as :func:`read_local_snapshots`
+    reads each manifest, with no other listing.
+    """
+    for caselist in _caselists_in((manifest.key,)):
+        snapshot = snapshot_of_manifest_key(caselist, manifest.key, full_archives=True)
+        if snapshot is not None:
+            return await _read_snapshot(local, caselist, snapshot, manifest)
+    return None
+
+
+async def _read_snapshot(
+    local: LocalEvidence, caselist: str, snapshot: str, info: ObjectInfo
+) -> LocalSnapshot:
+    async with local_file(local.objects, local.object_path_for, info.key) as path:
+        # By its path, so through the one reader that says a refused file is a refusal.
+        lines = read_manifest_file(path)
+    return LocalSnapshot(
+        caselist=caselist,
+        snapshot=snapshot,
+        sources=sources_in_manifest(info.key, lines),
+        manifest_size=info.size,
+        stored_rows=stored_rows_in_manifest(lines),
+        skipped_paths=skipped_paths_in_manifest(lines),
+    )
 
 
 async def held_back_digests(local: LocalEvidence, suppression: SuppressionState) -> frozenset[Sha256Hex]:

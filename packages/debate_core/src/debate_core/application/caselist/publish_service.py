@@ -30,7 +30,8 @@ source is never uploaded, and a manifest that still has a stored row the list st
 rather than published (`publish_plan`, "A manifest that still names a suppressed file"). So is one
 with a stored row at a path a removal holds, with the same outcome and the same code (`v1-e30-t21`),
 and bytes that only such rows name are not uploaded at all (`v1-e30-t22`; `publish_plan`, "Bytes
-only held rows name are not uploaded").
+only held rows name are not uploaded"). `store sync` asks the same plan before it pushes a manifest,
+and pushes none a publish withholds (:func:`withheld_manifest_reason`, `v1-e30-t25`).
 
 ## Idempotent and resumable
 
@@ -73,6 +74,7 @@ from debate_core.application.caselist.evidence_listing import (
     list_remote_evidence,
     local_blob_sizes,
     local_file,
+    read_local_manifest,
     read_local_snapshots,
 )
 from debate_core.application.caselist.publish_plan import (
@@ -80,6 +82,7 @@ from debate_core.application.caselist.publish_plan import (
     PublishPlan,
     SnapshotPlan,
     SourceAction,
+    UnreadableManifest,
     build_publish_plan,
     local_blob_key,
     manifest_prefix,
@@ -96,7 +99,7 @@ from debate_core.application.errors import (
     reported_error_message,
 )
 from debate_core.application.ports.evidence_store import EvidenceObjectStore, ObjectInfo, ObjectKey
-from debate_core.application.ports.suppression import SuppressionList
+from debate_core.application.ports.suppression import SuppressionList, SuppressionState
 from debate_core.domain import Sha256Hex
 
 __all__ = [
@@ -110,6 +113,7 @@ __all__ = [
     "SourceOutcome",
     "SourceResult",
     "error_code_of",
+    "withheld_manifest_reason",
 ]
 
 logger = logging.getLogger(__name__)
@@ -523,6 +527,37 @@ class CaselistPublishService:
         outcome = _outcome(planned, SourceResult.FAILED, code, message)
         failed[planned.key] = outcome
         return outcome
+
+
+async def withheld_manifest_reason(
+    local: LocalEvidence, manifest: ObjectInfo, suppression: SuppressionState
+) -> str | None:
+    """Why a publish withholds this local manifest for its rows, in its own words; `None` when it does not.
+
+    What `store sync` asks before it pushes a manifest (`v1-e30-t25`), so that a push never sends
+    what a publish withholds. The answer is the plan of that one snapshot
+    (:attr:`~debate_core.application.caselist.publish_plan.SnapshotPlan.withholding_rows`), as
+    `caselist status` asks it for its hint (`v1-e30-t19`), and the message is the one a withheld
+    outcome carries (:attr:`SnapshotOutcome.manifest_error`): digests and request ids, never a path.
+
+    `manifest` is this machine's listing entry for it, so nothing is listed again. The plan is built
+    with no blob or bucket listing: its source actions are not read, only the rows that withhold the
+    manifest. `None` for a key that is not a snapshot's manifest, which no publish uploads.
+
+    A manifest a publish cannot read is refused, and nothing of it is published, so its refusal is
+    the reason: :class:`~debate_core.application.caselist.publish_plan.UnreadableManifest` names the
+    key and the line number, never the line.
+    """
+    try:
+        snapshot = await read_local_manifest(local, manifest)
+    except UnreadableManifest as refused:
+        return str(refused)
+    if snapshot is None:
+        return None
+    (plan,) = build_publish_plan(
+        snapshot.caselist, [snapshot], local_blobs=(), remote={}, suppression=suppression
+    ).snapshots
+    return _withheld_for_rows(plan) if plan.withholding_rows else None
 
 
 # ------------------------------------------------------------------------------------------------

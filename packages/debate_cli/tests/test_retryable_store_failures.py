@@ -211,8 +211,13 @@ class TestStoreFamily:
         self, installation: Path, bucket: S3Client, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         """Each object fails on its own and the run carries on; then the run is a 3, not a 1."""
-        write_local_object(installation, "manifests/testcl26/2026-09-01.jsonl", b"week one\n")
-        write_local_object(installation, "manifests/testcl26/2026-09-08.jsonl", b"week two\n")
+        # Manifests a publish could read, which a push asks about before it sends them (v1-e30-t25).
+        write_local_object(
+            installation, "manifests/testcl26/2026-09-01.jsonl", b'{"kind": "summary", "week": 1}\n'
+        )
+        write_local_object(
+            installation, "manifests/testcl26/2026-09-08.jsonl", b'{"kind": "summary", "week": 2}\n'
+        )
         uploads_answer_503(monkeypatch)
 
         exit_code, envelope = run("store", "sync", "--apply")
@@ -227,7 +232,9 @@ class TestStoreFamily:
         """A key whose two sides disagree is a verdict; a store that also stuttered does not hide it."""
         blob_key = write_local_blob(installation, b"a disclosed file")
         bucket.put_object(Bucket=BUCKET, Key=f"{BLOB_PREFIX}/{blob_key}", Body=b"something else entirely")
-        write_local_object(installation, "manifests/testcl26/2026-09-01.jsonl", b"week one\n")
+        write_local_object(
+            installation, "manifests/testcl26/2026-09-01.jsonl", b'{"kind": "summary", "week": 1}\n'
+        )
         uploads_answer_503(monkeypatch)
 
         exit_code, envelope = run("store", "sync", "--blob-prefix", BLOB_PREFIX, "--apply")

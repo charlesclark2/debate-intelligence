@@ -46,7 +46,7 @@ spec:
         (2): an archive with `__MACOSX` junk beside a link at a held path imports with no
         row at that path, and the inbox rewrite agrees, by test shown failing first.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

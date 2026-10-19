@@ -181,7 +181,8 @@ def test_store_sync_names_an_os_error_by_its_class_and_errno(
 ) -> None:
     path = installation / "objects" / "manifests" / SYNTHETIC_CASELIST / "2026-09-01.jsonl"
     path.parent.mkdir(parents=True)
-    path.write_bytes(b"week one\n")
+    # A manifest a publish could read, which a push asks about before it sends it (v1-e30-t25).
+    path.write_bytes(b'{"kind": "summary"}\n')
     uploads_refused_by_the_os(monkeypatch)
 
     shown, envelope = both_outputs("store", "sync", "--apply")

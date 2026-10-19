@@ -412,9 +412,63 @@ Reply with 1: a or b, 2: a or b, 3: follow-up yes or no, 4: keep or new code.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-19
 
 **Notes:**
+
+Accepted, with the phase `Succeeded`.
+
+**The work itself:**
+
+* **Red against a skeleton with the real signatures,** and 59 passes at red each accounted for by
+  name.
+* **The suppression rule asks the same question the parse pipeline asks,** by
+  `SuppressionState.suppresses(sha256, disclosure=…)`, per row and once per resolve. The reason it
+  asks even though a rebuilt store already omits such rows is right: a list merged from another
+  machine runs ahead of this machine's next parse. A whole-source pin is refused before the store
+  is read, so a removal never reads as a plain mismatch.
+* **AUTO's order is total,** from stored fields only, and tested under five shuffles.
+* **Strict YAML is treated as a security surface:** duplicate keys, an alias bomb, size, YAML
+  booleans and `!!python` tags. Coverage found the `ReaderError` escaping, and it is fixed and
+  tested.
+* **No rejected value is echoed in a message,** and a pin's personal fields are off `repr`.
+* **51 of 51 mutants caught,** with the survivors (D15, B01 to B03) turned into exact assertions, and
+  an unreachable fallback (B05) deleted rather than tested.
+* **The drift check was shown failing for its reason.**
+* **`EXACT_FINGERPRINT_VERSIONS` comes with a test that today's `FINGERPRINT_VERSION` is in it,** so a
+  bump that forgets the list fails at once.
+
+**Rulings on the PM questions:**
+
+1. **(a), exact fingerprints only.** A cluster id is not a durable key, and a file must not change
+   card under a rebuild. Choosing from a cluster belongs to `files suggest` (t03), which writes exact
+   fingerprints.
+2. **(a).** t05 publishes the recipe with each pin's `school`, `team_code`, `tournament` and `round`
+   removed. The sidecar carries attribution, and the policy stays as written. Added to t05's notes.
+3. **Yes, a follow-up** (E33, p3, additive, still schema version 1) for camp (OpenEv) pins with a
+   release snapshot.
+4. **Keep `PIN_MISMATCH`** for an ambiguous pin, with its own message.
+
+**On the FYIs and deviations:**
+
+* **The five extra fields:** accepted. Each is justified, and `status` is what t03 already expects.
+* **Deviation 2, the package scope:** accepted. `debate_core.evidence` for
+  `EXACT_FINGERPRINT_VERSIONS` and `tests/scripts` for the drift test are approved. The spec
+  comment that calls them "pending PM review" is updated to "approved" at the next PM close-out.
+  No change is needed on this branch.
+* **Deviations 3 to 5, and Decisions 1 to 15:** accepted. Joining occurrences to disclosures by
+  digest is the documented join, and refusing a pin that mixes live and withdrawn copies is the
+  conservative reading I asked for.
+
+**Follow-ups:**
+
+* **1, AUTO choosing an unattributed occurrence:** ruled now. AUTO prefers occurrences with a
+  disclosure on record, and takes an unattributed one only when no attributed one remains. t03
+  reports such a card before building. This goes into t03's notes, because it changes the documented
+  rule and t03 owns the build.
+* **2, keeping `EXACT_FINGERPRINT_VERSIONS` up to date:** noted for `v1-e31-t20`'s review. The guard
+  test enforces it whichever branch merges second.
+* **3:** covered by ruling 2.

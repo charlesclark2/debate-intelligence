@@ -109,7 +109,9 @@ from debate_core.evidence.style_classifier import (
     classify_paragraph,
     first_name_and_year,
     for_matching,
+    is_a_cite_behind_a_first_name_or_title,
     is_a_cite_wholly_in_brackets,
+    is_a_highlighted_cite,
     the_cite_style_marks_a_name_and_year_at_the_head,
 )
 from debate_core.evidence.style_profile_loader import load_style_profile
@@ -441,7 +443,9 @@ class DebateDocxParser:
                     confidence=1.0,
                 )
             else:
-                match = classify_paragraph(read.description, self._profile)
+                match = classify_paragraph(
+                    read.description, self._profile, through_unmapped_styles=self._rules_under_review
+                )
                 if match.unit not in _UNITS_A_BLANK_PARAGRAPH_KEEPS and not read.text.strip():
                     match = ParagraphStyleMatch(
                         unit=StructuralUnit.OTHER,
@@ -452,14 +456,27 @@ class DebateDocxParser:
             sections.append(_ReadSection(read=read, match=match, in_text_box=body_paragraph.in_text_box))
         return sections
 
-    def _read_bracketed_cites_where_a_cite_stands(self, sections: list[_ReadSection]) -> list[_ReadSection]:
-        """Re-read a paragraph written wholly inside a bracket as a cite, where a cite stands.
+    def _read_cites_where_a_cite_stands(self, sections: list[_ReadSection]) -> list[_ReadSection]:
+        """Re-read as a cite a paragraph whose shape is a cite's only where a cite stands.
 
-        `[Okonkwo 26, ...] KR` is a cite and `(Lindqvist 2019)` on a line of an article is the
-        article's own reference: the same shape
-        (:func:`~debate_core.evidence.style_classifier.is_a_cite_wholly_in_brackets`), told apart
-        only by where it is. A cite stands after a tag, an undertag or another line of the cite,
-        before any body. Blank lines, page furniture and lines read as nothing are stepped over.
+        Three shapes are cites there and something else elsewhere, so the classifier cannot call
+        them:
+
+        * **wholly inside a bracket.** `[Okonkwo 26, ...] KR` is a cite and `(Lindqvist 2019)` on
+          a line of an article is the article's own reference
+          (:func:`~debate_core.evidence.style_classifier.is_a_cite_wholly_in_brackets`,
+          `v1-e31-t12`);
+        * **behind a first name or a title.** `Adaeze Okonkwo 26, ...` with the name and year in
+          bold is a cite, and a sentence in a body can open with a bold name
+          (:func:`~debate_core.evidence.style_classifier.is_a_cite_behind_a_first_name_or_title`,
+          `v1-e31-t19`);
+        * **a highlighted cite, with a body below it.** A cite whose name a debater highlighted to
+          read, and a card written as one paragraph behind its cite, have one shape
+          (:func:`~debate_core.evidence.style_classifier.is_a_highlighted_cite`). Only the first
+          has a body after it (`v1-e31-t19`).
+
+        A cite stands after a tag, an undertag or another line of the cite, before any body.
+        Blank lines, page furniture and lines read as nothing are stepped over.
         A guessed cite that a body may yet take for itself (:meth:`_is_a_guess_a_body_may_take`)
         is not such a line: what follows it may be the middle of a body, where a reference in
         brackets would end the card.
@@ -471,20 +488,25 @@ class DebateDocxParser:
         """
         reread: list[_ReadSection] = []
         a_cite_stands_here = False
-        for section in sections:
+        a_body_follows = _followed_by_a_body(sections)
+        for position, section in enumerate(sections):
             match = section.match
-            if (
-                a_cite_stands_here
+            reason = (
+                self._why_it_is_a_cite_where_a_cite_stands(
+                    section.read, a_body_follows=a_body_follows[position]
+                )
+                if a_cite_stands_here
                 and match.unit in (StructuralUnit.EVIDENCE, StructuralUnit.OTHER)
                 and match.match_source is StyleMatchSource.HEURISTIC
                 and not match.rule_id.startswith("assembly-")
-                and is_a_cite_wholly_in_brackets(section.read.description, self._profile)
-            ):
+                else None
+            )
+            if reason is not None:
                 section = _ReadSection(
                     read=section.read,
                     match=ParagraphStyleMatch(
                         unit=StructuralUnit.CITE,
-                        rule_id=f"assembly-bracketed-cite-before-the-body:{match.rule_id}",
+                        rule_id=f"{reason}:{match.rule_id}",
                         match_source=StyleMatchSource.HEURISTIC,
                         confidence=_BRACKETED_CITE_CONFIDENCE,
                     ),
@@ -497,6 +519,21 @@ class DebateDocxParser:
                 a_cite_stands_here = False
             reread.append(section)
         return reread
+
+    def _why_it_is_a_cite_where_a_cite_stands(
+        self, read: ReadParagraph, *, a_body_follows: bool
+    ) -> str | None:
+        """The assembly rule that reads a paragraph standing where a cite stands as a cite, or None."""
+        description = read.description
+        if is_a_cite_wholly_in_brackets(description, self._profile):
+            return "assembly-bracketed-cite-before-the-body"
+        if not self._rules_under_review:
+            return None
+        if is_a_cite_behind_a_first_name_or_title(description, self._profile):
+            return "assembly-cite-behind-a-name-before-the-body"
+        if a_body_follows and is_a_highlighted_cite(description, self._profile):
+            return "assembly-highlighted-cite-before-the-body"
+        return None
 
     def _is_a_guess_a_body_may_take(self, section: _ReadSection) -> bool:
         """Whether a paragraph is a guessed cite that the assembly may yet re-read as body.
@@ -701,7 +738,7 @@ class DebateDocxParser:
         camp: str | None,
     ) -> ParsedDocument:
         read_sections = self._demote_tags_with_no_card(
-            self._read_bracketed_cites_where_a_cite_stands(self._read_sections(package))
+            self._read_cites_where_a_cite_stands(self._read_sections(package))
         )
 
         open_headings: list[str | None] = [None, None, None, None]
@@ -963,6 +1000,18 @@ def _reread_as_body(section: _ReadSection, reason: str) -> _ReadSection:
         ),
         in_text_box=section.in_text_box,
     )
+
+
+def _followed_by_a_body(sections: Sequence[_ReadSection]) -> list[bool]:
+    """For each paragraph, whether the next one that is not `OTHER` was classified as body."""
+    followed = [False] * len(sections)
+    a_body_is_next = False
+    for position in range(len(sections) - 1, -1, -1):
+        followed[position] = a_body_is_next
+        unit = sections[position].match.unit
+        if unit is not StructuralUnit.OTHER:
+            a_body_is_next = unit is StructuralUnit.EVIDENCE
+    return followed
 
 
 def _card_follows(sections: Sequence[_ReadSection], position: int) -> bool:

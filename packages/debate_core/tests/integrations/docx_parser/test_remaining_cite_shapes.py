@@ -235,7 +235,7 @@ class TestACiteBehindAFirstNameOrATitle:
         "a sentence opener before it": behind_a_name("In "),
         "a lower-case word before it": behind_a_name("according to "),
         "a sentence before it": behind_a_name("The audit by "),
-        "the name and year past 40 characters": behind_a_name("Adaeze Ngozi " + "x" * 28 + " "),
+        "the name and year past 40 characters": behind_a_name("Adaeze N" + "g" * 32 + " "),
         "the name and year in the cite style": behind_a_name("Adaeze ", cite_style=True, after=TAIL + "."),
     }
 
@@ -247,7 +247,7 @@ class TestACiteBehindAFirstNameOrATitle:
         assert not section_of(document, text).match.rule_id.startswith(BEHIND_A_NAME)
 
     def test_the_name_and_year_at_40_characters_is_taken(self, parser: DebateDocxParser) -> None:
-        before = "Adaeze Ngozi " + "x" * 26 + " "
+        before = "Adaeze N" + "g" * 31 + " "
         assert len(before) == 40
         markup, text = behind_a_name(before)
 

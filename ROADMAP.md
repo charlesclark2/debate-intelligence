@@ -61,12 +61,13 @@ v2.3's extension work.
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 40 | 40 | 216 |
-| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 93 | 65 | 465 |
+| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 95 | 65 | 469 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 20 | 5 | 188 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 13 | 1 | 108 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 14 | 0 | 96 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 0 | 66 |
 | [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 19 | 12 | 146 |
+| [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 10 | 0 | 46 |
 | [v2.0](plan_specs/releases/v2.0.yaml) | Cloud platform foundation | 3 | 17 | 0 | 164 |
 | [v2.1](plan_specs/releases/v2.1.yaml) | Web app, debate tub & async jobs | 3 | 18 | 0 | 198 |
 | [v2.2](plan_specs/releases/v2.2.yaml) | Research workspace | 2 | 12 | 0 | 117 |
@@ -226,6 +227,7 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [The parse time-limit test does not depend on the machine's load](plan_specs/v1/e31-debate-file-parsing/t27-parse-time-limit-test.yaml) `v1-e31-t27-parse-time-limit-test` | Pending | 1 | 1.0 |
 | [What the cautious cite rules leave, and a short cite behind a first name](plan_specs/v1/e31-debate-file-parsing/t28-cite-rules-leftovers.yaml) `v1-e31-t28-cite-rules-leftovers` | Pending | 1 | 3.0 |
 | [Card matching recovers two kinds of pair it now keeps apart](plan_specs/v1/e31-debate-file-parsing/t29-card-matching-recall.yaml) `v1-e31-t29-card-matching-recall` | Pending | 1 | 4.0 |
+| [Publish the parsed store without rebuilding it](plan_specs/v1/e31-debate-file-parsing/t30-parsed-store-publish-only.yaml) `v1-e31-t30-parsed-store-publish-only` | Pending | 1 | 2.0 |
 
 #### [E34 — Scheduled Caselist Sync](plan_specs/v1/e34-caselist-sync/epic.yaml)
 
@@ -259,6 +261,7 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [A drifted snapshot is owed again, and the banner and run list say what is pending](plan_specs/v1/e34-caselist-sync/t26-pending-work-and-banner-words.yaml) `v1-e34-t26-pending-work-and-banner-words` | Succeeded | 2 | 3.0 |
 | [The wrapper exports no AWS_PROFILE, and --check-launchd refuses options it ignores](plan_specs/v1/e34-caselist-sync/t27-wrapper-and-check-launchd-options.yaml) `v1-e34-t27-wrapper-and-check-launchd-options` | InProgress | 1 | 1.0 |
 | [Publish-stage loose ends: a cut-short report check, the manifest count, and a report-only outcome](plan_specs/v1/e34-caselist-sync/t28-publish-stage-loose-ends.yaml) `v1-e34-t28-publish-stage-loose-ends` | Pending | 1 | 2.0 |
+| [An older build never rewrites or publishes an occurrence table stamped with a newer fingerprint version](plan_specs/v1/e34-caselist-sync/t29-newer-fingerprint-table-guard.yaml) `v1-e34-t29-newer-fingerprint-table-guard` | Pending | 1 | 2.0 |
 
 
 ### v1.2 — Argument landscape & file building
@@ -414,6 +417,26 @@ Whitefish Bay Debate has a public, mobile-friendly team website: team informatio
 | [Opt-in donor recognition](plan_specs/v1/e38-donations/t03-donor-recognition.yaml) `v1-e38-t03-donor-recognition` | Pending | 3 | 6.0 |
 
 
+### v1.7 — Team evidence search pilot
+
+Debaters search the team's evidence store from a school Chromebook or at home: a signed-in, team-only web page over every disclosed and camp card, one result per card, each card copied into Google Docs or Word with its formatting and provenance, or downloaded as a Verbatim .docx. A pilot for the end of the 2026 fall semester. Independent of v1.2-v1.6: it needs v1.1's parsed store and fingerprints, and the E33 writer from v1.2.
+
+#### [E39 — Team Evidence Search (Student Pilot)](plan_specs/v1/e39-evidence-search-pilot/epic.yaml)
+
+| Task | Status | Prereqs | Est. hours |
+|---|---|---|---|
+| [ADR-0019: the student search pilot's stack, sign-in and hosting](plan_specs/v1/e39-evidence-search-pilot/t01-pilot-architecture-adr.yaml) `v1-e39-t01-pilot-architecture-adr` | Pending | 1 | 3.0 |
+| [tub index build and publish: one searchable document per card cluster, from the parsed store](plan_specs/v1/e39-evidence-search-pilot/t02-search-index-build.yaml) `v1-e39-t02-search-index-build` | Pending | 3 | 6.0 |
+| [Search core: safe queries, ranking, filters, pages and card rendering over the index](plan_specs/v1/e39-evidence-search-pilot/t03-search-core.yaml) `v1-e39-t03-search-core` | Pending | 1 | 5.0 |
+| [Pilot infrastructure: the function, CloudFront, the user pool and the audit log, in dev and prod](plan_specs/v1/e39-evidence-search-pilot/t04-pilot-infrastructure.yaml) `v1-e39-t04-pilot-infrastructure` | Pending | 1 | 6.0 |
+| [Accounts and sign-in: the session flow, roles, and the coach's tub users commands](plan_specs/v1/e39-evidence-search-pilot/t05-accounts-and-sign-in.yaml) `v1-e39-t05-accounts-and-sign-in` | Pending | 1 | 5.0 |
+| [Search pages: search, results, the card page and Copy card, on a Chromebook](plan_specs/v1/e39-evidence-search-pilot/t06-search-pages.yaml) `v1-e39-t06-search-pages` | Pending | 2 | 6.0 |
+| [Removal, access audit and exposure: the pilot meets the policy's E39 gate](plan_specs/v1/e39-evidence-search-pilot/t07-removal-audit-and-exposure.yaml) `v1-e39-t07-removal-audit-and-exposure` | Pending | 1 | 5.0 |
+| [Download a card or a small file as Verbatim .docx through the E33 writer](plan_specs/v1/e39-evidence-search-pilot/t08-card-download.yaml) `v1-e39-t08-card-download` | Pending | 2 | 4.0 |
+| [The weekly agent run rebuilds and publishes the search index when the parsed store changed](plan_specs/v1/e39-evidence-search-pilot/t09-weekly-index-refresh.yaml) `v1-e39-t09-weekly-index-refresh` | Pending | 1 | 3.0 |
+| [Dev smoke checks, the coach's beta and the student pilot](plan_specs/v1/e39-evidence-search-pilot/t10-pilot-smoke-and-review.yaml) `v1-e39-t10-pilot-smoke-and-review` | Pending | 2 | 3.0 |
+
+
 ## V2
 
 ### v2.0 — Cloud platform foundation
@@ -444,7 +467,7 @@ Keyless CI deploys, DynamoDB + S3 repositories passing the same contract tests, 
 
 | Task | Status | Prereqs | Est. hours |
 |---|---|---|---|
-| [Cognito user pool and Google federation](plan_specs/v2/e12-identity-api/t01-cognito-user-pool.yaml) `v2-e12-t01-cognito-user-pool` | Pending | 1 | 8.0 |
+| [Cognito user pool and Google federation](plan_specs/v2/e12-identity-api/t01-cognito-user-pool.yaml) `v2-e12-t01-cognito-user-pool` | Pending | 2 | 8.0 |
 | [FastAPI service skeleton](plan_specs/v2/e12-identity-api/t02-fastapi-service.yaml) `v2-e12-t02-fastapi-service` | Pending | 1 | 9.0 |
 | [Authentication, roles and tenancy](plan_specs/v2/e12-identity-api/t03-authn-authz.yaml) `v2-e12-t03-authn-authz` | Pending | 2 | 9.0 |
 | [API Gateway + ECS Fargate deployment](plan_specs/v2/e12-identity-api/t04-api-deploy.yaml) `v2-e12-t04-api-deploy` | Pending | 3 | 11.0 |

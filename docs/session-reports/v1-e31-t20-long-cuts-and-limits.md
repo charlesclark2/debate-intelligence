@@ -8,7 +8,7 @@
 | Branch | `task/v1-e31-t20-long-cuts-and-limits` |
 | Session status | PARTIAL, for review: the PM's rulings on the first preview (2026-10-18) are built, tested red first and mutated (70 of 73 caught, 3 equivalent), and the operator's re-preview passed every check, accepted by the PM on 2026-10-19. Synced onto `dev`; `card-fingerprint-v4` added to `EXACT_FINGERPRINT_VERSIONS`. What is left is after the merge, in one list with `v1-e31-t19`'s re-parse to `docx-5` (A1 to A13): ac4's figures and ac5 on the store |
 
-Commit ids are those after `scripts/task sync` of 2026-10-19 onto `origin/dev` at `77c3a29`, except
+Commit ids are those after `scripts/task sync` of 2026-10-19 onto `origin/dev` at `8d1070c`, except
 where a run is said to have used an earlier one.
 
 ## Summary
@@ -81,17 +81,17 @@ re-parse to `docx-5` after the merge (A3 to A9); everything before the merge is 
 * **On the labelled sets, 1(a): the ruling stands.** The two text-disjoint trims of Brannock's and
   Kessler's cards are two passages each. `short_cards.jsonl` is unchanged; t08's ac1 for the two
   "full short cards" rows is amended to 0.792 and 0.622; a test pins the lost pairs to those two
-  cards by row id and holds every other card's recall. Built in `d9a7bc5`, `b04a9a1`, `8a7ce0d`.
+  cards by row id and holds every other card's recall. Built in `67771ba`, `ea93a27`, `e26d098`.
 * **On the three choices, 2: all go ahead**: symmetric refusal; the long near-containment join,
   with the container rule applying to it; and one shared run as "shares text", with a count of
-  pairs sharing one or two runs to test it (`b2d8a17`). The third is superseded below.
+  pairs sharing one or two runs to test it (`32f32be`). The third is superseded below.
 * **On the first preview:** (1)(a), "shares text" means overlaps at three-tenths, superseding the
   one-run reading, with the guardrail to hold exactly by test and the moved boundary test named;
   (2) `MIN_CUT_SHARE` 0.1 with a band sample of at least 20 and the added refusals reported, short
   bodies lacking an end compared, `MAX_CONTAINER_CLUSTERS` 8; (3) a diagnosis outcome for the
   neither-end body, the re-preview to report ac5, the four largest clusters' sizes and the few-run
-  pairs (any left must say how they got there), and the 132 long cuts accepted. Built in `63b361c`
-  and `e96096f`.
+  pairs (any left must say how they got there), and the 132 long cuts accepted. Built in `2b98a5f`
+  and `e173aae`.
 
 **The PM, 2026-10-19:** the re-preview passes every check; the 2,134 divided pairs are accepted as
 the card ruling's own case. Asked for the review with three changes, all made: the after-merge
@@ -123,7 +123,7 @@ v1-e31-t20 is ready for review: docs/session-reports/v1-e31-t20-long-cuts-and-li
    (normalization unchanged since v1). After the sync, e33-t01's guard failed, and 50 recipe
    resolves were refused, until it was added. The recipe schema is regenerated.
 
-Also: synced onto dev 77c3a29 (one conflict in the parse report, both sections kept). The suite
+Also: synced onto dev 8d1070c (one conflict in the parse report, both sections kept). The suite
 gives 8,764 passed and 1 failed, and the failure is dev's: the parser eval's pr-subset tier has
 no baseline since today's labels merged. It fails the same way on dev's own tree; this branch
 touches nothing in the eval. Writing the baseline needs a coach-reviewed report, so it's yours.
@@ -142,7 +142,7 @@ operator's first preview, recorded in the parse report.
 
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
-| **ac1** — (1), (5) and (7) built on synthetic fixtures, shown failing first, including two disjoint bodies and a third holding both, which stay apart | PASS | The 13 tests of "Long cuts, and joins only on text two bodies share" in `test_near_duplicates.py`, committed red (`f80a636`) against the v3 rules: `14 failed, 4 passed`. Under the overlap reading the same section plus three new tests: `uv run pytest packages/debate_core/tests/evidence/test_near_duplicates.py -n0` → `111 passed`. t11's false join stays `[[A], [B], [C]]` under all six orders of fingerprint. See [Shown failing first](#shown-failing-first) |
+| **ac1** — (1), (5) and (7) built on synthetic fixtures, shown failing first, including two disjoint bodies and a third holding both, which stay apart | PASS | The 13 tests of "Long cuts, and joins only on text two bodies share" in `test_near_duplicates.py`, committed red (`e6f1b69`) against the v3 rules: `14 failed, 4 passed`. Under the overlap reading the same section plus three new tests: `uv run pytest packages/debate_core/tests/evidence/test_near_duplicates.py -n0` → `111 passed`. t11's false join stays `[[A], [B], [C]]` under all six orders of fingerprint. See [Shown failing first](#shown-failing-first) |
 | **ac1** — the operator's join sample of 20 newly joined pairs, through t21's sampler, has no pair the coach calls different | PASS (re-preview); the sample on the `docx-5` store NOT RUN | Step R4, 2026-10-18: `Drew 20 of 1827 newly joined pairs, seed 963278315`, every pair shown with the contained shapes asked: 20 same card, 0 different, 0 unsure. The first preview's 40-pair sample found one different card, which is why the PM ruled 1(a). A9 draws a fresh 20 from the `docx-5` store |
 | **ac2** — each limit set from the recorded samples, with the figures in the report, and re-measured after (1) | PASS | From the first preview (parse report, "The first preview's samples"): `MIN_CUT_SHARE` 0.25 → 0.1 (20/20 kept-apart cuts the same card, 8 under a tenth); `MAX_CONTAINER_CLUSTERS` kept at 8 (6/6, every such cut on four caselists); both ruled by the PM on 2026-10-18 and pinned at their boundaries by test and mutants. Re-measured under the set values (step R6): 514 cuts under the share, all under a tenth; 6 kept out by `MAX_CONTAINER_CLUSTERS`; and the PM's band sample (step R5) 20 of 20 the same card |
 | **ac3** — (4): the sample decides, and the rule follows it, by test | PASS | The first preview's sample: 20 of 31 short bodies nine-tenths inside a body lacking one of their ends, 20 the same card. The rule followed: `test_a_short_body_nine_tenths_inside_a_body_lacking_one_of_its_ends_joins_it` and `test_a_card_lacking_the_end_of_a_short_copy_holds_it_and_is_no_second_witness`, the two tests that pinned the old rule turned round, red against the pre-ruling code |
@@ -157,7 +157,7 @@ operator's first preview, recorded in the parse report.
 
 | Check | Result |
 |---|---|
-| Default suite, `uv run --frozen pytest -n auto -m "not slow and not live" --part K/4`, one command each, on the final tree after the sync onto `77c3a29` | `2184 passed` (67 s); `2199 passed, 1 xfailed` (66 s); `1 failed, 2195 passed, 2 warnings` (56 s); `2186 passed, 1 xfailed, 1 warning` (62 s): 8,764 passed, 2 xfailed (t12's). **The one failure is `dev`'s, not this task's**: `tests/evals/parser/test_parser_eval.py::test_the_labeled_pr_subset_holds_the_baseline`, "no baseline is established for the pr-subset tier", which skipped before the sync. It fails the same way on an archive of `origin/dev` itself, and this branch changes nothing under `tests/evals`, the parser or `scripts/run_parser_eval.py`. Writing the baseline needs a coach-reviewed report, so it is left for the PM |
+| Default suite, `uv run --frozen pytest -n auto -m "not slow and not live" --part K/4`, one command each, on the final tree after the sync onto `8d1070c` | `2184 passed` (67 s); `2199 passed, 1 xfailed` (66 s); `1 failed, 2195 passed, 2 warnings` (56 s); `2186 passed, 1 xfailed, 1 warning` (62 s): 8,764 passed, 2 xfailed (t12's). **The one failure is `dev`'s, not this task's**: `tests/evals/parser/test_parser_eval.py::test_the_labeled_pr_subset_holds_the_baseline`, "no baseline is established for the pr-subset tier", which skipped before the sync. It fails the same way on an archive of `origin/dev` itself, and this branch changes nothing under `tests/evals`, the parser or `scripts/run_parser_eval.py`. Writing the baseline needs a coach-reviewed report, so it is left for the PM |
 | `uv run --frozen ruff check .`; `ruff format --check .` | `All checks passed!`; `828 files already formatted` |
 | `uv run --frozen pyright` (after the last format) | `0 errors, 0 warnings, 0 informations` |
 | `uv run --frozen lint-imports` | `Contracts: 12 kept, 0 broken.` |
@@ -295,7 +295,7 @@ changed module's `__file__` to confirm it was the one imported.
 
 | What | Against | Red |
 |---|---|---|
-| The 13 tests of the ruling (`f80a636`, committed red) | v3 | `14 failed, 4 passed`: t11's false join `[[A, B, C]]` in all six orders; the two-passage witness `[[0, 1, 2, 3]]`; three long-cut joins `[[0], [1]]`; two copies' passages `[[0, 1, 2, 3]]`; the copies' chain not sharing text throughout; the own-cluster cases `[[0, 1, 2]]` twice |
+| The 13 tests of the ruling (`e6f1b69`, committed red) | v3 | `14 failed, 4 passed`: t11's false join `[[A, B, C]]` in all six orders; the two-passage witness `[[0, 1, 2, 3]]`; three long-cut joins `[[0], [1]]`; two copies' passages `[[0, 1, 2, 3]]`; the copies' chain not sharing text throughout; the own-cluster cases `[[0, 1, 2]]` twice |
 | The four that passed on v3 | | Two boundaries kept on purpose (a body holding one passage is its card; a copy that does not hold the cut does not block it), the lacking-an-end rule pinned, and the container count, which v3's banding satisfies for another reason. Mutants are their evidence |
 | The version literal | v3 | `'card-fingerprint-v3' == 'card-fingerprint-v4'`, twice |
 | A long cut lacking an end joins | v3, and the commit before it | `[[0], [1]]` on both |
@@ -306,7 +306,7 @@ changed module's `__file__` to confirm it was the one imported.
 | The guardrail and the passage mechanism test (after the PM's ruling) | t08's code, `git archive d730de0` | `4 failed, 11 passed`: the pinned losses on the short-card and extended sets, and both k1 trims. The amended targets and the other cards' recall pass there, as they should: t08 found those pairs |
 | The container rule for a long body lacking an end | v3; and a mutant | On v3 the control fails first (`[[0], [1]] == [[0, 1]]`: v3 never pairs them). The rule itself is shown by the mutant exempting such a cut from the passage check: this test alone fails |
 | The stock-phrase count | the code before it | `ImportError` for `pairs_sharing_few_runs`, and `KeyError: 'pairs_sharing_only_few_runs'` from `shapes` |
-| The PM's rulings on the first preview: every new and changed test | the code before them (`22a474f`, `git archive` to the scratchpad), the new names added as inert stand-ins so the files collect | `27 failed, 225 passed`. Behaviour: the share boundaries at a tenth (four tests), the chain at the overlap line, lacking an end held (three), the neither-end outcome (two), the later-round refusal at the new share, the first-by-fingerprint flag, the share bands, the witness refusals, the divided part named, the few-run overlap count (two), `--joined-in-band` (two), the renamed slug (three), the exact-dict tests' new fields (two). Three fail for the archive's own reason: `--before-rules HEAD` needs a git repository, which an archive is not |
+| The PM's rulings on the first preview: every new and changed test | the code before them (`227adc6`, `git archive` to the scratchpad), the new names added as inert stand-ins so the files collect | `27 failed, 225 passed`. Behaviour: the share boundaries at a tenth (four tests), the chain at the overlap line, lacking an end held (three), the neither-end outcome (two), the later-round refusal at the new share, the first-by-fingerprint flag, the share bands, the witness refusals, the divided part named, the few-run overlap count (two), `--joined-in-band` (two), the renamed slug (three), the exact-dict tests' new fields (two). Three fail for the archive's own reason: `--before-rules HEAD` needs a git repository, which an archive is not |
 | The three tests added after the mutants were planned | the same | the overlap line: `AttributeError`, no `overlap`; the one-run passages: `[[0, 2], [1], [3]] == [[0], [1, 3], [2]]` (the body witnesses the first passage); the shared opening passes there, as a guard of behaviour the change had to keep, and its mutant is its evidence |
 
 ## Mutation runs
@@ -354,12 +354,12 @@ test can tell them apart. Ratios are kept so the three modules read one expressi
   again (`after-ignored-when-comparing`).
 * **A real defect, found while writing the third of those.** A cluster whose own join was refused
   beside a conflicting joiner still counted as joining, so a cut waiting on it waited forever.
-  Fixed in `cdd6b5e`, with a test that fails on the commit before.
+  Fixed in `8bcb011`, with a test that fails on the commit before.
 * **Two mutants were first written so that they crashed** (an unpacking error, a missing key) and
   were rewritten as behaviour changes before being counted.
 * **One branch deleted.** The handling of two clusters that would each join the other was never
   taken: the copies' step already joins two bodies that each hold the other, and I could build no
-  such pair. Without it the two would wait for each other and join neither (`aa8a7df`).
+  such pair. Without it the two would wait for each other and join neither (`1fd2e4e`).
 * **Two batches were cut by the alarm** under loads of 46 and 72 from other sessions, each leaving
   one file mutated. Each time the diff was checked to be the mutant alone and the file restored.
   The interrupted mutants were run again.

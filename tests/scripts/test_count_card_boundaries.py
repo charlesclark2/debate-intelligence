@@ -320,6 +320,17 @@ def test_the_candidates_file_must_be_outside_the_repository(data_dir: Path) -> N
         inside.unlink(missing_ok=True)
 
 
+def test_the_candidates_file_must_be_outside_the_data_directory(data_dir: Path) -> None:
+    inside = data_dir / "card-boundaries.jsonl"
+    with pytest.raises(SystemExit, match="outside the data directory"):
+        script.main(["--data-dir", str(data_dir), "--caselist", CASELIST, "--save-candidates", str(inside)])
+    assert not inside.exists()
+
+
+def test_the_candidates_are_kept_in_the_home_directory_by_default() -> None:
+    assert Path.home() / "t22-card-boundary-candidates.jsonl" == script.CANDIDATES
+
+
 def test_a_store_of_another_parser_version_is_refused_by_name(data_dir: Path) -> None:
     with pytest.raises(
         SystemExit, match=f"newest version directory is {DOCX_PARSER_VERSION}, not 2099.01.01-docx-9"

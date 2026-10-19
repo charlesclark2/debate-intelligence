@@ -16,13 +16,15 @@ Two counts per caselist, read from the store's newest version directory:
 
 **Read-only, and nothing but counts leaves it.** It reads the parsed store and the blobs in place
 and writes nothing to the data directory. Its output on stdout is counts and the names of rules:
-no card text, tag, cite, heading, file name, path or digest. `--save-candidates FILE` also writes,
-outside the repository, the store positions of what was counted (source digests and paragraph
-indices, no text), so that a sample can draw from them without counting again. Progress goes to
-stderr.
+no card text, tag, cite, heading, file name, path or digest. `--save-candidates FILE` also writes
+the store positions of what was counted (source digests and paragraph indices, no text), so that
+`scripts/sample_card_boundaries.py` can draw from them without counting again. The file goes
+neither in the repository nor in the data directory, which belongs to the store tooling (the PM,
+2026-10-19): `~/t22-card-boundary-candidates.jsonl` (:data:`CANDIDATES`), where the sample looks for
+it. Progress goes to stderr.
 
     uv run python scripts/count_card_boundaries.py --expect-version 2026.10.18-docx-5 \\
-        --save-candidates ~/.debate-research/dev/card-boundaries-t22.jsonl > ~/t22-card-boundary-counts.json
+        --save-candidates ~/t22-card-boundary-candidates.jsonl > ~/t22-card-boundary-counts.json
 """
 
 from __future__ import annotations
@@ -59,11 +61,24 @@ from debate_core.evidence.near_duplicates import CutIndex
 from debate_core.integrations.docx_parser import DebateDocxParser
 from debate_core.integrations.local.fs_blob_store import BLOB_DIRECTORY
 
-__all__ = ["CASELISTS", "StoredCard", "count_caselist", "main", "stored_cards", "version_directory"]
+__all__ = [
+    "CANDIDATES",
+    "CASELISTS",
+    "StoredCard",
+    "count_caselist",
+    "main",
+    "outside_the_repository_and_the_store",
+    "stored_cards",
+    "version_directory",
+]
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 CASELISTS = ("hsld26", "hspf26", "hspolicy26", "openev")
+
+CANDIDATES_SHOWN = "~/t22-card-boundary-candidates.jsonl"
+CANDIDATES = Path(CANDIDATES_SHOWN).expanduser()
+"""Where the operator keeps the positions counted, and where the sample reads them from."""
 
 type CardKey = tuple[str, int]
 """A card position: its source's SHA-256 and its first element index."""
@@ -342,10 +357,14 @@ def _progress(message: str) -> None:
     print(message, file=sys.stderr, flush=True)
 
 
-def _outside_the_repository(path: Path) -> Path:
+def outside_the_repository_and_the_store(path: Path, data_dir: Path, option: str) -> Path:
+    """`path`, refused inside the repository (what it holds is the operator's) or inside the data
+    directory (which belongs to the store tooling)."""
     resolved = path.expanduser().resolve()
     if resolved.is_relative_to(REPO_ROOT):
-        raise SystemExit("--save-candidates must be outside the repository: what it names is the operator's")
+        raise SystemExit(f"{option} must be outside the repository: what it holds is the operator's")
+    if resolved.is_relative_to(data_dir.expanduser().resolve()):
+        raise SystemExit(f"{option} must be outside the data directory, which belongs to the store tooling")
     return resolved
 
 
@@ -367,7 +386,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--save-candidates",
         type=Path,
-        help="Also write the positions counted (digests, indices) to this file, outside the repository.",
+        help=f"Also write the positions counted (digests, indices) here, e.g. {CANDIDATES_SHOWN}.",
     )
     parser.add_argument(
         "--workers",
@@ -376,7 +395,13 @@ def main(argv: Sequence[str] | None = None) -> int:
         help="Processes for reading and parsing. Default: all processors but two.",
     )
     arguments = parser.parse_args(argv)
-    saved = _outside_the_repository(arguments.save_candidates) if arguments.save_candidates else None
+    saved = (
+        outside_the_repository_and_the_store(
+            arguments.save_candidates, arguments.data_dir, "--save-candidates"
+        )
+        if arguments.save_candidates
+        else None
+    )
 
     started = time.monotonic()
     results: dict[str, Any] = {}

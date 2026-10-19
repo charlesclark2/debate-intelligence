@@ -139,7 +139,7 @@ from debate_core.application.caselist.later_manifests import LaterManifests
 from debate_core.application.caselist.openev_import_service import OpenEvImportService
 from debate_core.application.caselist.parse_workers import ProcessPoolParseRunner
 from debate_core.application.caselist.parsed_publish import ParsedStorePublisher
-from debate_core.application.caselist.publish_service import CaselistPublishService
+from debate_core.application.caselist.publish_service import CaselistPublishService, withheld_manifest_reason
 from debate_core.application.caselist.removal_plan import RemovalPlanner
 from debate_core.application.caselist.removal_service import (
     CaselistRemovalService,
@@ -725,8 +725,10 @@ class ServiceContainer:
                 remote=str(storage.s3.bucket),
             ),
             remote_name=str(storage.s3.bucket),
-            # A push leaves out the bytes `caselist publish` does not upload (v1-e30-t22).
+            # A push leaves out the bytes `caselist publish` does not upload (v1-e30-t22), and the
+            # manifests it withholds (v1-e30-t25).
             held_back=functools.partial(held_back_digests, self._local_evidence()),
+            withheld_manifests=functools.partial(withheld_manifest_reason, self._local_evidence()),
         )
 
     def caselist_publish(self) -> CaselistPublishService:

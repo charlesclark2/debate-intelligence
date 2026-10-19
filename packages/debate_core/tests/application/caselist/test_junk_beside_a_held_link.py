@@ -34,6 +34,7 @@ from tests.fixtures.caselist.build_revised_path_archives import (
     REVISED_PATH,
 )
 
+from debate_core.application.caselist.import_service import ImportReport
 from debate_core.application.caselist.inbox_purge import InboxAction
 from debate_core.application.caselist.publish_service import ManifestOutcome
 from debate_core.application.caselist.removal_plan import SourceSelector
@@ -111,16 +112,12 @@ def a_link_and_its_junk(tmp_path: Path, *, at: str = REVISED_PATH, week: date = 
     return write_archive(arriving(tmp_path, week), links=(at,), junk=(apple_double_of(at),))
 
 
-def skipped_of(report: object) -> dict[str, int]:
-    return {str(reason): count for reason, count in report.skipped.items()}  # type: ignore[attr-defined]
+def skipped_of(report: ImportReport) -> dict[str, int]:
+    return {str(reason): count for reason, count in report.skipped.items()}
 
 
-def withheld_of(report: object, path: str) -> list[bool]:
-    return [
-        entry.withheld
-        for entry in report.entries  # type: ignore[attr-defined]
-        if entry.is_skipped and entry.path == path
-    ]
+def withheld_of(report: ImportReport, path: str) -> list[bool]:
+    return [entry.withheld for entry in report.entries if entry.is_skipped and entry.path == path]
 
 
 # ------------------------------------------------------------------------------------------------
@@ -137,7 +134,9 @@ async def test_junk_beside_a_link_at_the_held_path_imports_with_no_row_at_either
 
     report = await import_archive(world, a_link_and_its_junk(tmp_path), WEEK_OF_THE_LINK)
 
-    assert rows_at(world, LINK_WEEK_MANIFEST, JUNK_OF_THE_HELD_PATH) == [], "the junk's row names the held path"
+    assert rows_at(world, LINK_WEEK_MANIFEST, JUNK_OF_THE_HELD_PATH) == [], (
+        "the junk's row names the held path"
+    )
     assert rows_at(world, LINK_WEEK_MANIFEST, REVISED_PATH) == []
     assert rows_at(world, LINK_WEEK_MANIFEST, KEPT_PATH), "the rest of the archive keeps its rows"
     assert skipped_of(report) == {"SYMLINK": 1, "MACOS_METADATA": 1}
@@ -152,9 +151,9 @@ async def test_junk_beside_a_link_at_a_path_nothing_holds_keeps_its_row(
 
     await import_archive(world, a_link_and_its_junk(tmp_path, at=ONE_WEEK_PATH), WEEK_OF_THE_LINK)
 
-    assert [row["skip_reason"] for row in rows_at(world, LINK_WEEK_MANIFEST, JUNK_OF_A_PATH_NOTHING_HOLDS)] == [
-        "MACOS_METADATA"
-    ]
+    assert [
+        row["skip_reason"] for row in rows_at(world, LINK_WEEK_MANIFEST, JUNK_OF_A_PATH_NOTHING_HOLDS)
+    ] == ["MACOS_METADATA"]
     assert [row["skip_reason"] for row in rows_at(world, LINK_WEEK_MANIFEST, ONE_WEEK_PATH)] == ["SYMLINK"]
 
 
@@ -292,7 +291,10 @@ async def test_an_earlier_builds_junk_row_beside_a_link_at_a_path_nothing_holds_
 ) -> None:
     await remove_the_named_file(world)
     await import_archive(
-        world, a_link_and_its_junk(tmp_path, at=ONE_WEEK_PATH), WEEK_OF_THE_LINK, importer=an_older_builds_importer(world)
+        world,
+        a_link_and_its_junk(tmp_path, at=ONE_WEEK_PATH),
+        WEEK_OF_THE_LINK,
+        importer=an_older_builds_importer(world),
     )
 
     report = await status_service(world).status(CASELIST, "2026-10-11")
@@ -301,5 +303,7 @@ async def test_an_earlier_builds_junk_row_beside_a_link_at_a_path_nothing_holds_
     publisher = an_older_builds_publisher(world)
     assert (await publisher.execute(await publisher.plan(CASELIST, "2026-10-11"))).succeeded
     assert (
-        await this_builds_publisher(world).execute(await this_builds_publisher(world).plan(CASELIST, "2026-10-11"))
+        await this_builds_publisher(world).execute(
+            await this_builds_publisher(world).plan(CASELIST, "2026-10-11")
+        )
     ).succeeded

@@ -39,6 +39,7 @@ from tests.fixtures.caselist.build_revised_path_archives import (
 )
 
 from debate_core.application.caselist import publish_service
+from debate_core.application.caselist.evidence_listing import LocalEvidence
 from debate_core.application.caselist.publish_service import CaselistPublishService, ManifestOutcome
 from debate_core.application.caselist.suppression import RecordedSuppressionList
 from debate_core.application.evidence_sync import (
@@ -63,7 +64,12 @@ from debate_core.testing.fakes import InMemoryAppendOnlyRecord
 
 from .conftest import REQUEST, RemovalWorld
 from .test_held_path_loose_ends import HELD_WEEK_MANIFEST, an_older_build_imports_next_week
-from .test_held_rows_publish_nothing import LINK_WEEK_MANIFEST, WEEK_OF_THE_LINK, an_older_builds_importer, import_archive
+from .test_held_rows_publish_nothing import (
+    LINK_WEEK_MANIFEST,
+    WEEK_OF_THE_LINK,
+    an_older_builds_importer,
+    import_archive,
+)
 from .test_junk_beside_a_held_link import JUNK_OF_THE_HELD_PATH, write_archive
 from .test_removal_covers_later_uploads import (
     NAMES,
@@ -84,6 +90,7 @@ PUSHED_BESIDE = f"manifests/{CASELIST}/2026-09-22.jsonl"
 ONE_WEEK_MANIFEST = f"manifests/{CASELIST}/2026-09-08.jsonl"
 
 type AskWithheld = Callable[[ObjectInfo, SuppressionState], Awaitable[str | None]]
+type AskTheStore = Callable[[LocalEvidence, ObjectInfo, SuppressionState], Awaitable[str | None]]
 
 
 @pytest.fixture(autouse=True)
@@ -136,7 +143,7 @@ def store_sync(
     `asked` collects every manifest key the push asks the publisher about. On a build without the
     question (the red run), the service is built as that build's composition root builds it.
     """
-    ask: AskWithheld | None = getattr(publish_service, "withheld_manifest_reason", None)
+    ask: AskTheStore | None = getattr(publish_service, "withheld_manifest_reason", None)
     extra: dict[str, AskWithheld] = {}
     if withholding and ask is not None and "withheld_manifests" in signature(EvidenceSyncService).parameters:
         asking = functools.partial(ask, world.local)
@@ -164,7 +171,9 @@ def store_sync(
     )
 
 
-def with_entry(world_entries: tuple[SuppressionEntry, ...], entry: SuppressionEntry) -> RecordedSuppressionList:
+def with_entry(
+    world_entries: tuple[SuppressionEntry, ...], entry: SuppressionEntry
+) -> RecordedSuppressionList:
     """The world's list with one more entry, as a removal made on another machine leaves it: on the
     list, and the manifest on this machine not rewritten."""
     lines = [one.to_line() for one in (*world_entries, entry)]
@@ -226,13 +235,19 @@ async def a_suppressed_file(world: RemovalWorld, tmp_path: Path) -> Withheld:
 async def a_withdrawn_disclosure(world: RemovalWorld, tmp_path: Path) -> Withheld:
     """`one-week-only` withdrawn from `ONE_WEEK_PATH` alone."""
     withdrawn = stops(digest_of("one-week-only"), disclosure_digest(CASELIST, ONE_WEEK_PATH))
-    return Withheld(ONE_WEEK_MANIFEST, with_entry(await world.suppression().entries(), withdrawn), (ONE_WEEK_PATH,))
+    return Withheld(
+        ONE_WEEK_MANIFEST, with_entry(await world.suppression().entries(), withdrawn), (ONE_WEEK_PATH,)
+    )
 
 
 async def a_withdrawn_camp_path(world: RemovalWorld, tmp_path: Path) -> Withheld:
     """A camp release of `later-revision`, published, then withdrawn from its camp path alone."""
     key = await a_camp_releases_the_later_revision(world, tmp_path / "camp")
-    (path,) = [str(row["path"]) for row in manifest_rows(world, key) if row.get("sha256") == digest_of("later-revision")]
+    (path,) = [
+        str(row["path"])
+        for row in manifest_rows(world, key)
+        if row.get("sha256") == digest_of("later-revision")
+    ]
     _, release = caselist_and_snapshot(key)
     withdrawn = stops(digest_of("later-revision"), disclosure_digest(camp_path_scope(release), path))
     return Withheld(key, with_entry(await world.suppression().entries(), withdrawn), (path,))
@@ -248,7 +263,9 @@ async def a_held_row(world: RemovalWorld, tmp_path: Path) -> Withheld:
 async def a_held_link(world: RemovalWorld, tmp_path: Path) -> Withheld:
     """After the removal, an older build imports `2026-10-11` with a symbolic link at the held path."""
     await remove_the_named_file(world)
-    archive = write_archive(tmp_path / "arriving" / f"{CASELIST}-weekly-2026-10-11.zip", links=(REVISED_PATH,))
+    archive = write_archive(
+        tmp_path / "arriving" / f"{CASELIST}-weekly-2026-10-11.zip", links=(REVISED_PATH,)
+    )
     await import_archive(world, archive, WEEK_OF_THE_LINK, importer=an_older_builds_importer(world))
     return Withheld(LINK_WEEK_MANIFEST, world.suppression(), (REVISED_PATH,))
 
@@ -284,7 +301,9 @@ async def withheld(request: pytest.FixtureRequest, world: RemovalWorld, tmp_path
 async def the_publishers_message(world: RemovalWorld, withheld: Withheld) -> str | None:
     """What `caselist publish` says when it withholds the manifest, from its own run."""
     caselist, snapshot = caselist_and_snapshot(withheld.key)
-    publisher = CaselistPublishService(local=world.local, remote=world.bucket, suppression=withheld.suppression)
+    publisher = CaselistPublishService(
+        local=world.local, remote=world.bucket, suppression=withheld.suppression
+    )
     (outcome,) = (await publisher.execute(await publisher.plan(caselist, snapshot))).snapshots
     assert outcome.manifest is ManifestOutcome.WITHHELD, "the precondition: the publisher withholds it"
     return outcome.manifest_error
@@ -313,7 +332,9 @@ async def test_a_push_skips_the_manifest_the_publisher_withholds_with_its_reason
     assert not [word for word in (*NAMES, *withheld.names, ".docx", "__MACOSX") if word in skipped.reason]
 
 
-async def test_a_push_of_a_rewritten_manifest_that_withholds_nothing_still_sends_it(world: RemovalWorld) -> None:
+async def test_a_push_of_a_rewritten_manifest_that_withholds_nothing_still_sends_it(
+    world: RemovalWorld,
+) -> None:
     """The removal rewrote `2026-09-15` here; the bucket's copy is the one from before. Nothing in the
     rewrite withholds it, so the push sends it over the bucket's, as before this task."""
     await remove_the_named_file(world)

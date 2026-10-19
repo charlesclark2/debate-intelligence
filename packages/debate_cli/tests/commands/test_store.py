@@ -390,7 +390,9 @@ class TestSyncPlansByDefault:
                 ]
             ),
         )
-        write_local_object(dev_data_dir, pushed, manifest_of([(KEPT_PATH, other, len(b"the other team's file"))]))
+        write_local_object(
+            dev_data_dir, pushed, manifest_of([(KEPT_PATH, other, len(b"the other team's file"))])
+        )
         hold_the_revised_path(dev_data_dir)
 
         result = invoke("--json", "store", "sync", "--prefix", f"manifests/{HELD_CASELIST}/", "--apply")

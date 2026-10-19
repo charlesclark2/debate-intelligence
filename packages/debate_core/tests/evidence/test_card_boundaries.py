@@ -21,8 +21,10 @@ from debate_core.evidence.card_boundaries import (
     LongBody,
     LongBodyKind,
     bodies_holding_two_cards,
+    ending_of,
     is_cite_shaped,
     is_too_long_to_be_one_card,
+    paragraphs_inside,
     read_long_body,
     rule_family,
     tally_holdings,
@@ -155,48 +157,48 @@ def test_words_are_runs_between_whitespace() -> None:
 # ------------------------------------------------------------------------------------------------
 
 
-def ending_of(*after: str) -> Ending:
+def ending_after(*after: str) -> Ending:
     """The ending of a card of a tag, a cite and a body, with `after` behind it."""
     document = parse(tag("First tag"), cite(), underlined_body(), *after)
     return read_long_body(document, first_card(document), PROFILE).ending
 
 
 def test_a_card_followed_by_another_cards_tag_was_ended_by_it() -> None:
-    assert ending_of(tag("Second tag"), cite(), underlined_body()) is Ending.TAG_IN_A_DEBATE_STYLE
+    assert ending_after(tag("Second tag"), cite(), underlined_body()) is Ending.TAG_IN_A_DEBATE_STYLE
 
 
 def test_a_tag_the_classifier_guessed_from_bold_at_a_tag_size_is_told_apart() -> None:
     bold_line = para("Second tag in bold at a tag size", bold=True, half_points=26)
-    assert ending_of(bold_line, cite(), underlined_body()) is Ending.TAG_GUESSED
+    assert ending_after(bold_line, cite(), underlined_body()) is Ending.TAG_GUESSED
 
 
 def test_a_pocket_hat_or_block_heading_ends_a_card() -> None:
-    assert ending_of(para("A block", style="Heading3")) is Ending.SECTION_HEADING
-    assert ending_of(para("A hat", style="Heading2")) is Ending.SECTION_HEADING
+    assert ending_after(para("A block", style="Heading3")) is Ending.SECTION_HEADING
+    assert ending_after(para("A hat", style="Heading2")) is Ending.SECTION_HEADING
 
 
 def test_an_analytic_and_a_tag_with_nothing_under_it_are_told_apart() -> None:
-    assert ending_of(para("An analytic line of argument", style="Analytic")) is Ending.ANALYTIC
+    assert ending_after(para("An analytic line of argument", style="Analytic")) is Ending.ANALYTIC
     assert (
-        ending_of(tag("A tag with nothing under it"), para("A block", style="Heading3"))
+        ending_after(tag("A tag with nothing under it"), para("A block", style="Heading3"))
         is Ending.TAG_WITH_NOTHING_UNDER_IT
     )
 
 
 def test_a_cite_after_the_body_ends_the_card_and_starts_one_with_no_tag() -> None:
-    assert ending_of(cite("Ferreira 25"), underlined_body()) is Ending.CITE
+    assert ending_after(cite("Ferreira 25"), underlined_body()) is Ending.CITE
 
 
 def test_a_card_at_the_end_of_its_file_was_ended_by_the_end() -> None:
-    assert ending_of() is Ending.END_OF_FILE
+    assert ending_after() is Ending.END_OF_FILE
 
 
 def test_blank_lines_and_lines_read_as_nothing_are_stepped_over() -> None:
     blank_heading = para("", style="Heading4")
-    assert ending_of(blank_heading, short_plain_line(), para("A block", style="Heading3")) is (
+    assert ending_after(blank_heading, short_plain_line(), para("A block", style="Heading3")) is (
         Ending.SECTION_HEADING
     )
-    assert ending_of(short_plain_line()) is Ending.END_OF_FILE
+    assert ending_after(short_plain_line()) is Ending.END_OF_FILE
 
 
 # ------------------------------------------------------------------------------------------------
@@ -295,6 +297,40 @@ def test_a_tag_typed_in_body_style_above_a_cite_the_body_kept_is_a_line_above_a_
     # The line read as nothing is no paragraph of the body; the cite line the body kept is.
     assert body.paragraphs == 3
     assert body.ending is Ending.END_OF_FILE
+
+
+def test_the_line_above_a_cite_is_marked_where_a_tag_would_be_and_the_cite_as_cite_shaped() -> None:
+    document = parse(
+        tag("First tag"),
+        cite(),
+        underlined_body(),
+        para("", half_points=READING_SIZE),
+        short_plain_line(),
+        highlighted_cite_line(),
+        underlined_body(),
+    )
+    inside = paragraphs_inside(document, first_card(document), PROFILE)
+    # The blank line is left out; each paragraph that says something is in, in order.
+    assert [(p.section.match.unit.value, p.cite_shaped, p.where_a_tag_would_be) for p in inside] == [
+        ("TAG", False, False),
+        ("CITE", False, False),
+        ("EVIDENCE", False, False),
+        ("OTHER", False, True),
+        ("EVIDENCE", True, False),
+        ("EVIDENCE", False, False),
+    ]
+
+
+def test_the_paragraph_that_ended_a_card_is_named_with_its_ending() -> None:
+    document = parse(
+        tag("First tag"), cite(), underlined_body(), short_plain_line(), tag("Second tag"), cite()
+    )
+    ending, closer = ending_of(document, first_card(document))
+    assert ending is Ending.TAG_IN_A_DEBATE_STYLE
+    assert closer is not None
+    assert closer.text == "Second tag"
+    last = parse(cite(), plain_prose())
+    assert ending_of(last, only_card(last)) == (Ending.END_OF_FILE, None)
 
 
 def test_a_cite_the_body_kept_straight_after_a_body_paragraph_is_a_cite_inside() -> None:

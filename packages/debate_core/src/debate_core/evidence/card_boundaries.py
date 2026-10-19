@@ -28,7 +28,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Final
 
-from debate_core.domain.debate_files import FileSection, ParsedCard, ParsedDocument
+from debate_core.domain.debate_files import FileSection, FormattingSpan, ParsedCard, ParsedDocument
 from debate_core.domain.style_profile import RunEmphasis, StructuralUnit, StyleMatchSource, StyleProfile
 from debate_core.evidence.near_duplicates import SHORT_BODY_SHINGLES, CutIndex
 from debate_core.evidence.style_classifier import (
@@ -43,11 +43,15 @@ __all__ = [
     "MARKED_UP_SHARE",
     "Ending",
     "Holding",
+    "InsideParagraph",
     "LongBody",
     "LongBodyKind",
     "bodies_holding_two_cards",
+    "ending_of",
     "is_cite_shaped",
     "is_too_long_to_be_one_card",
+    "marked_up_share",
+    "paragraphs_inside",
     "read_long_body",
     "rule_family",
     "tally_holdings",
@@ -216,15 +220,75 @@ def _uses_debate_styles(sections: Sequence[FileSection]) -> bool:
     return False
 
 
-def _marked_up_share(card: ParsedCard) -> float:
-    """The share of the body's characters under an underline, an emphasis or a highlight."""
-    if not card.evidence_text:
+def marked_up_share(text: str, spans: Iterable[FormattingSpan]) -> float:
+    """The share of `text`'s characters under an underline, an emphasis or a highlight."""
+    if not text:
         return 0.0
-    covered = [False] * len(card.evidence_text)
-    for span in card.formatting_spans:
+    covered = [False] * len(text)
+    for span in spans:
         if span.emphasis in _MARKED_UP:
             covered[span.start_offset : span.end_offset] = [True] * (span.end_offset - span.start_offset)
-    return sum(covered) / len(card.evidence_text)
+    return sum(covered) / len(text)
+
+
+@dataclass(frozen=True, slots=True)
+class InsideParagraph:
+    """A paragraph of a card's range that says something, with what the counts see in it."""
+
+    section: FileSection
+    cite_shaped: bool
+    """Read as body or as nothing once the body has begun, and naming a source at its head
+    (:func:`is_cite_shaped`)."""
+    where_a_tag_would_be: bool
+    """A line no longer than a heading, not itself cite-shaped, directly above a cite-shaped one."""
+
+
+def paragraphs_inside(
+    document: ParsedDocument, card: ParsedCard, profile: StyleProfile
+) -> list[InsideParagraph]:
+    """The paragraphs of `card`'s range in `document`, blank lines and page furniture left out.
+
+    `document` must hold its sections, as the parser returns it; the store leaves them out, so the
+    caller parses the source again.
+    """
+    first = card.provenance.first_element_index
+    last = card.provenance.last_element_index
+    found: list[InsideParagraph] = []
+    body_begun = False
+    for section in document.sections:
+        if not first <= section.element_index <= last:
+            continue
+        if section.match.rule_id in _FURNITURE or not section.text.strip():
+            continue
+        unit = section.match.unit
+        cite_shaped = (
+            body_begun
+            and unit in (StructuralUnit.EVIDENCE, StructuralUnit.OTHER)
+            and is_cite_shaped(section.text, profile)
+        )
+        # Once a body has begun, what stands above is body, nothing or an undertag: a tag or a
+        # cite would have closed the card.
+        if (
+            cite_shaped
+            and found
+            and len(found[-1].section.text.strip()) <= MAXIMUM_HEADING_CHARACTERS
+            and not is_cite_shaped(found[-1].section.text, profile)
+        ):
+            found[-1] = InsideParagraph(found[-1].section, found[-1].cite_shaped, where_a_tag_would_be=True)
+        found.append(InsideParagraph(section, cite_shaped, where_a_tag_would_be=False))
+        if unit is StructuralUnit.EVIDENCE:
+            body_begun = True
+    return found
+
+
+def ending_of(document: ParsedDocument, card: ParsedCard) -> tuple[Ending, FileSection | None]:
+    """What closed `card`, and the paragraph that did; None at the end of the file."""
+    after = [
+        section for section in document.sections if section.element_index > card.provenance.last_element_index
+    ]
+    ending = _ending(after)
+    closer = next((section for section in after if section.match.unit is not StructuralUnit.OTHER), None)
+    return ending, closer
 
 
 def read_long_body(document: ParsedDocument, card: ParsedCard, profile: StyleProfile) -> LongBody:
@@ -234,48 +298,22 @@ def read_long_body(document: ParsedDocument, card: ParsedCard, profile: StylePro
     caller parses the source again.
     """
     sections = document.sections
-    first = card.provenance.first_element_index
-    last = card.provenance.last_element_index
-    inside = [section for section in sections if first <= section.element_index <= last]
-    after = [section for section in sections if section.element_index > last]
-
-    cite_shaped_rules: list[str] = []
-    short_lines_above = 0
-    body_begun = False
-    above: FileSection | None = None
-    paragraphs = 0
-    for section in inside:
-        if section.match.rule_id in _FURNITURE or not section.text.strip():
-            continue
-        unit = section.match.unit
-        if unit in (StructuralUnit.EVIDENCE, StructuralUnit.OTHER):
-            if body_begun and is_cite_shaped(section.text, profile):
-                cite_shaped_rules.append(rule_family(section.match.rule_id))
-                # Once a body has begun, what stands above is body, nothing or an undertag: a tag
-                # or a cite would have closed the card.
-                if (
-                    above is not None
-                    and len(above.text.strip()) <= MAXIMUM_HEADING_CHARACTERS
-                    and not is_cite_shaped(above.text, profile)
-                ):
-                    short_lines_above += 1
-            if unit is StructuralUnit.EVIDENCE:
-                body_begun = True
-                paragraphs += 1
-        above = section
-
+    inside = paragraphs_inside(document, card, profile)
+    cite_shaped_rules = [
+        rule_family(paragraph.section.match.rule_id) for paragraph in inside if paragraph.cite_shaped
+    ]
     return LongBody(
         words=word_count(card.evidence_text),
-        ending=_ending(after),
+        ending=ending_of(document, card)[0],
         file_writes_tags=_writes_tags(sections),
         file_uses_debate_styles=_uses_debate_styles(sections),
         has_tag=card.has_tag,
         has_cite=bool(card.full_cite.strip()),
         cards_in_file=len(document.cards),
-        paragraphs=paragraphs,
+        paragraphs=sum(paragraph.section.match.unit is StructuralUnit.EVIDENCE for paragraph in inside),
         cite_shaped_paragraphs=len(cite_shaped_rules),
-        short_lines_above_a_cite=short_lines_above,
-        marked_up_share=_marked_up_share(card),
+        short_lines_above_a_cite=sum(paragraph.where_a_tag_would_be for paragraph in inside),
+        marked_up_share=marked_up_share(card.evidence_text, card.formatting_spans),
         cite_shaped_rules=tuple(cite_shaped_rules),
     )
 

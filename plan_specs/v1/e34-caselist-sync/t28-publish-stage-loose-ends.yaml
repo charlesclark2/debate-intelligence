@@ -1,0 +1,72 @@
+# TASK v1-e34-t28-publish-stage-loose-ends - Publish-stage loose ends: a cut-short report check, the manifest count, and a report-only outcome
+# Epic: E34 Caselist Sync | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e34-t28-publish-stage-loose-ends
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e34-caselist-sync
+  annotations:
+    debate/title: "Publish-stage loose ends: a cut-short report check, the manifest count, and a report-only outcome"
+spec:
+  # Filed by the PM, 2026-10-19, from v1-e34-t26's Follow-up work 1 to 3.
+  description: >-
+    (1) Nothing redoes a report-stage check an expired session cut short: `--publish-pending`
+    could compare the snapshots the newest run published but did not confirm, whose names are in
+    the publish stage's work today and in no file. (2) The publish stage's count leaves out a
+    manifest it uploads: a republish that uploads only the manifest says `0 object(s) uploaded
+    across 1 snapshot(s)`. (3) A report-only pending run's record outcome is still `completed`
+    (t23's Follow-up 2); t26 fixed the banner and left the outcome.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/runbooks]
+    forbidden:
+      - A record shape an earlier build refuses to read
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e34-t26-pending-work-and-banner-words
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        (1) to (3) each by a test shown failing first; the agent's build at the time reads
+        every record this build writes.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e34-t28-publish-stage-loose-ends-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e34-caselist-sync
+spec:
+  description: >-
+    Three publish-stage loose ends.
+  goalRef:
+    name: v1-e34-t28-publish-stage-loose-ends
+  graph:
+    nodes:
+      - id: publish-loose-ends
+        kind: Task
+        name: Publish-stage loose ends
+        description: >-
+          Three publish-stage loose ends.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Sync tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application, -k, caselist_sync or publish]
+status:
+  phase: Pending

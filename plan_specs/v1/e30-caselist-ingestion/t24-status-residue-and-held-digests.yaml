@@ -1,0 +1,108 @@
+# TASK v1-e30-t24-status-residue-and-held-digests - caselist status fails on every removal left unfinished, and reports a held digest the re-run has not listed
+# Epic: E30 Caselist Evidence Ingestion | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e30-t24-status-residue-and-held-digests
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e30-caselist-ingestion
+  annotations:
+    debate/title: "caselist status fails on every removal left unfinished, and reports a held digest the re-run has not listed"
+spec:
+  # Filed by the PM, 2026-10-19, from v1-e30-t19's PM question 1 and its PM review, v1-e30-t23's Follow-up 2, and the PM's reading of the prod status of 2026-10-18.
+  description: >-
+    (1) A copy withdrawn from a caselist that keeps no holder of it, still in the bucket
+    (WITHDRAWN COPIES LEFT, v1-e30-t19), fails `caselist status` as `REMOVAL_RESIDUE`, exit 1,
+    like a removed file's residue: the PM's ruling on t19's question 1, lifting "no exit code
+    changes" for this case only. Withdrawals NOT ATTRIBUTED stay reported and outside the exit
+    code, like NOT CHECKED. (2) Status and the re-run's sweep decide a rewritten manifest's
+    older versions by one shared predicate. Today status counts a noncurrent version other than
+    the rewrite that is older than the run's completion less 15 minutes, while the sweep takes
+    one strictly older than the rewrite, so a version stamped between the two is reported and
+    never cleared (t19's PM review). Widen the sweep to status's rule for completed runs, never
+    the current version or the rewrite; do not narrow status, which cannot read a version's
+    contents. (3) Status reads `held-digests.jsonl` (v1-e30-t23) and names, under
+    `removals_owed`, a held digest the same removal run again has not yet listed, whether or not
+    the archive is still in the inbox. (4) The `CASELIST_DRIFT` error panel prints counts and
+    digest prefixes, not the whole details record (about 1,000 lines of sha256 in prod on
+    2026-10-18); the full record stays in `--json`.
+  priority: 2
+  constraints:
+    packages: [debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, tests/smoke, docs/runbooks]
+    forbidden:
+      - A school, team code, path or file name in status output, a record or a log
+      - Any change to an exit code other than (1)'s
+      - A sweep that takes a current version, the rewrite itself or another request's or environment's key
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e30-t23-held-digests-and-manifest-fsync
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e30-t20-removal-output-loose-ends
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        (1): a withdrawn copy left in a caselist that keeps no holder fails status as
+        `REMOVAL_RESIDUE`, exit 1, by test shown failing first; a withdrawal not attributed
+        does not.
+    - id: ac2
+      description: >-
+        (2): one predicate decides a rewritten manifest's older versions for status and the
+        sweep; by property test over fixture states that include a run carrying on more than
+        15 minutes after its own rewrite and a version in the same second as the rewrite,
+        after the same removal runs again status counts no manifest version.
+    - id: ac3
+      description: >-
+        (3): a held digest the re-run has not listed is named under `removals_owed`, with
+        the archive in the inbox and after it has gone, by test shown failing first; once
+        listed it is not.
+    - id: ac4
+      description: >-
+        (4): the `CASELIST_DRIFT` panel prints no full sha256 and no more than one line per
+        differing snapshot; `--json` keeps every field, by test.
+    - id: ac5
+      description: >-
+        An earlier build (the agent's at the time) reads every file this build writes, by
+        the cross-build check.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e30-t24-status-residue-and-held-digests-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e30-caselist-ingestion
+spec:
+  description: >-
+    Withdrawn-copy residue in the exit code, one predicate for status and the sweep, held
+    digests in status, and a short drift panel.
+  goalRef:
+    name: v1-e30-t24-status-residue-and-held-digests
+  graph:
+    nodes:
+      - id: status-residue
+        kind: Task
+        name: Status residue and held digests
+        description: >-
+          Withdrawn-copy residue in the exit code, one predicate for status and the sweep,
+          held digests in status, and a short drift panel.
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Status and removal tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application, -k, status or residue or removal]
+status:
+  phase: Pending

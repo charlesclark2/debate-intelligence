@@ -207,5 +207,24 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e33-t05-file-publish
+    - id: t06
+      kind: Task
+      name: 'A recipe can name a camp (OpenEv) card'
+      description: >-
+        A recipe can name a camp (OpenEv) card.
+      inputs:
+        specRef: plan_specs/v1/e33-file-builder/t06-camp-pins.yaml
+        goalRef: v1-e33-t06-camp-pins
+      dependsOn:
+      - t01
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e33-t06-camp-pins reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e33-t06-camp-pins
 status:
   phase: Pending

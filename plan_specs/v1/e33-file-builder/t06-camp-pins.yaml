@@ -1,0 +1,73 @@
+# TASK v1-e33-t06-camp-pins - A recipe can name a camp (OpenEv) card
+# Epic: E33 Evidence File Builder | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e33-t06-camp-pins
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e33-file-builder
+  annotations:
+    debate/title: "A recipe can name a camp (OpenEv) card"
+spec:
+  # Filed by the PM, 2026-10-19, from v1-e33-t01's PM question 3.
+  description: >-
+    Recipe schema version 1 refuses a pin to the `openev` store, and AUTO reads only the
+    recipe's caselist, though the data-use policy's attribution rules cover camp cards in built
+    files. Let a pin name `openev` with a release snapshot, additively within schema version 1,
+    resolved against the openev occurrence rows, with the same suppression rule as every other
+    occurrence (v1-e33-t01's ac6).
+  priority: 3
+  constraints:
+    packages: [debate_core.domain, debate_core.application, packages/debate_core/tests, docs/guides, docs/data]
+    forbidden:
+      - A change that makes a valid schema-version-1 recipe invalid
+      - Real camp file names, schools or team codes in fixtures
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e33-t01-file-recipe-format
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A pin naming `openev` and a release resolves, AUTO never picks a suppressed camp
+        occurrence, and the schema and guide say so, by tests shown failing first; every
+        existing example still loads.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e33-t06-camp-pins-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e33-file-builder
+spec:
+  description: >-
+    Camp pins in recipe schema version 1.
+  goalRef:
+    name: v1-e33-t06-camp-pins
+  graph:
+    nodes:
+      - id: camp-pins
+        kind: Task
+        name: Camp pins
+        description: >-
+          Camp pins in recipe schema version 1.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Recipe tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_file_recipes.py]
+status:
+  phase: Pending

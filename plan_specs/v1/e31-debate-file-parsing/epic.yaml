@@ -572,6 +572,7 @@ spec:
         goalRef: v1-e31-t23-in-round-markers
       dependsOn:
       - t12
+      - t20
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e31-t23-in-round-markers reports phase Succeeded
@@ -581,5 +582,118 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e31-t23-in-round-markers
+    - id: t24
+      kind: Task
+      name: 'A bold tag above a bracketed cite is read as the card''s tag'
+      description: >-
+        A bold tag above a bracketed cite is read as the card's tag.
+      inputs:
+        specRef: plan_specs/v1/e31-debate-file-parsing/t24-bold-tag-above-bracketed-cite.yaml
+        goalRef: v1-e31-t24-bold-tag-above-bracketed-cite
+      dependsOn:
+      - t19
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e31-t24-bold-tag-above-bracketed-cite reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e31-t24-bold-tag-above-bracketed-cite
+    - id: t25
+      kind: Task
+      name: 'The labeller warns before a card is lost, and import refuses a file already corrected'
+      description: >-
+        The labeller warns before a card is lost, and import refuses a file already
+        corrected.
+      inputs:
+        specRef: plan_specs/v1/e31-debate-file-parsing/t25-labeller-safeguards.yaml
+        goalRef: v1-e31-t25-labeller-safeguards
+      dependsOn:
+      - t18
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e31-t25-labeller-safeguards reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e31-t25-labeller-safeguards
+    - id: t26
+      kind: Task
+      name: 'parse --publish sends nothing of a held upload'
+      description: >-
+        parse --publish sends nothing of a held upload.
+      inputs:
+        specRef: plan_specs/v1/e31-debate-file-parsing/t26-held-upload-parsed-publish.yaml
+        goalRef: v1-e31-t26-held-upload-parsed-publish
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e31-t26-held-upload-parsed-publish reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e31-t26-held-upload-parsed-publish
+    - id: t27
+      kind: Task
+      name: 'The parse time-limit test does not depend on the machine''s load'
+      description: >-
+        The parse time-limit test does not depend on the machine's load.
+      inputs:
+        specRef: plan_specs/v1/e31-debate-file-parsing/t27-parse-time-limit-test.yaml
+        goalRef: v1-e31-t27-parse-time-limit-test
+      dependsOn:
+      - t17
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e31-t27-parse-time-limit-test reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e31-t27-parse-time-limit-test
+    - id: t28
+      kind: Task
+      name: 'What the cautious cite rules leave, and a short cite behind a first name'
+      description: >-
+        What the cautious cite rules leave, and a short cite behind a first name.
+      inputs:
+        specRef: plan_specs/v1/e31-debate-file-parsing/t28-cite-rules-leftovers.yaml
+        goalRef: v1-e31-t28-cite-rules-leftovers
+      dependsOn:
+      - t19
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e31-t28-cite-rules-leftovers reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e31-t28-cite-rules-leftovers
+    - id: t29
+      kind: Task
+      name: 'Card matching recovers two kinds of pair it now keeps apart'
+      description: >-
+        Card matching recovers two kinds of pair it now keeps apart.
+      inputs:
+        specRef: plan_specs/v1/e31-debate-file-parsing/t29-card-matching-recall.yaml
+        goalRef: v1-e31-t29-card-matching-recall
+      dependsOn:
+      - t20
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e31-t29-card-matching-recall reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e31-t29-card-matching-recall
 status:
   phase: Pending

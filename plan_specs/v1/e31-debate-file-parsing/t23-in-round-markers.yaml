@@ -25,6 +25,13 @@ spec:
     by offsets into the snapshot), so the choice is between recording it as a marker beside the
     evidence and leaving it, and whether fingerprints ignore it. Counts first; the PM rules
     before any rule changes.
+    (PM amendment 2026-10-19, from v1-e31-t19's item (5) and the PM's ruling on it.) The same
+    task rules on the short plain lines inside a body that the parser reads as nothing: 43,488
+    sit between two body paragraphs of one card, in 15,796 cards (v1-e31-t19's counts in
+    docs/data/caselist-parse-report.md). Option B, reading every such line as body, decides the
+    marker question by default, so the two are ruled together: which lines are markers, which
+    are body, and whether fingerprints ignore markers. It starts after v1-e31-t20 merges,
+    because both change fingerprints.
   priority: 3
   constraints:
     packages: [debate_core.evidence, debate_core.integrations.docx_parser, packages/debate_core/tests, scripts, tests/fixtures/debate_files, docs/data]
@@ -35,6 +42,9 @@ spec:
   context:
     - kind: TaskRef
       name: v1-e31-t12-cite-detection
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e31-t20-long-cuts-and-limits
       relation: dependsOn
   acceptanceCriteria:
     - id: ac1
@@ -49,6 +59,12 @@ spec:
       description: >-
         If the parser or the fingerprint changes, its version is bumped and the operator's
         re-parse records the counts before and after in docs/data/caselist-parse-report.md.
+    - id: ac4
+      description: >-
+        (PM amendment 2026-10-19) The ruling on the short plain lines between body
+        paragraphs is written into this spec beside the marker ruling, and what it asks is
+        built with synthetic fixtures shown failing first; the labelled evaluation's
+        evidence precision does not fall.
 status:
   phase: Pending
 ---

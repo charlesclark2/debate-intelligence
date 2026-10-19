@@ -1,0 +1,82 @@
+# TASK v1-e30-t26-cmir-extension-and-directory-fsync - A .cmir file is imported as CMIR, and every rename-into-place writer fsyncs its directory
+# Epic: E30 Caselist Evidence Ingestion | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e30-t26-cmir-extension-and-directory-fsync
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e30-caselist-ingestion
+  annotations:
+    debate/title: "A .cmir file is imported as CMIR, and every rename-into-place writer fsyncs its directory"
+spec:
+  # Filed by the PM, 2026-10-19, from v1-e31-t15's PM question 4 and v1-e30-t23's Follow-up 1.
+  description: >-
+    (1) The importer maps a `.cmir` file name to `SourceFormat.CMIR` (v1-e31-t15), so it is
+    counted as unsupported under its own format from the manifest on. Start only once the
+    installed agent runs a build that knows `CMIR`: an earlier build reading a manifest with
+    `CMIR` refuses it. (2) Three writers fsync a file and rename it into place without fsyncing
+    the directory, so the rename can be lost to a power cut: `caselist/inbox_purge.py`'s inbox
+    rewrite, `integrations/opencaselist/token_store.py`'s `write`, and
+    `integrations/models/_recorded_files.py`'s `write_pretty_json` (which fsyncs nothing). Give
+    each the order v1-e30-t23 gave the manifest writer: file fsync, rename, directory fsync, and
+    raise a failed directory fsync.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, debate_core.integrations, debate_core.domain, packages/debate_core/tests]
+    forbidden:
+      - A manifest value the installed agent's build refuses
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e30-t23-held-digests-and-manifest-fsync
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e31-t15-zip-guard-and-exporter-quirks
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        (1): a `.cmir` file in an archive is recorded as `CMIR` and counted unsupported, by
+        test shown failing first; the report names the agent build that reads it.
+    - id: ac2
+      description: >-
+        (2): each of the three writers fsyncs the file, renames, then fsyncs the directory,
+        and a failed directory fsync raises, by recording test.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e30-t26-cmir-extension-and-directory-fsync-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e30-caselist-ingestion
+spec:
+  description: >-
+    Map the .cmir extension, and give three writers the directory fsync.
+  goalRef:
+    name: v1-e30-t26-cmir-extension-and-directory-fsync
+  graph:
+    nodes:
+      - id: cmir-and-fsync
+        kind: Task
+        name: CMIR extension and directory fsync
+        description: >-
+          Map the .cmir extension, and give three writers the directory fsync.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Import and writer tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, cmir or fsync or inbox_purge or token_store]
+status:
+  phase: Pending

@@ -731,5 +731,25 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e34-t27-wrapper-and-check-launchd-options
+    - id: t28
+      kind: Task
+      name: 'Publish-stage loose ends: a cut-short report check, the manifest count, and a report-only outcome'
+      description: >-
+        Publish-stage loose ends: a cut-short report check, the manifest count, and a
+        report-only outcome.
+      inputs:
+        specRef: plan_specs/v1/e34-caselist-sync/t28-publish-stage-loose-ends.yaml
+        goalRef: v1-e34-t28-publish-stage-loose-ends
+      dependsOn:
+      - t26
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e34-t28-publish-stage-loose-ends reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e34-t28-publish-stage-loose-ends
 status:
   phase: Pending

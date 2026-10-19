@@ -1,0 +1,82 @@
+# TASK v1-e30-t25-store-sync-withholding - store sync pushes no manifest the publisher withholds, and junk beside a held link does not keep its row
+# Epic: E30 Caselist Evidence Ingestion | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e30-t25-store-sync-withholding
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e30-caselist-ingestion
+  annotations:
+    debate/title: "store sync pushes no manifest the publisher withholds, and junk beside a held link does not keep its row"
+spec:
+  # Filed by the PM, 2026-10-19, from v1-e30-t22's PM question 2 and Follow-up 3.
+  description: >-
+    (1) `store sync` pushes every local manifest, including one the publisher withholds for a
+    suppressed row (v1-e30-t07), a held row (v1-e30-t21) or a held skipped row (v1-e30-t23):
+    only `_suppression/` records and suppressed blobs are skipped today. Ask the publisher's own
+    `SnapshotPlan.withholding_rows` for every key under `manifests/`, as `caselist status` does
+    (v1-e30-t19), so a withheld manifest is skipped with its reason and never pushed. (2) Junk
+    shadowing a held link: a `__MACOSX/<dir>/._<name>` member beside a link at a held path names
+    the same file and keeps its row. Both held-path rules, the importer's and the inbox
+    rewrite's, treat such junk as the link itself.
+  priority: 2
+  constraints:
+    packages: [debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/guides]
+    forbidden:
+      - Restating the publisher's withholding rule outside the publisher
+      - A path, school, team code or file name in a record or a log
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e30-t23-held-digests-and-manifest-fsync
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        (1): a push skips each manifest the publisher withholds, for each of the four row
+        kinds, with its reason in the summary, and pushes the rest, by test shown failing
+        first; the guide's `skipped` row names the reason.
+    - id: ac2
+      description: >-
+        (2): an archive with `__MACOSX` junk beside a link at a held path imports with no
+        row at that path, and the inbox rewrite agrees, by test shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e30-t25-store-sync-withholding-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e30-caselist-ingestion
+spec:
+  description: >-
+    Store sync asks the publisher's withholding rule, and junk beside a held link is held with
+    it.
+  goalRef:
+    name: v1-e30-t25-store-sync-withholding
+  graph:
+    nodes:
+      - id: sync-withholding
+        kind: Task
+        name: Store sync withholding
+        description: >-
+          Store sync asks the publisher's withholding rule, and junk beside a held link is
+          held with it.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Sync and import tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application, -k, store or sync or held]
+status:
+  phase: Pending

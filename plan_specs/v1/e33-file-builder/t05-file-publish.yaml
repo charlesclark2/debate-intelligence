@@ -32,6 +32,10 @@ spec:
     access audit and executing takedowns are v1-e30-t07 and E35 (this task only makes files findable
     by source); bucket, encryption and IAM are E29 t03; building and checking
     are t03/t04.
+    (PM amendment 2026-10-19, from v1-e33-t01's PM question 2.) The published `recipe.yaml`
+    carries no pin's `school`, `team_code`, `tournament` or `round`: those are removed before
+    upload, and the provenance sidecar carries the attribution. `source_sha256` and
+    `element_index` still identify each occurrence.
   priority: 2
   constraints:
     packages: [debate_core.application, debate_core.domain, debate_cli, docs/data, tests/smoke]
@@ -78,6 +82,10 @@ spec:
         Given a source sha256, school or team code, a lookup over published metadata.json objects returns
         exactly the built files containing cards from that source (tested with moto), and every source in
         a file's provenance sidecar appears in its metadata sources[].
+    - id: ac7
+      description: >-
+        (PM amendment 2026-10-19) The uploaded recipe holds no school, team code, tournament
+        or round in any pin, and still resolves to the same occurrences, by test.
 status:
   phase: Pending
 ---

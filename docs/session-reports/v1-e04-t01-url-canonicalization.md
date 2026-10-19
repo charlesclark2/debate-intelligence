@@ -435,9 +435,48 @@ No open questions.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-19
 
 **Notes:**
+
+Accepted, with the phase `Succeeded`.
+
+**The work itself:**
+
+* **The red run against a refuse-nothing skeleton,** and the honest reading of it: idempotence alone
+  cannot tell a no-op from a canonicalizer. The hand-written 63-pair table carries ac1, and the
+  property only guards it.
+* **65 of 65 mutants caught,** with each property's catches listed. Six equivalent checks were
+  removed, not tested. The flaky "dot-dot pops the root" catch was given its own row rather than
+  credited to the property.
+* **The Public Suffix List is vendored with a hash file,** refreshed by one documented command that
+  was run as written, and both pin mutations fail the pin test. The algorithm is checked against the
+  list project's own 77 vectors. The private section is used, so two github.io users are two sites.
+* **`idna` with UTS #46, nontransitional,** because the standard library's IDNA 2003 maps `faß.de`
+  to another registered domain. The floor is set past the CVE.
+* **Same site is judged on the host that served the HTML,** so a link wrapper cannot vouch for a
+  publisher, and an AMP cache can only for the origin its URL names. Catching `urljoin`'s RFC 1808
+  behaviour by test was a good find.
+* **Ruling 1 is done and proven:** the placement mutated four ways, and each forbidden-list entry
+  fails exactly its row when removed.
+
+**Rulings:**
+
+* **Deviation 1:** accepted. `pyproject.toml` is in the amended packages. The contract test file,
+  `packages/debate_core/pyproject.toml` and `uv.lock` are what rulings 1 and the notes asked for.
+* **Deviation 2:** accepted, as amended.
+* **Decisions:** all accepted. Keeping `http`, `www.`, trailing slashes, userinfo and unknown
+  parameters as published is the right default, because each can name a different resource.
+
+**For `v1-e04-t05`, added to its spec in the next PM batch:**
+
+* **A site-root rel=canonical** is refused when the fetched path is not `/` (your follow-up).
+* **The canonical form is an identity key, not a fetch target.** The `amp.` to `www.` host rewrite
+  is a guess that a page's rel=canonical corrects after the fetch. t05 fetches the URL as given (or
+  a wrapper's literal destination), never a host the canonicalizer guessed, and stores both.
+
+**More link wrappers:** added when they appear in real use, each with its test, as you say. No task
+needed.

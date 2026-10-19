@@ -29,6 +29,15 @@ A per-source file whose source the removal suppression list stops (`v1-e30-t07`)
 required argument. Only the version directory asked for is published, and the command only ever
 asks for the current one, so an older version in the bucket is never overwritten.
 
+Nor the per-source file of a held upload (`v1-e31-t26`): bytes that only a path a removal holds
+discloses, in a snapshot the hold covers, which a build from before `v1-e30-t13` imported and parsed.
+Which sources those are is asked of this machine's manifests through the parse pipeline's own rule
+(:func:`~debate_core.application.caselist.parse_sources.held_only_sources`), which asks the
+publisher's rule for a held row of each disclosure, so `caselist publish` and this command hold back
+the same bytes. Such a file is reported `suppressed`, like a suppressed source's: the hold is on the
+list. Bytes another live path discloses are published as before. The manifests are read only when
+the list holds a path.
+
 ## What is logged
 
 Counts, the caselist, the version and keys. A key here is a caselist, a parser version and a
@@ -38,12 +47,13 @@ digest; the store holds no path or name to leak (`docs/data/parsed-card-store.md
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
 from debate_core.application.caselist.evidence_listing import LocalEvidence, local_file
+from debate_core.application.caselist.parse_sources import enumerate_sources, held_only_sources
 from debate_core.application.caselist.publish_service import (
     DEFAULT_CONCURRENCY,
     SourceResult,
@@ -162,6 +172,11 @@ class ParsedStorePublisher:
         directory = f"{caselist}/{version}/"
         prefix = f"{PARSED_PREFIX}/{directory}"
         state = await load_suppression_state(self._suppression)
+        held = (
+            held_only_sources(await enumerate_sources(self._evidence, caselist), state)
+            if state.held_paths
+            else {}
+        )
         local_keys = [info.key for info in await self._local.list_objects(directory)]
         listed = {info.key for info in await self._remote.list_objects(prefix)}
         sources = [key for key in local_keys if key.split("/")[2:3] == [_SOURCE_SEGMENT]]
@@ -171,7 +186,7 @@ class ParsedStorePublisher:
 
         outcomes = list(
             await _bounded(
-                [lambda key=key: self._source(key, prefix, listed, state) for key in sources],
+                [lambda key=key: self._source(key, prefix, listed, state, held) for key in sources],
                 limit=self._concurrency,
             )
         )
@@ -190,11 +205,16 @@ class ParsedStorePublisher:
         return report
 
     async def _source(
-        self, key: ObjectKey, prefix: str, listed: set[ObjectKey], state: SuppressionState
+        self,
+        key: ObjectKey,
+        prefix: str,
+        listed: set[ObjectKey],
+        state: SuppressionState,
+        held: Mapping[str, str],
     ) -> ParsedObjectOutcome:
         remote_key = f"{PARSED_PREFIX}/{key}"
         digest = key.rsplit("/", 1)[-1].split(".", 1)[0]
-        if state.suppresses_source(digest):
+        if state.suppresses_source(digest) or digest in held:
             return ParsedObjectOutcome(key=remote_key, result=SourceResult.SUPPRESSED, aggregate=False)
         return await self._object(key, remote_key, listed, aggregate=False)
 

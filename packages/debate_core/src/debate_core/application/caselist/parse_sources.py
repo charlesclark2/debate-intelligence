@@ -61,10 +61,11 @@ from debate_core.application.caselist.publish_plan import (
     UnreadableManifest,
     manifest_prefix,
     snapshot_of_manifest_key,
+    stored_row_hold,
     validate_publish_target,
 )
 from debate_core.application.ports.evidence_store import ObjectKey
-from debate_core.application.ports.suppression import SuppressionState, disclosure_digest
+from debate_core.application.ports.suppression import PathHoldEntry, SuppressionState, disclosure_digest
 from debate_core.domain import Sha256Hex
 from debate_core.domain.caselist import SourceDocument, SourceFormat, SourceOrigin
 
@@ -169,7 +170,9 @@ def live_disclosures(source: EnumeratedSource, state: SuppressionState) -> tuple
     """The disclosures of `source` the suppression list neither stops nor holds the path of.
 
     Stopped by the source or by its path; a camp file is checked by its digest alone, as the
-    publisher checks a camp manifest's rows.
+    publisher checks a camp manifest's rows. Held by the publisher's rule for a stored row
+    (:func:`~debate_core.application.caselist.publish_plan.stored_row_hold`), which holds no camp
+    file's row.
     """
     return tuple(
         disclosed
@@ -180,12 +183,33 @@ def live_disclosures(source: EnumeratedSource, state: SuppressionState) -> tuple
             if source.caselist == OPENEV
             else disclosure_digest(source.caselist, disclosed.path),
         )
+        and _hold_on(source, disclosed, state) is None
     )
 
 
 def held_only_sources(sources: Iterable[EnumeratedSource], state: SuppressionState) -> dict[Sha256Hex, str]:
-    """Each source a held path discloses and no live one does, with the request holding the path."""
-    return {}
+    """Each source a held path discloses and no live one does, with the request holding the path.
+
+    What the parsed store neither parses, aggregates nor publishes, and what `caselist status` names
+    when an earlier build published its parsed file (`v1-e31-t26`). A source the list stops in every
+    disclosure, and holds in none, is not here: the list's own rules answer for it. Where two
+    requests hold its paths, the first disclosure's hold names it.
+    """
+    held: dict[Sha256Hex, str] = {}
+    for source in sources:
+        if live_disclosures(source, state):
+            continue
+        for disclosed in source.disclosures:
+            hold = _hold_on(source, disclosed, state)
+            if hold is not None:
+                held[source.sha256] = hold.request_id
+                break
+    return held
+
+
+def _hold_on(source: EnumeratedSource, disclosed: Disclosed, state: SuppressionState) -> PathHoldEntry | None:
+    """The hold on one disclosure's path, asked of the publisher's rule for its stored row."""
+    return stored_row_hold(source.caselist, disclosed.snapshot, source.sha256, disclosed.path, state)
 
 
 def _stored_rows(

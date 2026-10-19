@@ -6,7 +6,7 @@
 | Spec | [`plan_specs/v1/e01-repo-foundation/t28-affected-test-selection.yaml`](../../plan_specs/v1/e01-repo-foundation/t28-affected-test-selection.yaml) |
 | Epic / release | `v1-e01-repo-foundation` / `v1.0` |
 | Branch | `task/v1-e01-t28-affected-test-selection` |
-| Session status | PARTIAL <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | COMPLETE <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
@@ -17,9 +17,8 @@ imports in test, conftest, helper and script files (`ast`), conftest scope, cons
 runs, and files named by path, plus an always-run list. `--diff REV` / `--head REV` describe a past
 commit from git without checking it out.
 
-The work is done, and every criterion a session can close passes. One part is still open: ac4's
-time-to-choose on your Mac, which you asked to measure yourself. The command is under Operator
-follow-ups, and the Goal stays **InProgress** until that number is in.
+Every criterion passes. ac4's time to choose was measured by the operator on his Mac: median
+3.1 s, largest 4.1 s, over the 20 commits. The Goal is **Succeeded**.
 
 **Look at Deviation 1 first.** Read literally, "a conftest's imports count for every test beneath
 it" makes the root `conftest.py` pull in a third of `debate_core`. That turns 9 of the last 20 task
@@ -34,7 +33,7 @@ proposal.
 
 | Node | Status | Notes |
 |---|---|---|
-| `affected-tests` (Affected test selection) | Done | Node criterion passes (40 passed); every goal criterion except ac4's operator-measured time passes. |
+| `affected-tests` (Affected test selection) | Done | Node criterion passes (40 passed), and so does every goal criterion. |
 
 ## Acceptance criteria
 
@@ -43,7 +42,7 @@ proposal.
 | ac1: on synthetic workspaces, a changed module selects every direct or transitive importer and nothing else, a changed fixture selects the tests naming it, the always-run list is always selected; tests shown failing first | PASS | `tests/scripts/test_affected_tests.py` builds a git workspace per case and compares exact, hand-written sets. **Red:** against a skeleton `select()` that selects nothing and never reports the whole selection (swapped in from a byte copy and restored, `cmp` equal, `git status` clean), `uv run pytest tests/scripts/test_affected_tests.py` → `37 failed in 4.10s`. The three cases added later were each shown red first: the generic-folder case against the old folder list (`extra: [...test_writes_a_data_folder.py]`), the wiring case against the pre-edit docs and prompt, and the root-conftest-names case against the mutant it was written for. **Green:** `40 passed`. **Mutation:** 19 mutants, each removing one selection rule, all caught (table below). |
 | ac2: shared test ground reports the whole selection; a docs-only change selects the docs-check tests | PASS | Same file: `test_shared_test_ground_reports_the_whole_selection_and_exits_zero[conftest.py \| tests/pytest_plugins/run_in_parts.py \| pyproject.toml \| packages/debate_cli/pyproject.toml \| uv.lock \| .github/workflows/ci.yml]` checks the exact one line and exit 0; `test_run_runs_nothing_when_the_whole_selection_is_affected` (a failing test in the workspace is not run, exit 0); `test_a_docs_only_change_selects_the_docs_checks`, plus the `site/` Markdown, Terraform and spec cases. |
 | ac3: planted breaks in at least five real modules across the four packages each fail a selected test; selection size reported | PASS | `uv run pytest tests/scripts/test_affected_tests_planted_breaks.py -m slow -s -n 0` → `7 passed in 46.97s` at `20c302a`. It runs in a `git clone --shared` of HEAD in a temp directory, and the worktree is never written. Each break is committed in the clone and described with `--diff HEAD`. pytest then runs the nearest selected tests with the clone's `src` first on `PYTHONPATH`, and the clone is reset and its bytes compared. Against the select-nothing skeleton (a temporary commit, dropped afterwards), two cases fail with `no selected test is traced to ...`. Results in the table below. |
-| ac4: over the last 20 task commits, median and largest selected share and the time to choose; under 10 s on the operator's Mac (operator-measured) | Shares PASS; time NOT RUN | Shares: median **79.4%** of test files (**72.8%** of tests), largest **100%** (4 commits are the whole selection; without them the median is 58.4% of files, 42.4% of tests). Session-measured time to choose: median 3.2 s, largest 3.9 s (this Mac, load average 3–10). **NOT RUN:** your own timing, which you asked to take yourself; the command is under Operator follow-ups. |
+| ac4: over the last 20 task commits, median and largest selected share and the time to choose; under 10 s on the operator's Mac (operator-measured) | PASS | Shares: median **79.4%** of test files (**72.8%** of tests), largest **100%** (4 commits are the whole selection; without them the median is 58.4% of files, 42.4% of tests). **Operator-measured time to choose** (the command under Operator follow-ups, run on the operator's Mac, 2026-10-19): median **3.1 s**, largest **4.1 s**, all 20 under 10 s. His shares matched the session's row for row. The session's own figures on the same Mac were a median of 3.2 s and a largest of 3.9 s. |
 | ac5: working agreement 10 names the command in place of its interim rule, the session prompt tells a session to run it before the report, and the task-workflow guide says the same | PASS | Agreement 10's affected-set bullet now names `uv run scripts/affected_tests.py --run`; the interim rule ("Until then, the test directories…") is gone. `scripts/task_helper.py`'s "How to work" list has a new item 9. `docs/process/task-workflow.md` §3 says the same. `test_the_agreement_the_session_prompt_and_the_workflow_guide_send_a_session_to_the_script` failed against the pre-edit files (`assert 'uv run scripts/affected_tests.py --run' in '...'`) and passes now. No existing test pins the prompt's text (the ones that read `task_helper.PROMPT` check other substrings and still pass). |
 | Node: `uv run pytest tests/scripts -k affected` | PASS | `40 passed in 9.72s` (the planted-break file is `slow`, so it is deselected here). |
 
@@ -155,8 +154,8 @@ That last mutant survived the first run, so its test was added, and the mutant w
 - `docs/process/working-agreements.md`: agreement 10 names the command in place of the interim rule.
 - `scripts/task_helper.py`: the session prompt's "How to work" list, item 9.
 - `docs/process/task-workflow.md`: §3 says the same.
-- `plan_specs/.../t28-affected-test-selection.yaml`: the status set at the start. The phase is left
-  InProgress (see Summary).
+- `plan_specs/.../t28-affected-test-selection.yaml`: the Goal's phase, InProgress at the start and
+  Succeeded at the end.
 
 ## Deviations from the spec
 
@@ -242,7 +241,9 @@ That last mutant survived the first run, so its test was added, and the mutant w
 
 ## Operator follow-ups
 
-**ac4: time to choose on your Mac** (expected runtime about 1 minute: 20 runs of 2–4 s each)
+**ac4: time to choose on your Mac.** Done: the operator ran this on 2026-10-19. The results are
+under ac4 above (median 3.1 s, largest 4.1 s). The command is kept here as the record of what was
+run (about 1 minute: 20 runs of 2–4 s each).
 
 Where: your Mac, in the task worktree. These are the 20 commits in the ac4 table.
 
@@ -251,9 +252,9 @@ cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-
 for sha in 9101764 9f11fe1 29f074d edf8eba 30c5157 29c8293 387c961 9877884 72c1d05 3f2530b 801883a 993063c 8bbe1cd ea09eb1 0a43e88 d730de0 55d0b4b 1e63363 b0820cf 4c5a766; do uv run scripts/affected_tests.py --diff $sha > /dev/null; done
 ```
 
-Success looks like 20 lines. Most read `N of M test files (P%) chosen in X s from K changed
-files.`; the four `pyproject.toml` commits read `Chose in X s; ...`. Every X should be under 10.
-Paste the 20 lines back into the session, and I'll record them and set the Goal to Succeeded.
+Success looked like 20 lines, most reading `N of M test files (P%) chosen in X s from K changed
+files.` and the four `pyproject.toml` commits reading `Chose in X s; ...`, with every X under 10.
+That is what the run printed.
 
 **Optional, not needed: one whole-selection run.** The branch touches shared test ground (one
 dev-dependency line in `pyproject.toml` and its two lines in `uv.lock`). Under agreement 10's

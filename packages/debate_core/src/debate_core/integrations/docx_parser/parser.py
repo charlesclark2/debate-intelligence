@@ -134,7 +134,7 @@ from debate_core.integrations.docx_parser.runs import (
     read_paragraph,
 )
 
-__all__ = ["DOCX_PARSER_VERSION", "DebateDocxParser"]
+__all__ = ["DOCX_PARSER_VERSION", "BodyParagraph", "DebateDocxParser", "body_paragraphs"]
 
 #: Version recorded on every card this parser produces. Bumped whenever the output changes, so a
 #: stored card always names the reading that produced it. Bumped too when the only change is that
@@ -268,6 +268,19 @@ def _iter_text_box_paragraphs_of(element: XmlElement, *, in_table: bool = False)
     """Yield the paragraphs of any text box inside one paragraph."""
     for paragraph in iter_text_box_paragraphs(element):
         yield _BodyParagraph(paragraph, in_table=in_table, in_text_box=True)
+
+
+#: One paragraph of the body and where it sits, as the walk that numbers element indices sees it.
+BodyParagraph = _BodyParagraph
+
+
+def body_paragraphs(body: XmlElement) -> tuple[BodyParagraph, ...]:
+    """Every paragraph of the body, indexed exactly as a card's provenance element indices are.
+
+    The lossless writer (`v1-e33-t02`) finds a card's paragraphs by those indices, so it walks the
+    body with the parser's own walk rather than a second one that could disagree with it.
+    """
+    return tuple(_iter_body_paragraphs(body))
 
 
 def _iter_body_paragraphs(element: XmlElement) -> Iterator[_BodyParagraph]:

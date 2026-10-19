@@ -101,12 +101,16 @@ __all__ = [
     "W_NAMESPACE",
     "DocxPackage",
     "DocxPackageError",
+    "REPLACEMENT_CHARACTER",
     "PackageLimits",
     "StyleDefinition",
     "XmlElement",
     "hardened_xml_parser",
+    "PartRelationship",
+    "check_replacement_character",
     "open_debate_docx",
     "qualified_name",
+    "read_part_relationships",
 ]
 
 #: The WordprocessingML main namespace. Every element this parser reads lives in it.
@@ -286,6 +290,8 @@ class DocxPackage:
     warnings: tuple[str, ...] = field(default=())
     forbidden_characters_replaced: int = 0
     """How many characters XML 1.0 forbids were replaced by U+FFFD, over every part parsed."""
+    document_part: str = "word/document.xml"
+    """The main document part's name, as the package relationships give it."""
 
     def style_name(self, style_id: str | None) -> str | None:
         """The `w:name` of a style as this document defines it, or None."""
@@ -488,24 +494,40 @@ def _part_encoding(data: bytes) -> str | None:
     return None
 
 
-def _replace_forbidden_characters(data: bytes) -> tuple[bytes, int]:
+def _replace_forbidden_characters(data: bytes, replacement: str = REPLACEMENT_CHARACTER) -> tuple[bytes, int]:
     """Replace each raw character XML 1.0 forbids by U+FFFD, and count them.
 
     The decision recorded in `v1-e31-t15`'s spec. One character in, one character out, so every
     other character keeps its position. A character reference is markup, not a raw character, and is
     left for the parser to refuse. A part this cannot read in its own encoding is returned unchanged.
+
+    `replacement` is U+FFFD for every reader but one: the lossless writer (`v1-e33-t02`) opens a
+    source a second time with a character the source does not hold, to count the replacements
+    in each card it copies, and then writes U+FFFD in its place (:func:`check_replacement_character`).
     """
     encoding = _part_encoding(data)
     if encoding == "utf-8":
-        return _FORBIDDEN_XML_CHARACTERS_IN_UTF8.subn(REPLACEMENT_CHARACTER.encode("utf-8"), data)
+        return _FORBIDDEN_XML_CHARACTERS_IN_UTF8.subn(replacement.encode("utf-8"), data)
     if encoding is None:
         return data, 0
     try:
         text = data.decode(encoding)
     except UnicodeDecodeError:
         return data, 0
-    replaced, count = _FORBIDDEN_XML_CHARACTERS.subn(REPLACEMENT_CHARACTER, text)
+    replaced, count = _FORBIDDEN_XML_CHARACTERS.subn(replacement, text)
     return (replaced.encode(encoding), count) if count else (data, 0)
+
+
+#: A character a forbidden one may be replaced by: one XML 1.0 allows that is neither markup nor
+#: whitespace, so the replacement can never build a tag, an entity or a word break.
+_ALLOWED_REPLACEMENT: Final = re.compile("[^\x00-\x20<>&\"'\ufffe\uffff\ud800-\udfff]")
+
+
+def check_replacement_character(replacement: str) -> str:
+    """Return `replacement` if a forbidden character may be replaced by it, or raise ValueError."""
+    if len(replacement) != 1 or _ALLOWED_REPLACEMENT.fullmatch(replacement) is None:
+        raise ValueError(f"not a character a forbidden one may be replaced by: {replacement!r}")
+    return replacement
 
 
 @dataclass(frozen=True, slots=True)
@@ -514,7 +536,7 @@ class _ParsedPart:
     forbidden_characters_replaced: int
 
 
-def _parse_xml(data: bytes, name: str) -> _ParsedPart:
+def _parse_xml(data: bytes, name: str, replacement: str = REPLACEMENT_CHARACTER) -> _ParsedPart:
     """Parse one part, refusing it if it declares a document type in any encoding.
 
     A raw character XML forbids is replaced by U+FFFD after the declaration scan and before the
@@ -526,7 +548,7 @@ def _parse_xml(data: bytes, name: str) -> _ParsedPart:
             ParseFailureReason.FORBIDDEN_XML_CONSTRUCT,
             f"{name} declares {match.group(0).decode('ascii', 'replace')}, which is never resolved",
         )
-    data, replaced = _replace_forbidden_characters(data)
+    data, replaced = _replace_forbidden_characters(data, replacement)
     try:
         root = etree.fromstring(data, parser=hardened_xml_parser())
     except etree.XMLSyntaxError as error:
@@ -546,7 +568,9 @@ def _parse_xml(data: bytes, name: str) -> _ParsedPart:
     return _ParsedPart(root, replaced)
 
 
-def _main_document_part(archive: zipfile.ZipFile, limits: PackageLimits) -> tuple[str, int]:
+def _main_document_part(
+    archive: zipfile.ZipFile, limits: PackageLimits, replacement: str = REPLACEMENT_CHARACTER
+) -> tuple[str, int]:
     """Find the main document part through the package relationships, falling back to convention.
 
     Nearly every file names it `word/document.xml`, but Word itself writes `/word/document2.xml`
@@ -558,7 +582,7 @@ def _main_document_part(archive: zipfile.ZipFile, limits: PackageLimits) -> tupl
     names = set(archive.namelist())
     replaced = 0
     if "_rels/.rels" in names:
-        relationships = _parse_xml(_read_part(archive, "_rels/.rels", limits), "_rels/.rels")
+        relationships = _parse_xml(_read_part(archive, "_rels/.rels", limits), "_rels/.rels", replacement)
         replaced = relationships.forbidden_characters_replaced
         for relationship in relationships.root.iterfind(
             qualified_name("Relationship", RELATIONSHIPS_NAMESPACE)
@@ -602,7 +626,12 @@ def _read_styles(root: XmlElement) -> dict[str, StyleDefinition]:
     return styles
 
 
-def open_debate_docx(content: bytes, *, limits: PackageLimits = DEFAULT_PACKAGE_LIMITS) -> DocxPackage:
+def open_debate_docx(
+    content: bytes,
+    *,
+    limits: PackageLimits = DEFAULT_PACKAGE_LIMITS,
+    forbidden_character_replacement: str = REPLACEMENT_CHARACTER,
+) -> DocxPackage:
     """Open `content` as a debate `.docx`, or raise :class:`DocxPackageError` saying why not.
 
     The order is deliberate: the formats we do not parse are named from their magic bytes before
@@ -611,7 +640,11 @@ def open_debate_docx(content: bytes, *, limits: PackageLimits = DEFAULT_PACKAGE_
     it is inflated, and the XML is scanned for a document type declaration before a parser is
     built. Nothing about the document's contents is examined until
     all of that has passed.
+
+    `forbidden_character_replacement` is U+FFFD unless the caller is the lossless writer counting
+    replacements (:func:`_replace_forbidden_characters`); every other reader leaves it alone.
     """
+    replacement = check_replacement_character(forbidden_character_replacement)
     _refuse_non_zip_formats(content)
     try:
         archive = zipfile.ZipFile(BytesIO(content))
@@ -630,8 +663,8 @@ def open_debate_docx(content: bytes, *, limits: PackageLimits = DEFAULT_PACKAGE_
         content_types = _read_part(archive, "[Content_Types].xml", limits)
         _refuse_macro_enabled(archive, content_types)
 
-        document_part, replaced = _main_document_part(archive, limits)
-        document = _parse_xml(_read_part(archive, document_part, limits), document_part)
+        document_part, replaced = _main_document_part(archive, limits, replacement)
+        document = _parse_xml(_read_part(archive, document_part, limits), document_part, replacement)
         replaced += document.forbidden_characters_replaced
         body = document.root.find(qualified_name("body"))
         if body is None:
@@ -649,7 +682,7 @@ def open_debate_docx(content: bytes, *, limits: PackageLimits = DEFAULT_PACKAGE_
         if styles_part is None:
             warnings.append("the package defines no styles part; every unit comes from a heuristic")
         else:
-            styles_xml = _parse_xml(_read_part(archive, styles_part, limits), styles_part)
+            styles_xml = _parse_xml(_read_part(archive, styles_part, limits), styles_part, replacement)
             replaced += styles_xml.forbidden_characters_replaced
             styles = _read_styles(styles_xml.root)
             parts_read.append(styles_part)
@@ -662,7 +695,55 @@ def open_debate_docx(content: bytes, *, limits: PackageLimits = DEFAULT_PACKAGE_
             uncompressed_bytes=declared_uncompressed,
             warnings=tuple(warnings),
             forbidden_characters_replaced=replaced,
+            document_part=document_part,
         )
+
+
+@dataclass(frozen=True, slots=True)
+class PartRelationship:
+    """One `Relationship` of a part: what an `r:id` in the part points at."""
+
+    relationship_id: str
+    relationship_type: str
+    target: str
+    external: bool
+
+
+def read_part_relationships(
+    content: bytes, part: str, *, limits: PackageLimits = DEFAULT_PACKAGE_LIMITS
+) -> dict[str, PartRelationship]:
+    """The relationships of one part, by id, read under the same guards as the part itself.
+
+    Not read by the parser, which follows no relationship but the main document's; the lossless
+    writer (`v1-e33-t02`) reads the document part's to re-create a copied hyperlink's target. A part
+    with no relationships part has none, which is ordinary.
+    """
+    directory, _, name = part.rpartition("/")
+    rels_name = f"{directory}/_rels/{name}.rels" if directory else f"_rels/{name}.rels"
+    _refuse_non_zip_formats(content)
+    try:
+        archive = zipfile.ZipFile(BytesIO(content))
+    except zipfile.BadZipFile as error:
+        raise DocxPackageError(
+            ParseFailureReason.NOT_A_ZIP, "the bytes are not a readable zip container"
+        ) from error
+    with archive:
+        _check_directory(archive, limits)
+        if rels_name not in archive.namelist():
+            return {}
+        root = _parse_xml(_read_part(archive, rels_name, limits), rels_name).root
+    relationships: dict[str, PartRelationship] = {}
+    for element in root.iterfind(qualified_name("Relationship", RELATIONSHIPS_NAMESPACE)):
+        relationship_id = element.get("Id")
+        if not relationship_id:
+            continue
+        relationships[relationship_id] = PartRelationship(
+            relationship_id=relationship_id,
+            relationship_type=element.get("Type") or "",
+            target=element.get("Target") or "",
+            external=(element.get("TargetMode") or "") == "External",
+        )
+    return relationships
 
 
 def iter_body_children(body: XmlElement) -> Iterator[XmlElement]:

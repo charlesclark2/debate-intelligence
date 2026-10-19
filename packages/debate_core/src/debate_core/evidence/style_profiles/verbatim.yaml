@@ -404,6 +404,75 @@ writer_style_definitions:
     notes: >-
       Single underline in 376/376. `bold` is deliberately left inherited: the corpus is split
       (off in 262, on in 113), so a writer should not impose one reading on a team's template.
+  # The definitions below were not measured by the survey (PM ruling, 2026-10-19). The lossless
+  # writer (v1-e33-t02) needs them because every style table has the first two and source runs
+  # carry the rest; each one's notes say "Word default, not measured".
+  - style_id: Normal
+    style_name: Normal
+    style_type: paragraph
+    is_default: true
+    measured: false
+    notes: >-
+      Word default, not measured. Word's default paragraph style, with no formatting of its own:
+      it takes everything from the document defaults.
+  - style_id: DefaultParagraphFont
+    style_name: Default Paragraph Font
+    style_type: character
+    is_default: true
+    measured: false
+    notes: >-
+      Word default, not measured. Word's default character style, which every Verbatim character
+      style above is based on.
+  - style_id: Hyperlink
+    style_name: Hyperlink
+    style_type: character
+    based_on: DefaultParagraphFont
+    underline: single
+    color: 0563C1
+    measured: false
+    notes: >-
+      Word default, not measured. Word's built-in hyperlink style, blue and underlined; a cite's
+      source link carries it.
+  - style_id: Heading4Char
+    style_name: Heading 4 Char
+    style_type: character
+    based_on: DefaultParagraphFont
+    half_points: 26
+    bold: true
+    measured: false
+    notes: >-
+      Word default, not measured. The character style Word links to Heading4, carrying its run
+      formatting (size 26, bold) into a run. Runs inside a tag carry it, and the profile reads it
+      as HEADING; the other heading `Char` styles are its aliases.
+  - style_id: UndertagChar
+    style_name: Undertag Char
+    style_type: character
+    based_on: DefaultParagraphFont
+    half_points: 24
+    color: "385623"
+    font: Times New Roman
+    measured: false
+    notes: >-
+      Word default, not measured. The character style Word links to Undertag, carrying its run
+      formatting (size 24, green 385623, Times New Roman) into a run.
+  - style_id: AnalyticChar
+    style_name: Analytic Char
+    style_type: character
+    based_on: DefaultParagraphFont
+    half_points: 26
+    bold: true
+    color: 1F3864
+    measured: false
+    notes: >-
+      Word default, not measured. The character style Word links to Analytic, carrying its run
+      formatting (Heading4's size 26 and bold, Analytic's dark blue 1F3864) into a run.
+
+writer_document_defaults:
+  font: Calibri
+  half_points: 22
+  notes: >-
+    Word default, not measured. Calibri at 11 pt is what Word writes into a new document's
+    defaults; 22 half-points is also the profile's measured body size (`shrink.body_half_points`).
 
 # --------------------------------------------------------------------------------------------
 # CardMirror correspondence (ADR-0014)

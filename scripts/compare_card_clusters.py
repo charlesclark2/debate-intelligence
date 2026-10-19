@@ -128,6 +128,7 @@ if TYPE_CHECKING:
 __all__ = [
     "ABSORBED_BANDS",
     "ASK_SHAPES",
+    "JOINED_BANDS",
     "KEPT_APART_BY",
     "MATCHING_RULE_MODULES",
     "NO_WORDS",
@@ -193,8 +194,17 @@ KEPT_APART_BY = (
     "under-the-minimum-share",
     "unrelated-texts",
     "within-the-rule",
-    "lacking-an-end",
+    "lacking-both-ends",
 )
+
+#: The bands of a cut's share of the body holding it, as `sample --joined-in-band` names them
+#: (`debate_core.evidence.cluster_diagnosis.SHARE_BANDS`).
+JOINED_BANDS = {
+    "under-a-tenth": "under a tenth",
+    "a-tenth-to-a-quarter": "a tenth to a quarter",
+    "a-quarter-to-a-half": "a quarter to a half",
+    "half-or-more": "half or more",
+}
 
 #: The shapes a rule decides, as `sample --ask-shape` names them (`debate_core.evidence.pair_shapes`).
 ASK_SHAPES = {
@@ -683,6 +693,7 @@ def diagnose(
         "full_texts": census.texts,
         "short_full_texts": census.short_texts,
         "cuts": tally_cuts(census.findings, census.with_a_copy),
+        "witness_refusals": dict(census.witness_refusals),
     }
     if before is not None:
         from debate_core.evidence.near_duplicates import NearDuplicateThresholds, jaccard, shingles
@@ -789,17 +800,19 @@ def describe_pairs_sharing_few_runs(
         texts[clusters[fingerprint]][fingerprint] = body
     together = [cluster for cluster in texts.values() if len(cluster) > 1]
     totals = dict.fromkeys(range(1, FEW_RUNS + 1), 0)
-    pairs = with_one = 0
+    pairs = with_one = not_overlapping = 0
     for cluster in together:
         counts = pairs_sharing_few_runs(cluster)
         pairs += len(cluster) * (len(cluster) - 1) // 2
-        with_one += any(counts.values())
-        for runs, count in counts.items():
+        with_one += any(counts.by_runs.values())
+        not_overlapping += counts.not_overlapping
+        for runs, count in counts.by_runs.items():
             totals[runs] += count
     return {
         "clusters_with_two_or_more_texts": len(together),
         "pairs": pairs,
         "pairs_sharing_only_few_runs": {str(runs): count for runs, count in totals.items()},
+        "of_them_not_overlapping": not_overlapping,
         "clusters_with_a_pair_sharing_only_few_runs": with_one,
     }
 
@@ -859,7 +872,7 @@ def kept_apart(findings: Sequence[CutFinding], limit: str) -> list[tuple[str, st
     """The cuts among `findings` that `limit` keeps apart, each with the body it is shown beside.
 
     Pairs of exact fingerprints: the cut, and the smallest body confirmed to hold it that may
-    witness it (for a cut lacking an end, the first by fingerprint of the bodies holding
+    witness it (for a cut holding neither end, the first by fingerprint of the bodies holding
     nine-tenths of it). `limit` is one of :data:`KEPT_APART_BY`.
     """
     from debate_core.evidence.cluster_diagnosis import CutOutcome
@@ -872,7 +885,7 @@ def kept_apart(findings: Sequence[CutFinding], limit: str) -> list[tuple[str, st
         "under-the-minimum-share": CutOutcome.UNDER_MIN_CUT_SHARE,
         "unrelated-texts": CutOutcome.UNRELATED_TEXTS,
         "within-the-rule": CutOutcome.WITHIN_THE_RULE,
-        "lacking-an-end": CutOutcome.ENDS_NOT_BOTH_INSIDE,
+        "lacking-both-ends": CutOutcome.ENDS_NOT_INSIDE,
     }[limit]
     return [
         (finding.fingerprint, finding.smallest_container or min(finding.containers))
@@ -881,10 +894,42 @@ def kept_apart(findings: Sequence[CutFinding], limit: str) -> list[tuple[str, st
     ]
 
 
+def joined_in_band(
+    bodies: Mapping[str, str], before: Mapping[str, str], after: Mapping[str, str], band: str
+) -> list[tuple[str, str]]:
+    """Cuts newly in the cluster of their smallest witness, with a share of it in `band`.
+
+    `bodies` maps each distinct full text's exact fingerprint to its body; `before` and `after` map
+    the same fingerprints to their clusters in two placements. Pairs of exact fingerprints: the cut,
+    and the smallest body witnessing it, which `before` had in another cluster and `after` has in
+    the cut's. `band` is one of :data:`JOINED_BANDS`' values. What the PM asked of the re-preview
+    after lowering `MIN_CUT_SHARE` (2026-10-18): the cuts that the lower share let in.
+    """
+    from debate_core.evidence.cluster_diagnosis import SHARE_BANDS
+    from debate_core.evidence.near_duplicates import CutIndex, witnesses
+
+    index = CutIndex(bodies)
+    found: list[tuple[str, str]] = []
+    for cut in index.fingerprints:
+        if not index.containers(cut):
+            continue
+        seen = witnesses(cut, after.__getitem__, index)
+        if seen is None or len(seen.clusters) != 1:
+            continue
+        witness = seen.smallest
+        if after[witness] != after[cut] or before[witness] == before[cut]:
+            continue
+        share = index.size(cut) / index.size(witness)
+        if next(name for below, name in SHARE_BANDS if share < below) == band:
+            found.append((cut, witness))
+    return found
+
+
 def kept_apart_kind(limit: str, cut: str, holder: str) -> str:
     """What a kept-apart pair is tallied under: the limit, whether the cut is short or long, and its
     share of the body it is shown beside, in the diagnosis's bands. Counts only, as every kind is.
-    The bands are what a limit is set by: `MIN_CUT_SHARE` is the end of the second."""
+    The bands are what a limit is set by: `MIN_CUT_SHARE` is the end of the first, and the share
+    before the PM's ruling of 2026-10-18 the end of the second."""
     from debate_core.evidence.cluster_diagnosis import SHARE_BANDS
     from debate_core.evidence.near_duplicates import SHORT_BODY_SHINGLES, shingles
 
@@ -1537,6 +1582,48 @@ def _sample_kept_apart(arguments: argparse.Namespace, store: LocalParsedStore, s
     return 0
 
 
+def _sample_joined_in_band(arguments: argparse.Namespace, store: LocalParsedStore, seed: int) -> int:
+    """`sample --joined-in-band`: cuts newly with their smallest witness, by their share of it."""
+    band = JOINED_BANDS[arguments.joined_in_band]
+    candidates: list[tuple[str, str, Joined]] = []
+    for caselist in arguments.caselist:
+        print(f"Reading {caselist} ...", flush=True)
+        version, before, after = _load(arguments, store, caselist)
+        before, after = common_cards(before, after)
+        bodies, clusters = full_bodies(read_bodies(store, caselist, version, after), after)
+        earlier = {
+            placement.exact_fingerprint: placement.cluster_id
+            for placement in before.values()
+            if placement.completeness == "FULL"
+        }
+        first: dict[str, CardKey] = {}
+        for key in sorted(after):
+            if after[key].completeness == "FULL":
+                first.setdefault(after[key].exact_fingerprint, key)
+        for cut, witness in joined_in_band(bodies, earlier, clusters, band):
+            kind = kept_apart_kind("newly joined", bodies[cut], bodies[witness])
+            candidates.append((caselist, version, Joined(kind=kind, joiner=first[cut], host=first[witness])))
+    drawn = random.Random(seed).sample(candidates, min(arguments.count, len(candidates)))
+    pairs: list[tuple[str, Joined, ParsedCard, ParsedCard]] = []
+    for caselist, version, pair in drawn:
+        cards = read_cards(store, caselist, version, [pair.joiner, pair.host])
+        pairs.append((caselist, pair, cards[pair.joiner], cards[pair.host]))
+    tallies = run_sample(
+        pairs,
+        ask=read_key,
+        show=lambda text: print(text, end="", flush=True),
+        ask_shapes=_ask_shapes(arguments),
+        change="Newly in one cluster. B is the smallest body that holds A.",
+    )
+    _report_tallies(
+        arguments,
+        f"Drew {len(pairs)} of {len(candidates)} cuts newly joined {band} of their smallest witness, "
+        f"seed {seed}.",
+        tallies,
+    )
+    return 0
+
+
 def _sample(arguments: argparse.Namespace) -> int:
     if not (sys.stdin.isatty() and sys.stdout.isatty()):
         print(
@@ -1547,6 +1634,15 @@ def _sample(arguments: argparse.Namespace) -> int:
     seed = arguments.seed if arguments.seed is not None else random.SystemRandom().randrange(10**9)
     if arguments.least_alike and arguments.cluster is None and arguments.largest is None:
         raise SystemExit("--least-alike orders the pairs inside one cluster: give --cluster or --largest")
+    if arguments.joined_in_band is not None:
+        if arguments.divided or any(
+            option is not None for option in (arguments.cluster, arguments.largest, arguments.kept_apart_by)
+        ):
+            raise SystemExit(
+                "--joined-in-band draws newly joined cuts: "
+                "no --divided, --cluster, --largest or --kept-apart-by"
+            )
+        return _sample_joined_in_band(arguments, store, seed)
     inside_one_placement = (arguments.cluster, arguments.largest, arguments.kept_apart_by)
     if any(option is not None for option in inside_one_placement):
         if arguments.divided or arguments.before is not None or arguments.before_rules is not None:
@@ -1699,6 +1795,14 @@ def main(argv: Sequence[str] | None = None) -> int:
                 type=int,
                 metavar="RANK",
                 help="The same, for the cluster with the RANK-th most cards: 1 is the largest.",
+            )
+            command.add_argument(
+                "--joined-in-band",
+                choices=JOINED_BANDS,
+                metavar="BAND",
+                help="Draw cuts newly in the cluster of their smallest witness whose share of it is in "
+                f"this band, each beside that witness. One of: {', '.join(JOINED_BANDS)}. Reads every "
+                "body first.",
             )
             inside.add_argument(
                 "--kept-apart-by",

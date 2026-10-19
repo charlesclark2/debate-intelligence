@@ -27,6 +27,7 @@ from debate_core.application.ports.parsed_store import (
 from debate_core.domain.card_occurrence import ClusterMembership
 from debate_core.domain.caselist import SourceDocument, SourceFormat, SourceOrigin
 from debate_core.domain.debate_files import CardCompleteness, ParsedCard, ParsedDocument
+from debate_core.evidence.cluster_diagnosis import SHARE_BANDS
 from debate_core.evidence.fingerprints import FINGERPRINT_VERSION, card_fingerprint
 from debate_core.integrations.docx_parser import DebateDocxParser
 from debate_core.integrations.local.parsed_store import LocalParsedStore
@@ -800,7 +801,7 @@ def test_the_closing_lines_of_each_sample_are_appended_to_a_file_of_counts(
     ("options", "refusal"),
     [
         (["--largest", "1", "--divided"], "read one placement"),
-        (["--kept-apart-by", "lacking-an-end", "--before-rules", "HEAD"], "read one placement"),
+        (["--kept-apart-by", "lacking-both-ends", "--before-rules", "HEAD"], "read one placement"),
         (["--least-alike"], "give --cluster or --largest"),
         (["--largest", "1", "--caselist", "another"], "give --caselist once"),
     ],
@@ -814,7 +815,7 @@ def test_sample_refuses_options_that_do_not_go_together(
         script.main(arguments)
 
 
-@pytest.mark.parametrize("options", [["--largest", "1"], ["--kept-apart-by", "lacking-an-end"]])
+@pytest.mark.parametrize("options", [["--largest", "1"], ["--kept-apart-by", "lacking-both-ends"]])
 def test_sample_inside_a_placement_also_refuses_anything_but_a_terminal(
     nested_dir: Path, capsys: pytest.CaptureFixture[str], options: list[str]
 ) -> None:
@@ -961,6 +962,7 @@ def test_shapes_counts_the_pairs_of_each_largest_cluster_by_shape_and_names_no_t
             "sharing nothing": 0.6667,
         },
         "pairs_sharing_only_few_runs": {"1": 0, "2": 0},
+        "pairs_sharing_only_few_runs_not_overlapping": 0,
         "distinct_short_cites": 2,  # the passage's two spellings are one
         "texts_with_no_short_cite": 1,
         "words_smallest": 60,
@@ -977,6 +979,7 @@ def test_shapes_counts_the_pairs_of_each_largest_cluster_by_shape_and_names_no_t
         "pairs_by_shape": NO_PAIRS,
         "share_of_pairs_by_shape": dict.fromkeys(NO_PAIRS, 0.0),
         "pairs_sharing_only_few_runs": {"1": 0, "2": 0},
+        "pairs_sharing_only_few_runs_not_overlapping": 0,
         "distinct_short_cites": 1,
         "texts_with_no_short_cite": 0,
         "words_smallest": 40,
@@ -1084,7 +1087,9 @@ def test_shapes_counts_the_pairs_sharing_only_one_or_two_runs_over_every_cluster
     few_run_dir: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """Three pairs sharing only a few runs, in two of three clusters, of five pairs of full texts in
-    one cluster: the count says whether a stock phrase is bridging different cards. Counts only."""
+    one cluster: the count says whether a stock phrase is bridging different cards. The store's
+    clusters are written out, as the one-run reading could make them: none of the three overlaps,
+    which no cluster the current rules make can hold (the PM, 2026-10-18). Counts only."""
     plain = _shapes(few_run_dir, capsys, "--largest-clusters", "1")
     assert "pairs_sharing_only_few_runs_over_every_cluster" not in plain
     (largest,) = plain["described_clusters"]  # type: ignore[misc]
@@ -1094,9 +1099,56 @@ def test_shapes_counts_the_pairs_sharing_only_one_or_two_runs_over_every_cluster
         "clusters_with_two_or_more_texts": 3,
         "pairs": 5,
         "pairs_sharing_only_few_runs": {"1": 2, "2": 1},
+        "of_them_not_overlapping": 3,
         "clusters_with_a_pair_sharing_only_few_runs": 2,
     }
     assert not [word for word in FEW_RUN_TELLTALE if word in json.dumps(result)]
+
+
+def test_newly_joined_cuts_are_drawn_by_their_share_of_their_smallest_witness() -> None:
+    """The PM's check on lowering `MIN_CUT_SHARE` to a tenth (2026-10-18). A 400-word card holds a
+    60-word cut (56 of its 396 shingles, a seventh) and a 30-word one (26, a fifteenth). The first is
+    newly with the card, a tenth to a quarter of it; the second is under the share and stays out."""
+    from debate_core.evidence.near_duplicates import cluster_near_duplicates
+
+    card = _numbered("word", 400)
+    bodies = {
+        "card": " ".join(card),
+        "seventh": " ".join(card[100:160]),
+        "fifteenth": " ".join(card[200:230]),
+    }
+    before = {key: key for key in bodies}
+    after = cluster_near_duplicates(bodies)
+    assert after["seventh"] == after["card"] != after["fifteenth"]
+    assert script.joined_in_band(bodies, before, after, "a tenth to a quarter") == [("seventh", "card")]
+    assert script.joined_in_band(bodies, before, after, "under a tenth") == []
+    assert script.joined_in_band(bodies, after, after, "a tenth to a quarter") == []  # not newly
+    assert set(script.JOINED_BANDS.values()) == {name for _, name in SHARE_BANDS}
+
+
+def test_sample_joined_in_band_shows_each_newly_joined_cut_beside_its_smallest_witness(
+    nested_dir: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The nested store placed by the checked-out rules in memory: the copy joins the card (86 of
+    326 shingles) and the cut the copy (26 of 86), both a quarter to a half of their witness, and
+    both decided by rule unless their shape is asked."""
+    _as_a_terminal(monkeypatch, ["s", "s"])
+    arguments = ["--data-dir", str(nested_dir), "sample", "--caselist", CASELIST, "--seed", "3"]
+    assert script.main([*arguments, "--joined-in-band", "a-quarter-to-a-half"]) == 0
+    shown = capsys.readouterr().out
+    assert not [word for word in NUMBERED_TELLTALE if word in shown]
+    assert shown.endswith(
+        "Drew 2 of 2 cuts newly joined a quarter to a half of their smallest witness, seed 3.\n"
+        "  Decided by rule 2 of 2; asked 0; answered 0 in 0 seconds.\n"
+        "  by rule: newly joined, long cut, a quarter to a half of the body beside it: "
+        "contained, under a third of the larger: same card: 1\n"
+        "  by rule: newly joined, short cut, a quarter to a half of the body beside it: "
+        "contained, under a third of the larger: same card: 1\n"
+    )
+    assert script.main([*arguments, "--joined-in-band", "a-tenth-to-a-quarter"]) == 0
+    assert "Drew 0 of 0 cuts newly joined a tenth to a quarter" in capsys.readouterr().out
+    with pytest.raises(SystemExit, match="draws newly joined cuts"):
+        script.main([*arguments, "--joined-in-band", "under-a-tenth", "--largest", "1"])
 
 
 def _cards(*bodies: tuple[CardCompleteness, list[str]]) -> list[ParsedCard]:
@@ -1680,7 +1732,7 @@ def test_each_limit_draws_the_cuts_of_its_own_outcome() -> None:
         f.fingerprint for f in findings
     )
     assert all(len(pairs) == 1 and pairs[0][1] == "held" for pairs in drawn.values())
-    assert drawn["lacking-an-end"] == [(f"cut-{CutOutcome.ENDS_NOT_BOTH_INSIDE.name}", "held")]
+    assert drawn["lacking-both-ends"] == [(f"cut-{CutOutcome.ENDS_NOT_INSIDE.name}", "held")]
     assert drawn["held-with-another-passage"] == [
         (f"cut-{CutOutcome.HELD_WITH_ANOTHER_PASSAGE.name}", "held")
     ]

@@ -48,13 +48,17 @@ Narrowing the band a person sees (deciding some overlapping pairs by rule, say) 
 
 ## Pairs sharing only a few runs
 
-The clusterer refuses a join that would put two texts sharing no shingle in one cluster
-(`card-fingerprint-v4`, `v1-e31-t20`), so one shingle in common is enough to get past that guard. A
-stock phrase five words long is one shingle. :func:`pairs_sharing_few_runs` counts a cluster's pairs
-that share at least one shingle and no more than :data:`FEW_RUNS`, by how many they share: the PM's
-measure (2026-10-18) of whether stock phrases bridge different cards. It is a count beside the
-shapes, not a shape: such a pair is usually sharing a little, but two bodies of a few words can be
-identical on one shingle.
+:func:`pairs_sharing_few_runs` counts a cluster's pairs that share at least one shingle and no
+more than :data:`FEW_RUNS`, by how many they share: the PM's measure (2026-10-18) of whether stock
+phrases bridge different cards. While the clusterer refused only joins between texts sharing no
+shingle, one stock phrase was enough to pass that guard, and the operator's preview found a pair
+so joined that a person judged a different card. Since the PM's ruling the same day the clusterer
+refuses any join between texts that do not overlap (:data:`OVERLAPPING_SHARE`, the clusterer's own
+line), so a pair sharing only one or two runs can stay in a cluster only when that is three-tenths
+of the smaller text: a text of six shingles or fewer. :attr:`FewRunPairs.not_overlapping` counts
+the rest, which a placement by the current rules has none of. It is a count beside the shapes, not
+a shape: such a pair is usually sharing a little, but two bodies of a few words can be identical on
+one shingle.
 """
 
 from __future__ import annotations
@@ -65,7 +69,12 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Final
 
-from debate_core.evidence.near_duplicates import SHINGLE_SIZE, matching_words, word_shingles
+from debate_core.evidence.near_duplicates import (
+    MIN_OVERLAP_SHARE,
+    SHINGLE_SIZE,
+    matching_words,
+    word_shingles,
+)
 
 __all__ = [
     "CONTAINED_SHARE",
@@ -75,6 +84,7 @@ __all__ = [
     "RULE_VERDICTS",
     "SMALL_PART_OF_THE_LARGER",
     "ClusterPairShapes",
+    "FewRunPairs",
     "PairShape",
     "PairShares",
     "RuleVerdict",
@@ -94,9 +104,11 @@ CONTAINED_SHARE: Final = 0.9
 """The larger body holds at least this share of the smaller's shingles: the smaller is inside it.
 The containment threshold the clusterer confirms a cut on (`NearDuplicateThresholds.containment`)."""
 
-OVERLAPPING_SHARE: Final = 0.3
+OVERLAPPING_SHARE: Final = MIN_OVERLAP_SHARE
 """From this share of the smaller body's shingles up to :data:`CONTAINED_SHARE`, the pair overlaps;
-under it, they share a little."""
+under it, they share a little. The clusterer's line for "overlap" since the PM's ruling of
+2026-10-18 (:data:`~debate_core.evidence.near_duplicates.MIN_OVERLAP_SHARE`), so one value
+decides both."""
 
 SMALL_PART_OF_THE_LARGER: Final = 1 / 3
 """A contained body under this share of the larger body's size is a small part of it."""
@@ -214,6 +226,8 @@ class ClusterPairShapes:
     """Every shape, a zero included."""
     pairs_sharing_few_runs: Mapping[int, int]
     """Pairs by the shingles they share, for each count from 1 to :data:`FEW_RUNS`, a zero included."""
+    pairs_sharing_few_runs_not_overlapping: int
+    """Of those, the pairs that do not overlap: none in a cluster the current rules made."""
     distinct_short_cites: int
     """Short cites of the texts' cards, compared with case and spacing ignored."""
     texts_with_no_short_cite: int
@@ -235,6 +249,7 @@ class ClusterPairShapes:
             "pairs_sharing_only_few_runs": {
                 str(runs): count for runs, count in sorted(self.pairs_sharing_few_runs.items())
             },
+            "pairs_sharing_only_few_runs_not_overlapping": self.pairs_sharing_few_runs_not_overlapping,
             "distinct_short_cites": self.distinct_short_cites,
             "texts_with_no_short_cite": self.texts_with_no_short_cite,
             "words_smallest": self.words_smallest,
@@ -256,13 +271,10 @@ def cluster_pair_shapes(
     sets = {fingerprint: frozenset(word_shingles(text)) for fingerprint, text in words.items()}
     texts = sorted(fingerprint for fingerprint in bodies if sets[fingerprint])
     by_shape = dict.fromkeys(PairShape, 0)
-    few_runs = dict.fromkeys(range(1, FEW_RUNS + 1), 0)
     for position, left in enumerate(texts):
         for right in texts[position + 1 :]:
-            shares = pair_shares(sets[left], sets[right])
-            by_shape[pair_shape(shares)] += 1
-            if shares.shared in few_runs:
-                few_runs[shares.shared] += 1
+            by_shape[pair_shape(pair_shares(sets[left], sets[right]))] += 1
+    few_runs = _few_run_pairs([sets[text] for text in texts])
 
     def cite_key(cite: str | None) -> str:
         return " ".join((cite or "").split()).casefold()
@@ -277,7 +289,8 @@ def cluster_pair_shapes(
         texts_with_no_words=len(bodies) - len(texts),
         pairs=sum(by_shape.values()),
         by_shape=by_shape,
-        pairs_sharing_few_runs=few_runs,
+        pairs_sharing_few_runs=few_runs.by_runs,
+        pairs_sharing_few_runs_not_overlapping=few_runs.not_overlapping,
         distinct_short_cites=len(set[str]().union(*cites.values())),
         texts_with_no_short_cite=sum(not held for held in cites.values()),
         words_smallest=counts[0] if counts else 0,
@@ -286,18 +299,33 @@ def cluster_pair_shapes(
     )
 
 
-def pairs_sharing_few_runs(bodies: Mapping[str, str]) -> dict[int, int]:
-    """One cluster's pairs of distinct texts by the shingles they share, for each count from 1 to
-    :data:`FEW_RUNS`, a zero included. `bodies` maps each text's exact fingerprint to its body.
+@dataclass(frozen=True, slots=True)
+class FewRunPairs:
+    """A cluster's pairs sharing at least one shingle and no more than :data:`FEW_RUNS`. Counts only."""
+
+    by_runs: Mapping[int, int]
+    """Pairs by the shingles they share, for each count from 1 to :data:`FEW_RUNS`, a zero included."""
+    not_overlapping: int
+    """Of those, the pairs sharing under :data:`OVERLAPPING_SHARE` of the smaller's shingles."""
+
+
+def pairs_sharing_few_runs(bodies: Mapping[str, str]) -> FewRunPairs:
+    """One cluster's pairs of distinct texts sharing only a few shingles. `bodies` maps each text's
+    exact fingerprint to its body.
 
     The count :class:`ClusterPairShapes` holds, without the rest of the description: what a count
     over every cluster of a caselist needs.
     """
-    sets = [frozenset(word_shingles(matching_words(body))) for body in bodies.values()]
+    return _few_run_pairs([frozenset(word_shingles(matching_words(body))) for body in bodies.values()])
+
+
+def _few_run_pairs(sets: Sequence[frozenset[str]]) -> FewRunPairs:
     counts = dict.fromkeys(range(1, FEW_RUNS + 1), 0)
+    not_overlapping = 0
     for position, left in enumerate(sets):
         for right in sets[position + 1 :]:
             shared = len(left & right)
             if shared in counts:
                 counts[shared] += 1
-    return counts
+                not_overlapping += shared / min(len(left), len(right)) < OVERLAPPING_SHARE
+    return FewRunPairs(by_runs=counts, not_overlapping=not_overlapping)

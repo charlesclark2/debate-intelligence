@@ -10,26 +10,35 @@ takes no part in placing a card.
 
 A body is a **cut** of another when the other contains it as the clusterer reads containment
 (:class:`~debate_core.evidence.near_duplicates.CutIndex`, which this module reads it from, so the
-diagnosis cannot drift from the rule it explains): at least as large, holding the cut's first and
-last shingle (a long cut's first or last), and confirmed. :func:`diagnose_cuts` reports every body
+diagnosis cannot drift from the rule it explains): at least as large, holding the cut's first or
+last shingle, and confirmed. :func:`diagnose_cuts` reports every body
 with a container **outside its own cluster** that no container inside its cluster accounts for, and
 says what kept it out (:class:`CutOutcome`), in the order the cut step applies its limits
 (`card-fingerprint-v4`, short and long cuts alike):
 
 * its ends are held by more than
   :data:`~debate_core.evidence.near_duplicates.MAX_CONTAINER_CLUSTERS` other clusters (a short cut);
-* every body outside that holds it also holds a passage sharing nothing with it, and so witnesses
+* every body outside that holds it also holds a passage it does not overlap, and so witnesses
   nothing for it;
 * its witnesses are in more than one cluster, its own cluster among them or not;
 * it is under :data:`~debate_core.evidence.near_duplicates.MIN_CUT_SHARE` of its smallest witness;
-* joining its cluster to its witness's would put two texts that share nothing in one cluster.
+* joining its cluster to its witness's would put two texts that do not overlap in one cluster.
 
-A cut none of these apply to is *within the rule*. On a placement made by the current rules it is
-one whose cluster holds another body pointing elsewhere, or one refused beside another cluster
-joining the same one that shares nothing with it; on a placement made by earlier rules it is what
-those rules got wrong. A short body nine-tenths inside a body that **lacks one of its ends** is
-reported too: before the short-body step such a pair merged when the banding paired it, and since
-it they are never compared.
+"Overlap" is the clusterer's (:meth:`~debate_core.evidence.near_duplicates.CutIndex.overlap`): at
+least :data:`~debate_core.evidence.near_duplicates.MIN_OVERLAP_SHARE` of the smaller text's
+shingles in common. A cut none of these apply to is *within the rule*. On a placement made by the
+current rules it is one whose cluster holds another body pointing elsewhere, or one refused beside
+another cluster joining the same one that it does not overlap; on a placement made by earlier rules
+it is what those rules got wrong. A body nine-tenths inside another that **holds neither of its
+ends** is reported too: the clusterer finds a container from an end, so it never compares the two,
+and `card-fingerprint-v3` joined such a pair whenever its banding paired them. Such containers are
+found from three of the body's interior shingles, a quarter, a half and three-quarters of the way
+through it, and confirmed by count.
+
+**Witnesses refused by a passage.** :attr:`CutCensus.witness_refusals` counts, over every body, the
+containers that are no witness for it because they hold a passage it does not overlap, and how many
+of those refusals come only from passages under :data:`EARLIER_MIN_CUT_SHARE` of the container: the
+refusals that lowering `MIN_CUT_SHARE` to a tenth added (the PM asked for the figure, 2026-10-18).
 
 **Witnesses.** As in the clusterer, containers that hold one another count once. When every
 confirmed container outside the cluster of the smallest one holds a container inside that cluster,
@@ -70,7 +79,7 @@ from __future__ import annotations
 import statistics
 from collections import Counter, defaultdict
 from collections.abc import Callable, Mapping, Sequence, Set
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from enum import StrEnum
 from typing import Final
 
@@ -95,6 +104,7 @@ from debate_core.evidence.near_duplicates import (
 )
 
 __all__ = [
+    "EARLIER_MIN_CUT_SHARE",
     "MAX_CONTAINERS_COMPARED",
     "SHARE_BANDS",
     "ClusterShape",
@@ -114,21 +124,23 @@ MAX_CONTAINERS_COMPARED: Final = 12
 """Containers of one cut, per cluster, that are compared across clusters and checked against the
 banding. A much-read card has hundreds of copies; a spread of them by size says as much."""
 
+EARLIER_MIN_CUT_SHARE: Final = 0.25
+"""`MIN_CUT_SHARE` before the PM set it to a tenth (2026-10-18): what the witness refusals are
+compared with, and where the second of :data:`SHARE_BANDS` ends."""
+
 
 class CutOutcome(StrEnum):
     """What kept a cut out of the cluster of a body that contains it, in the order the cut step
     applies its limits."""
 
     TOO_MANY_HOLDERS = "short: its ends are held by too many clusters"
-    HELD_WITH_ANOTHER_PASSAGE = (
-        "every body outside that holds it also holds a passage sharing nothing with it"
-    )
+    HELD_WITH_ANOTHER_PASSAGE = "every body outside that holds it also holds a passage it does not overlap"
     OWN_CLUSTER_AND_ANOTHER = "a body in its own cluster holds it, and so does one in another"
     SEVERAL_CLUSTERS = "its witnesses are in more than one cluster"
     UNDER_MIN_CUT_SHARE = "under the minimum share of the smallest body that witnesses it"
-    UNRELATED_TEXTS = "joining it would put two texts that share nothing in one cluster"
+    UNRELATED_TEXTS = "joining it would put two texts that do not overlap in one cluster"
     WITHIN_THE_RULE = "one cluster is its witness, within the share, and it is still apart"
-    ENDS_NOT_BOTH_INSIDE = "short: nine-tenths inside a body that lacks one of its ends"
+    ENDS_NOT_INSIDE = "nine-tenths inside a body that holds neither of its ends"
 
 
 class CopiesRead(StrEnum):
@@ -212,6 +224,9 @@ class CutCensus:
     """The bodies left out of `findings`: every container outside their cluster holds a container
     inside it. Each is described as it would be were that copy not there, so that a pair the
     earlier rules joined through such a cut can still be explained."""
+    witness_refusals: Mapping[str, int] = field(default_factory=dict[str, int])
+    """Containers that are no witness for a body they hold, because they hold a passage it does not
+    overlap, over every body (:func:`witness_refusals`). Counts only."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -322,12 +337,13 @@ def diagnose_cuts(
     }
     short = {fingerprint for fingerprint in index.ends if index.size(fingerprint) < SHORT_BODY_SHINGLES}
 
-    # Every body holding a shingle of a short body: what finds one nine-tenths inside a body that
-    # lacks one of its ends, which is never among its candidates.
-    short_shingles = {shingle for fingerprint in short for shingle in index.sets[fingerprint]}
+    # Three interior shingles of each body, and every body holding one: what finds a body
+    # nine-tenths inside another that holds neither of its ends, which is never among its candidates.
+    probes = {fingerprint: _probes(index, fingerprint) for fingerprint in index.ends}
+    probe_shingles = {shingle for held in probes.values() for shingle in held}
     holders: defaultdict[str, set[str]] = defaultdict(set)
     for fingerprint in index.fingerprints:
-        for shingle in index.sets[fingerprint] & short_shingles:
+        for shingle in index.sets[fingerprint] & probe_shingles:
             holders[shingle].add(fingerprint)
 
     signatures: dict[str, tuple[int, ...]] = {}
@@ -362,30 +378,24 @@ def diagnose_cuts(
             if not accounted_for(holder):
                 confirmed[clusters[holder]].append(holder)
 
-        lacking_an_end: set[str] = set()
-        every_lacking_an_end: set[str] = set()
-        if cut in short:
-            sharing: Counter[str] = Counter()
-            for shingle in cut_set:
-                sharing.update(holders[shingle])
-            candidates = set(index.candidates(cut))
-            every_lacking_an_end = {
-                other
-                for other, shared in sharing.items()
-                if other != cut
-                and other not in candidates
-                and clusters[other] != cluster
-                and index.size(other) >= len(cut_set)
-                and shared >= limits.containment * len(cut_set)
-            }
-            lacking_an_end = {other for other in every_lacking_an_end if not accounted_for(other)}
-        with_a_copy = not confirmed and not lacking_an_end
+        candidates = set(index.candidates(cut))
+        every_neither_end = {
+            other
+            for other in set[str]().union(*(holders[shingle] for shingle in probes[cut]))
+            if other != cut
+            and other not in candidates
+            and clusters[other] != cluster
+            and index.size(other) >= len(cut_set)
+            and len(cut_set & index.sets[other]) >= limits.containment * len(cut_set)
+        }
+        neither_end = {other for other in every_neither_end if not accounted_for(other)}
+        with_a_copy = not confirmed and not neither_end
         if with_a_copy:
-            confirmed, lacking_an_end = every_confirmed, every_lacking_an_end
-        if not confirmed and not lacking_an_end:
+            confirmed, neither_end = every_confirmed, every_neither_end
+        if not confirmed and not neither_end:
             continue
 
-        finding = _finding(index, cut, cluster, confirmed, lacking_an_end, cluster_of, members, cuts_of)
+        finding = _finding(index, cut, cluster, confirmed, neither_end, cluster_of, members, cuts_of)
         if finding.smallest_container is not None:
             beside = members[clusters[finding.smallest_container]]
             finding = replace(
@@ -396,7 +406,7 @@ def diagnose_cuts(
         if cut in short:
             # Only a short cut's pairing matters: a long pair the banding made would have merged.
             compared = [holder for held in confirmed.values() for holder in _spread(held)]
-            compared += index.by_size(lacking_an_end)[:MAX_CONTAINERS_COMPARED]
+            compared += index.by_size(neither_end)[:MAX_CONTAINERS_COMPARED]
             finding = replace(
                 finding,
                 banded_with_a_container=any(
@@ -411,7 +421,38 @@ def diagnose_cuts(
         short_texts=len(short),
         findings=tuple(findings),
         with_a_copy=tuple(set_aside),
+        witness_refusals=witness_refusals(index),
     )
+
+
+def _probes(index: CutIndex, fingerprint: str) -> set[str]:
+    """Three of a body's interior shingles: a quarter, a half and three-quarters of the way in."""
+    ordered = word_shingles(index.words[fingerprint])
+    return {ordered[len(ordered) * quarter // 4] for quarter in (1, 2, 3)}
+
+
+def witness_refusals(index: CutIndex) -> dict[str, int]:
+    """Over every body, the containers that are no witness for it because they hold a passage it
+    does not overlap; and of those, the ones refused only by passages under
+    :data:`EARLIER_MIN_CUT_SHARE` of the container. Counts only."""
+    refusals = only_lower = 0
+    cuts: set[str] = set()
+    containers: set[str] = set()
+    for cut in index.fingerprints:
+        for holder in index.containers(cut):
+            if not index.holds_a_passage_apart_from(holder, cut):
+                continue
+            refusals += 1
+            cuts.add(cut)
+            containers.add(holder)
+            apart = [p for p in index.passages(holder) if p != cut and not index.overlap(p, cut)]
+            only_lower += all(index.size(p) / index.size(holder) < EARLIER_MIN_CUT_SHARE for p in apart)
+    return {
+        "containers_refused_as_witnesses": refusals,
+        "of_them_only_by_a_passage_a_tenth_to_a_quarter_of_the_container": only_lower,
+        "bodies_with_a_container_refused": len(cuts),
+        "containers_refusing": len(containers),
+    }
 
 
 def _finding(
@@ -419,7 +460,7 @@ def _finding(
     cut: str,
     cluster: str,
     confirmed: Mapping[str, list[str]],
-    lacking_an_end: Set[str],
+    neither_end: Set[str],
     cluster_of: Callable[[str], str],
     members: Mapping[str, Sequence[str]],
     cuts_of: Mapping[str, Sequence[str]],
@@ -454,7 +495,7 @@ def _finding(
             shingles=size,
             outcome=outcome,
             container_clusters=tuple(sorted(confirmed)),
-            containers=frozenset(everything) | frozenset(lacking_an_end),
+            containers=frozenset(everything) | frozenset(neither_end),
             containers_nested=nested,
             share_of_smallest_container=size / index.size(smallest) if smallest is not None else 0.0,
             smallest_container=smallest,
@@ -464,13 +505,13 @@ def _finding(
         )
 
     if smallest is None:
-        return finding(CutOutcome.ENDS_NOT_BOTH_INSIDE)
+        return finding(CutOutcome.ENDS_NOT_INSIDE)
     if too_common(cut, cluster_of, index):
         return finding(CutOutcome.TOO_MANY_HOLDERS)
     if len(copies) == len(everything):
         # Only copies hold it outside: they are joined unless the join puts unrelated texts together.
         apart = any(
-            not index.share_text_throughout(members[cluster], members[cluster_of(copy)]) for copy in copies
+            not index.overlap_throughout(members[cluster], members[cluster_of(copy)]) for copy in copies
         )
         return finding(CutOutcome.UNRELATED_TEXTS if apart else CutOutcome.WITHIN_THE_RULE)
     seen = witnesses(cut, cluster_of, index)
@@ -483,16 +524,16 @@ def _finding(
     # A witness in its own cluster that the bodies outside hold: the cut is with it. What the cut
     # is then described by is the rest of the rule, as it would be were that witness not there.
     witness = eligible[0] if target == cluster else seen.smallest
-    if size < MIN_CUT_SHARE * index.size(witness):
+    if size / index.size(witness) < MIN_CUT_SHARE:
         return finding(CutOutcome.UNDER_MIN_CUT_SHARE)
     joins = joining_target(cuts_of[cluster], cluster, cluster_of, index)
-    if joins == target and not index.share_text_throughout(members[cluster], members[target]):
+    if joins == target and not index.overlap_throughout(members[cluster], members[target]):
         return finding(CutOutcome.UNRELATED_TEXTS)
     first_by_fingerprint = min(everything)
     return finding(
         CutOutcome.WITHIN_THE_RULE,
         first_container_over_the_share=len(confirmed) == 1
-        and size < MIN_CUT_SHARE * index.size(first_by_fingerprint),
+        and size / index.size(first_by_fingerprint) < MIN_CUT_SHARE,
         another_body_points_elsewhere=joins != target,
     )
 
@@ -642,12 +683,13 @@ def tally_cuts(findings: Sequence[CutFinding], with_a_copy: Sequence[CutFinding]
 
 
 SHARE_BANDS: Final = (
-    (0.1, "under a tenth"),
-    (MIN_CUT_SHARE, "a tenth to a quarter"),
+    (MIN_CUT_SHARE, "under a tenth"),
+    (EARLIER_MIN_CUT_SHARE, "a tenth to a quarter"),
     (0.5, "a quarter to a half"),
     (float("inf"), "half or more"),
 )
-"""A cut's share of its smallest container, in bands; the second ends at :data:`MIN_CUT_SHARE`."""
+"""A cut's share of its smallest container, in bands: the first ends at :data:`MIN_CUT_SHARE`, and
+the second at the share before it, so that figures before and after the PM's ruling compare."""
 
 
 def _share_band(share: float) -> str:
@@ -814,14 +856,8 @@ def _would_match(held: _Bodies, left: str, right: str, limits: NearDuplicateThre
         return True
     smaller, larger = sorted((left, right), key=lambda text: (held.size(text), text))
     ordered = held.ordered[smaller]
-    if not (ordered[0] in held.sets[larger] and ordered[-1] in held.sets[larger]):
-        # A long cut lacking one of its ends is still found from the other (`card-fingerprint-v4`).
-        either_end = ordered[0] in held.sets[larger] or ordered[-1] in held.sets[larger]
-        return (
-            held.size(smaller) >= SHORT_BODY_SHINGLES
-            and either_end
-            and containment(left_set, right_set) >= limits.containment
-        )
+    if not (ordered[0] in held.sets[larger] or ordered[-1] in held.sets[larger]):
+        return False  # a cut is found from one of its ends (`card-fingerprint-v4`)
     return confirms_a_cut(
         held.sets[smaller], held.sets[larger], held.words[smaller], held.words[larger], limits
     )

@@ -215,9 +215,51 @@ None for this task. The operator steps the ADR implies are owned by later tasks:
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-19
 
 **Notes:**
+
+Accepted, with the phase `Succeeded`. The coach's merge is the ADR's acceptance.
+
+**The work itself:**
+
+* **Decisive, as asked.** Each of (a) to (g) is decided, with its alternatives and the documentation
+  read, and the five places current AWS documentation overrode my proposal are named up front.
+* **The claims that would have bitten later were checked, not assumed:**
+  * OAC's body hash on POST;
+  * managed login offering email at first setup, closed by "no session without an authenticator";
+  * the 625 Mbps cap that makes gzip worth it;
+  * SQLite 3.40.0, confirmed by running the Lambda image on both architectures;
+  * the provider's missing resources.
+* **The index stays out of the image** because ECR is not a place the policy lets personal data
+  live. That is reading the policy, not just the AWS docs.
+* **The log group names fall under ADR-0010's prod denies.**
+* **Turning down the sizes-only command was the right call.** File sizes would have bounded the
+  index, not measured it, and t02 measures it.
+
+**Rulings on the PM questions:**
+
+1. **(b).** Charlie believes every debater has a phone and asked for a fallback anyway. The coach
+   puts a phoneless student in an `email-second-factor` group, and the app accepts a verified email
+   as that student's only second factor. It is a group, not an attribute, and the email is the one
+   policy 1.10's E39 gate item 9 already allows. It goes into `v1-e39-t05` by PM amendment.
+2. **Amend `v1-e39-t04`** to ADR-0019's role table, app log group, two SSM parameters, the
+   `TubDeployer` and `TubAccounts` permission sets and the two runbook CLI steps.
+3. **Amend `v1-e39-t05`** for `/signed-out` and `/static/`, the account page, the app's own
+   authenticator enrolment page, and `debate_api` in the boto3 contract's direct form.
+4. **Amend `v2-e12-t01`** as recommended: email optional and verified when present; Plus when V2
+   wants threat protection; `organization_id` in the User record `v2-e12-t03` provisions, not an
+   immutable custom attribute.
+5. **Amend `v1-e39-t07`:** `reports/tub/search/` alone is added to the removal credential's delete
+   side, in the layout document and the IAM policy.
+6. **Amend `v1-e39-t02`** with the gzip object, both sha256 values, the 3.40.0 feature ceiling, and
+   the building SQLite version and index format version in the manifest.
+7. **The date** stays 2026-10-19 if it merges today. Otherwise the coach corrects the header and
+   README row in the merge.
+8. **The provider 6.x upgrade** goes on the deferred infrastructure list, after the pilot.
+
+One more amendment of my own: **`v1-e39-t08`** keeps a downloaded file under the function's 6 MB
+buffered response, or streams it, since a cart of 30 cards must never fail at the response limit.

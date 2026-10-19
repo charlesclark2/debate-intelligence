@@ -28,6 +28,9 @@ dev = [
     # ships no inline types. moto, below, is what answers the adapter in place of AWS.
     "boto3>=1.35",
     "boto3-stubs[s3]>=1.35",
+    # scripts/affected_tests.py (v1-e01-t28) builds the workspace packages' import graph with grimp.
+    # import-linter brings it in too, but the script uses it directly, so it is named here.
+    "grimp>=3.17",
     "httpx>=0.28",
     "hypothesis>=6.100",
     # `uv run lint-imports` checks the ports-and-adapters boundaries. v1-e29-t04 adds the first

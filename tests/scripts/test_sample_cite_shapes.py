@@ -7,6 +7,7 @@ file (working agreement 6).
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import re
@@ -18,7 +19,11 @@ from typing import Any
 import pytest
 from tests.evals.parser.cite_shapes import CITE_SIZE, READING_SIZE, SMALL_PRINT, SOURCE, prose, qualifications
 
-from debate_core.domain.debate_files import ParsedDocument
+from debate_core.application.ports.parsed_store import DocumentRecord, SourceEntry, SourceOutcome
+from debate_core.domain.caselist import SourceFormat
+from debate_core.domain.debate_files import CardCompleteness, ParsedCard, ParsedDocument
+from debate_core.evidence.fingerprints import FINGERPRINT_VERSION
+from debate_core.integrations.local.parsed_store import LocalParsedStore
 from debate_core.testing.docx_builder import build_docx, paragraph_xml, run_xml
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "scripts"))
@@ -169,7 +174,7 @@ def data_dir(tmp_path: Path) -> Path:
 
 
 def parsed_with_reads() -> tuple[list[Any], ParsedDocument]:
-    source = script._Source(CASELIST, DIGEST, Path("unused"))  # pyright: ignore[reportPrivateUsage]
+    source = script._Source(CASELIST, DIGEST, Path("unused"), Path("unused"), VERSION)  # pyright: ignore[reportPrivateUsage]
     parser = script._ReadingParser()  # pyright: ignore[reportPrivateUsage]
     document = parser.parse(FILE, script_source(source), source_path="sample.docx")
     assert isinstance(document, ParsedDocument)
@@ -215,7 +220,8 @@ def test_each_paragraph_under_test_is_in_its_stratum_and_nothing_else_is() -> No
 def test_the_plan_is_the_one_the_pm_approved() -> None:
     planned = Counter[str]()
     for stratum in script.STRATA:
-        planned[stratum.rule] += stratum.planned
+        if stratum.plan == script.FIRST_PLAN:
+            planned[stratum.rule] += stratum.planned
 
     assert planned == {
         "a cite behind a first name or a title": 20,
@@ -273,7 +279,9 @@ def test_a_sample_asks_about_every_stratum_and_saves_counts_alone(
     assert re.fullmatch(r"  Asked 11; answered 11 in \d+ seconds\.", lines[1])
     assert len(asked) == 12, "the key that is not an answer is asked again"
     per_stratum = lines[2:]
-    assert [line.split(":")[0].strip() for line in per_stratum] == [s.label for s in script.STRATA]
+    assert [line.split(":")[0].strip() for line in per_stratum] == [
+        s.label for s in script.STRATA if s.plan == script.FIRST_PLAN
+    ]
     for line in per_stratum:
         counts = re.fullmatch(r"  .+: in the corpus 1; drew 1 of \d+; yes (\d), no (\d), unsure (\d)", line)
         assert counts is not None, line
@@ -312,7 +320,7 @@ def test_stopping_keeps_the_tallies_so_far(
 
 
 def test_the_same_seed_draws_the_same_items_in_the_same_order(data_dir: Path) -> None:
-    found = script.scan(script.sources_in(data_dir, [CASELIST]), workers=1)
+    found, _ = script.scan(script.sources_in(data_dir, [CASELIST]), workers=1)
 
     first, second = script.draw(found, 11), script.draw(found, 11)
     assert [(stratum, position) for stratum, _, position in first] == [
@@ -323,13 +331,15 @@ def test_the_same_seed_draws_the_same_items_in_the_same_order(data_dir: Path) ->
 
 
 def test_each_stratum_draws_its_planned_number_and_no_more() -> None:
-    source = script._Source(CASELIST, DIGEST, Path("unused"))  # pyright: ignore[reportPrivateUsage]
+    source = script._Source(CASELIST, DIGEST, Path("unused"), Path("unused"), VERSION)  # pyright: ignore[reportPrivateUsage]
     found = {number: [(source, position) for position in range(30)] for number in range(len(script.STRATA))}
 
-    drawn = Counter(stratum for stratum, _, _ in script.draw(found, 5))
+    first = Counter(stratum for stratum, _, _ in script.draw(found, 5))
+    left_quote = Counter(stratum for stratum, _, _ in script.draw(found, 5, script.LEFT_QUOTE_PLAN))
 
-    assert drawn == {number: stratum.planned for number, stratum in enumerate(script.STRATA)}
-    assert sum(drawn.values()) == 70
+    assert first == {n: s.planned for n, s in enumerate(script.STRATA) if s.plan == script.FIRST_PLAN}
+    assert sum(first.values()) == 70
+    assert left_quote == {11: 18, 12: 10}
 
 
 def test_nothing_saved_holds_text_a_tag_a_path_or_a_digest(
@@ -415,3 +425,167 @@ def test_a_long_paragraph_is_shown_by_its_opening_and_its_end() -> None:
     plain = shown.replace("\x1b[0m", "")
     assert LONGER_GUESS[:900] in plain and LONGER_GUESS[-400:] in plain
     assert LONGER_GUESS[:901] not in plain
+
+
+# ------------------------------------------------------------------------------------------------
+# The left-quote plan, after the PM's review of 2026-10-18
+# ------------------------------------------------------------------------------------------------
+
+STORED_VERSION = "2026.10.12-docx-3"
+LEFT_QUOTE = "\u2018"
+LEFT_QUOTED_LINE = f"Okonkwo {LEFT_QUOTE}26, invented for this test, {SOURCE}."
+PLAIN_CITE_LINE = f"Okonkwo 26, invented for this test, {SOURCE}."
+BRACKETED = f"[Adaeze Okonkwo 2026, {qualifications(300)}, {SOURCE}] KR"
+
+#: Four cards: a line opening `Okonkwo ‘26` that was the body and is now the only cite; a short
+#: cite `Okonkwo ‘26` alone above a bracketed cite; a cite line that leaves its card no body with
+#: no left quote in it; and a card that does not change.
+LEFT_QUOTE_FILE = build_docx(
+    tag("Tenth tag")
+    + paragraph([("Okonkwo \u201826", {}), (LEFT_QUOTED_LINE[11:], {"underline": "single"})])
+    + tag("Eleventh tag")
+    + paragraph([(f"Okonkwo {LEFT_QUOTE}26", {"character_style": "Style13ptBold"})])
+    + paragraph([(BRACKETED, {})])
+    + body()
+    + tag("Twelfth tag")
+    + paragraph([("Okonkwo 26", {"bold": True}), (PLAIN_CITE_LINE[10:], {})])
+    + tag("Thirteenth tag")
+    + cite()
+    + body()
+)
+LEFT_QUOTE_DIGEST = hashlib.sha256(LEFT_QUOTE_FILE).hexdigest()
+
+
+def _left_quote_document() -> tuple[list[Any], ParsedDocument]:
+    source = script._Source(CASELIST, LEFT_QUOTE_DIGEST, Path("unused"), Path("unused"), STORED_VERSION)  # pyright: ignore[reportPrivateUsage]
+    parser = script._ReadingParser()  # pyright: ignore[reportPrivateUsage]
+    document = parser.parse(LEFT_QUOTE_FILE, script_source(source), source_path="sample.docx")
+    assert isinstance(document, ParsedDocument)
+    return parser.reads, document
+
+
+def _as_stored_before(document: ParsedDocument) -> ParsedDocument:
+    """The same file as the parser before the left quote: the two lone cite lines were each a card's
+    whole body, and the short cite above the bracket was none."""
+
+    def before(card: ParsedCard) -> ParsedCard:
+        if card.full_cite in (LEFT_QUOTED_LINE, PLAIN_CITE_LINE):
+            return card.model_copy(
+                update={
+                    "completeness": CardCompleteness.FULL,
+                    "full_cite": "",
+                    "short_cite": None,
+                    "evidence_text": card.full_cite,
+                }
+            )
+        if card.short_cite is not None and LEFT_QUOTE in card.short_cite:
+            return card.model_copy(update={"short_cite": None})
+        return card
+
+    return document.model_copy(
+        update={"cards": tuple(before(card) for card in document.cards), "parser_version": STORED_VERSION}
+    )
+
+
+@pytest.fixture
+def left_quote_dir(tmp_path: Path) -> Path:
+    blob = tmp_path / "blobs" / "sha256" / LEFT_QUOTE_DIGEST[:2] / LEFT_QUOTE_DIGEST[2:4] / LEFT_QUOTE_DIGEST
+    blob.parent.mkdir(parents=True)
+    blob.write_bytes(LEFT_QUOTE_FILE)
+    _, document = _left_quote_document()
+    stored = _as_stored_before(document)
+    entry = SourceEntry.model_validate(
+        {
+            "caselist": CASELIST,
+            "snapshot": "2026-10-18",
+            "source_sha256": LEFT_QUOTE_DIGEST,
+            "parser_version": STORED_VERSION,
+            "profile_version": stored.profile_version,
+            "fingerprint_version": FINGERPRINT_VERSION,
+            "source_format": SourceFormat.DOCX,
+            "byte_size": len(LEFT_QUOTE_FILE),
+            "outcome": SourceOutcome.PARSED,
+            "cards": len(stored.cards),
+        }
+    )
+    record = DocumentRecord.from_parsed_document(
+        stored, caselist=CASELIST, snapshot="2026-10-18", fingerprint_version=FINGERPRINT_VERSION, camp=None
+    )
+    store = LocalParsedStore(tmp_path)
+    asyncio.run(store.write_source(CASELIST, STORED_VERSION, entry, record))
+    asyncio.run(store.write_aggregates(CASELIST, STORED_VERSION, index=[entry], failures=[], occurrences=[]))
+    return tmp_path
+
+
+def test_the_left_quote_cards_are_found_against_the_stored_ones(left_quote_dir: Path) -> None:
+    reads, document = _left_quote_document()
+    (source,) = script.sources_in(left_quote_dir, [CASELIST])
+    stored = script._stored_cards(source)  # pyright: ignore[reportPrivateUsage]
+
+    found, without = script.card_strata(reads, document, stored, script._ReadingParser().profile)  # pyright: ignore[reportPrivateUsage]
+
+    assert [(stratum, document.sections[position].text) for stratum, position in found] == [
+        (11, LEFT_QUOTED_LINE),
+        (12, f"Okonkwo {LEFT_QUOTE}26"),
+        (11, PLAIN_CITE_LINE),
+    ]
+    assert without == 1, "the plain cite line holds no left quote"
+
+
+def test_with_nothing_stored_only_the_short_cites_are_found() -> None:
+    reads, document = _left_quote_document()
+
+    found, without = script.card_strata(reads, document, [], script._ReadingParser().profile)  # pyright: ignore[reportPrivateUsage]
+
+    assert [stratum for stratum, _ in found] == [12, 12]
+    assert without == 0
+
+
+def test_the_left_quote_plan_asks_its_28_and_shows_the_short_cite(
+    left_quote_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    saved = tmp_path / "tallies.txt"
+    _keys(monkeypatch, ["y", "n", "u"])
+
+    script.main(
+        [
+            "--data-dir",
+            str(left_quote_dir),
+            "--caselist",
+            CASELIST,
+            "--plan",
+            "left-quote",
+            "--seed",
+            "4",
+            "--save-tallies",
+            str(saved),
+            "--workers",
+            "1",
+        ]
+    )
+
+    lines = saved.read_text().splitlines()
+    assert (
+        lines[0]
+        == "Cite-shape sample (v1-e31-t19), left-quote plan, seed 4: drew 3 items from 1 parsed sources."
+    )
+    assert re.fullmatch(r"  Asked 3; answered 3 in \d+ seconds\.", lines[1])
+    assert re.fullmatch(
+        r"  a short cite with a left quote \| a cite line that leaves its card no body: "
+        r"in the corpus 2; drew 2 of 18; yes \d, no \d, unsure \d",
+        lines[2],
+    )
+    assert re.fullmatch(
+        r"  a short cite with a left quote \| a card gaining such a short cite: "
+        r"in the corpus 1; drew 1 of 10; yes \d, no \d, unsure \d",
+        lines[3],
+    )
+    assert lines[4] == (
+        "  Of the cards whose cite line leaves them no body, 1 hold no line read only through the left quote."
+    )
+    assert len(lines) == 5
+    assert f"Short cite read:  Okonkwo {LEFT_QUOTE}26" in capsys.readouterr().out
+    written = saved.read_text()
+    for word in ("Okonkwo", "Adaeze", "Tenth", "Grid", CASELIST):
+        assert word not in written, word
+    assert not re.search(r"[0-9a-f]{12}", written)

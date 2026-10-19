@@ -12,6 +12,13 @@ one key. The PM approved the plan on 2026-10-18, 70 items:
 * a highlighted cite: 10 taken, 10 left;
 * the cite-style hold: 7 re-read as body, 3 still held as cites.
 
+After the PM's review of 2026-10-18, a second plan, `--plan left-quote`, asks about the short cite
+written with a left quote (`Okonkwo ‘26`), 28 items: every card the change leaves `FULL` no longer,
+`CITE_ONLY` with no new rule id to explain it (18 in the corpus), with the line now read as its cite
+marked; and 10 cards that gain a short cite written with a left quote, with that short cite shown.
+Those two compare the parser's cards with the cards the store holds for the same source, read
+in place.
+
 It parses every source in the store with the parser this branch carries. The sample was taken on
 2026-10-18 with the three rules behind a flag that only this script switched on, so it judged the
 code that would ship; the rules were switched on for good once the tallies supported them, and the
@@ -26,6 +33,8 @@ paragraph, tag, cite, file name, path or digest.
 
     uv run python scripts/sample_cite_shapes.py --seed 20261018 \\
       --save-tallies ~/cite-shape-sample-tallies.txt
+    uv run python scripts/sample_cite_shapes.py --plan left-quote --seed 20261019 \\
+      --save-tallies ~/cite-shape-sample-tallies.txt
 
 Keys: `y` yes, `n` no, `u` unsure, with no Enter; `q` stops and keeps the tallies so far.
 """
@@ -33,9 +42,11 @@ Keys: `y` yes, `n` no, `u` unsure, with no Enter; `q` stops and keeps the tallie
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
 import os
 import random
+import re
 import sys
 import time
 from collections import Counter
@@ -53,22 +64,34 @@ from compare_card_clusters import CLEAR_TERMINAL, read_key  # noqa: E402
 
 from debate_core.application.ports.parsed_store import parse_version_directory  # noqa: E402
 from debate_core.domain.caselist import SourceDocument, SourceFormat, SourceOrigin  # noqa: E402
-from debate_core.domain.debate_files import FileSection, ParsedDocument  # noqa: E402
+from debate_core.domain.debate_files import (  # noqa: E402
+    CardCompleteness,
+    FileSection,
+    ParsedCard,
+    ParsedDocument,
+)
 from debate_core.domain.style_profile import RunEmphasis, StructuralUnit, StyleProfile  # noqa: E402
 from debate_core.evidence.style_classifier import (  # noqa: E402
     first_name_and_year,
+    for_matching,
     is_a_highlighted_cite,
     the_cite_style_marks_a_name_and_year_at_the_head,
 )
 from debate_core.integrations.docx_parser import DebateDocxParser  # noqa: E402
 from debate_core.integrations.docx_parser.runs import ReadParagraph  # noqa: E402
 from debate_core.integrations.local.fs_blob_store import BLOB_DIRECTORY  # noqa: E402
+from debate_core.integrations.local.parsed_store import LocalParsedStore  # noqa: E402
 
-__all__ = ["STRATA", "Stratum", "main", "strata_of"]
+__all__ = ["STRATA", "Stratum", "card_strata", "main", "strata_of"]
 
 CITE_QUESTION = "Is the marked paragraph this card's cite, or a line of it?"
 TEXT_QUESTION = "Is the marked paragraph part of the card's text, the evidence?"
 EITHER_QUESTION = "Is the marked paragraph a cite, or part of a card's text?"
+SHORT_CITE_QUESTION = "Is the short cite shown the right short cite for the marked cite?"
+
+#: The plan the PM approved first, and the one after the review of 2026-10-18.
+FIRST_PLAN, LEFT_QUOTE_PLAN = "first", "left-quote"
+LEFT_QUOTE = "\u2018"
 
 ANSWERS = {"y": "yes", "n": "no", "u": "unsure"}
 STOP_KEY = "q"
@@ -92,6 +115,7 @@ class Stratum:
     side: str
     question: str
     planned: int
+    plan: str = FIRST_PLAN
 
     @property
     def label(self) -> str:
@@ -110,7 +134,22 @@ STRATA: tuple[Stratum, ...] = (
     Stratum("a highlighted cite", "left", CITE_QUESTION, 10),
     Stratum("the cite-style hold", "re-read as body", CITE_QUESTION, 7),
     Stratum("the cite-style hold", "still held as a cite", CITE_QUESTION, 3),
+    Stratum(
+        "a short cite with a left quote",
+        "a cite line that leaves its card no body",
+        CITE_QUESTION,
+        18,
+        LEFT_QUOTE_PLAN,
+    ),
+    Stratum(
+        "a short cite with a left quote",
+        "a card gaining such a short cite",
+        SHORT_CITE_QUESTION,
+        10,
+        LEFT_QUOTE_PLAN,
+    ),
 )
+_LEAVES_NO_BODY, _GAINS_A_SHORT_CITE = 11, 12
 
 
 # ------------------------------------------------------------------------------------------------
@@ -229,6 +268,71 @@ def _stratum_of(
 # ------------------------------------------------------------------------------------------------
 
 
+def _is_a_new_rule(rule: str) -> bool:
+    """Whether a rule id names one of this task's rules other than the left quote's, or a re-read."""
+    head = rule.split(":")[0]
+    return (
+        head in (BEHIND_A_NAME, HIGHLIGHTED_CITE)
+        or head.startswith(GUESS_REREAD)
+        or (":verbatim-" in rule and not rule.startswith("verbatim-"))
+    )
+
+
+def _read_only_through_the_left_quote(text: str, profile: StyleProfile) -> bool:
+    """Whether a line opens with a short cite only once a left quote before its year is an apostrophe."""
+    text = text.strip()
+    pattern = profile.cite.short_cite_pattern
+    return re.match(pattern, text) is None and re.match(pattern, for_matching(text)) is not None
+
+
+def card_strata(
+    reads: Sequence[ReadParagraph],
+    document: ParsedDocument,
+    stored: Sequence[ParsedCard],
+    profile: StyleProfile,
+) -> tuple[list[tuple[int, int]], int]:
+    """The left-quote plan's items in one file, and how many of the first kind hold no left-quoted line.
+
+    A card that the store holds `FULL` at the same range, that is `CITE_ONLY` now, and whose rule ids
+    name none of this task's other rules is one the left quote moved: its marked paragraph is the
+    cite line read only through the left quote (the card's first cite paragraph if it has none, which
+    the second number counts). A card whose short cite holds a left quote, where the stored card at
+    its range had none, is the second kind; its first cite paragraph is marked.
+    """
+    position_of = {section.element_index: position for position, section in enumerate(document.sections)}
+    before = {
+        (card.provenance.first_element_index, card.provenance.last_element_index): card for card in stored
+    }
+    found: list[tuple[int, int]] = []
+    without_a_left_quoted_line = 0
+    for card in document.cards:
+        first, last = card.provenance.first_element_index, card.provenance.last_element_index
+        cites = [
+            position_of[index]
+            for index in range(first, last + 1)
+            if index in position_of and document.sections[position_of[index]].unit is StructuralUnit.CITE
+        ]
+        if not cites:
+            continue
+        earlier = before.get((first, last))
+        if (
+            earlier is not None
+            and earlier.completeness is CardCompleteness.FULL
+            and card.completeness is CardCompleteness.CITE_ONLY
+            and not any(_is_a_new_rule(rule) for rule in (*card.rule_ids, *earlier.rule_ids))
+        ):
+            through = [k for k in cites if _read_only_through_the_left_quote(reads[k].text, profile)]
+            without_a_left_quoted_line += not through
+            found.append((_LEAVES_NO_BODY, (through or cites)[0]))
+        elif (
+            card.short_cite is not None
+            and LEFT_QUOTE in card.short_cite
+            and (earlier is None or earlier.short_cite is None or LEFT_QUOTE not in earlier.short_cite)
+        ):
+            found.append((_GAINS_A_SHORT_CITE, cites[0]))
+    return found, without_a_left_quoted_line
+
+
 class _ReadingParser(DebateDocxParser):
     """The parser, keeping each file's paragraphs as it read them."""
 
@@ -247,6 +351,8 @@ class _Source:
     caselist: str
     sha256: str
     blob: Path
+    data_dir: Path
+    version: str
 
 
 def _version_directory(parsed: Path, caselist: str) -> Path:
@@ -266,13 +372,13 @@ def sources_in(data_dir: Path, caselists: Iterable[str]) -> list[_Source]:
     """Every source the store recorded as parsed, in a fixed order."""
     sources: list[_Source] = []
     for caselist in caselists:
-        index = _version_directory(data_dir / "parsed", caselist) / "index.jsonl"
-        for line in index.read_text(encoding="utf-8").splitlines():
+        version = _version_directory(data_dir / "parsed", caselist)
+        for line in (version / "index.jsonl").read_text(encoding="utf-8").splitlines():
             record = json.loads(line)
             if record.get("outcome") == "PARSED":
                 digest = record["source_sha256"]
                 blob = data_dir / BLOB_DIRECTORY / digest[:2] / digest[2:4] / digest
-                sources.append(_Source(caselist, digest, blob))
+                sources.append(_Source(caselist, digest, blob, data_dir, version.name))
     return sorted(sources, key=lambda source: (source.caselist, source.sha256))
 
 
@@ -300,26 +406,39 @@ def _parse(source: _Source) -> tuple[list[ReadParagraph], ParsedDocument] | None
     return _PARSER.reads, document
 
 
-def _strata_in(source: _Source) -> list[tuple[int, int]]:
+def _stored_cards(source: _Source) -> list[ParsedCard]:
+    """The cards the store holds for the source, read in place; none when it holds no document."""
+    record = asyncio.run(
+        LocalParsedStore(source.data_dir).read_document(source.caselist, source.version, source.sha256)
+    )
+    return [] if record is None else list(record.to_parsed_document("stored.docx").cards)
+
+
+def _strata_in(source: _Source) -> tuple[list[tuple[int, int]], int]:
     parsed = _parse(source)
     if parsed is None:
-        return []
+        return [], 0
     reads, document = parsed
-    return strata_of(reads, document.sections, _PARSER.profile)  # type: ignore[union-attr]
+    profile = _PARSER.profile  # type: ignore[union-attr]
+    by_card, without = card_strata(reads, document, _stored_cards(source), profile)
+    return strata_of(reads, document.sections, profile) + by_card, without
 
 
-def scan(sources: Sequence[_Source], workers: int) -> dict[int, list[tuple[_Source, int]]]:
-    """Every paragraph in every stratum, as (source, position), in a fixed order."""
+def scan(sources: Sequence[_Source], workers: int) -> tuple[dict[int, list[tuple[_Source, int]]], int]:
+    """Every item in every stratum, as (source, position), in a fixed order; and how many cards of
+    the left-quote plan's first kind hold no line read only through the left quote."""
     found: dict[int, list[tuple[_Source, int]]] = {number: [] for number in range(len(STRATA))}
     if workers <= 1:
         results = [_strata_in(source) for source in sources]
     else:
         with ProcessPoolExecutor(max_workers=workers) as pool:
             results = list(pool.map(_strata_in, sources, chunksize=8))
-    for source, in_file in zip(sources, results, strict=True):
+    without = 0
+    for source, (in_file, file_without) in zip(sources, results, strict=True):
+        without += file_without
         for stratum, position in in_file:
             found[stratum].append((source, position))
-    return found
+    return found, without
 
 
 # ------------------------------------------------------------------------------------------------
@@ -404,36 +523,50 @@ class Tallies:
 
     seed: int
     sources: int
+    plan: str
     population: dict[int, int]
     drawn: Counter[int]
     answered: Counter[tuple[int, str]]
     asked: int
     stopped: bool
     seconds_answering: float
+    without_a_left_quoted_line: int = 0
 
     def lines(self) -> list[str]:
         answered = sum(self.answered.values())
         summary = f"  Asked {self.asked}; answered {answered} in {round(self.seconds_answering)} seconds"
         summary += f", stopped with {self.asked - answered} not answered." if self.stopped else "."
+        plan = "" if self.plan == FIRST_PLAN else f", {self.plan} plan"
         lines = [
-            f"Cite-shape sample (v1-e31-t19), seed {self.seed}: drew {sum(self.drawn.values())} items "
+            f"Cite-shape sample (v1-e31-t19){plan}, seed {self.seed}: drew {sum(self.drawn.values())} items "
             f"from {self.sources:,} parsed sources.",
             summary,
         ]
         for number, stratum in enumerate(STRATA):
+            if stratum.plan != self.plan:
+                continue
             answers = ", ".join(f"{word} {self.answered[(number, word)]}" for word in ANSWERS.values())
             lines.append(
                 f"  {stratum.label}: in the corpus {self.population[number]:,}; drew {self.drawn[number]} "
                 f"of {stratum.planned}; {answers}"
             )
+        if self.plan == LEFT_QUOTE_PLAN:
+            lines.append(
+                f"  Of the cards whose cite line leaves them no body, {self.without_a_left_quoted_line} hold "
+                "no line read only through the left quote."
+            )
         return lines
 
 
-def draw(found: dict[int, list[tuple[_Source, int]]], seed: int) -> list[tuple[int, _Source, int]]:
+def draw(
+    found: dict[int, list[tuple[_Source, int]]], seed: int, plan: str = FIRST_PLAN
+) -> list[tuple[int, _Source, int]]:
     """Each stratum's planned number, at random by `seed`, then all of them in one shuffled order."""
     chooser = random.Random(seed)
     drawn: list[tuple[int, _Source, int]] = []
     for number, stratum in enumerate(STRATA):
+        if stratum.plan != plan:
+            continue
         candidates = found[number]
         for source, position in chooser.sample(candidates, min(stratum.planned, len(candidates))):
             drawn.append((number, source, position))
@@ -449,7 +582,16 @@ def prepare(drawn: Sequence[tuple[int, _Source, int]]) -> list[_Item]:
         if parsed is None:
             continue
         reads, document = parsed
-        items.append(_Item(stratum, render_item(reads, document.sections, position)))
+        shown = render_item(reads, document.sections, position)
+        if STRATA[stratum].question is SHORT_CITE_QUESTION:
+            element = document.sections[position].element_index
+            card = next(
+                card
+                for card in document.cards
+                if card.provenance.first_element_index <= element <= card.provenance.last_element_index
+            )
+            shown += f"\n\nShort cite read:  {card.short_cite}"
+        items.append(_Item(stratum, shown))
     return items
 
 
@@ -501,6 +643,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         action="append",
         help="Repeat for several. Default: hsld26, hspf26, hspolicy26 and openev.",
     )
+    parser.add_argument(
+        "--plan",
+        choices=(FIRST_PLAN, LEFT_QUOTE_PLAN),
+        default=FIRST_PLAN,
+        help="first: the 70 items approved first. left-quote: the 28 asked for in the PM's review.",
+    )
     parser.add_argument("--seed", type=int, help="Draws the same items again. Default: a new one, recorded.")
     parser.add_argument("--save-tallies", type=Path, required=True, help="A file outside the repository.")
     parser.add_argument(
@@ -516,8 +664,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     sources = sources_in(arguments.data_dir, caselists)
     print(f"Reading {len(sources):,} parsed sources; a few minutes …", flush=True)
-    found = scan(sources, arguments.workers)
-    items = prepare(draw(found, seed))
+    found, without = scan(sources, arguments.workers)
+    items = prepare(draw(found, seed, arguments.plan))
     answered, stopped, seconds = ask_about(
         items, ask=read_key, show=lambda text: print(text, end="", flush=True)
     )
@@ -525,12 +673,14 @@ def main(argv: Sequence[str] | None = None) -> int:
     tallies = Tallies(
         seed=seed,
         sources=len(sources),
+        plan=arguments.plan,
         population={number: len(found[number]) for number in range(len(STRATA))},
         drawn=Counter(item.stratum for item in items),
         answered=answered,
         asked=len(items),
         stopped=stopped,
         seconds_answering=seconds,
+        without_a_left_quoted_line=without,
     )
     lines = tallies.lines()
     print("\n".join(lines))

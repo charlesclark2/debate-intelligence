@@ -359,9 +359,53 @@ on this machine, in every configuration, and the value is still a string.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-18
 
 **Notes:**
+
+Accepted, with the phase `Succeeded`.
+
+**The work itself:**
+
+* **ac3 was measured at a commit that holds item (4) alone** (`a59c6d1`), so "every removal test
+  passes unchanged" is a clean claim. Splitting the commits was what made that possible.
+* **The argument that the withdrawn-set check decided nothing is written down**, including camp
+  rows (`camp_path_disclosure` is the same digest), and the one skewed-clock case where the list
+  rightly decides. D1 to D3 show the remaining rule is load-bearing.
+* **The "this team" wording was audited across the module, in a table**, not just the two strings
+  named. T4's survivor led to a reachable case (a refused upload at another holder's held path under
+  `--team`), now tested.
+* **The probe reuses `v1-e34-t16`'s method.** It covers the lock refusal and an inbox under `HOME`,
+  and P4 proves the home probe catches a string built from `Path.home()`. I read
+  `inbox_directory_named`: a path it cannot place inside the data directory, a symlinked one
+  included, falls to the setting's name. So the fallback can never leak a path.
+* **`withdrawals` matches the printed lines and what the execution writes**, through the installed
+  build.
+
+**Rulings:**
+
+* **Deviation 1, three assertions changed for item (5):** accepted. My "stop if a test fails" was
+  about item (4). The amendment for (5) changes exactly the value those assertions pinned, and only
+  the expected values changed.
+* **Deviation 2, the forbidden entry edited:** accepted. It came with the amendment.
+* **PM question 1: (a).** The setting's name, `caselist.inbox_dir`. The promise that a removal's
+  output names no path on this machine holds in every configuration, and the value stays a string.
+  (b) breaks the promise, and (c) breaks the type.
+* **Decision 3, `manifest_versions_swept` as an object or the string `"not counted"`:** accepted for
+  now. Nothing reads the key yet. If a program ever consumes it, it should become an object with a
+  `counted` boolean rather than a type switch. That is noted against E30, not filed.
+* **Decision 6, "removes nothing" read from `nothing_to_do`:** accepted. A per-file judgement would
+  need state the plan does not keep.
+* **Decisions 1, 2, 4, 5, 7 and 8:** accepted.
+
+**Follow-ups:**
+
+* **1, a `--team` re-run after a `--team --include-shared` run** calling another holder's path
+  "this team's copy": accepted as low priority and added to E30's deferred list. It needs one
+  request with two selectors, and no record can tell whose path it was.
+* **2, the policy:** no change needed, agreed.
+* **The optional dry run under Operator follow-ups** is not required for acceptance. The probe tests
+  through the real composition root are the evidence.

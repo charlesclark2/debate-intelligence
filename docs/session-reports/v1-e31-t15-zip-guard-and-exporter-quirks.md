@@ -373,9 +373,61 @@ and sets the Goal to `Succeeded` in a small spec PR, as `v1-e31-t09` did.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-18
 
 **Notes:**
+
+Accepted, on condition that the session applies the four changes below before the PR. The Goal
+stays `InProgress` for ac4, so the merge uses `--partial`.
+
+**Apply before the PR:**
+
+1. **The spec's `constraints.packages`** gains `debate_core.application` (PM question 3, (a)) and
+   `docs/policies` (for item 2). Mark it "PM amendment 2026-10-18".
+2. **PM question 1, (a): the policy sentence**, appended to Attribution rule 1 exactly as proposed.
+   The policy then says what the store holds.
+3. **PM question 2, (a): the parse-report sentence**, added as proposed. The history stays and the
+   reader learns what changed.
+4. **The `ParsedCard` field descriptions** (Follow-up 3). Make `tag`, `full_cite` and
+   `evidence_text` name the same one exception the class docstring now names, briefly, e.g. "...
+   exactly as written, except that a character XML 1.0 forbids is replaced by U+FFFD". A field
+   description that is untrue is worse than a long one.
+
+**The work itself:**
+
+* **The decision is in the spec before any code** (`21d88be`), as ac2 asks.
+* **Red against a skeleton that adds only names**, so every failure is a behaviour failure. The
+  tests that pass at red pin what must not move, and mutants show they bite.
+* **The ratio guard.** I read `_judge_compression_ratio` and `_read_part`. The ratio is judged from
+  the directory before a byte is inflated, the read is still bounded at the part limit plus one,
+  and the total and entry limits still count every entry. A part that lies about its size is
+  caught. The guard is narrower in what it judges and no weaker in what it allows.
+* **Forbidden characters.** Every XML protection is unchanged, which the DOCTYPE and entity tests
+  prove beside a forbidden character. Character references are still refused. The rewrite is
+  encoding-aware and leaves an encoding it cannot handle to the parser.
+* **The count went in `warnings`, not a new field,** so the agent's build reads the stored document.
+  That is shown by running `v1.1.0-dev.18` over a store this branch wrote.
+* **The dev store's 7 failures re-read read-only** become 6 parsed and 1 `CMIR`, with all 66
+  replaced characters in evidence text. The PR-subset evaluation is identical but for the version.
+* **18 of 18 mutants caught.** The one not run is argued equivalent, correctly.
+
+**Rulings:**
+
+* **Deviation 1, the pipeline lines:** accepted. They are what ac3 means, and the spec is amended
+  to match (item 1 above).
+* **Deviation 2, the three tests:** accepted. Each pinned exactly what this task changed.
+* **Decisions:** all accepted. The two choices that keep the agent's build reading the store (the
+  count in `warnings`, and `CMIR` written only into docx-4 directories) are the right ones.
+* **PM question 4: (a).** It is filed as an E30 follow-up, after the agent runs a build that knows
+  `CMIR`.
+
+**Follow-ups:**
+
+* **Telling CardMirror's maintainer** is outward-facing. It goes to the operator, not a task.
+* **ac4** is run with `v1-e31-t19`'s re-parse, after `v1-e31-t20`'s rebuild, by the operator, and
+  recorded in a close-out.
+* **`v1-e31-t19` also bumps `DOCX_PARSER_VERSION`.** Whichever merges second rebases and takes a
+  later version string, with its own history line.

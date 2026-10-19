@@ -48,6 +48,7 @@ from debate_core.application.ports.suppression import (
     ReasonCode,
     SuppressionAction,
     SuppressionEntry,
+    disclosure_digest,
 )
 
 from .conftest import REQUEST, RemovalWorld
@@ -249,6 +250,44 @@ class TestWhatIsNotOwed:
         )
 
         assert (await owed(world)).removals_owed == ()
+
+    async def test_the_same_requests_hold_of_another_path_does_not_make_it_owed(
+        self, world: RemovalWorld, tmp_path: Path
+    ) -> None:
+        """`RM-2026-01` removed a second file too, holding that file's path. An un-suppress lifts the
+        hold that refused the upload; the other hold is at another path, which no manifest names, and
+        refuses nothing there."""
+        await import_weekly(world, tmp_path, CASELIST, WEEK_OF_THE_HELD_UPLOAD)
+        await world.suppression().append_path_holds(
+            [
+                PathHoldEntry(
+                    caselist=CASELIST,
+                    disclosure=disclosure_digest(
+                        CASELIST, "Elm Bay/QQ/Elm Bay-QQ-Aff-Nowhere Open-Round 1.docx"
+                    ),
+                    sha256=digest_of("kept"),
+                    after_snapshot=date(2026, 9, 8),
+                    recorded_at=datetime(2026, 10, 10, 9, 0, tzinfo=UTC),
+                    reason=ReasonCode.REQUESTED_BY_TEAM,
+                    request_id=REQUEST,
+                )
+            ]
+        )
+        await world.suppression().append(
+            [
+                SuppressionEntry(
+                    action=SuppressionAction.UNSUPPRESS,
+                    sha256=NAMED,
+                    recorded_at=datetime(2026, 10, 12, 9, 0, tzinfo=UTC),
+                    reason=ReasonCode.REMOVED_IN_ERROR,
+                    request_id=REQUEST,
+                )
+            ]
+        )
+
+        report = await owed(world)
+        assert report.held_snapshots == (), "the precondition: no row at either path"
+        assert report.removals_owed == ()
 
     async def test_a_comparison_of_another_caselist_does_not_report_it(
         self, world: RemovalWorld, tmp_path: Path

@@ -318,6 +318,29 @@ def test_a_team_removal_withdrawing_only_from_its_own_paths_reads_as_before() ->
     ) in lines
 
 
+def test_an_upload_refused_at_another_holders_held_path_is_that_holders_copy() -> None:
+    """Known by the held path's digest alone (`v1-e30-t23`): the digest says whose path it is.
+
+    A `--source --include-shared` removal holds every holder's path of the file it removes, and a
+    `--team` removal under the same request then plans what an import refused at each of them.
+    """
+    refused_elsewhere = dataclasses.replace(
+        refused_at_the_held_path(),
+        held_at_import=((CASELIST, disclosure_digest(CASELIST, ANOTHER_HOLDERS_PATH)),),
+        suppression=(suppressed(REFUSED, ANOTHER_HOLDERS_PATH),),
+    )
+
+    lines = render_plan(plan_of((removed_whole(), refused_elsewhere), selector=TEAM), None).splitlines()
+
+    assert (
+        "  1 whole file(s), and 1 path(s) of another holder a later upload is withdrawn from. Each" in lines
+    )
+    assert (
+        "  - Suppressed, so no later archive, weekly or complete, can bring back a removed file, or "
+        "another holder's copy of a later upload at the path it was withdrawn from."
+    ) in lines
+
+
 def test_a_withdrawal_an_earlier_run_left_no_path_of_is_still_called_this_teams() -> None:
     """A `--team` re-run plans a file an earlier run withdrew again, with no path left to show:
     the team's own, as the line has always said, and nothing of another holder's."""

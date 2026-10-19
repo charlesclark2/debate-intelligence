@@ -25,6 +25,12 @@ spec:
     question before it is a parser one: the PM decides it with Charlie, and this task implements
     the decision. (3) A `.cmir` upload counts as failed; a `SourceFormat` of its own would count
     it as unsupported. Out of scope: other refusals.
+
+    Decision, PM with Charlie, 2026-10-18 (the CardMirror decision, ac2): "Each character XML 1.0
+    forbids that appears raw in a part the parser reads is replaced one-for-one by U+FFFD before
+    the part is parsed. Nothing is deleted, no author's word changes, every other character keeps
+    its position, and each source records how many it replaced. A forbidden character written as
+    a character reference (&#1; and the like) is still refused."
   priority: 3
   constraints:
     packages: [debate_core.integrations.docx_parser, debate_core.domain, packages/debate_core/tests, tests/fixtures, docs/data]

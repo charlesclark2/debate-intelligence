@@ -37,6 +37,12 @@ spec:
     refuses an index whose parser or fingerprint version is not the running build's. The
     evidence-store layout document and the operator's `ListBucket` prefixes gain the path. The
     full-store build and every publish are operator-run.
+    (PM amendment 2026-10-19, from ADR-0019 and v1-e39-t01's PM questions.) The published index
+    is a gzip object (level 6, mtime 0, no file name), and the manifest records the sha256 of
+    the gzip object and of the SQLite file, the building SQLite version and the index format
+    version. The index uses no SQLite or FTS5 feature newer than 3.40.0, the version in the
+    function's Lambda image (ADR-0019 (c)). The byte-identical criterion holds for both the file
+    and the gzip object.
   priority: 1
   constraints:
     packages: [debate_core.domain, debate_core.application, debate_core.integrations, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/data, docs/guides, docs/architecture, infrastructure/modules/evidence_bucket]
@@ -84,6 +90,12 @@ spec:
       description: >-
         The operator's full-store build is recorded in the session report and docs/data:
         documents, file size, build time and peak memory, counts only.
+    - id: ac7
+      description: >-
+        (PM amendment 2026-10-19) The gzip object is byte-identical for the same store; the
+        manifest's two sha256 values, SQLite version and format version are checked by test;
+        a test opens the index with SQLite 3.40.0's feature set (no newer function, pragma
+        or FTS5 option is used), by a check the report names.
 status:
   phase: Pending
 ---

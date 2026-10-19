@@ -676,5 +676,25 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e30-t26-cmir-extension-and-directory-fsync
+    - id: t27
+      kind: Task
+      name: 'caselist publish, verify, parse and pull panels print a summary, not the whole record'
+      description: >-
+        caselist publish, verify, parse and pull panels print a summary, not the whole
+        record.
+      inputs:
+        specRef: plan_specs/v1/e30-caselist-ingestion/t27-command-panels-print-summaries.yaml
+        goalRef: v1-e30-t27-command-panels-print-summaries
+      dependsOn:
+      - t24
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e30-t27-command-panels-print-summaries reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e30-t27-command-panels-print-summaries
 status:
   phase: Pending

@@ -1,0 +1,76 @@
+# TASK v1-e30-t27-command-panels-print-summaries - caselist publish, verify, parse and pull panels print a summary, not the whole record
+# Epic: E30 Caselist Evidence Ingestion | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e30-t27-command-panels-print-summaries
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e30-caselist-ingestion
+  annotations:
+    debate/title: "caselist publish, verify, parse and pull panels print a summary, not the whole record"
+spec:
+  # Filed by the PM, 2026-10-19, from v1-e30-t24's Follow-up 1.
+  description: >-
+    v1-e30-t24 gave `CommandFailure` a `panel_details` field and made `caselist status`'s panels
+    print counts and digest prefixes instead of the whole record. Four other commands still pass
+    a whole payload as the panel's `details`: `caselist publish` (`_publish_failure`, both
+    failures), `verify`, `caselist parse` (both failures) and `caselist pull`. Give each a
+    summary panel the same way: counts, at most a few twelve-character prefixes per kind, one
+    line per caselist or snapshot that differs, and a line saying every value is under
+    `error.details` in `--json`, which stays complete.
+  priority: 3
+  constraints:
+    packages: [debate_cli, packages/debate_cli/tests]
+    forbidden:
+      - Changing a `--json` payload
+      - A whole sha256, school, team code or path in a panel
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e30-t24-status-residue-and-held-digests
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Each of the four commands' failure panels prints no whole sha256 and at most one
+        line per differing caselist or snapshot, by tests shown failing first; each `--json`
+        envelope keeps every field, by test.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e30-t27-command-panels-print-summaries-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e30-caselist-ingestion
+spec:
+  description: >-
+    Summary panels for publish, verify, parse and pull failures through panel_details.
+  goalRef:
+    name: v1-e30-t27-command-panels-print-summaries
+  graph:
+    nodes:
+      - id: panels
+        kind: Task
+        name: Summary panels
+        description: >-
+          Summary panels for publish, verify, parse and pull failures through
+          panel_details.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: CLI panel tests pass
+            command: uv
+            args: [run, pytest, packages/debate_cli/tests, -k, panel or publish or verify or parse or pull]
+status:
+  phase: Pending

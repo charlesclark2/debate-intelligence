@@ -1,0 +1,85 @@
+# TASK v1-e29-t11-store-sync-skip-reasons - store sync says why it skipped what it skipped
+# Epic: E29 Cloud Evidence Store (S3) | Release: v1.1 (Caselist evidence store) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e29-t11-store-sync-skip-reasons
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e29-cloud-evidence-store
+  annotations:
+    debate/title: "store sync says why it skipped what it skipped"
+spec:
+  # Filed by the PM, 2026-10-19, from v1-e30-t25's PM question 1 and the PM's ruling (b).
+  description: >-
+    A push now skips a manifest the publisher withholds (v1-e30-t25), and t22's held-only blobs,
+    but `store sync` reports only a `skipped` count, so an operator whose push leaves a manifest
+    behind cannot see the reason, which is what tells them to run the removal again. Add a
+    `skipped_reasons` breakdown to `store sync --json` (each reason with its count and up to a
+    few key prefixes, never a school, team code, path or file name) and a caption line under the
+    table naming withheld manifests and what to do. The reason text is the plan's own
+    `PlannedObject.reason`, never restated. `v1-e34-t02` reads this payload: the new key is
+    additive, and an earlier reader ignores it.
+  priority: 2
+  constraints:
+    packages: [debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/guides]
+    forbidden:
+      - Restating a skip reason outside the plan
+      - A school, team code, path or file name in the summary or a log
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e30-t25-store-sync-withholding
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        `store sync --json` carries `skipped_reasons` with each reason's count and key
+        prefixes for a push that withholds a manifest and skips a held-only blob, and the
+        table's caption names the withheld manifest and the removal to run again, by tests
+        shown failing first.
+    - id: ac2
+      description: >-
+        The existing summary keys are unchanged, and the scheduled run's reader (v1-e34-t02)
+        reads the new payload, by test.
+    - id: ac3
+      description: >-
+        The guide's `skipped` row points at the breakdown.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e29-t11-store-sync-skip-reasons-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e29-cloud-evidence-store
+spec:
+  description: >-
+    Report each skip reason, by count and key prefix, in store sync's JSON and table caption.
+  goalRef:
+    name: v1-e29-t11-store-sync-skip-reasons
+  graph:
+    nodes:
+      - id: skip-reasons
+        kind: Task
+        name: Store sync skip reasons
+        description: >-
+          Report each skip reason, by count and key prefix, in store sync's JSON and table
+          caption.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Store sync tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application, packages/debate_cli/tests, -k, store or sync]
+status:
+  phase: Pending

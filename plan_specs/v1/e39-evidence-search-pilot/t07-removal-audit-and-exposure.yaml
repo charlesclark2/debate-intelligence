@@ -30,9 +30,13 @@ spec:
     Access is intact, no object is publicly reachable, signed-in responses are marked private
     and no-store, CloudFront keeps no access log, and the application logs no query text,
     school, team code or card text.
+    (PM amendment 2026-10-19, from ADR-0019 and v1-e39-t01's PM questions.) Deleting superseded
+    index versions needs delete on `reports/tub/search/`. That prefix alone is added to the
+    removal credential's delete side, in docs/architecture/evidence-store-layout.md and the
+    evidence bucket's IAM policy; nothing else under `reports/` gains a delete.
   priority: 1
   constraints:
-    packages: [debate_api, debate_core.application, packages/debate_api/tests, docs/runbooks, docs/data, infrastructure]
+    packages: [debate_api, debate_core.application, packages/debate_api/tests, docs/runbooks, docs/data, docs/architecture, infrastructure]
     forbidden:
       - A query, school, team code, evidence text, URL, token or IP address in an audit record or log
       - Card text, a school, team code, file name, student name, username or email in any fixture, log, report or commit (synthetic values only)
@@ -62,6 +66,11 @@ spec:
       description: >-
         The report maps each item of the policy's E39 gate to the test or operator record
         that proves it.
+    - id: ac6
+      description: >-
+        (PM amendment 2026-10-19) The removal credential can delete under
+        `reports/tub/search/` and nowhere else under `reports/`, by the existing grant-scope
+        test extended, and the layout document says so.
 status:
   phase: Pending
 ---

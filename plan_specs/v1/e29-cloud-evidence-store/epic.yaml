@@ -308,5 +308,22 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e29-t10-retention-rule-and-grant-loose-ends
+    - id: t11
+      kind: Task
+      name: 'store sync says why it skipped what it skipped'
+      description: >-
+        store sync says why it skipped what it skipped.
+      inputs:
+        specRef: plan_specs/v1/e29-cloud-evidence-store/t11-store-sync-skip-reasons.yaml
+        goalRef: v1-e29-t11-store-sync-skip-reasons
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e29-t11-store-sync-skip-reasons reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e29-t11-store-sync-skip-reasons
 status:
   phase: Pending

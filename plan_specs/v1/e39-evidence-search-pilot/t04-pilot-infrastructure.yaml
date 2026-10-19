@@ -35,6 +35,16 @@ spec:
     `scripts/tub_deploy.sh` builds the image, pushes it and updates the function. The dev pool
     holds only the maintainer and synthetic users (ADR-0013). Applies and deploys are
     operator-run, with the operator reading the plan first.
+    (PM amendment 2026-10-19, from ADR-0019 and v1-e39-t01's PM questions.) The function's role
+    is ADR-0019's role table, exactly: besides the evidence reads and its audit log group, it
+    writes its own app log group (`debate-<env>-tub-app`, kept 30 days) and reads the two
+    SecureString parameters ADR-0019 names (the client secret and the cookie keys) with
+    `ssm:GetParameter`. Each environment gains the `TubDeployer` and `TubAccounts` permission
+    sets. The managed login branding and the audit log group's deletion protection, which
+    provider 5.100.0 cannot manage, are CLI steps in the runbook. The function is reached
+    through a function URL with `AWS_IAM` behind CloudFront's origin access control, and the
+    runbook records which hosts the managed login pages load assets from, measured in dev,
+    before the web-filter request goes to school IT.
   priority: 1
   constraints:
     packages: [infrastructure, scripts, docs/runbooks, packages/debate_api]
@@ -69,6 +79,12 @@ spec:
         expected output: apply dev, deploy a placeholder page that requires sign-in, apply
         prod, request SES production access, and the web-filter allowlist request to school
         IT (the hostnames only).
+    - id: ac5
+      description: >-
+        (PM amendment 2026-10-19) The mocked `terraform test` checks the role against
+        ADR-0019's role table entry by entry, including the app log group, the two SSM
+        parameters and no other grant; the runbook's CLI steps for branding and deletion
+        protection, and the measured asset hosts, are written out with expected output.
 status:
   phase: Pending
 ---

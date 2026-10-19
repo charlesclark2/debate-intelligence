@@ -26,6 +26,10 @@ spec:
     nothing is written to the bucket. When the function's parser version is not the index
     manifest's, download is switched off with a message, never failed card by card. Each
     download writes v1-e39-t07's audit record.
+    (PM amendment 2026-10-19.) A function URL buffers at most 6 MB of response (ADR-0019, Lambda
+    quotas). A downloaded file is kept under that limit with headroom, or the route streams it;
+    a cart that would exceed the cap is refused before building, with a plain message, never
+    failed at the response.
   priority: 2
   constraints:
     packages: [debate_api, debate_core.application, packages/debate_api/tests]
@@ -58,6 +62,11 @@ spec:
       description: >-
         The operator opens a downloaded single card and a cart file in Word with Verbatim
         and imports one into Google Docs; reported yes or no (operator follow-up).
+    - id: ac5
+      description: >-
+        (PM amendment 2026-10-19) A cart whose built file would pass the buffered-response
+        limit is refused before building, or streamed, by test with a synthetic cart near
+        the limit.
 status:
   phase: Pending
 ---

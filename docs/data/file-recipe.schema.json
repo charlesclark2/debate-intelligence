@@ -1,0 +1,411 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "Analytic": {
+      "additionalProperties": false,
+      "description": "The coach's own words, written into the file as an analytic.",
+      "properties": {
+        "analytic": {
+          "description": "The analytic's text.",
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Analytic",
+          "type": "string"
+        }
+      },
+      "required": [
+        "analytic"
+      ],
+      "title": "Analytic",
+      "type": "object"
+    },
+    "Block": {
+      "additionalProperties": false,
+      "description": "A block heading and the items under it.",
+      "properties": {
+        "block": {
+          "description": "The block's heading.",
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Block",
+          "type": "string"
+        },
+        "items": {
+          "description": "Cards and analytics, in file order.",
+          "items": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/CardRef"
+              },
+              {
+                "$ref": "#/$defs/Analytic"
+              }
+            ]
+          },
+          "minItems": 1,
+          "title": "Items",
+          "type": "array"
+        }
+      },
+      "required": [
+        "block",
+        "items"
+      ],
+      "title": "Block",
+      "type": "object"
+    },
+    "CardRef": {
+      "additionalProperties": false,
+      "description": "A card, by its E31 exact fingerprint. Its cite and evidence are copied from its source.",
+      "properties": {
+        "fingerprint": {
+          "description": "The card's exact fingerprint (v1-e31-t04): 64 lowercase hex characters.",
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Fingerprint",
+          "type": "string"
+        },
+        "tag_override": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The coach's tag, replacing the card's own."
+        },
+        "pin": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OccurrencePin"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The occurrence to copy the card from; without one it is chosen (AUTO)."
+        }
+      },
+      "required": [
+        "fingerprint"
+      ],
+      "title": "CardRef",
+      "type": "object"
+    },
+    "Event": {
+      "description": "The debate event a caselist covers.\n\nUnlike the caselist slug, this really is closed: the three high-school events the platform\nsupports decide which sides are legal and which file conventions apply.",
+      "enum": [
+        "LD",
+        "POLICY",
+        "PF"
+      ],
+      "title": "Event",
+      "type": "string"
+    },
+    "Hat": {
+      "additionalProperties": false,
+      "description": "A hat heading and the blocks under it.",
+      "properties": {
+        "hat": {
+          "description": "The hat's heading.",
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Hat",
+          "type": "string"
+        },
+        "blocks": {
+          "description": "The hat's blocks, in file order.",
+          "items": {
+            "$ref": "#/$defs/Block"
+          },
+          "minItems": 1,
+          "title": "Blocks",
+          "type": "array"
+        }
+      },
+      "required": [
+        "hat",
+        "blocks"
+      ],
+      "title": "Hat",
+      "type": "object"
+    },
+    "OccurrencePin": {
+      "additionalProperties": false,
+      "description": "The one occurrence a card reference must come from, checked against the occurrence store.\n\nThe store's own key for a card is its source's SHA-256 and the index of its first paragraph;\nthose and the caselist whose store holds it are required. The same bytes disclosed by two teams\nare two occurrences there, so the rest narrow a pin to one disclosure: the snapshot it was seen\nin and who disclosed it, exactly as disclosed. A pin is never moved to another occurrence: one\nthat matches none, or more than one, is an error (`v1-e33-t01` ac4).",
+      "properties": {
+        "caselist": {
+          "description": "The caselist whose occurrence store holds the card.",
+          "pattern": "^[a-z]+[0-9]{2}$",
+          "title": "Caselist",
+          "type": "string"
+        },
+        "source_sha256": {
+          "description": "SHA-256 of the file the card is read from.",
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Source Sha256",
+          "type": "string"
+        },
+        "element_index": {
+          "description": "Index of the card's first paragraph in that file.",
+          "minimum": 0,
+          "title": "Element Index",
+          "type": "integer"
+        },
+        "snapshot": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "A snapshot the disclosure was seen in: between its first and latest.",
+          "title": "Snapshot"
+        },
+        "school": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "School, as disclosed.",
+          "title": "School"
+        },
+        "team_code": {
+          "anyOf": [
+            {
+              "maxLength": 12,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Team code, as disclosed.",
+          "title": "Team Code"
+        },
+        "side": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Side"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Side the disclosing file was read on."
+        },
+        "tournament": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Tournament, as disclosed.",
+          "title": "Tournament"
+        },
+        "round": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Round, exactly as disclosed.",
+          "title": "Round"
+        }
+      },
+      "required": [
+        "caselist",
+        "source_sha256",
+        "element_index"
+      ],
+      "title": "OccurrencePin",
+      "type": "object"
+    },
+    "Pocket": {
+      "additionalProperties": false,
+      "description": "A pocket heading, holding either hats or blocks, never both and never neither.",
+      "properties": {
+        "pocket": {
+          "description": "The pocket's heading.",
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Pocket",
+          "type": "string"
+        },
+        "hats": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/Hat"
+              },
+              "minItems": 1,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The pocket's hats, in file order.",
+          "title": "Hats"
+        },
+        "blocks": {
+          "anyOf": [
+            {
+              "items": {
+                "$ref": "#/$defs/Block"
+              },
+              "minItems": 1,
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The pocket's blocks, for a recipe without hats.",
+          "title": "Blocks"
+        }
+      },
+      "required": [
+        "pocket"
+      ],
+      "title": "Pocket",
+      "type": "object"
+    },
+    "RecipeStatus": {
+      "description": "Whether a recipe is ready to build. `files suggest` (`v1-e33-t03`) writes drafts.",
+      "enum": [
+        "draft",
+        "ready"
+      ],
+      "title": "RecipeStatus",
+      "type": "string"
+    },
+    "Side": {
+      "description": "The side a disclosed file was read on.\n\nLD and Policy debate affirmative and negative; Public Forum debates pro and con. `UNKNOWN` is\nlegal for every event and is what the importer records when a filename cannot be parsed —\na file is never dropped for having an unreadable name (v1-e30-t03 ac1).",
+      "enum": [
+        "AFF",
+        "NEG",
+        "PRO",
+        "CON",
+        "UNKNOWN"
+      ],
+      "title": "Side",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "One evidence file to build: what it is for, and its headings, cards and analytics in order.",
+  "properties": {
+    "schema_version": {
+      "const": 1,
+      "description": "The recipe shape: 1.",
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "title": {
+      "description": "The file's title.",
+      "maxLength": 200,
+      "minLength": 1,
+      "title": "Title",
+      "type": "string"
+    },
+    "topic": {
+      "description": "The topic id, kebab-case, as the landscape taxonomy names it.",
+      "maxLength": 64,
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "title": "Topic",
+      "type": "string"
+    },
+    "format": {
+      "$ref": "#/$defs/Event",
+      "description": "POLICY, LD or PF."
+    },
+    "caselist": {
+      "description": "The caselist whose occurrence store unpinned cards come from.",
+      "pattern": "^[a-z]+[0-9]{2}$",
+      "title": "Caselist",
+      "type": "string"
+    },
+    "position": {
+      "description": "The position id, kebab-case, as the landscape taxonomy names it.",
+      "maxLength": 64,
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+      "title": "Position",
+      "type": "string"
+    },
+    "side": {
+      "$ref": "#/$defs/Side",
+      "description": "The side the file is for: AFF or NEG, or PRO or CON for PF."
+    },
+    "fingerprint_version": {
+      "description": "The E31 fingerprint version the card fingerprints were taken under.",
+      "minLength": 1,
+      "title": "Fingerprint Version",
+      "type": "string",
+      "enum": [
+        "card-fingerprint-v1",
+        "card-fingerprint-v2",
+        "card-fingerprint-v3"
+      ]
+    },
+    "status": {
+      "$ref": "#/$defs/RecipeStatus",
+      "default": "ready",
+      "description": "draft or ready."
+    },
+    "structure": {
+      "description": "The file's pockets, in order.",
+      "items": {
+        "$ref": "#/$defs/Pocket"
+      },
+      "minItems": 1,
+      "title": "Structure",
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema_version",
+    "title",
+    "topic",
+    "format",
+    "caselist",
+    "position",
+    "side",
+    "fingerprint_version",
+    "structure"
+  ],
+  "title": "FileRecipe",
+  "type": "object"
+}

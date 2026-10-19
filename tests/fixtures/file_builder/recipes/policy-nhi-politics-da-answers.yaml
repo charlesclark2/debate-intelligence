@@ -1,0 +1,42 @@
+# Synthetic example recipe: Policy, affirmative answers to the politics disadvantage.
+# Every fingerprint, source hash, school, team code and tag here is invented for the repository.
+schema_version: 1
+title: Politics DA answers
+topic: nhi
+format: POLICY
+caselist: hspolicy26
+position: politics-da
+side: AFF
+fingerprint_version: card-fingerprint-v3
+structure:
+  - pocket: Politics DA answers
+    hats:
+      - hat: Uniqueness
+        blocks:
+          - block: Non-unique - the agenda is already stalled
+            items:
+              - analytic: The agenda is stalled now, so the plan cannot be why it fails.
+              - fingerprint: 2b256ef7bada457c21398f75b771ccc86e582caf37c75935c07c1597c74debb9
+                tag_override: The agenda is stalled - no capital is left to spend
+              - fingerprint: 62ad82e7dd7cbacf7bd602445b0abc49228ab21e850fe32be95c4119aa459a4a
+      - hat: Link
+        blocks:
+          - block: No link - the plan is popular
+            items:
+              - fingerprint: 656173b74de69289fbb383bcb27136e7479fcb7762b20605e08bc2a1923b977c
+                pin:
+                  caselist: hspolicy26
+                  snapshot: 2026-09-22
+                  school: Maple Grove
+                  team_code: QX
+                  round: Round 3
+                  source_sha256: 731fac7d649f172c908571e53cc95e035d20b31f878a6b17c209f86cd0132b15
+                  element_index: 41
+              - analytic: Even if the plan is unpopular, the vote comes after the agenda item.
+      - hat: Impact
+        blocks:
+          - block: Impact turns
+            items:
+              - fingerprint: d31c01b523147eb739279295b2d0912a26bf607d9e6e2b63c26697b2bb8a1bcb
+              - fingerprint: 99703657cd4dd993417fb63f39acb28c52d108f9c746c7a15bfd603fa7305789
+                tag_override: Turn - a fight over the agenda item helps the plan

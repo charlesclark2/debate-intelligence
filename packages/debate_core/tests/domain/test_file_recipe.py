@@ -12,6 +12,7 @@ Every fingerprint, school and team code here is invented (`Maple Grove`, `QX`).
 from __future__ import annotations
 
 import copy
+from collections.abc import Callable
 from typing import Any
 
 import pytest
@@ -147,6 +148,7 @@ def test_a_tag_override_is_labeled_coach_authored_and_written_as_its_text() -> N
     ref = next(ref for _, ref in recipe.card_refs())
 
     assert ref.tag_override == TagOverride(text="Morality outweighs")
+    assert ref.tag_override is not None
     assert ref.tag_override.authored_by is TagAuthor.COACH
     dumped = recipe.model_dump(mode="json")
     assert dumped["structure"][0]["hats"][0]["blocks"][0]["items"][1]["tag_override"] == "Morality outweighs"
@@ -187,14 +189,21 @@ def test_an_unknown_key_is_refused_at_every_level(where: tuple[str | int, ...]) 
     assert error["loc"][-1] == "colour"
 
 
+HEADING_LEVELS_OUT_OF_PLACE: list[tuple[tuple[str | int, ...], str, object]] = [
+    (("structure", 0), "items", [{"analytic": "skips hat and block"}]),
+    (("structure", 0, "hats", 0), "items", [{"analytic": "skips the block"}]),
+    (BLOCK, "blocks", [{"block": "a block in a block", "items": [{"analytic": "x"}]}]),
+    (
+        ("structure", 0, "hats", 0),
+        "hats",
+        [{"hat": "a hat in a hat", "blocks": [{"block": "b", "items": []}]}],
+    ),
+]
+
+
 @pytest.mark.parametrize(
     ("where", "key", "value"),
-    [
-        (("structure", 0), "items", [{"analytic": "skips hat and block"}]),
-        (("structure", 0, "hats", 0), "items", [{"analytic": "skips the block"}]),
-        (BLOCK, "blocks", [{"block": "a block in a block", "items": [{"analytic": "x"}]}]),
-        (("structure", 0, "hats", 0), "hats", [{"hat": "a hat in a hat", "blocks": []}]),
-    ],
+    HEADING_LEVELS_OUT_OF_PLACE,
     ids=["items-in-a-pocket", "items-in-a-hat", "block-in-a-block", "hat-in-a-hat"],
 )
 def test_a_skipped_or_repeated_heading_level_is_refused(
@@ -218,23 +227,50 @@ def test_a_block_beside_the_hats_of_its_own_pocket_is_refused() -> None:
 
 def test_a_pocket_without_hats_in_a_recipe_that_declares_hats_is_refused() -> None:
     data = recipe_data()
-    data["structure"].append({"pocket": "Second", "blocks": [{"block": "no hat", "items": [{"analytic": "x"}]}]})
+    data["structure"].append(
+        {"pocket": "Second", "blocks": [{"block": "no hat", "items": [{"analytic": "x"}]}]}
+    )
 
     assert error_locations(data) == [("structure", 1, "blocks")]
 
 
+def _no_pockets(data: dict[str, Any]) -> None:
+    data["structure"] = []
+
+
+def _pocket_with_nothing(data: dict[str, Any]) -> None:
+    del data["structure"][0]["hats"]
+
+
+def _empty_hats(data: dict[str, Any]) -> None:
+    data["structure"][0]["hats"] = []
+
+
+def _hat_without_blocks(data: dict[str, Any]) -> None:
+    data["structure"][0]["hats"][0]["blocks"] = []
+
+
+def _block_without_items(data: dict[str, Any]) -> None:
+    data["structure"][0]["hats"][0]["blocks"][0]["items"] = []
+
+
+EMPTY_SECTIONS: list[tuple[Callable[[dict[str, Any]], None], tuple[str | int, ...]]] = [
+    (_no_pockets, ("structure",)),
+    (_pocket_with_nothing, ("structure", 0)),
+    (_empty_hats, ("structure", 0, "hats")),
+    (_hat_without_blocks, ("structure", 0, "hats", 0, "blocks")),
+    (_block_without_items, (*BLOCK, "items")),
+]
+
+
 @pytest.mark.parametrize(
     ("change", "expected"),
-    [
-        (lambda data: data.update(structure=[]), ("structure",)),
-        (lambda data: data["structure"][0].pop("hats"), ("structure", 0)),
-        (lambda data: data["structure"][0].update(hats=[]), ("structure", 0, "hats")),
-        (lambda data: data["structure"][0]["hats"][0].update(blocks=[]), ("structure", 0, "hats", 0, "blocks")),
-        (lambda data: data["structure"][0]["hats"][0]["blocks"][0].update(items=[]), (*BLOCK, "items")),
-    ],
+    EMPTY_SECTIONS,
     ids=["no-pockets", "pocket-with-nothing", "empty-hats", "hat-without-blocks", "block-without-items"],
 )
-def test_an_empty_section_is_refused(change: Any, expected: tuple[str | int, ...]) -> None:
+def test_an_empty_section_is_refused(
+    change: Callable[[dict[str, Any]], None], expected: tuple[str | int, ...]
+) -> None:
     data = recipe_data()
     change(data)
 
@@ -316,7 +352,7 @@ def test_each_format_takes_its_own_sides(event: str, side: str) -> None:
     FileRecipe.model_validate(recipe_data(format=event, side=side))
 
 
-@pytest.mark.parametrize("version", [2, 0, "1", None])
+@pytest.mark.parametrize("version", [2, 0, "1", True, 1.0, None])
 def test_only_schema_version_1_is_read(version: object) -> None:
     assert error_locations(recipe_data(schema_version=version)) == [("schema_version",)]
 
@@ -385,6 +421,23 @@ def test_a_pin_takes_every_disclosure_field_it_can_be_narrowed_by() -> None:
     assert (pin.side, pin.tournament, pin.round) == ("NEG", "Invented Invitational", "Round 4")
 
 
+def test_a_pin_keeps_who_disclosed_the_card_out_of_its_repr() -> None:
+    """A team code is personal data about a minor: never in a log line (caselist-data-use.md, rule 4)."""
+    pin = OccurrencePin(
+        caselist="hsld26",
+        source_sha256=SOURCE,
+        element_index=1,
+        school="Maple Grove",
+        team_code="QX",
+        tournament="Invented Invitational",
+        round="Round 4",
+    )
+    recipe = FileRecipe.model_validate(recipe_data())
+    for text in (repr(pin), repr(recipe), str(recipe)):
+        for word in ("Maple Grove", "'QX'", "Invented", "Round 4"):
+            assert word not in text
+
+
 # ------------------------------------------------------------------------------------------------
 # Every error at once, and nothing that could hold evidence
 # ------------------------------------------------------------------------------------------------
@@ -394,7 +447,9 @@ def test_every_error_in_the_tree_is_reported_together() -> None:
     data = recipe_data(format="PF", side="AFF", colour="blue")
     data["structure"][0]["hats"][0]["blocks"][0]["items"][2]["fingerprint"] = "nope"
     data["structure"][0]["hats"][0]["blocks"][0]["items"][1]["pin"]["element_index"] = -3
-    data["structure"].append({"pocket": "Second", "blocks": [{"block": "no hat", "items": [{"analytic": "x"}]}]})
+    data["structure"].append(
+        {"pocket": "Second", "blocks": [{"block": "no hat", "items": [{"analytic": "x"}]}]}
+    )
     data["structure"].append({"pocket": "Third", "hats": [{"hat": "empty", "blocks": []}]})
 
     assert sorted(error_locations(data), key=str) == sorted(

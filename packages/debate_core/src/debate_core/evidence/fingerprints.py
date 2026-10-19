@@ -98,7 +98,9 @@ FINGERPRINT_VERSION: Final = "card-fingerprint-v3"
 """Version of the matching rules: the normalization above and the clustering and linking built on
 it. Bumped by any change that can change a digest or move a card to another cluster."""
 
-EXACT_FINGERPRINT_VERSIONS: Final = frozenset({"card-fingerprint-v1", "card-fingerprint-v2", "card-fingerprint-v3"})
+EXACT_FINGERPRINT_VERSIONS: Final = frozenset(
+    {"card-fingerprint-v1", "card-fingerprint-v2", "card-fingerprint-v3"}
+)
 """Every version whose exact fingerprints are the digests :func:`card_fingerprint` computes now.
 
 The list "Changing the rules" above, as data, for a consumer that keeps an exact fingerprint

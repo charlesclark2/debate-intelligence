@@ -1,0 +1,27 @@
+# Synthetic example recipe: LD, a negative constructive on space colonization, without hats.
+# Every fingerprint, source hash, school, team code and tag here is invented for the repository.
+schema_version: 1
+title: Space colonization NC
+topic: space-colonization
+format: LD
+caselist: hsld26
+position: nc
+side: NEG
+fingerprint_version: card-fingerprint-v3
+structure:
+  - pocket: NC
+    blocks:
+      - block: Framework - the value is morality
+        items:
+          - analytic: I value morality, because the resolution asks what we ought to do.
+          - fingerprint: 608ac2f3e7b063e55ffab3e7617285fe31e5869cffd4006ea79853bdcb59a9ed
+            tag_override: Obligations bind before outcomes are counted
+      - block: Contention 1 - extraction off-world
+        items:
+          - fingerprint: 9d647c1b4b2c2a0605417fe28141bc2163b19c5eda356cb3cc7b19a1686cbf53
+            pin: {caselist: hsld26, source_sha256: a0f52e86d35462af8a89ddc539c504b4d3ec15167451320c3047d23a414560d6, element_index: 7, school: Cedar Hollow, team_code: ZaLu}
+          - fingerprint: 3a7f105abcb103a8c2b670766de88c4b02e189c2637df65efee388090e8e57a5
+      - block: Contention 2 - priorities on Earth
+        items:
+          - fingerprint: 0a3967fe32002a2335ed08dfb58249da50a2f3a66b98232600d153cf9660872a
+          - analytic: Every dollar spent off-world is a dollar not spent here.

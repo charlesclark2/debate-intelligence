@@ -20,7 +20,7 @@ import hashlib
 import json
 import random
 import re
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -44,7 +44,11 @@ from debate_core.domain.caselist import Disclosure, Event, RoundLabel, Side
 from debate_core.domain.debate_files import CardCompleteness
 from debate_core.domain.file_recipe import FileRecipe
 from debate_core.evidence import fingerprints
-from debate_core.testing.fakes import InMemoryAppendOnlyRecord, InMemoryCaselistRepository, InMemoryParsedStore
+from debate_core.testing.fakes import (
+    InMemoryAppendOnlyRecord,
+    InMemoryCaselistRepository,
+    InMemoryParsedStore,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 EXAMPLES = REPO_ROOT / "tests" / "fixtures" / "file_builder" / "recipes"
@@ -58,9 +62,9 @@ PROFILE = "2026.09.20-verbatim-1"
 CARD_A = "a0" * 32
 CARD_B = "b1" * 32
 CARD_C = "c2" * 32
-SOURCE_1 = "10" * 32
-SOURCE_2 = "20" * 32
-SOURCE_3 = "30" * 32
+SOURCE_1 = "1a" * 32
+SOURCE_2 = "2b" * 32
+SOURCE_3 = "3c" * 32
 
 
 # ------------------------------------------------------------------------------------------------
@@ -85,7 +89,7 @@ def recipe_text(*items: str, header: str = HEADER) -> str:
     return f"{header}structure:\n  - pocket: P\n    blocks:\n      - block: B\n        items:\n{body}"
 
 
-def card(fingerprint: str, *, pin: dict[str, object] | None = None, tag: str | None = None) -> str:
+def card(fingerprint: str, *, pin: Mapping[str, object] | None = None, tag: str | None = None) -> str:
     """A card item in flow style, so a test reads as a list of items."""
     fields: dict[str, object] = {"fingerprint": fingerprint}
     if tag is not None:
@@ -142,7 +146,7 @@ structure:
               - fingerprint: NOT-A-FINGERPRINT
                 pin:
                   caselist: hsld26
-                  source_sha256: 1010101010101010101010101010101010101010101010101010101010101010
+                  source_sha256: 1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a
                   element_index: -1
 """
 
@@ -175,7 +179,7 @@ structure:
       {analytic: fine},
       {fingerprint: zz, tag_override: ""},
       {fingerprint: a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0, pin: {caselist: openev,
-                     source_sha256: 1010101010101010101010101010101010101010101010101010101010101010,
+                     source_sha256: 1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a,
                      element_index: true}},
       {analytic: fine, extra: 1}
     ]}]}
@@ -200,8 +204,12 @@ def test_load_reports_a_missing_field_at_the_line_of_the_mapping_that_lacks_it()
     # Line 14 is the item; it has a pin and no fingerprint, so it is read as neither kind of item.
     assert where(result) == [("structure[0].blocks[0].items[0]", 14)]
 
-    text = recipe_text("- " + json.dumps({"fingerprint": CARD_A, "pin": {"caselist": "hsld26", "element_index": 3}}))
-    assert where(file_recipes.load_recipe(text)) == [("structure[0].blocks[0].items[0].pin.source_sha256", 14)]
+    text = recipe_text(
+        "- " + json.dumps({"fingerprint": CARD_A, "pin": {"caselist": "hsld26", "element_index": 3}})
+    )
+    assert where(file_recipes.load_recipe(text)) == [
+        ("structure[0].blocks[0].items[0].pin.source_sha256", 14)
+    ]
 
 
 def test_load_reports_cross_section_errors_beside_field_errors() -> None:
@@ -236,11 +244,15 @@ def test_load_reports_a_yaml_syntax_error_with_its_line() -> None:
 
 
 def test_load_reports_each_duplicate_key_with_its_line() -> None:
-    text = HEADER + "title: A second title\nstructure:\n  - pocket: P\n    pocket: Q\n    blocks:\n" + (
-        "      - block: B\n        items:\n          - analytic: x\n"
+    text = (
+        HEADER
+        + "title: A second title\nstructure:\n  - pocket: P\n    pocket: Q\n    blocks:\n"
+        + ("      - block: B\n        items:\n          - analytic: x\n")
     )
     result = file_recipes.load_recipe(text)
-    duplicates = [error for error in result.errors if error.code is file_recipes.RecipeErrorCode.DUPLICATE_KEY]
+    duplicates = [
+        error for error in result.errors if error.code is file_recipes.RecipeErrorCode.DUPLICATE_KEY
+    ]
     assert [(error.path, error.line) for error in duplicates] == [("title", 9), ("structure[0].pocket", 12)]
 
 
@@ -288,7 +300,9 @@ def test_the_current_fingerprint_version_is_one_a_recipe_can_name() -> None:
 
 def test_load_never_repeats_a_rejected_value_in_a_message() -> None:
     pin = {"caselist": "hsld26", "source_sha256": SOURCE_1, "element_index": 3, "team_code": "Jane Rivera"}
-    text = recipe_text(card(CARD_A, pin=pin), header=HEADER.replace("title: Synthetic test file", "title: ''"))
+    text = recipe_text(
+        card(CARD_A, pin=pin), header=HEADER.replace("title: Synthetic test file", "title: ''")
+    )
     result = file_recipes.load_recipe(text)
     assert len(result.errors) == 2
     for error in result.errors:
@@ -314,7 +328,18 @@ def test_load_reads_yaml_scalars_strictly() -> None:
 
     pin = '{caselist: hsld26, source_sha256: "' + SOURCE_1 + '", element_index: "3"}'
     text = recipe_text("- fingerprint: " + CARD_A + "\n            pin: " + pin)
-    assert where(file_recipes.load_recipe(text)) == [("structure[0].blocks[0].items[0].pin.element_index", 15)]
+    assert where(file_recipes.load_recipe(text)) == [
+        ("structure[0].blocks[0].items[0].pin.element_index", 15)
+    ]
+
+
+def test_load_says_to_quote_a_hash_that_yaml_read_as_a_number() -> None:
+    digits = "1" * 64
+    text = recipe_text("- fingerprint: " + digits)
+    (error,) = file_recipes.load_recipe(text).errors
+    assert (error.path, error.line) == ("structure[0].blocks[0].items[0].fingerprint", 14)
+    assert "put it in quotes" in error.message
+    load_ok(recipe_text(f'- fingerprint: "{digits}"'))
 
 
 # ------------------------------------------------------------------------------------------------
@@ -365,7 +390,8 @@ title: &shared "T"
 structure:
   - blocks:   # a pocket without hats
       - items:
-          - {tag_override: Coach tag, fingerprint: a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0}
+          - {tag_override: Coach tag,
+             fingerprint: a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0}
           - analytic: 'Coach words'
         block: B
     pocket: *shared
@@ -386,7 +412,10 @@ def test_the_hash_ignores_key_order_comments_anchors_aliases_quoting_and_flow_st
 
 def test_the_hash_is_the_same_through_a_merge_key() -> None:
     with_pin = recipe_text(
-        "- fingerprint: " + CARD_A + "\n            pin: {caselist: hsld26, source_sha256: " + SOURCE_1
+        "- fingerprint: "
+        + CARD_A
+        + "\n            pin: {caselist: hsld26, source_sha256: "
+        + SOURCE_1
         + ", element_index: 4, team_code: QX}"
     )
     merged = with_pin.replace(
@@ -414,11 +443,22 @@ def test_the_hash_is_the_same_through_a_merge_key() -> None:
         ("side: NEG", "side: AFF"),
         ("fingerprint_version: card-fingerprint-v3", "fingerprint_version: card-fingerprint-v2"),
     ],
-    ids=["tag-override-edited", "tag-override-removed", "analytic", "card", "block-title", "title", "side", "version"],
+    ids=[
+        "tag-override-edited",
+        "tag-override-removed",
+        "analytic",
+        "card",
+        "block-title",
+        "title",
+        "side",
+        "version",
+    ],
 )
 def test_the_hash_changes_with_what_the_file_holds(old: str, new: str) -> None:
     assert old in TINY
-    assert file_recipes.recipe_hash(load_ok(TINY.replace(old, new))) != file_recipes.recipe_hash(load_ok(TINY))
+    assert file_recipes.recipe_hash(load_ok(TINY.replace(old, new))) != file_recipes.recipe_hash(
+        load_ok(TINY)
+    )
 
 
 def test_the_hash_changes_when_items_are_reordered() -> None:
@@ -434,14 +474,16 @@ def test_the_hash_changes_when_items_are_reordered() -> None:
 
 def test_the_hash_changes_when_a_pin_is_added() -> None:
     plain = recipe_text(card(CARD_A))
-    pinned = recipe_text(card(CARD_A, pin={"caselist": "hsld26", "source_sha256": SOURCE_1, "element_index": 0}))
+    pinned = recipe_text(
+        card(CARD_A, pin={"caselist": "hsld26", "source_sha256": SOURCE_1, "element_index": 0})
+    )
     assert file_recipes.recipe_hash(load_ok(plain)) != file_recipes.recipe_hash(load_ok(pinned))
 
 
 def test_the_hash_ignores_whitespace_the_model_strips() -> None:
-    assert file_recipes.recipe_hash(load_ok(TINY.replace("title: T", "title: '  T  '"))) == file_recipes.recipe_hash(
-        load_ok(TINY)
-    )
+    assert file_recipes.recipe_hash(
+        load_ok(TINY.replace("title: T", "title: '  T  '"))
+    ) == file_recipes.recipe_hash(load_ok(TINY))
 
 
 # ------------------------------------------------------------------------------------------------
@@ -449,8 +491,12 @@ def test_the_hash_ignores_whitespace_the_model_strips() -> None:
 # ------------------------------------------------------------------------------------------------
 
 
-def path_of(source: str, team_code: str = "QX", round_raw: str = "Round 4", school: str = "Maple Grove") -> str:
-    return f"{school}/{team_code}/{school}-{team_code}-Neg-Invented Invitational-{round_raw}-{source[:4]}.docx"
+def path_of(
+    source: str, team_code: str = "QX", round_raw: str = "Round 4", school: str = "Maple Grove"
+) -> str:
+    return (
+        f"{school}/{team_code}/{school}-{team_code}-Neg-Invented Invitational-{round_raw}-{source[:4]}.docx"
+    )
 
 
 def occurrence(
@@ -506,7 +552,9 @@ def disclosure(
     )
 
 
-def suppress(source: str, *, path: str | None = None, caselist: str = CASELIST, at: int = 1) -> SuppressionEntry:
+def suppress(
+    source: str, *, path: str | None = None, caselist: str = CASELIST, at: int = 1
+) -> SuppressionEntry:
     """A suppression of the whole source, or with `path` of one disclosure of it."""
     return SuppressionEntry(
         action=SuppressionAction.SUPPRESS,
@@ -594,12 +642,18 @@ def test_resolve_takes_the_occurrence_seen_in_the_latest_snapshot() -> None:
 
 def test_resolve_breaks_a_tie_in_one_snapshot_by_the_lowest_source_sha256() -> None:
     # Two files, both last seen on 2026-10-06; the higher digest is first in the store.
-    rows = [occurrence(CARD_A, SOURCE_3, 1, last="2026-10-06"), occurrence(CARD_A, SOURCE_2, 7, last="2026-10-06")]
+    rows = [
+        occurrence(CARD_A, SOURCE_3, 1, last="2026-10-06"),
+        occurrence(CARD_A, SOURCE_2, 7, last="2026-10-06"),
+    ]
     assert chosen(world(rows).resolve(recipe_text(card(CARD_A)))) == [(SOURCE_2, 7, "AUTO")]
 
 
 def test_resolve_breaks_a_tie_in_one_file_by_the_lowest_element_index() -> None:
-    rows = [occurrence(CARD_A, SOURCE_2, 30, last="2026-10-06"), occurrence(CARD_A, SOURCE_2, 4, last="2026-10-06")]
+    rows = [
+        occurrence(CARD_A, SOURCE_2, 30, last="2026-10-06"),
+        occurrence(CARD_A, SOURCE_2, 4, last="2026-10-06"),
+    ]
     assert chosen(world(rows).resolve(recipe_text(card(CARD_A)))) == [(SOURCE_2, 4, "AUTO")]
 
 
@@ -630,7 +684,10 @@ def test_resolve_does_not_depend_on_the_order_of_the_store() -> None:
 
 
 def test_resolve_a_pin_that_matches_one_occurrence_is_pinned_where_auto_would_choose_another() -> None:
-    rows = [occurrence(CARD_A, SOURCE_1, 5, last="2026-09-15"), occurrence(CARD_A, SOURCE_2, 9, last="2026-10-06")]
+    rows = [
+        occurrence(CARD_A, SOURCE_1, 5, last="2026-09-15"),
+        occurrence(CARD_A, SOURCE_2, 9, last="2026-10-06"),
+    ]
     pin = {"caselist": CASELIST, "source_sha256": SOURCE_1, "element_index": 5, "team_code": "QX"}
     resolved = world(rows, [disclosure(SOURCE_1)]).resolve(recipe_text(card(CARD_A, pin=pin), card(CARD_B)))
     assert chosen(resolved) == [(SOURCE_1, 5, "PINNED")]
@@ -677,7 +734,9 @@ def test_resolve_a_pin_matches_on_every_field_it_names(narrowing: dict[str, obje
 )
 def test_resolve_a_pin_to_no_occurrence_fails_with_pin_mismatch(pin: dict[str, object]) -> None:
     rows = [occurrence(CARD_A, SOURCE_1, 5)]
-    resolved = world(rows, [disclosure(SOURCE_1)]).resolve(recipe_text(card(CARD_A, pin={"caselist": CASELIST, **pin})))
+    resolved = world(rows, [disclosure(SOURCE_1)]).resolve(
+        recipe_text(card(CARD_A, pin={"caselist": CASELIST, **pin}))
+    )
     assert (chosen(resolved), codes(resolved)) == ([], [("PIN_MISMATCH", f"{ITEM}.pin")])
 
 
@@ -692,7 +751,10 @@ def test_resolve_a_pin_to_another_card_fails_with_pin_mismatch() -> None:
 def test_resolve_a_pin_two_teams_match_is_refused_until_it_says_which() -> None:
     qx, zalu = path_of(SOURCE_1, "QX"), path_of(SOURCE_1, "ZaLu", school="Cedar Hollow")
     rows = [occurrence(CARD_A, SOURCE_1, 5, path=qx), occurrence(CARD_A, SOURCE_1, 5, path=zalu)]
-    disclosures = [disclosure(SOURCE_1, path=qx), disclosure(SOURCE_1, school="Cedar Hollow", team_code="ZaLu", path=zalu)]
+    disclosures = [
+        disclosure(SOURCE_1, path=qx),
+        disclosure(SOURCE_1, school="Cedar Hollow", team_code="ZaLu", path=zalu),
+    ]
     pin: dict[str, object] = {"caselist": CASELIST, "source_sha256": SOURCE_1, "element_index": 5}
 
     ambiguous = world(rows, disclosures).resolve(recipe_text(card(CARD_A, pin=pin)))
@@ -711,7 +773,10 @@ def test_resolve_one_team_at_two_paths_is_one_occurrence_not_an_ambiguous_pin() 
         occurrence(CARD_A, SOURCE_1, 5, path=original, last="2026-09-08"),
         occurrence(CARD_A, SOURCE_1, 5, path=reupload, last="2026-09-15"),
     ]
-    disclosures = [disclosure(SOURCE_1, path=original), disclosure(SOURCE_1, path=reupload, snapshot="2026-09-15")]
+    disclosures = [
+        disclosure(SOURCE_1, path=original),
+        disclosure(SOURCE_1, path=reupload, snapshot="2026-09-15"),
+    ]
     pin = {"caselist": CASELIST, "source_sha256": SOURCE_1, "element_index": 5}
     resolved = world(rows, disclosures).resolve(recipe_text(card(CARD_A, pin=pin)))
     assert [card.occurrence.disclosure for card in resolved.cards] == [disclosure_digest(CASELIST, reupload)]
@@ -731,7 +796,9 @@ def test_resolve_a_card_known_only_in_another_caselist_is_unknown_here() -> None
 
 def test_resolve_the_same_fingerprint_twice_is_a_duplicate_ref_for_every_repeat() -> None:
     rows = [occurrence(CARD_A, SOURCE_1, 5)]
-    resolved = world(rows).resolve(recipe_text(card(CARD_A), "- analytic: x", card(CARD_A), card(CARD_A, tag="t")))
+    resolved = world(rows).resolve(
+        recipe_text(card(CARD_A), "- analytic: x", card(CARD_A), card(CARD_A, tag="t"))
+    )
     assert chosen(resolved) == [(SOURCE_1, 5, "AUTO")]
     assert codes(resolved) == [
         ("DUPLICATE_REF", "structure[0].blocks[0].items[2].fingerprint"),
@@ -800,7 +867,10 @@ def test_resolve_reports_the_version_directory_it_read() -> None:
 
 
 def test_resolve_auto_skips_a_source_the_suppression_list_stops_and_takes_the_next() -> None:
-    rows = [occurrence(CARD_A, SOURCE_1, 5, last="2026-10-06"), occurrence(CARD_A, SOURCE_2, 9, last="2026-09-29")]
+    rows = [
+        occurrence(CARD_A, SOURCE_1, 5, last="2026-10-06"),
+        occurrence(CARD_A, SOURCE_2, 9, last="2026-09-29"),
+    ]
     resolved = world(rows, suppressions=[suppress(SOURCE_1)]).resolve(recipe_text(card(CARD_A)))
     assert (chosen(resolved), resolved.errors) == ([(SOURCE_2, 9, "AUTO")], ())
 
@@ -811,7 +881,9 @@ def test_resolve_auto_skips_a_withdrawn_disclosure_and_takes_the_next() -> None:
         occurrence(CARD_A, SOURCE_1, 5, path=withdrawn, last="2026-10-06"),
         occurrence(CARD_A, SOURCE_1, 5, path=kept, last="2026-09-29"),
     ]
-    resolved = world(rows, suppressions=[suppress(SOURCE_1, path=withdrawn)]).resolve(recipe_text(card(CARD_A)))
+    resolved = world(rows, suppressions=[suppress(SOURCE_1, path=withdrawn)]).resolve(
+        recipe_text(card(CARD_A))
+    )
     assert [card.occurrence.disclosure for card in resolved.cards] == [disclosure_digest(CASELIST, kept)]
 
 
@@ -833,9 +905,14 @@ def test_resolve_a_pin_to_a_suppressed_source_is_refused_not_repointed() -> None
 def test_resolve_a_pin_to_a_withdrawn_disclosure_is_refused() -> None:
     withdrawn, kept = path_of(SOURCE_1, "QX"), path_of(SOURCE_1, "ZaLu", school="Cedar Hollow")
     rows = [occurrence(CARD_A, SOURCE_1, 5, path=withdrawn), occurrence(CARD_A, SOURCE_1, 5, path=kept)]
-    disclosures = [disclosure(SOURCE_1, path=withdrawn), disclosure(SOURCE_1, school="Cedar Hollow", team_code="ZaLu", path=kept)]
+    disclosures = [
+        disclosure(SOURCE_1, path=withdrawn),
+        disclosure(SOURCE_1, school="Cedar Hollow", team_code="ZaLu", path=kept),
+    ]
     pin = {"caselist": CASELIST, "source_sha256": SOURCE_1, "element_index": 5, "team_code": "QX"}
-    resolved = world(rows, disclosures, [suppress(SOURCE_1, path=withdrawn)]).resolve(recipe_text(card(CARD_A, pin=pin)))
+    resolved = world(rows, disclosures, [suppress(SOURCE_1, path=withdrawn)]).resolve(
+        recipe_text(card(CARD_A, pin=pin))
+    )
     assert (chosen(resolved), codes(resolved)) == ([], [("SUPPRESSED_OCCURRENCE", f"{ITEM}.pin")])
 
 
@@ -858,9 +935,17 @@ def test_resolve_a_source_suppressed_and_then_restored_resolves_again() -> None:
 def test_resolve_messages_name_no_school_team_or_path() -> None:
     withdrawn = path_of(SOURCE_1)
     rows = [occurrence(CARD_A, SOURCE_1, 5, path=withdrawn)]
-    pin = {"caselist": CASELIST, "source_sha256": SOURCE_1, "element_index": 5, "team_code": "QX", "school": "Maple Grove"}
+    pin = {
+        "caselist": CASELIST,
+        "source_sha256": SOURCE_1,
+        "element_index": 5,
+        "team_code": "QX",
+        "school": "Maple Grove",
+    }
     text = recipe_text(card(CARD_A, pin=pin), card(CARD_B, pin={**pin, "element_index": 7}))
-    resolved = world(rows, [disclosure(SOURCE_1, path=withdrawn)], [suppress(SOURCE_1, path=withdrawn)]).resolve(text)
+    resolved = world(
+        rows, [disclosure(SOURCE_1, path=withdrawn)], [suppress(SOURCE_1, path=withdrawn)]
+    ).resolve(text)
     assert len(resolved.errors) == 2
     for error in resolved.errors:
         assert not re.search(r"Maple|Grove|QX|Invented|\.docx", error.message), error.message
@@ -999,32 +1084,63 @@ def test_examples_resolve_against_a_synthetic_store(name: str) -> None:
         pin = ref.pin
         if pin is None:
             source = hashlib.sha256(f"auto source {number}".encode()).hexdigest()
-            rows.append(occurrence(ref.fingerprint, source, number, caselist=recipe.caselist, path=f"S/T/{number}.docx"))
+            rows.append(
+                occurrence(
+                    ref.fingerprint, source, number, caselist=recipe.caselist, path=f"S/T/{number}.docx"
+                )
+            )
             continue
         school, team = pin.school or "Maple Grove", pin.team_code or "QX"
         round_raw = pin.round or "Round 1"
         day = (pin.snapshot or date(2026, 9, 8)).isoformat()
         path = path_of(pin.source_sha256, team, round_raw, school)
         rows.append(
-            occurrence(ref.fingerprint, pin.source_sha256, pin.element_index, path=path, first=day, last=day, caselist=pin.caselist)
+            occurrence(
+                ref.fingerprint,
+                pin.source_sha256,
+                pin.element_index,
+                path=path,
+                first=day,
+                last=day,
+                caselist=pin.caselist,
+            )
         )
         disclosures.append(
-            disclosure(pin.source_sha256, snapshot=day, school=school, team_code=team, round_raw=round_raw, caselist=pin.caselist, path=path)
+            disclosure(
+                pin.source_sha256,
+                snapshot=day,
+                school=school,
+                team_code=team,
+                round_raw=round_raw,
+                caselist=pin.caselist,
+                path=path,
+            )
         )
     built = World()
     for caselist in {row.caselist for row in rows}:
         mine = [row for row in rows if row.caselist == caselist]
         asyncio.run(built.store.write_aggregates(caselist, PARSER, index=(), failures=(), occurrences=mine))
     for one in disclosures:
-        asyncio.run(built.caselists.record_disclosure(one.model_copy(update={"event": recipe.format, "side": _side(one, recipe)})))
+        asyncio.run(
+            built.caselists.record_disclosure(
+                one.model_copy(update={"event": recipe.format, "side": _side(one, recipe)})
+            )
+        )
     resolved = asyncio.run(built.resolver().resolve(recipe))
     assert resolved.errors == ()
     assert len(resolved.cards) == len(list(recipe.card_refs()))
-    assert {card.resolution for card in resolved.cards} == {file_recipes.Resolution.PINNED, file_recipes.Resolution.AUTO}
+    assert {card.resolution for card in resolved.cards} == {
+        file_recipes.Resolution.PINNED,
+        file_recipes.Resolution.AUTO,
+    }
 
 
 def _side(one: Disclosure, recipe: FileRecipe) -> Side:
-    pins = [ref.pin for _, ref in recipe.card_refs() if ref.pin is not None and ref.pin.source_sha256 == one.source_sha256]
+    pins = [
+        ref.pin
+        for _, ref in recipe.card_refs()
+        if ref.pin is not None and ref.pin.source_sha256 == one.source_sha256
+    ]
     for pin in pins:
         if pin.side is not None:
             return pin.side

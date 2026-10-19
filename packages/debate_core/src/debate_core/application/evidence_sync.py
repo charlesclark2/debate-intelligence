@@ -63,9 +63,9 @@ team code again. The push asks the publisher, through :data:`WithheldManifests`,
 under `manifests/` it would otherwise send, `new` or `changed`, and plans it `skipped` with the
 publisher's own message as the reason. The rule stays the publisher's, so it cannot drift from
 what a publish does. A manifest the publisher cannot read, which a publish refuses whole, is
-skipped with that refusal, which names the key and the line number. Asking costs no request: the manifest is read from the local listing's entry,
-once per manifest the push would send, and one already in the bucket, identical or journaled, is
-not asked about. A pull is not affected.
+skipped with that refusal, which names the key and the line number. Asking costs no request: the
+manifest is read from the local listing's entry, once per manifest the push would send, and one
+already in the bucket, identical or journaled, is not asked about. A pull is not affected.
 
 ## How few HeadObject calls this makes
 

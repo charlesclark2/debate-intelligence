@@ -466,6 +466,26 @@ def test_userinfo_is_kept_in_normalized_form() -> None:
     )
 
 
+def test_empty_query_pieces_are_dropped() -> None:
+    assert (
+        canonicalize_url("https://www.example.org/read?&id=7&&page=2&")
+        == "https://www.example.org/read?id=7&page=2"
+    )
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        pytest.param("/a/.amp", id="suffix-alone"),
+        pytest.param("/a/..amp", id="would-become-dot"),
+        pytest.param("/a/...amp", id="would-become-dot-dot"),
+    ],
+)
+def test_an_amp_suffix_that_is_the_whole_name_is_kept(path: str) -> None:
+    """Stripping it would leave an empty or dot segment, a different path."""
+    assert canonicalize_url(f"https://www.example.org{path}") == f"https://www.example.org{path}"
+
+
 def test_a_lone_percent_sign_is_encoded() -> None:
     assert canonicalize_url("https://www.example.org/100%-sure") == "https://www.example.org/100%25-sure"
 

@@ -373,9 +373,12 @@ def _without_amp_suffix(segment: str) -> str:
 
 
 def _without_amp_path(path: str) -> str:
-    segments = [segment for segment in path.split("/") if segment.lower() != "amp"]
-    segments[-1] = _without_amp_suffix(segments[-1])
-    return "/".join(segments) or "/"
+    # The syntax rules leave `path` absolute, so its first segment is the empty one before the
+    # leading slash; dropping every `amp` after it leaves at least `/`.
+    segments = [segment for segment in path.split("/")[1:] if segment.lower() != "amp"]
+    if segments:
+        segments[-1] = _without_amp_suffix(segments[-1])
+    return "/" + "/".join(segments)
 
 
 def _apply_content_rules_once(url: _Url) -> _Url:

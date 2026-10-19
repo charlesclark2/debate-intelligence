@@ -69,7 +69,9 @@ def ascii_hostname(host: str) -> str:
     """A host name in the ASCII form hosts are compared in: lower case, punycode, no trailing dot.
 
     Mapping is UTS #46 with nontransitional processing, the WHATWG URL Standard's choice, so
-    `faß.de` stays `xn--fa-hia.de` rather than becoming `fass.de`. ASCII labels are only lowered,
+    `faß.de` stays `xn--fa-hia.de` rather than becoming `fass.de`. That is idna's only behaviour:
+    its `transitional` argument defaults to off and, since UTS #46 dropped transitional processing
+    in Unicode 15.1, is ignored. ASCII labels are only lowered,
     which keeps real hosts with an underscore (IDNA 2008 forbids it in a U-label) usable.
 
     Raises `idna.IDNAError` for a label that cannot be encoded.
@@ -77,7 +79,7 @@ def ascii_hostname(host: str) -> str:
     host = host.rstrip(".")
     if host.isascii():
         return host.lower()
-    mapped = idna.uts46_remap(host, std3_rules=False, transitional=False)
+    mapped = idna.uts46_remap(host, std3_rules=False)
     return ".".join(
         label if label.isascii() else idna.alabel(label).decode("ascii") for label in mapped.split(".")
     )

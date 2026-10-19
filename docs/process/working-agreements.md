@@ -27,9 +27,9 @@ The goal is a short wait between opening a PR and being able to merge it into `d
     else changes. Each extra part repeats the job's setup, about 15 seconds, and its own collection.
   * One part steadily slower than the others: a few slow tests have landed together. Its durations
     name them. Make them cheaper; never mark them `slow` to get them out of the way.
-* **The same option splits a long local run.** `uv run pytest --part 1/2` and then `--part 2/2`
-  are the whole default selection between them, for any N, so a session that has to stay under
-  the two minutes of agreement 2 runs the parts one after another and says so in its report.
+* **The same option splits a long local run** for the operator: `uv run pytest --part 1/2` and
+  then `--part 2/2` are the whole default selection between them, for any N. A session does not use
+  it to run the whole selection in pieces; what a session runs is [agreement 10](#10-a-session-tests-what-it-changed-and-ci-tests-everything).
 * **Coverage is not measured on a PR, or by a plain `uv run pytest`.** It took a third of the
   suite's time and nothing is gated on it. `ci.yml`'s `coverage` job measures it over the whole
   selection on every push to `dev` and `main`. Locally, ask for it:
@@ -202,3 +202,39 @@ be always passes.
   pull request adds or changes it. A `#` inside quotes, a heredoc body or a word such as a URL's
   `#anchor` is not a comment and passes.
 
+## 10. A session tests what it changed, and CI tests everything
+
+The whole default selection takes about six minutes on the operator's Mac and grows with almost every
+task. Sessions were running it in eighths several times each (at red, at green, after formatting,
+after mutation runs, after a sync), and that had become most of a session's wall-clock time. CI runs
+the whole selection on every pull request, in parallel parts, in about three minutes. That is the
+gate, and it runs once per push rather than once per idea. (Added by the PM, 2026-10-19.)
+
+* **A session never runs the whole default selection**, in one command or in parts. Not at red, not
+  before the report, not after a sync. The pull request's `ci` check is the whole-suite run.
+* **While working, run the tests for what you are changing:** the new or changed test files, the
+  test directory of the module under change, and the plan node's own acceptance command. A red run
+  is the new tests alone, shown failing.
+* **Before the report, run the affected set once**, plus the cheap whole-repo checks:
+  * the affected set: every test file that imports, directly or through other modules, a module the
+    branch changed, printed by `uv run scripts/affected_tests.py` once `v1-e01-t28` lands. Until
+    then, the test directories of every package the branch changed, plus `tests/architecture` and
+    `tests/specs`;
+  * `ruff format --check`, `ruff check`, `pyright packages/<changed packages>`, `lint-imports`,
+    `scripts/validate_specs.py`, and the docs checks when docs changed. These take seconds.
+* **After a sync or rebase**, run the affected set again, never the whole selection.
+* **When CI fails** on the pull request, the operator pastes the failing part's output into the
+  session, which fixes it, runs the affected set and the failing tests, and commits; the operator
+  pushes the branch again (`git -C <worktree> push`) and the open pull request runs `ci` again. The
+  session is still open until `scripts/task finish`, so this costs one round trip.
+* **The report records what was run**: the commands and their results, not a table of parts. The PM
+  does not ask for a whole-suite run in a review.
+* **Mutation runs are scoped and capped.** They target the module the task's logic lives in, run
+  only the test files that cover it, and stop at about 20 mutants unless the spec asks for more.
+  They are worth their time for integrity-critical rules (evidence text, removal and suppression,
+  fingerprints, access control) and rarely elsewhere. Agreement 8 still applies to every run.
+* **Exceptions go to the operator, not the session.** A change to shared test ground (`conftest.py`,
+  `tests/pytest_plugins/`, `pyproject.toml` or `uv.lock`, the parser version with its golden
+  fixtures) may deserve one whole-selection run before the pull request. The session hands it over
+  as one operator command (`uv run pytest -n auto -m "not slow and not live"`, about six minutes),
+  once, at the end, under agreement 2.

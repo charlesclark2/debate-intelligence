@@ -1,0 +1,111 @@
+# TASK v1-e01-t28-affected-test-selection - scripts/affected_tests.py prints the tests a branch's changes can break
+# Epic: E01 Repository & Delivery Foundation | Release: v1.0 (Foundation & verified evidence core) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e01-t28-affected-test-selection
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+  annotations:
+    debate/title: "scripts/affected_tests.py prints the tests a branch's changes can break"
+spec:
+  # Filed by the PM, 2026-10-19, from Charlie's report of 2026-10-19 that whole-suite runs had become most of a session's time, and working agreement 10.
+  description: >-
+    Working agreement 10 has sessions run the affected set once before the report instead of the
+    whole default selection, which CI runs on the pull request. This task builds the tool that
+    prints the affected set. `uv run scripts/affected_tests.py [--base origin/dev] [--run]`
+    reads the branch's changed files against the merge base and prints the test files that can
+    be affected: a changed test file itself; every test file that imports, directly or through
+    any chain of modules, a changed module of the workspace packages (the import graph from
+    grimp, which import-linter already brings in, over `debate_core`, `debate_cli`, `debate_api`
+    and `debate_workers`, plus a scan of the test modules' own imports); a test that names a
+    changed fixture or data file by path; and a fixed always-run list for what imports cannot
+    see (`tests/architecture`, `tests/specs`, the container and command registration tests). A
+    change to shared test ground (`conftest.py`, `tests/pytest_plugins/`, `pyproject.toml`,
+    `uv.lock`, `.github/workflows/ci.yml`) prints that the whole selection is affected and that
+    CI runs it, and exits 0. A docs-only branch prints the docs-check tests. `--run` runs pytest
+    over the selection with CI's markers and `-n auto` and prints the count and time. It must be
+    conservative (missing an affected test is the failure that matters; an extra one is only
+    time), finish choosing in seconds, and need no state from an earlier run. pytest-testmon was
+    considered and is not used: it needs a coverage-measured baseline per worktree, which is the
+    slow run this replaces; the session may argue otherwise in the report.
+  priority: 1
+  constraints:
+    packages: [scripts, tests/scripts, docs/process, pyproject.toml]
+    forbidden:
+      - Moving a test off the PR path or marking it slow to shrink a selection
+      - Changing what CI runs on a pull request
+      - State kept between runs (a cache or database the selection depends on)
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e01-t27-ci-test-job-within-budget
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        For synthetic workspaces built in the test run, a change to a module selects every
+        test that imports it directly or transitively and no test that does not, a changed
+        fixture selects the tests naming it, and the always-run list is always selected, by
+        tests shown failing first.
+    - id: ac2
+      description: >-
+        A change to `conftest.py`, `tests/pytest_plugins/`, `pyproject.toml`, `uv.lock` or
+        `ci.yml` reports the whole selection as affected; a docs-only change selects the
+        docs-check tests, by test.
+    - id: ac3
+      description: >-
+        Planted-break check: for at least five real modules across the four packages, a
+        deliberate break in the module (made and reverted in the test run, or in a temporary
+        copy) makes at least one selected test fail, and the selection for each is reported
+        with its size.
+    - id: ac4
+      description: >-
+        Over the last 20 task commits on dev, the report gives the median and largest
+        selected share of the default selection and the time to choose; choosing takes under
+        10 seconds on the operator's Mac (operator-measured).
+    - id: ac5
+      description: >-
+        Working agreement 10 names the command in place of its interim rule, and the session
+        prompt in `scripts/task_helper.py` tells a session to run it before the report; the
+        task-workflow guide says the same.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e01-t28-affected-test-selection-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+spec:
+  description: >-
+    Select the tests a branch can affect from the import graph, fixture references and an
+    always-run list, conservatively and without state.
+  goalRef:
+    name: v1-e01-t28-affected-test-selection
+  graph:
+    nodes:
+      - id: affected-tests
+        kind: Task
+        name: Affected test selection
+        description: >-
+          Select the tests a branch can affect from the import graph, fixture references
+          and an always-run list, conservatively and without state.
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Affected-test tool tests pass
+            command: uv
+            args: [run, pytest, tests/scripts, -k, affected]
+status:
+  phase: Pending

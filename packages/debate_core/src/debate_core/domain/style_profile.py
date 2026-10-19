@@ -450,6 +450,7 @@ class WriterStyleDefinition(DomainModel):
             raise ValueError(f"style_type must be 'paragraph' or 'character', got {self.style_type!r}")
         if self.color is not None and not re.fullmatch(r"[0-9A-Fa-f]{6}", self.color):
             raise ValueError(f"color must be six hex digits, got {self.color!r}")
+        _require_unmeasured_marker(self.measured, self.notes, label=self.style_id)
         return self
 
 
@@ -468,6 +469,9 @@ class WriterDocumentDefaults(DomainModel):
 
     @model_validator(mode="after")
     def _check_marker(self) -> WriterDocumentDefaults:
+        if self.measured:
+            raise ValueError("the document defaults are Word's, not measured; measured must be false")
+        _require_unmeasured_marker(self.measured, self.notes, label="document defaults")
         return self
 
 

@@ -30,9 +30,9 @@ import hashlib
 import json
 from collections.abc import Iterable, Sequence
 from datetime import UTC, datetime
-from typing import Any, Final, Literal
+from typing import Any, Final, Literal, Self
 
-from pydantic import AwareDatetime, Field, field_serializer
+from pydantic import AwareDatetime, Field, field_serializer, model_validator
 
 from debate_core.domain.base import DomainModel, NonEmptyText, Sha256Hex
 from debate_core.domain.debate_files import CardCompleteness, FontSizeSpan, FormattingSpan
@@ -95,7 +95,22 @@ def formatting_sha256(
     (with its highlight colour) is reduced to the character ranges it covers, joined where they touch,
     and the sizes likewise per size. The rule ids and match sources are not part of it.
     """
-    return text_sha256("")
+    by_emphasis: dict[tuple[str, str], list[tuple[int, int]]] = {}
+    for span in formatting_spans:
+        key = (str(span.emphasis), span.highlight_color or "")
+        by_emphasis.setdefault(key, []).append((span.start_offset, span.end_offset))
+    by_size: dict[int, list[tuple[int, int]]] = {}
+    for size in font_size_spans:
+        by_size.setdefault(size.half_points, []).append((size.start_offset, size.end_offset))
+    canonical = {
+        "emphasis": [
+            [emphasis, colour, _merged(intervals)]
+            for (emphasis, colour), intervals in sorted(by_emphasis.items())
+        ],
+        "font_size": [[size, _merged(intervals)] for size, intervals in sorted(by_size.items())],
+    }
+    text = json.dumps(canonical, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    return hashlib.sha256(text.encode("ascii")).hexdigest()
 
 
 class FileProvenanceEntry(DomainModel):
@@ -167,6 +182,18 @@ class FileProvenanceEntry(DomainModel):
         description="Always UNVERIFIED: a disclosed card has not been verified by the platform.",
     )
 
+    @model_validator(mode="after")
+    def _check_entry(self) -> Self:
+        if self.last_element_index < self.first_element_index:
+            raise ValueError("last_element_index precedes first_element_index")
+        if self.tag_overridden != (self.tag_authored_by is TagAuthor.COACH):
+            raise ValueError("an overridden tag is the coach's, and only an overridden one")
+        if not self.tag_overridden and self.original_tag_sha256 is not None:
+            raise ValueError("original_tag_sha256 is recorded only for an overridden tag")
+        if self.team_code is not None and self.school is None:
+            raise ValueError("a team code is disclosed with its school")
+        return self
+
 
 class FileProvenanceManifest(DomainModel):
     """`<file>.provenance.json`: what a built file is, what built it, and one entry per card."""
@@ -195,6 +222,13 @@ class FileProvenanceManifest(DomainModel):
     def _write_built_at(self, built_at: datetime) -> str:
         """Written in UTC with a `Z`, so the same instant always serializes the same."""
         return built_at.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+
+    @model_validator(mode="after")
+    def _check_manifest(self) -> Self:
+        positions = [entry.position for entry in self.cards]
+        if positions != list(range(1, len(self.cards) + 1)):
+            raise ValueError("card positions run 1, 2, 3 ... in file order")
+        return self
 
     def to_json_bytes(self) -> bytes:
         """The sidecar's bytes: two-space indented JSON, keys in model order, UTF-8, a final newline."""

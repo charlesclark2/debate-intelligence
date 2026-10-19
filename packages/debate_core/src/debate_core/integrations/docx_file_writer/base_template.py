@@ -199,12 +199,33 @@ def _team_styles(team_styles_xml: bytes) -> tuple[XmlElement | None, dict[str, X
 
 
 def render_styles_xml(profile: StyleProfile, *, team_styles_xml: bytes | None = None) -> bytes:
-    """Skeleton (red run): an empty style table."""
-    return _serialize(etree.Element(qualified_name("styles"), nsmap=_W))
+    """`word/styles.xml`: the document defaults, then every writer definition in the profile's order."""
+    team_defaults, team = (None, {}) if team_styles_xml is None else _team_styles(team_styles_xml)
+    root = etree.Element(qualified_name("styles"), nsmap=_W)
+    root.append(
+        etree.fromstring(etree.tostring(team_defaults))
+        if team_defaults is not None
+        else _document_defaults(profile.writer_document_defaults)
+    )
+    for definition in profile.writer_style_definitions:
+        taken = team.get(definition.style_id)
+        root.append(
+            etree.fromstring(etree.tostring(taken)) if taken is not None else _style_element(definition)
+        )
+    return _serialize(root)
 
 
 def _settings_xml() -> bytes:
-    return _serialize(etree.Element(qualified_name("settings"), nsmap=_W))
+    root = etree.Element(qualified_name("settings"), nsmap=_W)
+    compatibility = _sub(root, "compat")
+    _sub(
+        compatibility,
+        "compatSetting",
+        name="compatibilityMode",
+        uri=_WORD_COMPATIBILITY_URI,
+        val=_COMPATIBILITY_MODE,
+    )
+    return _serialize(root)
 
 
 def document_relationships_xml(extra: Iterable[tuple[str, str, str]] = ()) -> bytes:

@@ -84,6 +84,8 @@ from debate_core.integrations.docx_file_writer.run_copier import (
     CopiedCard,
     HyperlinkTargets,
     OpenedSource,
+    UnsupportedCard,
+    copy_card,
     open_source,
 )
 from debate_core.integrations.docx_parser.package import (
@@ -137,13 +139,41 @@ _SOURCE_PATH_FOR_THE_PARSER: Final = "disclosed-source.docx"
 
 
 def provenance_line(occurrence: OccurrenceRecord, disclosure: Disclosure | None) -> str:
-    """Skeleton (red run)."""
-    return "[Disclosed]"
+    """The line below a card's cite (data-use policy, Attribution rule 2), from the record alone.
+
+    `[Disclosed: hsld26 2026-09-15 — Maple Grove QX, Aff vs. Riverbend Invitational Round 4]`, the
+    policy's own example: caselist, the first snapshot that listed the disclosure, then school and team
+    code exactly as disclosed, side, tournament and round as far as the disclosure records them. With no
+    disclosure on record (t01's ruling lets AUTO fall back to one), the line names no team.
+    """
+    head = f"Disclosed: {occurrence.caselist} {occurrence.snapshot}"
+    if disclosure is None:
+        return f"[{head}]"
+    side = _SIDE_LABELS.get(disclosure.side)
+    event = " ".join(
+        part
+        for part in (
+            disclosure.tournament,
+            disclosure.round_label.raw if disclosure.round_label is not None else None,
+        )
+        if part
+    )
+    if side and event:
+        detail = f", {side} vs. {event}"
+    elif side or event:
+        detail = f", {side or event}"
+    else:
+        detail = ""
+    return f"[{head} — {disclosure.school} {disclosure.team_code}{detail}]"
 
 
 def header_line(recipe: ResolvedRecipe) -> str:
-    """Skeleton (red run)."""
-    return "Disclosed cards."
+    """The file's one header analytic: where its cards came from, and that none of them is verified."""
+    caselists = sorted({card.occurrence.caselist for card in recipe.cards} | {recipe.recipe.caselist})
+    return (
+        f"Disclosed cards (FILE_IMPORT) from {', '.join(caselists)}, each copied from the file that "
+        "disclosed it and not verified by this platform. Who disclosed each card is below its cite."
+    )
 
 
 # ------------------------------------------------------------------------------------------------
@@ -260,38 +290,64 @@ class DocxEvidenceFileWriter:
         return FILE_BUILDER_VERSION
 
     async def build(self, request: FileBuildRequest) -> BuiltEvidenceFile | FileBuildRefusal:
-        """Skeleton (red run): a file with no body and a sidecar with no cards; refuses nothing."""
+        """Build the file, or refuse it with every card that stopped it."""
         resolved = request.resolved
-        recipe = resolved.recipe
-        body = _Body(self._profile)
-        docx = write_package(
-            (
-                ("[Content_Types].xml", CONTENT_TYPES),
-                ("_rels/.rels", PACKAGE_RELATIONSHIPS),
-                ("word/document.xml", body.to_bytes()),
-                ("word/_rels/document.xml.rels", document_relationships_xml(())),
-                ("word/styles.xml", self._base.styles_xml),
-                ("word/settings.xml", self._base.settings_xml),
-                ("docProps/core.xml", core_properties_xml(recipe.title)),
+        by_path = {card.path: card for card in resolved.cards}
+        missing = [
+            render_location(location)
+            for location, _ in resolved.recipe.card_refs()
+            if render_location(location) not in by_path
+        ]
+        if missing:
+            raise ValueError(f"the resolved recipe has no occurrence for {len(missing)} card(s)")
+
+        located, refusals = await self._locate(resolved.cards)
+        if refusals:
+            return FileBuildRefusal(tuple(refusals))
+
+        hyperlinks = HyperlinkTargets()
+        copies: dict[str, CopiedCard] = {}
+        for item in located:
+            copied = copy_card(
+                item.source.opened,
+                first_element_index=item.card.provenance.first_element_index,
+                last_element_index=item.card.provenance.last_element_index,
+                units=item.source.unit,
+                profile=self._profile,
+                base_style_ids=self._base_style_ids,
+                hyperlinks=hyperlinks,
             )
+            if isinstance(copied, UnsupportedCard):
+                refusals.append(
+                    CardRefusal(
+                        path=item.resolved.path,
+                        fingerprint=item.resolved.fingerprint,
+                        code=CardRefusalCode.UNSUPPORTED_CONTENT,
+                        detail=(
+                            "the card holds content that cannot be copied losslessly, in source "
+                            f"paragraph(s) {', '.join(str(index) for index in copied.element_indices)}"
+                        ),
+                        content_kinds=copied.kinds,
+                    )
+                )
+                continue
+            copies[item.resolved.path] = copied
+        if refusals:
+            return FileBuildRefusal(tuple(refusals))
+
+        by_path = {item.resolved.path: item for item in located}
+        docx, placed = self._write(resolved, by_path, copies, hyperlinks)
+        problems = self._read_back(docx, resolved.recipe, located, placed)
+        if problems:
+            return FileBuildRefusal(self._explain(resolved, by_path, copies, hyperlinks, problems))
+
+        manifest = self._manifest(request, docx, located, placed, copies)
+        return BuiltEvidenceFile(
+            docx=docx,
+            manifest=manifest,
+            manifest_json=manifest.to_json_bytes(),
+            warnings=manifest.warnings,
         )
-        manifest = FileProvenanceManifest(
-            title=recipe.title,
-            topic=recipe.topic,
-            format=str(recipe.format),
-            caselist=recipe.caselist,
-            position=recipe.position,
-            side=str(recipe.side),
-            recipe_hash=resolved.recipe_hash,
-            builder_version=FILE_BUILDER_VERSION,
-            parser_version=self._parser.parser_version,
-            style_profile_version=self._parser.profile_version,
-            fingerprint_version=recipe.fingerprint_version,
-            built_at=request.built_at,
-            docx_sha256=hashlib.sha256(docx).hexdigest(),
-            cards=(),
-        )
-        return BuiltEvidenceFile(docx=docx, manifest=manifest, manifest_json=manifest.to_json_bytes())
 
     # -- finding each card --------------------------------------------------------------------
 

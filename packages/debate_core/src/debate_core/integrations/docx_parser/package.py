@@ -507,7 +507,7 @@ def _replace_forbidden_characters(data: bytes, replacement: str = REPLACEMENT_CH
     """
     encoding = _part_encoding(data)
     if encoding == "utf-8":
-        return _FORBIDDEN_XML_CHARACTERS_IN_UTF8.subn(REPLACEMENT_CHARACTER.encode("utf-8"), data)
+        return _FORBIDDEN_XML_CHARACTERS_IN_UTF8.subn(replacement.encode("utf-8"), data)
     if encoding is None:
         return data, 0
     try:
@@ -525,6 +525,8 @@ _ALLOWED_REPLACEMENT: Final = re.compile("[^\x00-\x20<>&\"'\ufffe\uffff\ud800-\u
 
 def check_replacement_character(replacement: str) -> str:
     """Return `replacement` if a forbidden character may be replaced by it, or raise ValueError."""
+    if len(replacement) != 1 or _ALLOWED_REPLACEMENT.fullmatch(replacement) is None:
+        raise ValueError(f"not a character a forbidden one may be replaced by: {replacement!r}")
     return replacement
 
 
@@ -716,7 +718,32 @@ def read_part_relationships(
     writer (`v1-e33-t02`) reads the document part's to re-create a copied hyperlink's target. A part
     with no relationships part has none, which is ordinary.
     """
-    return {}
+    directory, _, name = part.rpartition("/")
+    rels_name = f"{directory}/_rels/{name}.rels" if directory else f"_rels/{name}.rels"
+    _refuse_non_zip_formats(content)
+    try:
+        archive = zipfile.ZipFile(BytesIO(content))
+    except zipfile.BadZipFile as error:
+        raise DocxPackageError(
+            ParseFailureReason.NOT_A_ZIP, "the bytes are not a readable zip container"
+        ) from error
+    with archive:
+        _check_directory(archive, limits)
+        if rels_name not in archive.namelist():
+            return {}
+        root = _parse_xml(_read_part(archive, rels_name, limits), rels_name).root
+    relationships: dict[str, PartRelationship] = {}
+    for element in root.iterfind(qualified_name("Relationship", RELATIONSHIPS_NAMESPACE)):
+        relationship_id = element.get("Id")
+        if not relationship_id:
+            continue
+        relationships[relationship_id] = PartRelationship(
+            relationship_id=relationship_id,
+            relationship_type=element.get("Type") or "",
+            target=element.get("Target") or "",
+            external=(element.get("TargetMode") or "") == "External",
+        )
+    return relationships
 
 
 def iter_body_children(body: XmlElement) -> Iterator[XmlElement]:

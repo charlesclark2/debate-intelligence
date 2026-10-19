@@ -41,6 +41,7 @@ each such character in a copied card is counted and written as U+FFFD (PM, 2026-
 
 from __future__ import annotations
 
+import copy
 from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass, field
 from typing import Final
@@ -56,6 +57,7 @@ from debate_core.integrations.docx_parser.package import (
     XmlElement,
     open_debate_docx,
     qualified_name,
+    read_part_relationships,
 )
 from debate_core.integrations.docx_parser.parser import BodyParagraph, body_paragraphs
 
@@ -197,10 +199,22 @@ def _characters_in(body: XmlElement) -> set[str]:
 
 
 def open_source(content: bytes, *, limits: PackageLimits = DEFAULT_PACKAGE_LIMITS) -> OpenedSource:
-    """Skeleton (red run): opened once, no relationships, no stand-in."""
+    """Open a source through the parser's own reader, guards and all.
+
+    Raises :class:`~debate_core.integrations.docx_parser.package.DocxPackageError` exactly where the
+    parser would refuse the bytes.
+    """
     package = open_debate_docx(content, limits=limits)
+    stand_in: str | None = None
+    if package.forbidden_characters_replaced:
+        present = _characters_in(package.body)
+        stand_in = next(candidate for candidate in _STAND_IN_CANDIDATES if candidate not in present)
+        package = open_debate_docx(content, limits=limits, forbidden_character_replacement=stand_in)
     return OpenedSource(
-        package=package, paragraphs=body_paragraphs(package.body), relationships={}, stand_in=None
+        package=package,
+        paragraphs=body_paragraphs(package.body),
+        relationships=read_part_relationships(content, package.document_part, limits=limits),
+        stand_in=stand_in,
     )
 
 
@@ -473,5 +487,56 @@ def copy_card(
     base_style_ids: frozenset[str],
     hyperlinks: HyperlinkTargets,
 ) -> CopiedCard | UnsupportedCard:
-    """Skeleton (red run): copies nothing and refuses nothing."""
-    return CopiedCard(tag=None, through_cite=(), after_cite=(), warnings=(), forbidden_characters_replaced=0)
+    """Copy the paragraphs `first_element_index` to `last_element_index` of `source`, or refuse them.
+
+    `units` gives the unit the E31 parser read each paragraph as; it says which paragraph is the tag
+    and which the last of the cite. Hyperlinks are allocated in `hyperlinks` only for a card that is
+    copied.
+    """
+    if not 0 <= first_element_index <= last_element_index < len(source.paragraphs):
+        raise ValueError("the card's element indices fall outside its source's paragraphs")
+    kinds: set[UnsupportedContentKind] = set()
+    refused_at: list[int] = []
+    cleaned: list[tuple[int, XmlElement]] = []
+    for index, paragraph in _in_range(source, first_element_index, last_element_index):
+        found: set[UnsupportedContentKind] = set()
+        if paragraph.in_text_box:
+            found.add(UnsupportedContentKind.TEXT_BOX)
+        elif paragraph.in_table:
+            found.add(UnsupportedContentKind.TABLE)
+        else:
+            copied = copy.deepcopy(paragraph.element)
+            _resolve_tracked_changes_and_marks(copied)
+            found |= _unsupported_kinds(copied)
+            cleaned.append((index, copied))
+        if found:
+            kinds |= found
+            refused_at.append(index)
+    if kinds:
+        return UnsupportedCard(kinds=tuple(sorted(kinds)), element_indices=tuple(refused_at))
+
+    styles = _StyleMap(source.package, profile, base_style_ids)
+    warnings: list[str] = []
+    replaced = 0
+    for _, paragraph in cleaned:
+        _remap_styles(paragraph, styles, warnings)
+        _drop_numbering(paragraph, warnings)
+        _relink_hyperlinks(paragraph, source.relationships, hyperlinks, warnings)
+        replaced += _write_replacements(paragraph, source.stand_in)
+
+    tag: XmlElement | None = None
+    body = list(cleaned)
+    if units(first_element_index) is StructuralUnit.TAG:
+        tag = body.pop(0)[1]
+        _set_paragraph_style(tag, styles.tag_style_id)
+    last_cite = max(
+        (position for position, (index, _) in enumerate(body) if units(index) is StructuralUnit.CITE),
+        default=-1,
+    )
+    return CopiedCard(
+        tag=tag,
+        through_cite=tuple(paragraph for _, paragraph in body[: last_cite + 1]),
+        after_cite=tuple(paragraph for _, paragraph in body[last_cite + 1 :]),
+        warnings=tuple(dict.fromkeys(warnings)),
+        forbidden_characters_replaced=replaced,
+    )

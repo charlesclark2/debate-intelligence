@@ -303,6 +303,21 @@ depend on it.
 The request names the pilot's prod address, because that is where students will use it, even
 though prod is not applied yet.
 
+**If step 3 is waiting on the concurrency quota** ([Before you start](#before-you-start)), this
+step need not wait too: it needs only the SES identity, which a targeted apply creates on its own,
+with its DKIM records. Step 3's full apply then finds those four resources already there and plans
+37 to add instead of 41.
+
+**Operator command** (expected runtime ~2 min)
+Where: `$WT`
+```bash
+cd "$WT"
+export AWS_PROFILE=debate-admin
+terraform -chdir=infrastructure/envs/dev apply -target=module.evidence_search.aws_route53_record.ses_dkim
+```
+Success looks like: a plan of `4 to add` (`aws_sesv2_email_identity.pilot` and three
+`aws_route53_record.ses_dkim`), then `Apply complete! Resources: 4 added, 0 changed, 0 destroyed.`
+
 **Operator command** (expected runtime ~1 min)
 Where: your Mac, anywhere
 ```bash

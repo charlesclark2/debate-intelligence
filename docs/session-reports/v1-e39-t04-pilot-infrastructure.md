@@ -410,7 +410,15 @@ session:
   - `pushed: <account>.dkr.ecr.us-east-1.amazonaws.com/debate-dev-tub@sha256:5bbd667aee32b933367257d513da0f2d1c8ae341068421ef39dca44187dc617b`;
   - then the expected stop: `the function debate-dev-tub does not exist yet`.
 
-**Steps 3–10: not yet run.** Step 3 waits for the concurrency increase. ac5, the runbook's tables
+**2026-10-19, step 4 ahead of step 3:** the quota was still pending, so the SES identity was
+created on its own to start SES's review clock, with
+`terraform -chdir=infrastructure/envs/dev apply -target=module.evidence_search.aws_route53_record.ses_dkim`:
+`Apply complete! Resources: 4 added, 0 changed, 0 destroyed.` (the identity and its three DKIM
+records). The runbook's step 4 now describes this route. The verification check and the
+production-access request itself are not yet reported.
+
+**Steps 3 and 5–10: not yet run.** Step 3 waits for the concurrency increase, and will plan 37 to
+add, not 41. ac5, the runbook's tables
 and the `Succeeded` phase wait for steps 3–10.
 
 ## PM review

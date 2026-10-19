@@ -20,13 +20,18 @@ spec:
     Implement pure URL canonicalization and scholarly identifier detection in debate_core.retrieval so
     the same article reached via a tracking link, an AMP page or a mixed-case host dedupes to one
     Article. Rules: lowercase scheme/host, drop default ports and fragments, strip tracking parameters
-    (utm_*, fbclid, gclid, mc_cid, ...), sort remaining query params, normalize trailing slashes and
-    AMP variants, and prefer an HTML rel=canonical link when it is same-site. Detect DOI, arXiv id
-    and PMID from URLs and text. Pure functions only — fetching is t02, and ArticleService applies the
+    (utm_*, fbclid, gclid, mc_cid, ...), sort remaining query params, normalize AMP variants, keep
+    trailing slashes as published (the empty path becomes /; a same-site rel=canonical resolves the
+    two forms; PM amendment 2026-10-19), and prefer an HTML rel=canonical link when it is same-site.
+    Detect DOI, arXiv id and PMID from URLs and text. Pure functions only — fetching is t02, and ArticleService applies the
     result in t05.
   priority: 2
   constraints:
-    packages: [debate_core.retrieval]
+    # PM amendment 2026-10-19 (ruling 1 on the session report's PM questions): pyproject.toml, whose
+    # exhaustive layers contract must place debate_core.retrieval ("evidence | retrieval", beside
+    # evidence, and on the delivery-framework list), and whose boto3, httpx and lxml forbidden
+    # contracts now name it too, so fetching and parsing stay in debate_core.integrations.
+    packages: [debate_core.retrieval, pyproject.toml]
     forbidden:
       - Network calls (no redirect following or DOI resolution in this task)
       - Accepting a cross-domain rel=canonical without an explicit allow rule

@@ -1,4 +1,4 @@
-"""Registrable domains, from a pinned snapshot of the Public Suffix List.
+r"""Registrable domains, from a pinned snapshot of the Public Suffix List.
 
 "Same site" for a rel=canonical link (`canonical_url.apply_rel_canonical`) means the same
 *registrable domain*: the public suffix plus one label. `www.bbc.co.uk` and `news.bbc.co.uk` are one
@@ -7,13 +7,28 @@ site because `co.uk` is a public suffix; `alice.github.io` and `bob.github.io` a
 comes from the list browsers use (https://publicsuffix.org), ICANN and private sections both.
 
 **The list is a file in this package, never fetched.** `data/public_suffix_list.dat` is the list
-as published at `PUBLIC_SUFFIX_LIST_VERSION` (commit `PUBLIC_SUFFIX_LIST_COMMIT` of
-github.com/publicsuffix/list), byte for byte, and `PUBLIC_SUFFIX_LIST_SHA256` pins it. Nothing here
-downloads, refreshes or caches a newer copy, on import, on first use or ever: a different list would
-mean a stored canonical URL could stop agreeing with the rule that produced it. Updating it is a
-pull request that replaces the file and these three constants together, and the test of the pin
-fails if one changes without the others. The list is Mozilla Public License 2.0, a file-level
+exactly as publicsuffix.org published it, and `data/public_suffix_list.dat.sha256` pins its bytes
+in `shasum -a 256` format. The list's own header names its version and the commit of
+github.com/publicsuffix/list it was built from (`// VERSION:` and `// COMMIT:`), and
+`bundled_public_suffix_rules()` reports both. Nothing here downloads, refreshes or caches a newer
+copy, on import, on first use or ever, because a different list could make a stored canonical URL
+stop agreeing with the rule that produced it. The list is Mozilla Public License 2.0, a file-level
 licence: the file keeps its own header and terms, and nothing else in the package is affected.
+
+**Refreshing it** is a deliberate pull request, never an automatic one. The list's maintainers ask
+that it be pulled only from https://publicsuffix.org/list/public_suffix_list.dat. From the
+repository root, this one command replaces the file and rewrites its hash together:
+
+    cd packages/debate_core/src/debate_core/retrieval/data && \
+      curl --fail --silent --show-error --output public_suffix_list.dat \
+        https://publicsuffix.org/list/public_suffix_list.dat && \
+      shasum -a 256 public_suffix_list.dat > public_suffix_list.dat.sha256
+
+Back at the repository root, run `uv run pytest packages/debate_core/tests/retrieval` and commit both
+files in one pull request that names the new `// VERSION:` line. The pin test fails if either file
+changes without the other. The project's test vectors in `test_public_suffix.py` were transcribed
+at the old commit; if one now fails, the list changed a rule they cover, so read the list's
+history before changing the expectation.
 
 The algorithm is the list's own (https://github.com/publicsuffix/list/wiki/Format): an exception
 rule (`!www.ck`) beats everything, otherwise the matching rule with the most labels wins, a
@@ -31,9 +46,8 @@ from importlib import resources
 import idna
 
 __all__ = [
-    "PUBLIC_SUFFIX_LIST_COMMIT",
-    "PUBLIC_SUFFIX_LIST_SHA256",
-    "PUBLIC_SUFFIX_LIST_VERSION",
+    "PUBLIC_SUFFIX_LIST_FILE",
+    "PUBLIC_SUFFIX_LIST_HASH_FILE",
     "PublicSuffixRules",
     "ascii_hostname",
     "bundled_public_suffix_rules",
@@ -41,11 +55,8 @@ __all__ = [
     "registrable_domain",
 ]
 
-PUBLIC_SUFFIX_LIST_VERSION = "2026-10-17_18-52-06_UTC"
-PUBLIC_SUFFIX_LIST_COMMIT = "52b71b3c4576ff77450cc7ebcfc7f34a916af3f9"
-PUBLIC_SUFFIX_LIST_SHA256 = "3e6ca639b7ef33f86ec0e6fe9a475857cf2585f28fdf485f38f14d5f00c1c2a4"
-
-_DATA_FILE = "data/public_suffix_list.dat"
+PUBLIC_SUFFIX_LIST_FILE = "data/public_suffix_list.dat"
+PUBLIC_SUFFIX_LIST_HASH_FILE = "data/public_suffix_list.dat.sha256"
 _VERSION_MARKER = "// VERSION:"
 _COMMIT_MARKER = "// COMMIT:"
 
@@ -114,7 +125,9 @@ def parse_public_suffix_list(text: str) -> PublicSuffixRules:
 @functools.cache
 def bundled_public_suffix_rules() -> PublicSuffixRules:
     """The pinned snapshot, read from this package once per process."""
-    text = resources.files("debate_core.retrieval").joinpath(_DATA_FILE).read_text(encoding="utf-8")
+    text = (
+        resources.files("debate_core.retrieval").joinpath(PUBLIC_SUFFIX_LIST_FILE).read_text(encoding="utf-8")
+    )
     return parse_public_suffix_list(text)
 
 

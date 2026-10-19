@@ -14,9 +14,8 @@ from importlib import resources
 import pytest
 
 from debate_core.retrieval.public_suffix import (
-    PUBLIC_SUFFIX_LIST_COMMIT,
-    PUBLIC_SUFFIX_LIST_SHA256,
-    PUBLIC_SUFFIX_LIST_VERSION,
+    PUBLIC_SUFFIX_LIST_FILE,
+    PUBLIC_SUFFIX_LIST_HASH_FILE,
     bundled_public_suffix_rules,
     parse_public_suffix_list,
     registrable_domain,
@@ -140,13 +139,21 @@ def test_hosts_the_canonicalizer_asks_about(host: str, expected: str | None) -> 
     assert registrable_domain(host) == expected
 
 
-def test_the_bundled_snapshot_is_the_pinned_one() -> None:
-    """The snapshot only changes in a reviewed pull request that also changes these constants."""
-    data = resources.files("debate_core.retrieval").joinpath("data/public_suffix_list.dat").read_bytes()
-    assert hashlib.sha256(data).hexdigest() == PUBLIC_SUFFIX_LIST_SHA256
+PACKAGE = resources.files("debate_core.retrieval")
+
+
+def test_the_bundled_snapshot_matches_its_pinned_hash() -> None:
+    """The file changes only with its hash, by the refresh command in the module docstring."""
+    data = PACKAGE.joinpath(PUBLIC_SUFFIX_LIST_FILE).read_bytes()
+    recorded = PACKAGE.joinpath(PUBLIC_SUFFIX_LIST_HASH_FILE).read_text(encoding="ascii")
+    assert recorded == f"{hashlib.sha256(data).hexdigest()}  public_suffix_list.dat\n"
+
+
+def test_the_bundled_snapshot_names_its_version_and_commit() -> None:
+    """Read from the list's own header, so a refresh cannot leave a stale copy of either in code."""
     rules = bundled_public_suffix_rules()
-    assert rules.version == PUBLIC_SUFFIX_LIST_VERSION
-    assert rules.commit == PUBLIC_SUFFIX_LIST_COMMIT
+    assert rules.version == "2026-10-17_18-52-06_UTC"
+    assert rules.commit == "52b71b3c4576ff77450cc7ebcfc7f34a916af3f9"
 
 
 def test_the_bundled_snapshot_holds_both_sections() -> None:

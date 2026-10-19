@@ -58,18 +58,25 @@ def numbered(stem: str, count: int) -> str:
 
 
 LONG_PARAGRAPH = prose(11_500)
-LONG_FILE = build_docx(
-    para("First tag", style="Heading4")
-    + cite("Okonkwo 26")
-    + underlined(LONG_PARAGRAPH)
-    + para("Reserve margins fall in every region", half_points=READING_SIZE)
-    + para(f"Lindqvist 2019, invented review of grid planning, {SOURCE}", highlight="yellow")
-    + underlined(LONG_PARAGRAPH)
-    + para("Second tag", style="Heading4")
-    + cite("Ferreira 25")
-    + underlined(numbered("third", 70))
-)
+
+
+def long_file(last_paragraph: str = LONG_PARAGRAPH) -> bytes:
+    return build_docx(
+        para("First tag", style="Heading4")
+        + cite("Okonkwo 26")
+        + underlined(LONG_PARAGRAPH)
+        + para("Reserve margins fall in every region", half_points=READING_SIZE)
+        + para(f"Lindqvist 2019, invented review of grid planning, {SOURCE}", highlight="yellow")
+        + underlined(last_paragraph)
+        + para("Second tag", style="Heading4")
+        + cite("Ferreira 25")
+        + underlined(numbered("third", 70))
+    )
+
+
+LONG_FILE = long_file()
 #: The holder: A's words, a line read as nothing, B's words; then B's card and A's, each under a cite.
+#: Then a body of 100 words and two cuts of it sharing 20, too few to overlap: counted, never drawn.
 HOLDING_FILE = build_docx(
     para("Holding tag", style="Heading4")
     + cite("Okonkwo 26")
@@ -80,6 +87,12 @@ HOLDING_FILE = build_docx(
     + underlined(numbered("second", 80))
     + cite("Ferreira 25")
     + underlined(numbered("first", 80))
+    + cite("Achebe 24")
+    + underlined(numbered("run", 100))
+    + cite("Mensah 23")
+    + underlined(" ".join(numbered("run", 100).split()[:60]))
+    + cite("Tanaka 22")
+    + underlined(" ".join(numbered("run", 100).split()[40:]))
 )
 LONG, HOLDING = hashlib.sha256(LONG_FILE).hexdigest(), hashlib.sha256(HOLDING_FILE).hexdigest()
 
@@ -260,6 +273,30 @@ def test_a_body_holding_two_cards_shows_how_much_of_each_paragraph_is_in_each() 
     assert "Are they two cards, or one card cut twice?" in shown
 
 
+def test_a_short_body_paragraph_in_a_long_run_is_shown_with_the_paragraphs_beside_it() -> None:
+    paragraphs = [underlined(prose(400)) for _ in range(12)]
+    paragraphs[5] = underlined("A short paragraph of the body, twelve words or so, in the middle.")
+    document_file = build_docx(para("A tag", style="Heading4") + cite("Okonkwo 26") + "".join(paragraphs))
+    shown = _STYLE.sub("", script.render_item(item_of(document_file, "e" * 64), 160))
+    rows = [line for line in shown.splitlines() if re.match(r"\s+\d+ ", line)]
+    assert [int(row.split()[0]) for row in rows] == [1, 2, 3, 4, 7, 8, 9, 12, 13, 14]
+
+
+def test_where_one_part_gives_way_to_the_other_is_shown_however_long_the_body() -> None:
+    first, second = numbered("first", 240).split(), numbered("second", 240).split()
+    paragraphs = [
+        underlined(" ".join(words[start : start + 40]))
+        for words in (first, second)
+        for start in range(0, 240, 40)
+    ]
+    holder = build_docx(para("A tag", style="Heading4") + cite("Okonkwo 26") + "".join(paragraphs))
+    item = item_of(holder, "e" * 64, pieces=(" ".join(first), " ".join(second)))
+    shown = _STYLE.sub("", script.render_item(item, 160))
+    rows = [line for line in shown.splitlines() if re.match(r"\s+\d+ ", line)]
+    # The last of A's six paragraphs is the eighth row, the first of B's the ninth.
+    assert [int(row.split()[0]) for row in rows] == [1, 2, 3, 4, 8, 9, 10, 12, 13, 14]
+
+
 def test_long_runs_of_body_paragraphs_are_shown_as_a_count() -> None:
     body = "".join(underlined(prose(400)) for _ in range(12))
     document_file = build_docx(para("A tag", style="Heading4") + cite("Okonkwo 26") + body)
@@ -283,8 +320,10 @@ def test_each_item_is_answered_by_its_own_keys_and_q_stops_keeping_the_answers_s
         item_of(LONG_FILE, LONG),
         item_of(HOLDING_FILE, HOLDING, pieces=("first0", "second0")),
         item_of(LONG_FILE, LONG),
+        item_of(LONG_FILE, LONG),
     ]
-    keys = iter(["t", "s", "x", "o", "q"])
+    # The fourth item is never asked: `q` on the third stops, and the `s` after it is not read.
+    keys = iter(["t", "s", "x", "o", "q", "s"])
     shown: list[str] = []
     answered, stopped, _ = script.ask_about(
         items, ask=lambda _: next(keys), show=shown.append, columns=160, clock=lambda: 0.0
@@ -367,6 +406,61 @@ def test_the_sample_runs_on_the_counted_positions_and_appends_its_tallies(
         assert telltale not in tally_text
     # The text went to the terminal only.
     assert "A tag typed in body style" in printed
+
+
+def test_a_holding_band_is_set_at_1000_words() -> None:
+    assert script.holder_band(999) == "body under 1,000 words"
+    assert script.holder_band(1_000) == "body of 1,000 words or more"
+
+
+def write_source(data_dir: Path, sha256: str, stored: bytes, blob: bytes) -> None:
+    """A source the store holds as `stored`'s parse, whose blob on disk is `blob`."""
+    document = parsed(stored, sha256)
+    entry = SourceEntry.model_validate(
+        {
+            "caselist": CASELIST,
+            "snapshot": "2026-10-19",
+            "source_sha256": sha256,
+            "parser_version": DOCX_PARSER_VERSION,
+            "profile_version": document.profile_version,
+            "fingerprint_version": "card-fingerprint-v4",
+            "source_format": SourceFormat.DOCX,
+            "byte_size": len(stored),
+            "outcome": SourceOutcome.PARSED,
+            "cards": len(document.cards),
+        }
+    )
+    record = DocumentRecord.from_parsed_document(
+        document,
+        caselist=CASELIST,
+        snapshot="2026-10-19",
+        fingerprint_version="card-fingerprint-v4",
+        camp=None,
+    )
+    asyncio.run(LocalParsedStore(data_dir).write_source(CASELIST, DOCX_PARSER_VERSION, entry, record))
+    path = data_dir / "blobs" / "sha256" / sha256[:2] / sha256[2:4] / sha256
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(blob)
+
+
+def test_an_item_the_parse_does_not_give_back_is_skipped_and_counted(data_dir: Path) -> None:
+    changed = long_file(LONG_PARAGRAPH.replace("operators", "planners", 1))
+    write_source(data_dir, "f" * 64, LONG_FILE, changed)
+    versions = {CASELIST: DOCX_PARSER_VERSION}
+    assert script.prepare([script.Drawn(0, CASELIST, ("f" * 64, 0))], data_dir, versions, PROFILE) == ([], 1)
+    items, skipped = script.prepare([script.Drawn(0, CASELIST, (LONG, 0))], data_dir, versions, PROFILE)
+    assert (len(items), skipped) == (1, 0)
+
+
+def test_a_is_the_part_the_body_holds_first_in_whichever_order_the_count_named_them(data_dir: Path) -> None:
+    holding = parsed(HOLDING_FILE, HOLDING)
+    holder, b_card, a_card = (card.provenance.first_element_index for card in holding.cards[:3])
+    versions = {CASELIST: DOCX_PARSER_VERSION}
+    for pieces in (((HOLDING, a_card), (HOLDING, b_card)), ((HOLDING, b_card), (HOLDING, a_card))):
+        [item], _ = script.prepare(
+            [script.Drawn(4, CASELIST, (HOLDING, holder), pieces)], data_dir, versions, PROFILE
+        )
+        assert item.pieces == (shingles(numbered("first", 80)), shingles(numbered("second", 80)))
 
 
 def test_the_sample_refuses_anything_but_a_terminal(data_dir: Path, operator_dir: Path) -> None:

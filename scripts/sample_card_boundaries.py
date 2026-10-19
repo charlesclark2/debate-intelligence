@@ -86,7 +86,10 @@ __all__ = [
     "Tallies",
     "ask_about",
     "draw",
+    "holder_band",
     "main",
+    "population_of",
+    "prepare",
     "render_item",
 ]
 
@@ -105,6 +108,11 @@ TWO_ANSWERS = {"t": "two cards: a boundary the parser missed", "o": "one card cu
 #: A body holding two cards is drawn in two bands of its own length.
 HOLDER_UNDER, HOLDER_OVER = "body under 1,000 words", "body of 1,000 words or more"
 HOLDER_BAND_WORDS = 1_000
+
+
+def holder_band(words: int) -> str:
+    """The band a body holding two cards is drawn in: 999 words is under 1,000, 1,000 is not."""
+    return HOLDER_UNDER if words < HOLDER_BAND_WORDS else HOLDER_OVER
 
 
 @dataclass(frozen=True, slots=True)
@@ -231,8 +239,7 @@ def population_of(
             if row["count"] == LONG_BODY:
                 number, pieces = number_of[(LONG_BODY, row["group"])], None
             else:
-                band = HOLDER_UNDER if word_count(body) < HOLDER_BAND_WORDS else HOLDER_OVER
-                number = number_of[(TWO_CARDS, band)]
+                number = number_of[(TWO_CARDS, holder_band(word_count(body)))]
                 first, second = row["pieces"]
                 pieces = ((first[0], first[1]), (second[0], second[1]))
             candidate = _Candidate(caselist, key, fingerprint_text(body), pieces)

@@ -1565,7 +1565,7 @@ holds exactly, by test.
 | Counts against `card-fingerprint-v3`: clusters, merged, divided, largest | below, 2026-10-18 | below, 2026-10-18 | not run |
 | ac5: share of pairs sharing nothing, three largest clusters per caselist | 0 in all twelve, below | 0 in all twelve, below | not run |
 | ac1: join sample of 20 newly joined pairs, contained shapes asked | all 20 decided by rule, below | 20 of 20 same card by eye, below | not run, same seed |
-| Newly joined cuts a tenth to a quarter of their witness, at least 20 (the PM's check on the share) | | not run | |
+| Newly joined cuts a tenth to a quarter of their witness, at least 20 (the PM's check on the share) | | 20 of 20 same card, below | |
 | Witness refusals the lower share added | | not run | |
 | `MIN_CUT_SHARE`: contained pairs under a third, joined and kept apart, by share band | below | not run | |
 | Lacking an end: short bodies nine-tenths inside a body lacking one of their ends | below | (joined) | |
@@ -1755,3 +1755,12 @@ third body.
 was shown and judged by eye; **20 of 20 the same card, none different, none unsure** (ac1). By
 shape: 16 contained under a third of the larger, 2 contained a third or more, 2 overlapping. The
 rule would have called the 18 contained ones the same card; the person agreed with it every time.
+
+### The re-preview's band sample, the PM's check on the share (operator-run, 2026-10-18)
+
+`sample --joined-in-band a-tenth-to-a-quarter --count 20` with the three decided shapes asked,
+over all four caselists: `Drew 20 of 933 cuts newly joined a tenth to a quarter of their smallest
+witness, seed 902519467`. Each was shown beside the smallest body holding it and judged by eye:
+**20 of 20 the same card** (17 long cuts, 3 short; every one contained, under a third of the
+larger), none different, none unsure. These are the joins lowering `MIN_CUT_SHARE` from a quarter
+to a tenth let in; the PM's condition, no different-card pair among at least 20, is met.

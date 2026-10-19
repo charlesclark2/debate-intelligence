@@ -766,9 +766,57 @@ rm ~/t20-preview-counts-*.json ~/t20-preview-shapes.json ~/t20-preview-diagnosis
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-19
 
 **Notes:**
+
+Accepted. The Goal stays `InProgress` for ac4's re-cluster figures and ac5 on the store, which come
+from the after-merge list, so the merge uses `--partial`.
+
+**The work itself:**
+
+* **The card ruling is built as ruled, twice.** Once as ruled on 2026-10-16, and again under the
+  rulings on the first preview: overlap at three-tenths, a cut as small as a tenth, either end.
+  t11's false join stays three clusters under every order of fingerprints.
+* **The labelled-set guardrail holds exactly by test.** The lost pairs are pinned to Brannock's
+  and Kessler's rows, and every other card's recall is t08's, at precision 1.000.
+* **The previews did their job.** The first one's sample found the one different-card pair that the
+  one-run reading let through, and the re-preview passed every check I set: 20 of 20 joins, 20 of 20
+  in the 0.1 band, ac5 at 0, the few-run pairs down from 401 to 4 and each explained, and no divided
+  pair unexplained.
+* **70 of 73 mutants caught.** The three equivalent ones are argued from the boundary check up to
+  200,000 shingles.
+* **`OVERLAPPING_SHARE` is now the clusterer's constant,** so t21's shapes and the clusterer cannot
+  drift apart.
+* **`card-fingerprint-v4` is added to `EXACT_FINGERPRINT_VERSIONS`** as a clusters-only bump. The
+  guard from `v1-e33-t01` caught the omission after the sync, as intended.
+
+**Rulings:**
+
+* **Deviations 1 to 6:** accepted. t08's amendment was written at the PM's direction.
+* **Decisions:** all accepted. Decision 15 is the important one, and it was checked in the code
+  rather than assumed. The re-parse to `docx-5` from a `dev` carrying this task writes the `v4`
+  table in the same run, so it is this task's rebuild. Comparing against the rules before this task
+  on the same `docx-5` cards (`--before-rules`) keeps t19's and t15's card changes out of this
+  task's figures. That is the right comparison.
+* **The after-merge list (A1 to A13)** is in the order I set, and supersedes t19's "after t20's
+  rebuild". One reinstall goes at the end, and none before the re-parse. Run it between two agent
+  runs, not across a Wednesday morning.
+
+**Follow-ups:**
+
+* **1 and 2:** already filed together as `v1-e31-t29-card-matching-recall` (PM close-out
+  2026-10-19).
+* **3, a publish-only path for the parsed store:** for the next PM batch, p3.
+* **4, an older build rewriting a newer table of its own parser version:** for the next PM batch,
+  at p2. A fingerprint bump without a parser bump would meet it, and the guard (refuse to rebuild or
+  publish a table stamped with a newer fingerprint version than the build's) is cheap.
+* **5, the pr-subset baseline:** the operator's. It is written at the labelling finish, which is
+  now one review PR away. The failure is local only: the test skips in CI.
+* **6, pyright errors in `tests/scripts`:** for the E01 deferred list.
+
+**`v1-e31-t24` (the bold tag, p1):** the combined re-parse does not wait for it. When t24 merges,
+it bumps the parser again and carries a re-parse of its own.

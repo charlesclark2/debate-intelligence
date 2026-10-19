@@ -1,0 +1,101 @@
+# TASK v1-e39-t03-search-core - Search core: safe queries, ranking, filters, pages and card rendering over the index
+# Epic: E39 — Team Evidence Search (Student Pilot) | Release: v1.7 (Team evidence search pilot) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e39-t03-search-core
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.7
+    debate/epic: v1-e39-evidence-search-pilot
+  annotations:
+    debate/title: "Search core: safe queries, ranking, filters, pages and card rendering over the index"
+spec:
+  # Filed by the PM, 2026-10-19, from Charlie's direction of 2026-10-19 (a student search pilot before the
+  # semester ends, on Chromebooks, signing in with a username, password and 2FA, outside the school's systems).
+  description: >-
+    Query and ranking in debate_core, pure over the v1-e39-t02 index. A student's query is
+    parsed here and never handed raw to FTS5's MATCH: words, "quoted phrases", a leading minus
+    to exclude, and `author:` and `tag:` prefixes; anything else is literal text. Filters:
+    event, caselist or camp, side, first seen on or after a date. Ranking is BM25 with weights
+    for tag, cite, read-aloud text and full text, kept in one place and justified in the report
+    on a small synthetic relevance set. Results come 20 to a page by an opaque cursor tied to
+    its query, each with the tag, short cite, a snippet with matched words marked, event, the
+    counts of files and teams, and the representative's provenance line. A card returns its runs
+    with formatting (underline, emphasis, highlight colour, size) and every surviving
+    occurrence's provenance. Rendering to HTML escapes every character of card text, since
+    disclosed files are untrusted input, and emits only an allow-listed set of tags and classes.
+    A query past a time budget returns what it has, flagged as partial.
+  priority: 1
+  constraints:
+    packages: [debate_core.domain, debate_core.application, debate_core.integrations, packages/debate_core/tests]
+    forbidden:
+      - fastapi, boto3 or httpx in debate_core.domain or debate_core.application
+      - Card text, a school, team code, file name, student name, username or email in any fixture, log, report or commit (synthetic values only)
+      - Search by school, team code or debater
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e39-t02-search-index-build
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Every input string becomes a safe FTS5 expression or a literal: a property test over
+        arbitrary strings never raises an FTS5 syntax error, and a prefix never searches a
+        field it did not name.
+    - id: ac2
+      description: >-
+        Filters and pagination are right over a synthetic index, and a cursor from another
+        query is refused, by tests shown failing first.
+    - id: ac3
+      description: >-
+        A fixture card holding a script element, an event-handler attribute and a
+        javascript: link renders inert, and rendered output uses only the allow-listed tags,
+        by test.
+    - id: ac4
+      description: >-
+        A rendered card's formatting coverage equals the stored spans' (the reading
+        `formatting_sha256` uses in debate_core.domain.file_provenance), by test.
+    - id: ac5
+      description: >-
+        On a synthetic index of 250,000 documents generated in the run (marked slow), the
+        95th-percentile query time is reported in the session report.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e39-t03-search-core-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.7
+    debate/epic: v1-e39-evidence-search-pilot
+spec:
+  description: >-
+    Parse queries safely, rank with weighted BM25, filter and page results, and render cards to
+    escaped HTML.
+  goalRef:
+    name: v1-e39-t03-search-core
+  graph:
+    nodes:
+      - id: search-core
+        kind: Task
+        name: Search core
+        description: >-
+          Parse queries safely, rank with weighted BM25, filter and page results, and
+          render cards to escaped HTML.
+        estimatedEffort: 5h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Search core tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, search]
+status:
+  phase: Pending

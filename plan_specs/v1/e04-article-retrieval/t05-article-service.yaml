@@ -27,6 +27,12 @@ spec:
     ingest_user_text() path accepts text the user lawfully has (e.g. from a subscription), stores it
     with provenance_mode=USER_SUPPLIED and access_status recorded as reported, so downstream cards show
     that provenance. The CLI command and recorded fixtures are t06.
+    (PM amendment 2026-10-19, from v1-e04-t01's PM review.) Applying rel=canonical: a canonical
+    pointing at the site root is refused when the fetched path is not "/", since a page naming
+    its home page as canonical is a template mistake, not a duplicate. The canonical form is an
+    identity key, never a fetch target: the service fetches the URL as given (or a wrapper's
+    literal destination), never a host it guessed (such as an AMP page's www host), and stores
+    both the fetched URL and the canonical one.
   priority: 1
   constraints:
     packages: [debate_core.application]
@@ -67,6 +73,11 @@ spec:
       description: >-
         Every outcome emits a structured log event with a correlation id, canonical URL, access status
         and elapsed time, and no page content.
+    - id: ac6
+      description: >-
+        (PM amendment 2026-10-19) A site-root rel=canonical on a deeper page is refused and
+        the fetched URL kept; no fetch is ever made to a guessed canonical host; both URLs
+        are stored, by tests shown failing first.
 status:
   phase: Pending
 ---

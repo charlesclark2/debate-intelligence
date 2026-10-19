@@ -25,6 +25,15 @@ spec:
     `scripts/sample_cite_shapes.py` if more than a few files hold it, then fix the parser for
     what is a defect. Counts come first and the PM rules before the rule changes. Merge before
     the combined re-parse of v1-e31-t19 and v1-e31-t20 if it can, so one re-parse carries it.
+    (PM amendment 2026-10-19, from v1-e33-t02's ruling (d) and its Follow-up 1.) The same task
+    makes the highlighted-cite look-ahead (v1-e31-t19's
+    `assembly-highlighted-cite-before-the-body`) step over an Undertag paragraph, so that the
+    provenance line a built file writes below every cite no longer turns a highlighted cite into
+    body. When it does, v1-e33-t02's `test_today_the_parser_does_not_step_over_the_line` fails
+    by design: change it to assert the new reading, and
+    `test_a_highlighted_cite_is_refused_until_the_parser_steps_over_the_line` then asserts that
+    such a card builds and reads back. The writer itself does not change. Both changes share one
+    parser bump: whichever of this task and v1-e31-t22 merges second takes the next version.
   priority: 1
   constraints:
     packages: [debate_core.evidence, debate_core.integrations.docx_parser, packages/debate_core/tests, scripts, tests/scripts, docs/data]
@@ -50,6 +59,12 @@ spec:
       description: >-
         `parser_version` is bumped; the re-parse is the operator's and is recorded in
         docs/data/caselist-parse-report.md.
+    - id: ac4
+      description: >-
+        (PM amendment 2026-10-19) A highlighted cite with an Undertag paragraph before its
+        body is still read as the cite, by a synthetic fixture shown failing first;
+        v1-e33-t02's pinned pair of tests is updated and a built file holding such a card
+        reads back as its source.
 status:
   phase: Pending
 ---

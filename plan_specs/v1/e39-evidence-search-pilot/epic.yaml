@@ -1,0 +1,267 @@
+# EPIC E39 — Team Evidence Search (Student Pilot)
+# Major version: V1 | Release: v1.7 (Team evidence search pilot)
+# Architecture refs: ADR-0019, ADR-0012, ADR-0006, docs/policies/caselist-data-use.md (E39 gate)
+# Source of truth for task ordering inside this epic. Task details live in the tNN-*.yaml files beside this one.
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e39-evidence-search-pilot
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: epic
+    debate/major-version: v1
+    debate/release: v1.7
+    debate/epic: v1-e39-evidence-search-pilot
+  annotations:
+    debate/title: E39 — Team Evidence Search (Student Pilot)
+    debate/architecture-refs: ADR-0019, ADR-0012, ADR-0006, caselist data-use policy E39 gate
+spec:
+  description: >-
+    Give the team's debaters a signed-in web page, usable on a school Chromebook, to search the
+    disclosed and camp cards in the evidence store and take a card out with its provenance:
+    copied with its formatting into Google Docs or Word, or downloaded as a Verbatim .docx
+    through the E33 writer. A pilot for the end of the 2026 fall semester, on the smallest stack
+    that meets the data-use policy's E39 gate (ADR-0019): one function behind CloudFront on the
+    team domain, a weekly SQLite full-text index built from the parsed store, and Cognito
+    accounts the coach creates (username, password, authenticator-app codes, an opt-in
+    emailed-code fallback; no Google or school account). The school's activities director and IT
+    approved the tool for students (policy open question 6, version 1.10). V2's E12, E15 and E35
+    replace its pieces later; this epic says which in ADR-0019.
+  priority: 1
+  constraints:
+    majorVersion: v1
+    release: v1.7
+    rule: Every task in this epic ships in this release; no task crosses major versions.
+  acceptanceCriteria:
+  - id: ac1
+    description: >-
+      A signed-in debater on a school Chromebook finds a card by words in its tag, author or
+      text, filtered by event, caselist and side, and copies it into Google Docs with its
+      formatting and provenance line, in prod.
+  - id: ac2
+    description: >-
+      Every item of the data-use policy's E39 gate is met and each is proven by a named test
+      or operator record.
+  - id: ac3
+    description: >-
+      The coach's beta and a student pilot have run on prod, and their findings and the go or
+      no-go for the whole team are recorded.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e39-evidence-search-pilot-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: epic
+    debate/major-version: v1
+    debate/release: v1.7
+    debate/epic: v1-e39-evidence-search-pilot
+spec:
+  description: >-
+    Task graph for epic E39 (Team Evidence Search (Student Pilot)). Each Task node points at its own
+    task-level PlanSpec.
+  goalRef:
+    name: v1-e39-evidence-search-pilot
+  version: '1'
+  graph:
+    nodes:
+    - id: t01
+      kind: Task
+      name: 'ADR-0019: the student search pilot''s stack, sign-in and hosting'
+      description: >-
+        ADR-0019: the student search pilot's stack, sign-in and hosting.
+      inputs:
+        specRef: plan_specs/v1/e39-evidence-search-pilot/t01-pilot-architecture-adr.yaml
+        goalRef: v1-e39-t01-pilot-architecture-adr
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e39-t01-pilot-architecture-adr reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e39-t01-pilot-architecture-adr
+    - id: t02
+      kind: Task
+      name: 'tub index build and publish: one searchable document per card cluster, from the parsed store'
+      description: >-
+        tub index build and publish: one searchable document per card cluster, from the
+        parsed store.
+      inputs:
+        specRef: plan_specs/v1/e39-evidence-search-pilot/t02-search-index-build.yaml
+        goalRef: v1-e39-t02-search-index-build
+      dependsOn:
+      - t01
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e39-t02-search-index-build reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e39-t02-search-index-build
+    - id: t03
+      kind: Task
+      name: 'Search core: safe queries, ranking, filters, pages and card rendering over the index'
+      description: >-
+        Search core: safe queries, ranking, filters, pages and card rendering over the
+        index.
+      inputs:
+        specRef: plan_specs/v1/e39-evidence-search-pilot/t03-search-core.yaml
+        goalRef: v1-e39-t03-search-core
+      dependsOn:
+      - t02
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e39-t03-search-core reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e39-t03-search-core
+    - id: t04
+      kind: Task
+      name: 'Pilot infrastructure: the function, CloudFront, the user pool and the audit log, in dev and prod'
+      description: >-
+        Pilot infrastructure: the function, CloudFront, the user pool and the audit log, in
+        dev and prod.
+      inputs:
+        specRef: plan_specs/v1/e39-evidence-search-pilot/t04-pilot-infrastructure.yaml
+        goalRef: v1-e39-t04-pilot-infrastructure
+      dependsOn:
+      - t01
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e39-t04-pilot-infrastructure reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e39-t04-pilot-infrastructure
+    - id: t05
+      kind: Task
+      name: 'Accounts and sign-in: the session flow, roles, and the coach''s tub users commands'
+      description: >-
+        Accounts and sign-in: the session flow, roles, and the coach's tub users commands.
+      inputs:
+        specRef: plan_specs/v1/e39-evidence-search-pilot/t05-accounts-and-sign-in.yaml
+        goalRef: v1-e39-t05-accounts-and-sign-in
+      dependsOn:
+      - t04
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e39-t05-accounts-and-sign-in reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e39-t05-accounts-and-sign-in
+    - id: t06
+      kind: Task
+      name: 'Search pages: search, results, the card page and Copy card, on a Chromebook'
+      description: >-
+        Search pages: search, results, the card page and Copy card, on a Chromebook.
+      inputs:
+        specRef: plan_specs/v1/e39-evidence-search-pilot/t06-search-pages.yaml
+        goalRef: v1-e39-t06-search-pages
+      dependsOn:
+      - t03
+      - t05
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e39-t06-search-pages reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e39-t06-search-pages
+    - id: t07
+      kind: Task
+      name: 'Removal, access audit and exposure: the pilot meets the policy''s E39 gate'
+      description: >-
+        Removal, access audit and exposure: the pilot meets the policy's E39 gate.
+      inputs:
+        specRef: plan_specs/v1/e39-evidence-search-pilot/t07-removal-audit-and-exposure.yaml
+        goalRef: v1-e39-t07-removal-audit-and-exposure
+      dependsOn:
+      - t06
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e39-t07-removal-audit-and-exposure reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e39-t07-removal-audit-and-exposure
+    - id: t08
+      kind: Task
+      name: 'Download a card or a small file as Verbatim .docx through the E33 writer'
+      description: >-
+        Download a card or a small file as Verbatim .docx through the E33 writer.
+      inputs:
+        specRef: plan_specs/v1/e39-evidence-search-pilot/t08-card-download.yaml
+        goalRef: v1-e39-t08-card-download
+      dependsOn:
+      - t07
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e39-t08-card-download reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e39-t08-card-download
+    - id: t09
+      kind: Task
+      name: 'The weekly agent run rebuilds and publishes the search index when the parsed store changed'
+      description: >-
+        The weekly agent run rebuilds and publishes the search index when the parsed store
+        changed.
+      inputs:
+        specRef: plan_specs/v1/e39-evidence-search-pilot/t09-weekly-index-refresh.yaml
+        goalRef: v1-e39-t09-weekly-index-refresh
+      dependsOn:
+      - t02
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e39-t09-weekly-index-refresh reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e39-t09-weekly-index-refresh
+    - id: t10
+      kind: Task
+      name: 'Dev smoke checks, the coach''s beta and the student pilot'
+      description: >-
+        Dev smoke checks, the coach's beta and the student pilot.
+      inputs:
+        specRef: plan_specs/v1/e39-evidence-search-pilot/t10-pilot-smoke-and-review.yaml
+        goalRef: v1-e39-t10-pilot-smoke-and-review
+      dependsOn:
+      - t07
+      - t08
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e39-t10-pilot-smoke-and-review reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e39-t10-pilot-smoke-and-review
+status:
+  phase: Pending

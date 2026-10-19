@@ -1,0 +1,86 @@
+# TASK v1-e39-t09-weekly-index-refresh - The weekly agent run rebuilds and publishes the search index when the parsed store changed
+# Epic: E39 — Team Evidence Search (Student Pilot) | Release: v1.7 (Team evidence search pilot) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e39-t09-weekly-index-refresh
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.7
+    debate/epic: v1-e39-evidence-search-pilot
+  annotations:
+    debate/title: "The weekly agent run rebuilds and publishes the search index when the parsed store changed"
+spec:
+  # Filed by the PM, 2026-10-19, from Charlie's direction of 2026-10-19 (a student search pilot before the
+  # semester ends, on Chromebooks, signing in with a username, password and 2FA, outside the school's systems).
+  description: >-
+    After the weekly run's parse and publish stages (E34), a new stage builds the index with
+    v1-e39-t02's command and publishes it to prod when the parsed store changed since the
+    current index's snapshot; it is reported in the run summary, and a failure leaves the
+    previous index current and shows in the stale-data warning (v1-e34-t03). The pointer moves
+    only after the uploaded index's sha256 is verified. The stage is skipped, and says so, when
+    the installed build's parser or fingerprint version is not the parsed store's.
+  priority: 2
+  constraints:
+    packages: [debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/runbooks]
+    forbidden:
+      - Running the agent or a publish in a session
+      - Card text, a school, team code, file name, student name, username or email in any fixture, log, report or commit (synthetic values only)
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e39-t02-search-index-build
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The stage builds and publishes only when the store changed, by test over a stubbed
+        run, shown failing first.
+    - id: ac2
+      description: >-
+        A failed build or upload leaves the previous pointer and appears in the run summary
+        and stale-data warning, by test.
+    - id: ac3
+      description: >-
+        A version mismatch skips the stage with its reason, by test.
+    - id: ac4
+      description: >-
+        The next agent install records one weekly run that published an index (operator
+        follow-up).
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e39-t09-weekly-index-refresh-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.7
+    debate/epic: v1-e39-evidence-search-pilot
+spec:
+  description: >-
+    Add a search-index stage to the weekly run that publishes only a changed, verified index.
+  goalRef:
+    name: v1-e39-t09-weekly-index-refresh
+  graph:
+    nodes:
+      - id: refresh
+        kind: Task
+        name: Weekly index refresh
+        description: >-
+          Add a search-index stage to the weekly run that publishes only a changed,
+          verified index.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Run stage tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, packages/debate_cli/tests, -k, index_stage or tub_index]
+status:
+  phase: Pending

@@ -42,8 +42,9 @@ decision lands. A reservation moves into the index above when its record is writ
 | ADR | Topic | Owning spec |
 |---|---|---|
 | 0011 | VPC egress design | [`v2-e10-t05-container-platform`](../../plan_specs/v2/e10-aws-foundation/t05-container-platform.yaml) |
+| 0019 | The student search pilot's stack, sign-in and hosting | [`v1-e39-t01-pilot-architecture-adr`](../../plan_specs/v1/e39-evidence-search-pilot/t01-pilot-architecture-adr.yaml) |
 
-New ADRs take the next free number after the highest written or reserved one: **0018** is the
+New ADRs take the next free number after the highest written or reserved one: **0020** is the
 next free number. Do not skip numbers; if a reservation is dropped, note it here rather than silently
 reusing the number.
 

@@ -191,6 +191,10 @@ class TestAWithdrawnCopyLeftFailsTheCommand:
         assert not report.in_sync
         assert failure.code == "REMOVAL_RESIDUE"
         told = " ".join(failure.message.split())
+        assert told.startswith(
+            "the bucket still holds copies of 1 file(s) withdrawn from a caselist that keeps no holder "
+            "of them: "
+        )
         assert (
             f"{CASELIST}: 1 current object(s), 0 noncurrent version(s) and 0 delete marker(s) of 1 file(s) "
             f"withdrawn from {CASELIST} (sha256 {WITHDRAWN[:12]}, {REQUEST})"

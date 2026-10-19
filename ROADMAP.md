@@ -60,8 +60,8 @@ v2.3's extension work.
 
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
-| [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 40 | 40 | 216 |
-| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 95 | 65 | 469 |
+| [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 41 | 40 | 220 |
+| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 95 | 66 | 469 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 20 | 5 | 188 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 13 | 1 | 108 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 14 | 0 | 96 |
@@ -119,6 +119,7 @@ Repo, tooling, CI, promotion flow, task tooling, domain core, and deterministic 
 | [An unexpected error never prints its message on the command line](plan_specs/v1/e01-repo-foundation/t25-unmodelled-errors-print-no-text.yaml) `v1-e01-t25-unmodelled-errors-print-no-text` | Succeeded | 1 | 1.0 |
 | [The manual sweep also opens the back-merge pull request](plan_specs/v1/e01-repo-foundation/t26-dispatch-opens-back-merge.yaml) `v1-e01-t26-dispatch-opens-back-merge` | Succeeded | 1 | 1.5 |
 | [The CI test job finishes well inside the five-minute budget](plan_specs/v1/e01-repo-foundation/t27-ci-test-job-within-budget.yaml) `v1-e01-t27-ci-test-job-within-budget` | Succeeded | 1 | 3.0 |
+| [scripts/affected_tests.py prints the tests a branch's changes can break](plan_specs/v1/e01-repo-foundation/t28-affected-test-selection.yaml) `v1-e01-t28-affected-test-selection` | Pending | 1 | 4.0 |
 
 #### [E02 — Domain Core: Entities, Ports & Local Persistence](plan_specs/v1/e02-domain-core/epic.yaml)
 
@@ -191,7 +192,7 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [A held path's bytes and skipped rows never reach the bucket](plan_specs/v1/e30-caselist-ingestion/t22-held-rows-publish-nothing.yaml) `v1-e30-t22-held-rows-publish-nothing` | Succeeded | 1 | 3.0 |
 | [Held digests are remembered once the copy is gone, and a manifest write survives a power cut](plan_specs/v1/e30-caselist-ingestion/t23-held-digests-and-manifest-fsync.yaml) `v1-e30-t23-held-digests-and-manifest-fsync` | Succeeded | 1 | 3.0 |
 | [caselist status fails on every removal left unfinished, and reports a held digest the re-run has not listed](plan_specs/v1/e30-caselist-ingestion/t24-status-residue-and-held-digests.yaml) `v1-e30-t24-status-residue-and-held-digests` | Pending | 2 | 4.0 |
-| [store sync pushes no manifest the publisher withholds, and junk beside a held link does not keep its row](plan_specs/v1/e30-caselist-ingestion/t25-store-sync-withholding.yaml) `v1-e30-t25-store-sync-withholding` | Pending | 1 | 2.0 |
+| [store sync pushes no manifest the publisher withholds, and junk beside a held link does not keep its row](plan_specs/v1/e30-caselist-ingestion/t25-store-sync-withholding.yaml) `v1-e30-t25-store-sync-withholding` | Succeeded | 1 | 2.0 |
 | [A .cmir file is imported as CMIR, and every rename-into-place writer fsyncs its directory](plan_specs/v1/e30-caselist-ingestion/t26-cmir-extension-and-directory-fsync.yaml) `v1-e30-t26-cmir-extension-and-directory-fsync` | Pending | 2 | 2.0 |
 
 #### [E31 — Debate File Parsing](plan_specs/v1/e31-debate-file-parsing/epic.yaml)

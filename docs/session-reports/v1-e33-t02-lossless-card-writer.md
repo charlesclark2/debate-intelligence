@@ -501,9 +501,40 @@ Paste the summary's per-category counts back. Its rows are keyed by SHA-256 pref
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-19
 
 **Notes:**
+
+Accepted, with the phase `Succeeded`.
+
+**The work itself:**
+
+* **Copying from the parser's own tree** (decisions 1 and 2) makes ac1 hold by construction for
+  forbidden characters and for paragraph numbering, instead of by a second walk that could drift.
+* **The read-back is the one guard,** and the diagnosis asks the parser rather than naming its rules,
+  so `v1-e31-t24` lands with no writer change. The pinned pair of tests flips by itself and signals the
+  day it does.
+* **The stand-in count** (decision 3) never counts a U+FFFD the source wrote itself.
+* **Determinism in its stronger form:** the `.docx` does not depend on `built_at`, which is what
+  t05's deduplication needs.
+* **Every guard shown failing for its reason,** restored by SHA-256, and the style fixtures shown
+  byte-identical after the profile's additions.
+* **ac6 closed by the operator:** Word with Verbatim opened all three with no repair prompt, and
+  CardMirror came back 3 of 3 clean. The `npm install --ignore-scripts` correction is recorded in
+  the harness README, which is where the next operator will look.
+
+**Deviations 1 to 7 are agreed;** each was a ruling of mine or the spec's own outputs.
+
+**Carried forward by the PM, into the next spec batch:**
+
+1. **`v1-e33-t03`:** decision 1 means a store parsed by another parser version gives
+   `OCCURRENCE_MISMATCH` for every card. `files build` checks the store's parser version against the
+   running one first and refuses with one message naming both and saying to re-parse, instead of a
+   mismatch per card.
+2. **`v1-e33-t06` (camp pins):** follow-up 4, the OpenEv provenance line and a source document for a
+   camp occurrence.
+3. **Numbered lists** (follow-up 6) wait for a coach to ask; not filed.
+4. **A team's own `styles.xml`** (follow-up 5) waits for one to be committed; not filed.

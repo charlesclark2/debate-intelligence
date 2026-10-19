@@ -1492,7 +1492,7 @@ Before the labels moved, on 2026-10-18, the same comparison gave the same cite f
 
 ## The re-cluster under `card-fingerprint-v4` (`v1-e31-t20`)
 
-**Status: preview started.** The counts against `v3` (step 2) are measured; the rest is not yet. The steps are in
+**Status: preview started.** The counts against `v3` (step 2) and the shapes (step 3) are measured; the rest is not yet. The steps are in
 [the task's session report](../session-reports/v1-e31-t20-long-cuts-and-limits.md#operator-follow-ups):
 a preview from the task worktree before the merge, which writes nothing to the store, and the
 rebuild in dev after it. This is a re-cluster, not a re-parse: the parser and `2026.10.12-docx-3`
@@ -1545,13 +1545,13 @@ of 18 on the extended set.
 | Measure | Preview, before the merge | After the dev rebuild |
 |---|---|---|
 | Counts against `card-fingerprint-v3`: clusters, merged, divided, largest | below, 2026-10-18 | not run |
-| ac5: share of pairs sharing nothing, three largest clusters per caselist | not run | not run |
+| ac5: share of pairs sharing nothing, three largest clusters per caselist | 0 in all twelve, below | not run |
 | ac1: join sample of 20 newly joined pairs | not run | not run, same seed |
 | `MIN_CUT_SHARE`: contained pairs under a third, joined and kept apart, by share band | not run | |
 | Lacking an end: short bodies nine-tenths inside a body lacking one of their ends | not run | |
 | `MAX_CONTAINER_CLUSTERS`: cuts whose ends too many clusters hold, re-measured | not run | |
 | Divided pairs against `v3`, by reason | not run | |
-| Pairs in one cluster sharing only one or two five-word runs, every cluster | not run | not run |
+| Pairs in one cluster sharing only one or two five-word runs, every cluster | below, 2026-10-18 | not run |
 
 ### The preview's counts against `card-fingerprint-v3` (operator-run, 2026-10-18)
 
@@ -1576,3 +1576,42 @@ the merges are mostly long copies joining one another, which `v3` left to the ba
 largest cluster falls least and holds the most distinct texts, and openev's grows: both are read by
 the shapes step, whose share of pairs sharing nothing is the check that no cluster joins texts with
 nothing in common.
+
+### The preview's shapes (operator-run, 2026-10-18)
+
+`compare_card_clusters.py shapes --largest-clusters 3 --every-cluster --after`, reading the
+placement step 2 saved. **ac5 on the preview: no pair sharing nothing in any of the twelve
+clusters** (target under 5%; `v3`'s were 62, 51, 41 and 25% in the largest clusters).
+
+| Caselist | Rank | Cards | Distinct texts | Pairs | Sharing nothing | Sharing 1 / 2 runs | Words, smallest / median / largest |
+|---|---|---|---|---|---|---|---|
+| hsld26 | 1 | 385 | 22 | 231 | 0 | 0 / 0 | 676 / 1,120 / 1,125 |
+| hsld26 | 2 | 331 | 29 | 406 | 0 | 0 / 0 | 238 / 1,479 / 1,539 |
+| hsld26 | 3 | 312 | 8 | 28 | 0 | 0 / 0 | 81 / 88 / 102 |
+| hspf26 | 1 | 589 | 74 | 2,701 | 0 | 0 / 0 | 2,672 / 6,143 / 7,040 |
+| hspf26 | 2 | 225 | 47 | 1,081 | 0 | 0 / 0 | 400 / 1,193 / 1,512 |
+| hspf26 | 3 | 191 | 19 | 171 | 0 | 0 / 0 | 500 / 829 / 882 |
+| hspolicy26 | 1 | 649 | 36 | 630 | 0 | 0 / 0 | 404 / 694 / 1,161 |
+| hspolicy26 | 2 | 634 | 74 | 2,701 | 0 | 11 / 0 | 296 / 2,499 / 3,843 |
+| hspolicy26 | 3 | 622 | 14 | 91 | 0 | 0 / 0 | 443 / 796 / 880 |
+| openev | 1 | 33 | 21 | 210 | 0 | 24 / 1 | 163 / 2,075 / 4,016 |
+| openev | 2 | 12 | 4 | 6 | 0 | 0 / 0 | 113 / 174 / 218 |
+| openev | 3 | 11 | 6 | 15 | 0 | 0 / 0 | 769 / 1,044 / 1,211 |
+
+Every card in these clusters is full. hspf26's largest is the long-bodied cluster the PM said to
+leave alone; nothing special-cases it.
+
+**Stock phrases, over every cluster**: pairs of distinct full texts in one cluster that share only
+one or two five-word runs.
+
+| Caselist | Pairs in one cluster | Sharing 1 run | Sharing 2 runs | Share | Clusters with such a pair |
+|---|---|---|---|---|---|
+| hsld26 | 16,589 | 23 | 169 | 1.2% | 21 of 2,505 |
+| hspf26 | 15,361 | 21 | 22 | 0.3% | 17 of 2,054 |
+| hspolicy26 | 24,181 | 83 | 47 | 0.5% | 42 of 3,518 |
+| openev | 1,151 | 33 | 3 | 3.1% | 9 of 407 |
+
+They are concentrated: openev's largest cluster holds 25 of its caselist's 36. Such a pair is in one
+cluster because each text shares more with some third body, so the count cannot say whether it is
+two passages of one article overlapping by a few words or a stock phrase bridging two cards; a
+person can, with `sample --largest 1 --least-alike`. The PM decides any follow-up from these figures.

@@ -6,7 +6,7 @@
 | Spec | [`plan_specs/v1/e33-file-builder/t02-lossless-card-writer.yaml`](../../plan_specs/v1/e33-file-builder/t02-lossless-card-writer.yaml) |
 | Epic / release | `v1-e33-file-builder` / `v1.2` |
 | Branch | `task/v1-e33-t02-lossless-card-writer` |
-| Session status | PARTIAL: the session's work is done; ac6, the coach's Word check and the CardMirror round-trip, is NOT RUN |
+| Session status | COMPLETE |
 
 ## Summary
 
@@ -22,9 +22,10 @@ provenance line below every cite (PM amendment to ac2, 2026-10-19).
 Before handing a file back, the writer re-parses it with the E31 parser (`2026.10.18-docx-5`). It
 refuses any card that does not read as its source.
 
-**The Goal stays `InProgress`.** ac6 needs the coach to open the three fixture files in Word with
-Verbatim, and the operator to run the CardMirror round-trip. Both are under
-[Operator follow-ups](#operator-follow-ups). Merge with `scripts/task pr v1-e33-t02-lossless-card-writer --partial`.
+**The Goal is `Succeeded`.** Every criterion passes. ac6 was closed by the operator on 2026-10-19:
+the three fixture files opened in Word with Verbatim with no repair prompt, and the CardMirror
+round-trip came back 3 of 3 clean. The harness's install command needed one correction on the way,
+in its README and in [Operator follow-ups](#operator-follow-ups).
 
 **Read first:**
 
@@ -42,7 +43,7 @@ Verbatim, and the operator to run the CardMirror round-trip. Both are under
 | `run-copier`: OOXML run copier with style remapping | Done | Tracked changes are resolved the parser's way. Styles are re-mapped through the profile, and an unmapped one becomes a warning. Hyperlinks are re-created. Forbidden characters are counted per card through t15's own function. Five kinds of content are refused, the fifth being TABLE (your FYI ruling). |
 | `file-assembly`: Evidence file assembly behind the port | Done | The read-back names the provenance line as the cause when it is one, without knowing any parser rule (your ruling). The `.docx` is a function of the recipe and the sources alone. |
 | `provenance-sidecar`: Provenance sidecar manifest | Done | `FileProvenanceManifest`, plus `docs/data/file-provenance.schema.json` with a drift test, as t01 did it. |
-| `fidelity-and-compat`: Fidelity suite, Word/Verbatim and CardMirror | Session's part done | The re-parse suite passes. Pyright and import boundaries pass. The coach's check is NOT RUN. |
+| `fidelity-and-compat`: Fidelity suite, Word/Verbatim and CardMirror | Done | The re-parse suite passes. Pyright and import boundaries pass. The operator reported the Word check (no repair prompt) and the CardMirror round-trip (3 of 3 clean) on 2026-10-19. |
 
 ## Acceptance criteria
 
@@ -55,7 +56,7 @@ Goal criteria:
 | **ac3**: headings in the profile's styles; source character styles re-mapped; an unmapped style keeps its direct formatting and is warned, never silently dropped | **PASS** | `test_assembly_writes_the_recipe_in_order_in_the_profiles_styles` (Heading1–4, Analytic, Undertag, written out in full by hand). `test_source_character_styles_are_remapped_to_the_profile_ids` covers re-mapping by alias id, drifted name, `basedOn` and the cite alias. `test_an_unmapped_style_keeps_its_direct_formatting_and_is_listed_as_a_warning` and `test_provenance_lists_an_unmapped_style_as_a_warning` cover the warning in the sidecar. |
 | **ac4**: images, text boxes, embedded objects and footnotes refused as UNSUPPORTED_CONTENT and listed; no partial file | **PASS** | `test_content_that_cannot_be_copied_losslessly_is_refused_by_kind` covers image, text box, embedded object, chart and footnote. Also tested: a table, an object with no relationship, ink behind a relationship, and every kind one card holds. At file level, `test_refusal_a_card_with_content_that_cannot_be_copied_refuses_the_whole_file` covers each kind, and `test_refusal_every_card_that_cannot_be_copied_is_listed` gives two cards, two refusals and no bytes. A picture inside a tracked deletion does not refuse its card. |
 | **ac5**: the sidecar validates against `docs/data/file-provenance.schema.json` with one entry per card; the same recipe and sources give byte-identical `.docx` and sidecar, with fixed timestamps and no author metadata | **PASS** | `test_provenance_sidecar_validates_against_the_committed_schema` (jsonschema 4.26). The schema also refuses `VERIFIED`. `test_provenance_has_one_entry_per_card_in_file_order`. `test_deterministic_the_same_request_builds_the_same_bytes`. `test_deterministic_the_order_sources_were_stored_in_changes_nothing`. A later `built_at` changes only the sidecar's `built_at`, and another zone gives the same bytes. Zip entries are in a fixed order, dated 1980-01-01, created on MS-DOS. `core.xml` holds the title and no creator, lastModifiedBy or dates. |
-| **ac6**: the coach opens each format's fixture file in Word with Verbatim without a repair prompt; the CardMirror round-trip, conditional on ADR-0014 | **NOT RUN** (both halves reported; the repair-prompt answer awaits an explicit yes) | **Word with Verbatim, reported by the operator on 2026-10-19:** the three files, built by follow-up 1 (LD 4 cards, PF 4, Policy 5), were checked and "everything looked correct", including the `[Disclosed: …]` line under each cite in the Undertag style. Whether Word showed a repair prompt was asked explicitly and is awaiting a yes or no. **CardMirror round-trip, run by the operator on 2026-10-19** (ADR-0014 adopts CardMirror, so it applies). The first `npm install` stopped on CardMirror's own `postinstall`; the install was corrected (follow-up 3). Then `npm run roundtrip -- --input ~/e33-example-files --output ~/e33-cardmirror-out` gave `CardMirror 1.11.0 (bc92e6bd…)`, `ok built/25c91b41`, `ok built/4c16925c`, `ok built/dd589b7d`, `3 ok, 0 failed`. `compare_docx_roundtrip.py` gave `3 file(s): 3 clean, 0 with differences, 0 error(s)`. |
+| **ac6**: the coach opens each format's fixture file in Word with Verbatim without a repair prompt; the CardMirror round-trip, conditional on ADR-0014 | **PASS** | **Word with Verbatim, reported by the operator on 2026-10-19.** The three files built by follow-up 1 (LD 4 cards, PF 4, Policy 5) each opened "without Word asking to repair any of them", and "everything looked correct", including the `[Disclosed: …]` line under each cite in the Undertag style. **CardMirror round-trip, run by the operator on 2026-10-19** (ADR-0014 adopts CardMirror, so it applies). The first `npm install` stopped on CardMirror's own `postinstall`; the install was corrected (follow-up 3). Then `npm run roundtrip -- --input ~/e33-example-files --output ~/e33-cardmirror-out` gave `CardMirror 1.11.0 (bc92e6bd…)`, `ok built/25c91b41`, `ok built/4c16925c`, `ok built/dd589b7d`, `3 ok, 0 failed`. `compare_docx_roundtrip.py` gave `3 file(s): 3 clean, 0 with differences, 0 error(s)`. |
 
 Node criteria:
 
@@ -69,7 +70,7 @@ Node criteria:
 | Re-parse fidelity suite passes offline | PASS | `… test_fidelity.py` → `31 passed` |
 | Type check passes for debate_core | PASS | `uv run pyright packages/debate_core` → `0 errors, 0 warnings, 0 informations` |
 | Import boundaries hold (no E06 renderer import) | PASS | `uv run lint-imports` → `Contracts: 12 kept, 0 broken.` The renderer module does not exist yet, so the boundary is a test that reads the writer's imports (`test_the_writer_never_imports_the_e06_docx_renderer`), agreed in your FYI ruling 4. |
-| Coach opens built files in Word with Verbatim (CardMirror if ADR-0014 adopts it) | NOT RUN | As ac6: CardMirror 3 of 3 clean; Word "everything looked correct", repair-prompt answer pending. |
+| Coach opens built files in Word with Verbatim (CardMirror if ADR-0014 adopts it) | PASS | As ac6: no repair prompt for any of the three files; CardMirror 3 of 3 clean. |
 
 ### The provenance line and the highlighted cite
 

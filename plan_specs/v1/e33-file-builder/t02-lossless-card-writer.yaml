@@ -100,7 +100,7 @@ spec:
         conditional on ADR-0014 (v1-e31-t01, via v1-e31-t02) adopting CardMirror, a CardMirror
         fromDocx/toDocx round-trip leaves card text and formatting unchanged.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

@@ -284,3 +284,53 @@ uv run pytest -n auto -m "not slow and not live"
   with E01 or E02. That is for the PM to place.
 - **Shell scripts that name a doc in a message** (`ops/launchd/install.sh`, `scripts/task`) select a
   handful of extra tests when docs change. This costs seconds and is left as is.
+
+## PM review
+
+<!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
+this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
+
+**Verdict:** ACCEPTED
+<!-- ACCEPTED / CHANGES_REQUESTED -->
+
+**Reviewed by / date:** PM, 2026-10-19
+
+**Notes:**
+
+Accepted, with the phase `Succeeded`. The report reached me without the template's PM review
+section, so the PM has added it here; a session leaves that section in place, empty.
+
+**The work itself:**
+
+* **Conservative where it matters.** When the tool cannot tell, it selects more or reports the whole
+  selection, and says why. The planted-break check proves it against real modules in all four
+  packages, run in a shared clone so the worktree is never written.
+* **The planted-break check found a real bug in its own first version,** the generic `data` folder.
+  That is the check doing its job.
+* **A real failure, caught by using the tool on its own branch:** the single-interpreter test read
+  `grimp>=3.17` as a Python version (Decision 9).
+* **No saved state, about 3 to 4 s to choose** on my Mac, with shares matching the session's
+  row for row.
+* **19 mutants, one per selection rule, all caught.** The one survivor became a test.
+
+**Rulings:**
+
+1. **Deviation 1 is accepted.** The root conftest counts only for its fixtures' users, and its
+   autouse fixtures and module-level code count for every test. Read literally, the rule would make
+   nearly half of all tasks the whole selection, for a gap the codebase does not have: import-time
+   side effects on global state. CI runs everything on every pull request, so the narrowing cannot
+   let a break merge. If a module ever gains such a side effect, the root conftest's note and
+   `test_a_root_conftest_import_no_fixture_uses_...` are where to change it.
+2. **Deviations 2 to 5 are accepted.** Every `pyproject.toml` is shared ground; Markdown under
+   `site/` and `web/` selects the docs checks, which really do scan it; `uv.lock` is in the change;
+   and the planted-break check is a new `slow` test, not an existing one moved off the path.
+3. **Decisions 1 to 10 are accepted.** Decision 3 (a package module reads only its own package) and
+   Decision 2 (string literals only) are the two that keep shares honest.
+4. **Follow-up work: the re-exports.** A median of 79% is real coupling, not rule noise, and the
+   session named the four modules behind it. The PM files a task for the next batch to slim
+   `debate_core.testing/__init__.py` and `debate_core.evidence/__init__.py` (import from
+   submodules), at p2. It starts after v1-e31-t22 closes, since `debate_core.evidence` is that
+   task's ground. Success is measured with this tool's own `--diff` table over the same 20 commits.
+5. **The optional whole-selection run is not needed.** CI runs it on the pull request.
+6. **The merge with v1-e39-t04.** Both change `uv.lock`. This task merges first, and t04 then syncs
+   and regenerates the lock (`git checkout --ours uv.lock && uv lock`), never by hand.

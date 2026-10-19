@@ -238,6 +238,22 @@ marked line, and every line where A gives way to B, each with the lines beside i
 with the paragraph that ended the card. An item the parse does not reproduce is skipped and
 counted.
 
+**Fixed after the operator's first run (item 11 of 60):** a body written as one paragraph of 2,338
+words showed A and B on one line, so nobody could see where either was. Two additions:
+
+- A body holding two cards now also shows **where A ends and B begins, word by word**: A's last 15
+  words underlined, every word between in bold (its two ends of 50 when over 120), B's first 15
+  reversed, ¶ where a paragraph starts, and the word numbers of A, B and the gap. A is the part the
+  body holds first by word, not by paragraph.
+- A long body lists **each name with a year inside its paragraphs over 150 words**, up to 8, with 8
+  words before and 12 after (`card_boundaries.names_and_years`). A cite run into the text shows up
+  there.
+
+The five tests of these were run against the sampler as it was at `1b4ab7f`, with only the new
+`Item` field added so the tests could build an item: `5 failed, 19 passed`, the five new ones, each
+on what is shown. The first run's tallies are not used: the operator stops it and runs it again
+with the same seed (step 2).
+
 **Tests:** `tests/scripts/test_sample_card_boundaries.py`. The plan; the draw (by stratum, one draw a
 text, the same again by seed, blind order); what an item shows, row by row; the answering loop
 (each item's own keys, `q` stops); the tallies, counts only; an end-to-end run on an invented store
@@ -294,6 +310,14 @@ the data directory.
 
 ### 2. The sample (ac2): about 2 minutes to start, then about 20 to 30 minutes answering
 
+If the first run, from `1b4ab7f`, is still open, press `q`. Its tallies came from the view that
+could not show A and B inside one paragraph, so they are removed before the run again, with the
+same seed and so the same 60 items.
+
+```zsh
+rm -f ~/t22-card-boundary-sample-tallies.txt
+```
+
 Read-only. It reads `~/t22-card-boundary-candidates.jsonl`, the store and the blobs, and appends
 counts to `~/t22-card-boundary-sample-tallies.txt`. Run it in a terminal window at full width
 (120 columns or more). It shows card text on the screen only. One key per item, no Enter; `q`
@@ -314,10 +338,11 @@ a few words of what you saw in any stratum where the answers were mixed. No card
 **How to read an item.**
 
 - *A long body:* look for lines read as `NOTHING` or marked ▸ / ◆ partway down that are a tag and
-  a cite: `s`. A single article cut at length: `o`. A case, a speech, notes or an article with
+  a cite, or a name with a year in the list below the lines that is a cite run into the text: `s`. A single article cut at length: `o`. A case, a speech, notes or an article with
   nothing cut: `n`.
-- *Two cards in one:* look at what stands between A's paragraphs and B's. A tag or a cite, or a
-  change of subject that two cards would have: `t`. The same article running on: `o`.
+- *Two cards in one:* read the word-by-word part below the paragraph lines, the bold words between
+  A and B. A tag or a cite, or a change of subject that two cards would have: `t`. The same article
+  running on: `o`. If A and B meet with no word between, the question is whether the text runs on.
 
 ## Follow-up work
 

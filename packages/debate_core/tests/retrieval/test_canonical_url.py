@@ -440,6 +440,15 @@ def test_a_query_redirect_on_another_host_is_not_unwrapped(url: str) -> None:
     assert canonicalize_url(url) == url
 
 
+def test_only_the_wrappers_destination_parameter_is_its_destination() -> None:
+    """Another parameter can carry a URL too, such as the referring page."""
+    url = (
+        "https://l.facebook.com/l.php?h=AT0&ref=https%3A%2F%2Fwww.facebook.com%2Fgroups%2F123%2F"
+        "&u=https%3A%2F%2Fwww.heritage.org%2Fdefense%2Freport%2Fthe-2020-index"
+    )
+    assert canonicalize_url(url) == "https://www.heritage.org/defense/report/the-2020-index"
+
+
 def test_a_wrapper_destination_with_no_public_host_is_kept() -> None:
     assert (
         canonicalize_url("https://www.google.com/url?q=http://intranet/report")

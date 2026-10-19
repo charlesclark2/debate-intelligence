@@ -86,7 +86,7 @@ spec:
         parameters and no other grant; the runbook's CLI steps for branding and deletion
         protection, and the measured asset hosts, are written out with expected output.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

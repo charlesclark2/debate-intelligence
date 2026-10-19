@@ -273,11 +273,14 @@ def test_load_refuses_more_than_one_document() -> None:
     assert error.code is file_recipes.RecipeErrorCode.YAML_SYNTAX
 
 
-@pytest.mark.parametrize("text", ["", "# only a comment\n", "- a list\n", "just text\n"])
-def test_load_refuses_a_recipe_that_is_not_a_mapping(text: str) -> None:
+@pytest.mark.parametrize(
+    ("text", "line"),
+    [("", None), ("# only a comment\n", None), ("- a list\n", 1), ("# a comment first\njust text\n", 2)],
+)
+def test_load_refuses_a_recipe_that_is_not_a_mapping(text: str, line: int | None) -> None:
     result = file_recipes.load_recipe(text)
     assert result.recipe is None
-    assert [error.path for error in result.errors] == [""]
+    assert where(result) == [("", line)]
 
 
 def test_load_refuses_aliases_that_expand_past_the_node_budget() -> None:

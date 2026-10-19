@@ -1036,13 +1036,7 @@ class RemovalPlanner:
             [*existing_holds, *path_holds],
         )
         removed = {source.sha256 for source in sources if source.disposition is Disposition.REMOVE}
-        withdrawn = {
-            (caselist, path, source.sha256)
-            for source in sources
-            if source.disposition is Disposition.WITHDRAW
-            for caselist, path in source.requester_paths
-        }
-        rewrites = await self._manifest_rewrites(copies, selector, removed, withdrawn, after, index)
+        rewrites = await self._manifest_rewrites(copies, selector, removed, after, index)
         objects, counted = await self._objects(sources, caselists, copies, index)
         inbox, team_files_left = plan_inbox(
             self._inbox,
@@ -1521,7 +1515,6 @@ class RemovalPlanner:
         copies: Sequence[_ManifestCopy],
         selector: RemovalSelector,
         removed: set[str],
-        withdrawn: set[tuple[str, str, str]],
         after: SuppressionState,
         index: _BucketIndex,
     ) -> list[ManifestRewrite]:
@@ -1537,9 +1530,7 @@ class RemovalPlanner:
         for copy in copies:
             if copy.summary is None:
                 continue
-            dropped = _rows_to_drop(
-                copy, selector, removed, withdrawn, held_removed.get(copy.caselist, set()), after
-            )
+            dropped = _rows_to_drop(copy, selector, removed, held_removed.get(copy.caselist, set()), after)
             if not dropped:
                 continue
             versions: int | None = None
@@ -1719,7 +1710,6 @@ def _rows_to_drop(
     copy: _ManifestCopy,
     selector: RemovalSelector,
     removed: set[str],
-    withdrawn: set[tuple[str, str, str]],
     held_removed: set[str],
     after: SuppressionState,
 ) -> set[int]:
@@ -1727,7 +1717,7 @@ def _rows_to_drop(
     dropped = {
         index
         for index, (_, row) in enumerate(copy.rows)
-        if _dropped(row, copy, selector, removed, withdrawn, held_removed, after)
+        if _dropped(row, copy, selector, removed, held_removed, after)
     }
     real = {
         str(row["path"]): index in dropped
@@ -1760,15 +1750,17 @@ def _dropped(
     copy: _ManifestCopy,
     selector: RemovalSelector,
     removed: set[str],
-    withdrawn: set[tuple[str, str, str]],
     held_removed: set[str],
     after: SuppressionState,
 ) -> bool:
     """Whether one member row goes, before the junk that shadows dropped files is added.
 
-    `withdrawn` is `(caselist, path, sha256)` with the path as :func:`taken_path` gives it: a
-    withdrawal takes one file from one path, and an earlier version of another file at that path
-    keeps its row (`v1-e30-t11`). A camp path is one row of one release (`v1-e30-t14`).
+    A withdrawn copy's row goes because the list as it will read stops its file at its path: the
+    plan appends `(sha256, disclosure)` for every path a withdrawal takes, unless the list already
+    holds it, so that one rule decides for a caselist row and a camp row alike (`v1-e30-t20`; the
+    withdrawn set it was checked against first decided nothing, `v1-e30-t14` mutant W8). It stops
+    one file at one path, so an earlier version of another file there keeps its row
+    (`v1-e30-t11`); a camp path is one row of one release (`v1-e30-t14`).
     """
     path, digest = row.get("path"), row.get("sha256")
     if not isinstance(path, str):
@@ -1776,11 +1768,12 @@ def _dropped(
     caselist = copy.caselist
     if isinstance(selector, TeamSelector) and selector.holds(caselist, path):
         return True  # every row of the requesting team's, junk and REMOVED rows included
-    if digest in removed or (*taken_path(caselist, copy.release, path), digest) in withdrawn:
+    if digest in removed:
         return True
     if row.get("classification") == str(Classification.REMOVED) and path in held_removed:
         return True  # "this path's file was taken down", where the file was the removed one
-    # Anything else the list already stops: a row an earlier removal never reached.
+    # What the list as it will read stops: a copy this plan withdraws, or a row an earlier removal
+    # never reached.
     return isinstance(digest, str) and after.suppresses(
         digest, disclosure=disclosure_digest(_scope(copy), path)
     )

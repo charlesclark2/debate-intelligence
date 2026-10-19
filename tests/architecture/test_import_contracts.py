@@ -73,6 +73,10 @@ VIOLATIONS = [
     Violation("debate_cli.commands.boundary_probe", "import boto3", CLI_AWS_SDK),
     Violation("debate_core.application.boundary_probe", "import lxml", DOCUMENT_LIBRARIES),
     Violation("debate_cli.commands.boundary_probe", "import lxml", CLI_DOCUMENT_LIBRARIES),
+    # Retrieval is the pure layer of E04: fetching and parsing are adapters (PM ruling, v1-e04-t01).
+    Violation("debate_core.retrieval.boundary_probe", "import boto3", AWS_SDK),
+    Violation("debate_core.retrieval.boundary_probe", "import httpx", HTTP_CLIENT),
+    Violation("debate_core.retrieval.boundary_probe", "from lxml import html", DOCUMENT_LIBRARIES),
     # The layers inside debate_core, in each direction a dependency can point the wrong way.
     Violation("debate_core.domain.boundary_probe", "import debate_core.application", CORE_LAYERS),
     Violation("debate_core.domain.boundary_probe", "import debate_core.evidence", CORE_LAYERS),

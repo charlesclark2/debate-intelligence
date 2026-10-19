@@ -1576,7 +1576,7 @@ holds exactly, by test.
 
 ### The first preview's counts against `card-fingerprint-v3` (operator-run, 2026-10-18)
 
-`compare_card_clusters.py counts --save-after`, from the task worktree at `ecf3e11` (rebased onto `dev` since as `eb23b2c`, the same rules), each
+`compare_card_clusters.py counts --save-after`, from the task worktree at `ecf3e11` (rebased onto `dev` since as `d041a5e`, the same rules), each
 caselist's cards in `2026.10.12-docx-3` placed in memory by `v4` and compared with the store's `v3`
 table. Nothing was written to the store. In every caselist, `exact_fingerprints_changed`,
 `cards_only_before` and `cards_only_after` are 0, and no cluster absorbed more than 5 others.
@@ -1721,7 +1721,7 @@ reading of "shares text" as "overlaps" would keep out of one cluster.
 
 ### The re-preview's counts and shapes (operator-run, 2026-10-18)
 
-The rules as ruled, from the task worktree at `8065605` (rebased onto `dev` since as `e2f83b6`, the same rules), placed in memory and saved (step R2), then
+The rules as ruled, from the task worktree at `8065605` (rebased onto `dev` since as `cc02a04`, the same rules), placed in memory and saved (step R2), then
 described (step R3). Nothing was written to the store. In every caselist
 `exact_fingerprints_changed`, `cards_only_before` and `cards_only_after` are 0, and no cluster
 absorbed more than 4 others.

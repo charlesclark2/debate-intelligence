@@ -588,21 +588,25 @@ class TestAShortCiteWithALeftQuote:
 # The parser version
 # --------------------------------------------------------------------------------------------
 
-#: The version directory the 2026-10-16 re-parse wrote, under `v1-e31-t12`'s rules.
+#: The version directory the 2026-10-16 re-parse wrote, under `v1-e31-t12`'s rules, and the version
+#: `v1-e31-t15` bumped to before this task.
 THIRD_CORPUS_PARSE_VERSION = "2026.10.12-docx-3"
+ZIP_GUARD_VERSION = "2026.10.18-docx-4"
 
 
 class TestTheParserVersion:
     def test_it_is_the_version_this_task_bumped_to(self) -> None:
         """The output changes, so the stored cards must say which reading made them."""
-        assert DOCX_PARSER_VERSION == "2026.10.18-docx-4"
+        assert DOCX_PARSER_VERSION == "2026.10.18-docx-5"
 
     def test_its_directory_sorts_after_the_last_corpus_parses(self) -> None:
         """The newest version directory is the one a reader takes."""
-        names = sorted([DOCX_PARSER_VERSION, THIRD_CORPUS_PARSE_VERSION], key=parse_version_directory)
-        assert names == [THIRD_CORPUS_PARSE_VERSION, DOCX_PARSER_VERSION]
+        names = sorted(
+            [DOCX_PARSER_VERSION, ZIP_GUARD_VERSION, THIRD_CORPUS_PARSE_VERSION], key=parse_version_directory
+        )
+        assert names == [THIRD_CORPUS_PARSE_VERSION, ZIP_GUARD_VERSION, DOCX_PARSER_VERSION]
 
     def test_every_card_names_it(self, parser: DebateDocxParser) -> None:
         card = only_card(parse(parser, tag_paragraph(), CITE_MARKUP, BODY))
 
-        assert card.provenance.parser_version == "2026.10.18-docx-4"
+        assert card.provenance.parser_version == "2026.10.18-docx-5"

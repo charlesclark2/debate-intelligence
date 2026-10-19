@@ -155,8 +155,12 @@ __all__ = ["DOCX_PARSER_VERSION", "DebateDocxParser"]
 #: (`v1-e31-t15`) reads three kinds of file the three before it refused: one whose compression
 #: ratio was over the limit only in a part the reader never opens, and one whose text held a raw
 #: character XML 1.0 forbids, each now replaced by U+FFFD; and it names a CardMirror `.cmir` filed
-#: under another extension as an unsupported format rather than a broken zip.
-DOCX_PARSER_VERSION: Final = "2026.10.18-docx-4"
+#: under another extension as an unsupported format rather than a broken zip. `2026.10.18-docx-5`
+#: (`v1-e31-t19`) reads a cite behind a first name or a title, and a highlighted cite with a body
+#: below it, where a cite stands; reads the cite and body rules through a paragraph style that maps
+#: to no unit; holds a long guess by its cite style only when the style marks a name and year at its
+#: head; and reads `Okonkwo ‘26`, with a left quote before the year, as a short cite.
+DOCX_PARSER_VERSION: Final = "2026.10.18-docx-5"
 
 W_PARAGRAPH: Final = qualified_name("p")
 W_TABLE: Final = qualified_name("tbl")

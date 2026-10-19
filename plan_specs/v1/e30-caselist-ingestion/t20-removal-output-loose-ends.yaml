@@ -25,11 +25,24 @@ spec:
     as it will read, and the first check is redundant for caselist and camp rows alike (t14 FU3,
     mutant W8); remove it so one rule decides. Out of scope: the other JSON keys v1-e30-t11
     settled.
+    PM amendment 2026-10-18: (5) `caselist remove` prints no home path. The plan prints
+    DOWNLOAD INBOX (<absolute path>), `--json` carries `inbox_directory` as an absolute path,
+    and InboxInUse says "it holds <lock path>". The removal runbook asks the operator to read
+    and keep this output, so it names no home path. As v1-e34-t16 ruled for
+    `summary_written_to`, the key and its type stay and the value is a path relative to the
+    data directory; that lifts the forbidden entry on t11's JSON keys for that one value's form,
+    and nothing else. Every removal output (dry run, execution, `--json`, the lock refusal) is
+    run through e34-t16's probe: a data directory and a HOME under different probe names, plus
+    the user name, red first (v1-e34-t16 Follow-up 1). (6) The plan's JSON carries the sweep's
+    count: a top-level `manifest_versions_swept` beside `withdrawals`, with the total and the
+    count per manifest key; where the profile may not list versions it says "not counted" as the
+    plan line does, never 0. It is the second allowed new key (v1-e30-t19 Decision 5 and
+    Follow-up 4).
   priority: 3
   constraints:
     packages: [debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, tests/smoke, docs/runbooks]
     forbidden:
-      - A change to the JSON keys v1-e30-t11 settled, other than adding `withdrawals`
+      - A change to the JSON keys v1-e30-t11 settled, other than adding `withdrawals` and `manifest_versions_swept`, and the form of `inbox_directory`'s value (PM amendment 2026-10-18)
       - A school, team code or file name in a plan line, the JSON or any record
   context:
     - kind: TaskRef
@@ -48,6 +61,15 @@ spec:
       description: >-
         (4): the withdrawn-set check is removed from `_dropped`, and every removal test
         passes unchanged, with the mutant that removed it before now the code.
+    - id: ac4
+      description: >-
+        (5), PM amendment 2026-10-18: by tests shown failing first, no plan line, JSON value or
+        refusal from `caselist remove` holds the data directory's absolute path, HOME or the
+        user name.
+    - id: ac5
+      description: >-
+        (6), PM amendment 2026-10-18: by test, the JSON's count equals the plan line's count and
+        what the execution deletes; a plan that cannot list says not counted.
 status:
   phase: InProgress
 ---

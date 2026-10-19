@@ -24,7 +24,10 @@ spec:
     such parsed object left in the bucket.
   priority: 2
   constraints:
-    packages: [debate_core.application, packages/debate_core/tests, docs/data]
+    # debate_cli and its tests added by the session, 2026-10-19: the publisher's new required
+    # argument is wired in container.py, and `caselist status` prints what ac2 names (report,
+    # Deviations 1 and 2).
+    packages: [debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/data]
     forbidden:
       - Restating the held-path rule outside its one function
       - A path, school, team code or file name in a record or a log

@@ -724,13 +724,14 @@ def _drift_hints(report: CaselistStatusReport) -> list[str]:
 
 
 def _removals_owed(report: CaselistStatusReport) -> str:
-    """The hint for a held row, a held upload in the inbox or one refused at import: which removals
-    to run again, and how."""
-    held = (
-        "A held row, a held upload in the inbox or an upload an import refused at a held path"
-        if report.refused_at_import
-        else "A held row or a held upload in the inbox"
-    )
+    """The hint for a held row, a held upload in the inbox, one refused at import or a held upload's
+    parsed file in the bucket (`v1-e31-t26`): which removals to run again, and how."""
+    kinds = ["A held row", "a held upload in the inbox"]
+    if report.refused_at_import:
+        kinds.append("an upload an import refused at a held path")
+    if report.held_parsed_objects:
+        kinds.append("a held upload's parsed file in the bucket")
+    held = f"{', '.join(kinds[:-1])} or {kinds[-1]}"
     return (
         f"{held} means {', '.join(report.removals_owed)} is owed again: "
         "run the same removal again, dry run first, then --execute "
@@ -871,7 +872,10 @@ def status_summary(report: CaselistStatusReport, settings: Settings) -> dict[str
     compared: the uploads at a held path in the download inbox's archives, by count,
     `sha256_prefixes` and `requests`. `refused_at_import` is the same, for the uploads an import
     refused at a held path that the same removal run again has not yet listed, from the held-digest
-    record (`v1-e30-t24`). `removals_owed` is every request any of these names, whose removal is
+    record (`v1-e30-t24`). `held_parsed_objects` is the same again, for the parsed files in the
+    bucket of bytes only a held path discloses, which an earlier build's `caselist parse --publish`
+    sent (`v1-e31-t26`): `objects` counts the sources, not their version directories. `removals_owed`
+    is every request any of these names, whose removal is
     owed again. None of these is part of `in_sync`. `withdrawn_copies_left` is one object per file
     withdrawn from a caselist that keeps no holder of it, of whose copy there something is left, by
     caselist, digest prefix, the request the withdrawal record gives and counts (`v1-e30-t19`); since
@@ -912,6 +916,15 @@ def status_summary(report: CaselistStatusReport, settings: Settings) -> dict[str
                 "uploads": len(found := report.refused_at_import_of(caselist)),
                 "sha256_prefixes": [_digest_prefix(upload.sha256) for upload in found],
                 "requests": sorted({upload.request_id for upload in found}),
+            }
+            for caselist in report.caselists
+        ],
+        "held_parsed_objects": [
+            {
+                "caselist": caselist,
+                "objects": len(found := report.held_parsed_objects_of(caselist)),
+                "sha256_prefixes": [_digest_prefix(one.sha256) for one in found],
+                "requests": sorted({one.request_id for one in found}),
             }
             for caselist in report.caselists
         ],
@@ -1111,7 +1124,8 @@ def _suppressed_object_lines(report: CaselistStatusReport) -> list[str]:
 
 def _held_lines(report: CaselistStatusReport) -> list[str]:
     """Under the status table: rows and uploads at a held path, in the inbox or refused at import
-    (`v1-e30-t24`), by digest prefix and request.
+    (`v1-e30-t24`), and a held upload's parsed file in the bucket (`v1-e31-t26`), by digest prefix
+    and request.
 
     A skipped member's row has no digest, so it is named by the request holding its path alone.
     """
@@ -1141,6 +1155,14 @@ def _held_lines(report: CaselistStatusReport) -> list[str]:
             lines.append(
                 f"REFUSED AT IMPORT AT A HELD PATH in {caselist}: {len(refused)} upload(s) the same "
                 f"removal has not yet listed ({named})."
+            )
+    for caselist in report.caselists:
+        parsed = report.held_parsed_objects_of(caselist)
+        if parsed:
+            named = _held_named((one.sha256, one.request_id) for one in parsed)
+            lines.append(
+                f"HELD UPLOADS PARSED IN THE BUCKET in {caselist}: {len(parsed)} source(s) only a held "
+                f"path discloses, whose parsed file an earlier build published ({named})."
             )
     if report.removals_owed:
         lines.append(_removals_owed(report))

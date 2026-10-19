@@ -1303,8 +1303,9 @@ class TestTheParserVersion:
         """A reading that differs has to say so: the stored cards name the reading that made them."""
         assert DOCX_PARSER_VERSION != SECOND_CORPUS_PARSE_VERSION
 
-    def test_it_is_the_version_this_task_bumped_to(self) -> None:
-        assert DOCX_PARSER_VERSION == "2026.10.12-docx-3"
+    def test_it_is_the_version_this_task_bumped_to_or_a_later_one(self) -> None:
+        """`2026.10.12-docx-3`, or one a later task bumped to (`v1-e31-t15`: `2026.10.18-docx-4`)."""
+        assert parse_version_directory(DOCX_PARSER_VERSION) >= parse_version_directory("2026.10.12-docx-3")
 
     def test_its_directory_sorts_after_the_second_corpus_parses(self) -> None:
         """The newest version directory is the one a reader takes."""

@@ -60,6 +60,7 @@ same version the skip key below would pass that file over for good.
 | `2026.09.20-docx-1` | The first full corpus, 2026-10-10 ([caselist-parse-report.md](caselist-parse-report.md)) | |
 | `2026.10.10-docx-2` | The re-parse of 2026-10-11 | Reads 23 files refused for the words `system "` and `public '` in card text. Keeps a body paragraph guessed to be a cite in its card. Does not take a blank line in a heading style for a heading. Calls a card `ABBREVIATED` for the shape of a first-and-last-words disclosure, not for an ellipsis. Writes "no tag" as `null`, under record `schema_version` 2 (`v1-e31-t09`) |
 | `2026.10.12-docx-3` | Written by the next `caselist parse` | Reads cites the two before it missed or misread ([caselist-parse-report.md](caselist-parse-report.md#cites-the-parser-missed-or-misread-v1-e31-t12)): a cite in the cite character style past 1,000 characters, a cite line longer than 400 characters that opens in bold or holds everything after its name and year in one bracket, and a cite written wholly inside a bracket. Does not take a line that opens with a word such as *In* and a year for a cite. Reads a guessed cite entry longer than 2,000 characters as body whatever its formatting. No field moved (`v1-e31-t12`) |
+| `2026.10.18-docx-4` | Written by the next `caselist parse` | Reads a file whose compression ratio is over the limit only in a part the reader never opens, such as a page thumbnail. Reads a file whose text holds a raw character XML 1.0 forbids, each replaced by U+FFFD and counted in the document's `warnings` ([below](#a-character-xml-forbids-replaced-by-ufffd)). Files a CardMirror `.cmir` uploaded under another extension as `UNSUPPORTED` with `source_format` `CMIR`, not as a `NOT_A_ZIP` failure. No field added; `CMIR` is a new value of `source_format` (`v1-e31-t15`) |
 
 ## The skip key
 
@@ -110,7 +111,7 @@ record kind.
 | Field | What it is |
 |---|---|
 | `snapshot` | The snapshot the source was parsed under: the earliest that disclosed it then |
-| `source_format` | `DOCX`, `DOC`, `PDF` or `OTHER`, from the manifest |
+| `source_format` | `DOCX`, `DOC`, `PDF` or `OTHER`, from the manifest; `CMIR` when the parser found CardMirror's native file under another extension (from `2026.10.18-docx-4`) |
 | `byte_size` | The source's size in bytes |
 | `outcome` | `PARSED`, `UNSUPPORTED` or `FAILED` |
 | `reason` | Why it has no document; `null` when `PARSED` |
@@ -119,14 +120,17 @@ record kind.
 
 `UNSUPPORTED` is a PDF, a legacy `.doc` or another format V1 stores without parsing. It is an
 outcome, not a failure: PF alone discloses hundreds of PDFs. Its `reason` is `UNSUPPORTED_FORMAT`
-and its `source_format` says which.
+and its `source_format` says which. A CardMirror `.cmir`, a gzip stream holding a JSON document, is
+told by its first inflated byte and filed under `CMIR` whatever its name; the manifest still gives
+the format its extension named.
 
 `FAILED` has one of these reasons, each counted against the run's failure-rate threshold:
 
 | Reason | Meaning |
 |---|---|
 | `MALFORMED_PACKAGE`, `NOT_A_ZIP`, `MISSING_DOCUMENT_PART`, `MALFORMED_XML` | A broken file |
-| `TOO_LARGE`, `TOO_MANY_ENTRIES`, `COMPRESSION_RATIO_EXCEEDED` | Oversized, or shaped like a zip bomb |
+| `TOO_LARGE`, `TOO_MANY_ENTRIES` | Oversized: more than 128 MiB uncompressed or 1,024 entries, counting every entry, read or not |
+| `COMPRESSION_RATIO_EXCEEDED` | Shaped like a zip bomb: a part the parser opens expands more than 200-fold. From `2026.10.18-docx-4` a part it never opens is not judged |
 | `MACRO_ENABLED` | A Word package carrying a VBA project |
 | `ENCRYPTED` | Password-protected |
 | `FORBIDDEN_XML_CONSTRUCT` | A part that declares a document type (`<!DOCTYPE`) or an entity, in any encoding. The words `SYSTEM` and `PUBLIC` in card text are not one |
@@ -158,6 +162,22 @@ text, formatting and font-size spans as offsets into that text, completeness, ma
 confidence, rule ids, `UNVERIFIED` status and `FILE_IMPORT` provenance with its element range. A
 reader in Python calls `DocumentRecord.to_parsed_document(path)` with a path from the manifests and
 gets a validated `ParsedDocument` back.
+
+#### A character XML forbids, replaced by U+FFFD
+
+From `2026.10.18-docx-4`, a raw character XML 1.0 forbids in a part the parser reads (a C0 control
+other than tab, line feed and carriage return, or U+FFFE or U+FFFF) is replaced one for one by
+U+FFFD before the part is parsed. The PM decided it with Charlie on 2026-10-18; it is recorded in
+`v1-e31-t15`'s spec. Nothing is deleted and every other character keeps its offset, so formatting
+spans are where they were. A source that had any says how many in its document's `warnings`:
+
+```text
+4 character(s) XML 1.0 forbids were each replaced by U+FFFD; no other character moved
+```
+
+A forbidden character written as a character reference, `&#1;` and the like, is still
+`MALFORMED_XML`. The first corpus parse had five such files, all CardMirror exports, with 66
+characters between them, every one in evidence text.
 
 #### A card with no tag
 

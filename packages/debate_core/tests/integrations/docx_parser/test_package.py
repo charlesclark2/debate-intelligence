@@ -95,9 +95,14 @@ class TestMacroEnabledPackages:
 
 
 class TestPackageLimits:
-    def test_an_entry_that_expands_a_thousandfold_is_refused(self) -> None:
-        """The shape of a zip bomb: one member of highly compressible filler."""
-        content = build_docx(CARD_BODY, extra_parts={"word/media/image1.bin": b"\x00" * (8 * 1024 * 1024)})
+    def test_a_part_the_reader_opens_that_expands_a_thousandfold_is_refused(self) -> None:
+        """The shape of a zip bomb: a part the reader would inflate, of highly compressible filler.
+
+        Until `v1-e31-t15` the filler sat in `word/media/`, which the reader never opens. The ratio
+        is judged on the parts it opens now, and the total limit on every entry
+        (`test_zip_guard_and_exporter_quirks.py`).
+        """
+        content = build_docx("", document_xml=build_document_xml(CARD_BODY) + " " * (8 * 1024 * 1024))
         assert reason_of(content) is ParseFailureReason.COMPRESSION_RATIO_EXCEEDED
 
     def test_a_ratio_is_not_judged_on_an_entry_too_small_to_mean_anything(self) -> None:

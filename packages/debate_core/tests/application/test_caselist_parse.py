@@ -23,6 +23,7 @@ below, and `caselist/test_parsed_store_removal.py`.
 
 from __future__ import annotations
 
+import gzip
 import hashlib
 import inspect
 import json
@@ -731,6 +732,47 @@ async def test_one_failing_source_is_recorded_with_its_reason_and_the_run_carrie
     }
     assert {row["source_format"] for row in failures if row["outcome"] == "UNSUPPORTED"} == {"PDF", "DOC"}
     assert report.parsed == EXPECTED["after_0908"]["parsed"]
+
+
+class CardMirrorNativeParser(CountingParser):
+    """The real parser, handed a CardMirror `.cmir` for the source the world files as `broken`.
+
+    The shape the first corpus parse met (`v1-e31-t09`): CardMirror's native gzip-and-JSON file,
+    uploaded under a `.docx` name. The manifest says DOCX; the bytes say otherwise.
+    """
+
+    CMIR: Final = gzip.compress(b'{"format":"cardmirror-native","doc":{"type":"doc"}}', mtime=0)
+
+    def parse(
+        self,
+        content: bytes,
+        source: SourceDocument,
+        *,
+        source_path: str,
+        snapshot: SnapshotDate | None = None,
+        camp: str | None = None,
+    ) -> ParsedDocument | ParseFailure:
+        if source.sha256 == digest_of("broken"):
+            content = self.CMIR
+        return super().parse(content, source, source_path=source_path, snapshot=snapshot, camp=camp)
+
+
+@pytest.mark.anyio
+async def test_a_cardmirror_native_file_counts_as_unsupported_under_its_own_format(world: World) -> None:
+    """`v1-e31-t15`: unsupported rather than failed, and named for what it is rather than DOCX."""
+    report = await world.run(CardMirrorNativeParser())
+
+    assert report.unsupported == {"CMIR": 1, "DOC": 1, "PDF": 1}
+    assert report.failed == {}
+    rows = {row["source_sha256"]: row for row in world.lines("failures.jsonl")}
+    assert (rows[digest_of("broken")]["outcome"], rows[digest_of("broken")]["source_format"]) == (
+        "UNSUPPORTED",
+        "CMIR",
+    )
+    assert (rows[digest_of("pdf")]["source_format"], rows[digest_of("doc")]["source_format"]) == (
+        "PDF",
+        "DOC",
+    )
 
 
 @pytest.mark.anyio

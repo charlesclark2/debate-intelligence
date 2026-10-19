@@ -20,9 +20,11 @@
 
 ## A failing source is an outcome
 
-Nothing one file does stops the run. A PDF, a legacy `.doc` or another format V1 does not read is
-recorded as `UNSUPPORTED`; a malformed, oversized or macro-enabled package, a parse past the time
-limit, a crashed worker or a parser that raised is recorded as `FAILED`, with its typed reason. The
+Nothing one file does stops the run. A PDF, a legacy `.doc`, a CardMirror `.cmir` or another format
+V1 does not read is recorded as `UNSUPPORTED`, under the format the parser found when that is not
+the one its name gives (`v1-e31-t15`); a malformed, oversized or macro-enabled package, a parse past
+the time limit, a crashed worker or a parser that raised is recorded as `FAILED`, with its typed
+reason. The
 command's exit code is decided by :attr:`ParseRunReport.exceeds_threshold`: the share of the sources
 this run tried to read that `FAILED`. Unsupported formats count on neither side of that fraction,
 because PF alone discloses hundreds of PDFs and a threshold that counted them would fail every run.
@@ -478,6 +480,10 @@ class CaselistParseService:
             )
             return entry, document
         if isinstance(result, ParseFailure):
+            if result.source_format is not None:
+                # The bytes are another format than the manifest's extension says: a `.cmir`
+                # uploaded as `.docx` is counted as CMIR, not DOCX (`v1-e31-t15`).
+                common["source_format"] = result.source_format
             return SourceEntry.for_failure(reason=str(result.reason), detail=result.detail, **common), None
         assert isinstance(result, WorkerFailure)
         return SourceEntry.for_failure(reason=str(result.reason), detail=result.detail, **common), None

@@ -46,7 +46,7 @@ from typing import Self
 from pydantic import Field, field_serializer, field_validator, model_validator
 
 from debate_core.domain.base import DomainModel, NonEmptyText, Sha256Hex
-from debate_core.domain.caselist.values import CaselistSlug, SnapshotDate, SourceOrigin
+from debate_core.domain.caselist.values import CaselistSlug, SnapshotDate, SourceFormat, SourceOrigin
 from debate_core.domain.enums import ProvenanceMode, VerificationStatus
 from debate_core.domain.style_profile import (
     ParagraphStyleMatch,
@@ -366,25 +366,42 @@ class ParsedCard(DomainModel):
     file names a source there and gives it no claim and no text, so it is a citation, not an
     argument. `FULL` or `ABBREVIATED`: evidence with no claim line above it, which is either how
     the file is written or a second card under the tag of the card before it.
+
+    ## A character XML forbids
+
+    The text is the file's, character for character, with one decided exception (PM with Charlie,
+    2026-10-18, `v1-e31-t15`): a raw character XML 1.0 forbids is U+FFFD here, one for one, so
+    every offset is the file's. The parsed document's `warnings` say how many a source had.
     """
 
     tag: str = Field(
         default="",
         description=(
-            "The claim the card is read for, exactly as written. Empty when the file gave the card "
-            "none, which a record writes as null: ask `has_tag`."
+            "The claim the card is read for, exactly as written, except that a character XML 1.0 "
+            "forbids is replaced by U+FFFD. Empty when the file gave the card none, which a record "
+            "writes as null: ask `has_tag`."
         ),
     )
     short_cite: str | None = Field(
         default=None, description="The part a debater says out loud, e.g. `Okonkwo 26`; None if unreadable."
     )
-    full_cite: str = Field(default="", description="The whole cite line, exactly as written.")
+    full_cite: str = Field(
+        default="",
+        description=(
+            "The whole cite line, exactly as written, except that a character XML 1.0 forbids is "
+            "replaced by U+FFFD."
+        ),
+    )
     undertag: str = Field(
         default="",
         description="Undertag lines under the tag, joined by newlines; empty when the card has none.",
     )
     evidence_text: str = Field(
-        default="", description="The card's body, the runs' text concatenated, copied exactly."
+        default="",
+        description=(
+            "The card's body, the runs' text concatenated, copied exactly, except that a character "
+            "XML 1.0 forbids is replaced by U+FFFD."
+        ),
     )
     completeness: CardCompleteness = Field(description="FULL, ABBREVIATED or CITE_ONLY.")
     section_path: tuple[str, ...] = Field(
@@ -510,6 +527,13 @@ class ParseFailure(DomainModel):
     reason: ParseFailureReason = Field(description="Which refusal this was.")
     detail: str = Field(default="", description="What was seen, in terms of limits and formats only.")
     parser_version: NonEmptyText = Field(description="Version of the parser that refused the file.")
+    source_format: SourceFormat | None = Field(
+        default=None,
+        description=(
+            "The format the reader found the bytes to be, when it is not the one the source was "
+            "filed under; None otherwise."
+        ),
+    )
 
 
 # --------------------------------------------------------------------------------------------

@@ -25,9 +25,17 @@ spec:
     question before it is a parser one: the PM decides it with Charlie, and this task implements
     the decision. (3) A `.cmir` upload counts as failed; a `SourceFormat` of its own would count
     it as unsupported. Out of scope: other refusals.
+
+    Decision, PM with Charlie, 2026-10-18 (the CardMirror decision, ac2): "Each character XML 1.0
+    forbids that appears raw in a part the parser reads is replaced one-for-one by U+FFFD before
+    the part is parsed. Nothing is deleted, no author's word changes, every other character keeps
+    its position, and each source records how many it replaced. A forbidden character written as
+    a character reference (&#1; and the like) is still refused."
   priority: 3
   constraints:
-    packages: [debate_core.integrations.docx_parser, debate_core.domain, packages/debate_core/tests, tests/fixtures, docs/data]
+    # PM amendment 2026-10-18: debate_core.application (the pipeline files a .cmir under CMIR, ac3)
+    # and docs/policies (the data-use policy's Attribution rule 1 names the U+FFFD exception).
+    packages: [debate_core.integrations.docx_parser, debate_core.domain, debate_core.application, packages/debate_core/tests, tests/fixtures, docs/data, docs/policies]
     forbidden:
       - Weakening the total uncompressed-size limit or any XML protection v1-e31-t09 kept
       - Altering evidence text without the decision recorded in the spec
@@ -53,7 +61,7 @@ spec:
         Operator-run: the next parse's refusal counts, recorded in
         docs/data/caselist-parse-report.md.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

@@ -306,6 +306,8 @@ evidence-ethics rule first and a traceability rule second: it is what makes
 1. **The original cite is kept verbatim.** It is copied from the source document's own runs,
    byte-for-byte, never retyped, re-flowed or re-cased (v1-e33-t02). Correcting someone else's
    cite is not permitted; if it is wrong, the card is re-cut from the original article instead.
+   The one exception is a character XML 1.0 forbids, which the parser replaces one for one with
+   U+FFFD (Decision, PM with Charlie, 2026-10-18, v1-e31-t15).
 2. **A provenance line is added below the cite**, as the only new text:
 
    ```

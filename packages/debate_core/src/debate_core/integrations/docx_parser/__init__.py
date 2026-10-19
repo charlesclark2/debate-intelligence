@@ -6,7 +6,8 @@ Three modules, in the order a file passes through them:
 * :mod:`~debate_core.integrations.docx_parser.package` opens the zip and the XML safely, and
   refuses what it will not read.
 * :mod:`~debate_core.integrations.docx_parser.runs` turns paragraphs into text and
-  character-offset formatting spans, copying the text exactly.
+  character-offset formatting spans, copying the text exactly; a raw character XML 1.0 forbids
+  reaches it as U+FFFD, replaced one for one by the package reader (`v1-e31-t15`).
 * :mod:`~debate_core.integrations.docx_parser.parser` classifies the paragraphs through the
   Verbatim style profile, groups them into cards and attaches provenance.
 

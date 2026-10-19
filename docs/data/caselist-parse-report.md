@@ -1562,8 +1562,8 @@ holds exactly, by test.
 
 | Measure | First preview (superseded rules) | Re-preview, before the merge | After the dev rebuild |
 |---|---|---|---|
-| Counts against `card-fingerprint-v3`: clusters, merged, divided, largest | below, 2026-10-18 | not run | not run |
-| ac5: share of pairs sharing nothing, three largest clusters per caselist | 0 in all twelve, below | not run | not run |
+| Counts against `card-fingerprint-v3`: clusters, merged, divided, largest | below, 2026-10-18 | below, 2026-10-18 | not run |
+| ac5: share of pairs sharing nothing, three largest clusters per caselist | 0 in all twelve, below | 0 in all twelve, below | not run |
 | ac1: join sample of 20 newly joined pairs, contained shapes asked | all 20 decided by rule, below | not run | not run, same seed |
 | Newly joined cuts a tenth to a quarter of their witness, at least 20 (the PM's check on the share) | | not run | |
 | Witness refusals the lower share added | | not run | |
@@ -1572,7 +1572,7 @@ holds exactly, by test.
 | Bodies nine-tenths inside one holding neither of their ends | 9 unexplained divided pairs | not run | |
 | `MAX_CONTAINER_CLUSTERS`: cuts whose ends too many clusters hold, re-measured | below | not run | |
 | Divided pairs against `v3`, by reason | below | not run | |
-| Pairs in one cluster sharing only one or two five-word runs, every cluster, and of them not overlapping | below, 2026-10-18 | not run | not run |
+| Pairs in one cluster sharing only one or two five-word runs, every cluster, and of them not overlapping | below, 2026-10-18 | 4, none not overlapping, below | not run |
 
 ### The first preview's counts against `card-fingerprint-v3` (operator-run, 2026-10-18)
 
@@ -1718,3 +1718,32 @@ reading of "shares text" as "overlaps" would keep out of one cluster.
   nine-tenths inside one holding neither of its ends; recovering them is a later rule change, which
   the PM is filing at p3.
 * **The 132 long cuts within the rule and apart**: accepted, no defect.
+
+### The re-preview's counts and shapes (operator-run, 2026-10-18)
+
+The rules as ruled, from the task worktree at `8065605`, placed in memory and saved (step R2), then
+described (step R3). Nothing was written to the store. In every caselist
+`exact_fingerprints_changed`, `cards_only_before` and `cards_only_after` are 0, and no cluster
+absorbed more than 4 others.
+
+| | hsld26 | hspf26 | hspolicy26 | openev |
+|---|---|---|---|---|
+| Clusters, `v3` → as ruled | 11,552 → 11,595 | 9,930 → 10,234 | 18,746 → 18,741 | 5,841 → 5,806 |
+| Clusters merged into another | 501 | 438 | 779 | 109 |
+| Clusters divided | 292 | 390 | 420 | 46 |
+| Absorbing 2 / 3 to 5 / 6 or more | 443 / 29 / 0 | 404 / 17 / 0 | 696 / 40 / 0 | 104 / 2 / 0 |
+| Largest cluster, cards (first preview) | 385 (385) | 586 (589) | 665 (649) | 13 (33) |
+| Distinct texts in the largest | 22 | 72 | 75 | 9 |
+| Seconds to place | 343 | 247 | 496 | 52 |
+
+**ac5 on the re-preview: no pair sharing nothing in any of the twelve largest clusters, and no pair
+sharing a little** (the first preview had 89 of those, 50 in openev's largest). Sizes of the three
+largest clusters, in cards: hsld26 385, 331, 312; hspf26 586, 217, 191; hspolicy26 665, 648, 602;
+openev 13, 12, 12.
+
+**Pairs sharing only one or two runs, over every cluster: 4** (hsld26 2 of 15,350 pairs in one
+cluster, hspf26 1 of 14,804, hspolicy26 1 of 22,864, openev 0 of 974), against 401 in the first
+preview, and **none of them fails to overlap**. How they got there: two texts sharing one run
+overlap only when the smaller has three runs or fewer, so each of the four is a text of a few words
+in its cluster directly, one of its runs being three-tenths of it or more; none is there through a
+third body.

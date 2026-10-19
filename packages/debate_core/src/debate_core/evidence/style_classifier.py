@@ -700,7 +700,9 @@ def _evidence_match(paragraph: ParagraphDescription, profile: StyleProfile) -> P
     return None
 
 
-def classify_paragraph(paragraph: ParagraphDescription, profile: StyleProfile) -> ParagraphStyleMatch:
+def classify_paragraph(
+    paragraph: ParagraphDescription, profile: StyleProfile, *, through_unmapped_styles: bool = False
+) -> ParagraphStyleMatch:
     """Return the structural unit of one paragraph, with the rule that decided it.
 
     Rules are tried in this order and the first match wins:

@@ -27,11 +27,12 @@ from typing import Any
 import pytest
 from tests.evals.parser.cite_shapes import CITE_SIZE, READING_SIZE, SMALL_PRINT, SOURCE, prose, qualifications
 
+from debate_core.application.ports.parsed_store import parse_version_directory
 from debate_core.domain.caselist import SourceDocument, SourceFormat, SourceOrigin
 from debate_core.domain.debate_files import CardCompleteness, ParsedCard, ParsedDocument
 from debate_core.domain.style_profile import StructuralUnit, StyleMatchSource, StyleProfile
 from debate_core.evidence.style_classifier import ParagraphDescription, RunDescription, classify_paragraph
-from debate_core.integrations.docx_parser.parser import DebateDocxParser
+from debate_core.integrations.docx_parser.parser import DOCX_PARSER_VERSION, DebateDocxParser
 from debate_core.testing.docx_builder import build_docx, paragraph_xml, run_xml
 
 SOURCE_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
@@ -51,7 +52,7 @@ HIGHLIGHTED_CITE = "assembly-highlighted-cite-before-the-body"
 
 @pytest.fixture
 def parser(profile: StyleProfile) -> DebateDocxParser:
-    return DebateDocxParser(profile, rules_under_review=True)
+    return DebateDocxParser(profile)
 
 
 def parse(parser: DebateDocxParser, *paragraphs: str) -> ParsedDocument:
@@ -265,12 +266,6 @@ class TestACiteBehindAFirstNameOrATitle:
 
         assert (section_of(parse(parser, tag_paragraph(), markup, BODY), text).unit is CITE) is taken
 
-    def test_with_the_rules_off_nothing_changes(self, profile: StyleProfile) -> None:
-        markup, text = behind_a_name("Adaeze ")
-        document = parse(DebateDocxParser(profile), tag_paragraph(), markup, BODY)
-
-        assert section_of(document, text).unit is OTHER
-
 
 # --------------------------------------------------------------------------------------------
 # (2) A paragraph style that maps to no unit
@@ -341,14 +336,13 @@ class TestAParagraphStyleThatMapsToNoUnit:
 
         assert section.match.rule_id == "verbatim-style-id:Heading4"
 
-    def test_the_classifier_does_it_only_when_asked(self, profile: StyleProfile) -> None:
+    def test_the_classifier_sees_through_it(self, profile: StyleProfile) -> None:
         described = ParagraphDescription(
             runs=(RunDescription(text="Okonkwo 26, invented for this test.", bold=True, half_points=26),),
             style_id="NormalWeb",
         )
 
-        assert classify_paragraph(described, profile).unit is OTHER
-        assert classify_paragraph(described, profile, through_unmapped_styles=True).unit is CITE
+        assert classify_paragraph(described, profile).unit is CITE
 
     def test_a_table_cell_in_it_is_still_page_furniture(self, parser: DebateDocxParser) -> None:
         cite_markup, cite_text = cite_paragraph(style="NormalWeb")
@@ -456,13 +450,6 @@ class TestAHighlightedCite:
         )
 
         assert section_of(parse(parser, tag_paragraph(), markup, BODY), text).unit is EVIDENCE
-
-    def test_with_the_rules_off_nothing_changes(self, profile: StyleProfile) -> None:
-        markup, text = highlighted_cite("bold opening")
-
-        assert (
-            section_of(parse(DebateDocxParser(profile), tag_paragraph(), markup, BODY), text).unit is EVIDENCE
-        )
 
 
 # --------------------------------------------------------------------------------------------
@@ -595,3 +582,27 @@ class TestAShortCiteWithALeftQuote:
         card = only_card(parse(DebateDocxParser(profile), tag_paragraph(), markup, BRACKETED_CITE, BODY))
 
         assert card.short_cite is None
+
+
+# --------------------------------------------------------------------------------------------
+# The parser version
+# --------------------------------------------------------------------------------------------
+
+#: The version directory the 2026-10-16 re-parse wrote, under `v1-e31-t12`'s rules.
+THIRD_CORPUS_PARSE_VERSION = "2026.10.12-docx-3"
+
+
+class TestTheParserVersion:
+    def test_it_is_the_version_this_task_bumped_to(self) -> None:
+        """The output changes, so the stored cards must say which reading made them."""
+        assert DOCX_PARSER_VERSION == "2026.10.18-docx-4"
+
+    def test_its_directory_sorts_after_the_last_corpus_parses(self) -> None:
+        """The newest version directory is the one a reader takes."""
+        names = sorted([DOCX_PARSER_VERSION, THIRD_CORPUS_PARSE_VERSION], key=parse_version_directory)
+        assert names == [THIRD_CORPUS_PARSE_VERSION, DOCX_PARSER_VERSION]
+
+    def test_every_card_names_it(self, parser: DebateDocxParser) -> None:
+        card = only_card(parse(parser, tag_paragraph(), CITE_MARKUP, BODY))
+
+        assert card.provenance.parser_version == "2026.10.18-docx-4"

@@ -871,16 +871,14 @@ def _through_an_unmapped_style(
     return style_match
 
 
-def classify_paragraph(
-    paragraph: ParagraphDescription, profile: StyleProfile, *, through_unmapped_styles: bool = False
-) -> ParagraphStyleMatch:
+def classify_paragraph(paragraph: ParagraphDescription, profile: StyleProfile) -> ParagraphStyleMatch:
     """Return the structural unit of one paragraph, with the rule that decided it.
 
     Rules are tried in this order and the first match wins:
 
-    1. the paragraph's own style, through the profile (`VERBATIM` or `VERBATIM_ALIAS`); with
-       `through_unmapped_styles`, a style that maps to `OTHER` lets rules 2, 5, 6, 7 and 9 see
-       through it, and never 4 or 8, the heading rules,
+    1. the paragraph's own style, through the profile (`VERBATIM` or `VERBATIM_ALIAS`); a style
+       that maps to `OTHER` lets rules 2, 5, 6, 7 and 9 see through it, and never 4 or 8, the
+       heading rules (`v1-e31-t19`),
     2. a cite character style on one of its runs (`VERBATIM_ALIAS`),
     3. table cells and empty paragraphs, which are `OTHER` whatever else they look like,
     4. outline level plus the formatting that must accompany it,
@@ -898,7 +896,7 @@ def classify_paragraph(
         paragraph.style_id, paragraph.style_name, paragraph.style_based_on
     )
     if style_match is not None:
-        if through_unmapped_styles and style_match.unit is StructuralUnit.OTHER:
+        if style_match.unit is StructuralUnit.OTHER:
             return _through_an_unmapped_style(paragraph, profile, style_match)
         return style_match
 

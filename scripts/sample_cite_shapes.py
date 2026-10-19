@@ -12,9 +12,10 @@ one key. The PM approved the plan on 2026-10-18, 70 items:
 * a highlighted cite: 10 taken, 10 left;
 * the cite-style hold: 7 re-read as body, 3 still held as cites.
 
-It parses every source in the store with the parser this branch carries and the rules under
-review switched on (`DebateDocxParser(rules_under_review=True)`), so the sample judges the code
-that would ship. That takes a few minutes before the first question; then the items come in an
+It parses every source in the store with the parser this branch carries. The sample was taken on
+2026-10-18 with the three rules behind a flag that only this script switched on, so it judged the
+code that would ship; the rules were switched on for good once the tallies supported them, and the
+flag removed. That takes a few minutes before the first question; then the items come in an
 order that does not say which rule or which side each is from.
 
 **Read-only, and nothing but tallies leaves it.** It reads the data directory's parsed store
@@ -159,8 +160,8 @@ def strata_of(
 ) -> list[tuple[int, int]]:
     """Each paragraph of one parsed file that belongs to a stratum, as (stratum, position).
 
-    `reads` and `sections` are the file's paragraphs as read and as the parser with the rules
-    under review switched on decided them, aligned. A paragraph is in one stratum at most: what a
+    `reads` and `sections` are the file's paragraphs as read and as the parser decided them,
+    aligned. A paragraph is in one stratum at most: what a
     rule took is looked for before what it left.
     """
     found: list[tuple[int, int]] = []
@@ -229,10 +230,10 @@ def _stratum_of(
 
 
 class _ReadingParser(DebateDocxParser):
-    """The parser with the rules under review, keeping each file's paragraphs as it read them."""
+    """The parser, keeping each file's paragraphs as it read them."""
 
     def __init__(self) -> None:
-        super().__init__(rules_under_review=True)
+        super().__init__()
         self.reads: list[ReadParagraph] = []
 
     def _read_sections(self, package: Any) -> Any:  # pyright: ignore[reportIncompatibleMethodOverride]
@@ -514,7 +515,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     caselists = arguments.caselist or ["hsld26", "hspf26", "hspolicy26", "openev"]
 
     sources = sources_in(arguments.data_dir, caselists)
-    print(f"Reading {len(sources):,} parsed sources with the rules under review; a few minutes …", flush=True)
+    print(f"Reading {len(sources):,} parsed sources; a few minutes …", flush=True)
     found = scan(sources, arguments.workers)
     items = prepare(draw(found, seed))
     answered, stopped, seconds = ask_about(

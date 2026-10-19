@@ -339,13 +339,9 @@ class DebateDocxParser:
         profile: StyleProfile | None = None,
         *,
         limits: PackageLimits = DEFAULT_PACKAGE_LIMITS,
-        rules_under_review: bool = False,
     ) -> None:
         self._profile = profile if profile is not None else load_style_profile()
         self._limits = limits
-        # `v1-e31-t19`: three cite rules the coach's sample judges before they are switched on.
-        # Only the sampler (`scripts/sample_cite_shapes.py`) passes True.
-        self._rules_under_review = rules_under_review
         # One pattern for every spelling. `[...]` is one marker, not a bracket, a marker and a
         # bracket: a match is taken where it starts first, and the bracketed spelling starts earlier.
         self._ellipsis_marker = re.compile(
@@ -443,9 +439,7 @@ class DebateDocxParser:
                     confidence=1.0,
                 )
             else:
-                match = classify_paragraph(
-                    read.description, self._profile, through_unmapped_styles=self._rules_under_review
-                )
+                match = classify_paragraph(read.description, self._profile)
                 if match.unit not in _UNITS_A_BLANK_PARAGRAPH_KEEPS and not read.text.strip():
                     match = ParagraphStyleMatch(
                         unit=StructuralUnit.OTHER,
@@ -527,8 +521,6 @@ class DebateDocxParser:
         description = read.description
         if is_a_cite_wholly_in_brackets(description, self._profile):
             return "assembly-bracketed-cite-before-the-body"
-        if not self._rules_under_review:
-            return None
         if is_a_cite_behind_a_first_name_or_title(description, self._profile):
             return "assembly-cite-behind-a-name-before-the-body"
         if a_body_follows and is_a_highlighted_cite(description, self._profile):

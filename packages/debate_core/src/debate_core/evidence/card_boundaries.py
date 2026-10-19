@@ -251,9 +251,10 @@ def read_long_body(document: ParsedDocument, card: ParsedCard, profile: StylePro
         if unit in (StructuralUnit.EVIDENCE, StructuralUnit.OTHER):
             if body_begun and is_cite_shaped(section.text, profile):
                 cite_shaped_rules.append(rule_family(section.match.rule_id))
+                # Once a body has begun, what stands above is body, nothing or an undertag: a tag
+                # or a cite would have closed the card.
                 if (
                     above is not None
-                    and above.match.unit in (StructuralUnit.EVIDENCE, StructuralUnit.OTHER)
                     and len(above.text.strip()) <= MAXIMUM_HEADING_CHARACTERS
                     and not is_cite_shaped(above.text, profile)
                 ):

@@ -217,6 +217,12 @@ def test_a_file_with_a_tag_style_writes_tags_and_uses_debate_styles() -> None:
     assert body.has_cite is True
 
 
+def test_a_card_of_a_tag_and_a_body_has_no_cite() -> None:
+    body = described(tag("First tag"), underlined_body())
+    assert body.has_tag is True
+    assert body.has_cite is False
+
+
 def test_a_file_of_cites_and_bodies_writes_no_tags_and_uses_no_debate_style() -> None:
     body = described(cite(), plain_prose(), cite("Ferreira 25"), plain_prose())
     assert body.file_writes_tags is False
@@ -553,31 +559,33 @@ def test_long_bodies_are_tallied_by_ending_tags_kind_and_bands() -> None:
                 marked_up_share=0.01,
                 cards_in_file=2,
             ),
+            long_body(marked_up_share=0.005, cards_in_file=21),
         ]
     )
     assert tally == {
-        "cards": 3,
-        "by_cards_in_file": {"1": 1, "2 to 5": 1, "21 or more": 1},
-        "by_ending": {"a tag in a debate style": 2, "the end of the file": 1},
+        "cards": 4,
+        "by_cards_in_file": {"1": 1, "2 to 5": 1, "21 or more": 2},
+        "by_ending": {"a tag in a debate style": 3, "the end of the file": 1},
         "by_ending_and_file_writing_tags": {
-            "a tag in a debate style | file writes tags: yes": 2,
+            "a tag in a debate style | file writes tags: yes": 3,
             "the end of the file | file writes tags: no": 1,
         },
-        "by_file_using_debate_styles": {"no": 1, "yes": 2},
-        "by_file_writing_tags": {"file writes tags: no": 1, "file writes tags: yes": 2},
+        "by_file_using_debate_styles": {"no": 1, "yes": 3},
+        "by_file_writing_tags": {"file writes tags: no": 1, "file writes tags: yes": 3},
         "by_kind": {
             "a short line above a cite-shaped paragraph inside": 1,
             "no cite inside, marked up": 1,
-            "no cite inside, plain prose": 1,
+            "no cite inside, plain prose": 2,
         },
         "by_kind_and_file_styles": {
             "a short line above a cite-shaped paragraph inside | debate styles: yes": 1,
             "no cite inside, marked up | debate styles: yes": 1,
             "no cite inside, plain prose | debate styles: no": 1,
+            "no cite inside, plain prose | debate styles: yes": 1,
         },
-        "by_marked_up_share": {"5% or more": 1, "none": 1, "under 5%": 1},
-        "by_tag_and_cite": {"tag: no | cite: yes": 1, "tag: yes | cite: yes": 2},
-        "by_words": {"10,001 or more": 1, "3,001 to 5,000": 1, "5,001 to 10,000": 1},
+        "by_marked_up_share": {"5% or more": 1, "none": 1, "under 5%": 2},
+        "by_tag_and_cite": {"tag: no | cite: yes": 1, "tag: yes | cite: yes": 3},
+        "by_words": {"10,001 or more": 1, "3,001 to 5,000": 2, "5,001 to 10,000": 1},
         "cite_shaped_paragraphs_by_rule": {
             "assembly-cite-guess-inside-card-body": 1,
             "heuristic-prose-paragraph": 1,

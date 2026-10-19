@@ -67,7 +67,7 @@ spec:
         docs/data/file-recipe.schema.json is generated from the models and checked for drift in CI, and
         docs/guides/file-recipes.md walks through a synthetic example recipe for each of Policy, LD and PF.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

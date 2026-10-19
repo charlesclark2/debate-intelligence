@@ -10,7 +10,9 @@
    version. An older directory is never written to again.
 3. **Skips** every source whose :class:`~debate_core.application.ports.parsed_store.SkipKey` (its
    SHA-256, the parser version and the profile version) is already recorded there, and every source
-   the removal suppression list stops. The same file disclosed in fourteen weeks is one parse.
+   the removal suppression list stops, or discloses only at a path a removal holds (`v1-e31-t26`,
+   :func:`~debate_core.application.caselist.parse_sources.live_disclosures`). The same file
+   disclosed in fourteen weeks is one parse.
 4. **Parses the rest** in a bounded pool with a per-file time limit
    (:mod:`debate_core.application.caselist.parse_workers`), writing each source's file as its
    result arrives, so a run stopped part-way keeps what it finished.
@@ -151,7 +153,8 @@ class ParsePlan:
     in_scope: int
     """Sources disclosed in the requested snapshot, or every source when none was asked for."""
     suppressed: int
-    """In-scope sources the suppression list stops, wholly or in every disclosure."""
+    """In-scope sources the suppression list stops, wholly or in every disclosure, counting a
+    disclosure at a path a removal holds as stopped (`v1-e31-t26`): no live disclosure is left."""
     to_parse: tuple[EnumeratedSource, ...] = field(repr=False)
     suppression: SuppressionState = field(repr=False)
 

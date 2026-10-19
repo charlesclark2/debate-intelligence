@@ -1492,7 +1492,7 @@ Before the labels moved, on 2026-10-18, the same comparison gave the same cite f
 
 ## The re-cluster under `card-fingerprint-v4` (`v1-e31-t20`)
 
-**Status: preview measured; a newly joined pair called different is with the PM.** The counts against `v3` (step 2), the shapes (step 3) and the samples (steps 4 to 7) are measured; the diagnosis figures of step 7 are to come. The steps are in
+**Status: preview measured; a newly joined pair called different is with the PM.** The counts against `v3` (step 2), the shapes (step 3) and the samples (steps 4 to 7) and the diagnosis (step 7) are measured. The steps are in
 [the task's session report](../session-reports/v1-e31-t20-long-cuts-and-limits.md#operator-follow-ups):
 a preview from the task worktree before the merge, which writes nothing to the store, and the
 rebuild in dev after it. This is a re-cluster, not a re-parse: the parser and `2026.10.12-docx-3`
@@ -1550,7 +1550,7 @@ of 18 on the extended set.
 | `MIN_CUT_SHARE`: contained pairs under a third, joined and kept apart, by share band | below | |
 | Lacking an end: short bodies nine-tenths inside a body lacking one of their ends | below | |
 | `MAX_CONTAINER_CLUSTERS`: cuts whose ends too many clusters hold, re-measured | below | |
-| Divided pairs against `v3`, by reason | not run | |
+| Divided pairs against `v3`, by reason | below | |
 | Pairs in one cluster sharing only one or two five-word runs, every cluster | below, 2026-10-18 | not run |
 
 ### The preview's counts against `card-fingerprint-v3` (operator-run, 2026-10-18)
@@ -1642,3 +1642,36 @@ caselists, judged by eye on the operator's terminal. Tallies only.
   which is every such cut on the four caselists. The contained pairs under a third that `v4`
   newly joins were the same card 17 times in 17, confirming the rule's "contained is the same card"
   on this sample (ac6).
+
+### The preview's diagnosis (operator-run, 2026-10-18)
+
+`compare_card_clusters.py diagnose --after`, and `shapes`' pair counts for the twelve largest
+clusters. Bodies with a container outside their cluster, by what keeps them out:
+
+| Outcome | Short cuts | Long cuts |
+|---|---|---|
+| Every body outside that holds it also holds a passage sharing nothing with it | 126 | 1,366 |
+| Under the minimum share of the smallest witness | 235 | 1,991 |
+| … of which a tenth to a quarter / under a tenth | 81 / 154 | 1,327 / 664 |
+| Its witnesses are in more than one cluster | 50 | 625 |
+| A body in its own cluster holds it, and so does one in another | 12 | 303 |
+| Joining it would put two texts that share nothing in one cluster | 2 | 53 |
+| One cluster is its witness, within the share, and it is still apart | 0 | 132 |
+| Nine-tenths inside a body lacking one of its ends | 31 | (joined) |
+| Its ends are held by too many clusters | 6 | (not counted for long cuts) |
+
+(Summed over hsld26, hspf26, hspolicy26 and openev; t11 counted the too-many-clusters limit at
+5 of 81.)
+
+**Divided pairs against `v3`**: 418, 662, 567 and 41, 1,688 in all, each explained by a cut left out
+or a part joined only through a cut, except **9** (1, 6, 1 and 1) that the diagnosis reports as "no
+cut or copy links this part to the rest". On invented text, one shape gives exactly that: a long
+body nine-tenths inside another but with a word changed at both ends. `v4` finds a long cut's
+containers from either end, so such a body has none; `v3` joined the pair whenever its banding
+happened to pair the two. This is likely, not shown on the store, and is a recall loss, not a
+false join.
+
+**Pairs sharing a little in the largest clusters** (some five-word run, under three tenths of the
+smaller's): hspf26 1 and 19 of 2,701 and 1,081 pairs in its first two; hspolicy26 19 of 2,701 in
+its second; openev 50 of 210 in its largest; none in the other eight. These are the pairs a
+reading of "shares text" as "overlaps" would keep out of one cluster.

@@ -312,6 +312,9 @@ GOVERNMENT = [
         id="gov-already-canonical",
     ),
     pytest.param(
+        "https://www.state.gov/../reports/", "https://www.state.gov/reports/", id="gov-dot-dot-at-the-root"
+    ),
+    pytest.param(
         "https://www.state.gov/reports/../reports/2019-country-reports-on-human-rights-practices/./china/",
         "https://www.state.gov/reports/2019-country-reports-on-human-rights-practices/china/",
         id="gov-dot-segments",

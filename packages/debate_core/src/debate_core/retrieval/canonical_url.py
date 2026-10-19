@@ -16,7 +16,8 @@ and resolves no DOI: a destination is used only when it is literally inside the 
 4. Percent-encoding: hex digits become upper case, encoded unreserved characters (letters,
    digits, `-._~`) are decoded, and characters that may not appear raw are encoded as UTF-8.
    Reserved characters keep whatever form they had, so an encoded slash stays encoded.
-5. `.` and `..` segments are removed, and an empty path becomes `/`.
+5. `.` and `..` segments are removed, and an empty path becomes `/` (when the path is rebuilt
+   by the AMP rule, which every URL passes through).
 6. The fragment is dropped, and so are empty query pieces (`?&a=1&&`).
 
 Two things that look like syntax are deliberately left alone. **http is not upgraded to https**
@@ -292,7 +293,7 @@ def _parse(url: str) -> _Url:
         raise InvalidUrlError(f"URL has no host: {url!r}")
     userinfo, at, host_and_port = parts.netloc.rpartition("@")
     host, port_text = _split_host_and_port(host_and_port, url)
-    path = _remove_dot_segments(_normalize_percent_encoding(parts.path, _PATH_SAFE, url)) or "/"
+    path = _remove_dot_segments(_normalize_percent_encoding(parts.path, _PATH_SAFE, url))
     return _Url(
         scheme=scheme,
         userinfo=_normalize_percent_encoding(userinfo, _USERINFO_SAFE, url) if at else None,
@@ -373,8 +374,9 @@ def _without_amp_suffix(segment: str) -> str:
 
 
 def _without_amp_path(path: str) -> str:
-    # The syntax rules leave `path` absolute, so its first segment is the empty one before the
-    # leading slash; dropping every `amp` after it leaves at least `/`.
+    # The syntax rules leave `path` absolute or empty, so its first segment is the empty one
+    # before the leading slash. Rebuilding from the rest always starts with `/`, which is also
+    # where an empty path becomes `/` (rule 5).
     segments = [segment for segment in path.split("/")[1:] if segment.lower() != "amp"]
     if segments:
         segments[-1] = _without_amp_suffix(segments[-1])

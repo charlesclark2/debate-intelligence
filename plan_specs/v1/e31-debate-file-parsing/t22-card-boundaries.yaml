@@ -28,7 +28,8 @@ spec:
     Not this task: how card matching treats such a body, which is v1-e31-t20's.
   priority: 2
   constraints:
-    packages: [debate_core.evidence, debate_core.integrations.docx_parser, packages/debate_core/tests, scripts, tests/evals/parser, tests/fixtures/debate_files, docs/data]
+    # tests/scripts added by PM amendment 2026-10-19 (the session report's Deviation 1).
+    packages: [debate_core.evidence, debate_core.integrations.docx_parser, packages/debate_core/tests, scripts, tests/scripts, tests/evals/parser, tests/fixtures/debate_files, docs/data]
     forbidden:
       - Changing a CORRECTED or COACH_REVIEWED label file
       - Running the corpus counts or a re-parse in a session (operator-run only)
@@ -51,14 +52,19 @@ spec:
         defects.
     - id: ac3
       description: >-
-        Each defect has a synthetic fixture shown failing first, and the labelled
-        evaluation's tag and cite precision and card boundaries do not fall.
+        PM amendment 2026-10-19: the counts and sample found no defect that warrants a rule
+        in this task (PM ruling). The narrow shape, a short line above a cite-shaped
+        paragraph, goes to v1-e31-t28. Was: each defect has a synthetic fixture shown failing
+        first, and the labelled evaluation's tag and cite precision and card boundaries do
+        not fall.
     - id: ac4
       description: >-
-        `parser_version` is bumped, and the operator's re-parse records (1) and (2) before
-        and after in docs/data/caselist-parse-report.md.
+        PM amendment 2026-10-19: no parser_version bump and no re-parse; v1-e31-t24 bumps
+        alone. The counts and the sample are recorded in docs/data/caselist-parse-report.md.
+        Was: `parser_version` is bumped, and the operator's re-parse records (1) and (2)
+        before and after in docs/data/caselist-parse-report.md.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

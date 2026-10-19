@@ -695,5 +695,24 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e31-t29-card-matching-recall
+    - id: t30
+      kind: Task
+      name: 'Publish the parsed store without rebuilding it'
+      description: >-
+        Publish the parsed store without rebuilding it.
+      inputs:
+        specRef: plan_specs/v1/e31-debate-file-parsing/t30-parsed-store-publish-only.yaml
+        goalRef: v1-e31-t30-parsed-store-publish-only
+      dependsOn:
+      - t20
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e31-t30-parsed-store-publish-only reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e31-t30-parsed-store-publish-only
 status:
   phase: Pending

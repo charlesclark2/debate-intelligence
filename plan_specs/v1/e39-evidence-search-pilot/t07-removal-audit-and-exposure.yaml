@@ -1,0 +1,99 @@
+# TASK v1-e39-t07-removal-audit-and-exposure - Removal, access audit and exposure: the pilot meets the policy's E39 gate
+# Epic: E39 — Team Evidence Search (Student Pilot) | Release: v1.7 (Team evidence search pilot) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e39-t07-removal-audit-and-exposure
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.7
+    debate/epic: v1-e39-evidence-search-pilot
+  annotations:
+    debate/title: "Removal, access audit and exposure: the pilot meets the policy's E39 gate"
+spec:
+  # Filed by the PM, 2026-10-19, from Charlie's direction of 2026-10-19 (a student search pilot before the
+  # semester ends, on Chromebooks, signing in with a username, password and 2FA, outside the school's systems).
+  description: >-
+    (1) Removal: the function re-reads the suppression list at most five minutes apart and hides
+    every occurrence it names from results, card pages and downloads; a card left with no
+    occurrence answers as not found. The removal runbook gains the pilot: after `caselist
+    remove`, rebuild and publish the index, then delete the superseded index versions under
+    `reports/tub/search/`, noncurrent versions included. It is exercised end to end in dev and
+    prod with a synthetic source (operator). (2) Audit: each card page view, copy, download and
+    account change writes one append-only record (time, the actor's pool subject, role, action,
+    cluster ids or a count) and nothing else: no query text, URL, token, name, team code,
+    evidence text or IP address. Searches are counted, never recorded with their words. (3)
+    Exposure: a check over the plan and the deployed responses that the buckets' Block Public
+    Access is intact, no object is publicly reachable, signed-in responses are marked private
+    and no-store, CloudFront keeps no access log, and the application logs no query text,
+    school, team code or card text.
+  priority: 1
+  constraints:
+    packages: [debate_api, debate_core.application, packages/debate_api/tests, docs/runbooks, docs/data, infrastructure]
+    forbidden:
+      - A query, school, team code, evidence text, URL, token or IP address in an audit record or log
+      - Card text, a school, team code, file name, student name, username or email in any fixture, log, report or commit (synthetic values only)
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e39-t06-search-pages
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A suppressed occurrence is gone from results, card pages and downloads within five
+        minutes, by test with a fake clock, shown failing first.
+    - id: ac2
+      description: >-
+        Every audit record validates against a committed schema, and a test over every
+        action shows none of the forbidden fields.
+    - id: ac3
+      description: >-
+        Running the full Playwright journey with a fixture school, team code and query, the
+        captured application logs contain none of them, by test.
+    - id: ac4
+      description: >-
+        The removal runbook's pilot steps are exercised in dev and prod with a synthetic
+        source, and the operator's record is in the report.
+    - id: ac5
+      description: >-
+        The report maps each item of the policy's E39 gate to the test or operator record
+        that proves it.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e39-t07-removal-audit-and-exposure-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.7
+    debate/epic: v1-e39-evidence-search-pilot
+spec:
+  description: >-
+    Hide removed cards within minutes, audit every access without personal data, and prove
+    nothing is exposed.
+  goalRef:
+    name: v1-e39-t07-removal-audit-and-exposure
+  graph:
+    nodes:
+      - id: gate
+        kind: Task
+        name: Removal, audit and exposure
+        description: >-
+          Hide removed cards within minutes, audit every access without personal data, and
+          prove nothing is exposed.
+        estimatedEffort: 5h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Removal and audit tests pass
+            command: uv
+            args: [run, pytest, packages/debate_api/tests, -k, suppression or audit or exposure]
+status:
+  phase: Pending

@@ -1,0 +1,95 @@
+# TASK v1-e39-t08-card-download - Download a card or a small file as Verbatim .docx through the E33 writer
+# Epic: E39 — Team Evidence Search (Student Pilot) | Release: v1.7 (Team evidence search pilot) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e39-t08-card-download
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.7
+    debate/epic: v1-e39-evidence-search-pilot
+  annotations:
+    debate/title: "Download a card or a small file as Verbatim .docx through the E33 writer"
+spec:
+  # Filed by the PM, 2026-10-19, from Charlie's direction of 2026-10-19 (a student search pilot before the
+  # semester ends, on Chromebooks, signing in with a username, password and 2FA, outside the school's systems).
+  description: >-
+    Download .docx on a card page and for a selection (a cart of up to 30 cards held in the
+    session) builds a Verbatim file through the E33 `EvidenceFileWriter` port, reading sources
+    from `raw/` with the existing `SnapshotStore`, with the provenance line and sidecar exactly
+    as `files build` writes them. A refused card (READBACK_MISMATCH, UNSUPPORTED_CONTENT) is
+    named with a plain reason, and the student can drop it and build the rest. A card whose
+    source is suppressed is never offered. The file is streamed back as an attachment and
+    nothing is written to the bucket. When the function's parser version is not the index
+    manifest's, download is switched off with a message, never failed card by card. Each
+    download writes v1-e39-t07's audit record.
+  priority: 2
+  constraints:
+    packages: [debate_api, debate_core.application, packages/debate_api/tests]
+    forbidden:
+      - Writing to `exports/` or any other prefix
+      - A second card writer beside E33's
+      - Card text, a school, team code, file name, student name, username or email in any fixture, log, report or commit (synthetic values only)
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e39-t07-removal-audit-and-exposure
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e33-t02-lossless-card-writer
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A single card downloaded through the app route re-parses as its source, by test with
+        a stubbed store.
+    - id: ac2
+      description: >-
+        The cart cap, a refused card's message, and dropping it and building the rest work,
+        by tests shown failing first.
+    - id: ac3
+      description: >-
+        A parser-version mismatch switches download off with a message, by test; each
+        download writes one audit record, by test.
+    - id: ac4
+      description: >-
+        The operator opens a downloaded single card and a cart file in Word with Verbatim
+        and imports one into Google Docs; reported yes or no (operator follow-up).
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e39-t08-card-download-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.7
+    debate/epic: v1-e39-evidence-search-pilot
+spec:
+  description: >-
+    Build single-card and cart downloads through the E33 writer, with refusals named and every
+    download audited.
+  goalRef:
+    name: v1-e39-t08-card-download
+  graph:
+    nodes:
+      - id: download
+        kind: Task
+        name: Card download
+        description: >-
+          Build single-card and cart downloads through the E33 writer, with refusals named
+          and every download audited.
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Download tests pass
+            command: uv
+            args: [run, pytest, packages/debate_api/tests, -k, download or cart]
+status:
+  phase: Pending

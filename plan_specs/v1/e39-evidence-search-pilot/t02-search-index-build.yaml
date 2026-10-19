@@ -1,0 +1,121 @@
+# TASK v1-e39-t02-search-index-build - tub index build and publish: one searchable document per card cluster, from the parsed store
+# Epic: E39 — Team Evidence Search (Student Pilot) | Release: v1.7 (Team evidence search pilot) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e39-t02-search-index-build
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.7
+    debate/epic: v1-e39-evidence-search-pilot
+  annotations:
+    debate/title: "tub index build and publish: one searchable document per card cluster, from the parsed store"
+spec:
+  # Filed by the PM, 2026-10-19, from Charlie's direction of 2026-10-19 (a student search pilot before the
+  # semester ends, on Chromebooks, signing in with a username, password and 2FA, outside the school's systems).
+  description: >-
+    `tub index build` (debate_cli, logic in debate_core) builds the pilot's index from the
+    operator's local parsed store: one document per card cluster under the current fingerprint
+    version, its representative occurrence chosen by a total order over stored fields alone
+    (FULL before ABBREVIATED before CITE_ONLY; an attributed occurrence before an unattributed
+    one, as v1-e33-t03's AUTO rule; then the latest `last_seen_snapshot`; then the smallest
+    occurrence key). Searchable: the tag, the cite as the card writes it, the evidence text, and
+    the read-aloud text (underlined or highlighted) as its own weighted field. Stored and never
+    searchable: the formatting spans the card page renders from, the event (from the caselist
+    slug or the camp), caselist or camp, sides, first and last seen, the counts of files and
+    teams, and the provenance of up to a configured number of occurrences (school, team code,
+    side, tournament and round as disclosed) for the provenance line. Never stored: a cutter
+    mark, a file name, or a name from a document body. The suppression list applies: a
+    suppressed occurrence never appears and a cluster with no surviving occurrence is left out.
+    The output is one SQLite file with FTS5 and a JSON manifest (index format version, parser
+    version, fingerprint version, store snapshot, counts, sha256), byte-identical for the same
+    store. `tub index publish --env dev|prod` uploads both under `reports/tub/search/<index
+    id>/` and writes a `current.json` pointer last, so a reader never meets half an index; it
+    refuses an index whose parser or fingerprint version is not the running build's. The
+    evidence-store layout document and the operator's `ListBucket` prefixes gain the path. The
+    full-store build and every publish are operator-run.
+  priority: 1
+  constraints:
+    packages: [debate_core.domain, debate_core.application, debate_core.integrations, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/data, docs/guides, docs/architecture, infrastructure/modules/evidence_bucket]
+    forbidden:
+      - Card text, a school, team code, file name, student name, username or email in any fixture, log, report or commit (synthetic values only)
+      - Making a school, team code, tournament or round searchable
+      - Running the full-store build or a publish in a session (operator-run)
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e39-t01-pilot-architecture-adr
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e31-t20-long-cuts-and-limits
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e30-t07-source-removal
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A built index holds one document per cluster with a surviving occurrence, its
+        representative chosen by the stated order under five shuffles of the store, by tests
+        over a synthetic store shown failing first.
+    - id: ac2
+      description: >-
+        A school, team code, tournament or round is stored only in provenance columns: a
+        full-text query for a fixture's school or team code matches nothing (the policy's
+        E39 gate item 8), by test.
+    - id: ac3
+      description: >-
+        A suppressed occurrence never appears and a cluster with none surviving is absent,
+        by test.
+    - id: ac4
+      description: >-
+        The same store gives a byte-identical index and manifest; the manifest validates
+        against a committed JSON Schema with a drift test, as v1-e33-t02's sidecar schema
+        does.
+    - id: ac5
+      description: >-
+        `publish` writes the pointer last and refuses a version mismatch, by test against
+        the existing S3 test double; the store layout document and the operator's listing
+        grant name `reports/tub/search/`.
+    - id: ac6
+      description: >-
+        The operator's full-store build is recorded in the session report and docs/data:
+        documents, file size, build time and peak memory, counts only.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e39-t02-search-index-build-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.7
+    debate/epic: v1-e39-evidence-search-pilot
+spec:
+  description: >-
+    Build the per-cluster SQLite FTS5 index and its manifest from the parsed store, and publish
+    it with a pointer written last.
+  goalRef:
+    name: v1-e39-t02-search-index-build
+  graph:
+    nodes:
+      - id: index-build
+        kind: Task
+        name: Search index build and publish
+        description: >-
+          Build the per-cluster SQLite FTS5 index and its manifest from the parsed store,
+          and publish it with a pointer written last.
+        estimatedEffort: 6h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Index build tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, packages/debate_cli/tests, -k, tub_index or search_index]
+status:
+  phase: Pending

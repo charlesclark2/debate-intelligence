@@ -1,0 +1,96 @@
+# TASK v1-e39-t06-search-pages - Search pages: search, results, the card page and Copy card, on a Chromebook
+# Epic: E39 — Team Evidence Search (Student Pilot) | Release: v1.7 (Team evidence search pilot) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e39-t06-search-pages
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.7
+    debate/epic: v1-e39-evidence-search-pilot
+  annotations:
+    debate/title: "Search pages: search, results, the card page and Copy card, on a Chromebook"
+spec:
+  # Filed by the PM, 2026-10-19, from Charlie's direction of 2026-10-19 (a student search pilot before the
+  # semester ends, on Chromebooks, signing in with a username, password and 2FA, outside the school's systems).
+  description: >-
+    Server-rendered pages in debate_api over v1-e39-t03: a search page with one box and filters
+    for event, caselist, side and date; results with tag, short cite, snippet, counts and the
+    provenance line; a card page with the formatted card, the label "Disclosed evidence, not
+    platform-verified" (ADR-0006), and every surviving occurrence's provenance. Copy card puts
+    text/html and text/plain on the clipboard, so a paste into Google Docs or Word keeps bold,
+    underline, emphasis and highlight colours, with the provenance line below the cite as a
+    built file has it. The pages work in a Chromebook's Chrome at 1366x768 and 1280x800, by
+    keyboard alone, and on a phone; they load nothing from another origin and use no inline
+    script; a page weighs under 150 KB before the card body.
+  priority: 1
+  constraints:
+    packages: [debate_api, packages/debate_api/tests, tests/integration]
+    forbidden:
+      - A third-party script, font, analytics or tracking
+      - Inline script or a CSP exception for one
+      - Card text, a school, team code, file name, student name, username or email in any fixture, log, report or commit (synthetic values only)
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e39-t03-search-core
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e39-t05-accounts-and-sign-in
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Playwright tests against the app served locally with a synthetic index search,
+        filter, page, open a card and copy it at 1366x768 and 390x844, and axe reports no
+        serious or critical violation.
+    - id: ac2
+      description: >-
+        Copied HTML pasted into a fixture editable region keeps every formatting span,
+        compared as coverage, with the provenance line below the cite, by test.
+    - id: ac3
+      description: >-
+        No page requests another origin or carries inline script, by a test over every
+        response and its CSP; the page-weight budget holds, by test.
+    - id: ac4
+      description: >-
+        On dev, the operator's Chromebook check: search, open a card, copy it into Google
+        Docs, formatting kept; reported yes or no for each (operator follow-up).
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e39-t06-search-pages-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.7
+    debate/epic: v1-e39-evidence-search-pilot
+spec:
+  description: >-
+    Render the search, results and card pages, and Copy card for Google Docs and Word, within a
+    Chromebook's limits.
+  goalRef:
+    name: v1-e39-t06-search-pages
+  graph:
+    nodes:
+      - id: pages
+        kind: Task
+        name: Search pages
+        description: >-
+          Render the search, results and card pages, and Copy card for Google Docs and
+          Word, within a Chromebook's limits.
+        estimatedEffort: 6h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Page tests pass
+            command: uv
+            args: [run, pytest, packages/debate_api/tests, -k, pages or copy]
+status:
+  phase: Pending

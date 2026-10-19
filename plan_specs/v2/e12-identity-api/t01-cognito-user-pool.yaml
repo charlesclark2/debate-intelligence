@@ -27,6 +27,13 @@ spec:
     domain/email list. There is one pool per environment (dev and prod, ADR-0013): the dev pool holds
     only maintainers and synthetic smoke-test users, never real students. Token verification in the API
     is E12-t03; the sign-in UX is E14-t02.
+    (PM amendment 2026-10-19.) v1-e39-t04 builds a user pool first, for the student search pilot
+    (ADR-0019), on Charlie's decision of 2026-10-19: no Google or school identity provider;
+    username sign-in with no email required; accounts the coach creates, never self sign-up;
+    authenticator-app TOTP required and emailed codes as an opt-in fallback; no SMS. This task
+    starts from that pool and module rather than building a second one, and adds only what V2
+    needs beyond it. Google federation and email-as-username in this description are withdrawn;
+    the acceptance criteria that name them are read through this amendment.
   priority: 1
   constraints:
     packages: [infrastructure/modules/cognito, infrastructure/envs]
@@ -39,6 +46,9 @@ spec:
   context:
     - kind: TaskRef
       name: v1-e29-t02-terraform-bootstrap
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e39-t04-pilot-infrastructure
       relation: dependsOn
   acceptanceCriteria:
     - id: ac1

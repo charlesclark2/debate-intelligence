@@ -1,0 +1,87 @@
+# TASK v1-e34-t29-newer-fingerprint-table-guard - An older build never rewrites or publishes an occurrence table stamped with a newer fingerprint version
+# Epic: E34 Caselist Sync | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e34-t29-newer-fingerprint-table-guard
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e34-caselist-sync
+  annotations:
+    debate/title: "An older build never rewrites or publishes an occurrence table stamped with a newer fingerprint version"
+spec:
+  # Filed by the PM, 2026-10-19, from v1-e31-t20's Follow-up 4 and its PM review.
+  description: >-
+    A build older than an occurrence table's fingerprint version puts its own table back on the
+    next parse stage of the same parser version's directory (v1-e31-t20, Follow-up 4). The
+    re-parse to `docx-5` sidesteps it this time, because the installed agent builds `docx-3`,
+    but a fingerprint bump without a parser bump would meet it again, and the search pilot's
+    weekly index (v1-e39-t09) would then publish clusters from the older rules. Every stage that
+    rebuilds or publishes an occurrence table reads the stamped fingerprint version first and
+    refuses, with both versions named and the run summary saying so, when it is newer than the
+    build's own (judged by `EXACT_FINGERPRINT_VERSIONS` order). An equal or older table is
+    rebuilt as today.
+  priority: 2
+  constraints:
+    packages: [debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/runbooks]
+    forbidden:
+      - Changing the fingerprint or clustering rules
+      - A path, school, team code or file name in a record or a log
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e31-t20-long-cuts-and-limits
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A rebuild or publish over a table stamped with a newer fingerprint version is
+        refused with both versions named, by tests for the parse stage and the publish stage
+        shown failing first.
+    - id: ac2
+      description: >-
+        An equal or older stamp rebuilds as before, by test; the run summary and the
+        stale-data warning name a refusal.
+    - id: ac3
+      description: >-
+        An earlier build (the agent's at the time) reads every file this build writes, by
+        the cross-build check.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e34-t29-newer-fingerprint-table-guard-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e34-caselist-sync
+spec:
+  description: >-
+    Refuse to rebuild or publish an occurrence table stamped with a newer fingerprint version
+    than the build's.
+  goalRef:
+    name: v1-e34-t29-newer-fingerprint-table-guard
+  graph:
+    nodes:
+      - id: fingerprint-guard
+        kind: Task
+        name: Newer fingerprint table guard
+        description: >-
+          Refuse to rebuild or publish an occurrence table stamped with a newer
+          fingerprint version than the build's.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Parse and publish stage tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application, -k, parse or publish or fingerprint]
+status:
+  phase: Pending

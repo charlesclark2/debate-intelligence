@@ -1,0 +1,100 @@
+# RELEASE v1.7 — Team evidence search pilot
+# Major version: V1. Epics: E39
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: release-v1-7
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: release
+    debate/major-version: v1
+    debate/release: v1.7
+  annotations:
+    debate/title: v1.7 — Team evidence search pilot
+spec:
+  description: >-
+    Debaters search the team's evidence store from a school Chromebook or at home: a signed-in,
+    team-only web page over every disclosed and camp card, one result per card, each card copied
+    into Google Docs or Word with its formatting and provenance, or downloaded as a Verbatim
+    .docx. A pilot for the end of the 2026 fall semester. Independent of v1.2-v1.6: it needs
+    v1.1's parsed store and fingerprints, and the E33 writer from v1.2.
+  priority: 1
+  acceptanceCriteria:
+  - id: epic-e39
+    description: >-
+      Epic E39 (Team Evidence Search (Student Pilot)) goal is Succeeded.
+  - id: tagged
+    description: >-
+      Release tag v1.7.0 is pushed and CHANGELOG.md has a v1.7 section.
+  - id: gate
+    description: >-
+      Gate release-v1-7-gate is approved.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Gate
+metadata:
+  name: release-v1-7-gate
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: release
+    debate/major-version: v1
+    debate/release: v1.7
+spec:
+  gateType: review
+  description: >-
+    Release review for v1.7 (Team evidence search pilot): demo the release goal end to end on a
+    Chromebook, confirm CI green on the release tag, confirm every item of the data-use policy's E39 gate
+    is proven, and confirm no evidence-integrity regressions.
+  reviewers:
+  - user:charlie
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: release-v1-7-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: release
+    debate/major-version: v1
+    debate/release: v1.7
+spec:
+  description: >-
+    Release plan for v1.7: complete its epic, tag, and pass the release gate.
+  goalRef:
+    name: release-v1-7
+  series: v1
+  version: v1.7
+  graph:
+    nodes:
+    - id: e39
+      kind: External
+      name: Epic E39 — Team Evidence Search (Student Pilot)
+      inputs:
+        goalRef: v1-e39-evidence-search-pilot
+        specRef: plan_specs/v1/e39-evidence-search-pilot/epic.yaml
+    - id: tag-release
+      kind: Task
+      name: Tag and publish v1.7.0
+      description: >-
+        Update CHANGELOG.md, bump package versions, create the git tag, and publish release notes.
+      dependsOn:
+      - e39
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Release tag exists
+        command: git
+        args:
+        - rev-parse
+        - v1.7.0
+    - id: release-review
+      kind: Gate
+      name: v1.7 release review
+      dependsOn:
+      - tag-release
+      gateRef:
+        name: release-v1-7-gate
+status:
+  phase: Pending

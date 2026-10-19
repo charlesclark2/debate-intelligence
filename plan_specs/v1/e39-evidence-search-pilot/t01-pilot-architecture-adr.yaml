@@ -1,0 +1,110 @@
+# TASK v1-e39-t01-pilot-architecture-adr - ADR-0019: the student search pilot's stack, sign-in and hosting
+# Epic: E39 — Team Evidence Search (Student Pilot) | Release: v1.7 (Team evidence search pilot) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e39-t01-pilot-architecture-adr
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.7
+    debate/epic: v1-e39-evidence-search-pilot
+  annotations:
+    debate/title: "ADR-0019: the student search pilot's stack, sign-in and hosting"
+spec:
+  # Filed by the PM, 2026-10-19, from Charlie's direction of 2026-10-19 (a student search pilot before the
+  # semester ends, on Chromebooks, signing in with a username, password and 2FA, outside the school's systems).
+  description: >-
+    Write ADR-0019 so that every later E39 task builds against one record. Charlie's decisions
+    of 2026-10-19 are inputs, not options: a web app usable on school Chromebooks (and from
+    home); no Google sign-in and no school account; a username, a password and a second factor,
+    on accounts only the coach creates; authenticator-app codes as the main factor and emailed
+    codes as an opt-in fallback; the only step for school IT is allowing the hostname through
+    the web filter. The PM's proposed stack, to confirm or argue against, each claim checked
+    against current AWS documentation and cited with the date read: (a) one Lambda function from
+    a container image behind CloudFront, at tub.wfbdebate.com in prod and tub.dev.wfbdebate.com
+    in dev, under ADR-0012's domain; (b) server-rendered HTML from Jinja templates with as
+    little JavaScript as works, FastAPI in debate_api adapted to Lambda (the Lambda Web Adapter
+    or Mangum; say which), no Next.js; (c) the index is one SQLite file with FTS5, built on the
+    operator's machine from the parsed store and published to the evidence bucket's
+    `reports/tub/search/` (the prefix the store layout reserves for the tub's index); say
+    whether the function downloads it to ephemeral storage at a cold start or carries it in the
+    image, and why, at the size 233,643 stored cards make; (d) a Cognito user pool: the feature
+    plan email MFA needs, managed login pages, authorization code with PKCE through a
+    confidential client whose tokens stay on the server behind an HttpOnly, Secure, SameSite=Lax
+    session cookie, administrator-created users only, username sign-in with no email required,
+    TOTP required, email MFA opt-in through SES, no SMS; (e) the access audit as an append-only
+    CloudWatch Logs group kept 400 days, which the function may write and never delete; (f)
+    applies and deploys are operator-run, as the website's are, since there are no GitHub OIDC
+    roles until v2-e10-t03; (g) the monthly cost at 30 users. Name what V2 replaces (E12
+    identity and API, E15 search, E35 tub) and what it keeps. ADR-0019 is reserved for this task
+    in docs/adr/README.md.
+  priority: 1
+  constraints:
+    packages: [docs/adr, docs/architecture]
+    forbidden:
+      - Code or Terraform (later E39 tasks build them)
+      - A school, team code, student name or real email address in the ADR
+      - Re-opening a decision of Charlie's listed in the description; a concern goes to the PM as a question
+  context:
+    - kind: TaskRef
+      name: v1-e30-t01-caselist-data-use-policy
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        ADR-0019 exists in the template's form and records (a) to (g), each with the
+        alternative considered and the AWS documentation it relies on, by URL and date read;
+        the coach accepts it in the pull request.
+    - id: ac2
+      description: >-
+        It states how large the index is expected to be (estimated from the stored-card
+        count, to be measured by v1-e39-t02), how the function gets it, the cold start it
+        expects, and why that is acceptable on a Chromebook.
+    - id: ac3
+      description: >-
+        It states the account lifecycle end to end: the coach creates an account, the first
+        sign-in with a temporary password, the password change, TOTP enrolment, the optional
+        backup email, a coach's reset for a lost password or phone, and removing a student
+        who leaves.
+    - id: ac4
+      description: >-
+        docs/adr/README.md indexes ADR-0019 and moves the reservation;
+        `scripts/docs_index.py --check-descriptions` and `scripts/check_links.py` pass.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e39-t01-pilot-architecture-adr-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.7
+    debate/epic: v1-e39-evidence-search-pilot
+spec:
+  description: >-
+    Decide and record the pilot's stack, sign-in flow, hosting, audit sink, deploy path and cost
+    in ADR-0019.
+  goalRef:
+    name: v1-e39-t01-pilot-architecture-adr
+  graph:
+    nodes:
+      - id: adr
+        kind: Task
+        name: ADR-0019 written and accepted
+        description: >-
+          Decide and record the pilot's stack, sign-in flow, hosting, audit sink, deploy
+          path and cost in ADR-0019.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Docs index and links pass
+            command: uv
+            args: [run, scripts/check_links.py]
+status:
+  phase: Pending

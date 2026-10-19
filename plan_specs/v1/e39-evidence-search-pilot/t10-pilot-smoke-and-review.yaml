@@ -1,0 +1,89 @@
+# TASK v1-e39-t10-pilot-smoke-and-review - Dev smoke checks, the coach's beta and the student pilot
+# Epic: E39 — Team Evidence Search (Student Pilot) | Release: v1.7 (Team evidence search pilot) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e39-t10-pilot-smoke-and-review
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.7
+    debate/epic: v1-e39-evidence-search-pilot
+  annotations:
+    debate/title: "Dev smoke checks, the coach's beta and the student pilot"
+spec:
+  # Filed by the PM, 2026-10-19, from Charlie's direction of 2026-10-19 (a student search pilot before the
+  # semester ends, on Chromebooks, signing in with a username, password and 2FA, outside the school's systems).
+  description: >-
+    Cloud smoke checks under tests/smoke/cloud marked `dev` (run by validate-dev before a
+    promotion, never in PR CI): a synthetic dev user, its TOTP seed held in the dev
+    environment's parameter store, signs in, searches a seeded synthetic index, opens a card,
+    copies it, downloads it and matches the file's re-parse; an unauthenticated request is sent
+    to sign-in; a removed synthetic source disappears. The seed is a handful of synthetic .docx
+    files (fake schools, no real disclosures) loaded by an idempotent script. Then the coach's
+    beta on prod (a checklist in the runbook), and a student pilot with three to five debaters
+    for at least a week. docs/data/evidence-search-pilot.md records tallies and themes, never
+    names, and the go or no-go for the whole team.
+  priority: 1
+  constraints:
+    packages: [tests/smoke, scripts, docs/runbooks, docs/data, packages/debate_api]
+    forbidden:
+      - A real student's name, username or feedback quoted with an identity
+      - Real disclosed files in the dev seed
+      - Smoke checks in PR CI
+  context:
+    - kind: TaskRef
+      name: v1-e39-t07-removal-audit-and-exposure
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e39-t08-card-download
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The dev smoke checks pass against dev (operator-run) and are wired into
+        validate-dev, by the workflow's own test.
+    - id: ac2
+      description: >-
+        The coach's beta checklist is complete on prod and recorded (operator).
+    - id: ac3
+      description: >-
+        The student pilot has run for at least a week; docs/data/evidence-search-pilot.md
+        records its tallies, themes and the go or no-go.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e39-t10-pilot-smoke-and-review-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.7
+    debate/epic: v1-e39-evidence-search-pilot
+spec:
+  description: >-
+    Smoke-check dev end to end, run the coach's beta and a student pilot, and record the
+    decision.
+  goalRef:
+    name: v1-e39-t10-pilot-smoke-and-review
+  graph:
+    nodes:
+      - id: smoke-and-review
+        kind: Task
+        name: Smoke, beta and pilot
+        description: >-
+          Smoke-check dev end to end, run the coach's beta and a student pilot, and record
+          the decision.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Smoke checks collect
+            command: uv
+            args: [run, pytest, tests/smoke, --collect-only, -q]
+status:
+  phase: Pending

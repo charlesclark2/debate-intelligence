@@ -21,6 +21,10 @@ spec:
     Give debaters a signed-in "debate tub" in the web app: browse, search and download the team's built
     files, caselist sources and camp files from the S3 evidence store, organized by topic, position and
     side.
+    (PM amendment 2026-10-19.) Card-level search over disclosed and camp cards reaches students
+    first through the v1.7 pilot (v1-e39), on a smaller stack (ADR-0019). This epic keeps the
+    file-level tub (browse, download and upload of whole files) and builds on the pilot's user
+    pool, audit log and removal wiring rather than beside them.
   priority: 9
   constraints:
     majorVersion: v2

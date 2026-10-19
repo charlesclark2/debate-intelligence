@@ -751,5 +751,23 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e34-t28-publish-stage-loose-ends
+    - id: t29
+      kind: Task
+      name: 'An older build never rewrites or publishes an occurrence table stamped with a newer fingerprint version'
+      description: >-
+        An older build never rewrites or publishes an occurrence table stamped with a newer
+        fingerprint version.
+      inputs:
+        specRef: plan_specs/v1/e34-caselist-sync/t29-newer-fingerprint-table-guard.yaml
+        goalRef: v1-e34-t29-newer-fingerprint-table-guard
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e34-t29-newer-fingerprint-table-guard reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e34-t29-newer-fingerprint-table-guard
 status:
   phase: Pending

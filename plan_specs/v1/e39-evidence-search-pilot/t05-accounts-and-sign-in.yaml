@@ -1,0 +1,102 @@
+# TASK v1-e39-t05-accounts-and-sign-in - Accounts and sign-in: the session flow, roles, and the coach's tub users commands
+# Epic: E39 — Team Evidence Search (Student Pilot) | Release: v1.7 (Team evidence search pilot) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e39-t05-accounts-and-sign-in
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.7
+    debate/epic: v1-e39-evidence-search-pilot
+  annotations:
+    debate/title: "Accounts and sign-in: the session flow, roles, and the coach's tub users commands"
+spec:
+  # Filed by the PM, 2026-10-19, from Charlie's direction of 2026-10-19 (a student search pilot before the
+  # semester ends, on Chromebooks, signing in with a username, password and 2FA, outside the school's systems).
+  description: >-
+    The application side of ADR-0019's sign-in. In debate_api: the authorization-code flow with
+    PKCE against the v1-e39-t04 pool's managed login, the token exchange on the server, an
+    encrypted HttpOnly, Secure, SameSite=Lax session cookie, sign-out (local and the pool's),
+    the session lifetimes ADR-0019 sets, CSRF protection on every state-changing request, and a
+    session required on every route except the health check and the sign-in callback. Roles come
+    from the pool's groups: `student` and `coach`. In debate_cli, a coach-only `tub users`
+    group: `add` (username and role; shows a temporary password once and never logs it), `list`
+    (usernames and roles only), `reset` (a new temporary password, and the second factor cleared
+    so the student enrols again), `disable` and `remove`. A username is 3 to 32 lowercase
+    letters, digits and dots, and never an email address. A guide for the coach and the
+    students: first sign-in, choosing an authenticator app, adding the optional backup email,
+    and what to do when a phone is lost or replaced.
+  priority: 1
+  constraints:
+    packages: [debate_api, debate_cli, debate_core.application, packages/debate_api/tests, packages/debate_cli/tests, docs/guides]
+    forbidden:
+      - A password, temporary password, token or TOTP secret in a log, error message, report or commit
+      - Self sign-up, or any Google or school identity provider
+      - Card text, a school, team code, file name, student name, username or email in any fixture, log, report or commit (synthetic values only)
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e39-t04-pilot-infrastructure
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        An authorization matrix over every route (student and coach, each with a valid,
+        expired, tampered or absent session) shows that only the health check and the
+        callback answer without a session and that coach routes refuse a student, by test.
+    - id: ac2
+      description: >-
+        The callback refuses a mismatched state or PKCE verifier and an ID token from
+        another pool or client, by tests with locally signed tokens.
+    - id: ac3
+      description: >-
+        `tub users` calls the pool's administrator API with the expected parameters
+        (stubbed), never shows a password except `add`'s and `reset`'s one display, and
+        refuses an email-shaped username, by test.
+    - id: ac4
+      description: >-
+        docs/guides/evidence-search-accounts.md walks the coach and a student through first
+        sign-in, TOTP, the backup email and a reset; `scripts/check_command_blocks.py` and
+        `scripts/check_links.py` pass.
+    - id: ac5
+      description: >-
+        On dev, the operator signs in as a synthetic user, enrols TOTP, signs out, and a
+        reset forces enrolment again (operator follow-up, recorded in the report).
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e39-t05-accounts-and-sign-in-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.7
+    debate/epic: v1-e39-evidence-search-pilot
+spec:
+  description: >-
+    Build the sign-in flow, session, roles and CSRF in debate_api, and the coach's account
+    commands in debate_cli.
+  goalRef:
+    name: v1-e39-t05-accounts-and-sign-in
+  graph:
+    nodes:
+      - id: sign-in
+        kind: Task
+        name: Accounts and sign-in
+        description: >-
+          Build the sign-in flow, session, roles and CSRF in debate_api, and the coach's
+          account commands in debate_cli.
+        estimatedEffort: 5h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Sign-in and account tests pass
+            command: uv
+            args: [run, pytest, packages/debate_api/tests, packages/debate_cli/tests, -k, auth or session or tub_users]
+status:
+  phase: Pending

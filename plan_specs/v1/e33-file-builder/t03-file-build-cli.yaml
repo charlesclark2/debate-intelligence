@@ -37,6 +37,12 @@ spec:
     only when no attributed one remains; `files build` reports each card resolved to an
     unattributed occurrence before it builds, since t04's provenance check would fail it. This
     changes t01's documented AUTO rule; change its guide with it.
+    (PM amendment 2026-10-19, from v1-e33-t02's PM review.) The writer finds each card by
+    re-parsing its source with the running parser and matching element indices and fingerprint,
+    so a store parsed by another parser version gives `OCCURRENCE_MISMATCH` for every card.
+    Before resolving anything, `files build` compares the parsed store's parser and fingerprint
+    versions with the running build's and, when they differ, refuses once with a message naming
+    both and saying to re-parse.
   priority: 1
   constraints:
     packages: [debate_cli, debate_core.application, tests/smoke]
@@ -88,6 +94,11 @@ spec:
         (PM amendment 2026-10-19) AUTO prefers attributed occurrences, and `files build`
         names every card resolved to an unattributed one before building, by tests shown
         failing first; t01's guide states the rule.
+    - id: ac8
+      description: >-
+        (PM amendment 2026-10-19) A store parsed by another parser or fingerprint version is
+        refused once, before any card is resolved, with both versions and the re-parse
+        named, by test shown failing first.
 status:
   phase: Pending
 ---

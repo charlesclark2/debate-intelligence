@@ -3,12 +3,12 @@
 
 | | |
 |---|---|
-| Policy version | 1.9 |
-| Status | **Approved**, version 1.9, on the merge of its pull request (2026-10-15). See [Approval](#approval). |
+| Policy version | 1.10 |
+| Status | **Approved**, version 1.10, on the merge of its pull request (2026-10-19). See [Approval](#approval). |
 | Owner | Charlie Clark (product owner and head coach) |
 | Written by | v1-e30-t01-caselist-data-use-policy implementation session, 2026-09-19 |
 | Applies to | Everything the platform collects from OpenCaselist and OpenEv, and everything derived from it, in every environment |
-| Approved by | Charlie Clark, product owner and head coach, 2026-09-19 (versions 1.0 and 1.1), 2026-10-01 (versions 1.3 and 1.4), 2026-10-10 (versions 1.5 and 1.6), 2026-10-11 (version 1.7), 2026-10-13 (version 1.8) and 2026-10-15 (version 1.9) |
+| Approved by | Charlie Clark, product owner and head coach, 2026-09-19 (versions 1.0 and 1.1), 2026-10-01 (versions 1.3 and 1.4), 2026-10-10 (versions 1.5 and 1.6), 2026-10-11 (version 1.7), 2026-10-13 (version 1.8), 2026-10-15 (version 1.9) and 2026-10-19 (version 1.10) |
 | Next review | Start of the 2027-28 season, or sooner if a source's terms change |
 
 This is the policy that governs how the Debate Intelligence Platform collects, stores, uses and
@@ -258,7 +258,9 @@ personal data about a minor (architecture proposal §14).
 
 **Where personal data is allowed to live** — and only here: the local evidence store on the
 operator's machine, the `manifests/` prefix of the private dev and prod evidence buckets, the
-provenance sidecar of a built file, and the per-school landscape view.
+provenance sidecar of a built file, the per-school landscape view, and the student search pilot's
+index (`reports/tub/search/` in the private buckets, and the copy its function holds while it runs),
+in stored provenance columns that are never searchable (v1-e39-t02).
 
 **What a report may show**
 
@@ -268,10 +270,14 @@ provenance sidecar of a built file, and the per-school landscape view.
 | Per-school and trend views (v1-e32-t04) | **School plus team code, as disclosed. Never more.** |
 | Operator import/publish summaries (`docs/data/`) | Aggregate counts only. |
 | Built-file provenance line and sidecar (E33) | School, team code, side, tournament, round — inside the team only. |
+| Student search pilot (E39): result rows, card pages, copied and downloaded cards | School, team code, side, tournament, round in a card's provenance line — to signed-in team members only. Never searchable, and no search by debater. |
 | Removal log and suppression list (v1-e30-t07), and the records beside them (v1-e30-t13, t14, t15, t16, t23) | sha256, date, reason code, request id; a held path's digest, the keys a removal reached, and a caselist slug. |
 
-**Access.** In V1, the operator only. In V2, authenticated members of the team's organization
-only, audited — see [the debate tub gate](#v2-e35--debate-tub-v21).
+**Access.** In V1, the operator only, with one exception: the student search pilot (E39, v1.7)
+gives the team's own debaters and coach, signed in to accounts the coach creates, the provenance
+line shown above, audited, under [the E39 gate](#e39--student-evidence-search-pilot-v17). In V2,
+authenticated members of the team's organization only, audited — see
+[the debate tub gate](#v2-e35--debate-tub-v21).
 
 ## Retention
 
@@ -285,6 +291,8 @@ A **season** runs 1 August to 31 July and is labelled like `2026-27`.
 | Per-school landscape views | Same clock as their sources | With their sources |
 | Circuit-wide landscape reports (no personal data) | Indefinitely | — |
 | Team files built from disclosed cards | Indefinitely (team work product), but subject to [Removal](#removal) flagging | — |
+| The student search pilot's index (E39) | Until the next build replaces it | Superseded index versions, noncurrent versions included, deleted within 30 days, and at once after a removal (v1-e39-t07) |
+| The student search pilot's access audit (E39) | 400 days | Log retention, automatically |
 | Removal log and suppression list | Indefinitely — the suppression list must outlive the data it suppresses | — |
 | S3 noncurrent object versions | Lifecycle from v1-e29-t03: Standard-IA after 30 days, expire after 365 days in prod and 30 days in dev | Automatically |
 
@@ -325,8 +333,9 @@ evidence-ethics rule first and a traceability rule second: it is what makes
    (ADR-0006). If the team wants a verified card, it re-cuts it from the original article, and the
    card then carries *article* provenance instead, with a note that it was found through the
    caselist.
-5. **Attribution survives every move.** Copying a card into another file, exporting it, or opening
-   it in the V2 debate tub carries the provenance line and sidecar entry with it. A card without
+5. **Attribution survives every move.** Copying a card into another file, exporting it, copying or
+   downloading it from the student search pilot (E39), or opening it in the V2 debate tub carries
+   the provenance line and sidecar entry with it. A card without
    provenance may not be added to a built file.
 6. This is internal credit, not publication credit. Nothing built from the corpus is published, so
    attribution here exists for the team's own ethics, for rebuttal ("this is their card"), and for
@@ -502,6 +511,39 @@ first automated pull:
 4. The circuit-wide report is verified to contain **no team codes** before it is shared with the
    team.
 
+### E39 — student evidence search pilot (v1.7)
+
+The pilot shows the team's own debaters other teams' disclosed cards, so it meets the same
+conditions the V2 tub must, adapted to a pilot, before any student is given an account. Each item is
+proven by a named test or operator record (v1-e39-t07, v1-e39-t10).
+
+1. This policy (version 1.10 or later) is approved **and the removal runbook's pilot steps have
+   been exercised end to end once** in dev and prod: after a removal, the card is gone from search,
+   card pages and downloads within five minutes, and the rebuilt index no longer holds it.
+2. **Team-only access is proven**: an authorization matrix over every route for student and coach,
+   signed in, expired, tampered and absent sessions. Accounts exist only because the coach created
+   them: no self sign-up, and no Google or school account (ADR-0019). Every account has a password
+   and a second factor.
+3. **No public reachability**: the evidence buckets keep all four block-public-access flags; there
+   is no public or CloudFront access to a bucket; only the pilot's function reads `raw/`, and it
+   writes nothing there; signed-in responses are private and never cached.
+4. **Every access is audited.** A card page view, copy, download and account change each write an
+   append-only record holding the time, the account's identifier, its role, the action and card
+   cluster ids: no query text, URL, token, name, team code, evidence text or IP address. Records are
+   kept **400 days** and then expire.
+5. **The suppression list governs the pilot**: a suppressed occurrence never enters the index and is
+   hidden by the running function within five minutes of its removal.
+6. **No sharing surface leaves the team**: no public links and no share-by-link. A student may copy
+   or download a card for their own preparation; it carries its provenance line.
+7. **Attribution survives into the pilot**: the provenance line is shown with every disclosed or camp
+   card, and the label "Disclosed evidence, not platform-verified" with every card page (ADR-0006).
+8. **Nothing beyond school plus team code** is shown about any debater; school, team code,
+   tournament and round are never searchable, and there is no search by debater.
+9. **Accounts hold the least personal data that works**: a username chosen by the coach, a role, and
+   an email address only when a student adds one as a backup second factor. No real name, phone
+   number or other attribute is collected. Removing a student who leaves deletes their account.
+10. **School review**: answered — see [open question 6](#open-questions).
+
 ### v2-e35 — debate tub (v2.1)
 
 1. This policy is approved **and the removal runbook has been exercised end to end at least once**
@@ -538,7 +580,7 @@ before the thing it gates.
 | 3 | **OpenEv's distribution terms** and the per-camp licensing notes carried in the files | **Accepted as a known gap**, 2026-09-19 | Charlie, from the files and the camp sites | Nothing today — we redistribute nothing, so the risk is low. Revisit if camp files are ever handled differently from disclosures |
 | 4 | Confirmation that the model provider does not retain or train on our inputs: the **AWS Bedrock data-protection documentation** (Bedrock does not store prompts or completions and does not use them to train models), recorded here by URL and date read, **plus** a check that no model-invocation logging to a third-party destination is enabled in the account | **Open** | Operator, from the AWS documentation and the account's Bedrock settings | [E32 gate](#e32--model-classification-of-the-corpus). Not a blocker for this approval; it blocks the first full-corpus classification run |
 | 5 | The removal contact address to publish in [Removal](#removal) | **Resolved** 2026-09-19 — `ctcb57@gmail.com` | Charlie | — |
-| 6 | Whether school or district review is needed before students (who may be minors) get accounts on the V2 tub. This policy does not answer it and is not legal advice | **Open until V2** | Charlie, with the school | [v2-e35 gate](#v2-e35--debate-tub-v21) item 9 |
+| 6 | Whether school or district review is needed before students (who may be minors) get accounts on the V2 tub. This policy does not answer it and is not legal advice | **Resolved for the E39 pilot** 2026-10-19 — Charlie reports that the school's activities director and IT approved the tool for students; IT's one condition is allowing the pilot's hostname through the school web filter, since students' Chromebooks can run little else. No district review is needed for the pilot. Asked again before the V2 tub, if its scope goes beyond the pilot's (uploads, sharing, other organizations) | Charlie, with the school | [E39 gate](#e39--student-evidence-search-pilot-v17) item 10; [v2-e35 gate](#v2-e35--debate-tub-v21) item 9 |
 | 7 | Whether a season's corpus may be kept beyond two seasons for year-over-year trend analysis | **Resolved** 2026-09-19 — no; the two-season clock in [Retention](#retention) stands | Charlie | — |
 | 8 | Whether the `EvidenceOperator` permission set needs scoped delete rights for `caselist remove`, or whether removal runs under a separate elevated role | **Resolved by a spec change to v1-e29-t03 / v1-e30-t07 (PM)** | PM, in a separate specs pull request | Executing a real removal — see the [runbook](../runbooks/caselist-removal.md#manual-procedure-until-v1-e30-t07-ships) |
 
@@ -554,7 +596,7 @@ before the thing it gates.
 
 ## Approval
 
-**Version 1.9 of this policy is approved.** Publishing caselist and OpenEv imports, loading the
+**Version 1.10 of this policy is approved.** Publishing caselist and OpenEv imports, loading the
 real corpus into dev, model classification over real disclosed text, and automated download (E34)
 are unblocked, each still subject to its own conditions in [Gates](#gates). Version 1.1 recorded
 the maintainer's confirmation of scheduled API downloads and the 10-per-minute rate limit.
@@ -620,19 +662,29 @@ Version 1.9 makes three corrections and one addition, and loosens nothing:
 The last tightens the policy, so under [Review and change control](#review-and-change-control)
 version 1.9 takes effect on merge, and merging its pull request records the approval below.
 
+Version 1.10 lets the team's own debaters see disclosed and camp cards for the first time, through
+the student search pilot (E39, v1.7). It adds the [E39 gate](#e39--student-evidence-search-pilot-v17),
+the pilot's place in [Personal data](#personal-data) (where personal data may live, what it may show,
+and who has access), two rows in [Retention](#retention), the pilot in Attribution rule 5, and the
+answer to [open question 6](#open-questions): the school's activities director and IT approved the
+tool for students. It loosens the policy, since V1 access was the operator's alone, so under
+[Review and change control](#review-and-change-control) it needs the coach's approval: Charlie
+directed the pilot on 2026-10-19, and merging its pull request records the approval below. No
+student is given an account until every item of the E39 gate is met.
+
 The standing rule for every future version: until this table records an approval of that version,
 nothing this policy governs may happen under it.
 
 | Field | Value |
 |---|---|
-| Policy version | 1.9 (2026-10-15); 1.8 (2026-10-13); 1.7 (2026-10-11); 1.6 and 1.5 (2026-10-10); 1.4 and 1.3 approved 2026-10-01, 1.3 including version 1.2's correction to rule 3; 1.0 and 1.1 approved 2026-09-19 |
+| Policy version | 1.10 (2026-10-19); 1.9 (2026-10-15); 1.8 (2026-10-13); 1.7 (2026-10-11); 1.6 and 1.5 (2026-10-10); 1.4 and 1.3 approved 2026-10-01, 1.3 including version 1.2's correction to rule 3; 1.0 and 1.1 approved 2026-09-19 |
 | Approved by | Charlie Clark |
 | Role | Product owner and head coach |
-| Approval date | 2026-10-15 (version 1.9; 1.8: 2026-10-13; 1.7: 2026-10-11; 1.5 and 1.6: 2026-10-10; 1.3 and 1.4: 2026-10-01; 1.0 and 1.1: 2026-09-19) |
-| Scope of approval | Sections [Scope](#scope) through [Review and change control](#review-and-change-control) of version 1.9, including the [clause register](#clause-register) read 2026-09-19 and the [community disclosure norms](#community-disclosure-norms), both confirmed by Charlie |
-| Open questions resolved at approval | **5** — removal contact address is `ctcb57@gmail.com`. **7** — two-season retention stands. **8** — resolved by a PM spec change to v1-e29-t03 / v1-e30-t07. **2** (version 1.1) — maintainer confirmed scheduled API downloads at 10 file downloads per minute |
+| Approval date | 2026-10-19 (version 1.10; 1.9: 2026-10-15; 1.8: 2026-10-13; 1.7: 2026-10-11; 1.5 and 1.6: 2026-10-10; 1.3 and 1.4: 2026-10-01; 1.0 and 1.1: 2026-09-19) |
+| Scope of approval | Sections [Scope](#scope) through [Review and change control](#review-and-change-control) of version 1.10, including the [clause register](#clause-register) read 2026-09-19 and the [community disclosure norms](#community-disclosure-norms), both confirmed by Charlie |
+| Open questions resolved at approval | **5** — removal contact address is `ctcb57@gmail.com`. **7** — two-season retention stands. **8** — resolved by a PM spec change to v1-e29-t03 / v1-e30-t07. **2** (version 1.1) — maintainer confirmed scheduled API downloads at 10 file downloads per minute. **6** (version 1.10) — the school's activities director and IT approved the tool for students; no district review for the E39 pilot |
 | Open questions accepted as known gaps | **1** — OpenCaselist privacy page unread. **3** — OpenEv distribution and per-camp terms unread |
-| Open questions left open | **4** — Bedrock data-protection terms, an E32 gate. **6** — school or district review, before V2 student accounts |
+| Open questions left open | **4** — Bedrock data-protection terms, an E32 gate. **6** — for the V2 tub only, if its scope goes beyond the pilot's |
 
 A later version is approved by editing this table in a pull request, with the version bumped in
 the header and in [Review and change control](#review-and-change-control).

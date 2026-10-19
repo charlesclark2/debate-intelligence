@@ -1,0 +1,106 @@
+# TASK v1-e39-t04-pilot-infrastructure - Pilot infrastructure: the function, CloudFront, the user pool and the audit log, in dev and prod
+# Epic: E39 — Team Evidence Search (Student Pilot) | Release: v1.7 (Team evidence search pilot) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e39-t04-pilot-infrastructure
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.7
+    debate/epic: v1-e39-evidence-search-pilot
+  annotations:
+    debate/title: "Pilot infrastructure: the function, CloudFront, the user pool and the audit log, in dev and prod"
+spec:
+  # Filed by the PM, 2026-10-19, from Charlie's direction of 2026-10-19 (a student search pilot before the
+  # semester ends, on Chromebooks, signing in with a username, password and 2FA, outside the school's systems).
+  description: >-
+    Terraform for both environments as ADR-0019 decides, in a new module instantiated the same
+    way in envs/dev and envs/prod, as the website is: an ECR repository; the Lambda function
+    from its image with the memory and ephemeral storage ADR-0019 sets; a CloudFront
+    distribution at the pilot hostname with an ACM certificate and DNS in the existing zone,
+    security headers (a CSP of default-src 'self', HSTS, frame-ancestors 'none', no-referrer),
+    caching off for signed-in pages, and no access logging; a function role that may read only
+    `reports/tub/search/*`, current objects under `raw/`, and
+    `manifests/_suppression/suppression-list.jsonl` in its own environment's bucket, decrypt
+    with that bucket's key, and write only to its audit log group; the evidence buckets' Block
+    Public Access and policies untouched. The Cognito user pool: username sign-in,
+    administrator-created users only, TOTP required, email MFA available and opt-in, no SMS
+    configuration, groups `coach` and `student`, no attribute beyond the username (and an email
+    only when a student adds one), deletion protection in prod; its managed login domain and the
+    confidential app client with the pilot's callback and sign-out URLs; the SES identity email
+    codes are sent from. The audit log group, kept 400 days. A monthly budget alarm.
+    `scripts/tub_deploy.sh` builds the image, pushes it and updates the function. The dev pool
+    holds only the maintainer and synthetic users (ADR-0013). Applies and deploys are
+    operator-run, with the operator reading the plan first.
+  priority: 1
+  constraints:
+    packages: [infrastructure, scripts, docs/runbooks, packages/debate_api]
+    forbidden:
+      - terraform apply or a deploy in a session (operator-run)
+      - Changing the evidence buckets' public-access settings or the website's module
+      - SMS MFA or a phone-number attribute
+      - A real student name, username or email in any committed file
+  context:
+    - kind: TaskRef
+      name: v1-e39-t01-pilot-architecture-adr
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        `scripts/terraform_checks.sh` passes for both roots and the new module, and the two
+        roots differ only in their tfvars, as the website's do.
+    - id: ac2
+      description: >-
+        A mocked `terraform test` shows: the evidence buckets keep all four Block Public
+        Access flags; no bucket policy grants CloudFront or the public; the function role
+        reads only the three named key patterns, writes nothing in the bucket, and holds no
+        delete on its log group; the log group keeps 400 days.
+    - id: ac3
+      description: >-
+        A mocked `terraform test` shows the user pool allows no self sign-up, requires TOTP,
+        offers email MFA, has no SMS configuration and no attribute beyond username and an
+        optional email.
+    - id: ac4
+      description: >-
+        docs/runbooks/evidence-search.md writes out the operator's steps in full with
+        expected output: apply dev, deploy a placeholder page that requires sign-in, apply
+        prod, request SES production access, and the web-filter allowlist request to school
+        IT (the hostnames only).
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e39-t04-pilot-infrastructure-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.7
+    debate/epic: v1-e39-evidence-search-pilot
+spec:
+  description: >-
+    Terraform the pilot's function, CloudFront, user pool, SES identity, audit log and budget
+    for dev and prod, with an operator deploy script and runbook.
+  goalRef:
+    name: v1-e39-t04-pilot-infrastructure
+  graph:
+    nodes:
+      - id: infrastructure
+        kind: Task
+        name: Pilot infrastructure
+        description: >-
+          Terraform the pilot's function, CloudFront, user pool, SES identity, audit log
+          and budget for dev and prod, with an operator deploy script and runbook.
+        estimatedEffort: 6h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Terraform checks pass
+            command: bash
+            args: [scripts/terraform_checks.sh]
+status:
+  phase: Pending

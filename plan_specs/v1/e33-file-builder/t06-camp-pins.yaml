@@ -21,6 +21,11 @@ spec:
     files. Let a pin name `openev` with a release snapshot, additively within schema version 1,
     resolved against the openev occurrence rows, with the same suppression rule as every other
     occurrence (v1-e33-t01's ac6).
+    (PM amendment 2026-10-19, from v1-e33-t02's Follow-up 4.) Two things the writer needs for a
+    camp occurrence, which it refuses today as `SOURCE_UNREADABLE`: the OpenEv form of the
+    provenance line, `[OpenEv: <camp> <year> — <event>, <file title>]` as the data-use policy's
+    Attribution 2 gives it, and the source document for a camp occurrence, read from
+    `raw/openev/` by its sha256.
   priority: 3
   constraints:
     packages: [debate_core.domain, debate_core.application, packages/debate_core/tests, docs/guides, docs/data]
@@ -38,6 +43,11 @@ spec:
         A pin naming `openev` and a release resolves, AUTO never picks a suppressed camp
         occurrence, and the schema and guide say so, by tests shown failing first; every
         existing example still loads.
+    - id: ac2
+      description: >-
+        (PM amendment 2026-10-19) A recipe pinning a camp card builds, with the OpenEv
+        provenance line below its cite and the occurrence in the sidecar, and reads back as
+        its source, by test shown failing first.
 status:
   phase: Pending
 ---

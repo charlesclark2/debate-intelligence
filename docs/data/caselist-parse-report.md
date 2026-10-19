@@ -1287,8 +1287,9 @@ lengths, formatting flags and rule ids only. Every total below over all cards eq
 directory's figures of [The re-parse, 2026-10-16](#the-re-parse-2026-10-16).
 
 **Status: the rules are in parser `2026.10.18-docx-5`; the store has not been re-parsed with it.**
-The "after" figures are what that parser produces over the same sources, measured side by side
-with the stored cards. The start commit's parser reproduces the stored cards exactly (openev,
+`2026.10.18-docx-4` is `v1-e31-t15`'s, which merged first; `2026.10.18-docx-5` carries both. The
+"after" figures are what that parser produces over the same sources, measured side by side with
+the stored cards on the branch synced onto `dev` with t15. The start commit's parser reproduces the stored cards exactly (openev,
 8,033 of 8,033 identical in every field), so the stored directory is the "before".
 
 ### The counts, and what was done
@@ -1422,6 +1423,19 @@ switched on.
 tells "mostly right" from "often wrong" and no finer. The left sides of the first and third rules
 are cites too (7 of 10 and 10 of 10): those rules are cautious, and what they leave is a follow-up.
 
+**The left quote, sampled after the PM's review.** (6) had shipped on a count of a few hundred lines
+and reaches 9,602 cards, and it is the one change here that can take evidence text away from a
+card. On 2026-10-18, seed 20261019, 28 items, 148 seconds answering, `--plan left-quote`:
+
+| Side | In the corpus | Asked | Yes | No | Unsure | Question |
+|---|---|---|---|---|---|---|
+| A cite line that leaves its card no body | 18 | 18 | 18 | 0 | 0 | The card's cite? |
+| A card gaining a short cite written with a left quote | 9,584 | 10 | 10 | 0 | 0 | The right short cite? |
+
+Each of the 18 is a card stored `FULL` that is `CITE_ONLY` now with no other new rule to explain it,
+and every one holds a line read as a cite only through the left quote. All 18 of those lines are
+the card's cite, and all 10 short cites are right. (6) stands as built.
+
 ### Before and after, over the same sources
 
 | Caselist | Cards before | After | `CITE_ONLY` before | After | No tag before | After | With a cite before | After | Tagged, no cite before | After | With a short cite before | After |
@@ -1431,6 +1445,12 @@ are cites too (7 of 10 and 10 of 10): those rules are cautious, and what they le
 | hspolicy26 | 101,681 | 101,826 | 1,251 | 1,265 | 1,072 | 1,093 | 94,309 | 95,713 | 7,372 | 6,113 | 56,818 | 61,162 |
 | openev | 8,033 | 8,049 | 78 | 78 | 73 | 75 | 7,267 | 7,590 | 766 | 459 | 4,203 | 4,468 |
 | **Total** | 233,643 | 235,457 | 2,444 | 2,409 | 5,322 | 5,769 | 205,589 | 215,913 | 28,054 | 19,544 | 140,527 | 151,726 |
+
+The table covers the 11,148 sources parsed before. `v1-e31-t15`'s part of `2026.10.18-docx-5` reads
+six of the seven sources refused before (five in hsld26, one in openev), with 95 cards, and names
+the seventh an unsupported format; with them the totals are 235,552 cards, 2,411 `CITE_ONLY`, 5,772
+with no tag, 216,005 with a cite, 19,547 tagged with no cite and 151,802 with a short cite. Over the
+11,148 sources, t15 changes no card: every figure above is the same on the synced parser.
 
 * **No card is `ABBREVIATED`,** before or after.
 * **218,218 stored cards are identical in every field** but provenance's versions.
@@ -1449,13 +1469,18 @@ are cites too (7 of 10 and 10 of 10): those rules are cautious, and what they le
 
 ### The labelled evaluation
 
-The six person-corrected files of the PR subset (410 labelled rows), `run_parser_eval.py --tier
-pr-subset`, both parsers over the same files. The full tier's labels are not corrected yet.
+The six person-corrected files of the PR subset, `run_parser_eval.py --tier pr-subset`, every
+parser over the same files and the labels as they stand on `dev` after `labels/2026 10 19`. The
+full tier's labels are not corrected yet.
 
 | Parser | Cite precision | Cite recall | Tag precision | Tag recall | Evidence precision | Evidence recall | Card boundaries |
 |---|---|---|---|---|---|---|---|
-| `2026.10.12-docx-3` | 0.957 (22 right, 1 wrong) | 0.500 (22 of 44) | 0.949 | 0.771 | 0.943 | 0.968 | 22 of 23 |
-| `2026.10.18-docx-5` | 0.969 (31 right, 1 wrong) | 0.705 (31 of 44) | 0.949 | 0.771 | 0.943 | 0.968 | 22 of 23 |
+| `2026.10.12-docx-3` | 0.957 (22 right, 1 wrong) | 0.500 (22 of 44) | 0.949 | 0.860 | 0.943 | 0.968 | 36 of 38 |
+| `2026.10.18-docx-4` (`v1-e31-t15`) | 0.957 | 0.500 | 0.949 | 0.860 | 0.943 | 0.968 | 36 of 38 |
+| `2026.10.18-docx-5` | 0.969 (31 right, 1 wrong) | 0.705 (31 of 44) | 0.949 | 0.860 | 0.943 | 0.968 | 36 of 38 |
+
+Before the labels moved, on 2026-10-18, the same comparison gave the same cite figures, tag recall
+0.771 and 22 of 23 card boundaries for both parsers.
 
 ### What this raised and did not change
 

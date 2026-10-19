@@ -19,7 +19,7 @@ at the head (4); and a short cite written `Okonkwo ‘26` with a left quote is r
 measured and left, as ruled.
 
 The coach's sample of 70 items found no paragraph taken wrongly by any rule. Over the same 11,148
-sources the new parser `2026.10.18-docx-4` reads a cite for 10,324 more cards (205,589 to 215,913),
+sources the new parser `2026.10.18-docx-5` reads a cite for 10,324 more cards (205,589 to 215,913),
 tagged cards with no cite fall from 28,054 to 19,544, and 218,218 of the 233,643 stored cards are
 identical in every field. The labelled PR subset's cite precision rises from 0.957 to 0.969 and its
 recall from 0.500 to 0.705.
@@ -47,7 +47,7 @@ recall from 0.500 to 0.705.
 | ac1: before any rule changes, the counts for (1) to (5), and for each shape the share a proposed rule reaches and the share it would wrongly take, on a sample checked by the coach | PASS | Counts sent to the PM before any rule change and ruled on 2026-10-18 ([The counts](#the-counts)). Reach in the counts: (1) 4,864 of 8,250 (59%); (2) 1,268 cites and 12,744 body paragraphs; (3) 488 of 645 (76%); (4) 25 of 26. Wrongly taken on the coach's sample (seed 20261018, 70 items, 710 s): 0 of 10, 0 of 14, 0 of 10, 0 of 7 ([The coach's sample](#the-coachs-sample)) |
 | ac2: each of (1) to (4) built or ruled out on those counts; each built rule has synthetic fixtures shown failing first; the labelled evaluation's cite precision does not fall | PASS | All four built. Red at `0441a0e`: `36 failed, 196 passed`, every failure an `AssertionError` ([Red then green](#red-then-green)). `uv run python scripts/run_parser_eval.py --tier pr-subset`: cite precision 0.957 → 0.969, recall 0.500 → 0.705; tags, evidence and card boundaries unchanged. The full tier is not corrected yet and was not run |
 | ac3: (4): the hold no longer holds a paragraph whose style marks no name and year at its head, and t09's 300-word fixture changes to match, by test | PASS | `test_first_corpus_parse_findings.py::TestACiteThatDoesNotOpenTheBody::test_a_paragraph_of_300_words_with_a_run_in_the_cite_character_style_is_the_body` (both positions `FULL`, the paragraph is the body), and `TestTheCiteStyleHold` (3 tests, a styled name and year at the head still holds). Both failed first at `0441a0e` |
-| ac4, first half: `parser_version` is bumped | PASS | `2026.10.18-docx-4`. `TestTheParserVersion` → 3 passed; they failed first at `8b89d2d` (`3 failed`), and a mutant reverting the version fails 13 tests |
+| ac4, first half: `parser_version` is bumped | PASS | `2026.10.18-docx-5`. `TestTheParserVersion` → 3 passed; they failed first at `8b89d2d` (`3 failed`), and a mutant reverting the version fails 13 tests |
 | ac4, second half: the operator's re-parse records the cards whose cite changed in `docs/data/caselist-parse-report.md` | **NOT RUN** | Operator-run, after the merge and after `v1-e31-t20`'s rebuild (step 13) has finished. The report holds the read-only side-by-side, marked as that. [Operator follow-ups](#operator-follow-ups), step 2 |
 | ac5, (6): the short cite read from the line above, curly or straight apostrophe, by synthetic fixture shown failing first, with the corpus count of cards it fills | PASS | `TestAShortCiteWithALeftQuote`: U+2018 failed first at `0441a0e`, U+2019 and straight passed before and after. Corpus: 9,602 cards hold a short cite written with a left quote, none before; 9,547 cards that keep their range gain a short cite in all |
 | ac5, (7): if the operator confirms the tag is in the document, counted and fixed; if not, the report says so | **NOT RUN** | The operator's Word check has not come back. Located read-only: the file of t12's step 6 for `heuristic-cite-line-bracketed`, cards 2 and 3 of 16; above each cite a short underlined line at reading size, read as body. Nothing counted or changed. [Operator follow-ups](#operator-follow-ups), step 1 |
@@ -119,7 +119,7 @@ Commit ids are after the sync onto `2f01f1b`.
 | `8ebb9d7` | (1), (2), (3) behind the flag | 65 passed |
 | `f261a2f` | The sampler and its tests | 10 passed |
 | `8b89d2d` | The rules switched on for good; t12's three highlighting tests restated; version tests | Version: **3 failed** |
-| `734afa1` | `2026.10.18-docx-4`; ten structural expectations' `parser_version` line | 3,374 passed but the known baseline test |
+| `734afa1` | `2026.10.18-docx-5`; ten structural expectations' `parser_version` line | 3,374 passed but the known baseline test |
 | `e76b932`, `6da8609` | Edge tests the mutation review asked for; two unreachable checks deleted | |
 | `f5f1ab1` | The parse report and the store document | |
 
@@ -274,7 +274,7 @@ completeness changes; every count agrees.
   stepped over, as the classifier read it.
 - **(6) reads a left quote only before a digit.** `O‘Brien` stays as written. The short cite keeps
   the file's character.
-- **The version is `2026.10.18-docx-4`:** the date the output changed and the next counter.
+- **The version is `2026.10.18-docx-5`:** the date the output changed and the next counter.
 - **`profile_version` is unchanged:** the profile file is untouched, so the operator's labelling is
   not disturbed (the PM's ruling on (6)).
 
@@ -342,7 +342,7 @@ for c in hsld26 hspolicy26 hspf26 openev; do echo ${c}; find ~/.debate-research/
 cat ~/cites-before-t19.txt
 ```
 
-Expected from the first loop: `version` `2026.10.18-docx-4` and `to_parse` equal to `sources` for
+Expected from the first loop: `version` `2026.10.18-docx-5` and `to_parse` equal to `sources` for
 each caselist. If `version` is `2026.10.12-docx-3`, the checkout does not carry the task: stop.
 
 **2c. The dev parse and publish** (about 35 minutes), one caselist at a time:
@@ -357,16 +357,17 @@ uv run debate-research --json caselist parse --caselist hspf26 --publish > ~/rep
 uv run debate-research --json caselist parse --caselist openev --publish > ~/reparse4-dev-openev.json; echo "exit $?"
 ```
 
-Expected: `exit 0` each time, with the same seven failures as on 2026-10-16. On
+Expected: `exit 0` each time. The seven failures of 2026-10-16 are gone: `v1-e31-t15`'s part of the
+version reads six of them and records the seventh, a CardMirror file, as an unsupported format. On
 `PARSED_PUBLISH_INCOMPLETE` run the same line again.
 
 **2d. The counts to paste back** (about 3 minutes; counts only):
 
 ```zsh
 for c in hsld26 hspolicy26 hspf26 openev; do jq -c '(.data // .error.details) | {caselist, version, sources, parsed, cards, unsupported, failed, elapsed_seconds, publish: .publish.counts}' ~/reparse4-dev-${c}.json; done
-for c in hsld26 hspolicy26 hspf26 openev; do echo ${c}; find ~/.debate-research/dev/parsed/${c}/2026.10.18-docx-4/sha256 -name '*.jsonl' -print0 | xargs -0 jq -r 'select(.record == "document") | .document.cards[] | "\(.completeness) \(if .tag == null then "no-tag" else "tagged" end) \(if .full_cite == "" then "no-cite" else "cite" end) \(if .short_cite == null then "no-short" else "short" end)"' | sort | uniq -c; done > ~/cites-after-t19.txt
+for c in hsld26 hspolicy26 hspf26 openev; do echo ${c}; find ~/.debate-research/dev/parsed/${c}/2026.10.18-docx-5/sha256 -name '*.jsonl' -print0 | xargs -0 jq -r 'select(.record == "document") | .document.cards[] | "\(.completeness) \(if .tag == null then "no-tag" else "tagged" end) \(if .full_cite == "" then "no-cite" else "cite" end) \(if .short_cite == null then "no-short" else "short" end)"' | sort | uniq -c; done > ~/cites-after-t19.txt
 cat ~/cites-after-t19.txt
-for c in hsld26 hspolicy26 hspf26 openev; do echo ${c}; find ~/.debate-research/dev/parsed/${c}/2026.10.18-docx-4/sha256 -name '*.jsonl' -print0 | xargs -0 jq -r 'select(.record == "document") | .document.cards[] | (.rule_ids[] | if startswith("assembly-cite-behind-a-name") then "behind a name" elif startswith("assembly-highlighted-cite") then "highlighted" elif test(":verbatim-") then "through an unmapped style" else empty end), (if (.short_cite // "") | test("‘") then "short cite with a left quote" else empty end)' | sort | uniq -c; done
+for c in hsld26 hspolicy26 hspf26 openev; do echo ${c}; find ~/.debate-research/dev/parsed/${c}/2026.10.18-docx-5/sha256 -name '*.jsonl' -print0 | xargs -0 jq -r 'select(.record == "document") | .document.cards[] | (.rule_ids[] | if startswith("assembly-cite-behind-a-name") then "behind a name" elif startswith("assembly-highlighted-cite") then "highlighted" elif test(":verbatim-") then "through an unmapped style" else empty end), (if (.short_cite // "") | test("‘") then "short cite with a left quote" else empty end)' | sort | uniq -c; done
 ls -d ~/.debate-research/dev/parsed/*/*
 du -sh ~/.debate-research/dev/parsed
 ```
@@ -375,11 +376,14 @@ Expected, if no source was imported after 2026-10-16:
 
 | Caselist | Cards | `CITE_ONLY` | No tag | With a cite | Tagged, no cite | With a short cite |
 |---|---|---|---|---|---|---|
-| hsld26 | 75,336 | 676 | 1,563 | 70,914 | 4,422 | 50,458 |
+| hsld26 | 75,399 | 676 | 1,563 | 70,977 | 4,422 | 50,512 |
 | hspf26 | 50,246 | 390 | 3,038 | 41,696 | 8,550 | 35,638 |
 | hspolicy26 | 101,826 | 1,265 | 1,093 | 95,713 | 6,113 | 61,162 |
-| openev | 8,049 | 78 | 75 | 7,590 | 459 | 4,468 |
-| **Total** | 235,457 | 2,409 | 5,769 | 215,913 | 19,544 | 151,726 |
+| openev | 8,081 | 80 | 78 | 7,619 | 462 | 4,490 |
+| **Total** | 235,552 | 2,411 | 5,772 | 216,005 | 19,547 | 151,802 |
+
+These include `v1-e31-t15`'s six sources refused before and read now (95 cards, in hsld26 and
+openev).
 
 and from the third loop:
 
@@ -419,10 +423,10 @@ block once a row.
 cd ~/.debate-research/dev/parsed
 C=hspf26
 M='^assembly-cite-behind-a-name'
-D=$(find ${C}/2026.10.18-docx-4/sha256 -name '*.jsonl' -print0 | xargs -0 jq -r --arg m "${M}" 'select(.record == "document") | "\([.document.cards[] | select(any(.rule_ids[]; test($m)))] | length) \(.source_sha256)"' | sort -rn | head -1 | cut -d' ' -f2)
+D=$(find ${C}/2026.10.18-docx-5/sha256 -name '*.jsonl' -print0 | xargs -0 jq -r --arg m "${M}" 'select(.record == "document") | "\([.document.cards[] | select(any(.rule_ids[]; test($m)))] | length) \(.source_sha256)"' | sort -rn | head -1 | cut -d' ' -f2)
 cp -f ~/.debate-research/dev/blobs/sha256/${D:0:2}/${D:2:2}/${D} /tmp/cite-check.docx
 open /tmp/cite-check.docx
-jq -r --arg m "${M}" 'select(.record == "document") | [.document.cards[] | select(any(.rule_ids[]; test($m)))][:5][] | "\(.completeness) | \(.tag) | \(.short_cite) | \(.full_cite[:80]) | \(.evidence_text[:60])"' ${C}/2026.10.18-docx-4/sha256/${D:0:2}/${D:2:2}/${D}.jsonl
+jq -r --arg m "${M}" 'select(.record == "document") | [.document.cards[] | select(any(.rule_ids[]; test($m)))][:5][] | "\(.completeness) | \(.tag) | \(.short_cite) | \(.full_cite[:80]) | \(.evidence_text[:60])"' ${C}/2026.10.18-docx-5/sha256/${D:0:2}/${D:2:2}/${D}.jsonl
 ```
 
 For each card printed, find it by its tag and answer: is the tag the card's tag; is the cite the
@@ -452,13 +456,13 @@ uv run debate-research --json caselist parse --caselist openev --publish --confi
 unset DEBATE_ENV DEBATE_STORAGE__DATA_DIR
 ```
 
-The dry run must show `2026.10.18-docx-4` and `to_parse` 0; if not, the data directory is wrong:
+The dry run must show `2026.10.18-docx-5` and `to_parse` 0; if not, the data directory is wrong:
 stop. The `unset` at the end matters.
 
 **2h. Install a build that carries this task and reload the agent**, on a day other than Wednesday
 morning, by the scheduled-sync runbook (`scripts/install_channel.sh` with the tag, its Step 2 and
 Step 3, then `ops/launchd/install.sh --check-launchd`). The tag does not exist yet, so the commands
-come from the runbook. Afterwards the agent's dry run should show `2026.10.18-docx-4` and
+come from the runbook. Afterwards the agent's dry run should show `2026.10.18-docx-5` and
 `to_parse` 0.
 
 **2i. Record it.** Whoever closes ac4 adds the counts to `docs/data/caselist-parse-report.md`
@@ -553,3 +557,97 @@ merge. If after, it is recorded with ac4.
 * **A short cite behind a first name:** needs a ruling on the "front only" short-cite rule. Filed at
   p3.
 * **(5):** goes with the `v1-e31-t23` merge, as ruled.
+
+## After the PM review of 2026-10-18
+
+Both items are done. The branch is rebased with `scripts/task sync` onto `origin/dev` at `5a77636`,
+which holds `v1-e31-t15`. Commit ids in the sections above are from before that rebase; the ones
+here are after it. The Goal stays `InProgress`: the re-parse (ac4) and the Word check for (7)
+(ac5) are still the operator's.
+
+### 1. The version: `2026.10.18-docx-5`
+
+`v1-e31-t15` merged with `2026.10.18-docx-4`, and the date is still 2026-10-18, so this task's
+version is the next counter, `2026.10.18-docx-5`, with its own history line after t15's
+(`9b8dc57`, resolved in the rebase).
+
+- **Every place this branch named `docx-4` now names `docx-5`:** the version constant and its
+  history; `TestTheParserVersion` (which now also sorts after t15's version); the ten structural
+  expectations' `parser_version` line; `parsed-card-store.md` (a row of its own in the version
+  table beside t15's, and the new rule ids); the parse report's section; and every operator step
+  above (2b's expected version, 2d's and 2f's paths, 2g's dry run, 2h).
+- **One more of t15's lines changed, as t15 changed t12's.** t15's
+  `test_it_is_the_version_this_task_bumped_to` pinned `2026.10.18-docx-4`; it now asks for that
+  version or a later one, in the words t15 used for t12's test. The rebase kept t15's version of
+  t12's test and dropped mine.
+- **The side-by-side, re-run on the synced parser,** read-only, both kinds of source: the 11,148
+  parsed before and the 7 refused before.
+  - Over the 11,148, every figure equals the first run: 218,218 cards identical, 9,602 short cites
+    with a left quote, the same completeness changes and rule counts. t15 changes no card there.
+  - t15 reads six of the seven refused sources (five in hsld26, one in openev), with 95 cards, and
+    names the seventh an unsupported format.
+  - So the operator's expected totals become 235,552 cards, 2,411 `CITE_ONLY`, 5,772 with no tag,
+    216,005 with a cite, 19,547 tagged with no cite and 151,802 with a short cite. Step 2d's table
+    and step 2c's note on failures are updated to match.
+- **The PR-subset evaluation, re-run on the synced branch.** The labels moved on `dev`
+  (`labels/2026 10 19`), so every parser was measured again on the same labels:
+
+  | Parser | Cite precision | Cite recall | Tag precision | Tag recall | Evidence precision | Evidence recall | Card boundaries |
+  |---|---|---|---|---|---|---|---|
+  | `2026.10.12-docx-3` | 0.957 (22, 1 wrong) | 0.500 (22 of 44) | 0.949 | 0.860 | 0.943 | 0.968 | 36 of 38 |
+  | `2026.10.18-docx-4` (t15, `dev`) | 0.957 | 0.500 | 0.949 | 0.860 | 0.943 | 0.968 | 36 of 38 |
+  | `2026.10.18-docx-5` | 0.969 (31, 1 wrong) | 0.705 (31 of 44) | 0.949 | 0.860 | 0.943 | 0.968 | 36 of 38 |
+
+  Cite precision does not fall. Only the tag recall and the boundary counts moved, with the labels,
+  and they are the same before and after this task.
+- **The default suite, in eighths, on the synced branch:** 1,061; 1,065; 1,063; 1,057; 1,052; 1,061
+  and 1 xfailed; 1,061 and 1 failed; 1,059 and 1 xfailed. 8,479 passed. The failure is the known
+  `test_the_labeled_pr_subset_holds_the_baseline`. `pyright` 0 errors. The mutant that reverts the
+  version to t15's is caught by 12 tests.
+
+### 2. (6), sampled before it ships
+
+`scripts/sample_cite_shapes.py --plan left-quote` (`7d36310`, `b3180ba`) adds two strata. They
+compare the parser's cards with the cards the store holds for the same source, read in place:
+
+- **a cite line that leaves its card no body:** a card stored `FULL` that is `CITE_ONLY` now at the
+  same range, whose rule ids name none of this task's other rules or a re-read. The marked paragraph
+  is the cite line that opens with a short cite only once the left quote is read as `’`. Every one of
+  these cards is drawn;
+- **a card gaining a short cite written with a left quote,** with the short cite shown under the
+  cite.
+
+Before the operator's run, a read-only count over the store in shards found exactly the 18 cards,
+and all 18 hold such a line: the attribution by rule ids was right. The second stratum is 9,584
+(those plus the 18 are the 9,602). The plan's code has 4 new tests; 11 mutants were caught, three
+of them only after tests were added for a card `CITE_ONLY` before and after, a left-quoted line
+under an ordinary cite, and a short cite the store already held.
+
+**The operator's run, 2026-10-18,** seed 20261019, 28 items, 148 seconds answering:
+
+| Side | In the corpus | Asked | Yes | No | Unsure |
+|---|---|---|---|---|---|
+| A cite line that leaves its card no body (the card's cite?) | 18 | 18 | 18 | 0 | 0 |
+| A card gaining a short cite with a left quote (the right short cite?) | 9,584 | 10 | 10 | 0 | 0 |
+
+The tallies' last line: "Of the cards whose cite line leaves them no body, 0 hold no line read
+only through the left quote."
+
+**None of the 18 is the card's text, and no short cite is wrong**, so neither stop condition is
+met and nothing is narrowed. (6) stands as built. Each of the 18 is a card whose only "body" was its
+own cite line, which the old patterns could not read. The parse report's sample section holds both
+tables.
+
+### Criteria, as they stand now
+
+| Criterion | Status |
+|---|---|
+| ac1 | PASS, as accepted |
+| ac2 | PASS: cite precision 0.957 → 0.969 on the synced branch and the moved labels |
+| ac3 | PASS |
+| ac4, first half | PASS: `2026.10.18-docx-5` |
+| ac4, second half | **NOT RUN**: operator, after the merge and after `v1-e31-t20`'s step 13 |
+| ac5, (6) | PASS, now with a coach's sample: 18 of 18 and 10 of 10 right |
+| ac5, (7) | **NOT RUN**: the operator's Word check (step 1) |
+
+**Scratch files:** kept until this second review, as you asked, then deleted on your word.

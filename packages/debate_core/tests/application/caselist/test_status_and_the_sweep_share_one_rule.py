@@ -143,6 +143,31 @@ class TestARunThatCarriesOnAfterItsRewrite:
         assert set(versions_of(world, REWRITTEN_KEY)) == {current, rewrite}
         assert of(await status(world), SYNTHETIC_CASELIST).older_versions == ()
 
+    async def test_a_current_version_written_in_the_window_is_a_manifest_mismatch_until_published_over(
+        self, long_run: RemovalWorld
+    ) -> None:
+        """No version is on top of the other machine's publish, so it is current. Neither rule takes
+        a current version, so status does not count it as older than the removal: it is what the
+        comparison already reports, a manifest mismatch with the hint to publish (`v1-e30-t12`).
+        The publish puts it beneath this machine's manifest; then status counts it, and the same
+        removal run again clears it."""
+        world = long_run
+        during = put(world, REWRITTEN_KEY, AN_OLD_BODY, written=IN_THE_WINDOW)
+        before = await status(world)
+        assert of(before, SYNTHETIC_CASELIST).older_versions == ()
+        assert [(one.snapshot, one.manifest_mismatched) for one in before.manifest_mismatched] == [
+            ("2026-09-15", True)
+        ]
+
+        await republish(world)
+        assert of(await status(world), SYNTHETIC_CASELIST).older_versions == one_manifest_version()
+        await remove(world)
+
+        assert during not in versions_of(world, REWRITTEN_KEY)
+        cleared = await status(world)
+        assert of(cleared, SYNTHETIC_CASELIST).older_versions == ()
+        assert cleared.in_sync, (cleared.drifted, cleared.residue)
+
     async def test_a_version_inside_the_margin_is_neither_counted_nor_taken(
         self, long_run: RemovalWorld, tmp_path: Path
     ) -> None:

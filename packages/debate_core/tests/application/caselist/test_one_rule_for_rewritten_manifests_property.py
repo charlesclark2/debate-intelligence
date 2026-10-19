@@ -5,7 +5,8 @@ example is a key some runs of `RM-2026-01` rewrote in dev, each run completed or
 carrying on for a while after its rewrite (more than the fifteen-minute margin included); versions
 of the key at generated times (the same second as a rewrite, either side of a completion less the
 margin, long before, long after), some of them delete markers; a rewrite the bucket may no longer
-hold; and a publish after everything, or not, which decides what is current.
+hold; another machine's publish while the last run carries on, or not; and a publish after
+everything, or not, which decides what is current.
 
 Both sides are the real code, given the same log entries and scopes: the sweep is
 :func:`~debate_core.application.caselist.manifest_sweep.swept_manifest_versions` over the planner's
@@ -144,6 +145,14 @@ def histories(draw: st.DrawFn) -> tuple[tuple[Run, ...], list[tuple[datetime, bo
     others = draw(
         st.lists(st.tuples(when, st.integers(min_value=0, max_value=5).map(lambda n: n == 0)), max_size=6)
     )
+    last = the_runs[-1]
+    if draw(st.booleans()) and last.ended_at - last.rewritten_at > CLOCK_SKEW_MARGIN + SECOND:
+        # Another machine publishes while the last run carries on, after its rewrite and more than
+        # the margin before its completion: current, unless the publish on top comes after it.
+        room = int((last.ended_at - CLOCK_SKEW_MARGIN - last.rewritten_at).total_seconds())
+        others.append(
+            (last.rewritten_at + draw(st.integers(min_value=0, max_value=room - 1)) * SECOND, False)
+        )
     return the_runs, others, draw(st.booleans())
 
 
@@ -284,6 +293,15 @@ def describe(the_runs: Sequence[Run], versions: Sequence[ObjectVersion]) -> None
             ]
             if window:
                 event("a noncurrent version in that window, which the strictly-older rule kept")
+            if any(
+                one.is_latest
+                and not one.is_delete_marker
+                and one.last_modified is not None
+                and one.last_modified < run.ended_at - CLOCK_SKEW_MARGIN
+                and one.version_id != f"rewrite-{the_runs.index(run)}"
+                for one in versions
+            ):
+                event("a current version older than a completed run's completion less the margin")
         if any(
             one.last_modified == run.rewritten_at and not (one.version_id or "").startswith("rewrite")
             for one in versions
@@ -295,7 +313,7 @@ def describe(the_runs: Sequence[Run], versions: Sequence[ObjectVersion]) -> None
         event("a run that stopped")
 
 
-@settings(max_examples=300, deadline=None)
+@settings(max_examples=500, deadline=None)
 @given(histories())
 def test_after_the_same_removal_runs_again_status_counts_no_version_of_a_manifest_it_rewrote(
     history: tuple[tuple[Run, ...], list[tuple[datetime, bool]], bool],

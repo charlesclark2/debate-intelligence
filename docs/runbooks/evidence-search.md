@@ -52,21 +52,21 @@ login domain's minimum TLS version. Each has a read-back check.
 | [1](#step-1--apply-dev-the-image-repository-alone) | Apply dev: the repository alone | `$WT`, as `debate-admin` |
 | [2](#step-2--the-first-dev-deploy-pushes-an-image) | The first dev deploy pushes an image | `$WT`, as `debate-admin` |
 | [3](#step-3--apply-dev-in-full) | Apply dev in full, which creates the function from that image | `$WT`, as `debate-admin` |
-| [4](#step-4--the-settings-terraform-cannot-make) | The three CLI-only settings | `$WT`, as `debate-admin` |
-| [5](#step-5--put-the-cookie-keys) | Put the cookie keys | anywhere, as `debate-admin` |
-| [6](#step-6--sign-in-to-the-new-permission-sets) | Sign in to the new permission sets | your Mac |
-| [7](#step-7--deploy-dev-as-tubdeployer-and-check-it-through-cloudfront) | Deploy dev as TubDeployer; check through CloudFront; check the function URL refuses a direct call | `$WT` |
-| [8](#step-8--confirm-the-roles-are-least-privilege) | Confirm the function's role and the two permission sets are least-privilege | anywhere |
-| [9](#step-9--sign-in-on-dev-and-record-the-managed-logins-asset-hosts) | Sign in on dev and record the managed login's asset hosts | Chrome on your Mac |
-| [10](#step-10--prod) | Prod: the same sequence, the deploys from a `main` worktree | `$WT`, then a `main` worktree |
-| [11](#step-11--request-ses-production-access) | Request SES production access, right after the first prod apply | anywhere |
+| [4](#step-4--request-ses-production-access) | Request SES production access, once the dev apply has verified the SES identity | anywhere, as `debate-admin` |
+| [5](#step-5--the-settings-terraform-cannot-make) | The three CLI-only settings | `$WT`, as `debate-admin` |
+| [6](#step-6--put-the-cookie-keys) | Put the cookie keys | anywhere, as `debate-admin` |
+| [7](#step-7--sign-in-to-the-new-permission-sets) | Sign in to the new permission sets | your Mac |
+| [8](#step-8--deploy-dev-as-tubdeployer-and-check-it-through-cloudfront) | Deploy dev as TubDeployer; check through CloudFront; check the function URL refuses a direct call | `$WT` |
+| [9](#step-9--confirm-the-roles-are-least-privilege) | Confirm the function's role and the two permission sets are least-privilege | anywhere |
+| [10](#step-10--sign-in-on-dev-and-record-the-managed-logins-asset-hosts) | Sign in on dev and record the managed login's asset hosts | Chrome on your Mac |
+| [11](#step-11--prod) | Prod: the same sequence, the deploys from a `main` worktree | `$WT`, then a `main` worktree |
 | [12](#step-12--the-web-filter-request-to-school-it) | The web-filter request to school IT | email |
 
 ## Before you start
 
 **Shell variables**, used by every block below. `WT` is the checkout holding this task's
 Terraform: the task worktree while the task is in flight, the main clone once it has merged.
-`PILOT_USERNAME` is the dev sign-in name you will give yourself in step 9; make it up, and never
+`PILOT_USERNAME` is the dev sign-in name you will give yourself in step 10; make it up, and never
 use a student's name.
 
 ```bash
@@ -248,9 +248,50 @@ echo "$POOL_ID $CLIENT_ID $FUNCTION_URL"
 ```
 Success looks like: `us-east-1_<letters and digits> <26 characters> https://<id>.lambda-url.us-east-1.on.aws/`.
 
-## Step 4 — The settings Terraform cannot make
+## Step 4 — Request SES production access
 
-### 4a — Deletion protection on the audit log group
+Until AWS grants it, the account is in the SES sandbox: the email fallback reaches only verified
+addresses, 200 a day. Sandbox status is per account and Region, and dev and prod share one account
+(ADR-0010), so one request covers both, and dev's verified identity is enough to ask with. Send it
+now, as soon as step 3 has verified the dev identity, rather than after prod: AWS's first answer
+can take up to 96 hours, and prod waits for a promotion. TOTP sign-in and the coach's resets do not
+depend on it.
+
+The request names the pilot's prod address, because that is where students will use it, even
+though prod is not applied yet.
+
+**Operator command** (expected runtime ~1 min)
+Where: your Mac, anywhere
+```bash
+export AWS_PROFILE=debate-admin
+aws sesv2 get-email-identity --region us-east-1 --email-identity tub.dev.wfbdebate.com \
+  --query VerifiedForSendingStatus --output text
+```
+Success looks like: `True`. On `False`, wait a few minutes and repeat; the DKIM records step 3
+wrote are what verify it. Do not send the request until this says `True`.
+
+**Operator command** (expected runtime ~1 min)
+Where: your Mac, anywhere
+```bash
+export AWS_PROFILE=debate-admin
+aws sesv2 put-account-details --region us-east-1 \
+  --production-access-enabled \
+  --mail-type TRANSACTIONAL \
+  --website-url https://tub.wfbdebate.com/ \
+  --contact-language EN \
+  --additional-contact-email-addresses "$OWNER_EMAIL" \
+  --use-case-description "Transactional email only, for a high school debate team's evidence search at https://tub.wfbdebate.com/, which opens to the team's students in the coming weeks. Amazon Cognito sends two kinds of message through this account: a one-time sign-in code to a student who has chosen email as a backup second factor, and a code to confirm that student's own email address when they add it. About 30 accounts, each created by the team's coach; nobody can sign up. Expected volume is under 500 messages a month. No marketing or bulk mail. Bounces and complaints are handled with the account-level suppression list."
+aws sesv2 get-account --region us-east-1 \
+  --query '[ProductionAccessEnabled,Details.ReviewDetails.Status]' --output text
+```
+Success looks like: no output from the request, then `False	PENDING`. AWS writes to
+`$OWNER_EMAIL`. Run the second command again later: `True	GRANTED` is the end of this step, and it
+holds for prod too. If AWS asks for more information, answer from the description above. Record
+the dates in [What to record](#what-to-record).
+
+## Step 5 — The settings Terraform cannot make
+
+### 5a — Deletion protection on the audit log group
 
 The function can only append to the audit group, and no API edits a log event. Deletion protection
 also stops anyone deleting the group or its streams until the protection is turned off, and the
@@ -268,7 +309,7 @@ aws logs describe-log-groups --region us-east-1 --log-group-name-prefix debate-d
 Success looks like: no output from the first command, then exactly one line:
 `debate-dev-tub-audit	400	True`.
 
-### 4b — The managed login branding
+### 5b — The managed login branding
 
 Cognito creates no branding for an app client made through the API, and without one the managed
 login pages do not render. This creates Cognito's default branding for the pilot's client.
@@ -287,7 +328,7 @@ aws cognito-idp describe-managed-login-branding-by-client --region us-east-1 \
 Success looks like: a branding id (a UUID), then `True`. If the first command says a branding
 already exists for the client, the second is the check that matters.
 
-### 4c — The login domain's minimum TLS version
+### 5c — The login domain's minimum TLS version
 
 Managed login on a custom domain needs a security policy of `TLS_V1_2_2021` or stricter (ADR-0019
 (d)). Cognito sets it through `CustomDomainConfig.SecurityPolicy`, which provider 5.100.0 cannot
@@ -313,7 +354,7 @@ aws cognito-idp update-user-pool-domain --region us-east-1 --domain auth.tub.dev
 An `Unknown parameter` error means the CLI is older than the setting: `brew upgrade awscli` and run
 it again.
 
-## Step 5 — Put the cookie keys
+## Step 6 — Put the cookie keys
 
 The session cookie is encrypted under keys only the function holds (ADR-0019 (d)). Terraform
 created `/debate-dev-tub/cookie-keys` with a placeholder and never reads or writes its value again,
@@ -344,10 +385,10 @@ check prints no key.
 
 A later `terraform apply` leaves this value alone: the parameter ignores changes to its value.
 
-## Step 6 — Sign in to the new permission sets
+## Step 7 — Sign in to the new permission sets
 
 The deploy script runs as `TubDeployer`, and the coach's `tub users` commands (`v1-e39-t05`) as
-`TubAccounts`. Add four profiles; the prod pair works once prod is applied in step 10.
+`TubAccounts`. Add four profiles; the prod pair works once prod is applied in step 11.
 
 **Operator command** (expected runtime ~3 min)
 Where: your Mac, in `~/.aws/config`
@@ -390,7 +431,7 @@ Success looks like: two ARNs, containing `AWSReservedSSO_DebateDevTubDeployer` a
 `AWSReservedSSO_DebateDevTubAccounts`. A failure usually means the user name lists were empty when
 dev was applied: check `owner.auto.tfvars` and re-apply.
 
-## Step 7 — Deploy dev as TubDeployer, and check it through CloudFront
+## Step 8 — Deploy dev as TubDeployer, and check it through CloudFront
 
 This is the deploy every later change uses: no override, the deployer profile.
 
@@ -453,7 +494,7 @@ A `200` or `{"status":"ok"}` here means the function URL is open to the internet
 in the Lambda console that the URL's auth type is `AWS_IAM`.
 
 **Record the cold start.** ADR-0019 (c) 7 asks for the function's init duration, from its
-`REPORT` lines. The first request after a deploy starts a new environment, so step 7's own requests
+`REPORT` lines. The first request after a deploy starts a new environment, so step 8's own requests
 produced one.
 
 ```bash
@@ -463,7 +504,7 @@ aws logs filter-log-events --profile debate-admin --region us-east-1 --log-group
 Success looks like: up to three `REPORT RequestId: ...` lines, each with `Init Duration: <n> ms`.
 Copy them into [What to record](#what-to-record).
 
-## Step 8 — Confirm the roles are least-privilege
+## Step 9 — Confirm the roles are least-privilege
 
 **The function's role** against ADR-0019's role table, with `simulate-principal-policy`. The bucket
 and key names are dev's.
@@ -550,7 +591,7 @@ aws iam simulate-principal-policy --policy-source-arn "$ACCOUNTS" \
 Success looks like: `allowed` on the deployer's own function and the accounts set's
 `AdminCreateUser`; `implicitDeny` on everything else.
 
-## Step 9 — Sign in on dev, and record the managed login's asset hosts
+## Step 10 — Sign in on dev, and record the managed login's asset hosts
 
 School IT will allow the pilot's hostnames and nothing else (ADR-0019 (a) 7), so every host the
 managed login pages load from has to be on the request. The documentation names none beyond the
@@ -596,7 +637,7 @@ Cognito's default style), the password change and the QR code were offered, and 
 hosts. Expect `auth.tub.dev.wfbdebate.com` and `tub.dev.wfbdebate.com`; anything else on the list
 is what this step exists to find. Fill in [The managed login's asset hosts](#the-managed-logins-asset-hosts).
 
-## Step 10 — Prod
+## Step 11 — Prod
 
 The same sequence, with two differences: **the deploys run from a `main` worktree**, which the
 deploy script enforces (a clean `main` equal to `origin/main`, ADR-0013), and so the prod function
@@ -606,7 +647,7 @@ apply can run before that.
 Read every prod plan as carefully as dev's: it is the same 1, then 41, resources under
 `module.evidence_search`, with prod's names, and nothing else changes.
 
-**10a — The repository alone** (as step 1):
+**11a — The repository alone** (as step 1):
 
 **Operator command** (expected runtime ~2 min)
 Where: `$WT`
@@ -618,7 +659,7 @@ terraform -chdir=infrastructure/envs/prod apply -target=module.evidence_search.a
 ```
 Success looks like `Apply complete! Resources: 1 added, 0 changed, 0 destroyed.`
 
-**10b — The first prod deploy**, from a `main` worktree after the promotion. `MAIN_WT` is that
+**11b — The first prod deploy**, from a `main` worktree after the promotion. `MAIN_WT` is that
 worktree, set up as the [team website runbook's deploy worktrees](team-website.md#the-deploy-worktrees)
 are, including `uv sync --all-packages` after every pull.
 
@@ -634,7 +675,7 @@ TUB_DEPLOY_PROFILE=debate-admin scripts/tub_deploy.sh prod
 Success looks like `clean, on main, and equal to origin/main.`, a pushed `debate-prod-tub@sha256:`
 digest, and the message that the function `debate-prod-tub` does not exist yet.
 
-**10c — Apply prod in full** (as step 3), from `$WT` if it is now the merged checkout, or from
+**11c — Apply prod in full** (as step 3), from `$WT` if it is now the merged checkout, or from
 `MAIN_WT`:
 
 **Operator command** (expected runtime ~25 min)
@@ -645,15 +686,14 @@ export AWS_PROFILE=debate-admin
 terraform -chdir=infrastructure/envs/prod apply
 ```
 Success looks like `Apply complete! Resources: 41 added, 0 changed, 0 destroyed.` and
-`evidence_search_url = "https://tub.wfbdebate.com/"`. **Do step 11 now**, before the rest of this
-step: SES's answer can take up to 96 hours.
+`evidence_search_url = "https://tub.wfbdebate.com/"`.
 
-**10d — The prod settings and keys.** Repeat steps 4 and 5 with prod's names:
+**11d — The prod settings and keys.** Repeat steps 5 and 6 with prod's names:
 `debate-prod-tub-audit`, `auth.tub.wfbdebate.com`, `/debate-prod-tub/cookie-keys`, and `POOL_ID`
 and `CLIENT_ID` read from `infrastructure/envs/prod`. Generate new keys for prod; never copy dev's.
 Each read-back should match dev's, with prod's names.
 
-**10e — Deploy prod as TubDeployer and check it** (as step 7, from `MAIN_WT`):
+**11e — Deploy prod as TubDeployer and check it** (as step 8, from `MAIN_WT`):
 
 ```bash
 cd "$MAIN_WT"
@@ -663,45 +703,19 @@ curl -sSI https://tub.wfbdebate.com/ | grep -i -c '^x-robots-tag:'
 ```
 Success looks like the deploy ending `Deployed <sha> to prod: https://tub.wfbdebate.com/`, then
 `200 private, no-store`, then `0`: prod is not marked noindex. The direct call to prod's function
-URL is refused exactly as in step 7. Repeat step 8 with prod's names.
+URL is refused exactly as in step 8. Repeat step 9 with prod's names.
 
 No account is made in the prod pool here. Students' accounts are the coach's, with `tub users add`
 (`v1-e39-t05`).
 
-## Step 11 — Request SES production access
-
-Until AWS grants it, the account is in the SES sandbox: the email fallback reaches only verified
-addresses, 200 a day. Sandbox status is per account and region, so one request covers dev and prod.
-Send it right after the first prod apply (step 10c), because AWS's first answer can take up to 96
-hours. TOTP sign-in and the coach's resets do not depend on it.
-
-**Operator command** (expected runtime ~1 min)
-Where: your Mac, anywhere
-```bash
-export AWS_PROFILE=debate-admin
-aws sesv2 put-account-details --region us-east-1 \
-  --production-access-enabled \
-  --mail-type TRANSACTIONAL \
-  --website-url https://tub.wfbdebate.com/ \
-  --contact-language EN \
-  --additional-contact-email-addresses "$OWNER_EMAIL" \
-  --use-case-description "Transactional email only, for a high school debate team's evidence search at https://tub.wfbdebate.com/. Amazon Cognito sends two kinds of message through this account: a one-time sign-in code to a student who has chosen email as a backup second factor, and a code to confirm that student's own email address when they add it. About 30 accounts, each created by the team's coach; nobody can sign up. Expected volume is under 500 messages a month. No marketing or bulk mail. Bounces and complaints are handled with the account-level suppression list."
-aws sesv2 get-account --region us-east-1 \
-  --query '[ProductionAccessEnabled,Details.ReviewDetails.Status]' --output text
-```
-Success looks like: no output from the request, then `False	PENDING`. AWS writes to
-`$OWNER_EMAIL`. Run the second command again later: `True	GRANTED` is the end of this step. If AWS
-asks for more information, answer from the description above. Record the dates in
-[What to record](#what-to-record).
-
 ## Step 12 — The web-filter request to school IT
 
 School IT allows the prod hostnames and nothing else (ADR-0019 (a) 7): the pilot host, the login
-host, and any other host [step 9](#step-9--sign-in-on-dev-and-record-the-managed-logins-asset-hosts)
+host, and any other host [step 10](#step-10--sign-in-on-dev-and-record-the-managed-logins-asset-hosts)
 found, written with its prod name where it has one. Never the dev hostnames: dev holds no student.
 The authenticator app runs on the student's phone and needs no hostname.
 
-Send it once step 9's table is filled in. The text, with the measured hosts added at the end of
+Send it once step 10's table is filled in. The text, with the measured hosts added at the end of
 the list:
 
 ```text
@@ -726,7 +740,7 @@ Success looks like: IT's confirmation, and a Chromebook on the school network th
 
 ## The managed login's asset hosts
 
-Measured on dev in step 9. Each host here goes on the school IT request in step 12 under its prod
+Measured on dev in step 10. Each host here goes on the school IT request in step 12 under its prod
 name.
 
 | Host seen on dev | What it served | Prod name for the IT request |
@@ -740,17 +754,17 @@ for.
 
 | Item | dev | prod |
 |---|---|---|
-| Step 3 / 10c apply: resources added | | |
-| 4a: `deletion-protection` read-back | | |
-| 4b: branding read-back | | |
-| 4c: domain security policy read-back | | |
-| 5: cookie keys version and check | | |
-| 7: deploy digest | | |
-| 7: through CloudFront (code, cache-control) | | |
-| 7: direct function URL (code, body) | | |
-| 7: init durations from `REPORT` lines | | |
-| 9: managed login rendered; asset hosts recorded | | n/a |
-| 11: SES request sent; answer and date | n/a | |
+| Step 3 / 11c apply: resources added | | |
+| 4: SES request sent; answer and date (one request covers both) | | n/a |
+| 5a: `deletion-protection` read-back | | |
+| 5b: branding read-back | | |
+| 5c: domain security policy read-back | | |
+| 6: cookie keys version and check | | |
+| 8: deploy digest | | |
+| 8: through CloudFront (code, cache-control) | | |
+| 8: direct function URL (code, body) | | |
+| 8: init durations from `REPORT` lines | | |
+| 10: managed login rendered; asset hosts recorded | | n/a |
 | 12: IT request sent; confirmed and date | n/a | |
 
 ## Rolling back a deploy

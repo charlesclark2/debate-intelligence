@@ -6,7 +6,7 @@
 | Spec | [`plan_specs/v1/e39-evidence-search-pilot/t04-pilot-infrastructure.yaml`](../../plan_specs/v1/e39-evidence-search-pilot/t04-pilot-infrastructure.yaml) |
 | Epic / release | `v1-e39-evidence-search-pilot` / `v1.7` |
 | Branch | `task/v1-e39-t04-pilot-infrastructure` |
-| Session status | PARTIAL: everything a session can do is done; ac5's measured asset hosts need the operator's dev apply and sign-in |
+| Session status | PARTIAL: the PM's rulings are applied; waiting on the operator's dev outputs (runbook steps 1–10) to close ac5 and set `Succeeded` |
 
 ## Summary
 
@@ -26,7 +26,7 @@ role against ADR-0019's role table entry by entry, the pool, and the evidence bu
 **Look first at:** the one PM question. Provider 5.100.0 cannot set the login domain's minimum TLS
 version, a third setting the ADR's list of provider gaps leaves out. It is a runbook step with a
 read-back, pending your ruling. **The Goal stays `InProgress`**: ac5's "measured asset hosts" can only
-be measured by the operator on a deployed dev. That is runbook step 9, and nothing else is open.
+be measured by the operator on a deployed dev. That is runbook step 10, and nothing else is open.
 
 ## Plan nodes
 
@@ -42,8 +42,8 @@ be measured by the operator on a deployed dev. That is runbook step 9, and nothi
 | ac1: checks pass for both roots and the new module; the roots differ only in their tfvars, as the website's do | PASS | As above. `diff -r infrastructure/envs/dev infrastructure/envs/prod -x .terraform -x owner.auto.tfvars` → only `backend.tf` and `terraform.tfvars` differ, as before this task. `evidence_search.tf`, `variables.tf`, `outputs.tf` and `owner.auto.tfvars.example` are identical. `tests/scripts/test_tub_deploy.py::test_the_script_names_the_resources_adr_0019_names` also reads the root's module call |
 | ac2: mocked test: evidence buckets keep all four BPA flags; no bucket policy grants CloudFront or the public; the role reads only the three key patterns, writes nothing in the bucket, holds no delete on its log group; the log group keeps 400 days | PASS | `terraform -chdir=infrastructure/modules/evidence_search test` → `Success! 16 passed, 0 failed.` Runs: `evidence_bucket_keeps_block_public_access_and_grants_cloudfront_nothing` plans `../evidence_bucket` with the roots' inputs and asserts the four flags, no `Allow` in the bucket policy and no CloudFront or public principal in the key policy. `cloudfront_reaches_the_function_url_and_nothing_else` asserts the only origin is the function URL. `function_role_is_the_adr_role_table_entry_by_entry` covers GetObject on exactly the three patterns, no other S3 action, and only CreateLogStream/PutLogEvents on the log groups. `audit_log_keeps_four_hundred_days_and_the_app_log_thirty` |
 | ac3: mocked test: no self sign-up, TOTP required, email MFA offered, no SMS configuration, no attribute beyond username and optional email | PASS | Same command. `user_pool_admits_only_coach_created_accounts_with_totp`: admin-only creation, MFA `ON`, TOTP enabled, email MFA present, the password as the only first factor, no device remembering. `user_pool_has_no_sms_and_nothing_beyond_a_username_and_an_optional_email`: no `sms_configuration`, no schema block, no username or alias attributes, case-insensitive, email the only auto-verified attribute, client reads `email`/`email_verified` and writes `email` only |
-| ac4: the runbook writes out apply dev, deploy a placeholder page that requires sign-in, apply prod, request SES production access, and the web-filter request (hostnames only), with expected output | PASS | [`docs/runbooks/evidence-search.md`](../runbooks/evidence-search.md), steps 1–12 in the PM's order, each with "Success looks like". Step 7 proves the path as the PM defined it: through CloudFront `200 private, no-store`; a direct call to the function URL gets `{"Message":"Forbidden"}`/`403`, Lambda's own refusal. Step 9 renders the managed login at the login host. Step 11 is SES, step 12 the IT text (prod hostnames only). `check_links.py`, `docs_index.py --check-descriptions`, `check_command_blocks.py --base origin/dev` → all OK. The outputs are the expected ones; nobody has run the steps yet |
-| ac5: the role checked against the role table entry by entry, incl. the app log group, the two SSM parameters and no other grant; the runbook's CLI steps for branding and deletion protection, and the measured asset hosts, written out with expected output | **NOT RUN** (in part) | **Done:** `function_role_is_the_adr_role_table_entry_by_entry` compares every action with every resource against a hand-written copy of the table (`expected_role_table`, app group and both parameters included). `function_role_has_no_other_grant` checks the exclusive-policy resources (one inline policy, zero managed) and the trust policy. Runbook steps 4a and 4b have their CLI commands and read-backs. **Open:** "the measured asset hosts". Measuring them needs a deployed dev and a person signing in with the network panel open (runbook step 9). The table in the runbook says `Not measured yet`. No session can close this |
+| ac4: the runbook writes out apply dev, deploy a placeholder page that requires sign-in, apply prod, request SES production access, and the web-filter request (hostnames only), with expected output | PASS | [`docs/runbooks/evidence-search.md`](../runbooks/evidence-search.md), steps 1–12 in the PM's order, each with "Success looks like". Step 8 proves the path as the PM defined it: through CloudFront `200 private, no-store`; a direct call to the function URL gets `{"Message":"Forbidden"}`/`403`, Lambda's own refusal. Step 10 renders the managed login at the login host. Step 4 is SES, moved to right after the dev apply by the PM's review; step 12 is the IT text (prod hostnames only). `check_links.py`, `docs_index.py --check-descriptions`, `check_command_blocks.py --base origin/dev` → all OK. The outputs are the expected ones; nobody has run the steps yet |
+| ac5: the role checked against the role table entry by entry, incl. the app log group, the two SSM parameters and no other grant; the runbook's CLI steps for branding and deletion protection, and the measured asset hosts, written out with expected output | **NOT RUN** (in part) | **Done:** `function_role_is_the_adr_role_table_entry_by_entry` compares every action with every resource against a hand-written copy of the table (`expected_role_table`, app group and both parameters included). `function_role_has_no_other_grant` checks the exclusive-policy resources (one inline policy, zero managed) and the trust policy. Runbook steps 5a and 5b have their CLI commands and read-backs. **Open:** "the measured asset hosts". Measuring them needs a deployed dev and a person signing in with the network panel open (runbook step 10). The table in the runbook says `Not measured yet`. No session can close this |
 
 The Goal is left `InProgress` because ac5 is not closed.
 
@@ -134,7 +134,7 @@ edited.
    `CustomDomainConfig.SecurityPolicy`. Provider 5.100.0's `aws_cognito_user_pool_domain` has no
    argument for it (checked from the provider's schema), and the AWS CLI 2.27.6 on this Mac does not
    know it either. The spec and the ADR list two such settings, branding and deletion protection.
-   Runbook step 4c reads the policy back and sets it with `update-user-pool-domain` if it is not
+   Runbook step 5c reads the policy back and sets it with `update-user-pool-domain` if it is not
    `TLS_V1_2_2021`. **This is the PM question below.** I did not stop the session for it, because
    the decision changes one runbook step and nothing else.
 5. **Files outside `constraints.packages`.** The constraint is `[infrastructure, scripts,
@@ -221,7 +221,7 @@ edited.
 - **The login host gets A and AAAA aliases** to Cognito's distribution, as ADR (a) 6 says for both
   hosts.
 - **The placeholder app has no `/auth/callback`.** The PM limited it to `/healthz` and a page.
-  Runbook step 9's sign-in therefore ends at FastAPI's `{"detail":"Not Found"}` on the pilot host.
+  Runbook step 10's sign-in therefore ends at FastAPI's `{"detail":"Not Found"}` on the pilot host.
   The runbook says this is expected, and it still shows the redirect reached the function.
 - **A mocking limit, written into the test.** In provider 5.100.0, `aws_cloudfront_cache_policy` and
   `aws_cloudfront_origin_request_policy` have a plain optional `id`, which neither `mock_data` nor
@@ -271,12 +271,12 @@ Everything is in [`docs/runbooks/evidence-search.md`](../runbooks/evidence-searc
 with expected output. Its "Before you start" section covers:
 
 - the `WT` variables and `uv sync --all-packages`;
-- the Docker and AWS CLI versions; the CLI needs upgrading on this Mac for step 4a;
+- the Docker and AWS CLI versions; the CLI needs upgrading on this Mac for step 5a;
 - `debate-admin`;
 - the three lines for each `owner.auto.tfvars`;
 - the Lambda concurrency check.
 
-**Dev, now, from this task's worktree:** runbook steps 1 to 9, with `debate-admin` for steps 1–5.
+**Dev, now, from this task's worktree:** runbook steps 1 to 10, with `debate-admin` for steps 1–6. Step 4, the SES production-access request, goes as soon as step 3 has verified the dev SES identity.
 The first three, for orientation:
 
 **Operator command** (expected runtime ~2 min)
@@ -308,31 +308,22 @@ Success looks like: the plan reads `Plan: 41 to add, 0 to change, 0 to destroy.`
 `module.evidence_search`, with nothing under `module.evidence_store` or `module.site`. After
 approving: `Apply complete! Resources: 41 added, 0 changed, 0 destroyed.`
 
-Then steps 4 to 9. **Paste back:**
+Then steps 4 to 10. **Paste back:**
 
 - step 3's apply summary;
-- the read-backs from 4a, 4b and 4c;
-- step 5's `2` and `['current', 'previous'] True`;
-- step 7's two `curl` results and its `Init Duration` lines;
-- step 9's list of hosts.
+- step 4's `True` and `False	PENDING`, with the date sent;
+- the read-backs from 5a, 5b and 5c;
+- step 6's `2` and `['current', 'previous'] True`;
+- step 8's two `curl` results and its `Init Duration` lines;
+- step 10's list of hosts.
 
 Those fill in the runbook's tables and close ac5.
 
-**Prod, after this task is merged and promoted:** runbook step 10. The deploys run from a `main`
-worktree. Step 11, the SES request, goes **immediately after** step 10c's full prod apply. Step 12
-goes to school IT once step 9's hosts are recorded.
+**Prod, after this task is merged and promoted:** runbook step 11. The deploys run from a `main`
+worktree. The SES request was step 4, on dev, and covers prod too. Step 12 goes to school IT once
+step 10's hosts are recorded.
 
-**Optional, under agreement 10's exception for `uv.lock`:** one whole-selection run before the pull
-request. This task's lock change only adds packages to `debate_api`, and CI runs the whole selection
-on the pull request anyway.
-
-**Operator command** (expected runtime ~6 min)
-Where: this task's worktree
-```bash
-cd /Users/charlesclark/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e39-t04-pilot-infrastructure
-uv run pytest -n auto -m "not slow and not live"
-```
-Success looks like: `... passed` with no failures.
+**No whole-selection run:** the PM's review ruled it unnecessary; CI runs it on the pull request.
 
 **Merging `uv.lock`:** `v1-e01-t28` may add `grimp` to the dev dependencies. Whichever task merges
 second regenerates the lock as `docs/process/task-workflow.md` says
@@ -349,22 +340,105 @@ second regenerates the lock as `docs/process/task-workflow.md` says
   - the `TubAccounts` action list;
   - the duty to enforce PKCE (Cognito does not enforce it for a confidential client).
 
-  It also replaces runbook step 9's CLI account creation with `tub users add`.
+  It also replaces runbook step 10's CLI account creation with `tub users add`.
 - **`v1-e39-t05` or `v1-e39-t06`:** Starlette 1.9 deprecates `httpx` under `TestClient` and asks
   for `httpx2`. A dev-dependency change for whichever task first writes many app tests.
 - **ADR-0019's Consequences** say "two settings are runbook steps". If PM question 1 is answered
   a), that becomes three: a small edit to the ADR by the PM or a docs task.
 - **ADR-0019 (c) 8's revisit trigger** (a gzipped index above 400 MB) is `v1-e39-t02`'s measurement.
-  This task only records the init duration, in runbook step 7.
+  This task only records the init duration, in runbook step 8.
+
+## PM review follow-through (2026-10-19)
+
+The PM accepted the review on condition that ac5 closes in this session, with no `--partial` merge.
+
+**Done in this round:**
+
+- **SES production access moved to dev.** The request is now runbook step 4, sent as soon as the dev
+  apply (step 3) has verified the dev SES identity. The step first reads `VerifiedForSendingStatus`
+  and expects `True`. The request text names the prod URL, `https://tub.wfbdebate.com/`, as the
+  address the pilot opens at. Sandbox status is per account and Region and the environments share
+  one account (ADR-0010), so this request covers prod as well. The old step 11 and the pointer to
+  it from the prod apply are gone. The record table has a step 4 row.
+- **Renumbering:** inserting step 4 moved the old steps 4–10 to 5–11. The old step 11 is gone and
+  step 12 keeps its number. Headings, sub-steps (5a–5c, 11a–11e), anchors, the order table, the
+  record table and every cross-reference were renumbered by one script and read back.
+  `check_links.py` → `OK: 1818 relative links and anchors`; `check_command_blocks.py --base
+  origin/dev` → OK. This report's own sections use the new numbers; the PM questions block keeps
+  the numbers it was asked with.
+- **Question 1 (a):** as built, runbook step 5c.
+- **Question 3:** the PM amends `constraints.packages`; this branch does not edit the spec.
+- **No whole-selection run:** removed from the operator follow-ups.
+
+**Not done yet: ac5, the runbook's tables, and the phase.** The PM's message said "with the dev
+outputs below", but it carried no outputs. No step of the runbook has been reported as run, so this
+round records no measured hosts and no read-backs, and does not set `Succeeded`. The Goal stays
+`InProgress` until the operator pastes back the outputs listed under Operator follow-ups. Then this
+session:
+
+- fills in the runbook's "The managed login's asset hosts" and "What to record" tables;
+- records the outputs in a section here;
+- sets the phase `Succeeded`, runs `validate_specs.py`, and commits.
 
 ## PM review
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-19
 
 **Notes:**
+
+Accepted, on one condition: ac5 closes in this session before the pull request, not by `--partial`
+(question 2 below). When the operator has run the runbook's dev steps, the session does three things
+in its own sections above this review: records the outputs, fills in the runbook's tables, and sets
+the phase `Succeeded`. The pull request then needs no `--partial`.
+
+**The work itself:**
+
+* **Built to ADR-0019,** with every difference from the spec named under Deviations rather than
+  silently resolved. The roots differ only in tfvars and backend, as the website's do.
+* **The role is checked entry by entry against a hand-written copy of the ADR's table,** and Terraform
+  itself removes any policy attached out of band (`*_exclusive`). That is "no other grant" enforced,
+  not only tested.
+* **Settings the ADR fixes per environment are derived from the environment,** so a tfvars slip
+  cannot turn them off: prod deletion protection and dev's noindex.
+* **Hardened where the ADR implies rather than states:**
+  * `sign_in_policy` is password only;
+  * there is no password auth flow;
+  * the audit group has `skip_destroy`;
+  * the cookie keys are written through a mode-600 file and never sit on a command line.
+* **The image was proven by running it:** arm64, Python 3.12.15, SQLite 3.40.0, the adapter present,
+  `/healthz` private and no-store, and no access-log line. The build context holds only hashed wheels.
+* **The first-apply problem is solved without a committed toggle:** a targeted apply, a deploy that
+  recognises the missing function, then the full apply.
+* **29 mutants, each caught by an assertion.** That is above agreement 10's cap, but 24 are aimed at
+  the role and the pool, which is where I asked for them.
+
+**Rulings:**
+
+1. **Question 1: (a).** The login domain's TLS policy is a third CLI-only setting, with step 4c's
+   read-back. The PM corrects ADR-0019's "two settings" to three in the next batch.
+2. **Question 2: (b), not (a).** `v1-e39-t05` lists this task as a prerequisite, and `scripts/task
+   ready` offers a task only when its prerequisites are `Succeeded`. A `--partial` merge would leave
+   t05 blocked until a later close-out, so closing ac5 here is the faster route to t05. The operator
+   runs dev steps 1 to 9 from this worktree and pastes the outputs back.
+3. **SES production access moves to dev.** Sandbox status is per account and Region, and dev and prod
+   share the account (ADR-0010), so the dev identity is enough to ask. The runbook's step 11 moves
+   to right after the dev apply has verified the SES identity, with the pilot's prod URL in the
+   request. AWS's answer can take up to 96 hours, and prod waits for a promotion, so this starts
+   the clock days earlier. Edit the runbook's order and the step's text accordingly.
+4. **Question 3:** `tests/scripts` and `uv.lock` are agreed. The PM adds them to
+   `constraints.packages` in the next batch, since the deviation is already recorded.
+5. **The optional whole-selection run is not needed.** CI runs it on the pull request.
+6. **Follow-ups to v1-e39-t05 are agreed as listed:**
+   * the cookie-key format;
+   * the environment variables;
+   * the `tub-users` stream;
+   * the `TubAccounts` actions;
+   * PKCE enforced by the app;
+   * `tub users add` replacing step 9's CLI account creation;
+   * the Starlette `httpx2` dev dependency.

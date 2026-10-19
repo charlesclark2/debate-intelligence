@@ -319,6 +319,7 @@ def test_the_same_seed_draws_the_same_items_in_the_same_order(data_dir: Path) ->
         (stratum, position) for stratum, _, position in second
     ]
     assert sorted(stratum for stratum, _, _ in first) == list(range(11))
+    assert [stratum for stratum, _, _ in first] != list(range(11)), "shuffled: the order says nothing"
 
 
 def test_nothing_saved_holds_text_a_tag_a_path_or_a_digest(

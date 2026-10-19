@@ -416,8 +416,10 @@ def is_a_cite_behind_a_first_name_or_title(paragraph: ParagraphDescription, prof
     :data:`MOST_WORDS_BEFORE_THE_AUTHORS_NAME` capitalised words or a title. That alone is also how
     a sentence about a source can open, so the paragraph must say more, as the long cite line
     must: the name and year, or the paragraph's opening, are bold, or everything after the year
-    sits in one bracket. Nothing in it is highlighted, no run is in a cite style (the style rules
-    read those), and it is no longer than :data:`MAXIMUM_LONG_CITE_LINE_CHARACTERS`.
+    sits in one bracket. Nothing in it is highlighted, no run is in a cite style, and it is no
+    longer than :data:`MAXIMUM_LONG_CITE_LINE_CHARACTERS`. A paragraph that carries the cite style
+    is the style rule's to read, and the hold's; the counts and the coach's sample of this rule
+    were taken without such paragraphs, 11 of them in the corpus.
 
     The classifier does not call such a paragraph a cite. The parser's assembly asks this where a
     cite stands, under a tag or under the card's cite, before any body (`v1-e31-t19`).

@@ -31,7 +31,12 @@ from debate_core.application.ports.parsed_store import parse_version_directory
 from debate_core.domain.caselist import SourceDocument, SourceFormat, SourceOrigin
 from debate_core.domain.debate_files import CardCompleteness, ParsedCard, ParsedDocument
 from debate_core.domain.style_profile import StructuralUnit, StyleMatchSource, StyleProfile
-from debate_core.evidence.style_classifier import ParagraphDescription, RunDescription, classify_paragraph
+from debate_core.evidence.style_classifier import (
+    ParagraphDescription,
+    RunDescription,
+    classify_paragraph,
+    is_a_highlighted_cite,
+)
 from debate_core.integrations.docx_parser.parser import DOCX_PARSER_VERSION, DebateDocxParser
 from debate_core.testing.docx_builder import build_docx, paragraph_xml, run_xml
 
@@ -181,6 +186,8 @@ TAKEN_BEHIND_A_NAME = {
         "Adaeze ", after=f" [{TAIL[2:]}] KR", name_bold=False
     ),
     "et al.": behind_a_name("Adaeze ", name="Okonkwo et al. 26"),
+    "a left quote before the year": behind_a_name("Adaeze ", name="Okonkwo \u201826"),
+    "a title and three names": behind_a_name("Professor Adaeze N. Ngozi "),
 }
 
 
@@ -238,6 +245,18 @@ class TestACiteBehindAFirstNameOrATitle:
         "a sentence before it": behind_a_name("The audit by "),
         "the name and year past 40 characters": behind_a_name("Adaeze N" + "g" * 32 + " "),
         "the name and year in the cite style": behind_a_name("Adaeze ", cite_style=True, after=TAIL + "."),
+        "only the name bold, not its year": paragraph(
+            [("Adaeze ", {}), ("Okonkwo", {"bold": True}), (" 26" + TAIL, {})]
+        ),
+        "the cite style on a phrase further in, past 1,000 characters": paragraph(
+            [
+                ("Adaeze ", {}),
+                ("Okonkwo 26", {"bold": True}),
+                (", " + qualifications(1_000), {}),
+                ("Grid Studies", {"character_style": "Style13ptBold"}),
+                (", " + qualifications(100) + ".", {}),
+            ]
+        ),
     }
 
     @pytest.mark.parametrize("built", LEFT.values(), ids=LEFT.keys())
@@ -344,6 +363,21 @@ class TestAParagraphStyleThatMapsToNoUnit:
 
         assert classify_paragraph(described, profile).unit is CITE
 
+    def test_the_classifier_leaves_a_table_cell_in_it_as_it_was(self, profile: StyleProfile) -> None:
+        described = ParagraphDescription(
+            runs=(RunDescription(text="Okonkwo 26, invented for this test.", bold=True, half_points=26),),
+            style_id="NormalWeb",
+            in_table=True,
+        )
+
+        assert classify_paragraph(described, profile).rule_id == "verbatim-alias-id:NormalWeb"
+
+    def test_a_blank_paragraph_in_small_print_in_it_is_still_nothing(self, profile: StyleProfile) -> None:
+        """Its mark is small print, which the body rule would take for shrunk text: a blank body line."""
+        described = ParagraphDescription(runs=(), style_id="NormalWeb", paragraph_half_points=SMALL_PRINT)
+
+        assert classify_paragraph(described, profile).unit is OTHER
+
     def test_a_table_cell_in_it_is_still_page_furniture(self, parser: DebateDocxParser) -> None:
         cite_markup, cite_text = cite_paragraph(style="NormalWeb")
         table = f"<w:tbl><w:tr><w:tc>{cite_markup}</w:tc></w:tr></w:tbl>"
@@ -420,6 +454,27 @@ class TestAHighlightedCite:
             (TAG, "", text),
             ("Another tag", CITE_TEXT, BODY_TEXT),
         ]
+
+    def test_a_blank_line_between_it_and_the_body_changes_nothing(self, parser: DebateDocxParser) -> None:
+        markup, text = highlighted_cite("bold opening")
+        blank = paragraph_xml(run_xml(""))
+
+        assert only_card(parse(parser, tag_paragraph(), markup, blank, BODY)).full_cite == text
+
+    def test_the_shape_is_a_highlighted_ones(self, profile: StyleProfile) -> None:
+        """Not highlighted, a paragraph of the same shape is the long cite line's to read."""
+        described = ParagraphDescription(
+            runs=(
+                RunDescription(text="Okonkwo 26", bold=True),
+                RunDescription(text=", " + qualifications(600)),
+            )
+        )
+
+        assert is_a_highlighted_cite(described, profile) is False
+        highlighted = described.model_copy(
+            update={"runs": (described.runs[0].model_copy(update={"highlight": "yellow"}), described.runs[1])}
+        )
+        assert is_a_highlighted_cite(highlighted, profile) is True
 
     def test_after_a_body_it_is_left_in_the_body(self, parser: DebateDocxParser) -> None:
         markup, text = highlighted_cite("bold opening")
@@ -576,6 +631,20 @@ class TestAShortCiteWithALeftQuote:
         section = section_of(parse(DebateDocxParser(profile), tag_paragraph(), markup, BODY), text)
 
         assert (section.unit, section.match.rule_id) == (CITE, "heuristic-cite-line-bold-author-year")
+
+    def test_a_left_quote_inside_a_name_is_left_as_it_is(self, profile: StyleProfile) -> None:
+        """Only a left quote before a digit is read as an apostrophe: `O‘Brien` is not `O’Brien`."""
+        markup, _ = paragraph([(f"O{LEFT_QUOTE}Brien 26", {"character_style": "Style13ptBold"})])
+        card = only_card(parse(DebateDocxParser(profile), tag_paragraph(), markup, BRACKETED_CITE, BODY))
+
+        assert card.short_cite is None
+
+    def test_the_wiki_guess_finds_its_year_behind_one(self, profile: StyleProfile) -> None:
+        described = ParagraphDescription(
+            runs=(RunDescription(text=f"Reserve margins narrowed … as Okonkwo {LEFT_QUOTE}26 had warned."),)
+        )
+
+        assert classify_paragraph(described, profile).rule_id == "heuristic-wiki-cite-entry"
 
     def test_a_left_quote_not_before_a_year_changes_nothing(self, profile: StyleProfile) -> None:
         markup, _ = paragraph([(f"Okonkwo {LEFT_QUOTE}twenty-six", {"character_style": "Style13ptBold"})])

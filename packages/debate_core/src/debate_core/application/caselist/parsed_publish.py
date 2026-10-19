@@ -43,7 +43,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
-from debate_core.application.caselist.evidence_listing import local_file
+from debate_core.application.caselist.evidence_listing import LocalEvidence, local_file
 from debate_core.application.caselist.publish_service import (
     DEFAULT_CONCURRENCY,
     SourceResult,
@@ -134,6 +134,8 @@ class ParsedStorePublisher:
         local_path_for: The file a local key is stored at, so it is uploaded in place.
         remote: The environment's evidence bucket.
         suppression: The removal suppression list. Required: nothing is published without it.
+        evidence: This machine's manifests and blobs, whose rows say which sources only a held path
+            discloses (`v1-e31-t26`). Required, like the list.
     """
 
     def __init__(
@@ -143,6 +145,7 @@ class ParsedStorePublisher:
         local_path_for: Callable[[ObjectKey], Path] | None,
         remote: EvidenceObjectStore,
         suppression: SuppressionList,
+        evidence: LocalEvidence,
         concurrency: int = DEFAULT_CONCURRENCY,
     ) -> None:
         if concurrency < 1:
@@ -151,6 +154,7 @@ class ParsedStorePublisher:
         self._local_path_for = local_path_for
         self._remote = remote
         self._suppression = suppression
+        self._evidence = evidence
         self._concurrency = concurrency
 
     async def publish(self, caselist: str, version: str) -> ParsedPublishReport:

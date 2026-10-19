@@ -236,6 +236,7 @@ def parsed_store_publisher(
         local_path_for=local.path_for,
         remote=remote or installation.bucket,
         suppression=suppression or installation.suppression or empty_suppression_list(),
+        evidence=installation.local,
     )
 
 

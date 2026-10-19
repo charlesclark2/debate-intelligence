@@ -201,6 +201,7 @@ __all__ = [
     "CaselistStatusReport",
     "CaselistStatusService",
     "HeldInboxUpload",
+    "HeldParsedObject",
     "InboxHolds",
     "MismatchKind",
     "NoCaselistEvidence",
@@ -251,6 +252,20 @@ class RefusedAtImport:
 
     The caselist of the hold that refused it, its digest, and the request holding the path. Never the
     path: the record holds the path's digest alone.
+    """
+
+    caselist: str
+    sha256: Sha256Hex
+    request_id: str
+
+
+@dataclass(frozen=True, slots=True, order=True)
+class HeldParsedObject:
+    """A parsed file in the bucket of bytes that only a held path discloses (`v1-e31-t26`).
+
+    An earlier build parsed and published it; this build's `caselist parse --publish` does not. Its
+    caselist, its source's digest and the request holding the path. Never the path, and never its
+    key's version directory, which says nothing the request does not.
     """
 
     caselist: str
@@ -381,6 +396,9 @@ class CaselistStatusReport:
     """Uploads an import refused at a held path in a caselist compared, from the held-digest record,
     that the same removal run again has not yet listed (`v1-e30-t24`). Read when the inbox is, and
     empty when the caller did not ask. Not part of :attr:`in_sync`."""
+    held_parsed_objects: tuple[HeldParsedObject, ...] = ()
+    """Parsed files in the bucket, under a caselist compared, of bytes only a held path discloses
+    (`v1-e31-t26`): an earlier build's `caselist parse --publish` sent them. Not part of :attr:`in_sync`."""
 
     @property
     def in_sync(self) -> bool:
@@ -433,12 +451,14 @@ class CaselistStatusReport:
 
     @property
     def removals_owed(self) -> tuple[str, ...]:
-        """The request ids whose removal a held row, a held inbox upload or an upload refused at
-        import says to run again, sorted."""
+        """The request ids whose removal a held row, a held inbox upload, an upload refused at import
+        or a held upload's parsed file in the bucket says to run again, sorted."""
         rows = {row.request_id for snapshot in self.snapshots for row in snapshot.held_rows}
         skipped = {request for snapshot in self.snapshots for request in snapshot.held_skipped_rows}
         inbox = {upload.request_id for upload in self.held_in_inbox}
-        return tuple(sorted(rows | skipped | inbox | {one.request_id for one in self.refused_at_import}))
+        refused = {one.request_id for one in self.refused_at_import}
+        parsed = {one.request_id for one in self.held_parsed_objects}
+        return tuple(sorted(rows | skipped | inbox | refused | parsed))
 
     def held_in_inbox_of(self, caselist: str) -> tuple[HeldInboxUpload, ...]:
         """The :attr:`held_in_inbox` uploads of `caselist`."""
@@ -447,6 +467,10 @@ class CaselistStatusReport:
     def refused_at_import_of(self, caselist: str) -> tuple[RefusedAtImport, ...]:
         """The :attr:`refused_at_import` uploads of `caselist`."""
         return tuple(upload for upload in self.refused_at_import if upload.caselist == caselist)
+
+    def held_parsed_objects_of(self, caselist: str) -> tuple[HeldParsedObject, ...]:
+        """The :attr:`held_parsed_objects` of `caselist`."""
+        return tuple(one for one in self.held_parsed_objects if one.caselist == caselist)
 
     @property
     def residue_found(self) -> bool:

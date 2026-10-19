@@ -65,7 +65,11 @@ from dataclasses import dataclass, field
 from typing import Final
 
 from debate_core.application.caselist.evidence_listing import LocalEvidence
-from debate_core.application.caselist.parse_sources import Disclosed, EnumeratedSource, enumerate_sources
+from debate_core.application.caselist.parse_sources import (
+    EnumeratedSource,
+    enumerate_sources,
+    live_disclosures,
+)
 from debate_core.application.caselist.parse_workers import (
     LoadableJob,
     ParseJob,
@@ -74,7 +78,7 @@ from debate_core.application.caselist.parse_workers import (
     SourceLoadError,
     WorkerFailure,
 )
-from debate_core.application.caselist.publish_plan import OPENEV, local_blob_key, validate_publish_target
+from debate_core.application.caselist.publish_plan import local_blob_key, validate_publish_target
 from debate_core.application.caselist.suppression import load_suppression_state
 from debate_core.application.caselist_card_stats import CardPlacement
 from debate_core.application.ports.debate_files import DebateFileParser
@@ -318,7 +322,7 @@ class CaselistParseService:
             for source in sources
             if snapshot is None or any(disclosed.snapshot == snapshot for disclosed in source.disclosures)
         ]
-        live = [source for source in in_scope if _live_disclosures(source, state)]
+        live = [source for source in in_scope if live_disclosures(source, state)]
         to_parse = tuple(
             source for source in live if skip_key(source.sha256, parser_version, profile_version) not in done
         )
@@ -422,7 +426,7 @@ class CaselistParseService:
 
     def _jobs(self, plan: ParsePlan) -> Iterator[LoadableJob]:
         for source in plan.to_parse:
-            live = _live_disclosures(source, plan.suppression)
+            live = live_disclosures(source, plan.suppression)
             first = live[0]
             job = ParseJob(
                 source=source.source_document(live),
@@ -456,7 +460,7 @@ class CaselistParseService:
     def _record(
         self, plan: ParsePlan, source: EnumeratedSource, result: ParseResult
     ) -> tuple[SourceEntry, DocumentRecord | None]:
-        first = _live_disclosures(source, plan.suppression)[0]
+        first = live_disclosures(source, plan.suppression)[0]
         common: dict[str, object] = {
             "caselist": plan.caselist,
             "snapshot": first.snapshot,
@@ -531,7 +535,7 @@ class CaselistParseService:
             source = held.get(entry.source_sha256)
             if entry.outcome is not SourceOutcome.PARSED or source is None:
                 continue
-            live = _live_disclosures(source, state)
+            live = live_disclosures(source, state)
             if not live:
                 continue
             record = await self._store.read_document(plan.caselist, plan.version, entry.source_sha256)
@@ -601,7 +605,7 @@ class CaselistParseService:
         rows: list[FailureRow] = []
         for entry in recorded:
             source = held.get(entry.source_sha256)
-            live = _live_disclosures(source, state) if source is not None else ()
+            live = live_disclosures(source, state) if source is not None else ()
             if source is not None and not live:
                 continue
             rows.append(
@@ -633,23 +637,6 @@ class CaselistParseService:
 # ------------------------------------------------------------------------------------------------
 
 
-def _live_disclosures(source: EnumeratedSource, state: SuppressionState) -> tuple[Disclosed, ...]:
-    """The disclosures of `source` the suppression list does not stop, by the source or by its path.
-
-    A camp file is checked by its digest alone, as the publisher checks a camp manifest's rows.
-    """
-    return tuple(
-        disclosed
-        for disclosed in source.disclosures
-        if not state.suppresses(
-            source.sha256,
-            disclosure=None
-            if source.caselist == OPENEV
-            else disclosure_digest(source.caselist, disclosed.path),
-        )
-    )
-
-
 def _disclosure_spans(source: EnumeratedSource, state: SuppressionState) -> list[tuple[str | None, str, str]]:
     """`(disclosure, first snapshot, latest snapshot)` for each live disclosure of `source`.
 
@@ -657,7 +644,7 @@ def _disclosure_spans(source: EnumeratedSource, state: SuppressionState) -> list
     is still one disclosure. A camp file has no disclosure, so each release is its own.
     """
     spans: dict[tuple[str | None, str | None], tuple[str, str]] = {}
-    for disclosed in _live_disclosures(source, state):
+    for disclosed in live_disclosures(source, state):
         if source.is_camp_file:
             key: tuple[str | None, str | None] = (None, disclosed.snapshot)
         else:
@@ -674,7 +661,7 @@ def _index_rows(
     return [
         entry
         for entry in entries
-        if (source := held.get(entry.source_sha256)) is not None and _live_disclosures(source, state)
+        if (source := held.get(entry.source_sha256)) is not None and live_disclosures(source, state)
     ]
 
 
@@ -687,7 +674,7 @@ def _failure_rows(
         for entry in entries
         if entry.outcome is not SourceOutcome.PARSED
         and (source := held.get(entry.source_sha256)) is not None
-        and _live_disclosures(source, state)
+        and live_disclosures(source, state)
     ]
 
 

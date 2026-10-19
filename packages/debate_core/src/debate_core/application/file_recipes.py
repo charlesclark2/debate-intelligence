@@ -59,14 +59,15 @@ reaches the network.
 The resolver never chooses an occurrence the suppression list stops. It asks
 :meth:`~debate_core.application.ports.suppression.SuppressionState.suppresses` with the row's source
 SHA-256 and its disclosure digest, the same question the parse pipeline asks when it rebuilds the
-occurrence table (`_live_disclosures` in :mod:`debate_core.application.caselist_parse`): a whole
+occurrence table (:func:`~debate_core.application.caselist.parse_sources.live_disclosures`): a whole
 source, or a disclosure withdrawn from that caselist path. The table already leaves both out once
 it is rebuilt; the resolver asks again because a list merged from another machine can stop a row
 before this machine's next rebuild. AUTO passes over such a row to the next by the rule above; a
 card with none left is `SUPPRESSED_OCCURRENCE`. A pin to such an occurrence is refused with
 `SUPPRESSED_OCCURRENCE`, never moved to another one, and so is a pin to a source suppressed as a
 whole, which a rebuilt store no longer holds at all. Path holds (`v1-e30-t13`) stop new bytes at an
-import and never reach the table, so the resolver has none to ask about.
+import. A row an earlier build imported at a held path is left out of the table when it is rebuilt
+(`v1-e31-t26`), and the resolver does not ask about holds itself.
 """
 
 from __future__ import annotations

@@ -1095,7 +1095,11 @@ def bucket(evidence_bucket: str, s3_client: S3Client) -> S3EvidenceObjectStore:
 def publisher(world: World, bucket: Any) -> ParsedStorePublisher:
     local = FsEvidenceObjectStore(world.data_dir, subdirectory=Path("parsed"))
     return ParsedStorePublisher(
-        local=local, local_path_for=local.path_for, remote=bucket, suppression=world.suppression
+        local=local,
+        local_path_for=local.path_for,
+        remote=bucket,
+        suppression=world.suppression,
+        evidence=world.local,
     )
 
 

@@ -89,7 +89,11 @@ async def parse(world: RemovalWorld, *, reparse: bool = False) -> ParseRunReport
     report = await service.run(await service.plan(CASELIST, reparse=reparse))
     local = FsEvidenceObjectStore(world.data_dir, subdirectory=Path("parsed"))
     publisher = ParsedStorePublisher(
-        local=local, local_path_for=local.path_for, remote=world.bucket, suppression=world.suppression()
+        local=local,
+        local_path_for=local.path_for,
+        remote=world.bucket,
+        suppression=world.suppression(),
+        evidence=world.local,
     )
     assert (await publisher.publish(CASELIST, report.plan.version)).succeeded
     return report

@@ -14,6 +14,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import zipfile
 from collections.abc import Iterator
 from datetime import UTC, date, datetime
@@ -319,6 +320,25 @@ class TestStatus:
             assert sorted(entry["missing_sources"]) == sorted(
                 digest_of_body(name) for name in week["sources"]
             )
+
+    def test_the_panel_before_a_publish_counts_each_week_on_one_line_and_names_no_whole_digest(
+        self, buckets: S3Client, imported: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """`v1-e30-t24`, item 4: the panel printed the whole details record, every missing digest
+        in full. The terminal is wide enough here that no line of the panel wraps."""
+        monkeypatch.setenv("COLUMNS", "2000")
+
+        result = invoke("caselist", "status", "--caselist", SYNTHETIC_CASELIST)
+
+        assert result.exit_code == ExitCode.DOMAIN_FAILURE
+        assert re.findall(r"[0-9a-f]{64}", result.output) == []
+        panel = [line.strip("│ ") for line in result.stderr.splitlines()]
+        for week in EXPECTED["snapshots"]:
+            (counted,) = [
+                line for line in panel if line.startswith(f"{SYNTHETIC_CASELIST} {week['snapshot']}:")
+            ]
+            assert f"no manifest in the bucket, {len(week['sources'])} source(s) not in the bucket" in counted
+        assert not [word for word in FICTIONAL_IDENTIFIERS if word in result.output]
 
     def test_status_after_a_publish_exits_zero(self, buckets: S3Client, imported: Path) -> None:
         publish()

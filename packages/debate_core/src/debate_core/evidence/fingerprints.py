@@ -63,9 +63,18 @@ was computed under.
   `v2` left it out of both. Long bodies are matched as before. **Exact fingerprints unchanged;
   cluster ids changed** for the short bodies that now join a cluster, and for a cluster one of them
   now gives its smallest fingerprint to.
+* **`card-fingerprint-v4`** (`v1-e31-t20`). The PM's ruling of 2026-10-16: a card is a passage, and
+  bodies join only on text they share. Long cuts join the one cluster that holds them by the step
+  short cuts are joined by, where `v3` joined them only when the banding paired a cut with its
+  container. A body that holds a cut and another passage the cut does not overlap is no witness for
+  the cut. A cut's own cluster is one of its witnesses. No join puts two bodies that do not overlap
+  (share three-tenths of the smaller's shingles) in one cluster. With the PM's rulings on its
+  preview (2026-10-18), before any store held it: a cut may be a tenth of its witness (a quarter
+  before), and a short cut, like a long one, is found from either end. **Exact fingerprints
+  unchanged; cluster ids changed.**
 
 The normalization has not changed since `v1`, so an exact fingerprint computed under `v1` is the
-same digest under `v2` and `v3`, and anything keyed on one (a suppression, a recipe, a cache) still
+same digest under `v2`, `v3` and `v4`, and anything keyed on one (a suppression, a recipe, a cache) still
 holds. Cluster ids are not comparable across versions: under each later version more cards share
 one. A consumer that compares cluster ids of two versions is comparing two different functions; one
 that compares exact fingerprints of two versions must check this list says they did not change.
@@ -94,12 +103,12 @@ __all__ = [
     "normalize_for_matching",
 ]
 
-FINGERPRINT_VERSION: Final = "card-fingerprint-v3"
+FINGERPRINT_VERSION: Final = "card-fingerprint-v4"
 """Version of the matching rules: the normalization above and the clustering and linking built on
 it. Bumped by any change that can change a digest or move a card to another cluster."""
 
 EXACT_FINGERPRINT_VERSIONS: Final = frozenset(
-    {"card-fingerprint-v1", "card-fingerprint-v2", "card-fingerprint-v3"}
+    {"card-fingerprint-v1", "card-fingerprint-v2", "card-fingerprint-v3", "card-fingerprint-v4"}
 )
 """Every version whose exact fingerprints are the digests :func:`card_fingerprint` computes now.
 
@@ -107,7 +116,8 @@ The list "Changing the rules" above, as data, for a consumer that keeps an exact
 across versions: a file recipe (`v1-e33-t01`) names one, and is resolved against occurrence rows
 stamped with any version here. A bump that changes only clusters adds the new version; a bump that
 changes the normalization replaces the set with the new version alone, and every recipe written
-under an older one is refused until its fingerprints are recomputed."""
+under an older one is refused until its fingerprints are recomputed. `card-fingerprint-v4`
+(`v1-e31-t20`) changed only clusters, so it was added."""
 
 _SINGLE_QUOTES: Final = "\u2018\u2019\u201a\u201b\u2032\u2035`\u00b4\u02bc\uff07"
 _DOUBLE_QUOTES: Final = "\u201c\u201d\u201e\u201f\u2033\u2036\u00ab\u00bb\uff02"

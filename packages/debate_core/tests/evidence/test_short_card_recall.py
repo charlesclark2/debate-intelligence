@@ -522,21 +522,140 @@ AFTER_GROUPING_UNMATCHED_MISSES: Final[dict[str, dict[Miss, int]]] = AFTER_SPLIT
     "extended set, abbreviated with abbreviated": {Miss.NO_FULL_COPY: 4},
 }
 
+#: After the PM's ruling of 2026-10-16 (`v1-e31-t20`): bodies join only on text they share, never
+#: through a third body holding both, and a body holding two passages that share nothing is no
+#: witness for either. Worked out by hand from the rows before the run. Two labelled cards have a
+#: trimmed-start and a trimmed-end copy that share no shingle, and only their pairs move.
+#:
+#: * Brannock (t06's rows): the original is the trimmed-end copy followed by the trimmed-start one,
+#:   word for word, the shape of `v1-e31-t11`'s false join. The original and the typo copy hold both
+#:   trims, so neither trim has a witness and each is a cluster of its own. Full pairs lost: the
+#:   original and the typo copy with each trim, three wholly inside (candidates) and the typo copy
+#:   with the trimmed end (the typo is in it, confirmation), and the two trims (confirmation). The
+#:   four-four abbreviation links to the original's cluster and loses both trims; the abbreviation
+#:   of the trimmed start links to that trim and loses the original, the typo copy and the other
+#:   trim: five pairs with a full copy, and the two abbreviations apart (one): "other", since each
+#:   matches full copies in one cluster.
+#: * Kessler (t08's rows): the original holds both trims and witnesses neither. The OCR-joined copy
+#:   holds the trimmed start, the dropped-word copy the trimmed end, and both join the original. The
+#:   two trims then each have one witness, that cluster, and would put two texts sharing nothing in
+#:   it: it takes in neither. Seven full pairs lost: four wholly inside (candidates), and the OCR
+#:   copy with the trimmed end, the dropped-word copy with the trimmed start and the two trims
+#:   (confirmation).
+AFTER_THE_PASSAGE_RULING_TABLE: Final[dict[str, tuple[int, int, int]]] = AFTER_GROUPING_UNMATCHED_TABLE | {
+    "short-card set, all pairs": (70, 0, 11),
+    "short-card set, full short cards": (19, 0, 5),
+    "short-card set, abbreviated with a full copy": (39, 0, 5),
+    "short-card set, abbreviated with abbreviated": (11, 0, 1),
+    "extended set, all pairs": (86, 0, 30),
+    "extended set, full short cards": (23, 0, 14),
+    "extended set, abbreviated with a full copy": (46, 0, 9),
+    "extended set, abbreviated with abbreviated": (15, 0, 5),
+}
+
+AFTER_THE_PASSAGE_RULING_MISSES: Final[dict[str, dict[Miss, int]]] = AFTER_GROUPING_UNMATCHED_MISSES | {
+    "short-card set, all pairs": {Miss.CANDIDATES: 3, Miss.CONFIRMATION: 2, Miss.OTHER: 6},
+    "short-card set, full short cards": {Miss.CANDIDATES: 3, Miss.CONFIRMATION: 2},
+    "short-card set, abbreviated with a full copy": {Miss.OTHER: 5},
+    "short-card set, abbreviated with abbreviated": {Miss.OTHER: 1},
+    "extended set, all pairs": {
+        Miss.CANDIDATES: 7,
+        Miss.CONFIRMATION: 9,
+        Miss.SPLIT_FULL_COPIES: 4,
+        Miss.NO_FULL_COPY: 4,
+        Miss.OTHER: 6,
+    },
+    "extended set, full short cards": {Miss.CANDIDATES: 7, Miss.CONFIRMATION: 7},
+    "extended set, abbreviated with a full copy": {Miss.SPLIT_FULL_COPIES: 4, Miss.OTHER: 5},
+    "extended set, abbreviated with abbreviated": {Miss.NO_FULL_COPY: 4, Miss.OTHER: 1},
+}
+
+#: The two labelled cards whose trims the passage ruling splits. The PM ruled on 2026-10-18
+#: (`v1-e31-t20`) that the ruling stands against the labels, and that the labels stay: they are the
+#: coach's, so these pairs keep showing as misses rather than being relabelled away.
+SPLIT_BY_THE_PASSAGE_RULING: Final = frozenset({"brannock-ferry-fares", "kessler-night-buses"})
+
+#: Same-card pairs that the code as `v1-e31-t08` left it kept apart, by row id, from a run against
+#: that code: the orphan's minimum cut, Sable's two cuts, the two-typos copies and Pryce's 5 ... 5.
+#: Every card but the two above is held to these misses and no more.
+MISSED_BEFORE_THE_PASSAGE_RULING: Final[dict[str, frozenset[tuple[str, str]]]] = {
+    "variant set": frozenset(),
+    "short-card set": frozenset(),
+    "extended set": frozenset(
+        {
+            ("a-q1-five-four-brackets", "a-q1-three-three"),
+            ("a-q1-four-eight", "a-q1-three-three"),
+            ("a-q1-six-six", "a-q1-three-three"),
+            ("a-t1-eight-seven", "a-t1-four-six"),
+            ("v1-original", "v1-two-typos"),
+            ("v1-retagged", "v1-two-typos"),
+            ("a-v1-five-five", "v1-two-typos"),
+            ("a-v1-three-six", "v1-two-typos"),
+            ("w1-original", "w1-two-typos"),
+            ("w1-retagged", "w1-two-typos"),
+            ("a-w1-five-five", "w1-two-typos"),
+            ("a-y1-five-five", "y1-original"),
+        }
+    ),
+}
+
+#: Brannock's pairs the ruling loses, worked out by hand in `AFTER_THE_PASSAGE_RULING_TABLE`'s
+#: comment: every pair with either trim, and the two abbreviations, which link to different trims'
+#: clusters. The original and the typo copy stay together, with the four-four abbreviation.
+BRANNOCK_LOST: Final = frozenset(
+    {
+        ("s3-original", "s3-trimmed-end"),
+        ("s3-original", "s3-trimmed-start"),
+        ("s3-trimmed-end", "s3-typo"),
+        ("s3-trimmed-start", "s3-typo"),
+        ("s3-trimmed-end", "s3-trimmed-start"),
+        ("a-s3-four-four", "s3-trimmed-end"),
+        ("a-s3-four-four", "s3-trimmed-start"),
+        ("a-s3-of-trimmed-start", "s3-original"),
+        ("a-s3-of-trimmed-start", "s3-typo"),
+        ("a-s3-of-trimmed-start", "s3-trimmed-end"),
+        ("a-s3-four-four", "a-s3-of-trimmed-start"),
+    }
+)
+
+#: Kessler's: each trim with the original, with the two copies that joined the original, and with
+#: the other trim.
+KESSLER_LOST: Final = frozenset(
+    {
+        ("k1-original", "k1-trimmed-end"),
+        ("k1-original", "k1-trimmed-start"),
+        ("k1-dropped-word", "k1-trimmed-end"),
+        ("k1-dropped-word", "k1-trimmed-start"),
+        ("k1-ocr-join", "k1-trimmed-end"),
+        ("k1-ocr-join", "k1-trimmed-start"),
+        ("k1-trimmed-end", "k1-trimmed-start"),
+    }
+)
+
+LOST_TO_THE_PASSAGE_RULING: Final[dict[str, frozenset[tuple[str, str]]]] = {
+    "variant set": frozenset(),
+    "short-card set": BRANNOCK_LOST,
+    "extended set": BRANNOCK_LOST | KESSLER_LOST,
+}
+
 BASELINE_TABLE: Final = T06_TABLE | BASELINE_EXTENDED_TABLE
 """Every row against the code as t06 left it: what each fix is measured from."""
 
-EXPECTED_TABLE: Final = AFTER_GROUPING_UNMATCHED_TABLE
+EXPECTED_TABLE: Final = AFTER_THE_PASSAGE_RULING_TABLE
 """What the code under test should measure today. Each fix replaces the rows it changes."""
 
-EXPECTED_MISSES: Final = AFTER_GROUPING_UNMATCHED_MISSES
+EXPECTED_MISSES: Final = AFTER_THE_PASSAGE_RULING_MISSES
 
 #: Goal criterion ac1's recall targets, by the rows they are read from. Precision is 1.000 or the
-#: task has failed, whatever the recall.
+#: task has failed, whatever the recall. The two "full short cards" rows were 0.90 until the PM
+#: amended them on 2026-10-18 to what `v1-e31-t20` measured under the passage ruling, Brannock's and
+#: Kessler's trims being two passages each. `test_the_passage_ruling_loses_only_two_cards_pairs`
+#: keeps the lower figure from hiding any other loss.
 REQUIRED_RECALL: Final[dict[str, float]] = {
-    "short-card set, full short cards": 0.90,
+    "short-card set, full short cards": 19 / 24,
     "short-card set, abbreviated with a full copy": 0.75,
     "short-card set, abbreviated with abbreviated": 0.75,
-    "extended set, full short cards": 0.90,
+    "extended set, full short cards": 23 / 37,
     "extended set, abbreviated with a full copy": 0.75,
     "extended set, abbreviated with abbreviated": 0.75,
     "variant set, pairs with a short card": 0.90,
@@ -552,12 +671,12 @@ def test_every_miss_comes_from_one_of_t06s_three_mechanisms(measured: dict[str, 
     assert {name: row.by_mechanism for name, row in measured.items()} == EXPECTED_MISSES
 
 
-def test_recall_reaches_the_targets_with_precision_held(measured: dict[str, Row]) -> None:
+@pytest.mark.parametrize("name", REQUIRED_RECALL)
+def test_recall_reaches_the_targets_with_precision_held(measured: dict[str, Row], name: str) -> None:
     """Goal criterion ac1, on t06's rows and on the extended set."""
-    for name, required in REQUIRED_RECALL.items():
-        counts = measured[name].counts
-        assert counts.precision == 1.0, name
-        assert counts.recall >= required, name
+    counts = measured[name].counts
+    assert counts.precision == 1.0, name
+    assert counts.recall >= REQUIRED_RECALL[name], name
 
 
 def test_no_row_is_worse_than_before_the_fixes(measured: dict[str, Row]) -> None:
@@ -567,6 +686,48 @@ def test_no_row_is_worse_than_before_the_fixes(measured: dict[str, Row]) -> None
         true_positives, false_positives, _ = row.figures
         assert true_positives >= BASELINE_TABLE[name][0], name
         assert false_positives == 0, name
+
+
+def labelled_sets() -> dict[str, list[Variant]]:
+    return {
+        "variant set": load_variants(),
+        "short-card set": load_short_cards(),
+        "extended set": load_short_cards(extended=True),
+    }
+
+
+def missed_pairs(variants: Sequence[Variant]) -> frozenset[tuple[str, str]]:
+    """Same-card pairs placed apart, each as its two row ids in sorted order."""
+    clusters = placed_clusters(variants)
+    return frozenset(
+        (min(left.variant_id, right.variant_id), max(left.variant_id, right.variant_id))
+        for left, right in itertools.combinations(variants, 2)
+        if left.label == right.label and clusters[left.variant_id] != clusters[right.variant_id]
+    )
+
+
+@pytest.mark.parametrize("name", MISSED_BEFORE_THE_PASSAGE_RULING)
+def test_the_passage_ruling_loses_only_two_cards_pairs(name: str) -> None:
+    """The guardrail on the amended target (PM, 2026-10-18): the pairs lost since `v1-e31-t08` are
+    exactly Brannock's and Kessler's, pinned by row id. A pair lost anywhere else fails, whatever
+    the figures."""
+    variants = labelled_sets()[name]
+    labels = {variant.variant_id: variant.label for variant in variants}
+    lost = LOST_TO_THE_PASSAGE_RULING[name]
+    assert {labels[row] for pair in lost for row in pair} <= SPLIT_BY_THE_PASSAGE_RULING
+    assert missed_pairs(variants) == MISSED_BEFORE_THE_PASSAGE_RULING[name] | lost
+
+
+@pytest.mark.parametrize("name", MISSED_BEFORE_THE_PASSAGE_RULING)
+def test_recall_over_every_other_card_is_as_t08_left_it(name: str) -> None:
+    """Over every same-card pair of every other labelled card, recall is what it was."""
+    variants = [
+        variant for variant in labelled_sets()[name] if variant.label not in SPLIT_BY_THE_PASSAGE_RULING
+    ]
+    pairs = sum(1 for left, right in itertools.combinations(variants, 2) if left.label == right.label)
+    before = MISSED_BEFORE_THE_PASSAGE_RULING[name]
+    missed = missed_pairs(variants)
+    assert (pairs - len(missed), len(missed)) == (pairs - len(before), len(before))
 
 
 # ------------------------------------------------------------------------------------------------
@@ -590,11 +751,15 @@ def test_mechanism_1_one_changed_word_keeps_a_short_card_in_its_cluster(
 
 
 @pytest.mark.parametrize("copy", ["k1-trimmed-end", "k1-trimmed-start"])
-def test_mechanism_1_a_short_cards_trimmed_copy_is_compared_with_it(
+def test_mechanism_1_a_short_cards_trims_that_share_nothing_are_two_passages(
     extended_clusters: dict[str, str], copy: str
 ) -> None:
-    """Wholly inside the original, sharing a third of its shingles: the banding never pairs them."""
-    assert extended_clusters[copy] == extended_clusters["k1-original"]
+    """Each wholly inside the original, and the two sharing no shingle. `v1-e31-t08` joined both
+    to it. Under the passage ruling (PM, 2026-10-16, held against the labels on 2026-10-18) the
+    original holds two passages that share nothing and is a witness for neither, so each trim is a
+    cluster of its own."""
+    assert extended_clusters[copy] != extended_clusters["k1-original"]
+    assert extended_clusters["k1-trimmed-end"] != extended_clusters["k1-trimmed-start"]
 
 
 @pytest.mark.parametrize(

@@ -47,24 +47,39 @@ needed, so both take seconds on the store's own table:
   texts by shape (`debate_core.evidence.pair_shapes`: identical, contained, overlapping,
   sharing a little, sharing nothing), the cluster's distinct short cites and texts with none, and
   its texts' word counts. Its texts are the ones `diagnose` describes the largest clusters by, so
-  its share sharing nothing is the figure `diagnose` gives.
+  its share sharing nothing is the figure `diagnose` gives. Each cluster's pairs sharing only one
+  or two five-word runs are counted too, and `--every-cluster` counts them over every cluster of
+  the caselist (`v1-e31-t20`): one run is enough to pass the clusterer's guard against joining
+  texts that share nothing, so the count says whether a stock phrase is bridging different cards.
 
 **Every `sample` asks a person only what a rule cannot decide.** Of the pairs it draws, a pair of
 two full cards that is identical, or one inside the other, is the same card, and a pair sharing no
 text is two different cards: those are counted and never shown (the PM's ruling of 2026-10-16, in
-`debate_core.evidence.pair_shapes`). A person is shown the rest one at a time: both texts side by
-side, or one above the other on a narrow terminal, the text both hold underlined and each side's
-own text in bold, trimmed to the shared region when long. One key answers each, `q` stops and
-keeps the tallies so far. The tallies keep what the rule decided apart from what the person did.
+`debate_core.evidence.pair_shapes`). `--ask-shape SHAPE` shows the pairs of a shape the rule
+decides as well, without the rule's verdict, and tallies the person's answers apart, beside the
+rule's (`v1-e31-t20`): a short quote two articles both carry is contained in each without being one
+card, so the rule's "contained is the same card" is itself measured. A person is shown the rest one
+at a time: both texts side by side, or one above the other on a narrow terminal, the text both hold
+underlined and each side's own text in bold, trimmed to the shared region when long. One key
+answers each, `q` stops and keeps the tallies so far. The tallies keep what the rule decided apart
+from what the person did.
+
+**Placements in memory, and saved** (`v1-e31-t20-long-cuts-and-limits`). A rebuild under new rules
+takes minutes per caselist, and what it would do can be read before it runs, without writing to the
+store. `counts` with neither *before* option places the store's cards by the checked-out rules in
+memory, and `--save-after DIR` keeps that placement (digests, indices and ids, no text). Every
+command then reads it with `--after DIR` in place of the store's table: `shapes` and `diagnose`
+describe it, `sample` draws from it, and `counts` and `sample` compare it with the store's table.
+`shapes --preview` and `diagnose --preview` place the cards in memory themselves.
 
 **Operator-run on the real store.** It writes nothing to the store or the repository.
 `--before-rules` copies source files, never card text, to a temporary directory it removes, and
-`counts --save-before` writes digests and cluster ids where it is told to. It never
-prints a card's text, tag or cite except in `sample`, to a terminal, one pair at a time, cleared
-before the next; `sample` refuses to run when its input or output is not a terminal, so nothing it
-shows can land in a file or a pipe; `sample --save-tallies` appends its closing lines, which are
-counts and hold no text, tag, cite, path or digest, to a file. The store itself holds no path,
-school or team code (`docs/data/parsed-card-store.md`).
+`counts --save-before` and `--save-after` write digests and cluster ids where they are told to. It
+never prints a card's text, tag or cite except in `sample`, to a terminal, one pair at a time,
+cleared before the next; `sample` refuses to run when its input or output is not a terminal, so
+nothing it shows can land in a file or a pipe; `sample --save-tallies` appends its closing lines,
+which are counts and hold no text, tag, cite, path or digest, to a file. The store itself holds no
+path, school or team code (`docs/data/parsed-card-store.md`).
 
     uv run python scripts/compare_card_clusters.py counts --caselist openev
     uv run python scripts/compare_card_clusters.py counts --caselist hsld26 --before ~/saved/hsld26.jsonl
@@ -72,6 +87,10 @@ school or team code (`docs/data/parsed-card-store.md`).
     uv run python scripts/compare_card_clusters.py diagnose --caselist openev
     uv run python scripts/compare_card_clusters.py sample --caselist hspolicy26 --largest 1 --count 10
     uv run python scripts/compare_card_clusters.py shapes --caselist hspf26 --caselist hsld26
+    uv run python scripts/compare_card_clusters.py counts --caselist openev --save-after ~/saved/after
+    uv run python scripts/compare_card_clusters.py shapes --caselist openev --after ~/saved/after
+    uv run python scripts/compare_card_clusters.py sample --caselist openev --after ~/saved/after \\
+        --kept-apart-by under-the-minimum-share --ask-shape contained-under-a-third
 """
 
 from __future__ import annotations
@@ -88,8 +107,8 @@ import sys
 import tempfile
 import time
 from collections import Counter, defaultdict
-from collections.abc import Callable, Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from collections.abc import Callable, Collection, Iterable, Mapping, Sequence
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -108,6 +127,8 @@ if TYPE_CHECKING:
 
 __all__ = [
     "ABSORBED_BANDS",
+    "ASK_SHAPES",
+    "JOINED_BANDS",
     "KEPT_APART_BY",
     "MATCHING_RULE_MODULES",
     "NO_WORDS",
@@ -121,11 +142,13 @@ __all__ = [
     "common_cards",
     "compare",
     "describe_cluster_shapes",
+    "describe_pairs_sharing_few_runs",
     "describe_largest_clusters",
     "diagnose",
     "divided_parts",
     "joined_pairs",
     "kept_apart",
+    "kept_apart_kind",
     "largest_clusters",
     "main",
     "placements_now",
@@ -160,17 +183,36 @@ NO_WORDS = "a side has no words"
 """The shape a pair is tallied under when a body has no shingle, and so no shape: a person's to judge."""
 
 #: What `sample --kept-apart-by` can draw: cuts `diagnose` counts as apart from a body that holds
-#: them, by the limit that applies. The long ones are split at the minimum cut share, since a rule
-#: that joined long cuts as the short ones are joined would take the first and leave the second.
+#: them, by the limit that applies (`debate_core.evidence.cluster_diagnosis.CutOutcome`, in the
+#: order the cut step applies them since `card-fingerprint-v4`). Names, not the outcomes: this
+#: module is imported by `--before-rules` against earlier rules, which the diagnosis cannot read.
 KEPT_APART_BY = (
+    "ends-held-by-too-many-clusters",
+    "held-with-another-passage",
+    "own-cluster-and-another",
     "witnesses-in-several-clusters",
     "under-the-minimum-share",
-    "ends-held-by-too-many-clusters",
-    "lacking-an-end",
-    "long-cut-within-the-share",
-    "long-cut-under-the-share",
-    "long-cut-in-several-clusters",
+    "unrelated-texts",
+    "within-the-rule",
+    "lacking-both-ends",
 )
+
+#: The bands of a cut's share of the body holding it, as `sample --joined-in-band` names them
+#: (`debate_core.evidence.cluster_diagnosis.SHARE_BANDS`).
+JOINED_BANDS = {
+    "under-a-tenth": "under a tenth",
+    "a-tenth-to-a-quarter": "a tenth to a quarter",
+    "a-quarter-to-a-half": "a quarter to a half",
+    "half-or-more": "half or more",
+}
+
+#: The shapes a rule decides, as `sample --ask-shape` names them (`debate_core.evidence.pair_shapes`).
+ASK_SHAPES = {
+    "identical": "identical",
+    "contained-under-a-third": "contained, under a third of the larger",
+    "contained-a-third-or-more": "contained, a third or more of the larger",
+    "sharing-nothing": "sharing nothing",
+}
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 PACKAGE_SOURCE = REPO_ROOT / "packages" / "debate_core" / "src"
@@ -651,10 +693,22 @@ def diagnose(
         "full_texts": census.texts,
         "short_full_texts": census.short_texts,
         "cuts": tally_cuts(census.findings, census.with_a_copy),
+        "witness_refusals": dict(census.witness_refusals),
     }
     if before is not None:
+        from debate_core.evidence.near_duplicates import NearDuplicateThresholds, jaccard, shingles
+
+        sets: dict[str, frozenset[str]] = {}
+
+        def are_copies(left: str, right: str) -> bool:
+            """One text by the copies' rule: Jaccard over the threshold."""
+            for fingerprint in (left, right):
+                if fingerprint not in sets:
+                    sets[fingerprint] = shingles(bodies[fingerprint])
+            return jaccard(sets[left], sets[right]) >= NearDuplicateThresholds().jaccard
+
         result["divided_pairs"] = _divided_tally(
-            divided_parts(before, placed), census.findings, census.with_a_copy
+            divided_parts(before, placed), census.findings, census.with_a_copy, are_copies
         )
     return result
 
@@ -729,10 +783,45 @@ def describe_cluster_shapes(
     return described
 
 
+def describe_pairs_sharing_few_runs(
+    read: Callable[[Sequence[CardKey]], Mapping[CardKey, str]], placed: Mapping[CardKey, Placement]
+) -> dict[str, object]:
+    """Over every cluster of `placed`, the pairs of its distinct full texts sharing only one or two
+    five-word runs (`debate_core.evidence.pair_shapes.pairs_sharing_few_runs`). Counts only.
+
+    `read` returns the stored bodies at the keys it is given; every full card's is read.
+    """
+    from debate_core.evidence.pair_shapes import FEW_RUNS, pairs_sharing_few_runs
+
+    full = [key for key in sorted(placed) if placed[key].completeness == "FULL"]
+    bodies, clusters = full_bodies(read(full), placed)
+    texts: defaultdict[str, dict[str, str]] = defaultdict(dict)
+    for fingerprint, body in bodies.items():
+        texts[clusters[fingerprint]][fingerprint] = body
+    together = [cluster for cluster in texts.values() if len(cluster) > 1]
+    totals = dict.fromkeys(range(1, FEW_RUNS + 1), 0)
+    pairs = with_one = not_overlapping = 0
+    for cluster in together:
+        counts = pairs_sharing_few_runs(cluster)
+        pairs += len(cluster) * (len(cluster) - 1) // 2
+        with_one += any(counts.by_runs.values())
+        not_overlapping += counts.not_overlapping
+        for runs, count in counts.by_runs.items():
+            totals[runs] += count
+    return {
+        "clusters_with_two_or_more_texts": len(together),
+        "pairs": pairs,
+        "pairs_sharing_only_few_runs": {str(runs): count for runs, count in totals.items()},
+        "of_them_not_overlapping": not_overlapping,
+        "clusters_with_a_pair_sharing_only_few_runs": with_one,
+    }
+
+
 def _divided_tally(
     parts: Sequence[tuple[set[str], set[str], bool]],
     findings: Sequence[CutFinding],
     with_a_copy: Sequence[CutFinding] = (),
+    are_copies: Callable[[str, str], bool] | None = None,
 ) -> dict[str, object]:
     from debate_core.evidence.cluster_diagnosis import explain_divided_part
 
@@ -743,7 +832,7 @@ def _divided_tally(
         if not has_full_card:
             reasons[("the part holds no full card", "", "", "", ())] += 1
             continue
-        why = explain_divided_part(part, rest, by_fingerprint, set_aside)
+        why = explain_divided_part(part, rest, by_fingerprint, set_aside, are_copies=are_copies)
         details = [
             "its containers are nested copies in several clusters" if why.containers_nested else "",
             "the container first by fingerprint is over the share"
@@ -782,37 +871,73 @@ def _divided_tally(
 def kept_apart(findings: Sequence[CutFinding], limit: str) -> list[tuple[str, str]]:
     """The cuts among `findings` that `limit` keeps apart, each with the body it is shown beside.
 
-    Pairs of exact fingerprints: the cut, and the smallest body confirmed to hold it (for a cut
-    lacking an end, the first by fingerprint of the bodies holding nine-tenths of it).
+    Pairs of exact fingerprints: the cut, and the smallest body confirmed to hold it that may
+    witness it (for a cut holding neither end, the first by fingerprint of the bodies holding
+    nine-tenths of it). `limit` is one of :data:`KEPT_APART_BY`.
     """
     from debate_core.evidence.cluster_diagnosis import CutOutcome
-    from debate_core.evidence.near_duplicates import MIN_CUT_SHARE
 
-    long_with_one_witness = (CutOutcome.LONG_NEVER_PAIRED, CutOutcome.LONG_SEVERAL_CLUSTERS)
-    chosen: dict[str, Callable[[CutFinding], bool]] = {
-        "witnesses-in-several-clusters": lambda f: f.outcome is CutOutcome.SEVERAL_CLUSTERS,
-        "under-the-minimum-share": lambda f: f.outcome is CutOutcome.UNDER_MIN_CUT_SHARE,
-        "ends-held-by-too-many-clusters": lambda f: f.outcome is CutOutcome.TOO_MANY_HOLDERS,
-        "lacking-an-end": lambda f: f.outcome is CutOutcome.ENDS_NOT_BOTH_INSIDE,
-        "long-cut-within-the-share": lambda f: (
-            f.outcome in long_with_one_witness
-            and f.has_one_witness
-            and f.share_of_smallest_container >= MIN_CUT_SHARE
-        ),
-        "long-cut-under-the-share": lambda f: (
-            f.outcome in long_with_one_witness
-            and f.has_one_witness
-            and f.share_of_smallest_container < MIN_CUT_SHARE
-        ),
-        "long-cut-in-several-clusters": lambda f: (
-            f.outcome is CutOutcome.LONG_SEVERAL_CLUSTERS and not f.has_one_witness
-        ),
-    }
+    outcome = {
+        "ends-held-by-too-many-clusters": CutOutcome.TOO_MANY_HOLDERS,
+        "held-with-another-passage": CutOutcome.HELD_WITH_ANOTHER_PASSAGE,
+        "own-cluster-and-another": CutOutcome.OWN_CLUSTER_AND_ANOTHER,
+        "witnesses-in-several-clusters": CutOutcome.SEVERAL_CLUSTERS,
+        "under-the-minimum-share": CutOutcome.UNDER_MIN_CUT_SHARE,
+        "unrelated-texts": CutOutcome.UNRELATED_TEXTS,
+        "within-the-rule": CutOutcome.WITHIN_THE_RULE,
+        "lacking-both-ends": CutOutcome.ENDS_NOT_INSIDE,
+    }[limit]
     return [
         (finding.fingerprint, finding.smallest_container or min(finding.containers))
         for finding in findings
-        if chosen[limit](finding)
+        if finding.outcome is outcome
     ]
+
+
+def joined_in_band(
+    bodies: Mapping[str, str], before: Mapping[str, str], after: Mapping[str, str], band: str
+) -> list[tuple[str, str]]:
+    """Cuts newly in the cluster of their smallest witness, with a share of it in `band`.
+
+    `bodies` maps each distinct full text's exact fingerprint to its body; `before` and `after` map
+    the same fingerprints to their clusters in two placements. Pairs of exact fingerprints: the cut,
+    and the smallest body witnessing it, which `before` had in another cluster and `after` has in
+    the cut's. `band` is one of :data:`JOINED_BANDS`' values. What the PM asked of the re-preview
+    after lowering `MIN_CUT_SHARE` (2026-10-18): the cuts that the lower share let in.
+    """
+    from debate_core.evidence.cluster_diagnosis import SHARE_BANDS
+    from debate_core.evidence.near_duplicates import CutIndex, witnesses
+
+    index = CutIndex(bodies)
+    found: list[tuple[str, str]] = []
+    for cut in index.fingerprints:
+        if not index.containers(cut):
+            continue
+        seen = witnesses(cut, after.__getitem__, index)
+        if seen is None or len(seen.clusters) != 1:
+            continue
+        witness = seen.smallest
+        if after[witness] != after[cut] or before[witness] == before[cut]:
+            continue
+        share = index.size(cut) / index.size(witness)
+        if next(name for below, name in SHARE_BANDS if share < below) == band:
+            found.append((cut, witness))
+    return found
+
+
+def kept_apart_kind(limit: str, cut: str, holder: str) -> str:
+    """What a kept-apart pair is tallied under: the limit, whether the cut is short or long, and its
+    share of the body it is shown beside, in the diagnosis's bands. Counts only, as every kind is.
+    The bands are what a limit is set by: `MIN_CUT_SHARE` is the end of the first, and the share
+    before the PM's ruling of 2026-10-18 the end of the second."""
+    from debate_core.evidence.cluster_diagnosis import SHARE_BANDS
+    from debate_core.evidence.near_duplicates import SHORT_BODY_SHINGLES, shingles
+
+    cut_set, holder_set = shingles(cut), shingles(holder)
+    size = "short cut" if len(cut_set) < SHORT_BODY_SHINGLES else "long cut"
+    share = len(cut_set) / len(holder_set) if holder_set else 0.0
+    band = next(name for below, name in SHARE_BANDS if share < below)
+    return f"{limit}, {size}, {band} of the body beside it"
 
 
 def cluster_pairs(
@@ -894,19 +1019,27 @@ class SampleTallies:
     decided: Counter[tuple[str, str, str]]
     """Pairs the rule decided, by kind, shape and verdict: never shown."""
     answered: Counter[tuple[str, str, str]]
-    """Pairs the person answered, by kind, shape and verdict."""
+    """Pairs the person answered that no rule decides, by kind, shape and verdict."""
     asked: int
-    """Pairs the rule left for the person, answered or not."""
+    """Pairs shown to the person, answered or not."""
     stopped: bool
     seconds_asking: float
+    answered_of_a_decided_shape: Counter[tuple[str, str, str, str]] = field(
+        default_factory=Counter[tuple[str, str, str, str]]
+    )
+    """Pairs of a shape the rule decides, shown because `--ask-shape` named it: by kind, shape,
+    the rule's verdict and the person's."""
+    asked_of_a_decided_shape: int = 0
+    """Of the pairs shown, those of a shape the rule decides."""
 
     def lines(self) -> list[str]:
         """The lines a sample ends with, after the line saying what was drawn."""
-        decided, answered = sum(self.decided.values()), sum(self.answered.values())
-        summary = (
-            f"  Decided by rule {decided} of {self.drawn}; asked {self.asked}; "
-            f"answered {answered} in {round(self.seconds_asking)} seconds"
-        )
+        decided = sum(self.decided.values())
+        answered = sum(self.answered.values()) + sum(self.answered_of_a_decided_shape.values())
+        summary = f"  Decided by rule {decided} of {self.drawn}; asked {self.asked}"
+        if self.asked_of_a_decided_shape:
+            summary += f", {self.asked_of_a_decided_shape} of them of a shape the rule decides"
+        summary += f"; answered {answered} in {round(self.seconds_asking)} seconds"
         summary += f", stopped with {self.asked - answered} not answered." if self.stopped else "."
         return [
             summary,
@@ -917,6 +1050,10 @@ class SampleTallies:
             *(
                 f"  asked: {kind}: {shape}: {verdict}: {count}"
                 for (kind, shape, verdict), count in sorted(self.answered.items())
+            ),
+            *(
+                f"  asked of a shape the rule decides: {kind}: {shape}: rule {rule}: person {person}: {count}"
+                for (kind, shape, rule, person), count in sorted(self.answered_of_a_decided_shape.items())
             ),
         ]
 
@@ -929,10 +1066,14 @@ def run_sample(
     change: str = "Newly in one cluster.",
     columns: int | None = None,
     clock: Callable[[], float] = time.monotonic,
+    ask_shapes: Collection[str] = (),
 ) -> SampleTallies:
     """Count the pairs a rule decides, show the person each of the rest, and return the tallies.
 
-    A decided pair is never shown. `columns` is the terminal's width, read from it when not given.
+    A decided pair is never shown, unless its shape is one of `ask_shapes` (values of
+    :class:`~debate_core.evidence.pair_shapes.PairShape`): then it is shown like any other, without
+    the rule's verdict, and the person's answer is tallied apart, beside the rule's. `columns` is
+    the terminal's width, read from it when not given.
     """
     classified = [
         _Classified(caselist, pair, left, right, *classify_pair(left, right))
@@ -940,17 +1081,18 @@ def run_sample(
     ]
     decided: Counter[tuple[str, str, str]] = Counter()
     for entry in classified:
-        if entry.verdict is not None:
+        if entry.verdict is not None and entry.shape not in ask_shapes:
             decided[(entry.pair.kind, entry.shape, entry.verdict)] += 1
-    to_ask = [entry for entry in classified if entry.verdict is None]
+    to_ask = [entry for entry in classified if entry.verdict is None or entry.shape in ask_shapes]
     answered: Counter[tuple[str, str, str]] = Counter()
+    answered_of_a_decided_shape: Counter[tuple[str, str, str, str]] = Counter()
     width = columns if columns is not None else shutil.get_terminal_size((100, 40)).columns
     stopped = False
     started = clock()
     for number, entry in enumerate(to_ask, start=1):
         show(CLEAR_TERMINAL)
         show(
-            f"Pair {number} of {len(to_ask)} to judge; the rule decided {len(classified) - len(to_ask)} "
+            f"Pair {number} of {len(to_ask)} to judge; the rule decided {sum(decided.values())} "
             f"of the {len(classified)} drawn. {entry.caselist}, {entry.pair.kind}. {change}\n"
         )
         show(render_pair(entry.left, entry.right, entry.shape, width))
@@ -960,7 +1102,10 @@ def run_sample(
         if key == STOP_KEY:
             stopped = True
             break
-        answered[(entry.pair.kind, entry.shape, VERDICTS[key])] += 1
+        if entry.verdict is None:
+            answered[(entry.pair.kind, entry.shape, VERDICTS[key])] += 1
+        else:
+            answered_of_a_decided_shape[(entry.pair.kind, entry.shape, entry.verdict, VERDICTS[key])] += 1
     seconds = clock() - started if to_ask else 0.0
     show(CLEAR_TERMINAL)
     return SampleTallies(
@@ -970,6 +1115,8 @@ def run_sample(
         asked=len(to_ask),
         stopped=stopped,
         seconds_asking=seconds,
+        answered_of_a_decided_shape=answered_of_a_decided_shape,
+        asked_of_a_decided_shape=sum(entry.verdict is not None for entry in to_ask),
     )
 
 
@@ -1190,22 +1337,53 @@ def render_pair(left: ParsedCard, right: ParsedCard, shape: str, columns: int) -
 # ------------------------------------------------------------------------------------------------
 
 
+def _saved(path: Path, caselist: str) -> dict[CardKey, Placement]:
+    """A placement `counts` saved (`--save-before`, `--save-after`): a file, or a directory of
+    `<caselist>.jsonl`."""
+    return read_placements(path / f"{caselist}.jsonl" if path.is_dir() else path)
+
+
 def _load(
     arguments: argparse.Namespace, store: LocalParsedStore, caselist: str
 ) -> tuple[str, dict[CardKey, Placement], dict[CardKey, Placement]]:
-    """The version directory read, and the placements before and after."""
+    """The version directory read, and the placements before and after.
+
+    *After* is `--after`'s saved placement when given, else the store's table when a *before* is
+    given, else the store's cards placed in memory by the checked-out rules. *Before* is
+    `--before`'s, or `--before-rules`', or else the store's table.
+    """
     version = current_version(store, caselist)
     held = read_placements(store.root / caselist / version / OCCURRENCES_NAME)
+    after = _saved(arguments.after, caselist) if arguments.after is not None else None
     if arguments.before is not None:
-        before: Path = arguments.before
-        return version, read_placements(before / f"{caselist}.jsonl" if before.is_dir() else before), held
+        return version, _saved(arguments.before, caselist), held if after is None else after
     if arguments.before_rules is not None:
         earlier = placements_under_rules(_module_at(arguments.before_rules), arguments.data_dir, caselist)
-        return version, earlier, held
+        return version, earlier, held if after is None else after
+    if after is not None:
+        return version, held, after
     from debate_core.evidence.fingerprints import FINGERPRINT_VERSION
 
     cards = read_cards(store, caselist, version, held)
     return version, held, placements_now(cards, FINGERPRINT_VERSION)
+
+
+def _one_placement(
+    arguments: argparse.Namespace, store: LocalParsedStore, caselist: str
+) -> tuple[str, dict[CardKey, Placement], dict[CardKey, Placement], str]:
+    """For a command that reads one placement: the version directory, the store's table, the
+    placement to read and what it is. `--after`'s saved placement, or with `--preview` the store's
+    cards placed in memory by the checked-out rules, or else the store's table."""
+    version = current_version(store, caselist)
+    held = read_placements(store.root / caselist / version / OCCURRENCES_NAME)
+    if getattr(arguments, "after", None) is not None:
+        return version, held, _saved(arguments.after, caselist), "a placement counts saved"
+    if getattr(arguments, "preview", False):
+        from debate_core.evidence.fingerprints import FINGERPRINT_VERSION
+
+        placed = placements_now(read_cards(store, caselist, version, held), FINGERPRINT_VERSION)
+        return version, held, placed, "the checked-out rules, in memory"
+    return version, held, held, "the store's table"
 
 
 def _counts(arguments: argparse.Namespace) -> int:
@@ -1218,34 +1396,30 @@ def _counts(arguments: argparse.Namespace) -> int:
         results[caselist] = {**change.as_json(), "seconds": round(time.monotonic() - started, 1)}
         if arguments.save_before is not None:
             write_placements(before, arguments.save_before / f"{caselist}.jsonl")
+        if arguments.save_after is not None:
+            write_placements(after, arguments.save_after / f"{caselist}.jsonl")
     print(json.dumps(results, indent=2, sort_keys=True))
     return 0
 
 
 def _diagnose(arguments: argparse.Namespace) -> int:
-    from debate_core.evidence.fingerprints import FINGERPRINT_VERSION
-
     store = LocalParsedStore(arguments.data_dir)
     results: dict[str, dict[str, object]] = {}
     for caselist in arguments.caselist:
         started = time.monotonic()
-        version = current_version(store, caselist)
-        held = read_placements(store.root / caselist / version / OCCURRENCES_NAME)
+        version, held, placed, what = _one_placement(arguments, store, caselist)
         before: dict[CardKey, Placement] | None = None
         if arguments.before is not None:
-            saved: Path = arguments.before
-            before = read_placements(saved / f"{caselist}.jsonl" if saved.is_dir() else saved)
+            before = _saved(arguments.before, caselist)
         elif arguments.before_rules is not None:
             before = placements_under_rules(_module_at(arguments.before_rules), arguments.data_dir, caselist)
+        elif placed is not held:
+            before = held
         result: dict[str, object] = {"version_directory": version}
-        placed = held
-        if arguments.preview:
-            placed = placements_now(read_cards(store, caselist, version, held), FINGERPRINT_VERSION)
-            before = held if before is None else before
         if not arguments.only_largest_clusters:
-            result.update(diagnose(read_bodies(store, caselist, version, held), placed, before=before))
+            result.update(diagnose(read_bodies(store, caselist, version, placed), placed, before=before))
         result.update(
-            placement="the checked-out rules, in memory" if arguments.preview else "the store's table",
+            placement=what,
             fingerprint_version=", ".join(sorted({p.fingerprint_version for p in placed.values()})),
             cards=len(placed),
             clusters=len({placement.cluster_id for placement in placed.values()}),
@@ -1270,8 +1444,7 @@ def _shapes(arguments: argparse.Namespace) -> int:
     results: dict[str, dict[str, object]] = {}
     for caselist in arguments.caselist:
         started = time.monotonic()
-        version = current_version(store, caselist)
-        placed = read_placements(store.root / caselist / version / OCCURRENCES_NAME)
+        version, _, placed, what = _one_placement(arguments, store, caselist)
         ranked = [name for name, _ in largest_clusters(placed, len(placed))]
         if arguments.cluster is not None:
             cluster_id = _resolve_cluster(placed, arguments.cluster, None)
@@ -1280,6 +1453,7 @@ def _shapes(arguments: argparse.Namespace) -> int:
             chosen = list(enumerate(ranked[: arguments.largest_clusters], start=1))
         results[caselist] = {
             "version_directory": version,
+            "placement": what,
             "fingerprint_version": ", ".join(sorted({p.fingerprint_version for p in placed.values()})),
             "cards": len(placed),
             "clusters": len({placement.cluster_id for placement in placed.values()}),
@@ -1289,8 +1463,15 @@ def _shapes(arguments: argparse.Namespace) -> int:
                 chosen,
                 show_cluster_ids=arguments.show_cluster_ids,
             ),
-            "seconds": round(time.monotonic() - started, 1),
         }
+        if arguments.every_cluster:
+            results[caselist]["pairs_sharing_only_few_runs_over_every_cluster"] = (
+                describe_pairs_sharing_few_runs(
+                    lambda keys: read_bodies(store, caselist, version, keys),  # noqa: B023 - called in this pass
+                    placed,
+                )
+            )
+        results[caselist]["seconds"] = round(time.monotonic() - started, 1)
     print(json.dumps(results, indent=2, sort_keys=True))
     return 0
 
@@ -1310,6 +1491,11 @@ def _report_tallies(arguments: argparse.Namespace, drew: str, tallies: SampleTal
         saved.parent.mkdir(parents=True, exist_ok=True)
         with saved.open("a", encoding="utf-8") as stream:
             stream.write("\n".join(lines) + "\n")
+
+
+def _ask_shapes(arguments: argparse.Namespace) -> frozenset[str]:
+    """The decided shapes `--ask-shape` names, as `PairShape` values."""
+    return frozenset(ASK_SHAPES[name] for name in arguments.ask_shape or ())
 
 
 def _resolve_cluster(placed: Mapping[CardKey, Placement], cluster: str | None, rank: int | None) -> str:
@@ -1332,8 +1518,7 @@ def _sample_cluster(arguments: argparse.Namespace, store: LocalParsedStore, seed
         raise SystemExit("--cluster and --largest read one caselist: give --caselist once")
     (caselist,) = arguments.caselist
     print(f"Reading {caselist} ...", flush=True)
-    version = current_version(store, caselist)
-    placed = read_placements(store.root / caselist / version / OCCURRENCES_NAME)
+    version, _, placed, _ = _one_placement(arguments, store, caselist)
     cluster_id = _resolve_cluster(placed, arguments.cluster, arguments.largest)
     keys = _members(placed)[cluster_id]
     rank = size_rank(placed, cluster_id)
@@ -1346,6 +1531,7 @@ def _sample_cluster(arguments: argparse.Namespace, store: LocalParsedStore, seed
         pairs,
         ask=read_key,
         show=lambda text: print(text, end="", flush=True),
+        ask_shapes=_ask_shapes(arguments),
         change="In one cluster now.",
     )
     texts = len({placed[key].exact_fingerprint for key in keys})
@@ -1366,15 +1552,15 @@ def _sample_kept_apart(arguments: argparse.Namespace, store: LocalParsedStore, s
     candidates: list[tuple[str, str, Joined]] = []
     for caselist in arguments.caselist:
         print(f"Reading {caselist} ...", flush=True)
-        version = current_version(store, caselist)
-        placed = read_placements(store.root / caselist / version / OCCURRENCES_NAME)
+        version, _, placed, _ = _one_placement(arguments, store, caselist)
         bodies, clusters = full_bodies(read_bodies(store, caselist, version, placed), placed)
         first: dict[str, CardKey] = {}
         for key in sorted(placed):
             if placed[key].completeness == "FULL":
                 first.setdefault(placed[key].exact_fingerprint, key)
         for cut, holder in kept_apart(diagnose_cuts(bodies, clusters).findings, arguments.kept_apart_by):
-            pair = Joined(kind=arguments.kept_apart_by, joiner=first[cut], host=first[holder])
+            kind = kept_apart_kind(arguments.kept_apart_by, bodies[cut], bodies[holder])
+            pair = Joined(kind=kind, joiner=first[cut], host=first[holder])
             candidates.append((caselist, version, pair))
     drawn = random.Random(seed).sample(candidates, min(arguments.count, len(candidates)))
     pairs: list[tuple[str, Joined, ParsedCard, ParsedCard]] = []
@@ -1385,11 +1571,54 @@ def _sample_kept_apart(arguments: argparse.Namespace, store: LocalParsedStore, s
         pairs,
         ask=read_key,
         show=lambda text: print(text, end="", flush=True),
+        ask_shapes=_ask_shapes(arguments),
         change="Apart now. B is the smallest body that holds A.",
     )
     _report_tallies(
         arguments,
         f"Drew {len(pairs)} of {len(candidates)} cuts kept apart by {arguments.kept_apart_by}, seed {seed}.",
+        tallies,
+    )
+    return 0
+
+
+def _sample_joined_in_band(arguments: argparse.Namespace, store: LocalParsedStore, seed: int) -> int:
+    """`sample --joined-in-band`: cuts newly with their smallest witness, by their share of it."""
+    band = JOINED_BANDS[arguments.joined_in_band]
+    candidates: list[tuple[str, str, Joined]] = []
+    for caselist in arguments.caselist:
+        print(f"Reading {caselist} ...", flush=True)
+        version, before, after = _load(arguments, store, caselist)
+        before, after = common_cards(before, after)
+        bodies, clusters = full_bodies(read_bodies(store, caselist, version, after), after)
+        earlier = {
+            placement.exact_fingerprint: placement.cluster_id
+            for placement in before.values()
+            if placement.completeness == "FULL"
+        }
+        first: dict[str, CardKey] = {}
+        for key in sorted(after):
+            if after[key].completeness == "FULL":
+                first.setdefault(after[key].exact_fingerprint, key)
+        for cut, witness in joined_in_band(bodies, earlier, clusters, band):
+            kind = kept_apart_kind("newly joined", bodies[cut], bodies[witness])
+            candidates.append((caselist, version, Joined(kind=kind, joiner=first[cut], host=first[witness])))
+    drawn = random.Random(seed).sample(candidates, min(arguments.count, len(candidates)))
+    pairs: list[tuple[str, Joined, ParsedCard, ParsedCard]] = []
+    for caselist, version, pair in drawn:
+        cards = read_cards(store, caselist, version, [pair.joiner, pair.host])
+        pairs.append((caselist, pair, cards[pair.joiner], cards[pair.host]))
+    tallies = run_sample(
+        pairs,
+        ask=read_key,
+        show=lambda text: print(text, end="", flush=True),
+        ask_shapes=_ask_shapes(arguments),
+        change="Newly in one cluster. B is the smallest body that holds A.",
+    )
+    _report_tallies(
+        arguments,
+        f"Drew {len(pairs)} of {len(candidates)} cuts newly joined {band} of their smallest witness, "
+        f"seed {seed}.",
         tallies,
     )
     return 0
@@ -1405,6 +1634,15 @@ def _sample(arguments: argparse.Namespace) -> int:
     seed = arguments.seed if arguments.seed is not None else random.SystemRandom().randrange(10**9)
     if arguments.least_alike and arguments.cluster is None and arguments.largest is None:
         raise SystemExit("--least-alike orders the pairs inside one cluster: give --cluster or --largest")
+    if arguments.joined_in_band is not None:
+        if arguments.divided or any(
+            option is not None for option in (arguments.cluster, arguments.largest, arguments.kept_apart_by)
+        ):
+            raise SystemExit(
+                "--joined-in-band draws newly joined cuts: "
+                "no --divided, --cluster, --largest or --kept-apart-by"
+            )
+        return _sample_joined_in_band(arguments, store, seed)
     inside_one_placement = (arguments.cluster, arguments.largest, arguments.kept_apart_by)
     if any(option is not None for option in inside_one_placement):
         if arguments.divided or arguments.before is not None or arguments.before_rules is not None:
@@ -1431,7 +1669,11 @@ def _sample(arguments: argparse.Namespace) -> int:
         pairs.append((caselist, pair, cards[pair.joiner], cards[pair.host]))
     change = "No longer in one cluster." if arguments.divided else "Newly in one cluster."
     tallies = run_sample(
-        pairs, ask=read_key, show=lambda text: print(text, end="", flush=True), change=change
+        pairs,
+        ask=read_key,
+        show=lambda text: print(text, end="", flush=True),
+        change=change,
+        ask_shapes=_ask_shapes(arguments),
     )
     print(json.dumps(counts, indent=2, sort_keys=True))
     what = "divided" if arguments.divided else "newly joined"
@@ -1460,6 +1702,22 @@ def main(argv: Sequence[str] | None = None) -> int:
         command.set_defaults(handler=handler)
         if name == "place":
             continue  # run by --before-rules in a child process; prints digests and ids
+        placement = command.add_mutually_exclusive_group()
+        placement.add_argument(
+            "--after",
+            type=Path,
+            metavar="PATH",
+            help="Read the placement `counts --save-after` saved (a <caselist>.jsonl, or the directory "
+            "holding them) instead of the store's table: the 'after' when comparing.",
+        )
+        if name in ("diagnose", "shapes"):
+            placement.add_argument(
+                "--preview",
+                action="store_true",
+                help="Read the placement the checked-out rules would make of the store's cards, placed "
+                "in memory, instead of the store's table. Takes about as long as a rebuild; nothing is "
+                "written.",
+            )
         if name == "shapes":
             which = command.add_mutually_exclusive_group()
             which.add_argument(
@@ -1472,13 +1730,19 @@ def main(argv: Sequence[str] | None = None) -> int:
             which.add_argument(
                 "--cluster",
                 metavar="ID",
-                help="Describe this cluster of the store's table instead (an id, or the start of one "
+                help="Describe this cluster of the placement read instead (an id, or the start of one "
                 "that no other id shares).",
             )
             command.add_argument(
                 "--show-cluster-ids",
                 action="store_true",
                 help="Print each described cluster's id, a digest, for `sample --cluster`.",
+            )
+            command.add_argument(
+                "--every-cluster",
+                action="store_true",
+                help="Also count, over every cluster, the pairs of distinct full texts sharing only one "
+                "or two five-word runs. Reads every full card's body.",
             )
             continue  # one placement, the store's: no before
         earlier = command.add_mutually_exclusive_group()
@@ -1498,6 +1762,13 @@ def main(argv: Sequence[str] | None = None) -> int:
                 type=Path,
                 metavar="DIRECTORY",
                 help="Also write the 'before' placements there as <caselist>.jsonl, to pass as --before.",
+            )
+            command.add_argument(
+                "--save-after",
+                type=Path,
+                metavar="DIRECTORY",
+                help="Also write the 'after' placements there as <caselist>.jsonl, to pass as --after. "
+                "Digests, indices and ids, no text.",
             )
         if name == "sample":
             command.add_argument(
@@ -1525,6 +1796,14 @@ def main(argv: Sequence[str] | None = None) -> int:
                 metavar="RANK",
                 help="The same, for the cluster with the RANK-th most cards: 1 is the largest.",
             )
+            command.add_argument(
+                "--joined-in-band",
+                choices=JOINED_BANDS,
+                metavar="BAND",
+                help="Draw cuts newly in the cluster of their smallest witness whose share of it is in "
+                f"this band, each beside that witness. One of: {', '.join(JOINED_BANDS)}. Reads every "
+                "body first.",
+            )
             inside.add_argument(
                 "--kept-apart-by",
                 choices=KEPT_APART_BY,
@@ -1543,13 +1822,16 @@ def main(argv: Sequence[str] | None = None) -> int:
                 action="store_true",
                 help="With --cluster or --largest: the pairs sharing the least text first, not at random.",
             )
-        if name == "diagnose":
             command.add_argument(
-                "--preview",
-                action="store_true",
-                help="Diagnose the placement the checked-out rules would make, not the store's table. "
-                "Takes about as long as a rebuild.",
+                "--ask-shape",
+                action="append",
+                choices=sorted(ASK_SHAPES),
+                metavar="SHAPE",
+                help="Show the person the pairs of this shape, which the rule decides, and tally their "
+                "answers apart from the rule's. Repeat for several. One of: "
+                f"{', '.join(sorted(ASK_SHAPES))}.",
             )
+        if name == "diagnose":
             command.add_argument(
                 "--largest-clusters",
                 type=int,

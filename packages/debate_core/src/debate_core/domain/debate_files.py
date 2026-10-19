@@ -46,7 +46,7 @@ from typing import Self
 from pydantic import Field, field_serializer, field_validator, model_validator
 
 from debate_core.domain.base import DomainModel, NonEmptyText, Sha256Hex
-from debate_core.domain.caselist.values import CaselistSlug, SnapshotDate, SourceOrigin
+from debate_core.domain.caselist.values import CaselistSlug, SnapshotDate, SourceFormat, SourceOrigin
 from debate_core.domain.enums import ProvenanceMode, VerificationStatus
 from debate_core.domain.style_profile import (
     ParagraphStyleMatch,
@@ -510,6 +510,13 @@ class ParseFailure(DomainModel):
     reason: ParseFailureReason = Field(description="Which refusal this was.")
     detail: str = Field(default="", description="What was seen, in terms of limits and formats only.")
     parser_version: NonEmptyText = Field(description="Version of the parser that refused the file.")
+    source_format: SourceFormat | None = Field(
+        default=None,
+        description=(
+            "The format the reader found the bytes to be, when it is not the one the source was "
+            "filed under; None otherwise."
+        ),
+    )
 
 
 # --------------------------------------------------------------------------------------------

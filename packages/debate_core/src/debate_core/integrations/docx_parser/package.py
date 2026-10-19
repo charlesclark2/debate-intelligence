@@ -228,6 +228,7 @@ class DocxPackage:
     entry_count: int
     uncompressed_bytes: int
     warnings: tuple[str, ...] = field(default=())
+    forbidden_characters_replaced: int = 0
 
     def style_name(self, style_id: str | None) -> str | None:
         """The `w:name` of a style as this document defines it, or None."""

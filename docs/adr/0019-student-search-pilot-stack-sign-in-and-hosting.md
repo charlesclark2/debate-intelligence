@@ -77,9 +77,11 @@ This record covers release v1.7 and its two environments. It decides the pilot o
 ### (a) Hosting: one function behind CloudFront, reachable only through it
 
 1. **Function.** Each environment has one Lambda function, `debate-<env>-tub`, built from a
-   container image in the ECR repository `debate-<env>-tub`. Its base image is
-   `public.ecr.aws/lambda/python:3.12` on Amazon Linux 2023, matching the repository's
-   `requires-python = ">=3.12,<3.13"`. Its settings:
+   container image in the ECR repository `debate-<env>-tub`. Its base image is AWS's
+   `public.ecr.aws/lambda/python` image, on Amazon Linux 2023, at the tag of the one Python that
+   `requires-python` in
+   [`packages/debate_core/pyproject.toml`](../../packages/debate_core/pyproject.toml) allows. The
+   image follows that declaration; it does not state a version of its own. Its settings:
    - **Architecture:** `arm64`, so the operator's Apple-silicon Mac builds the image without
      emulation.
    - **Memory:** 2,048 MB.
@@ -164,7 +166,7 @@ This record covers release v1.7 and its two environments. It decides the pilot o
 1. **Format.** One SQLite file with FTS5, one document per card cluster, built by `tub index build`
    (`v1-e39-t02`) from the operator's local parsed store. It is published by `tub index publish`
    under `reports/tub/search/<index id>/` with its JSON manifest, and `current.json` is written
-   last. The function's Python is 3.12.15 with **SQLite 3.40.0**, and `PRAGMA compile_options`
+   last. The base image's Python is built against **SQLite 3.40.0**, and `PRAGMA compile_options`
    lists `ENABLE_FTS5`. This was checked on 2026-10-19 by running the image itself (built
    2026-10-15) for both `linux/amd64` and `linux/arm64`. The operator's Python has SQLite 3.50.4.
    So the index uses no SQLite or FTS5 feature added after 3.40.0. The manifest records the
@@ -570,8 +572,9 @@ publish a real-corpus index to dev for validation, because only operators have a
 - **Two settings are runbook steps, not Terraform,** until the repository's AWS provider moves past
   5.100.0: the managed login branding and the audit group's deletion protection. Each has a
   read-back check in the runbook. Moving to provider 6 is a separate change, not part of the pilot.
-- **The index is pinned to SQLite 3.40.0's features** for as long as the function runs the
-  `python:3.12` image. A newer FTS5 option needs a different base image first.
+- **The index is pinned to SQLite 3.40.0's features** for as long as the function runs on that
+  base image. A newer FTS5 option needs a different base image first. A change to the declared
+  Python also changes the base image, so it re-checks the SQLite version and FTS5 as (c) 1 did.
 - **The kept pool binds V2.** It can never require email, sign in by email or be case-sensitive,
   and an immutable custom attribute can be written only at user creation. So V2's organization id
   cannot be an immutable attribute on accounts the pilot created. It belongs in the User record
@@ -699,7 +702,7 @@ forbids. The operator deploys, as for the website, until `v2-e10-t03`.
 | SES sandbox limits, per Region; production access by console or `put-account-details`; first response within 96 hours | [Request production access](https://docs.aws.amazon.com/ses/latest/dg/request-production-access.html) |
 | SES $0.10 per 1,000 emails | [Amazon SES pricing](https://aws.amazon.com/ses/pricing/) |
 | Container image 10 GB; `/tmp` 512 to 10,240 MB; 6 MB buffered response; 625 Mbps per environment, raisable outside a VPC; Web Functions' fixed 512 MB `/tmp` and 2 GB memory | [Lambda quotas](https://docs.aws.amazon.com/lambda/latest/dg/gettingstarted-limits.html) |
-| Python 3.12 runtime on Amazon Linux 2023, deprecated 2028-10-31 | [Lambda runtimes](https://docs.aws.amazon.com/lambda/latest/dg/lambda-runtimes.html) |
+| The Lambda runtime for the declared Python is on Amazon Linux 2023, deprecated 2028-10-31 | [Lambda runtimes](https://docs.aws.amazon.com/lambda/latest/dg/lambda-runtimes.html) |
 | Lambda request, compute and ephemeral-storage prices and free tier | [Lambda pricing](https://aws.amazon.com/lambda/pricing/) |
 | The Web Adapter's current version, extension install, function URL support, readiness check, invoke modes | [aws-lambda-web-adapter](https://github.com/awslabs/aws-lambda-web-adapter) |
 | Mangum's function URL support | [Mangum](https://github.com/Kludex/mangum) |
@@ -712,9 +715,10 @@ forbids. The operator deploys, as for the website, until `v2-e10-t03`.
 | Budgets without actions are free | [AWS Budgets pricing](https://aws.amazon.com/aws-cost-management/aws-budgets/pricing/) |
 
 Checked by running rather than reading, 2026-10-19:
-- **FTS5 in the base image.** `public.ecr.aws/lambda/python:3.12`, image created 2026-10-15, run on
-  `linux/amd64` and `linux/arm64`. It reports Python 3.12.15, SQLite 3.40.0 and `ENABLE_FTS5`, and
-  a `bm25()` and `highlight()` query over an FTS5 table succeeded.
+- **FTS5 in the base image.** The base image at the declared Python's tag, created 2026-10-15, run
+  on `linux/amd64` and `linux/arm64`. It reports SQLite 3.40.0 and `ENABLE_FTS5`, and a `bm25()`
+  and `highlight()` query over an FTS5 table succeeded. The exact tag and patch release are in the
+  [session report](../session-reports/v1-e39-t01-pilot-architecture-adr.md).
 - **The repository's AWS provider.** Its 5.100.0 schema has no managed login branding resource and
   no log group deletion-protection argument. It does have `user_pool_tier`,
   `email_mfa_configuration`, `deletion_protection`, the domain's `managed_login_version` and

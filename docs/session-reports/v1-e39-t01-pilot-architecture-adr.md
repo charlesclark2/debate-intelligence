@@ -210,6 +210,41 @@ None for this task. The operator steps the ADR implies are owned by later tasks:
   protection into Terraform. Question 8; no task exists.
 - The spec amendments in questions 2 to 6, which are the PM's to make.
 
+## CI fix after review
+
+PR #344's `test (5)` part failed one test:
+`tests/architecture/test_single_interpreter_source.py::test_no_python_version_is_named_outside_the_one_declaration`
+(1 failed, 1897 passed). The ADR named the supported Python in seven lines: the base image's tag,
+the `requires-python` value, the image's patch release, and the runtime row in the documentation
+table. That test allows the version in one place, `packages/debate_core/pyproject.toml`'s
+`requires-python`. The aggregate `ci` check failed only because `test (5)` did.
+
+**Why it reached CI.** Before the report I ran the docs checks and no tests, reading "no test suite
+at all" as excluding `tests/architecture` too. That suite reads every tracked file, docs included,
+and running it would have caught this. For a docs task it belongs with the docs checks.
+
+**The fix.** The ADR now points at the declaration and repeats no version:
+
+- the base image is AWS's Lambda Python image at the tag of the Python that `requires-python`
+  allows;
+- (c) 1 states the image's SQLite version without the patch release;
+- the consequence about the SQLite pin says a change to the declared Python re-checks SQLite and
+  FTS5;
+- the runtime row and the run-check line name "the declared Python".
+
+No decision changed. The exact facts the probe found are recorded here, where the test permits
+them: `public.ecr.aws/lambda/python:3.12`, image created 2026-10-15, Python 3.12.15, SQLite 3.40.0,
+`ENABLE_FTS5`, on `linux/amd64` and `linux/arm64`.
+
+**Run after the fix:**
+
+- `uv run pytest -q tests/architecture/test_single_interpreter_source.py` → red before the edit
+  (`1 failed, 22 passed`, naming the seven ADR lines), then `23 passed`.
+- `uv run pytest -q tests/architecture tests/specs` → `181 passed`.
+- `uv run scripts/check_links.py`, `uv run --frozen scripts/docs_index.py --check-descriptions`,
+  `uv run --frozen scripts/check_command_blocks.py --base origin/dev` and
+  `uv run scripts/validate_specs.py` → all pass.
+
 ## PM review
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in

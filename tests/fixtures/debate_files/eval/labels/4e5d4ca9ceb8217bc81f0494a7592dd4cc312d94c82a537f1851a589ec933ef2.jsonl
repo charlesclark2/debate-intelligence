@@ -1,4 +1,4 @@
-{"record":"file","digest":"4e5d4ca9ceb8217bc81f0494a7592dd4cc312d94c82a537f1851a589ec933ef2","paragraph_count":119,"blocks":[[0,19],[40,59]],"plan_id":"06a5e928bf1fc90f","status":"PRELABELED","prelabel_parser_version":"2026.10.12-docx-3","corrected_by":null,"reviewed_by":null,"rows_changed_from_prelabel":null,"span_sample_fraction":0.2}
+{"record":"file","digest":"4e5d4ca9ceb8217bc81f0494a7592dd4cc312d94c82a537f1851a589ec933ef2","paragraph_count":119,"blocks":[[0,19],[40,59]],"plan_id":"06a5e928bf1fc90f","status":"CORRECTED","prelabel_parser_version":"2026.10.12-docx-3","corrected_by":"coach","reviewed_by":null,"rows_changed_from_prelabel":1,"span_sample_fraction":0.2}
 {"record":"paragraph","index":0,"length":31,"text_digest":"7b4f242d11ca415cee12a65bcfc0e7039028fbcc9ba08d44d154212d6c4b0360","unit":"POCKET","card":null}
 {"record":"paragraph","index":1,"length":3,"text_digest":"9066247f0927793646741850536cde3fc425f0910b8f1d629094c4d959d06011","unit":"HAT","card":null}
 {"record":"paragraph","index":2,"length":9,"text_digest":"eab8a85bf111774a4117967179dcc2caefbaf4c866800cd4b120ac47271aa19e","unit":"BLOCK","card":null}
@@ -34,7 +34,7 @@
 {"record":"paragraph","index":52,"length":163,"text_digest":"1b15fe8132f41ec4812dbc3be0211b9885b957c651a3bbcf18482091c686d993","unit":"EVIDENCE","card":4}
 {"record":"paragraph","index":53,"length":697,"text_digest":"30d1852cda08fa124bf462051517d85c8ff2752edbe2c52650fbf024d9c77277","unit":"EVIDENCE","card":4}
 {"record":"paragraph","index":54,"length":543,"text_digest":"87b08a39a397f0398fd9ae206bb4ef4aac205f789b520bce03f20f78e8f26e61","unit":"EVIDENCE","card":4}
-{"record":"paragraph","index":55,"length":10,"text_digest":"da639a8fb145c433e2516c4afbb8c6aa5b1ff3766c0036568c53ceeb6d2ea70d","unit":"ANALYTIC","card":null}
+{"record":"paragraph","index":55,"length":10,"text_digest":"da639a8fb145c433e2516c4afbb8c6aa5b1ff3766c0036568c53ceeb6d2ea70d","unit":"BLOCK","card":null}
 {"record":"paragraph","index":56,"length":40,"text_digest":"482982c332aad1b532ff5587d63e403eeb8d70808e130fbbac017c8f51b1c5d6","unit":"ANALYTIC","card":null}
 {"record":"paragraph","index":57,"length":109,"text_digest":"1e1b0bcab96395dfda4cf0b2dd89897bbbfcb24bc11e8cf864a4a98aac48d5d9","unit":"TAG","card":null}
 {"record":"paragraph","index":58,"length":198,"text_digest":"be6ab88dbeded98f1456a7edc8d871a18932ac5205d449442e90d748f1adfd89","unit":"CITE","card":null}

@@ -1663,6 +1663,12 @@ clusters. Bodies with a container outside their cluster, by what keeps them out:
 (Summed over hsld26, hspf26, hspolicy26 and openev; t11 counted the too-many-clusters limit at
 5 of 81.)
 
+**The 132 long cuts within the rule and still apart**: 82 because another body of their cluster
+points elsewhere (a witness of its own in a third cluster, or too common), so the cluster joins
+nothing, which is the rule; 22 with nested copies as containers in several clusters; 9 whose
+container first by fingerprint is over the share; 19 of none of these, refused beside another join
+(the symmetric refusal) or placed by other rules.
+
 **Divided pairs against `v3`**: 418, 662, 567 and 41, 1,688 in all, each explained by a cut left out
 or a part joined only through a cut, except **9** (1, 6, 1 and 1) that the diagnosis reports as "no
 cut or copy links this part to the rest". On invented text, one shape gives exactly that: a long

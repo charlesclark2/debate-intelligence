@@ -1,0 +1,460 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "CardCompleteness": {
+      "description": "How much of a card the file actually contained.\n\nCaselist uploads are not team files. A disclosure may record only that a card exists —\nits tag, its cite, and the first and last few words of its body, which is all the open-source\nrules require. Such a card is *abbreviated*, not broken, and it is worth keeping: it is\nevidence that a team read something, and `v1-e31-t04` fingerprints it alongside full cards.\nPadding it out or dropping it would both be lies of a different kind.\n\nAbbreviated is a shape, not a mark. A whole card whose text leaves something out, with one\nellipsis or with ten, is `FULL`: the file holds the card (`v1-e31-t09`).",
+      "enum": [
+        "FULL",
+        "ABBREVIATED",
+        "CITE_ONLY"
+      ],
+      "title": "CardCompleteness",
+      "type": "string"
+    },
+    "FileProvenanceEntry": {
+      "additionalProperties": false,
+      "description": "One card of a built file: which occurrence it was copied from, and what it was.",
+      "properties": {
+        "position": {
+          "description": "The card's place in the file, from 1, in file order.",
+          "minimum": 1,
+          "title": "Position",
+          "type": "integer"
+        },
+        "recipe_path": {
+          "description": "Where the card is in the recipe: `structure[0].hats[1].blocks[0].items[2]`.",
+          "minLength": 1,
+          "title": "Recipe Path",
+          "type": "string"
+        },
+        "section_path": {
+          "description": "The pocket, hat and block headings above the card in the built file, outermost first.",
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Section Path",
+          "type": "array"
+        },
+        "fingerprint": {
+          "description": "The card's E31 exact fingerprint, as the recipe names it.",
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Fingerprint",
+          "type": "string"
+        },
+        "fingerprint_version": {
+          "description": "The fingerprint version of the occurrence row.",
+          "minLength": 1,
+          "title": "Fingerprint Version",
+          "type": "string"
+        },
+        "resolution": {
+          "description": "How the recipe chose the occurrence.",
+          "enum": [
+            "PINNED",
+            "AUTO"
+          ],
+          "title": "Resolution",
+          "type": "string"
+        },
+        "caselist": {
+          "description": "Caselist slug, or `openev` for a camp file.",
+          "minLength": 1,
+          "title": "Caselist",
+          "type": "string"
+        },
+        "camp": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Camp for an OpenEv file; None otherwise.",
+          "title": "Camp"
+        },
+        "snapshot": {
+          "description": "The first snapshot listing the occurrence.",
+          "minLength": 1,
+          "title": "Snapshot",
+          "type": "string"
+        },
+        "last_snapshot": {
+          "description": "The latest snapshot listing the occurrence.",
+          "minLength": 1,
+          "title": "Last Snapshot",
+          "type": "string"
+        },
+        "disclosure_digest": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "minLength": 64,
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Digest of `<caselist>/<path>` naming the disclosure; None for a camp file.",
+          "title": "Disclosure Digest"
+        },
+        "school": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "School, as disclosed; None with no disclosure on record.",
+          "title": "School"
+        },
+        "team_code": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Team code exactly as disclosed, never expanded to names; None with no disclosure.",
+          "title": "Team Code"
+        },
+        "side": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Side as disclosed; None with no disclosure.",
+          "title": "Side"
+        },
+        "tournament": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Tournament as disclosed; None when absent.",
+          "title": "Tournament"
+        },
+        "round": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Round exactly as disclosed; None when absent.",
+          "title": "Round"
+        },
+        "source_sha256": {
+          "description": "SHA-256 of the source file the card was copied from.",
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Source Sha256",
+          "type": "string"
+        },
+        "first_element_index": {
+          "description": "First paragraph of the card in its source.",
+          "minimum": 0,
+          "title": "First Element Index",
+          "type": "integer"
+        },
+        "last_element_index": {
+          "description": "Last paragraph of the card in its source.",
+          "minimum": 0,
+          "title": "Last Element Index",
+          "type": "integer"
+        },
+        "completeness": {
+          "$ref": "#/$defs/CardCompleteness",
+          "description": "FULL, ABBREVIATED or CITE_ONLY, as parsed."
+        },
+        "evidence_sha256": {
+          "description": "SHA-256 of the source card's evidence text, UTF-8.",
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Evidence Sha256",
+          "type": "string"
+        },
+        "cite_sha256": {
+          "description": "SHA-256 of the source card's full cite, UTF-8.",
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Cite Sha256",
+          "type": "string"
+        },
+        "formatting_sha256": {
+          "description": "SHA-256 of the source card's formatting (emphasis coverage and font sizes).",
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Formatting Sha256",
+          "type": "string"
+        },
+        "tag_overridden": {
+          "description": "Whether the coach's tag replaced the card's own.",
+          "title": "Tag Overridden",
+          "type": "boolean"
+        },
+        "tag_authored_by": {
+          "anyOf": [
+            {
+              "const": "COACH",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "COACH when the tag in the file is the coach's; None when it is the card's.",
+          "title": "Tag Authored By"
+        },
+        "original_tag_sha256": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "minLength": 64,
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "SHA-256 of the card's own tag when the coach replaced it; None otherwise or untagged.",
+          "title": "Original Tag Sha256"
+        },
+        "provenance_line": {
+          "description": "The line written below the cite (data-use policy, Attribution rule 2).",
+          "minLength": 1,
+          "title": "Provenance Line",
+          "type": "string"
+        },
+        "forbidden_characters_replaced": {
+          "description": "Characters XML 1.0 forbids in the copied markup, each written as U+FFFD.",
+          "minimum": 0,
+          "title": "Forbidden Characters Replaced",
+          "type": "integer"
+        },
+        "warnings": {
+          "default": [],
+          "description": "What the writer could not carry over as it was: a style it does not know.",
+          "items": {
+            "minLength": 1,
+            "type": "string"
+          },
+          "title": "Warnings",
+          "type": "array"
+        },
+        "provenance_mode": {
+          "const": "FILE_IMPORT",
+          "default": "FILE_IMPORT",
+          "description": "Always FILE_IMPORT.",
+          "title": "Provenance Mode",
+          "type": "string"
+        },
+        "verification_status": {
+          "const": "UNVERIFIED",
+          "default": "UNVERIFIED",
+          "description": "Always UNVERIFIED: a disclosed card has not been verified by the platform.",
+          "title": "Verification Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "position",
+        "recipe_path",
+        "section_path",
+        "fingerprint",
+        "fingerprint_version",
+        "resolution",
+        "caselist",
+        "snapshot",
+        "last_snapshot",
+        "source_sha256",
+        "first_element_index",
+        "last_element_index",
+        "completeness",
+        "evidence_sha256",
+        "cite_sha256",
+        "formatting_sha256",
+        "tag_overridden",
+        "provenance_line",
+        "forbidden_characters_replaced"
+      ],
+      "title": "FileProvenanceEntry",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "`<file>.provenance.json`: what a built file is, what built it, and one entry per card.",
+  "properties": {
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "description": "The sidecar's shape: 1.",
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "title": {
+      "description": "The recipe's title.",
+      "minLength": 1,
+      "title": "Title",
+      "type": "string"
+    },
+    "topic": {
+      "description": "The recipe's topic id.",
+      "minLength": 1,
+      "title": "Topic",
+      "type": "string"
+    },
+    "format": {
+      "description": "POLICY, LD or PF.",
+      "minLength": 1,
+      "title": "Format",
+      "type": "string"
+    },
+    "caselist": {
+      "description": "The recipe's caselist.",
+      "minLength": 1,
+      "title": "Caselist",
+      "type": "string"
+    },
+    "position": {
+      "description": "The recipe's position id.",
+      "minLength": 1,
+      "title": "Position",
+      "type": "string"
+    },
+    "side": {
+      "description": "The side the file is for.",
+      "minLength": 1,
+      "title": "Side",
+      "type": "string"
+    },
+    "recipe_hash": {
+      "description": "The recipe's canonical hash (v1-e33-t01).",
+      "maxLength": 64,
+      "minLength": 64,
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Recipe Hash",
+      "type": "string"
+    },
+    "builder_version": {
+      "description": "Version of the writer that built the file.",
+      "minLength": 1,
+      "title": "Builder Version",
+      "type": "string"
+    },
+    "parser_version": {
+      "description": "Version of the parser that located the cards.",
+      "minLength": 1,
+      "title": "Parser Version",
+      "type": "string"
+    },
+    "style_profile_version": {
+      "description": "Version of the style profile it used.",
+      "minLength": 1,
+      "title": "Style Profile Version",
+      "type": "string"
+    },
+    "fingerprint_version": {
+      "description": "The recipe's fingerprint version.",
+      "minLength": 1,
+      "title": "Fingerprint Version",
+      "type": "string"
+    },
+    "built_at": {
+      "description": "When the build was requested, from the build request; UTC.",
+      "title": "Built At",
+      "type": "string"
+    },
+    "docx_sha256": {
+      "description": "SHA-256 of the built `.docx` this sidecar describes.",
+      "maxLength": 64,
+      "minLength": 64,
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Docx Sha256",
+      "type": "string"
+    },
+    "cards": {
+      "description": "One entry per card, in file order.",
+      "items": {
+        "$ref": "#/$defs/FileProvenanceEntry"
+      },
+      "title": "Cards",
+      "type": "array"
+    },
+    "warnings": {
+      "default": [],
+      "description": "Every card's warnings, prefixed.",
+      "items": {
+        "minLength": 1,
+        "type": "string"
+      },
+      "title": "Warnings",
+      "type": "array"
+    },
+    "provenance_mode": {
+      "const": "FILE_IMPORT",
+      "default": "FILE_IMPORT",
+      "description": "Always FILE_IMPORT: every card is disclosed.",
+      "title": "Provenance Mode",
+      "type": "string"
+    }
+  },
+  "required": [
+    "title",
+    "topic",
+    "format",
+    "caselist",
+    "position",
+    "side",
+    "recipe_hash",
+    "builder_version",
+    "parser_version",
+    "style_profile_version",
+    "fingerprint_version",
+    "built_at",
+    "docx_sha256",
+    "cards"
+  ],
+  "title": "FileProvenanceManifest",
+  "type": "object"
+}

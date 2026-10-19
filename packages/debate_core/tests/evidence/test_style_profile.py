@@ -542,6 +542,38 @@ def test_a_writer_definition_with_an_unknown_style_type_is_refused() -> None:
         load_style_profile_from_text(yaml.safe_dump(document))
 
 
+def test_a_writer_definition_not_measured_must_say_so_in_its_notes() -> None:
+    """The Word defaults the lossless writer needs are marked as the PM asked (2026-10-19)."""
+    document = _profile_document()
+    definitions: list[dict[str, Any]] = document["writer_style_definitions"]
+    unmeasured = next(definition for definition in definitions if definition.get("measured") is False)
+    unmeasured["notes"] = "a value someone chose"
+    with pytest.raises(StyleProfileError, match="Word default, not measured"):
+        load_style_profile_from_text(yaml.safe_dump(document))
+
+
+def test_the_writer_document_defaults_are_never_called_measured() -> None:
+    document = _profile_document()
+    document["writer_document_defaults"]["measured"] = True
+    with pytest.raises(StyleProfileError, match="Word's, not measured"):
+        load_style_profile_from_text(yaml.safe_dump(document))
+
+
+def test_the_measured_writer_definitions_are_the_surveys_nine(profile: StyleProfile) -> None:
+    measured = [definition.style_id for definition in profile.writer_style_definitions if definition.measured]
+    assert measured == [
+        "Heading1",
+        "Heading2",
+        "Heading3",
+        "Heading4",
+        "Analytic",
+        "Undertag",
+        "Style13ptBold",
+        "StyleUnderline",
+        "Emphasis",
+    ]
+
+
 def test_the_profile_is_frozen_like_every_other_domain_model(profile: StyleProfile) -> None:
     from pydantic import ValidationError
 

@@ -197,7 +197,14 @@ def build_styles_xml(document: FixtureDocument, profile: StyleProfile) -> str:
         '<w:name w:val="Default Paragraph Font"/></w:style>',
     ]
     if document.define_verbatim_styles:
-        styles.extend(_definition_to_xml(definition) for definition in profile.writer_style_definitions)
+        # The measured Verbatim definitions only. The Word defaults the profile also lists for the
+        # lossless writer (`v1-e33-t02`) include the two written above, and none of them was in
+        # the style table these fixtures were generated with.
+        styles.extend(
+            _definition_to_xml(definition)
+            for definition in profile.writer_style_definitions
+            if definition.measured
+        )
     for style_id, style_type, name, based_on in document.extra_style_definitions:
         based = f"<w:basedOn w:val={quoteattr(based_on)}/>" if based_on else ""
         styles.append(

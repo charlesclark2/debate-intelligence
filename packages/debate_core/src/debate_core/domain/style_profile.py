@@ -73,7 +73,9 @@ __all__ = [
     "StructuralUnit",
     "StyleMatchSource",
     "StyleProfile",
+    "UNMEASURED_MARKER",
     "UnderlineEncodingRule",
+    "WriterDocumentDefaults",
     "WriterStyleDefinition",
     "normalize_style_key",
     "strip_deduplication_suffix",
@@ -404,10 +406,16 @@ class CiteConvention(DomainModel):
 class WriterStyleDefinition(DomainModel):
     """One style definition a writer puts in `word/styles.xml`.
 
-    These are measured from the corpus, not invented: every value is the one most files carry.
-    A writer that emits them produces a file Verbatim's macros key on and Word renders the way a
-    debater expects — which is the difference between a real debate file and one that merely
-    parses.
+    The Verbatim definitions are measured from the corpus, not invented: every value is the one
+    most files carry. A writer that emits them produces a file Verbatim's macros key on and Word
+    renders the way a debater expects — which is the difference between a real debate file and
+    one that merely parses.
+
+    A handful are not measured: the two Word defaults every style table has (`Normal`,
+    `Default Paragraph Font`), Word's `Hyperlink`, and the linked character styles of the
+    Verbatim paragraph styles. The lossless writer (`v1-e33-t02`) needs them because source runs
+    carry them, and the survey never measured them. Each says so in `measured` and in its notes
+    (PM ruling, 2026-10-19).
     """
 
     style_id: NonEmptyText = Field(description="The `w:styleId` to write.")
@@ -427,6 +435,13 @@ class WriterStyleDefinition(DomainModel):
     outline_level: int | None = Field(default=None, ge=0, le=8, description="`w:outlineLvl`.")
     page_break_before: bool = Field(default=False, description="`w:pageBreakBefore`.")
     keep_with_next: bool = Field(default=False, description="`w:keepNext`.")
+    is_default: bool = Field(
+        default=False, description='`w:default="1"`: the default style of its type, as `Normal` is.'
+    )
+    measured: bool = Field(
+        default=True,
+        description="False for a Word default the corpus survey did not measure; its notes say so.",
+    )
     notes: str = Field(default="", description="What the survey measured for this style.")
 
     @model_validator(mode="after")
@@ -436,6 +451,34 @@ class WriterStyleDefinition(DomainModel):
         if self.color is not None and not re.fullmatch(r"[0-9A-Fa-f]{6}", self.color):
             raise ValueError(f"color must be six hex digits, got {self.color!r}")
         return self
+
+
+class WriterDocumentDefaults(DomainModel):
+    """`w:docDefaults`: the run formatting every style in a written file inherits.
+
+    Not measured (PM ruling, 2026-10-19): Word writes these into every new document, and the
+    corpus survey read style definitions, not document defaults. `half_points` agrees with the
+    profile's measured body size (:attr:`ShrinkRule.body_half_points`).
+    """
+
+    font: NonEmptyText = Field(description="`w:rFonts` ascii, hAnsi and cs.")
+    half_points: int = Field(gt=0, description="`w:sz` and `w:szCs`, in half-points.")
+    measured: bool = Field(default=False, description="Always False here: a Word default, not measured.")
+    notes: str = Field(default="", description="Where the values come from.")
+
+    @model_validator(mode="after")
+    def _check_marker(self) -> WriterDocumentDefaults:
+        return self
+
+
+#: What the notes of a writer value the survey did not measure must say (PM ruling, 2026-10-19).
+UNMEASURED_MARKER = "Word default, not measured"
+
+
+def _require_unmeasured_marker(measured: bool, notes: str, *, label: str) -> None:
+    """A value the survey did not measure says so in its notes, in the words the PM asked for."""
+    if not measured and UNMEASURED_MARKER not in notes:
+        raise ValueError(f"{label} is not measured, so its notes must say {UNMEASURED_MARKER!r}")
 
 
 # --------------------------------------------------------------------------------------------
@@ -508,6 +551,9 @@ class StyleProfile(DomainModel):
     cite: CiteConvention = Field(description="How cite lines and short cites are recognised.")
     writer_style_definitions: tuple[WriterStyleDefinition, ...] = Field(
         description="The style definitions a writer emits."
+    )
+    writer_document_defaults: WriterDocumentDefaults = Field(
+        description="The document defaults a writer emits; Word's, not measured."
     )
     cardmirror_nodes: tuple[CardMirrorNodeMapping, ...] = Field(
         description="Every CardMirror node, mapped to a unit or explicitly not."

@@ -40,10 +40,11 @@ spec:
     files are t04, CLI is t03, publishing is t05.
   priority: 1
   constraints:
-    # debate_core.evidence (the Word-default writer definitions in style_profiles/verbatim.yaml, PM ruling
-    # 2026-10-19) and pyproject.toml (the new adapter added to the import contracts' adapter lists) are
-    # added by the implementing session, pending PM review.
-    packages: [debate_core.integrations, debate_core.domain, debate_core.application, debate_core.evidence, scripts, tests/fixtures, pyproject.toml]
+    # debate_core.evidence (the Word-default writer definitions in style_profiles/verbatim.yaml),
+    # debate_core.testing (file_builder, the synthetic world the tests and the fixture script share) and
+    # pyproject.toml (the new adapter in the import contracts' adapter lists): added by the implementing
+    # session, each agreed by the PM on 2026-10-19.
+    packages: [debate_core.integrations, debate_core.domain, debate_core.application, debate_core.evidence, debate_core.testing, scripts, tests/fixtures, pyproject.toml]
     forbidden:
       - Any writer input that carries evidence or cite text as a string (runs come only from source bytes)
       - Model calls anywhere in the writer

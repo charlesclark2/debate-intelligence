@@ -1276,3 +1276,191 @@ It asks a person about the rest. Run again on the join sample above (the same se
 
 The rule agrees with every verdict given by eye. The pair called different shares no text, and the
 two called unsure are each wholly inside the other body.
+
+## The remaining cite shapes (`v1-e31-t19`)
+
+`v1-e31-t12` left five cite shapes counted and unsettled, and the operator's check by eye on
+2026-10-16 added two. Each was counted on 2026-10-18 in the dev data directory, read-only, as t12
+counted: the 11,148 parsed DOCX sources of `2026.10.12-docx-3` (233,643 cards) re-parsed in place
+from their blobs by scratch scripts outside the repository and the data directory. Counts,
+lengths, formatting flags and rule ids only. Every total below over all cards equals the stored
+directory's figures of [The re-parse, 2026-10-16](#the-re-parse-2026-10-16).
+
+**Status: the rules are in parser `2026.10.18-docx-5`; the store has not been re-parsed with it.**
+The "after" figures are what that parser produces over the same sources, measured side by side
+with the stored cards. The start commit's parser reproduces the stored cards exactly (openev,
+8,033 of 8,033 identical in every field), so the stored directory is the "before".
+
+### The counts, and what was done
+
+| | Shape | In the corpus | Ruling and result |
+|---|---|---|---|
+| 1 | A cite behind a first name or a title | 8,250 tagged cards with no cite have a name and a year starting within the first 40 characters of the line under the tag, not at its front: 6,204 read as nothing, 2,046 as the body's first paragraph | Built: where a cite stands, behind one to three capitalised words or a title, the name and year (or the line's opening) in bold, or everything after the year in one bracket |
+| 2 | A paragraph style that maps to no unit | 1,355 paragraphs a cite rule would read but for their style (1,255 by an alias, 48 by Word's de-duplication, 46 by `basedOn`, 6 in `Normal` by name) | Built, broad (PM, 2026-10-18): the cite and body rules see through such a style; the heading rules never do |
+| 3 | A highlighted cite | 645 highlighted paragraphs over 400 characters with a cite's shape: 599 open in bold with a name and a year, 38 carry the cite style on a name and year at the head past 1,000 characters, 8 hold everything after the year in one bracket | Built: where a cite stands and a body follows |
+| 4 | `v1-e31-t09`'s cite-style hold | 33 guessed cites carry a cite-style run; 26 of them, all over 2,000 characters, have no styled name and year at the head | Built as ruled in t12's review: the style holds a guess only when it marks a name and a year at its head |
+| 5 | Short plain lines inside a body read as nothing | 91,345 short unformatted lines read as nothing; 43,488 stand between two body paragraphs of one card | Measured only (PM: left here, for the task merged with `v1-e31-t23`). Below |
+| 6 | A short cite written `Okonkwo ‘26` | 296 short author-and-year lines hold U+2018, the left quote Word types before a two-digit year; the profile's patterns accept `'` and `’` only | Built: a left quote before a digit is read as `’` for matching only. Text, offsets and the profile are unchanged |
+| 7 | Two cards with no tag in one checked file | Cards 2 and 3 of the file t12's step 6 opened for the bracketed cite line: above each cite, a short underlined line at reading size, read as body | Waiting on the operator's check in Word; not counted |
+
+### 1. A cite behind a first name or a title
+
+What sits directly under the tag of a tagged card with no cite (28,054 cards):
+
+| Under the tag | Read as nothing | Read as body |
+|---|---|---|
+| No name and year | 8,178 | 6,392 |
+| A name and year within 40 characters, not at the front | 6,204 | 2,046 |
+| A name and year past 40 characters | 2,221 | 1,872 |
+| A name and year at the front | 143 | 860 |
+| A line in a paragraph style that maps to no unit | 129 | |
+
+Of the 8,250 with a name and a year a few words in, 5,817 have one to three capitalised words or
+initials before it, 308 a title, and the rest a phrase. The rule takes 4,864 of them in the counts:
+3,949 read as nothing (64%) and 915 read as body (45%); 4,811 of the 4,864 name a credential or
+hold a link. The same shape fits 437 paragraphs that do not stand where a cite stands, and the rule
+leaves them. Over every place a cite stands, the shipped rule reads 5,189 paragraphs.
+
+### 2. A paragraph style that maps to no unit
+
+16,372 paragraphs carry a paragraph style the profile maps to `OTHER`. In 955 of the 1,355 that a
+cite rule would read, the tag above had lost its card and the body below, in the same style, was
+nothing too; 711 sit in files where half or more of the paragraphs carry such a style. Side by
+side over the 492 files that hold one:
+
+| Over the 492 files | Cards | With a cite | Tagged, with a cite and a body | `CITE_ONLY` | Tagged, no cite | No tag | Paragraphs to a cite / to body |
+|---|---|---|---|---|---|---|---|
+| Before | 8,113 | 6,929 | 6,527 | 196 | 1,184 | 246 | |
+| The cite rules alone | 9,171 | 8,061 | 6,666 | 1,185 | 1,110 | 291 | 1,274 / 81 |
+| The cite and body rules (built) | 9,598 | 8,149 | 7,687 | 111 | 1,449 | 398 | 1,268 / 12,744 |
+
+The cite rules alone would have left 989 more cards `CITE_ONLY` whose body is in the file. In the
+shipped parser, 1,339 cites and 12,852 body paragraphs are read through such a style.
+
+### 3. A highlighted cite
+
+| The 645 | Where a cite stands, a body below | Elsewhere |
+|---|---|---|
+| Bold opening | 466 | 133 |
+| Styled name and year at the head | 14 | 24 |
+| One bracket | 8 | 0 |
+
+In 388 of the 488 the rule takes, under a tenth of the characters are highlighted, most often the
+name at the head. The shipped rule reads 493.
+
+### 4. The cite-style hold
+
+Over the 15 files that hold such a guess, the change re-reads 25 paragraphs of over 2,000
+characters as body: 23 cards go from `CITE_ONLY` to `FULL` (22 of them tagged), one more card
+changes and one range becomes two. No paragraph of 2,000 characters or fewer moves. Seven guesses
+are still held, six with the style on a name and year at the head. `v1-e31-t09`'s 300-word
+fixture, whose style marks a name in its middle, is body now.
+
+### 5. Short plain lines read as nothing, measured for a later task
+
+The PM's ruling of 2026-10-18 leaves these as they are: the lines between two body paragraphs are
+the population the task merged with `v1-e31-t23` (in-round markers) rules on. This is the
+measurement it starts from. 91,345 lines that the classifier reads as nothing, not table cells or
+text boxes:
+
+| Where | Lines |
+|---|---|
+| Between two body paragraphs of one card | 43,488, in 15,796 cards |
+| Before a body (under a tag or a cite) | 30,429 |
+| After a body, before something else | 6,467 |
+| Elsewhere | 10,961 |
+
+The 43,488 between two body paragraphs:
+
+| Length | No sentence end | Ends a sentence | In capitals |
+|---|---|---|---|
+| 40 characters or fewer | 24,207 | 1,192 | 11,799 |
+| 41 to 100 | 4,909 | 3,421 | 154 |
+| 101 to 200 | 1,300 | 5,482 | 4 |
+| 201 to 400 | 1,162 | 0 | 0 |
+| 401 to 1,000 | 1,457 | 0 | 0 |
+| 1,001 to 4,000 | 353 | 0 | 0 |
+| Over 4,000 | 5 | 0 | 0 |
+| **All** | 33,393 | 10,095 | 11,957 |
+
+A line of 200 characters or more that ends a sentence is prose to the classifier, so none of those
+is here; the longer lines are ones that do not end a sentence.
+
+### 6. A short cite written with a left quote
+
+`Okonkwo ‘26`: Word turns an apostrophe typed after a space into U+2018, the left quote. The lines
+written with `’` were read already. From `2026.10.18-docx-5` a left quote directly before a digit
+is read as `’` wherever the profile's cite patterns are matched, and the short cite is taken from
+the cite as written. Over the same sources **9,602 cards hold a short cite written with a left
+quote, none before.** The estimate before the build, 415 more short cites, covered only the 131
+files with such a line alone on its line; most of the 9,602 are cites that open `Okonkwo ‘26 [...]`.
+It also reads 106 such lines that a bold-heading guess had taken for tags, and the tags above them
+come back from analytics.
+
+### The coach's sample
+
+`scripts/sample_cite_shapes.py`, run by the operator on 2026-10-18 with seed 20261018: 70 items
+from the 11,148 sources, drawn blind across the rules and sides, one key each, 710 seconds
+answering. The parser was this task's, with the three new rules behind a flag only the sampler
+switched on.
+
+| Rule | Side | In the corpus | Asked | Yes | No | Unsure | Question |
+|---|---|---|---|---|---|---|---|
+| Behind a first name or a title | Taken, read as nothing before | 4,176 | 8 | 8 | 0 | 0 | The card's cite? |
+| | Taken, read as body before | 1,013 | 2 | 2 | 0 | 0 | The card's cite? |
+| | Left, read as nothing | 2,186 | 7 | 4 | 0 | 3 | The card's cite? |
+| | Left, read as body | 1,110 | 3 | 3 | 0 | 0 | The card's cite? |
+| A style that maps to no unit | Taken as a cite | 1,339 | 6 | 6 | 0 | 0 | The card's cite? |
+| | Taken as body | 12,852 | 8 | 8 | 0 | 0 | The card's text? |
+| | Left as nothing | 2,162 | 6 | 2 | 3 | 1 | A cite or text? |
+| A highlighted cite | Taken | 493 | 10 | 10 | 0 | 0 | The card's cite? |
+| | Left | 221 | 10 | 10 | 0 | 0 | The card's cite? |
+| The cite-style hold | Re-read as body | 25 | 7 | 0 | 7 | 0 | The card's cite? |
+| | Still held as a cite | 7 | 3 | 3 | 0 | 0 | The card's cite? |
+
+**No rule took a paragraph wrongly:** 0 of 10, 0 of 14, 0 of 10 and 0 of 7. With ten a side, that
+tells "mostly right" from "often wrong" and no finer. The left sides of the first and third rules
+are cites too (7 of 10 and 10 of 10): those rules are cautious, and what they leave is a follow-up.
+
+### Before and after, over the same sources
+
+| Caselist | Cards before | After | `CITE_ONLY` before | After | No tag before | After | With a cite before | After | Tagged, no cite before | After | With a short cite before | After |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| hsld26 | 74,725 | 75,336 | 707 | 676 | 1,495 | 1,563 | 68,921 | 70,914 | 5,804 | 4,422 | 48,313 | 50,458 |
+| hspf26 | 49,204 | 50,246 | 408 | 390 | 2,682 | 3,038 | 35,092 | 41,696 | 14,112 | 8,550 | 31,193 | 35,638 |
+| hspolicy26 | 101,681 | 101,826 | 1,251 | 1,265 | 1,072 | 1,093 | 94,309 | 95,713 | 7,372 | 6,113 | 56,818 | 61,162 |
+| openev | 8,033 | 8,049 | 78 | 78 | 73 | 75 | 7,267 | 7,590 | 766 | 459 | 4,203 | 4,468 |
+| **Total** | 233,643 | 235,457 | 2,444 | 2,409 | 5,322 | 5,769 | 205,589 | 215,913 | 28,054 | 19,544 | 140,527 | 151,726 |
+
+* **No card is `ABBREVIATED`,** before or after.
+* **218,218 stored cards are identical in every field** but provenance's versions.
+* **Among cards that keep their range,** 8,594 gain a cite and one loses its cite (a held guess the
+  hold now reads as the card's text); 9,547 gain a short cite; 16 have a different tag (a short
+  cite with a left quote no longer taken for the tag); 27 differ only in their section path.
+* **Completeness, among cards that keep their range:** 25 go from `CITE_ONLY` to `FULL` (23 by the
+  hold) and 28 from `FULL` to `CITE_ONLY`. Of the 28, 10 are a cite behind a first name that had
+  been the card's only "body" paragraph. The other 18 carry no new rule id; by their rule ids they
+  are lines read by the existing cite-line rule, which fits a line opening with a short cite
+  written with a left quote that had been read as body. That is a reading of rule ids, not a check
+  of each card.
+* **548 stored ranges are gone and 2,362 are new:** mostly tags restored with their cards in files
+  that write their cites and bodies in an unmapped style, and cards behind cites that are read now.
+  500 of the new have no tag.
+
+### The labelled evaluation
+
+The six person-corrected files of the PR subset (410 labelled rows), `run_parser_eval.py --tier
+pr-subset`, both parsers over the same files. The full tier's labels are not corrected yet.
+
+| Parser | Cite precision | Cite recall | Tag precision | Tag recall | Evidence precision | Evidence recall | Card boundaries |
+|---|---|---|---|---|---|---|---|
+| `2026.10.12-docx-3` | 0.957 (22 right, 1 wrong) | 0.500 (22 of 44) | 0.949 | 0.771 | 0.943 | 0.968 | 22 of 23 |
+| `2026.10.18-docx-5` | 0.969 (31 right, 1 wrong) | 0.705 (31 of 44) | 0.949 | 0.771 | 0.943 | 0.968 | 22 of 23 |
+
+### What this raised and did not change
+
+* **What the cautious rules leave.** 2,186 lines behind a first name read as nothing and 221
+  highlighted cite shapes elsewhere than under a tag with a body below are left; the sample found
+  cites among both. Widening either needs its own counts and its own sample.
+* **19,544 tagged cards still have no cite.**
+* **The short plain lines** are the later task's, with the figures above.

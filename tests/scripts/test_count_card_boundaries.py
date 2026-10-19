@@ -9,8 +9,10 @@ this checkout carries, and every expected count is written by hand from what the
 * **the holding file**: one card whose body is two others' bodies run together, and those two;
   and one card of 100 words with two cuts of it that share 20 words, too few to overlap.
 * **the same long file stored under another digest, with no blob on disk.**
-* **the same long file stored under another digest whose blob is the holding file's bytes**, so
-  parsing it again does not give the stored card back.
+* **the same long file stored under three more digests whose blobs differ from it**, so parsing
+  them again does not give the stored long card back: the holding file's bytes; the long file with
+  an undertag after the long card, which gives it a longer range and the same body; and the long
+  file with one word of the long card changed, which gives it the same range and another body.
 """
 
 from __future__ import annotations
@@ -63,17 +65,27 @@ def underlined(text: str) -> str:
 #: Two paragraphs of about 1,900 words each.
 LONG_PARAGRAPH = prose(11_500)
 
-LONG_FILE = build_docx(
-    para("First tag", style="Heading4")
-    + cite("Okonkwo 26")
-    + underlined(LONG_PARAGRAPH)
-    + para("Reserve margins fall in every region", half_points=READING_SIZE)
-    + para(f"Lindqvist 2019, invented review of grid planning, {SOURCE}", highlight="yellow")
-    + underlined(LONG_PARAGRAPH)
-    + para("Second tag", style="Heading4")
-    + cite("Ferreira 25")
-    + underlined(numbered("third", 70))
-)
+
+def long_file(*, last_paragraph: str = LONG_PARAGRAPH, undertag: bool = False) -> bytes:
+    return build_docx(
+        para("First tag", style="Heading4")
+        + cite("Okonkwo 26")
+        + underlined(LONG_PARAGRAPH)
+        + para("Reserve margins fall in every region", half_points=READING_SIZE)
+        + para(f"Lindqvist 2019, invented review of grid planning, {SOURCE}", highlight="yellow")
+        + underlined(last_paragraph)
+        + (para("An undertag under the card", style="Undertag") if undertag else "")
+        + para("Second tag", style="Heading4")
+        + cite("Ferreira 25")
+        + underlined(numbered("third", 70))
+    )
+
+
+LONG_FILE = long_file()
+#: The long card one paragraph longer, by an undertag that is no part of its body.
+LONGER_RANGE = long_file(undertag=True)
+#: The long card with one word changed: the same range and the same number of words.
+ONE_WORD_CHANGED = long_file(last_paragraph=LONG_PARAGRAPH.replace("operators", "planners", 1))
 
 HOLDING_FILE = build_docx(
     cite("Okonkwo 26")
@@ -96,7 +108,7 @@ def digest(content: bytes) -> str:
 
 
 LONG, HOLDING = digest(LONG_FILE), digest(HOLDING_FILE)
-NO_BLOB, OTHER_BLOB = "b" * 64, "c" * 64
+NO_BLOB, OTHER_BLOB, LONGER_RANGE_BLOB, CHANGED_BLOB = "b" * 64, "c" * 64, "e" * 64, "f" * 64
 
 #: Words and digests the output must not contain: the store's text, and the sources' names.
 TELLTALES = ("first0", "second7", "third3", "Grid operators", "Reserve margins", "Okonkwo", LONG, HOLDING)
@@ -126,7 +138,14 @@ def write_blob(data_dir: Path, sha256: str, content: bytes) -> None:
 @pytest.fixture
 def data_dir(tmp_path: Path) -> Path:
     store = LocalParsedStore(tmp_path)
-    stored = {LONG: LONG_FILE, HOLDING: HOLDING_FILE, NO_BLOB: LONG_FILE, OTHER_BLOB: LONG_FILE}
+    stored = {
+        LONG: LONG_FILE,
+        HOLDING: HOLDING_FILE,
+        NO_BLOB: LONG_FILE,
+        OTHER_BLOB: LONG_FILE,
+        LONGER_RANGE_BLOB: LONG_FILE,
+        CHANGED_BLOB: LONG_FILE,
+    }
     entries: list[SourceEntry] = []
     common = {
         "caselist": CASELIST,
@@ -176,6 +195,8 @@ def data_dir(tmp_path: Path) -> Path:
     write_blob(tmp_path, LONG, LONG_FILE)
     write_blob(tmp_path, HOLDING, HOLDING_FILE)
     write_blob(tmp_path, OTHER_BLOB, HOLDING_FILE)
+    write_blob(tmp_path, LONGER_RANGE_BLOB, LONGER_RANGE)
+    write_blob(tmp_path, CHANGED_BLOB, ONE_WORD_CHANGED)
     return tmp_path
 
 
@@ -193,6 +214,14 @@ def test_the_long_file_is_as_the_counts_below_assume() -> None:
     assert words[0] > 3_000
     assert words[0] < 5_000
     assert words[1] == 70
+    stored = document.cards[0]
+    longer = parsed(LONGER_RANGE, LONGER_RANGE_BLOB).cards[0]
+    changed = parsed(ONE_WORD_CHANGED, CHANGED_BLOB).cards[0]
+    assert longer.evidence_text == stored.evidence_text
+    assert longer.provenance.last_element_index == stored.provenance.last_element_index + 1
+    assert changed.evidence_text != stored.evidence_text
+    assert len(changed.evidence_text.split()) == words[0]
+    assert changed.provenance.last_element_index == stored.provenance.last_element_index
 
 
 def test_each_count_is_the_one_the_invented_store_holds(
@@ -202,12 +231,12 @@ def test_each_count_is_the_one_the_invented_store_holds(
     counts = output["caselists"][CASELIST]
     assert output["long_body_words"] == 3_000
     assert counts["version"] == DOCX_PARSER_VERSION
-    assert counts["sources"] == 4
-    assert counts["cards"] == 12
-    assert counts["full_cards"] == 12
+    assert counts["sources"] == 6
+    assert counts["cards"] == 16
+    assert counts["full_cards"] == 16
     assert counts["long_bodies"] == {
         "texts": 1,
-        "not_reproduced": 1,
+        "not_reproduced": 3,
         "in_a_source_with_no_blob": 1,
         "cards": 1,
         "by_cards_in_file": {"2 to 5": 1},
@@ -297,7 +326,7 @@ def test_a_store_of_another_parser_version_is_refused_by_name(data_dir: Path) ->
 
 def test_the_version_expected_is_read(data_dir: Path, capsys: pytest.CaptureFixture[str]) -> None:
     output, _ = run(data_dir, capsys, "--expect-version", DOCX_PARSER_VERSION)
-    assert output["caselists"][CASELIST]["cards"] == 12
+    assert output["caselists"][CASELIST]["cards"] == 16
 
 
 def test_the_newest_version_directory_with_an_index_is_the_one_read(data_dir: Path) -> None:

@@ -71,7 +71,7 @@ type CardKey = tuple[str, int]
 
 @dataclass(frozen=True, slots=True)
 class StoredCard:
-    """What the counts need of one stored card. `body` is kept for a full card only."""
+    """What the counts need of one stored card."""
 
     sha256: str
     first: int
@@ -123,7 +123,6 @@ def _read_source(path: Path) -> list[StoredCard]:
     cards: list[StoredCard] = []
     for card in document["cards"]:
         body = card["evidence_text"]
-        full = card["completeness"] == "FULL"
         cards.append(
             StoredCard(
                 sha256=sha256,
@@ -132,7 +131,7 @@ def _read_source(path: Path) -> list[StoredCard]:
                 completeness=card["completeness"],
                 words=word_count(body),
                 fingerprint=fingerprint_text(body) if body else "",
-                body=body if full else "",
+                body=body,
             )
         )
     return cards
@@ -161,8 +160,8 @@ class _LongBodySource:
     caselist: str
     sha256: str
     blob: Path
-    ranges: tuple[tuple[int, int, int], ...]
-    """(first index, last index, words) of each long card the store holds for the source."""
+    ranges: tuple[tuple[int, int, str], ...]
+    """(first index, last index, exact fingerprint) of each long card the store holds for the source."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -201,13 +200,13 @@ def _describe(source: _LongBodySource) -> _LongBodiesRead:
     cards = {} if document is None else {card.provenance.first_element_index: card for card in document.cards}
     described: list[tuple[int, LongBody]] = []
     not_reproduced = 0
-    for first, last, words in source.ranges:
+    for first, last, fingerprint in source.ranges:
         card = cards.get(first)
         if (
             document is None
             or card is None
             or card.provenance.last_element_index != last
-            or word_count(card.evidence_text) != words
+            or fingerprint_text(card.evidence_text) != fingerprint
         ):
             not_reproduced += 1
             continue
@@ -220,9 +219,9 @@ def describe_long_bodies(
 ) -> tuple[dict[CardKey, LongBody], int, int]:
     """Each long card described by its file's paragraphs; how many the parse did not reproduce; and
     how many are in a source with no blob on this machine."""
-    ranges: defaultdict[str, list[tuple[int, int, int]]] = defaultdict(list)
+    ranges: defaultdict[str, list[tuple[int, int, str]]] = defaultdict(list)
     for card in long_cards:
-        ranges[card.sha256].append((card.first, card.last, card.words))
+        ranges[card.sha256].append((card.first, card.last, card.fingerprint))
     sources = [
         _LongBodySource(caselist, digest, blobs / digest[:2] / digest[2:4] / digest, tuple(sorted(found)))
         for digest, found in sorted(ranges.items())

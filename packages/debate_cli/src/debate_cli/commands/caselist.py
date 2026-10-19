@@ -166,13 +166,23 @@ for a row a removal stops or holds, gets the hint to finish the removal first an
 hint: status asks the publisher's own rule. A copy withdrawn from a caselist that keeps no holder of
 it is named, if anything is left of it, by that caselist and the request the withdrawal record
 gives, by digest prefix and count; and a withdrawal no record attributes, which an earlier build
-made, by its request as not attributed. Neither of those two changes the exit code.
+made, by its request as not attributed. Neither of those two changed the exit code then.
+
+Three since `v1-e30-t24`. The withdrawn copy left is residue, as a removed file's is: `1`, as
+`REMOVAL_RESIDUE` when every snapshot agrees (the PM's ruling on t19's question 1). A withdrawal not
+attributed still changes nothing: it says what was not looked at. An upload an import refused at a
+held path, which the same removal run again has not yet listed, is named by caselist, digest prefix
+and request, from the held-digest record, and its request is owed, whether or not the archive is
+still in the inbox; that changes no exit code either. And the error panel no longer prints the whole
+report it carries in `error.details`, which in prod on 2026-10-18 was about 1,000 lines of sha256:
+it prints the counts, one line per snapshot that differs, with digests by prefix. `--json` keeps
+every field.
 """
 
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Coroutine, Iterable
+from collections.abc import Coroutine, Iterable, Sequence
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Annotated, Any, Final
@@ -539,26 +549,27 @@ def _status_failure(report: CaselistStatusReport, payload: dict[str, JsonValue])
     """What a status that is not clean reports: the snapshots that differ, or what a removal left.
 
     Snapshots that differ are `CASELIST_DRIFT`, with any residue in the details beside them. When
-    every snapshot agrees and a version listing still shows a removed file, the code is
-    `REMOVAL_RESIDUE` and the message says what is left, by digest prefix and count.
+    every snapshot agrees and a version listing still shows a removed file, or a copy withdrawn
+    from a caselist that keeps no holder of it (`v1-e30-t24`), the code is `REMOVAL_RESIDUE` and the
+    message says what is left, by digest prefix and count.
+
+    The details are the whole report, for `--json`; the panel prints :func:`_status_panel` in their
+    place (`v1-e30-t24`).
     """
     drifted = report.drifted
+    panel = _status_panel(report, payload)
     if report.residue_found and not drifted:
-        files = sum(len(one.files) for one in report.residue)
-        held = (
-            f"the bucket still holds versions of {files} removed file(s)"
-            if files
-            else "the bucket still holds versions older than a removal"
-        )
         return CommandFailure(
             code=REMOVAL_RESIDUE,
-            message=f"{held}: " + "; ".join(_residue_found(one) for one in report.residue if one.found),
+            message=f"{_residue_held(report)}: "
+            + "; ".join(_residue_found(one, withdrawn=True) for one in report.residue if one.found),
             exit_code=ExitCode.DOMAIN_FAILURE,
             details=payload,
             hint=(
                 "A removal left them. Run that removal again, dry run first, then --execute: "
                 'docs/runbooks/caselist-removal.md, "When caselist status reports removal residue".'
             ),
+            panel_details=panel,
         )
     differ = (
         f"{len(drifted)} snapshot(s) differ between this machine and the bucket: "
@@ -573,6 +584,70 @@ def _status_failure(report: CaselistStatusReport, payload: dict[str, JsonValue])
         exit_code=ExitCode.DOMAIN_FAILURE,
         details=payload,
         hint=" ".join(_drift_hints(report)),
+        panel_details=panel,
+    )
+
+
+_PREFIXES_SHOWN: Final = 3
+"""How many digests a line of the failure panel names by prefix before it counts the rest."""
+
+
+def _status_panel(report: CaselistStatusReport, payload: dict[str, JsonValue]) -> dict[str, JsonValue]:
+    """What a failing status's panel prints in place of its details, the whole report (`v1-e30-t24`).
+
+    The environment and the bucket, how many snapshots were compared and differ, and one line per
+    snapshot that differs, saying what differs by count with up to three digests by prefix. The
+    table above it has already counted every snapshot, and `--json` holds every digest in full.
+    """
+    panel: dict[str, JsonValue] = {
+        "environment": payload["environment"],
+        "bucket": payload["bucket"],
+        "snapshots": f"{len(report.snapshots)} compared, {len(report.drifted)} differ",
+    }
+    for entry in report.drifted:
+        panel[f"{entry.caselist} {entry.snapshot}"] = _what_differs(entry)
+    panel["every digest"] = "in full under error.details of --json"
+    return panel
+
+
+def _what_differs(entry: SnapshotStatus) -> str:
+    """One snapshot's differences, by count, each list of digests named by its first prefixes."""
+    what: list[str] = []
+    if not entry.local_manifest:
+        what.append("no manifest on this machine")
+    if not entry.manifest_present:
+        what.append("no manifest in the bucket")
+    if entry.manifest_mismatched:
+        what.append("manifest mismatch")
+    for counted, digests in (
+        ("source(s) not in the bucket", entry.missing_sources),
+        ("source(s) not on this machine", entry.missing_local),
+        ("source mismatch(es)", tuple(_digest_of_key(key) for key in entry.source_mismatches)),
+        ("suppressed row(s)", entry.suppressed_rows),
+    ):
+        if digests:
+            what.append(f"{len(digests)} {counted} {_some_prefixes(digests)}")
+    return ", ".join(what)
+
+
+def _some_prefixes(digests: Sequence[str]) -> str:
+    """`(sha256 <prefix>, <prefix>, <prefix> and N more)`: the first few, and how many are not named."""
+    named = ", ".join(_digest_prefix(digest) for digest in digests[:_PREFIXES_SHOWN])
+    more = len(digests) - _PREFIXES_SHOWN
+    return f"(sha256 {named} and {more} more)" if more > 0 else f"(sha256 {named})"
+
+
+def _residue_held(report: CaselistStatusReport) -> str:
+    """What a `REMOVAL_RESIDUE` message begins with: what kind of thing the bucket still holds."""
+    files = sum(len(one.files) for one in report.residue)
+    if files:
+        return f"the bucket still holds versions of {files} removed file(s)"
+    if any(one.older_versions for one in report.residue):
+        return "the bucket still holds versions older than a removal"
+    copies = sum(len(one.withdrawn_copies) for one in report.residue)
+    return (
+        f"the bucket still holds copies of {copies} file(s) withdrawn from a caselist that keeps no "
+        "holder of them"
     )
 
 
@@ -649,9 +724,15 @@ def _drift_hints(report: CaselistStatusReport) -> list[str]:
 
 
 def _removals_owed(report: CaselistStatusReport) -> str:
-    """The hint for a held row or a held upload in the inbox: which removals to run again, and how."""
+    """The hint for a held row, a held upload in the inbox or one refused at import: which removals
+    to run again, and how."""
+    held = (
+        "A held row, a held upload in the inbox or an upload an import refused at a held path"
+        if report.refused_at_import
+        else "A held row or a held upload in the inbox"
+    )
     return (
-        f"A held row or a held upload in the inbox means {', '.join(report.removals_owed)} is owed again: "
+        f"{held} means {', '.join(report.removals_owed)} is owed again: "
         "run the same removal again, dry run first, then --execute "
         "(docs/runbooks/caselist-removal.md, step 9)."
     )
@@ -788,13 +869,15 @@ def status_summary(report: CaselistStatusReport, settings: Settings) -> dict[str
     members' rows at such a path, a symbolic link named as the removed file, which have no digest to
     name and which every build before `v1-e30-t22` wrote. `held_in_inbox` is one object per caselist
     compared: the uploads at a held path in the download inbox's archives, by count,
-    `sha256_prefixes` and `requests`.
-    `removals_owed` is every request either names, whose removal is owed again. None of these is
-    part of `in_sync`. `withdrawn_copies_left` is one object per file withdrawn from a caselist that
-    keeps no holder of it, of whose copy there something is left, by caselist, digest prefix, the
-    request the withdrawal record gives and counts; `withdrawals_not_attributed` the requests of
-    withdrawals no record attributes, which an earlier build made (`v1-e30-t19`). Neither is part of
-    `in_sync` either. `suppressed_objects` is one object per caselist
+    `sha256_prefixes` and `requests`. `refused_at_import` is the same, for the uploads an import
+    refused at a held path that the same removal run again has not yet listed, from the held-digest
+    record (`v1-e30-t24`). `removals_owed` is every request any of these names, whose removal is
+    owed again. None of these is part of `in_sync`. `withdrawn_copies_left` is one object per file
+    withdrawn from a caselist that keeps no holder of it, of whose copy there something is left, by
+    caselist, digest prefix, the request the withdrawal record gives and counts (`v1-e30-t19`); since
+    `v1-e30-t24` it is part of `in_sync`, as `removal_residue` is. `withdrawals_not_attributed` is
+    the requests of withdrawals no record attributes, which an earlier build made, and is not part
+    of `in_sync`. `suppressed_objects` is one object per caselist
     compared, because one listing of a caselist's source prefix finds them for all its snapshots:
     the count of current source objects whose digest is suppressed, and their `sha256_prefixes`.
     A removed file is named by the first twelve characters of its digest, as in `removal_residue`.
@@ -818,6 +901,15 @@ def status_summary(report: CaselistStatusReport, settings: Settings) -> dict[str
             {
                 "caselist": caselist,
                 "uploads": len(found := report.held_in_inbox_of(caselist)),
+                "sha256_prefixes": [_digest_prefix(upload.sha256) for upload in found],
+                "requests": sorted({upload.request_id for upload in found}),
+            }
+            for caselist in report.caselists
+        ],
+        "refused_at_import": [
+            {
+                "caselist": caselist,
+                "uploads": len(found := report.refused_at_import_of(caselist)),
                 "sha256_prefixes": [_digest_prefix(upload.sha256) for upload in found],
                 "requests": sorted({upload.request_id for upload in found}),
             }
@@ -876,9 +968,10 @@ def _utc_stamp(when: datetime) -> str:
     return when.astimezone(UTC).isoformat().replace("+00:00", "Z")
 
 
-def _residue_found(residue: CaselistResidue) -> str:
+def _residue_found(residue: CaselistResidue, *, withdrawn: bool = False) -> str:
     """`<caselist>: counts of N file(s) (sha256 <prefix>, …)`, and the versions older than a removal
-    by role and count, for a caselist with something left."""
+    by role and count, for a caselist with something left; with `withdrawn`, its withdrawn copies'
+    counts too (`v1-e30-t24`), which the table gives a line of their own."""
     found: list[str] = []
     if residue.files:
         named = ", ".join(f"sha256 {one.sha256_prefix}" for one in residue.files)
@@ -894,12 +987,18 @@ def _residue_found(residue: CaselistResidue) -> str:
             f"{listed} older than {residue.older_than.request_id}, completed "
             f"{residue.older_than.completed_at.astimezone(UTC):%Y-%m-%d %H:%M} UTC"
         )
+    if withdrawn and residue.withdrawn_copies:
+        found.append(_withdrawn_counts(residue))
     return f"{residue.caselist}: " + "; ".join(found)
 
 
 def _residue_lines(report: CaselistStatusReport) -> list[str]:
     """What the status table says under it about removal residue: found, not checked, or none."""
-    lines = [f"REMOVAL RESIDUE in {_residue_found(one)}." for one in report.residue if one.found]
+    lines = [
+        f"REMOVAL RESIDUE in {_residue_found(one)}."
+        for one in report.residue
+        if one.files or one.older_versions
+    ]
     if lines:
         lines.append("A removal left them; docs/runbooks/caselist-removal.md says what to run.")
     unchecked = report.residue_not_checked
@@ -916,7 +1015,7 @@ def _residue_lines(report: CaselistStatusReport) -> list[str]:
         )
     lines += _withdrawn_copy_lines(report)
     checked = [one for one in report.residue if one.checked]
-    if checked and not report.residue_found and not report.withdrawn_copies_left:
+    if checked and not report.residue_found:
         lines.append(
             "No version of a removed file is left under raw/ or parsed/, and no manifest or aggregate "
             f"version is older than a removal that touched its caselist ({len(checked)} caselist(s) checked)."
@@ -926,20 +1025,13 @@ def _residue_lines(report: CaselistStatusReport) -> list[str]:
 
 def _withdrawn_copy_lines(report: CaselistStatusReport) -> list[str]:
     """What is left of copies withdrawn from a caselist, by caselist and request, and the withdrawals
-    no record attributes (`v1-e30-t19`). Neither changes the exit status."""
-    lines: list[str] = []
-    for residue in report.residue:
-        copies = residue.withdrawn_copies
-        if not copies:
-            continue
-        named = ", ".join(f"sha256 {copy.sha256_prefix}, {copy.request_id}" for copy in copies)
-        lines.append(
-            f"WITHDRAWN COPIES LEFT in {residue.caselist}: "
-            f"{sum(copy.current_objects for copy in copies)} current object(s), "
-            f"{sum(copy.noncurrent_versions for copy in copies)} noncurrent version(s) and "
-            f"{sum(copy.delete_markers for copy in copies)} delete marker(s) of {len(copies)} file(s) "
-            f"withdrawn from {residue.caselist} ({named})."
-        )
+    no record attributes (`v1-e30-t19`). The first fails the command as residue (`v1-e30-t24`); the
+    second does not."""
+    lines = [
+        f"WITHDRAWN COPIES LEFT in {residue.caselist}: {_withdrawn_counts(residue)}."
+        for residue in report.residue
+        if residue.withdrawn_copies
+    ]
     if lines:
         lines.append(
             "Run that removal again, dry run first, then --execute: docs/runbooks/caselist-removal.md, "
@@ -952,6 +1044,18 @@ def _withdrawn_copy_lines(report: CaselistStatusReport) -> list[str]:
             "left of them is not checked. That is not a finding of none."
         )
     return lines
+
+
+def _withdrawn_counts(residue: CaselistResidue) -> str:
+    """`N current object(s), … of M file(s) withdrawn from <caselist> (sha256 <prefix>, <request>, …)`."""
+    copies = residue.withdrawn_copies
+    named = ", ".join(f"sha256 {copy.sha256_prefix}, {copy.request_id}" for copy in copies)
+    return (
+        f"{sum(copy.current_objects for copy in copies)} current object(s), "
+        f"{sum(copy.noncurrent_versions for copy in copies)} noncurrent version(s) and "
+        f"{sum(copy.delete_markers for copy in copies)} delete marker(s) of {len(copies)} file(s) "
+        f"withdrawn from {residue.caselist} ({named})"
+    )
 
 
 def _status_entry(entry: SnapshotStatus) -> dict[str, JsonValue]:
@@ -1006,7 +1110,8 @@ def _suppressed_object_lines(report: CaselistStatusReport) -> list[str]:
 
 
 def _held_lines(report: CaselistStatusReport) -> list[str]:
-    """Under the status table: rows and inbox uploads at a held path, by digest prefix and request.
+    """Under the status table: rows and uploads at a held path, in the inbox or refused at import
+    (`v1-e30-t24`), by digest prefix and request.
 
     A skipped member's row has no digest, so it is named by the request holding its path alone.
     """
@@ -1028,6 +1133,14 @@ def _held_lines(report: CaselistStatusReport) -> list[str]:
             lines.append(
                 f"HELD UPLOADS IN THE DOWNLOAD INBOX for {caselist}: {len(found)} upload(s) at a path a "
                 f"removal holds ({_held_named((one.sha256, one.request_id) for one in found)})."
+            )
+    for caselist in report.caselists:
+        refused = report.refused_at_import_of(caselist)
+        if refused:
+            named = _held_named((one.sha256, one.request_id) for one in refused)
+            lines.append(
+                f"REFUSED AT IMPORT AT A HELD PATH in {caselist}: {len(refused)} upload(s) the same "
+                f"removal has not yet listed ({named})."
             )
     if report.removals_owed:
         lines.append(_removals_owed(report))

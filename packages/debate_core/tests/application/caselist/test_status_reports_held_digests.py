@@ -35,6 +35,7 @@ import pytest
 from tests.fixtures.caselist.build_held_path_archives import build_arriving_weekly_zips
 from tests.fixtures.caselist.build_revised_path_archives import CASELIST, OTHER_CASELIST, REVISED_PATH
 
+from debate_core.application.caselist.publish_service import CaselistPublishService
 from debate_core.application.caselist.status_service import CaselistStatusReport, CaselistStatusService
 from debate_core.application.ports.suppression import (
     HeldDigestEntry,
@@ -110,6 +111,11 @@ class TestAHeldUploadTheReRunHasNotListed:
         assert json.loads((world.data_dir / LOCAL_RECORD).read_text(encoding="utf-8")) == line_for(
             UPLOADED_AFTER
         ), "the precondition: the import recorded it"
+
+        publisher = CaselistPublishService(
+            local=world.local, remote=world.bucket, suppression=world.suppression()
+        )
+        assert (await publisher.execute(await publisher.plan(CASELIST))).succeeded
 
         report = await owed(world)
 

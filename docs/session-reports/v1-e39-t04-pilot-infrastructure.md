@@ -398,7 +398,20 @@ session:
 - **The runbook now carries the quota commands.** It says steps 1 and 2 may run meanwhile, and that
   step 3, with step 4 after it, waits for the increase.
 
-**Steps 1–10: not yet run.** ac5, the runbook's tables and the `Succeeded` phase wait for them.
+**2026-10-19, steps 1 and 2:**
+
+- **Step 1** (the targeted apply): `Apply complete! Resources: 1 added, 0 changed, 0 destroyed.` The
+  only new output is `evidence_search_repository_url = "<account>.dkr.ecr.us-east-1.amazonaws.com/debate-dev-tub"`;
+  every other output is as it was.
+- **Step 2** (the first deploy, as `debate-admin`):
+  - `requires-python >=3.12,<3.13: public.ecr.aws/lambda/python:3.12`, built from the clean commit
+    `e2b30ed`;
+  - the build took 6.2 s, with the adapter resolved by its pinned digest;
+  - `pushed: <account>.dkr.ecr.us-east-1.amazonaws.com/debate-dev-tub@sha256:5bbd667aee32b933367257d513da0f2d1c8ae341068421ef39dca44187dc617b`;
+  - then the expected stop: `the function debate-dev-tub does not exist yet`.
+
+**Steps 3–10: not yet run.** Step 3 waits for the concurrency increase. ac5, the runbook's tables
+and the `Succeeded` phase wait for steps 3–10.
 
 ## PM review
 

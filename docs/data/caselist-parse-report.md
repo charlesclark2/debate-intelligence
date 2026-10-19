@@ -1492,7 +1492,7 @@ Before the labels moved, on 2026-10-18, the same comparison gave the same cite f
 
 ## The re-cluster under `card-fingerprint-v4` (`v1-e31-t20`)
 
-**Status: not run.** Nothing below has been measured on the store yet. The steps are in
+**Status: preview started.** The counts against `v3` (step 2) are measured; the rest is not yet. The steps are in
 [the task's session report](../session-reports/v1-e31-t20-long-cuts-and-limits.md#operator-follow-ups):
 a preview from the task worktree before the merge, which writes nothing to the store, and the
 rebuild in dev after it. This is a re-cluster, not a re-parse: the parser and `2026.10.12-docx-3`
@@ -1544,7 +1544,7 @@ of 18 on the extended set.
 
 | Measure | Preview, before the merge | After the dev rebuild |
 |---|---|---|
-| Counts against `card-fingerprint-v3`: clusters, merged, divided, largest | not run | not run |
+| Counts against `card-fingerprint-v3`: clusters, merged, divided, largest | below, 2026-10-18 | not run |
 | ac5: share of pairs sharing nothing, three largest clusters per caselist | not run | not run |
 | ac1: join sample of 20 newly joined pairs | not run | not run, same seed |
 | `MIN_CUT_SHARE`: contained pairs under a third, joined and kept apart, by share band | not run | |
@@ -1552,3 +1552,27 @@ of 18 on the extended set.
 | `MAX_CONTAINER_CLUSTERS`: cuts whose ends too many clusters hold, re-measured | not run | |
 | Divided pairs against `v3`, by reason | not run | |
 | Pairs in one cluster sharing only one or two five-word runs, every cluster | not run | not run |
+
+### The preview's counts against `card-fingerprint-v3` (operator-run, 2026-10-18)
+
+`compare_card_clusters.py counts --save-after`, from the task worktree at `ecf3e11`, each
+caselist's cards in `2026.10.12-docx-3` placed in memory by `v4` and compared with the store's `v3`
+table. Nothing was written to the store. In every caselist, `exact_fingerprints_changed`,
+`cards_only_before` and `cards_only_after` are 0, and no cluster absorbed more than 5 others.
+
+| | hsld26 | hspf26 | hspolicy26 | openev |
+|---|---|---|---|---|
+| Clusters, `v3` → `v4` | 11,552 → 11,656 | 9,930 → 10,325 | 18,746 → 18,821 | 5,841 → 5,816 |
+| Clusters merged into another | 314 | 267 | 492 | 66 |
+| Clusters made of several | 296 | 257 | 460 | 61 |
+| Clusters divided | 230 | 336 | 320 | 28 |
+| Absorbing 2 / 3 to 5 / 6 or more | 278 / 18 / 0 | 247 / 10 / 0 | 428 / 32 / 0 | 58 / 3 / 0 |
+| Largest cluster, cards, `v3` → `v4` | 710 → 385 | 682 → 589 | 1,609 → 649 | 22 → 33 |
+| Distinct texts in the largest, `v4` | 22 | 74 | 36 | 21 |
+| Seconds to place | 330 | 229 | 414 | 51 |
+
+The divided clusters are the chains `v3` built through bodies holding several passages coming apart;
+the merges are mostly long copies joining one another, which `v3` left to the banding. hspf26's
+largest cluster falls least and holds the most distinct texts, and openev's grows: both are read by
+the shapes step, whose share of pairs sharing nothing is the check that no cluster joins texts with
+nothing in common.

@@ -22,6 +22,7 @@ from debate_core.evidence.card_boundaries import (
     LongBodyKind,
     bodies_holding_two_cards,
     is_cite_shaped,
+    is_too_long_to_be_one_card,
     read_long_body,
     rule_family,
     tally_holdings,
@@ -137,6 +138,11 @@ def test_a_rule_is_named_by_its_family_alone() -> None:
         "assembly-cite-guess-inside-card-body"
     )
     assert rule_family("heuristic-marked-up-body-text") == "heuristic-marked-up-body-text"
+
+
+def test_a_body_of_3000_words_is_one_card_and_of_3001_too_long_to_be_one() -> None:
+    assert is_too_long_to_be_one_card(3_000) is False
+    assert is_too_long_to_be_one_card(3_001) is True
 
 
 def test_words_are_runs_between_whitespace() -> None:
@@ -297,6 +303,28 @@ def test_a_long_line_above_a_cite_is_no_tag() -> None:
     )
     assert body.short_lines_above_a_cite == 0
     assert body.kind is LongBodyKind.CITE_INSIDE
+
+
+def test_a_blank_line_above_a_cite_is_no_tag() -> None:
+    body = described(
+        tag("First tag"),
+        cite(),
+        underlined_body(),
+        para("", half_points=READING_SIZE),
+        highlighted_cite_line(),
+        underlined_body(),
+    )
+    assert body.cite_shaped_paragraphs == 1
+    assert body.short_lines_above_a_cite == 0
+
+
+def test_a_table_cell_above_a_cite_is_page_furniture_and_no_tag() -> None:
+    table = f"<w:tbl><w:tr><w:tc>{short_plain_line('Speech times')}</w:tc></w:tr></w:tbl>"
+    body = described(
+        tag("First tag"), cite(), underlined_body(), table, highlighted_cite_line(), underlined_body()
+    )
+    assert body.cite_shaped_paragraphs == 1
+    assert body.short_lines_above_a_cite == 0
 
 
 def test_a_cite_shaped_line_above_a_cite_is_no_tag() -> None:
@@ -545,6 +573,16 @@ def test_long_bodies_are_tallied_by_ending_tags_kind_and_bands() -> None:
 
 def test_no_long_bodies_tally_to_nothing() -> None:
     assert tally_long_bodies([]) == {"cards": 0}
+
+
+@pytest.mark.parametrize(
+    ("words_each", "band"), [(64, "long (64 words or more)"), (63, "short (under 64 words)")]
+)
+def test_the_smaller_of_two_cards_is_short_under_64_words(words_each: int, band: str) -> None:
+    one, two = words("one", words_each), words("two", words_each)
+    index = index_of(holder=text(one, two), one=text(one), two=text(two))
+    tally = tally_holdings(bodies_holding_two_cards(index), index, cards_by_fingerprint={"holder": 1})
+    assert tally["by_smaller_of_the_two"] == {band: 1}
 
 
 def test_holdings_are_tallied_in_texts_and_in_the_cards_that_carry_them() -> None:

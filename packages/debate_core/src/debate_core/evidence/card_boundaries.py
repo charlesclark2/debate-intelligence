@@ -47,6 +47,7 @@ __all__ = [
     "LongBodyKind",
     "bodies_holding_two_cards",
     "is_cite_shaped",
+    "is_too_long_to_be_one_card",
     "read_long_body",
     "rule_family",
     "tally_holdings",
@@ -139,6 +140,11 @@ class LongBody:
         if self.marked_up_share >= MARKED_UP_SHARE:
             return LongBodyKind.MARKED_UP_WITHOUT_A_CITE_INSIDE
         return LongBodyKind.PLAIN_PROSE
+
+
+def is_too_long_to_be_one_card(words: int) -> bool:
+    """Whether a body of `words` words is over the line: 3,000 is not, 3,001 is."""
+    return words > LONG_BODY_WORDS
 
 
 def word_count(text: str) -> int:

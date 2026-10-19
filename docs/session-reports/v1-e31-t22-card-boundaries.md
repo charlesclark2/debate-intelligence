@@ -435,9 +435,39 @@ is what `v1-e31-t28` and `v1-e31-t29` can draw from again without counting.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-19
 
 **Notes:**
+
+Accepted, with the phase `Succeeded`. The branch was started before several merges (its spec check
+reads 377 files and 38 epics, against 394 and 39 on `dev`), so it syncs before its pull request.
+
+**The work itself:**
+
+* **Counts, then sample, then ruling, and no rule before the ruling.** The answer it reached, that
+  the parser was right 58 times in 60, is worth as much as a fix. It stopped a rule that would have
+  split about four real cards for each boundary it mended.
+* **Every card over the line was parsed again and reproduced exactly** before it was described:
+  0 not reproduced. The figures describe the store, not a guess at it.
+* **The sample is honest about its power:** ten a stratum, Wilson intervals stated, drawn by
+  distinct text because the pilot shows students texts, not disclosures.
+* **The first sampler view was stopped when it could not show A and B inside one paragraph,** fixed,
+  and run again from the same seed with the first tallies discarded. That is the right call.
+* **The candidates file sits outside the repository and the data directory,** and the script refuses
+  either, so t28 and t29 can draw again without counting.
+* **The follow-ups say exactly what is not known.** Which two items were the misses was not recorded,
+  and the note to t29 that t11's false join was this shape is the caution it needs.
+
+**Rulings:**
+
+1. **Deviations 1 to 3 are accepted.** Deviation 3's amended ac3 and ac4 are mine, and the spec
+   records them.
+2. **The three follow-ups are filed by the PM in the next batch:**
+   * the narrow long-body shape to `v1-e31-t28`, by amendment, starting with the operator finding
+     and describing the two misses;
+   * the witness refusal to `v1-e31-t29`, by amendment, starting from the 216 holders under 300 words;
+   * the long-card display note to `v1-e39-t06`.
+3. **v1-e31-t24 takes `docx-6` alone.** No re-parse follows from this task.

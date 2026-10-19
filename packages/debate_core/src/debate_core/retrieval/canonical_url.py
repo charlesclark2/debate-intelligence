@@ -285,7 +285,7 @@ def _parse(url: str) -> _Url:
         parts = urlsplit(text)
     except ValueError as error:
         raise InvalidUrlError(f"not a URL: {url!r}") from error
-    scheme = parts.scheme.lower()
+    scheme = parts.scheme  # urlsplit has already lower-cased it
     if scheme not in _DEFAULT_PORTS:
         raise InvalidUrlError(f"URL must be absolute http or https: {url!r}")
     if not parts.netloc:

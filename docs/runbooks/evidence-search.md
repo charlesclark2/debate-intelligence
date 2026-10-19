@@ -177,9 +177,30 @@ Where: your Mac, anywhere
 aws lambda get-account-settings --profile debate-admin --region us-east-1 \
   --query '[AccountLimit.ConcurrentExecutions,AccountLimit.UnreservedConcurrentExecutions]' --output text
 ```
-Success looks like: two numbers, each at least `120` (usually `1000 1000`). Below that, request a
-quota increase for "Concurrent executions" in Service Quotas before step 3, or the function's
-creation fails.
+Success looks like: two numbers, each at least `120` (usually `1000 1000`). Below that, the
+function's creation in step 3 fails, so request a quota increase now. Steps 1 and 2 do not need it
+and can run while AWS decides; step 3, and step 4 after it, wait until the check above shows at
+least `120` twice. This account's allowance was `10 10` on 2026-10-19, and an increase to 1,000
+was requested that day.
+
+**Operator command** (expected runtime ~1 min)
+Where: your Mac, anywhere
+```bash
+aws service-quotas list-service-quotas --profile debate-admin --region us-east-1 --service-code lambda \
+  --query "Quotas[?QuotaName=='Concurrent executions'].[QuotaCode,Value]" --output text
+aws service-quotas request-service-quota-increase --profile debate-admin --region us-east-1 \
+  --service-code lambda --quota-code L-B99A9384 --desired-value 1000 \
+  --query 'RequestedQuota.[Id,Status]' --output text
+```
+Success looks like: `L-B99A9384	10.0` (use the code it prints if it differs), then a request id and
+`PENDING` or `CASE_OPENED`. To follow the request, with that id:
+
+```bash
+QUOTA_REQUEST_ID='the-request-id-printed-above'
+aws service-quotas get-requested-service-quota-change --profile debate-admin --region us-east-1 \
+  --request-id "$QUOTA_REQUEST_ID" --query 'RequestedQuota.Status' --output text
+```
+`APPROVED` is the end of it; then repeat the `get-account-settings` check.
 
 ## Step 1 — Apply dev: the image repository alone
 

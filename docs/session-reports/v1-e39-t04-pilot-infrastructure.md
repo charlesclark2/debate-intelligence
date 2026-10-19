@@ -380,6 +380,26 @@ session:
 - records the outputs in a section here;
 - sets the phase `Succeeded`, runs `validate_specs.py`, and commits.
 
+## Dev run, as reported by the operator
+
+**2026-10-19, "Before you start":**
+
+- **A1–A4: done.** The worktree had no `owner.auto.tfvars`; A2 copied them in from the `dev-preview`
+  and `prod-deploy` worktrees and checked `owner` against the deployed `Owner` tag. That step was
+  added to the runbook in `d08e4ec`, because appending the pilot's lines to an absent file and
+  applying would have removed the website's and the evidence store's permission-set assignments.
+- **A5:** the pilot's three lines were added to each file (`grep -c` → `3` and `3`; `terraform fmt`
+  aligned both files).
+- **The Lambda concurrency check returned `10	10`.** The account's "Concurrent executions" quota
+  (`L-B99A9384`) is `10.0`, and ADR-0019's reserved concurrency of 10 per environment needs at least
+  120, so step 3 cannot create the function yet. An increase to 1,000 was requested: request id
+  `1187e55997dc4721b6a9a816aeba97c6H6usQepv`, status `PENDING`. A re-check straight after still read
+  `10	10`.
+- **The runbook now carries the quota commands.** It says steps 1 and 2 may run meanwhile, and that
+  step 3, with step 4 after it, waits for the increase.
+
+**Steps 1–10: not yet run.** ac5, the runbook's tables and the `Succeeded` phase wait for them.
+
 ## PM review
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in

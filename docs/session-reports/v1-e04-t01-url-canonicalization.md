@@ -19,10 +19,14 @@ DOIs, arXiv ids and PMIDs in URLs and text. "Same site" means the same registrab
 from a Public Suffix List snapshot that is a file in the package and is never fetched. Every
 criterion passed and the Goal is `Succeeded`.
 
-**Look first at Deviation 1.** The new package cannot exist without a line in the root
-`pyproject.toml`, because the layers contract is `exhaustive`. That file is outside this task's
-`constraints.packages`. I made the edit, in its own commit (`8c2e179`), and the question is under
-PM questions below.
+**PM rulings of 2026-10-19 are applied** (see "PM rulings" near the end):
+
+- `pyproject.toml` is now in the spec's packages, as a PM amendment.
+- `debate_core.retrieval` is also on the boto3, httpx and lxml forbidden lists. Each new entry is
+  shown failing under a deliberate import.
+- The trailing-slash prose is amended.
+- The Public Suffix List pin moved to a `shasum` file, so one documented command refreshes the
+  list and its hash together.
 
 ## Plan nodes
 
@@ -44,8 +48,8 @@ PM questions below.
 | Node `canonical-rules`: canonicalization table tests pass | PASS | `uv run pytest packages/debate_core/tests/retrieval/test_canonical_url.py` → `300 passed in 11.29s` |
 | Node `rel-canonical`: rel=canonical tests pass | PASS | `uv run pytest packages/debate_core/tests/retrieval/test_canonical_url.py -k rel_canonical` → `25 passed in 10.22s` |
 | Node `identifiers`: identifier tests pass | PASS | `uv run pytest packages/debate_core/tests/retrieval/test_identifiers.py` → `64 passed in 5.10s` |
-| Node `quality-gates`: retrieval tests pass | PASS | `uv run pytest packages/debate_core/tests/retrieval` → `467 passed in 14.21s` |
-| Node `quality-gates`: pyright passes | PASS | `uv run pyright packages/debate_core` → `0 errors, 0 warnings, 0 informations` (15.5 s), after `uv sync --locked --all-packages` and after the last format. |
+| Node `quality-gates`: retrieval tests pass | PASS | `uv run pytest packages/debate_core/tests/retrieval` → `468 passed in 4.26s` (final code, after the rulings; 467 before the pin test was split in two) |
+| Node `quality-gates`: pyright passes | PASS | `uv run pyright packages/debate_core` → `0 errors, 0 warnings, 0 informations`, and CI's `uv run --frozen pyright` → the same (10.9 s), both on the final code after the last format. |
 | Epic node `t01`: task reports phase Succeeded | PASS | `uv run scripts/validate_specs.py --require-succeeded v1-e04-t01-url-canonicalization` → `v1-e04-t01-url-canonicalization: Succeeded`; `uv run scripts/validate_specs.py` → `OK: 366 files, 38 epics, 308 tasks, 20 releases` |
 
 ### Red run first
@@ -86,8 +90,10 @@ property only guards it.
 
 ### Mutation table
 
-65 mutants, each applied alone to the final source (`5dc66b8`, after `7b2d299` changed only
-`pyproject.toml`). Each was run against `pytest packages/debate_core/tests/retrieval -n 0` with
+65 mutants, each applied alone to the source as of `5dc66b8` (`7b2d299` then changed only
+`pyproject.toml`). After the rulings, `public_suffix.py` changed (the pin moved to a file). Its 10
+mutants (0, 1, 38 to 45) were re-run on the final source, `8e4294d`: all caught, with the same
+failure counts as in the table. The other 55 target code that has not changed since `5dc66b8`. Each was run against `pytest packages/debate_core/tests/retrieval -n 0` with
 **a fresh, empty `HYPOTHESIS_STORAGE_DIRECTORY` per mutant** (a new temporary directory each
 time). The driver saved byte copies, restored them in `finally` and asserted byte equality. It
 classified each mutant from the pytest summary line and reported "did not apply" when the match
@@ -184,27 +190,60 @@ byte-for-byte afterwards. Each row is caught by at least one mutation:
 | retrieval below domain | domain → retrieval; evidence → retrieval |
 | retrieval off the delivery-framework list | retrieval → typer |
 
+### Forbidden lists mutated too (PM ruling 1)
+
+Three new rows import each library from retrieval on purpose: `import boto3`, `import httpx`,
+`from lxml import html`. Taking `debate_core.retrieval` off each list in turn, with the file
+restored byte-for-byte after:
+
+| Mutation | Result (`pytest tests/architecture/test_import_contracts.py -k retrieval`) |
+|---|---|
+| retrieval off the AWS SDK list | `1 failed, 7 passed`: the `import boto3` row |
+| retrieval off the httpx list | `1 failed, 7 passed`: the `import httpx` row |
+| retrieval off the document-library list | `1 failed, 7 passed`: the `from lxml import html` row |
+
+The whole contract suite, `uv run --frozen pytest tests/architecture/test_import_contracts.py`,
+gives `41 passed`, and `uv run --frozen lint-imports` gives `Contracts: 12 kept, 0 broken.`
+
+### The pin, mutated
+
+On `8e4294d`, `pytest packages/debate_core/tests/retrieval/test_public_suffix.py`:
+
+- **One rule added to the list (`example.co.uk`), hash file unchanged** → `1 failed, 92 passed`:
+  `test_the_bundled_snapshot_matches_its_pinned_hash`. No vector covers the new rule, so the hash
+  is the only thing that notices it.
+- **Hash file edited, list unchanged** → `1 failed, 92 passed`, the same test.
+
+Both files were restored and verified byte-equal.
+
+The refresh command in the module docstring was run exactly as written, except that it changed
+into a scratch directory instead of `retrieval/data`. Exit 0. It fetched the same
+338,207 bytes (`VERSION: 2026-10-17_18-52-06_UTC`) and wrote a hash file identical to the
+committed one. A wheel built with `uv build --package debate-core --wheel` contains both
+`retrieval/data/public_suffix_list.dat` and `retrieval/data/public_suffix_list.dat.sha256`.
+
 ### Full default suite
 
-Run in eighths because the load was 11 to 57 from other sessions:
-`uv run --frozen pytest --part K/8 -q`, one command per part.
+Run in eighths, one command per part, because other sessions kept the load between 7 and 28:
+`uv run --frozen pytest --part K/8 -q`. This run is on the final code, `8e4294d`:
 
 | Part | Result | Wall |
 |---|---|---|
-| 1/8 | 1118 passed | 75.9 s |
-| 2/8 | 1121 passed | 46.5 s |
-| 3/8 | 1122 passed | 101.1 s |
-| 4/8 | 1117 passed | 88.6 s |
-| 5/8 | 1113 passed | 71.6 s |
-| 6/8 | 1123 passed, 1 xfailed | 66.7 s |
-| 7/8 | 1 failed, 1120 passed | 69.4 s |
-| 8/8 | 1118 passed, 1 xfailed | 65.6 s |
+| 1/8 | 1119 passed | 54.5 s |
+| 2/8 | 1122 passed | 39.5 s |
+| 3/8 | 1123 passed | 41.2 s |
+| 4/8 | 1117 passed | 38.6 s |
+| 5/8 | 1113 passed | 38.4 s |
+| 6/8 | 1123 passed, 1 xfailed | 45.3 s |
+| 7/8 | 1 failed, 1121 passed | 49.4 s |
+| 8/8 | 1118 passed, 1 xfailed | 51.8 s |
 
-Total: 8,952 passed, 2 xfailed, 1 failed. The failure is the known one from the PM notes,
+Total: 8,956 passed, 2 xfailed, 1 failed. The failure is the known one from the PM notes,
 `tests/evals/parser/test_parser_eval.py::test_the_labeled_pr_subset_holds_the_baseline` ("no
 baseline is established for the pr-subset tier"), and was not investigated.
 
-Part 1 had first failed on this branch, in
+An earlier full run, before the rulings, gave 8,952 passed with the same single failure.
+Part 1 of that run had first failed on this branch, in
 `tests/architecture/test_single_interpreter_source.py`. That guard read my `"idna>=3.10"` as a
 Python 3.10 mention. The floor is now `idna>=3.7` (see Decisions), and part 1 was re-run on
 `7b2d299`. Part 2 ran on `5dc66b8`, which differs from `7b2d299` only in that bound and the
@@ -219,10 +258,11 @@ Other checks: `uv run --frozen ruff format --check .` → `830 files already for
 - `packages/debate_core/src/debate_core/retrieval/`: the new package.
   - `canonical_url.py`: rules, wrappers, AMP caches and rel=canonical.
   - `query_parameters.py`: the deny, allow and AMP lists with reasons.
-  - `public_suffix.py`: registrable domains and the pin.
+  - `public_suffix.py`: registrable domains, and in its docstring the refresh command.
   - `identifiers.py`.
   - `__init__.py`.
   - `data/public_suffix_list.dat`: the PSL, 338,207 bytes, MPL-2.0, unmodified.
+  - `data/public_suffix_list.dat.sha256`: its hash, as `shasum -a 256` writes it.
 - `packages/debate_core/tests/retrieval/`, the tests:
   - `test_canonical_url.py`: the table, rules, lists and rel=canonical.
   - `test_canonical_url_properties.py`: four Hypothesis properties.
@@ -232,52 +272,72 @@ Other checks: `uv run --frozen ruff format --check .` → `830 files already for
 - `packages/debate_core/pyproject.toml` and `uv.lock`: `idna>=3.7` as a direct debate-core
   dependency. It was already locked at 3.20 through httpx and requests, so the lock gains two
   lines and no package.
-- `pyproject.toml`: the layers contract becomes `evidence | retrieval`, its name says "evidence and
-  retrieval", and retrieval joins the delivery-framework list. See Deviation 1.
-- `tests/architecture/test_import_contracts.py`: the renamed `CORE_LAYERS` constant and five
-  violation rows for retrieval. See Deviation 1.
-- `plan_specs/v1/e04-article-retrieval/t01-url-canonicalization.yaml`: Goal phase set to
-  `Succeeded`.
+- `pyproject.toml`, the import contracts:
+  - The layers contract becomes `evidence | retrieval`, and its name says "evidence and
+    retrieval".
+  - Retrieval joins the delivery-framework list (`8c2e179`).
+  - Retrieval joins the boto3, httpx and lxml forbidden lists (`b50d2cd`, PM ruling 1).
+- `tests/architecture/test_import_contracts.py`: the renamed `CORE_LAYERS` constant and eight
+  violation rows for retrieval: five for the placement, three for the forbidden lists.
+- `plan_specs/v1/e04-article-retrieval/t01-url-canonicalization.yaml`:
+  - Goal phase set to `Succeeded`.
+  - PM amendments of 2026-10-19: `pyproject.toml` added to `constraints.packages`, with a
+    comment citing ruling 1, and the trailing-slash sentence (ruling 2).
 
 ## Deviations from the spec
 
-1. **Edits outside `constraints.packages: [debate_core.retrieval]`.**
-   - The root `pyproject.toml` (the import contracts) and `tests/architecture/test_import_contracts.py`.
-     The layers contract is `exhaustive`. With the package unplaced, `uv run --frozen lint-imports`
-     printed `The following modules are not listed as layers: - debate_core.retrieval` and
-     `Contracts: 11 kept, 1 broken.`, so the package cannot exist on a green branch without the
-     edit. I placed it exactly as `debate_core.evidence` is placed: in the layers contract and on
-     the delivery-framework list, nowhere else. That is in its own commit, `8c2e179`, so the PM
-     can rule on it separately. The PM notes said to propose such an edit under PM questions if
-     it fell outside the packages. Not making it would have left the branch red on a CI check, so
-     I made it and put the question to the PM below.
-   - `packages/debate_core/pyproject.toml` and `uv.lock`, for the `idna` dependency. The PM notes
-     allowed a new dependency "kept to debate_core".
-2. **"normalize trailing slashes" is read as "never add or remove one".** The spec lists trailing
-   slashes among the rules, and the PM notes ask for a case where the slash is meaningful. A
-   canonicalizer cannot tell which slashes are meaningful. `/reports/` and `/reports` resolve
-   relative links differently (RFC 3986 §5.2.3), and Google's guidance treats them as different
-   URLs. So the only trailing-slash normalization here is the empty path becoming `/` (RFC 3986
-   §6.2.3). A page's own rel=canonical merges the two forms where they are one page, and
-   `test_rel_canonical_decides_a_trailing_slash` shows it. The spec's prose may want amending to
-   say so (PM question 2).
+1. **Edits outside `constraints.packages`, now settled by a PM amendment.**
+   - **The root `pyproject.toml`.** The layers contract is `exhaustive`. With the package
+     unplaced, `uv run --frozen lint-imports` printed `The following modules are not listed as
+     layers: - debate_core.retrieval` and `Contracts: 11 kept, 1 broken.` I placed the package
+     beside evidence in `8c2e179` and asked the PM. Ruling 1 (2026-10-19): *"(c). Keep
+     8c2e179's layers placement … Also add debate_core.retrieval to the boto3, httpx and lxml
+     forbidden lists now … Record the pyproject.toml edit as a PM amendment to the spec's
+     packages, citing this ruling."* The spec now reads
+     `packages: [debate_core.retrieval, pyproject.toml]`, under a comment citing the ruling.
+   - **Three files the amendment does not name, listed so the PM can see them:**
+     - `tests/architecture/test_import_contracts.py`, the rows that show each placement and each
+       forbidden entry failing, which the ruling asked for.
+     - `packages/debate_core/pyproject.toml` and `uv.lock`, for the `idna` dependency, which the
+       PM notes allowed "kept to debate_core".
+2. **Trailing slashes: amended by the PM.** The spec said "normalize trailing slashes". I kept
+   them as published, because `/x/` and `/x` resolve relative links differently (RFC 3986
+   §5.2.3). Ruling 2 (2026-10-19): *"Amend. The description reads 'keep trailing slashes as
+   published (the empty path becomes /); a same-site rel=canonical resolves the two forms',
+   marked 'PM amendment 2026-10-19'."* The description now says so. The code and tests were
+   already that rule (`gov-trailing-slash-kept`, `gov-no-trailing-slash-kept`,
+   `test_rel_canonical_decides_a_trailing_slash`). It passes as amended, and it would have
+   failed only the original wording.
 
 ## Decisions and assumptions
 
-- **Public Suffix List: vendored, not a dependency.** The file is
-  `retrieval/data/public_suffix_list.dat`, exactly as published at VERSION
-  `2026-10-17_18-52-06_UTC`, commit `52b71b3c4576ff77450cc7ebcfc7f34a916af3f9`, sha256
-  `3e6ca639…c1c2a4`. A test pins all three. I downloaded it from publicsuffix.org once, by hand;
-  nothing in the code fetches it.
+- **Public Suffix List: vendored, not a dependency** (agreed by the PM, 2026-10-19). The file is
+  `retrieval/data/public_suffix_list.dat`, exactly as publicsuffix.org published it:
+  `// VERSION: 2026-10-17_18-52-06_UTC`, `// COMMIT: 52b71b3c4576ff77450cc7ebcfc7f34a916af3f9`,
+  sha256 `3e6ca639…c1c2a4`. I downloaded it once, by hand; nothing in the code fetches it.
   - Why not `tldextract`: it fetches the list by default, and it brings `requests` and `filelock`
     into the domain core.
   - Why not `publicsuffixlist`: it ships an update command that rewrites its bundled copy inside
     site-packages, so "pinned" would depend on nobody running it.
-  - A file in the repository can only change in a reviewed PR that also changes the constants.
-    The matching algorithm is the list's own (exception rules first, then the longest rule, a
-    wildcard matches one label, unlisted means the last label), about 40 lines. It is checked
-    against the PSL project's 77 test vectors, transcribed from `tests/test_psl.txt` at the same
-    commit (public domain).
+  - **The pin is a file.** It started as a Python constant. The PM asked for a documented command
+    that updates the list and its hash together, and a command cannot edit a constant reliably.
+    So the hash is now `data/public_suffix_list.dat.sha256`, in the format `shasum -a 256`
+    writes. The version and commit are read from the list's own header, so no copy of them can
+    go stale.
+  - **How to refresh it** is in `public_suffix.py`'s docstring:
+    1. Run one command, which changes into `retrieval/data`, fetches from
+       https://publicsuffix.org/list/public_suffix_list.dat (the only source the list's
+       maintainers support), and rewrites the hash file.
+    2. Run the retrieval tests.
+    3. Commit both files in one PR that names the new `// VERSION:` line.
+
+    The docstring also says what a newly failing vector means. Changing one file without the
+    other fails `test_the_bundled_snapshot_matches_its_pinned_hash`, so an update is always a
+    deliberate, reviewed change.
+  - **The algorithm** is the list's own: exception rules first, then the longest rule, a
+    wildcard matches one label, and an unlisted host's suffix is its last label. It is about 40
+    lines, checked against the PSL project's 77 test vectors, transcribed from
+    `tests/test_psl.txt` at the same commit (public domain).
   - Licence: MPL-2.0, which applies file by file. The file keeps its header, and nothing else is
     affected.
   - Both sections are used, ICANN and private, so `alice.github.io` and `bob.github.io` are
@@ -329,7 +389,8 @@ Other checks: `uv run --frozen ruff format --check .` → `830 files already for
   in text is not taken as arXiv.
 - **Layer placement:** retrieval sits beside evidence, independent of it in both directions. t02
   to t05 put their models (`fetch_types`, `access`, `extraction`) in retrieval and their httpx,
-  trafilatura and pdf adapters in `debate_core.integrations`, which this placement allows.
+  trafilatura and pdf adapters in `debate_core.integrations`. This placement allows that, and
+  since PM ruling 1 the boto3, httpx and lxml contracts require it.
 - **No-network guarantee:** pytest's `--disable-socket` covers tests. `test_no_network.py` also
   scans every retrieval module for network imports (`socket`, `http`, `urllib.request`, `httpx`,
   `requests`, `tldextract`, …), which covers code that would only reach out outside a test.
@@ -341,37 +402,33 @@ None. Everything that ran is recorded above, and nothing needs credentials or a 
 ## Follow-up work
 
 - **A site-root rel=canonical** (v1-e04-t05). A common CMS bug gives every article
-  `rel=canonical` = the homepage, and the same-site rule accepts it, so every article on such a
-  site would dedupe into one. I recommend that ArticleService refuse a canonical whose path is
-  `/` when the fetched path is not. I left it out here because ac3 says same-site canonicals are
-  accepted.
-- **More forbidden lists for retrieval** (PM, or v1-e04-t02). `debate_core.retrieval` is on the
-  layers and delivery-framework contracts only, as evidence is. Adding it to the boto3, httpx
-  and lxml `source_modules` would keep t02's and t04's adapters in `integrations` by contract,
-  not by convention.
-- **A PSL refresh procedure** (E04 or ops). The snapshot will age, and a newly listed suffix is
-  treated as an ordinary domain until it is refreshed. A refresh is: replace the file, update the
-  three constants, then run `test_public_suffix.py`. A short runbook or script would make that a
-  routine PR.
+  `rel=canonical` = the homepage, and the same-site rule accepts it. The PM is adding a safeguard
+  to t05's spec ("I'll put it into t05's spec in my next batch").
 - **More link wrappers** (YouTube `/redirect?q=`, DuckDuckGo `/l/?uddg=`, Slack `slack-redir.net`)
   can be added to `LINK_WRAPPERS` with a test each when they show up in real use. I left them out
   so that every rule in the table has a test.
+- The forbidden-list contracts and the PSL refresh procedure were follow-ups in the first draft
+  of this report. Both are now done, under PM ruling 1 and the FYI.
 
-## PM questions
+## PM rulings (2026-10-19) and what was done
 
-1. **The `pyproject.toml` contract edit (Deviation 1).** Options:
-   - (a) Keep it as committed in `8c2e179`. Recommended: it mirrors how evidence is placed, five
-     new contract rows each fail under a placement mutation, and all criteria pass with it.
-   - (b) Revert `8c2e179` and make the placement a separate task. `lint-imports` then fails on
-     this branch with the unplaced-module error quoted above.
-   - (c) Keep it, and also add retrieval to the boto3, httpx and lxml lists (see Follow-up work).
-2. **The trailing-slash prose (Deviation 2).** Amend the spec description's "normalize trailing
-   slashes" to "keep trailing slashes as published (only the empty path becomes `/`); rel=canonical
-   resolves the two forms". Or name a stripping rule you want. I recommend the amendment, because
-   any stripping rule merges URLs the server may treat as different.
+1. **(c): keep the placement, and add retrieval to the boto3, httpx and lxml lists.**
+   - Done in `b50d2cd`: `debate_core.retrieval` is in each list's `source_modules`, with a comment
+     in the httpx and lxml contracts saying that fetching and parsing are adapters.
+   - Three rows import each library from retrieval on purpose, and removing each entry fails
+     exactly its row (see "Forbidden lists mutated too").
+   - Recorded as a PM amendment to `constraints.packages` (Deviation 1).
+2. **Amend the trailing-slash prose.** Done in `8e4294d` (Deviation 2).
 
-FYI, proceeding unless told otherwise: the vendored PSL in place of a library, `idna>=3.7`, and
-the site-root rel=canonical safeguard left for t05.
+FYI items:
+
+- **Vendored PSL with a sha256 test: agreed.** The refresh note is in the module docstring. The
+  pin moved to a `shasum` file so that the one command updates the list and its hash together.
+  The command was run as written against a scratch directory, and both pin mutations fail the
+  pin test.
+- **Site-root rel=canonical:** the PM is taking it into t05; nothing changed here.
+
+No open questions.
 
 ## PM review
 

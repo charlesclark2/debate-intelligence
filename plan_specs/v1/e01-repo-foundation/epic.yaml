@@ -676,5 +676,24 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e01-t27-ci-test-job-within-budget
+    - id: t28
+      kind: Task
+      name: 'scripts/affected_tests.py prints the tests a branch''s changes can break'
+      description: >-
+        scripts/affected_tests.py prints the tests a branch's changes can break.
+      inputs:
+        specRef: plan_specs/v1/e01-repo-foundation/t28-affected-test-selection.yaml
+        goalRef: v1-e01-t28-affected-test-selection
+      dependsOn:
+      - t27
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e01-t28-affected-test-selection reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e01-t28-affected-test-selection
 status:
   phase: Pending

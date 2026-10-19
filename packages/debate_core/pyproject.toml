@@ -22,6 +22,11 @@ dependencies = [
     # renders the reviewed files under prompts/ in a sandboxed environment with strict undefined
     # variables. Templates are compiled from strings; nothing is loaded from a path a template names.
     "jinja2>=3.1",
+    # Canonical URLs (v1-e04-t01-url-canonicalization): debate_core.retrieval turns an internationalized
+    # host into its ASCII form by UTS #46 with nontransitional processing, as the WHATWG URL Standard
+    # and current browsers do. The standard library's `idna` codec is IDNA 2003, which maps `faß.de`
+    # to `fass.de`, a different registered domain. Pure Python, no network. BSD-3-Clause.
+    "idna>=3.10",
 ]
 
 # boto3 is optional on purpose. The domain and application layers never import it — the

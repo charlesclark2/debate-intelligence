@@ -216,10 +216,14 @@ gate, and it runs once per push rather than once per idea. (Added by the PM, 202
   test directory of the module under change, and the plan node's own acceptance command. A red run
   is the new tests alone, shown failing.
 * **Before the report, run the affected set once**, plus the cheap whole-repo checks:
-  * the affected set: every test file that imports, directly or through other modules, a module the
-    branch changed, printed by `uv run scripts/affected_tests.py` once `v1-e01-t28` lands. Until
-    then, the test directories of every package the branch changed, plus `tests/architecture` and
-    `tests/specs`;
+  * the affected set, run with `uv run scripts/affected_tests.py --run` (`v1-e01-t28`). It prints
+    every test file the branch's changes can reach, committed or not: through imports, directly or
+    through any chain of modules, the conftest files above a test, a script or fixture a test names
+    by path, and an always-run list (`tests/architecture`, `tests/specs`, the CLI's wiring tests).
+    Then it runs pytest over them with CI's markers. `--explain` says why each file was chosen. When
+    the branch changes shared test ground (`pyproject.toml`, `uv.lock`, the root `conftest.py`,
+    `tests/pytest_plugins/`, `ci.yml`) it prints that the whole selection is affected and runs
+    nothing: that run is CI's, or the operator's under the exception below;
   * `ruff format --check`, `ruff check`, `pyright packages/<changed packages>`, `lint-imports`,
     `scripts/validate_specs.py`, and the docs checks when docs changed. These take seconds.
 * **After a sync or rebase**, run the affected set again, never the whole selection.

@@ -548,3 +548,22 @@ def test_run_runs_nothing_when_the_whole_selection_is_affected(workspace: Worksp
     assert result.status == 0
     assert result.whole
     assert "failed" not in result.stdout
+
+
+# --------------------------------------------------------------------------------------------
+# Wiring: working agreement 10, the kickoff prompt and the task-workflow guide name the command
+# --------------------------------------------------------------------------------------------
+
+
+def test_the_agreement_the_session_prompt_and_the_workflow_guide_send_a_session_to_the_script() -> None:
+    sys.path.insert(0, str(REPO_ROOT / "scripts"))
+    import task_helper
+
+    command = "uv run scripts/affected_tests.py --run"
+    agreements = (REPO_ROOT / "docs" / "process" / "working-agreements.md").read_text(encoding="utf-8")
+    agreement_10 = " ".join(agreements.split("\n## 10.", 1)[1].split("\n## ", 1)[0].split())
+    assert command in agreement_10
+    assert "Until then" not in agreement_10, "the interim rule is still in agreement 10"
+    assert command in " ".join(task_helper.PROMPT.split())
+    guide = (REPO_ROOT / "docs" / "process" / "task-workflow.md").read_text(encoding="utf-8")
+    assert command in " ".join(guide.split())

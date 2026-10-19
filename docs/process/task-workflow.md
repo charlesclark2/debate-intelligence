@@ -84,6 +84,15 @@ The prompt tells the session which spec to execute, to implement the plan nodes 
 hand you any command that runs longer than about 2 minutes, to commit locally but never push,
 and to finish by setting the phase to `Succeeded` and completing the session report.
 
+It also tells the session never to run the whole test suite: CI runs it on the pull request
+([working agreement 10](working-agreements.md#10-a-session-tests-what-it-changed-and-ci-tests-everything)).
+Before the report the session runs the affected set once, with
+`uv run scripts/affected_tests.py --run`, which prints and runs the test files the branch's changes
+can reach (`--explain` says why each one was chosen). When the branch changes shared test ground,
+such as `pyproject.toml` or `uv.lock`, the script says the whole selection is affected and runs
+nothing; if a whole-selection run before the pull request is warranted, the session hands it to you
+as one operator command.
+
 `scripts/task resume <task>` reopens the worktree in VS Code; continue the task's conversation
 from Claude Code's past-conversations list. With `--launch terminal` it runs `claude --continue`.
 For a task merged with `--partial` whose worktree is gone, the same command recreates it (see

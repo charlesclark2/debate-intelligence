@@ -322,6 +322,16 @@ def test_the_same_seed_draws_the_same_items_in_the_same_order(data_dir: Path) ->
     assert [stratum for stratum, _, _ in first] != list(range(11)), "shuffled: the order says nothing"
 
 
+def test_each_stratum_draws_its_planned_number_and_no_more() -> None:
+    source = script._Source(CASELIST, DIGEST, Path("unused"))  # pyright: ignore[reportPrivateUsage]
+    found = {number: [(source, position) for position in range(30)] for number in range(len(script.STRATA))}
+
+    drawn = Counter(stratum for stratum, _, _ in script.draw(found, 5))
+
+    assert drawn == {number: stratum.planned for number, stratum in enumerate(script.STRATA)}
+    assert sum(drawn.values()) == 70
+
+
 def test_nothing_saved_holds_text_a_tag_a_path_or_a_digest(
     data_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

@@ -436,6 +436,13 @@ class TestAHighlightedCite:
         assert section.match.rule_id == f"{HIGHLIGHTED_CITE}:heuristic-marked-up-body-text"
         assert section.match.confidence == 0.6
 
+    def test_a_left_quote_before_its_year_is_read_as_an_apostrophe(self, parser: DebateDocxParser) -> None:
+        markup, text = paragraph(
+            [("Okonkwo \u201826", {"bold": True, "highlight": "yellow"}), (", " + qualifications(588), {})]
+        )
+
+        assert only_card(parse(parser, tag_paragraph(), markup, BODY)).full_cite == text
+
     def test_highlighted_throughout_it_is_still_the_cite_when_a_body_follows(
         self, parser: DebateDocxParser
     ) -> None:

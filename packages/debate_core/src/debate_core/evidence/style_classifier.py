@@ -389,17 +389,18 @@ def _is_a_first_name_or_a_title(words_before: str) -> bool:
 
 
 def _is_bold_over(paragraph: ParagraphDescription, starts: int, ends: int) -> bool:
-    """Whether every visible run over `[starts, ends)` of the paragraph's text is bold."""
+    """Whether every visible run over `[starts, ends)` of the paragraph's text is bold.
+
+    Asked only of the stretch a name and a year occupy, which always has a visible run.
+    """
     position = 0
-    seen = False
     for run in paragraph.runs:
         run_ends = position + len(run.text)
-        if position < ends and run_ends > starts and not run.is_blank:
-            seen = True
-            if not (run.bold if run.bold is not None else bool(paragraph.paragraph_bold)):
-                return False
+        bold = run.bold if run.bold is not None else bool(paragraph.paragraph_bold)
+        if position < ends and run_ends > starts and not run.is_blank and not bold:
+            return False
         position = run_ends
-    return seen
+    return True
 
 
 def _one_bracket_runs_on_from(text: str, after: int) -> bool:
@@ -432,8 +433,9 @@ def is_a_cite_behind_a_first_name_or_title(paragraph: ParagraphDescription, prof
     if any(_is_in_a_cite_style(run, profile) for run in paragraph.visible_runs):
         return False
     found = first_name_and_year(text, profile)
-    if found is None or not 0 < found.start() <= NAME_AND_YEAR_AT_THE_HEAD_CHARACTERS:
+    if found is None or found.start() > NAME_AND_YEAR_AT_THE_HEAD_CHARACTERS:
         return False
+    # Not at the front: nothing before the name is no first name and no title.
     if not _is_a_first_name_or_a_title(text[: found.start()]):
         return False
     if _opens_in_bold(paragraph) or _is_bold_over(paragraph, found.start() + leading, found.end() + leading):

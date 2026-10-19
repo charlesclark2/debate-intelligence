@@ -10,8 +10,9 @@ and the commands end to end are `tests/smoke/test_caselist_remove_smoke.py` and
   count, and is never "Nothing is left to remove"; one whose sweep could not be counted says that.
 * **A re-planned withdrawal** says where the withdrawal record puts the copy, or that none does.
 * **A withdrawn copy's residue** is named by the caselist it was withdrawn from and the request,
-  and a withdrawal an earlier build made is *not attributed*. Neither changes the exit code, and
-  neither names a path, school, team code or file name.
+  and a withdrawal an earlier build made is *not attributed*. Neither names a path, school, team
+  code or file name. Neither changed the exit code until `v1-e30-t24`, when the residue began to
+  fail the command.
 """
 
 from __future__ import annotations
@@ -135,11 +136,16 @@ def with_a_withdrawn_copy_left(*, not_attributed: tuple[str, ...] = ()) -> Casel
 
 
 class TestAWithdrawnCopyLeft:
-    def test_it_does_not_change_whether_the_command_succeeds(self) -> None:
+    def test_it_fails_the_command_as_residue(self) -> None:
+        """Until `v1-e30-t24` this said it does not change whether the command succeeds. The PM ruled
+        on this task's question 1 that a withdrawn copy left is an unfinished removal: it now fails
+        the command as `REMOVAL_RESIDUE` (`test_caselist_status_panels.py`). A withdrawal not
+        attributed still does not."""
         report = with_a_withdrawn_copy_left(not_attributed=("RM-2026-90",))
 
-        assert report.in_sync is True
-        assert not report.residue_found
+        assert report.in_sync is False
+        assert report.residue_found
+        assert dataclasses.replace(report, residue=()).in_sync, "not attributed alone fails nothing"
 
     def test_the_table_names_its_caselist_its_request_and_twelve_characters(self) -> None:
         caption = _status_table(with_a_withdrawn_copy_left(), SETTINGS).caption or ""

@@ -1669,3 +1669,134 @@ def test_a_plan_that_may_not_list_versions_says_the_sweep_was_not_counted(
 
     assert planned["data"].get("manifest_versions_swept") == "not counted"
     assert "MANIFEST VERSIONS SWEPT from the bucket by --execute: not counted." in text.splitlines()
+
+
+# ------------------------------------------------------------------------------------------------
+# v1-e30-t24: a withdrawn copy left fails status; an upload refused at import is owed after it goes
+# ------------------------------------------------------------------------------------------------
+
+WITHDRAWN_COPY = hashlib.sha256(b"a copy a withdrawal took from testcl26, put back").hexdigest()
+WITHDRAWN_FROM = disclosure_of("Seaside/ZZ/Seaside-ZZ-Neg-Fictional Invitational-Round 9.docx")
+WITHDRAWAL_REQUEST = "RM-2026-07"
+
+
+def a_withdrawal_left_its_copy(installation: Path, bucket: S3Client, *, recorded: bool = True) -> None:
+    """What a withdrawal from `testcl26` leaves when its takedown stopped before the caselist's copy:
+    the list's entry for the path it was withdrawn from, the withdrawal record's line naming
+    `testcl26`, no manifest row of the file, and its copy still under `raw/caselist/testcl26/`.
+    Written as a build since `v1-e30-t16` writes them. Without `recorded`, as an earlier build leaves
+    it: the entry and no record."""
+    suppression = installation / "dev" / "suppression"
+    suppression.mkdir(parents=True, exist_ok=True)
+    when = {
+        "recorded_at": "2026-10-01T12:00:00Z",
+        "reason": "REQUESTED_BY_TEAM",
+        "request_id": WITHDRAWAL_REQUEST,
+    }
+    entry = {
+        "schema_version": 1,
+        "action": "SUPPRESS",
+        "sha256": WITHDRAWN_COPY,
+        "disclosure": WITHDRAWN_FROM,
+    }
+    (suppression / "suppression-list.jsonl").write_text(json.dumps(entry | when) + "\n", encoding="utf-8")
+    if recorded:
+        line = {"schema_version": 1, "sha256": WITHDRAWN_COPY, "disclosure": WITHDRAWN_FROM}
+        (suppression / "withdrawals.jsonl").write_text(
+            json.dumps(line | {"caselist": SYNTHETIC_CASELIST} | when) + "\n", encoding="utf-8"
+        )
+    digest = WITHDRAWN_COPY
+    key = f"raw/caselist/{SYNTHETIC_CASELIST}/sha256/{digest[:2]}/{digest[2:4]}/{digest}"
+    bucket.put_object(Bucket=BUCKET, Key=key, Body=b"left")
+
+
+def test_a_withdrawn_copy_left_in_a_caselist_that_keeps_no_holder_fails_status_as_removal_residue(
+    installation: Path, bucket: S3Client, published: Any
+) -> None:
+    """The PM's ruling on `v1-e30-t19`'s question 1: an unfinished removal, like a removed file's residue."""
+    a_withdrawal_left_its_copy(installation, bucket)
+
+    status = run("caselist", "status")
+    told = invoke("caselist", "status", width=400)
+
+    assert status["exit_code"] == ExitCode.DOMAIN_FAILURE, status
+    error = status["error"]
+    assert error["code"] == "REMOVAL_RESIDUE"
+    assert error["details"]["withdrawn_copies_left"] == [
+        {
+            "caselist": SYNTHETIC_CASELIST,
+            "sha256_prefix": WITHDRAWN_COPY[:12],
+            "request_id": WITHDRAWAL_REQUEST,
+            "current_objects": 1,
+            "noncurrent_versions": 0,
+            "delete_markers": 0,
+        }
+    ]
+    assert f"withdrawn from {SYNTHETIC_CASELIST} (sha256 {WITHDRAWN_COPY[:12]}, {WITHDRAWAL_REQUEST})" in (
+        " ".join(error["message"].split())
+    )
+    assert told.exit_code == ExitCode.DOMAIN_FAILURE
+    assert "REMOVAL_RESIDUE" in told.output and WITHDRAWN_COPY not in told.output
+
+
+def test_a_withdrawal_no_record_attributes_is_reported_and_status_still_exits_zero(
+    installation: Path, bucket: S3Client, published: Any
+) -> None:
+    """*NOT ATTRIBUTED* says what was not looked at, not that something was found."""
+    a_withdrawal_left_its_copy(installation, bucket, recorded=False)
+
+    status = run("caselist", "status")
+
+    assert status["exit_code"] == ExitCode.OK, status
+    assert status["data"]["withdrawals_not_attributed"] == [WITHDRAWAL_REQUEST]
+    assert status["data"]["withdrawn_copies_left"] == []
+
+
+def test_an_upload_refused_at_a_held_path_is_owed_after_its_archive_has_gone_until_the_rerun_lists_it(
+    installation: Path, bucket: S3Client, published: Any
+) -> None:
+    """`v1-e30-t24`, item 3. Next week's archive is imported from outside the inbox, the state its
+    take-out or retention leaves, so only the held-digest record still knows the upload."""
+    data_dir = installation / "dev"
+    environment(DEBATE_REMOVAL_PROFILE=REMOVAL_PROFILE)
+    assert run(*REMOVE_REVISION, "--execute")["exit_code"] == ExitCode.OK
+    environment(DEBATE_REMOVAL_PROFILE=None)
+    imported = import_next_week(next_weeks_archive(installation / "next-week"))
+    assert imported["data"]["held_at_removed_paths"] == {"RM-2026-03": 1}, imported
+    assert not list((data_dir / "inbox").glob("*.zip")), "nothing waits in the inbox"
+    assert run("caselist", "publish", "--caselist", SYNTHETIC_CASELIST)["exit_code"] == ExitCode.OK
+
+    owed = raw_json("caselist", "status")
+    told = invoke("caselist", "status", width=400).stdout
+
+    data = json.loads(owed)["data"]
+    assert (data["in_sync"], data["removals_owed"], data["held_in_inbox"][0]["uploads"]) == (
+        True,
+        ["RM-2026-03"],
+        0,
+    )
+    assert data["refused_at_import"] == [
+        {
+            "caselist": SYNTHETIC_CASELIST,
+            "uploads": 1,
+            "sha256_prefixes": [UPLOADED_AFTER[:12]],
+            "requests": ["RM-2026-03"],
+        }
+    ]
+    assert (
+        f"REFUSED AT IMPORT AT A HELD PATH in {SYNTHETIC_CASELIST}: 1 upload(s) the same removal has not yet "
+        f"listed (sha256 {UPLOADED_AFTER[:12]}, RM-2026-03)."
+    ) in " ".join(told.split())
+    assert not [name for name in (*IDENTIFYING, NEXT_WEEK, HELD_PATH) if name in owed + told]
+
+    again = run(*REMOVE_REVISION)
+    assert [
+        (one["sha256"], one["inclusion"])
+        for one in again["data"]["sources"]
+        if one["sha256"] == UPLOADED_AFTER
+    ] == [(UPLOADED_AFTER, "held_at_import")]
+    environment(DEBATE_REMOVAL_PROFILE=REMOVAL_PROFILE)
+    assert run(*REMOVE_REVISION, "--execute")["exit_code"] == ExitCode.OK
+    finished = run("caselist", "status")
+    assert finished["exit_code"] == ExitCode.OK, finished
+    assert finished["data"]["removals_owed"] == [], "the re-run listed what status said was owed"

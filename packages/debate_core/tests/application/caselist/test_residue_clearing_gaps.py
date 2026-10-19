@@ -260,21 +260,30 @@ class TestARewrittenManifestsOlderVersion:
 
         assert old in versions_of(world, REWRITTEN_KEY)
 
-    async def test_a_rewrite_the_bucket_no_longer_holds_orders_nothing_and_sweeps_nothing_of_its_key(
+    async def test_a_rewrite_the_bucket_no_longer_holds_leaves_what_status_counts_to_be_cleared(
         self, removed: RemovalWorld, tmp_path: Path
     ) -> None:
-        """Older than the rewrite cannot be told without the rewrite: the key is left as it is."""
+        """`v1-e30-t24` changed this from "sweeps nothing of its key". The run completed, and a
+        completed run's versions are held to its completion, which the log records, and not to the
+        rewrite: status counts the old version without the rewrite, so the re-run takes it. A run
+        that stopped is still held to its rewrite, and without it nothing of the key is taken
+        (`test_status_and_the_sweep_share_one_rule.py`, `TestARunThatStopped`)."""
         world = removed
         rewrite = rewrite_of(world)
         old = put(world, REWRITTEN_KEY, AN_OLD_BODY, written=LONG_BEFORE)
         same_bytes = tmp_path / "republished.jsonl"
         same_bytes.write_bytes(current_bytes(world, REWRITTEN_KEY))
-        await world.bucket.put_file(REWRITTEN_KEY, same_bytes)
+        republished = (await world.bucket.put_file(REWRITTEN_KEY, same_bytes)).version_id
         world.client.delete_object(Bucket=world.bucket_name, Key=REWRITTEN_KEY, VersionId=rewrite)
+        assert of(await status(world), SYNTHETIC_CASELIST).older_versions == (
+            OlderVersions(role="manifest", versions=1),
+        )
 
         await remove(world)
 
-        assert old in versions_of(world, REWRITTEN_KEY)
+        assert old not in versions_of(world, REWRITTEN_KEY)
+        assert versions_of(world, REWRITTEN_KEY) == [republished]
+        assert of(await status(world), SYNTHETIC_CASELIST).older_versions == ()
 
     async def test_a_version_stamped_in_the_same_moment_as_the_rewrite_is_not_older_than_it(
         self, removed: RemovalWorld, tmp_path: Path
@@ -627,8 +636,9 @@ class TestAWithdrawnCopysResidue:
         )
         assert of(report, OTHER_CASELIST).withdrawn_copies == ()
         assert report.withdrawals_not_attributed == ()
-        # Not a difference this task may make an exit code of (the spec's forbidden list).
-        assert report.in_sync
+        # Since v1-e30-t24 (the PM's ruling on this task's question 1) it fails the comparison, as a
+        # removed file's residue does: `test_withdrawn_copies_fail_status.py`.
+        assert not report.in_sync
 
     async def test_a_withdrawal_an_earlier_build_made_is_not_attributed(
         self, withdrawn_from_one_caselist: RemovalWorld

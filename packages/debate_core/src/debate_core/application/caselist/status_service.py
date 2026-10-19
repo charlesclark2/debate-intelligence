@@ -62,13 +62,29 @@ comparison reports both (`v1-e30-t21`):
   file, which every build before `v1-e30-t22` gave a row and this build's importer withholds;
 * an upload at a held path in an archive in the download inbox (:attr:`CaselistStatusReport.held_in_inbox`),
   asked for with `held_in_inbox=True` from a service built with the inbox: refused at import, or
-  waiting to be.
+  waiting to be;
+* an upload an import refused at a held path, which the same removal run again has not yet put on
+  the list (:attr:`CaselistStatusReport.refused_at_import`, `v1-e30-t24`), whether or not its
+  archive is still in the inbox: see below.
 
 None is a difference between this machine and the bucket, so none changes
 :attr:`CaselistStatusReport.in_sync` or the command's exit status. Each is named by the request that
 holds its path, and a file by its digest too, never by the path. The inbox is read only when asked, because it
 means reading every archive in it: `caselist status` asks, and `caselist pull` does not. An archive
 there that cannot be read is passed over; a removal's dry run names it.
+
+### What an import refused (`v1-e30-t24`)
+
+The import records each upload it refuses at a held path (`held-digests.jsonl`, `v1-e30-t23`): its
+digest, the held path's digest and the request holding the path. The same removal run again lists
+each one: whole where no other path holds the bytes, and withdrawn from the held path where one does.
+Until it has, the removal is owed, and once the archive has left the inbox nothing but the record
+says so. So, asked with `held_in_inbox=True`, the comparison reads the record too, from every copy
+of the list as the removal reads it (the import writes this machine's copy alone, the removal the
+bucket's), and names a line whose request holds that path in a caselist compared, and which the list
+does not stop there, whole or as the held path's disclosure. A hold an un-suppress lifted holds
+nothing, and the re-run lists nothing for it, so nothing is owed for it either. The record holds no
+date, so `--snapshot` does not narrow it.
 
 ## Bytes the publisher does not upload
 
@@ -102,11 +118,13 @@ With the residue check, the withdrawal record beside the list (`withdrawals.json
 says which caselist each copy a removal withdrew was taken from. For a caselist that no longer
 holds the file (no manifest of it on this machine names the file at a path the list does not stop)
 what is left of that caselist's copy is counted, and named by the caselist and the request
-(:mod:`~debate_core.application.caselist.removal_residue`, "A copy withdrawn from a caselist"). A
-withdrawal an earlier build made has no record, and its request is named as not attributed
-(:attr:`CaselistStatusReport.withdrawals_not_attributed`). Neither is part of
-:attr:`CaselistStatusReport.in_sync`: they are new findings, and the command's exit status is as it
-was.
+(:mod:`~debate_core.application.caselist.removal_residue`, "A copy withdrawn from a caselist"). That
+is residue, as a removed file's is: since `v1-e30-t24` it is not :attr:`CaselistStatusReport.in_sync`,
+and the command fails as `REMOVAL_RESIDUE` when every snapshot agrees. A withdrawal an earlier build
+made has no record, and its request is named as not attributed
+(:attr:`CaselistStatusReport.withdrawals_not_attributed`). That is not part of
+:attr:`CaselistStatusReport.in_sync`: it says what was not looked at, not that something was found,
+like a caselist whose versions are not checked.
 
 Checksums are the bucket's *recorded* digests, read with one `HeadObject` per listed source — the
 listing states none (`debate_core.application.ports.evidence_store`). Nothing is downloaded: a
@@ -160,6 +178,7 @@ from debate_core.application.caselist.removal_residue import (
 from debate_core.application.caselist.suppression import (
     caselist_withdrawn_from,
     load_suppression_state,
+    read_held_digests,
     read_withdrawals,
 )
 from debate_core.application.errors import DomainError, NotFound
@@ -185,6 +204,7 @@ __all__ = [
     "InboxHolds",
     "MismatchKind",
     "NoCaselistEvidence",
+    "RefusedAtImport",
     "SnapshotStatus",
 ]
 
@@ -220,6 +240,20 @@ class HeldInboxUpload:
 
     caselist: str
     snapshot: str
+    sha256: Sha256Hex
+    request_id: str
+
+
+@dataclass(frozen=True, slots=True, order=True)
+class RefusedAtImport:
+    """An upload an import refused at a held path, which the same removal run again has not yet put
+    on the list (`v1-e30-t24`), from the held-digest record (`v1-e30-t23`).
+
+    The caselist of the hold that refused it, its digest, and the request holding the path. Never the
+    path: the record holds the path's digest alone.
+    """
+
+    caselist: str
     sha256: Sha256Hex
     request_id: str
 
@@ -343,13 +377,18 @@ class CaselistStatusReport:
     """Request ids of withdrawals the list still suppresses that no withdrawal record attributes to
     a caselist: made by a build from before `v1-e30-t16`, so what is left of their copies is not
     checked (`v1-e30-t19`). Empty when the caller did not ask for the residue check."""
+    refused_at_import: tuple[RefusedAtImport, ...] = ()
+    """Uploads an import refused at a held path in a caselist compared, from the held-digest record,
+    that the same removal run again has not yet listed (`v1-e30-t24`). Read when the inbox is, and
+    empty when the caller did not ask. Not part of :attr:`in_sync`."""
 
     @property
     def in_sync(self) -> bool:
         """True only when every snapshot agrees and nothing suppressed is left; what exits 0.
 
         A caselist whose residue could not be checked does not make this false: it is reported as
-        not checked (:attr:`residue_not_checked`).
+        not checked (:attr:`residue_not_checked`). Nor does a withdrawal no record attributes
+        (:attr:`withdrawals_not_attributed`). A withdrawn copy left does (`v1-e30-t24`).
         """
         return (
             all(snapshot.in_sync for snapshot in self.snapshots)
@@ -394,14 +433,20 @@ class CaselistStatusReport:
 
     @property
     def removals_owed(self) -> tuple[str, ...]:
-        """The request ids whose removal a held row or a held inbox upload says to run again, sorted."""
+        """The request ids whose removal a held row, a held inbox upload or an upload refused at
+        import says to run again, sorted."""
         rows = {row.request_id for snapshot in self.snapshots for row in snapshot.held_rows}
         skipped = {request for snapshot in self.snapshots for request in snapshot.held_skipped_rows}
-        return tuple(sorted(rows | skipped | {upload.request_id for upload in self.held_in_inbox}))
+        inbox = {upload.request_id for upload in self.held_in_inbox}
+        return tuple(sorted(rows | skipped | inbox | {one.request_id for one in self.refused_at_import}))
 
     def held_in_inbox_of(self, caselist: str) -> tuple[HeldInboxUpload, ...]:
         """The :attr:`held_in_inbox` uploads of `caselist`."""
         return tuple(upload for upload in self.held_in_inbox if upload.caselist == caselist)
+
+    def refused_at_import_of(self, caselist: str) -> tuple[RefusedAtImport, ...]:
+        """The :attr:`refused_at_import` uploads of `caselist`."""
+        return tuple(upload for upload in self.refused_at_import if upload.caselist == caselist)
 
     @property
     def residue_found(self) -> bool:
@@ -411,7 +456,7 @@ class CaselistStatusReport:
     @property
     def withdrawn_copies_left(self) -> bool:
         """Whether a version listing showed anything left of a copy withdrawn from a caselist
-        (`v1-e30-t19`). Not part of :attr:`in_sync`."""
+        (`v1-e30-t19`). Part of :attr:`residue_found` since `v1-e30-t24`."""
         return any(one.withdrawn_copies for one in self.residue)
 
     @property
@@ -434,7 +479,8 @@ class CaselistStatusService:
             :meth:`status` is asked for residue. Without one, no removal is known.
         environment: This environment, `dev` or `prod`. Only its own removals are compared.
         inbox: The download inbox, for the uploads a removal's hold covers there (`v1-e30-t21`).
-            Read only when :meth:`status` is asked for them.
+            Read only when :meth:`status` is asked for them, and the held-digest record beside the
+            suppression list with it (`v1-e30-t24`).
         concurrency: `HeadObject` calls in flight at once.
     """
 
@@ -476,7 +522,8 @@ class CaselistStatusService:
         With `residue`, also list object versions and report what is left of each compared
         caselist's removed files, whichever snapshot was asked about: see "What a removal left
         behind" in the module docstring. With `held_in_inbox`, also read the download inbox for
-        uploads a removal's hold covers, of the caselists compared and the snapshot asked about:
+        uploads a removal's hold covers, of the caselists compared and the snapshot asked about,
+        and the held-digest record for uploads an import refused that the re-run has not listed:
         see "What a removal's hold says is owed".
 
         Raises :class:`NoCaselistEvidence` when neither side holds anything that was asked about.
@@ -519,6 +566,7 @@ class CaselistStatusService:
                 for name in caselists
             ]
         inbox: tuple[HeldInboxUpload, ...] = ()
+        refused: tuple[RefusedAtImport, ...] = ()
         if held_in_inbox and self._inbox is not None:
             inbox = tuple(
                 sorted(
@@ -527,6 +575,7 @@ class CaselistStatusService:
                     if upload.caselist in caselists and snapshot in (None, upload.snapshot)
                 )
             )
+            refused = await self._refused_at_import(suppression, caselists)
         return CaselistStatusReport(
             snapshots=tuple(compared),
             suppressed_objects=tuple(sorted(set(leftovers))),
@@ -534,7 +583,24 @@ class CaselistStatusService:
             removals_not_checked=removals.not_checked,
             held_in_inbox=inbox,
             withdrawals_not_attributed=not_attributed,
+            refused_at_import=refused,
         )
+
+    async def _refused_at_import(
+        self, suppression: SuppressionState, caselists: Sequence[str]
+    ) -> tuple[RefusedAtImport, ...]:
+        """The held-digest record's uploads the same removal run again would still list: see "What
+        an import refused" in the module docstring. Reads the record from every copy of the list."""
+        found: set[RefusedAtImport] = set()
+        for entry in await read_held_digests(self._suppression):
+            if suppression.suppresses(entry.sha256, disclosure=entry.disclosure):
+                continue  # on the list already, whole or at the held path: the re-run's work is done
+            found.update(
+                RefusedAtImport(caselist=hold.caselist, sha256=entry.sha256, request_id=entry.request_id)
+                for hold in suppression.held_paths.get(entry.disclosure, ())
+                if hold.request_id == entry.request_id and hold.caselist in caselists
+            )
+        return tuple(sorted(found))
 
     async def _withdrawn_copies(
         self, suppression: SuppressionState, caselists: Sequence[str]

@@ -113,6 +113,11 @@ class CommandFailure:
             exit_code=ExitCode.DOMAIN_FAILURE,
             details={"unverified": 3, "total": 12},
         )
+
+    The panel prints each of `details` as a line, and the JSON envelope carries them whole. Where
+    `details` are a whole report, as `caselist status`'s are, `panel_details` is what the panel
+    prints instead: counts and digest prefixes a person reads, while the envelope's `details` keep
+    every field (`v1-e30-t24`).
     """
 
     code: str
@@ -120,6 +125,8 @@ class CommandFailure:
     exit_code: ExitCode
     details: Mapping[str, JsonValue] = field(default_factory=dict)
     hint: str | None = None
+    panel_details: Mapping[str, JsonValue] | None = None
+    """What the panel prints in place of :attr:`details`, or `None` to print them. Never in the JSON."""
 
     @classmethod
     def from_exception(cls, exception: BaseException, *, hint: str | None = None) -> CommandFailure:
@@ -316,7 +323,8 @@ def _render_table(spec: TableSpec) -> Table:
 
 def _render_failure(failure: CommandFailure) -> Panel:
     body = Text(failure.message)
-    for key, value in failure.details.items():
+    shown = failure.details if failure.panel_details is None else failure.panel_details
+    for key, value in shown.items():
         body.append(f"\n{key}: {value}", style="dim")
     if failure.hint is not None:
         body.append(f"\n\n{failure.hint}", style="italic")

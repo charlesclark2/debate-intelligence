@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Sequence
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final
@@ -40,6 +41,7 @@ from tests.fixtures.parse_pipeline.build_parse_world import (
 )
 
 from debate_core.application.caselist.publish_service import SourceResult
+from debate_core.application.caselist_card_stats import CardPlacement, CaselistCardStatsService
 from debate_core.application.ports.parsed_store import AGGREGATE_NAMES
 from debate_core.application.ports.suppression import (
     PathHoldEntry,
@@ -48,8 +50,10 @@ from debate_core.application.ports.suppression import (
     SuppressionEntry,
     disclosure_digest,
 )
+from debate_core.domain.debate_files import ParsedCard
 from debate_core.integrations.docx_parser import DOCX_PARSER_VERSION
 from debate_core.integrations.s3 import S3EvidenceObjectStore
+from debate_core.testing.fakes import build_fake_caselist_repository
 
 from .test_caselist_parse import THROUGH_0908, CountingParser, World, publisher, put_requests
 
@@ -167,6 +171,27 @@ async def test_an_earlier_builds_parse_of_a_held_upload_leaves_every_aggregate(w
     assert report.store.cards == sum(int(row["cards"]) for row in world.lines("index.jsonl"))
     # Its cards are not clustered either: every cluster counted has a row, so none is the held card's.
     assert report.store.clusters == len({row["cluster_id"] for row in world.lines("occurrences.jsonl")})
+
+
+async def test_a_held_uploads_cards_are_never_clustered_with_the_live_ones(world: World) -> None:
+    """Its document is still in the directory the earlier build wrote; the rebuild never reads it, so
+    a held card can neither name a cluster nor change a live card's membership."""
+    held = digest_of("cardmirror")
+    await world.run()
+    await hold(world, HELD_ONLY_PATH)
+    placed: list[str] = []
+    place = CaselistCardStatsService(build_fake_caselist_repository()).place
+
+    def recording(cards: Sequence[ParsedCard]) -> Sequence[CardPlacement]:
+        placed.extend(card.provenance.source_sha256 for card in cards)
+        return place(cards)
+
+    service = world.service()
+    service._place_cards = recording  # pyright: ignore[reportPrivateUsage]
+    await service.run(await service.plan(CASELIST))
+
+    assert placed, "the precondition: the live cards are placed"
+    assert held not in placed
 
 
 async def test_publish_sends_nothing_of_an_earlier_builds_parse_of_a_held_upload(

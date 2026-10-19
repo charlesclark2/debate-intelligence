@@ -31,18 +31,19 @@ New records use the template in [0000-template.md](0000-template.md).
 | [0016](0016-caselist-corpus-is-accumulated.md) | The caselist corpus is accumulated from windows, not captured | Superseded 2026-09-21 | Claimed no full export exists and decided a daily sync. Both were wrong: the site publishes `<caselist>-all-<date>.zip` and retains weekly archives back to 2026-07-07, and the daily cadence contradicted the approved data-use policy. Its measurements of the three September windows stand and are carried into [0017](0017-caselist-corpus-is-retrievable.md). |
 | [0017](0017-caselist-corpus-is-retrievable.md) | The caselist corpus is retrievable, and the sync stays weekly | Accepted 2026-09-21 | Supersedes [0016](0016-caselist-corpus-is-accumulated.md): the site publishes a complete archive and retains a weekly back-catalogue, so the backfill starts from the full archive and the sync stays at the policy's weekly cadence. |
 | [0018](0018-card-evidence-omissions.md) | A card quotes one passage and records what it omitted | Accepted 2026-10-01 | `Card` names an envelope in the snapshot plus canonical `omitted_ranges`; `evidence_text` stays verbatim with no joiner, the ellipsis is a rendering concern, and `CardSpan` offsets stay relative to `evidence_text`. |
+| [0019](0019-student-search-pilot-stack-sign-in-and-hosting.md) | The student search pilot — one function behind CloudFront, a weekly SQLite index, and coach-created Cognito accounts | Accepted 2026-10-19 | The v1.7 pilot (E39): a container-image Lambda behind CloudFront and origin access control at `tub.wfbdebate.com`, server-rendered FastAPI through the Lambda Web Adapter, a SQLite FTS5 index fetched from `reports/tub/search/` at cold start, a Cognito Essentials pool with managed login, admin-created username accounts and required TOTP, an encrypted session cookie, a 400-day append-only audit log group, operator-run deploys, about $0.40 a month. Scoped to the pilot; [0004](0004-opensearch-is-derived-not-authoritative.md) still governs V2's search, and V2 keeps the pool. |
 
 ## Reserved numbers
 
 Some numbers are already referenced by task specs but the ADR files themselves have not
 been written yet. Keep the numbers reserved for these topics; write the record when the
 decision lands. A reservation moves into the index above when its record is written —
-0012 did so in `v1-e36-t02-site-hosting`, 0015 in `v1-e37-t01-content-editing-decision`.
+0012 did so in `v1-e36-t02-site-hosting`, 0015 in `v1-e37-t01-content-editing-decision`, 0019 in
+`v1-e39-t01-pilot-architecture-adr`.
 
 | ADR | Topic | Owning spec |
 |---|---|---|
 | 0011 | VPC egress design | [`v2-e10-t05-container-platform`](../../plan_specs/v2/e10-aws-foundation/t05-container-platform.yaml) |
-| 0019 | The student search pilot's stack, sign-in and hosting | [`v1-e39-t01-pilot-architecture-adr`](../../plan_specs/v1/e39-evidence-search-pilot/t01-pilot-architecture-adr.yaml) |
 
 New ADRs take the next free number after the highest written or reserved one: **0020** is the
 next free number. Do not skip numbers; if a reservation is dropped, note it here rather than silently

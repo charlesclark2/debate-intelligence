@@ -318,6 +318,21 @@ def test_a_team_removal_withdrawing_only_from_its_own_paths_reads_as_before() ->
     ) in lines
 
 
+def test_a_withdrawal_an_earlier_run_left_no_path_of_is_still_called_this_teams() -> None:
+    """A `--team` re-run plans a file an earlier run withdrew again, with no path left to show:
+    the team's own, as the line has always said, and nothing of another holder's."""
+    earlier = dataclasses.replace(
+        source(SHARED, Inclusion.UNFINISHED, Disposition.WITHDRAW), withdrawn_earlier_from=(CASELIST,)
+    )
+
+    lines = render_plan(plan_of((earlier,), selector=TEAM), None).splitlines()
+
+    assert (
+        "  - Suppressed, so no later archive, weekly or complete, can bring back this team's copy of a "
+        "shared file at the path it was taken from."
+    ) in lines
+
+
 # ------------------------------------------------------------------------------------------------
 # (3) A re-run that removes nothing
 # ------------------------------------------------------------------------------------------------

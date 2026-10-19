@@ -529,9 +529,9 @@ def _entries_by_kind(plan: RemovalPlan) -> str:
 def _withdrawn_at(plan: RemovalPlan) -> tuple[bool, bool]:
     """Whether the plan withdraws a copy at a path of the team's own, and at another holder's.
 
-    By the paths each withdrawal takes. One whose paths an earlier run's deletions left nothing to
-    show is the team's when the request names it, and the other holder's when it is at a removed
-    path, as a later upload is.
+    By the paths each withdrawal takes. One an earlier run withdrew, whose paths that run's
+    deletions left nothing to show, is the team's, as the plan has always called it: a `--team`
+    re-run plans each such file again as the request's own.
     """
     own = _the_teams_own_paths(plan)
     at_the_teams = at_anothers = False
@@ -539,14 +539,7 @@ def _withdrawn_at(plan: RemovalPlan) -> tuple[bool, bool]:
         taken = {disclosure_digest(caselist, path) for caselist, path in source.requester_paths} | {
             disclosure for _, disclosure in source.held_at_import
         }
-        if not taken:
-            at_a_removed_path = source.inclusion in _AT_A_REMOVED_PATH
-            at_the_teams, at_anothers = (
-                at_the_teams or not at_a_removed_path,
-                at_anothers or at_a_removed_path,
-            )
-            continue
-        at_the_teams = at_the_teams or bool(taken & own)
+        at_the_teams = at_the_teams or not taken or bool(taken & own)
         at_anothers = at_anothers or bool(taken - own)
     return at_the_teams, at_anothers
 
@@ -932,7 +925,7 @@ def _confirmation(plan: RemovalPlan) -> list[str]:
             f"  - Not removed: {plan.later_uploads_found} later upload(s) at the same path(s), because the "
             "request was about one version."
         )
-    if (refused := plan.included_as(Inclusion.HELD_AT_IMPORT)) and not plan.nothing_to_do:
+    if refused := plan.included_as(Inclusion.HELD_AT_IMPORT):
         lines.append(
             "  - Also stopped, as later uploads an import refused at the same path(s): "
             f"{len(refused)} file(s)."

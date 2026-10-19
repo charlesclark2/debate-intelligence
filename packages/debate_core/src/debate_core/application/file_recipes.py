@@ -264,16 +264,15 @@ def load_recipe(text: str) -> RecipeLoadResult:
                 f"a recipe is at most {RECIPE_MAX_BYTES:,} bytes; this is {size:,}",
             )
         )
-    loader = yaml.SafeLoader(text)
+    try:
+        loader = yaml.SafeLoader(text)  # reads every character of the text before anything is parsed
+    except yaml.reader.ReaderError as error:
+        return _refused(_unreadable_character(text, error))
     try:
         try:
             root = loader.get_single_node()
         except yaml.MarkedYAMLError as error:
             return _refused(_syntax_error(error))
-        except yaml.YAMLError:
-            return _refused(
-                RecipeError(RecipeErrorCode.YAML_SYNTAX, "", None, "the text is not readable as YAML")
-            )
         if root is None:
             return _refused(RecipeError(RecipeErrorCode.INVALID, "", None, "the recipe is empty"))
         survey = _survey(root)
@@ -327,6 +326,17 @@ def _syntax_error(error: yaml.MarkedYAMLError) -> RecipeError:
         "",
         mark.line + 1 if mark is not None else None,
         described or "the text is not readable as YAML",
+    )
+
+
+def _unreadable_character(text: str, error: yaml.reader.ReaderError) -> RecipeError:
+    """A character YAML does not allow, such as a control character pasted from another program."""
+    line = text.count("\n", 0, error.position) + 1
+    return RecipeError(
+        RecipeErrorCode.YAML_SYNTAX,
+        "",
+        line,
+        f"a character YAML does not allow (code point {error.character:#06x}); delete it",
     )
 
 

@@ -356,6 +356,49 @@ def test_load_says_to_quote_a_hash_that_yaml_read_as_a_number() -> None:
     load_ok(recipe_text(f'- fingerprint: "{digits}"'))
 
 
+def test_a_recipe_error_prints_its_line_path_message_and_code() -> None:
+    error = file_recipes.RecipeError(
+        file_recipes.RecipeErrorCode.UNKNOWN_CARD, "structure[0]", 12, "no such card"
+    )
+    assert str(error) == "line 12: structure[0]: no such card [UNKNOWN_CARD]"
+    whole = file_recipes.RecipeError(file_recipes.RecipeErrorCode.TOO_LARGE, "", None, "too big")
+    assert str(whole) == "recipe: (recipe): too big [TOO_LARGE]"
+
+
+def test_load_refuses_a_python_tag_without_running_it() -> None:
+    text = recipe_text(
+        "- analytic: x",
+        header=HEADER.replace("title: Synthetic test file", "title: !!python/object/apply:os.system [echo]"),
+    )
+    (error,) = file_recipes.load_recipe(text).errors
+    assert (error.code, error.line) == (file_recipes.RecipeErrorCode.YAML_SYNTAX, 2)
+
+
+def test_load_refuses_a_character_yaml_cannot_read() -> None:
+    (error,) = file_recipes.load_recipe(HEADER + "structure: \x07\n").errors
+    assert (error.code, error.line) == (file_recipes.RecipeErrorCode.YAML_SYNTAX, 9)
+    assert "0x0007" in error.message
+
+
+def test_load_refuses_a_list_used_as_a_key() -> None:
+    (error,) = file_recipes.load_recipe(HEADER + "? [a, b]\n: x\nstructure: []\n").errors
+    assert error.code is file_recipes.RecipeErrorCode.YAML_SYNTAX
+
+
+def test_load_says_which_heading_level_an_out_of_place_key_skips() -> None:
+    text = HEADER + "structure:\n  - pocket: P\n    items:\n      - analytic: x\n"
+    result = file_recipes.load_recipe(text)
+    assert where(result) == [("structure[0]", 10), ("structure[0].items", 11)]
+    assert "skips or repeats a heading level" in result.errors[1].message
+
+
+def test_load_names_the_fields_a_pin_has() -> None:
+    pin = {"caselist": "hsld26", "source_sha256": SOURCE_1, "element_index": 3, "team": "QX"}
+    (error,) = file_recipes.load_recipe(recipe_text(card(CARD_A, pin=pin))).errors
+    assert error.path == "structure[0].blocks[0].items[0].pin.team"
+    assert "not a field of a pin; a pin has caselist, source_sha256, element_index" in error.message
+
+
 # ------------------------------------------------------------------------------------------------
 # hash
 # ------------------------------------------------------------------------------------------------
@@ -862,6 +905,23 @@ def test_resolve_takes_the_latest_disclosure_record_of_the_occurrence() -> None:
 def test_resolve_an_occurrence_with_no_disclosure_on_record_resolves_without_one() -> None:
     (resolved_card,) = world([occurrence(CARD_A, SOURCE_1, 5)]).resolve(recipe_text(card(CARD_A))).cards
     assert resolved_card.disclosure is None
+
+
+def test_resolve_a_pin_naming_a_team_needs_a_disclosure_on_record() -> None:
+    pin = {"caselist": CASELIST, "source_sha256": SOURCE_1, "element_index": 5, "team_code": "QX"}
+    resolved = world([occurrence(CARD_A, SOURCE_1, 5)]).resolve(recipe_text(card(CARD_A, pin=pin)))
+    assert (resolved.ok, codes(resolved)) == (False, [("PIN_MISMATCH", f"{ITEM}.pin")])
+    assert "team_code" in resolved.errors[0].message
+
+
+def test_resolve_reads_every_page_of_a_sources_disclosures(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(file_recipes, "_DISCLOSURE_PAGE", 1)
+    others = [disclosure(SOURCE_1, school="Cedar Hollow", team_code=f"Z{n}") for n in range(3)]
+    mine = disclosure(SOURCE_1, team_code="QX")
+    rows = [occurrence(CARD_A, SOURCE_1, 5, path=mine.source_path)]
+    resolved = world(rows, [*others, mine]).resolve(recipe_text(card(CARD_A)))
+    assert resolved.ok
+    assert [card.disclosure for card in resolved.cards] == [mine]
 
 
 def test_resolve_ignores_a_disclosure_of_the_same_bytes_at_another_path() -> None:

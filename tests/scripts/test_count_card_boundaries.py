@@ -310,9 +310,14 @@ def test_the_candidates_are_store_positions_and_hold_no_text(
 
 def test_the_candidates_file_must_be_outside_the_repository(data_dir: Path) -> None:
     inside = Path(__file__).resolve().parents[2] / "scripts" / "candidates.jsonl"
-    with pytest.raises(SystemExit, match="outside the repository"):
-        script.main(["--data-dir", str(data_dir), "--caselist", CASELIST, "--save-candidates", str(inside)])
-    assert not inside.exists()
+    try:
+        with pytest.raises(SystemExit, match="outside the repository"):
+            script.main(
+                ["--data-dir", str(data_dir), "--caselist", CASELIST, "--save-candidates", str(inside)]
+            )
+        assert not inside.exists()
+    finally:
+        inside.unlink(missing_ok=True)
 
 
 def test_a_store_of_another_parser_version_is_refused_by_name(data_dir: Path) -> None:

@@ -32,7 +32,10 @@ spec:
     cards from E06 (v1.3) are out of scope.
   priority: 1
   constraints:
-    packages: [debate_core.domain, debate_core.application, scripts, docs/data, docs/guides, tests/fixtures]
+    # debate_core.evidence and tests/scripts added in the v1-e33-t01 session, pending PM review (see the
+    # session report's Deviations): EXACT_FINGERPRINT_VERSIONS beside FINGERPRINT_VERSION, and the
+    # schema drift test beside the other script tests.
+    packages: [debate_core.domain, debate_core.application, debate_core.evidence, scripts, docs/data, docs/guides, tests/fixtures, tests/scripts]
     forbidden:
       - Any recipe field that carries quoted evidence text or cite text
       - Model calls while loading, validating or resolving a recipe
@@ -66,6 +69,15 @@ spec:
       description: >-
         docs/data/file-recipe.schema.json is generated from the models and checked for drift in CI, and
         docs/guides/file-recipes.md walks through a synthetic example recipe for each of Policy, LD and PF.
+    - id: ac6
+      description: >-
+        PM amendment 2026-10-18 (written before the removal work of E30, which the spec did not
+        state): the resolver never chooses an occurrence the removal suppression list stops, a whole
+        source or a disclosure withdrawn from that caselist path. AUTO resolution skips such an
+        occurrence and picks the next by the documented rule; a card with no occurrence left is
+        reported with SUPPRESSED_OCCURRENCE. A pin to such an occurrence is refused with
+        SUPPRESSED_OCCURRENCE, not re-pointed. The resolver reads the suppression list through its
+        port (no AWS), tested with the in-memory repositories and shown failing first.
 status:
   phase: InProgress
 ---
@@ -128,7 +140,9 @@ spec:
           RecipeResolver reads the card fingerprint/occurrence repository port from E31 t04 and returns
           ResolvedCard records (fingerprint, occurrence, resolution PINNED or AUTO); PIN_MISMATCH and
           UNKNOWN_CARD are collected for the whole recipe, and the same fingerprint twice in one recipe is
-          reported as DUPLICATE_REF.
+          reported as DUPLICATE_REF. PM amendment 2026-10-18 (ac6): it also reads the removal
+          suppression list port, never chooses an occurrence the list stops, and reports
+          SUPPRESSED_OCCURRENCE for a pin to one or a card with none left.
         dependsOn: [loader-and-hash]
         estimatedEffort: 3h
         acceptanceCriteria:

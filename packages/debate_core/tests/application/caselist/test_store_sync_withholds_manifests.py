@@ -11,7 +11,8 @@ The row kinds are those `withholding_rows` is made of, counted from the code:
 
 * `suppressed_rows`, a stored row the list stops: the whole file, one caselist disclosure of it, or
   one camp path of it (`v1-e30-t07`, `v1-e30-t14`);
-* `held_rows`, a stored row at a path a removal holds (`v1-e30-t21`);
+* `held_rows`, a stored row at a path a removal holds (`v1-e30-t21`), in a weekly or in a complete
+  archive, whose manifest is a level further down;
 * `held_skipped_rows`, a skipped member's row at a held path (`v1-e30-t23`): a symbolic link, or
   the AppleDouble junk that shadows one (`v1-e30-t25`, item 2).
 
@@ -63,7 +64,11 @@ from debate_core.integrations.local import FsEvidenceObjectStore
 from debate_core.testing.fakes import InMemoryAppendOnlyRecord
 
 from .conftest import REQUEST, RemovalWorld
-from .test_held_path_loose_ends import HELD_WEEK_MANIFEST, an_older_build_imports_next_week
+from .test_held_path_loose_ends import (
+    HELD_WEEK_MANIFEST,
+    an_older_build_imports_next_week,
+    an_older_build_imports_the_next_complete_archive,
+)
 from .test_held_rows_publish_nothing import (
     LINK_WEEK_MANIFEST,
     WEEK_OF_THE_LINK,
@@ -260,6 +265,14 @@ async def a_held_row(world: RemovalWorld, tmp_path: Path) -> Withheld:
     return Withheld(HELD_WEEK_MANIFEST, world.suppression(), (REVISED_PATH,))
 
 
+async def a_held_row_in_a_complete_archive(world: RemovalWorld, tmp_path: Path) -> Withheld:
+    """After the removal, an older build imports the complete archive of `2026-10-09`, whose manifest
+    is a level further down: `manifests/testcl26/full/2026-10-09.jsonl`."""
+    await remove_the_named_file(world)
+    await an_older_build_imports_the_next_complete_archive(world, tmp_path)
+    return Withheld(f"manifests/{CASELIST}/full/2026-10-09.jsonl", world.suppression(), (REVISED_PATH,))
+
+
 async def a_held_link(world: RemovalWorld, tmp_path: Path) -> Withheld:
     """After the removal, an older build imports `2026-10-11` with a symbolic link at the held path."""
     await remove_the_named_file(world)
@@ -285,6 +298,7 @@ ROW_KINDS: dict[str, Callable[[RemovalWorld, Path], Awaitable[Withheld]]] = {
     "a withdrawn disclosure": a_withdrawn_disclosure,
     "a withdrawn camp path": a_withdrawn_camp_path,
     "a held row": a_held_row,
+    "a held row in a complete archive": a_held_row_in_a_complete_archive,
     "a held link": a_held_link,
     "junk at the held path": junk_at_the_held_path,
 }

@@ -132,7 +132,7 @@ def _public_suffix_length(labels: list[str], rules: PublicSuffixRules) -> int:
     for start in range(len(labels)):
         if ".".join(labels[start:]) in rules.exact:
             return len(labels) - start
-        if start + 1 < len(labels) and ".".join(labels[start + 1 :]) in rules.wildcards:
+        if ".".join(labels[start + 1 :]) in rules.wildcards:
             return len(labels) - start
     return 1
 

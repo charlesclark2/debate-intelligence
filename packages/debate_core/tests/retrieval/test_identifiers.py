@@ -83,6 +83,11 @@ def test_a_doi_is_found_and_lowercased(source: str, doi: str) -> None:
         pytest.param('the link "https://doi.org/10.1038/nature12373".', "10.1038/nature12373", id="quotes"),
         pytest.param("[10.1038/nature12373]", "10.1038/nature12373", id="closing-bracket"),
         pytest.param(
+            "(ASCE, doi:10.1061/(ASCE)0733-9445(2004)130:4(605)).",
+            "10.1061/(asce)0733-9445(2004)130:4(605)",
+            id="ending-in-its-own-parenthesis",
+        ),
+        pytest.param(
             "<a href=https://doi.org/10.1038/nature12373>paper</a>", "10.1038/nature12373", id="markup"
         ),
     ],
@@ -110,6 +115,11 @@ def test_several_dois_are_returned_once_each_in_order_of_appearance() -> None:
 )
 def test_no_doi_is_invented(text: str) -> None:
     assert detect_identifiers(text).dois == ()
+
+
+def test_arxiv_ids_from_dois_and_labels_keep_their_order_in_the_text() -> None:
+    found = detect_identifiers("https://doi.org/10.48550/arXiv.2101.01234 and then arXiv:2002.06199")
+    assert found.arxiv_ids == ("2101.01234", "2002.06199")
 
 
 def test_an_arxiv_doi_also_yields_its_arxiv_id() -> None:

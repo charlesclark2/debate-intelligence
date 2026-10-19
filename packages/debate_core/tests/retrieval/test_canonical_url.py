@@ -423,12 +423,56 @@ def test_a_wrapper_whose_target_is_not_a_web_url_is_kept() -> None:
     )
 
 
-def test_a_query_redirect_on_another_host_is_not_unwrapped() -> None:
+@pytest.mark.parametrize(
+    "url",
+    [
+        pytest.param("https://www.example.org/share?url=https%3A%2F%2Fwww.cato.org%2F", id="share-path"),
+        pytest.param(
+            "https://www.example.org/?url=https%3A%2F%2Fwww.cato.org%2F", id="root-path-like-safe-links"
+        ),
+    ],
+)
+def test_a_query_redirect_on_another_host_is_not_unwrapped(url: str) -> None:
     """The wrapper rules name their hosts; a `url=` parameter elsewhere is content."""
+    assert canonicalize_url(url) == url
+
+
+def test_a_wrapper_destination_with_no_public_host_is_kept() -> None:
     assert (
-        canonicalize_url("https://www.example.org/share?url=https%3A%2F%2Fwww.cato.org%2F")
-        == "https://www.example.org/share?url=https%3A%2F%2Fwww.cato.org%2F"
+        canonicalize_url("https://www.google.com/url?q=http://intranet/report")
+        == "https://www.google.com/url?q=http://intranet/report"
     )
+
+
+def test_an_amp_cache_keeps_the_origins_own_query() -> None:
+    assert (
+        canonicalize_url(
+            "https://www-example-com.cdn.ampproject.org/c/s/www.example.com/story.php?id=42&usqp=mq331AQ"
+        )
+        == "https://www.example.com/story.php?id=42"
+    )
+
+
+def test_a_url_the_amp_host_rule_turns_into_a_wrapper_is_unwrapped() -> None:
+    """`amp.google.com` becomes `www.google.com`, a wrapper host; stopping there would not be a
+    fixed point, since a second canonicalization would unwrap it."""
+    assert canonicalize_url("https://amp.google.com/url?q=https://www.cato.org/x") == "https://www.cato.org/x"
+
+
+def test_userinfo_is_kept_in_normalized_form() -> None:
+    assert (
+        canonicalize_url("https://reader:p%40ss@WWW.Example.org/a")
+        == "https://reader:p%40ss@www.example.org/a"
+    )
+
+
+def test_a_lone_percent_sign_is_encoded() -> None:
+    assert canonicalize_url("https://www.example.org/100%-sure") == "https://www.example.org/100%25-sure"
+
+
+def test_a_lone_surrogate_is_refused() -> None:
+    with pytest.raises(InvalidUrlError):
+        canonicalize_url("https://www.example.org/\ud800")
 
 
 def test_deeply_nested_wrappers_are_refused_rather_than_unwound_forever() -> None:

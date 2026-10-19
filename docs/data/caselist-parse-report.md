@@ -1564,7 +1564,7 @@ holds exactly, by test.
 |---|---|---|---|
 | Counts against `card-fingerprint-v3`: clusters, merged, divided, largest | below, 2026-10-18 | below, 2026-10-18 | not run |
 | ac5: share of pairs sharing nothing, three largest clusters per caselist | 0 in all twelve, below | 0 in all twelve, below | not run |
-| ac1: join sample of 20 newly joined pairs, contained shapes asked | all 20 decided by rule, below | not run | not run, same seed |
+| ac1: join sample of 20 newly joined pairs, contained shapes asked | all 20 decided by rule, below | 20 of 20 same card by eye, below | not run, same seed |
 | Newly joined cuts a tenth to a quarter of their witness, at least 20 (the PM's check on the share) | | not run | |
 | Witness refusals the lower share added | | not run | |
 | `MIN_CUT_SHARE`: contained pairs under a third, joined and kept apart, by share band | below | not run | |
@@ -1747,3 +1747,11 @@ preview, and **none of them fails to overlap**. How they got there: two texts sh
 overlap only when the smaller has three runs or fewer, so each of the four is a text of a few words
 in its cluster directly, one of its runs being three-tenths of it or more; none is there through a
 third body.
+
+### The re-preview's join sample, ac1 (operator-run, 2026-10-18)
+
+`sample --count 20 --ask-shape contained-under-a-third --ask-shape contained-a-third-or-more
+--after`, over all four caselists: `Drew 20 of 1827 newly joined pairs, seed 963278315`. Every pair
+was shown and judged by eye; **20 of 20 the same card, none different, none unsure** (ac1). By
+shape: 16 contained under a third of the larger, 2 contained a third or more, 2 overlapping. The
+rule would have called the 18 contained ones the same card; the person agreed with it every time.

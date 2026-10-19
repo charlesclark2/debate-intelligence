@@ -634,10 +634,10 @@ Expected: step R3's figures, from the store's table: `version` `card-fingerprint
 and the same stock-phrase count.
 
 **Step 14. The join sample, with step R4's seed** (seconds, then the person's time). The same 20
-pairs as step R4, if no source arrived between. Put the seed R4 printed in place of `SEED`.
+pairs as step R4 (seed 963278315, 2026-10-18), if no source arrived between.
 
 ```zsh
-uv run python scripts/compare_card_clusters.py sample --count 20 --seed SEED --caselist hsld26 --caselist hspf26 --caselist hspolicy26 --caselist openev --before ~/.debate-research/dev/card-clusters-v3 --ask-shape contained-under-a-third --ask-shape contained-a-third-or-more --save-tallies ~/t20-repreview-tallies.txt
+uv run python scripts/compare_card_clusters.py sample --count 20 --seed 963278315 --caselist hsld26 --caselist hspf26 --caselist hspolicy26 --caselist openev --before ~/.debate-research/dev/card-clusters-v3 --ask-shape contained-under-a-third --ask-shape contained-a-third-or-more --save-tallies ~/t20-repreview-tallies.txt
 cat ~/t20-repreview-tallies.txt
 ```
 

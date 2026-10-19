@@ -30,6 +30,7 @@ from typing import Final
 
 import pytest
 
+from debate_core.application.ports.parsed_store import parse_version_directory
 from debate_core.domain.caselist import SourceDocument, SourceFormat, SourceOrigin
 from debate_core.domain.debate_files import ParsedDocument, ParseFailure, ParseFailureReason
 from debate_core.domain.style_profile import RunEmphasis, StyleProfile
@@ -39,7 +40,7 @@ from debate_core.integrations.docx_parser.package import (
     PackageLimits,
     open_debate_docx,
 )
-from debate_core.integrations.docx_parser.parser import DebateDocxParser
+from debate_core.integrations.docx_parser.parser import DOCX_PARSER_VERSION, DebateDocxParser
 from debate_core.testing.docx_builder import (
     CONTENT_TYPES,
     PACKAGE_RELS,
@@ -532,3 +533,20 @@ class TestCardMirrorNativeFiles:
 
     def test_a_cmir_source_is_never_parsable(self) -> None:
         assert not make_source(source_format=SourceFormat.CMIR).is_parsable
+
+
+# --------------------------------------------------------------------------------------------
+# The parser version
+# --------------------------------------------------------------------------------------------
+
+
+class TestTheParserVersion:
+    """Files once refused are read now, so the version moves: the parsed store skips a source it
+    has recorded under the running version, refusals included."""
+
+    def test_it_is_the_version_this_task_bumped_to(self) -> None:
+        assert DOCX_PARSER_VERSION == "2026.10.18-docx-4"
+
+    def test_its_directory_sorts_after_the_version_that_refused_them(self) -> None:
+        names = sorted([DOCX_PARSER_VERSION, "2026.10.12-docx-3"], key=parse_version_directory)
+        assert names == ["2026.10.12-docx-3", DOCX_PARSER_VERSION]

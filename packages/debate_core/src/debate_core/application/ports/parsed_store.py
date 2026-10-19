@@ -278,7 +278,12 @@ class SourceEntry(StoreRecord):
     """
 
     record: Literal["source"] = "source"
-    source_format: SourceFormat = Field(description="DOCX, DOC, PDF or OTHER, from the manifest.")
+    source_format: SourceFormat = Field(
+        description=(
+            "DOCX, DOC, PDF or OTHER, from the manifest; CMIR when the parser found a CardMirror "
+            "native file filed under another extension."
+        )
+    )
     byte_size: int = Field(ge=0, description="Size of the source in bytes.")
     outcome: SourceOutcome
     reason: str | None = Field(default=None, description="Why it has no document; None when PARSED.")

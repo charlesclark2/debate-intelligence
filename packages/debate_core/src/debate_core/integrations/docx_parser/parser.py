@@ -88,7 +88,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Final
 
-from debate_core.domain.caselist import SnapshotDate, SourceDocument
+from debate_core.domain.caselist import SnapshotDate, SourceDocument, SourceFormat
 from debate_core.domain.debate_files import (
     CardCompleteness,
     FileImportProvenance,
@@ -147,8 +147,12 @@ __all__ = ["DOCX_PARSER_VERSION", "DebateDocxParser"]
 #: style past the profile's 1,000 characters, a cite line longer than 400 characters that opens
 #: in bold or holds everything after its name and year in one bracket, and a cite written wholly
 #: inside a bracket; it no longer takes a line that opens *In 2019* for a cite, and a guessed cite
-#: entry longer than any cite entry is body whatever its formatting.
-DOCX_PARSER_VERSION: Final = "2026.10.12-docx-3"
+#: entry longer than any cite entry is body whatever its formatting. `2026.10.18-docx-4`
+#: (`v1-e31-t15`) reads three kinds of file the three before it refused: one whose compression
+#: ratio was over the limit only in a part the reader never opens, and one whose text held a raw
+#: character XML 1.0 forbids, each now replaced by U+FFFD; and it names a CardMirror `.cmir` filed
+#: under another extension as an unsupported format rather than a broken zip.
+DOCX_PARSER_VERSION: Final = "2026.10.18-docx-4"
 
 W_PARAGRAPH: Final = qualified_name("p")
 W_TABLE: Final = qualified_name("tbl")
@@ -375,7 +379,9 @@ class DebateDocxParser:
         try:
             package = open_debate_docx(content, limits=self._limits)
         except DocxPackageError as error:
-            return self._failure(source, source_path, error.reason, error.detail)
+            return self._failure(
+                source, source_path, error.reason, error.detail, source_format=error.source_format
+            )
         return self._build_document(
             package,
             source=source,
@@ -390,6 +396,8 @@ class DebateDocxParser:
         source_path: str,
         reason: ParseFailureReason,
         detail: str,
+        *,
+        source_format: SourceFormat | None = None,
     ) -> ParseFailure:
         return ParseFailure(
             source_sha256=source.sha256,
@@ -397,6 +405,7 @@ class DebateDocxParser:
             reason=reason,
             detail=detail,
             parser_version=DOCX_PARSER_VERSION,
+            source_format=source_format,
         )
 
     # -- reading and classifying --------------------------------------------------------------
@@ -734,6 +743,11 @@ class DebateDocxParser:
             self._close(building, cards, source, source_path, snapshot, camp)
 
         warnings = list(package.warnings)
+        if package.forbidden_characters_replaced:
+            warnings.append(
+                f"{package.forbidden_characters_replaced} character(s) XML 1.0 forbids were each "
+                "replaced by U+FFFD; no other character moved"
+            )
         if deletions_dropped:
             warnings.append(
                 f"{deletions_dropped} tracked deletion(s) were dropped; the card is what the file "

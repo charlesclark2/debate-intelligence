@@ -378,3 +378,25 @@ async def test_a_pull_is_not_asked_about_withholding(world: RemovalWorld) -> Non
 
     assert planned(plan.objects, ONE_WEEK_MANIFEST).action is SyncAction.NEW
     assert asked == []
+
+
+async def test_a_push_skips_a_manifest_the_publisher_cannot_read_and_carries_on(world: RemovalWorld) -> None:
+    """A publish refuses a manifest it cannot read and publishes nothing of it; a push cannot tell
+    whether it withholds it, so does not send it either. Skipped with the publisher's refusal, which
+    names the key and the line and never the line itself, and the rest of the push goes ahead."""
+    unreadable = f"manifests/{CASELIST}/2026-10-13.jsonl"
+    FsEvidenceObjectStore(world.data_dir).path_for(unreadable).write_bytes(b"not a manifest row\n")
+    off_the_bucket(world, PUSHED_BESIDE)
+    service = store_sync(world, world.suppression())
+
+    plan = await service.plan(prefix="manifests/", direction=SyncDirection.PUSH)
+    report = await service.execute(plan)
+
+    skipped = planned(plan.objects, unreadable)
+    assert (skipped.action, skipped.reason) == (
+        SyncAction.SKIPPED,
+        f"{unreadable} line 1 is not a usable manifest row: not JSON",
+    )
+    assert report.succeeded
+    assert in_the_bucket(world, PUSHED_BESIDE)
+    assert not in_the_bucket(world, unreadable)

@@ -82,6 +82,7 @@ from debate_core.application.caselist.publish_plan import (
     PublishPlan,
     SnapshotPlan,
     SourceAction,
+    UnreadableManifest,
     build_publish_plan,
     local_blob_key,
     manifest_prefix,
@@ -542,8 +543,15 @@ async def withheld_manifest_reason(
     `manifest` is this machine's listing entry for it, so nothing is listed again. The plan is built
     with no blob or bucket listing: its source actions are not read, only the rows that withhold the
     manifest. `None` for a key that is not a snapshot's manifest, which no publish uploads.
+
+    A manifest a publish cannot read is refused, and nothing of it is published, so its refusal is
+    the reason: :class:`~debate_core.application.caselist.publish_plan.UnreadableManifest` names the
+    key and the line number, never the line.
     """
-    snapshot = await read_local_manifest(local, manifest)
+    try:
+        snapshot = await read_local_manifest(local, manifest)
+    except UnreadableManifest as refused:
+        return str(refused)
     if snapshot is None:
         return None
     (plan,) = build_publish_plan(

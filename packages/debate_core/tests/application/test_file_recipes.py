@@ -236,11 +236,22 @@ def test_load_reports_cross_section_errors_beside_field_errors() -> None:
 
 
 def test_load_reports_a_yaml_syntax_error_with_its_line() -> None:
-    text = HEADER + "structure:\n  - pocket: P\n    blocks: [unclosed\n"
-    result = file_recipes.load_recipe(text)
-    (error,) = result.errors
-    assert error.code is file_recipes.RecipeErrorCode.YAML_SYNTAX
-    assert error.line is not None and error.line >= 11
+    text = HEADER + "structure:\n  - pocket: P\n    blocks: x: y\n"
+    (error,) = file_recipes.load_recipe(text).errors
+    assert (error.code, error.path, error.line) == (file_recipes.RecipeErrorCode.YAML_SYNTAX, "", 11)
+    assert "x: y" not in error.message
+
+
+def test_load_reports_an_explicit_key_beside_a_merge_at_its_own_line() -> None:
+    text = recipe_text(
+        "- fingerprint: " + CARD_A + "\n"  # line 14
+        "            pin:\n"  # line 15
+        "              <<: {caselist: hsld26, source_sha256: " + SOURCE_1 + ", element_index: 4}\n"  # line 16
+        "              element_index: -1"  # line 17
+    )
+    assert where(file_recipes.load_recipe(text)) == [
+        ("structure[0].blocks[0].items[0].pin.element_index", 17)
+    ]
 
 
 def test_load_reports_each_duplicate_key_with_its_line() -> None:

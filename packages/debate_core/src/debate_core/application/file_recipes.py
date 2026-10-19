@@ -915,7 +915,4 @@ class _Resolution:
         return max(matching, key=lambda one: (one.snapshot, one.source_path)) if matching else None
 
     def _error(self, code: RecipeErrorCode, path: str, message: str) -> None:
-        line = self._lines.get(path)
-        if line is None:
-            line = self._lines.get(path.rsplit(".", 1)[0])
-        self._errors.append(RecipeError(code, path, line, message))
+        self._errors.append(RecipeError(code, path, self._lines.get(path), message))

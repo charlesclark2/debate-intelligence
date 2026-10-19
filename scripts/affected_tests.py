@@ -1057,6 +1057,7 @@ def main(argv: list[str] | None = None) -> int:
         print("Nothing to run.", file=sys.stderr)
         return 0
     command = [sys.executable, "-m", "pytest", "-n", "auto", "-m", CI_MARKERS, *sorted(selection.tests)]
+    sys.stdout.flush()  # the selection above pytest's output, even when both go to a pipe
     run_started = time.monotonic()
     status = subprocess.run(command, cwd=root, check=False).returncode
     print(

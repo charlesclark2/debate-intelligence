@@ -5,9 +5,10 @@ reads the first and third; the second guards the first.
 
 * **`TRACKING_PARAMETERS`, the deny list.** Parameters that record how a reader arrived (a
   campaign, a click, a share button, an email) and never what they read. Each is stripped. Names
-  are compared case-insensitively after percent-decoding, because `UTM_SOURCE` and `utm%5Fsource`
-  are both seen in the wild. A rule is an exact name unless it is marked as a prefix; `utm_` is
-  the only prefix, since the Urchin convention reserves the whole family.
+  are compared case-insensitively, because `UTM_SOURCE` is seen in the wild; `utm%5Fsource` is
+  caught too, since the syntax rules decode it to `utm_source` first. A rule is an exact name
+  unless it is marked as a prefix; `utm_` is the only prefix, since the Urchin convention reserves
+  the whole family.
 * **`CONTENT_PARAMETERS`, the allow list.** Parameters known to select what is read: an article or
   post id, a page, a video, a search, a wrapped destination. Since an unknown parameter is kept
   anyway, this list changes nothing at run time. It is the deny list's guard: the test suite fails
@@ -26,7 +27,6 @@ later. Extend the deny list only with a name that tracks on every site that uses
 from __future__ import annotations
 
 from dataclasses import dataclass
-from urllib.parse import unquote
 
 __all__ = [
     "AMP_QUERY_MARKERS",
@@ -185,11 +185,13 @@ _AMP_MARKERS = {marker.name: marker.values for marker in AMP_QUERY_MARKERS}
 
 
 def _comparable(text: str) -> str:
-    return unquote(text).lower()
+    # No percent-decoding: the canonicalizer's syntax rules have already decoded every unreserved
+    # character, and every name and value on these lists is made of unreserved characters only.
+    return text.lower()
 
 
 def is_tracking_parameter(name: str) -> bool:
-    """True if the (possibly percent-encoded) name is on the deny list."""
+    """True if the name, as the syntax rules leave it, is on the deny list."""
     name = _comparable(name)
     return name in _EXACT or name.startswith(_PREFIXES)
 

@@ -110,7 +110,7 @@ _MONTH = r"(?:0[1-9]|1[0-2])"
 _ARXIV_NEW = rf"(?P<new>\d\d{_MONTH}\.\d{{4,5}})"
 _ARXIV_OLD = rf"(?P<archive>[a-z]+(?:-[a-z]+)?)(?:\.[a-z]{{2}})?/(?P<number>\d\d{_MONTH}\d{{3}})"
 _ARXIV = re.compile(
-    rf"(?:arxiv\.org/(?:abs|pdf|html|format)/|\barxiv:\s*)(?:{_ARXIV_NEW}|{_ARXIV_OLD})(?:v\d+)?(?!\d)",
+    rf"(?:arxiv\.org/(?:abs|pdf|html|format)/|arxiv:\s*)(?:{_ARXIV_NEW}|{_ARXIV_OLD})(?:v\d+)?(?!\d)",
     re.IGNORECASE,
 )
 _ARXIV_ID_IN_DOI = re.compile(rf"{_ARXIV_NEW}(?:v\d+)?")
@@ -136,7 +136,7 @@ def _arxiv_ids(text: str, dois: list[tuple[int, str]]) -> list[tuple[int, str]]:
 
 _PMID = re.compile(
     r"(?:pubmed\.ncbi\.nlm\.nih\.gov/|ncbi\.nlm\.nih\.gov/pubmed/|europepmc\.org/(?:abstract|article)/med/"
-    r"|\bpmid\s*:?\s*)(?P<pmid>\d{1,9})(?!\d)",
+    r"|pmid\s*:?\s*)(?P<pmid>\d{1,9})(?!\d)",
     re.IGNORECASE,
 )
 

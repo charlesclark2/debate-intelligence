@@ -64,6 +64,11 @@ a withdrawn later upload's copy stays because another *path* holds it, which may
 team's. Each withdrawal's caselist is recorded beside the list, by slug, and the plan prints those
 lines under *WITHDRAWALS* as it prints the path entries.
 
+A `--team --include-shared` plan has a team, but removes a shared file from every holder's path,
+so a later upload it withdraws from another holder's path is that holder's copy: its count and the
+line on what the list stops say so, and never "this team's" (`v1-e30-t20`). A re-run that finds
+nothing left tells the requester it removed nothing, rather than counting what it plans again.
+
 ## A camp path is withdrawn on its own (`v1-e30-t14`)
 
 A camp file's later upload that another release or a team also holds is withdrawn from its camp
@@ -79,7 +84,8 @@ The plan counts the noncurrent manifest versions the execution's sweep will dele
 *MANIFEST VERSIONS SWEPT*, by manifest: those that name a removed file, and those of a manifest an
 earlier run of the request rewrote that are older than its rewrite. A plan with any is never
 *Nothing is left to remove*, and prints the command that carries it out. Where the everyday
-profile may not list or read them it says they were not counted. A file a re-run plans again from
+profile may not list or read them it says they were not counted. `--json` carries the same count as
+`manifest_versions_swept`, or `"not counted"`, never 0 (`v1-e30-t20`). A file a re-run plans again from
 the withdrawal record, with no path left to show, says which caselist the record names, or that
 none does.
 
@@ -93,8 +99,14 @@ suppression`).
 `--json` carries none of them (`v1-e30-t11`): no school, team code, path, camp, title or file
 name. A file is its sha256, a disclosure is the digest the suppression list uses for one
 (:func:`~debate_core.application.ports.suppression.disclosure_digest`), a team selector is its
-caselist, and an inbox file is the label an error would give it. JSON is what gets piped, saved and
-pasted, and the policy keeps those names out of everything that is.
+caselist, and an inbox file is the label an error would give it. A withdrawal is its file's sha256,
+its path's digest and its caselist's slug (`withdrawals`, `v1-e30-t20`). JSON is what gets piped,
+saved and pasted, and the policy keeps those names out of everything that is.
+
+Neither the text nor the JSON names a path on this machine, which is under the home directory: the
+runbook asks the operator to keep the plan (`v1-e30-t20`). The inbox is its place in the data
+directory, `inbox`, or the setting `caselist.inbox_dir` when a profile puts it elsewhere, and a run a
+pull's lock stops names the lock by its file name in the data directory.
 
 ## Exit codes
 
@@ -126,7 +138,7 @@ from debate_cli.commands.store import CONFIRM_PROD_FLAG, SYNCABLE_ENVIRONMENTS
 from debate_cli.context import CliContext, cli_context, command_name
 from debate_cli.exit_codes import ExitCode
 from debate_cli.output import CliOutput, CommandFailure, JsonValue, OutputMode
-from debate_core.application.caselist.inbox_purge import InboxAction, InboxFilePlan
+from debate_core.application.caselist.inbox_purge import INBOX_SETTING, InboxAction, InboxFilePlan
 from debate_core.application.caselist.publish_plan import OPENEV
 from debate_core.application.caselist.removal_path_versions import (
     PathVersion,
@@ -143,6 +155,7 @@ from debate_core.application.caselist.removal_plan import (
     RemovalSelector,
     Side,
     SourceSelector,
+    TeamSelector,
     parse_team_selector,
 )
 from debate_core.application.caselist.removal_service import (
@@ -394,16 +407,10 @@ def render_plan(plan: RemovalPlan, report: RemovalReport | None) -> str:
     lines += ["", *_inbox_lines(plan)]
 
     entries = plan.suppression_entries
-    whole = sum(1 for entry in entries if entry.disclosure is None)
-    paths = (
-        f"{len(entries) - whole} of this team's path(s) to a shared file"
-        if _names_a_team(plan)
-        else f"{len(entries) - whole} path(s) a shared file is withdrawn from"
-    )
     lines += [
         "",
         f"SUPPRESSION ENTRIES appended to the list, here and in the bucket: {len(entries)}",
-        f"  {whole} whole file(s), and {paths}. Each",
+        f"  {_entries_by_kind(plan)}. Each",
         "  line below is exactly what is written, with recorded_at set when it runs; no school, team",
         "  code or name appears in any of them.",
     ]
@@ -478,6 +485,70 @@ def _shared_kept_heading(plan: RemovalPlan, files: int) -> list[str]:
 def _names_a_team(plan: RemovalPlan) -> bool:
     """Whether a team asked: `--team`. A `--source` plan has no "this team" (`v1-e30-t16`)."""
     return not isinstance(plan.selector, SourceSelector)
+
+
+def _the_teams_own_paths(plan: RemovalPlan) -> frozenset[str]:
+    """The disclosure digests of the paths the plan withdraws a copy from that are the team's own.
+
+    A `--team --include-shared` plan removes a shared file whole, so it takes it from the other
+    holders' paths too, and a later upload at one of them is withdrawn from that holder's path: no
+    path of this team's (`v1-e30-t20`). Empty for a `--source` plan, which names no team.
+    """
+    selector = plan.selector
+    if not isinstance(selector, TeamSelector):
+        return frozenset()
+    return frozenset(
+        disclosure_digest(caselist, path)
+        for source in plan.sources
+        for caselist, path in source.requester_paths
+        if selector.holds(caselist, path)
+    )
+
+
+def _entries_by_kind(plan: RemovalPlan) -> str:
+    """The suppression entries counted by what each stops: a whole file, or a copy at one path."""
+    entries = plan.suppression_entries
+    whole = sum(1 for entry in entries if entry.disclosure is None)
+    if not _names_a_team(plan):
+        return f"{whole} whole file(s), and {len(entries) - whole} path(s) a shared file is withdrawn from"
+    own = _the_teams_own_paths(plan)
+    mine = sum(1 for entry in entries if entry.disclosure in own)
+    others = len(entries) - whole - mine
+    if not others:
+        return f"{whole} whole file(s), and {mine} of this team's path(s) to a shared file"
+    if not mine:
+        return (
+            f"{whole} whole file(s), and {others} path(s) of another holder a later upload is withdrawn from"
+        )
+    return (
+        f"{whole} whole file(s), {mine} of this team's path(s) to a shared file, and {others} path(s) of "
+        "another holder a later upload is withdrawn from"
+    )
+
+
+def _withdrawn_at(plan: RemovalPlan) -> tuple[bool, bool]:
+    """Whether the plan withdraws a copy at a path of the team's own, and at another holder's.
+
+    By the paths each withdrawal takes. One whose paths an earlier run's deletions left nothing to
+    show is the team's when the request names it, and the other holder's when it is at a removed
+    path, as a later upload is.
+    """
+    own = _the_teams_own_paths(plan)
+    at_the_teams = at_anothers = False
+    for source in plan.of(Disposition.WITHDRAW):
+        taken = {disclosure_digest(caselist, path) for caselist, path in source.requester_paths} | {
+            disclosure for _, disclosure in source.held_at_import
+        }
+        if not taken:
+            at_a_removed_path = source.inclusion in _AT_A_REMOVED_PATH
+            at_the_teams, at_anothers = (
+                at_the_teams or not at_a_removed_path,
+                at_anothers or at_a_removed_path,
+            )
+            continue
+        at_the_teams = at_the_teams or bool(taken & own)
+        at_anothers = at_anothers or bool(taken - own)
+    return at_the_teams, at_anothers
 
 
 def _withdrawal_lines(plan: RemovalPlan) -> list[str]:
@@ -713,16 +784,17 @@ def _where_held(version: PathVersion) -> str:
 
 def _inbox_lines(plan: RemovalPlan) -> list[str]:
     """The download inbox: each file holding a removed file, and whether it is deleted or rewritten."""
+    where = _inbox_named(plan)
     if not plan.inbox_exists:
         lines = [
-            f"DOWNLOAD INBOX ({plan.inbox_directory}): does not exist, so there is nothing to check or "
+            f"DOWNLOAD INBOX ({where}): does not exist, so there is nothing to check or "
             "change (an environment that has never pulled has none)."
         ]
     elif not plan.inbox:
-        lines = [f"DOWNLOAD INBOX ({plan.inbox_directory}): nothing in it holds a removed file."]
+        lines = [f"DOWNLOAD INBOX ({where}): nothing in it holds a removed file."]
     else:
         lines = [
-            f"DOWNLOAD INBOX ({plan.inbox_directory}): {len(plan.inbox)} file(s) hold removed files. An",
+            f"DOWNLOAD INBOX ({where}): {len(plan.inbox)} file(s) hold removed files. An",
             "archive still waiting to be imported is rewritten without them, never deleted.",
         ]
         lines += [_inbox_file_line(one) for one in plan.inbox]
@@ -733,6 +805,16 @@ def _inbox_lines(plan: RemovalPlan) -> list[str]:
             "       `caselist pull` to import it, then this same command again.",
         ]
     return lines
+
+
+def _inbox_named(plan: RemovalPlan) -> str:
+    """The inbox by its place in the data directory, or by the setting that puts it elsewhere.
+
+    Never its path on this machine, which is under the home directory (`v1-e30-t20`).
+    """
+    if plan.inbox_directory == INBOX_SETTING:
+        return f"the directory {INBOX_SETTING} names"
+    return f"{plan.inbox_directory} in the data directory"
 
 
 def _inbox_file_line(one: InboxFilePlan) -> str:
@@ -829,7 +911,10 @@ def _confirmation(plan: RemovalPlan) -> list[str]:
     snapshots = sorted({ref.snapshot for ref in refs})
     removed_whole = len(_not_later_uploads(plan, Disposition.REMOVE))
     copies = len(_not_later_uploads(plan, Disposition.WITHDRAW))
-    if _names_a_team(plan):
+    if plan.nothing_to_do:
+        # A re-run plans again what an earlier run removed, and removes none of it (v1-e30-t20).
+        removed_line = "nothing; this run found nothing left to remove."
+    elif _names_a_team(plan):
         removed_line = f"{removed_whole} file(s), and this team's copies of {copies} shared file(s)."
     elif copies:
         removed_line = (
@@ -838,7 +923,7 @@ def _confirmation(plan: RemovalPlan) -> list[str]:
     else:
         removed_line = f"{removed_whole} file(s)."
     lines = [f"  - Removed from this environment: {removed_line}"]
-    if plan.later_uploads_added:
+    if plan.later_uploads_added and not plan.nothing_to_do:
         lines.append(
             f"  - Also removed, as later uploads at the same path(s): {plan.later_uploads_added} file(s)."
         )
@@ -847,7 +932,7 @@ def _confirmation(plan: RemovalPlan) -> list[str]:
             f"  - Not removed: {plan.later_uploads_found} later upload(s) at the same path(s), because the "
             "request was about one version."
         )
-    if refused := plan.included_as(Inclusion.HELD_AT_IMPORT):
+    if (refused := plan.included_as(Inclusion.HELD_AT_IMPORT)) and not plan.nothing_to_do:
         lines.append(
             "  - Also stopped, as later uploads an import refused at the same path(s): "
             f"{len(refused)} file(s)."
@@ -900,17 +985,27 @@ def _suppressed_line(plan: RemovalPlan) -> str:
     takes it down on OpenCaselist; the list stops it in all of them. A file removed whole is stopped
     by its bytes, and a shared file withdrawn from this team only at the path it was taken from.
     A `--source` removal has no requesting team: what it withdraws is a copy at the path it was
-    withdrawn from (`v1-e30-t16`). Whether a path is held is the line before this one.
+    withdrawn from (`v1-e30-t16`). A `--team --include-shared` removal may withdraw a later upload
+    from another holder's path, which is that holder's copy and not this team's (`v1-e30-t20`).
+    Whether a path is held is the line before this one.
     """
-    withdrawn = (
-        "this team's copy of a shared file at the path it was taken from"
-        if _names_a_team(plan)
-        else "the copy of a shared file at the path it was withdrawn from"
-    )
-    stopped = [
-        *(["a removed file"] if plan.of(Disposition.REMOVE) else []),
-        *([withdrawn] if plan.of(Disposition.WITHDRAW) else []),
-    ]
+    if _names_a_team(plan):
+        at_the_teams, at_anothers = _withdrawn_at(plan)
+        withdrawn = [
+            *(["this team's copy of a shared file at the path it was taken from"] if at_the_teams else []),
+            *(
+                ["another holder's copy of a later upload at the path it was withdrawn from"]
+                if at_anothers
+                else []
+            ),
+        ]
+    else:
+        withdrawn = (
+            ["the copy of a shared file at the path it was withdrawn from"]
+            if plan.of(Disposition.WITHDRAW)
+            else []
+        )
+    stopped = [*(["a removed file"] if plan.of(Disposition.REMOVE) else []), *withdrawn]
     if not stopped:
         return "  - Nothing suppressed: no file was removed, and no copy withdrawn."
     return f"  - Suppressed, so no later archive, weekly or complete, can bring back {', or '.join(stopped)}."
@@ -990,6 +1085,13 @@ def plan_summary(plan: RemovalPlan, settings: Settings, report: RemovalReport | 
         ],
         "suppression_entries": [entry.to_line() for entry in plan.suppression_entries],
         "path_holds": [entry.to_line() for entry in plan.path_holds],
+        "withdrawals": [
+            # By digest and caselist slug alone: the record's line also has the time, reason and
+            # request, which `suppression_entries` carries (v1-e30-t20).
+            {"sha256": entry.sha256, "disclosure": entry.disclosure, "caselist": entry.caselist}
+            for entry in plan.withdrawals
+        ],
+        "manifest_versions_swept": _swept_json(plan),
         "inbox_directory": plan.inbox_directory,
         "inbox_exists": plan.inbox_exists,
         "inbox": [
@@ -1020,6 +1122,19 @@ def plan_summary(plan: RemovalPlan, settings: Settings, report: RemovalReport | 
         data["log_entry"] = report.log_entry.to_line()
         data["preflight_probes_left"] = _probes_left_json(report.preflight_probes_left)
     return data
+
+
+def _swept_json(plan: RemovalPlan) -> JsonValue:
+    """What the *MANIFEST VERSIONS SWEPT* line counts, in all and by manifest key (`v1-e30-t20`).
+
+    `"not counted"` where the everyday profile may not list or read the versions, as the line says:
+    never 0, which would say the execution sweeps none.
+    """
+    swept = plan.superseded_versions
+    if swept is None:
+        return "not counted"
+    by_manifest = Counter(version.key for version in swept)
+    return {"total": len(swept), "by_manifest": {key: count for key, count in sorted(by_manifest.items())}}
 
 
 def _selector_json(selector: RemovalSelector) -> dict[str, JsonValue]:

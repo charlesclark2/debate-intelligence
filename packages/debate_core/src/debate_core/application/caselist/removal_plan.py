@@ -207,6 +207,7 @@ from debate_core.application.caselist.inbox_purge import (
     InboxFileKind,
     InboxFilePlan,
     InboxTeamFilesLeft,
+    inbox_directory_named,
     plan_inbox,
     read_inbox,
 )
@@ -558,6 +559,9 @@ class RemovalPlan:
     inbox_team_files_left: tuple[InboxTeamFilesLeft, ...] = ()
     """Archives waiting to be imported that hold files of the team the store has never seen."""
     inbox_directory: str = ""
+    """The inbox's path relative to the data directory, or the setting that puts it elsewhere
+    (:func:`~debate_core.application.caselist.inbox_purge.inbox_directory_named`): never a path
+    on this machine, since the plan is read and kept (`v1-e30-t20`)."""
     inbox_exists: bool = False
     """Whether that directory exists. Prod, which does not pull, has none; nothing is then created."""
     only_named: bool = False
@@ -1067,7 +1071,7 @@ class RemovalPlanner:
             suppression_after=after,
             inbox=inbox,
             inbox_team_files_left=team_files_left,
-            inbox_directory=str(self._inbox.directory),
+            inbox_directory=inbox_directory_named(self._inbox),
             inbox_exists=self._inbox.directory.is_dir(),
             only_named=only_named,
             later_uploads=later,

@@ -141,9 +141,15 @@ which tournament rounds, what was kept and what was not done), and **TO CARRY IT
 `--execute` command. Add `--json` for the same plan as one
 JSON object. The JSON carries no school, team code, path, camp, title or file name (`v1-e30-t11`):
 a file is its sha256, a disclosure is the digest the suppression list uses for one, a `--team`
-selector is its caselist, and an inbox file is a weekly archive's name or `openev-<id>`. So the JSON
+selector is its caselist, and an inbox file is a weekly archive's name or `openev-<id>`. Its
+`withdrawals` are the *WITHDRAWALS* lines, each by the file's sha256, the path's digest and the
+caselist's slug, and `manifest_versions_swept` is the *MANIFEST VERSIONS SWEPT* count, in all and by
+manifest key, or `"not counted"` where the line says so (`v1-e30-t20`). So the JSON
 can be saved or pasted where the text of the plan cannot. Check the plan against the request in
-the text. The everyday profile may list object versions under the prefixes a takedown removes
+the text. Neither the text nor the JSON names a path on this machine, so you can keep both: the
+inbox is *inbox in the data directory* (`"inbox_directory": "inbox"`), or *the directory
+caselist.inbox_dir names* when a profile puts it elsewhere, and a run a pull's lock stops names the
+lock as *caselist-sync.lock in the data directory* (`v1-e30-t20`). The everyday profile may list object versions under the prefixes a takedown removes
 from (`v1-e29-t06`), so the plan shows each object's version count. In an environment where that
 grant has not been applied yet ([evidence-store.md, Later applies](evidence-store.md#later-applies)
 records when it was), the plan says *Versions not counted* instead; everything else in it is still
@@ -230,7 +236,10 @@ Read the plan before going further. Confirm:
       `kept in` line says *another path there still holds it*, which may be the same team's. A
       `--source` plan never says "this team's": no team asked. It says what happens at the removed
       path instead (*N path(s) a shared file is withdrawn from*, *the copy of a shared file at the
-      path it was withdrawn from*).
+      path it was withdrawn from*). Nor does a `--team --include-shared` plan of a later upload it
+      takes from another team's path, since it removes the shared file from that path too: it
+      counts *N path(s) of another holder a later upload is withdrawn from*, and the list stops
+      *another holder's copy of a later upload* there (`v1-e30-t20`).
 - [ ] **Shared references.** If the plan lists sources also disclosed by another team, or that are
       also a camp file, decide explicitly: without `--include-shared` only this team's `Disclosure`
       records and manifest rows are dropped and the shared blob stays, and each of this team's
@@ -610,7 +619,9 @@ holds other teams' disclosures too, and the importer refuses the removed files i
       environment (the `DONE` line), and the date completed. Counts and codes only, as for the rest
       of the entry — no filename.
 - [ ] Reply to the requester confirming completion, naming what was removed in their terms (their
-      team, their rounds) and anything that was not, with the reason.
+      team, their rounds) and anything that was not, with the reason. Take it from the run that
+      removed it: a run of the same command again that finds nothing left says *Removed from this
+      environment: nothing; this run found nothing left to remove* (`v1-e30-t20`).
 - [ ] Commit the register update. No personal data in the diff or the commit message.
 
 ## Camp rows that carry no upstream identity

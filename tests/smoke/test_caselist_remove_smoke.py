@@ -426,7 +426,7 @@ def test_the_download_inbox_is_listed_by_the_dry_run_and_purged_by_the_execution
         (f"{SYNTHETIC_CASELIST}-weekly-2026-09-15.zip", "delete"),
         (waiting.name, "rewrite"),
     ]
-    assert f"DOWNLOAD INBOX ({inbox}): 4 file(s) hold removed files." in shown.stdout
+    assert "DOWNLOAD INBOX (inbox in the data directory): 4 file(s) hold removed files." in shown.stdout
     assert tree(inbox) == before, "the dry run changed the inbox"
 
     environment(DEBATE_REMOVAL_PROFILE=REMOVAL_PROFILE)

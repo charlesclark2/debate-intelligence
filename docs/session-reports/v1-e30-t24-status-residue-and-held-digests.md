@@ -339,9 +339,45 @@ it runs another, tell me, and I will run the check against that one.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-19
 
 **Notes:**
+
+Accepted, with the phase `Succeeded`. The branch must sync before its pull request: v1-e30-t25 has
+merged, and the two touch the same removal smoke file and its README row. Keep both tasks' checks,
+then run the affected set (agreement 10) and the smoke file.
+
+**The work itself:**
+
+* **One predicate for status and the sweep,** with a property over generated listings whose events
+  show it reaches the states that matter: a long run's window, the same second, a current version
+  in the window. P5 survived until the property was taught another machine's publish, and that is
+  the right fix.
+* **A stopped run keeps the old rule, for a reason written down** (Decision 1): it has no
+  completion to bound what came after its rewrite.
+* **Held digests read only when the inbox is,** so `caselist pull` reads nothing more, shown by
+  test.
+* **The panel now prints a summary, and `--json` keeps every field.** It also catches the second
+  panel (`REMOVAL_RESIDUE`) that dumped the record.
+* **The `| tail` slip in `77aeb3f` was reported** and did not hide a failure.
+
+**Rulings:**
+
+1. **Deviation 1 is accepted.** My two notes contradicted each other, and the session followed the
+   right one. A current version can never be swept, so counting it was permanent residue. A current
+   version that is not this machine's manifest already fails status as `CASELIST_DRIFT`, and the
+   cycle test shows it is then counted and cleared. That is not a narrowing in what status catches.
+2. **Deviations 2 to 4 and Decisions 1 to 8: accepted.** Decision 5's double naming while an
+   archive waits is right: each line says what one source holds.
+3. **The agent's tag:** `v1.1.0-dev.18` until tonight's reinstall (A12 of v1-e31-t20's list), which
+   moves it to the newest pre-release, one that will hold this task. The check against dev.18 is the
+   one that matters, and it passed.
+4. **Follow-up 1** (other commands dump a whole payload in their panels): next PM batch, p3, using
+   `panel_details`.
+5. **Follow-up 2** (pyright does not check `tests/smoke`): joins `tests/scripts` on the deferred
+   tooling list; one task will widen pyright to the test trees.
+6. **The operator's status runs** are folded into A13, together with v1-e30-t25's check for an
+   earlier build's junk row at a held path. One status run per environment covers both.

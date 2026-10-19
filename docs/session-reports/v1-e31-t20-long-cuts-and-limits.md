@@ -6,7 +6,7 @@
 | Spec | [`plan_specs/v1/e31-debate-file-parsing/t20-long-cuts-and-limits.yaml`](../../plan_specs/v1/e31-debate-file-parsing/t20-long-cuts-and-limits.yaml) |
 | Epic / release | `v1-e31-debate-file-parsing` / `v1.1` |
 | Branch | `task/v1-e31-t20-long-cuts-and-limits` |
-| Session status | PARTIAL: the PM's rulings on the first preview (2026-10-18) are built, tested red first and mutated: every two bodies in a cluster overlap, `MIN_CUT_SHARE` is a tenth, short bodies are found from either end, `MAX_CONTAINER_CLUSTERS` stays 8. The labelled-set guardrail holds exactly. The re-preview that covers all of it, and the rebuild after the merge, are the operator's and NOT RUN |
+| Session status | PARTIAL: the PM's rulings on the first preview (2026-10-18) are built, tested red first and mutated (70 of 73 caught, 3 equivalent), and the operator's re-preview of them passed every check: ac1's sample 20 of 20 the same card, the PM's band sample 20 of 20, ac5 0 in all twelve largest clusters, no unexplained divided pair. What is left is after the merge: the dev rebuild and its figures (ac4, ac5 on the store) |
 
 ## Summary
 
@@ -50,8 +50,26 @@ it all from this worktree, writing nothing to the store.
 6. **An installed agent rewrites the table as `v3`.** Reinstall the agent on the first pre-release
    carrying this task before the dev rebuild (step 9).
 
-**The Goal stays `InProgress`.** ac1's sample, ac4's re-cluster figures and ac5's shapes need the
-re-preview and the rebuild; the PM's check on the share needs the re-preview's band sample.
+**The re-preview (2026-10-18, steps R2 to R6) passed every check** (parse report, "The re-preview's
+..."):
+
+* **ac1:** 20 newly joined pairs, every one shown, 20 the same card (seed 963278315).
+* **The PM's check on the share:** 20 of 933 cuts newly joined a tenth to a quarter of their
+  witness, 20 the same card.
+* **ac5:** no pair sharing nothing, and none sharing a little, in any of the twelve largest
+  clusters. Pairs sharing only one or two runs over every cluster: 4 (401 in the first preview),
+  all overlapping, each a text of a few words.
+* **The limits re-measured:** 514 cuts under the share, all under a tenth; 6 kept out by
+  `MAX_CONTAINER_CLUSTERS`, as before. **No divided pair is unexplained** (9 before); 13 are now
+  named as a body holding neither end.
+* **The cost of the lower share, for the PM to see:** 38,776 containers are refused as witnesses,
+  10,602 of them only by a passage a tenth to a quarter of the container. Cuts kept out by a
+  passage they do not overlap rose from 1,366 to 3,429 long and 126 to 203 short, and divided pairs
+  from 1,688 to 2,134. Every one is a body holding two passages that do not overlap, the ruling's
+  own case.
+
+**The Goal stays `InProgress`.** ac4's re-cluster figures and ac5 on the store come from the dev
+rebuild after the merge (steps 9 to 16); everything before the merge is done.
 
 **The PM's rulings of 2026-10-18**, in the order they came:
 
@@ -73,28 +91,32 @@ re-preview and the rebuild; the PM's check on the share needs the re-preview's b
 **For the PM** (paste-ready):
 
 ```text
-v1-e31-t20: your rulings on the first preview are built. The operator's re-preview is next.
+v1-e31-t20 re-preview done (operator-run 2026-10-18, counts only; in caselist-parse-report.md).
+Every check you set passed. Asking to merge, with the rebuild steps after it.
 
-1(a) Overlap. "Shares text" is now "overlaps": at least 0.3 of the smaller text's five-word runs
-  (MIN_OVERLAP_SHARE, and pair_shapes' OVERLAPPING_SHARE is the same constant). It is read in the
-  passage refusal and in every join guard, so every two bodies in a cluster overlap or one holds
-  the other. Supersedes the one-run reading you accepted earlier today.
-  - Guardrail: holds exactly. The two pinned tests pass unchanged and every labelled row is the
-    same, precision 1.000. The labelled sets have no in-cluster pair sharing only a little.
-  - The boundary test that moved: the chain of eleven 100-word extents ten words apart. It was one
-    cluster of ten and one of one; it is now seven and four. Six apart they share 36 of 96 runs
-    (overlap), seven apart 26 (do not).
-2. Limits. MIN_CUT_SHARE = 0.1; short bodies lacking an end are compared; MAX_CONTAINER_CLUSTERS
-  stays 8, still counting clusters that hold both ends.
-  - Re-preview: sample --joined-in-band a-tenth-to-a-quarter draws cuts newly joined to their
-    smallest witness in that band, 20 of them, every one shown. Any different card: stop.
-  - diagnose reports witness_refusals: the containers refused as witnesses, and how many of those
-    refusals come only from a passage a tenth to a quarter of the container, i.e. the ones the
-    lower share added.
-3. The 9 are named: a new outcome, "nine-tenths inside a body that holds neither of its ends",
-  found from three interior shingles. shapes --every-cluster now also says how many of the pairs
-  sharing one or two runs do not overlap. Under the new rules that must be 0. A pair left sharing
-  one or two runs must have a text of six runs or fewer, where that is three-tenths.
+- ac1: 20 newly joined pairs, all shown with the contained shapes asked: 20 same card
+  (16 contained under a third, 2 contained a third or more, 2 overlapping). Pool 1,827.
+- Your check on MIN_CUT_SHARE = 0.1: 20 of 933 cuts newly joined at a tenth to a quarter of their
+  smallest witness, each shown beside it: 20 same card (17 long, 3 short). No different card.
+- ac5: 0 pairs sharing nothing and 0 sharing a little in each caselist's 3 largest clusters
+  (largest: hsld26 385, hspf26 586, hspolicy26 665, openev 13 cards).
+- Pairs sharing only 1-2 runs, every cluster: 4 (was 401), all overlapping. How they got there:
+  one run overlaps only a text of 3 runs or fewer, so each is a few-word text in its cluster
+  directly, not via a third body.
+- Limits re-measured: 514 cuts under the share, all under a tenth; MAX_CONTAINER_CLUSTERS keeps
+  6 apart, as before.
+- The 9 unexplained divided pairs: now 0 unexplained; 13 divided pairs carry the new
+  "holds neither of its ends" outcome.
+- What the lower share also costs (you asked): 38,776 witness refusals by a passage the cut
+  does not overlap, 10,602 (27%) added by the lower share. Cuts kept out that way: long 1,366 ->
+  3,429, short 126 -> 203. Divided pairs vs v3: 1,688 -> 2,134 (1,422 by that refusal). All are
+  bodies holding two passages that do not overlap, the card ruling's own case.
+- Counts vs v3: clusters 11,552->11,595 / 9,930->10,234 / 18,746->18,741 / 5,841->5,806;
+  most absorbed 4; no exact fingerprint changed.
+
+After the merge (report steps 9-16): reinstall the agent on the first pre-release with this task,
+save the v3 tables, rebuild dev, then counts/shapes/the join sample (seed 963278315) go to you
+before the dev publish and prod.
 ```
 
 ## Plan nodes
@@ -111,12 +133,12 @@ operator's first preview, recorded in the parse report.
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
 | **ac1** — (1), (5) and (7) built on synthetic fixtures, shown failing first, including two disjoint bodies and a third holding both, which stay apart | PASS | The 13 tests of "Long cuts, and joins only on text two bodies share" in `test_near_duplicates.py`, committed red (`a295999`) against the v3 rules: `14 failed, 4 passed`. Under the overlap reading the same section plus three new tests: `uv run pytest packages/debate_core/tests/evidence/test_near_duplicates.py -n0` → `111 passed`. t11's false join stays `[[A], [B], [C]]` under all six orders of fingerprint. See [Shown failing first](#shown-failing-first) |
-| **ac1** — the operator's join sample of 20 newly joined pairs, through t21's sampler, has no pair the coach calls different | **NOT RUN** on the rules as ruled | The first preview's 20 were all decided by rule (contained), so nobody judged them, and its 40-pair sample found one different card, which is why the PM ruled 1(a). The re-preview's step R4 draws 20 with both contained shapes asked |
-| **ac2** — each limit set from the recorded samples, with the figures in the report, and re-measured after (1) | PASS (set); the re-measure under the set limits **NOT RUN** | From the first preview (parse report, "The first preview's samples"): `MIN_CUT_SHARE` 0.25 → 0.1 (20/20 kept-apart cuts the same card, 8 under a tenth); `MAX_CONTAINER_CLUSTERS` kept at 8 (6/6, every such cut on four caselists); both ruled by the PM on 2026-10-18 and pinned at their boundaries by test and mutants. The re-preview's `diagnose` (step R6) re-measures every limit under the set values |
+| **ac1** — the operator's join sample of 20 newly joined pairs, through t21's sampler, has no pair the coach calls different | PASS (re-preview); the same 20 after the rebuild NOT RUN | Step R4, 2026-10-18: `Drew 20 of 1827 newly joined pairs, seed 963278315`, every pair shown with the contained shapes asked: 20 same card, 0 different, 0 unsure. The first preview's 40-pair sample found one different card, which is why the PM ruled 1(a). Step 14 draws the same 20 from the rebuilt table |
+| **ac2** — each limit set from the recorded samples, with the figures in the report, and re-measured after (1) | PASS | From the first preview (parse report, "The first preview's samples"): `MIN_CUT_SHARE` 0.25 → 0.1 (20/20 kept-apart cuts the same card, 8 under a tenth); `MAX_CONTAINER_CLUSTERS` kept at 8 (6/6, every such cut on four caselists); both ruled by the PM on 2026-10-18 and pinned at their boundaries by test and mutants. Re-measured under the set values (step R6): 514 cuts under the share, all under a tenth; 6 kept out by `MAX_CONTAINER_CLUSTERS`; and the PM's band sample (step R5) 20 of 20 the same card |
 | **ac3** — (4): the sample decides, and the rule follows it, by test | PASS | The first preview's sample: 20 of 31 short bodies nine-tenths inside a body lacking one of their ends, 20 the same card. The rule followed: `test_a_short_body_nine_tenths_inside_a_body_lacking_one_of_its_ends_joins_it` and `test_a_card_lacking_the_end_of_a_short_copy_holds_it_and_is_no_second_witness`, the two tests that pinned the old rule turned round, red against the pre-ruling code |
 | **ac4** — `fingerprint_version` bumped | PASS | `card-fingerprint-v4`. No store has held a `v4` table (the preview writes none), so the rulings stay `v4`; `fingerprints.py` and `parsed-card-store.md` describe `v4` as ruled |
 | **ac4** — the operator's re-parse records clusters, merges and divided pairs before and after in `caselist-parse-report.md` | **NOT RUN** | A re-cluster, not a re-parse. The first preview's figures are recorded and marked superseded; the re-preview's and the rebuild's columns are marked not run. Steps R2, R6 and 9 to 16 |
-| **ac5** — under 5% of pairs sharing no text in each caselist's three largest clusters, after the rebuild | **NOT RUN** | 0% by construction, and since the overlap reading so is the share sharing a little, but for texts of six runs or fewer. The first preview measured 0 in all twelve. Re-preview: step R3; after the rebuild: step 13 |
+| **ac5** — under 5% of pairs sharing no text in each caselist's three largest clusters, after the rebuild | **NOT RUN** after the rebuild; 0% on the re-preview | 0% by construction, and since the overlap reading so is the share sharing a little, but for texts of six runs or fewer. Re-preview (step R3): 0 sharing nothing and 0 sharing a little in all twelve. After the rebuild: step 13 |
 | **ac6** — `sample` shows the pairs of a decided shape the person names, tallied apart, by test | PASS | `sample --ask-shape SHAPE`, repeatable, by test, red against the start commit |
 | **ac6** — the operator's sample of contained pairs under a third of the larger sets or confirms `MIN_CUT_SHARE` | PASS | The first preview: 17 of 17 newly joined contained pairs under a third the same card, and 20 of 20 cuts the share kept out the same card. It set the share at a tenth |
 | Node `long-cuts`: `uv run pytest packages/debate_core/tests -k "fingerprint or cluster"` | PASS | see Also run |
@@ -567,6 +589,10 @@ the 9 of the first preview now count under "nine-tenths inside a body that holds
 ends". **Paste back** the eight `jq` lines and the tallies file: two blocks, R4's and R5's.
 
 **Step R7.** The PM reads R2 to R6. The session then records the figures and asks for the merge.
+
+*Run on 2026-10-18:* R1 to R6 all passed; the figures are in the parse report ("The re-preview's
+counts and shapes", "join sample", "band sample" and "diagnosis") and summarised at the top of this
+report.
 
 ### After the merge
 

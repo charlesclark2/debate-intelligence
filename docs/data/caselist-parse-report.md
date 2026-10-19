@@ -1492,8 +1492,8 @@ Before the labels moved, on 2026-10-18, the same comparison gave the same cite f
 
 ## The re-cluster under `card-fingerprint-v4` (`v1-e31-t20`)
 
-**Status: the first preview is measured and ruled on; the re-preview under the PM's rulings is not
-run.** The first preview (the counts, shapes, samples and diagnosis below, all 2026-10-18) was of
+**Status: the first preview is measured and ruled on; the re-preview under the PM's rulings is
+measured (2026-10-18); the rebuild after the merge is not run.** The first preview (the counts, shapes, samples and diagnosis below, all 2026-10-18) was of
 the rules before the PM's rulings on it the same day; the re-preview is of the rules as ruled. The
 steps are in
 [the task's session report](../session-reports/v1-e31-t20-long-cuts-and-limits.md#operator-follow-ups):
@@ -1566,12 +1566,12 @@ holds exactly, by test.
 | ac5: share of pairs sharing nothing, three largest clusters per caselist | 0 in all twelve, below | 0 in all twelve, below | not run |
 | ac1: join sample of 20 newly joined pairs, contained shapes asked | all 20 decided by rule, below | 20 of 20 same card by eye, below | not run, same seed |
 | Newly joined cuts a tenth to a quarter of their witness, at least 20 (the PM's check on the share) | | 20 of 20 same card, below | |
-| Witness refusals the lower share added | | not run | |
-| `MIN_CUT_SHARE`: contained pairs under a third, joined and kept apart, by share band | below | not run | |
+| Witness refusals the lower share added | | 10,602 of 38,776, below | |
+| `MIN_CUT_SHARE`: contained pairs under a third, joined and kept apart, by share band | below | 514 kept out, all under a tenth, below | |
 | Lacking an end: short bodies nine-tenths inside a body lacking one of their ends | below | (joined) | |
-| Bodies nine-tenths inside one holding neither of their ends | 9 unexplained divided pairs | not run | |
-| `MAX_CONTAINER_CLUSTERS`: cuts whose ends too many clusters hold, re-measured | below | not run | |
-| Divided pairs against `v3`, by reason | below | not run | |
+| Bodies nine-tenths inside one holding neither of their ends | 9 unexplained divided pairs | 62 cuts, 13 divided pairs, none unexplained, below | |
+| `MAX_CONTAINER_CLUSTERS`: cuts whose ends too many clusters hold, re-measured | below | 6, below | |
+| Divided pairs against `v3`, by reason | below | 2,134, below | |
 | Pairs in one cluster sharing only one or two five-word runs, every cluster, and of them not overlapping | below, 2026-10-18 | 4, none not overlapping, below | not run |
 
 ### The first preview's counts against `card-fingerprint-v3` (operator-run, 2026-10-18)
@@ -1764,3 +1764,34 @@ witness, seed 902519467`. Each was shown beside the smallest body holding it and
 **20 of 20 the same card** (17 long cuts, 3 short; every one contained, under a third of the
 larger), none different, none unsure. These are the joins lowering `MIN_CUT_SHARE` from a quarter
 to a tenth let in; the PM's condition, no different-card pair among at least 20, is met.
+
+### The re-preview's diagnosis (operator-run, 2026-10-18)
+
+`compare_card_clusters.py diagnose --after`, against the placement step R2 saved. Bodies with a
+container outside their cluster, by what keeps them out, summed over the four caselists (first
+preview in brackets):
+
+| Outcome | Short cuts | Long cuts |
+|---|---|---|
+| Every body outside that holds it also holds a passage it does not overlap | 203 (126) | 3,429 (1,366) |
+| Under the minimum share of the smallest witness, all under a tenth | 114 (235) | 400 (1,991) |
+| Its witnesses are in more than one cluster | 40 (50) | 347 (625) |
+| A body in its own cluster holds it, and so does one in another | 9 (12) | 213 (303) |
+| Joining it would put two texts that do not overlap in one cluster | 8 (2) | 21 (53) |
+| One cluster is its witness, within the share, and it is still apart | 2 (0) | 96 (132) |
+| Nine-tenths inside a body that holds neither of its ends | 0 | 62 |
+| Its ends are held by too many clusters (`MAX_CONTAINER_CLUSTERS`) | 6 (6) | |
+
+**Witness refusals** (`witness_refusals`, the PM's figure): 38,776 containers refused as witnesses
+for a body they hold (hsld26 8,637, hspf26 9,348, hspolicy26 20,159, openev 632), of which
+**10,602 (27%) only by a passage a tenth to a quarter of the container**: the refusals lowering
+`MIN_CUT_SHARE` added (2,391, 2,612, 5,370, 229). They fall on 7,706 bodies and come from 5,081
+containers. Each is a body holding two passages that do not overlap, which the ruling makes no
+witness for either; it is the other side of the 933 newly joined cuts in the band, which the band
+sample judged the same card 20 of 20.
+
+**Divided pairs against `v3`**: 544, 742, 774 and 74, 2,134 in all (1,688 in the first preview),
+**none unexplained** (9 in the first preview). By the outcome that explains them: a passage the cut
+does not overlap 1,422; witnesses in several clusters 435; own cluster and another 171; within the
+rule 54; nine-tenths inside a body holding neither end 13; under the share 23; joining texts that do
+not overlap 12; ends held by too many clusters 4.

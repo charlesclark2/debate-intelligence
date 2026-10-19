@@ -564,11 +564,17 @@ At the next import (or immediately, if you have the next archive on hand):
         build wrote, with the code `MANIFEST_NAMES_SUPPRESSED_SOURCE`, as it withholds one with a
         held row (`v1-e30-t23`), so a publish that succeeded over it now fails until the re-run below
         drops the row. A manifest an earlier build published is in the bucket until then;
+      - *REFUSED AT IMPORT AT A HELD PATH in `<caselist>`: N upload(s) the same removal has not yet
+        listed* (`v1-e30-t24`): an upload this build refused at a held path, from
+        `held-digests.jsonl` in either place, which the re-run below has not yet put on the list,
+        whole or for the held path. It is named whether or not its archive is still in the inbox,
+        so an upload that left with its archive is still said to be owed. An upload whose archive
+        is still waiting is in the *HELD UPLOADS* line too;
       - then *RM-… is owed again*. Each file is named by the first twelve characters of its sha256
         and the request holding its path, a skipped member by the request alone, and `--json` gives
-        the same as `held_in_inbox`, each snapshot's `held_rows`, `held_row_prefixes`,
-        `held_row_requests`, `held_skipped_rows` and `held_skipped_row_requests`, and
-        `removals_owed`.
+        the same as `held_in_inbox`, `refused_at_import`, each snapshot's `held_rows`,
+        `held_row_prefixes`, `held_row_requests`, `held_skipped_rows` and
+        `held_skipped_row_requests`, and `removals_owed`.
       None changes the exit code: the command still exits 0 when the bucket agrees.
 - [ ] **Finish it by running the same removal again**, dry run first: the same `--source`, the same
       `--request` and `--reason`, in dev and then prod. Do this after any pull that reported a held
@@ -710,13 +716,19 @@ some of these:
   whole, so the lines above never name it. But a caselist's copy is its own object, and the
   withdrawal deleted it because no other holder in that caselist kept the file. The withdrawal
   record beside the list (`withdrawals.jsonl`, `v1-e30-t16`) says which caselist each copy was taken
-  from and under which request, so this line names both. **It does not change the exit code.** Clear
-  it as [Versions older than a removal](#versions-older-than-a-removal) says: run that request's
-  command again.
+  from and under which request, so this line names both. The command exits 1, as `REMOVAL_RESIDUE`
+  when every snapshot agrees (`v1-e30-t24`; until then it did not change the exit code). Clear it as
+  [Versions older than a removal](#versions-older-than-a-removal) says: run that request's command
+  again.
 - *Withdrawals NOT ATTRIBUTED to a caselist: `RM-…`.* A withdrawal the list still suppresses that no
   withdrawal record attributes: a removal by a build from before `v1-e30-t16`, which recorded no
   caselist. What is left of its copies is not checked. That is not a finding of none, and it does
   not change the exit code.
+
+When the command exits 1, the panel under the table says why in counts (`v1-e30-t24`): the
+environment and bucket, how many snapshots were compared and how many differ, and one line for each
+snapshot that differs, naming at most three of its digests by their first twelve characters. Every
+digest in full is in `--json`, under `error.details`, which holds the whole report.
 
 Each file is one removed file, named by the first twelve characters of its sha256 and by counts.
 The report prints no school, team code, path or file name, in the text or in `removal_residue` of
@@ -849,9 +861,14 @@ DEBATE_ENV=dev uv run debate-research caselist remove --source <sha256> --reques
   command under *TO CARRY IT OUT* (`v1-e30-t19`). Until then it read current manifests only and said
   *Nothing is left to remove*. The sweep deletes two kinds, and only these: a noncurrent version of
   a manifest of the caselist that names the removed file, and a noncurrent version of a manifest
-  this request rewrote that is older than its rewrite, whatever it names. It never deletes the
-  current version, the rewrite, a version written after it, or a version of a manifest no run of
-  this request rewrote that names nothing removed. Where the everyday profile may not list or read
+  this request rewrote that the run's purge should have taken, whatever it names. For a run that
+  completed, that is the version `caselist status` counts: other than the rewrite, and older than
+  the run's completion less fifteen minutes (`v1-e30-t24`). One status and the sweep disagreed on
+  until then, such as a version in the same second as the rewrite or a publish from another machine
+  while the run went on, is now cleared by the re-run. For a run that stopped, which status never
+  counts, it is a version older than its rewrite. It never deletes the current version, the
+  latest rewrite, a version written after the run, or a version of a manifest no run of this
+  request rewrote that names nothing removed. Where the everyday profile may not list or read
   those versions the line says *not counted*, and the command is still printed.
 - **A request that removed no whole file** (its `removed_sha256` is empty, only `withdrawn_sha256`).
   Run the request's own command again: the same `--team`, `--request` and `--reason`. Its first run
@@ -864,19 +881,23 @@ DEBATE_ENV=dev uv run debate-research caselist remove --source <sha256> --reques
 Then run `caselist status` again. Every kind is cleared that way, and
 `test_versions_older_than_a_removal_are_cleared_by_running_it_again_under_the_same_request` and
 `test_an_old_manifest_version_alone_is_counted_by_the_dry_run_and_cleared_by_its_execution`
-(`tests/smoke/test_caselist_remove_smoke.py`), and `test_residue_clearing_gaps.py`
+(`tests/smoke/test_caselist_remove_smoke.py`), and `test_residue_clearing_gaps.py`,
+`test_status_and_the_sweep_share_one_rule.py` and `test_one_rule_for_rewritten_manifests_property.py`
 (`packages/debate_core/tests/application/caselist/`), prove it. Two cases are still not cleared
 that way. Tell the PM about either, and do not delete anything by hand:
 
 - a manifest count that stays after the re-run, where the plan swept nothing of that manifest:
-  something deleted the rewrite the request recorded, so no version can be shown older than it;
+  status and the sweep decide those versions by one rule since `v1-e30-t24`, so this should not
+  happen;
 - a withdrawal-only request whose plan says *no withdrawal record names the caselist it was
   withdrawn from*: a build from before `v1-e30-t16` made its first run.
 
 **What the report does not see.** It matches `raw/` and `parsed/` objects by their key, which is
 the file's sha256, and the aggregates and the rewritten manifests by their time. So:
 
-- It does not read manifests. A version of a manifest the removal *did not rewrite*, older than it,
+- It does not read manifests. A current manifest version is never counted as older than a removal:
+  where it is not this machine's, it is a manifest mismatch in the table. A version of a manifest
+  the removal *did not rewrite*, older than it,
   is not counted, even if it still names a removed row: the removal's sweep reads those, keeps the
   ones that name nothing removed, and deletes the rest. Telling the two apart would mean downloading
   each. A camp release's manifest re-published by `caselist reimport-openev-metadata` keeps such a

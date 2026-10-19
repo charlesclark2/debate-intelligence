@@ -1497,10 +1497,10 @@ measured (2026-10-18); the rebuild after the merge is not run.** The first previ
 the rules before the PM's rulings on it the same day; the re-preview is of the rules as ruled. The
 steps are in
 [the task's session report](../session-reports/v1-e31-t20-long-cuts-and-limits.md#operator-follow-ups):
-a preview from the task worktree before the merge, which writes nothing to the store, and the
-rebuild in dev after it. This is a re-cluster, not a re-parse: the parser and `2026.10.12-docx-3`
-are unchanged, `caselist parse` rebuilds each caselist's `occurrences.jsonl` under the new rules,
-and `--publish` uploads that file alone.
+a preview from the task worktree before the merge, which writes nothing to the store, and after it
+`v1-e31-t19`'s re-parse to `2026.10.18-docx-5` (the PM, 2026-10-19), which builds each caselist's
+`occurrences.jsonl` under this task's rules in the same run: this task has no rebuild of its own.
+Its figures on the store compare the `docx-5` cards under the rules before and after it.
 
 **What changed** (the PM's ruling of 2026-10-16, and the PM's rulings on the first preview of
 2026-10-18, in [`near_duplicates.py`](../../packages/debate_core/src/debate_core/evidence/near_duplicates.py)):
@@ -1560,11 +1560,11 @@ holds exactly, by test.
 
 **To be recorded here**, from the operator's runs:
 
-| Measure | First preview (superseded rules) | Re-preview, before the merge | After the dev rebuild |
+| Measure | First preview (superseded rules) | Re-preview, before the merge | On the `docx-5` store, after the re-parse |
 |---|---|---|---|
 | Counts against `card-fingerprint-v3`: clusters, merged, divided, largest | below, 2026-10-18 | below, 2026-10-18 | not run |
 | ac5: share of pairs sharing nothing, three largest clusters per caselist | 0 in all twelve, below | 0 in all twelve, below | not run |
-| ac1: join sample of 20 newly joined pairs, contained shapes asked | all 20 decided by rule, below | 20 of 20 same card by eye, below | not run, same seed |
+| ac1: join sample of 20 newly joined pairs, contained shapes asked | all 20 decided by rule, below | 20 of 20 same card by eye, below | not run, a fresh draw |
 | Newly joined cuts a tenth to a quarter of their witness, at least 20 (the PM's check on the share) | | 20 of 20 same card, below | |
 | Witness refusals the lower share added | | 10,602 of 38,776, below | |
 | `MIN_CUT_SHARE`: contained pairs under a third, joined and kept apart, by share band | below | 514 kept out, all under a tenth, below | |
@@ -1576,7 +1576,7 @@ holds exactly, by test.
 
 ### The first preview's counts against `card-fingerprint-v3` (operator-run, 2026-10-18)
 
-`compare_card_clusters.py counts --save-after`, from the task worktree at `ecf3e11`, each
+`compare_card_clusters.py counts --save-after`, from the task worktree at `ecf3e11` (rebased onto `dev` since as `eb23b2c`, the same rules), each
 caselist's cards in `2026.10.12-docx-3` placed in memory by `v4` and compared with the store's `v3`
 table. Nothing was written to the store. In every caselist, `exact_fingerprints_changed`,
 `cards_only_before` and `cards_only_after` are 0, and no cluster absorbed more than 5 others.
@@ -1721,7 +1721,7 @@ reading of "shares text" as "overlaps" would keep out of one cluster.
 
 ### The re-preview's counts and shapes (operator-run, 2026-10-18)
 
-The rules as ruled, from the task worktree at `8065605`, placed in memory and saved (step R2), then
+The rules as ruled, from the task worktree at `8065605` (rebased onto `dev` since as `e2f83b6`, the same rules), placed in memory and saved (step R2), then
 described (step R3). Nothing was written to the store. In every caselist
 `exact_fingerprints_changed`, `cards_only_before` and `cards_only_after` are 0, and no cluster
 absorbed more than 4 others.

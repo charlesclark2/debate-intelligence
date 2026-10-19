@@ -8,6 +8,9 @@
 | Branch | `task/v1-e31-t20-long-cuts-and-limits` |
 | Session status | PARTIAL: the PM's rulings on the first preview (2026-10-18) are built, tested red first and mutated (70 of 73 caught, 3 equivalent), and the operator's re-preview of them passed every check: ac1's sample 20 of 20 the same card, the PM's band sample 20 of 20, ac5 0 in all twelve largest clusters, no unexplained divided pair. What is left is after the merge: the dev rebuild and its figures (ac4, ac5 on the store) |
 
+Commit ids are those after `scripts/task sync` of 2026-10-19 onto `origin/dev` at `8e42378`, except
+where a run is said to have used an earlier one.
+
 ## Summary
 
 `card-fingerprint-v4` builds the PM's card ruling of 2026-10-16 into near-duplicate clustering, as
@@ -47,8 +50,10 @@ it all from this worktree, writing nothing to the store.
 5. **The 9 unexplained divided pairs are now named**, by the outcome "nine-tenths inside a body that
    holds neither of its ends", found from three interior shingles of each body. Recovering them is
    a later rule change, which the PM is filing at p3.
-6. **An installed agent rewrites the table as `v3`.** Reinstall the agent on the first pre-release
-   carrying this task before the dev rebuild (step 9).
+6. **After the merge, one list in the PM's order** (Operator follow-ups, A1 to A13): `v1-e31-t19`'s
+   re-parse to `2026.10.18-docx-5`, which is also this task's rebuild, then this task's figures on
+   the `docx-5` store, then prod, then one agent reinstall at the end. The re-parse writes the
+   `v4` table in the same run, so no rebuild follows it.
 
 **The re-preview (2026-10-18, steps R2 to R6) passed every check** (parse report, "The re-preview's
 ..."):
@@ -69,24 +74,24 @@ it all from this worktree, writing nothing to the store.
   own case.
 
 **The Goal stays `InProgress`.** ac4's re-cluster figures and ac5 on the store come from the dev
-rebuild after the merge (steps 9 to 16); everything before the merge is done.
+re-parse to `docx-5` after the merge (A3 to A9); everything before the merge is done.
 
 **The PM's rulings of 2026-10-18**, in the order they came:
 
 * **On the labelled sets, 1(a): the ruling stands.** The two text-disjoint trims of Brannock's and
   Kessler's cards are two passages each. `short_cards.jsonl` is unchanged; t08's ac1 for the two
   "full short cards" rows is amended to 0.792 and 0.622; a test pins the lost pairs to those two
-  cards by row id and holds every other card's recall. Built in `cafab61`, `790a42b`, `7d7e73d`.
+  cards by row id and holds every other card's recall. Built in `109d0c1`, `07e5ca8`, `59d9953`.
 * **On the three choices, 2: all go ahead**: symmetric refusal; the long near-containment join,
   with the container rule applying to it; and one shared run as "shares text", with a count of
-  pairs sharing one or two runs to test it (`bff30f6`). The third is superseded below.
+  pairs sharing one or two runs to test it (`8206ec3`). The third is superseded below.
 * **On the first preview:** (1)(a), "shares text" means overlaps at three-tenths, superseding the
   one-run reading, with the guardrail to hold exactly by test and the moved boundary test named;
   (2) `MIN_CUT_SHARE` 0.1 with a band sample of at least 20 and the added refusals reported, short
   bodies lacking an end compared, `MAX_CONTAINER_CLUSTERS` 8; (3) a diagnosis outcome for the
   neither-end body, the re-preview to report ac5, the four largest clusters' sizes and the few-run
-  pairs (any left must say how they got there), and the 132 long cuts accepted. Built in `1c38f49`
-  and `2aab11c`.
+  pairs (any left must say how they got there), and the 132 long cuts accepted. Built in `eb81c5c`
+  and `778ede5`.
 
 **For the PM** (paste-ready):
 
@@ -132,13 +137,13 @@ operator's first preview, recorded in the parse report.
 
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
-| **ac1** — (1), (5) and (7) built on synthetic fixtures, shown failing first, including two disjoint bodies and a third holding both, which stay apart | PASS | The 13 tests of "Long cuts, and joins only on text two bodies share" in `test_near_duplicates.py`, committed red (`a295999`) against the v3 rules: `14 failed, 4 passed`. Under the overlap reading the same section plus three new tests: `uv run pytest packages/debate_core/tests/evidence/test_near_duplicates.py -n0` → `111 passed`. t11's false join stays `[[A], [B], [C]]` under all six orders of fingerprint. See [Shown failing first](#shown-failing-first) |
-| **ac1** — the operator's join sample of 20 newly joined pairs, through t21's sampler, has no pair the coach calls different | PASS (re-preview); the same 20 after the rebuild NOT RUN | Step R4, 2026-10-18: `Drew 20 of 1827 newly joined pairs, seed 963278315`, every pair shown with the contained shapes asked: 20 same card, 0 different, 0 unsure. The first preview's 40-pair sample found one different card, which is why the PM ruled 1(a). Step 14 draws the same 20 from the rebuilt table |
+| **ac1** — (1), (5) and (7) built on synthetic fixtures, shown failing first, including two disjoint bodies and a third holding both, which stay apart | PASS | The 13 tests of "Long cuts, and joins only on text two bodies share" in `test_near_duplicates.py`, committed red (`4838bd3`) against the v3 rules: `14 failed, 4 passed`. Under the overlap reading the same section plus three new tests: `uv run pytest packages/debate_core/tests/evidence/test_near_duplicates.py -n0` → `111 passed`. t11's false join stays `[[A], [B], [C]]` under all six orders of fingerprint. See [Shown failing first](#shown-failing-first) |
+| **ac1** — the operator's join sample of 20 newly joined pairs, through t21's sampler, has no pair the coach calls different | PASS (re-preview); the sample on the `docx-5` store NOT RUN | Step R4, 2026-10-18: `Drew 20 of 1827 newly joined pairs, seed 963278315`, every pair shown with the contained shapes asked: 20 same card, 0 different, 0 unsure. The first preview's 40-pair sample found one different card, which is why the PM ruled 1(a). A9 draws a fresh 20 from the `docx-5` store |
 | **ac2** — each limit set from the recorded samples, with the figures in the report, and re-measured after (1) | PASS | From the first preview (parse report, "The first preview's samples"): `MIN_CUT_SHARE` 0.25 → 0.1 (20/20 kept-apart cuts the same card, 8 under a tenth); `MAX_CONTAINER_CLUSTERS` kept at 8 (6/6, every such cut on four caselists); both ruled by the PM on 2026-10-18 and pinned at their boundaries by test and mutants. Re-measured under the set values (step R6): 514 cuts under the share, all under a tenth; 6 kept out by `MAX_CONTAINER_CLUSTERS`; and the PM's band sample (step R5) 20 of 20 the same card |
 | **ac3** — (4): the sample decides, and the rule follows it, by test | PASS | The first preview's sample: 20 of 31 short bodies nine-tenths inside a body lacking one of their ends, 20 the same card. The rule followed: `test_a_short_body_nine_tenths_inside_a_body_lacking_one_of_its_ends_joins_it` and `test_a_card_lacking_the_end_of_a_short_copy_holds_it_and_is_no_second_witness`, the two tests that pinned the old rule turned round, red against the pre-ruling code |
-| **ac4** — `fingerprint_version` bumped | PASS | `card-fingerprint-v4`. No store has held a `v4` table (the preview writes none), so the rulings stay `v4`; `fingerprints.py` and `parsed-card-store.md` describe `v4` as ruled |
-| **ac4** — the operator's re-parse records clusters, merges and divided pairs before and after in `caselist-parse-report.md` | **NOT RUN** | A re-cluster, not a re-parse. The first preview's figures are recorded and marked superseded; the re-preview's and the rebuild's columns are marked not run. Steps R2, R6 and 9 to 16 |
-| **ac5** — under 5% of pairs sharing no text in each caselist's three largest clusters, after the rebuild | **NOT RUN** after the rebuild; 0% on the re-preview | 0% by construction, and since the overlap reading so is the share sharing a little, but for texts of six runs or fewer. Re-preview (step R3): 0 sharing nothing and 0 sharing a little in all twelve. After the rebuild: step 13 |
+| **ac4** — `fingerprint_version` bumped | PASS | `card-fingerprint-v4`. No store has held a `v4` table (the preview writes none), so the rulings stay `v4`; `fingerprints.py` and `parsed-card-store.md` describe `v4` as ruled. A clusters-only bump, so `v4` is **added** to `v1-e33-t01`'s `EXACT_FINGERPRINT_VERSIONS` in this task, and the recipe schema regenerated with `scripts/export_recipe_schema.py`: its guard test failed after the sync, and 50 recipe resolves were refused, then all passed |
+| **ac4** — the operator's re-parse records clusters, merges and divided pairs before and after in `caselist-parse-report.md` | **NOT RUN** | A re-cluster, carried by `v1-e31-t19`'s re-parse to `docx-5`. The first preview's figures are recorded and marked superseded, and the re-preview's (R2, R6) recorded; the store's column is marked not run. A7 to A9 |
+| **ac5** — under 5% of pairs sharing no text in each caselist's three largest clusters, after the rebuild | **NOT RUN** after the rebuild; 0% on the re-preview | 0% by construction, and since the overlap reading so is the share sharing a little, but for texts of six runs or fewer. Re-preview (step R3): 0 sharing nothing and 0 sharing a little in all twelve. On the store: A8 |
 | **ac6** — `sample` shows the pairs of a decided shape the person names, tallied apart, by test | PASS | `sample --ask-shape SHAPE`, repeatable, by test, red against the start commit |
 | **ac6** — the operator's sample of contained pairs under a third of the larger sets or confirms `MIN_CUT_SHARE` | PASS | The first preview: 17 of 17 newly joined contained pairs under a third the same card, and 20 of 20 cuts the share kept out the same card. It set the share at a tenth |
 | Node `long-cuts`: `uv run pytest packages/debate_core/tests -k "fingerprint or cluster"` | PASS | see Also run |
@@ -280,12 +285,12 @@ of its own.
 ## Shown failing first
 
 Red runs, each against the code before the behaviour existed. The start commit's source was taken
-with `git archive 47d454d` to the scratchpad and put first on `PYTHONPATH`, after printing a
+with `git archive` of the `dev` commit the task started from (`d730de0`, the same tree as the task's start commit) to the scratchpad and put first on `PYTHONPATH`, after printing a
 changed module's `__file__` to confirm it was the one imported.
 
 | What | Against | Red |
 |---|---|---|
-| The 13 tests of the ruling (`a295999`, committed red) | v3 | `14 failed, 4 passed`: t11's false join `[[A, B, C]]` in all six orders; the two-passage witness `[[0, 1, 2, 3]]`; three long-cut joins `[[0], [1]]`; two copies' passages `[[0, 1, 2, 3]]`; the copies' chain not sharing text throughout; the own-cluster cases `[[0, 1, 2]]` twice |
+| The 13 tests of the ruling (`4838bd3`, committed red) | v3 | `14 failed, 4 passed`: t11's false join `[[A, B, C]]` in all six orders; the two-passage witness `[[0, 1, 2, 3]]`; three long-cut joins `[[0], [1]]`; two copies' passages `[[0, 1, 2, 3]]`; the copies' chain not sharing text throughout; the own-cluster cases `[[0, 1, 2]]` twice |
 | The four that passed on v3 | | Two boundaries kept on purpose (a body holding one passage is its card; a copy that does not hold the cut does not block it), the lacking-an-end rule pinned, and the container count, which v3's banding satisfies for another reason. Mutants are their evidence |
 | The version literal | v3 | `'card-fingerprint-v3' == 'card-fingerprint-v4'`, twice |
 | A long cut lacking an end joins | v3, and the commit before it | `[[0], [1]]` on both |
@@ -293,10 +298,10 @@ changed module's `__file__` to confirm it was the one imported.
 | The two round tests | v3; the commit before the fix | Both `[[0, 1, 2, 3, 4]]` on v3; the waiting cut `[[0, 1], [2], [3], [4]]` before the fix |
 | The diagnosis (`test_cluster_diagnosis.py`) | v3's diagnosis | `14 failed, 20 passed`: the new outcomes and the v4 readings |
 | The six new script tests | the start commit's script | `SystemExit: 2` for the four options it lacks, `TypeError` for `ask_shapes`, and no `within-the-rule` selector. A missing option proves little; the mutants are the evidence |
-| The guardrail and the passage mechanism test (after the PM's ruling) | t08's code, `git archive 47d454d` | `4 failed, 11 passed`: the pinned losses on the short-card and extended sets, and both k1 trims. The amended targets and the other cards' recall pass there, as they should: t08 found those pairs |
+| The guardrail and the passage mechanism test (after the PM's ruling) | t08's code, `git archive d730de0` | `4 failed, 11 passed`: the pinned losses on the short-card and extended sets, and both k1 trims. The amended targets and the other cards' recall pass there, as they should: t08 found those pairs |
 | The container rule for a long body lacking an end | v3; and a mutant | On v3 the control fails first (`[[0], [1]] == [[0, 1]]`: v3 never pairs them). The rule itself is shown by the mutant exempting such a cut from the passage check: this test alone fails |
 | The stock-phrase count | the code before it | `ImportError` for `pairs_sharing_few_runs`, and `KeyError: 'pairs_sharing_only_few_runs'` from `shapes` |
-| The PM's rulings on the first preview: every new and changed test | the code before them (`34b1393`, `git archive` to the scratchpad), the new names added as inert stand-ins so the files collect | `27 failed, 225 passed`. Behaviour: the share boundaries at a tenth (four tests), the chain at the overlap line, lacking an end held (three), the neither-end outcome (two), the later-round refusal at the new share, the first-by-fingerprint flag, the share bands, the witness refusals, the divided part named, the few-run overlap count (two), `--joined-in-band` (two), the renamed slug (three), the exact-dict tests' new fields (two). Three fail for the archive's own reason: `--before-rules HEAD` needs a git repository, which an archive is not |
+| The PM's rulings on the first preview: every new and changed test | the code before them (`218f7ba`, `git archive` to the scratchpad), the new names added as inert stand-ins so the files collect | `27 failed, 225 passed`. Behaviour: the share boundaries at a tenth (four tests), the chain at the overlap line, lacking an end held (three), the neither-end outcome (two), the later-round refusal at the new share, the first-by-fingerprint flag, the share bands, the witness refusals, the divided part named, the few-run overlap count (two), `--joined-in-band` (two), the renamed slug (three), the exact-dict tests' new fields (two). Three fail for the archive's own reason: `--before-rules HEAD` needs a git repository, which an archive is not |
 | The three tests added after the mutants were planned | the same | the overlap line: `AttributeError`, no `overlap`; the one-run passages: `[[0, 2], [1], [3]] == [[0], [1, 3], [2]]` (the body witnesses the first passage); the shared opening passes there, as a guard of behaviour the change had to keep, and its mutant is its evidence |
 
 ## Mutation runs
@@ -344,12 +349,12 @@ test can tell them apart. Ratios are kept so the three modules read one expressi
   again (`after-ignored-when-comparing`).
 * **A real defect, found while writing the third of those.** A cluster whose own join was refused
   beside a conflicting joiner still counted as joining, so a cut waiting on it waited forever.
-  Fixed in `2be9063`, with a test that fails on the commit before.
+  Fixed in `c9b2b5f`, with a test that fails on the commit before.
 * **Two mutants were first written so that they crashed** (an unpacking error, a missing key) and
   were rewritten as behaviour changes before being counted.
 * **One branch deleted.** The handling of two clusters that would each join the other was never
   taken: the copies' step already joins two bodies that each hold the other, and I could build no
-  such pair. Without it the two would wait for each other and join neither (`26e54cc`).
+  such pair. Without it the two would wait for each other and join neither (`c221d50`).
 * **Two batches were cut by the alarm** under loads of 46 and 72 from other sessions, each leaving
   one file mutated. Each time the diff was checked to be the mutant alone and the file restored.
   The interrupted mutants were run again.
@@ -405,18 +410,20 @@ and what recovering it needs; the stock-phrase count);
    Put to the PM as the reason the notes ask for; the PM ruled 1(a) on 2026-10-18 and directed
    t08's ac1 amended, which this session wrote in t08's spec (outside `constraints.packages`, at the
    PM's direction) with the ruling and the two cards named. The labels are unchanged.
-2. **Outside `constraints.packages`**: `tests/scripts/test_compare_card_clusters.py`, the tests of
+2. **Synced onto `dev` on 2026-10-19** (`scripts/task sync`; one conflict, both sections of the
+   parse report kept, `v1-e31-t19`'s first). Commit ids in this report are after the sync.
+3. **Outside `constraints.packages`**: `tests/scripts/test_compare_card_clusters.py`, the tests of
    the script the spec asks to change, and `tests/smoke/test_caselist_cards.py`, one literal the
    suite fails without. The same two t11 recorded and the PM accepted.
-3. **The limits were set from the operator's first preview, then ruled by the PM.** ac2 asks for
+4. **The limits were set from the operator's first preview, then ruled by the PM.** ac2 asks for
    them "set from the recorded samples"; t11 left none, so the first preview took them (steps 4 to
    7, 2026-10-18) and the PM ruled the values the same day. The re-measure under the set values is
    the re-preview's.
-4. **The rules changed after the first preview, so the preview runs twice.** The PM's rulings on it
+5. **The rules changed after the first preview, so the preview runs twice.** The PM's rulings on it
    (overlap, a tenth, either end) change placements, so the first preview's figures describe rules
    that no longer exist; they are kept, marked superseded, as the evidence the rulings rest on. The
    version stays `card-fingerprint-v4`, since no store has held a `v4` table.
-5. **`v1-e31-t21`'s `OVERLAPPING_SHARE` is now the clusterer's constant** (`pair_shapes.py`
+6. **`v1-e31-t21`'s `OVERLAPPING_SHARE` is now the clusterer's constant** (`pair_shapes.py`
    imports `MIN_OVERLAP_SHARE`), so the shapes' "overlapping" and the clusterer's "overlaps" cannot
    drift apart.
 
@@ -471,6 +478,18 @@ and what recovering it needs; the stock-phrase count);
     another holds at least nine of every ten of its shingles, so missing all three is possible but
     rare; the outcome names a shape, it does not decide a placement. Searching every shingle of
     every long body would hold tens of millions of entries on hspolicy26.
+15. **The after-merge order is the PM's of 2026-10-19, with the rebuild folded into the re-parse.**
+    Checked in the code, not assumed: `caselist parse` writes the newest generation of its build's
+    parser version and rebuilds that directory's table under its build's fingerprint version, so
+    t19's dev parse from a `dev` carrying this task writes `docx-5` with a `v4` table; and
+    `compare_card_clusters.py` reads the newest version directory holding a table. The order is not
+    wrong; it only has one step fewer than written, and t19's 2e shows the table needs no second
+    rebuild. The comparison moved to `--before-rules` on the `docx-5` cards, since a `docx-3` table
+    holds another parser's cards and would mix t19's and t15's changes into this task's figures.
+16. **`EXACT_FINGERPRINT_VERSIONS` gains `card-fingerprint-v4`** (`v1-e33-t01`'s rule for a bump
+    that changes only clusters): the normalization is unchanged since `v1`, so every exact
+    fingerprint of a `v1` to `v3` recipe is still today's digest. A normalization change would have
+    replaced the set.
 10. **The preview's placement file holds digests, indices and ids**, as `--save-before`'s does
     (t21's Deviation 2, accepted).
 11. **No session run against the operator's data directory.** Every figure here is from invented
@@ -478,7 +497,7 @@ and what recovering it needs; the stock-phrase count);
 
 ## Operator follow-ups
 
-Nothing here writes to the parsed store until step 11. Don't run any of it while `caselist pull`
+Nothing here writes to the parsed store before A3. Don't run any of it while `caselist pull`
 is running (`uv run debate-research caselist runs --last 1` shows the last run) or on a Wednesday
 morning, when the agent runs. Every file these steps save holds counts, digests, indices and ids,
 no text; the tallies files hold counts alone. The cards a sample shows are real disclosures, so
@@ -490,7 +509,7 @@ Steps 1 to 8 of the first version of this report ran on 2026-10-18 against the r
 PM's rulings on them: the counts, shapes, samples and diagnosis are in the parse report under "The
 first preview", and the PM ruled from them the same day. Their placement,
 `~/.debate-research/dev/card-clusters-t20-preview`, and `~/t20-sample-tallies.txt` describe rules
-that no longer exist; keep them until step 17 removes them.
+that no longer exist; keep them until A13 removes them.
 
 ### Before the merge: the re-preview, from this worktree
 
@@ -553,7 +572,7 @@ cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-
 uv run python scripts/compare_card_clusters.py sample --count 20 --caselist hsld26 --caselist hspf26 --caselist hspolicy26 --caselist openev --after ~/.debate-research/dev/card-clusters-t20-repreview --ask-shape contained-under-a-third --ask-shape contained-a-third-or-more --save-tallies ~/t20-repreview-tallies.txt
 ```
 
-Expected: `Drew 20 of N newly joined pairs, seed S.` **Note the seed**: step 14 uses it. ac1 passes
+Expected: `Drew 20 of N newly joined pairs, seed S.` ac1 passes
 when no pair is answered `different card`.
 
 **Step R5. The PM's check on the share: 20 cuts newly joined a tenth to a quarter of their witness**
@@ -594,113 +613,121 @@ ends". **Paste back** the eight `jq` lines and the tallies file: two blocks, R4'
 counts and shapes", "join sample", "band sample" and "diagnosis") and summarised at the top of this
 report.
 
-### After the merge
+### After the merge: one list, with `v1-e31-t19`'s re-parse (the PM, 2026-10-19)
 
-**Step 9. Reinstall the agent on the first pre-release carrying this task, before the rebuild.**
-Every build reads a `v4` table, since no code compares the version. But the agent's parse stage
-rebuilds each caselist it imports into under its own build's version and publishes it to dev, so
-`v1.1.0-dev.18` would put `v3` back the next week it ran. This finds the tag; then follow
-[Reinstalling the agent](../runbooks/caselist-scheduled-sync.md#reinstalling-the-agent) with it.
+`v1-e31-t15` and `v1-e31-t19` are merged, so the first pre-release carrying this task also carries
+parser `2026.10.18-docx-5`. The PM set the order: the combined re-parse to `docx-5`, then this
+task's figures on the `docx-5` store, then prod, then **one** agent reinstall, on the newest
+pre-release, after all of that. No reinstall before the re-parse. The steps below are that order;
+where a step is `v1-e31-t19`'s, it is run exactly as [`v1-e31-t19`'s report](v1-e31-t19-remaining-cite-shapes.md#2-the-re-parse-ac4-after-the-merge-and-after-v1-e31-t20s-rebuild-its-step-13) gives it, from the main checkout, and
+the only difference noted here is what to expect from this task. t19's step 2 says to run after
+this task's rebuild (its step 13): that is superseded by this list.
+
+**The re-parse is this task's rebuild.** `caselist parse` writes the newest generation of its own
+build's parser version (`CaselistParseService._choose_version`) and rebuilds that directory's
+occurrence table under its own build's `FINGERPRINT_VERSION`. Run from a `dev` that carries this
+task, t19's 2c writes `2026.10.18-docx-5` and its table under `card-fingerprint-v4` in one run.
+There is no separate rebuild to run after it, and nothing to repeat: running one anyway is a no-op
+(t19's 2e is exactly that run, and must upload nothing). The figures below read the newest version
+directory that holds a table (`compare_card_clusters.py`'s `current_version`): `docx-5` once 2c has
+run. Because the cards on both sides then come from one parser, the clusters are compared by
+placing the same `docx-5` cards under the rules before this task (`--before-rules`), not against
+the `docx-3` table, which is another parser's cards.
+
+**Why one reinstall, at the end, is safe.** The installed agent (`v1.1.0-dev.18`) builds parser
+`docx-3`, so a run of it writes only the `docx-3` directory and never touches `docx-5` or its
+`v4` table. The early reinstall the earlier version of this report asked for was against the agent
+rewriting the one directory this task's rebuild would have written; with the re-parse to a new
+parser version that case is gone. Still, run the list between two agent runs, not across a
+Wednesday morning, as t19's 2h says.
+
+Nothing here writes to the store before A3. Don't run any of it while `caselist pull` is running.
+
+**A1. Start on an updated `dev`**: t19's **2a**, then (seconds):
 
 ```zsh
 cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence
-git branch --show-current
-git pull --ff-only origin dev
-git fetch --tags origin
+git log --oneline -1 --grep='^v1-e31-t20-long-cuts-and-limits:'
+uv run python -c "import debate_core.evidence.fingerprints as f, debate_core.evidence.near_duplicates as n; print(f.FINGERPRINT_VERSION, n.MIN_CUT_SHARE, n.MIN_OVERLAP_SHARE)"
+```
+
+Expected: t19's 2a as it says; then one line for this task's merge, and `card-fingerprint-v4 0.1
+0.3`. If `git log` prints nothing, this task is not on `dev`: stop.
+
+**A2. The dry run and the counts before**: t19's **2b**. Expected as it says, and
+`fingerprint_version` `card-fingerprint-v4` on each line.
+
+**A3. The dev parse and publish**: t19's **2c** (about 35 minutes). This writes `docx-5` with its
+`v4` table and publishes it to dev.
+
+**A4. t19's counts**: t19's **2d**, its expected tables unchanged (they count parsed cards, which
+this task does not change).
+
+**A5. The second run, which parses and uploads nothing**: t19's **2e**. It is also the proof that
+this task's table needs no second rebuild: `uploaded` 0 means the table it rebuilt is the one 2c
+published.
+
+**A6. Five files by eye**: t19's **2f**.
+
+**A7. The clusters against the rules before this task, on the same `docx-5` cards** (about as
+long as a rebuild: about 6, 4, 8 and 1 minutes; one command a caselist):
+
+```zsh
+cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence
 T20=$(git log -1 --format=%H --grep='^v1-e31-t20-long-cuts-and-limits:')
 echo "${T20}"
-git tag --list 'v1.1.0-dev.*' --contains "${T20}" --sort=v:refname | head -1
+uv run python scripts/compare_card_clusters.py counts --caselist hsld26 --before-rules "${T20}^" --save-before ~/.debate-research/dev/card-clusters-v3-on-docx-5 > ~/t20-docx5-counts-hsld26.json; echo "exit $?"
+uv run python scripts/compare_card_clusters.py counts --caselist hspf26 --before-rules "${T20}^" --save-before ~/.debate-research/dev/card-clusters-v3-on-docx-5 > ~/t20-docx5-counts-hspf26.json; echo "exit $?"
+uv run python scripts/compare_card_clusters.py counts --caselist hspolicy26 --before-rules "${T20}^" --save-before ~/.debate-research/dev/card-clusters-v3-on-docx-5 > ~/t20-docx5-counts-hspolicy26.json; echo "exit $?"
+uv run python scripts/compare_card_clusters.py counts --caselist openev --before-rules "${T20}^" --save-before ~/.debate-research/dev/card-clusters-v3-on-docx-5 > ~/t20-docx5-counts-openev.json; echo "exit $?"
+jq -c 'to_entries[] | {caselist: .key} + (.value | {before_version, after_version, cards_only_before, cards_only_after, exact_fingerprints_changed, clusters_before, clusters_after, clusters_merged_into_another, clusters_divided, most_absorbed, absorbed, largest_before, largest_after, largest_after_distinct_texts, seconds})' ~/t20-docx5-counts-*.json
 ```
 
-Expected: `dev`, one commit id, and one tag. No tag yet means the pre-release is still building.
+From the main checkout on `dev`, which A1 updated (this task's worktree is gone once
+`scripts/task finish` has run). `--before-rules` takes the rules from `dev` just before this task's
+merge. Expected: one commit id; `exit 0` four times;
+`card-fingerprint-v3` before and `card-fingerprint-v4` after; `exact_fingerprints_changed`,
+`cards_only_before` and `cards_only_after` 0 (one parser on both sides). The figures should be
+near the re-preview's (parse report, "The re-preview's counts and shapes"), moved by t19's and
+t15's cards; anything under `absorbed` at `6 to 20` or above: send it before going on.
 
-**Step 10. Save the `v3` tables** (seconds).
+**A8. ac5 on the store** (3 to 6 minutes):
 
 ```zsh
-mkdir -p ~/.debate-research/dev/card-clusters-v3
-for c in hsld26 hspf26 hspolicy26 openev; do cp -p ~/.debate-research/dev/parsed/${c}/2026.10.12-docx-3/occurrences.jsonl ~/.debate-research/dev/card-clusters-v3/${c}.jsonl; done
-jq -r '.fingerprint_version' ~/.debate-research/dev/card-clusters-v3/*.jsonl | sort | uniq -c
+cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence
+uv run python scripts/compare_card_clusters.py shapes --caselist hsld26 --caselist hspf26 --caselist hspolicy26 --caselist openev --largest-clusters 3 --every-cluster > ~/t20-docx5-shapes.json; echo "exit $?"
+jq -c 'to_entries[] | {caselist: .key, placement: .value.placement, version: .value.fingerprint_version, clusters: [.value.described_clusters[] | {rank, cards, texts: .distinct_texts, pairs, nothing: .share_of_pairs_by_shape["sharing nothing"], a_little: .pairs_by_shape["sharing a little"]}]}' ~/t20-docx5-shapes.json
+jq -c 'to_entries[] | {caselist: .key} + .value.pairs_sharing_only_few_runs_over_every_cluster' ~/t20-docx5-shapes.json
 ```
 
-Expected: one line, every row `card-fingerprint-v3`. Anything else, stop: the agent has run on
-another build since 2026-10-16, or the directory has changed.
+Expected: `placement` `the store's table`, `version` `card-fingerprint-v4`, `nothing` and
+`a_little` 0 in all twelve clusters, `of_them_not_overlapping` 0. ac5 passes on the store here.
 
-**Step 11. The dev rebuild, without publishing** (about 345, 219, 482 and 68 s, as the 2026-10-16
-rebuild; no AWS session needed).
+**A9. The join sample on the store** (seconds, then the person's time):
 
 ```zsh
-DEBATE_ENV=dev uv run debate-research --json caselist parse --caselist hsld26 > ~/t20-parse-dev-hsld26.json; echo "exit $?"
-DEBATE_ENV=dev uv run debate-research --json caselist parse --caselist hspf26 > ~/t20-parse-dev-hspf26.json; echo "exit $?"
-DEBATE_ENV=dev uv run debate-research --json caselist parse --caselist hspolicy26 > ~/t20-parse-dev-hspolicy26.json; echo "exit $?"
-DEBATE_ENV=dev uv run debate-research --json caselist parse --caselist openev > ~/t20-parse-dev-openev.json; echo "exit $?"
-for c in hsld26 hspf26 hspolicy26 openev; do jq -c '(.data // .error.details) | {caselist, version, fingerprint_version, attempted, store, elapsed_seconds}' ~/t20-parse-dev-${c}.json; done
+cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence
+uv run python scripts/compare_card_clusters.py sample --count 20 --caselist hsld26 --caselist hspf26 --caselist hspolicy26 --caselist openev --before ~/.debate-research/dev/card-clusters-v3-on-docx-5 --ask-shape contained-under-a-third --ask-shape contained-a-third-or-more --save-tallies ~/t20-docx5-tallies.txt
+cat ~/t20-docx5-tallies.txt
 ```
 
-Expected: `exit 0`; `fingerprint_version` `card-fingerprint-v4`; `attempted` 0 unless sources
-arrived since; `store.clusters` equal to step R2's `clusters_after`.
+A fresh draw: R4's seed drew from the `docx-3` cards, and this pool is `docx-5`'s. Expected: every
+pair shown, none `different card`.
 
-**Step 12. The counts against `card-fingerprint-v3`** (seconds; both tables exist).
+**A10. To the PM before prod**: t19's 2d to 2f results, and A7 to A9's `jq` lines and tallies.
 
-```zsh
-uv run python scripts/compare_card_clusters.py counts --caselist hsld26 --caselist hspf26 --caselist hspolicy26 --caselist openev --before ~/.debate-research/dev/card-clusters-v3 > ~/t20-counts-v4.json; echo "exit $?"
-jq -c 'to_entries[] | {caselist: .key} + (.value | {before_version, after_version, cards_only_before, cards_only_after, exact_fingerprints_changed, clusters_before, clusters_after, clusters_merged_into_another, clusters_divided, largest_before, largest_after})' ~/t20-counts-v4.json
-```
+**A11. The prod publish**: t19's **2g**, once the PM has read A10. Expected as it says.
 
-Expected: step R2's figures exactly, if no source arrived between.
+**A12. The one agent reinstall, on the newest pre-release**: t19's **2h**. Afterwards the agent's
+dry run shows `2026.10.18-docx-5`, `to_parse` 0 and `fingerprint_version`
+`card-fingerprint-v4`.
 
-**Step 13. Shapes** (3 to 6 minutes, as step R3).
-
-```zsh
-uv run python scripts/compare_card_clusters.py shapes --caselist hsld26 --caselist hspf26 --caselist hspolicy26 --caselist openev --largest-clusters 3 --every-cluster > ~/t20-shapes.json; echo "exit $?"
-jq -c 'to_entries[] | {caselist: .key, version: .value.fingerprint_version, clusters: [.value.described_clusters[] | {rank, cards, texts: .distinct_texts, pairs, nothing: .share_of_pairs_by_shape["sharing nothing"]}]}' ~/t20-shapes.json
-jq -c 'to_entries[] | {caselist: .key} + .value.pairs_sharing_only_few_runs_over_every_cluster' ~/t20-shapes.json
-```
-
-Expected: step R3's figures, from the store's table: `version` `card-fingerprint-v4`, `nothing` 0,
-and the same stock-phrase count.
-
-**Step 14. The join sample, with step R4's seed** (seconds, then the person's time). The same 20
-pairs as step R4 (seed 963278315, 2026-10-18), if no source arrived between.
+**A13. Record and clean up.** t19's **2i** records its counts; the session that closes this task's
+ac4 and ac5 records A7 to A9 in `caselist-parse-report.md`. Then:
 
 ```zsh
-uv run python scripts/compare_card_clusters.py sample --count 20 --seed 963278315 --caselist hsld26 --caselist hspf26 --caselist hspolicy26 --caselist openev --before ~/.debate-research/dev/card-clusters-v3 --ask-shape contained-under-a-third --ask-shape contained-a-third-or-more --save-tallies ~/t20-repreview-tallies.txt
-cat ~/t20-repreview-tallies.txt
-```
-
-**Steps 12 to 14 go to the PM before steps 15 and 16.**
-
-**Step 15. The dev publish** (the rebuild again, about 19 minutes, since `caselist parse --publish`
-always rebuilds; then one upload a caselist, the occurrence table).
-
-```zsh
-aws sso login --profile debate-dev-evidence
-DEBATE_ENV=dev uv run debate-research --json caselist parse --caselist hsld26 --publish > ~/t20-publish-dev-hsld26.json; echo "exit $?"
-DEBATE_ENV=dev uv run debate-research --json caselist parse --caselist hspf26 --publish > ~/t20-publish-dev-hspf26.json; echo "exit $?"
-DEBATE_ENV=dev uv run debate-research --json caselist parse --caselist hspolicy26 --publish > ~/t20-publish-dev-hspolicy26.json; echo "exit $?"
-DEBATE_ENV=dev uv run debate-research --json caselist parse --caselist openev --publish > ~/t20-publish-dev-openev.json; echo "exit $?"
-for c in hsld26 hspf26 hspolicy26 openev; do jq -c '(.data // .error.details) | {caselist, fingerprint_version, attempted, publish: .publish.counts}' ~/t20-publish-dev-${c}.json; done
-```
-
-Expected: `exit 0`, `card-fingerprint-v4`, `attempted` 0, and one uploaded object a caselist.
-
-**Step 16. Prod, only after the PM has read steps 12 to 14** (about 19 minutes), from the same dev
-data directory, as the 2026-10-16 publish was:
-
-```zsh
-aws sso login --profile debate-prod-evidence
-DEBATE_ENV=prod DEBATE_STORAGE__DATA_DIR="$HOME/.debate-research/dev" uv run debate-research --json caselist parse --caselist hsld26 --publish --confirm-prod > ~/t20-publish-prod-hsld26.json; echo "exit $?"
-DEBATE_ENV=prod DEBATE_STORAGE__DATA_DIR="$HOME/.debate-research/dev" uv run debate-research --json caselist parse --caselist hspf26 --publish --confirm-prod > ~/t20-publish-prod-hspf26.json; echo "exit $?"
-DEBATE_ENV=prod DEBATE_STORAGE__DATA_DIR="$HOME/.debate-research/dev" uv run debate-research --json caselist parse --caselist hspolicy26 --publish --confirm-prod > ~/t20-publish-prod-hspolicy26.json; echo "exit $?"
-DEBATE_ENV=prod DEBATE_STORAGE__DATA_DIR="$HOME/.debate-research/dev" uv run debate-research --json caselist parse --caselist openev --publish --confirm-prod > ~/t20-publish-prod-openev.json; echo "exit $?"
-```
-
-Expected: `exit 0` each.
-
-**Step 17. Remove what the steps saved:**
-
-```zsh
-rm -r ~/.debate-research/dev/card-clusters-t20-preview ~/.debate-research/dev/card-clusters-t20-repreview ~/.debate-research/dev/card-clusters-v3
-rm ~/t20-preview-counts-*.json ~/t20-preview-shapes.json ~/t20-preview-diagnosis-*.json ~/t20-repreview-counts-*.json ~/t20-repreview-shapes.json ~/t20-repreview-diagnosis-*.json ~/t20-parse-dev-*.json ~/t20-counts-v4.json ~/t20-shapes.json ~/t20-publish-*.json ~/t20-sample-tallies.txt ~/t20-repreview-tallies.txt
+rm -r ~/.debate-research/dev/card-clusters-t20-preview ~/.debate-research/dev/card-clusters-t20-repreview ~/.debate-research/dev/card-clusters-v3-on-docx-5
+rm ~/t20-preview-counts-*.json ~/t20-preview-shapes.json ~/t20-preview-diagnosis-*.json ~/t20-repreview-counts-*.json ~/t20-repreview-shapes.json ~/t20-repreview-diagnosis-*.json ~/t20-docx5-counts-*.json ~/t20-docx5-shapes.json ~/t20-sample-tallies.txt ~/t20-repreview-tallies.txt ~/t20-docx5-tallies.txt
 ```
 
 ## Follow-up work
@@ -712,11 +739,14 @@ rm ~/t20-preview-counts-*.json ~/t20-preview-shapes.json ~/t20-preview-diagnosis
    it).** Named by the diagnosis since the rulings; finding them in the clusterer needs a lookup
    that is not by the body's ends.
 3. **A publish-only path for the parsed store (E31 or E34).** `caselist parse --publish` always
-   rebuilds, so the PM's order (rebuild, read, then publish) costs a second rebuild of about 19
-   minutes, and prod a third.
-4. **The agent rewrites a newer table with an older version (E34).** Any build older than the
-   table's version puts its own back on the next parse stage. A guard could refuse to publish an
-   occurrence table older than the one the bucket holds; today it is the reinstall in step 9.
+   rebuilds. With the re-parse folded in (A1 to A13) it no longer costs a step here, since the
+   re-parse publishes dev as it builds and prod is t19's one publish; it would still save the
+   rebuild a publish-only change needs.
+4. **An older build can rewrite a newer table of its own parser version (E34).** A build older
+   than a table's fingerprint version puts its own back on the next parse stage of the same parser
+   version's directory. The re-parse to `docx-5` sidesteps it here (the installed agent builds
+   `docx-3`), but a fingerprint bump without a parser bump would meet it again. A guard could
+   refuse to rebuild or publish an occurrence table stamped with a newer version than the build's.
 5. **`tests/scripts/test_compare_card_clusters.py` has four pyright errors outside CI's scope**
    (`include = ["packages"]`): one unresolved import and three `object is not iterable`, the same in
    the start commit's file. Not this task's.

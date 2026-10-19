@@ -1492,7 +1492,7 @@ Before the labels moved, on 2026-10-18, the same comparison gave the same cite f
 
 ## The re-cluster under `card-fingerprint-v4` (`v1-e31-t20`)
 
-**Status: preview started.** The counts against `v3` (step 2) and the shapes (step 3) are measured; the rest is not yet. The steps are in
+**Status: preview measured; a newly joined pair called different is with the PM.** The counts against `v3` (step 2), the shapes (step 3) and the samples (steps 4 to 7) are measured; the diagnosis figures of step 7 are to come. The steps are in
 [the task's session report](../session-reports/v1-e31-t20-long-cuts-and-limits.md#operator-follow-ups):
 a preview from the task worktree before the merge, which writes nothing to the store, and the
 rebuild in dev after it. This is a re-cluster, not a re-parse: the parser and `2026.10.12-docx-3`
@@ -1546,10 +1546,10 @@ of 18 on the extended set.
 |---|---|---|
 | Counts against `card-fingerprint-v3`: clusters, merged, divided, largest | below, 2026-10-18 | not run |
 | ac5: share of pairs sharing nothing, three largest clusters per caselist | 0 in all twelve, below | not run |
-| ac1: join sample of 20 newly joined pairs | not run | not run, same seed |
-| `MIN_CUT_SHARE`: contained pairs under a third, joined and kept apart, by share band | not run | |
-| Lacking an end: short bodies nine-tenths inside a body lacking one of their ends | not run | |
-| `MAX_CONTAINER_CLUSTERS`: cuts whose ends too many clusters hold, re-measured | not run | |
+| ac1: join sample of 20 newly joined pairs | all 20 decided by rule, below | not run, same seed |
+| `MIN_CUT_SHARE`: contained pairs under a third, joined and kept apart, by share band | below | |
+| Lacking an end: short bodies nine-tenths inside a body lacking one of their ends | below | |
+| `MAX_CONTAINER_CLUSTERS`: cuts whose ends too many clusters hold, re-measured | below | |
 | Divided pairs against `v3`, by reason | not run | |
 | Pairs in one cluster sharing only one or two five-word runs, every cluster | below, 2026-10-18 | not run |
 
@@ -1615,3 +1615,30 @@ They are concentrated: openev's largest cluster holds 25 of its caselist's 36. S
 cluster because each text shares more with some third body, so the count cannot say whether it is
 two passages of one article overlapping by a few words or a stock phrase bridging two cards; a
 person can, with `sample --largest 1 --least-alike`. The PM decides any follow-up from these figures.
+
+### The preview's samples (operator-run, 2026-10-18)
+
+`compare_card_clusters.py sample --after`, against the placement step 2 saved, over all four
+caselists, judged by eye on the operator's terminal. Tallies only.
+
+| Sample | Drawn | Decided by rule | Asked | Same card | Different card | Unsure |
+|---|---|---|---|---|---|---|
+| Step 4, ac1: newly joined pairs (seed 718710206) | 20 of 1,139 | 20 (contained: 13 under a third, 7 a third or more) | 0 | | | |
+| Step 5: newly joined pairs, contained under a third asked (seed 306444940) | 40 of 1,139 | 18 (contained, a third or more) | 22 | 21: 17 contained under a third, 4 overlapping | **1: sharing a little** | 0 |
+| Step 5: cuts kept apart by the minimum share (seed 563320648) | 20 of 2,226 | 0 | 20 | 20: long 11 a tenth to a quarter, 7 under a tenth; short 1 and 1 | 0 | 0 |
+| Step 6: short bodies lacking an end (seed 737351069) | 20 of 31 | 0 | 20 | 20: 2 half or more, 4 a quarter to a half, 4 a tenth to a quarter, 10 under a tenth | 0 | 0 |
+| Step 7: cuts whose ends too many clusters hold (seed 281425182) | 6 of 6 | 0 | 6 | 6: 4 half or more, 1 a quarter to a half, 1 a tenth to a quarter | 0 | 0 |
+
+* **A newly joined pair called different.** One of the 40 newly joined pairs in step 5 shares a
+  little text (some five-word run, under three tenths of the smaller's) and was judged a different
+  card. `v4` refuses a join only when two texts share nothing, so two texts sharing a run can end up
+  in one cluster through a third body that shares more with each, although under the ruling they
+  are neither one inside the other nor overlapping. This is with the PM before any merge.
+* **ac1's 20 pairs were all decided by rule**, so no person judged them; the sample is to be run
+  again on whatever placement the PM's answer leads to, with the contained shapes asked.
+* **The limits.** Every cut each limit keeps out that a person saw was judged the same card:
+  20 of 20 under the minimum share, including 8 under a tenth of the body; 20 of 20 short bodies
+  lacking an end (item 4: the sample says compare them); 6 of 6 whose ends too many clusters hold,
+  which is every such cut on the four caselists. The contained pairs under a third that `v4`
+  newly joins were the same card 17 times in 17, confirming the rule's "contained is the same card"
+  on this sample (ac6).

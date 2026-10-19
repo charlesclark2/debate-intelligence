@@ -71,7 +71,7 @@ spec:
         (6), PM amendment 2026-10-18: by test, the JSON's count equals the plan line's count and
         what the execution deletes; a plan that cannot list says not counted.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

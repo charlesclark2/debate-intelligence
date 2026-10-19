@@ -54,6 +54,7 @@ from debate_core.evidence.near_duplicates import (
     MINHASH_PERMUTATIONS,
     SHINGLE_SIZE,
     SHORT_BODY_SHINGLES,
+    CutIndex,
     NearDuplicateThresholds,
     cluster_near_duplicates,
     contained_but_for_one_word,
@@ -536,6 +537,19 @@ def templated(count: int, middle: int = 20) -> list[list[str]]:
     ]
 
 
+def test_a_short_body_whose_opening_alone_many_others_share_is_still_compared() -> None:
+    """`MAX_CONTAINER_CLUSTERS` counts clusters holding both ends, although a short body's
+    containers are found from either end since item (4) was decided. Ten cards open with the same
+    five words; a 25-word cut of the first shares that opening with all ten and its close with the
+    first alone, and joins it."""
+    cards = [[*numbered("opens", 5), *numbered(f"card{index}x", 40)] for index in range(10)]
+    cut = cards[0][:25]
+    assert len(cards) - 1 > MAX_CONTAINER_CLUSTERS
+    clusters = clustered(*cards, cut)
+    assert clusters[-1] == clusters[0]
+    assert len(set(clusters)) == len(cards)
+
+
 def test_a_short_body_that_opens_and_closes_like_many_others_is_left_alone() -> None:
     """Past `MAX_CONTAINER_CLUSTERS` other clusters holding both its ends, nothing is compared."""
     assert MAX_CONTAINER_CLUSTERS == 8
@@ -835,6 +849,40 @@ def test_a_body_holding_one_passage_is_that_passages_card() -> None:
     joins it, the long one by the same step as the short one."""
     assert partition(FIRST_PASSAGE, BOTH_PASSAGES) == [[0, 1]]
     assert partition(SECOND_PASSAGE, BOTH_PASSAGES) == [[0, 1]]
+
+
+def test_two_bodies_overlap_from_three_tenths_of_the_smaller() -> None:
+    """The PM's line (2026-10-18), compared as a ratio: 30 of the smaller's 100 shingles overlap,
+    29 do not, whichever body is the larger."""
+    card = numbered("word", 104)  # 100 shingles
+    thirty = [*card[:34], *numbered("own", 70)]  # 100 shingles, the first 30 shared
+    twenty_nine = [*card[:33], *numbered("own", 71)]
+    longer = [*card[:34], *numbered("own", 170)]  # 200 shingles, 30 shared
+    index = CutIndex(
+        {
+            key: " ".join(body)
+            for key, body in (("card", card), ("30", thirty), ("29", twenty_nine), ("long", longer))
+        }
+    )
+    assert (index.overlap("card", "30"), index.overlap("card", "29"), index.overlap("card", "long")) == (
+        True,
+        False,
+        True,
+    )
+    assert index.overlap("30", "card") and MIN_OVERLAP_SHARE == 0.3
+    assert not CutIndex({"a": "", "b": " ".join(card)}).overlap("a", "b")
+
+
+def test_two_passages_sharing_one_run_are_two_cards_and_their_holder_witnesses_neither() -> None:
+    """The overlap reading in the passage refusal: two passages of a 150-word body share five words,
+    one run of the first's 56, and so do not overlap. The body is a witness for neither: the first
+    stays apart, and the second joins the card that holds it alone. Read as "shares a run", the
+    body would witness the first and take it in."""
+    article = numbered("word", 150)
+    first, second = article[:60], article[55:150]
+    own_card = [*numbered("before", 30), *second, *numbered("after", 30)]
+    assert len(frozenset(word_shingles(first)) & frozenset(word_shingles(second))) == 1
+    assert partition(first, second, article, own_card) == [[0], [1, 3], [2]]
 
 
 def test_a_body_holding_two_passages_is_no_witness_even_for_a_passage_nothing_else_claims() -> None:

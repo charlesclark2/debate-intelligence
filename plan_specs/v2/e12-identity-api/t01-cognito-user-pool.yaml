@@ -34,6 +34,12 @@ spec:
     starts from that pool and module rather than building a second one, and adds only what V2
     needs beyond it. Google federation and email-as-username in this description are withdrawn;
     the acceptance criteria that name them are read through this amendment.
+    (PM amendment 2026-10-19, from ADR-0019 and v1-e39-t01's PM questions, question 4.) Against
+    the kept pool: ac1's verified email reads "email optional, and verified when present", since
+    Cognito fixes required attributes at creation; threat protection in audit mode needs the
+    Plus plan, switched on when V2 wants it; `organization_id` lives in the User record
+    `v2-e12-t03` provisions (or a mutable custom attribute no app client may write), not an
+    immutable custom attribute, which Cognito writes only at user creation.
   priority: 1
   constraints:
     packages: [infrastructure/modules/cognito, infrastructure/envs]

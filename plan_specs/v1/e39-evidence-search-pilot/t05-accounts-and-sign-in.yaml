@@ -29,9 +29,21 @@ spec:
     letters, digits and dots, and never an email address. A guide for the coach and the
     students: first sign-in, choosing an authenticator app, adding the optional backup email,
     and what to do when a phone is lost or replaced.
+    (PM amendment 2026-10-19, from ADR-0019 and v1-e39-t01's PM questions.) Routes without a
+    session are `/healthz`, `/auth/callback`, `/signed-out` and `/static/` (content-hashed
+    assets with no data) and no others. No session starts until the account has an authenticator
+    registered: a student who chose email at managed login's first setup is sent to the app's
+    own authenticator enrolment page. An account page lets a student add, verify and remove the
+    backup email and replace the authenticator. The fallback for a debater with no phone (PM
+    ruling, 2026-10-19): the coach adds the account to an `email-second-factor` group (`tub
+    users add --group` or a `tub users` subcommand), and for that account alone a verified email
+    is accepted as the only second factor. `debate_api` moves from the boto3 contract's
+    even-indirectly list to the direct form the CLI uses. The session follows ADR-0019 (d): an
+    AES-GCM encrypted `__Host-` cookie, revalidated at most every five minutes, with its
+    lifetimes and CSRF rules.
   priority: 1
   constraints:
-    packages: [debate_api, debate_cli, debate_core.application, packages/debate_api/tests, packages/debate_cli/tests, docs/guides]
+    packages: [debate_api, debate_cli, debate_core.application, packages/debate_api/tests, packages/debate_cli/tests, docs/guides, pyproject.toml]
     forbidden:
       - A password, temporary password, token or TOTP secret in a log, error message, report or commit
       - Self sign-up, or any Google or school identity provider
@@ -65,6 +77,14 @@ spec:
       description: >-
         On dev, the operator signs in as a synthetic user, enrols TOTP, signs out, and a
         reset forces enrolment again (operator follow-up, recorded in the report).
+    - id: ac6
+      description: >-
+        (PM amendment 2026-10-19) The authorization matrix covers exactly the four
+        session-free routes; an account with no authenticator gets no session and is sent to
+        enrolment unless it is in `email-second-factor` with a verified email; the account
+        page adds, verifies and removes the backup email and replaces the authenticator; a
+        disabled account's session ends within five minutes; each by test shown failing
+        first.
 status:
   phase: Pending
 ---

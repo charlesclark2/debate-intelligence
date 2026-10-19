@@ -88,6 +88,10 @@ BASE: dict[str, str] = {
     f"{CORE}/loader.py": 'from pathlib import Path\n\nPROFILES = Path(__file__).parent / "profiles"\n',
     f"{CORE}/profiles/one.yaml": "name: one\n",
     f"{CORE}/data/unnamed.dat": "nothing names this\n",
+    f"{CORE}/data/suffix_list.dat": "com\n",
+    f"{CORE}/suffixes.py": (
+        'from pathlib import Path\n\nLIST = Path(__file__).parent / "data" / "suffix_list.dat"\n'
+    ),
     f"{CORE}/messages.py": 'HELP = "see docs/runbooks/guide.md"\n',
     f"{CORE_TESTS}/test_domain.py": "from debate_core.domain import VALUE\n",
     f"{CORE_TESTS}/test_service.py": "from debate_core import service\n",
@@ -96,6 +100,10 @@ BASE: dict[str, str] = {
     f"{CORE_TESTS}/test_builder.py": "from debate_core.testing import file_builder\n",
     f"{CORE_TESTS}/test_loader.py": "from debate_core import loader\n",
     f"{CORE_TESTS}/test_messages.py": "from debate_core import messages\n",
+    f"{CORE_TESTS}/test_suffixes.py": "from debate_core import suffixes\n",
+    f"{CORE_TESTS}/test_writes_a_data_folder.py": (
+        'def test_data(tmp_path):\n    (tmp_path / "data").mkdir()\n'
+    ),
     f"{CORE_TESTS}/test_router_user.py": "def test_router(router):\n    assert router\n",
     f"{CORE_TESTS}/scenario.py": "SCENARIO = 1\n",
     f"{CORE_TESTS}/test_scenario.py": "from .scenario import SCENARIO\n",
@@ -375,6 +383,11 @@ def test_package_data_selects_the_tests_importing_the_module_that_names_its_fold
 ) -> None:
     workspace.commit(changed(f"{CORE}/profiles/one.yaml"))
     assert_selected(workspace.run(), {f"{CORE_TESTS}/test_loader.py"} | ALWAYS)
+
+
+def test_a_generic_folder_name_like_data_is_not_taken_for_a_mention(workspace: Workspace) -> None:
+    workspace.commit(changed(f"{CORE}/data/suffix_list.dat"))
+    assert_selected(workspace.run(), {f"{CORE_TESTS}/test_suffixes.py"} | ALWAYS)
 
 
 def test_package_data_nothing_names_selects_every_test_of_its_package(workspace: Workspace) -> None:

@@ -20,16 +20,20 @@ working tree's uncommitted and untracked files, and selects every test file one 
   selection.
 * **Runs.** A file that mentions a console script (`debate-research`) or `-m <module>` runs that
   module, so it depends on it as if it imported it.
-* **Names.** A file read or run by path is found by its name. A changed data file (a fixture under
-  `tests/fixtures/`, package data such as `style_profiles/*.yaml` or `templates/base.docx`, a
-  workflow, Terraform) selects the files that name it: its file name anywhere in their text, or
-  the name of a folder it is in (up to the first Python package or a generic folder such as
-  `tests/` or `fixtures/`) as a quoted or slash-separated path part, plus the Python files beside
-  it. A file named that way counts as changed, so a helper module that opens the fixture carries
-  the selection on to the tests importing it. A data file nothing names selects every test of the
-  package it is in, or the whole selection when it is in none. A changed script or test helper
-  outside the packages is also found by its file name, which is how a test that starts it with
-  subprocess (`write_junk_beside_a_held_link_files.py`, `scripts/*.py`) is selected.
+* **Names.** A file read or run by path is found by its name, in the string literals of Python
+  files (docstrings and comments describe files, they do not read them) and anywhere in a shell
+  script. A changed data file (a fixture under `tests/fixtures/`, package data such as
+  `style_profiles/*.yaml` or `templates/base.docx`, a workflow, Terraform) selects the files that
+  name it: its file name, or the name of a folder it is in as a quoted or slash-separated path
+  part, plus the Python files in those folders. The folders stop at a Python package, a folder
+  holding tests or a conftest, or a generic one (`tests`, `fixtures`, `data`, ...); a name like
+  `v1` is skipped. A file named that way counts as changed, so a helper module that opens the
+  fixture carries the selection on to the tests importing it. A package module reads only its own
+  package's files: naming a runbook in an error message is not reading it. A data file nothing
+  names selects every test of the package it is in, or the whole selection when it is in none. A
+  changed script or test helper outside the packages is also found by its file name, which is how
+  a test that starts it with subprocess (`write_junk_beside_a_held_link_files.py`,
+  `scripts/*.py`) is selected.
 * **Source readers.** A test that walks a directory and parses the Python it finds there
   (`ast.parse` with a glob, `rglob`, `iterdir` or `walk`) reads source as data, so any changed
   Python file selects it.
@@ -109,7 +113,7 @@ CHECKED_OUTSIDE_PYTEST = {
 }
 
 # A folder name this generic is not evidence that a file mentioning it reads a particular file.
-GENERIC_FOLDERS = frozenset({"tests", "fixtures", "src", "packages", "scripts", "docs"})
+GENERIC_FOLDERS = frozenset({"tests", "fixtures", "data", "src", "packages", "scripts", "docs"})
 # File names too common to search for; such a file is found through its path or module name.
 GENERIC_FILE_NAMES = frozenset({"__init__.py", "__main__.py", "conftest.py", "py.typed", "README.md"})
 # Python loads these by their name from a directory on its path; a test reaches them by the folder.

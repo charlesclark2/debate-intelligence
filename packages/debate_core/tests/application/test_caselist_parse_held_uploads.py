@@ -165,6 +165,8 @@ async def test_an_earlier_builds_parse_of_a_held_upload_leaves_every_aggregate(w
     for name, rows in aggregates(world).items():
         assert held not in digests_in(rows), name
     assert report.store.cards == sum(int(row["cards"]) for row in world.lines("index.jsonl"))
+    # Its cards are not clustered either: every cluster counted has a row, so none is the held card's.
+    assert report.store.clusters == len({row["cluster_id"] for row in world.lines("occurrences.jsonl")})
 
 
 async def test_publish_sends_nothing_of_an_earlier_builds_parse_of_a_held_upload(
@@ -192,15 +194,20 @@ async def test_publish_sends_nothing_of_an_earlier_builds_parse_of_a_held_upload
 
 
 async def test_a_held_upload_that_failed_is_in_no_failure_listing(world: World) -> None:
-    """The listing names each failure by its manifest path, which here is the held path."""
+    """The listing names each failure by its manifest path, which here is the held path. Asked
+    between the hold's arrival and the next run, while the failures file still has its row; the
+    next run's file has none."""
+    held = digest_of("broken")
     await world.run()
     await hold(world, HELD_FAILURE_PATH)
-    await world.run()
+    assert held in digests_in(world.lines("failures.jsonl")), "the precondition: the earlier run's row"
 
     listing = await world.service().failures(CASELIST)
 
-    assert digest_of("broken") not in {row.sha256 for row in listing.rows}
-    assert digest_of("broken") not in digests_in(world.lines("failures.jsonl"))
+    assert held not in {row.sha256 for row in listing.rows}
+    assert listing.rows, "the other failures are still listed"
+    await world.run()
+    assert held not in digests_in(world.lines("failures.jsonl"))
 
 
 # ------------------------------------------------------------------------------------------------

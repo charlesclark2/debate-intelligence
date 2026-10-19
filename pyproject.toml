@@ -241,7 +241,7 @@ forbidden_modules = ["lxml", "docx"]
 # that lint-imports names it, so a contract here that stops biting fails that suite.
 
 [[tool.importlinter.contracts]]
-name = "debate_core layers: integrations and testing above application above evidence above domain"
+name = "debate_core layers: integrations and testing above application above evidence and retrieval above domain"
 type = "layers"
 # Each layer may import the ones below it and never the ones above: the domain model imports
 # nothing else in debate_core, the evidence algorithms see only the domain, the application layer
@@ -249,11 +249,16 @@ type = "layers"
 # the shared test fakes. `|` makes integrations and testing independent: neither may import the
 # other. `exhaustive` means a new debate_core subpackage fails this contract until it is placed in
 # a layer here, rather than slipping in unconstrained.
+#
+# `retrieval` (v1-e04-t01-url-canonicalization) sits beside `evidence`: the pure procedures that
+# turn a URL and fetched bytes into an article (canonical URLs, identifiers, and later access
+# classification and extracted-content types) see only the domain, and the `|` keeps the two
+# independent of each other. ArticleService in the application layer composes both.
 containers = ["debate_core"]
 layers = [
     "integrations | testing",
     "application",
-    "evidence",
+    "evidence | retrieval",
     "domain",
 ]
 exhaustive = true
@@ -268,6 +273,7 @@ type = "forbidden"
 source_modules = [
     "debate_core.domain",
     "debate_core.evidence",
+    "debate_core.retrieval",
     "debate_core.application",
 ]
 forbidden_modules = ["typer", "click", "rich", "fastapi", "starlette"]

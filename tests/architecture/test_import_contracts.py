@@ -39,7 +39,9 @@ CLI_HTTP_CLIENT = "The CLI reaches httpx and keyring only through debate_core.in
 CLI_AWS_SDK = "The CLI reaches the AWS SDK only through debate_core.integrations.s3"
 DOCUMENT_LIBRARIES = "Document libraries stay inside debate_core.integrations.docx_parser"
 CLI_DOCUMENT_LIBRARIES = "The CLI reaches lxml only through debate_core.integrations.docx_parser"
-CORE_LAYERS = "debate_core layers: integrations and testing above application above evidence above domain"
+CORE_LAYERS = (
+    "debate_core layers: integrations and testing above application above evidence and retrieval above domain"
+)
 DELIVERY_FRAMEWORKS = "The domain and application layers never import a delivery framework"
 CORE_NEVER_IMPORTS_DELIVERY = "debate_core never imports a delivery package"
 DELIVERY_INDEPENDENCE = "The delivery packages are independent of one another"
@@ -75,6 +77,12 @@ VIOLATIONS = [
     Violation("debate_core.domain.boundary_probe", "import debate_core.application", CORE_LAYERS),
     Violation("debate_core.domain.boundary_probe", "import debate_core.evidence", CORE_LAYERS),
     Violation("debate_core.evidence.boundary_probe", "import debate_core.application.settings", CORE_LAYERS),
+    # Retrieval beside evidence (v1-e04-t01): below the application layer, above the domain, and
+    # independent of evidence in both directions.
+    Violation("debate_core.retrieval.boundary_probe", "import debate_core.application.settings", CORE_LAYERS),
+    Violation("debate_core.domain.boundary_probe", "import debate_core.retrieval", CORE_LAYERS),
+    Violation("debate_core.retrieval.boundary_probe", "import debate_core.evidence", CORE_LAYERS),
+    Violation("debate_core.evidence.boundary_probe", "import debate_core.retrieval", CORE_LAYERS),
     Violation("debate_core.application.boundary_probe", "import debate_core.integrations.local", CORE_LAYERS),
     Violation("debate_core.application.boundary_probe", "import debate_core.testing.fakes", CORE_LAYERS),
     Violation("debate_core.integrations.boundary_probe", "import debate_core.testing.fakes", CORE_LAYERS),
@@ -84,6 +92,7 @@ VIOLATIONS = [
     Violation("debate_core.application.boundary_probe", "import typer", DELIVERY_FRAMEWORKS),
     Violation("debate_core.domain.boundary_probe", "from rich.console import Console", DELIVERY_FRAMEWORKS),
     Violation("debate_core.evidence.boundary_probe", "import click", DELIVERY_FRAMEWORKS),
+    Violation("debate_core.retrieval.boundary_probe", "import typer", DELIVERY_FRAMEWORKS),
     Violation("debate_core.application.boundary_probe", "from fastapi import APIRouter", DELIVERY_FRAMEWORKS),
     # The core pointing back at a front end, and front ends importing each other.
     Violation(

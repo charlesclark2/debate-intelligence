@@ -1,0 +1,77 @@
+# TASK v1-e31-t26-held-upload-parsed-publish - parse --publish sends nothing of a held upload
+# Epic: E31 Debate File Parsing | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e31-t26-held-upload-parsed-publish
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e31-debate-file-parsing
+  annotations:
+    debate/title: "parse --publish sends nothing of a held upload"
+spec:
+  # Filed by the PM, 2026-10-19, from v1-e30-t22's Follow-up 4.
+  description: >-
+    If an earlier build stored a held upload (bytes refused at a path a removal holds) and
+    `caselist parse` parsed it, `caselist parse --publish` sends its per-source parsed file and
+    its rows in the caselist aggregates: the parser skips only whole-source suppression. The
+    parsed store asks the same held-path rule the importer and the publisher ask (v1-e30-t21,
+    v1-e30-t22) before it publishes a source or writes its aggregate rows, and status names any
+    such parsed object left in the bucket.
+  priority: 2
+  constraints:
+    packages: [debate_core.application, packages/debate_core/tests, docs/data]
+    forbidden:
+      - Restating the held-path rule outside its one function
+      - A path, school, team code or file name in a record or a log
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e30-t23-held-digests-and-manifest-fsync
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A held upload's parsed file and aggregate rows are not published, by test shown
+        failing first; bytes another live path holds still are.
+    - id: ac2
+      description: >-
+        An earlier build's parsed object for held-only bytes is named by status, and the
+        removal run again takes it, by test.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e31-t26-held-upload-parsed-publish-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e31-debate-file-parsing
+spec:
+  description: >-
+    The parsed store's publish asks the held-path rule.
+  goalRef:
+    name: v1-e31-t26-held-upload-parsed-publish
+  graph:
+    nodes:
+      - id: held-parse
+        kind: Task
+        name: Held uploads not parsed out
+        description: >-
+          The parsed store's publish asks the held-path rule.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Parse tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application, -k, parse and (held or suppress)]
+status:
+  phase: Pending

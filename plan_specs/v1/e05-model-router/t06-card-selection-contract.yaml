@@ -26,6 +26,10 @@ spec:
     quoted evidence text (long verbatim substrings of the snapshot in tag/rationale) and any offset outside
     the snapshot or selected range. Boundaries: turning offsets into evidence text is v1-e03-t03; the
     pipeline that runs it is v1-e06-t02; quality evals are v1-e09-t03.
+    (PM amendment 2026-10-19, from v1-e05-t04's Follow-up work.) Each generated artifact is
+    stored with `response.metadata.with_inputs(snapshot_ids=..., retrieval_ids=...)` as a
+    required field, so an artifact can never be persisted without the inputs it was generated
+    from.
   priority: 1
   constraints:
     packages: [debate_core.evidence, debate_core.domain, prompts/card]
@@ -61,6 +65,10 @@ spec:
       description: >-
         Given a recorded fixture, selection offsets passed to v1-e03-t03 span extraction reproduce evidence
         text byte-identical to the snapshot slice.
+    - id: ac5
+      description: >-
+        (PM amendment 2026-10-19) A generated artifact cannot be built or stored without its
+        response metadata and inputs, by test.
 status:
   phase: Pending
 ---

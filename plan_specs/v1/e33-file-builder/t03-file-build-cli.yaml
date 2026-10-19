@@ -32,6 +32,11 @@ spec:
     FileBuildService, FileSuggestService and the t04 FileQualityService in debate_core.application.
     Boundaries: the check library and report format are owned by t04 (not re-implemented here);
     `files publish` and its quality gate are t05; this task does not upload anything to S3.
+    (PM amendment 2026-10-19, from v1-e33-t01's Follow-up 1 and the PM's ruling.) AUTO
+    resolution prefers an occurrence with a disclosure on record and takes an unattributed one
+    only when no attributed one remains; `files build` reports each card resolved to an
+    unattributed occurrence before it builds, since t04's provenance check would fail it. This
+    changes t01's documented AUTO rule; change its guide with it.
   priority: 1
   constraints:
     packages: [debate_cli, debate_core.application, tests/smoke]
@@ -78,6 +83,11 @@ spec:
       description: >-
         tests/smoke/test_files_cli.py covers build, check and suggest on synthetic data and runs in
         validate-dev.
+    - id: ac7
+      description: >-
+        (PM amendment 2026-10-19) AUTO prefers attributed occurrences, and `files build`
+        names every card resolved to an unattributed one before building, by tests shown
+        failing first; t01's guide states the rule.
 status:
   phase: Pending
 ---

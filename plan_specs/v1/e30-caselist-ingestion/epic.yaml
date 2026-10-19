@@ -615,5 +615,66 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e30-t23-held-digests-and-manifest-fsync
+    - id: t24
+      kind: Task
+      name: 'caselist status fails on every removal left unfinished, and reports a held digest the re-run has not listed'
+      description: >-
+        caselist status fails on every removal left unfinished, and reports a held digest
+        the re-run has not listed.
+      inputs:
+        specRef: plan_specs/v1/e30-caselist-ingestion/t24-status-residue-and-held-digests.yaml
+        goalRef: v1-e30-t24-status-residue-and-held-digests
+      dependsOn:
+      - t23
+      - t20
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e30-t24-status-residue-and-held-digests reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e30-t24-status-residue-and-held-digests
+    - id: t25
+      kind: Task
+      name: 'store sync pushes no manifest the publisher withholds, and junk beside a held link does not keep its row'
+      description: >-
+        store sync pushes no manifest the publisher withholds, and junk beside a held link
+        does not keep its row.
+      inputs:
+        specRef: plan_specs/v1/e30-caselist-ingestion/t25-store-sync-withholding.yaml
+        goalRef: v1-e30-t25-store-sync-withholding
+      dependsOn:
+      - t23
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e30-t25-store-sync-withholding reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e30-t25-store-sync-withholding
+    - id: t26
+      kind: Task
+      name: 'A .cmir file is imported as CMIR, and every rename-into-place writer fsyncs its directory'
+      description: >-
+        A .cmir file is imported as CMIR, and every rename-into-place writer fsyncs its
+        directory.
+      inputs:
+        specRef: plan_specs/v1/e30-caselist-ingestion/t26-cmir-extension-and-directory-fsync.yaml
+        goalRef: v1-e30-t26-cmir-extension-and-directory-fsync
+      dependsOn:
+      - t23
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e30-t26-cmir-extension-and-directory-fsync reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e30-t26-cmir-extension-and-directory-fsync
 status:
   phase: Pending

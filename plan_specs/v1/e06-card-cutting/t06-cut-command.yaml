@@ -26,6 +26,10 @@ spec:
     verified, 2 usage error, 3 retrieval failed, 4 card unverified, 5 model/config error. `--json` prints
     the CutResult/manifest to stdout for scripting. Boundaries: no business logic in debate_cli; batch
     cutting is E08 t06; DOCX verification is t07.
+    (PM amendment 2026-10-19, from v1-e05-t04's PM review: this is the first CLI command that
+    calls a model.) The installed build bundles `prompts/`, and the composition root loads the
+    prompt registry from it; a refused model call (`ModelAccessDenied`, `ModelRequestRejected`)
+    exits with the non-retryable model error code, as v1-e05-t09 rules, never the retryable one.
   priority: 1
   constraints:
     packages: [debate_cli]
@@ -60,6 +64,11 @@ spec:
       description: >-
         `--json` writes a single JSON object (CutResult with manifest) to stdout with progress output sent
         to stderr, and `cut --help` documents every option and exit code.
+    - id: ac5
+      description: >-
+        (PM amendment 2026-10-19) An installed wheel holds `prompts/` and the command loads
+        the registry from it, by an installed-build smoke test; a refused model call exits
+        with the non-retryable code, by test.
 status:
   phase: Pending
 ---

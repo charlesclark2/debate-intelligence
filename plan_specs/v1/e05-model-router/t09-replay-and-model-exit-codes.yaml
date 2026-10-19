@@ -26,6 +26,8 @@ spec:
     found without loading settings in plain doctor (t03's Deviation 4). (4) Plain doctor tries
     to open a socket in `test_doctor_renders_a_table`, against its "reaches no network"
     contract: find and remove it.
+    (PM amendment 2026-10-19, from v1-e05-t04's PM review.) (5) An import contract keeps
+    `jinja2` out of the domain and application layers, as the contract for `lxml` does.
   priority: 3
   constraints:
     packages: [debate_core.integrations, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, tests/fixtures/model_cassettes, docs/runbooks]
@@ -58,6 +60,11 @@ spec:
       description: >-
         (4): plain doctor opens no socket, shown by the socket guard failing on the start
         commit and passing after.
+    - id: ac5
+      description: >-
+        (PM amendment 2026-10-19) (5): `lint-imports` has a contract that fails when
+        `debate_core.domain` or `debate_core.application` imports `jinja2`, shown failing on
+        a deliberate import.
 status:
   phase: Pending
 ---

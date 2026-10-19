@@ -680,3 +680,12 @@ and (7)'s Word check, so the merge uses `--partial`.
 
 **For the operator:** the re-parse (step 2) runs after `v1-e31-t20`'s step 13, once. Its counts close
 ac4 for both t19 and t15, recorded in one close-out. (7)'s Word check (step 1) is any time.
+
+### (7): the operator's Word check, 2026-10-19 (recorded by the PM)
+
+The operator ran Operator follow-ups step 1 and checked both cards in Word. For card 2 and card 3
+of 16, the line just above the bracketed cite **is the card's tag**, formatted as an ordinary bold
+tag. So the shape is a defect: ac5's second half, "counted and fixed", is carried by
+`v1-e31-t24-bold-tag-above-bracketed-cite`, filed in the PM close-out of 2026-10-19, which counts
+the shape over the corpus before any rule changes. This task's Goal stays `InProgress` for ac4's
+re-parse; (7) closes when `v1-e31-t24` does.

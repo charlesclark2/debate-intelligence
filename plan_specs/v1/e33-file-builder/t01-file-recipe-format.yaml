@@ -32,7 +32,7 @@ spec:
     cards from E06 (v1.3) are out of scope.
   priority: 1
   constraints:
-    # debate_core.evidence and tests/scripts added in the v1-e33-t01 session, pending PM review (see the
+    # debate_core.evidence and tests/scripts added in the v1-e33-t01 session, approved by the PM 2026-10-19 (see the
     # session report's Deviations): EXACT_FINGERPRINT_VERSIONS beside FINGERPRINT_VERSION, and the
     # schema drift test beside the other script tests.
     packages: [debate_core.domain, debate_core.application, debate_core.evidence, scripts, docs/data, docs/guides, tests/fixtures, tests/scripts]

@@ -554,3 +554,21 @@ would stop reporting a version in that window that names a removed file.
 * 4: added to `v1-e30-t20`.
 * 5: covered by PM question 2.
 * 6: noted.
+
+### Operator follow-ups run, 2026-10-18 (recorded by the PM)
+
+The read-only `caselist status` after the merge, from a detached worktree of `origin/dev` holding
+this task:
+
+* **Dev:** *No version of a removed file is left under raw/ or parsed/, and no manifest or
+  aggregate version is older than a removal that touched its caselist.* *Manifest and aggregate
+  versions NOT CHECKED against RM-2026-90*, as expected since `v1-e30-t15`. No *Withdrawals NOT
+  ATTRIBUTED* line: RM-2026-90 withdrew no copy. No *REMOVAL RESIDUE* or *WITHDRAWN COPIES LEFT*.
+  Exit 1 for `CASELIST_DRIFT` on `testcl26` alone (5 snapshots), the caselist kept by the operator's
+  decision.
+* **Prod**, against the dev data directory: the same clean line, 4 caselists checked,
+  `removals_not_checked: []`, every `removal_residue` entry empty. Exit 1 for `CASELIST_DRIFT` only:
+  the 2026-10-13 week unpublished in prod for hsld26, hspf26 and hspolicy26, and openev 2026-ld (2
+  files). Prod lags dev until the next promotion; not this task's.
+* The drift panel printed the whole details record, about 1,000 lines of sha256. Filed as item (4)
+  of `v1-e30-t24`.

@@ -1,0 +1,81 @@
+# TASK v1-e31-t25-labeller-safeguards - The labeller warns before a card is lost, and import refuses a file already corrected
+# Epic: E31 Debate File Parsing | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e31-t25-labeller-safeguards
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e31-debate-file-parsing
+  annotations:
+    debate/title: "The labeller warns before a card is lost, and import refuses a file already corrected"
+spec:
+  # Filed by the PM, 2026-10-19, from the PM's review of the 2026-10-18 and 2026-10-19 labelling sittings.
+  description: >-
+    What the first labelling sittings tripped over, each found by counting the committed labels:
+    (1) in blind mode `k` pressed straight after `n`, before the row has a unit, says "no card",
+    so a card gets no completeness; (2) `import` run twice on one worksheet rewrites the file
+    and resets `rows_changed_from_prelabel` to 0 (three files); it must refuse a label file that
+    is not PRELABELED unless told to replace it, and then count against the stored pre-label;
+    (3) a CITE row marked as a start directly under a TAG splits the card and leaves the tag
+    outside it (two files): the page warns; (4) in sighted mode `n` on a row that starts a
+    pre-label card removes the card without a word (two files): the page says so; (5) `check`
+    and the page warn, not refuse, on a TAG or CITE in no card that is not cut off at a block
+    edge (a file whose card runs body first, cite after, is the legitimate case); (6) the guide
+    writes that case down: a card written body first is labelled EVIDENCE and CITE with a blank
+    card.
+  priority: 3
+  constraints:
+    packages: [tests/evals/parser, scripts, tests/fixtures/debate_files/eval/labels/README.md]
+    forbidden:
+      - Changing any committed label file
+      - A label file's card text in a log or a committed file
+  context:
+    - kind: TaskRef
+      name: v1-e31-t18-click-through-labeller
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        (1) to (5) each by a test shown failing first.
+    - id: ac2
+      description: >-
+        (6): the guide's Ambiguous conventions section holds the case, and the labeller's
+        help names the warnings.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e31-t25-labeller-safeguards-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e31-debate-file-parsing
+spec:
+  description: >-
+    Five labeller safeguards and one guide case.
+  goalRef:
+    name: v1-e31-t25-labeller-safeguards
+  graph:
+    nodes:
+      - id: labeller-safeguards
+        kind: Task
+        name: Labeller safeguards
+        description: >-
+          Five labeller safeguards and one guide case.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Labeller tests pass
+            command: uv
+            args: [run, pytest, tests/evals/parser, -k, labeller or worksheet or prelabel]
+status:
+  phase: Pending

@@ -6,7 +6,8 @@ this checkout carries, and every expected count is written by hand from what the
 
 * **the long file**: a card of over 3,000 words with a tag typed in body style above a cite its
   body kept, then a second card under a tag. Its blob is on disk.
-* **the holding file**: one card whose body is two others' bodies run together, and those two.
+* **the holding file**: one card whose body is two others' bodies run together, and those two;
+  and one card of 100 words with two cuts of it that share 20 words, too few to overlap.
 * **the same long file stored under another digest, with no blob on disk.**
 * **the same long file stored under another digest whose blob is the holding file's bytes**, so
   parsing it again does not give the stored card back.
@@ -81,6 +82,12 @@ HOLDING_FILE = build_docx(
     + underlined(numbered("first", 80))
     + cite("Lindqvist 2019")
     + underlined(numbered("second", 80))
+    + cite("Achebe 24")
+    + underlined(numbered("run", 100))
+    + cite("Mensah 23")
+    + underlined(" ".join(numbered("run", 100).split()[:60]))
+    + cite("Tanaka 22")
+    + underlined(" ".join(numbered("run", 100).split()[40:]))
 )
 
 
@@ -196,8 +203,8 @@ def test_each_count_is_the_one_the_invented_store_holds(
     assert output["long_body_words"] == 3_000
     assert counts["version"] == DOCX_PARSER_VERSION
     assert counts["sources"] == 4
-    assert counts["cards"] == 9
-    assert counts["full_cards"] == 9
+    assert counts["cards"] == 12
+    assert counts["full_cards"] == 12
     assert counts["long_bodies"] == {
         "texts": 1,
         "not_reproduced": 1,
@@ -218,10 +225,10 @@ def test_each_count_is_the_one_the_invented_store_holds(
         "cite_shaped_paragraphs_by_rule": {"assembly-cite-guess-inside-card-body": 1},
     }
     assert counts["two_cards_in_one"] == {
-        "full_texts": 5,
+        "full_texts": 8,
         "holding_two_sharing_nothing_texts": 1,
         "holding_two_sharing_nothing_cards": 1,
-        "holding_two_not_overlapping_texts": 1,
+        "holding_two_not_overlapping_texts": 2,
         "by_bodies_sharing_nothing": {"2": 1},
         "by_holder_over_the_long_body_line": {"no": 1},
         "by_holder_words": {"0 to 299": 1},
@@ -260,6 +267,13 @@ def test_the_candidates_are_store_positions_and_hold_no_text(
             "card": [HOLDING, first_of[0]],
             "pieces": [[HOLDING, first_of[1]], [HOLDING, first_of[2]]],
         },
+        {
+            "caselist": CASELIST,
+            "count": "two-cards-in-one",
+            "group": "not overlapping",
+            "card": [HOLDING, first_of[3]],
+            "pieces": [[HOLDING, first_of[4]], [HOLDING, first_of[5]]],
+        },
     ]
     for telltale in TELLTALES[:6]:
         assert telltale not in saved.read_text()
@@ -283,7 +297,7 @@ def test_a_store_of_another_parser_version_is_refused_by_name(data_dir: Path) ->
 
 def test_the_version_expected_is_read(data_dir: Path, capsys: pytest.CaptureFixture[str]) -> None:
     output, _ = run(data_dir, capsys, "--expect-version", DOCX_PARSER_VERSION)
-    assert output["caselists"][CASELIST]["cards"] == 9
+    assert output["caselists"][CASELIST]["cards"] == 12
 
 
 def test_the_newest_version_directory_with_an_index_is_the_one_read(data_dir: Path) -> None:

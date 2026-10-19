@@ -230,6 +230,8 @@ def test_a_style_that_maps_to_no_unit_is_no_debate_style() -> None:
     body = described(
         para("Okonkwo 26, Adaeze Okonkwo, invented for this test", style="Normal", bold=True),
         para(prose(600), style="Normal", underline="single"),
+        # A line no rule sees through the style takes: the style's own `OTHER`, matched by name.
+        para("A line in Normal", style="Normal"),
     )
     assert body.file_uses_debate_styles is False
 
@@ -303,6 +305,18 @@ def test_a_long_line_above_a_cite_is_no_tag() -> None:
     )
     assert body.short_lines_above_a_cite == 0
     assert body.kind is LongBodyKind.CITE_INSIDE
+
+
+def test_a_line_of_a_headings_length_above_a_cite_is_where_a_tag_would_be() -> None:
+    body = described(
+        tag("First tag"),
+        cite(),
+        underlined_body(),
+        short_plain_line("x" * 300),
+        highlighted_cite_line(),
+        underlined_body(),
+    )
+    assert body.short_lines_above_a_cite == 1
 
 
 def test_a_blank_line_above_a_cite_is_no_tag() -> None:

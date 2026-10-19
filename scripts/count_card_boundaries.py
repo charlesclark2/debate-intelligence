@@ -294,9 +294,8 @@ def count_caselist(
     cards = stored_cards(store_root, caselist, version.name, digests, workers)
     read_at = time.monotonic()
 
-    long_cards = [
-        card for card in cards if card.completeness != "CITE_ONLY" and is_too_long_to_be_one_card(card.words)
-    ]
+    # A cite-only card has no body, so no words.
+    long_cards = [card for card in cards if is_too_long_to_be_one_card(card.words)]
     _progress(f"{caselist}: parsing again the sources of {len(long_cards):,} long bodies")
     described, not_reproduced, without_a_blob = describe_long_bodies(
         caselist, long_cards, data_dir / BLOB_DIRECTORY, workers

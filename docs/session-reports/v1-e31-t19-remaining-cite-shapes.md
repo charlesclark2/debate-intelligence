@@ -651,3 +651,32 @@ tables.
 | ac5, (7) | **NOT RUN**: the operator's Word check (step 1) |
 
 **Scratch files:** kept until this second review, as you asked, then deleted on your word.
+
+## PM review, second
+
+**Verdict:** ACCEPTED
+<!-- ACCEPTED / CHANGES_REQUESTED -->
+
+**Reviewed by / date:** PM, 2026-10-18
+
+**Notes:**
+
+Accepted. Both items of the first review are done. The Goal stays `InProgress` for ac4's re-parse
+and (7)'s Word check, so the merge uses `--partial`.
+
+* **The version.** I checked the worktree. The branch sits on `origin/dev` at `5a77636`, which holds
+  `v1-e31-t15`, and `DOCX_PARSER_VERSION` is `2026.10.18-docx-5`. The `docx-4` strings left are t15's
+  own pins, now "or later", and the reference to t15's version, as they should be. The side-by-side
+  was re-run on the synced parser, and the operator's expected tables now include t15's six newly
+  read sources. So the one re-parse covers both tasks: step 2c's note on the failures is ac4 for
+  `v1-e31-t15` as well.
+* **(6)'s sample.** All 18 cards that lose their body under (6) were drawn, and all 18 are cards
+  whose only "body" was their own cite line. 10 of 10 left-quoted short cites are right. The count
+  that found exactly the 18 confirms the rule-id attribution, and the new strata's mutants were
+  caught. (6) stands as built.
+* **The PR-subset table** measures every parser on the moved labels. The comparison is like with
+  like, and cite precision does not fall (0.957 to 0.969).
+* **The scratch files** may be deleted now.
+
+**For the operator:** the re-parse (step 2) runs after `v1-e31-t20`'s step 13, once. Its counts close
+ac4 for both t19 and t15, recorded in one close-out. (7)'s Word check (step 1) is any time.

@@ -59,6 +59,8 @@ BASE: dict[str, str] = {
         "from debate_core.router import Router\n"
         "from debate_core.unused_by_fixtures import THING\n"
         "\n"
+        'SETTINGS = "root_settings.json"\n'
+        "\n"
         "\n"
         "@pytest.fixture(autouse=True)\n"
         "def fixed_clock():\n"
@@ -137,6 +139,7 @@ BASE: dict[str, str] = {
         "def test_writer():\n"
         '    subprocess.run([sys.executable, Path(__file__).parent / "write_files.py"])\n'
     ),
+    "tests/fixtures/root_settings.json": "{}\n",
     "tests/fixtures/cards/build.py": "from pathlib import Path\n\nHERE = Path(__file__).parent\n",
     "tests/fixtures/cards/a.json": "{}\n",
     "tests/fixtures/cards/b.json": "{}\n",
@@ -404,6 +407,15 @@ def test_a_data_file_nothing_names_outside_the_packages_is_the_whole_selection(w
     assert result.status == 0
     assert result.whole
     assert "nothing names ops/unnamed.cfg" in result.stdout
+
+
+def test_a_file_the_root_conftest_names_is_the_whole_selection(workspace: Workspace) -> None:
+    workspace.commit(changed("tests/fixtures/root_settings.json"))
+    result = workspace.run()
+    assert result.status == 0
+    assert result.stdout.startswith(
+        "The whole selection is affected: the root conftest.py names tests/fixtures/root_settings.json"
+    )
 
 
 def test_a_package_module_naming_a_doc_in_a_message_does_not_read_it(workspace: Workspace) -> None:

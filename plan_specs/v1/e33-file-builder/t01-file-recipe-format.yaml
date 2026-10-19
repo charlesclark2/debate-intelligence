@@ -79,7 +79,7 @@ spec:
         SUPPRESSED_OCCURRENCE, not re-pointed. The resolver reads the suppression list through its
         port (no AWS), tested with the in-memory repositories and shown failing first.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

@@ -59,7 +59,9 @@ __all__ = [
     "classify_paragraph",
     "classify_run",
     "first_name_and_year",
+    "for_matching",
     "is_a_cite_wholly_in_brackets",
+    "the_cite_style_marks_a_name_and_year_at_the_head",
 ]
 
 #: A heading is short. Anything longer is a paragraph that happens to be bold.
@@ -282,6 +284,23 @@ _CLOSING_BRACKET = {"[": "]", "(": ")"}
 _BETWEEN_YEAR_AND_BRACKET = " ,:;.–—-"
 
 
+#: A left single quote directly before a digit: `Okonkwo ‘26`, as Word's autocorrect types the
+#: apostrophe of a two-digit year after a space (`v1-e31-t19`).
+_LEFT_QUOTE_BEFORE_A_DIGIT = re.compile("\u2018(?=\\d)")
+
+
+def for_matching(text: str) -> str:
+    """`text` as the profile's cite patterns read it: a left quote before a digit is an apostrophe.
+
+    The patterns accept `'` and `’` before a year. Word turns an apostrophe typed after a space
+    into U+2018, the *left* quote, so `Okonkwo ‘26` named no year: in the corpus 296 short lines
+    were written that way, and 226 cards with such a line at the front of their cite had no short
+    cite. One character becomes one character, so every offset into the result is an offset into
+    `text`, and nothing read from a file is ever changed: only what the patterns are matched on.
+    """
+    return _LEFT_QUOTE_BEFORE_A_DIGIT.sub("\u2019", text)
+
+
 def _is_a_sentence_opener(author: str) -> bool:
     """Whether the "author" a cite pattern captured is a lone word that opens a sentence."""
     return author.strip() in WORDS_THAT_OPEN_A_SENTENCE
@@ -293,7 +312,7 @@ def first_name_and_year(text: str, profile: StyleProfile) -> re.Match[str] | Non
     A sentence opener followed by a year (*In 2019*) matches the pattern and is passed over: it
     dates a sentence and names no source.
     """
-    for found in _compiled(profile.cite.author_year_pattern).finditer(text):
+    for found in _compiled(profile.cite.author_year_pattern).finditer(for_matching(text)):
         if not _is_a_sentence_opener(found.group("author")):
             return found
     return None
@@ -429,7 +448,7 @@ def _is_in_a_cite_style(run: RunDescription, profile: StyleProfile) -> bool:
     return match is not None and match.emphasis is RunEmphasis.CITE
 
 
-def _the_cite_style_marks_a_name_and_year_at_the_head(
+def the_cite_style_marks_a_name_and_year_at_the_head(
     paragraph: ParagraphDescription, profile: StyleProfile
 ) -> bool:
     """Whether the paragraph's first name and year sits at its head, at least partly in a cite style.
@@ -482,7 +501,7 @@ def _cite_run_style_match(
     if (
         length <= MAXIMUM_STYLED_CITE_CHARACTERS
         and not paragraph.has_highlighted_run
-        and _the_cite_style_marks_a_name_and_year_at_the_head(paragraph, profile)
+        and the_cite_style_marks_a_name_and_year_at_the_head(paragraph, profile)
     ):
         return ParagraphStyleMatch(
             unit=StructuralUnit.CITE,
@@ -531,7 +550,7 @@ def _wiki_cite_entry_match(
     text = paragraph.text.strip()
     if not any(marker in text for marker in profile.cite.wiki_ellipsis_markers):
         return None
-    if not _compiled(profile.cite.author_year_pattern).search(text):
+    if not _compiled(profile.cite.author_year_pattern).search(for_matching(text)):
         return None
     return ParagraphStyleMatch(
         unit=StructuralUnit.CITE,
@@ -562,7 +581,7 @@ def _cite_line_match(paragraph: ParagraphDescription, profile: StyleProfile) -> 
     text = paragraph.text.strip()
     if len(text) > MAXIMUM_CITE_LINE_CHARACTERS:
         return None
-    short_cite = _compiled(profile.cite.short_cite_pattern).match(text)
+    short_cite = _compiled(profile.cite.short_cite_pattern).match(for_matching(text))
     if short_cite is None:
         return None
     if _is_a_sentence_opener(short_cite.group("author")) and not _opens_in_bold(paragraph):
@@ -599,7 +618,7 @@ def _long_cite_line_match(
     # turned away below as it was there.
     if len(text) > MAXIMUM_LONG_CITE_LINE_CHARACTERS or paragraph.has_highlighted_run:
         return None
-    short_cite = _compiled(profile.cite.short_cite_pattern).match(text)
+    short_cite = _compiled(profile.cite.short_cite_pattern).match(for_matching(text))
     if short_cite is None or _is_a_sentence_opener(short_cite.group("author")):
         return None
     if _opens_in_bold(paragraph):

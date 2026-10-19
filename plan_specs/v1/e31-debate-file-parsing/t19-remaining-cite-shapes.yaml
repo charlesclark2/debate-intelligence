@@ -20,7 +20,9 @@ spec:
     7,200 tagged cards with no cite have a name and a year within the first 40 characters of the
     line under the tag, but not at its front. (2) A cite in a paragraph style that resolves to
     nothing: 957 lines, 904 of them by an alias, in a list or web style the profile maps to no
-    unit. (3) Highlighted cites: 593 lines open in bold with a name and a year and hold
+    unit; the rules see through such a style, including the body rules, never the heading rules
+    (PM amendment, 2026-10-18, on the counts: reading the cite alone would leave 989 cards
+    CITE_ONLY whose bodies are in the file). (3) Highlighted cites: 593 lines open in bold with a name and a year and hold
     highlighting; take one only when a body follows. (4) v1-e31-t09's cite-style hold: a cite
     style that marks no name and year at the head is emphasis, not a cite, so change the hold,
     including v1-e31-t09's 300-word fixture (ruled in t12's review). (5) Short plain lines
@@ -71,7 +73,7 @@ spec:
         the operator confirms the tag is in the document, the shape is counted and fixed the same
         way; if not, the report says so and nothing changes. Added by the PM, 2026-10-16.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

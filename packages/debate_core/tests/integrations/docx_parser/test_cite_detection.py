@@ -72,6 +72,7 @@ BRACKETED_BEFORE_THE_BODY = "assembly-bracketed-cite-before-the-body"
 INSIDE_THE_BODY = "assembly-cite-guess-inside-card-body"
 AFTER_THE_CARDS_CITE = "assembly-cite-guess-after-card-cite"
 LONGER_THAN_A_CITE = "assembly-cite-guess-longer-than-a-cite"
+HIGHLIGHTED_BEFORE_THE_BODY = "assembly-highlighted-cite-before-the-body"
 
 
 @pytest.fixture
@@ -650,7 +651,13 @@ class TestAGuessLongerThanACiteEntry:
         assert card.full_cite == SHORT_CITE + CITE_TAIL
         assert card.evidence_text == short + "\n" + long
 
-    def test_a_run_in_the_cite_character_style_leaves_it_a_cite(self, parser: DebateDocxParser) -> None:
+    def test_a_run_in_the_cite_character_style_in_its_middle_is_emphasis(
+        self, parser: DebateDocxParser
+    ) -> None:
+        """Until `v1-e31-t19` any cite-style run held the guess as a cite. The style here marks a
+        phrase 1,200 characters in, not a name and year at the head, so it is emphasis and the
+        paragraph is the body (the PM's ruling in `v1-e31-t12`'s review). A style at the head still
+        holds a guess: `test_remaining_cite_shapes.py`, `TestTheCiteStyleHold`."""
         text = wiki_guess(2_300)
         styled = paragraph_xml(
             run_xml(text[:40], bold=True, half_points=READING_SIZE)
@@ -661,7 +668,8 @@ class TestAGuessLongerThanACiteEntry:
 
         document = parse(parser, tag_paragraph() + cite_paragraph() + styled)
 
-        assert document.sections[2].unit is CITE
+        assert document.sections[2].unit is EVIDENCE
+        assert document.sections[2].match.rule_id == f"{AFTER_THE_CARDS_CITE}:heuristic-wiki-cite-entry"
 
     def test_with_no_card_open_it_is_left_the_cite_of_a_card_with_no_tag(
         self, parser: DebateDocxParser
@@ -773,13 +781,17 @@ class TestAStyledCitePastTheProfileBound:
 
         assert document.sections[1].unit is not CITE
 
-    def test_highlighting_leaves_it_as_it_was(self, parser: DebateDocxParser) -> None:
-        """Nobody highlights a citation. A highlighted paragraph behind a name is a card in one paragraph."""
+    def test_highlighted_it_is_not_this_rules_and_is_a_cite_with_a_body_below(
+        self, parser: DebateDocxParser
+    ) -> None:
+        """This rule never takes a highlighted paragraph: a card in one paragraph is highlighted too.
+        Under a tag with a body below, `v1-e31-t19`'s assembly rule reads it as the cite."""
         markup, _ = styled_cite(1_400, highlight=True)
 
         document = parse(parser, tag_paragraph() + markup + body_paragraph())
 
-        assert document.sections[1].unit is EVIDENCE
+        assert document.sections[1].unit is CITE
+        assert document.sections[1].match.rule_id.startswith(HIGHLIGHTED_BEFORE_THE_BODY + ":")
 
     def test_the_style_on_a_phrase_further_in_does_not_make_a_cite(self, parser: DebateDocxParser) -> None:
         """The name and year at its head are plain, and the style marks something else."""
@@ -879,12 +891,15 @@ class TestACiteLineLongerThanFourHundredCharacters:
 
         assert document.sections[1].unit is OTHER
 
-    def test_highlighting_leaves_it_as_it_was(self, parser: DebateDocxParser) -> None:
+    def test_highlighted_it_is_not_this_rules_and_is_a_cite_with_a_body_below(
+        self, parser: DebateDocxParser
+    ) -> None:
         markup, _ = bold_cite(700, highlight=True)
 
         document = parse(parser, tag_paragraph() + markup + body_paragraph())
 
-        assert document.sections[1].unit is EVIDENCE
+        assert document.sections[1].unit is CITE
+        assert document.sections[1].match.rule_id.startswith(HIGHLIGHTED_BEFORE_THE_BODY + ":")
 
     def test_a_bold_sentence_opener_and_a_year_do_not_open_a_long_cite(
         self, parser: DebateDocxParser
@@ -1028,12 +1043,15 @@ class TestABracketedCiteLine:
 
         assert document.sections[1].unit is OTHER
 
-    def test_highlighting_leaves_it_as_it_was(self, parser: DebateDocxParser) -> None:
+    def test_highlighted_it_is_not_this_rules_and_is_a_cite_with_a_body_below(
+        self, parser: DebateDocxParser
+    ) -> None:
         markup, _ = bracketed_cite(700, highlight=True)
 
         document = parse(parser, tag_paragraph() + markup + body_paragraph())
 
-        assert document.sections[1].unit is EVIDENCE
+        assert document.sections[1].unit is CITE
+        assert document.sections[1].match.rule_id.startswith(HIGHLIGHTED_BEFORE_THE_BODY + ":")
 
     def test_a_sentence_opener_and_a_year_before_a_bracket_are_not_a_cite(
         self, parser: DebateDocxParser

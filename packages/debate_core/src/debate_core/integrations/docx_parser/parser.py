@@ -53,9 +53,10 @@ classifier does not make, because each needs something the classifier cannot see
   that the paragraph be formatted as body, and a body's first words are often bold: 220 cards
   were still stored with their body in the cite and no evidence text. Past
   :data:`LONGEST_GUESSED_CITE_ENTRY_CHARACTERS` a wiki cite-entry guess is body whatever its
-  formatting, unless it carries a cite character style or names a source within its first
-  :data:`A_CITE_ENTRY_NAMES_ITS_SOURCE_WITHIN_CHARACTERS`, which is where a cite run together
-  with its card has its cite (`v1-e31-t12`).
+  formatting, unless a cite character style marks a name and a year at its head or it names a
+  source within its first :data:`A_CITE_ENTRY_NAMES_ITS_SOURCE_WITHIN_CHARACTERS`, which is where
+  a cite run together with its card has its cite (`v1-e31-t12`). A cite style anywhere else in
+  the paragraph is emphasis and holds nothing (`v1-e31-t19`).
 * **A cite written wholly inside a bracket is a cite where a cite stands.** `[Okonkwo 26, ...] KR`
   opens with its bracket, so nothing that reads the front of a line sees a name and a year, and
   it was read as body text or as nothing: a card that is only such a cite was stored `FULL`. A
@@ -100,7 +101,6 @@ from debate_core.domain.debate_files import (
 )
 from debate_core.domain.style_profile import (
     ParagraphStyleMatch,
-    RunEmphasis,
     StructuralUnit,
     StyleMatchSource,
     StyleProfile,
@@ -108,7 +108,11 @@ from debate_core.domain.style_profile import (
 from debate_core.evidence.style_classifier import (
     classify_paragraph,
     first_name_and_year,
+    for_matching,
+    is_a_cite_behind_a_first_name_or_title,
     is_a_cite_wholly_in_brackets,
+    is_a_highlighted_cite,
+    the_cite_style_marks_a_name_and_year_at_the_head,
 )
 from debate_core.evidence.style_profile_loader import load_style_profile
 from debate_core.integrations.docx_parser.package import (
@@ -151,8 +155,12 @@ __all__ = ["DOCX_PARSER_VERSION", "DebateDocxParser"]
 #: (`v1-e31-t15`) reads three kinds of file the three before it refused: one whose compression
 #: ratio was over the limit only in a part the reader never opens, and one whose text held a raw
 #: character XML 1.0 forbids, each now replaced by U+FFFD; and it names a CardMirror `.cmir` filed
-#: under another extension as an unsupported format rather than a broken zip.
-DOCX_PARSER_VERSION: Final = "2026.10.18-docx-4"
+#: under another extension as an unsupported format rather than a broken zip. `2026.10.18-docx-5`
+#: (`v1-e31-t19`) reads a cite behind a first name or a title, and a highlighted cite with a body
+#: below it, where a cite stands; reads the cite and body rules through a paragraph style that maps
+#: to no unit; holds a long guess by its cite style only when the style marks a name and year at its
+#: head; and reads `Okonkwo ‘26`, with a left quote before the year, as a short cite.
+DOCX_PARSER_VERSION: Final = "2026.10.18-docx-5"
 
 W_PARAGRAPH: Final = qualified_name("p")
 W_TABLE: Final = qualified_name("tbl")
@@ -446,14 +454,27 @@ class DebateDocxParser:
             sections.append(_ReadSection(read=read, match=match, in_text_box=body_paragraph.in_text_box))
         return sections
 
-    def _read_bracketed_cites_where_a_cite_stands(self, sections: list[_ReadSection]) -> list[_ReadSection]:
-        """Re-read a paragraph written wholly inside a bracket as a cite, where a cite stands.
+    def _read_cites_where_a_cite_stands(self, sections: list[_ReadSection]) -> list[_ReadSection]:
+        """Re-read as a cite a paragraph whose shape is a cite's only where a cite stands.
 
-        `[Okonkwo 26, ...] KR` is a cite and `(Lindqvist 2019)` on a line of an article is the
-        article's own reference: the same shape
-        (:func:`~debate_core.evidence.style_classifier.is_a_cite_wholly_in_brackets`), told apart
-        only by where it is. A cite stands after a tag, an undertag or another line of the cite,
-        before any body. Blank lines, page furniture and lines read as nothing are stepped over.
+        Three shapes are cites there and something else elsewhere, so the classifier cannot call
+        them:
+
+        * **wholly inside a bracket.** `[Okonkwo 26, ...] KR` is a cite and `(Lindqvist 2019)` on
+          a line of an article is the article's own reference
+          (:func:`~debate_core.evidence.style_classifier.is_a_cite_wholly_in_brackets`,
+          `v1-e31-t12`);
+        * **behind a first name or a title.** `Adaeze Okonkwo 26, ...` with the name and year in
+          bold is a cite, and a sentence in a body can open with a bold name
+          (:func:`~debate_core.evidence.style_classifier.is_a_cite_behind_a_first_name_or_title`,
+          `v1-e31-t19`);
+        * **a highlighted cite, with a body below it.** A cite whose name a debater highlighted to
+          read, and a card written as one paragraph behind its cite, have one shape
+          (:func:`~debate_core.evidence.style_classifier.is_a_highlighted_cite`). Only the first
+          has a body after it (`v1-e31-t19`).
+
+        A cite stands after a tag, an undertag or another line of the cite, before any body.
+        Blank lines, page furniture and lines read as nothing are stepped over.
         A guessed cite that a body may yet take for itself (:meth:`_is_a_guess_a_body_may_take`)
         is not such a line: what follows it may be the middle of a body, where a reference in
         brackets would end the card.
@@ -465,20 +486,25 @@ class DebateDocxParser:
         """
         reread: list[_ReadSection] = []
         a_cite_stands_here = False
-        for section in sections:
+        a_body_follows = _followed_by_a_body(sections)
+        for position, section in enumerate(sections):
             match = section.match
-            if (
-                a_cite_stands_here
+            reason = (
+                self._why_it_is_a_cite_where_a_cite_stands(
+                    section.read, a_body_follows=a_body_follows[position]
+                )
+                if a_cite_stands_here
                 and match.unit in (StructuralUnit.EVIDENCE, StructuralUnit.OTHER)
                 and match.match_source is StyleMatchSource.HEURISTIC
                 and not match.rule_id.startswith("assembly-")
-                and is_a_cite_wholly_in_brackets(section.read.description, self._profile)
-            ):
+                else None
+            )
+            if reason is not None:
                 section = _ReadSection(
                     read=section.read,
                     match=ParagraphStyleMatch(
                         unit=StructuralUnit.CITE,
-                        rule_id=f"assembly-bracketed-cite-before-the-body:{match.rule_id}",
+                        rule_id=f"{reason}:{match.rule_id}",
                         match_source=StyleMatchSource.HEURISTIC,
                         confidence=_BRACKETED_CITE_CONFIDENCE,
                     ),
@@ -491,6 +517,19 @@ class DebateDocxParser:
                 a_cite_stands_here = False
             reread.append(section)
         return reread
+
+    def _why_it_is_a_cite_where_a_cite_stands(
+        self, read: ReadParagraph, *, a_body_follows: bool
+    ) -> str | None:
+        """The assembly rule that reads a paragraph standing where a cite stands as a cite, or None."""
+        description = read.description
+        if is_a_cite_wholly_in_brackets(description, self._profile):
+            return "assembly-bracketed-cite-before-the-body"
+        if is_a_cite_behind_a_first_name_or_title(description, self._profile):
+            return "assembly-cite-behind-a-name-before-the-body"
+        if a_body_follows and is_a_highlighted_cite(description, self._profile):
+            return "assembly-highlighted-cite-before-the-body"
+        return None
 
     def _is_a_guess_a_body_may_take(self, section: _ReadSection) -> bool:
         """Whether a paragraph is a guessed cite that the assembly may yet re-read as body.
@@ -572,9 +611,10 @@ class DebateDocxParser:
         paragraph formatted as body, exactly as there. Two things more are asked, because here the
         paragraph sits where a cite belongs:
 
-        * **no run carries a cite character style.** The classifier lets go of its style rule
-          past 1,000 characters and its guess takes over, but the author's mark is still on the
-          paragraph, and a cite style never moves;
+        * **no cite character style marks a name and a year at its head.** The classifier lets go
+          of its style rule past 1,000 characters and its guess takes over, but where the style
+          marks the paragraph's source the author's mark is still on it, and it never moves. On a
+          phrase further in, the style is emphasis (`v1-e31-t19`);
         * **the card already has a cite**, so the paragraph is not the only cite the card has.
           Failing that, it must be longer than any cite entry
           (:data:`LONGEST_GUESSED_CITE_ENTRY_CHARACTERS`) and must not open with a name and a year,
@@ -598,7 +638,8 @@ class DebateDocxParser:
             return section
         by_its_length_alone = self._is_longer_than_a_cite_entry(section)
         if not by_its_length_alone and (
-            not self._is_formatted_as_body(section.read) or self._carries_a_cite_style(section.read)
+            not self._is_formatted_as_body(section.read)
+            or self._the_cite_style_marks_its_source(section.read)
         ):
             return section
         # A guess that is still a cite here was not taken by an open body, so the card has none yet.
@@ -618,12 +659,15 @@ class DebateDocxParser:
         The wiki guess takes any paragraph that holds an ellipsis and a name with a year, at any
         length, and it is the only guess with no bound of its own. Past
         :data:`LONGEST_GUESSED_CITE_ENTRY_CHARACTERS` a paragraph is no cite entry, unless the
-        file's author marked it with a cite character style or it names a source within its first
+        file's author marked a name and a year at its head with a cite character style, or it
+        names a source within its first
         :data:`A_CITE_ENTRY_NAMES_ITS_SOURCE_WITHIN_CHARACTERS`: a card written as one paragraph
         behind its cite, which is left as the classifier called it.
         """
         text = section.read.text
-        if len(text) <= LONGEST_GUESSED_CITE_ENTRY_CHARACTERS or self._carries_a_cite_style(section.read):
+        if len(text) <= LONGEST_GUESSED_CITE_ENTRY_CHARACTERS or self._the_cite_style_marks_its_source(
+            section.read
+        ):
             return False
         source = first_name_and_year(text.strip(), self._profile)
         return source is None or source.start() > A_CITE_ENTRY_NAMES_ITS_SOURCE_WITHIN_CHARACTERS
@@ -648,15 +692,16 @@ class DebateDocxParser:
             )
         return followed
 
-    def _carries_a_cite_style(self, read: ReadParagraph) -> bool:
-        """Whether any visible run is in a cite character style, as the classifier's style rule asks."""
-        for run in read.description.visible_runs:
-            style = self._profile.resolve_character_style(
-                run.character_style_id, run.character_style_name, run.character_style_based_on
-            )
-            if style is not None and style.emphasis is RunEmphasis.CITE:
-                return True
-        return False
+    def _the_cite_style_marks_its_source(self, read: ReadParagraph) -> bool:
+        """Whether a cite character style marks a name and a year at the paragraph's head.
+
+        That is what the style is for in a cite. Until `v1-e31-t19` a cite-style run anywhere held
+        a guess as a cite at any length, and 26 paragraphs of over 2,000 characters, formatted as
+        body, stood as cite text with the style on a phrase in their middle: emphasis, by the
+        measure `v1-e31-t12` took for the style past the profile's bound (the PM's ruling in its
+        review). 23 cards were `CITE_ONLY` with their body in the cite.
+        """
+        return the_cite_style_marks_a_name_and_year_at_the_head(read.description, self._profile)
 
     def _is_formatted_as_body(self, read: ReadParagraph) -> bool:
         """Whether a paragraph carries a body's formatting and not a cite's.
@@ -689,7 +734,7 @@ class DebateDocxParser:
         camp: str | None,
     ) -> ParsedDocument:
         read_sections = self._demote_tags_with_no_card(
-            self._read_bracketed_cites_where_a_cite_stands(self._read_sections(package))
+            self._read_cites_where_a_cite_stands(self._read_sections(package))
         )
 
         open_headings: list[str | None] = [None, None, None, None]
@@ -930,10 +975,11 @@ class DebateDocxParser:
         """
         if not full_cite.strip():
             return None
-        match = re.match(self._profile.cite.short_cite_pattern, full_cite)
+        match = re.match(self._profile.cite.short_cite_pattern, for_matching(full_cite))
         if match is None:
             return None
-        short = match.group(0).strip().rstrip(",")
+        # Taken from the cite as written: `Okonkwo ‘26` keeps its left quote (`v1-e31-t19`).
+        short = full_cite[: match.end()].strip().rstrip(",")
         return short or None
 
 
@@ -950,6 +996,18 @@ def _reread_as_body(section: _ReadSection, reason: str) -> _ReadSection:
         ),
         in_text_box=section.in_text_box,
     )
+
+
+def _followed_by_a_body(sections: Sequence[_ReadSection]) -> list[bool]:
+    """For each paragraph, whether the next one that is not `OTHER` was classified as body."""
+    followed = [False] * len(sections)
+    a_body_is_next = False
+    for position in range(len(sections) - 1, -1, -1):
+        followed[position] = a_body_is_next
+        unit = sections[position].match.unit
+        if unit is not StructuralUnit.OTHER:
+            a_body_is_next = unit is StructuralUnit.EVIDENCE
+    return followed
 
 
 def _card_follows(sections: Sequence[_ReadSection], position: int) -> bool:

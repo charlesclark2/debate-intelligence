@@ -544,8 +544,9 @@ class TestTheParserVersion:
     """Files once refused are read now, so the version moves: the parsed store skips a source it
     has recorded under the running version, refusals included."""
 
-    def test_it_is_the_version_this_task_bumped_to(self) -> None:
-        assert DOCX_PARSER_VERSION == "2026.10.18-docx-4"
+    def test_it_is_the_version_this_task_bumped_to_or_a_later_one(self) -> None:
+        """`2026.10.18-docx-4`, or one a later task bumped to (`v1-e31-t19`: `2026.10.18-docx-5`)."""
+        assert parse_version_directory(DOCX_PARSER_VERSION) >= parse_version_directory("2026.10.18-docx-4")
 
     def test_its_directory_sorts_after_the_version_that_refused_them(self) -> None:
         names = sorted([DOCX_PARSER_VERSION, "2026.10.12-docx-3"], key=parse_version_directory)

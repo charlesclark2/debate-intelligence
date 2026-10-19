@@ -1398,13 +1398,21 @@ class TestACiteThatDoesNotOpenTheBody:
         assert document.sections[-1].unit is StructuralUnit.CITE
         assert document.sections[-1].match.rule_id == "verbatim-style-id:CiteParagraph"
 
-    @pytest.mark.parametrize("position", ["after the card's cite", "as the card's first cite"])
-    def test_a_paragraph_of_300_words_with_a_run_in_the_cite_character_style_stays_a_cite(
-        self, parser: DebateDocxParser, position: str
+    @pytest.mark.parametrize(
+        ("position", "cite", "rule"),
+        [
+            ("after the card's cite", SHORT_CITE + CITE_TAIL, AFTER_THE_CARDS_CITE),
+            ("as the card's first cite", "", LONGER_THAN_A_CITE),
+        ],
+    )
+    def test_a_paragraph_of_300_words_with_a_run_in_the_cite_character_style_is_the_body(
+        self, parser: DebateDocxParser, position: str, cite: str, rule: str
     ) -> None:
         """Past 1,000 characters the classifier's style rule lets go of it and its guess takes over.
 
-        The guess is still about a paragraph the author marked with the cite style, so it stands.
+        Until `v1-e31-t19` the style held the guess as a cite wherever it sat. Here it sits on a
+        name and a year in the middle of the paragraph, which is emphasis, not a cite: a cite's
+        style marks the name and year at its head (the PM's ruling in `v1-e31-t12`'s review).
         """
         before = cite_paragraph() if position == "after the card's cite" else ""
         document = parse(
@@ -1413,11 +1421,11 @@ class TestACiteThatDoesNotOpenTheBody:
         )
 
         (card,) = document.cards
-        assert card.full_cite.endswith(WHOLE_BODY_IN_ONE_PARAGRAPH)
-        assert card.evidence_text == ""
-        assert card.completeness is CardCompleteness.CITE_ONLY
-        assert document.sections[-1].unit is StructuralUnit.CITE
-        assert document.sections[-1].match.rule_id == "heuristic-wiki-cite-entry"
+        assert card.full_cite == cite
+        assert card.evidence_text == WHOLE_BODY_IN_ONE_PARAGRAPH
+        assert card.completeness is CardCompleteness.FULL
+        assert document.sections[-1].unit is StructuralUnit.EVIDENCE
+        assert document.sections[-1].match.rule_id == f"{rule}:heuristic-wiki-cite-entry"
 
     @pytest.mark.parametrize(
         ("second", "second_text"),

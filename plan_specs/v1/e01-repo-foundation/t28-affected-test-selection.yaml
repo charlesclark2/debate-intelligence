@@ -75,7 +75,7 @@ spec:
         prompt in `scripts/task_helper.py` tells a session to run it before the report; the
         task-workflow guide says the same.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

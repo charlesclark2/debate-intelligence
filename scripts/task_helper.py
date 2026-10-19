@@ -286,6 +286,12 @@ How to work:
    explanation in the prose around the block (working agreement 9,
    docs/process/working-agreements.md#9-command-blocks-are-safe-to-paste-into-zsh). This holds in
    runbooks, guides, READMEs and your session report; scripts/check_command_blocks.py fails CI on one.
+9. Never run the whole test suite, in one command or in parts: CI runs it on the pull request
+   (working agreement 10). While working, run the tests for what you change. Before the report, run
+   the affected set once with `uv run scripts/affected_tests.py --run`, plus ruff, pyright on the
+   changed packages, lint-imports and scripts/validate_specs.py, and record the commands and
+   results. If it says the whole selection is affected, run nothing more; agreement 10 says when to
+   hand the operator one whole-selection run.
 
 When the work is complete:
 - Set the task Goal status.phase to Succeeded ONLY if every acceptance criterion actually passed

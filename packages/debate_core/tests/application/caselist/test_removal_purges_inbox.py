@@ -501,7 +501,7 @@ class TestTheDryRun:
                 14,
             ),
         ]
-        assert plan.inbox_directory == str(inbox)
+        assert plan.inbox_directory == "inbox", "relative to the data directory (v1-e30-t20)"
         assert not plan.nothing_to_do
 
     async def test_the_dry_run_changes_nothing_in_the_inbox_or_the_sync_state(
@@ -918,7 +918,7 @@ class TestAnEnvironmentWithNoInbox:
         assert not inbox.exists()
 
         remover, plan = await plan_team(removal_world, include_shared=True)
-        assert (plan.inbox_exists, plan.inbox, plan.inbox_directory) == (False, (), str(inbox))
+        assert (plan.inbox_exists, plan.inbox, plan.inbox_directory) == (False, (), "inbox")
         report = await remover.execute(plan)
 
         assert report.completed and report.log_entry.outcome is RemovalOutcome.COMPLETED

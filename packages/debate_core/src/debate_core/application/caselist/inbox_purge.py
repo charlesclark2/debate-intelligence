@@ -162,6 +162,7 @@ from debate_core.application.ports.archive import ArchiveRewriter, InventoriedEn
 from debate_core.application.ports.suppression import SuppressionState, disclosure_digest
 
 __all__ = [
+    "INBOX_SETTING",
     "CaselistInbox",
     "InboxAction",
     "InboxFile",
@@ -175,6 +176,7 @@ __all__ = [
     "InboxRewrite",
     "InboxRewriteFailed",
     "InboxTeamFilesLeft",
+    "inbox_directory_named",
     "plan_inbox",
     "purge_inbox",
     "read_inbox",
@@ -255,6 +257,24 @@ class CaselistInbox:
                 if hold is not None:
                     found.add(HeldInboxUpload(caselist, named, entry.sha256, hold.request_id))
         return tuple(sorted(found))
+
+
+INBOX_SETTING: Final = "caselist.inbox_dir"
+"""How a removal's output names an inbox a profile puts outside the data directory: by the setting
+that puts it there, since no path inside the data directory leads to it (`v1-e30-t20`)."""
+
+
+def inbox_directory_named(inbox: CaselistInbox) -> str:
+    """The inbox as a removal's plan names it: its path relative to the data directory, `inbox`
+    unless `caselist.inbox_dir` says otherwise, or :data:`INBOX_SETTING` when that is elsewhere.
+
+    Never its absolute path, which is under the home directory: the removal runbook asks the
+    operator to read the plan and keep it (`v1-e30-t20`, as `v1-e34-t16` ruled for the pull's
+    `summary_written_to`).
+    """
+    if inbox.directory.is_relative_to(inbox.state_dir):
+        return inbox.directory.relative_to(inbox.state_dir).as_posix()
+    return INBOX_SETTING
 
 
 class InboxFileKind(StrEnum):
@@ -385,13 +405,19 @@ class InboxPurge:
 
 
 class InboxInUse(DomainError):
-    """A `caselist pull` holds the sync's run lock, so the inbox cannot be changed under it."""
+    """A `caselist pull` holds the sync's run lock, so the inbox cannot be changed under it.
+
+    The message names the lock by its file name in the data directory and never by its path, which
+    is under the home directory, as :class:`~debate_core.application.caselist_sync.SyncRunInProgress`
+    does (`v1-e30-t20`). :attr:`lock_path` is where it is.
+    """
 
     def __init__(self, lock_path: Path) -> None:
         self.lock_path = lock_path
         super().__init__(
-            f"a caselist pull is running (it holds {lock_path}), so the inbox was left as it was; "
-            "run the same command again when the pull has finished"
+            f"a caselist pull is running (it holds the run lock, {lock_path.name} in the data "
+            "directory), so the inbox was left as it was; run the same command again when the pull "
+            "has finished"
         )
 
 

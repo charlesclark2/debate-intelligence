@@ -16,6 +16,7 @@ from collections.abc import Sequence
 import pytest
 
 from debate_core.retrieval.canonical_url import (
+    LINK_WRAPPERS,
     InvalidUrlError,
     RelCanonicalRule,
     apply_rel_canonical,
@@ -181,7 +182,7 @@ AMP = [
     ),
 ]
 
-LINK_WRAPPERS = [
+REDIRECTS = [
     pytest.param(
         "https://news.google.com/news/url?sa=t&fd=R&ct2=us&usg=AFQjCNHx7&clid=c3a7d30bb8a4878e06b80cf16b898331"
         "&url=https://www.nytimes.com/2016/01/01/us/politics/story.html",
@@ -368,7 +369,7 @@ INTERNATIONAL = [
     ),
 ]
 
-VARIANT_PAIRS = [*NEWS, *AMP, *LINK_WRAPPERS, *THINK_TANKS, *GOVERNMENT, *INTERNATIONAL]
+VARIANT_PAIRS = [*NEWS, *AMP, *REDIRECTS, *THINK_TANKS, *GOVERNMENT, *INTERNATIONAL]
 
 
 def test_the_variant_table_has_at_least_forty_pairs() -> None:
@@ -520,6 +521,12 @@ def test_no_deny_rule_or_amp_marker_matches_an_allow_listed_parameter(content: C
     assert not is_tracking_parameter(name.upper())
     for value in (None, "", "1", "true", "amp", "42"):
         assert not is_amp_marker(name, value)
+
+
+def test_every_link_wrapper_destination_parameter_is_allow_listed() -> None:
+    """A wrapper whose destination is not a web URL is kept, parameter and all."""
+    destinations = {parameter for wrapper in LINK_WRAPPERS for parameter in wrapper.parameters}
+    assert destinations <= {rule.name for rule in CONTENT_PARAMETERS}
 
 
 @pytest.mark.parametrize("content", CONTENT_PARAMETERS, ids=lambda rule: rule.name)

@@ -37,7 +37,7 @@ PROPERTY_SETTINGS = settings(
     suppress_health_check=[HealthCheck.too_slow],
 )
 
-HTTP_URL = TypeAdapter(HttpUrlStr)
+HTTP_URL: TypeAdapter[str] = TypeAdapter(HttpUrlStr)
 
 # ---------------------------------------------------------------------------------------------
 # Strategies

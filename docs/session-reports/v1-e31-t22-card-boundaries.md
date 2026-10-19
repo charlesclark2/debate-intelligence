@@ -220,8 +220,8 @@ screen cleared between items and at the end, and closing tallies appended to a f
 | Long body: a cite-shaped paragraph, no short line above | from the 1,029 | 10 | the same |
 | Long body: no cite inside, marked up | from the 8,245 | 10 | the same |
 | Long body: no cite inside, plain prose | from the 1,600 | 10 | the same |
-| Two cards in one: body under 1,000 words | from the 1,887 | 10 | "The two marked parts, A and B, share no text. Are they two cards, or one card cut twice?" `t` two cards (a boundary the parser missed), `o` one card cut twice, `u` unsure |
-| Two cards in one: body of 1,000 words or more | from the 2,673 | 10 | the same |
+| Two cards in one: body under 1,000 words | from about 1,887 | 10 | "The two marked parts, A and B, share no text. Are they two cards, or one card cut twice?" `t` two cards (a boundary the parser missed), `o` one card cut twice, `u` unsure |
+| Two cards in one: body of 1,000 words or more | from about 2,673 | 10 | the same |
 
 Ten a stratum tells "mostly" from "often", about ±15 points at 95%, and no finer. Each stratum is
 drawn by distinct text, so a card disclosed fifty times is as likely as one disclosed once. A text
@@ -279,7 +279,9 @@ to B. Each was given a test, and all 7 are caught on re-run: 22 runs in all.
 - **The sample draws by distinct text,** not by stored card. The pilot indexes one result per card
   cluster, so what a student meets is the text, not how often it was disclosed.
 - **Two cards in one is sampled in two bands of the holder's length, split at 1,000 words,** near
-  the median (1,887 below, 2,673 above). A short holder is the shape of `v1-e31-t11`'s false join; a
+  the median (about 1,887 below and 2,673 above: the count's bands read the clusterer's words and
+  the sampler's band words between spaces, so the sampler's own population line is the exact one).
+  A short holder is the shape of `v1-e31-t11`'s false join; a
   long one is closer to (1).
 
 ## Operator follow-ups

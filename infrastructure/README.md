@@ -21,6 +21,7 @@ that keeps binding.
 | [`modules/static_site/`](modules/static_site/) | One environment's public website: private bucket, CloudFront with OAC, security headers, the SitePublisher permission set | `v1-e36-t02-site-hosting` |
 | [`modules/domain_redirect/`](modules/domain_redirect/) | The `.com` names, which 301 to the canonical `.org` site and hold no content | `v1-e36-t02-site-hosting` |
 | [`modules/evidence_bucket/`](modules/evidence_bucket/) | One environment's evidence store: private versioned KMS-encrypted bucket, its key, and the EvidenceOperator and EvidenceRemoval permission sets | `v1-e29-t03-evidence-buckets` |
+| [`modules/evidence_search/`](modules/evidence_search/) | One environment's student evidence search pilot: the function behind CloudFront, the Cognito user pool, the audit log, the TubDeployer and TubAccounts permission sets | `v1-e39-t04-pilot-infrastructure` |
 | [`envs/dev/`](envs/dev/), [`envs/prod/`](envs/prod/) | The two environment roots | `v1-e29-t02-terraform-bootstrap` |
 
 There is no `envs/stage`, and adding one means changing ADR-0013 first.
@@ -104,6 +105,26 @@ The two permission sets are separate on purpose. `EvidenceOperator` — what the
 `EvidenceRemoval` is the only credential that can delete evidence, is scoped to the five prefixes
 that hold disclosed material, and is assigned to one person, because a takedown purges noncurrent
 versions and leaves nothing to restore from.
+
+## The student evidence search pilot
+
+Both roots call [`modules/evidence_search`](modules/evidence_search/) from `evidence_search.tf`,
+which is identical in the two roots; only the host in `terraform.tfvars` differs, and the module
+derives the rest from the environment. The decision is
+[ADR-0019](../docs/adr/0019-student-search-pilot-stack-sign-in-and-hosting.md) and the operator
+steps, including the targeted first apply and the CLI-only settings, are
+[docs/runbooks/evidence-search.md](../docs/runbooks/evidence-search.md).
+
+| | dev | prod |
+|---|---|---|
+| Pilot host | `https://tub.dev.wfbdebate.com/` | `https://tub.wfbdebate.com/` |
+| Login host | `auth.tub.dev.wfbdebate.com` | `auth.tub.wfbdebate.com` |
+| Function, repository, user pool | `debate-dev-tub` | `debate-prod-tub` |
+| Deploy profile | `debate-dev-tub-deployer` | `debate-prod-tub-deployer` |
+| Accounts profile | `debate-dev-tub-accounts` | `debate-prod-tub-accounts` |
+
+The function reads the evidence bucket through its own role and nothing else: the bucket's Block
+Public Access settings and policy are untouched, and CloudFront's only origin is the function URL.
 
 ## Tagging
 

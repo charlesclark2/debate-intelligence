@@ -1492,26 +1492,42 @@ Before the labels moved, on 2026-10-18, the same comparison gave the same cite f
 
 ## The re-cluster under `card-fingerprint-v4` (`v1-e31-t20`)
 
-**Status: preview measured; a newly joined pair called different is with the PM.** The counts against `v3` (step 2), the shapes (step 3) and the samples (steps 4 to 7) and the diagnosis (step 7) are measured. The steps are in
+**Status: the first preview is measured and ruled on; the re-preview under the PM's rulings is not
+run.** The first preview (the counts, shapes, samples and diagnosis below, all 2026-10-18) was of
+the rules before the PM's rulings on it the same day; the re-preview is of the rules as ruled. The
+steps are in
 [the task's session report](../session-reports/v1-e31-t20-long-cuts-and-limits.md#operator-follow-ups):
 a preview from the task worktree before the merge, which writes nothing to the store, and the
 rebuild in dev after it. This is a re-cluster, not a re-parse: the parser and `2026.10.12-docx-3`
 are unchanged, `caselist parse` rebuilds each caselist's `occurrences.jsonl` under the new rules,
 and `--publish` uploads that file alone.
 
-**What changed** (the PM's ruling of 2026-10-16, in
-[`near_duplicates.py`](../../packages/debate_core/src/debate_core/evidence/near_duplicates.py)):
+**What changed** (the PM's ruling of 2026-10-16, and the PM's rulings on the first preview of
+2026-10-18, in [`near_duplicates.py`](../../packages/debate_core/src/debate_core/evidence/near_duplicates.py)):
 
 * A long cut joins the one cluster that holds it by the step short cuts use, where `v3` joined it
   only when the banding happened to pair the two. `MIN_CUT_SHARE` applies to both.
-* A body that holds a cut and another passage sharing no text with it is no witness for the cut.
+* **Two bodies overlap when they share at least three-tenths of the smaller's five-word runs**
+  (`MIN_OVERLAP_SHARE`, `v1-e31-t21`'s line between overlapping and sharing a little; the PM,
+  2026-10-18). Every two bodies in a cluster overlap or one holds the other. This supersedes the
+  first preview's reading, one shared run, which the PM had accepted: the preview's sample found a
+  newly joined pair sharing a little that a person judged a different card.
+* A body that holds a cut and another passage the cut does not overlap is no witness for the cut.
   `v1-e31-t11`'s false join is the case: two bodies sharing no text, joined because a third held
   both.
 * A cut's own cluster counts among its witnesses, so a cut already with a body that holds it is not
   taken into a second cluster.
-* No join puts two bodies that share no text in one cluster. So, by construction, every pair of
-  full texts in a cluster shares at least one five-word run, and ac5's measure, the share of pairs
-  sharing nothing, is 0 in every cluster.
+* No join puts two bodies that do not overlap in one cluster. So, by construction, every pair of
+  full texts in a cluster overlaps or is contained, ac5's measure, the share of pairs sharing
+  nothing, is 0 in every cluster, and so is the share sharing a little, but for texts of six runs
+  or fewer, where one or two runs is three-tenths.
+* **`MIN_CUT_SHARE` is a tenth** (a quarter before; the PM, 2026-10-18, from the first preview's
+  sample: 20 of 20 cuts the share kept out were the same card, 8 of them under a tenth). It is also
+  the size of a passage, so a body holding a passage a tenth to a quarter of it that a cut does not
+  overlap is now no witness for that cut; the diagnosis counts those refusals.
+* **A short body is found from either end**, as a long one is: one nine-tenths inside a body lacking
+  one of its ends is compared (item 4, decided by the first preview's sample: 20 of 20 the same
+  card). `MAX_CONTAINER_CLUSTERS` stays 8 and still counts clusters holding both ends.
 * `MAX_CONTAINER_CLUSTERS` is counted against the clusters as they stand when a cut is considered,
   after long copies have joined one another.
 * A long body nine-tenths inside a body that lacks one of its ends joins it, as `v3`'s banding did
@@ -1532,28 +1548,33 @@ alone, two trims of one card that share no text have the same shape as `v1-e31-t
 two cards. A cite, a tag or the files the copies came from might tell the two apart; that is outside
 this task, and the PM will consider it as a separate one.
 
-**Stock phrases.** No join puts two texts that share nothing in one cluster, but one shared
-five-word run is enough to pass that guard, and a stock phrase is one run. `shapes` therefore counts
-the pairs in one cluster sharing only one or two runs, for each cluster it describes and, with
-`--every-cluster`, over every cluster of a caselist (the PM's request of 2026-10-18; no change to
-the rules follows from it here). On the labelled sets, all invented text, there are none: 0 of 59
-pairs of distinct full texts in one cluster on the variant set, 0 of 15 on the short-card set and 0
-of 18 on the extended set.
+**Stock phrases.** Under the first preview's reading one shared five-word run was enough to pass the
+guard, and a stock phrase is one run. `shapes` counts the pairs in one cluster sharing only one or
+two runs, for each cluster it describes and, with `--every-cluster`, over every cluster of a
+caselist, and since the PM's rulings also how many of them do not overlap, which must be none. On
+the labelled sets, all invented text, there are none under either reading: 0 of 59 pairs of
+distinct full texts in one cluster on the variant set, 0 of 15 on the short-card set and 0 of 18 on
+the extended set. Under the overlap reading the labelled sets' figures are unchanged row for row,
+and the guardrail (t08's misses and the 18 pinned pairs, every other card's recall as t08 left it)
+holds exactly, by test.
 
 **To be recorded here**, from the operator's runs:
 
-| Measure | Preview, before the merge | After the dev rebuild |
-|---|---|---|
-| Counts against `card-fingerprint-v3`: clusters, merged, divided, largest | below, 2026-10-18 | not run |
-| ac5: share of pairs sharing nothing, three largest clusters per caselist | 0 in all twelve, below | not run |
-| ac1: join sample of 20 newly joined pairs | all 20 decided by rule, below | not run, same seed |
-| `MIN_CUT_SHARE`: contained pairs under a third, joined and kept apart, by share band | below | |
-| Lacking an end: short bodies nine-tenths inside a body lacking one of their ends | below | |
-| `MAX_CONTAINER_CLUSTERS`: cuts whose ends too many clusters hold, re-measured | below | |
-| Divided pairs against `v3`, by reason | below | |
-| Pairs in one cluster sharing only one or two five-word runs, every cluster | below, 2026-10-18 | not run |
+| Measure | First preview (superseded rules) | Re-preview, before the merge | After the dev rebuild |
+|---|---|---|---|
+| Counts against `card-fingerprint-v3`: clusters, merged, divided, largest | below, 2026-10-18 | not run | not run |
+| ac5: share of pairs sharing nothing, three largest clusters per caselist | 0 in all twelve, below | not run | not run |
+| ac1: join sample of 20 newly joined pairs, contained shapes asked | all 20 decided by rule, below | not run | not run, same seed |
+| Newly joined cuts a tenth to a quarter of their witness, at least 20 (the PM's check on the share) | | not run | |
+| Witness refusals the lower share added | | not run | |
+| `MIN_CUT_SHARE`: contained pairs under a third, joined and kept apart, by share band | below | not run | |
+| Lacking an end: short bodies nine-tenths inside a body lacking one of their ends | below | (joined) | |
+| Bodies nine-tenths inside one holding neither of their ends | 9 unexplained divided pairs | not run | |
+| `MAX_CONTAINER_CLUSTERS`: cuts whose ends too many clusters hold, re-measured | below | not run | |
+| Divided pairs against `v3`, by reason | below | not run | |
+| Pairs in one cluster sharing only one or two five-word runs, every cluster, and of them not overlapping | below, 2026-10-18 | not run | not run |
 
-### The preview's counts against `card-fingerprint-v3` (operator-run, 2026-10-18)
+### The first preview's counts against `card-fingerprint-v3` (operator-run, 2026-10-18)
 
 `compare_card_clusters.py counts --save-after`, from the task worktree at `ecf3e11`, each
 caselist's cards in `2026.10.12-docx-3` placed in memory by `v4` and compared with the store's `v3`
@@ -1577,7 +1598,7 @@ largest cluster falls least and holds the most distinct texts, and openev's grow
 the shapes step, whose share of pairs sharing nothing is the check that no cluster joins texts with
 nothing in common.
 
-### The preview's shapes (operator-run, 2026-10-18)
+### The first preview's shapes (operator-run, 2026-10-18)
 
 `compare_card_clusters.py shapes --largest-clusters 3 --every-cluster --after`, reading the
 placement step 2 saved. **ac5 on the preview: no pair sharing nothing in any of the twelve
@@ -1616,7 +1637,7 @@ cluster because each text shares more with some third body, so the count cannot 
 two passages of one article overlapping by a few words or a stock phrase bridging two cards; a
 person can, with `sample --largest 1 --least-alike`. The PM decides any follow-up from these figures.
 
-### The preview's samples (operator-run, 2026-10-18)
+### The first preview's samples (operator-run, 2026-10-18)
 
 `compare_card_clusters.py sample --after`, against the placement step 2 saved, over all four
 caselists, judged by eye on the operator's terminal. Tallies only.
@@ -1643,7 +1664,7 @@ caselists, judged by eye on the operator's terminal. Tallies only.
   newly joins were the same card 17 times in 17, confirming the rule's "contained is the same card"
   on this sample (ac6).
 
-### The preview's diagnosis (operator-run, 2026-10-18)
+### The first preview's diagnosis (operator-run, 2026-10-18)
 
 `compare_card_clusters.py diagnose --after`, and `shapes`' pair counts for the twelve largest
 clusters. Bodies with a container outside their cluster, by what keeps them out:
@@ -1681,3 +1702,19 @@ false join.
 smaller's): hspf26 1 and 19 of 2,701 and 1,081 pairs in its first two; hspolicy26 19 of 2,701 in
 its second; openev 50 of 210 in its largest; none in the other eight. These are the pairs a
 reading of "shares text" as "overlaps" would keep out of one cluster.
+
+### The PM's rulings on the first preview (2026-10-18)
+
+* **"Shares text" means overlaps**, at three-tenths of the smaller text's five-word runs, in the
+  passage refusal and the join guard. This supersedes the one-run reading the PM accepted earlier
+  the same day; the count of pairs sharing one or two runs was asked for to test that reading, and
+  the sample answered it.
+* **`MIN_CUT_SHARE` is a tenth.** The re-preview samples at least 20 newly joined cuts from the
+  tenth-to-a-quarter band; any judged a different card stops the merge until the PM has seen it.
+  The diagnosis reports the witness refusals the lower share added.
+* **Short bodies lacking an end are compared**, as the sample supports. **`MAX_CONTAINER_CLUSTERS`
+  stays 8.**
+* **The 9 divided pairs the diagnosis could not explain** are named by a new outcome, a body
+  nine-tenths inside one holding neither of its ends; recovering them is a later rule change, which
+  the PM is filing at p3.
+* **The 132 long cuts within the rule and apart**: accepted, no defect.

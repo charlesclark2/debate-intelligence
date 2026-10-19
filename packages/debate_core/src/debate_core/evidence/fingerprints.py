@@ -66,9 +66,12 @@ was computed under.
 * **`card-fingerprint-v4`** (`v1-e31-t20`). The PM's ruling of 2026-10-16: a card is a passage, and
   bodies join only on text they share. Long cuts join the one cluster that holds them by the step
   short cuts are joined by, where `v3` joined them only when the banding paired a cut with its
-  container. A body that holds a cut and another passage sharing nothing with it is no witness for
-  the cut. A cut's own cluster is one of its witnesses. No join puts two bodies that share no
-  shingle in one cluster. **Exact fingerprints unchanged; cluster ids changed.**
+  container. A body that holds a cut and another passage the cut does not overlap is no witness for
+  the cut. A cut's own cluster is one of its witnesses. No join puts two bodies that do not overlap
+  (share three-tenths of the smaller's shingles) in one cluster. With the PM's rulings on its
+  preview (2026-10-18), before any store held it: a cut may be a tenth of its witness (a quarter
+  before), and a short cut, like a long one, is found from either end. **Exact fingerprints
+  unchanged; cluster ids changed.**
 
 The normalization has not changed since `v1`, so an exact fingerprint computed under `v1` is the
 same digest under `v2`, `v3` and `v4`, and anything keyed on one (a suppression, a recipe, a cache) still

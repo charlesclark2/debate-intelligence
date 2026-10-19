@@ -410,6 +410,16 @@ suppression list. Nothing is carried forward from the previous aggregate. Each a
 a source the suppression list stops, and `occurrences.jsonl` also leaves out each withdrawn
 disclosure.
 
+They also leave out each disclosure at a path a removal holds, in a snapshot the hold covers
+(`v1-e31-t26`): a later upload at the removed file's path, which a build from before `v1-e30-t13`
+imported. The rule is the publisher's own for a held manifest row (`publish_plan.stored_row_hold`),
+asked of each disclosure. A source only held paths disclose is not parsed and has no row in any
+aggregate; a source another live path discloses keeps its rows, less the held disclosure's
+occurrence rows. A disclosure listed before the hold's date and again after it keeps a row spanning
+the snapshots before. An earlier build may have parsed such a source into the current directory:
+its per-source file stays there, out of every aggregate and never published, until the same removal
+run again deletes it.
+
 A source's file is written as its parse finishes, and every file is written to a temporary name and
 renamed into place. A run stopped part-way leaves whole per-source files that the next run skips,
 and aggregates that are either the previous run's or the next one's.
@@ -443,6 +453,12 @@ files go first and the aggregates last, so the bucket never holds an index namin
 not hold. An object already in the bucket with the same SHA-256 is skipped, so a re-run uploads
 nothing. A per-source file the bucket holds with a different checksum is reported and left alone; an
 aggregate is replaced. Only the current version directory is ever published.
+
+A per-source file is never sent when the suppression list stops its source, or when only paths a
+removal holds disclose it (`v1-e31-t26`), read from this machine's manifests by the rule the
+aggregates use. Either is counted `suppressed`. If an earlier build's `--publish` already sent such
+a file, `caselist status` names it, under *HELD UPLOADS PARSED IN THE BUCKET*, by caselist, digest
+prefix and request, and the same removal run again deletes it with every version.
 
 ## Retention
 

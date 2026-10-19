@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import copy
 from collections.abc import Callable
+from datetime import datetime
 from typing import Any
 
 import pytest
@@ -393,6 +394,8 @@ def test_a_title_is_required_text(title: str) -> None:
         ("snapshot", "last week"),
         ("snapshot", 20260915),
         ("snapshot", "2026-09-15T10:00:00"),
+        ("snapshot", 1789430400),
+        ("snapshot", datetime(2026, 9, 15)),
         ("side", "BOTH"),
         ("round", ""),
     ],

@@ -1439,3 +1439,186 @@ def test_a_camp_file_two_releases_hold_names_one_other_camp_file(
         0,
         1,
     )
+
+
+# ------------------------------------------------------------------------------------------------
+# Loose ends in what a removal plan prints (v1-e30-t20)
+# ------------------------------------------------------------------------------------------------
+
+#: Cedar Hollow/ZaLu's path of the Round 1 affirmative, which Maple Grove/QX discloses too, from 09-08.
+ANOTHER_TEAMS_PATH = "Cedar Hollow/ZaLu/Cedar Hollow-ZaLu-Aff-Grove City Invitational-Round 3.docx"
+#: The other team's second path, where it uploaded the revision again.
+ANOTHER_TEAMS_SECOND_PATH = "Cedar Hollow/ZaLu/Cedar Hollow-ZaLu-Aff-Grove City Invitational-Round 3 (1).docx"
+ROUND_1_REVISED = _docx(("Grove City Invitational, round 3, affirmative.", "Revised by the other team."))
+ROUND_1_REVISION = hashlib.sha256(ROUND_1_REVISED).hexdigest()
+REMOVE_SHARED_TOO = (*REMOVE, "--include-shared")
+NOTHING_REMOVED = "  - Removed from this environment: nothing; this run found nothing left to remove."
+
+
+def disclosure_of(path: str) -> str:
+    """The digest the suppression list and the withdrawal record hold for a path: of `<caselist>/<path>`."""
+    return hashlib.sha256(f"{SYNTHETIC_CASELIST}/{path}".encode()).hexdigest()
+
+
+def suppression_count_line(text: str) -> str:
+    """The line under *SUPPRESSION ENTRIES* that counts them by kind."""
+    lines = text.splitlines()
+    heading = next(index for index, line in enumerate(lines) if line.startswith("SUPPRESSION ENTRIES"))
+    return lines[heading + 1]
+
+
+def confirmation_lines(text: str) -> list[str]:
+    lines = text.splitlines()
+    start = lines.index("FOR THE CONFIRMATION TO THE REQUESTER")
+    end = next((index for index in range(start, len(lines)) if not lines[index]), len(lines))
+    return lines[start:end]
+
+
+@pytest.fixture
+def revised_at_another_teams_paths(installation: Path, published: Any) -> None:
+    """The weekly window of 2026-09-22: the other team's copy of the shared affirmative revised, at
+    its path and at its second.
+
+    `caselist remove --team <Maple Grove/QX> --include-shared` removes the shared file whole, from
+    the other team's path as well, so the revision is a later upload there. The other team's second
+    path still holds it, so it is withdrawn from the other team's path only.
+    """
+    archive = installation / "downloads" / f"{SYNTHETIC_CASELIST}-weekly-2026-09-22.zip"
+    with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as written:
+        written.writestr(ANOTHER_TEAMS_PATH, ROUND_1_REVISED)
+        written.writestr(ANOTHER_TEAMS_SECOND_PATH, ROUND_1_REVISED)
+    imported = run(
+        "caselist", "import", str(archive), "--caselist", SYNTHETIC_CASELIST, "--snapshot", "2026-09-22"
+    )  # fmt: skip
+    assert imported["exit_code"] == ExitCode.OK, imported
+    assert run("caselist", "publish", "--caselist", SYNTHETIC_CASELIST)["exit_code"] == ExitCode.OK
+
+
+def test_a_team_removal_including_shared_files_calls_another_teams_path_none_of_this_teams(
+    installation: Path, bucket: S3Client, revised_at_another_teams_paths: None
+) -> None:
+    """The suppression count and the line on what the list stops, in the dry run and the execution."""
+    dry_run = shown(*REMOVE_SHARED_TOO)
+    planned = run(*REMOVE_SHARED_TOO)
+    environment(DEBATE_REMOVAL_PROFILE=REMOVAL_PROFILE)
+    executed = shown(*REMOVE_SHARED_TOO, "--execute")
+
+    revision = {source["sha256"]: source for source in planned["data"]["sources"]}[ROUND_1_REVISION]
+    assert (revision["inclusion"], revision["disposition"]) == ("later_upload", "withdraw")
+    assert revision["withdrawn_disclosures"] == [
+        {"caselist": SYNTHETIC_CASELIST, "disclosure": disclosure_of(ANOTHER_TEAMS_PATH)}
+    ]
+    whole = sum(
+        1 for line in planned["data"]["suppression_entries"] if json.loads(line)["disclosure"] is None
+    )
+    for text in (dry_run, executed):
+        lines = text.splitlines()
+        assert suppression_count_line(text) == (
+            f"  {whole} whole file(s), and 1 path(s) of another holder a later upload is withdrawn from. Each"
+        )
+        assert (
+            "  - Suppressed, so no later archive, weekly or complete, can bring back a removed file, or "
+            "another holder's copy of a later upload at the path it was withdrawn from."
+        ) in lines
+        assert [line for line in lines if "this team's path" in line or "this team's copy" in line] == []
+
+
+def test_a_rerun_that_removes_nothing_says_so_in_its_dry_run_and_its_execution(
+    installation: Path, bucket: S3Client, published: Any
+) -> None:
+    """A team removal with a shared file withdrawn, executed, then the same command again, both ways.
+
+    The re-run plans the team's files again, finds each gone and suppressed, and removes nothing.
+    """
+    environment(DEBATE_REMOVAL_PROFILE=REMOVAL_PROFILE)
+    first = shown(*REMOVE, "--execute")
+    rerun = shown(*REMOVE)
+    rerun_executed = shown(*REMOVE, "--execute")
+
+    told = confirmation_lines(first)
+    assert told[1].startswith("  - Removed from this environment: ") and told[1] != NOTHING_REMOVED
+    for text in (rerun, rerun_executed):
+        assert "Nothing is left to remove" in text
+        told = confirmation_lines(text)
+        assert told[1] == NOTHING_REMOVED, told
+        assert [line for line in told if "removed" in line.casefold() and "file(s)" in line] == [], told
+
+
+def test_the_jsons_withdrawals_are_the_plans_lines_and_what_the_execution_records(
+    installation: Path, bucket: S3Client, published: Any
+) -> None:
+    """The team's two paths of the shared affirmative: in the text, in the JSON, and in the record."""
+    text = shown(*REMOVE)
+    planned = run(*REMOVE)
+    environment(DEBATE_REMOVAL_PROFILE=REMOVAL_PROFILE)
+    done = run(*REMOVE, "--execute")
+    rerun = run(*REMOVE)
+
+    expected = [
+        {"sha256": HELD_BY_TWO_TEAMS, "disclosure": disclosure_of(path), "caselist": SYNTHETIC_CASELIST}
+        for path in sorted(
+            (
+                "Maple Grove/QX/Maple Grove-QX-Aff-Grove City Invitational-Round 1.docx",
+                "Maple Grove/QX/Maple Grove-QX-Aff-Grove City Invitational-Round 1 (1).docx",
+            )
+        )
+    ]
+    assert sorted(planned["data"].get("withdrawals", []), key=lambda one: one["disclosure"]) == sorted(
+        expected, key=lambda one: one["disclosure"]
+    )
+    lines = text.splitlines()
+    heading = next(index for index, line in enumerate(lines) if line.startswith("WITHDRAWALS"))
+    printed = [json.loads(line) for line in lines[heading + 4 : heading + 4 + len(expected)]]
+    assert [{key: one[key] for key in ("sha256", "disclosure", "caselist")} for one in printed] == (
+        planned["data"]["withdrawals"]
+    )
+    assert done["exit_code"] == ExitCode.OK, done
+    assert done["data"]["withdrawals"] == planned["data"]["withdrawals"]
+    record = installation / "dev" / "suppression" / "withdrawals.jsonl"
+    recorded = [json.loads(line) for line in record.read_text(encoding="utf-8").splitlines()]
+    assert sorted((one["sha256"], one["disclosure"], one["caselist"]) for one in recorded) == sorted(
+        (one["sha256"], one["disclosure"], one["caselist"]) for one in expected
+    )
+    assert rerun["data"]["withdrawals"] == [], "the re-run appends nothing"
+
+
+def manifest_versions(client: S3Client, key: str) -> set[str]:
+    listed = client.list_object_versions(Bucket=BUCKET, Prefix=key)
+    return {str(one.get("VersionId")) for one in listed.get("Versions", []) if one.get("Key") == key}
+
+
+def test_the_jsons_sweep_count_is_the_plan_lines_and_what_the_execution_deletes(
+    installation: Path, bucket: S3Client, an_old_manifest_version: str
+) -> None:
+    text = invoke(*REMOVE_FIRST_VERSION, width=200).stdout
+    planned = run(*REMOVE_FIRST_VERSION)
+    before = manifest_versions(bucket, an_old_manifest_version)
+    environment(DEBATE_REMOVAL_PROFILE=REMOVAL_PROFILE)
+    done = run(*REMOVE_FIRST_VERSION, "--execute")
+    after = manifest_versions(bucket, an_old_manifest_version)
+
+    assert planned["data"].get("manifest_versions_swept") == {
+        "total": 1,
+        "by_manifest": {an_old_manifest_version: 1},
+    }
+    assert (
+        "MANIFEST VERSIONS SWEPT from the bucket by --execute: 1 noncurrent version(s) of 1 manifest(s)."
+        in text.splitlines()
+    )
+    assert f"  bucket {an_old_manifest_version}  (1 version(s))" in text.splitlines()
+    assert done["exit_code"] == ExitCode.OK, done
+    assert len(before - after) == planned["data"]["manifest_versions_swept"]["total"]
+    assert after <= before, "the sweep put nothing new at the key"
+
+
+def test_a_plan_that_may_not_list_versions_says_the_sweep_was_not_counted(
+    installation: Path, bucket: S3Client, removed_with_its_later_upload: None, s3_stand_in: S3StandIn
+) -> None:
+    """The bucket refuses the listing as S3 refuses a call the permission set does not grant."""
+    s3_stand_in.refuse("ListObjectVersions", status=403, code="AccessDenied", message="Access Denied")
+
+    text = invoke(*REMOVE_FIRST_VERSION, width=200).stdout
+    planned = run(*REMOVE_FIRST_VERSION)
+
+    assert planned["data"].get("manifest_versions_swept") == "not counted"
+    assert "MANIFEST VERSIONS SWEPT from the bucket by --execute: not counted." in text.splitlines()

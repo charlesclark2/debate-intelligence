@@ -40,7 +40,10 @@ spec:
     files are t04, CLI is t03, publishing is t05.
   priority: 1
   constraints:
-    packages: [debate_core.integrations, debate_core.domain, debate_core.application, scripts, tests/fixtures]
+    # debate_core.evidence (the Word-default writer definitions in style_profiles/verbatim.yaml, PM ruling
+    # 2026-10-19) and pyproject.toml (the new adapter added to the import contracts' adapter lists) are
+    # added by the implementing session, pending PM review.
+    packages: [debate_core.integrations, debate_core.domain, debate_core.application, debate_core.evidence, scripts, tests/fixtures, pyproject.toml]
     forbidden:
       - Any writer input that carries evidence or cite text as a string (runs come only from source bytes)
       - Model calls anywhere in the writer
@@ -68,9 +71,13 @@ spec:
         identical to parsing the card in its source document.
     - id: ac2
       description: >-
-        The writer API has no parameter that accepts card text; tag overrides and analytics are the only
-        strings written, and the provenance manifest marks each overridden tag as coach-authored with the
-        original tag's hash.
+        The writer API has no parameter that accepts card text; tag overrides, analytics and the policy's
+        provenance line are the only strings written, and the provenance manifest marks each overridden tag
+        as coach-authored with the original tag's hash. (PM amendment 2026-10-19: the data-use policy's
+        Attribution rule 2 requires a provenance line below every cite, written in the Undertag style and
+        built from the occurrence's disclosure record, never from card text; a card with no disclosure on
+        record gets the line without a team. Re-parsing a built card with the line gives the same cite and
+        evidence as its source.)
     - id: ac3
       description: >-
         Headings use the style profile's pocket/hat/block/tag styles and source character styles are

@@ -61,8 +61,8 @@ v2.3's extension work.
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 40 | 40 | 216 |
-| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 83 | 65 | 439 |
-| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 19 | 4 | 186 |
+| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 93 | 65 | 465 |
+| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 20 | 4 | 188 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 13 | 0 | 108 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 14 | 0 | 96 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 0 | 66 |
@@ -189,6 +189,9 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [Loose ends of the removed-path hold: status, the publisher and the inbox](plan_specs/v1/e30-caselist-ingestion/t21-held-path-loose-ends.yaml) `v1-e30-t21-held-path-loose-ends` | Succeeded | 1 | 3.0 |
 | [A held path's bytes and skipped rows never reach the bucket](plan_specs/v1/e30-caselist-ingestion/t22-held-rows-publish-nothing.yaml) `v1-e30-t22-held-rows-publish-nothing` | Succeeded | 1 | 3.0 |
 | [Held digests are remembered once the copy is gone, and a manifest write survives a power cut](plan_specs/v1/e30-caselist-ingestion/t23-held-digests-and-manifest-fsync.yaml) `v1-e30-t23-held-digests-and-manifest-fsync` | Succeeded | 1 | 3.0 |
+| [caselist status fails on every removal left unfinished, and reports a held digest the re-run has not listed](plan_specs/v1/e30-caselist-ingestion/t24-status-residue-and-held-digests.yaml) `v1-e30-t24-status-residue-and-held-digests` | Pending | 2 | 4.0 |
+| [store sync pushes no manifest the publisher withholds, and junk beside a held link does not keep its row](plan_specs/v1/e30-caselist-ingestion/t25-store-sync-withholding.yaml) `v1-e30-t25-store-sync-withholding` | Pending | 1 | 2.0 |
+| [A .cmir file is imported as CMIR, and every rename-into-place writer fsyncs its directory](plan_specs/v1/e30-caselist-ingestion/t26-cmir-extension-and-directory-fsync.yaml) `v1-e30-t26-cmir-extension-and-directory-fsync` | Pending | 2 | 2.0 |
 
 #### [E31 — Debate File Parsing](plan_specs/v1/e31-debate-file-parsing/epic.yaml)
 
@@ -216,7 +219,13 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [Long cuts join the one cluster that holds them, and the matching limits are set from samples](plan_specs/v1/e31-debate-file-parsing/t20-long-cuts-and-limits.yaml) `v1-e31-t20-long-cuts-and-limits` | Pending | 2 | 6.0 |
 | [Measure cluster shapes, and ask a person only about the pairs a rule cannot decide](plan_specs/v1/e31-debate-file-parsing/t21-cluster-shapes-and-sampler.yaml) `v1-e31-t21-cluster-shapes-and-sampler` | Succeeded | 1 | 4.0 |
 | [Bodies too long to be one card, and two cards stored as one](plan_specs/v1/e31-debate-file-parsing/t22-card-boundaries.yaml) `v1-e31-t22-card-boundaries` | Pending | 2 | 6.0 |
-| [In-round markers kept in a card's evidence text](plan_specs/v1/e31-debate-file-parsing/t23-in-round-markers.yaml) `v1-e31-t23-in-round-markers` | Pending | 1 | 3.0 |
+| [In-round markers kept in a card's evidence text](plan_specs/v1/e31-debate-file-parsing/t23-in-round-markers.yaml) `v1-e31-t23-in-round-markers` | Pending | 2 | 3.0 |
+| [A bold tag above a bracketed cite is read as the card's tag](plan_specs/v1/e31-debate-file-parsing/t24-bold-tag-above-bracketed-cite.yaml) `v1-e31-t24-bold-tag-above-bracketed-cite` | Pending | 1 | 3.0 |
+| [The labeller warns before a card is lost, and import refuses a file already corrected](plan_specs/v1/e31-debate-file-parsing/t25-labeller-safeguards.yaml) `v1-e31-t25-labeller-safeguards` | Pending | 1 | 3.0 |
+| [parse --publish sends nothing of a held upload](plan_specs/v1/e31-debate-file-parsing/t26-held-upload-parsed-publish.yaml) `v1-e31-t26-held-upload-parsed-publish` | Pending | 1 | 2.0 |
+| [The parse time-limit test does not depend on the machine's load](plan_specs/v1/e31-debate-file-parsing/t27-parse-time-limit-test.yaml) `v1-e31-t27-parse-time-limit-test` | Pending | 1 | 1.0 |
+| [What the cautious cite rules leave, and a short cite behind a first name](plan_specs/v1/e31-debate-file-parsing/t28-cite-rules-leftovers.yaml) `v1-e31-t28-cite-rules-leftovers` | Pending | 1 | 3.0 |
+| [Card matching recovers two kinds of pair it now keeps apart](plan_specs/v1/e31-debate-file-parsing/t29-card-matching-recall.yaml) `v1-e31-t29-card-matching-recall` | Pending | 1 | 4.0 |
 
 #### [E34 — Scheduled Caselist Sync](plan_specs/v1/e34-caselist-sync/epic.yaml)
 
@@ -249,6 +258,7 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [A reinstall keeps the agent's schedule and options, and doctor names a takedown profile's environment](plan_specs/v1/e34-caselist-sync/t25-reinstall-keeps-every-setting.yaml) `v1-e34-t25-reinstall-keeps-every-setting` | Succeeded | 2 | 2.0 |
 | [A drifted snapshot is owed again, and the banner and run list say what is pending](plan_specs/v1/e34-caselist-sync/t26-pending-work-and-banner-words.yaml) `v1-e34-t26-pending-work-and-banner-words` | Succeeded | 2 | 3.0 |
 | [The wrapper exports no AWS_PROFILE, and --check-launchd refuses options it ignores](plan_specs/v1/e34-caselist-sync/t27-wrapper-and-check-launchd-options.yaml) `v1-e34-t27-wrapper-and-check-launchd-options` | InProgress | 1 | 1.0 |
+| [Publish-stage loose ends: a cut-short report check, the manifest count, and a report-only outcome](plan_specs/v1/e34-caselist-sync/t28-publish-stage-loose-ends.yaml) `v1-e34-t28-publish-stage-loose-ends` | Pending | 1 | 2.0 |
 
 
 ### v1.2 — Argument landscape & file building
@@ -288,6 +298,7 @@ Weekly argument-landscape reports show which positions are being read and with w
 | [`debate-research files` commands](plan_specs/v1/e33-file-builder/t03-file-build-cli.yaml) `v1-e33-t03-file-build-cli` | Pending | 3 | 10.0 |
 | [Built-file quality checks](plan_specs/v1/e33-file-builder/t04-file-quality-checks.yaml) `v1-e33-t04-file-quality-checks` | Pending | 2 | 11.0 |
 | [Publish built files to S3](plan_specs/v1/e33-file-builder/t05-file-publish.yaml) `v1-e33-t05-file-publish` | Pending | 3 | 9.0 |
+| [A recipe can name a camp (OpenEv) card](plan_specs/v1/e33-file-builder/t06-camp-pins.yaml) `v1-e33-t06-camp-pins` | Pending | 1 | 2.0 |
 
 
 ### v1.3 — URL → verified card

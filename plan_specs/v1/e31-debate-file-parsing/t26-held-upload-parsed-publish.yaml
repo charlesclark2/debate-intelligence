@@ -43,7 +43,7 @@ spec:
         An earlier build's parsed object for held-only bytes is named by status, and the
         removal run again takes it, by test.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

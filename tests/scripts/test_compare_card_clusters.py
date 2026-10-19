@@ -571,6 +571,29 @@ def test_diagnose_says_which_limit_kept_each_cut_out_and_prints_counts_only(
     assert (largest["words_smallest"], largest["words_largest"], largest["cards_not_full"]) == (90, 90, 0)
 
 
+def test_diagnose_counts_the_containers_refused_as_witnesses_by_a_passage(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """`v1-e31-t11`'s false join in a store: a 150-word body holding two passages that share
+    nothing, each a cluster of its own. The body is refused as a witness for each, by a passage
+    over a quarter of it, so the lower share added neither refusal (the PM's figure, 2026-10-18)."""
+    first, second = _numbered("pfirst", 59), _numbered("psecond", 87)
+    both = [*first, *second, *_numbered("pthen", 4)]
+    cards = tuple(("Invented 26", CardCompleteness.FULL, " ".join(body)) for body in (first, second, both))
+    _write_store(
+        tmp_path,
+        [_document("refusals", cards)],
+        {_fingerprint_of(b): _fingerprint_of(b) for b in (first, second, both)},
+    )
+    result = _diagnosed(tmp_path, capsys)
+    assert result["witness_refusals"] == {
+        "containers_refused_as_witnesses": 2,
+        "of_them_only_by_a_passage_a_tenth_to_a_quarter_of_the_container": 0,
+        "bodies_with_a_container_refused": 2,
+        "containers_refusing": 1,
+    }
+
+
 def test_diagnose_can_describe_the_largest_clusters_alone_and_name_them(
     nested_dir: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

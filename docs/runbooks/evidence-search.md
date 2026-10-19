@@ -121,6 +121,28 @@ aws sts get-caller-identity --profile debate-admin --query Arn --output text
 ```
 Success looks like: an ARN containing `AWSReservedSSO_DebateBreakGlassAdmin`.
 
+**A fresh worktree has no `owner.auto.tfvars` of its own.** The files are gitignored, so a new
+task worktree starts without them. Applying without them is not harmless: with the website's and
+the evidence store's user name lists empty, the plan would remove those permission sets'
+assignments. Copy both files from the checkout that last applied each root, then check that
+`owner` still matches the `Owner` tag on what is deployed (team-website.md, "Before you start").
+`PREVIOUS_DEV_WT` and `PREVIOUS_PROD_WT` are those checkouts.
+
+**Operator command** (expected runtime ~1 min)
+Where: `$WT`
+```bash
+cd "$WT"
+PREVIOUS_DEV_WT=/path/to/the/checkout/that/last/applied/dev
+PREVIOUS_PROD_WT=/path/to/the/checkout/that/last/applied/prod
+test -f infrastructure/envs/dev/owner.auto.tfvars || cp "${PREVIOUS_DEV_WT}/infrastructure/envs/dev/owner.auto.tfvars" infrastructure/envs/dev/
+test -f infrastructure/envs/prod/owner.auto.tfvars || cp "${PREVIOUS_PROD_WT}/infrastructure/envs/prod/owner.auto.tfvars" infrastructure/envs/prod/
+grep -h '^owner' infrastructure/envs/dev/owner.auto.tfvars infrastructure/envs/prod/owner.auto.tfvars
+AWS_PROFILE=debate-admin aws s3api get-bucket-tagging --bucket debate-dev-site-a7508de8 --query "TagSet[?Key=='Owner'].Value" --output text
+AWS_PROFILE=debate-admin aws s3api get-bucket-tagging --bucket debate-prod-site-a7508de8 --query "TagSet[?Key=='Owner'].Value" --output text
+```
+Success looks like: two `owner = "..."` lines and then two tag values, all four the same address.
+If they differ, set `owner` to the deployed tag's value before any apply.
+
 **The operator-local tfvars.** Add the pilot's three lines to each root's gitignored
 `owner.auto.tfvars`, beside the lines already there. They name you for the two permission sets and
 the budget alarm; none of it is committed. Read back the file afterwards rather than trusting the

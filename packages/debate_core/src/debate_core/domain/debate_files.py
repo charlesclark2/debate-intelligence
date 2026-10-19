@@ -366,6 +366,12 @@ class ParsedCard(DomainModel):
     file names a source there and gives it no claim and no text, so it is a citation, not an
     argument. `FULL` or `ABBREVIATED`: evidence with no claim line above it, which is either how
     the file is written or a second card under the tag of the card before it.
+
+    ## A character XML forbids
+
+    The text is the file's, character for character, with one decided exception (PM with Charlie,
+    2026-10-18, `v1-e31-t15`): a raw character XML 1.0 forbids is U+FFFD here, one for one, so
+    every offset is the file's. The parsed document's `warnings` say how many a source had.
     """
 
     tag: str = Field(

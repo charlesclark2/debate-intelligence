@@ -437,11 +437,15 @@ LEFT_QUOTED_LINE = f"Okonkwo {LEFT_QUOTE}26, invented for this test, {SOURCE}."
 PLAIN_CITE_LINE = f"Okonkwo 26, invented for this test, {SOURCE}."
 BRACKETED = f"[Adaeze Okonkwo 2026, {qualifications(300)}, {SOURCE}] KR"
 
-#: Four cards: a line opening `Okonkwo ‘26` that was the body and is now the only cite; a short
-#: cite `Okonkwo ‘26` alone above a bracketed cite; a cite line that leaves its card no body with
-#: no left quote in it; and a card that does not change.
+CITE_TEXT = f"Okonkwo 26, Adaeze Okonkwo, invented for this test, {SOURCE}."
+
+#: Five cards: a cite, then a line opening `Okonkwo ‘26` that was the body and is now a second line
+#: of the cite; a short cite `Okonkwo ‘26` alone above a bracketed cite; a cite line that leaves its
+#: card no body with no left quote in it; a card that does not change; and a card that was
+#: `CITE_ONLY` before and still is.
 LEFT_QUOTE_FILE = build_docx(
     tag("Tenth tag")
+    + cite()
     + paragraph([("Okonkwo \u201826", {}), (LEFT_QUOTED_LINE[11:], {"underline": "single"})])
     + tag("Eleventh tag")
     + paragraph([(f"Okonkwo {LEFT_QUOTE}26", {"character_style": "Style13ptBold"})])
@@ -452,6 +456,8 @@ LEFT_QUOTE_FILE = build_docx(
     + tag("Thirteenth tag")
     + cite()
     + body()
+    + tag("Fourteenth tag")
+    + cite()
 )
 LEFT_QUOTE_DIGEST = hashlib.sha256(LEFT_QUOTE_FILE).hexdigest()
 
@@ -465,11 +471,20 @@ def _left_quote_document() -> tuple[list[Any], ParsedDocument]:
 
 
 def _as_stored_before(document: ParsedDocument) -> ParsedDocument:
-    """The same file as the parser before the left quote: the two lone cite lines were each a card's
-    whole body, and the short cite above the bracket was none."""
+    """The same file as the parser before the left quote: the left-quoted line was the first card's
+    body, the plain cite line was its card's whole body, and the short cite above the bracket was
+    none."""
 
     def before(card: ParsedCard) -> ParsedCard:
-        if card.full_cite in (LEFT_QUOTED_LINE, PLAIN_CITE_LINE):
+        if card.full_cite == f"{CITE_TEXT}\n{LEFT_QUOTED_LINE}":
+            return card.model_copy(
+                update={
+                    "completeness": CardCompleteness.FULL,
+                    "full_cite": CITE_TEXT,
+                    "evidence_text": LEFT_QUOTED_LINE,
+                }
+            )
+        if card.full_cite == PLAIN_CITE_LINE:
             return card.model_copy(
                 update={
                     "completeness": CardCompleteness.FULL,
@@ -532,12 +547,22 @@ def test_the_left_quote_cards_are_found_against_the_stored_ones(left_quote_dir: 
     assert without == 1, "the plain cite line holds no left quote"
 
 
+def test_a_short_cite_the_store_already_held_is_not_gained() -> None:
+    reads, document = _left_quote_document()
+
+    found, _ = script.card_strata(reads, document, document.cards, script._ReadingParser().profile)  # pyright: ignore[reportPrivateUsage]
+
+    assert found == []
+
+
 def test_with_nothing_stored_only_the_short_cites_are_found() -> None:
     reads, document = _left_quote_document()
 
     found, without = script.card_strata(reads, document, [], script._ReadingParser().profile)  # pyright: ignore[reportPrivateUsage]
 
-    assert [stratum for stratum, _ in found] == [12, 12]
+    assert [stratum for stratum, _ in found] == [12], (
+        "only the short cite above the bracket holds a left quote"
+    )
     assert without == 0
 
 

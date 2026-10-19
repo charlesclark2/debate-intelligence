@@ -30,7 +30,7 @@ No test imports a name this task adds, so each runs against the start commit's s
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Final
 
@@ -47,6 +47,7 @@ from debate_core.application.ports.suppression import (
     RemovalScopeEntry,
     RemovalSelectorKind,
 )
+from debate_core.integrations.local import FsEvidenceObjectStore
 
 from .conftest import REQUEST, RemovalWorld
 from .test_manifest_and_aggregate_residue import (
@@ -81,11 +82,10 @@ def one_manifest_version() -> tuple[OlderVersions, ...]:
     return (OlderVersions(role="manifest", versions=1),)
 
 
-async def republish(world: RemovalWorld, scratch: Path) -> str:
+async def republish(world: RemovalWorld) -> str:
     """This machine's manifest published again, as `caselist publish` would: the current version now."""
-    same_bytes = scratch / "republished.jsonl"
-    same_bytes.write_bytes(current_bytes(world, REWRITTEN_KEY))
-    return str((await world.bucket.put_file(REWRITTEN_KEY, same_bytes)).version_id)
+    local_copy = FsEvidenceObjectStore(world.data_dir).path_for(REWRITTEN_KEY)
+    return str((await world.bucket.put_file(REWRITTEN_KEY, local_copy)).version_id)
 
 
 @pytest.fixture
@@ -115,7 +115,7 @@ class TestARunThatCarriesOnAfterItsRewrite:
         world = long_run
         rewrite = rewrite_of(world)
         during = put(world, REWRITTEN_KEY, AN_OLD_BODY, written=IN_THE_WINDOW)
-        current = await republish(world, tmp_path)
+        current = await republish(world)
         assert versions_of(world, REWRITTEN_KEY) == [current, during, rewrite]
         assert of(await status(world), SYNTHETIC_CASELIST).older_versions == one_manifest_version()
 
@@ -124,7 +124,7 @@ class TestARunThatCarriesOnAfterItsRewrite:
         assert versions_of(world, REWRITTEN_KEY) == [current, rewrite]
         cleared = await status(world)
         assert of(cleared, SYNTHETIC_CASELIST).older_versions == ()
-        assert cleared.in_sync
+        assert cleared.in_sync, (cleared.drifted, cleared.residue)
 
     async def test_a_version_in_the_same_second_as_the_rewrite_is_counted_and_then_cleared(
         self, long_run: RemovalWorld, tmp_path: Path
@@ -134,7 +134,7 @@ class TestARunThatCarriesOnAfterItsRewrite:
         world = long_run
         rewrite = rewrite_of(world)
         same_second = put(world, REWRITTEN_KEY, AN_OLD_BODY, written=LONG_RUN_REWRITE)
-        current = await republish(world, tmp_path)
+        current = await republish(world)
         assert set(versions_of(world, REWRITTEN_KEY)) == {current, same_second, rewrite}
         assert of(await status(world), SYNTHETIC_CASELIST).older_versions == one_manifest_version()
 
@@ -150,7 +150,7 @@ class TestARunThatCarriesOnAfterItsRewrite:
         gives it the benefit of the margin, and the sweep, by the same rule, leaves it."""
         world = long_run
         inside = put(world, REWRITTEN_KEY, AN_OLD_BODY, written=COMPLETED - timedelta(minutes=10))
-        await republish(world, tmp_path)
+        await republish(world)
         assert of(await status(world), SYNTHETIC_CASELIST).older_versions == ()
 
         await remove(world)
@@ -165,8 +165,8 @@ class TestARunThatCarriesOnAfterItsRewrite:
         world = long_run
         rewrite = rewrite_of(world)
         old = put(world, REWRITTEN_KEY, AN_OLD_BODY, written=LONG_BEFORE)
-        first = await republish(world, tmp_path)
-        second = await republish(world, tmp_path)
+        first = await republish(world)
+        second = await republish(world)
         assert of(await status(world), SYNTHETIC_CASELIST).older_versions == one_manifest_version()
 
         await remove(world)
@@ -198,28 +198,7 @@ class TestARunThatStopped:
         same_bytes = tmp_path / "republished.jsonl"
         same_bytes.write_bytes(current_bytes(world, NOT_REWRITTEN))
         await world.bucket.put_file(NOT_REWRITTEN, same_bytes)
-        stopped = RemovalLogEntry(
-            kind=RemovalLogKind.REMOVAL,
-            recorded_at=stopped_at,
-            request_id=REQUEST,
-            reason=ReasonCode.REQUESTED_BY_TEAM,
-            environment="dev",
-            outcome=RemovalOutcome.INCOMPLETE,
-            selector=RemovalSelectorKind.SOURCE,
-            error_code="STORE_UNAVAILABLE",
-        )
-        await world.removal_log().append(
-            [stopped],
-            scopes=[
-                RemovalScopeEntry(
-                    recorded_at=stopped_at,
-                    request_id=REQUEST,
-                    environment="dev",
-                    caselists=(SYNTHETIC_CASELIST,),
-                    manifest_rewrites=(ManifestRewriteRecord(key=NOT_REWRITTEN, version_id=published),),
-                )
-            ],
-        )
+        await a_stopped_run_rewrote(world, NOT_REWRITTEN, published, stopped_at)
         assert of(await status(world), SYNTHETIC_CASELIST).older_versions == ()
 
         await remove(world)
@@ -227,3 +206,50 @@ class TestARunThatStopped:
         assert older not in versions_of(world, NOT_REWRITTEN)
         assert {after_it, published} <= set(versions_of(world, NOT_REWRITTEN))
         assert of(await status(world), SYNTHETIC_CASELIST).older_versions == ()
+
+    async def test_a_rewrite_the_bucket_no_longer_holds_sweeps_nothing_of_its_key(
+        self, removed: RemovalWorld, tmp_path: Path
+    ) -> None:
+        """t19's protection, kept where its rule still applies: older than a stopped run's rewrite
+        cannot be told without the rewrite, and the key is left as it is."""
+        world = removed
+        (published,) = versions_of(world, NOT_REWRITTEN)
+        stopped_at = COMPLETED - timedelta(hours=2)
+        backdate(world, NOT_REWRITTEN, published, stopped_at - timedelta(hours=1))
+        old = put(world, NOT_REWRITTEN, AN_OLD_BODY, written=LONG_BEFORE)
+        same_bytes = tmp_path / "republished.jsonl"
+        same_bytes.write_bytes(current_bytes(world, NOT_REWRITTEN))
+        await world.bucket.put_file(NOT_REWRITTEN, same_bytes)
+        world.client.delete_object(Bucket=world.bucket_name, Key=NOT_REWRITTEN, VersionId=published)
+        await a_stopped_run_rewrote(world, NOT_REWRITTEN, published, stopped_at)
+
+        await remove(world)
+
+        assert old in versions_of(world, NOT_REWRITTEN)
+
+
+async def a_stopped_run_rewrote(world: RemovalWorld, key: str, version_id: str, stopped_at: datetime) -> None:
+    """A run of `RM-2026-01` that stopped at `stopped_at`, after rewriting `key` as `version_id`: its
+    log entry and the scope beside it, as the removal writes them."""
+    stopped = RemovalLogEntry(
+        kind=RemovalLogKind.REMOVAL,
+        recorded_at=stopped_at,
+        request_id=REQUEST,
+        reason=ReasonCode.REQUESTED_BY_TEAM,
+        environment="dev",
+        outcome=RemovalOutcome.INCOMPLETE,
+        selector=RemovalSelectorKind.SOURCE,
+        error_code="STORE_UNAVAILABLE",
+    )
+    await world.removal_log().append(
+        [stopped],
+        scopes=[
+            RemovalScopeEntry(
+                recorded_at=stopped_at,
+                request_id=REQUEST,
+                environment="dev",
+                caselists=(SYNTHETIC_CASELIST,),
+                manifest_rewrites=(ManifestRewriteRecord(key=key, version_id=version_id),),
+            )
+        ],
+    )

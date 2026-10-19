@@ -51,10 +51,20 @@ from the listing and the removal log, with nothing downloaded. Under each comple
   purge should have taken.
 
 So per caselist, against the latest completed removal that touched it (:func:`completed_removals`):
-each aggregate version, current or not, older than its completion; and each version of a manifest
-it rewrote, other than the rewrite, older than its completion. "Older" allows for the two clocks
-(:data:`CLOCK_SKEW_MARGIN`). A version written after it is an ordinary later write: the aggregates
-rebuilt by the next parse, a manifest published again.
+each aggregate version, current or not, older than its completion; and each noncurrent version of a
+manifest it rewrote, other than the rewrite, older than the completion of the run that rewrote it
+(:func:`purge_should_have_taken`). "Older" allows for the two clocks (:data:`CLOCK_SKEW_MARGIN`). A
+version written after it is an ordinary later write: the aggregates rebuilt by the next parse, a
+manifest published again.
+
+**One rule with the sweep (`v1-e30-t24`).** The same removal run again sweeps a rewritten manifest's
+versions by :func:`purge_should_have_taken` too
+(:mod:`~debate_core.application.caselist.manifest_sweep`), so what is counted here is what the re-run
+clears. Until then the sweep took a version only if it was strictly older than the rewrite, and a
+version stamped between the rewrite and the completion less the margin was counted and never cleared:
+one in the same second as the rewrite, or a publish from another machine while the run carried on.
+The rule never takes the current version: one that differs from this machine's manifest is a
+manifest mismatch in the comparison, and one that does not holds nothing removed.
 
 **Not every manifest of the caselist.** The removal's sweep of the caselist's *other* manifests
 reads each noncurrent version and deletes only those that name what was removed. A version that
@@ -83,10 +93,12 @@ as its whole-removed files are, under :attr:`CaselistResidue.withdrawn_copies`, 
 that withdrew it. The caller works out which those are
 (:meth:`~debate_core.application.caselist.status_service.CaselistStatusService.status`).
 
-They are reported and not part of :attr:`CaselistResidue.found`: the command's exit status is as it
-was before this check (the spec of `v1-e30-t19` forbids changing it). A withdrawal an earlier build
+They are part of :attr:`CaselistResidue.found`, as a removed file's residue is (`v1-e30-t24`: the
+PM's ruling on `v1-e30-t19`'s question 1, which had reported them beside the verdict): a copy left
+is a removal left unfinished, and the same removal run again takes it. A withdrawal an earlier build
 made has no record, so nothing says which caselist it was taken from; the report names its request
-as *not attributed* instead.
+as *not attributed* instead, and that is not part of :attr:`CaselistResidue.found`: it says what was
+not looked at, not that something was found.
 
 ## What it does not see
 
@@ -97,9 +109,10 @@ as *not attributed* instead.
 * **`manifests/_suppression/`**: the list, the log, the path holds and the scopes are appended to,
   and their old versions are the record of what was asked, which no removal deletes.
 
-So "nothing found" means no version of a wholly removed file is left under `raw/` and `parsed/`, and
-no aggregate or rewritten manifest version is older than a removal that touched its caselist, and
-the command says exactly that.
+So "nothing found" means no version of a wholly removed file is left under `raw/` and `parsed/`, no
+copy a withdrawal took from a caselist that keeps no holder of it, and no aggregate or rewritten
+manifest version is older than a removal that touched its caselist, and the command says exactly
+that.
 
 ## A refused listing is not an empty one
 
@@ -149,6 +162,7 @@ __all__ = [
     "ResidueFile",
     "WithdrawnCopy",
     "completed_removals",
+    "purge_should_have_taken",
     "removal_residue",
     "residue_prefixes",
 ]
@@ -251,11 +265,11 @@ class CaselistResidue:
     """The latest completed removal that touched this caselist, or `None` when none did."""
     withdrawn_copies: tuple[WithdrawnCopy, ...] = ()
     """Files withdrawn from this caselist, by the withdrawal record, of whose copy here something is
-    left, in digest order (`v1-e30-t19`). Not part of :attr:`found`."""
+    left, in digest order (`v1-e30-t19`). Part of :attr:`found` since `v1-e30-t24`."""
 
     @property
     def found(self) -> bool:
-        return bool(self.files) or bool(self.older_versions)
+        return bool(self.files) or bool(self.older_versions) or bool(self.withdrawn_copies)
 
     @property
     def current_objects(self) -> int | None:
@@ -352,8 +366,8 @@ def _older_versions(
     completion: RemovalCompletion | None,
 ) -> tuple[OlderVersions, ...]:
     """Per role, the data versions in `listed` that a completed removal touching `caselist` should
-    have taken: an aggregate's older than the latest one, and a rewritten manifest's older than the
-    removal that rewrote it, its own rewrite apart."""
+    have taken: an aggregate's older than the latest one, and a rewritten manifest's by
+    :func:`purge_should_have_taken`."""
     if removals is None or completion is None:
         return ()
     older: dict[str, set[tuple[ObjectKey, str | None]]] = {}
@@ -364,16 +378,39 @@ def _older_versions(
         role = _aggregate_role(version.key, aggregates)
         if role is not None and _before(version, completion.completed_at):
             older.setdefault(role, set()).add((version.key, version.version_id))
-        for rewrite, completed_at in removals.rewrites:
-            if (
-                version.key == rewrite.key
-                and version.version_id != rewrite.version_id
-                and _before(version, completed_at)
-            ):
-                older.setdefault(MANIFEST_ROLE, set()).add((version.key, version.version_id))
+        if any(
+            purge_should_have_taken(version, rewrite, completed_at)
+            for rewrite, completed_at in removals.rewrites
+        ):
+            older.setdefault(MANIFEST_ROLE, set()).add((version.key, version.version_id))
     return tuple(
         OlderVersions(role=role, versions=len(found))
         for role, found in sorted(older.items(), key=lambda item: _ROLES.index(item[0]))
+    )
+
+
+def purge_should_have_taken(
+    version: ObjectVersion, rewrite: ManifestRewriteRecord, completed_at: datetime
+) -> bool:
+    """Whether `version` is one a completed run's purge of the manifest it rewrote should have taken.
+
+    The one rule for a rewritten manifest's older versions (`v1-e30-t24`): `caselist status` counts
+    them by it (:func:`removal_residue`), and the same removal run again sweeps them by it
+    (:mod:`~debate_core.application.caselist.manifest_sweep`), so what one counts the other clears.
+    `rewrite` is what the run's scope records, and `completed_at` that run's completion, from its
+    log entry.
+
+    A noncurrent data version of the rewritten key, other than the rewrite, written before the
+    completion by more than :data:`CLOCK_SKEW_MARGIN`. Never the current version, the rewrite
+    itself, a delete marker, or a version of another key; a version whose store states no time is
+    not older than anything.
+    """
+    return (
+        version.key == rewrite.key
+        and not version.is_latest
+        and not version.is_delete_marker
+        and version.version_id != rewrite.version_id
+        and _before(version, completed_at)
     )
 
 

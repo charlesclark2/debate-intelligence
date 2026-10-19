@@ -159,6 +159,7 @@ __all__ = [
     "RemovalLogKind",
     "RemovalOutcome",
     "RemovalScopeEntry",
+    "RemovalLogWithScopes",
     "RemovalScopeLog",
     "RemovalSelectorKind",
     "RequestId",
@@ -793,3 +794,9 @@ class RemovalScopeLog(Protocol):
     async def scopes(self) -> tuple[RemovalScopeEntry, ...]:
         """Every scope entry on every copy, deduplicated. A record that does not exist has none."""
         ...
+
+
+@runtime_checkable
+class RemovalLogWithScopes(RemovalLog, RemovalScopeLog, Protocol):
+    """The removal log's entries and the scopes beside them: what a removal's re-run reads to know
+    which manifests each earlier run rewrote, and whether that run completed (`v1-e30-t24`)."""

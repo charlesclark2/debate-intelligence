@@ -176,10 +176,12 @@ A re-run also reads two records its first run left beside the list and the log (
   still in such a caselist, and never removes it whole on the record's account. A withdrawal an
   earlier build made has no record, and nothing of it is planned again.
 * **The scopes beside the log** (`v1-e30-t15`): the manifests each earlier run of the request
-  rewrote, with the version of the rewrite (:attr:`RemovalPlan.earlier_rewrites`). The sweep takes
-  the noncurrent versions of each that are older than its rewrite
-  (:mod:`~debate_core.application.caselist.manifest_sweep`), and the dry run counts what the sweep
-  will delete (:attr:`RemovalPlan.superseded_versions`), so a plan with a version to sweep is never
+  rewrote, with the version of the rewrite, and from the log whether that run completed
+  (:attr:`RemovalPlan.earlier_rewrites`). The sweep takes the versions of each that the run's purge
+  should have taken: for a run that completed, by the rule `caselist status` counts them by
+  (`v1-e30-t24`), and for one that stopped, those older than its rewrite
+  (:mod:`~debate_core.application.caselist.manifest_sweep`). The dry run counts what the sweep will
+  delete (:attr:`RemovalPlan.superseded_versions`), so a plan with a version to sweep is never
   "nothing to do".
 
 ## What it never puts in a log or an error
@@ -212,7 +214,11 @@ from debate_core.application.caselist.inbox_purge import (
     read_inbox,
 )
 from debate_core.application.caselist.manifest import MANIFEST_DIRECTORY, read_manifest_file, render_rows
-from debate_core.application.caselist.manifest_sweep import swept_manifest_versions
+from debate_core.application.caselist.manifest_sweep import (
+    EarlierRewrite,
+    earlier_rewrites,
+    swept_manifest_versions,
+)
 from debate_core.application.caselist.openev_manifest import (
     openev_release_name,
     row_upstream_identity,
@@ -253,10 +259,9 @@ from debate_core.application.ports.suppression import (
     REMOVAL_REASONS,
     REQUEST_ID_PATTERN,
     HeldDigestEntry,
-    ManifestRewriteRecord,
     PathHoldEntry,
     ReasonCode,
-    RemovalScopeLog,
+    RemovalLogWithScopes,
     RemovalSelectorKind,
     SuppressionAction,
     SuppressionEntry,
@@ -576,11 +581,11 @@ class RemovalPlan:
     """The path entries this removal appends: one for each caselist path a `--source` removal takes
     a file from whole (`v1-e30-t13`). None with `--only-named`, none for a file withdrawn or
     skipped, and none that is already in force."""
-    earlier_rewrites: tuple[ManifestRewriteRecord, ...] = ()
+    earlier_rewrites: tuple[EarlierRewrite, ...] = ()
     """Each manifest an earlier run of this request rewrote in the bucket, with the version its
-    rewrite is, from the scopes beside the removal log (`v1-e30-t15`). The sweep takes the versions
-    of each key older than its rewrite (`v1-e30-t19`; :mod:`~debate_core.application.caselist.
-    manifest_sweep`)."""
+    rewrite is, from the scopes beside the removal log (`v1-e30-t15`), and the run's completion
+    where it completed. The sweep takes the versions of each key the run's purge should have taken
+    (`v1-e30-t19`, `v1-e30-t24`; :mod:`~debate_core.application.caselist.manifest_sweep`)."""
     superseded_versions: tuple[ObjectVersion, ...] | None = ()
     """The noncurrent manifest versions the execution's sweep would delete, as the dry run's
     credential lists and reads them (`v1-e30-t19`); `None` where it may not, so they were not
@@ -840,9 +845,10 @@ class RemovalPlanner:
             beside it, which a re-run reads for the caselists a copy was withdrawn from (`v1-e30-t19`),
             and the held-digest record, which it reads for the uploads an import refused at a held
             path (`v1-e30-t23`).
-        removal_log: The removal log, both copies, for the scopes beside it: the manifests earlier
-            runs of the same request rewrote, which the sweep holds their older versions to
-            (`v1-e30-t19`). Required, with no default, like the inbox.
+        removal_log: The removal log, both copies, with the scopes beside it: the manifests earlier
+            runs of the same request rewrote, and whether each run completed, by which the sweep
+            takes their older versions (`v1-e30-t19`, `v1-e30-t24`). Required, with no default,
+            like the inbox.
         clock: The time entries are recorded at.
         environment: `dev` or `prod`, for the plan and the log.
         bucket: The bucket's name, for the plan.
@@ -859,7 +865,7 @@ class RemovalPlanner:
         remote_versions: EvidenceVersionStore,
         inbox: CaselistInbox,
         suppression: SuppressionList,
-        removal_log: RemovalScopeLog,
+        removal_log: RemovalLogWithScopes,
         clock: Clock,
         environment: str,
         bucket: str,
@@ -1081,19 +1087,16 @@ class RemovalPlanner:
         )
         return replace(plan, superseded_versions=await self._swept(plan))
 
-    async def _earlier_rewrites(self, request_id: str) -> tuple[ManifestRewriteRecord, ...]:
-        """The manifests this request's earlier runs in this environment rewrote, from their scopes.
-
-        Every run's, completed or stopped: a scope records a rewrite only once its purge is done.
-        Another request's, or another environment's, are not this request's to sweep.
-        """
-        found = {
-            rewrite: None
-            for scope in await self._removal_log.scopes()
-            if scope.request_id == request_id and scope.environment == self._environment
-            for rewrite in scope.manifest_rewrites
-        }
-        return tuple(found)
+    async def _earlier_rewrites(self, request_id: str) -> tuple[EarlierRewrite, ...]:
+        """The manifests this request's earlier runs in this environment rewrote, from their scopes,
+        each with its run's completion where the log says it completed (:func:`~debate_core.
+        application.caselist.manifest_sweep.earlier_rewrites`)."""
+        return earlier_rewrites(
+            await self._removal_log.entries(),
+            await self._removal_log.scopes(),
+            request_id=request_id,
+            environment=self._environment,
+        )
 
     async def _swept(self, plan: RemovalPlan) -> tuple[ObjectVersion, ...] | None:
         """What the execution's sweep would delete, as the everyday credential sees it; `None` where

@@ -1,0 +1,36 @@
+# Synthetic example recipe: PF, con blocks against a data-center moratorium, two pockets with hats.
+# Every fingerprint, source hash, school, team code and tag here is invented for the repository.
+schema_version: 1
+title: Data-center moratorium con blocks
+topic: data-center-moratorium
+format: PF
+caselist: hspf26
+position: con-blocks
+side: CON
+fingerprint_version: card-fingerprint-v3
+structure:
+  - pocket: Answers to energy prices
+    hats:
+      - hat: Prices
+        blocks:
+          - block: AT - a moratorium lowers prices
+            items:
+              - fingerprint: f4fcb12e6aecb70d1638a34c13fd713b2563b5db671dd17a7030e619eb5ee752
+                tag_override: Demand moves elsewhere - it does not vanish
+              - analytic: Their evidence assumes the demand disappears; it relocates.
+  - pocket: Answers to water use
+    hats:
+      - hat: Water
+        blocks:
+          - block: AT - data centers drain aquifers
+            items:
+              - fingerprint: 34a4d50762785d35d8dc5aecc3dbe487bf5f5e99a6375510164ff7da1fc702e6
+                pin:
+                  caselist: hspf26
+                  source_sha256: 86affdf090d9656d2e71cf6064802f3c1add451789b25d13a79e03f19a41dfc5
+                  element_index: 3
+                  school: Maple Grove
+                  team_code: AB
+                  side: CON
+              - fingerprint: aa1220efca7d04f0511c4359e5d32637f5fd5019c20ebfdb0807fb60fa54dcc1
+              - fingerprint: dc2c26bc1e2004dab8eb4d777317a18a68aa10a9a84a2a8cbd30cad457800b88

@@ -465,6 +465,18 @@ uv run python scripts/compare_card_clusters.py sample --count 20 --caselist hsld
 Expected: `Drew 20 of N newly joined pairs, seed S.` **Note the seed**: step 14 uses it. ac1 passes
 when no pair is answered `different card`. By construction none is decided "different" by rule.
 
+*Run on 2026-10-18:* `Drew 20 of 1139 newly joined pairs, seed 718710206`, and all 20 were
+contained pairs the rule decides as the same card (13 under a third of the larger, 7 a third or
+more), so nobody was asked anything. A zero decided wholly by rule says nothing about ac1, since
+"contained is the same card" is the rule item (8) exists to test. So the sample is run again with
+the same seed and both contained shapes asked. The draw happens before classification and does not
+depend on `--ask-shape`, so it shows the same 20 pairs:
+
+```zsh
+cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e31-t20-long-cuts-and-limits
+uv run python scripts/compare_card_clusters.py sample --count 20 --seed 718710206 --caselist hsld26 --caselist hspf26 --caselist hspolicy26 --caselist openev --after ~/.debate-research/dev/card-clusters-t20-preview --ask-shape contained-under-a-third --ask-shape contained-a-third-or-more --save-tallies ~/t20-sample-tallies.txt
+```
+
 **Step 5. `MIN_CUT_SHARE` (ac2, ac6)** (seconds, then the person's time; the second reads every
 caselist's bodies first, about 3 to 6 minutes). The first shows newly joined pairs that are a small
 part of the other (under a third), which the rule calls the same card. The second shows cuts the
@@ -577,10 +589,10 @@ Expected: step 3's figures, from the store's table: `version` `card-fingerprint-
 and the same stock-phrase count.
 
 **Step 14. The join sample, with step 4's seed** (seconds, then the person's time). The same 20
-pairs as step 4. Put the seed step 4 printed in place of `SEED`.
+pairs as step 4, with the contained shapes asked as in step 4's second run.
 
 ```zsh
-uv run python scripts/compare_card_clusters.py sample --count 20 --seed SEED --caselist hsld26 --caselist hspf26 --caselist hspolicy26 --caselist openev --before ~/.debate-research/dev/card-clusters-v3 --save-tallies ~/t20-sample-tallies.txt
+uv run python scripts/compare_card_clusters.py sample --count 20 --seed 718710206 --caselist hsld26 --caselist hspf26 --caselist hspolicy26 --caselist openev --before ~/.debate-research/dev/card-clusters-v3 --ask-shape contained-under-a-third --ask-shape contained-a-third-or-more --save-tallies ~/t20-sample-tallies.txt
 cat ~/t20-sample-tallies.txt
 ```
 

@@ -38,6 +38,7 @@ from __future__ import annotations
 import argparse
 import json
 import random
+import re
 import shutil
 import sys
 import time
@@ -51,7 +52,7 @@ from typing import Any
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
-from compare_card_clusters import CLEAR_TERMINAL, STOP_KEY, read_key  # noqa: E402
+from compare_card_clusters import CLEAR_TERMINAL, STOP_KEY, _marked_words, read_key  # noqa: E402
 from count_card_boundaries import (  # noqa: E402
     CANDIDATES,
     outside_the_repository_and_the_store,
@@ -68,11 +69,13 @@ from debate_core.evidence.card_boundaries import (  # noqa: E402
     LongBodyKind,
     ending_of,
     marked_up_share,
+    names_and_years,
     paragraphs_inside,
     word_count,
 )
 from debate_core.evidence.fingerprints import fingerprint_text  # noqa: E402
-from debate_core.evidence.near_duplicates import shingles  # noqa: E402
+from debate_core.evidence.near_duplicates import matching_words, shingles  # noqa: E402
+from debate_core.evidence.pair_shapes import shared_words  # noqa: E402
 from debate_core.integrations.docx_parser import DebateDocxParser  # noqa: E402
 from debate_core.integrations.local.fs_blob_store import BLOB_DIRECTORY  # noqa: E402
 
@@ -269,6 +272,11 @@ SHOWN_WHOLE_WORDS = 30
 OPENING_WORDS, END_WORDS = 10, 6
 #: Paragraphs always shown at the start and the end of a card.
 FIRST_ROWS, LAST_ROWS = 4, 3
+#: Between A and B: the words of each shown beside the gap, and a gap shown whole up to this.
+PIECE_EDGE_WORDS, GAP_SHOWN_WHOLE_WORDS, GAP_EDGE_WORDS = 15, 120, 50
+#: A long body's paragraphs over this many words are searched for names with a year.
+LONG_PARAGRAPH_WORDS = 150
+MOST_GLIMPSES, GLIMPSE_BEFORE_WORDS, GLIMPSE_AFTER_WORDS = 8, 8, 12
 
 
 @dataclass(frozen=True, slots=True)
@@ -283,6 +291,9 @@ class Item:
     pieces: tuple[frozenset[str], frozenset[str]] | None = None
     """For a body holding two cards, the five-word runs of A and of B, A the earlier in the body."""
     piece_words: tuple[int, int] = (0, 0)
+    glimpses: tuple[tuple[int, str, str, str], ...] = ()
+    """For a long body, each name with a year inside its long paragraphs: (row, words before, the
+    name and year, words after)."""
 
 
 def _shortened(text: str, width: int) -> str:
@@ -379,9 +390,111 @@ def render_item(item: Item, columns: int) -> str:
         lines.append(
             f"{_DIM}      … {hidden_rows} body paragraphs, {hidden_words:,} words, not shown …{_RESET}"
         )
+    if item.pieces is not None:
+        lines += ["", *_between(item.card.evidence_text, item.pieces, columns)]
+    elif any(len(row.section.text.split()) > LONG_PARAGRAPH_WORDS for row in item.inside):
+        lines += ["", *_glimpse_lines(item, columns)]
     closer = f": {_shortened(item.closer, columns - 30)}" if item.closer else ""
     lines += ["", f"Ended by {item.ending.value}{closer}", "", stratum.question]
     return "\n".join(lines) + "\n"
+
+
+def _written_words(text: str) -> list[tuple[str, bool]]:
+    """The words of `text` as `compare_card_clusters` shows them, each with whether it opens a
+    paragraph: chunks between spaces, a line-break hyphenation kept with the word it splits."""
+    words: list[tuple[str, bool]] = []
+    for paragraph in text.split("\n"):
+        for position, chunk in enumerate(paragraph.split()):
+            if words and _HYPHEN_AT_THE_END.search(words[-1][0]) and _WORD_AT_THE_START.match(chunk):
+                words[-1] = (f"{words[-1][0]} {chunk}", words[-1][1])
+            else:
+                words.append((chunk, position == 0))
+    return words
+
+
+_HYPHEN_AT_THE_END = re.compile(r"\w-$")
+_WORD_AT_THE_START = re.compile(r"\w")
+
+
+def _wrap(tokens: Sequence[tuple[str, str]], width: int) -> list[str]:
+    """Styled words as lines of at most `width` visible characters."""
+    lines: list[str] = []
+    line: list[str] = []
+    used = 0
+    for word, style in tokens:
+        if line and used + 1 + len(word) > width:
+            lines.append(" ".join(line))
+            line, used = [], 0
+        line.append(f"{style}{word}{_RESET}" if style else word)
+        used += len(word) + (1 if used else 0)
+    if line:
+        lines.append(" ".join(line))
+    return lines
+
+
+def _between(text: str, pieces: tuple[frozenset[str], frozenset[str]], columns: int) -> list[str]:
+    """Where A ends and B begins, word by word: the end of A, every word between, the start of B."""
+    in_a = [flag for _, flag in _marked_words(text, pieces[0])]
+    in_b = [flag for _, flag in _marked_words(text, pieces[1])]
+    written = _written_words(text)
+    if len(written) != len(in_a):
+        # `_marked_words` showed the matching words: no paragraph marks can be placed on them.
+        written = [(word, False) for word, _ in _marked_words(text, pieces[0])]
+    a_at = [index for index, flag in enumerate(in_a) if flag]
+    b_at = [index for index, flag in enumerate(in_b) if flag]
+    if not a_at or not b_at:
+        return ["A or B could not be placed in the text, word by word."]
+    a_first, a_last, b_first, b_last = a_at[0], a_at[-1], b_at[0], b_at[-1]
+    if b_first <= a_last:
+        return ["A and B are interleaved in the text, word by word: judge from the lines above."]
+    between = max(0, b_first - a_last - 1)
+    heading = [
+        f"Where A ends and B begins, word by word: {_UNDERLINE}A underlined{_RESET}, "
+        f"{_REVERSE}B reversed{_RESET}, {_BOLD}words in neither in bold{_RESET}, ¶ where a paragraph starts.",
+        f"A is words {a_first + 1:,} to {a_last + 1:,} of {len(written):,}; B is words {b_first + 1:,} to "
+        f"{b_last + 1:,}; "
+        + (f"{between:,} words between them." if between else "no word between them: they meet."),
+    ]
+
+    def token(index: int) -> tuple[str, str]:
+        word, opens = written[index]
+        style = _UNDERLINE if in_a[index] else _REVERSE if in_b[index] else _BOLD
+        return (f"¶ {word}" if opens and index else word, style)
+
+    def note(text: str) -> tuple[str, str]:
+        return (f"[… {text} …]", _DIM)
+
+    tokens: list[tuple[str, str]] = []
+    start = max(0, a_last - PIECE_EDGE_WORDS + 1)
+    end = min(len(written), b_first + PIECE_EDGE_WORDS)
+    if start:
+        tokens.append(note(f"{start:,} words before not shown"))
+    if between <= GAP_SHOWN_WHOLE_WORDS:
+        tokens += [token(index) for index in range(start, end)]
+    else:
+        tokens += [token(index) for index in range(start, a_last + 1 + GAP_EDGE_WORDS)]
+        tokens.append(note(f"{between - 2 * GAP_EDGE_WORDS:,} words between not shown"))
+        tokens += [token(index) for index in range(b_first - GAP_EDGE_WORDS, end)]
+    if end < len(written):
+        tokens.append(note(f"{len(written) - end:,} words after not shown"))
+    return [*heading, *_wrap(tokens, max(20, columns))]
+
+
+def _glimpse_lines(item: Item, columns: int) -> list[str]:
+    heading = (
+        f"Each name with a year inside the paragraphs over {LONG_PARAGRAPH_WORDS} words, with the words "
+        f"around it (a cite run into the text would show here); up to {MOST_GLIMPSES}:"
+    )
+    if not item.glimpses:
+        return [heading, "  none."]
+    lines = [heading]
+    for row, before, found, after in item.glimpses:
+        prefix = f"  {row:>4}: "
+        visible = len(prefix) + len(before) + len(found) + len(after) + 4
+        overflow = max(0, visible - columns)
+        tail = after[: max(0, len(after) - overflow)]
+        lines.append(f"{prefix}…{before} {_BOLD}{found}{_RESET} {tail}…")
+    return lines
 
 
 def _prompt(stratum: Stratum) -> str:
@@ -464,6 +577,7 @@ def prepare(
             skipped += 1
             continue
         ending, closer = ending_of(document, card)
+        inside = tuple(paragraphs_inside(document, card, profile))
         pieces: tuple[frozenset[str], frozenset[str]] | None = None
         piece_words = (0, 0)
         if entry.pieces is not None:
@@ -476,22 +590,41 @@ def prepare(
             Item(
                 drawn=entry,
                 card=card,
-                inside=tuple(paragraphs_inside(document, card, profile)),
+                inside=inside,
                 ending=ending,
                 closer=closer.text if closer is not None else None,
                 pieces=pieces,
                 piece_words=piece_words,
+                glimpses=() if pieces is not None else _glimpses_of(inside, profile),
             )
         )
     return items, skipped
 
 
 def _first_shared(body: str, piece: frozenset[str]) -> int:
-    """Which paragraph of `body` first holds a run of `piece`: how A is told from B."""
-    for number, paragraph in enumerate(body.split("\n")):
-        if shingles(paragraph) & piece:
-            return number
-    return len(body)
+    """The first word of `body` in a run of `piece`: how A is told from B, inside one paragraph too."""
+    flags = shared_words(matching_words(body), piece)
+    return next((index for index, flag in enumerate(flags) if flag), len(flags))
+
+
+def _glimpses_of(
+    inside: Sequence[InsideParagraph], profile: StyleProfile
+) -> tuple[tuple[int, str, str, str], ...]:
+    found: list[tuple[int, str, str, str]] = []
+    for row, paragraph in enumerate(inside, start=1):
+        text = paragraph.section.text
+        if (
+            paragraph.section.match.unit is not StructuralUnit.EVIDENCE
+            or len(text.split()) <= LONG_PARAGRAPH_WORDS
+        ):
+            continue
+        for start, end in names_and_years(text, profile):
+            before = " ".join(text[:start].split()[-GLIMPSE_BEFORE_WORDS:])
+            after = " ".join(text[end:].split()[:GLIMPSE_AFTER_WORDS])
+            found.append((row, before, text[start:end], after))
+            if len(found) == MOST_GLIMPSES:
+                return tuple(found)
+    return tuple(found)
 
 
 # ------------------------------------------------------------------------------------------------

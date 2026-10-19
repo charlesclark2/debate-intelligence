@@ -51,6 +51,7 @@ __all__ = [
     "is_cite_shaped",
     "is_too_long_to_be_one_card",
     "marked_up_share",
+    "names_and_years",
     "paragraphs_inside",
     "read_long_body",
     "rule_family",
@@ -174,6 +175,24 @@ def is_cite_shaped(text: str, profile: StyleProfile) -> bool:
         return False
     found = first_name_and_year(stripped, profile)
     return found is not None and found.start() <= NAME_AND_YEAR_AT_THE_HEAD_CHARACTERS
+
+
+def names_and_years(text: str, profile: StyleProfile) -> list[tuple[int, int]]:
+    """Where each name with a year sits in `text`, as (start, end) offsets, in order.
+
+    The profile's pattern, as :func:`~debate_core.evidence.style_classifier.first_name_and_year`
+    reads it: a sentence opener with a year (*In 2019*) names no source and is passed over. A cite
+    run into a card's text shows up here, and so does a source's own reference to another.
+    """
+    found: list[tuple[int, int]] = []
+    position = 0
+    while position < len(text):
+        match = first_name_and_year(text[position:], profile)
+        if match is None:
+            break
+        found.append((position + match.start(), position + match.end()))
+        position += match.end()
+    return found
 
 
 def _ending(after: Sequence[FileSection]) -> Ending:

@@ -234,10 +234,12 @@ def item_of(content: bytes, sha256: str, *, pieces: tuple[str, str] | None = Non
     ending, closer = ending_of(document, card)
     stratum = 4 if pieces else 0
     piece_sets = (shingles(pieces[0]), shingles(pieces[1])) if pieces else None
+    inside = tuple(paragraphs_inside(document, card, PROFILE))
     return script.Item(
         drawn=script.Drawn(stratum, CASELIST, (sha256, 0)),
         card=card,
-        inside=tuple(paragraphs_inside(document, card, PROFILE)),
+        inside=inside,
+        glimpses=() if pieces else script._glimpses_of(inside, PROFILE),  # pyright: ignore[reportPrivateUsage]
         ending=ending,
         closer=closer.text if closer else None,
         pieces=piece_sets,
@@ -295,6 +297,77 @@ def test_where_one_part_gives_way_to_the_other_is_shown_however_long_the_body() 
     rows = [line for line in shown.splitlines() if re.match(r"\s+\d+ ", line)]
     # The last of A's six paragraphs is the eighth row, the first of B's the ninth.
     assert [int(row.split()[0]) for row in rows] == [1, 2, 3, 4, 8, 9, 10, 12, 13, 14]
+
+
+FIRST, SECOND = numbered("first", 80), numbered("second", 80)
+MISSED = "a missed tag and Mensah 2024 cite"
+
+
+def one_paragraph_holder(between: str) -> Any:
+    holder = build_docx(
+        para("A tag", style="Heading4") + cite("Okonkwo 26") + underlined(f"{FIRST} {between} {SECOND}")
+    )
+    return item_of(holder, "e" * 64, pieces=(FIRST, SECOND))
+
+
+def test_where_a_ends_and_b_begins_is_shown_word_by_word_inside_one_paragraph() -> None:
+    shown = script.render_item(one_paragraph_holder(MISSED), 160)
+    plain = _STYLE.sub("", shown)
+    assert "A is words 1 to 80 of 167; B is words 88 to 167; 7 words between them." in plain
+    assert "[… 65 words before not shown …]" in plain
+    assert "[… 65 words after not shown …]" in plain
+    words = set(plain.split())
+    assert "first65" in words and "first64" not in words
+    assert "second14" in words and "second15" not in words
+    # A's words underlined, the words between in bold, B's reversed.
+    assert "\x1b[4mfirst79\x1b[0m \x1b[1ma\x1b[0m" in shown
+    assert "\x1b[1mcite\x1b[0m \x1b[7msecond0\x1b[0m" in shown
+
+
+def test_a_long_gap_between_a_and_b_keeps_its_two_ends() -> None:
+    plain = _STYLE.sub("", script.render_item(one_paragraph_holder(numbered("gap", 200)), 160))
+    assert "200 words between them." in plain
+    assert "[… 100 words between not shown …]" in plain
+    words = set(plain.split())
+    assert {"gap49", "gap150"} <= words
+    assert "gap50" not in words and "gap149" not in words
+
+
+def test_parts_that_meet_are_said_to_meet_and_a_paragraph_start_is_marked() -> None:
+    holder = build_docx(
+        para("A tag", style="Heading4") + cite("Okonkwo 26") + underlined(FIRST) + underlined(SECOND)
+    )
+    plain = _STYLE.sub("", script.render_item(item_of(holder, "e" * 64, pieces=(FIRST, SECOND)), 1_000))
+    assert "no word between them: they meet." in plain
+    assert "first79 ¶ second0" in plain
+
+
+def test_a_is_the_part_that_comes_first_inside_one_paragraph() -> None:
+    text = f"{FIRST} {MISSED} {SECOND}"
+    first_shared = script._first_shared  # pyright: ignore[reportPrivateUsage]
+    assert first_shared(text, shingles(FIRST)) == 0
+    assert first_shared(text, shingles(SECOND)) == 87
+
+
+def test_a_long_paragraph_shows_each_name_with_a_year_inside_it() -> None:
+    long_paragraph = prose(1_200) + " As Mensah 2024 argued in an invented study, " + prose(600)
+    plain = _STYLE.sub(
+        "",
+        script.render_item(
+            item_of(build_docx(cite("Okonkwo 26") + underlined(long_paragraph)), "e" * 64), 200
+        ),
+    )
+    assert "Each name with a year inside the paragraphs over 150 words" in plain
+    [glimpse] = [
+        line for line in plain.splitlines() if "Mensah 2024" in line and line.lstrip().startswith("2:")
+    ]
+    assert "As Mensah 2024 argued in an invented study" in glimpse
+    none = _STYLE.sub(
+        "",
+        script.render_item(item_of(build_docx(cite("Okonkwo 26") + underlined(prose(1_500))), "e" * 64), 200),
+    )
+    assert "Each name with a year" in none
+    assert "  none." in none
 
 
 def test_long_runs_of_body_paragraphs_are_shown_as_a_count() -> None:

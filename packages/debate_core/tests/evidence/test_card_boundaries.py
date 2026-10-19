@@ -24,6 +24,7 @@ from debate_core.evidence.card_boundaries import (
     ending_of,
     is_cite_shaped,
     is_too_long_to_be_one_card,
+    names_and_years,
     paragraphs_inside,
     read_long_body,
     rule_family,
@@ -129,6 +130,15 @@ def first_card(document: ParsedDocument) -> ParsedCard:
 )
 def test_a_cite_shaped_paragraph_names_its_source_at_its_head(text: str, shaped: bool) -> None:
     assert is_cite_shaped(text, PROFILE) is shaped
+
+
+def test_every_name_with_a_year_is_found_in_order_and_a_sentence_opener_is_not() -> None:
+    text = "Grid demand rose. Okonkwo 26 found it. In 2019 it fell, as Ferreira and Lindqvist 2025 say."
+    assert [text[start:end] for start, end in names_and_years(text, PROFILE)] == [
+        "Okonkwo 26",
+        "Ferreira and Lindqvist 2025",
+    ]
+    assert names_and_years("No source is named here.", PROFILE) == []
 
 
 def test_a_rule_is_named_by_its_family_alone() -> None:

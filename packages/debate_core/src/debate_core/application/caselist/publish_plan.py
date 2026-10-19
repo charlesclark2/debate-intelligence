@@ -162,6 +162,7 @@ __all__ = [
     "source_key",
     "source_prefix",
     "sources_in_manifest",
+    "stored_row_hold",
     "stored_rows_in_manifest",
     "suppressed_rows",
     "validate_publish_target",
@@ -541,24 +542,31 @@ def held_skipped_rows(local: LocalSnapshot, suppression: SuppressionState) -> tu
     return tuple(sorted(hold.request_id for hold in holds if hold is not None))
 
 
+def stored_row_hold(
+    caselist: str, snapshot: str, digest: Sha256Hex, path: str, suppression: SuppressionState
+) -> PathHoldEntry | None:
+    """The hold on one stored manifest row's path, `None` where none covers it.
+
+    The one rule every question about a held stored row asks: :func:`held_rows`,
+    :func:`held_only_digests` and, through them, the publisher, `caselist status` and `store sync`;
+    and the parsed card store, for each disclosure of a source (`v1-e31-t26`). The list's own rows
+    come first: a row the list stops is :func:`suppressed_rows`', never held. A camp release's rows
+    are at no caselist path, and a snapshot of no date is covered by no hold.
+    """
+    day = snapshot_date(snapshot)
+    if caselist == OPENEV or day is None:
+        return None
+    if suppression.suppresses(digest, disclosure=disclosure_digest(caselist, path)):
+        return None
+    return suppression.path_hold(caselist=caselist, path=path, snapshot=day)
+
+
 def _holds_of_stored_rows(
     local: LocalSnapshot, suppression: SuppressionState
 ) -> list[tuple[Sha256Hex, PathHoldEntry | None]]:
-    """Each stored row's digest and the hold on its path, `None` where none covers it.
-
-    The list's own rows come first: a row the list stops is :func:`suppressed_rows`', never held. A
-    camp release's rows are at no caselist path, and a snapshot of no date is covered by no hold.
-    """
-    snapshot = snapshot_date(local.snapshot)
-    if local.caselist == OPENEV or snapshot is None:
-        return [(digest, None) for digest, _ in local.stored_rows]
+    """Each stored row's digest and the hold on its path (:func:`stored_row_hold`)."""
     return [
-        (
-            digest,
-            None
-            if suppression.suppresses(digest, disclosure=disclosure_digest(local.caselist, path))
-            else suppression.path_hold(caselist=local.caselist, path=path, snapshot=snapshot),
-        )
+        (digest, stored_row_hold(local.caselist, local.snapshot, digest, path, suppression))
         for digest, path in local.stored_rows
     ]
 

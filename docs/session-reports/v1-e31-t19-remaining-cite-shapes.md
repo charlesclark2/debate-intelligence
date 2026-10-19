@@ -485,9 +485,71 @@ outcome.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** CHANGES_REQUESTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-18
 
 **Notes:**
+
+The work is strong and nearly done. Two things stop the merge today: a parser-version collision,
+and a rule whose reach turned out twenty times larger than was sampled. Append a section headed
+"After the PM review of 2026-10-18" for both, and I review again.
+
+**1. The version collides with `v1-e31-t15`.** Both branches set `DOCX_PARSER_VERSION =
+"2026.10.18-docx-4"` for different parsers. Two parsers under one version string would make the
+store's version directories lie. `v1-e31-t15` is ahead in review and merges first. Then:
+
+* run `scripts/task sync` onto the `dev` that holds it, and take the next counter
+  (`2026.10.18-docx-5`, or the date you make the change if that is later), with its own history
+  line;
+* change every place this branch names `docx-4` to the new version: the version tests, the ten
+  structural expectations, `parsed-card-store.md`, the parse report section, and each operator
+  step (2b expects the version, 2d's paths, 2g's dry run, 2h);
+* re-run the read-only side-by-side on the synced parser, so the operator's expected tables include
+  t15's effect (its 7 sources now parse), and update the tables;
+* re-run `run_parser_eval.py --tier pr-subset` and the default suite on the synced branch.
+
+**2. (6) needs a sample before it ships.** I approved (6) without a sample as a narrow
+normalisation: a few hundred lines, by your estimate. It now changes 9,602 cards' short cites. Your
+own reading of rule ids also attributes 18 of the 28 FULL to CITE_ONLY changes to it: a body
+paragraph opening with a left-quoted short cite read as a cite line, so the card loses its body.
+That is the one change in this task that can take evidence away from a card, and nobody has looked
+at it. Through `scripts/sample_cite_shapes.py`:
+
+* **all 18** of those cards: is the paragraph now read as a cite really the cite, or the card's
+  text?
+* **10** cards that gain a left-quoted short cite: is the short cite right?
+
+That is 28 items and about 5 minutes for the operator, with the seed, items asked and time
+recorded.
+
+* If any of the 18 is the card's text, stop and propose how to narrow (6). For example, the left
+  quote could be read as `’` for the short-cite pattern only and not for the cite-line rule. Don't
+  build it until I rule.
+* If the short cites are wrong more than once in 10, the same applies.
+
+**3. (7):** the operator's Word check (Operator follow-ups, step 1) may come before or after the
+merge. If after, it is recorded with ac4.
+
+**Already accepted, and not to be redone:**
+
+* **ac1:** the counts first, the rulings before any rule, and a sample of 70 with 0 wrong takes in
+  41 taken items.
+* **The rules,** with every condition mutated: 54 of 54 caught, and the four first-pass survivors
+  resolved properly.
+* **The flag that let the sample judge the shipped code,** then removed. A good method.
+* **The PR-subset cite precision rose** (0.957 to 0.969) and recall rose (0.500 to 0.705), with
+  tags, evidence and boundaries unchanged.
+* **Deviations 1 to 7:** accepted. Deviation 3's correction to the (5) figures is noted. Nothing
+  ruled depended on it.
+* **Decisions:** all accepted. Leaving (1)'s short cite empty rather than inventing one is right.
+* **Deviation 8, the scratch files:** keep them until this second review, then delete them.
+
+**Follow-ups, for the next PM batch:**
+
+* **The cautious rules' leftovers:** 2,186 lines behind a first name and 221 highlighted shapes.
+  Filed at p3, each with its own counts and sample.
+* **A short cite behind a first name:** needs a ruling on the "front only" short-cite rule. Filed at
+  p3.
+* **(5):** goes with the `v1-e31-t23` merge, as ruled.

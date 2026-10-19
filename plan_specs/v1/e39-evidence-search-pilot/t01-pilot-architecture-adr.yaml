@@ -74,7 +74,7 @@ spec:
         docs/adr/README.md indexes ADR-0019 and moves the reservation;
         `scripts/docs_index.py --check-descriptions` and `scripts/check_links.py` pass.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

@@ -1,4 +1,4 @@
-{"record":"file","digest":"90fe3d84f2ba99e9c0eac278287654a808f14a9871ac1153b493b3d9b6daee23","paragraph_count":178,"blocks":[[0,19],[100,119]],"plan_id":"06a5e928bf1fc90f","status":"PRELABELED","prelabel_parser_version":"2026.10.12-docx-3","corrected_by":null,"reviewed_by":null,"rows_changed_from_prelabel":null,"span_sample_fraction":0.2}
+{"record":"file","digest":"90fe3d84f2ba99e9c0eac278287654a808f14a9871ac1153b493b3d9b6daee23","paragraph_count":178,"blocks":[[0,19],[100,119]],"plan_id":"06a5e928bf1fc90f","status":"CORRECTED","prelabel_parser_version":"2026.10.12-docx-3","corrected_by":"coach","reviewed_by":null,"rows_changed_from_prelabel":1,"span_sample_fraction":0.2}
 {"record":"paragraph","index":0,"length":5,"text_digest":"aacd5deb9cf672802882a52252b3583d61a1042c0bc6d26f63ab2596c2e9312c","unit":"BLOCK","card":null}
 {"record":"paragraph","index":1,"length":175,"text_digest":"474252652bdcf3b0c5a9266b27a1eba52aef9aef87b1bddc60e5be02723e0bf8","unit":"TAG","card":0}
 {"record":"paragraph","index":2,"length":446,"text_digest":"b120244b3378dbd660c79be9ec588cd675a77023552736d33a0870857395ca83","unit":"CITE","card":0}
@@ -15,7 +15,7 @@
 {"record":"paragraph","index":13,"length":6612,"text_digest":"8b99eec235f1319f5be90631a4e551dedb050c7df712f8ec51131adc2086982c","unit":"EVIDENCE","card":2}
 {"record":"paragraph","index":14,"length":0,"text_digest":"24532245209765ada879bbd3cb4cad655812054928157f24f8c3beaf80a34508","unit":"OTHER","card":null}
 {"record":"paragraph","index":15,"length":234,"text_digest":"52efce6d01eaf8439faf5292c0e6ca3489c4ba2650a70527f30b7bea3d1cb88e","unit":"TAG","card":3}
-{"record":"paragraph","index":16,"length":203,"text_digest":"044593c263b336ea40afc924a7dc090bab7fb821499d7a03a4f2133c2347187d","unit":"OTHER","card":null}
+{"record":"paragraph","index":16,"length":203,"text_digest":"044593c263b336ea40afc924a7dc090bab7fb821499d7a03a4f2133c2347187d","unit":"CITE","card":3}
 {"record":"paragraph","index":17,"length":11468,"text_digest":"0a3b3b371386d10bf9adaff644c3a3f629df5716b351b0c7acf6775c8b973bac","unit":"EVIDENCE","card":3}
 {"record":"paragraph","index":18,"length":0,"text_digest":"24532245209765ada879bbd3cb4cad655812054928157f24f8c3beaf80a34508","unit":"OTHER","card":null}
 {"record":"paragraph","index":19,"length":87,"text_digest":"e3ef3a7826246d697f035dd3bc19952068cebb8f8946bdb741537c93e577af37","unit":"TAG","card":null}

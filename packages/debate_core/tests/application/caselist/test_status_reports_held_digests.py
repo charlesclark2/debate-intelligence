@@ -27,18 +27,24 @@ from __future__ import annotations
 
 import json
 import shutil
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import pytest
 from tests.fixtures.caselist.build_held_path_archives import build_arriving_weekly_zips
-from tests.fixtures.caselist.build_revised_path_archives import CASELIST, OTHER_CASELIST, REVISED_PATH
+from tests.fixtures.caselist.build_revised_path_archives import (
+    CASELIST,
+    OTHER_CASELIST,
+    REVISED_PATH,
+    digest_of,
+)
 
 from debate_core.application.caselist.publish_service import CaselistPublishService
 from debate_core.application.caselist.status_service import CaselistStatusReport, CaselistStatusService
 from debate_core.application.ports.suppression import (
     HeldDigestEntry,
+    PathHoldEntry,
     ReasonCode,
     SuppressionAction,
     SuppressionEntry,
@@ -196,6 +202,40 @@ class TestWhatIsNotOwed:
         """`caselist unsuppress` of the named version lifts its hold, so an upload at the path is let in
         again, and the re-run lists nothing for it."""
         await import_weekly(world, tmp_path, CASELIST, WEEK_OF_THE_HELD_UPLOAD)
+        await world.suppression().append(
+            [
+                SuppressionEntry(
+                    action=SuppressionAction.UNSUPPRESS,
+                    sha256=NAMED,
+                    recorded_at=datetime(2026, 10, 12, 9, 0, tzinfo=UTC),
+                    reason=ReasonCode.REMOVED_IN_ERROR,
+                    request_id=REQUEST,
+                )
+            ]
+        )
+
+        assert (await owed(world)).removals_owed == ()
+
+    async def test_another_requests_hold_at_the_same_path_does_not_make_it_owed(
+        self, world: RemovalWorld, tmp_path: Path
+    ) -> None:
+        """Two removals hold the path: `RM-2026-01`'s, which refused the upload, and `RM-2026-02`'s,
+        for another file. An un-suppress lifts `RM-2026-01`'s hold, so its re-run lists nothing for
+        the upload, and `RM-2026-02`'s hold does not make it `RM-2026-01`'s to finish."""
+        await import_weekly(world, tmp_path, CASELIST, WEEK_OF_THE_HELD_UPLOAD)
+        await world.suppression().append_path_holds(
+            [
+                PathHoldEntry(
+                    caselist=CASELIST,
+                    disclosure=HELD_PATH,
+                    sha256=digest_of("kept"),
+                    after_snapshot=date(2026, 9, 8),
+                    recorded_at=datetime(2026, 10, 10, 9, 0, tzinfo=UTC),
+                    reason=ReasonCode.REQUESTED_BY_TEAM,
+                    request_id="RM-2026-02",
+                )
+            ]
+        )
         await world.suppression().append(
             [
                 SuppressionEntry(

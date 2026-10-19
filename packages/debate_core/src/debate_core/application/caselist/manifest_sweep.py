@@ -102,21 +102,20 @@ def earlier_rewrites(
     """The manifests this request's earlier runs in `environment` rewrote, from their scopes.
 
     Every run's, completed or stopped: a scope records a rewrite only once its purge is done. A run
-    completed when the log entry its scope joins is `COMPLETED`, as
+    completed when a `COMPLETED` log entry is the one its scope joins
+    (:meth:`~debate_core.application.ports.suppression.RemovalScopeEntry.joins`), as
     :func:`~debate_core.application.caselist.removal_residue.completed_removals` reads it. Another
     request's, or another environment's, are not this request's to sweep.
     """
-    completed = {
-        entry.recorded_at
+    completed = [
+        entry
         for entry in entries
-        if entry.kind is RemovalLogKind.REMOVAL
-        and entry.outcome is RemovalOutcome.COMPLETED
-        and entry.request_id == request_id
-        and entry.environment == environment
-    }
+        if entry.kind is RemovalLogKind.REMOVAL and entry.outcome is RemovalOutcome.COMPLETED
+    ]
     found = {
         EarlierRewrite(
-            record=rewrite, completed_at=scope.recorded_at if scope.recorded_at in completed else None
+            record=rewrite,
+            completed_at=scope.recorded_at if any(scope.joins(entry) for entry in completed) else None,
         ): None
         for scope in scopes
         if scope.request_id == request_id and scope.environment == environment

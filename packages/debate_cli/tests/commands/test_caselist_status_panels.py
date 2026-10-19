@@ -209,6 +209,7 @@ class TestAWithdrawnCopyLeftFailsTheCommand:
         caption = " ".join((_status_table(residue_left(0, withdrawn=True), SETTINGS).caption or "").split())
 
         assert f"WITHDRAWN COPIES LEFT in {CASELIST}:" in caption
+        assert "REMOVAL RESIDUE in" not in caption, "the copy has a line of its own"
         assert "No version of a removed file is left" not in caption
         assert "Run that removal again, dry run first, then --execute" in caption
 
@@ -236,7 +237,10 @@ class TestAnUploadRefusedAtImport:
             f"REFUSED AT IMPORT AT A HELD PATH in {CASELIST}: 1 upload(s) the same removal has not yet "
             f"listed (sha256 {WITHDRAWN[:12]}, {REQUEST})."
         ) in told
-        assert f"means {REQUEST} is owed again: run the same removal again" in told
+        assert (
+            "A held row, a held upload in the inbox or an upload an import refused at a held path means "
+            f"{REQUEST} is owed again: run the same removal again"
+        ) in told
         assert WITHDRAWN not in caption
         assert not [word for word in IDENTIFYING if word in caption]
 

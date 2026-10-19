@@ -1795,3 +1795,62 @@ sample judged the same card 20 of 20.
 does not overlap 1,422; witnesses in several clusters 435; own cluster and another 171; within the
 rule 54; nine-tenths inside a body holding neither end 13; under the share 23; joining texts that do
 not overlap 12; ends held by too many clusters 4.
+
+## Card boundaries: bodies too long to be one card, and two cards stored as one (`v1-e31-t22`)
+
+Operator-run, read-only, over the dev data directory's `2026.10.18-docx-5` store on 2026-10-19:
+`scripts/count_card_boundaries.py` (all 11,154 parsed sources; every long card parsed again and
+reproduced exactly), then `scripts/sample_card_boundaries.py`, seed 20261019, 60 items, 1,259
+seconds answering. Counts only. Before any parser rule changed; whether one changes is the PM's
+ruling, recorded below when made.
+
+### Bodies over 3,000 words
+
+| | hsld26 | hspf26 | hspolicy26 | openev | Total |
+|---|---|---|---|---|---|
+| Cards in the store | 75,399 | 50,246 | 101,826 | 8,081 | 235,552 |
+| Cards over 3,000 words | 4,130 | 2,705 | 4,946 | 267 | 12,048 |
+| Distinct texts | 969 | 635 | 1,199 | 191 | 2,994 |
+| Ended by a tag in a debate style | 2,801 | 1,356 | 3,326 | 177 | 7,660 |
+| Ended by a pocket, hat or block | 686 | 703 | 1,117 | 82 | 2,588 |
+| Ended by a tag with nothing under it | 274 | 177 | 260 | 5 | 716 |
+| Ended by the end of the file | 230 | 159 | 140 | 2 | 531 |
+| Ended by a tag guessed from its formatting | 81 | 223 | 47 | 0 | 351 |
+| Ended by a cite, starting a card with no tag | 35 | 85 | 21 | 1 | 142 |
+| Ended by an analytic | 23 | 2 | 35 | 0 | 60 |
+| In a file that writes no tags | 5 | 35 | 4 | 0 | 44 |
+| In a file that uses no debate style | 52 | 55 | 10 | 0 | 117 |
+| Inside: a short line above a cite-shaped paragraph | 256 | 449 | 439 | 30 | 1,174 |
+| Inside: a cite-shaped paragraph, no short line above | 163 | 192 | 647 | 27 | 1,029 |
+| Inside: no cite, marked up (5% or more) | 3,351 | 1,397 | 3,307 | 190 | 8,245 |
+| Inside: no cite, plain prose (under 5%) | 360 | 667 | 553 | 20 | 1,600 |
+
+A cite-shaped paragraph names a source within its first 40 characters and is 2,000 characters or
+fewer, once the body has begun; a short line is 300 characters or fewer. Of the 4,844 cite-shaped
+paragraphs, 2,914 were read as small-print body and 329 as a cite the body kept.
+
+### Bodies holding two shorter bodies whole that share no text
+
+| | hsld26 | hspf26 | hspolicy26 | openev | Total |
+|---|---|---|---|---|---|
+| Distinct full texts | 16,774 | 14,561 | 25,701 | 6,400 | 63,436 |
+| Holding two that share no text | 1,212 | 1,207 | 2,023 | 118 | 4,560 |
+| Stored cards carrying them | 11,013 | 6,280 | 19,666 | 169 | 37,128 |
+| Holding two that do not overlap | 1,430 | 1,346 | 2,255 | 142 | 5,173 |
+
+"Holds" is the clusterer's (`CutIndex.containers`); 3,297 of the 4,560 hold exactly two, and in
+4,142 the smaller of the two is 64 words or more.
+
+### The sample
+
+| Stratum | Distinct texts | Asked | Answers |
+|---|---|---|---|
+| Long body: a short line above a cite-shaped paragraph | 271 | 10 | one card 8, several cards stored as one 2 |
+| Long body: a cite-shaped paragraph, no short line above | 241 | 10 | one card 10 |
+| Long body: no cite inside, marked up | 2,157 | 10 | one card 10 |
+| Long body: no cite inside, plain prose | 379 | 10 | one card 10 |
+| Two cards in one: body under 1,000 words | 1,954 | 10 | one card cut twice 10 |
+| Two cards in one: body of 1,000 words or more | 2,606 | 10 | one card cut twice 10 |
+
+No long body was answered "no cards". With ten a stratum, 2 of 10 is 6% to 51% at 95% (Wilson),
+and 0 of 10 is at most 28%; 0 of 20 at most 16%.

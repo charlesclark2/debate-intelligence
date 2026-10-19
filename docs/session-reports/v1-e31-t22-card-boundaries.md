@@ -6,18 +6,20 @@
 | Spec | [`plan_specs/v1/e31-debate-file-parsing/t22-card-boundaries.yaml`](../../plan_specs/v1/e31-debate-file-parsing/t22-card-boundaries.yaml) |
 | Epic / release | `v1-e31-debate-file-parsing` / `v1.1` |
 | Branch | `task/v1-e31-t22-card-boundaries` |
-| Session status | IN PROGRESS: the counts (ac1) are in; the sample (ac2) is built and waits on the operator. No parser rule is changed <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | IN PROGRESS: counts (ac1) and sample (ac2) done; waiting for the PM's ruling on the proposals below. No parser rule is changed <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
 The PM's order is followed: counts, then the sample, then the PM's ruling, and only then a parser
-change. The operator ran the counts on the `2026.10.18-docx-5` store on 2026-10-19
-([The counts](#the-counts)). The sampler is built and tested, and its command is with the operator
-([Operator follow-ups](#operator-follow-ups), step 2). When its tallies are in, the PM gets the
-tallies, what each kind turns out to be, and the rules proposed. No parser rule, version or
-fixture has changed.
+change. The operator ran the counts ([The counts](#the-counts)) and the sample
+([The sample's answers](#the-samples-answers)) on the `2026.10.18-docx-5` store on 2026-10-19.
+**58 of the 60 items are one card.** Long bodies are long cards, not missed boundaries. A body
+holding two cards' bodies that share no text is one card cut twice, 20 of 20. The one defect seen
+is 2 of 10 in one stratum, and the shape the count can see is wrong 8 times in 10. So the proposal
+is **no parser rule in this task** ([Proposals for the PM's ruling](#proposals-for-the-pms-ruling)).
+No parser rule, version or fixture has changed.
 
-**What the counts say, before the sample:**
+**What the counts said, before the sample:**
 
 1. **Long bodies are common, and the parser did end most of them where the file put a heading.**
    12,048 stored cards, 2,994 distinct texts, are over 3,000 words: 3% to 5.5% of each caselist's
@@ -55,8 +57,8 @@ fixture has changed.
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
 | ac1: before any rule changes, the operator-run counts for (1) and (2) per caselist, with (1) split by ending rule and by files that write tags | PASS | The operator's run of 2026-10-19 on `2026.10.18-docx-5`, all four caselists, `exit 0`, nothing not reproduced: [The counts](#the-counts). No rule has changed |
-| ac2: a sample of each, through v1-e31-t21's sampler, tallies only | NOT RUN | `scripts/sample_card_boundaries.py` built and tested ([The sample](#the-sample)); the operator's command is step 2 |
-| ac3: each defect has a synthetic fixture shown failing first; tag and cite precision and card boundaries do not fall | NOT RUN | After the PM's ruling |
+| ac2: a sample of each, through v1-e31-t21's sampler, tallies only | PASS | The operator's run of 2026-10-19 at `899c1a7`, seed 20261019, 60 of 60 answered in 1,259 s: long bodies one card 38, several cards 2 (both in one stratum); two cards in one, one card cut twice 20 of 20. Defects: the 2 only ([The sample's answers](#the-samples-answers)) |
+| ac3: each defect has a synthetic fixture shown failing first; tag and cite precision and card boundaries do not fall | NOT RUN | Waits on the PM's ruling. Before: PR subset tag precision 0.949, cite precision 0.969, card boundaries 35 of 38 exact |
 | ac4: `parser_version` bumped; the operator's re-parse records (1) and (2) before and after | NOT RUN | After ac3 |
 | Node: `uv run pytest packages/debate_core/tests -k "docx or parser"` | NOT RUN | Run before the report, with the PM's list of 2026-10-19 (working agreement 10) |
 
@@ -134,6 +136,62 @@ Of the 4,560:
 
 The holder bands count words as the clusterer reads them and the 3,000-word line counts words
 between spaces. That is why 762 holders are in the top band and 737 are over the line.
+
+## The sample's answers
+
+The operator ran `scripts/sample_card_boundaries.py` on 2026-10-19 from `899c1a7`, seed 20261019:
+60 of 60 drawn, asked and answered, 1,259 seconds answering, about 21 seconds an item. An earlier
+run with the first view was stopped at item 11 and its tallies deleted
+([The sample](#the-sample)).
+
+| Stratum | Distinct texts | Asked | Answers | 95% (Wilson) |
+|---|---|---|---|---|
+| Long body: a short line above a cite-shaped paragraph | 271 | 10 | one card 8, **several cards stored as one 2** | several: 6% to 51% |
+| Long body: a cite-shaped paragraph, no short line above | 241 | 10 | one card 10 | several: at most 28% |
+| Long body: no cite inside, marked up | 2,157 | 10 | one card 10 | several: at most 28% |
+| Long body: no cite inside, plain prose | 379 | 10 | one card 10 | several: at most 28% |
+| Two cards in one: body under 1,000 words | 1,954 | 10 | one card cut twice 10 | two cards: at most 28% |
+| Two cards in one: body of 1,000 words or more | 2,606 | 10 | one card cut twice 10 | two cards: at most 28% |
+
+**What each kind turns out to be:**
+
+- **Bodies over 3,000 words are cards.** 38 of 40 are one card and none is "no cards", including the
+  ten of plain prose (under 5% marked up), which are cards with little cut. The PM's four things to
+  check:
+  - *PF cases or speeches written as prose:* none in the sample; prose under 5% marked up is long
+    cards;
+  - *tags in body style:* the 2 found, both in the "short line above a cite" stratum;
+  - *cards separated only by their cites:* 0 of 10;
+  - *files with no styles:* 117 cards, 1% of the long bodies.
+
+  On the stratum's 271 texts, 2 of 10 is about 54 texts (15 to 138 at 95%), about 230 stored cards:
+  about 0.1% of the store.
+- **A body holding two cards' bodies that share no text is one card cut twice:** 20 of 20, in both
+  length bands. Two teams cut different passages of one long card. None is a missed boundary.
+- **The shape the count can see is mostly not a boundary.** A short line above a cite-shaped
+  paragraph is one card 8 times in 10.
+
+## Proposals for the PM's ruling
+
+The paste-ready message to the PM is in this session's transcript. The proposals, with the
+recommendation first:
+
+1. **Long bodies: no parser rule in this task** (recommended). The only shape the counts see is one
+   card 8 times in 10, so a rule on it would split about four real cards for each missed boundary
+   it mends. *Alternative:* a follow-up task to describe what the 2 had in common (the operator's
+   few words, then a narrower count and its own sample) before any rule.
+2. **No store marking for long bodies.** No sampled long body was "not cards", so there is nothing
+   to mark. That a 5,000-word card is a poor search result is a display question for the pilot
+   (show what the card reads aloud), not a parser one.
+3. **Two cards in one: no parser change.** 20 of 20 are one card cut twice. *To note, not this
+   task's:* `v1-e31-t20` refuses as witness a body holding two passages that do not overlap, built
+   on `v1-e31-t11`'s one false join. On this sample such a body is one card, so the refusal may keep
+   cuts out of their own card's cluster. That is matching (the PM: not this task); a candidate for
+   `v1-e31-t29`, perhaps with a sample of the 216 holders under 300 words, the shape of t11's join.
+4. **The spec, if 1 and 3 stand:** ac3 and ac4 have no defect to apply to. The PM amends them: no
+   fixture, no `parser_version` bump and no re-parse, so the operator is spared a whole-store
+   re-parse and `v1-e31-t24` bumps alone. This task then closes with the counts and the sample in
+   `docs/data/caselist-parse-report.md` (written), the Goal `Succeeded`.
 
 ## The counting script
 
@@ -271,6 +329,7 @@ to B. Each was given a test, and all 7 are caught on re-run: 22 runs in all.
 - `packages/debate_core/tests/evidence/test_card_boundaries.py` (new).
 - `scripts/count_card_boundaries.py` (new) and `tests/scripts/test_count_card_boundaries.py` (new).
 - `scripts/sample_card_boundaries.py` (new) and `tests/scripts/test_sample_card_boundaries.py` (new).
+- `docs/data/caselist-parse-report.md`: a section with the counts and the sample.
 
 ## Deviations from the spec
 
@@ -308,7 +367,10 @@ Run after A5 of `v1-e31-t20`'s list, once the local store was `docx-5`. Its figu
 [The counts](#the-counts). The candidates are at `~/t22-card-boundary-candidates.jsonl`, outside
 the data directory.
 
-### 2. The sample (ac2): about 2 minutes to start, then about 20 to 30 minutes answering
+### 2. The sample (ac2): done, 2026-10-19 (1,259 seconds answering)
+
+The instructions as run are kept below. Its tallies are in [The sample's answers](#the-samples-answers).
+
 
 If the first run, from `1b4ab7f`, is still open, press `q`. Its tallies came from the view that
 could not show A and B inside one paragraph, so they are removed before the run again, with the
@@ -346,7 +408,12 @@ a few words of what you saw in any stratum where the answers were mixed. No card
 
 ## Follow-up work
 
-None yet.
+- **The witness refusal for a body holding two passages (`v1-e31-t29` or E31, the PM's):** see
+  proposal 3.
+- **What a 3,000-word card shows a student (E39, the pilot):** what the card reads aloud, not the
+  whole body.
+- **`~/t22-card-boundary-candidates.jsonl` and `~/t22-card-boundary-sample-tallies.txt`** are the
+  operator's, outside the repository; they can be deleted once the PM has ruled.
 
 ## PM review
 

@@ -169,3 +169,48 @@ variable "evidence_removal_user_names" {
   type        = list(string)
   default     = []
 }
+
+# --- The student evidence search pilot (v1-e39-t04-pilot-infrastructure, ADR-0019) ---------------
+#
+# Identical in both roots; the host is in each root's terraform.tfvars and the people in the
+# gitignored owner.auto.tfvars.
+
+variable "evidence_search_host" {
+  description = "The host students open: tub.dev.wfbdebate.com in dev, tub.wfbdebate.com in prod (ADR-0019 (a) 6). The login host is auth. in front of it."
+  type        = string
+}
+
+variable "evidence_search_dns_zone_name" {
+  description = "Name of the existing Route 53 hosted zone holding evidence_search_host. Read, never created."
+  type        = string
+  default     = "wfbdebate.com"
+}
+
+variable "evidence_search_budget_emails" {
+  description = <<-EOT
+    Where the pilot's $10 budget alarm writes. Supplied through the gitignored owner.auto.tfvars
+    and never committed; empty sends it to the Owner address.
+  EOT
+  type        = list(string)
+  default     = []
+}
+
+variable "evidence_search_deployer_user_names" {
+  description = <<-EOT
+    Identity Center user names assigned this environment's TubDeployer permission set, which
+    scripts/tub_deploy.sh runs as. Adult maintainers only. Supplied through the gitignored
+    owner.auto.tfvars, because these are people's names and the repository is public.
+  EOT
+  type        = list(string)
+  default     = []
+}
+
+variable "evidence_search_accounts_user_names" {
+  description = <<-EOT
+    Identity Center user names assigned this environment's TubAccounts permission set, which the
+    coach's `tub users` commands run as (v1-e39-t05). Adult maintainers only, never a student.
+    Supplied through the gitignored owner.auto.tfvars.
+  EOT
+  type        = list(string)
+  default     = []
+}

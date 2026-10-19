@@ -58,7 +58,7 @@ spec:
         `parser_version` is bumped, and the operator's re-parse records (1) and (2) before
         and after in docs/data/caselist-parse-report.md.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

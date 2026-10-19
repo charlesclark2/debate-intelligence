@@ -457,3 +457,33 @@ def test_the_writer_calls_no_model() -> None:
         text = path.read_text(encoding="utf-8")
         for word in ("ModelRouter", "model_router", "generate_structured", "bedrock"):
             assert word not in text, (path.name, word)
+
+
+def test_a_stretch_underlined_by_an_alias_beside_the_profiles_own_style_reads_back(
+    parser: DebateDocxParser,
+) -> None:
+    """The source reads two underline spans (two rules); the writer re-maps the alias and the built
+    file reads one. The characters underlined are the same, which is what ac1 compares."""
+    content = build_docx(
+        tag("Moratoria raise prices")
+        + styled_cite("Lindqvist 26")
+        + paragraph(
+            [
+                ("Supply ", SMALL),
+                ("freezes", {"character_style": "Underline", **SMALL}),
+                (" in place", {**UNDERLINE, **SMALL}),
+                (" this year.", SMALL),
+            ]
+        )
+    )
+    cards, result = build_all(parser, content)
+    underlines = [span for span in cards[0].card.formatting_spans if span.emphasis is RunEmphasis.UNDERLINE]
+    assert len(underlines) == 2, "the source reads the alias and the style as two spans"
+    assert_every_card_reads_as_its_source(parser, cards, result)
+    assert isinstance(result, BuiltEvidenceFile)
+    rebuilt = [
+        s
+        for s in reparse(parser, result.docx).cards[0].formatting_spans
+        if s.emphasis is RunEmphasis.UNDERLINE
+    ]
+    assert len(rebuilt) == 1

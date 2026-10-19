@@ -536,3 +536,53 @@ def test_a_stand_in_that_could_build_markup_or_move_a_word_is_refused(stand_in: 
 @pytest.mark.parametrize("stand_in", ["�", "", ""])
 def test_the_replacement_character_and_the_private_use_area_are_allowed(stand_in: str) -> None:
     assert check_replacement_character(stand_in) == stand_in
+
+
+def test_a_comment_reference_inside_a_run_with_text_is_dropped_and_the_text_kept(
+    parser: DebateDocxParser, profile: StyleProfile, base: BaseTemplate
+) -> None:
+    shared = (
+        '<w:p><w:r><w:rPr><w:highlight w:val="cyan"/></w:rPr>'
+        '<w:t xml:space="preserve">Supply shrinks under the moratorium.</w:t>'
+        '<w:commentReference w:id="5"/></w:r></w:p>'
+    )
+    card = _copied(_copy(build_docx(TAG + CITE + shared), parser, profile, base))
+    assert _text(card.after_cite[0]) == "Supply shrinks under the moratorium."
+    assert "commentReference" not in _xml(card.after_cite[0])
+
+
+def test_an_embedded_object_is_refused_even_with_no_relationship(
+    parser: DebateDocxParser, profile: StyleProfile, base: BaseTemplate
+) -> None:
+    unlinked = '<w:object><v:shape id="_x0000_i1026"/></w:object>'
+    result = _copy(build_docx(TAG + CITE + _body_holding(unlinked)), parser, profile, base)
+    assert isinstance(result, UnsupportedCard)
+    assert result.kinds == (UnsupportedContentKind.EMBEDDED_OBJECT,)
+
+
+def test_anything_else_that_points_into_another_part_is_refused(
+    parser: DebateDocxParser, profile: StyleProfile, base: BaseTemplate
+) -> None:
+    """Ink, as Word writes it: a content part behind a relationship, in no list of known objects."""
+    ink = (
+        '<mc:AlternateContent xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml">'
+        '<mc:Choice Requires="w14"><w14:contentPart r:id="rId12"/></mc:Choice></mc:AlternateContent>'
+    )
+    result = _copy(build_docx(TAG + CITE + _body_holding(ink)), parser, profile, base)
+    assert isinstance(result, UnsupportedCard)
+    assert result.kinds == (UnsupportedContentKind.EMBEDDED_OBJECT,)
+
+
+def test_a_hyperlink_to_an_internal_target_is_kept_as_text_with_a_warning(
+    parser: DebateDocxParser, profile: StyleProfile, base: BaseTemplate
+) -> None:
+    internal = LINKED_RELS.replace(' TargetMode="External"', "")
+    content = build_docx(
+        TAG + _linked_cite("rId7") + BODY, extra_parts={"word/_rels/document.xml.rels": internal}
+    )
+    targets = HyperlinkTargets()
+    card = _copied(_copy(content, parser, profile, base, targets=targets))
+    hyperlink = card.through_cite[0].find(f"{W}hyperlink")
+    assert hyperlink is not None and hyperlink.get(f"{{{R_NS}}}id") is None
+    assert targets.relationships() == ()
+    assert card.warnings == ("a hyperlink whose target the source does not give was kept as text, unlinked",)

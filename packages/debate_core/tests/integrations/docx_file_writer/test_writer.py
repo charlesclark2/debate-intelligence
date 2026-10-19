@@ -34,7 +34,7 @@ from debate_core.application.ports.evidence_file_writer import (
 )
 from debate_core.application.ports.parsed_store import OccurrenceRecord
 from debate_core.domain.caselist import Disclosure, Side, SourceDocument, SourceFormat, SourceOrigin
-from debate_core.domain.debate_files import ParsedDocument
+from debate_core.domain.debate_files import ParsedDocument, ParseFailure
 from debate_core.domain.enums import ProvenanceMode, VerificationStatus
 from debate_core.domain.file_provenance import (
     FILE_PROVENANCE_SCHEMA_FILENAME,
@@ -792,3 +792,98 @@ def test_refusal_messages_name_no_school_team_or_card_text(
     message = str(built.result.refusals[0])
     for absent in ("Maple Grove", "QX", "Lindqvist", "Moratoria", "Prices climb"):
         assert absent not in message, absent
+
+
+class _LosesTheCiteOfACardWithTheLine(DebateDocxParser):
+    """A parser that reads the cite of any card carrying a provenance line as nothing.
+
+    No shape of today's parser does this to a cite that is not highlighted; this stands in for one
+    not yet found, to show the writer names the line as the cause without knowing any parser rule.
+    """
+
+    def parse(
+        self,
+        content: bytes,
+        source: SourceDocument,
+        *,
+        source_path: str,
+        snapshot: date | None = None,
+        camp: str | None = None,
+    ) -> ParsedDocument | ParseFailure:
+        parsed = super().parse(content, source, source_path=source_path, snapshot=snapshot, camp=camp)
+        if not isinstance(parsed, ParsedDocument):
+            return parsed
+        cards = tuple(
+            card.model_copy(update={"full_cite": ""}) if "[Disclosed" in card.undertag else card
+            for card in parsed.cards
+        )
+        return parsed.model_copy(update={"cards": cards})
+
+
+class _ReadsAnExtraCardInABuiltFile(DebateDocxParser):
+    """A parser that finds one card more in a built file than the writer put there."""
+
+    def parse(
+        self,
+        content: bytes,
+        source: SourceDocument,
+        *,
+        source_path: str,
+        snapshot: date | None = None,
+        camp: str | None = None,
+    ) -> ParsedDocument | ParseFailure:
+        parsed = super().parse(content, source, source_path=source_path, snapshot=snapshot, camp=camp)
+        if not isinstance(parsed, ParsedDocument) or source_path != "built-file.docx":
+            return parsed
+        last = parsed.cards[-1]
+        extra = last.model_copy(
+            update={"provenance": last.provenance.model_copy(update={"first_element_index": 999})}
+        )
+        return parsed.model_copy(update={"cards": (*parsed.cards, extra)})
+
+
+def test_refusal_names_the_line_as_the_cause_of_any_change_it_makes_without_knowing_the_rule(
+    built_at: datetime,
+) -> None:
+    parser = _LosesTheCiteOfACardWithTheLine()
+    world, cards = _sources(parser, (SOURCE_ONE, SyntheticDisclosure()))
+    built = _build(
+        world, cards[:1], [("Prices", [{"fingerprint": cards[0].fingerprint}])], built_at, parser=parser
+    )
+    assert isinstance(built.result, FileBuildRefusal)
+    (refusal,) = built.result.refusals
+    assert refusal.detail.startswith("the provenance line below the cite changes how the card reads: ")
+    assert refusal.detail.endswith("; without the line the card reads as its source")
+
+
+def test_refusal_a_built_file_that_reads_as_more_cards_than_were_written(built_at: datetime) -> None:
+    parser = _ReadsAnExtraCardInABuiltFile()
+    world, cards = _sources(parser, (SOURCE_ONE, SyntheticDisclosure()))
+    built = _build(
+        world, cards[:1], [("Prices", [{"fingerprint": cards[0].fingerprint}])], built_at, parser=parser
+    )
+    assert isinstance(built.result, FileBuildRefusal)
+    assert built.result.refusals[0].detail.startswith("the built file reads as 2 cards, not 1")
+
+
+def test_refusal_a_camp_card_cannot_be_built_from_a_schema_version_1_recipe(
+    parser: DebateDocxParser, built_at: datetime
+) -> None:
+    world, cards = _sources(parser, (SOURCE_ONE, SyntheticDisclosure()))
+    camp = cards[0].occurrence.model_copy(
+        update={
+            "caselist": "openev",
+            "camp": "Cascade Institute",
+            "snapshot": "2026-cascade",
+            "last_snapshot": "2026-cascade",
+        }
+    )
+    moved = dataclasses.replace(cards[0], occurrence=camp, disclosure=None)
+    built = _build(world, [moved], [("Prices", [{"fingerprint": moved.fingerprint}])], built_at)
+    assert isinstance(built.result, FileBuildRefusal)
+    assert [(refusal.code, refusal.detail) for refusal in built.result.refusals] == [
+        (
+            CardRefusalCode.SOURCE_UNREADABLE,
+            "a camp (OpenEv) card cannot be referenced by a schema version 1 recipe",
+        )
+    ]

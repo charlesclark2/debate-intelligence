@@ -130,9 +130,6 @@ _DROP: Final = frozenset(
     }
 )
 
-#: A tracked change to the paragraph mark itself, written inside a paragraph's `w:pPr/w:rPr`.
-_PARAGRAPH_MARK_REVISIONS: Final = frozenset({_w("ins"), _w("del"), _w("moveFrom"), _w("moveTo")})
-
 #: Attributes that fingerprint an editing session.
 _EDITING_ATTRIBUTES: Final = frozenset(
     {_w(name) for name in ("rsidR", "rsidRPr", "rsidRDefault", "rsidP", "rsidDel", "rsidSect", "rsidTr")}
@@ -294,12 +291,11 @@ def _unwrap(element: XmlElement) -> None:
 
 
 def _resolve_tracked_changes_and_marks(paragraph: XmlElement) -> None:
-    """Drop what the parser drops and unwrap what it keeps, in one pass over a copied paragraph."""
-    for properties in paragraph.iter(W_RUN_PROPERTIES):
-        parent = properties.getparent()
-        if parent is not None and parent.tag == W_PARAGRAPH_PROPERTIES:
-            for revision in [child for child in properties if child.tag in _PARAGRAPH_MARK_REVISIONS]:
-                properties.remove(revision)
+    """Drop what the parser drops and unwrap what it keeps, in one pass over a copied paragraph.
+
+    A tracked change to the paragraph mark (`w:ins` or `w:del` inside `w:pPr/w:rPr`) needs no rule of
+    its own: the insertion is an empty element and unwraps to nothing, and the deletion is dropped.
+    """
     for reference in list(paragraph.iter(_COMMENT_REFERENCE)):
         run = reference.getparent()
         if (
@@ -501,8 +497,10 @@ def copy_card(
     for index, paragraph in _in_range(source, first_element_index, last_element_index):
         found: set[UnsupportedContentKind] = set()
         if paragraph.in_text_box:
-            found.add(UnsupportedContentKind.TEXT_BOX)
-        elif paragraph.in_table:
+            # A text box's paragraphs follow the paragraph that holds the box, which is in the card's
+            # range before them and is refused for the box (`_unsupported_kinds`).
+            continue
+        if paragraph.in_table:
             found.add(UnsupportedContentKind.TABLE)
         else:
             copied = copy.deepcopy(paragraph.element)

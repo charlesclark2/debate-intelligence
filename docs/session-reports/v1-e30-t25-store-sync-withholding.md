@@ -228,9 +228,44 @@ v1-e30-t25 asks the PM, 2026-10-19:
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-19
 
 **Notes:**
+
+Accepted, with the phase `Succeeded`.
+
+**The work itself:**
+
+* **The push asks the publisher, never restates it.** Mutants S6 and S7 restate the rule and are
+  caught, and the reason is compared word for word with a real publish of the same snapshot.
+* **Item (2) is one change to the shared rule,** so the importer, the inbox rewrite, status and the
+  publisher agree without a line in `status_service.py`, which keeps clear of v1-e30-t24's files.
+* **The question costs no request,** shown by a counting wrapper rather than asserted, and the
+  reasoning for why the empty listings are safe is written down (Decision 3), with the condition
+  under which it would stop being safe.
+* **S9's survivor became a test** for the complete archive's manifest one level down. That is the
+  mutation run doing its job.
+* **The lint slip in `edb6a11` was reported, not hidden,** and fixed in the next commit.
+
+**Rulings:**
+
+1. **PM question 1: (b), filed later, not here.** A small E29 task adds a `skipped_reasons`
+   breakdown to `store sync --json` and a caption line naming withheld manifests, at p2. The operator
+   should see the reason that tells them to run the removal again.
+2. **PM question 2: (a).** A push does not send what a publish refuses.
+3. **Decisions 1 to 9 and Deviations 1 to 3: accepted.** Decision 4's `LocalStoreAccessDenied`
+   ending the plan matches publish and status. Follow-up 2 is not filed unless it happens.
+4. **Decision 8 has an operator consequence.** An earlier build's import that kept a junk row at a
+   held path now makes that week's publish refuse. After this merges and the agent is reinstalled
+   (A12), the operator's next `caselist status` in dev and prod shows any such week as a held skipped
+   row, and the fix is the removal run again. I'll give that command at A13.
+5. **Follow-up 1** (Word lock files and in-place AppleDouble at a held path) waits for a real archive
+   that carries one; not filed.
+6. **The merge with v1-e30-t24** overlaps only in `tests/smoke/test_caselist_remove_smoke.py` and its
+   README row. Whichever merges second syncs and keeps both checks.
+7. **From the next task on, working agreement 10 applies.** It is pending as a docs pull request:
+   no whole-suite runs in parts, the affected set once before the report, and mutation runs capped.
+   This report's eighths table was right under the rules it ran under.

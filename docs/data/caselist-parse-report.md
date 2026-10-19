@@ -204,7 +204,8 @@ document id. 2,703 sources share that shape and 2,691 of them parse. In these fi
 wrote a character into the text that XML does not allow, so no conforming XML parser reads the
 part. The three files with U+0001 are well-formed once those four characters are taken out, which
 shows the characters are the whole defect there. Taking them out would be editing evidence text,
-which the parser never does.
+which the parser never does. From 2026.10.18-docx-4 the parser replaces each such character with
+U+FFFD, one for one, by decision (v1-e31-t15); nothing is taken out.
 
 **The compression ratio.** Of the 9,738 distinct DOCX sources that open as a zip, 9,732 have no
 entry above 50-fold, five have one between 50 and 100, and this file is the only one above 100.

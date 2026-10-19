@@ -377,20 +377,31 @@ class ParsedCard(DomainModel):
     tag: str = Field(
         default="",
         description=(
-            "The claim the card is read for, exactly as written. Empty when the file gave the card "
-            "none, which a record writes as null: ask `has_tag`."
+            "The claim the card is read for, exactly as written, except that a character XML 1.0 "
+            "forbids is replaced by U+FFFD. Empty when the file gave the card none, which a record "
+            "writes as null: ask `has_tag`."
         ),
     )
     short_cite: str | None = Field(
         default=None, description="The part a debater says out loud, e.g. `Okonkwo 26`; None if unreadable."
     )
-    full_cite: str = Field(default="", description="The whole cite line, exactly as written.")
+    full_cite: str = Field(
+        default="",
+        description=(
+            "The whole cite line, exactly as written, except that a character XML 1.0 forbids is "
+            "replaced by U+FFFD."
+        ),
+    )
     undertag: str = Field(
         default="",
         description="Undertag lines under the tag, joined by newlines; empty when the card has none.",
     )
     evidence_text: str = Field(
-        default="", description="The card's body, the runs' text concatenated, copied exactly."
+        default="",
+        description=(
+            "The card's body, the runs' text concatenated, copied exactly, except that a character "
+            "XML 1.0 forbids is replaced by U+FFFD."
+        ),
     )
     completeness: CardCompleteness = Field(description="FULL, ABBREVIATED or CITE_ONLY.")
     section_path: tuple[str, ...] = Field(

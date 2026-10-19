@@ -63,7 +63,7 @@ v2.3's extension work.
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 40 | 40 | 216 |
 | [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 93 | 65 | 465 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 20 | 4 | 188 |
-| [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 13 | 0 | 108 |
+| [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 13 | 1 | 108 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 14 | 0 | 96 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 0 | 66 |
 | [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 19 | 12 | 146 |
@@ -309,7 +309,7 @@ A student can run `debate-research cut <URL>` and receive a verified, tagged, ci
 
 | Task | Status | Prereqs | Est. hours |
 |---|---|---|---|
-| [URL canonicalization and identifier detection](plan_specs/v1/e04-article-retrieval/t01-url-canonicalization.yaml) `v1-e04-t01-url-canonicalization` | Pending | 1 | 7.0 |
+| [URL canonicalization and identifier detection](plan_specs/v1/e04-article-retrieval/t01-url-canonicalization.yaml) `v1-e04-t01-url-canonicalization` | Succeeded | 1 | 7.0 |
 | [Polite HTTP fetcher](plan_specs/v1/e04-article-retrieval/t02-http-fetcher.yaml) `v1-e04-t02-http-fetcher` | Pending | 4 | 10.0 |
 | [Access-status and paywall detection](plan_specs/v1/e04-article-retrieval/t03-access-status.yaml) `v1-e04-t03-access-status` | Pending | 2 | 6.0 |
 | [Readable-text extraction (HTML + PDF)](plan_specs/v1/e04-article-retrieval/t04-content-extraction.yaml) `v1-e04-t04-content-extraction` | Pending | 2 | 8.5 |

@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+{% if csrf_token %}<meta name="tub-csrf" content="{{ csrf_token }}">
+{% endif %}<title>{% block title %}Team evidence search{% endblock %}</title>
+<script src="{{ app_js }}" defer></script>
+</head>
+<body>
+<header>
+<p><a href="/">Team evidence search</a></p>
+{% if username %}
+<nav aria-label="Your account">
+<p>Signed in as <strong>{{ username }}</strong>{% if role == "coach" %} (coach){% endif %}.</p>
+<ul>
+{% if signed_in %}<li><a href="/account">Your account</a></li>
+{% endif %}{% if role == "coach" and signed_in %}<li><a href="/coach">Coach</a></li>
+{% endif %}</ul>
+<form method="post" action="/auth/sign-out">
+<button type="submit">Sign out</button>
+<p data-tub-message role="status"></p>
+</form>
+</nav>
+{% endif %}
+</header>
+<main>
+{% block main %}{% endblock %}
+</main>
+</body>
+</html>

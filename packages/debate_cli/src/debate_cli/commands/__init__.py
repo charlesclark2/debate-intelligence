@@ -1,9 +1,10 @@
 """Where every `debate-research` command is attached to the root application.
 
 V1 fills this package up over several epics — `verify` (E03), `fetch` (E04), `search` and `cut`
-(E08), `daily`, `config`, `store` (v1-e29-t05), `caselist` (E30, E34), `landscape` (E32) and
-`files` (E33) — so registration happens in one function, :func:`register_commands`, rather than
-through decorators scattered across modules. Reading it tells you the whole surface.
+(E08), `daily`, `config`, `store` (v1-e29-t05), `caselist` (E30, E34), `landscape` (E32),
+`files` (E33) and `tub` (E39) — so registration happens in one function,
+:func:`register_commands`, rather than through decorators scattered across modules. Reading it
+tells you the whole surface.
 
 ## Adding a plain command
 
@@ -52,6 +53,7 @@ from debate_cli.commands import (
     doctor,
     store,
     tub_index,
+    tub_users,
     verify,
 )
 
@@ -94,13 +96,23 @@ def register_commands(app: typer.Typer) -> None:
     evidence_store.command("get")(store.get)
     app.add_typer(evidence_store)
 
-    search_pilot = command_group(
-        "tub", "The student search pilot: its index (and, from v1-e39-t05, its users)."
-    )
+    # The student search pilot (E39): its index (v1-e39-t02) and its users (v1-e39-t05).
+    search_pilot = command_group("tub", "The team's student evidence search pilot: its index and its users.")
     search_index = command_group("index", "Build the search pilot's index and publish it to a bucket.")
     search_index.command("build")(tub_index.build)
     search_index.command("publish")(tub_index.publish)
     search_pilot.add_typer(search_index)
+    pilot_accounts = command_group(
+        "users", "The coach's accounts for the pilot: add, list, reset, disable, remove."
+    )
+    pilot_accounts.command("add")(tub_users.add)
+    pilot_accounts.command("list")(tub_users.list_accounts)
+    pilot_accounts.command("reset")(tub_users.reset)
+    pilot_accounts.command("disable")(tub_users.disable)
+    pilot_accounts.command("enable")(tub_users.enable)
+    pilot_accounts.command("remove")(tub_users.remove)
+    pilot_accounts.command("email-second-factor")(tub_users.email_second_factor)
+    search_pilot.add_typer(pilot_accounts)
     app.add_typer(search_pilot)
 
 

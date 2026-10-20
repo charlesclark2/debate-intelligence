@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Your account · Team evidence search{% endblock %}
+{% block main %}
+<h1>Your account</h1>
+{% if notice %}<p role="status">{{ notice }}</p>{% endif %}
+
+<h2>Authenticator app</h2>
+{% if account.has_authenticator %}
+<p>Your authenticator app is set up. If you have a new phone, set up the new one here: the old one
+stops working once the new one is confirmed.</p>
+{% else %}
+<p>You have no authenticator app set up.</p>
+{% endif %}
+<p><a href="/account/authenticator">Set up {% if account.has_authenticator %}a new{% else %}an{% endif %} authenticator app</a></p>
+
+<h2>Backup email</h2>
+{% if account.email and account.email_verified %}
+<p>Your backup email is <strong>{{ account.email }}</strong>. When you sign in you can choose a code
+sent there instead of your authenticator app.</p>
+{% elif account.email %}
+<p>Your backup email <strong>{{ account.email }}</strong> is not confirmed yet. Enter the code we sent to it.</p>
+<form method="post" action="/account/email/verify">
+<label for="email-code">Code from the email</label>
+<input id="email-code" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required>
+<button type="submit">Confirm</button>
+<p data-tub-message role="status"></p>
+</form>
+{% else %}
+<p>You can add an email address as a backup way to sign in, for when your phone is not with you.
+It is optional.</p>
+{% endif %}
+{% if not (account.email and account.email_verified) %}
+<form method="post" action="/account/email">
+<label for="email">{% if account.email %}Use a different address{% else %}Email address{% endif %}</label>
+<input id="email" name="email" type="email" autocomplete="email" maxlength="254" required>
+<button type="submit">Send a code</button>
+<p data-tub-message role="status"></p>
+</form>
+{% endif %}
+{% if account.email %}
+{% if account.may_remove_email %}
+<form method="post" action="/account/email/remove">
+<button type="submit">Remove the backup email</button>
+<p data-tub-message role="status"></p>
+</form>
+{% else %}
+<p>Your email is how you sign in in place of an authenticator app, so it cannot be removed here.
+Ask your coach.</p>
+{% endif %}
+{% endif %}
+{% endblock %}

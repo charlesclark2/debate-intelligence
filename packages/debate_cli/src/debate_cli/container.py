@@ -182,6 +182,7 @@ from debate_core.application.sync_runs import (
     SyncRunLog,
     SyncRunMonitor,
 )
+from debate_core.application.tub.accounts import AccountAdministration
 from debate_core.application.verify_manifest import VerifyManifest
 from debate_core.domain import new_id
 from debate_core.domain.caselist import Event
@@ -235,6 +236,7 @@ SERVICE_NAMES: Final[tuple[str, ...]] = (
     "opencaselist_client",
     "search_index_build",
     "search_index_publish",
+    "tub_account_administration",
     "verify_manifest",
 )
 """Names of the services this container can build, for `debate-research doctor` to report."""
@@ -1205,6 +1207,54 @@ class ServiceContainer:
         from debate_core.integrations.local.macos_notifier import MacOsNotifier
 
         return MacOsNotifier()
+
+    def tub_account_administration(
+        self, environment: str, user_pool_id: str, profile: str | None
+    ) -> AccountAdministration:
+        """The coach's `tub users` commands over the pilot's pool in `environment` (`v1-e39-t05`).
+
+        Signed with `profile`, or `debate-<environment>-tub-accounts`: the `TubAccounts` permission
+        set, which may manage accounts in its own environment's pool and append to the `tub-users`
+        stream of its audit group, and nothing else (`infrastructure/modules/evidence_search`). The
+        pilot reads no settings: its pool is named on the command line, and its region is the one
+        ADR-0010 fixes.
+        """
+        return self.singleton(
+            "tub_account_administration",
+            lambda: self._build_tub_account_administration(environment, user_pool_id, profile),
+        )
+
+    def _build_tub_account_administration(
+        self, environment: str, user_pool_id: str, profile: str | None
+    ) -> AccountAdministration:
+        # Imported here, not at module scope: boto3 is an optional dependency. See the docstring.
+        from debate_core.integrations.cloudwatch_audit import (
+            ACCOUNT_CHANGES_STREAM,
+            CloudWatchAuditSink,
+            build_logs_client,
+        )
+        from debate_core.integrations.cognito import (
+            PILOT_REGION,
+            CognitoAccountDirectory,
+            build_cognito_admin_client,
+        )
+
+        accounts_profile = profile or f"debate-{environment}-tub-accounts"
+        return AccountAdministration(
+            directory=CognitoAccountDirectory(
+                client=build_cognito_admin_client(profile=accounts_profile),
+                user_pool_id=user_pool_id,
+                profile=accounts_profile,
+            ),
+            audit=CloudWatchAuditSink(
+                client=build_logs_client(profile=accounts_profile, region=PILOT_REGION),
+                log_group=f"debate-{environment}-tub-audit",
+                log_stream=ACCOUNT_CHANGES_STREAM,
+                create_stream=False,
+                profile=accounts_profile,
+            ),
+            clock=self.clock(),
+        )
 
     def _aws_login_command(self) -> str:
         profile = self.settings.storage.s3.aws_profile

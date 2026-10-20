@@ -581,6 +581,11 @@ run "user_pool_admits_only_coach_created_accounts_with_totp" {
     condition     = aws_cognito_user_group.coach.name == "coach" && aws_cognito_user_group.student.name == "student"
     error_message = "The pool's groups are coach and student."
   }
+
+  assert {
+    condition     = aws_cognito_user_group.email_second_factor.name == "email-second-factor" && aws_cognito_user_group.email_second_factor.user_pool_id == aws_cognito_user_pool.pilot.id
+    error_message = "The pool has the email-second-factor group the app and tub users read (PM ruling, 2026-10-19)."
+  }
 }
 
 run "user_pool_has_no_sms_and_nothing_beyond_a_username_and_an_optional_email" {
@@ -1006,6 +1011,28 @@ run "deployer_can_push_and_update_its_own_function_and_nothing_else" {
       ])
     ])
     error_message = "TubAccounts acts on its own pool and its own audit stream only."
+  }
+
+  assert {
+    condition = toset(flatten([
+      for statement in jsondecode(aws_ssoadmin_permission_set_inline_policy.accounts[0].inline_policy).Statement :
+      [for action in flatten([statement.Action]) : action if startswith(action, "cognito-idp:")]
+      ])) == toset([
+      "cognito-idp:AdminCreateUser",
+      "cognito-idp:AdminAddUserToGroup",
+      "cognito-idp:AdminRemoveUserFromGroup",
+      "cognito-idp:ListUsers",
+      "cognito-idp:ListUsersInGroup",
+      "cognito-idp:AdminGetUser",
+      "cognito-idp:AdminListGroupsForUser",
+      "cognito-idp:AdminSetUserPassword",
+      "cognito-idp:AdminDeleteSoftwareToken",
+      "cognito-idp:AdminUserGlobalSignOut",
+      "cognito-idp:AdminDisableUser",
+      "cognito-idp:AdminEnableUser",
+      "cognito-idp:AdminDeleteUser",
+    ])
+    error_message = "TubAccounts holds exactly the Cognito actions tub users calls (debate_core.integrations.cognito.accounts), and no other."
   }
 
   assert {

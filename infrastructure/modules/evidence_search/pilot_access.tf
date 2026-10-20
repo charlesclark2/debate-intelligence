@@ -70,10 +70,13 @@ locals {
 
   # The account lifecycle of ADR-0019 (d), command by command: add (create, add to group), list
   # (list, get, groups), reset (set a temporary password, remove the authenticator, sign out
-  # everywhere), disable and enable, remove (sign out, delete).
+  # everywhere), disable and enable, remove (sign out, delete), and email-second-factor (add to or
+  # remove from that group, v1-e39-t05). Exactly the calls debate_core.integrations.cognito.accounts
+  # makes; tests/evidence_search.tftest.hcl lists them.
   accounts_cognito_actions = [
     "cognito-idp:AdminCreateUser",
     "cognito-idp:AdminAddUserToGroup",
+    "cognito-idp:AdminRemoveUserFromGroup",
     "cognito-idp:ListUsers",
     "cognito-idp:ListUsersInGroup",
     "cognito-idp:AdminGetUser",

@@ -282,6 +282,22 @@ class SkipKind(StrEnum):
     """A key under none of :data:`EVIDENCE_PREFIXES`."""
 
 
+PUBLISHER_SKIP_KINDS: frozenset[SkipKind] = frozenset(
+    {SkipKind.WITHHELD_MANIFEST, SkipKind.UNREADABLE_MANIFEST}
+)
+"""The kinds whose reason is the publisher's message, which the breakdown carries word for word."""
+
+KEY_PREFIX_LENGTH = 12
+"""How much of a key the breakdown shows: `manifests/hs`, `raw/caselist`, `files/hsld26`.
+
+Short enough that a key under any of :data:`EVIDENCE_PREFIXES` is cut before anything after its
+caselist or tenant segment, which is where a built file's name would start.
+"""
+
+KEY_PREFIXES_PER_REASON = 3
+"""At most this many distinct key prefixes per kind of skip."""
+
+
 class UnsyncableKeyspace(DomainError):
     """A keyspace was asked to sync something it has no mapping for.
 
@@ -400,6 +416,13 @@ class PlannedObject:
     request_ids: tuple[str, ...] = ()
     """The removal requests the publisher's reason names, for a manifest it withholds."""
 
+    def __post_init__(self) -> None:
+        if (self.action is SyncAction.SKIPPED) is (self.skip_kind is None):
+            raise ValueError(
+                f"{self.remote_key} is planned {self.action.value} with skip_kind {self.skip_kind}: a "
+                "skip carries the kind of reason it was skipped for, and nothing else carries one"
+            )
+
     @property
     def transfers(self) -> bool:
         """Whether executing the plan moves this object's bytes."""
@@ -420,7 +443,12 @@ class SkippedReason:
     """The removal requests those messages name, sorted, for the two publisher kinds only."""
 
     def as_json(self) -> dict[str, int | list[str]]:
-        return {}
+        """The entry under this kind's name in `store sync --json`'s `skipped_reasons`."""
+        entry: dict[str, int | list[str]] = {"count": self.count, "key_prefixes": list(self.key_prefixes)}
+        if self.kind in PUBLISHER_SKIP_KINDS:
+            entry["messages"] = list(self.messages)
+            entry["request_ids"] = list(self.request_ids)
+        return entry
 
 
 @dataclass(frozen=True, slots=True)
@@ -470,8 +498,18 @@ class SyncPlan:
 
     @property
     def skipped_reasons(self) -> tuple[SkippedReason, ...]:
-        """One entry per kind of skip this plan has, in :class:`SkipKind`'s order."""
-        return ()
+        """One entry per kind of skip this plan has, in :class:`SkipKind`'s order (`v1-e29-t11`).
+
+        Grouped by :attr:`PlannedObject.skip_kind`, never by the reason's text, which for a manifest
+        the publisher withholds is different for every manifest. A kind the plan has no skip of is
+        absent, so a pull simply has no push-only kind.
+        """
+        skipped = self.of(SyncAction.SKIPPED)
+        return tuple(
+            _skipped_reason(kind, [planned for planned in skipped if planned.skip_kind is kind])
+            for kind in SkipKind
+            if any(planned.skip_kind is kind for planned in skipped)
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -837,6 +875,7 @@ class EvidenceSyncService:
                     SyncAction.SKIPPED,
                     source.size,
                     "the suppression list and removal log are appended to by caselist remove only",
+                    skip_kind=SkipKind.SUPPRESSION_RECORD,
                 ),
                 0,
             )
@@ -851,6 +890,7 @@ class EvidenceSyncService:
                         source.size,
                         "on the removal suppression list",
                         digest,
+                        skip_kind=SkipKind.SUPPRESSED_SOURCE,
                     ),
                     0,
                 )
@@ -863,6 +903,7 @@ class EvidenceSyncService:
                         source.size,
                         "named only by manifest rows at a path a removal holds",
                         digest,
+                        skip_kind=SkipKind.HELD_ONLY_BLOB,
                     ),
                     0,
                 )
@@ -878,6 +919,7 @@ class EvidenceSyncService:
                     SyncAction.SKIPPED,
                     source.size,
                     f"in the {owner.name} keyspace, not this one",
+                    skip_kind=SkipKind.ANOTHER_KEYSPACE,
                 ),
                 0,
             )
@@ -889,6 +931,7 @@ class EvidenceSyncService:
                     SyncAction.SKIPPED,
                     source.size,
                     "not under a documented evidence prefix",
+                    skip_kind=SkipKind.UNDOCUMENTED_PREFIX,
                 ),
                 0,
             )
@@ -924,6 +967,7 @@ class EvidenceSyncService:
                     source.size,
                     "already stored under this digest",
                     keyspace.digest_of_key(key),
+                    skip_kind=SkipKind.IDENTICAL,
                 ),
                 0,
             )
@@ -938,7 +982,13 @@ class EvidenceSyncService:
         if source_digest is not None and journaled == source_digest:
             return (
                 _planned(
-                    keyspace, key, SyncAction.SKIPPED, source.size, "journaled at this digest", source_digest
+                    keyspace,
+                    key,
+                    SyncAction.SKIPPED,
+                    source.size,
+                    "journaled at this digest",
+                    source_digest,
+                    skip_kind=SkipKind.JOURNALED,
                 ),
                 0,
             )
@@ -947,7 +997,15 @@ class EvidenceSyncService:
         heads = 1 if side.destination is keyspace.remote else 0
         if source_digest is not None and source_digest == destination_digest:
             return (
-                _planned(keyspace, key, SyncAction.SKIPPED, source.size, "identical", source_digest),
+                _planned(
+                    keyspace,
+                    key,
+                    SyncAction.SKIPPED,
+                    source.size,
+                    "identical",
+                    source_digest,
+                    skip_kind=SkipKind.IDENTICAL,
+                ),
                 heads,
             )
         reason = "no digest recorded at the destination" if destination_digest is None else "different digest"
@@ -971,7 +1029,14 @@ class EvidenceSyncService:
         if withholding is None:
             return entry
         return _planned(
-            keyspace, entry.local_key, SyncAction.SKIPPED, entry.size, withholding.message, entry.sha256
+            keyspace,
+            entry.local_key,
+            SyncAction.SKIPPED,
+            entry.size,
+            withholding.message,
+            entry.sha256,
+            skip_kind=SkipKind.UNREADABLE_MANIFEST if withholding.unreadable else SkipKind.WITHHELD_MANIFEST,
+            request_ids=withholding.request_ids,
         )
 
     async def _list_remote(self, keyspace: SyncKeyspace, local_filter: str) -> tuple[ObjectInfo, ...]:
@@ -1199,6 +1264,9 @@ def _planned(
     size: int,
     reason: str,
     sha256: Sha256Hex | None = None,
+    *,
+    skip_kind: SkipKind | None = None,
+    request_ids: tuple[str, ...] = (),
 ) -> PlannedObject:
     return PlannedObject(
         keyspace=keyspace.name,
@@ -1208,6 +1276,32 @@ def _planned(
         size=size,
         reason=reason,
         sha256=sha256,
+        skip_kind=skip_kind,
+        request_ids=request_ids,
+    )
+
+
+def _skipped_reason(kind: SkipKind, skipped: Sequence[PlannedObject]) -> SkippedReason:
+    """One kind's entry in the breakdown, from the plan's skips of that kind in key order.
+
+    A key under no documented prefix gives no prefix: it is whatever someone put in the local tree,
+    and its first 12 characters can be a school's name. The publisher's messages are the plans'
+    reasons as they are, and only the two publisher kinds carry them.
+    """
+    prefixes: list[str] = []
+    for planned in skipped:
+        prefix = planned.remote_key[:KEY_PREFIX_LENGTH]
+        if _is_documented_prefix(planned.remote_key) and prefix not in prefixes:
+            prefixes.append(prefix)
+    publisher = kind in PUBLISHER_SKIP_KINDS
+    return SkippedReason(
+        kind=kind,
+        count=len(skipped),
+        key_prefixes=tuple(prefixes[:KEY_PREFIXES_PER_REASON]),
+        messages=tuple(planned.reason for planned in skipped) if publisher else (),
+        request_ids=tuple(sorted({request for planned in skipped for request in planned.request_ids}))
+        if publisher
+        else (),
     )
 
 

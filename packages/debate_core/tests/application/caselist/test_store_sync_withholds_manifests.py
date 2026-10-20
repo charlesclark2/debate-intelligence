@@ -45,6 +45,7 @@ from debate_core.application.caselist.publish_service import CaselistPublishServ
 from debate_core.application.caselist.suppression import RecordedSuppressionList
 from debate_core.application.evidence_sync import (
     EvidenceSyncService,
+    ManifestWithholding,
     PlannedObject,
     SyncAction,
     SyncDirection,
@@ -94,8 +95,10 @@ PUSHED_BESIDE = f"manifests/{CASELIST}/2026-09-22.jsonl"
 #: The only manifest naming `one-week-only`, at `ONE_WEEK_PATH`.
 ONE_WEEK_MANIFEST = f"manifests/{CASELIST}/2026-09-08.jsonl"
 
-type AskWithheld = Callable[[ObjectInfo, SuppressionState], Awaitable[str | None]]
-type AskTheStore = Callable[[LocalEvidence, ObjectInfo, SuppressionState], Awaitable[str | None]]
+type AskWithheld = Callable[[ObjectInfo, SuppressionState], Awaitable[ManifestWithholding | None]]
+type AskTheStore = Callable[
+    [LocalEvidence, ObjectInfo, SuppressionState], Awaitable[ManifestWithholding | None]
+]
 
 
 @pytest.fixture(autouse=True)
@@ -153,7 +156,7 @@ def store_sync(
     if withholding and ask is not None and "withheld_manifests" in signature(EvidenceSyncService).parameters:
         asking = functools.partial(ask, world.local)
 
-        async def recorded(manifest: ObjectInfo, state: SuppressionState) -> str | None:
+        async def recorded(manifest: ObjectInfo, state: SuppressionState) -> ManifestWithholding | None:
             if asked is not None:
                 asked.append(manifest.key)
             return await asking(manifest, state)

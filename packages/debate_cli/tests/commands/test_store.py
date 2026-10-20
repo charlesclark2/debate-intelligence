@@ -448,6 +448,11 @@ def a_week_the_publisher_withholds(data_dir: Path) -> str:
     return held.rsplit("/", 1)[-1]
 
 
+def flattened(result: Result) -> str:
+    """The output with every run of whitespace one space: a caption wraps at the table's width."""
+    return " ".join(result.stdout.split())
+
+
 def push_everything(*options: str) -> Result:
     return invoke(*options, "store", "sync", "--blob-prefix", f"raw/caselist/{HELD_CASELIST}", "--apply")
 
@@ -483,9 +488,8 @@ class TestSkipReasons:
         assert not [word for word in ("Alder Point", "Birch Hill", "KR", ".docx") if word in result.stdout]
 
     def test_the_caption_names_the_withheld_manifest_and_the_removal_to_run_again(
-        self, buckets: S3Client, dev_data_dir: Path, monkeypatch: pytest.MonkeyPatch
+        self, buckets: S3Client, dev_data_dir: Path
     ) -> None:
-        monkeypatch.setenv("COLUMNS", "2000")
         a_week_the_publisher_withholds(dev_data_dir)
 
         result = push_everything()
@@ -495,14 +499,13 @@ class TestSkipReasons:
             "WITHHELD MANIFESTS: 1 manifest(s) the publisher withholds, left on this machine (RM-2026-01). "
             "Run the same removal again on this machine (caselist remove … --request RM-2026-01) to "
             "rewrite them, then push again; --json has the publisher's message for each."
-        ) in result.stdout
+        ) in flattened(result)
         assert "held_only_blob" not in result.stdout
         assert not [word for word in ("Alder Point", "Birch Hill", ".docx") if word in result.stdout]
 
     def test_a_manifest_the_publisher_cannot_read_has_its_own_caption_line(
-        self, buckets: S3Client, dev_data_dir: Path, monkeypatch: pytest.MonkeyPatch
+        self, buckets: S3Client, dev_data_dir: Path
     ) -> None:
-        monkeypatch.setenv("COLUMNS", "2000")
         unreadable = f"manifests/{HELD_CASELIST}/2026-10-13.jsonl"
         write_local_object(dev_data_dir, unreadable, b"not a manifest row\n")
 
@@ -512,8 +515,8 @@ class TestSkipReasons:
         assert (
             "UNREADABLE MANIFESTS: 1 manifest(s) the publisher cannot read, left on this machine; "
             "--json has the key and line number of each."
-        ) in table.stdout
-        assert "WITHHELD MANIFESTS" not in table.stdout
+        ) in flattened(table)
+        assert "WITHHELD MANIFESTS" not in flattened(table)
         assert data["skipped_reasons"] == {
             "unreadable_manifest": {
                 "count": 1,
@@ -524,10 +527,9 @@ class TestSkipReasons:
         }
 
     def test_identical_and_journaled_skips_stay_a_count_with_no_caption_line(
-        self, buckets: S3Client, dev_data_dir: Path, monkeypatch: pytest.MonkeyPatch
+        self, buckets: S3Client, dev_data_dir: Path
     ) -> None:
         """One manifest pushed by this machine, so journaled, and one report the bucket already held."""
-        monkeypatch.setenv("COLUMNS", "2000")
         write_local_object(dev_data_dir, MANIFEST_KEY, MANIFEST_BODY)
         invoke("store", "sync", "--apply")
         write_local_object(dev_data_dir, "reports/sync/run.json", b"{}")
@@ -540,8 +542,8 @@ class TestSkipReasons:
             "identical": {"count": 1, "key_prefixes": ["reports/sync"]},
             "journaled": {"count": 1, "key_prefixes": ["manifests/hs"]},
         }
-        assert "MANIFESTS:" not in table.stdout
-        assert "Planned only" in table.stdout
+        assert "MANIFESTS:" not in flattened(table)
+        assert "Planned only" in flattened(table)
 
     def test_a_pull_reports_the_same_way(self, buckets: S3Client, dev_data_dir: Path) -> None:
         write_local_object(dev_data_dir, MANIFEST_KEY, MANIFEST_BODY)

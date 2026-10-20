@@ -119,12 +119,14 @@ async def test_a_push_reports_the_withheld_manifest_and_the_held_only_blob_by_ki
 
     plan = await store_sync(world, made.suppression).plan(direction=SyncDirection.PUSH)
     breakdown = {reason.kind: reason for reason in plan.skipped_reasons}
+    message = await the_publishers_message(world, made)
 
+    assert message is not None
     assert breakdown[SkipKind.WITHHELD_MANIFEST] == SkippedReason(
         SkipKind.WITHHELD_MANIFEST,
         1,
         ("manifests/te",),
-        messages=(await the_publishers_message(world, made),),
+        messages=(message,),
         request_ids=(REQUEST,),
     )
     assert breakdown[SkipKind.HELD_ONLY_BLOB] == SkippedReason(SkipKind.HELD_ONLY_BLOB, 1, ("raw/caselist",))

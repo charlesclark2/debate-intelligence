@@ -12,6 +12,7 @@ therefore matter more than usual and are tested here rather than inside the pars
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 from datetime import date
 
@@ -267,14 +268,31 @@ class TestACardWithNoTag:
     """`v1-e31-t09`: "the file gave this card no tag" is said one way, and never as `""` in a record.
 
     The first corpus parse stored 15,528 cards as `"tag": ""`. A reader of the store could not tell
-    a card the file left untagged from a tag the parser had lost.
+    a card the file left untagged from a tag the parser had lost. Since `v1-e31-t14` the card has
+    no tag in memory either: `tag` is `None`.
     """
 
     def test_a_card_built_without_a_tag_has_none(self) -> None:
         card = make_card(tag=None)
 
         assert card.has_tag is False
-        assert card.tag == ""
+        assert card.tag is None
+
+    def test_a_card_built_with_an_empty_tag_has_none_in_memory(self) -> None:
+        """`""` is still accepted on the way in, and comes out as no tag, never as a tag of nothing."""
+        card = make_card(tag="")
+
+        assert card.tag is None
+        assert card.has_tag is False
+
+    def test_a_card_left_to_its_default_has_no_tag(self) -> None:
+        fields = make_card().model_dump()
+        del fields["tag"]
+
+        assert ParsedCard.model_validate(fields).tag is None
+
+    def test_evolving_a_card_to_an_empty_tag_gives_none(self) -> None:
+        assert make_card().evolve(tag="").tag is None
 
     def test_a_card_with_a_tag_says_so(self) -> None:
         assert make_card().has_tag is True
@@ -302,6 +320,8 @@ class TestACardWithNoTag:
         stored = make_card().model_dump(mode="json") | {"tag": ""}
 
         assert ParsedCard.model_validate(stored).has_tag is False
+        assert ParsedCard.model_validate(stored).tag is None
+        assert ParsedCard.model_validate_json(json.dumps(stored)).tag is None
 
     @pytest.mark.parametrize("blank", [" ", "   ", "\t", "\n", " "])
     def test_a_tag_of_nothing_but_whitespace_is_refused(self, blank: str) -> None:

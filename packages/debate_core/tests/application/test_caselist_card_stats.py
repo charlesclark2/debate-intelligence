@@ -66,7 +66,7 @@ def card(
     snapshot: date = WEEK_ONE,
     short_cite: str | None = "Pellam 26",
     full_cite: str = "Pellam 26 (Oriel Pellam, Fictional Review of Urban Climate, 2026)",
-    tag: str = "Canopy loss kills",
+    tag: str | None = "Canopy loss kills",
     completeness: CardCompleteness = CardCompleteness.FULL,
     caselist: str | None = CASELIST,
 ) -> ParsedCard:
@@ -461,6 +461,60 @@ def test_a_long_copy_over_a_tenth_of_its_card_is_placed_with_it_and_the_cut_with
     ]
     clusters = {cluster for cluster, _ in place(*cards)}
     assert clusters == {min(card_fingerprint(item).exact_fingerprint for item in cards)}
+
+
+# ------------------------------------------------------------------------------------------------
+# v1-e31-t14: a card with no tag has no tag on its occurrence or as its cluster's label
+# ------------------------------------------------------------------------------------------------
+
+
+def test_the_occurrence_of_a_card_with_no_tag_has_none() -> None:
+    report = build_report(
+        [card(FILE_A, 4), card(FILE_B, 2, WAREHOUSE, short_cite="Thorne 26", tag=None)],
+        [disclosure(FILE_A, WEEK_ONE), disclosure(FILE_B, WEEK_ONE, school="Cedar Hollow", team_code="ZaLu")],
+    )
+
+    by_source = {occurrence.source_sha256: occurrence for occurrence in report.occurrences}
+    assert by_source[FILE_A].tag == "Canopy loss kills"
+    assert by_source[FILE_B].tag is None
+    assert by_source[FILE_B].model_dump(mode="json")["tag"] is None
+
+
+def test_a_cluster_whose_cards_have_no_tag_has_none_as_its_label() -> None:
+    report = build_report(
+        [card(FILE_A, 4, WAREHOUSE, short_cite="Thorne 26", tag=None)], [disclosure(FILE_A, WEEK_ONE)]
+    )
+
+    assert [(cluster.short_cite, cluster.tag) for cluster in report.top_clusters] == [("Thorne 26", None)]
+
+
+def test_a_tie_between_no_tag_and_a_tag_is_still_won_by_no_tag() -> None:
+    """The rule of every build before `v1-e31-t14`: "no tag" sorted as `""`, before any tag's text.
+
+    Two copies of the heat card, one tagged and one not, label the cluster once each. The tie goes
+    to the smallest label, and `("Pellam 26", no tag)` is smaller than `("Pellam 26", "Canopy…")`.
+    """
+    report = build_report(
+        [card(FILE_A, 4), card(FILE_B, 2, tag=None)],
+        [disclosure(FILE_A, WEEK_ONE), disclosure(FILE_B, WEEK_ONE, school="Cedar Hollow", team_code="ZaLu")],
+    )
+
+    assert [(cluster.short_cite, cluster.tag) for cluster in report.top_clusters] == [("Pellam 26", None)]
+
+
+def test_a_tag_two_copies_share_outnumbers_a_copy_with_no_tag() -> None:
+    report = build_report(
+        [card(FILE_A, 4), card(FILE_B, 2, tag=None), card(FILE_C, 7)],
+        [
+            disclosure(FILE_A, WEEK_ONE),
+            disclosure(FILE_B, WEEK_ONE, school="Cedar Hollow", team_code="ZaLu"),
+            disclosure(FILE_C, WEEK_ONE, school="Northgate Prep", team_code="BeCo"),
+        ],
+    )
+
+    assert [(cluster.short_cite, cluster.tag) for cluster in report.top_clusters] == [
+        ("Pellam 26", "Canopy loss kills")
+    ]
 
 
 def test_cutter_mark_is_recorded_on_the_occurrence_and_nowhere_else() -> None:

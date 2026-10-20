@@ -17,6 +17,10 @@ this checkout carries, and every expected count is written by hand from what the
 * **the plain file stored under another digest with no blob on disk.**
 * **the plain file stored under another digest whose blob has a paragraph more at its head**, so
   its parse gives back other ranges.
+
+The counts were taken on the `2026.10.18-docx-5` store, before `v1-e31-t24`'s rule read lines 3 and 9
+of the bold file and line 3 of the plain file as tags, so the store is written and parsed again
+with that rule switched off. Two tests read it as `2026.10.20-docx-6` does.
 """
 
 from __future__ import annotations
@@ -167,7 +171,19 @@ def write_blob(data_dir: Path, sha256: str, content: bytes) -> None:
 
 
 @pytest.fixture
-def data_dir(tmp_path: Path) -> Path:
+def data_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """The store as `docx-5` wrote it, read again as `docx-5` reads it: the rule switched off."""
+    monkeypatch.setattr(DebateDocxParser, "_bold_tags_above_cites", lambda *_: frozenset())
+    return write_the_store(tmp_path)
+
+
+@pytest.fixture
+def data_dir_at_docx_6(tmp_path: Path) -> Path:
+    """The store as `docx-6` writes it. Worker processes read it the same way."""
+    return write_the_store(tmp_path)
+
+
+def write_the_store(tmp_path: Path) -> Path:
     store = LocalParsedStore(tmp_path)
     stored = {
         BOLD: BOLD_FILE,
@@ -236,7 +252,8 @@ def run(data_dir: Path, capsys: pytest.CaptureFixture[str], *options: str) -> tu
     return json.loads(captured.out), captured.out + captured.err
 
 
-def test_the_files_read_as_the_counts_below_assume() -> None:
+def test_the_files_read_as_the_counts_below_assume(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(DebateDocxParser, "_bold_tags_above_cites", lambda *_: frozenset())
     bold = parsed(BOLD_FILE, BOLD)
     assert [card.tag for card in bold.cards] == ["First tag", None, None, None]
     assert [
@@ -342,9 +359,24 @@ def test_a_store_another_parser_wrote_is_refused(data_dir: Path, monkeypatch: py
         script.main(["--data-dir", str(data_dir), "--caselist", CASELIST])
 
 
-def test_worker_processes_give_the_counts_one_process_gives(
-    data_dir: Path, capsys: pytest.CaptureFixture[str]
+def test_at_docx_6_the_lines_the_rule_takes_are_tags(
+    data_dir_at_docx_6: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    output, _ = run(data_dir_at_docx_6, capsys)
+    counts = output["caselists"][CASELIST]
+    assert (counts["not_reproduced"], counts["without_a_blob"]) == (1, 1)
+    every_rule = counts["above_a_bracketed_cite"]["every_bracketed_rule"]
+    assert every_rule["cites"] == 5
+    assert every_rule["cites_opening_a_card_with_no_tag"] == 1
+    assert every_rule["line_above_read_as"] == {"OTHER": 1, "TAG": 4}
+    assert every_rule["the_proposed_rule_takes"] == 0
+    assert counts["above_a_bracketed_cite"]["files_holding_the_shape"] == 0
+
+
+def test_worker_processes_give_the_counts_one_process_gives(
+    data_dir_at_docx_6: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    data_dir = data_dir_at_docx_6
     one, _ = run(data_dir, capsys)
     assert script.main(["--data-dir", str(data_dir), "--caselist", CASELIST, "--workers", "2"]) == 0
     two = json.loads(capsys.readouterr().out)

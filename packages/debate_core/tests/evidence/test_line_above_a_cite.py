@@ -3,7 +3,10 @@
 One invented file in (7)'s formatting: its document defaults make every run bold at 13 pt, and its
 bodies and cites switch bold off and set their size, as a Google Docs export of such a file does.
 Its lines above cites are each written to be one case, and every expectation below is written by
-hand from what the file was built to hold (working agreement 6):
+hand from what the file was built to hold (working agreement 6). The counts were taken on the
+`2026.10.18-docx-5` store, before `v1-e31-t24`'s rule read three of these lines as tags, so the
+file is parsed as that version read it: the rule switched off. The last test reads it as
+`2026.10.20-docx-6` does.
 
 ====  =========================================================  =====================================
  at    paragraph                                                  read by the parser (docx-5) as
@@ -132,12 +135,18 @@ SEVEN_LIKE_FILE = build_docx(
 
 
 class _ReadingParser(DebateDocxParser):
-    """The parser, keeping each paragraph as read and as Word shows it."""
+    """The parser, keeping each paragraph as read and as Word shows it; `docx-5`'s reading by default."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, with_the_bold_tag_rule: bool = False) -> None:
         super().__init__()
+        self.with_the_bold_tag_rule = with_the_bold_tag_rule
         self.descriptions: list[ParagraphDescription] = []
         self.shown: list[ParagraphDescription] = []
+
+    def _bold_tags_above_cites(self, assembled: Any, package: Any) -> frozenset[int]:  # pyright: ignore[reportIncompatibleMethodOverride]
+        if not self.with_the_bold_tag_rule:
+            return frozenset()
+        return super()._bold_tags_above_cites(assembled, package)  # pyright: ignore[reportPrivateUsage]
 
     def _read_sections(self, package: Any) -> Any:  # pyright: ignore[reportIncompatibleMethodOverride]
         sections = super()._read_sections(package)  # pyright: ignore[reportPrivateUsage]
@@ -146,9 +155,7 @@ class _ReadingParser(DebateDocxParser):
         return sections
 
 
-@pytest.fixture(scope="module")
-def parsed() -> tuple[_ReadingParser, ParsedDocument]:
-    parser = _ReadingParser()
+def parse_the_file(parser: _ReadingParser) -> tuple[_ReadingParser, ParsedDocument]:
     snapshot = date(2026, 10, 20)
     source = SourceDocument(
         sha256="a" * 64,
@@ -162,6 +169,11 @@ def parsed() -> tuple[_ReadingParser, ParsedDocument]:
     document = parser.parse(SEVEN_LIKE_FILE, source, source_path="invented.docx")
     assert isinstance(document, ParsedDocument)
     return parser, document
+
+
+@pytest.fixture(scope="module")
+def parsed() -> tuple[_ReadingParser, ParsedDocument]:
+    return parse_the_file(_ReadingParser())
 
 
 def lines(parsed: tuple[_ReadingParser, ParsedDocument], **options: Any) -> dict[int, LineAboveACite]:
@@ -319,3 +331,11 @@ def test_the_line_above_steps_over_blank_lines(parsed: tuple[_ReadingParser, Par
     _, document = parsed
     assert line_above(document.sections, 0) is None
     assert line_above(document.sections, 4) == 3
+
+
+def test_at_docx_6_the_lines_the_rule_takes_are_tags() -> None:
+    """The lines above cites 4, 7 and 19 are their cards' tags; the rest read as they did."""
+    found = lines(parse_the_file(_ReadingParser(with_the_bold_tag_rule=True)), cite_rules=None)
+    assert {at for at, line in found.items() if line.line_unit is StructuralUnit.TAG} == {1, 4, 7, 19, 24}
+    assert not any(line.the_proposed_rule_takes for line in found.values())
+    assert {at for at, line in found.items() if line.is_the_shape} == {13, 16}

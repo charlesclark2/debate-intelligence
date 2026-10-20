@@ -23,6 +23,7 @@ from debate_core.application.ports.parsed_store import DocumentRecord, SourceEnt
 from debate_core.domain.caselist import SourceFormat
 from debate_core.domain.debate_files import CardCompleteness, ParsedCard, ParsedDocument
 from debate_core.evidence.fingerprints import FINGERPRINT_VERSION
+from debate_core.integrations.docx_parser.parser import DebateDocxParser
 from debate_core.integrations.local.parsed_store import LocalParsedStore
 from debate_core.testing.docx_builder import build_docx, paragraph_xml, run_xml
 
@@ -686,8 +687,19 @@ def _bold_tag_strata() -> list[tuple[int, int]]:
     )
 
 
+@pytest.fixture
+def as_docx_5_read_it(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The sample was taken on `2026.10.18-docx-5`, before `v1-e31-t24`'s rule: switch the rule off."""
+    monkeypatch.setattr(DebateDocxParser, "_bold_tags_above_cites", lambda *_: frozenset())
+
+
+@pytest.mark.usefixtures("as_docx_5_read_it")
 def test_the_bold_tag_strata_of_a_file_in_sevens_formatting() -> None:
     assert _bold_tag_strata() == [(TAKEN_BRACKETED, 3), (LEFT, 6), (TAKEN_OTHER, 9), (ELSEWHERE, 12)]
+
+
+def test_at_docx_6_only_what_the_rule_leaves_is_drawn() -> None:
+    assert _bold_tag_strata() == [(LEFT, 6), (ELSEWHERE, 12)]
 
 
 def test_the_bold_tag_plan_draws_36() -> None:
@@ -716,6 +728,7 @@ def bold_tag_dir(tmp_path: Path) -> Path:
     return tmp_path
 
 
+@pytest.mark.usefixtures("as_docx_5_read_it")
 def test_the_bold_tag_plan_shows_each_line_as_word_shows_it_and_saves_counts_alone(
     bold_tag_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

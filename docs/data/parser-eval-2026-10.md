@@ -1,3 +1,4 @@
+<!-- docs-index: Parser evaluation baseline on 2026.10.18-docx-5: per-unit scores for the labelled tiers -->
 # Parser evaluation — full tier
 
 | | |

@@ -20,6 +20,11 @@ the camp files:
 DEBATE_ENV=dev debate-research tub index build --caselist hsld26 --caselist hspf26 --caselist hspolicy26 --caselist openev
 ```
 
+Build an index you will publish on the machine that makes the removals. Every command that writes
+the suppression list writes this machine's copy and the bucket's together, so this copy is the whole
+list here; no command yet copies a removal made on another machine down from the bucket. The
+manifest's `suppression.sha256` says which list a build applied.
+
 It writes one directory, `<data_dir>/tub-index/<index id>/`, and prints the index id, the counts
 and the sizes. `--out` puts it somewhere else; `--provenance-limit` (default 5) is how many
 occurrences of each card keep who disclosed them. `--json` prints the whole manifest.

@@ -69,11 +69,11 @@ journal and finishes with `VACUUM`, so it has no free pages.
 | `tag` | text | **yes** | The representative's tag, exactly as written; null when the card has none |
 | `cite` | text | **yes** | Its full cite, exactly as written, except for a cutter mark (`//JD`) at its end, which is removed |
 | `short_cite` | text | | Its short cite (`Okonkwo 26`); null when unreadable |
-| `read_aloud` | text | **yes** | The underlined or highlighted stretches of its evidence text, in order, joined by a space |
+| `read_aloud` | text | **yes** | The underlined or highlighted stretches of its evidence text, in order, joined by a space: `read_aloud_text(text, decode_formatting_spans(formatting_spans))` gives it again |
 | `text` | text | **yes** | Its evidence text, exactly as written; empty for CITE_ONLY |
 | `completeness` | text | | `FULL`, `ABBREVIATED` or `CITE_ONLY` |
-| `formatting_spans` | text | | JSON array of its formatting spans (`emphasis`, `start_offset`, `end_offset`, `highlight_color`, `rule_id`, `match_source`), offsets into `text` |
-| `font_size_spans` | text | | JSON array of its font-size spans (`start_offset`, `end_offset`, `half_points`) |
+| `formatting_spans` | text | | Its formatting spans in the parser's order, as compact JSON: `[emphasis, start, end]`, with the colour after a highlight's, as in `[["UNDERLINE",0,15],["HIGHLIGHT",9,22,"cyan"]]`. Offsets index into `text`, start inclusive, end exclusive. The parser's `rule_id` and `match_source` are not stored. `decode_formatting_spans` in `debate_core.domain.search_index` reads it back |
+| `font_size_spans` | text | | Its font-size spans, as compact JSON `[start, end, half_points]`; `decode_font_size_spans` reads it back |
 | `sides` | text | | JSON array of the sides its occurrences were disclosed on, sorted, `UNKNOWN` left out |
 | `first_seen` | text | | Earliest first snapshot of its occurrences, `YYYY-MM-DD`; null for `openev` |
 | `last_seen` | text | | Latest last snapshot of its occurrences; null for `openev` |
@@ -120,9 +120,12 @@ FTS5's own.
   can match them (the data-use policy's E39 gate item 8). A test builds an index whose fixture
   disclosures name a school, team code, tournament and round, and checks that a full-text query for
   each matches nothing.
-* **Never stored:** a cutter mark, a file name or disclosure path, a card's section headings and
-  undertag, a name from a document body. The ports the build reads hold no path, and the cite's
-  trailing cutter mark is removed before it is stored.
+* **A camp file title** (`camp_file_title`, the importer's title without extension, camp, year or lab
+  initials) is stored for a camp card's provenance line and is in no FTS5 table either (PM ruling
+  2026-10-20); a test checks that a word found only in one matches nothing.
+* **Never stored:** a cutter mark, a disclosure path or a caselist file name, a card's section
+  headings and undertag, a name from a document body. The ports the build reads hold no path, and
+  the cite's trailing cutter mark is removed before it is stored.
 
 ## The manifest
 

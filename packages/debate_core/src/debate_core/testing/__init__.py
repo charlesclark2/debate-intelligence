@@ -5,80 +5,19 @@ tests need them — `debate_cli`, `debate_api` and `debate_workers` each wire a 
 and the reusable repository contract suite lives here too, so that a V2 DynamoDB adapter is held
 to the same contract as the V1 SQLite one.
 
-Two things are exported from here:
+Import from the submodule that defines a name; this package re-exports nothing:
 
 * :mod:`debate_core.testing.fakes` — an in-memory implementation of every port.
 * :mod:`debate_core.testing.builders` — builders that produce complete, valid domain entities
   from a handful of keyword arguments.
+* :mod:`debate_core.testing.contracts` — the shared contract suites. They import pytest, so they
+  are importable in a test environment and not in a running CLI or API.
 
-The third, :mod:`debate_core.testing.contracts`, is deliberately *not* re-exported. It imports
-pytest, so it is importable in a test environment and not in a running CLI or API; a test that
-wants it imports `debate_core.testing.contracts` directly.
+This module imports nothing (v1-e01-t29). Importing any `debate_core.testing.*` module runs it,
+so an import here would make every caller of every helper reach what that import reaches: `fakes`
+alone reaches the caselist suppression code. `tests/architecture/test_package_inits_import_nothing.py`
+keeps it that way.
 
 Everything here is deterministic and offline. Nothing reads the clock, the filesystem or the
 network.
 """
-
-from debate_core.testing.builders import (
-    build_article,
-    build_card,
-    build_card_span,
-    build_citation,
-    build_search,
-    build_search_result,
-    build_source_snapshot,
-    readable_id,
-    sha256_of,
-)
-from debate_core.testing.fakes import (
-    FAKE_EPOCH,
-    FakeArticleFetcher,
-    FakeContentExtractor,
-    FakeDebateFileParser,
-    FakePorts,
-    FakeSearchProvider,
-    FixedClock,
-    InMemoryArticleRepository,
-    InMemoryCardEditLog,
-    InMemoryCardRepository,
-    InMemoryCaselistRepository,
-    InMemorySearchRepository,
-    InMemorySnapshotStore,
-    ScriptedModelRouter,
-    SequentialIdGenerator,
-    build_fake_card_edit_log,
-    build_fake_caselist_repository,
-    build_fake_debate_file_parser,
-    build_fake_ports,
-)
-
-__all__ = [
-    "FAKE_EPOCH",
-    "FakeArticleFetcher",
-    "FakeContentExtractor",
-    "FakeDebateFileParser",
-    "ScriptedModelRouter",
-    "FakePorts",
-    "FakeSearchProvider",
-    "FixedClock",
-    "InMemoryArticleRepository",
-    "InMemoryCardEditLog",
-    "InMemoryCardRepository",
-    "InMemoryCaselistRepository",
-    "InMemorySearchRepository",
-    "InMemorySnapshotStore",
-    "SequentialIdGenerator",
-    "build_article",
-    "build_card",
-    "build_card_span",
-    "build_citation",
-    "build_fake_card_edit_log",
-    "build_fake_caselist_repository",
-    "build_fake_debate_file_parser",
-    "build_fake_ports",
-    "build_search",
-    "build_search_result",
-    "build_source_snapshot",
-    "readable_id",
-    "sha256_of",
-]

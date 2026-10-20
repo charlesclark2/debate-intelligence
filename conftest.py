@@ -86,7 +86,7 @@ def plain_fixed_width_rendering(monkeypatch: pytest.MonkeyPatch) -> None:
 # `model_router` and gets the fake over the committed fixtures, tests/fixtures/model_outputs/,
 # dated by a fixed clock so its output is the same on every run. A call with no fixture fails with
 # MissingFixtureError naming the prompt and the key; it never reaches a model. A test that needs
-# scripted answers builds `debate_core.testing.ScriptedModelRouter`, and one that needs cassettes
+# scripted answers builds `debate_core.testing.fakes.ScriptedModelRouter`, and one that needs cassettes
 # builds a replay router; neither changes this default. The `test` settings profile selects the
 # same router through `debate_core.integrations.models.factory.build_model_router`.
 

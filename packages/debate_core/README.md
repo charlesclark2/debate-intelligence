@@ -239,7 +239,7 @@ means.**
 | `evidence/style_classifier.py` | `classify_paragraph` / `classify_run` for files that carry no Verbatim styles |
 
 ```python
-from debate_core.evidence import load_style_profile, resolve_based_on_chain
+from debate_core.evidence.style_profile_loader import load_style_profile, resolve_based_on_chain
 
 profile = load_style_profile()
 match = profile.resolve_paragraph_style("Heading411", "Heading 411", ("Heading1", "Normal"))

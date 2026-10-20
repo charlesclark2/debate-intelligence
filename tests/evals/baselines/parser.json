@@ -1,10 +1,80 @@
 {
-  "parser_version": "2026.09.20-docx-1",
-  "profile_version": null,
-  "status": "NOT_ESTABLISHED",
-  "note": "No baseline yet: the labeled set has not been corrected and coach-reviewed. scripts/run_parser_eval.py --write-baseline establishes it from a run over corrected labels, alongside a coach-reviewed report under docs/data/. Until then the eval-tier gate fails rather than passing against nothing. It also records the sampling plan it was measured over: two samples are two measurements, so the gate refuses rather than comparing when the plan differs.",
-  "established_by_report": null,
-  "label_status": {},
-  "tiers": {},
-  "sampling_plan_id": null
+  "parser_version": "2026.10.18-docx-5",
+  "profile_version": "2026.09.20-verbatim-1",
+  "status": "ESTABLISHED",
+  "sampling_plan_id": "06a5e928bf1fc90f",
+  "labeled_rows": 1851,
+  "total_rows": 5763,
+  "established_on": "2026-10-19",
+  "established_by_report": "docs/data/parser-eval-2026-10.md",
+  "label_status": {
+    "PRELABELED": 0,
+    "CORRECTED": 27,
+    "COACH_REVIEWED": 3
+  },
+  "tiers": {
+    "pr-subset": {
+      "overall": {
+        "POCKET": 1.0,
+        "HAT": 1.0,
+        "BLOCK": 1.0,
+        "TAG": 0.9024,
+        "CITE": 0.8158,
+        "EVIDENCE": 0.9556,
+        "ANALYTIC": 0.6818,
+        "UNDERTAG": 0.0
+      },
+      "template:verbatim": {
+        "POCKET": 1.0,
+        "HAT": 1.0,
+        "BLOCK": 1.0,
+        "TAG": 0.9524,
+        "CITE": 0.7619,
+        "EVIDENCE": 0.8952,
+        "ANALYTIC": 1.0
+      },
+      "template:non-verbatim": {
+        "POCKET": 1.0,
+        "HAT": 1.0,
+        "BLOCK": 1.0,
+        "TAG": 0.85,
+        "CITE": 0.8824,
+        "EVIDENCE": 0.9784,
+        "ANALYTIC": 0.5882,
+        "UNDERTAG": 0.0
+      }
+    },
+    "full": {
+      "overall": {
+        "POCKET": 1.0,
+        "HAT": 0.9882,
+        "BLOCK": 0.9593,
+        "TAG": 0.9353,
+        "CITE": 0.7635,
+        "EVIDENCE": 0.9245,
+        "ANALYTIC": 0.7895,
+        "UNDERTAG": 0.0
+      },
+      "template:verbatim": {
+        "POCKET": 1.0,
+        "HAT": 1.0,
+        "BLOCK": 0.9846,
+        "TAG": 0.9502,
+        "CITE": 0.751,
+        "EVIDENCE": 0.9339,
+        "ANALYTIC": 0.8723,
+        "UNDERTAG": 0.0
+      },
+      "template:non-verbatim": {
+        "POCKET": 1.0,
+        "HAT": 0.9655,
+        "BLOCK": 0.931,
+        "TAG": 0.9076,
+        "CITE": 0.7959,
+        "EVIDENCE": 0.9078,
+        "ANALYTIC": 0.6552,
+        "UNDERTAG": 0.0
+      }
+    }
+  }
 }

@@ -452,6 +452,11 @@ check prints no key.
 
 A later `terraform apply` leaves this value alone: the parameter ignores changes to its value.
 
+**The app will not start without this step.** Since `v1-e39-t05` the function reads the keys at
+start-up and refuses Terraform's placeholder, so until the real keys are in place the Lambda Web
+Adapter's readiness check never answers and step 8's `/healthz` check fails. After writing new
+keys, deploy again (step 8) so a running environment picks them up.
+
 ## Step 7 — Sign in to the new permission sets
 
 The deploy script runs as `TubDeployer`, and the coach's `tub users` commands (`v1-e39-t05`) as
@@ -518,22 +523,24 @@ Deployed <sha> to dev: https://tub.dev.wfbdebate.com/
 Function debate-dev-tub runs <account>.dkr.ecr.us-east-1.amazonaws.com/debate-dev-tub@sha256:<digest>
 ```
 
-**The placeholder page through CloudFront, with the edge's headers.** A request through the
-distribution reaches the function, which answers with the placeholder and `private, no-store`.
+**The pilot through CloudFront, with the edge's headers.** A request through the distribution
+reaches the function. Since `v1-e39-t05` every page needs a session, so a request without one is
+sent to managed login, with `private, no-store`. (Before that, the function answered `/` with a
+placeholder page and `200`.)
 
 **Operator command** (expected runtime ~1 min)
 Where: your Mac, anywhere
 ```bash
 curl -sS -o /dev/null -w '%{http_code} %header{cache-control}\n' https://tub.dev.wfbdebate.com/
-curl -sS https://tub.dev.wfbdebate.com/ | grep -o '<title>[^<]*</title>'
+curl -sS -o /dev/null -w '%{redirect_url}\n' https://tub.dev.wfbdebate.com/ | cut -d '?' -f 1
 curl -sSI https://tub.dev.wfbdebate.com/ \
   | grep -i -E '^(content-security-policy|strict-transport-security|referrer-policy|x-frame-options|x-content-type-options|x-robots-tag):'
 ```
 Success looks like:
 
 ```text
-200 private, no-store
-<title>Team evidence search</title>
+302 private, no-store
+https://auth.tub.dev.wfbdebate.com/oauth2/authorize
 content-security-policy: default-src 'self'; frame-ancestors 'none'; object-src 'none'; base-uri 'none'; form-action 'self' https://auth.tub.dev.wfbdebate.com
 strict-transport-security: max-age=31536000; includeSubDomains
 referrer-policy: no-referrer
@@ -664,43 +671,40 @@ School IT will allow the pilot's hostnames and nothing else (ADR-0019 (a) 7), so
 managed login pages load from has to be on the request. The documentation names none beyond the
 login host, so they are measured here, on dev, with the browser's network panel open.
 
-This needs a dev account. The coach's `tub users add` arrives with `v1-e39-t05`; until then the
-maintainer's own dev account is made with the CLI, in the `coach` group. The temporary password is
-printed once; you set a new one at the first sign-in.
+This needs a dev account: the maintainer's own, in the `coach` group, made with the coach's
+`tub users add` (`v1-e39-t05`, [the accounts guide](../guides/evidence-search-accounts.md)). Its
+temporary password is printed once; you set a new one at the first sign-in. On 2026-10-19, before
+`tub users` existed, this account was made with `aws cognito-idp admin-create-user`; if yours
+exists already, run `tub users reset` in place of `add` for a new temporary password.
 
 **Operator command** (expected runtime ~1 min)
-Where: your Mac, anywhere
+Where: `$WT`
 ```bash
-export AWS_PROFILE=debate-dev-tub-accounts
-TEMP_PASSWORD="$(openssl rand -base64 18)"
-aws cognito-idp admin-create-user --region us-east-1 --user-pool-id "$POOL_ID" \
-  --username "$PILOT_USERNAME" --temporary-password "$TEMP_PASSWORD" --message-action SUPPRESS \
-  --query User.UserStatus --output text
-aws cognito-idp admin-add-user-to-group --region us-east-1 --user-pool-id "$POOL_ID" \
-  --username "$PILOT_USERNAME" --group-name coach
-echo "temporary password: $TEMP_PASSWORD"
-unset TEMP_PASSWORD
-echo "https://auth.tub.dev.wfbdebate.com/oauth2/authorize?response_type=code&client_id=${CLIENT_ID}&redirect_uri=https%3A%2F%2Ftub.dev.wfbdebate.com%2Fauth%2Fcallback&scope=openid"
+cd "$WT"
+export TUB_USER_POOL_ID="$POOL_ID"
+uv run debate-research tub users add "$PILOT_USERNAME" --role coach --env dev
 ```
-Success looks like: `FORCE_CHANGE_PASSWORD`, nothing from the group command, the temporary
-password, and a sign-in URL.
+Success looks like `Created <your dev username> (coach).` and a temporary password, shown that once.
+The command runs as `debate-dev-tub-accounts` and writes one record to the audit group's
+`tub-users` stream.
 
 Then, in Chrome on your Mac, in an **Incognito** window (⌘⇧N). A normal window logs the new-tab
 page's Google traffic as well, and its saved managed-login session would skip the very pages this
 step measures.
 
 1. Open DevTools (⌥⌘I), the **Network** tab. Tick **Preserve log** and **Disable cache**.
-2. Paste the sign-in URL into that window.
+2. Open `https://tub.dev.wfbdebate.com/` in that window. The pilot sends you to managed login.
 3. Sign in with `$PILOT_USERNAME` and the temporary password, set a new password of at least 12
    characters, and set up the authenticator app: scan the QR code with an authenticator on your
    phone and enter its code.
-4. You land on `https://tub.dev.wfbdebate.com/auth/callback?code=...`, which answers
-   `{"detail":"Not Found"}`. That is expected: the callback arrives with `v1-e39-t05`. It also shows
-   the redirect reached the pilot through CloudFront.
+4. You land back on `https://tub.dev.wfbdebate.com/`, signed in: the page says *Signed in as* your
+   dev username. (Before `v1-e39-t05` was deployed, the callback answered `{"detail":"Not Found"}`,
+   which still showed the redirect reached the pilot through CloudFront.)
 5. Save the log: the Network toolbar's download arrow (Export HAR), as `tub-signin-1.har` in
    Downloads.
-6. Close the Incognito window, open a new one, and repeat steps 1 and 2. Sign in with the new
-   password and an authenticator code: the ordinary sign-in. Save that log as `tub-signin-2.har`.
+6. Sign out with the page's *Sign out* button, close the Incognito window, open a new one, and
+   repeat steps 1 and 2. Sign in with the new password and an authenticator code: the ordinary
+   sign-in. Save that log as `tub-signin-2.har`.
 
 Then list the distinct hosts the two sign-ins loaded, with what each served and what loaded it.
 The HAR files hold the sign-in form data, password included, so the same block deletes them.
@@ -811,11 +815,11 @@ curl -sS -o /dev/null -w '%{http_code} %header{cache-control}\n' https://tub.wfb
 curl -sSI https://tub.wfbdebate.com/ | grep -i -c '^x-robots-tag:'
 ```
 Success looks like the deploy ending `Deployed <sha> to prod: https://tub.wfbdebate.com/`, then
-`200 private, no-store`, then `0`: prod is not marked noindex. The direct call to prod's function
+`302 private, no-store` (the redirect to managed login), then `0`: prod is not marked noindex. The direct call to prod's function
 URL is refused exactly as in step 8. Repeat step 9 with prod's names.
 
 No account is made in the prod pool here. Students' accounts are the coach's, with `tub users add`
-(`v1-e39-t05`).
+([the accounts guide](../guides/evidence-search-accounts.md)).
 
 ## Step 12 — The web-filter request to school IT
 
@@ -864,7 +868,7 @@ Thank you,
 ```
 
 Success looks like: IT's confirmation, and a Chromebook on the school network that opens
-`https://tub.wfbdebate.com/` and shows the placeholder page. Record the date.
+`https://tub.wfbdebate.com/` and shows the sign-in page at `auth.tub.wfbdebate.com`. Record the date.
 
 ## The managed login's asset hosts
 
@@ -930,8 +934,8 @@ Success looks like `InProgress`, then `{"status":"ok"}`. For prod, the same with
 
 ## What this runbook deliberately does not do
 
-- **Create a student's account.** That is the coach's `tub users add`, in prod, from `v1-e39-t05`.
-  The dev pool never holds a student.
+- **Create a student's account.** That is the coach's `tub users add`, in prod
+  ([the accounts guide](../guides/evidence-search-accounts.md)). The dev pool never holds a student.
 - **Publish an index.** `tub index publish` is `v1-e39-t02`'s, under the `EvidenceOperator`
   profile, and the weekly refresh is `v1-e39-t09`'s.
 - **Turn on access logging, a WAF or a second origin.** The pilot keeps no per-request record of a

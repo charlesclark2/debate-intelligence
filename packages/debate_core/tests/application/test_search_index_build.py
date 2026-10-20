@@ -1018,3 +1018,46 @@ def test_search_index_camp_file_title_matches_nothing(tmp_path: Path) -> None:
     for word in ("Zanzibar", "Quorum", "Counterplan", '"Zanzibar Quorum Counterplan"', "Cascade"):
         assert built.matches(word) == 0, word
     assert built.matches('"invented camp evidence"') == 1, "the same query finds what is searchable"
+
+
+# ------------------------------------------------------------------------------------------------
+# The digests the weekly run compares (v1-e39-t09, PM ruling 2026-10-20 Q2)
+# ------------------------------------------------------------------------------------------------
+
+
+def test_search_index_sources_digests_are_the_digests_a_real_build_records(tmp_path: Path) -> None:
+    """One method computes both: what the weekly run compares with, and what the manifest records."""
+    store = standard_store()
+    store.suppress(S_THREE)
+    store.released(
+        store.card(S_ONE, 40, sha("camp digest"), "Invented camp trade evidence", camp="Cascade Institute"),
+        "2026-ld",
+        recorded=True,
+    )
+    ports = store.service(tmp_path / "data")
+
+    sources = asyncio.run(ports.service.sources((CAMP, CASELIST)))
+    built = ports.build(tmp_path / "out", stores=(CASELIST, CAMP))
+
+    assert sources.stores == built.manifest.stores
+    assert sources.suppression_list == built.manifest.suppression
+    assert [one.caselist for one in sources.stores] == [CASELIST, CAMP], "by name, as the manifest lists them"
+    assert built.manifest.suppression.entries == 1
+
+
+def test_search_index_built_from_sources_read_first_is_the_same_index(tmp_path: Path) -> None:
+    ports = standard_store().service(tmp_path / "data")
+
+    sources = asyncio.run(ports.service.sources((CASELIST,)))
+    given = asyncio.run(ports.service.build((CASELIST,), tmp_path / "given", sources=sources))
+    read_again = ports.build(tmp_path / "read-again")
+
+    assert given.manifest == read_again.manifest
+
+
+def test_search_index_refuses_sources_read_for_other_stores(tmp_path: Path) -> None:
+    ports = standard_store().service(tmp_path / "data")
+    sources = asyncio.run(ports.service.sources((CASELIST,)))
+
+    with pytest.raises(ValueError, match="read for other stores"):
+        asyncio.run(ports.service.build((CASELIST, CAMP), tmp_path / "out", sources=sources))

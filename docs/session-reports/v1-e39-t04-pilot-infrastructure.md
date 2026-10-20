@@ -445,9 +445,12 @@ Until the hold is lifted, nothing under `wfbdebate.com` can be validated:
 **The cause, found by the operator:** `resend-contact-reachability-email` showed the domain's
 registrant contact email had been entered with the wrong top-level domain, so the ICANN verification
 email could never be confirmed, and the registrar put the domain on hold at the 15-day deadline.
-The operator is correcting the address on all three contacts in the Route 53 Domains console,
-because `update-domain-contact` needs the whole contact record written out, and then verifying the
-new address. Neither address is recorded here.
+The operator corrected the address on all three contacts in the Route 53 Domains console, because
+`update-domain-contact` needs the whole contact record written out, and then verified the new
+address: `get-contact-reachability-status` → `"status": "DONE"`, with `clientHold` still in the
+domain's status list straight afterwards. At 19:50 CDT the registry still showed `clientHold` and
+`NXDOMAIN`. The session is polling the `.com` servers until the domain is delegated again. Neither
+address is recorded here.
 
 **Steps 3 and 5–10: not yet run.** They need both the domain hold lifted and the concurrency
 increase. Step 3 waits for the concurrency increase, and will plan 37 to

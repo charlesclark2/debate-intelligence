@@ -79,7 +79,9 @@ email. To stop using the address, choose **Remove the backup email** on the same
 
 - **A new phone, and you still have the old one** (or a backup email): sign in as usual, open **Your
   account**, choose **Set up a new authenticator app**, then **Start**, and scan the new code with
-  the app on the new phone. The old phone stops working once you confirm the new one.
+  the app on the new phone. The old phone stops working as soon as you choose **Start**, so have the
+  new phone in hand and finish in one sitting. If you are signed out before you finish, sign in
+  again: the sign-in page asks you to set up an authenticator app, and you do it there.
 - **A lost phone and a backup email**: sign in, choose the email code when the sign-in page asks,
   then set up the app on your new phone from **Your account** as above.
 - **A lost phone and no backup email**: ask the coach for a reset. You get a new temporary password,

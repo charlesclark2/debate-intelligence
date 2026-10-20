@@ -183,7 +183,7 @@ class AccountSelfService(Protocol):
     def standing(self, access_token: str) -> AccountStanding: ...
 
     def begin_authenticator(self, access_token: str) -> AuthenticatorSecret:
-        """A new, unverified TOTP secret. The account's current authenticator, if any, keeps working."""
+        """A new, unverified TOTP secret. Cognito drops the current authenticator at once (2026-10-20)."""
         ...
 
     def confirm_authenticator(self, access_token: str, code: str) -> None:

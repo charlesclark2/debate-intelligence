@@ -10,9 +10,9 @@ Removing it turns the email factor off first. An account whose email is its only
 `email-second-factor`, with no authenticator) cannot remove it here: that would leave it with
 none, so the student asks the coach.
 
-**The authenticator.** Beginning gives a new secret, which changes nothing until a code from it is
-confirmed; confirming replaces any earlier authenticator and turns the factor on. The same two
-calls serve a first enrolment and a replacement.
+**The authenticator.** Beginning gives a new secret, and Cognito drops the current authenticator at
+once (measured on dev, 2026-10-20); confirming a code from the new secret turns the factor on. The
+same two calls serve a first enrolment and a replacement.
 
 Each completed change writes one audit record with the student's subject and no address (ADR-0019
 (d) 5: "the audit record says an email was added or removed, never which").
@@ -182,7 +182,7 @@ class AccountPageService:
         self._record(AuditAction.BACKUP_EMAIL_REMOVED, session)
 
     def begin_authenticator(self, holder: Session | PendingEnrolment) -> AuthenticatorEnrolment:
-        """A new secret for the enrolment page. The current authenticator works until it is confirmed."""
+        """A new secret for the enrolment page. Cognito drops the current authenticator at once."""
         secret = self._self_service.begin_authenticator(self._access_token(holder.refresh_token))
         return AuthenticatorEnrolment(
             secret=secret, uri=authenticator_uri(secret, issuer=self._issuer, username=holder.username)

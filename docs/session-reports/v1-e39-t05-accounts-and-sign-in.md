@@ -1353,3 +1353,31 @@ verdict.
 * **Dev still runs `93ed3f1`, with *Start*.** Nothing reaches it but synthetic accounts, so the next
   pilot deploy to dev (v1-e39-t06, or before) replaces it. No separate deploy is needed.
 * **Operator follow-up C,** the module apply dev then prod, stays on the promotion list.
+
+## The sync onto `origin/dev` (2026-10-20)
+
+`scripts/task sync` rebased the branch's 32 commits onto `origin/dev` at `ff84cc1`, which holds
+v1-e39-t02 (`d14f984`). Two commits conflicted. Each conflict was resolved by keeping both sides,
+as the second review asked:
+
+| File | Resolution |
+|---|---|
+| `debate_cli/commands/__init__.py` | One `tub` group, *The team's student evidence search pilot: its index and its users.*, with t02's `index build\|publish` and this task's `users` subcommands |
+| `debate_cli/container.py` (`SERVICE_NAMES`) | Both: `search_index_build`, `search_index_publish`, `tub_account_administration` |
+| `debate_cli/tests/test_app.py` | The same three services, and the comment naming both tasks |
+| `test_doctor.py`, `test_installation.py` | **15** wired integrations: 12 at the merge base, plus t02's `local.search_index`, plus this task's `cognito` and `cloudwatch_audit`. Each side had counted only its own (13 and 14). The merged list in `test_installation.py` has 15 entries |
+
+`uv.lock` and the package pyprojects merged without conflict, and `uv lock --check` passes.
+
+**Checks after the sync:**
+
+| Check | Result |
+|---|---|
+| The affected selection, plus t02's `test_tub_index.py` and `tests/scripts/test_tub_deploy.py` | `903 passed in 15.31s` |
+| `ruff check .`, `ruff format --check .` | `All checks passed!`, `976 files already formatted` |
+| `pyright packages/debate_api packages/debate_cli packages/debate_core` | `0 errors, 0 warnings, 0 informations` |
+| `lint-imports` | `Contracts: 12 kept, 0 broken.` |
+| `scripts/check_thin_handlers.py` | `OK: 44 CLI command and API route handlers within 25 statements` |
+| `scripts/validate_specs.py` | `OK: 396 files, 39 epics, 336 tasks, 21 releases` |
+| `scripts/check_links.py`, `scripts/check_command_blocks.py` | `OK: 1907 relative links and anchors in 276 Markdown files`; `OK: no # comments in 331 shell code blocks in 130 Markdown files` |
+| `debate-research tub --help` | lists `index` and `users` |

@@ -1,4 +1,4 @@
-"""How fast the search core answers: on a synthetic 250,000-document index, and on the operator's own (`v1-e39-t03`).
+"""How fast search answers, on a synthetic 250,000-document index and the operator's own (`v1-e39-t03`).
 
 Both tests are marked slow and stay off the PR's path (working agreement 1).
 
@@ -42,7 +42,26 @@ VOCABULARY: Final = 20_000
 TEXT_WORDS: Final = 120
 TIMED_PASSES: Final = 3
 
-_ONSETS: Final = ("b", "d", "f", "g", "k", "l", "m", "n", "p", "r", "s", "t", "v", "z", "br", "tr", "pl", "st")
+_ONSETS: Final = (
+    "b",
+    "d",
+    "f",
+    "g",
+    "k",
+    "l",
+    "m",
+    "n",
+    "p",
+    "r",
+    "s",
+    "t",
+    "v",
+    "z",
+    "br",
+    "tr",
+    "pl",
+    "st",
+)
 _VOWELS: Final = ("a", "e", "i", "o", "u", "ai", "ou")
 _CODAS: Final = ("", "n", "r", "s", "l", "x", "m")
 
@@ -51,7 +70,7 @@ def vocabulary(size: int) -> list[str]:
     """Invented words, `kelomar`-like: distinct, pronounceable, and no word of any language on purpose."""
     words: list[str] = []
     for one in range(size * 4):
-        syllables = []
+        syllables: list[str] = []
         value = one
         for _ in range(3):
             value, onset = divmod(value, len(_ONSETS))
@@ -93,7 +112,10 @@ def synthetic_documents(count: int, seed: int = 39) -> Iterator[SearchDocument]:
             event=event,
             camp="Cascade Institute" if camp else None,
             tag=" ".join(words[:8]),
-            cite=f"{author} 26, Dr. {author}, professor at Invented University, {' '.join(words[2:6])}, Invented Review",
+            cite=(
+                f"{author} 26, Dr. {author}, professor at Invented University, "
+                f"{' '.join(words[2:6])}, Invented Review"
+            ),
             short_cite=f"{author} 26",
             read_aloud=read_aloud,
             text=text,
@@ -258,7 +280,7 @@ def test_search_timings_on_the_operators_index() -> None:
         f"\noperator's index: {path.stat().st_size} bytes, SQLite {sqlite3.sqlite_version}"
         f"\nwarm, {len(warm)} timed searches: {percentiles(warm)}"
         f"\ncold, first pass: {percentiles(cold)}"
-        f"\nslowest warm query: number {1 + warm.index(max(warm)) % len(OPERATOR_QUERIES)} of {len(OPERATOR_QUERIES)}"
+        f"\nslowest warm query: number {1 + warm.index(max(warm)) % len(OPERATOR_QUERIES)}"
         f"\nmatches per query: {counts}"
         f"\nfirst-page results per query: {sizes}"
     )

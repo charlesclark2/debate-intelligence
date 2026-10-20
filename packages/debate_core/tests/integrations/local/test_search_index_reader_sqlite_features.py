@@ -112,7 +112,10 @@ def documents() -> Iterator[SearchDocument]:
             cite=f"Okonkwo {doc_id}, Invented Journal" if doc_id % 3 else "Lindqvist 26, Invented Quarterly",
             short_cite="Okonkwo 26",
             read_aloud="growth always",
-            text=f"Invented growth always ends badly near the {'recession' if doc_id % 4 else 'boom'}, case {doc_id}",
+            text=(
+                f"Invented growth always ends badly near the {'recession' if doc_id % 4 else 'boom'}, "
+                f"case {doc_id}"
+            ),
             completeness="FULL",
             formatting_spans=(),
             font_size_spans=(),
@@ -177,7 +180,9 @@ def run_core_queries(path: Path) -> list[Any]:
     results: list[Any] = []
     for query, filters in CORE_QUERIES:
         page = searched.search(query, filters)
-        results.append([[hit.cluster_id, hit.provenance_line, [s.text for s in hit.snippet]] for hit in page.hits])
+        results.append(
+            [[hit.cluster_id, hit.provenance_line, [s.text for s in hit.snippet]] for hit in page.hits]
+        )
     card = searched.card("hsld26", f"{1:064x}")
     assert card is not None
     results.append([card.cite, [one.provenance_line for one in card.occurrences]])
@@ -203,7 +208,11 @@ def test_search_index_reader_runs_only_statements_sqlite_3_40_has(
     index_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     traced, _ = traced_statements(index_path, monkeypatch)
-    sent = [statement for statement in traced if not statement.startswith("--") and statement not in FTS5_OWN_STATEMENTS]
+    sent = [
+        statement
+        for statement in traced
+        if not statement.startswith("--") and statement not in FTS5_OWN_STATEMENTS
+    ]
     shapes = [_shape(statement) for statement in ALLOWED_STATEMENTS]
     refused = [statement for statement in sent if not any(shape.match(statement) for shape in shapes)]
     assert sent, "the trace saw the reader's statements"
@@ -218,8 +227,12 @@ def test_search_index_reader_plan_ranks_inside_fts5_and_joins_by_key(index_path:
     """The ranking is FTS5's own sort, and the joins are key lookups: no temporary sort, no scan."""
     with sqlite3.connect(index_path) as connection:
         plan = connection.execute(
-            "EXPLAIN QUERY PLAN " + ALLOWED_STATEMENTS[2].replace("{}", "NULL").replace(
-                "search MATCH NULL AND rank MATCH NULL", "search MATCH 'growth' AND rank MATCH 'bm25(8.0, 3.0, 2.0, 1.0)'"
+            "EXPLAIN QUERY PLAN "
+            + ALLOWED_STATEMENTS[2]
+            .replace("{}", "NULL")
+            .replace(
+                "search MATCH NULL AND rank MATCH NULL",
+                "search MATCH 'growth' AND rank MATCH 'bm25(8.0, 3.0, 2.0, 1.0)'",
             )
         ).fetchall()
     details = [row[3] for row in plan]
@@ -231,9 +244,41 @@ def test_search_index_reader_plan_ranks_inside_fts5_and_joins_by_key(index_path:
 
 QUERY_PIECES: Final = st.sampled_from(
     [
-        "AND", "OR", "NOT", "NEAR", "NEAR(", "NEAR/2", "*", "^", "(", ")", '"', '""', ":", "{", "}",
-        "-", "+", "tag:", "author:", "cite:", "text:", "read_aloud:", "{tag cite}:", "search:", "rank:",
-        "rowid:", "\x00", "'", ",", "growth", "recession", "Okonkwo", "\U0001f600", "́", "é",
+        "AND",
+        "OR",
+        "NOT",
+        "NEAR",
+        "NEAR(",
+        "NEAR/2",
+        "*",
+        "^",
+        "(",
+        ")",
+        '"',
+        '""',
+        ":",
+        "{",
+        "}",
+        "-",
+        "+",
+        "tag:",
+        "author:",
+        "cite:",
+        "text:",
+        "read_aloud:",
+        "{tag cite}:",
+        "search:",
+        "rank:",
+        "rowid:",
+        "\x00",
+        "'",
+        ",",
+        "growth",
+        "recession",
+        "Okonkwo",
+        "\U0001f600",
+        "́",
+        "é",
     ]
 )
 QUERIES: Final = st.one_of(
@@ -278,7 +323,11 @@ def test_search_index_reader_stopped_by_the_budget_is_interrupted_and_not_exhaus
     """A stopped statement keeps the rows it fetched, and says the ranking may go on past them."""
     with SqliteSearchIndexReader(index_path, index_id=INDEX_ID) as reader:
         request = MatchRequest(
-            expression='"invented"', rank="bm25(10.0, 6.0, 3.0, 1.0)", filters=SearchFilters(), offset=0, limit=100,
+            expression='"invented"',
+            rank="bm25(10.0, 6.0, 3.0, 1.0)",
+            filters=SearchFilters(),
+            offset=0,
+            limit=100,
             expired=lambda: True,
         )
         stopped = reader.match(request)
@@ -291,9 +340,11 @@ def test_search_index_reader_stopped_by_the_budget_is_interrupted_and_not_exhaus
 
 
 def test_search_index_reader_opens_read_only(index_path: Path) -> None:
-    with SqliteSearchIndexReader(index_path, index_id=INDEX_ID) as reader:
-        with pytest.raises(sqlite3.OperationalError, match="readonly"):
-            reader._connection.execute("DELETE FROM documents")  # pyright: ignore[reportPrivateUsage]
+    with (
+        SqliteSearchIndexReader(index_path, index_id=INDEX_ID) as reader,
+        pytest.raises(sqlite3.OperationalError, match="readonly"),
+    ):
+        reader._connection.execute("DELETE FROM documents")  # pyright: ignore[reportPrivateUsage]
 
 
 # ------------------------------------------------------------------------------------------------
@@ -335,11 +386,15 @@ def test_search_index_reader_statements_run_in_the_lambda_image_sqlite(
     if docker is None:
         pytest.skip("Docker is not installed on this machine")
     image = _lambda_image()
-    present = subprocess.run([docker, "image", "inspect", image], capture_output=True, check=False, timeout=30)
+    present = subprocess.run(
+        [docker, "image", "inspect", image], capture_output=True, check=False, timeout=30
+    )
     if present.returncode != 0:
         pytest.skip(f"{image} is not on this machine; `scripts/tub_deploy.sh dev --dry-run` pulls it")
     traced, _ = traced_statements(index_path, monkeypatch)
-    statements = [one for one in traced if one.startswith("SELECT d.doc_id") or one.startswith("SELECT doc_id")]
+    statements = [
+        one for one in traced if one.startswith("SELECT d.doc_id") or one.startswith("SELECT doc_id")
+    ]
     with sqlite3.connect(f"{index_path.resolve().as_uri()}?mode=ro&immutable=1", uri=True) as local:
         expected = [[list(row) for row in local.execute(statement).fetchall()] for statement in statements]
     mounted = tmp_path / "mounted"
@@ -350,8 +405,21 @@ def test_search_index_reader_statements_run_in_the_lambda_image_sqlite(
     (mounted / "replay.py").write_text(_REPLAY_IN_THE_IMAGE, encoding="utf-8")
     run = subprocess.run(
         [
-            docker, "run", "--rm", "--pull", "never", "--network", "none", "--platform", "linux/arm64",
-            "--entrypoint", "python3", "-v", f"{mounted}:/index:ro", image, "/index/replay.py",
+            docker,
+            "run",
+            "--rm",
+            "--pull",
+            "never",
+            "--network",
+            "none",
+            "--platform",
+            "linux/arm64",
+            "--entrypoint",
+            "python3",
+            "-v",
+            f"{mounted}:/index:ro",
+            image,
+            "/index/replay.py",
         ],
         capture_output=True,
         text=True,

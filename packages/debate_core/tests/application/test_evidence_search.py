@@ -1,4 +1,4 @@
-"""Search and card lookup over a synthetic index: filters, pages, cursors, suppression, the time budget (`v1-e39-t03`).
+"""Search and card lookup over a synthetic index: filters, pages, cursors, suppression, budget (`v1-e39-t03`).
 
 Each index is a real SQLite FTS5 file written by `v1-e39-t02`'s writer under `tmp_path` and read by
 the real reader; nothing is mocked but the clock. Every expected value is written by hand from the
@@ -131,7 +131,11 @@ def document(
     file_count: int | None = None,
     team_count: int | None = None,
 ) -> SearchDocument:
-    held = tuple(occurrences) if occurrences is not None else (occurrence(0, caselist=caselist, source_number=doc_id),)
+    held = (
+        tuple(occurrences)
+        if occurrences is not None
+        else (occurrence(0, caselist=caselist, source_number=doc_id),)
+    )
     return SearchDocument(
         doc_id=doc_id,
         caselist=caselist,
@@ -191,10 +195,14 @@ def every_page(
 FILTERED: Final = (
     document(1, text="zephyr one", caselist="hsld26", event="LD", sides=("AFF",), first_seen="2026-09-01"),
     document(2, text="zephyr two", caselist="hsld26", event="LD", sides=("NEG",), first_seen="2026-09-20"),
-    document(3, text="zephyr three", caselist="hsld26", event="LD", sides=("AFF", "NEG"), first_seen="2026-10-05"),
+    document(
+        3, text="zephyr three", caselist="hsld26", event="LD", sides=("AFF", "NEG"), first_seen="2026-10-05"
+    ),
     document(4, text="zephyr four", caselist="hspf26", event="PF", sides=("PRO",), first_seen="2026-09-10"),
     document(5, text="zephyr five", caselist="hspf26", event="PF", sides=("CON",), first_seen="2026-10-01"),
-    document(6, text="zephyr six", caselist="hspolicy26", event="POLICY", sides=("AFF",), first_seen="2026-09-15"),
+    document(
+        6, text="zephyr six", caselist="hspolicy26", event="POLICY", sides=("AFF",), first_seen="2026-09-15"
+    ),
     document(7, text="zephyr seven", caselist="openev", event="POLICY", camp=CAMP, sides=()),
     document(8, text="zephyr eight", caselist="openev", event="LD", camp="Summit Workshop", sides=()),
 )
@@ -223,8 +231,8 @@ def filtered(tmp_path_factory: pytest.TempPathFactory) -> EvidenceSearchService:
         (SearchFilters(first_seen_on_or_after=date(2026, 9, 20)), {2, 3, 5}),
         (SearchFilters(first_seen_on_or_after=date(2026, 9, 20), side=Side.AFF), {3}),
         (SearchFilters(event=Event.LD, caselist="openev"), {8}),
-        (SearchFilters(event=Event.PF, side=Side.AFF), set()),
-        (SearchFilters(caselist="hsld99"), set()),
+        (SearchFilters(event=Event.PF, side=Side.AFF), set[int]()),
+        (SearchFilters(caselist="hsld99"), set[int]()),
     ],
 )
 def test_evidence_search_filters_keep_the_documents_written_by_hand(
@@ -237,7 +245,9 @@ def test_evidence_search_filters_keep_the_documents_written_by_hand(
     assert page.next_cursor is None
 
 
-def test_evidence_search_first_seen_leaves_camp_cards_out_and_says_so(filtered: EvidenceSearchService) -> None:
+def test_evidence_search_first_seen_leaves_camp_cards_out_and_says_so(
+    filtered: EvidenceSearchService,
+) -> None:
     """PM amendment 2026-10-20 (v1-e39-t02 follow-up 2): camp cards have no first seen."""
     page = filtered.search("zephyr", SearchFilters(first_seen_on_or_after=date(2026, 1, 1)))
     assert set(ids(page)) == {1, 2, 3, 4, 5, 6}
@@ -259,11 +269,22 @@ def test_evidence_search_with_nothing_to_search_for_returns_no_results_and_says_
 def test_evidence_search_hit_carries_what_a_results_page_shows(filtered: EvidenceSearchService) -> None:
     (hit,) = filtered.search("seven").hits
     assert (hit.caselist, hit.cluster_id, hit.event, hit.camp) == ("openev", cluster(7), "POLICY", CAMP)
-    assert (hit.tag, hit.short_cite, hit.file_count, hit.team_count) == ("Invented claim", "Lindqvist 26", 1, 1)
-    assert [(segment.text, segment.marked) for segment in hit.snippet] == [("zephyr ", False), ("seven", True)]
+    assert (hit.tag, hit.short_cite, hit.file_count, hit.team_count) == (
+        "Invented claim",
+        "Lindqvist 26",
+        1,
+        1,
+    )
+    assert [(segment.text, segment.marked) for segment in hit.snippet] == [
+        ("zephyr ", False),
+        ("seven", True),
+    ]
     assert hit.provenance_line == f"[OpenEv: {CAMP} 2026 — Policy, {CAMP_TITLE}]"
     (disclosed,) = filtered.search("two").hits
-    assert disclosed.provenance_line == f"[Disclosed: hsld26 2026-09-01 — {SCHOOL} {TEAM}, Neg vs. {TOURNAMENT} {ROUND}]"
+    assert (
+        disclosed.provenance_line
+        == f"[Disclosed: hsld26 2026-09-01 — {SCHOOL} {TEAM}, Neg vs. {TOURNAMENT} {ROUND}]"
+    )
 
 
 # ------------------------------------------------------------------------------------------------
@@ -307,7 +328,10 @@ def test_evidence_search_cursor_from_another_query_filters_or_index_is_refused(p
     searched = service(paged_index)
     cursor = searched.search("quokka").next_cursor
     assert cursor is not None
-    assert ids(searched.search("quokka", cursor=cursor)) == ids(service(paged_index, page_size=100).search("quokka"))[20:40]
+    assert (
+        ids(searched.search("quokka", cursor=cursor))
+        == ids(service(paged_index, page_size=100).search("quokka"))[20:40]
+    )
     assert ids(searched.search("  quokka ", cursor=cursor)) == ids(searched.search("quokka", cursor=cursor))
     with pytest.raises(InvalidSearchCursor):
         searched.search("filler1", cursor=cursor)
@@ -346,7 +370,9 @@ def people(tmp_path_factory: pytest.TempPathFactory) -> EvidenceSearchService:
             ),
         ),
         document(6, text="camp card", caselist="openev", event="POLICY", camp=CAMP, sides=()),
-        document(7, text="nothing here", tag="Invented text wombat and read aloud wombat", cite="Lindqvist 26"),
+        document(
+            7, text="nothing here", tag="Invented text wombat and read aloud wombat", cite="Lindqvist 26"
+        ),
     )
     return service(build(tmp_path_factory.mktemp("people"), documents))
 
@@ -361,7 +387,7 @@ def people(tmp_path_factory: pytest.TempPathFactory) -> EvidenceSearchService:
         ("Author:Wombat", {3}),
         ("wombat -tag:wombat", {1, 3, 4}),
         ("wombat -author:wombat", {1, 2, 4, 7}),
-        ("tag:lindqvist", set()),
+        ("tag:lindqvist", set[int]()),
         ("author:invented", {3, 5, 6}),
         ("text:wombat", {7}),
         ("read_aloud:wombat", {7}),
@@ -424,13 +450,21 @@ LONG_TAIL: Final = document(
     2,
     text="pangolin long tail card",
     occurrences=tuple(
-        occurrence(ordinal, source_number=20 + ordinal, school=f"Invented School {ordinal}", team="CD", provenance=ordinal < 5)
+        occurrence(
+            ordinal,
+            source_number=20 + ordinal,
+            school=f"Invented School {ordinal}",
+            team="CD",
+            provenance=ordinal < 5,
+        )
         for ordinal in range(7)
     ),
     file_count=7,
     team_count=7,
 )
-CAMP_CARD: Final = document(3, text="pangolin camp card", caselist="openev", event="POLICY", camp=CAMP, sides=())
+CAMP_CARD: Final = document(
+    3, text="pangolin camp card", caselist="openev", event="POLICY", camp=CAMP, sides=()
+)
 
 
 @pytest.fixture(scope="module")
@@ -451,7 +485,9 @@ def test_evidence_search_without_a_predicate_hides_nothing(suppressible: Evidenc
     assert (card.file_count, card.team_count) == (3, 3)
 
 
-def test_evidence_search_hides_a_card_whose_representative_is_suppressed(suppressible: EvidenceSearchService) -> None:
+def test_evidence_search_hides_a_card_whose_representative_is_suppressed(
+    suppressible: EvidenceSearchService,
+) -> None:
     """The PM's ruling for t07: hidden until the next build chooses another representative."""
     predicate = stopping(11)
     assert set(ids(suppressible.search("pangolin", is_suppressed=predicate))) == {2, 3}
@@ -475,7 +511,11 @@ def test_evidence_search_leaves_out_a_suppressed_occurrence_and_counts_again(
     assert [one.ordinal for one in card.occurrences] == [0, 2]
     assert OTHER_SCHOOL not in " ".join(one.provenance_line or "" for one in card.occurrences)
     assert (card.file_count, card.team_count) == (2, 2)
-    (hit,) = [hit for hit in suppressible.search("pangolin", is_suppressed=predicate).hits if hit.cluster_id == cluster(1)]
+    (hit,) = [
+        hit
+        for hit in suppressible.search("pangolin", is_suppressed=predicate).hits
+        if hit.cluster_id == cluster(1)
+    ]
     assert (hit.file_count, hit.team_count) == (2, 2)
 
 
@@ -486,7 +526,14 @@ def test_evidence_search_counts_teams_past_the_provenance_limit_as_the_stored_co
     card = suppressible.card("hsld26", cluster(2), is_suppressed=stopping(21))
     assert card is not None
     assert [one.ordinal for one in card.occurrences] == [0, 2, 3, 4, 5, 6]
-    assert [one.provenance_line is not None for one in card.occurrences] == [True, True, True, True, False, False]
+    assert [one.provenance_line is not None for one in card.occurrences] == [
+        True,
+        True,
+        True,
+        True,
+        False,
+        False,
+    ]
     assert (card.file_count, card.team_count) == (6, 6)
 
 
@@ -511,7 +558,9 @@ def test_evidence_search_fills_a_page_past_hidden_cards_and_skips_none(paged_ind
     pages = every_page(searched, "quokka", is_suppressed=predicate)
     assert [len(page.hits) for page in pages] == [20, 10]
     whole = ids(service(paged_index, page_size=100).search("quokka"))
-    assert [number for page in pages for number in ids(page)] == [number for number in whole if number not in hidden]
+    assert [number for page in pages for number in ids(page)] == [
+        number for number in whole if number not in hidden
+    ]
 
 
 # ------------------------------------------------------------------------------------------------
@@ -520,7 +569,7 @@ def test_evidence_search_fills_a_page_past_hidden_cards_and_skips_none(paged_ind
 
 
 def spent_after(reads: int) -> Callable[[], float]:
-    """A clock that stands at 0 for `reads` reads after the one that sets the deadline, then jumps a minute."""
+    """A clock at 0 for `reads` reads after the one that sets the deadline, and a minute on after that."""
     counter = itertools.count()
     return lambda: 0.0 if next(counter) <= reads else 60.0
 
@@ -529,7 +578,10 @@ def spent_after(reads: int) -> Callable[[], float]:
 def large_index(tmp_path_factory: pytest.TempPathFactory) -> Path:
     return build(
         tmp_path_factory.mktemp("large"),
-        (document(number, text="numbat " * (1 + number % 11) + f"filler{number}") for number in range(1, 301)),
+        (
+            document(number, text="numbat " * (1 + number % 11) + f"filler{number}")
+            for number in range(1, 301)
+        ),
     )
 
 
@@ -548,7 +600,9 @@ def test_evidence_search_past_its_budget_returns_what_it_has_flagged_partial(lar
         assert (ids(page) + ids(rest))[:20] == whole
         fetched.add(len(page.hits))
     assert 0 in fetched, "a budget spent at once returns nothing, flagged partial"
-    assert any(0 < count < 20 for count in fetched), "a budget spent part-way returns the rows fetched by then"
+    assert any(0 < count < 20 for count in fetched), (
+        "a budget spent part-way returns the rows fetched by then"
+    )
 
 
 class InterruptedAfterAFullBatch:
@@ -560,7 +614,9 @@ class InterruptedAfterAFullBatch:
         self.hits = tuple(hits)
 
     def match(self, request: MatchRequest) -> MatchBatch:
-        return MatchBatch(hits=self.hits[request.offset : request.offset + request.limit], exhausted=False, interrupted=True)
+        return MatchBatch(
+            hits=self.hits[request.offset : request.offset + request.limit], exhausted=False, interrupted=True
+        )
 
     def document(self, caselist: str, cluster_id: str) -> StoredDocument | None:
         raise AssertionError("not asked")
@@ -583,15 +639,25 @@ def stored_hit(position: int) -> StoredHit:
         file_count=1,
         team_count=1,
         representative=StoredOccurrence(
-            doc_id=position + 1, ordinal=0, caselist="hsld26", source_sha256=source(position + 1), disclosure=None,
-            snapshot="2026-09-01", last_snapshot="2026-09-01", completeness="FULL", attributed=False, provenance=True,
+            doc_id=position + 1,
+            ordinal=0,
+            caselist="hsld26",
+            source_sha256=source(position + 1),
+            disclosure=None,
+            snapshot="2026-09-01",
+            last_snapshot="2026-09-01",
+            completeness="FULL",
+            attributed=False,
+            provenance=True,
         ),
     )
 
 
 def test_evidence_search_stopped_after_finding_the_next_hit_resumes_at_that_hit() -> None:
-    """The budget can run out after the twenty-first row: the cursor still points at row twenty, not past it."""
-    searched = EvidenceSearchService(InterruptedAfterAFullBatch([stored_hit(position) for position in range(30)]))
+    """The budget can run out after the twenty-first row: the cursor points at row twenty, not past it."""
+    searched = EvidenceSearchService(
+        InterruptedAfterAFullBatch([stored_hit(position) for position in range(30)])
+    )
     page = searched.search("numbat")
     assert page.partial
     assert len(page.hits) == 20
@@ -623,7 +689,16 @@ def carded(tmp_path_factory: pytest.TempPathFactory) -> EvidenceSearchService:
     return service(
         build(
             tmp_path_factory.mktemp("carded"),
-            (document(1, text=CARD_TEXT, spans=CARD_SPANS, sizes=CARD_SIZES, tag="Invented tag <b>", sides=("AFF", "NEG")),),
+            (
+                document(
+                    1,
+                    text=CARD_TEXT,
+                    spans=CARD_SPANS,
+                    sizes=CARD_SIZES,
+                    tag="Invented tag <b>",
+                    sides=("AFF", "NEG"),
+                ),
+            ),
         )
     )
 
@@ -648,22 +723,28 @@ def test_evidence_search_card_returns_its_text_runs_and_provenance(carded: Evide
     assert carded.card("hspf26", cluster(1)) is None
 
 
-def test_evidence_search_card_renders_inert_with_the_stored_spans_coverage(carded: EvidenceSearchService) -> None:
+def test_evidence_search_card_renders_inert_with_the_stored_spans_coverage(
+    carded: EvidenceSearchService,
+) -> None:
     """ac3 and ac4 through the index: the stored spans render as the fixture's do, escaped."""
     card = carded.card("hsld26", cluster(1))
     assert card is not None
     rendered = render_card_html(card.runs)
-    indexed = [IndexedFormattingSpan(s.emphasis, s.start_offset, s.end_offset, s.highlight_color) for s in CARD_SPANS]
+    indexed = [
+        IndexedFormattingSpan(s.emphasis, s.start_offset, s.end_offset, s.highlight_color) for s in CARD_SPANS
+    ]
     sizes = [IndexedFontSizeSpan(s.start_offset, s.end_offset, s.half_points) for s in CARD_SIZES]
     assert rendered == render_card_html(card_runs(CARD_TEXT, indexed, sizes))
     assert formatting_sha256(CARD_SPANS, CARD_SIZES) == formatting_sha256(
-        [parser_span(s.emphasis, s.start_offset, s.end_offset, s.highlight_color) for s in indexed], CARD_SIZES
+        [parser_span(s.emphasis, s.start_offset, s.end_offset, s.highlight_color) for s in indexed],
+        CARD_SIZES,
     )
     assert rendered == (
         '<span class="card-size-22">Invented </span>'
         '<span class="card-underline card-highlight card-highlight-cyan card-size-22">growth</span>'
         '<span class="card-size-22"> </span>'
         '<span class="card-bold card-size-22">&lt;script&gt;</span>'
-        '<span class="card-size-22">alert(&quot;x&quot;)&lt;/script&gt; ends &lt;a href=&quot;javascript:x&quot;&gt;'
+        '<span class="card-size-22">alert(&quot;x&quot;)&lt;/script&gt; ends '
+        "&lt;a href=&quot;javascript:x&quot;&gt;"
         "badly&lt;/a&gt;</span>"
     )

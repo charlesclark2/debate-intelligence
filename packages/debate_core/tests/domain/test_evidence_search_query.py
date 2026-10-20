@@ -109,7 +109,10 @@ QUERIES = st.one_of(
         ("  economic   growth ", [QueryTerm("economic"), QueryTerm("growth")]),
         ('"economic growth" bad', [QueryTerm("economic growth", phrase=True), QueryTerm("bad")]),
         ("growth -recession", [QueryTerm("growth"), QueryTerm("recession", excluded=True)]),
-        ('growth -"soft landing"', [QueryTerm("growth"), QueryTerm("soft landing", phrase=True, excluded=True)]),
+        (
+            'growth -"soft landing"',
+            [QueryTerm("growth"), QueryTerm("soft landing", phrase=True, excluded=True)],
+        ),
         ("author:okonkwo", [QueryTerm("okonkwo", field=CITE)]),
         ("AUTHOR:Okonkwo Tag:growth", [QueryTerm("Okonkwo", field=CITE), QueryTerm("growth", field=TAG)]),
         ('tag:"growth bad"', [QueryTerm("growth bad", phrase=True, field=TAG)]),
@@ -194,12 +197,14 @@ def test_search_query_prefix_names_the_only_column_a_term_searches(raw: str) -> 
 @settings(max_examples=400, deadline=None)
 @given(QUERIES)
 def test_search_query_lets_no_typed_operator_through(raw: str) -> None:
-    """Outside its strings, the expression is only the AND, NOT, parentheses and filters this module writes."""
+    """Outside its strings, the expression is only the AND, NOT, brackets and filters this module writes."""
     expression = parse_query(raw).fts5_expression()
     if expression is None:
         return
     syntax = _outside_strings(expression)
-    assert re.fullmatch(r'(\()?((tag|cite) : )?""( AND ((tag|cite) : )?"")*(\))?( NOT ((tag|cite) : )?"")*', syntax)
+    assert re.fullmatch(
+        r'(\()?((tag|cite) : )?""( AND ((tag|cite) : )?"")*(\))?( NOT ((tag|cite) : )?"")*', syntax
+    )
     assert "\x00" not in expression
 
 
@@ -342,7 +347,11 @@ def test_search_cursor_decoder_refuses_any_string_with_its_own_error(cursor: str
         ("plain", [SnippetSegment("plain", False)]),
         (
             f"Invented {SNIPPET_OPEN}growth{SNIPPET_CLOSE} ends",
-            [SnippetSegment("Invented ", False), SnippetSegment("growth", True), SnippetSegment(" ends", False)],
+            [
+                SnippetSegment("Invented ", False),
+                SnippetSegment("growth", True),
+                SnippetSegment(" ends", False),
+            ],
         ),
         (
             f"{SNIPPET_OPEN}a{SNIPPET_CLOSE}{SNIPPET_OPEN}b{SNIPPET_CLOSE}",
@@ -351,7 +360,9 @@ def test_search_cursor_decoder_refuses_any_string_with_its_own_error(cursor: str
         (f"x{SNIPPET_CLOSE}y{SNIPPET_OPEN}z", [SnippetSegment("xy", False), SnippetSegment("z", True)]),
     ],
 )
-def test_search_snippet_splits_on_its_markers_and_keeps_none(raw: str, segments: list[SnippetSegment]) -> None:
+def test_search_snippet_splits_on_its_markers_and_keeps_none(
+    raw: str, segments: list[SnippetSegment]
+) -> None:
     assert snippet_segments(raw) == tuple(segments)
 
 
@@ -429,7 +440,13 @@ def caselist_row(snapshot: str = "2026-09-15") -> OccurrenceRecord:
 
 def camp_row(release: str = "2026-policy") -> OccurrenceRecord:
     return caselist_row().model_copy(
-        update={"caselist": "openev", "snapshot": release, "last_snapshot": release, "disclosure": None, "camp": "Cascade Institute"}
+        update={
+            "caselist": "openev",
+            "snapshot": release,
+            "last_snapshot": release,
+            "disclosure": None,
+            "camp": "Cascade Institute",
+        }
     )
 
 
@@ -451,9 +468,19 @@ def disclosure(side: Side, tournament: str | None, round_raw: str | None) -> Dis
 @pytest.mark.parametrize(
     ("side", "tournament", "round_raw", "line"),
     [
-        (Side.AFF, "Invented Invitational", "Round 4", "[Disclosed: hsld26 2026-09-15 — Maple Grove QX, Aff vs. Invented Invitational Round 4]"),
+        (
+            Side.AFF,
+            "Invented Invitational",
+            "Round 4",
+            "[Disclosed: hsld26 2026-09-15 — Maple Grove QX, Aff vs. Invented Invitational Round 4]",
+        ),
         (Side.NEG, None, None, "[Disclosed: hsld26 2026-09-15 — Maple Grove QX, Neg]"),
-        (Side.UNKNOWN, "Invented Invitational", None, "[Disclosed: hsld26 2026-09-15 — Maple Grove QX, Invented Invitational]"),
+        (
+            Side.UNKNOWN,
+            "Invented Invitational",
+            None,
+            "[Disclosed: hsld26 2026-09-15 — Maple Grove QX, Invented Invitational]",
+        ),
         (Side.UNKNOWN, None, None, "[Disclosed: hsld26 2026-09-15 — Maple Grove QX]"),
     ],
 )
@@ -513,7 +540,12 @@ def test_search_provenance_line_is_the_writers_line_for_a_camp_card() -> None:
     )
     assert (
         occurrence_provenance_line(
-            caselist="openev", snapshot="2026-policy", provenance=True, camp="Cascade Institute", camp_year=2026, camp_event="POLICY"
+            caselist="openev",
+            snapshot="2026-policy",
+            provenance=True,
+            camp="Cascade Institute",
+            camp_year=2026,
+            camp_event="POLICY",
         )
         == unrecorded
     )

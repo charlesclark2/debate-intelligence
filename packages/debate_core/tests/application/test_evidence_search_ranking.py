@@ -39,7 +39,12 @@ from debate_core.integrations.local.search_index_reader import SqliteSearchIndex
 
 TOPICS: Final = ("deterrence", "inflation", "automation", "sanctions")
 AUTHORS: Final = ("Okafor", "Lindqvist", "Haddad", "Moreau")
-CLAIMS: Final = (("tariffs", "recession"), ("drones", "escalation"), ("warming", "migration"), ("privacy", "surveillance"))
+CLAIMS: Final = (
+    ("tariffs", "recession"),
+    ("drones", "escalation"),
+    ("warming", "migration"),
+    ("privacy", "surveillance"),
+)
 
 FILLER: Final = (
     "the evidence suggests that policy makers should weigh the long term effects of any change "
@@ -136,7 +141,12 @@ def cite(author: str, number: int, journal: str = "Invented Policy Review") -> s
 
 def tag(words: str, number: int) -> str:
     """A tag of 4 to 13 words: the claim, and for some cards the reason after it."""
-    reasons = ("", " because the data shows it", " and the impact is large and fast", " because history proves it")
+    reasons = (
+        "",
+        " because the data shows it",
+        " and the impact is large and fast",
+        " because history proves it",
+    )
     return words + reasons[number % len(reasons)]
 
 
@@ -161,7 +171,9 @@ def corpus() -> Corpus:
         )
         built.grades[topic] = {wanted: 2, journal: 1, repeated: 0}
     for number, author in enumerate(AUTHORS):
-        theirs = built.add(tag=tag("Cooperation is possible", number), cite=cite(author, number), read="cooperation works")
+        theirs = built.add(
+            tag=tag("Cooperation is possible", number), cite=cite(author, number), read="cooperation works"
+        )
         about = built.add(
             tag=tag("Critics answer the cooperation thesis", number + 1),
             cite=cite("Novak", number + 1),
@@ -175,7 +187,11 @@ def corpus() -> Corpus:
         )
         built.grades[author.lower()] = {theirs: 2, about: 1, passing: 1}
     for number, (first, second) in enumerate(CLAIMS):
-        both = built.add(tag=tag("The link is strong", number), cite=cite("Novak", number + 3), read=f"{first} cause {second}")
+        both = built.add(
+            tag=tag("The link is strong", number),
+            cite=cite("Novak", number + 3),
+            read=f"{first} cause {second}",
+        )
         split = built.add(
             tag=tag(f"{first.title()} matter", number + 1),
             cite=cite("Tanaka", number + 3, "Invented Quarterly"),
@@ -246,6 +262,9 @@ def test_search_ranking_weights_score_at_least_every_candidate_on_the_relevance_
     path, grades = relevance_set
     chosen = mean_ndcg(path, RANKING_WEIGHTS, grades)
     scores = {name: mean_ndcg(path, weights, grades) for name, weights in CANDIDATES.items()}
-    print(f"\nmean nDCG@5: chosen {chosen:.4f}; " + "; ".join(f"{name} {score:.4f}" for name, score in scores.items()))
+    print(
+        f"\nmean nDCG@5: chosen {chosen:.4f}; "
+        + "; ".join(f"{name} {score:.4f}" for name, score in scores.items())
+    )
     assert all(chosen >= score for score in scores.values()), scores
     assert chosen > scores["equal"]

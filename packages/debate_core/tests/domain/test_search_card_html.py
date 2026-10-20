@@ -1,4 +1,4 @@
-"""A searched card renders inert, with only allow-listed tags and classes, and loses no formatting (`v1-e39-t03`).
+"""A searched card renders inert, only allow-listed tags and classes, losing no formatting (`v1-e39-t03`).
 
 ac3: a card whose text holds a script element, an event-handler attribute and a `javascript:` link
 renders as text, and the rendered HTML, read back by the standard library's parser, holds only the
@@ -67,7 +67,7 @@ class ReadBack(HTMLParser):
         names = frozenset(
             name for key, value in attrs if key == "class" and value is not None for name in value.split()
         )
-        self.stack.append(names | (self.stack[-1] if self.stack else frozenset()))
+        self.stack.append(names | (self.stack[-1] if self.stack else frozenset[str]()))
 
     def handle_endtag(self, tag: str) -> None:
         self.tags.append(f"/{tag}")
@@ -86,7 +86,7 @@ class ReadBack(HTMLParser):
         self.tags.append("<?")
 
     def _add(self, data: str) -> None:
-        current = self.stack[-1] if self.stack else frozenset()
+        current = self.stack[-1] if self.stack else frozenset[str]()
         self.text.append(data)
         self.classes.extend([current] * len(data))
 
@@ -111,9 +111,13 @@ class ReadBack(HTMLParser):
                 if name in by_emphasis and by_emphasis[name] is not RunEmphasis.HIGHLIGHT:
                     formatting.append(_span(by_emphasis[name], offset))
                 elif name.startswith("card-highlight-"):
-                    formatting.append(_span(RunEmphasis.HIGHLIGHT, offset, name.removeprefix("card-highlight-")))
+                    formatting.append(
+                        _span(RunEmphasis.HIGHLIGHT, offset, name.removeprefix("card-highlight-"))
+                    )
                 elif name.startswith("card-size-"):
-                    sizes.append(FontSizeSpan(start_offset=offset, end_offset=offset + 1, half_points=int(name[10:])))
+                    sizes.append(
+                        FontSizeSpan(start_offset=offset, end_offset=offset + 1, half_points=int(name[10:]))
+                    )
         return formatting, sizes
 
 
@@ -143,13 +147,35 @@ def _parser_span(span: IndexedFormattingSpan) -> FormattingSpan:
 #: to the list it checks.
 TAGS_BY_HAND: Final = {"span", "mark", "br"}
 CLASSES_BY_HAND: Final = {
-    "card-underline", "card-emphasis", "card-cite", "card-undertag", "card-analytic", "card-highlight",
-    "card-bold", "card-shrunk", "card-heading", "card-highlight-other",
+    "card-underline",
+    "card-emphasis",
+    "card-cite",
+    "card-undertag",
+    "card-analytic",
+    "card-highlight",
+    "card-bold",
+    "card-shrunk",
+    "card-heading",
+    "card-highlight-other",
     *(
         f"card-highlight-{colour}"
         for colour in (
-            "black", "blue", "cyan", "darkBlue", "darkCyan", "darkGray", "darkGreen", "darkMagenta", "darkRed",
-            "darkYellow", "green", "lightGray", "magenta", "red", "white", "yellow",
+            "black",
+            "blue",
+            "cyan",
+            "darkBlue",
+            "darkCyan",
+            "darkGray",
+            "darkGreen",
+            "darkMagenta",
+            "darkRed",
+            "darkYellow",
+            "green",
+            "lightGray",
+            "magenta",
+            "red",
+            "white",
+            "yellow",
         )
     ),
 }
@@ -170,12 +196,26 @@ def assert_only_allowed_markup(reader: ReadBack) -> None:
 
 def test_search_card_html_allow_list_is_the_one_written_by_hand() -> None:
     assert ALLOWED_TAGS == TAGS_BY_HAND
-    assert {*EMPHASIS_CLASSES.values(), OTHER_HIGHLIGHT_CLASS, *(f"card-highlight-{c}" for c in HIGHLIGHT_COLOURS)} == CLASSES_BY_HAND
+    assert {
+        *EMPHASIS_CLASSES.values(),
+        OTHER_HIGHLIGHT_CLASS,
+        *(f"card-highlight-{c}" for c in HIGHLIGHT_COLOURS),
+    } == CLASSES_BY_HAND
 
 
 @pytest.mark.parametrize(
     "name",
-    ["card-size-0", "card-size-10000", "card-size-022", "card-size-", "onclick", "x", "card-highlight-cyan\" onclick", "card-highlight-none", "CARD-BOLD"],
+    [
+        "card-size-0",
+        "card-size-10000",
+        "card-size-022",
+        "card-size-",
+        "onclick",
+        "x",
+        'card-highlight-cyan" onclick',
+        "card-highlight-none",
+        "CARD-BOLD",
+    ],
 )
 def test_search_card_html_refuses_a_class_off_the_list(name: str) -> None:
     assert not is_allowed_class(name)
@@ -204,7 +244,7 @@ def test_search_card_html_renders_a_script_a_handler_and_a_javascript_link_as_te
     assert_only_allowed_markup(reader)
     assert set(reader.tags) == {"span", "/span", "br"}
     lowered = rendered.lower()
-    for raw in ("<script", "<img", "<a ", "<svg", "<style", "<!--", "onerror=\"", "href=\""):
+    for raw in ("<script", "<img", "<a ", "<svg", "<style", "<!--", 'onerror="', 'href="'):
         assert raw not in lowered, raw
 
 
@@ -231,7 +271,9 @@ def test_search_card_html_writes_the_exact_markup_for_a_small_card() -> None:
     """Written by hand: one plain run, one underlined and highlighted, a line break, a size."""
     runs = (
         CardRun("Invented "),
-        CardRun("growth", emphases=(RunEmphasis.UNDERLINE, RunEmphasis.HIGHLIGHT), highlight_colors=("cyan",)),
+        CardRun(
+            "growth", emphases=(RunEmphasis.UNDERLINE, RunEmphasis.HIGHLIGHT), highlight_colors=("cyan",)
+        ),
         CardRun(" <ends>\nbadly", font_sizes=(16,)),
     )
     assert render_card_html(runs) == (
@@ -241,9 +283,13 @@ def test_search_card_html_writes_the_exact_markup_for_a_small_card() -> None:
 
 
 @settings(max_examples=300, deadline=None)
-@given(st.text(alphabet=st.sampled_from('<>&"\'/=:;\n ascriptjvonerrohf') | st.characters(), max_size=120))
+@given(st.text(alphabet=st.sampled_from("<>&\"'/=:;\n ascriptjvonerrohf") | st.characters(), max_size=120))
 def test_search_card_html_text_of_any_card_reads_back_unchanged_with_no_markup_of_its_own(text: str) -> None:
-    reader = ReadBack.of(render_card_html(card_runs(text, (IndexedFormattingSpan(RunEmphasis.BOLD, 0, 1),) if text else (), ())))
+    reader = ReadBack.of(
+        render_card_html(
+            card_runs(text, (IndexedFormattingSpan(RunEmphasis.BOLD, 0, 1),) if text else (), ())
+        )
+    )
     assert reader.plain == text
     assert_only_allowed_markup(reader)
 
@@ -255,13 +301,17 @@ def test_search_card_html_text_of_any_card_reads_back_unchanged_with_no_markup_o
 
 @st.composite
 def stored_card(draw: st.DrawFn) -> tuple[str, list[IndexedFormattingSpan], list[IndexedFontSizeSpan]]:
-    text = draw(st.text(alphabet=st.sampled_from("abc <&>\n\"'é") , min_size=1, max_size=60))
+    text = draw(st.text(alphabet=st.sampled_from("abc <&>\n\"'é"), min_size=1, max_size=60))
     length = len(text)
-    offsets = st.tuples(st.integers(0, length - 1), st.integers(1, length)).filter(lambda pair: pair[0] < pair[1])
+    offsets = st.tuples(st.integers(0, length - 1), st.integers(1, length)).filter(
+        lambda pair: pair[0] < pair[1]
+    )
     formatting: list[IndexedFormattingSpan] = []
     for start, end in draw(st.lists(offsets, max_size=12)):
         emphasis = draw(st.sampled_from(list(RunEmphasis)))
-        colour = draw(st.sampled_from(sorted(HIGHLIGHT_COLOURS))) if emphasis is RunEmphasis.HIGHLIGHT else None
+        colour = (
+            draw(st.sampled_from(sorted(HIGHLIGHT_COLOURS))) if emphasis is RunEmphasis.HIGHLIGHT else None
+        )
         formatting.append(IndexedFormattingSpan(emphasis, start, end, colour))
     sizes = [
         IndexedFontSizeSpan(start, end, draw(st.integers(1, 200)))
@@ -282,13 +332,16 @@ def test_search_card_html_coverage_equals_the_stored_spans_reading(
     rendered_formatting, rendered_sizes = reader.spans()
     stored = formatting_sha256(
         [_parser_span(span) for span in formatting],
-        [FontSizeSpan(start_offset=s.start_offset, end_offset=s.end_offset, half_points=s.half_points) for s in sizes],
+        [
+            FontSizeSpan(start_offset=s.start_offset, end_offset=s.end_offset, half_points=s.half_points)
+            for s in sizes
+        ],
     )
     assert formatting_sha256(rendered_formatting, rendered_sizes) == stored
 
 
 def test_search_card_html_coverage_of_a_fixture_card_written_by_hand() -> None:
-    """ac4 on one card, its coverage read off by hand: underline 9-22, cyan 9-15, bold 28-33, size 22 from 9."""
+    """ac4 on one card, coverage read off by hand: underline 9-22, cyan 9-15, bold 28-33, size 22 from 9."""
     text = "Invented growth always ends badly"
     formatting = [
         IndexedFormattingSpan(RunEmphasis.UNDERLINE, 9, 15),
@@ -310,7 +363,8 @@ def test_search_card_html_coverage_of_a_fixture_card_written_by_hand() -> None:
         "card-size-22": (9, 33, 24),
     }
     expected = formatting_sha256(
-        [_parser_span(span) for span in formatting], [FontSizeSpan(start_offset=9, end_offset=33, half_points=22)]
+        [_parser_span(span) for span in formatting],
+        [FontSizeSpan(start_offset=9, end_offset=33, half_points=22)],
     )
     assert formatting_sha256(*reader.spans()) == expected
 

@@ -1,4 +1,4 @@
-"""A searched card and its snippet as HTML: every character escaped, only allow-listed tags and classes (`v1-e39-t03`).
+"""A searched card and its snippet as HTML: text escaped, only allow-listed tags and classes (`v1-e39-t03`).
 
 Disclosed files are untrusted input. A card's text may hold anything a stranger typed into Word,
 `<script>`, `onerror=` and `javascript:` included, and none of it may reach a page as markup. So this
@@ -87,7 +87,11 @@ FONT_SIZE_CLASS: Final = re.compile(r"^card-size-[1-9][0-9]{0,3}$")
 """`card-size-22`: a font size in half-points, digits only, up to 9999 (Word's largest is 3276)."""
 
 _ALLOWED_CLASSES: Final = frozenset(
-    {*EMPHASIS_CLASSES.values(), OTHER_HIGHLIGHT_CLASS, *(f"card-highlight-{one}" for one in HIGHLIGHT_COLOURS)}
+    {
+        *EMPHASIS_CLASSES.values(),
+        OTHER_HIGHLIGHT_CLASS,
+        *(f"card-highlight-{one}" for one in HIGHLIGHT_COLOURS),
+    }
 )
 
 

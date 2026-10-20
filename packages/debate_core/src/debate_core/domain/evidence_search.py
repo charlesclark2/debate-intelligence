@@ -249,7 +249,9 @@ class SearchFilters(DomainModel):
     """What a search is narrowed to. Every filter is optional, and they combine with AND."""
 
     event: Event | None = Field(default=None, description="LD, POLICY or PF.")
-    caselist: StoreName | None = Field(default=None, description="A caselist slug, or `openev` for camp cards.")
+    caselist: StoreName | None = Field(
+        default=None, description="A caselist slug, or `openev` for camp cards."
+    )
     camp: str | None = Field(default=None, min_length=1, max_length=100, description="One camp's cards.")
     side: Side | None = Field(default=None, description="A side the card was disclosed on; never UNKNOWN.")
     first_seen_on_or_after: date | None = Field(
@@ -343,10 +345,10 @@ class SearchNotice(StrEnum):
     """The query had no word to search for (only exclusions, or only punctuation): no results."""
 
     QUERY_SHORTENED = "QUERY_SHORTENED"
-    """The query was longer than :data:`MAX_QUERY_CHARACTERS` or :data:`MAX_QUERY_TERMS`; the rest was ignored."""
+    """The query ran past :data:`MAX_QUERY_CHARACTERS` or :data:`MAX_QUERY_TERMS`; the rest was ignored."""
 
     FIRST_SEEN_CASELIST_CARDS_ONLY = "FIRST_SEEN_CASELIST_CARDS_ONLY"
-    """A first-seen filter applies to caselist cards only: camp cards have no first-seen day, and are left out."""
+    """First seen applies to caselist cards only: camp cards have no first-seen day and are left out."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -453,7 +455,9 @@ def card_runs(
                 )
             ),
             highlight_colors=tuple(sorted(str(value) for kind, value in keys if kind == "colour")),
-            font_sizes=tuple(sorted(value for kind, value in keys if kind == "size" and isinstance(value, int))),
+            font_sizes=tuple(
+                sorted(value for kind, value in keys if kind == "size" and isinstance(value, int))
+            ),
         )
         if runs and runs[-1].formatting == run.formatting:
             runs[-1] = CardRun(runs[-1].text + run.text, *run.formatting)
@@ -462,7 +466,12 @@ def card_runs(
     return tuple(runs)
 
 
-_SIDE_LABELS: Final = {Side.AFF.value: "Aff", Side.NEG.value: "Neg", Side.PRO.value: "Pro", Side.CON.value: "Con"}
+_SIDE_LABELS: Final = {
+    Side.AFF.value: "Aff",
+    Side.NEG.value: "Neg",
+    Side.PRO.value: "Pro",
+    Side.CON.value: "Con",
+}
 _EVENT_LABELS: Final = {Event.POLICY.value: "Policy", Event.LD.value: "LD", Event.PF.value: "PF"}
 
 
@@ -566,7 +575,7 @@ class OccurrenceProvenance:
 
 @dataclass(frozen=True, slots=True)
 class Card:
-    """A card as its page shows it: the representative's text in formatted runs, and every survivor's provenance."""
+    """A card as its page shows it: its representative's text as formatted runs, every survivor's line."""
 
     caselist: str
     cluster_id: str

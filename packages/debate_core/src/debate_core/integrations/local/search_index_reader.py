@@ -275,7 +275,9 @@ class SqliteSearchIndexReader:
             )
             for index, row in enumerate(rows)
         )
-        return MatchBatch(hits=hits, exhausted=not interrupted and len(hits) < request.limit, interrupted=interrupted)
+        return MatchBatch(
+            hits=hits, exhausted=not interrupted and len(hits) < request.limit, interrupted=interrupted
+        )
 
     def document(self, caselist: str, cluster_id: str) -> StoredDocument | None:
         with self._lock:

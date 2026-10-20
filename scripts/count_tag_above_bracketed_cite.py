@@ -28,8 +28,8 @@ stored cards' ranges is counted as such and not described.
 and writes nothing. Its output on stdout is counts and the names of rules: no card text, tag,
 cite, heading, file name, path or digest. Progress goes to stderr.
 
-    uv run python scripts/count_tag_above_bracketed_cite.py --expect-version 2026.10.18-docx-5
-    uv run python scripts/count_tag_above_bracketed_cite.py --expect-version 2026.10.18-docx-5 --every-source
+    uv run python scripts/count_tag_above_bracketed_cite.py --expect-version 2026.10.20-docx-6
+    uv run python scripts/count_tag_above_bracketed_cite.py --expect-version 2026.10.20-docx-6 --every-source
 """
 
 from __future__ import annotations

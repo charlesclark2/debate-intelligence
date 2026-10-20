@@ -165,7 +165,10 @@ __all__ = ["DOCX_PARSER_VERSION", "BodyParagraph", "DebateDocxParser", "body_par
 #: below it, where a cite stands; reads the cite and body rules through a paragraph style that maps
 #: to no unit; holds a long guess by its cite style only when the style marks a name and year at its
 #: head; and reads `Okonkwo ‘26`, with a left quote before the year, as a short cite.
-DOCX_PARSER_VERSION: Final = "2026.10.18-docx-5"
+#: `2026.10.20-docx-6` (`v1-e31-t24`) reads a bold line directly above a cite that opens a card with no
+#: tag as that card's tag, its bold and size read as Word shows them, and steps over an Undertag line
+#: when it looks for the body below a highlighted cite.
+DOCX_PARSER_VERSION: Final = "2026.10.20-docx-6"
 
 W_PARAGRAPH: Final = qualified_name("p")
 W_TABLE: Final = qualified_name("tbl")

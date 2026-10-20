@@ -19,10 +19,11 @@ from typing import Any
 import pytest
 from tests.evals.parser.cite_shapes import CITE_SIZE, READING_SIZE, SMALL_PRINT, SOURCE, prose, qualifications
 
+from debate_core.application.ports.parsed_store import parse_version_directory
 from debate_core.domain.caselist import SourceDocument, SourceFormat, SourceOrigin
 from debate_core.domain.debate_files import CardCompleteness, ParsedCard, ParsedDocument
 from debate_core.domain.style_profile import StyleProfile
-from debate_core.integrations.docx_parser.parser import DebateDocxParser
+from debate_core.integrations.docx_parser.parser import DOCX_PARSER_VERSION, DebateDocxParser
 from debate_core.testing.docx_builder import build_docx, paragraph_xml, run_xml
 
 SOURCE_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
@@ -329,3 +330,16 @@ class TestWhatTheRuleLeaves:
         assert [card.tag for card in document.cards] == [TAG, None]
         for text in (LINE, between_text):
             assert not section_with(document, text).match.rule_id.startswith(TAKEN)
+
+
+class TestTheParserVersion:
+    def test_it_is_the_version_this_task_bumped_to(self) -> None:
+        assert DOCX_PARSER_VERSION == "2026.10.20-docx-6"
+
+    def test_its_directory_sorts_after_the_store_it_replaces(self) -> None:
+        names = sorted([DOCX_PARSER_VERSION, "2026.10.18-docx-5"], key=parse_version_directory)
+        assert names == ["2026.10.18-docx-5", DOCX_PARSER_VERSION]
+
+    def test_every_card_names_it(self, parser: DebateDocxParser) -> None:
+        document = card_above_then(SEVENS_LINE, parser=parser)
+        assert {card.provenance.parser_version for card in document.cards} == {"2026.10.20-docx-6"}

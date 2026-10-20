@@ -5,7 +5,7 @@ highlight colour, font size) read from the built file are compared with the same
 source. These tests re-parse the built file themselves: they do not rely on the writer's own
 read-back, which they are also a check on.
 
-The parser is the current one, `2026.10.18-docx-5`. Formatting is compared as the characters each
+The parser is the current one, `2026.10.20-docx-6`. Formatting is compared as the characters each
 emphasis covers (:func:`~debate_core.domain.file_provenance.formatting_sha256`'s reading), because the
 parser joins two touching spans only when the same rule found them, and the writer re-maps a source's
 style aliases to the profile's ids. Font-size spans are compared exactly.
@@ -248,7 +248,7 @@ def test_the_tracked_change_and_the_comment_are_resolved_the_parsers_way(parser:
 
 
 def test_the_parser_ac1_is_measured_with_is_the_current_one(parser: DebateDocxParser) -> None:
-    assert parser.parser_version == DOCX_PARSER_VERSION == "2026.10.18-docx-5"
+    assert parser.parser_version == DOCX_PARSER_VERSION == "2026.10.20-docx-6"
 
 
 # ------------------------------------------------------------------------------------------------

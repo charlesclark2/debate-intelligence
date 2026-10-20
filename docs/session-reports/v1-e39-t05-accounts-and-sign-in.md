@@ -921,3 +921,52 @@ Accepted, on three conditions, all closed in this session before the pull reques
 **After the merge**, operator follow-up C (the module apply, dev then prod) goes on the PM's
 promotion list. Whichever of this task and v1-e39-t02 merges second keeps both sides of the `tub`
 group, the container and the service lists.
+
+## Fourth session: the second review's conditions (2026-10-20)
+
+### Condition 1: a dropped record leaves a trace
+
+When revalidation cannot write `session-ended-no-second-factor`, the session still ends, and
+`debate_core.application.tub.sign_in` logs one `WARNING`:
+
+```text
+tub audit: a session-ended-no-second-factor record was not written; the session ended anyway
+```
+
+It names the action and nothing else: no username and no subject. `contextlib.suppress` is gone from
+that path; `sign_out`'s use of it is unchanged. The app configures no log handler, so Python's
+last-resort handler writes the line to stderr, which Lambda sends to the function's log group.
+
+**Shown failing first.** `test_a_lost_session_end_record_is_logged_once_without_a_name_or_subject`
+was committed alone (`7f6fc63`). It failed for its reason, finding no WARNING
+(`ValueError: not enough values to unpack (expected 1, got 0)`); the other 22 tests in its file
+passed. After the change (`61aa4d2`), all 23 passed.
+
+**Mutants** (same driver; byte restore; `git status --porcelain` empty after):
+
+| Mutant | Result | Caught by |
+|---|---|---|
+| A lost record is raised (`except ZeroDivisionError`) | CAUGHT (2) | `test_a_session_end_that_cannot_be_recorded_still_ends_the_session` |
+| No WARNING is written | CAUGHT (1) | `test_a_lost_session_end_record_is_logged_once_without_a_name_or_subject` |
+| The WARNING names the account's subject | CAUGHT (1) | the same |
+| Revalidation writes no record (re-run) | CAUGHT (2) | `test_a_session_ended_for_want_of_a_second_factor_is_recorded` |
+
+The third session's mutant "a lost session-end record is not suppressed" no longer applies, because
+its text is gone. "A lost record is raised" replaces it.
+
+### Checks run
+
+| Check | Result |
+|---|---|
+| The same affected selection as the third session | `806 passed in 18.64s` (805, plus the new test) |
+| `ruff check .`, `ruff format --check .` | `All checks passed!`, `940 files already formatted` |
+| `pyright packages/debate_api packages/debate_cli packages/debate_core` | `0 errors, 0 warnings, 0 informations` |
+| `lint-imports` | `Contracts: 12 kept, 0 broken.` |
+| `scripts/check_thin_handlers.py` | `OK: 43 CLI command and API route handlers within 25 statements` |
+| `scripts/validate_specs.py` | `OK: 394 files, 39 epics, 334 tasks, 21 releases` |
+
+### Condition 2: the ac5 re-run of steps 4 and 5 on dev
+
+**Results: PENDING the operator's run.** They will be recorded here. If any differs from what the
+hand-off says to expect, this task asks for another review instead of opening the pull request
+(condition 3).

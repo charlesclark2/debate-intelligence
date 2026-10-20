@@ -435,7 +435,17 @@ def standard_store() -> Store:
     abbreviated = store.card(
         S_ONE, 0, BY_COMPLETENESS, "Invented growth ... ends badly", completeness=CardCompleteness.ABBREVIATED
     )
-    full = store.card(S_FOUR, 0, BY_COMPLETENESS, "Invented growth always ends badly for everyone involved")
+    full = store.card(
+        S_FOUR,
+        0,
+        BY_COMPLETENESS,
+        "Invented growth always ends badly for everyone involved",
+        spans=(span(RunEmphasis.UNDERLINE, 0, 22), span(RunEmphasis.HIGHLIGHT, 9, 15, "yellow")),
+        font_sizes=(
+            FontSizeSpan(start_offset=0, end_offset=22, half_points=22),
+            FontSizeSpan(start_offset=23, end_offset=55, half_points=12),
+        ),
+    )
     store.occurs(abbreviated, last="2026-09-29", disclosed_by=(SCHOOL, TEAM))
     store.occurs(full, last="2026-09-08")
     # Attributed beats unattributed, though the unattributed row is later and the smaller key.
@@ -449,8 +459,21 @@ def standard_store() -> Store:
     store.occurs(older, last="2026-09-08", disclosed_by=(SCHOOL, TEAM))
     store.occurs(newer, last="2026-09-15", disclosed_by=(OTHER_SCHOOL, OTHER_TEAM))
     # Then the smallest occurrence key: source, element, disclosure digest.
-    shared = store.card(S_ONE, 30, BY_KEY, "Invented hegemony prevents invented conflict")
-    bigger = store.card(S_THREE, 30, BY_KEY, "Invented hegemony prevents invented conflict")
+    # Formatted, so the byte-identity tests cover the stored spans (PM review 2026-10-20).
+    shared = store.card(
+        S_ONE,
+        30,
+        BY_KEY,
+        "Invented hegemony prevents invented conflict",
+        spans=(span(RunEmphasis.UNDERLINE, 0, 26), span(RunEmphasis.HIGHLIGHT, 9, 17, "cyan")),
+    )
+    bigger = store.card(
+        S_THREE,
+        30,
+        BY_KEY,
+        "Invented hegemony prevents invented conflict",
+        spans=(span(RunEmphasis.UNDERLINE, 0, 17),),
+    )
     store.occurs(shared, path=PATH_A, disclosed_by=(SCHOOL, TEAM))
     store.occurs(shared, path=PATH_B, disclosed_by=(OTHER_SCHOOL, OTHER_TEAM))
     store.occurs(bigger, disclosed_by=(SCHOOL, TEAM), side=Side.AFF)

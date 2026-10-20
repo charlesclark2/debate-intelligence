@@ -412,3 +412,41 @@ def test_index_stage_that_did_its_work_leaves_the_runs_outcome_alone(
     summary = run(tmp_path, search_index=RecordingIndexStage(report))
 
     assert record_for_summary(summary, environment="dev", mode="run").outcome is SyncRunOutcome.NOTHING_NEW
+
+
+def test_index_stage_turned_off_by_setting_is_skipped_with_the_settings_name_and_never_absent(
+    tmp_path: Path,
+) -> None:
+    data_dir = tmp_path / "evidence"
+    database = SqliteDatabase.open(data_dir)
+    repository = SqliteCaselistRepository(database)
+    blobs = FsSnapshotStore(data_dir)
+    service = CaselistSyncService(
+        source=FakeSource(),
+        archive_importer=CaselistImportService(
+            suppression=empty_suppression_list(), caselists=repository, blobs=blobs
+        ),
+        openev_importer=OpenEvImportService(
+            suppression=empty_suppression_list(), caselists=repository, blobs=blobs
+        ),
+        local=local_evidence(data_dir),
+        read_archive=lambda path: read_archive(path, **_LIMITS),
+        event_for_caselist=lambda slug: Event.LD if slug.startswith("testcl") else None,
+        inbox=data_dir / "inbox",
+        state_dir=data_dir,
+        suppression=empty_suppression_list(),
+        search_index_turned_off=True,
+        clock=lambda: RUN_CLOCK,
+    )
+
+    for dry_run in (True, False):
+        summary = asyncio.run(service.run([SYNTHETIC_CASELIST], dry_run=dry_run))
+        record = search_index_record(summary)
+        assert record.outcome is StageOutcome.SKIPPED
+        assert (record.reason or "").startswith("turned off by setting (caselist.refresh_search_index)")
+        [entry] = [
+            one
+            for one in record_for_summary(summary, environment="dev", mode="run").stages
+            if one.stage == "search_index"
+        ]
+        assert entry.reason == record.reason, "caselist runs reads the stage from the record"

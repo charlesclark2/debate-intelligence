@@ -696,6 +696,20 @@ class CaselistSettings(SettingsGroup):
         ),
     )
 
+    # --- The search pilot's weekly index (v1-e39-t09-weekly-index-refresh) ----------------------
+
+    refresh_search_index: bool = Field(
+        default=True,
+        description=(
+            "Whether `caselist pull` keeps the student search pilot's index current where the "
+            "environment names a bucket: rebuilt when the parsed store changed, and published to "
+            "this environment's bucket when current.json is behind it. On by default and in the "
+            "dev and prod profiles, which is what the installed agent reads. Off, the stage is "
+            "still in the run summary and `caselist runs`, skipped with this setting's name as the "
+            "reason; `tub index build` and `tub index publish` do the same work by hand."
+        ),
+    )
+
     # --- Monitoring the weekly sync (v1-e34-t03-sync-monitoring) ------------------------------
 
     notifier: SyncNotifierKind = Field(

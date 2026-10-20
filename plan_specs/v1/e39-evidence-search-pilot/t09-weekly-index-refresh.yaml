@@ -51,7 +51,10 @@ spec:
     not the parsed store's, and when this run's parse stage failed.
   priority: 2
   constraints:
-    packages: [debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/runbooks]
+    # PM ruling 2026-10-20 (v1-e39-t09 Q6): caselist.refresh_search_index (default true, and true in
+    # the bundled dev and prod profiles) is set to false in the three smoke worlds that parse no camp
+    # store; tests/smoke is added to the packages for that.
+    packages: [debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/runbooks, tests/smoke]
     forbidden:
       - Running the agent or a publish in a session
       - Card text, a school, team code, file name, student name, username or email in any fixture, log, report or commit (synthetic values only)

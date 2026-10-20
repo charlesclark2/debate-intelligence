@@ -2614,6 +2614,8 @@ class CaselistSyncService:
         parse: The parse stage (`v1-e34-t17`), built over this same `suppression`, or `None` when
             `caselist.parse_imported_sources` turns it off.
         search_index: The search index stage (`v1-e39-t09`), or `None` where none is wired in.
+        search_index_turned_off: `caselist.refresh_search_index` is off. The stage is then skipped
+            with that setting's name as the reason, and never left out of the run.
         landscape: Landscape regeneration (`v1-e32-t05`), or `None` — the normal case today.
         openev_event: The event to file OpenEv files under when their own tags do not say.
         openev_year: The OpenEv release year to list, or `None` for the API's current year.
@@ -2643,6 +2645,7 @@ class CaselistSyncService:
         status: CaselistStatusService | None = None,
         parse: CaselistParseStage | None = None,
         search_index: SearchIndexStage | None = None,
+        search_index_turned_off: bool = False,
         landscape: LandscapeStage | None = None,
         openev_event: Event | None = None,
         openev_year: int | None = None,
@@ -2671,6 +2674,7 @@ class CaselistSyncService:
         self._status = status
         self._parse = parse
         self._search_index = search_index
+        self._no_search_index = _SEARCH_INDEX_TURNED_OFF if search_index_turned_off else _NO_SEARCH_INDEX
         self._landscape = landscape
         self._openev_event = openev_event
         self._openev_year = openev_year
@@ -3286,7 +3290,7 @@ class CaselistSyncService:
             "would rebuild the search index if the parsed store changed since the newest one, and "
             "publish it if current.json is behind it"
             if self._search_index is not None
-            else _NO_SEARCH_INDEX,
+            else self._no_search_index,
         )
         tally.record(
             SyncStage.LANDSCAPE,
@@ -3986,7 +3990,7 @@ class CaselistSyncService:
         recorded as its failure.
         """
         if self._search_index is None:
-            tally.record(SyncStage.SEARCH_INDEX, StageOutcome.SKIPPED, _NO_SEARCH_INDEX)
+            tally.record(SyncStage.SEARCH_INDEX, StageOutcome.SKIPPED, self._no_search_index)
             return
         if tally.outcome_of(SyncStage.PARSE) is StageOutcome.FAILED:
             tally.record(SyncStage.SEARCH_INDEX, StageOutcome.SKIPPED, _PARSE_FAILED_SO_NO_INDEX)
@@ -4671,6 +4675,10 @@ _UNPUBLISHED_PARSED_STORE_FIX: Final = (
 _NO_LANDSCAPE: Final = "no landscape service is installed (v1-e32-t05 has not shipped)"
 _NO_SEARCH_INDEX: Final = (
     "no search index stage is wired in: an environment that names no evidence bucket has none"
+)
+_SEARCH_INDEX_TURNED_OFF: Final = (
+    "turned off by setting (caselist.refresh_search_index); `tub index build` and "
+    "`tub index publish` do it by hand"
 )
 _PARSE_FAILED_SO_NO_INDEX: Final = (
     "the parse stage failed in this run, so the index is not rebuilt from what it left; "

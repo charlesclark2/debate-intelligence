@@ -130,9 +130,17 @@ def run(installed_cli: InstalledCli) -> Any:
 def test_a_pull_is_listed_by_caselist_runs_locally_and_from_the_bucket(
     installation: Path, bucket: S3Client, site: OpenCaselistStandIn, run: Any, installed_cli: InstalledCli
 ) -> None:
+    # This world parses no camp store, so the search index stage would fail on `openev` every run;
+    # it is about the run log, not the index (PM ruling 2026-10-20, v1-e39-t09 Q6).
+    installed_cli.configure(DEBATE_CASELIST__REFRESH_SEARCH_INDEX="false")
     pulled = run("caselist", "pull")
     assert pulled["exit_code"] == ExitCode.OK
     run_id = pulled["data"]["run_id"]
+    [index_stage] = [one for one in pulled["data"]["stages"] if one["stage"] == "search_index"]
+    assert (index_stage["outcome"], index_stage["reason"].split(" (")[0]) == (
+        "skipped",
+        "turned off by setting",
+    )
 
     local = run("caselist", "runs", "--last", "5")
     remote = run("caselist", "runs", "--last", "5", "--remote")

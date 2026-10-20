@@ -1070,8 +1070,9 @@ class ServiceContainer:
 
         The search index stage (`v1-e39-t09`) is `tub index build` and `tub index publish` over this
         environment's bucket, with the suppression list's two copies to reconcile first. It is wired
-        in only where the environment names a bucket: an index nothing can publish is not the
-        weekly run's to build.
+        in only where the environment names a bucket, because an index nothing can publish is not
+        the weekly run's to build, and `caselist.refresh_search_index` is on; turned off, the run
+        records the stage as skipped by that setting.
 
         Raises :class:`~debate_core.application.ports.caselist_source.CaselistApiDisabled` unless
         the operator has turned the API on, which is the data-use policy's E34 gate.
@@ -1133,7 +1134,10 @@ class ServiceContainer:
             )
             if caselist.parse_imported_sources
             else None,
-            search_index=self._pull_search_index(event_for_caselist) if settings.storage.s3.bucket else None,
+            search_index=self._pull_search_index(event_for_caselist)
+            if settings.storage.s3.bucket and caselist.refresh_search_index
+            else None,
+            search_index_turned_off=not caselist.refresh_search_index,
             openev_event=caselist.openev_event,
             openev_year=caselist.openev_year,
             bulk_downloads_per_day=caselist.bulk_downloads_per_day,

@@ -67,7 +67,7 @@ v2.3's extension work.
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 14 | 0 | 96 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 0 | 66 |
 | [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 19 | 12 | 146 |
-| [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 10 | 1 | 46 |
+| [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 10 | 2 | 46 |
 | [v2.0](plan_specs/releases/v2.0.yaml) | Cloud platform foundation | 3 | 17 | 0 | 164 |
 | [v2.1](plan_specs/releases/v2.1.yaml) | Web app, debate tub & async jobs | 3 | 18 | 0 | 198 |
 | [v2.2](plan_specs/releases/v2.2.yaml) | Research workspace | 2 | 12 | 0 | 117 |
@@ -431,7 +431,7 @@ Debaters search the team's evidence store from a school Chromebook or at home: a
 | [ADR-0019: the student search pilot's stack, sign-in and hosting](plan_specs/v1/e39-evidence-search-pilot/t01-pilot-architecture-adr.yaml) `v1-e39-t01-pilot-architecture-adr` | Succeeded | 1 | 3.0 |
 | [tub index build and publish: one searchable document per card cluster, from the parsed store](plan_specs/v1/e39-evidence-search-pilot/t02-search-index-build.yaml) `v1-e39-t02-search-index-build` | Pending | 3 | 6.0 |
 | [Search core: safe queries, ranking, filters, pages and card rendering over the index](plan_specs/v1/e39-evidence-search-pilot/t03-search-core.yaml) `v1-e39-t03-search-core` | Pending | 1 | 5.0 |
-| [Pilot infrastructure: the function, CloudFront, the user pool and the audit log, in dev and prod](plan_specs/v1/e39-evidence-search-pilot/t04-pilot-infrastructure.yaml) `v1-e39-t04-pilot-infrastructure` | Pending | 1 | 6.0 |
+| [Pilot infrastructure: the function, CloudFront, the user pool and the audit log, in dev and prod](plan_specs/v1/e39-evidence-search-pilot/t04-pilot-infrastructure.yaml) `v1-e39-t04-pilot-infrastructure` | Succeeded | 1 | 6.0 |
 | [Accounts and sign-in: the session flow, roles, and the coach's tub users commands](plan_specs/v1/e39-evidence-search-pilot/t05-accounts-and-sign-in.yaml) `v1-e39-t05-accounts-and-sign-in` | Pending | 1 | 5.0 |
 | [Search pages: search, results, the card page and Copy card, on a Chromebook](plan_specs/v1/e39-evidence-search-pilot/t06-search-pages.yaml) `v1-e39-t06-search-pages` | Pending | 2 | 6.0 |
 | [Removal, access audit and exposure: the pilot meets the policy's E39 gate](plan_specs/v1/e39-evidence-search-pilot/t07-removal-audit-and-exposure.yaml) `v1-e39-t07-removal-audit-and-exposure` | Pending | 1 | 5.0 |

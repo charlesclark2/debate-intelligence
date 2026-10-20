@@ -62,7 +62,7 @@ follow-ups. It is not a criterion, and the Goal is `Succeeded`.
 | ac3: a fixture card holding a script element, an event-handler attribute and a `javascript:` link renders inert, and rendered output uses only the allow-listed tags, by test | PASS | `test_search_card_html_renders_a_script_a_handler_and_a_javascript_link_as_text`: the output is read back by `html.parser`, which finds only `span`/`br`, only `class` attributes, every class on a hand-written list, and text equal to the input. A hostile snippet, plain text and an unknown highlight colour (`cyan" onclick=...` becomes `card-highlight-other`) are covered too, as is a 300-example property over markup-heavy text. Through the index: `test_evidence_search_card_renders_inert_with_the_stored_spans_coverage` (exact markup written by hand). Red: all failed against the unescaping skeleton. |
 | ac4: a rendered card's formatting coverage equals the stored spans' (the reading `formatting_sha256` uses), by test | PASS | `test_search_card_html_coverage_equals_the_stored_spans_reading`: 400 examples of random text and overlapping spans of every emphasis, colour and size; `formatting_sha256` of the rendered HTML read back equals it over the stored spans. Also a fixture whose coverage was read off by hand, and the same check through the index. Red: failed against a skeleton that drops formatting. |
 | ac5: on a synthetic index of 250,000 documents generated in the run (marked slow), the 95th-percentile query time is reported | PASS | `uv run pytest -n0 -s -q -m slow packages/debate_core/tests/application/test_evidence_search_scale.py -k synthetic` → `1 passed in 56.28s` (load average 16). Index 604,528,640 bytes, built in 44.4 s, SQLite 3.50.4. **Warm, 60 searches: p50 69.1 ms, p95 340.8 ms, max 421.0 ms.** Cold first pass: p50 71.7 ms, p95 374.8 ms, max 450.3 ms. Matches per query run from 90 to all 250,000. |
-| Node: search core tests pass (`uv run pytest packages/debate_core/tests -k search`) | PASS | `314 passed in 10.75s` |
+| Node: search core tests pass (`uv run pytest packages/debate_core/tests -k search`) | PASS | `322 passed in 8.97s` after the PM's rulings (`314 passed` before) |
 | SQLite 3.40.0 ceiling, in every run (PM note) | PASS | `test_search_index_reader_runs_only_statements_sqlite_3_40_has`: every traced statement, parameters expanded, matches a hand-written shape, each shape is exercised, and none uses JSON, `unixepoch`, `STRICT`, `RETURNING` or a write. `test_search_index_reader_plan_ranks_inside_fts5_and_joins_by_key`: the ranking is FTS5's own sort and the joins are key lookups. |
 | SQLite 3.40.0 ceiling, slow, in the Lambda image (PM note) | PASS | `uv run pytest -q -m slow packages/debate_core/tests/integrations/local/test_search_index_reader_sqlite_features.py` → `1 passed in 2.33s`. In the image: `sqlite3.sqlite_version == "3.40.0"`, the same rows for every core query and the card lookup, the same FTS5 rank plan, and a progress handler stops a statement with `interrupted`. |
 | PM amendment 2026-10-20 (first seen) | PASS | Written into the spec's description, with a comment. `test_evidence_search_first_seen_leaves_camp_cards_out_and_says_so`. |
@@ -130,6 +130,9 @@ Final: 19 killed, 1 equivalent.
 * **The budget's limit** is recorded in `EvidenceSearchService.search`'s docstring and in a new
   section of `docs/data/search-index.md`, "How the index is read". Both give the figures, say they
   were measured on the operator's Mac, and say that `v1-e39-t10` measures on the Lambda function.
+  One figure is worded differently there: the warm p50 of 3.9 ms reads "under 4 ms", because
+  `tests/architecture/test_single_interpreter_source.py` reads any `3.9` outside a session report
+  as a Python version. The exact value stays here.
 * **`Card.runs` for t06.** `CardRun`'s docstring now says every field is a plain value.
   `test_search_card_runs_are_plain_values_a_page_can_style_its_own_way` serialises runs to JSON as
   emphasis names, colour tokens and integer half-points.
@@ -139,7 +142,9 @@ Final: 19 killed, 1 equivalent.
 
 **Checks before the report:**
 
-* `uv run scripts/affected_tests.py --run` → 32 test files, `1314 passed in 43.20s`, exit 0. The
+* `uv run scripts/affected_tests.py --run`, after the PM's rulings → 32 test files, `1322 passed in
+  31.39s`, exit 0. On the rulings' first pass the same architecture test flagged the p50 figure
+  `3.9 ms` in the new docs (see the PM's rulings section). Before the rulings → `1314 passed in 43.20s`. The
   first run found one failure, `test_no_python_version_is_named_outside_the_one_declaration`: my
   reader docstring named SQLite's `3.11.0`, which the test reads as a Python version. I reworded it
   and the second run passed.

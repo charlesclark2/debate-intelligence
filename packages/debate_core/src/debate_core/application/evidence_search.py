@@ -158,7 +158,7 @@ class EvidenceSearchService:
         match and sorts them inside one instruction, before the first row comes back, and nothing in
         SQLite 3.40.0 (the Lambda image's) can interrupt that sort. So a search can overrun its budget
         by the length of that sort. Measured on the operator's Mac, not on the function: on the dev
-        index of 46,658 documents, twenty generic queries ran at a warm p50 of 3.9 ms, p95 12.1 ms
+        index of 46,658 documents, twenty generic queries ran at a warm p50 under 4 ms, p95 12.1 ms
         and max 207 ms (`the`, which matches 45,948 documents); on a synthetic index of 250,000
         documents, p95 341 ms and max 421 ms. `v1-e39-t10` measures query time on the Lambda function
         itself.

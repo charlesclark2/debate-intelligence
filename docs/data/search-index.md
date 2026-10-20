@@ -133,7 +133,7 @@ query time on the Lambda function itself.
 
 | Index | Queries | Warm p50 | Warm p95 | Warm max |
 |---|---|---|---|---|
-| The dev index `b9fd48d280ab1c71`, 46,658 documents | Twenty generic queries, 60 timed runs | 3.9 ms | 12.1 ms | 207 ms (`the`, 45,948 matches) |
+| The dev index `b9fd48d280ab1c71`, 46,658 documents | Twenty generic queries, 60 timed runs | under 4 ms | 12.1 ms | 207 ms (`the`, 45,948 matches) |
 | Synthetic, 250,000 documents | Twenty queries over a skewed invented vocabulary, 60 timed runs | 69.1 ms | 341 ms | 421 ms |
 
 ## Never searchable, never stored

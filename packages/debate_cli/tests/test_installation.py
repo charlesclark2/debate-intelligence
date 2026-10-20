@@ -70,8 +70,11 @@ def test_the_container_wires_these_integrations() -> None:
     # `local` package itself, `macos_notifier` inside sync_notifier, `docx_parser` inside the parse
     # and retention factories, `models.routing_policy` at module level for the startup check of the
     # routing file (v1-e05-t03), `opencaselist` under TYPE_CHECKING and inside two factories, `s3`
-    # inside four factories, and `s3.version_directories` inside the retention factory (v1-e31-t16).
+    # inside four factories, `s3.version_directories` inside the retention factory (v1-e31-t16), and
+    # `cloudwatch_audit` and `cognito` inside the pilot accounts factory (v1-e39-t05).
     assert wired_integrations() == (
+        "debate_core.integrations.cloudwatch_audit",
+        "debate_core.integrations.cognito",
         "debate_core.integrations.docx_parser",
         "debate_core.integrations.local",
         "debate_core.integrations.local.fs_version_store",
@@ -158,7 +161,7 @@ def test_this_checkout_is_a_complete_installation() -> None:
     report = check_installation()
 
     assert report.complete, report.as_dict()
-    assert report.declared_extras == ("aws", "docx", "opencaselist")
+    assert report.declared_extras == ("aws", "docx", "opencaselist", "tub")
 
 
 def test_an_integration_that_does_not_import_makes_the_installation_incomplete() -> None:
@@ -215,7 +218,7 @@ def test_the_check_exits_zero_and_reports_json_for_this_checkout(capsys: pytest.
     report = json.loads(capsys.readouterr().out)
     assert report["complete"] is True
     assert report["covered"] is True
-    assert len(report["imported"]) == len(report["wired"]) == 13
+    assert len(report["imported"]) == len(report["wired"]) == 15
 
 
 # ---------------------------------------------------------------------------------------------
@@ -305,13 +308,24 @@ def test_debate_cli_declares_every_distribution_its_wired_integrations_import() 
 
 
 def test_dropping_the_aws_extra_leaves_the_s3_adapter_without_boto3() -> None:
-    gaps = undeclared_imports(_with_core_extras("docx,opencaselist"), wired_integrations())
+    gaps = undeclared_imports(_with_core_extras("docx,opencaselist,tub"), wired_integrations())
 
-    assert gaps == {"debate_core.integrations.s3": {"boto3", "botocore"}}
+    # The pilot's two adapters (v1-e39-t05) take boto3 from the same extra.
+    assert gaps == {
+        "debate_core.integrations.s3": {"boto3", "botocore"},
+        "debate_core.integrations.cognito": {"boto3", "botocore"},
+        "debate_core.integrations.cloudwatch_audit": {"boto3", "botocore"},
+    }
+
+
+def test_dropping_the_tub_extra_leaves_the_cognito_adapter_without_cryptography() -> None:
+    gaps = undeclared_imports(_with_core_extras("aws,docx,opencaselist"), wired_integrations())
+
+    assert gaps == {"debate_core.integrations.cognito": {"cryptography"}}
 
 
 def test_dropping_the_opencaselist_extra_leaves_the_client_without_httpx_and_keyring() -> None:
-    gaps = undeclared_imports(_with_core_extras("aws,docx"), wired_integrations())
+    gaps = undeclared_imports(_with_core_extras("aws,docx,tub"), wired_integrations())
 
     assert gaps == {"debate_core.integrations.opencaselist": {"httpx", "keyring"}}
 
@@ -320,7 +334,7 @@ def test_once_the_docx_parser_is_wired_dropping_the_docx_extra_is_caught() -> No
     """The container does not wire the parser yet (v1-e31-t06 will); when it does, this applies."""
     wired = (*wired_integrations(), "debate_core.integrations.docx_parser")
 
-    assert undeclared_imports(_with_core_extras("aws,opencaselist"), wired) == {
+    assert undeclared_imports(_with_core_extras("aws,opencaselist,tub"), wired) == {
         "debate_core.integrations.docx_parser": {"lxml"}
     }
     assert undeclared_imports(_cli_dependencies(), wired) == {}

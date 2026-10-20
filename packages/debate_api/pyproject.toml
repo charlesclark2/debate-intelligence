@@ -10,13 +10,13 @@ requires-python = ">=3.12,<3.13"
 # `standard` extra: the pure-Python h11 server is enough for one function, and adds nothing to
 # the image that needs compiling.
 #
-# v1-e39-t05 adds sign-in: debate-core's `tub` extra for the Cognito, audit and parameter adapters
-# its composition root builds; cryptography for the AES-GCM session cookie; jinja2 for the pages;
+# v1-e39-t05 adds sign-in: debate-core's `aws` and `tub` extras for the Cognito, audit and parameter
+# adapters its composition root builds; cryptography for the AES-GCM session cookie; jinja2 for the pages;
 # and segno, pure Python with no dependencies, which draws the authenticator QR code as SVG on the
 # server so the secret never leaves the page as an image request.
 dependencies = [
     "cryptography>=44",
-    "debate-core[tub]",
+    "debate-core[aws,tub]",
     "fastapi>=0.115",
     "jinja2>=3.1",
     "segno>=1.6",

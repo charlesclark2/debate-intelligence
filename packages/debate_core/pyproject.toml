@@ -62,13 +62,12 @@ opencaselist = [
     "keyring>=25",
 ]
 
-# The student search pilot's sign-in and accounts (v1-e39-t05, ADR-0019 (d) and (e)):
-# debate_core.integrations.cognito calls the user pool's administrative and token-authorized APIs
-# with boto3, reaches the OAuth endpoints with the standard library, and checks an ID token's
-# RS256 signature with cryptography; cloudwatch_audit and parameter_store are boto3 too. Optional
-# for the same reason boto3 is: nothing below the integrations imports either.
+# The student search pilot's sign-in (v1-e39-t05, ADR-0019 (d)): debate_core.integrations.cognito
+# checks an ID token's RS256 signature with cryptography. Its boto3 calls, and those of
+# cloudwatch_audit and parameter_store, come with the `aws` extra, so a front end that wires them
+# asks for both: `debate-core[aws,tub]`. Kept apart from `aws` so that each distribution belongs to
+# one extra, which is how `debate_cli.installation` names the extra a missing module needs.
 tub = [
-    "boto3>=1.35",
     "cryptography>=44",
 ]
 

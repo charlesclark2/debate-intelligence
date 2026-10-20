@@ -26,8 +26,12 @@ with the account's pool subject and no name.
 ## Exit codes
 
 `0` when it did what it was asked. `1` for a refusal: an invalid username, an account that does not
-exist or already exists, a grant the profile lacks. `3` when the SSO session expired or AWS did not
-answer.
+exist or already exists, a profile this machine's AWS config does not define. `3` when the SSO
+session expired, the profile was refused, or AWS did not answer (the store failures every command
+treats alike, `debate_cli.exit_codes`).
+
+If the audit record cannot be written, the command fails with `3` after making the change, and
+`add` and `reset` do not print the password: run `reset` once the audit log is reachable.
 """
 
 from __future__ import annotations

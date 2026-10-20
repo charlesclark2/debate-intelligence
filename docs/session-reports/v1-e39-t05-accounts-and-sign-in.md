@@ -588,3 +588,154 @@ merge. The prod apply runs from `prod-deploy` after its `owner.auto.tfvars` gain
 
 **The conflict with v1-e39-t02** in `debate_cli/commands/__init__.py`: whichever merges second keeps
 both subgroups under one `tub` group, as you say.
+
+---
+
+## Second session: the PM's change, and ac5 (2026-10-20)
+
+**Status:** COMPLETE. Every criterion passes, ac5 included. The Goal is `Succeeded`. One question
+for the PM came out of ac5 step 4; it is in [Question for the PM](#question-for-the-pm), and it
+does not hold up the review.
+
+### The change: replacing an authenticator starts with a POST
+
+These follow the review's points 1 to 5:
+
+- **Point 1, the full session:** `GET /account/authenticator` renders `authenticator_start.html`
+  and calls nothing in Cognito. Its **Start** button is a form POST to
+  `/account/authenticator/begin`, which is `Access.SIGNED_IN`. That route goes through the gate's
+  CSRF, `Origin` and `Sec-Fetch-Site` checks, calls `begin_authenticator`, and answers with the QR
+  page.
+  - `app.js` puts an HTML answer's `<main>` in place of the page's, with `DOMParser` and
+    `importNode`. There is still no `innerHTML` and no `document.write`.
+  - Confirming the new code (`POST /account/authenticator`) is unchanged.
+- **Point 2, the pending enrolment:** its GET is unchanged and still begins the secret.
+- **Point 4, the wording:** it follows ac5 step 4's answer, which was that the old app stops at
+  once. The *Start* page, the QR page after *Start*, the account page and the guide now say the old
+  app stops working as soon as you choose *Start*, so finish in one sitting. They also say what to
+  do if you are signed out first. The `authenticator-replaced` message is unchanged.
+- **The test fake:** `FakeSelfService.begin_authenticator` now drops the authenticator, as Cognito
+  did.
+- **Docstrings:** the port's and `AccountPageService`'s say the same.
+
+### Shown failing first
+
+| Run | Commit | Command | Result |
+|---|---|---|---|
+| Red, *Start*: the tests against the code before the change | `25c0a7b` | `uv run pytest packages/debate_api/tests -n 0` | `8 failed, 401 passed` |
+| Green | `ffa50c3` | the same | `409 passed` |
+| Red, the wording, with the fake dropping the authenticator at *Start* | `5c44a93` | the same | `3 failed, 408 passed` |
+| Green | `d18b3a2` | `uv run pytest packages/debate_api/tests packages/debate_core/tests/application/tub` | `486 passed` |
+
+**The 8 that failed:**
+- `test_the_page_for_a_full_session_calls_nothing_in_cognito`;
+- `test_start_begins_a_new_secret_and_shows_its_qr_code`;
+- the two account-page tests moved to *Start*;
+- the matrix's coverage test (the new route had no row yet);
+- the CSRF test's GET on `/begin`;
+- the page rules, now including the *Start* answer;
+- the script's HTML-answer test.
+
+**The ones that passed on the old code:** the six forged-*Start* tests and the
+pending-enrolment-*Start* test, because the gate already refuses a forged or pending-enrolment POST
+to any path. They now hold the new route to that. The pending-enrolment GET test passed too, since
+that GET is unchanged.
+
+**Mutants** (same driver, `-n 0`, fresh Hypothesis directory, byte restore, clean tree after):
+
+| Mutant | Result | Caught by |
+|---|---|---|
+| The GET begins for a full session (the review's mutant) | CAUGHT (1) | `test_the_page_for_a_full_session_calls_nothing_in_cognito` |
+| A pending enrolment may press *Start* (`/begin` as `ENROLMENT`) | CAUGHT (1) | `test_start_is_for_a_full_session_only` |
+
+The matrix gained the row `POST /account/authenticator/begin`, `ROUTE_ACCESS` gained its entry,
+and the CSRF tests gained the route.
+
+### ac5, the operator's dev run, 2026-10-20
+
+The run was from this worktree at `329a082`. The operator reported these results; no password or
+code was pasted. The deploy's own output (step 1) and the account's creation (step 2) were not
+pasted. Steps 3 to 8 are the evidence they ran: the *Start* page and the PKCE redirect exist only in
+this branch's code.
+
+| Step | Result |
+|---|---|
+| 1. Deploy to dev | Ran. The deployed app is this branch: step 4's *Start* page and step 7's redirect are its code |
+| 2. Synthetic account `synthetic.student.one` | Created (step 8's audit record `account-added`, 04:18:53Z) |
+| 3. Sign in and enrol TOTP | Done: signed in, authenticator set up, on *Your account* |
+| 4. *Start*, without scanning | *Start* worked. The next page load landed on managed login's *Set up authenticator app MFA*. `admin-get-user` then returned `CONFIRMED None None`: **the authenticator was dropped at *Start*** |
+| 5. Sign out, then sign back in | Asked to sign in again, so managed login's own session had been cleared. Then asked to set up a second factor (email or authenticator app): outcome (b), the same finding as step 4 |
+| 6. `tub users reset` | Done (audit record `account-reset`, 04:26:44Z) |
+| 7. Sign in after the reset | Redirected to `https://auth.tub.dev.wfbdebate.com/login?response_type=code&...&redirect_uri=https%3A%2F%2Ftub.dev.wfbdebate.com%2Fauth%2Fcallback&scope=openid+aws.cognito.signin.user.admin&state=...&nonce=...&code_challenge=...&code_challenge_method=S256` (client id and values elided). Asked for a new password and a second factor, then signed in, then signed out |
+| 8. The audit log, then `tub users remove` | Two events on the `tub-users` stream. `account-added`, `actor_role` `coach`, `account_subject` `94787458-…`, `format_version` 1, at 04:18:53Z; then `account-reset` with the same subject at 04:26:44Z. No username in either. Then `Removed synthetic.student.one. Any open session ends within five minutes.` |
+| B. `bash scripts/terraform_checks.sh` | Every line `ok`: fmt, validate for 9 roots and modules, tflint for 9 configs and the recursive run, `terraform test` for 4 modules. `All Terraform checks passed.` |
+
+**ac5 is PASS:** a synthetic user signed in on dev, enrolled TOTP and signed out, and a reset forced
+enrolment again.
+
+### Acceptance criteria, as of this session
+
+| Criterion | Status | Evidence |
+|---|---|---|
+| Node `sign-in` | PASS | `uv run pytest packages/debate_api/tests packages/debate_cli/tests -k "auth or session or tub_users"` (the first session: 480 passed; this session's runs below) |
+| ac1, ac2, ac3, ac4, ac6 | PASS | As in the first session, with the matrix and CSRF rows for `/begin`. The guide's new-phone steps now name *Start* and its consequence |
+| ac5 | PASS | The table above |
+
+### Checks run
+
+| Check | Result |
+|---|---|
+| `uv run pytest packages/debate_api/tests packages/debate_cli/tests/commands/test_tub_users.py packages/debate_core/tests/application/tub packages/debate_core/tests/integrations/cognito tests/architecture tests/specs` | `793 passed in 7.30s` |
+| `uv run scripts/affected_tests.py` | The whole selection is affected (the package pyprojects), so the PR's CI runs it (working agreement 10, accepted in the review) |
+| `ruff check .`, `ruff format --check .` | exit 0, exit 0 |
+| `pyright packages/debate_api packages/debate_cli packages/debate_core` | `0 errors, 0 warnings, 0 informations` |
+| `lint-imports` | exit 0 |
+| `scripts/check_thin_handlers.py` | `OK: 43 CLI command and API route handlers within 25 statements` |
+| `scripts/validate_specs.py` (after setting `Succeeded`) | `OK: 394 files, 39 epics, 334 tasks, 21 releases` |
+| `scripts/check_links.py`, `scripts/check_command_blocks.py` | `OK: 1872 relative links and anchors in 270 Markdown files`; `OK: no # comments in 327 shell code blocks in 127 Markdown files` |
+| `bash scripts/terraform_checks.sh` (the operator) | `All Terraform checks passed.` |
+
+**Two commits stopped before they went in.** Pyright found an `Optional` access in a new test, and
+the commit chained after it did not run. The mutant driver refused a file that was not yet
+committed. Both were fixed and the commands re-run.
+
+### Question for the PM
+
+ac5 step 4 showed a gap the wording cannot close:
+
+1. Between *Start* and confirming the new code, the account has no second factor.
+2. Revalidation (deviation 4) ends such a session at its next due check.
+3. *Start* does not reset the revalidation clock, so that check can be seconds away. That is what
+   happened in the operator's run.
+4. The student then lands on managed login's setup page, where the password alone lets anyone
+   register a phone. That fallback is inherent once Cognito has dropped the token. The question is
+   how short the window before it should be.
+
+The options:
+- **(a)** *Start* counts as a revalidation. It has just redeemed the refresh token and read the
+  account, so it writes the session back with `revalidated_at` set to now, giving the student a
+  full five minutes. About 6 lines and 2 tests.
+- **(b)** A session that pressed *Start* may lack an authenticator for up to 15 minutes. That needs
+  a new cookie field and an exception to the invariant.
+- **(c)** Leave it as it is.
+
+**Recommendation: (a).** Scanning and confirming take a minute or two. It adds nothing to the cookie
+and no exception to the invariant, and a slower student falls back to the path the *Start* page
+already describes. If the PM chooses (a) or (b), I make it with its test shown failing first.
+
+### Operator follow-ups still open
+
+- **C, the module apply, dev then prod.** It is on the PM's promotion list after the merge. The prod
+  apply runs from `prod-deploy` once its `owner.auto.tfvars` has the pilot lines.
+
+## PM review
+
+<!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
+this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
+
+**Verdict:** PENDING
+<!-- ACCEPTED / CHANGES_REQUESTED -->
+
+**Reviewed by / date:**
+
+**Notes:**

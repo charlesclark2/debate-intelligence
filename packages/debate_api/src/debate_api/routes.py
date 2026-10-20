@@ -22,6 +22,7 @@ from debate_api.access import Access, RouteAccess
 from debate_api.cookies import ALL_COOKIES, ENROLMENT_COOKIE, SESSION_COOKIE, SIGN_IN_COOKIE
 from debate_api.pages import IMMUTABLE, qr_code_svg
 from debate_api.state import pilot_state
+from debate_core.application.tub.account_page import AuthenticatorEnrolment
 from debate_core.application.tub.sessions import PendingEnrolment, Session
 from debate_core.application.tub.sign_in import EnrolmentRequired, SignInRefusal, SignInRefused
 
@@ -182,18 +183,29 @@ def authenticator_page(request: Request) -> HTMLResponse:
     callback's 303 lands here, so its GET begins the secret (PM review, 2026-10-20).
     """
     holder = _holder(request)
+    state = pilot_state(request)
     if isinstance(holder, Session):
-        return pilot_state(request).renderer.render("authenticator_start.html", holder=holder)
-    return _authenticator_qr_page(request, holder)
+        return state.renderer.render("authenticator_start.html", holder=holder)
+    return _authenticator_qr_page(request, holder, state.services.account_page.begin_authenticator(holder))
 
 
 def begin_authenticator(request: Request) -> HTMLResponse:
-    """*Start*, for a full session: begin a new secret and answer with its QR page."""
-    return _authenticator_qr_page(request, _session(request))
+    """*Start*, for a full session: begin a new secret and answer with its QR page.
+
+    Starting counts as the session's revalidation, so the cookie is written with the session the
+    use case returns (PM ruling, 2026-10-20).
+    """
+    state = pilot_state(request)
+    enrolment, session = state.services.account_page.begin_replacement(_session(request))
+    response = _authenticator_qr_page(request, session, enrolment)
+    state.write_session(response, session)
+    request.state.cookies_written = True
+    return response
 
 
-def _authenticator_qr_page(request: Request, holder: Session | PendingEnrolment) -> HTMLResponse:
-    enrolment = pilot_state(request).services.account_page.begin_authenticator(holder)
+def _authenticator_qr_page(
+    request: Request, holder: Session | PendingEnrolment, enrolment: AuthenticatorEnrolment
+) -> HTMLResponse:
     secret = enrolment.secret.reveal()
     return pilot_state(request).renderer.render(
         "authenticator.html",

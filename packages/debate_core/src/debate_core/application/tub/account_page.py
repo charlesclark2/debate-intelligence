@@ -188,6 +188,10 @@ class AccountPageService:
             secret=secret, uri=authenticator_uri(secret, issuer=self._issuer, username=holder.username)
         )
 
+    def begin_replacement(self, session: Session) -> tuple[AuthenticatorEnrolment, Session]:
+        """*Start*, for a full session: a new secret, and the session to write back."""
+        return self.begin_authenticator(session), session
+
     def confirm_authenticator(self, holder: Session | PendingEnrolment, raw_code: str) -> None:
         """Confirm the new secret with a code from it; it replaces any earlier authenticator."""
         code = _one_time_code(raw_code, "authenticator")

@@ -421,7 +421,10 @@ class PilotWorld:
             configuration=configuration(),
             cookie_keys=self.cookie_keys,
             sign_in=SignInService(
-                identity_provider=identity_provider, self_service=self.self_service, clock=self.clock
+                identity_provider=identity_provider,
+                self_service=self.self_service,
+                audit=self.audit,
+                clock=self.clock,
             ),
             account_page=AccountPageService(
                 identity_provider=identity_provider,

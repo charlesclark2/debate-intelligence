@@ -8,7 +8,14 @@ meaning anything once the account is removed.
 
 The coach's `tub users` commands run on the coach's Mac under the `TubAccounts` permission set, not
 as a pool user, so their records carry the role `coach` and no actor subject. The pilot's own
-account page records the student's subject as the actor.
+records, of a change on the account page and of a session it ended, carry the student's subject as
+the actor.
+
+A replacement authenticator is recorded twice: `authenticator-replacement-started` when the student
+chooses *Start*, which drops the old one, and `authenticator-registered` when the new one is
+confirmed. A start with no registration after it is an abandoned replacement; if the session then
+ended for want of a second factor, `session-ended-no-second-factor` says so (PM ruling,
+2026-10-20).
 
 `v1-e39-t07` adds the access records (searches counted, cards by cluster id) to the same shape.
 """
@@ -30,7 +37,7 @@ AUDIT_FORMAT_VERSION: Final = 1
 
 
 class AuditAction(StrEnum):
-    """What happened. The coach's commands, then the student's own changes on the account page."""
+    """What happened. The coach's commands, the student's own changes, then the pilot's own."""
 
     ACCOUNT_ADDED = "account-added"
     ACCOUNTS_LISTED = "accounts-listed"
@@ -42,7 +49,9 @@ class AuditAction(StrEnum):
     EMAIL_SECOND_FACTOR_WITHDRAWN = "email-second-factor-withdrawn"
     BACKUP_EMAIL_ADDED = "backup-email-added"
     BACKUP_EMAIL_REMOVED = "backup-email-removed"
+    AUTHENTICATOR_REPLACEMENT_STARTED = "authenticator-replacement-started"
     AUTHENTICATOR_REGISTERED = "authenticator-registered"
+    SESSION_ENDED_NO_SECOND_FACTOR = "session-ended-no-second-factor"
 
 
 @dataclass(frozen=True, slots=True)

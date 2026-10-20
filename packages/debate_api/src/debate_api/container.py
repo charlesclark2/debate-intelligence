@@ -76,7 +76,9 @@ def build_pilot_services(environ: Mapping[str, str]) -> PilotServices:
     return PilotServices(
         configuration=configuration,
         cookie_keys=cookie_keys,
-        sign_in=SignInService(identity_provider=identity_provider, self_service=self_service, clock=_now),
+        sign_in=SignInService(
+            identity_provider=identity_provider, self_service=self_service, audit=audit, clock=_now
+        ),
         account_page=AccountPageService(
             identity_provider=identity_provider,
             self_service=self_service,

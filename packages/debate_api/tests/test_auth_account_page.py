@@ -176,6 +176,24 @@ def test_the_start_page_warns_that_the_old_authenticator_stops_at_once(student: 
     assert "finish in one sitting" in page.text
 
 
+def test_the_start_page_says_what_to_do_if_signed_out_or_asked_unexpectedly(
+    student: tuple[Any, Any],
+) -> None:
+    """PM ruling, 2026-10-20: the same two lines as the guide's."""
+    world, _ = student
+
+    page = world.browser.get("/account/authenticator")
+
+    assert (
+        "If you are signed out partway through, sign in again straight away and finish setting up "
+        "the authenticator app." in page.text
+    )
+    assert (
+        "If the sign-in page ever asks you to set up an authenticator when you did not choose "
+        "<strong>Start</strong>, tell the coach." in page.text
+    )
+
+
 def test_after_start_the_qr_page_says_the_old_authenticator_has_stopped(student: tuple[Any, Any]) -> None:
     world, session = student
 
@@ -207,7 +225,7 @@ def test_a_confirmed_new_authenticator_replaces_the_old_one(student: tuple[Any, 
         "debater.one",
         {"code": world.good_authenticator_code},
     ) in world.self_service.calls
-    assert actions(world) == ["authenticator-registered"]
+    assert actions(world) == ["authenticator-replacement-started", "authenticator-registered"]
     assert (
         "Your new authenticator app is set up"
         in world.browser.get("/account?done=authenticator-replaced").text

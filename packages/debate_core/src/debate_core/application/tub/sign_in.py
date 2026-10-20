@@ -35,6 +35,7 @@ from debate_core.application.errors import DomainError
 from debate_core.application.ports.tub import (
     AccountSelfService,
     AccountStanding,
+    AuditSink,
     IdentityProvider,
     TokenRefused,
 )
@@ -124,10 +125,12 @@ class SignInService:
         *,
         identity_provider: IdentityProvider,
         self_service: AccountSelfService,
+        audit: AuditSink,
         clock: Callable[[], datetime],
     ) -> None:
         self._identity_provider = identity_provider
         self._self_service = self_service
+        self._audit = audit
         self._clock = clock
 
     def begin(self, return_to: str | None) -> tuple[SignInTransaction, str]:

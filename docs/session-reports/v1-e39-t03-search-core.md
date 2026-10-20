@@ -33,8 +33,9 @@ the warm p95 is **340.8 ms**. Three things to look at first:
 * the budget cannot cut into FTS5's own ranking sort (Decisions 6);
 * the team count after a partial suppression (Decisions 8).
 
-The operator's read-only timing block for the real dev index is under Operator follow-ups. It is not a
-criterion, so the Goal is `Succeeded`.
+The operator ran the read-only timing block on the real dev index (46,658 documents, 752 MB): warm
+p50 3.9 ms, p95 12.1 ms, max 207.0 ms, the worst being `the`. The run is recorded under Operator
+follow-ups. It is not a criterion, and the Goal is `Succeeded`.
 
 ## Plan nodes
 
@@ -203,8 +204,10 @@ None.
    **Limit:** FTS5 computes and sorts the whole ranking inside one VM step before the first row comes
    back, and the progress handler only runs between steps. So a query's overshoot past the budget is
    at most that sort. On 250,000 synthetic documents the slowest whole search was 421 ms, against a
-   2 s budget. What the budget does stop is the work after the sort: filters that reject most
-   matches, deep offsets, snippets. Nothing in SQLite 3.40.0 interrupts FTS5's sort.
+   2 s budget. On the real dev index the worst query, `the` (45,948 matches), took 207.0 ms at most
+   and its cold run under 59.9 ms (Operator follow-ups). What the budget does stop is the work after
+   the sort: filters that reject most matches, deep offsets, snippets. Nothing in SQLite 3.40.0
+   interrupts FTS5's sort.
 7. **The suppression seam.** `search` and `card` take `is_suppressed(source_sha256,
    disclosure_digest)`, defaulting to `None`. A camp occurrence is asked with `None` as its digest.
    * A card whose representative (ordinal 0) is suppressed is hidden from search and is not found by
@@ -233,7 +236,7 @@ None.
 12. **ac5 ran in the session.** It finished in 56 s under a hard 170 s stop, inside agreement 2's
     limit, so it was not handed over. The synthetic texts are 120 words, while the real average is
     about 5,000 characters, so posting lists per document are shorter than the real index's. The
-    operator's block measures the real one.
+    operator's run on the real index (warm p95 12.1 ms) is under Operator follow-ups.
 
 ## Operator follow-ups
 
@@ -254,6 +257,23 @@ DEBATE_TUB_SEARCH_INDEX="${HOME}/.debate-research/dev/tub-index/b9fd48d280ab1c71
 Success looks like six lines starting `operator's index:` and then `1 passed, 1 deselected`. Paste
 those lines back. A `1 skipped` means the variable did not reach pytest.
 
+**Result, run by the operator on 2026-10-20:** `1 passed, 1 deselected in 1.04s`.
+
+| | |
+|---|---|
+| Index | `b9fd48d280ab1c71`, 752,369,664 bytes, 46,658 documents, read by SQLite 3.50.4 |
+| Warm, 60 timed searches | p50 3.9 ms, p95 12.1 ms, max 207.0 ms |
+| Cold, first pass | p50 11.6 ms, p95 46.5 ms, max 59.9 ms |
+| Slowest warm query | number 14, `the`, which matches 45,948 of the 46,658 documents |
+| Matches per query | 8,612; 3,354; 4,523; 2,390; 6,149; 1,352; 3,543; 2,849; 4,154; 2,010; 10,392; 1,256; 988; 45,948; 8,612; 3,354; 6,149; 1,078; 3,514; 8,839 |
+| First-page results | 20 for every query |
+
+The real index answers about 28 times faster at p95 than the 250,000-document synthetic one (12.1
+ms against 340.8 ms): it has a fifth of the documents, and real words are spread over a far larger
+vocabulary than the synthetic Zipf draw. The warm maximum, 207.0 ms, is one run of `the`. Its cold
+run was under 59.9 ms, so the 207 ms is most likely noise from the machine's load during the run,
+not the query's normal cost. Even the worst case is about a tenth of the 2 s budget.
+
 ## Follow-up work
 
 * **`v1-e39-t06`: Copy card needs inline styles.** Google Docs and Word ignore classes on pasted
@@ -266,8 +286,9 @@ those lines back. A `1 skipped` means the variable did not reach pytest.
 * **E33 (refactor):** the E33 writer's `provenance_line` and the domain's
   `occurrence_provenance_line` compose the same line from different records, held together by tests.
   The writer could call the domain function.
-* **`v1-e39-t09` / ADR-0019:** if the operator's real-index timings put any query near the 2 s
-  budget, the place to look is FTS5's sort for very common words (Decisions 6).
+* **`v1-e39-t09` / ADR-0019:** the real index's worst query is about a tenth of the 2 s budget
+  today. If a later, larger index pushes a very common word near the budget, the place to look is
+  FTS5's sort (Decisions 6).
 
 ## PM review
 

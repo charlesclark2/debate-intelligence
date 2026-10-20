@@ -117,6 +117,9 @@ def install_gate(app: FastAPI, routes: RouteAccess) -> None:
             return response
         refused = _refused(request, access, holder, state)
         if refused is not None:
+            # A session revalidated on the way to a refusal is still the browser's session.
+            if isinstance(holder, Session):
+                state.write_session(refused, holder)
             return refused
         request.state.holder = holder
         response = await call_next(request)

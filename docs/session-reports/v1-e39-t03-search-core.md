@@ -30,8 +30,18 @@ a hand-written list in every run, and the slow replay of those statements in
 the warm p95 is **340.8 ms**. Three things to look at first:
 
 * the relevance set and how its first version misled me (Decisions 4);
-* the budget cannot cut into FTS5's own ranking sort (Decisions 6);
-* the team count after a partial suppression (Decisions 8).
+* the budget cannot cut into FTS5's own ranking sort, which the PM accepted as a known limit
+  (Decisions 6);
+* no team count after a partial suppression that leaves a survivor without provenance, per the PM's
+  ruling (Decisions 8).
+
+**After the PM's rulings of 2026-10-20** (the section "The PM's rulings of 2026-10-20" below has the
+evidence):
+
+* `surviving_counts` gives no team count in that case, by tests shown failing first.
+* The budget's limit, with the measured figures, is in `EvidenceSearchService.search`'s docstring
+  and in `docs/data/search-index.md`. The spec's packages gain `docs/data` for that.
+* `Card.runs` are plain values for t06's Copy card, by test.
 
 The operator ran the read-only timing block on the real dev index (46,658 documents, 752 MB): warm
 p50 3.9 ms, p95 12.1 ms, max 207.0 ms, the worst being `the`. The run is recorded under Operator
@@ -56,6 +66,7 @@ follow-ups. It is not a criterion, and the Goal is `Succeeded`.
 | SQLite 3.40.0 ceiling, in every run (PM note) | PASS | `test_search_index_reader_runs_only_statements_sqlite_3_40_has`: every traced statement, parameters expanded, matches a hand-written shape, each shape is exercised, and none uses JSON, `unixepoch`, `STRICT`, `RETURNING` or a write. `test_search_index_reader_plan_ranks_inside_fts5_and_joins_by_key`: the ranking is FTS5's own sort and the joins are key lookups. |
 | SQLite 3.40.0 ceiling, slow, in the Lambda image (PM note) | PASS | `uv run pytest -q -m slow packages/debate_core/tests/integrations/local/test_search_index_reader_sqlite_features.py` → `1 passed in 2.33s`. In the image: `sqlite3.sqlite_version == "3.40.0"`, the same rows for every core query and the card lookup, the same FTS5 rank plan, and a progress handler stops a statement with `interrupted`. |
 | PM amendment 2026-10-20 (first seen) | PASS | Written into the spec's description, with a comment. `test_evidence_search_first_seen_leaves_camp_cards_out_and_says_so`. |
+| PM ruling 2026-10-20: no team count when a partial suppression leaves a survivor without provenance, shown failing first | PASS | See the section "The PM's rulings of 2026-10-20" below. |
 
 **The red run.** I committed the implementation, applied a refuse-nothing skeleton, ran the five new
 test files, recorded the result and restored the committed files with `git checkout`. The skeleton:
@@ -99,6 +110,33 @@ test files from an empty Hypothesis database (agreement 8).
 
 Final: 19 killed, 1 equivalent.
 
+**The PM's rulings of 2026-10-20.**
+
+* **Team count.** I wrote the tests first:
+  * `test_evidence_search_gives_no_team_count_when_a_survivor_kept_no_provenance` covers card and
+    search: 7 occurrences, 5 with provenance, 1 suppressed, giving 6 files and no team count.
+  * `test_evidence_search_keeps_the_stored_counts_when_nothing_is_suppressed_past_the_limit`.
+  * `test_evidence_search_surviving_counts_are_the_pms_rule` has six cases written by hand: nothing
+    suppressed keeps the stored counts; full provenance gives the exact count; one team twice counts
+    once; an unattributed survivor names no team; a survivor past the limit gives no team count, in
+    two cases.
+
+  Run against the committed rule, from an empty Hypothesis database:
+  `uv run pytest -q packages/debate_core/tests/application/test_evidence_search.py -k "team_count or
+  surviving_counts or stored_counts"` → **3 failed, 5 passed**. The three that failed are the cases
+  the ruling changes: the card and search test, and both survivor-past-the-limit cases. The five
+  exact-count and stored-count cases already held. After the change: green.
+  `team_count` on `SearchHit` and `Card` is now `int | None`.
+* **The budget's limit** is recorded in `EvidenceSearchService.search`'s docstring and in a new
+  section of `docs/data/search-index.md`, "How the index is read". Both give the figures, say they
+  were measured on the operator's Mac, and say that `v1-e39-t10` measures on the Lambda function.
+* **`Card.runs` for t06.** `CardRun`'s docstring now says every field is a plain value.
+  `test_search_card_runs_are_plain_values_a_page_can_style_its_own_way` serialises runs to JSON as
+  emphasis names, colour tokens and integer half-points.
+* **Imports (PM note on `v1-e01-t29`).** No new code imports `debate_core.testing` or
+  `debate_core.evidence` at package level. The new code imports neither at all, which I checked by
+  grep over the branch's files.
+
 **Checks before the report:**
 
 * `uv run scripts/affected_tests.py --run` → 32 test files, `1314 passed in 43.20s`, exit 0. The
@@ -129,14 +167,20 @@ Final: 19 killed, 1 equivalent.
 * **`packages/debate_core/tests/`** (six new files): parser, cursor and provenance line (`domain/`);
   renderer (`domain/`); service (`application/`); ranking set (`application/`); scale and operator
   timings, slow (`application/`); reader and the 3.40.0 checks (`integrations/local/`).
-* **The spec:** the PM's first-seen amendment of 2026-10-20 in its description, with a comment; Goal
-  set to `Succeeded`.
+* **The spec:** the PM's first-seen amendment of 2026-10-20 in its description, with a comment, and
+  `docs/data` added to `constraints.packages` under the PM's ruling of 2026-10-20; Goal set to
+  `Succeeded`.
+* **`docs/data/search-index.md`:** a section, "How the index is read", with the time budget's known
+  limit and the measured figures (PM ruling 2026-10-20).
 
 `debate_api`, `t02`'s writer, build and port modules, and the parser are untouched.
 
 ## Deviations from the spec
 
-None.
+1. **`docs/data` added to the spec's packages.** The PM's ruling of 2026-10-20 asked for the time
+   budget's limit in `docs/data/search-index.md`, which was outside `constraints.packages`. The spec
+   now lists `docs/data`, with a comment citing the ruling. The doc gains one section; `t02`'s
+   sections are unchanged.
 
 ## Decisions and assumptions
 
@@ -207,7 +251,9 @@ None.
    2 s budget. On the real dev index the worst query, `the` (45,948 matches), took 207.0 ms at most
    and its cold run under 59.9 ms (Operator follow-ups). What the budget does stop is the work after
    the sort: filters that reject most matches, deep offsets, snippets. Nothing in SQLite 3.40.0
-   interrupts FTS5's sort.
+   interrupts FTS5's sort. **The PM accepted this as a known limit (2026-10-20).** It is recorded in
+   `EvidenceSearchService.search`'s docstring and in `docs/data/search-index.md`. Both say the figures
+   were measured on the operator's Mac and that `v1-e39-t10` measures on the Lambda function.
 7. **The suppression seam.** `search` and `card` take `is_suppressed(source_sha256,
    disclosure_digest)`, defaulting to `None`. A camp occurrence is asked with `None` as its digest.
    * A card whose representative (ordinal 0) is suppressed is hidden from search and is not found by
@@ -215,11 +261,12 @@ None.
    * Search fills its page past hidden cards and still pages correctly.
    * Any other suppressed occurrence drops out of the card's occurrences, and the counts are redone
      (Decisions 8).
-8. **Counts after a partial suppression.** Files are exact: the distinct sources among the survivors.
-   Teams are exact when every survivor kept its provenance. Otherwise the index cannot say which team
-   disclosed an occurrence past the provenance limit, so the stored count stands, capped at the number
-   of survivors. The PM may prefer showing no team count in that case. It is one function,
-   `surviving_counts`, for `v1-e39-t07` to change.
+8. **Counts after a partial suppression (the PM's ruling of 2026-10-20).** Files are exact: the
+   distinct sources among the survivors. Teams are exact when every survivor kept its provenance.
+   When any survivor did not, the team count is `None`. A stored count can include the hidden team,
+   and a count above the truth right after a removal is the wrong way to err. The case lasts until
+   the next build. I had recommended keeping the stored count capped at the survivors; the PM ruled
+   otherwise. The rule is one function, `surviving_counts`, for `v1-e39-t07`.
 9. **Rendering.**
    * Tags are `span`, `mark` and `br`; the only attribute is `class`.
    * Classes are one per emphasis (`card-underline`, ...), `card-highlight-<colour>` for OOXML's 16
@@ -276,13 +323,22 @@ not the query's normal cost. Even the worst case is about a tenth of the 2 s bud
 
 ## Follow-up work
 
-* **`v1-e39-t06`: Copy card needs inline styles.** Google Docs and Word ignore classes on pasted
-  HTML, so the clipboard's `text/html` needs `style` attributes. `Card.runs` is plain data (text,
-  emphases, colours, sizes), so `debate_api` can render it with a fixed style table, without touching
-  card text. Alternatively the PM can move a style renderer into `debate_core` with a spec change.
-  The page itself styles the `card-*` classes in CSS.
-* **`v1-e39-t07`:** wire `is_suppressed` to the live list. Decide whether Decisions 8's team count is
-  wanted.
+* **`v1-e39-t06`: Copy card builds its inline styles in `debate_api` from `Card.runs`** (agreed by the
+  PM, 2026-10-20; no spec change). Google Docs and Word ignore classes on pasted HTML, so the
+  clipboard's `text/html` needs `style` attributes. Each `CardRun` gives, as plain values:
+  * `text`;
+  * `emphases`: each a `RunEmphasis`, a `str` such as `"UNDERLINE"`, `"EMPHASIS"`, `"BOLD"` or
+    `"HIGHLIGHT"`;
+  * `highlight_colors`: OOXML tokens such as `"cyan"`, as stored;
+  * `font_sizes`: integer half-points, so `22` is 11 pt.
+
+  A test serialises runs to JSON. t06 needs a fixed table from those values to styles, escapes
+  `text` itself, and never needs card HTML from `debate_core`. Two colours or two sizes on one run
+  mean overlapping stored spans; t06 picks one for the style. The page itself styles the `card-*`
+  classes in CSS.
+* **`v1-e39-t06` and `v1-e39-t07`: show a missing team count.** `team_count` can be `None` after a
+  partial suppression (Decisions 8), and the pages should show that case without a number.
+* **`v1-e39-t07`:** wire `is_suppressed` to the live list.
 * **E33 (refactor):** the E33 writer's `provenance_line` and the domain's
   `occurrence_provenance_line` compose the same line from different records, held together by tests.
   The writer could call the domain function.

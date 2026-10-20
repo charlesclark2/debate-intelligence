@@ -36,7 +36,8 @@ spec:
     filter applies to caselist cards only, so the search page can label it; by test.
   priority: 1
   constraints:
-    packages: [debate_core.domain, debate_core.application, debate_core.integrations, packages/debate_core/tests]
+    # PM ruling 2026-10-20 (v1-e39-t03 Q2): the time budget's known limit is recorded in docs/data/search-index.md.
+    packages: [debate_core.domain, debate_core.application, debate_core.integrations, packages/debate_core/tests, docs/data]
     forbidden:
       - fastapi, boto3 or httpx in debate_core.domain or debate_core.application
       - Card text, a school, team code, file name, student name, username or email in any fixture, log, report or commit (synthetic values only)

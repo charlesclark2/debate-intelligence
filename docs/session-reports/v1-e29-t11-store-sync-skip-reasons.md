@@ -167,7 +167,26 @@ None. The affected-set run is the PR's `ci` check, by the PM's ruling of 2026-10
 ## Follow-up work
 
 1. **`sync_report`'s docstring still says v1-e34-t02 reads this payload** (Deviation 1). I left it,
-   pending PM question 2. A one-line change either way.
+   pending PM question 2. A one-line change either way. *Done after the review; see below.*
+
+### After the PM review (2026-10-19)
+
+The two changes in ruling 2, committed with the PM's review in `4497080`; this record follows.
+
+- **ac2, PM amendment 2026-10-19:** the spec's ac2 now reads "Every earlier key keeps its value, and
+  an earlier build's store tests pass against this build (PM amendment 2026-10-19)." Its evidence is
+  the ac2 row above, unchanged: `test_every_earlier_key_keeps_its_shape_and_value_beside_the_new_one`,
+  and v1.1.0-dev.18's and v1.1.0-dev.59's `test_store.py` against this build (36 and 38 passed).
+- **Follow-up 1:** `sync_report`'s docstring no longer says v1-e34-t02 reads this payload. It now
+  begins "Written for a program first". No code changed.
+
+| Command | Result |
+|---|---|
+| `uv run scripts/affected_tests.py --diff HEAD` (the commit with both edits) | 2,942 tests: anything importing the CLI app reaches `store.py`, the slow smoke files included. Over two minutes, so **left to the PR's CI** by the PM's ruling of 2026-10-19 |
+| `uv run pytest -q -m "not slow and not live" packages/debate_cli/tests/commands/test_store.py packages/debate_cli/tests/test_app.py packages/debate_cli/tests/test_help_rendering.py tests/specs tests/architecture` (what a docstring and a spec edit can reach: the command, its wiring and help, the spec checks, the always-run list) | `260 passed in 12.27s` |
+| `uv run ruff format --check packages/debate_cli` / `uv run ruff check packages/debate_cli` | `66 files already formatted` / `All checks passed!` (the first try was `E501` on the rewritten docstring line, rewrapped before the commit) |
+| `uv run pyright packages/debate_cli` | `0 errors, 0 warnings, 0 informations` |
+| `uv run scripts/validate_specs.py` / `--require-succeeded v1-e29-t11-store-sync-skip-reasons` | `OK: 394 files, 39 epics, 334 tasks, 21 releases` / `Succeeded` |
 
 ### PM questions
 

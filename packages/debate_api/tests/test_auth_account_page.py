@@ -166,16 +166,33 @@ def test_the_audit_record_names_no_address_and_no_username(student: tuple[Any, A
 # --------------------------------------------------------------------------------------------
 
 
-def test_replacing_the_authenticator_keeps_the_old_one_until_the_new_one_is_confirmed(
-    student: tuple[Any, Any],
-) -> None:
+def test_the_start_page_warns_that_the_old_authenticator_stops_at_once(student: tuple[Any, Any]) -> None:
+    """ac5 step 4 on dev, 2026-10-20: after Start, Cognito listed no authenticator on the account."""
+    world, _ = student
+
+    page = world.browser.get("/account/authenticator")
+
+    assert "your current authenticator app stops working at once" in page.text
+    assert "finish in one sitting" in page.text
+
+
+def test_after_start_the_qr_page_says_the_old_authenticator_has_stopped(student: tuple[Any, Any]) -> None:
     world, session = student
 
     page = post(world, session, "/account/authenticator/begin")
 
     assert page.status_code == 200
-    assert "Your old one keeps working until you confirm" in page.text
-    assert world.login.accounts["debater.one"].has_authenticator
+    assert "Your old authenticator app has stopped working" in page.text
+    assert "keeps working" not in page.text
+    assert not world.login.accounts["debater.one"].has_authenticator
+
+
+def test_the_account_page_says_the_old_app_stops_when_you_start(student: tuple[Any, Any]) -> None:
+    world, _ = student
+
+    page = world.browser.get("/account")
+
+    assert "stops working as soon as you choose Start" in page.text
 
 
 def test_a_confirmed_new_authenticator_replaces_the_old_one(student: tuple[Any, Any]) -> None:

@@ -319,8 +319,14 @@ class FakeSelfService(AccountSelfService):
         )
 
     def begin_authenticator(self, access_token: str) -> AuthenticatorSecret:
+        """As Cognito does it (measured on dev, 2026-10-20): the current authenticator goes at once.
+
+        After `AssociateSoftwareToken`, `AdminGetUser` listed no MFA setting at all, and the next
+        sign-in asked for authenticator setup.
+        """
         account = self._account("AssociateSoftwareToken", access_token)
         account.pending_secret = AUTHENTICATOR_SECRET
+        account.has_authenticator = False
         return AuthenticatorSecret(AUTHENTICATOR_SECRET)
 
     def confirm_authenticator(self, access_token: str, code: str) -> None:

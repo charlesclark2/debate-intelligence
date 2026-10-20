@@ -728,6 +728,150 @@ already describes. If the PM chooses (a) or (b), I make it with its test shown f
 - **C, the module apply, dev then prod.** It is on the PM's promotion list after the merge. The prod
   apply runs from `prod-deploy` once its `owner.auto.tfvars` has the pilot lines.
 
+## Third session: the PM's ruling on Start (2026-10-20)
+
+The PM ruled **(a), plus two small additions**, in a relay message:
+
+- *Start* counts as a revalidation;
+- *Start* and a session ended for want of a second factor are both written to the audit log;
+- the *Start* page and the guide say what to do if signed out partway, or if asked to set up an
+  authenticator unprompted.
+
+### The change
+
+- **Start counts as a revalidation.** `AccountPageService.begin_replacement` makes revalidation's
+  own checks, through `refreshed_account` in `sign_in.py`, which `_revalidated` now uses too:
+  - the refresh grant;
+  - the subject;
+  - the role.
+
+  It then returns the session with `revalidated_at` set to now, and the role and the
+  `email-second-factor` group re-read. The begin route writes that session back. It skips only the
+  second-factor check, which *Start* fails on purpose.
+- **`authenticator-replacement-started`.** Written by the begin POST, after the refresh and
+  **before** `AssociateSoftwareToken`. A start that cannot be recorded answers 503 and leaves the old
+  authenticator working.
+- **`session-ended-no-second-factor`.** Written by revalidation when it ends a session for that
+  reason, and for no other reason. A record that cannot be written does not keep the session open:
+  the session ends either way.
+- **Both records** follow `debate_core.application.tub.audit`'s shape, with the student's subject as
+  `actor_subject` and `account_subject`, and no name. `SignInService` now takes the audit sink; the
+  container passes it the app's existing CloudWatch sink. The function's role is unchanged: it
+  already has `logs:PutLogEvents` on its audit group.
+- **The copy.** The *Start* page, the guide's student section and its coach section carry the PM's
+  two lines.
+
+### Decisions in this session
+
+1. **The record comes before Cognito is asked.** The other way round, a failed audit write after
+   *Start* would leave the student with no authenticator and no QR code. This way the log shows a
+   start only after the refresh has said the account is still there. If `AssociateSoftwareToken`
+   then fails, the log shows a start with no registration, which reads as abandoned. That is true:
+   the student did not get a new authenticator.
+2. **A lost `session-ended-no-second-factor` record is dropped, not raised.** Raising it would turn
+   the end of a session into a 500 on every request until CloudWatch answers. Neither case lets the
+   session continue, so the choice is between an error page and a lost record.
+3. **The *Start* page says "The coach's fix is a reset."** The PM's wording is
+   "tub users reset". That command means nothing to a student, so the page says "a reset" and the
+   guide's two sections name the command. The page also says "choose **Start**" where the PM wrote
+   "press", to match every other page and the guide.
+4. **Two sentences beyond the ruling.** The *Start* page and the guide's new-phone step say the
+   student has five minutes to enter the new code. The coach's section says the audit log shows each
+   replacement as `authenticator-replacement-started`, then `authenticator-registered`. Both follow
+   from the ruling; neither changes behaviour.
+
+### Shown failing first
+
+The tests were committed with a skeleton (`1a9bdcc`). The skeleton had:
+
+- the two audit actions;
+- the `audit` argument on `SignInService`;
+- a `begin_replacement` that returned the session unchanged and wrote no record.
+
+Run against that skeleton, **10 failed, 35 passed**, each for its reason:
+
+| Test | How it failed |
+|---|---|
+| `test_a_revalidation_due_seconds_after_start_does_not_end_the_session` | `302 == 200`: signed out 10 s after *Start* |
+| `test_a_confirm_4_59_after_start_succeeds` | answered `{"message": …, "location": "/"}`: signed out before the confirm |
+| `test_with_no_confirm_the_session_ends_at_the_first_revalidation_after_five_minutes` | `302 == 200` at 4:59: ended too early |
+| `test_start_rechecks_the_role_as_a_revalidation_does` | `200 == 401`: *Start* went ahead without a role |
+| `test_start_records_authenticator_replacement_started` | no record |
+| `test_a_session_ended_for_want_of_a_second_factor_is_recorded` | no records |
+| `test_a_start_that_cannot_be_recorded_keeps_the_old_authenticator` | `200 == 503`: *Start* went ahead |
+| `test_start_then_a_confirmed_code_replaces_the_authenticator` (record list) | only `authenticator-registered` |
+| `test_a_confirmed_new_authenticator_replaces_the_old_one` (record list) | the same |
+| `test_the_start_page_says_what_to_do_if_signed_out_or_asked_unexpectedly` | the sentences were not on the page |
+
+Four new tests passed on the skeleton, and they now hold their behaviour:
+
+- `test_a_forged_start_does_not_count_as_a_revalidation`: a forged *Start* is refused before the
+  route runs, so the clock was never reset;
+- `test_start_on_an_account_signed_out_elsewhere_changes_nothing`;
+- `test_a_session_ended_for_another_reason_records_nothing`;
+- `test_a_session_end_that_cannot_be_recorded_still_ends_the_session`: the skeleton wrote no record,
+  so it had none to lose.
+
+The CSRF and cross-site refusals on the begin route still hold: the six forged-*Start* cases pass,
+and the forged-*Start* revalidation test is new.
+
+**Mutants** (same driver, `-n 0`, fresh Hypothesis directory, byte restore, `git status
+--porcelain` empty after):
+
+| Mutant | Result | Caught by |
+|---|---|---|
+| *Start* returns the session without resetting `revalidated_at` | CAUGHT (3) | `test_a_revalidation_due_seconds_after_start_does_not_end_the_session` |
+| *Start* writes no record | CAUGHT (5) | `test_a_confirmed_new_authenticator_replaces_the_old_one` |
+| *Start* records after `AssociateSoftwareToken` | CAUGHT (1) | `test_a_start_that_cannot_be_recorded_keeps_the_old_authenticator` |
+| Revalidation writes no `session-ended-no-second-factor` | CAUGHT (1) | `test_a_session_ended_for_want_of_a_second_factor_is_recorded` |
+| A lost session-end record is raised, not dropped | CAUGHT (1) | `test_a_session_end_that_cannot_be_recorded_still_ends_the_session` |
+
+### ac5: the step 4 facts
+
+From the operator's run on 2026-10-20 (the table under [ac5, the operator's dev
+run](#ac5-the-operators-dev-run-2026-10-20)):
+
+1. After *Start*, with the new QR code not scanned, the operator ran this at 04:23:29Z:
+
+   ```text
+   aws cognito-idp admin-get-user --profile debate-dev-tub-accounts --region us-east-1 --user-pool-id "$TUB_USER_POOL_ID" --username synthetic.student.one --query '[UserStatus,UserMFASettingList,PreferredMfaSetting]' --output text
+   ```
+
+   It returned `CONFIRMED None None`: no MFA setting at all and no preferred factor. The old
+   authenticator was gone, though the new one had never been confirmed.
+2. At the next page load the app sent the browser to managed login, which showed *Set up
+   authenticator app MFA*. At the next full sign-in (step 5), managed login asked for a second
+   factor to be set up, email or authenticator app, not for a code from the old app.
+
+### ac5: the re-run this change needs
+
+The change is in the deployed path, so the operator re-runs steps 4 and 5 on dev with it. That
+covers three things: a replacement that finishes, a replacement left unfinished, and the two new
+records in CloudWatch. The reset steps (6 and 7) and the Terraform checks do not depend on this
+change and are not re-run.
+
+**Results: PENDING the operator's run.** They will be recorded here.
+
+### Acceptance criteria, as of this session
+
+| Criterion | Status | Evidence |
+|---|---|---|
+| Node `sign-in` | PASS | The tests and mutants above; checks below |
+| ac1, ac2, ac3, ac4, ac6 | PASS | As before, with the new tests for *Start* and the two records |
+| ac5 | PASS on the first run; the re-run of steps 4 and 5 is PENDING | [the step 4 facts](#ac5-the-step-4-facts) and the re-run above |
+
+### Checks run
+
+| Check | Result |
+|---|---|
+| `uv run pytest packages/debate_api/tests packages/debate_cli/tests/commands/test_tub_users.py packages/debate_core/tests/application/tub packages/debate_core/tests/integrations/cognito tests/architecture tests/specs` | `805 passed in 6.26s` (793, plus the 12 new tests) |
+| `ruff check .`, `ruff format --check .` | `All checks passed!`, `940 files already formatted` |
+| `pyright packages/debate_api packages/debate_cli packages/debate_core` | `0 errors, 0 warnings, 0 informations` |
+| `lint-imports` | `Contracts: 12 kept, 0 broken.` |
+| `scripts/check_thin_handlers.py` | `OK: 43 CLI command and API route handlers within 25 statements` |
+| `scripts/validate_specs.py` | `OK: 394 files, 39 epics, 334 tasks, 21 releases` |
+| `scripts/check_links.py`, `scripts/check_command_blocks.py` | `OK: 1875 relative links and anchors in 270 Markdown files`; `OK: no # comments in 327 shell code blocks in 127 Markdown files` |
+
 ## PM review
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in

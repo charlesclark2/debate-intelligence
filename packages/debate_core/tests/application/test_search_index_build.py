@@ -293,7 +293,11 @@ class Store:
         self, data_dir: Path, *, seed: int | None = None, extra_sources: Sequence[Card] = ()
     ) -> Ports:
         """The four ports written, rows and records in a shuffled order when `seed` is given."""
-        shuffle = random.Random(seed).shuffle if seed is not None else (lambda _: None)
+
+        def shuffle(items: list[Any]) -> None:
+            if seed is not None:
+                random.Random(f"{seed}-{len(items)}").shuffle(items)
+
         store = InMemoryParsedStore()
         caselists = InMemoryCaselistRepository()
         by_source: dict[tuple[str, str], list[Card]] = {}

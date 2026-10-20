@@ -30,7 +30,6 @@ import pytest
 
 from debate_core.application.ports.search_index import IndexedOccurrence, SearchDocument
 from debate_core.domain.search_index import SEARCH_INDEX_FORMAT_VERSION
-from debate_core.integrations.local import search_index
 from debate_core.integrations.local.search_index import (
     APPLICATION_ID,
     SCHEMA_STATEMENTS,
@@ -158,7 +157,7 @@ def test_search_index_writer_runs_only_statements_sqlite_3_40_has(
         connection.set_trace_callback(traced.append)
         return connection
 
-    monkeypatch.setattr(search_index.sqlite3, "connect", tracing_connect)
+    monkeypatch.setattr(sqlite3, "connect", tracing_connect)
     write(tmp_path / "index.sqlite")
 
     sent = [statement for statement in traced if not statement.startswith("--")]

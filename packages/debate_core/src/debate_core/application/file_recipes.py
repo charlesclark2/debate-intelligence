@@ -68,6 +68,28 @@ card with none left is `SUPPRESSED_OCCURRENCE`. A pin to such an occurrence is r
 whole, which a rebuilt store no longer holds at all. Path holds (`v1-e30-t13`) stop new bytes at an
 import. A row an earlier build imported at a held path is left out of the table when it is rebuilt
 (`v1-e31-t26`), and the resolver does not ask about holds itself.
+
+## Camp (OpenEv) cards (`v1-e33-t06`)
+
+Camp files are parsed into a store of their own, `openev`, one occurrence row per card per release
+(`2031-policy`) and none with a disclosure. A pin reaches one with `caselist: openev` and the release
+as its `snapshot`, and matches the row of that release at its source and element index. A recipe
+whose own `caselist` is `openev` lets AUTO choose among camp rows by the rule above, where the latest
+release is the one of the latest year, then the first by name (`2031-ld`, `2031-pf`, `2031-policy`).
+
+The suppression rule is the one every occurrence gets, asked the same way: with the row's source
+SHA-256 and its disclosure digest, which for a camp row is none. That is the question the parse
+pipeline asks of a camp file (:func:`~debate_core.application.caselist.parse_sources.live_disclosures`),
+so a camp row is stopped by its source suppressed as a whole, and not by one team's withdrawn
+disclosure of the same bytes. A camp path withdrawn from one release (`v1-e30-t14`) drops the row
+from that release's manifest, and the next `caselist parse --caselist openev` leaves its cards out.
+
+**What the camp's release record says.** The provenance line of a camp card names its camp, year,
+event and file title (data-use policy, Attribution rule 2). The camp is the row's own; the year,
+event and file title are the importer's record of the release, a
+:class:`~debate_core.domain.caselist.CampFile`, listed by the source's SHA-256 in the caselist
+records and kept when its release is the row's. A row with no such record still resolves, without
+one, as a caselist row with no disclosure on record does.
 """
 
 from __future__ import annotations
@@ -83,17 +105,19 @@ from typing import Any, Final, cast
 import yaml
 from pydantic import ValidationError
 
+from debate_core.application.caselist.openev_manifest import openev_release_name
 from debate_core.application.caselist.suppression import load_suppression_state
 from debate_core.application.errors import DomainError
 from debate_core.application.ports.caselist import CaselistRepository
 from debate_core.application.ports.parsed_store import (
+    OPENEV_STORE,
     OccurrenceRecord,
     ParsedStore,
     parse_version_directory,
     version_directory_name,
 )
 from debate_core.application.ports.suppression import SuppressionList, SuppressionState, disclosure_digest
-from debate_core.domain.caselist import Disclosure
+from debate_core.domain.caselist import CampFile, Disclosure
 from debate_core.domain.file_recipe import (
     RECIPE_ITEM_TAGS,
     Analytic,
@@ -480,7 +504,9 @@ _PATTERNS: Final = {
     "source_sha256": "a source SHA-256 is 64 lowercase hex characters",
     "topic": "a topic id is kebab-case: lowercase letters and digits joined by single hyphens",
     "position": "a position id is kebab-case: lowercase letters and digits joined by single hyphens",
-    "caselist": "a caselist is its slug, letters and a two-digit year, such as hsld26",
+    "caselist": (
+        "a caselist is its slug, letters and a two-digit year, such as hsld26, or openev for camp files"
+    ),
 }
 
 _DIGESTS: Final = frozenset({"fingerprint", "source_sha256"})
@@ -576,7 +602,9 @@ class ResolvedCard:
 
     `disclosure` is who disclosed that occurrence, for the built file's provenance line and sidecar,
     or `None` when the caselist records hold no disclosure with the row's digest. It holds a school,
-    a team code and a path, so it is kept off the `repr`.
+    a team code and a path, so it is kept off the `repr`. `camp_file` is the release record of a
+    camp occurrence (`v1-e33-t06`), for the same line and sidecar: its year, event and file title.
+    `None` for a caselist occurrence, and for a camp one whose release has no record.
     """
 
     path: str
@@ -585,6 +613,7 @@ class ResolvedCard:
     resolution: Resolution
     occurrence: OccurrenceRecord
     disclosure: Disclosure | None = field(default=None, repr=False)
+    camp_file: CampFile | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -618,14 +647,20 @@ class _Store:
 type _Attribution = tuple[str, str, str, str, str] | None
 
 
-def _auto_order(row: OccurrenceRecord) -> tuple[int, str, int, str]:
+def _auto_order(row: OccurrenceRecord) -> tuple[tuple[int, str], str, int, str]:
     """Latest snapshot first, then lowest source SHA-256, element index and disclosure digest."""
-    return (
-        -date.fromisoformat(row.last_snapshot).toordinal(),
-        row.source_sha256,
-        row.first_element_index,
-        row.disclosure or "",
-    )
+    return (_recency(row), row.source_sha256, row.first_element_index, row.disclosure or "")
+
+
+def _recency(row: OccurrenceRecord) -> tuple[int, str]:
+    """Latest first: a caselist row by the day of its last snapshot, a camp row by its release.
+
+    A release (`2031-policy`) has a year and no day, so camp rows go by the year, latest first, and
+    then by the release's name. Rows of one store are only ever compared with each other.
+    """
+    if row.caselist == OPENEV_STORE:
+        return (-int(row.last_snapshot[:4]), row.last_snapshot)
+    return (-date.fromisoformat(row.last_snapshot).toordinal(), "")
 
 
 def _attribution(disclosure: Disclosure | None) -> _Attribution:
@@ -643,9 +678,16 @@ def _attribution(disclosure: Disclosure | None) -> _Attribution:
 
 
 def _pin_matches(pin: OccurrencePin, row: OccurrenceRecord, disclosure: Disclosure | None) -> bool:
-    """Whether a row and its disclosure agree with every field the pin gives beyond its key."""
-    if pin.snapshot is not None and not (
-        date.fromisoformat(row.snapshot) <= pin.snapshot <= date.fromisoformat(row.last_snapshot)
+    """Whether a row and its disclosure agree with every field the pin gives beyond its key.
+
+    A camp pin's snapshot is a release, which a camp row is listed in exactly (`v1-e33-t06`).
+    """
+    if isinstance(pin.snapshot, str):
+        if pin.snapshot != row.snapshot:
+            return False
+    elif pin.snapshot is not None and (
+        row.caselist == OPENEV_STORE
+        or not (date.fromisoformat(row.snapshot) <= pin.snapshot <= date.fromisoformat(row.last_snapshot))
     ):
         return False
     wanted = (pin.school, pin.team_code, pin.side, pin.tournament, pin.round)
@@ -732,6 +774,19 @@ class _Ports:
             by_position={key: tuple(value) for key, value in by_position.items()},
         )
 
+    async def camp_files(self, source_sha256: str) -> tuple[CampFile, ...]:
+        """Every release record of the camp file `source_sha256`, all pages."""
+        found: list[CampFile] = []
+        cursor: str | None = None
+        while True:
+            page = await self.caselists.list_camp_files(
+                source_sha256=source_sha256, limit=_DISCLOSURE_PAGE, cursor=cursor
+            )
+            found += page.items
+            if page.next_cursor is None:
+                return tuple(found)
+            cursor = page.next_cursor
+
     async def disclosures(self, caselist: str, source_sha256: str) -> tuple[Disclosure, ...]:
         """Every disclosure of `source_sha256` the caselist records hold, all pages."""
         found: list[Disclosure] = []
@@ -755,6 +810,7 @@ class _Resolution:
         self._lines = lines
         self._stores: dict[str, _Store | None] = {}
         self._disclosures: dict[tuple[str, str], tuple[Disclosure, ...]] = {}
+        self._camp_files: dict[str, tuple[CampFile, ...]] = {}
         self._errors: list[RecipeError] = []
 
     async def resolve(self) -> ResolvedRecipe:
@@ -815,7 +871,7 @@ class _Resolution:
             )
             return None
         row = min(live, key=_auto_order)
-        return self._resolved(ref, path, Resolution.AUTO, row, await self._disclosure_of(row))
+        return await self._resolved(ref, path, Resolution.AUTO, row, await self._disclosure_of(row))
 
     async def _pinned(
         self, ref: CardRef, pin: OccurrencePin, path: str, state: SuppressionState
@@ -887,9 +943,9 @@ class _Resolution:
             )
             return None
         row, disclosure = min(matching, key=lambda pair: _auto_order(pair[0]))
-        return self._resolved(ref, path, Resolution.PINNED, row, disclosure)
+        return await self._resolved(ref, path, Resolution.PINNED, row, disclosure)
 
-    def _resolved(
+    async def _resolved(
         self,
         ref: CardRef,
         path: str,
@@ -904,6 +960,7 @@ class _Resolution:
             resolution=resolution,
             occurrence=row,
             disclosure=disclosure,
+            camp_file=await self._camp_file_of(row),
         )
 
     async def _store_of(self, caselist: str) -> _Store | None:
@@ -924,6 +981,19 @@ class _Resolution:
             if disclosure_digest(row.caselist, disclosure.source_path) == row.disclosure
         ]
         return max(matching, key=lambda one: (one.snapshot, one.source_path)) if matching else None
+
+    async def _camp_file_of(self, row: OccurrenceRecord) -> CampFile | None:
+        """The release record of a camp row: the camp file's record whose release is the row's."""
+        if row.caselist != OPENEV_STORE:
+            return None
+        if row.source_sha256 not in self._camp_files:
+            self._camp_files[row.source_sha256] = await self._ports.camp_files(row.source_sha256)
+        matching = [
+            record
+            for record in self._camp_files[row.source_sha256]
+            if openev_release_name(record.year, record.event) == row.snapshot
+        ]
+        return max(matching, key=lambda one: (one.snapshot, one.camp, one.file_title)) if matching else None
 
     def _error(self, code: RecipeErrorCode, path: str, message: str) -> None:
         self._errors.append(RecipeError(code, path, self._lines.get(path), message))

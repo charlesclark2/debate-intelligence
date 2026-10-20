@@ -18,6 +18,14 @@ The policy names the built file's provenance line and its sidecar as places a sc
 may appear, inside the team only. They are written here exactly as disclosed, never expanded to a
 name, and kept off every `repr`.
 
+## Camp cards
+
+A camp (OpenEv) card (`v1-e33-t06`) is recorded with `caselist` `openev`, its release as `snapshot`
+(`2031-policy`), and the camp, year, event and file title its provenance line names. It has no
+disclosure, so its disclosure digest, school, team code, side, tournament and round are empty, and
+only a camp card names a camp. The camp fields are additions: a sidecar written before them has
+none of their keys and still validates.
+
 ## Never verified
 
 A card read out of somebody else's file has not been through the platform's verification pipeline.
@@ -35,9 +43,10 @@ from typing import Any, Final, Literal, Self
 from pydantic import AwareDatetime, Field, field_serializer, model_validator
 
 from debate_core.domain.base import DomainModel, NonEmptyText, Sha256Hex
+from debate_core.domain.caselist import Event
 from debate_core.domain.debate_files import CardCompleteness, FontSizeSpan, FormattingSpan
 from debate_core.domain.enums import ProvenanceMode, VerificationStatus
-from debate_core.domain.file_recipe import TagAuthor
+from debate_core.domain.file_recipe import CAMP_STORE, TagAuthor
 from debate_core.domain.schema_export import JSON_SCHEMA_DIALECT
 
 __all__ = [
@@ -128,7 +137,22 @@ class FileProvenanceEntry(DomainModel):
     resolution: Literal["PINNED", "AUTO"] = Field(description="How the recipe chose the occurrence.")
     caselist: NonEmptyText = Field(description="Caselist slug, or `openev` for a camp file.")
     camp: NonEmptyText | None = Field(default=None, description="Camp for an OpenEv file; None otherwise.")
-    snapshot: NonEmptyText = Field(description="The first snapshot listing the occurrence.")
+    camp_year: int | None = Field(
+        default=None, ge=2000, description="Year of the camp release, for an OpenEv file; None otherwise."
+    )
+    camp_event: Event | None = Field(
+        default=None, description="Event of the camp release, for an OpenEv file; None otherwise."
+    )
+    camp_file_title: NonEmptyText | None = Field(
+        default=None,
+        description=(
+            "The camp file's title as its release records it, for an OpenEv file; None otherwise, or "
+            "with no release record."
+        ),
+    )
+    snapshot: NonEmptyText = Field(
+        description="The first snapshot listing the occurrence; for an OpenEv file, its release."
+    )
     last_snapshot: NonEmptyText = Field(description="The latest snapshot listing the occurrence.")
     disclosure_digest: Sha256Hex | None = Field(
         default=None, description="Digest of `<caselist>/<path>` naming the disclosure; None for a camp file."
@@ -192,6 +216,22 @@ class FileProvenanceEntry(DomainModel):
             raise ValueError("original_tag_sha256 is recorded only for an overridden tag")
         if self.team_code is not None and self.school is None:
             raise ValueError("a team code is disclosed with its school")
+        disclosed = (
+            self.disclosure_digest,
+            self.school,
+            self.team_code,
+            self.side,
+            self.tournament,
+            self.round,
+        )
+        camp = (self.camp, self.camp_year, self.camp_event, self.camp_file_title)
+        if self.caselist == CAMP_STORE:
+            if any(one is not None for one in disclosed):
+                raise ValueError("a camp card names no disclosure: a camp file has no disclosure")
+        elif any(one is not None for one in camp):
+            raise ValueError(
+                "only a camp card (caselist openev) names a camp, a year, an event or a file title"
+            )
         return self
 
 

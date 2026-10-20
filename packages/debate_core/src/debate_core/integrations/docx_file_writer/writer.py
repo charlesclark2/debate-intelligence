@@ -2,8 +2,8 @@
 
 :class:`DocxEvidenceFileWriter` walks a resolved recipe (`v1-e33-t01`) and writes, in order:
 
-1. **One header line**, an analytic naming the source caselists and saying the cards are disclosed
-   (FILE_IMPORT) and not verified by the platform.
+1. **One header line**, an analytic naming the source caselists (and OpenEv, for camp cards) and
+   saying the cards are disclosed or camp cards (FILE_IMPORT) and not verified by the platform.
 2. **The recipe's headings**: each pocket, hat and block in the profile's `Heading1` to `Heading3`.
 3. **Each card**, copied by :mod:`.run_copier`: its tag (or the coach's override, in the profile's tag
    style), its cite, **the provenance line** below the cite in the Undertag style (data-use policy,
@@ -12,6 +12,17 @@
 
 That is the only new text: headings, overrides and analytics are the coach's, the header is fixed,
 and the provenance line is built from the occurrence and its disclosure record, never from card text.
+
+## Camp (OpenEv) cards (`v1-e33-t06`)
+
+A camp card's line is the policy's other form, `[OpenEv: <camp> <year> — <event>, <file title>]`: the
+camp from its occurrence row, the year, event and file title from its release record
+(:attr:`~debate_core.application.file_recipes.ResolvedCard.camp_file`). With no release record, the
+year and event are read from the row's release (`2031-policy`) and the title is left out. Its source is
+read by its SHA-256 like any other. A writer given `source_stores` reads each source from the store of
+its prefix in the evidence layout (:func:`~debate_core.application.caselist.publish_plan.source_prefix`),
+`raw/caselist/<slug>` or a camp file's `raw/openev/<year>`, as a bucket keeps them; without it the one
+`snapshots` store holds every source, as the local blob store does.
 
 ## Before a card is copied, it is found and checked
 
@@ -40,13 +51,14 @@ from __future__ import annotations
 
 import copy
 import hashlib
-from collections.abc import Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
 from datetime import date
 from typing import Final
 
 from lxml import etree
 
+from debate_core.application.caselist.publish_plan import source_prefix
 from debate_core.application.errors import BlobIntegrityError, NotFound
 from debate_core.application.file_recipes import ResolvedCard, ResolvedRecipe
 from debate_core.application.ports.evidence_file_writer import (
@@ -58,7 +70,15 @@ from debate_core.application.ports.evidence_file_writer import (
 )
 from debate_core.application.ports.parsed_store import OPENEV_STORE, OccurrenceRecord
 from debate_core.application.ports.persistence import SnapshotStore
-from debate_core.domain.caselist import Disclosure, Side, SourceDocument, SourceFormat, SourceOrigin
+from debate_core.domain.caselist import (
+    CampFile,
+    Disclosure,
+    Event,
+    Side,
+    SourceDocument,
+    SourceFormat,
+    SourceOrigin,
+)
 from debate_core.domain.debate_files import ParsedCard, ParsedDocument, ParseFailure
 from debate_core.domain.file_provenance import (
     FileProvenanceEntry,
@@ -111,8 +131,9 @@ __all__ = [
 #: body (PM ruling, 2026-10-19; the parser moves with `v1-e31-t24`).
 HIGHLIGHTED_CITE_CAUSE: Final = "the provenance line stands between a highlighted cite and its body"
 
-#: Version recorded in every sidecar. Bumped whenever the bytes a recipe builds to change.
-FILE_BUILDER_VERSION: Final = "2026.10.19-file-writer-1"
+#: Version recorded in every sidecar. Bumped whenever the bytes a recipe builds to change: `-2` adds
+#: camp cards and the sidecar's camp keys (`v1-e33-t06`).
+FILE_BUILDER_VERSION: Final = "2026.10.19-file-writer-2"
 
 _W15_NAMESPACE: Final = "http://schemas.microsoft.com/office/word/2012/wordml"
 
@@ -128,9 +149,16 @@ _DOCUMENT_NAMESPACES: Final = {
 
 _SIDE_LABELS: Final = {Side.AFF: "Aff", Side.NEG: "Neg", Side.PRO: "Pro", Side.CON: "Con"}
 
+#: How the policy's line names an event: `[OpenEv: Cascade Institute 2026 — Policy, Climate Adv CP]`.
+_EVENT_LABELS: Final = {Event.POLICY: "Policy", Event.LD: "LD", Event.PF: "PF"}
+
 #: The path the parser is told a source sat at. It is recorded nowhere the writer keeps; a real
 #: disclosure path names a school and a team, and the writer has no use for one.
 _SOURCE_PATH_FOR_THE_PARSER: Final = "disclosed-source.docx"
+
+#: The day the parser is told a camp file was seen. A release has a year and no day, and nothing the
+#: writer keeps reads it; the built file's read-back is told the same.
+_UNDATED: Final = date(2000, 1, 1)
 
 
 # ------------------------------------------------------------------------------------------------
@@ -138,14 +166,56 @@ _SOURCE_PATH_FOR_THE_PARSER: Final = "disclosed-source.docx"
 # ------------------------------------------------------------------------------------------------
 
 
-def provenance_line(occurrence: OccurrenceRecord, disclosure: Disclosure | None) -> str:
+@dataclass(frozen=True, slots=True)
+class _CampRelease:
+    """What a camp card's line and sidecar entry say about where it came from."""
+
+    camp: str | None
+    year: int
+    event: Event | None
+    event_label: str
+    file_title: str | None
+
+
+def _camp_release(occurrence: OccurrenceRecord, camp_file: CampFile | None) -> _CampRelease:
+    """The camp from the occurrence; the year, event and title from the release record, if any.
+
+    Without a record, the year and event are read from the occurrence's release, `2031-policy`, which
+    is the importer's own name for it (`openev_release_name`), and there is no title to give.
+    """
+    if camp_file is not None:
+        year, event = camp_file.year, camp_file.event
+        named = event.value.lower()
+    else:
+        year, named = int(occurrence.snapshot[:4]), occurrence.snapshot[5:]
+        event = next((one for one in Event if one.value.lower() == named), None)
+    return _CampRelease(
+        camp=occurrence.camp or (camp_file.camp if camp_file is not None else None),
+        year=year,
+        event=event,
+        event_label=_EVENT_LABELS[event] if event is not None else named,
+        file_title=camp_file.file_title if camp_file is not None else None,
+    )
+
+
+def provenance_line(
+    occurrence: OccurrenceRecord, disclosure: Disclosure | None, *, camp_file: CampFile | None = None
+) -> str:
     """The line below a card's cite (data-use policy, Attribution rule 2), from the record alone.
 
     `[Disclosed: hsld26 2026-09-15 — Maple Grove QX, Aff vs. Riverbend Invitational Round 4]`, the
     policy's own example: caselist, the first snapshot that listed the disclosure, then school and team
     code exactly as disclosed, side, tournament and round as far as the disclosure records them. With no
     disclosure on record (t01's ruling lets AUTO fall back to one), the line names no team.
+
+    A camp card's is `[OpenEv: Cascade Institute 2026 — Policy, Climate Adv CP]`, the policy's other
+    example: camp, year, event and file title (`v1-e33-t06`), and without a release record no title.
     """
+    if occurrence.caselist == OPENEV_STORE:
+        release = _camp_release(occurrence, camp_file)
+        named = " ".join(part for part in (release.camp, str(release.year)) if part)
+        title = f", {release.file_title}" if release.file_title else ""
+        return f"[OpenEv: {named} — {release.event_label}{title}]"
     head = f"Disclosed: {occurrence.caselist} {occurrence.snapshot}"
     if disclosure is None:
         return f"[{head}]"
@@ -168,11 +238,25 @@ def provenance_line(occurrence: OccurrenceRecord, disclosure: Disclosure | None)
 
 
 def header_line(recipe: ResolvedRecipe) -> str:
-    """The file's one header analytic: where its cards came from, and that none of them is verified."""
-    caselists = sorted({card.occurrence.caselist for card in recipe.cards} | {recipe.recipe.caselist})
+    """The file's one header analytic: where its cards came from, and that none of them is verified.
+
+    A file with a camp card names OpenEv beside its caselists and says where each card came from,
+    not who disclosed it (`v1-e33-t06`); a file without one says what it said before.
+    """
+    stores = {card.occurrence.caselist for card in recipe.cards}
+    if OPENEV_STORE not in stores:
+        caselists = sorted(stores | {recipe.recipe.caselist})
+        return (
+            f"Disclosed cards (FILE_IMPORT) from {', '.join(caselists)}, each copied from the file that "
+            "disclosed it and not verified by this platform. Who disclosed each card is below its cite."
+        )
+    caselists = ", ".join(sorted(stores - {OPENEV_STORE}))
+    kinds, origins = (
+        ("Disclosed and camp cards", f"{caselists} and OpenEv") if caselists else ("Camp cards", "OpenEv")
+    )
     return (
-        f"Disclosed cards (FILE_IMPORT) from {', '.join(caselists)}, each copied from the file that "
-        "disclosed it and not verified by this platform. Who disclosed each card is below its cite."
+        f"{kinds} (FILE_IMPORT) from {origins}, each copied from its source file and not verified by this "
+        "platform. Where each card came from is below its cite."
     )
 
 
@@ -203,6 +287,16 @@ class _Located:
 
 
 def _source_document(occurrence: OccurrenceRecord, size: int) -> SourceDocument:
+    if occurrence.caselist == OPENEV_STORE:
+        return SourceDocument(
+            sha256=occurrence.source_sha256,
+            byte_size=size,
+            source_format=SourceFormat.DOCX,
+            origin=SourceOrigin.OPENEV,
+            caselist=None,
+            first_seen_snapshot=_UNDATED,
+            last_seen_snapshot=_UNDATED,
+        )
     return SourceDocument(
         sha256=occurrence.source_sha256,
         byte_size=size,
@@ -268,6 +362,10 @@ class DocxEvidenceFileWriter:
     Deterministic and offline: no clock, no model call, no network. Its only inputs beyond the request
     are the blob store it reads sources from, the parser (and through it the style profile) and the
     committed base template.
+
+    `source_stores`, when given, is the blob store under each source prefix of the evidence layout
+    (`raw/caselist/hsld26`, `raw/openev/2031`), for a writer reading a bucket that keeps one store per
+    prefix; `snapshots` is then not read. Without it, `snapshots` holds every source.
     """
 
     def __init__(
@@ -277,8 +375,10 @@ class DocxEvidenceFileWriter:
         parser: DebateDocxParser | None = None,
         base: BaseTemplate | None = None,
         limits: PackageLimits = DEFAULT_PACKAGE_LIMITS,
+        source_stores: Callable[[str], SnapshotStore] | None = None,
     ) -> None:
         self._snapshots = snapshots
+        self._source_stores = source_stores
         self._parser = parser if parser is not None else DebateDocxParser(limits=limits)
         self._profile = self._parser.profile
         self._base = base if base is not None else load_base_template()
@@ -361,12 +461,6 @@ class DocxEvidenceFileWriter:
             def refuse(code: CardRefusalCode, detail: str, resolved: ResolvedCard = resolved) -> None:
                 refusals.append(CardRefusal(resolved.path, resolved.fingerprint, code, detail))
 
-            if occurrence.caselist == OPENEV_STORE:
-                refuse(
-                    CardRefusalCode.SOURCE_UNREADABLE,
-                    "a camp (OpenEv) card cannot be referenced by a schema version 1 recipe",
-                )
-                continue
             sha = occurrence.source_sha256
             if sha not in sources:
                 sources[sha] = await self._open(occurrence)
@@ -403,8 +497,13 @@ class DocxEvidenceFileWriter:
         return located, refusals
 
     async def _open(self, occurrence: OccurrenceRecord) -> _Source | tuple[CardRefusalCode, str]:
+        store = (
+            self._snapshots
+            if self._source_stores is None
+            else self._source_stores(source_prefix(occurrence.caselist, occurrence.snapshot))
+        )
         try:
-            content = await self._snapshots.get(occurrence.source_sha256)
+            content = await store.get(occurrence.source_sha256)
         except NotFound:
             return CardRefusalCode.SOURCE_UNAVAILABLE, "the source's bytes are not in the blob store"
         except BlobIntegrityError:
@@ -493,7 +592,9 @@ class DocxEvidenceFileWriter:
             if path not in without_line:
                 line = body.write(
                     StructuralUnit.UNDERTAG,
-                    provenance_line(card.resolved.occurrence, card.resolved.disclosure),
+                    provenance_line(
+                        card.resolved.occurrence, card.resolved.disclosure, camp_file=card.resolved.camp_file
+                    ),
                 )
                 first = line if first is None else first
             for paragraph in copied.after_cite:
@@ -515,14 +616,15 @@ class DocxEvidenceFileWriter:
         without_line: frozenset[str] = frozenset(),
     ) -> dict[str, str]:
         """Each card the built file does not read back as its source, with what differs."""
+        camp = recipe.caselist == OPENEV_STORE
         built = SourceDocument(
             sha256=hashlib.sha256(docx).hexdigest(),
             byte_size=len(docx),
             source_format=SourceFormat.DOCX,
-            origin=SourceOrigin.CASELIST_ARCHIVE,
-            caselist=recipe.caselist,
-            first_seen_snapshot=date(2000, 1, 1),
-            last_seen_snapshot=date(2000, 1, 1),
+            origin=SourceOrigin.OPENEV if camp else SourceOrigin.CASELIST_ARCHIVE,
+            caselist=None if camp else recipe.caselist,
+            first_seen_snapshot=_UNDATED,
+            last_seen_snapshot=_UNDATED,
         )
         parsed = self._parser.parse(docx, built, source_path="built-file.docx")
         if isinstance(parsed, ParseFailure):
@@ -596,6 +698,8 @@ class DocxEvidenceFileWriter:
             sorted(located, key=lambda item: placed[item.resolved.path]), start=1
         ):
             card, occurrence, disclosure = item.card, item.resolved.occurrence, item.resolved.disclosure
+            camp_file = item.resolved.camp_file
+            release = _camp_release(occurrence, camp_file) if occurrence.caselist == OPENEV_STORE else None
             override = item.resolved.tag_override
             copied = copies[item.resolved.path]
             warnings.extend(f"{item.resolved.path}: {warning}" for warning in copied.warnings)
@@ -608,7 +712,10 @@ class DocxEvidenceFileWriter:
                     fingerprint_version=occurrence.fingerprint_version,
                     resolution=item.resolved.resolution.value,
                     caselist=occurrence.caselist,
-                    camp=occurrence.camp,
+                    camp=release.camp if release is not None else None,
+                    camp_year=release.year if release is not None else None,
+                    camp_event=release.event if release is not None else None,
+                    camp_file_title=release.file_title if release is not None else None,
                     snapshot=occurrence.snapshot,
                     last_snapshot=occurrence.last_snapshot,
                     disclosure_digest=occurrence.disclosure,
@@ -633,7 +740,7 @@ class DocxEvidenceFileWriter:
                     original_tag_sha256=(
                         text_sha256(card.tag) if override is not None and card.tag is not None else None
                     ),
-                    provenance_line=provenance_line(occurrence, disclosure),
+                    provenance_line=provenance_line(occurrence, disclosure, camp_file=camp_file),
                     forbidden_characters_replaced=copied.forbidden_characters_replaced,
                     warnings=copied.warnings,
                 )
@@ -673,7 +780,9 @@ def _difference(item: _Located, built: ParsedCard | None, *, with_line: bool = T
         return "no card starts where the card was written in the built file"
     source = item.card
     expected_tag = item.resolved.tag_override.text if item.resolved.tag_override is not None else source.tag
-    line = provenance_line(item.resolved.occurrence, item.resolved.disclosure)
+    line = provenance_line(
+        item.resolved.occurrence, item.resolved.disclosure, camp_file=item.resolved.camp_file
+    )
     checks = (
         ("cite", built.full_cite == source.full_cite),
         ("evidence text", built.evidence_text == source.evidence_text),

@@ -53,7 +53,7 @@ structure: []
 | `title` | The file's title |
 | `topic` | The topic id, kebab-case (`nhi`, `space-colonization`), as the landscape taxonomy names it |
 | `format` | `POLICY`, `LD` or `PF` |
-| `caselist` | The caselist whose cards an unpinned reference comes from, such as `hspolicy26` |
+| `caselist` | The caselist whose cards an unpinned reference comes from, such as `hspolicy26`, or `openev` for a file of camp cards ([below](#camp-cards-openev)) |
 | `position` | The position id, kebab-case (`politics-da`) |
 | `side` | `AFF` or `NEG` for Policy and LD, `PRO` or `CON` for PF |
 | `fingerprint_version` | The card-matching rules your fingerprints were taken under. `card-fingerprint-v1`, `v2` and `v3` all give the same fingerprints today, so any of them is accepted |
@@ -122,6 +122,9 @@ Among the card's occurrences in the recipe's `caselist`, the builder takes:
 Every step reads a field the occurrence store holds, so the same store always gives the same
 choice. The result is recorded as `AUTO`.
 
+AUTO never leaves the recipe's own `caselist`. A camp card reaches a caselist recipe only by a pin;
+a recipe whose `caselist` is `openev` chooses among camp cards instead ([below](#camp-cards-openev)).
+
 ### Pinned: the copy you name
 
 ```yaml
@@ -151,6 +154,39 @@ A pin may name another caselist than the recipe's, such as last season's. The re
 `PINNED`. A pin is never quietly moved to another copy: one that matches no occurrence, or two
 disclosures by different teams or rounds, is an error until you fix it.
 
+### Camp cards (OpenEv)
+
+Camp files from OpenEv are kept in a store of their own, named `openev`, one copy of each card per
+**release**: a camp year and an event, written `<year>-<event>` such as `2031-policy`, as
+`caselist publish --caselist openev --snapshot` names it. A pin reaches a camp card with
+`caselist: openev` and its release as `snapshot`:
+
+```yaml
+- fingerprint: 5e0b7d2c41f0a8c3d6e9b1f4a7c2e5d8b0f3a6c9e2d5b8f1a4c7e0d3b6f9a2c5
+  pin:
+    caselist: openev
+    source_sha256: 9c4e1a7f3b6d0c2e5a8f1b4d7c0e3a6f9b2d5c8e1a4f7b0d3c6e9a2f5b8d1c4e
+    element_index: 12
+    snapshot: 2031-policy
+```
+
+* The release is required, because the same camp file released in two years is two copies. The
+  event is `policy`, `ld` or `pf`, in lower case.
+* A camp file has no disclosure, so a camp pin names no `school`, `team_code`, `side`, `tournament`
+  or `round`; giving one is an error.
+* A caselist pin's `snapshot` is still a date. A release there is an error that says to use
+  `caselist: openev`.
+
+A camp pin can sit in any recipe, beside cards from a caselist. For a file of camp cards alone, set
+the recipe's own `caselist` to `openev`, and unpinned cards are chosen among camp releases by the
+same four steps, where the latest release is the one of the latest year, then the first by name
+(`2031-ld`, `2031-pf`, `2031-policy`). In the built file a camp card's line below its cite names the
+camp, year, event and file title, as the data-use policy sets out:
+
+```text
+[OpenEv: Cascade Institute 2026 — Policy, Climate Adv CP]
+```
+
 **A pin names a team.** A school and team code are personal data about students, and the data-use
 policy allows them only in a few places, the evidence workspace among them. That is where your
 recipes live, so a pin there may name a team. A recipe is never committed to the repository with a
@@ -166,6 +202,10 @@ of it was withdrawn:
 * a card with no copy left is reported, `SUPPRESSED_OCCURRENCE`;
 * a pin to a removed copy is refused with `SUPPRESSED_OCCURRENCE`. It is not moved to another copy:
   remove the pin to let the recipe choose, or pin another.
+
+Camp cards follow the same rules. A camp file removed as a whole is never used. Withdrawing one
+team's disclosure of a file does not withdraw a camp's release of the same file; a camp release a
+removal takes a file out of drops it at the next `caselist parse --caselist openev`.
 
 ## Errors
 
@@ -186,7 +226,7 @@ the second hat of the first pocket.
 | `DUPLICATE_KEY` | A key given twice in one mapping; YAML would silently keep the last |
 | `TOO_LARGE` | Over 1,000,000 bytes, or over 100,000 YAML nodes once aliases are followed |
 | `INVALID` | A field or section the recipe does not allow, or a `fingerprint_version` with other fingerprints |
-| `UNKNOWN_CARD` | The recipe's caselist has no occurrence of this fingerprint |
+| `UNKNOWN_CARD` | The recipe's caselist (or `openev`) has no occurrence of this fingerprint |
 | `PIN_MISMATCH` | The pin matches no occurrence of the card, or two disclosures that differ in who disclosed them |
 | `DUPLICATE_REF` | The card is already in the file |
 | `SUPPRESSED_OCCURRENCE` | The removal suppression list stops the pinned copy, or every copy of the card |

@@ -28,7 +28,10 @@ spec:
     `raw/openev/` by its sha256.
   priority: 3
   constraints:
-    packages: [debate_core.domain, debate_core.application, packages/debate_core/tests, docs/guides, docs/data]
+    # debate_core.integrations (the writer, debate_core.integrations.docx_file_writer, never
+    # docx_parser, which is v1-e31-t24's) and docs/data's file-provenance.schema.json: PM amendment
+    # 2026-10-19, from the PM's notes for this task, as v1-e33-t02 marked its additions.
+    packages: [debate_core.domain, debate_core.application, debate_core.integrations, packages/debate_core/tests, docs/guides, docs/data]
     forbidden:
       - A change that makes a valid schema-version-1 recipe invalid
       - Real camp file names, schools or team codes in fixtures
@@ -49,7 +52,7 @@ spec:
         provenance line below its cite and the occurrence in the sidecar, and reads back as
         its source, by test shown failing first.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

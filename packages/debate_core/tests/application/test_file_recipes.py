@@ -40,7 +40,7 @@ from debate_core.application.ports.suppression import (
     disclosure_digest,
 )
 from debate_core.domain.card_occurrence import ClusterMembership
-from debate_core.domain.caselist import Disclosure, Event, RoundLabel, Side
+from debate_core.domain.caselist import CampFile, Disclosure, Event, RoundLabel, Side
 from debate_core.domain.debate_files import CardCompleteness
 from debate_core.domain.file_recipe import FileRecipe
 from debate_core.evidence import fingerprints
@@ -178,7 +178,7 @@ structure:
   - {pocket: P, blocks: [{block: B, items: [
       {analytic: fine},
       {fingerprint: zz, tag_override: ""},
-      {fingerprint: a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0, pin: {caselist: openev,
+      {fingerprint: a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0, pin: {caselist: OpenEv,
                      source_sha256: 1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a,
                      element_index: true}},
       {analytic: fine, extra: 1}
@@ -397,6 +397,55 @@ def test_load_names_the_fields_a_pin_has() -> None:
     (error,) = file_recipes.load_recipe(recipe_text(card(CARD_A, pin=pin))).errors
     assert error.path == "structure[0].blocks[0].items[0].pin.team"
     assert "not a field of a pin; a pin has caselist, source_sha256, element_index" in error.message
+
+
+def test_load_takes_a_camp_pin_with_its_release_unquoted() -> None:
+    """`v1-e33-t06`: YAML reads `2031-policy` as text, and the pin keeps it as the release."""
+    text = recipe_text(
+        "- fingerprint: " + CARD_A,
+        "  pin: {caselist: openev, source_sha256: " + SOURCE_1 + ", element_index: 5, snapshot: 2031-policy}",
+    )
+    ((_, ref),) = load_ok(text).card_refs()
+    assert ref.pin is not None and (ref.pin.caselist, ref.pin.snapshot) == ("openev", "2031-policy")
+
+
+@pytest.mark.parametrize(
+    ("pin", "field", "says"),
+    [
+        ({"caselist": "openev", "source_sha256": SOURCE_1, "element_index": 5}, "snapshot", "release"),
+        (
+            {"caselist": "openev", "source_sha256": SOURCE_1, "element_index": 5, "snapshot": "2031-09-15"},
+            "snapshot",
+            "release",
+        ),
+        (
+            {"caselist": CASELIST, "source_sha256": SOURCE_1, "element_index": 5, "snapshot": "2031-policy"},
+            "snapshot",
+            "caselist: openev",
+        ),
+        (
+            {
+                "caselist": "openev",
+                "source_sha256": SOURCE_1,
+                "element_index": 5,
+                "snapshot": "2031-policy",
+                "team_code": "QX",
+            },
+            "team_code",
+            "no disclosure",
+        ),
+    ],
+    ids=["no-release", "a-date", "a-release-in-a-caselist-pin", "a-team"],
+)
+def test_load_says_what_a_camp_pin_needs_at_the_field_and_line(
+    pin: dict[str, object], field: str, says: str
+) -> None:
+    result = file_recipes.load_recipe(recipe_text(card(CARD_A, pin=pin)))
+    assert [(str(error.code), error.path, error.line) for error in result.errors] == [
+        ("INVALID", f"structure[0].blocks[0].items[0].pin.{field}", 14)
+    ]
+    assert says in result.errors[0].message
+    assert "QX" not in result.errors[0].message
 
 
 # ------------------------------------------------------------------------------------------------
@@ -1089,6 +1138,243 @@ def test_resolve_needs_no_model_and_no_network() -> None:
         assert forbidden not in source
 
 
+# -- camp (OpenEv) cards, `v1-e33-t06` -----------------------------------------------------------
+
+OPENEV = "openev"
+CAMP = "Lanternfield Institute"
+CAMP_HEADER = HEADER.replace("caselist: hsld26", "caselist: openev")
+
+
+def camp_occurrence(
+    fingerprint: str, source: str, element: int, *, release: str = "2031-policy", camp: str | None = CAMP
+) -> OccurrenceRecord:
+    """A camp file's card as the parse pipeline records it: one row per release, no disclosure."""
+    return OccurrenceRecord(
+        caselist=OPENEV,
+        snapshot=release,
+        last_snapshot=release,
+        source_sha256=source,
+        parser_version=PARSER,
+        profile_version=PROFILE,
+        fingerprint_version=fingerprints.FINGERPRINT_VERSION,
+        disclosure=None,
+        camp=camp,
+        first_element_index=element,
+        last_element_index=element + 2,
+        exact_fingerprint=fingerprint,
+        cluster_id=fingerprint,
+        membership=ClusterMembership.UNLINKED,
+        completeness=CardCompleteness.FULL,
+    )
+
+
+def camp_file(
+    source: str, *, year: int = 2031, event: Event = Event.POLICY, title: str = "Synthetic CP"
+) -> CampFile:
+    """What the OpenEv importer records for the release: invented camp, title and year."""
+    return CampFile(
+        source_sha256=source, camp=CAMP, year=year, event=event, file_title=title, snapshot=date(2026, 7, 30)
+    )
+
+
+def camp_world(
+    camp_rows: Sequence[OccurrenceRecord],
+    camp_files: Sequence[CampFile] = (),
+    suppressions: Sequence[SuppressionEntry] = (),
+    *,
+    caselist_rows: Sequence[OccurrenceRecord] = (),
+) -> World:
+    """The recipe's caselist store (`caselist_rows`) and the openev store (`camp_rows`)."""
+    built = world(caselist_rows, suppressions=suppressions)
+    asyncio.run(built.store.write_aggregates(OPENEV, PARSER, index=(), failures=(), occurrences=camp_rows))
+    for one in camp_files:
+        asyncio.run(built.caselists.record_camp_file(one))
+    return built
+
+
+CAMP_PIN: dict[str, object] = {
+    "caselist": OPENEV,
+    "source_sha256": SOURCE_1,
+    "element_index": 5,
+    "snapshot": "2031-policy",
+}
+
+
+def test_resolve_a_camp_pin_naming_its_release_resolves_to_that_camp_occurrence() -> None:
+    built = camp_world(
+        [camp_occurrence(CARD_A, SOURCE_1, 5)],
+        [camp_file(SOURCE_1)],
+        caselist_rows=[occurrence(CARD_B, SOURCE_2, 1)],
+    )
+    resolved = built.resolve(recipe_text(card(CARD_A, pin=CAMP_PIN), card(CARD_B)))
+    assert (chosen(resolved), resolved.errors) == ([(SOURCE_1, 5, "PINNED"), (SOURCE_2, 1, "AUTO")], ())
+    camp_card = resolved.cards[0]
+    assert (camp_card.occurrence.caselist, camp_card.occurrence.snapshot, camp_card.occurrence.camp) == (
+        OPENEV,
+        "2031-policy",
+        CAMP,
+    )
+    assert camp_card.disclosure is None
+    assert camp_card.camp_file == camp_file(SOURCE_1)
+    assert dict(resolved.versions) == {CASELIST: PARSER, OPENEV: PARSER}
+
+
+def test_resolve_a_camp_pin_takes_the_release_it_names_when_the_file_is_in_two() -> None:
+    rows = [
+        camp_occurrence(CARD_A, SOURCE_1, 5, release="2030-policy"),
+        camp_occurrence(CARD_A, SOURCE_1, 5, release="2031-policy"),
+    ]
+    files = [camp_file(SOURCE_1, year=2030, title="Earlier title"), camp_file(SOURCE_1, title="Later title")]
+    for release, title in (("2030-policy", "Earlier title"), ("2031-policy", "Later title")):
+        pin = {**CAMP_PIN, "snapshot": release}
+        resolved = camp_world(rows, files).resolve(recipe_text(card(CARD_A, pin=pin)))
+        (camp_card,) = resolved.cards
+        assert camp_card.occurrence.snapshot == release
+        assert camp_card.camp_file is not None and camp_card.camp_file.file_title == title
+
+
+@pytest.mark.parametrize(
+    "pin",
+    [
+        {**CAMP_PIN, "snapshot": "2030-policy"},
+        {**CAMP_PIN, "snapshot": "2031-ld"},
+        {**CAMP_PIN, "element_index": 6},
+        {**CAMP_PIN, "source_sha256": SOURCE_2},
+    ],
+    ids=["another-year", "another-event", "another-paragraph", "another-file"],
+)
+def test_resolve_a_camp_pin_that_matches_no_camp_occurrence_is_a_pin_mismatch(pin: dict[str, object]) -> None:
+    resolved = camp_world([camp_occurrence(CARD_A, SOURCE_1, 5)]).resolve(recipe_text(card(CARD_A, pin=pin)))
+    assert (chosen(resolved), codes(resolved)) == ([], [("PIN_MISMATCH", f"{ITEM}.pin")])
+
+
+def test_resolve_a_camp_pin_needs_the_openev_store() -> None:
+    resolved = world([occurrence(CARD_B, SOURCE_2, 1)]).resolve(recipe_text(card(CARD_A, pin=CAMP_PIN)))
+    assert codes(resolved) == [("PIN_MISMATCH", f"{ITEM}.pin")]
+    assert "openev" in resolved.errors[0].message
+
+
+def test_resolve_a_camp_pin_to_a_suppressed_camp_file_is_refused_not_repointed() -> None:
+    rows = [camp_occurrence(CARD_A, SOURCE_1, 5), camp_occurrence(CARD_A, SOURCE_2, 9)]
+    resolved = camp_world(rows, suppressions=[suppress(SOURCE_1)]).resolve(
+        recipe_text(card(CARD_A, pin=CAMP_PIN))
+    )
+    assert (chosen(resolved), codes(resolved)) == ([], [("SUPPRESSED_OCCURRENCE", f"{ITEM}.pin")])
+
+
+def test_resolve_a_camp_pin_is_not_stopped_by_a_teams_withdrawn_disclosure_of_the_same_bytes() -> None:
+    """A withdrawal of one team's disclosure stops that disclosure, not the camp's release of the file."""
+    withdrawn = path_of(SOURCE_1)
+    rows = [camp_occurrence(CARD_A, SOURCE_1, 5)]
+    resolved = camp_world(rows, suppressions=[suppress(SOURCE_1, path=withdrawn)]).resolve(
+        recipe_text(card(CARD_A, pin=CAMP_PIN))
+    )
+    assert (chosen(resolved), resolved.errors) == ([(SOURCE_1, 5, "PINNED")], ())
+
+
+def test_resolve_a_camp_occurrence_with_no_release_record_resolves_without_one() -> None:
+    other_release = camp_file(SOURCE_1, year=2030)
+    resolved = camp_world([camp_occurrence(CARD_A, SOURCE_1, 5)], [other_release]).resolve(
+        recipe_text(card(CARD_A, pin=CAMP_PIN))
+    )
+    (camp_card,) = resolved.cards
+    assert camp_card.camp_file is None
+
+
+def test_resolve_auto_in_a_camp_recipe_takes_the_latest_release() -> None:
+    rows = [
+        camp_occurrence(CARD_A, SOURCE_1, 5, release="2030-policy"),
+        camp_occurrence(CARD_A, SOURCE_3, 2, release="2031-policy"),
+        camp_occurrence(CARD_A, SOURCE_2, 9, release="2029-policy"),
+    ]
+    built = camp_world(rows, [camp_file(SOURCE_3)])
+    asyncio.run(built.store.write_aggregates(CASELIST, PARSER, index=(), failures=(), occurrences=()))
+    resolved = built.resolve(recipe_text(card(CARD_A), header=CAMP_HEADER))
+    assert (chosen(resolved), resolved.errors) == ([(SOURCE_3, 2, "AUTO")], ())
+    assert resolved.cards[0].camp_file == camp_file(SOURCE_3)
+
+
+def test_resolve_auto_breaks_a_tie_in_one_camp_year_by_the_release_then_the_lowest_source() -> None:
+    # The release that wins by name is in the file with the highest digest, so the two rules disagree.
+    rows = [
+        camp_occurrence(CARD_A, SOURCE_2, 7, release="2031-policy"),
+        camp_occurrence(CARD_A, SOURCE_1, 1, release="2031-policy"),
+        camp_occurrence(CARD_A, SOURCE_3, 4, release="2031-pf"),
+    ]
+    for order in (rows, rows[::-1]):
+        resolved = camp_world(order).resolve(recipe_text(card(CARD_A), header=CAMP_HEADER))
+        assert chosen(resolved) == [(SOURCE_3, 4, "AUTO")], "2031-pf before 2031-policy, by name"
+    resolved = camp_world(rows[:2]).resolve(recipe_text(card(CARD_A), header=CAMP_HEADER))
+    assert chosen(resolved) == [(SOURCE_1, 1, "AUTO")]
+
+
+def test_resolve_auto_takes_a_camp_release_whose_bytes_a_team_withdrew_from_its_own_disclosure() -> None:
+    """The question the parse pipeline asks of a camp file: only its source, suppressed as a whole."""
+    rows = [
+        camp_occurrence(CARD_A, SOURCE_1, 5, release="2031-policy"),
+        camp_occurrence(CARD_A, SOURCE_2, 9, release="2030-policy"),
+    ]
+    withdrawn = suppress(SOURCE_1, path=path_of(SOURCE_1))
+    resolved = camp_world(rows, suppressions=[withdrawn]).resolve(
+        recipe_text(card(CARD_A), header=CAMP_HEADER)
+    )
+    assert (chosen(resolved), resolved.errors) == ([(SOURCE_1, 5, "AUTO")], ())
+
+
+def test_resolve_a_camp_pin_to_a_removed_camp_file_the_store_no_longer_holds_is_refused_as_suppressed() -> (
+    None
+):
+    """After `caselist parse --caselist openev` rebuilds the store, the removed file has no row left."""
+    rows = [camp_occurrence(CARD_A, SOURCE_2, 9)]
+    resolved = camp_world(rows, suppressions=[suppress(SOURCE_1)]).resolve(
+        recipe_text(card(CARD_A, pin=CAMP_PIN))
+    )
+    assert (chosen(resolved), codes(resolved)) == ([], [("SUPPRESSED_OCCURRENCE", f"{ITEM}.pin")])
+
+
+def test_resolve_auto_never_picks_a_suppressed_camp_occurrence() -> None:
+    rows = [
+        camp_occurrence(CARD_A, SOURCE_1, 5, release="2031-policy"),
+        camp_occurrence(CARD_A, SOURCE_2, 9, release="2030-policy"),
+    ]
+    skipped = camp_world(rows, suppressions=[suppress(SOURCE_1)]).resolve(
+        recipe_text(card(CARD_A), header=CAMP_HEADER)
+    )
+    assert (chosen(skipped), skipped.errors) == ([(SOURCE_2, 9, "AUTO")], ())
+
+    stopped = camp_world(rows, suppressions=[suppress(SOURCE_1), suppress(SOURCE_2)]).resolve(
+        recipe_text(card(CARD_A), header=CAMP_HEADER)
+    )
+    assert (chosen(stopped), codes(stopped)) == ([], [("SUPPRESSED_OCCURRENCE", f"{ITEM}.fingerprint")])
+
+
+def test_resolve_auto_in_a_caselist_recipe_never_reaches_a_camp_occurrence() -> None:
+    """AUTO reads only the recipe's own store: a camp card enters a caselist recipe by a pin."""
+    built = camp_world(
+        [camp_occurrence(CARD_A, SOURCE_1, 5)], caselist_rows=[occurrence(CARD_B, SOURCE_2, 1)]
+    )
+    resolved = built.resolve(recipe_text(card(CARD_A)))
+    assert codes(resolved) == [("UNKNOWN_CARD", f"{ITEM}.fingerprint")]
+
+
+def test_resolve_a_caselist_pin_in_a_camp_recipe_reads_the_caselist_it_names() -> None:
+    built = camp_world(
+        [camp_occurrence(CARD_B, SOURCE_2, 1)], caselist_rows=[occurrence(CARD_A, SOURCE_1, 5)]
+    )
+    pin = {"caselist": CASELIST, "source_sha256": SOURCE_1, "element_index": 5}
+    resolved = built.resolve(recipe_text(card(CARD_A, pin=pin), card(CARD_B), header=CAMP_HEADER))
+    assert (chosen(resolved), resolved.errors) == ([(SOURCE_1, 5, "PINNED"), (SOURCE_2, 1, "AUTO")], ())
+
+
+def test_resolve_camp_messages_name_no_camp_or_file_title() -> None:
+    rows = [camp_occurrence(CARD_A, SOURCE_1, 5)]
+    text = recipe_text(card(CARD_A, pin=CAMP_PIN), card(CARD_B, pin={**CAMP_PIN, "element_index": 7}))
+    resolved = camp_world(rows, [camp_file(SOURCE_1)], [suppress(SOURCE_1)]).resolve(text)
+    assert len(resolved.errors) == 2
+    for error in resolved.errors:
+        assert not re.search(r"Lanternfield|Synthetic CP", error.message), error.message
+
+
 def _entry(source: str) -> Any:
     from debate_core.application.ports.parsed_store import SourceEntry, SourceOutcome
     from debate_core.domain.caselist import SourceFormat
@@ -1141,6 +1427,17 @@ def test_examples_validate_against_the_published_schema(name: str) -> None:
     jsonschema.validate(json.loads(json.dumps(data, default=str)), schema)
 
 
+def test_a_camp_pin_and_a_camp_recipe_validate_against_the_published_schema() -> None:
+    """`v1-e33-t06`: the schema says what the models take; the cross-field rules stay the loader's."""
+    schema = json.loads(SCHEMA.read_text(encoding="utf-8"))
+    text = recipe_text(card(CARD_A, pin=CAMP_PIN), card(CARD_B), header=CAMP_HEADER)
+    data = yaml.safe_load(text)
+    jsonschema.validate(json.loads(json.dumps(data, default=str)), schema)
+    data["structure"][0]["blocks"][0]["items"][0]["pin"]["caselist"] = "OpenEv"
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(json.loads(json.dumps(data, default=str)), schema)
+
+
 @pytest.mark.parametrize("name", EXAMPLE_NAMES)
 def test_examples_use_only_synthetic_schools_and_team_codes(name: str) -> None:
     recipe = load_ok((EXAMPLES / name).read_text(encoding="utf-8"))
@@ -1166,7 +1463,7 @@ def test_examples_resolve_against_a_synthetic_store(name: str) -> None:
             continue
         school, team = pin.school or "Maple Grove", pin.team_code or "QX"
         round_raw = pin.round or "Round 1"
-        day = (pin.snapshot or date(2026, 9, 8)).isoformat()
+        day = pin.snapshot.isoformat() if isinstance(pin.snapshot, date) else "2026-09-08"
         path = path_of(pin.source_sha256, team, round_raw, school)
         rows.append(
             occurrence(
@@ -1225,3 +1522,14 @@ def _side(one: Disclosure, recipe: FileRecipe) -> Side:
 def test_examples_are_each_walked_through_in_the_guide(name: str) -> None:
     guide = GUIDE.read_text(encoding="utf-8")
     assert (EXAMPLES / name).read_text(encoding="utf-8") in guide
+
+
+def test_the_guide_shows_a_camp_pin_the_models_take() -> None:
+    """`v1-e33-t06` ac1: the guide's camp pin is a card item a recipe loads, with its release."""
+    guide = GUIDE.read_text(encoding="utf-8")
+    blocks = re.findall(r"```yaml\n(.*?)```", guide, flags=re.DOTALL)
+    (camp,) = [block for block in blocks if "caselist: openev" in block]
+    item = yaml.safe_load(camp)[0]
+    ((_, ref),) = load_ok(recipe_text("- " + json.dumps(item))).card_refs()
+    assert ref.pin is not None and (ref.pin.caselist, ref.pin.snapshot) == ("openev", "2031-policy")
+    assert "[OpenEv: Cascade Institute 2026 — Policy, Climate Adv CP]" in guide

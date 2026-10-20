@@ -33,7 +33,15 @@ from debate_core.application.ports.evidence_file_writer import (
     UnsupportedContentKind,
 )
 from debate_core.application.ports.parsed_store import OccurrenceRecord
-from debate_core.domain.caselist import Disclosure, Side, SourceDocument, SourceFormat, SourceOrigin
+from debate_core.domain.caselist import (
+    CampFile,
+    Disclosure,
+    Event,
+    Side,
+    SourceDocument,
+    SourceFormat,
+    SourceOrigin,
+)
 from debate_core.domain.debate_files import ParsedDocument, ParseFailure
 from debate_core.domain.enums import ProvenanceMode, VerificationStatus
 from debate_core.domain.file_provenance import (
@@ -60,6 +68,7 @@ from debate_core.testing.docx_builder import (
     paragraph_xml,
     run_xml,
 )
+from debate_core.testing.fakes import InMemorySnapshotStore
 from debate_core.testing.file_builder import FileBuilderWorld, SourceCard, SyntheticDisclosure
 
 W = f"{{{W_NAMESPACE}}}"
@@ -332,12 +341,14 @@ def test_assembly_takes_no_card_text_through_its_api() -> None:
         "parser",
         "base",
         "limits",
+        "source_stores",
     ]
     reachable = (
         {field.name for field in dataclasses.fields(ResolvedRecipe)}
         | {field.name for field in dataclasses.fields(ResolvedCard)}
         | set(OccurrenceRecord.model_fields)
         | set(Disclosure.model_fields)
+        | set(CampFile.model_fields)
     )
     for name in reachable:
         assert not any(word in name for word in ("evidence", "cite", "run", "body", "text")), name
@@ -866,24 +877,278 @@ def test_refusal_a_built_file_that_reads_as_more_cards_than_were_written(built_a
     assert built.result.refusals[0].detail.startswith("the built file reads as 2 cards, not 1")
 
 
-def test_refusal_a_camp_card_cannot_be_built_from_a_schema_version_1_recipe(
-    parser: DebateDocxParser, built_at: datetime
-) -> None:
-    world, cards = _sources(parser, (SOURCE_ONE, SyntheticDisclosure()))
-    camp = cards[0].occurrence.model_copy(
-        update={
+# ------------------------------------------------------------------------------------------------
+# Camp (OpenEv) cards (`v1-e33-t06` ac2)
+# ------------------------------------------------------------------------------------------------
+
+#: An invented camp, release and file title: never a real OpenEv file (PM notes, 2026-10-19).
+CAMP = "Lanternfield Institute"
+CAMP_TITLE = "Synthetic Grid Reliability CP"
+RELEASE = "2031-policy"
+CAMP_LINE = f"[OpenEv: {CAMP} 2031 — Policy, {CAMP_TITLE}]"
+
+CAMP_SOURCE = build_docx(
+    tag("Grid upgrades cost less than new plants")
+    + cite("Vasquez-Hale 31", ", Engineer, Synthetic Transmission Journal, 2031")
+    + body("Reconductoring ", "doubles capacity", " on existing corridors.")
+)
+
+
+def _as_camp_card(source: SourceCard, *, release: str = RELEASE, camp: str | None = CAMP) -> SourceCard:
+    """The same card as the parse pipeline records it in a camp release: no disclosure, one release."""
+    occurrence = OccurrenceRecord.model_validate(
+        {
+            **source.occurrence.model_dump(),
             "caselist": "openev",
-            "camp": "Cascade Institute",
-            "snapshot": "2026-cascade",
-            "last_snapshot": "2026-cascade",
+            "snapshot": release,
+            "last_snapshot": release,
+            "disclosure": None,
+            "camp": camp,
         }
     )
-    moved = dataclasses.replace(cards[0], occurrence=camp, disclosure=None)
-    built = _build(world, [moved], [("Prices", [{"fingerprint": moved.fingerprint}])], built_at)
-    assert isinstance(built.result, FileBuildRefusal)
-    assert [(refusal.code, refusal.detail) for refusal in built.result.refusals] == [
+    return dataclasses.replace(source, occurrence=occurrence, disclosure=None)
+
+
+def _camp_file(
+    sha: str, *, year: int = 2031, event: Event = Event.POLICY, title: str = CAMP_TITLE
+) -> CampFile:
+    return CampFile(
+        source_sha256=sha, camp=CAMP, year=year, event=event, file_title=title, snapshot=date(2026, 7, 30)
+    )
+
+
+@dataclasses.dataclass
+class CampBuild:
+    disclosed: SourceCard
+    camp: SourceCard
+    resolved: ResolvedRecipe
+    result: BuiltEvidenceFile | FileBuildRefusal
+
+    @property
+    def file(self) -> BuiltEvidenceFile:
+        assert isinstance(self.result, BuiltEvidenceFile), self.result
+        return self.result
+
+
+def _with_camp_files(resolved: ResolvedRecipe, camp_files: dict[str, CampFile | None]) -> ResolvedRecipe:
+    """Each camp card's release record, as the resolver joins it from the caselist records."""
+    cards = tuple(
+        dataclasses.replace(card, camp_file=camp_files.get(card.fingerprint)) for card in resolved.cards
+    )
+    versions = {card.occurrence.caselist: card.occurrence.parser_version for card in resolved.cards}
+    return dataclasses.replace(resolved, cards=cards, versions=versions)
+
+
+def _camp_build(
+    parser: DebateDocxParser,
+    built_at: datetime,
+    *,
+    camp_file: bool = True,
+    camp_only: bool = False,
+    writer: DocxEvidenceFileWriter | None = None,
+) -> CampBuild:
+    """A disclosed card, then a camp card pinned by its release, in one block; or the camp card alone."""
+    world, cards = _sources(parser, (SOURCE_ONE, SyntheticDisclosure()), (CAMP_SOURCE, None))
+    disclosed, camp = cards[0], _as_camp_card(cards[2])
+    items = (
+        [{"fingerprint": camp.fingerprint}]
+        if camp_only
+        else [
+            {"fingerprint": disclosed.fingerprint},
+            {"fingerprint": camp.fingerprint},
+        ]
+    )
+    recipe = world.recipe([("Reliability", items)])
+    if camp_only:
+        recipe = recipe.evolve(caselist="openev")
+    resolved = world.resolve(
+        recipe, {disclosed.fingerprint: disclosed, camp.fingerprint: camp}, pinned=[camp.fingerprint]
+    )
+    record = _camp_file(camp.occurrence.source_sha256) if camp_file else None
+    resolved = _with_camp_files(resolved, {camp.fingerprint: record})
+    writer = writer or DocxEvidenceFileWriter(snapshots=world.snapshots, parser=parser)
+    result = asyncio.run(writer.build(FileBuildRequest(resolved, built_at)))
+    return CampBuild(disclosed, camp, resolved, result)
+
+
+def test_camp_a_recipe_pinning_a_camp_card_builds_with_the_openev_line_below_its_cite(
+    parser: DebateDocxParser, built_at: datetime
+) -> None:
+    maple = "[Disclosed: hspolicy26 2026-09-15 — Maple Grove QX, Aff vs. Riverbend Invitational Round 4]"
+    built = _camp_build(parser, built_at)
+    assert _paragraphs(built.file.docx) == [
         (
-            CardRefusalCode.SOURCE_UNREADABLE,
-            "a camp (OpenEv) card cannot be referenced by a schema version 1 recipe",
-        )
+            "Analytic",
+            "Disclosed and camp cards (FILE_IMPORT) from hspolicy26 and OpenEv, each copied from its "
+            "source file and not verified by this platform. Where each card came from is below its cite.",
+        ),
+        ("Heading1", "Synthetic pocket"),
+        ("Heading2", "Synthetic hat"),
+        ("Heading3", "Reliability"),
+        ("Heading4", "Moratoria raise prices for every ratepayer"),
+        (None, "Lindqvist 26, Senior Fellow, Synthetic Energy Review, 2026"),
+        ("Undertag", maple),
+        (None, "A moratorium freezes supply while demand rises."),
+        ("Heading4", "Grid upgrades cost less than new plants"),
+        (None, "Vasquez-Hale 31, Engineer, Synthetic Transmission Journal, 2031"),
+        ("Undertag", CAMP_LINE),
+        (None, "Reconductoring doubles capacity on existing corridors."),
+    ]
+
+
+def test_camp_the_card_reads_back_as_its_source_with_the_line_as_undertag_in_neither_cite_nor_evidence(
+    parser: DebateDocxParser, built_at: datetime
+) -> None:
+    built = _camp_build(parser, built_at)
+    read = _reparse(parser, built.file.docx).cards
+    assert len(read) == 2
+    camp, source = read[1], built.camp.card
+    assert camp.full_cite == source.full_cite
+    assert camp.evidence_text == source.evidence_text
+    assert formatting_sha256(camp.formatting_spans, camp.font_size_spans) == formatting_sha256(
+        source.formatting_spans, source.font_size_spans
+    )
+    assert camp.tag == source.tag
+    assert CAMP_LINE in camp.undertag.split("\n")
+    for text in (camp.full_cite, camp.evidence_text):
+        assert "OpenEv" not in text and CAMP not in text and CAMP_TITLE not in text
+
+
+def test_camp_the_sidecar_records_the_camp_occurrence(parser: DebateDocxParser, built_at: datetime) -> None:
+    built = _camp_build(parser, built_at)
+    disclosed, camp = built.file.manifest.cards
+    occurrence = built.camp.occurrence
+    assert (camp.caselist, camp.camp, camp.snapshot, camp.last_snapshot, camp.resolution) == (
+        "openev",
+        CAMP,
+        RELEASE,
+        RELEASE,
+        "PINNED",
+    )
+    assert (camp.camp_year, camp.camp_event, camp.camp_file_title) == (2031, Event.POLICY, CAMP_TITLE)
+    assert (camp.source_sha256, camp.first_element_index, camp.last_element_index) == (
+        occurrence.source_sha256,
+        occurrence.first_element_index,
+        occurrence.last_element_index,
+    )
+    assert (camp.disclosure_digest, camp.school, camp.team_code, camp.side, camp.tournament, camp.round) == (
+        None,
+    ) * 6
+    assert camp.provenance_line == CAMP_LINE
+    assert camp.evidence_sha256 == text_sha256(built.camp.card.evidence_text)
+    assert camp.cite_sha256 == text_sha256(built.camp.card.full_cite)
+    assert camp.provenance_mode is ProvenanceMode.FILE_IMPORT
+    assert camp.verification_status is VerificationStatus.UNVERIFIED
+    assert (disclosed.camp, disclosed.camp_year, disclosed.camp_event, disclosed.camp_file_title) == (
+        None,
+    ) * 4
+    jsonschema.validate(
+        json.loads(built.file.manifest_json), json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
+    )
+
+
+def test_camp_a_sidecar_written_before_camp_cards_still_validates(standard: Built) -> None:
+    document = json.loads(standard.file.manifest_json)
+    for entry in document["cards"]:
+        for key in ("camp_year", "camp_event", "camp_file_title"):
+            entry.pop(key, None)
+    jsonschema.validate(document, json.loads(SCHEMA_PATH.read_text(encoding="utf-8")))
+    FileProvenanceManifest.model_validate(document)
+
+
+@pytest.mark.parametrize(
+    ("release", "record", "line"),
+    [
+        (RELEASE, _camp_file("0" * 64), CAMP_LINE),
+        ("2031-ld", _camp_file("0" * 64, event=Event.LD), f"[OpenEv: {CAMP} 2031 — LD, {CAMP_TITLE}]"),
+        (
+            "2030-pf",
+            _camp_file("0" * 64, year=2030, event=Event.PF),
+            f"[OpenEv: {CAMP} 2030 — PF, {CAMP_TITLE}]",
+        ),
+        (RELEASE, None, f"[OpenEv: {CAMP} 2031 — Policy]"),
+    ],
+    ids=["policy", "ld", "pf", "no-release-record"],
+)
+def test_camp_the_line_is_composed_from_the_records_alone(
+    parser: DebateDocxParser, release: str, record: CampFile | None, line: str
+) -> None:
+    _, cards = _sources(parser, (CAMP_SOURCE, None))
+    camp = _as_camp_card(cards[0], release=release)
+    assert provenance_line(camp.occurrence, None, camp_file=record) == line
+
+
+def test_camp_the_line_takes_the_camp_from_the_occurrence(parser: DebateDocxParser) -> None:
+    _, cards = _sources(parser, (CAMP_SOURCE, None))
+    camp = _as_camp_card(cards[0], camp="Brackenridge Debate Workshop")
+    assert provenance_line(camp.occurrence, None, camp_file=_camp_file("0" * 64)) == (
+        f"[OpenEv: Brackenridge Debate Workshop 2031 — Policy, {CAMP_TITLE}]"
+    )
+
+
+def test_camp_a_card_with_no_release_record_builds_with_the_line_without_a_title(
+    parser: DebateDocxParser, built_at: datetime
+) -> None:
+    built = _camp_build(parser, built_at, camp_file=False)
+    assert [text for style, text in _paragraphs(built.file.docx) if style == "Undertag"][1] == (
+        f"[OpenEv: {CAMP} 2031 — Policy]"
+    )
+    camp = built.file.manifest.cards[1]
+    assert (camp.camp_year, camp.camp_event, camp.camp_file_title) == (2031, Event.POLICY, None)
+
+
+def test_camp_a_file_of_camp_cards_alone_says_so_in_its_header(
+    parser: DebateDocxParser, built_at: datetime
+) -> None:
+    built = _camp_build(parser, built_at, camp_only=True)
+    assert _paragraphs(built.file.docx)[0] == (
+        "Analytic",
+        "Camp cards (FILE_IMPORT) from OpenEv, each copied from its source file and not verified by this "
+        "platform. Where each card came from is below its cite.",
+    )
+    assert built.file.manifest.caselist == "openev"
+    assert [entry.provenance_line for entry in built.file.manifest.cards] == [CAMP_LINE]
+
+
+def test_camp_the_same_request_builds_the_same_bytes(parser: DebateDocxParser, built_at: datetime) -> None:
+    first, second = _camp_build(parser, built_at), _camp_build(parser, built_at)
+    assert (first.file.docx, first.file.manifest_json) == (second.file.docx, second.file.manifest_json)
+
+
+class _StoresByPrefix:
+    """One blob store per source prefix of the evidence layout, as a bucket holds them."""
+
+    def __init__(self) -> None:
+        self.stores: dict[str, InMemorySnapshotStore] = {}
+        self.asked: list[str] = []
+
+    def __call__(self, prefix: str) -> InMemorySnapshotStore:
+        self.asked.append(prefix)
+        return self.stores.setdefault(prefix, InMemorySnapshotStore())
+
+
+def test_camp_the_source_is_read_from_raw_openev_by_its_release_year(
+    parser: DebateDocxParser, built_at: datetime
+) -> None:
+    stores = _StoresByPrefix()
+    asyncio.run(stores("raw/caselist/hspolicy26").put(SOURCE_ONE))
+    asyncio.run(stores("raw/openev/2031").put(CAMP_SOURCE))
+    stores.asked.clear()
+    writer = DocxEvidenceFileWriter(snapshots=InMemorySnapshotStore(), parser=parser, source_stores=stores)
+    built = _camp_build(parser, built_at, writer=writer)
+    assert isinstance(built.result, BuiltEvidenceFile), built.result
+    assert sorted(set(stores.asked)) == ["raw/caselist/hspolicy26", "raw/openev/2031"]
+
+
+def test_camp_a_camp_source_missing_from_its_years_store_is_unavailable(
+    parser: DebateDocxParser, built_at: datetime
+) -> None:
+    stores = _StoresByPrefix()
+    asyncio.run(stores("raw/caselist/hspolicy26").put(SOURCE_ONE))
+    asyncio.run(stores("raw/openev/2030").put(CAMP_SOURCE))
+    writer = DocxEvidenceFileWriter(snapshots=InMemorySnapshotStore(), parser=parser, source_stores=stores)
+    built = _camp_build(parser, built_at, writer=writer)
+    assert isinstance(built.result, FileBuildRefusal)
+    assert [(refusal.path, refusal.code) for refusal in built.result.refusals] == [
+        ("structure[0].hats[0].blocks[0].items[1]", CardRefusalCode.SOURCE_UNAVAILABLE)
     ]

@@ -142,3 +142,87 @@ def test_the_formatting_digest_tells_apart_what_a_reader_would_see_differently()
 
 def test_text_digests_are_sha256_of_utf8() -> None:
     assert text_sha256("") == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+
+
+# -- camp (OpenEv) cards, `v1-e33-t06` -----------------------------------------------------------
+
+CAMP_LINE = "[OpenEv: Lanternfield Institute 2031 — Policy, Synthetic Grid Reliability CP]"
+
+
+def camp_entry(**changes: Any) -> dict[str, Any]:
+    """A camp card's entry: the camp, its release and file title, and no disclosure."""
+    values = entry(
+        caselist="openev",
+        camp="Lanternfield Institute",
+        snapshot="2031-policy",
+        last_snapshot="2031-policy",
+        disclosure_digest=None,
+        school=None,
+        team_code=None,
+        camp_year=2031,
+        camp_event="POLICY",
+        camp_file_title="Synthetic Grid Reliability CP",
+        provenance_line=CAMP_LINE,
+    )
+    values.update(changes)
+    return values
+
+
+def test_a_camp_entry_names_its_camp_year_event_and_file_title() -> None:
+    parsed = FileProvenanceEntry.model_validate(camp_entry())
+    assert (parsed.camp, parsed.camp_year, parsed.camp_event, parsed.camp_file_title) == (
+        "Lanternfield Institute",
+        2031,
+        "POLICY",
+        "Synthetic Grid Reliability CP",
+    )
+    FileProvenanceManifest.model_validate(manifest([entry(), camp_entry(position=2)]))
+
+
+def test_a_camp_entry_without_a_release_record_names_no_file_title() -> None:
+    FileProvenanceEntry.model_validate(camp_entry(camp_file_title=None))
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"camp": "Lanternfield Institute"},
+        {"camp_year": 2031},
+        {"camp_event": "POLICY"},
+        {"camp_file_title": "Synthetic Grid Reliability CP"},
+    ],
+    ids=["camp", "year", "event", "file-title"],
+)
+def test_a_caselist_entry_names_no_camp(changes: dict[str, Any]) -> None:
+    with pytest.raises(ValidationError, match="only a camp card"):
+        FileProvenanceEntry.model_validate(entry(**changes))
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"disclosure_digest": DIGEST},
+        {"school": "Maple Grove"},
+        {"school": "Maple Grove", "team_code": "QX"},
+        {"side": "AFF"},
+        {"tournament": "Invented Invitational"},
+        {"round": "Round 4"},
+    ],
+    ids=["digest", "school", "team", "side", "tournament", "round"],
+)
+def test_a_camp_entry_names_no_disclosure_because_a_camp_file_has_none(changes: dict[str, Any]) -> None:
+    with pytest.raises(ValidationError, match="a camp file has no disclosure"):
+        FileProvenanceEntry.model_validate(camp_entry(**changes))
+
+
+def test_a_sidecar_written_before_camp_cards_still_validates() -> None:
+    """Every key `v1-e33-t02` wrote, and none of the camp keys this task added."""
+    written_before = manifest([entry()])
+    for key in ("camp_year", "camp_event", "camp_file_title"):
+        assert key not in written_before["cards"][0]
+    parsed = FileProvenanceManifest.model_validate(written_before)
+    assert (parsed.cards[0].camp_year, parsed.cards[0].camp_event, parsed.cards[0].camp_file_title) == (
+        None,
+        None,
+        None,
+    )

@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import copy
 from collections.abc import Callable
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 import pytest
@@ -370,9 +370,14 @@ def test_topic_and_position_are_kebab_case_ids(field_name: str, value: str) -> N
     assert error_locations(recipe_data(**{field_name: value})) == [(field_name,)]
 
 
-@pytest.mark.parametrize("caselist", ["openev", "HSLD26", "hsld2026", "hsld"])
-def test_the_caselist_is_a_caselist_slug(caselist: str) -> None:
+@pytest.mark.parametrize("caselist", ["HSLD26", "hsld2026", "hsld", "OpenEv", "open-ev"])
+def test_the_caselist_is_a_caselist_slug_or_openev(caselist: str) -> None:
     assert error_locations(recipe_data(caselist=caselist)) == [("caselist",)]
+
+
+def test_a_recipe_of_camp_cards_names_openev_as_its_caselist() -> None:
+    """`v1-e33-t06`: AUTO then chooses among camp occurrences, as it does in a caselist's store."""
+    assert FileRecipe.model_validate(recipe_data(caselist="openev")).caselist == "openev"
 
 
 @pytest.mark.parametrize("title", ["", "   "])
@@ -388,7 +393,7 @@ def test_a_title_is_required_text(title: str) -> None:
         ("element_index", "12"),
         ("element_index", 1.5),
         ("source_sha256", "C2" * 32),
-        ("caselist", "openev"),
+        ("caselist", "OpenEv"),
         ("team_code", "Jane Rivera"),
         ("school", ""),
         ("snapshot", "last week"),
@@ -422,8 +427,102 @@ def test_a_pin_takes_every_disclosure_field_it_can_be_narrowed_by() -> None:
     )
     pin = next(ref for _, ref in FileRecipe.model_validate(data).card_refs()).pin
     assert pin is not None
-    assert pin.snapshot is not None and pin.snapshot.isoformat() == "2026-09-15"
+    assert pin.snapshot == date(2026, 9, 15), "a caselist pin's snapshot is still read as a date"
     assert (pin.side, pin.tournament, pin.round) == ("NEG", "Invented Invitational", "Round 4")
+
+
+# -- camp (OpenEv) pins, `v1-e33-t06` ------------------------------------------------------------
+
+
+def camp_pin_data(**fields: object) -> dict[str, Any]:
+    """A recipe whose second item is pinned to a camp file: `fields` replace the whole pin."""
+    data = recipe_data()
+    data["structure"][0]["hats"][0]["blocks"][0]["items"][1]["pin"] = fields
+    return data
+
+
+CAMP_PIN: dict[str, object] = {
+    "caselist": "openev",
+    "source_sha256": SOURCE,
+    "element_index": 4,
+    "snapshot": "2031-policy",
+}
+PIN_AT = (*BLOCK, "items", 1, "card", "pin")
+
+
+@pytest.mark.parametrize("release", ["2031-policy", "2031-ld", "2031-pf"])
+def test_a_camp_pin_names_openev_and_its_release(release: str) -> None:
+    data = camp_pin_data(**{**CAMP_PIN, "snapshot": release})
+    pin = next(ref for _, ref in FileRecipe.model_validate(data).card_refs()).pin
+    assert pin == OccurrencePin(caselist="openev", source_sha256=SOURCE, element_index=4, snapshot=release)
+    assert pin is not None and pin.snapshot == release
+
+
+def test_a_camp_pin_needs_the_release_it_names() -> None:
+    """One camp file is one occurrence per release, so a pin without one could name two."""
+    pin = {key: value for key, value in CAMP_PIN.items() if key != "snapshot"}
+    assert error_locations(camp_pin_data(**pin)) == [(*PIN_AT, "snapshot")]
+
+
+@pytest.mark.parametrize(
+    "snapshot",
+    ["2031-09-15", "2031-ndi", "31-policy", "2031-Policy", "2031-policy-ddi", "2031"],
+)
+def test_a_camp_pins_release_is_a_year_and_an_event_the_platform_debates(snapshot: str) -> None:
+    assert error_locations(camp_pin_data(**{**CAMP_PIN, "snapshot": snapshot})) == [(*PIN_AT, "snapshot")]
+
+
+def test_a_camp_pins_release_may_not_be_a_date_written_as_one() -> None:
+    assert error_locations(camp_pin_data(**{**CAMP_PIN, "snapshot": date(2031, 9, 15)})) == [
+        (*PIN_AT, "snapshot")
+    ]
+
+
+def test_a_caselist_pins_snapshot_is_a_date_not_a_release() -> None:
+    pin = {**CAMP_PIN, "caselist": "hsld26"}
+    assert error_locations(camp_pin_data(**pin)) == [(*PIN_AT, "snapshot")]
+
+
+@pytest.mark.parametrize(
+    ("field_name", "value"),
+    [
+        ("school", "Maple Grove"),
+        ("team_code", "QX"),
+        ("side", "NEG"),
+        ("tournament", "Invented Invitational"),
+        ("round", "Round 4"),
+    ],
+)
+def test_a_camp_pin_names_no_disclosure_because_a_camp_file_has_none(field_name: str, value: str) -> None:
+    assert error_locations(camp_pin_data(**{**CAMP_PIN, field_name: value})) == [(*PIN_AT, field_name)]
+
+
+def test_a_camp_pin_with_several_problems_reports_each() -> None:
+    pin = {"caselist": "openev", "source_sha256": SOURCE, "element_index": 4, "team_code": "QX"}
+    assert sorted(error_locations(camp_pin_data(**pin))) == sorted(
+        [(*PIN_AT, "snapshot"), (*PIN_AT, "team_code")]
+    )
+
+
+def test_a_camp_pin_beside_a_caselist_pin_in_one_recipe() -> None:
+    data = camp_pin_data(**CAMP_PIN)
+    block = data["structure"][0]["hats"][0]["blocks"][0]
+    block["items"].append(
+        {
+            "fingerprint": FINGERPRINT_A[:-2] + "ff",
+            "pin": {
+                "caselist": "hsld26",
+                "source_sha256": SOURCE,
+                "element_index": 9,
+                "snapshot": "2026-09-15",
+            },
+        }
+    )
+    pins = [ref.pin for _, ref in FileRecipe.model_validate(data).card_refs() if ref.pin is not None]
+    assert [(pin.caselist, str(pin.snapshot)) for pin in pins] == [
+        ("openev", "2031-policy"),
+        ("hsld26", "2026-09-15"),
+    ]
 
 
 def test_a_pin_keeps_who_disclosed_the_card_out_of_its_repr() -> None:

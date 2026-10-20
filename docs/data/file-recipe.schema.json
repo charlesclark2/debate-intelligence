@@ -137,11 +137,11 @@
     },
     "OccurrencePin": {
       "additionalProperties": false,
-      "description": "The one occurrence a card reference must come from, checked against the occurrence store.\n\nThe store's own key for a card is its source's SHA-256 and the index of its first paragraph;\nthose and the caselist whose store holds it are required. The same bytes disclosed by two teams\nare two occurrences there, so the rest narrow a pin to one disclosure: the snapshot it was seen\nin and who disclosed it, exactly as disclosed. A pin is never moved to another occurrence: one\nthat matches none, or more than one, is an error (`v1-e33-t01` ac4).",
+      "description": "The one occurrence a card reference must come from, checked against the occurrence store.\n\nThe store's own key for a card is its source's SHA-256 and the index of its first paragraph;\nthose and the caselist whose store holds it are required. The same bytes disclosed by two teams\nare two occurrences there, so the rest narrow a pin to one disclosure: the snapshot it was seen\nin and who disclosed it, exactly as disclosed. A pin is never moved to another occurrence: one\nthat matches none, or more than one, is an error (`v1-e33-t01` ac4).\n\nA camp pin (`caselist: openev`, `v1-e33-t06`) names the release instead, as its `snapshot`, and\nnothing else: a camp file is one occurrence per release and has no disclosure.",
       "properties": {
         "caselist": {
-          "description": "The caselist whose occurrence store holds the card.",
-          "pattern": "^[a-z]+[0-9]{2}$",
+          "description": "The caselist whose occurrence store holds the card, or `openev` for a camp file.",
+          "pattern": "^(?:[a-z]+[0-9]{2}|openev)$",
           "title": "Caselist",
           "type": "string"
         },
@@ -166,11 +166,15 @@
               "type": "string"
             },
             {
+              "pattern": "^[0-9]{4}-(?:ld|pf|policy)$",
+              "type": "string"
+            },
+            {
               "type": "null"
             }
           ],
           "default": null,
-          "description": "A snapshot the disclosure was seen in: between its first and latest.",
+          "description": "For a caselist, a snapshot the disclosure was seen in, between its first and latest; for `openev`, the camp release, `<year>-<event>` such as 2031-policy, which a camp pin requires.",
           "title": "Snapshot"
         },
         "school": {
@@ -353,8 +357,8 @@
       "description": "POLICY, LD or PF."
     },
     "caselist": {
-      "description": "The caselist whose occurrence store unpinned cards come from.",
-      "pattern": "^[a-z]+[0-9]{2}$",
+      "description": "The caselist whose occurrence store unpinned cards come from, or `openev` for a file of camp cards.",
+      "pattern": "^(?:[a-z]+[0-9]{2}|openev)$",
       "title": "Caselist",
       "type": "string"
     },

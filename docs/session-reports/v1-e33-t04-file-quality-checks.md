@@ -116,6 +116,12 @@ The outline-level test was retargeted from a block to a tag, because an outline-
 styled file is read as OTHER and is not a heading. It is the same kind of assertion as its red
 version.
 
+**One commit went in on a red test.** `52ebdc1` added an assertion that a flipped character fails
+only the identity and sidecar checks, and my command did not gate the commit on pytest. The
+assertion was wrong: the fingerprint changes with the text, so the alignment check rightly fails
+too. `e66f737`, the next commit, corrects the expectation, and every commit after it was gated on a
+green run.
+
 **A bug the hand-written expectations caught.** A misplaced block's section path included the
 previous block, "Prices": the path was taken before the new heading closed the levels at and below
 it. `test_mutation_a_heading_restyled_as_an_alias_fails_heading_structure` expected

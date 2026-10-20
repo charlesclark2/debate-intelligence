@@ -30,7 +30,8 @@ spec:
     this task owns the service, check library and report only, with no CLI surface.
   priority: 1
   constraints:
-    packages: [debate_core.evidence, debate_core.application, docs/data]
+    # packages/debate_core/tests: PM amendment, 2026-10-19 (the task's tests live there).
+    packages: [debate_core.evidence, debate_core.application, docs/data, packages/debate_core/tests]
     forbidden:
       - Trusting writer-reported hashes without re-parsing the built file and the source document
       - Model calls in any check

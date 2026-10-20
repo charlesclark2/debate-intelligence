@@ -1,0 +1,303 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "CheckResult": {
+      "additionalProperties": false,
+      "description": "One finding of one check: about one card, one place in the document, or the whole file.",
+      "properties": {
+        "check": {
+          "$ref": "#/$defs/QualityCheck",
+          "description": "Which check this is."
+        },
+        "status": {
+          "$ref": "#/$defs/CheckStatus",
+          "description": "PASS, WARN or FAIL."
+        },
+        "card_position": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The card's place in the built file, from 1; None for the file.",
+          "title": "Card Position"
+        },
+        "fingerprint": {
+          "anyOf": [
+            {
+              "maxLength": 64,
+              "minLength": 64,
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The card's exact fingerprint, if known.",
+          "title": "Fingerprint"
+        },
+        "section_path": {
+          "anyOf": [
+            {
+              "items": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The headings above the place this is about, outermost first.",
+          "title": "Section Path"
+        },
+        "paragraph_index": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The paragraph of the built file this is about, from 0.",
+          "title": "Paragraph Index"
+        },
+        "message": {
+          "description": "What was found. Names fields and digests, never card text.",
+          "minLength": 1,
+          "title": "Message",
+          "type": "string"
+        }
+      },
+      "required": [
+        "check",
+        "status",
+        "message"
+      ],
+      "title": "CheckResult",
+      "type": "object"
+    },
+    "CheckStatus": {
+      "enum": [
+        "PASS",
+        "WARN",
+        "FAIL"
+      ],
+      "title": "CheckStatus",
+      "type": "string"
+    },
+    "CheckSummary": {
+      "additionalProperties": false,
+      "description": "One check over the whole file: its worst result and how many results failed or warned.",
+      "properties": {
+        "check": {
+          "$ref": "#/$defs/QualityCheck",
+          "description": "Which check this is."
+        },
+        "description": {
+          "description": "What the check asks.",
+          "minLength": 1,
+          "title": "Description",
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/CheckStatus",
+          "description": "The worst status among its results."
+        },
+        "failures": {
+          "description": "Results that FAIL.",
+          "minimum": 0,
+          "title": "Failures",
+          "type": "integer"
+        },
+        "warnings": {
+          "description": "Results that WARN.",
+          "minimum": 0,
+          "title": "Warnings",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "check",
+        "description",
+        "status",
+        "failures",
+        "warnings"
+      ],
+      "title": "CheckSummary",
+      "type": "object"
+    },
+    "QualityCheck": {
+      "description": "The checks, each by the name a report gives it.",
+      "enum": [
+        "sidecar",
+        "evidence-identity",
+        "cite-present",
+        "duplicate-cards",
+        "heading-structure",
+        "manifest-alignment",
+        "provenance-complete",
+        "suppression"
+      ],
+      "title": "QualityCheck",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "`<file>.quality.json`: every check's results for one built file, and the versions behind them.",
+  "properties": {
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "description": "The report's shape: 1.",
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "status": {
+      "description": "FAIL when any result fails; PASS otherwise, warnings or not.",
+      "enum": [
+        "PASS",
+        "FAIL"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "checker_version": {
+      "description": "Version of the checks.",
+      "minLength": 1,
+      "title": "Checker Version",
+      "type": "string"
+    },
+    "parser_version": {
+      "description": "Version of the parser that re-read the files.",
+      "minLength": 1,
+      "title": "Parser Version",
+      "type": "string"
+    },
+    "style_profile_version": {
+      "description": "Version of the style profile it read them with.",
+      "minLength": 1,
+      "title": "Style Profile Version",
+      "type": "string"
+    },
+    "fingerprint_version": {
+      "description": "Version of the fingerprints it recomputed.",
+      "minLength": 1,
+      "title": "Fingerprint Version",
+      "type": "string"
+    },
+    "builder_version": {
+      "anyOf": [
+        {
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The writer's version, as the sidecar records it; None without one.",
+      "title": "Builder Version"
+    },
+    "sidecar_parser_version": {
+      "anyOf": [
+        {
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The parser version the sidecar records; None without one.",
+      "title": "Sidecar Parser Version"
+    },
+    "docx_sha256": {
+      "description": "SHA-256 of the built file's bytes as checked.",
+      "maxLength": 64,
+      "minLength": 64,
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Docx Sha256",
+      "type": "string"
+    },
+    "recipe_hash": {
+      "anyOf": [
+        {
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "The recipe's hash, from the sidecar.",
+      "title": "Recipe Hash"
+    },
+    "card_count": {
+      "description": "Cards the built file reads as.",
+      "minimum": 0,
+      "title": "Card Count",
+      "type": "integer"
+    },
+    "manifest_card_count": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Entries in the sidecar; None when it could not be read.",
+      "title": "Manifest Card Count"
+    },
+    "checks": {
+      "description": "One summary per check, in a fixed order.",
+      "items": {
+        "$ref": "#/$defs/CheckSummary"
+      },
+      "title": "Checks",
+      "type": "array"
+    },
+    "results": {
+      "description": "Every result, check by check.",
+      "items": {
+        "$ref": "#/$defs/CheckResult"
+      },
+      "title": "Results",
+      "type": "array"
+    }
+  },
+  "required": [
+    "status",
+    "checker_version",
+    "parser_version",
+    "style_profile_version",
+    "fingerprint_version",
+    "docx_sha256",
+    "card_count",
+    "checks",
+    "results"
+  ],
+  "title": "FileQualityReport",
+  "type": "object"
+}

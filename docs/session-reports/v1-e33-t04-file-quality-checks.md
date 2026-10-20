@@ -30,11 +30,10 @@ cards on this Mac.
 **Read first:**
 
 * **[Deviation 2](#deviations-from-the-spec):** a disclosure on record that names no round or no
-  tournament is a WARN, not the FAIL ac4 lists. I read your note's "the disclosure (or none on
-  record)" as covering it. If you rule it a FAIL, it is a one-word change and two test expectations.
-* **[The camp-card suppression decision](#decisions-and-assumptions)** (decision 7): a camp card is
-  flagged by a suppression of *any* path of its source bytes. The sidecar records no camp path, so it
-  cannot tell which path was withdrawn.
+  tournament is a WARN. That is your ruling of 2026-10-20, and ac4 is amended in the spec to match.
+* **[The camp-card suppression decision](#decisions-and-assumptions)** (decision 7, kept by your ruling
+  of 2026-10-20): a camp card is flagged by a suppression of *any* camp path of its file. This errs
+  towards flagging.
 * **[Mutation runs](#mutation-runs):** four survivors. Three checks were deleted because a mutation
   could not tell them from their absence. One behaviour a reader sees was pinned with a test.
 
@@ -55,8 +54,8 @@ Goal criteria:
 |---|---|---|
 | **ac1**: a mutation suite flips one character in a copied `w:t`, removes one underline run, changes a highlight colour, deletes a cite paragraph and duplicates a card; each is detected by the matching check and fails the file | **PASS** | `uv run pytest packages/debate_core/tests/application/test_file_quality_mutations.py` → `42 passed`. Each `test_mutation_*` rewrites `word/document.xml` of a file t02 built and leaves the sidecar as written. It asserts the overall `FAIL` and the owning check: character flipped → `evidence-identity` (evidence text, card 1); underline removed, text kept → `evidence-identity` (formatting alone, card 2); underlined run removed → `evidence-identity` (evidence text and formatting); highlight `cyan`→`magenta` → `evidence-identity` (formatting alone, card 1); cite paragraph deleted → `evidence-identity` (cite, card 3); card duplicated → `duplicate-cards` (cards 1 and 2) and `manifest-alignment`. Two more mutations: the provenance line moved above its cite → `provenance-complete`, and a heading restyled `Block` → `heading-structure`. |
 | **ac2**: files built by t02 from the synthetic fixtures pass every check, in under 5 s per 100 cards on the CI runner | **PASS** | Every check `PASS`, no warnings, for: the standard four-card file; t02's three example files for the coach (LD, PF, Policy, built by `scripts/build_example_evidence_files.py`'s own `build_example`); a disclosed card beside a camp card. Each of the 8 E31 structural fixtures with cards fails no check. **Timing**, measured on a 100-card file the test builds: check alone **0.140 s** median of 5 (max 0.144 s); 300 cards 0.529 s, 0.176 s per 100. Apple M3 Pro, load average 17. `test_a_hundred_card_file_passes_every_check_within_the_budget` asserts `< 5.0 s` wherever it runs, CI included; the whole test, build plus check, takes 0.39 s, so it is not marked `slow`. |
-| **ac3**: heading violations (a tag outside any block when the file has blocks, a skipped level, a non-profile heading style) reported with section path and paragraph index | **PASS** | `uv run pytest packages/debate_core/tests/evidence/file_checks/test_structure.py` → `41 passed`. Each expectation was read off a hand-built document: `(7, ("Pocket A", "Hat B"), "a tag with no block above it, in a file that has blocks")`; `(7, ("Pocket B",), "a block with no hat above it, in a file that has hats")`; `(2, ("Pocket A", "Hat A"), "a block heading not in the profile's Heading3 style (verbatim-alias-id:Block)")`; a tag found by outline level → `(heuristic-outline-level-3)`. A file with no hats may put blocks straight in a pocket (t01). A heading the sidecar does not name is given as `hat at paragraph 6`. |
-| **ac4**: manifest/document disagreements (card missing from either side, wrong order, missing source sha256, team code, round or snapshot, provenance_mode not FILE_IMPORT) are FAIL | **PASS**, with Deviation 2 | Unit (`test_structure.py`): a card missing from the document, missing from the sidecar, held twice, out of order, or under other headings → FAIL. Missing team code, missing side, or no disclosure digest → FAIL. End to end (`test_file_quality_mutations.py`), sidecar edited as JSON: no `source_sha256`, no `snapshot`, a card's or the file's `provenance_mode` `CASELIST` → `sidecar` FAIL (`the sidecar is not valid: cards.1.source_sha256: Field required`, …), and identity, alignment and suppression FAIL as "not checked without a valid sidecar". No team code → `provenance-complete` FAIL; cards swapped or one dropped → `manifest-alignment` FAIL. **No round → WARN (Deviation 2).** |
+| **ac3**: heading violations (a tag outside any block when the file has blocks, a skipped level, a non-profile heading style) reported with section path and paragraph index | **PASS** | `uv run pytest packages/debate_core/tests/evidence/file_checks/test_structure.py` → `42 passed`. Each expectation was read off a hand-built document: `(7, ("Pocket A", "Hat B"), "a tag with no block above it, in a file that has blocks")`; `(7, ("Pocket B",), "a block with no hat above it, in a file that has hats")`; `(2, ("Pocket A", "Hat A"), "a block heading not in the profile's Heading3 style (verbatim-alias-id:Block)")`; a tag found by outline level → `(heuristic-outline-level-3)`. A file with no hats may put blocks straight in a pocket (t01). A heading the sidecar does not name is given as `hat at paragraph 6`. |
+| **ac4**: manifest/document disagreements (card missing from either side, wrong order, missing source sha256, team code, round or snapshot, provenance_mode not FILE_IMPORT) are FAIL | **PASS** (as amended by the PM, 2026-10-20) | Unit (`test_structure.py`): a card missing from the document, missing from the sidecar, held twice, out of order, or under other headings → FAIL. Missing team code, missing side, or no disclosure digest → FAIL. A provenance line that does not name the team on record → FAIL (`test_a_line_that_does_not_name_the_team_on_record_fails`). End to end (`test_file_quality_mutations.py`), sidecar edited as JSON: no `source_sha256`, no `snapshot`, a card's or the file's `provenance_mode` `CASELIST` → `sidecar` FAIL (`the sidecar is not valid: cards.1.source_sha256: Field required`, …), and identity, alignment and suppression FAIL as "not checked without a valid sidecar". No team code → `provenance-complete` FAIL; cards swapped or one dropped → `manifest-alignment` FAIL. **No round → WARN, per the amendment (Deviation 2).** |
 | **ac5**: `<file>.quality.json` validates against `docs/data/file-quality-report.schema.json` and records checker_version, parser_version, style_profile_version and overall status | **PASS** | `test_the_reports_are_written_beside_the_file_and_the_json_validates`: a real report validates (jsonschema), with `checker_version` `2026.10.19-file-checks-1`, the running parser's version and profile version, and `status`. `test_report.py` (`15 passed`) validates a failing report too. The schema refuses a report with no version or with status `WARN`. The drift test passes. |
 | **ac6**: a built file containing a card from a suppressed source is flagged, naming the card by fingerprint and the suppression entry by request id, never by school, team or filename | **PASS** | End to end, a `RecordedSuppressionList` holding one `SUPPRESS` of a source flags its two cards: `(1, <fingerprint>, "the card's source is on the suppression list (request RM-2026-0007, the whole source)")`. The Markdown names `card 1 (`<12-char prefix>`)` and `RM-2026-0007` and holds none of the school, team code, tournament, round or disclosure path. A suppressed disclosure is flagged; another disclosure of the same bytes is not; a lifted suppression flags nothing. `suppressions_in_force` agrees with `SuppressionState.from_entries`. A camp card is decision 7. |
 
@@ -67,7 +66,7 @@ Node criteria:
 | Quality report schema exists, contains `checker_version` | PASS | `grep -c checker_version docs/data/file-quality-report.schema.json` → `2`; `uv run scripts/export_file_quality_schema.py --check` → `OK` |
 | Report model tests pass | PASS | `uv run pytest packages/debate_core/tests/evidence/file_checks/test_report.py` → `15 passed` |
 | Identity check tests pass | PASS | `uv run pytest packages/debate_core/tests/evidence/file_checks/test_identity.py` → `17 passed` |
-| Structure check tests pass | PASS | `uv run pytest packages/debate_core/tests/evidence/file_checks/test_structure.py` → `41 passed` |
+| Structure check tests pass | PASS | `uv run pytest packages/debate_core/tests/evidence/file_checks/test_structure.py` → `42 passed` |
 | Mutation suite detects every tampering | PASS | `uv run pytest packages/debate_core/tests/application/test_file_quality_mutations.py` → `42 passed` |
 | Type check passes for debate_core | PASS | `uv run pyright packages/debate_core` → `0 errors, 0 warnings, 0 informations` |
 | Import boundaries hold | PASS | `uv run lint-imports` → `Contracts: 12 kept, 0 broken.` |
@@ -140,7 +139,8 @@ The driver is `mutants.py` in the session scratchpad, and it commits nothing:
   uses Hypothesis;
 * it restores the file and checks its SHA-256; `git status --porcelain` was empty after every batch.
 
-No mutant errored at collection. There were 24 mutants, about the cap. Two attempts did not apply
+No mutant errored at collection. There were 24 mutants, about the cap, plus S15 after your
+2026-10-20 rulings. Two attempts did not apply
 because ruff had reformatted their line; they were rewritten and run, and are not counted twice.
 
 | Mutant | Module | Mutation | Result | First test that caught it |
@@ -167,6 +167,7 @@ because ruff had reformatted their line; they were rewritten and run, and are no
 | S12 | `structure.py` | the line may sit above the cite | CAUGHT (1) | `test_mutation_a_provenance_line_moved_above_its_cite_fails_provenance` |
 | S13 | `structure.py` | disclosure-scoped suppression ignored | CAUGHT (2) | `test_a_card_from_a_suppressed_disclosure_is_flagged_and_another_disclosure_is_not` |
 | S14 | `structure.py` | camp-path suppression ignored | CAUGHT (1) | `test_a_camp_card_whose_source_has_any_disclosure_suppressed_is_flagged` |
+| S15 | `structure.py` | a line need not name the team on record | CAUGHT (1) | `test_a_line_that_does_not_name_the_team_on_record_fails` |
 | V01 | service | a source's bytes not hashed again | SURVIVED → **deleted** | — |
 | V02 | service | an un-suppress lifts nothing | CAUGHT (2) | `test_the_suppressions_in_force_are_the_suppression_lists_own_state` |
 | V03 | service | the suppression list not read | CAUGHT (2) | `test_a_card_from_a_suppressed_source_is_flagged_by_fingerprint_and_request_id` |
@@ -204,7 +205,7 @@ empty afterwards.
 
 | Command | Result |
 |---|---|
-| `uv run scripts/affected_tests.py --run` | 28 of 324 test files, chosen from 14 changed files; `1228 passed in 25.54s`, exit 0 (31 s wall-clock) |
+| `uv run scripts/affected_tests.py --run` | 28 of 324 test files, chosen from 14 changed files; `1228 passed in 25.54s`, exit 0 (31 s wall-clock). Run again after the 2026-10-20 rulings (ac4 amended, one test added): `1229 passed in 25.72s`, exit 0 |
 | `uv run pytest packages/debate_core/tests/integrations/docx_file_writer/test_fidelity.py` (the writer's fidelity suite) | `31 passed` |
 | `uv run ruff format --check .` | `906 files already formatted` |
 | `uv run ruff check .` | `All checks passed!` |
@@ -243,19 +244,18 @@ existing interfaces.
    faithfully. Evidence identity stays a FAIL that is never downgraded: text, formatting, fingerprint,
    the sidecar agreeing with the document, and `provenance_mode` FILE_IMPORT. A *deleted* cite
    paragraph still FAILs, because the built cite then differs from the source's (ac1).
-2. **A disclosure on record with no round, or no tournament, is a WARN, not the FAIL ac4 lists.**
-   `Disclosure.round_label` and `tournament` are optional. The record's own docstring describes
-   disclosures with neither, and the writer writes them as `None`, faithfully. Your note defines
-   complete as "the disclosure (or none on record)" for a caselist entry. I applied that, and the same
-   principle as your cite ruling. What does FAIL:
+2. **A disclosure on record with no round, or no tournament, is a WARN, not the FAIL ac4 first
+   listed** (PM ruling, 2026-10-20; ac4 amended in the spec, marked "PM amendment 2026-10-20"). It is
+   metadata the writer copied faithfully, not an identity failure: `Disclosure.round_label` and
+   `tournament` are optional, and the writer writes them as `None`. What still FAILs:
    * a caselist card with no disclosure digest;
    * a disclosure on record with no school, a school with no team code, or no side;
+   * a card whose disclosure names a team, under a provenance line that does not name that team
+     (the check existed; a test now pins it, and mutant S15 shows it caught);
    * a camp card with no camp year, event or file title (a missing camp name is a WARN);
    * no `source_sha256` or `snapshot`, or `provenance_mode` other than FILE_IMPORT. The sidecar's
-     schema requires these, so the sidecar check fails.
-
-   **If you rule a missing round a FAIL**, it is `warnings` → `problems` for those two lines in
-   `structure._caselist_provenance`, plus two test expectations.
+     schema requires these, so the sidecar check fails;
+   * every evidence-identity finding.
 3. **`scripts/export_file_quality_schema.py` is outside `constraints.packages`.** The node says the
    schema is generated, and t01 and t02 each generate theirs with a script of this shape; without one,
    nothing writes the committed file. It imports `debate_core` only.
@@ -298,8 +298,10 @@ existing interfaces.
    source or of its own disclosure digest. A camp card records no disclosure, and its sidecar entry
    records no camp path. So a suppression of one camp path (`v1-e30-t14`) cannot be told apart from
    another path of the same bytes, and *any* path suppression of its source flags it, saying so.
-   That errs towards flagging a removed card for a person to look at. Making it exact needs the camp
-   path's digest in the sidecar (follow-up 4).
+   **This errs towards flagging**, and you kept it that way (ruling, 2026-10-20). A false flag costs
+   a person a look before the file is published. A missed flag would let a card the requester asked
+   to remove be read in a round. Making it exact needs the camp path's digest in the sidecar, carried
+   by `v1-e33-t07` (follow-up 4).
 8. **Suppressions in force** are computed as `SuppressionState.from_entries` applies them, keeping
    the first request that suppressed each source or disclosure; a test compares the two. Path holds
    are not read: they stop *new* bytes at a path, and a built file cites bytes the list names.
@@ -328,9 +330,9 @@ None.
 3. **The removal runbook, step 8** ("find every built file whose provenance sidecar cites a removed
    sha256") has a check behind it now, and a command once t03 wires `files check`. The runbook's text
    belongs with t03, since `docs/runbooks/` is not in this task's packages.
-4. **Exact camp-path suppression** (decision 7): if wanted, the sidecar could record a camp card's
-   `camp_path_disclosure` digest, a t02/t06 sidecar addition. The check would then match it as it
-   matches a caselist disclosure.
+4. **Exact camp-path suppression** (decision 7): carried by `v1-e33-t07`. The PM is adding the camp
+   path's digest to the sidecar there by amendment; the check can then match it as it matches a
+   caselist disclosure.
 
 ## PM review
 

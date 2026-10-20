@@ -967,6 +967,52 @@ its text is gone. "A lost record is raised" replaces it.
 
 ### Condition 2: the ac5 re-run of steps 4 and 5 on dev
 
-**Results: PENDING the operator's run.** They will be recorded here. If any differs from what the
-hand-off says to expect, this task asks for another review instead of opening the pull request
-(condition 3).
+The operator ran it from this worktree at `93ed3f1` on 2026-10-20. Local times were UTC−5 and match
+the audit log. No password or code was pasted.
+
+**The result differs from what was expected, so this task stops and asks for another review
+(condition 3).**
+
+| Step | Expected | Seen |
+|---|---|---|
+| 2. `tub users add` | `account-added` | `account-added` at 05:01:10Z, `account_subject` `44e854b8-…`, `actor_role` `coach` |
+| 3. Sign-in and enrolment | Enrolment at managed login, so no app record | `authenticator-registered` at 05:03:31Z, `actor_role` `student`: the account was enrolled through **the app's own** enrolment page |
+| 4. *Start*, then confirm | `authenticator-replacement-started`, then `authenticator-registered` | One *Start*, at 05:04:16Z (`authenticator-replacement-started`). No second `authenticator-registered` |
+| 5. *Start* again, wait past 5:00, reload | A second `authenticator-replacement-started`; at the reload after 5:00, the sign-in page and `session-ended-no-second-factor` | Six minutes after *Start*, the reload **did not** go to the sign-in page. No `session-ended-no-second-factor` |
+| 6. The CloudWatch read since step 2 | Five records | Three: the three above. Every record has the same subject and no username |
+| 7. `tub users remove` | `Removed synthetic.student.one. …` | As expected |
+
+**What the records establish:**
+
+- The account went through the app's pending enrolment in step 3. Managed login let it in without
+  an authenticator, which happens when email is chosen at its first setup.
+  `confirm_authenticator` then turned on both factors. When *Start* ran, the account therefore had
+  the authenticator and a verified email factor. The first run's account had only the
+  authenticator.
+- One *Start* was recorded, and nothing after it: neither a registration nor a session end.
+
+**Two readings fit, and they need different fixes:**
+
+- **(R1)** With an email factor also on, `AssociateSoftwareToken` did not remove
+  `SOFTWARE_TOKEN_MFA` from `GetUser`'s `UserMFASettingList`. Revalidation then found an
+  authenticator and kept the session, correctly by its rules, so no record was written.
+- **(R2)** Revalidation did end the session, but the record was not written. Managed login still had
+  its own session from 05:02 and the account still had a second factor (email), so it sent the
+  browser straight back without a sign-in page. The callback found no authenticator and opened the
+  app's enrolment page. That looks like still being signed in. The lost record would have left this
+  session's WARNING in `debate-dev-tub-app`.
+
+To tell them apart: what the reload after six minutes showed, and the app log for 05:00 to 05:30Z.
+The operator has both. They are recorded below when they come in.
+
+## PM review
+
+<!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
+this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
+
+**Verdict:** PENDING
+<!-- ACCEPTED / CHANGES_REQUESTED -->
+
+**Reviewed by / date:**
+
+**Notes:**

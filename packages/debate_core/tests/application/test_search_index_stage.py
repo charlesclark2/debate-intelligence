@@ -17,6 +17,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import os
+import shutil
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
@@ -699,3 +700,30 @@ def test_index_stage_compares_with_the_digests_the_build_service_computes(world:
 
     assert newest.manifest.stores == sources.stores
     assert newest.manifest.suppression == sources.suppression_list
+
+
+def test_index_stage_a_scratch_directory_holding_a_whole_index_is_never_the_newest(world: World) -> None:
+    """A build killed after it wrote its manifest and before the rename leaves a whole index in a
+    dot-directory. It is never what the stage reuses or publishes."""
+    first = world.refresh()
+    assert first.counts is not None
+    killed = world.out / ".building-killed"
+    shutil.copytree(world.out / first.counts.index_id, killed)
+    os.utime(killed / SEARCH_INDEX_MANIFEST_NAME, ns=(9_000_000_000_000_000_000, 9_000_000_000_000_000_000))
+
+    newest = newest_local_index(world.out)
+
+    assert newest is not None and newest.directory == world.out / first.counts.index_id
+
+
+def test_index_stage_rebuilds_an_index_built_by_hand_with_another_provenance_limit(world: World) -> None:
+    """Same stores, same suppression list, and still not the index the stage builds."""
+    by_hand = asyncio.run(world.builder.build(STORES, world.out, provenance_limit=1))
+    assert by_hand.manifest.provenance_limit == 1 != DEFAULT_PROVENANCE_LIMIT
+
+    report = world.refresh()
+
+    assert report.counts is not None and report.counts.built
+    assert world.builder.builds == 2
+    newest = newest_local_index(world.out)
+    assert newest is not None and newest.manifest.provenance_limit == DEFAULT_PROVENANCE_LIMIT

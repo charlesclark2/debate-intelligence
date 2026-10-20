@@ -685,10 +685,11 @@ echo "https://auth.tub.dev.wfbdebate.com/oauth2/authorize?response_type=code&cli
 Success looks like: `FORCE_CHANGE_PASSWORD`, nothing from the group command, the temporary
 password, and a sign-in URL.
 
-Then, in Chrome on your Mac:
+Then, in Chrome on your Mac, in an **Incognito** window (⌘⇧N). A normal window logs the new-tab
+page's Google traffic as well, and its saved managed-login session would skip the very pages this
+step measures.
 
-1. Open a new window, then DevTools (View, Developer, Developer Tools), the **Network** tab. Tick
-   **Preserve log** and **Disable cache**. Right-click a column heading and turn on **Domain**.
+1. Open DevTools (⌥⌘I), the **Network** tab. Tick **Preserve log** and **Disable cache**.
 2. Paste the sign-in URL into that window.
 3. Sign in with `$PILOT_USERNAME` and the temporary password, set a new password of at least 12
    characters, and set up the authenticator app: scan the QR code with an authenticator on your
@@ -696,13 +697,54 @@ Then, in Chrome on your Mac:
 4. You land on `https://tub.dev.wfbdebate.com/auth/callback?code=...`, which answers
    `{"detail":"Not Found"}`. That is expected: the callback arrives with `v1-e39-t05`. It also shows
    the redirect reached the pilot through CloudFront.
-5. In the Network panel, sort by **Domain** and write down every distinct host. Then sign in once
-   more in a new window, to see the pages that ask for the code at an ordinary sign-in.
+5. Save the log: the Network toolbar's download arrow (Export HAR), as `tub-signin-1.har` in
+   Downloads.
+6. Close the Incognito window, open a new one, and repeat steps 1 and 2. Sign in with the new
+   password and an authenticator code: the ordinary sign-in. Save that log as `tub-signin-2.har`.
 
-Success looks like: the managed login page rendered (a form for the username and password, in
-Cognito's default style), the password change and the QR code were offered, and you have a list of
-hosts. Expect `auth.tub.dev.wfbdebate.com` and `tub.dev.wfbdebate.com`; anything else on the list
-is what this step exists to find. Fill in [The managed login's asset hosts](#the-managed-logins-asset-hosts).
+Then list the distinct hosts the two sign-ins loaded, with what each served and what loaded it.
+The HAR files hold the sign-in form data, password included, so the same block deletes them.
+
+**Operator command** (expected runtime ~1 min)
+Where: your Mac, anywhere
+```bash
+python3 - "$HOME/Downloads/tub-signin-1.har" "$HOME/Downloads/tub-signin-2.har" <<'PY'
+import collections
+import json
+import sys
+from urllib.parse import urlparse
+
+seen = collections.defaultdict(lambda: [set(), set()])
+for path in sys.argv[1:]:
+    entries = json.load(open(path))["log"]["entries"]
+    for entry in entries:
+        host = urlparse(entry["request"]["url"]).hostname
+        if not host:
+            continue
+        seen[host][0].add(entry.get("_resourceType", "?"))
+        initiator = entry.get("_initiator", {})
+        source = initiator.get("url") or ""
+        if not source:
+            frames = initiator.get("stack", {}).get("callFrames", [])
+            source = frames[0]["url"] if frames else ""
+        seen[host][1].add(urlparse(source).hostname or initiator.get("type", "?"))
+for host in sorted(seen):
+    types, sources = seen[host]
+    print(f"{host}\t{','.join(sorted(types))}\tloaded by: {','.join(sorted(s for s in sources if s))}")
+PY
+rm -f "$HOME/Downloads/tub-signin-1.har" "$HOME/Downloads/tub-signin-2.har"
+ls "$HOME/Downloads" | grep -c tub-signin
+```
+Success looks like:
+
+- the managed login page rendered (a form for the username and password, in Cognito's default
+  style), and the password change and the QR code were offered;
+- one line per host, ending in `0` (both files deleted).
+
+On 2026-10-19 the list was `auth.tub.dev.wfbdebate.com`, `tub.dev.wfbdebate.com` and three
+`*.cloudfront.net` hosts. If any Google host appears (`ogs.google.com`, `*.gstatic.com`), it was
+loaded by Chrome's new-tab page, not by the login: its "loaded by" column traces back to
+`ogs.google.com`. Fill in [The managed login's asset hosts](#the-managed-logins-asset-hosts).
 
 ## Step 11 — Prod
 
@@ -782,8 +824,23 @@ host, and any other host [step 10](#step-10--sign-in-on-dev-and-record-the-manag
 found, written with its prod name where it has one. Never the dev hostnames: dev holds no student.
 The authenticator app runs on the student's phone and needs no hostname.
 
-Send it once step 10's table is filled in. The text, with the measured hosts added at the end of
-the list:
+**First, confirm the asset hosts on prod's login page.** The three `*.cloudfront.net` hosts were
+measured on dev's login page. AWS does not document whether every pool's managed login uses the
+same ones, so prod's page is checked before the request goes out. No account is needed: loading
+the login page is enough. In an Incognito window with the Network panel open, as in step 10, open
+the URL this prints. Save the log as `tub-prod-login.har` in Downloads, and run step 10's listing
+command with `"$HOME/Downloads/tub-prod-login.har"` in place of the two files, and that file in its
+`rm` line.
+
+```bash
+cd "$WT"
+PROD_CLIENT_ID=$(terraform -chdir=infrastructure/envs/prod output -raw evidence_search_client_id)
+echo "https://auth.tub.wfbdebate.com/oauth2/authorize?response_type=code&client_id=${PROD_CLIENT_ID}&redirect_uri=https%3A%2F%2Ftub.wfbdebate.com%2Fauth%2Fcallback&scope=openid"
+```
+Success looks like: `auth.tub.wfbdebate.com` and the same three `*.cloudfront.net` hosts as the
+[table](#the-managed-logins-asset-hosts). If prod lists different ones, send prod's.
+
+Then send the request. The text, with the hosts as confirmed on prod:
 
 ```text
 Subject: Web filter request: the debate team's evidence search
@@ -795,9 +852,13 @@ these hostnames allowed through the school web filter on student Chromebooks:
 
 tub.wfbdebate.com
 auth.tub.wfbdebate.com
+dnh6qh3zeqkj3.cloudfront.net
+d14wtojjlkahd9.cloudfront.net
+d2gc27jy00o0yk.cloudfront.net
 
-Both serve HTTPS only. Nothing needs installing, and students sign in with an account the coach
-creates; no Google or school account is used.
+All five serve HTTPS only. The last three are Amazon Web Services' content network, which serves
+the sign-in page's scripts, styles and images. Nothing needs installing, and students sign in with
+an account the coach creates; no Google or school account is used.
 
 Thank you,
 ```
@@ -812,7 +873,17 @@ name.
 
 | Host seen on dev | What it served | Prod name for the IT request |
 |---|---|---|
-| Not measured yet | | |
+| `auth.tub.dev.wfbdebate.com` | The login pages (document) and their own requests (fetch) | `auth.tub.wfbdebate.com` |
+| `dnh6qh3zeqkj3.cloudfront.net` | The managed login's scripts and stylesheets | The same host, confirmed on prod's login page first (step 12) |
+| `d14wtojjlkahd9.cloudfront.net` | A stylesheet, the login theme | The same host, confirmed on prod's login page first (step 12) |
+| `d2gc27jy00o0yk.cloudfront.net` | Images, loaded by the login page's scripts | The same host, confirmed on prod's login page first (step 12) |
+| `tub.dev.wfbdebate.com` | The callback page the sign-in returns to | `tub.wfbdebate.com` |
+
+Measured 2026-10-19 over a first sign-in (password change and authenticator setup) and an ordinary
+one. The capture also held `ogs.google.com`, `www.gstatic.com`, `fonts.gstatic.com`,
+`ssl.gstatic.com`, `lh3.googleusercontent.com`, `play.google.com` and `accounts.google.com`. Every
+one of them traced back to `ogs.google.com`, the account widget of Chrome's new-tab page, so none is
+the login's, and none goes on the request.
 
 ## What to record
 
@@ -821,17 +892,17 @@ for.
 
 | Item | dev | prod |
 |---|---|---|
-| Step 3 / 11c apply: resources added | | |
-| 4: SES request sent; answer and date (one request covers both) | | n/a |
-| 5a: `deletion-protection` read-back | | |
-| 5b: branding read-back | | |
-| 5c: domain security policy read-back | | |
-| 6: cookie keys version and check | | |
-| 8: deploy digest | | |
-| 8: through CloudFront (code, cache-control) | | |
-| 8: direct function URL (code, body) | | |
-| 8: init durations from `REPORT` lines | | |
-| 10: managed login rendered; asset hosts recorded | | n/a |
+| Step 3 / 11c apply: resources added | 41 in four applies on 2026-10-19: 1 (step 1), 4 (the SES identity ahead of step 3), 22, then 15 with the app client replaced after the provider bug fixed in `beafdbe` | |
+| 4: SES request sent; answer and date (one request covers both) | Sent 2026-10-19; review `PENDING`; `SendQuota` `50000.0 14.0 HEALTHY`, so already out of the sandbox | n/a |
+| 5a: `deletion-protection` read-back | `debate-dev-tub-audit 400 True` | |
+| 5b: branding read-back | Branding id returned; `UseCognitoProvidedValues` `True` | |
+| 5c: domain security policy read-back | `ACTIVE 2 TLS_V1_2_2021` at the first read-back; no update needed | |
+| 6: cookie keys version and check | `2`; `['current', 'previous'] True` | |
+| 8: deploy digest | `debate-dev-tub@sha256:7ddc815bbda13a5e60676abfaa3514f299bb66366ae8661f067b68bb2cbd0e9a` (commit `47bf8a2`) | |
+| 8: through CloudFront (code, cache-control) | `200 private, no-store`; all six headers as expected | |
+| 8: direct function URL (code, body) | `403` `{"Message":"Forbidden"}`, for `/healthz` and `/` | |
+| 8: init durations from `REPORT` lines | 4,115 ms (first environment after the deploy), 1,848 ms; 81–82 MB used | |
+| 10: managed login rendered; asset hosts recorded | Rendered; both sign-ins reached the callback; hosts in the table above | n/a |
 | 12: IT request sent; confirmed and date | n/a | |
 
 ## Rolling back a deploy

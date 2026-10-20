@@ -6,7 +6,7 @@
 | Spec | [`plan_specs/v1/e39-evidence-search-pilot/t04-pilot-infrastructure.yaml`](../../plan_specs/v1/e39-evidence-search-pilot/t04-pilot-infrastructure.yaml) |
 | Epic / release | `v1-e39-evidence-search-pilot` / `v1.7` |
 | Branch | `task/v1-e39-t04-pilot-infrastructure` |
-| Session status | PARTIAL: the PM's rulings are applied; waiting on the operator's dev outputs (runbook steps 1–10) to close ac5 and set `Succeeded` |
+| Session status | PARTIAL: dev steps 1–10 are run and recorded, and ac5 is closed; waiting on the operator's own run of `scripts/terraform_checks.sh` before `Succeeded` |
 
 ## Summary
 
@@ -23,29 +23,35 @@ operator's order with expected output at every step. The mocked `terraform test`
 role against ADR-0019's role table entry by entry, the pool, and the evidence bucket beside it. All
 29 mutants were caught by an assertion failing.
 
-**Look first at:** the one PM question. Provider 5.100.0 cannot set the login domain's minimum TLS
-version, a third setting the ADR's list of provider gaps leaves out. It is a runbook step with a
-read-back, pending your ruling. **The Goal stays `InProgress`**: ac5's "measured asset hosts" can only
-be measured by the operator on a deployed dev. That is runbook step 10, and nothing else is open.
+**Look first at:** [Dev run, as reported by the operator](#dev-run-as-reported-by-the-operator).
+Dev is applied, deployed and checked, and ac5's asset hosts are measured. Three things outside the
+code held it up:
+
+- the account's Lambda concurrency quota was 10, and was raised to 1,000;
+- `wfbdebate.com` was on registrar `clientHold`, which also took the public website offline;
+- a provider bug on the app client, fixed in `beafdbe`.
+
+The one remaining check is `scripts/terraform_checks.sh` on the operator's machine (see the node
+row below).
 
 ## Plan nodes
 
 | Node | Status | Notes |
 |---|---|---|
-| `infrastructure` | Done (its criterion passes) | The module, both roots, the placeholder app, the image, the deploy script and the runbook. The Goal's ac5 has one part only the operator can close (below) |
+| `infrastructure` | Done; its criterion's last run is the operator's | The module, both roots, the placeholder app, the image, the deploy script and the runbook, all applied and checked on dev |
 
 ## Acceptance criteria
 
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
-| Node `infrastructure`: Terraform checks pass | PASS | `bash scripts/terraform_checks.sh` → `ok` for fmt, validate of all 9 directories, the tflint configs, `tflint --recursive`, and `test` of all 4 modules; `All Terraform checks passed.` (21 s with providers cached; 1 min 49 s on the first run under load) |
+| Node `infrastructure`: Terraform checks pass | **Awaiting the operator's run** | Before the dev applies: `bash scripts/terraform_checks.sh` → `All Terraform checks passed.` After the grace-period fix (`beafdbe`), in this session: every check `ok` except `validate infrastructure/envs/dev`, which fails with `No valid credential sources found`. The operator's `terraform init` gave that directory the S3 backend, and the session has no AWS credentials. The same configuration validated with `TF_DATA_DIR` in a scratch directory → `Success! The configuration is valid.`; all four module tests and `tflint --recursive` → `ok`. The operator runs the script with credentials before `Succeeded` is set |
 | ac1: checks pass for both roots and the new module; the roots differ only in their tfvars, as the website's do | PASS | As above. `diff -r infrastructure/envs/dev infrastructure/envs/prod -x .terraform -x owner.auto.tfvars` → only `backend.tf` and `terraform.tfvars` differ, as before this task. `evidence_search.tf`, `variables.tf`, `outputs.tf` and `owner.auto.tfvars.example` are identical. `tests/scripts/test_tub_deploy.py::test_the_script_names_the_resources_adr_0019_names` also reads the root's module call |
 | ac2: mocked test: evidence buckets keep all four BPA flags; no bucket policy grants CloudFront or the public; the role reads only the three key patterns, writes nothing in the bucket, holds no delete on its log group; the log group keeps 400 days | PASS | `terraform -chdir=infrastructure/modules/evidence_search test` → `Success! 16 passed, 0 failed.` Runs: `evidence_bucket_keeps_block_public_access_and_grants_cloudfront_nothing` plans `../evidence_bucket` with the roots' inputs and asserts the four flags, no `Allow` in the bucket policy and no CloudFront or public principal in the key policy. `cloudfront_reaches_the_function_url_and_nothing_else` asserts the only origin is the function URL. `function_role_is_the_adr_role_table_entry_by_entry` covers GetObject on exactly the three patterns, no other S3 action, and only CreateLogStream/PutLogEvents on the log groups. `audit_log_keeps_four_hundred_days_and_the_app_log_thirty` |
 | ac3: mocked test: no self sign-up, TOTP required, email MFA offered, no SMS configuration, no attribute beyond username and optional email | PASS | Same command. `user_pool_admits_only_coach_created_accounts_with_totp`: admin-only creation, MFA `ON`, TOTP enabled, email MFA present, the password as the only first factor, no device remembering. `user_pool_has_no_sms_and_nothing_beyond_a_username_and_an_optional_email`: no `sms_configuration`, no schema block, no username or alias attributes, case-insensitive, email the only auto-verified attribute, client reads `email`/`email_verified` and writes `email` only |
-| ac4: the runbook writes out apply dev, deploy a placeholder page that requires sign-in, apply prod, request SES production access, and the web-filter request (hostnames only), with expected output | PASS | [`docs/runbooks/evidence-search.md`](../runbooks/evidence-search.md), steps 1–12 in the PM's order, each with "Success looks like". Step 8 proves the path as the PM defined it: through CloudFront `200 private, no-store`; a direct call to the function URL gets `{"Message":"Forbidden"}`/`403`, Lambda's own refusal. Step 10 renders the managed login at the login host. Step 4 is SES, moved to right after the dev apply by the PM's review; step 12 is the IT text (prod hostnames only). `check_links.py`, `docs_index.py --check-descriptions`, `check_command_blocks.py --base origin/dev` → all OK. The outputs are the expected ones; nobody has run the steps yet |
-| ac5: the role checked against the role table entry by entry, incl. the app log group, the two SSM parameters and no other grant; the runbook's CLI steps for branding and deletion protection, and the measured asset hosts, written out with expected output | **NOT RUN** (in part) | **Done:** `function_role_is_the_adr_role_table_entry_by_entry` compares every action with every resource against a hand-written copy of the table (`expected_role_table`, app group and both parameters included). `function_role_has_no_other_grant` checks the exclusive-policy resources (one inline policy, zero managed) and the trust policy. Runbook steps 5a and 5b have their CLI commands and read-backs. **Open:** "the measured asset hosts". Measuring them needs a deployed dev and a person signing in with the network panel open (runbook step 10). The table in the runbook says `Not measured yet`. No session can close this |
+| ac4: the runbook writes out apply dev, deploy a placeholder page that requires sign-in, apply prod, request SES production access, and the web-filter request (hostnames only), with expected output | PASS | [`docs/runbooks/evidence-search.md`](../runbooks/evidence-search.md), steps 1–12 in the PM's order, each with "Success looks like". Step 8 proves the path as the PM defined it: through CloudFront `200 private, no-store`; a direct call to the function URL gets `{"Message":"Forbidden"}`/`403`, Lambda's own refusal. Step 10 renders the managed login at the login host. Step 4 is SES, moved to right after the dev apply by the PM's review; step 12 is the IT text (prod hostnames only). `check_links.py`, `docs_index.py --check-descriptions`, `check_command_blocks.py --base origin/dev` → all OK. Steps 1–10 have since been run on dev, with the outputs in [Dev run](#dev-run-as-reported-by-the-operator) and in the runbook's "What to record" table |
+| ac5: the role checked against the role table entry by entry, incl. the app log group, the two SSM parameters and no other grant; the runbook's CLI steps for branding and deletion protection, and the measured asset hosts, written out with expected output | PASS | **The role:** `function_role_is_the_adr_role_table_entry_by_entry` compares every action with every resource against a hand-written copy of the table (`expected_role_table`, app group and both parameters included). `function_role_has_no_other_grant` checks the exclusive-policy resources (one inline policy, zero managed) and the trust policy. On dev, step 9's `simulate-principal-policy` gave the same decisions. **The CLI steps:** runbook steps 5a and 5b, run on dev with read-backs `debate-dev-tub-audit 400 True` and `True`. **The measured asset hosts:** runbook step 10, measured on dev on 2026-10-19 over a first and an ordinary sign-in. They are `auth.tub.dev.wfbdebate.com`, `dnh6qh3zeqkj3.cloudfront.net`, `d14wtojjlkahd9.cloudfront.net` and `d2gc27jy00o0yk.cloudfront.net` (plus the callback on `tub.dev.wfbdebate.com`), now in the runbook's table, with step 12 confirming them on prod's login page before the IT request |
 
-The Goal is left `InProgress` because ac5 is not closed.
+The Goal stays `InProgress` only until the operator's run of `scripts/terraform_checks.sh` (node row).
 
 **Mutation runs** (agreement 8; agreement 10 caps them at about 20, and this ran 29: 24 on the
 module, aimed at the role and the pool, and 5 on the deploy script). Every mutant was applied to the
@@ -370,15 +376,11 @@ The PM accepted the review on condition that ac5 closes in this session, with no
 - **Question 3:** the PM amends `constraints.packages`; this branch does not edit the spec.
 - **No whole-selection run:** removed from the operator follow-ups.
 
-**Not done yet: ac5, the runbook's tables, and the phase.** The PM's message said "with the dev
-outputs below", but it carried no outputs. No step of the runbook has been reported as run, so this
-round records no measured hosts and no read-backs, and does not set `Succeeded`. The Goal stays
-`InProgress` until the operator pastes back the outputs listed under Operator follow-ups. Then this
-session:
-
-- fills in the runbook's "The managed login's asset hosts" and "What to record" tables;
-- records the outputs in a section here;
-- sets the phase `Succeeded`, runs `validate_specs.py`, and commits.
+**Then: ac5, the runbook's tables, and the phase.** The PM's message said "with the dev outputs
+below" but carried none, so that round recorded nothing and set nothing. The operator then ran dev
+steps 1–10 over the evening of 2026-10-19; the next section records each. The runbook's two tables
+are filled in, and ac5 is closed. The phase waits only for the operator's run of
+`scripts/terraform_checks.sh`.
 
 ## Dev run, as reported by the operator
 
@@ -566,7 +568,43 @@ prod is applied.
 
 ADR-0019's role table is thus confirmed against AWS's own evaluation, not only the mocked test.
 
-**Step 10: not yet run.** Step 3 waits for the concurrency increase, and will plan 37 to
+**2026-10-19, step 10 (sign-in on dev; the managed login's asset hosts):**
+
+- `admin-create-user` under `debate-dev-tub-accounts` created the maintainer's dev account, in the
+  `coach` group. Its name is not recorded; it is the maintainer's, not a student's.
+- The managed login rendered at `auth.tub.dev.wfbdebate.com`. The first sign-in went through the
+  password change and authenticator setup and reached the callback page,
+  `{"detail":"Not Found"}` on `tub.dev.wfbdebate.com`, as expected until `v1-e39-t05`.
+- The hosts were captured over a first and an ordinary sign-in, the second in an Incognito window,
+  with the Network panel exported to HAR. A Python block listed each distinct host, what it served
+  and what loaded it, then deleted the HAR files (`grep -c` → `0`).
+- **The managed login's hosts:**
+  - `auth.tub.dev.wfbdebate.com`: document, fetch;
+  - `dnh6qh3zeqkj3.cloudfront.net`: script, stylesheet;
+  - `d14wtojjlkahd9.cloudfront.net`: stylesheet;
+  - `d2gc27jy00o0yk.cloudfront.net`: image;
+  - `tub.dev.wfbdebate.com`: the callback document.
+- **Excluded:** `ogs.google.com`, `www.gstatic.com`, `fonts.gstatic.com`, `ssl.gstatic.com`,
+  `lh3.googleusercontent.com`, `play.google.com` and `accounts.google.com`. Every one traced back
+  to `ogs.google.com`, the account widget of Chrome's new-tab page, so none is the login's.
+
+**What changed in the runbook as a result:**
+
+- Step 10 now uses Incognito windows and the HAR listing, because the Domain-column method proved
+  hard to follow and logged the new-tab page.
+- Step 12 confirms the three CloudFront hosts on prod's login page before the request (AWS does not
+  say whether they are the same for every pool), and its text lists all five hostnames.
+- The asset-host and "What to record" tables are filled in for dev.
+
+**After step 10, in this session:**
+
+- `uv run pytest -q tests/specs tests/architecture tests/scripts/test_tub_deploy.py packages/debate_api/tests`
+  → `214 passed`.
+- `uv run scripts/validate_specs.py` → OK.
+- `check_links.py`, `docs_index.py --check-descriptions` and `check_command_blocks.py --base
+  origin/dev` → OK.
+- `scripts/terraform_checks.sh` → one failure, `validate infrastructure/envs/dev`, on credentials,
+  as described in the node row. Step 3 waits for the concurrency increase, and will plan 37 to
 add, not 41. ac5, the runbook's tables
 and the `Succeeded` phase wait for steps 3–10.
 

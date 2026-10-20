@@ -230,9 +230,11 @@ Exit `3` and exit `1` both mean a download, an import or a publish did not compl
 next run retries it, `1` is a verdict someone has to look at. Exit `70` is a bug. The agent never
 retries any of them on its own; the next attempt is next week's run.
 `parse: completed` is the normal outcome when the run imported anything, and `parse: skipped` when
-it imported nothing ([The parse stage](#the-parse-stage)). `landscape: skipped` is expected until
-E32 ships. Both stages are optional by design and cannot fail a run whose bytes are already
-captured: a failed parse stage is reported and the exit code stays `0`.
+it imported nothing ([The parse stage](#the-parse-stage)). `search_index: completed` means the run
+built or published the search pilot's index, and `search_index: skipped` that nothing had changed
+([The search index stage](#the-search-index-stage)). `landscape: skipped` is expected until
+E32 ships. These stages are optional by design and cannot fail a run whose bytes are already
+captured: a failed parse or search index stage is reported and the exit code stays `0`.
 
 Record the counts in [`docs/data/caselist-sync-runs.md`](../data/caselist-sync-runs.md).
 
@@ -1191,6 +1193,77 @@ DEBATE_ENV=dev debate-research caselist parse --caselist hsld26 --publish
 The last line parses nothing that is parsed, rebuilds the aggregates and uploads what the bucket
 lacks, so it takes about as long as that caselist's rebuild in the table above. In prod it needs
 `--confirm-prod`. However many weeks were missed, one run per caselist catches up.
+
+## The search index stage
+
+After the parse stage, a run keeps the student search pilot's index current (`v1-e39-t09`). The
+index is `tub index build`'s, from the parsed store on this Mac, for the run's caselists plus
+`openev`, and its publish is `tub index publish`'s: the gzip object, then the manifest, each checked
+by sha256 as it lands, and `current.json` last
+([`docs/runbooks/evidence-search.md`](evidence-search.md) runs the site that reads it). The stage
+runs whether or not the run imported anything, and is wired in only where the environment names a
+bucket. In order:
+
+1. **With an AWS session, the suppression list's two copies are reconciled**, so that a removal
+   recorded in the bucket's copy reaches this Mac's, which is the one the build reads. Without a
+   session, or with a bucket that does not answer, the build reads this Mac's copy alone, and the
+   stage's reason and the summary's `suppression_list_local_copy_only` say so.
+2. **The digests are compared**: each store's `occurrences_sha256` and the suppression list's
+   `sha256`, with those in the manifest of the newest index under `~/.debate-research/dev/tub-index`.
+3. **It builds only when they differ**, or when the newest index was built by another parser or
+   fingerprint version. Otherwise it keeps the newest index and says `unchanged since <index id>`.
+4. **With a session, it publishes that index when `current.json` names another one.** It publishes to
+   the agent's own environment, dev. Prod is yours, below, until an agent runs against prod.
+
+What each outcome means:
+
+| Stage row | What happened | What to do |
+|---|---|---|
+| `skipped`, `unchanged since <id>, which current.json names` | Nothing changed. | Nothing. |
+| `completed`, `built <id>` … `published` | A new index is live in dev. | Nothing; publish it to prod when you want prod to have it. |
+| `pending`, `built, publish pending` | Built with no AWS login; dev still serves the previous index. | Nothing: the next run with a session publishes it without rebuilding. Or publish it now, below. |
+| `skipped`, `the parsed store is not this build's version` | The parsed store was parsed by another parser or fingerprint version than the agent's build, for example after a by-hand re-parse with a newer build. | The reason names both versions. A newer store: reinstall the agent with the build that parsed it ([Reinstalling the agent](#reinstalling-the-agent)). An older one: re-parse it with the agent's build ([After a release that bumps the parser version](#after-a-release-that-bumps-the-parser-version)). |
+| `skipped`, `the parse stage failed in this run` | An index of what a failed parse left is not built. | See [The parse stage](#the-parse-stage). |
+| `failed` | The build or an upload failed. The previous index is still on this Mac and `current.json` still names the previous index; the reason names both. | The stage's hint and the notification say what to fix. The next run tries again. |
+
+Every build's summary reports the SQLite file's size and its bytes per document (`search_index` in
+the run summary, and in the reason). A warning in the reason means the index has passed one of
+ADR-0019's lines: 900,000,000 SQLite bytes, under its 1 GB uncompressed ceiling, or 400,000,000
+gzip bytes, at which `v1-e39-t04` asks for a higher bandwidth quota. Bring either to the PM.
+
+### Publishing a pending index by hand
+
+`caselist pull --publish-pending` does not publish the index. The next weekly run with a session
+does, without rebuilding it unless reconciling the suppression list changed its digest. To publish
+it now to dev, with the newest index the run built:
+
+```bash
+aws sso login --profile debate-dev-evidence
+NEWEST=$(ls -t "${HOME}/.debate-research/dev/tub-index" | head -1)
+DEBATE_ENV=dev debate-research tub index publish --env dev --index "${HOME}/.debate-research/dev/tub-index/${NEWEST}"
+```
+
+To prod, from the same data directory, as the parsed store is
+([One data directory for each bucket](#one-data-directory-for-each-bucket)):
+
+```bash
+aws sso login --profile debate-prod-evidence
+NEWEST=$(ls -t "${HOME}/.debate-research/dev/tub-index" | head -1)
+export DEBATE_ENV=prod DEBATE_STORAGE__DATA_DIR="${HOME}/.debate-research/dev"
+debate-research tub index publish --env prod --index "${HOME}/.debate-research/dev/tub-index/${NEWEST}" --confirm-prod
+unset DEBATE_ENV DEBATE_STORAGE__DATA_DIR
+```
+
+Success is a table whose last row is `reports/tub/search/current.json`, naming the index id. A
+refusal names a parser or fingerprint version: that index was built by another build than the one
+on your `PATH`.
+
+**An index built without a session read this Mac's copy of the suppression list alone.** That is safe
+while this Mac is the only machine that imports and removes: every removal writes both copies, so
+this Mac's is never behind the bucket's. It is the same condition
+`LocalFallbackSuppressionList` names for the pull's own fallback (`v1-e34-t07`), and it is revisited
+on the same day: the day a second machine imports or removes, publish a pending index only after a
+run with a session has rebuilt it.
 
 ## The download inbox
 

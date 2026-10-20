@@ -145,6 +145,12 @@ exit 0
                 "docker",
                 f"""
 case "${{1:-}}" in
+  login)
+    # The real `docker login --password-stdin` reads the password the script pipes in. A stub
+    # that exits without reading it races the `aws ecr get-login-password` writing it: if this
+    # exits first, the writer gets SIGPIPE and `pipefail` fails the sign-in. CI hit that once.
+    cat > /dev/null
+    ;;
   info)
     [ "$(cat "{state}/daemon")" = "running" ] && exit 0
     echo "Cannot connect to the Docker daemon" >&2
@@ -155,7 +161,6 @@ case "${{1:-}}" in
     echo "${{image%:*}}@{DIGEST}"
     ;;
 esac
-cat > /dev/null 2>&1 < /dev/null || true
 exit 0
 """,
             )

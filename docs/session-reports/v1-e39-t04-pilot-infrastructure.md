@@ -595,6 +595,36 @@ and the `Succeeded` phase wait for steps 3–10.
 - **The Terraform checks:** the operator, with credentials, ran `bash scripts/terraform_checks.sh` →
   `ok` for all 24 checks, `All Terraform checks passed.`
 
+## CI on the pull request (2026-10-20)
+
+**The failure.** The first `ci` run failed in `test (5)`: `1 failed, 1959 passed, 1 skipped`. The
+failing test was `tests/scripts/test_tub_deploy.py::test_a_deploy_waits_for_the_update_then_checks_healthz_through_cloudfront`,
+with `tub deploy: could not sign Docker in to 111122223333.dkr.ecr.us-east-1.amazonaws.com with
+profile debate-dev-tub-deployer.` Every other job passed. The operator saved the log with
+`gh run view <run> --log-failed`.
+
+**The cause was the test's stub, not the script.** The script pipes
+`aws ecr get-login-password | docker login --password-stdin`. The fake `docker` never read its
+input: the line meant to drain it read `/dev/null`. When the fake `docker` exited before the fake
+`aws` wrote, `aws` got SIGPIPE and `pipefail` failed the sign-in. That is a timing race, which this
+Mac never lost and the CI runner lost once. The real `docker login --password-stdin` always reads
+its input.
+
+**The fix.** The fake `docker login` now drains its input (`cat > /dev/null`), and the wrong line is
+gone.
+
+**Shown, not assumed.** The race was forced by making the fake `aws` sleep 0.3 s before writing,
+with `sleep` linked into the sandbox, on throwaway copies of the test file:
+
+- old stub → `7 failed, 13 passed`, every sign-in test, each with `could not sign Docker in`;
+- fixed stub → `20 passed`.
+
+Two earlier attempts at this were invalid and were not counted. The first lacked `sleep` in the
+sandbox, so the fake `aws` died on `command not found`. The second did not write its copies because
+a string match missed ruff's formatting, so both runs tested the fixed file. The committed file has
+no delay. After the fix: `ruff check` and `ruff format --check` → clean, and
+`uv run pytest -q tests/scripts/test_tub_deploy.py` → `20 passed`.
+
 ## PM review
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in

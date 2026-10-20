@@ -43,6 +43,14 @@ spec:
     version. The index uses no SQLite or FTS5 feature newer than 3.40.0, the version in the
     function's Lambda image (ADR-0019 (c)). The byte-identical criterion holds for both the file
     and the gzip object.
+    (PM amendment 2026-10-20, from v1-e31-t14's Deviation 2, v1-e31-t26 and the operator's
+    sizes.) The stored occurrence table carries no tag or cite: each card's tag and cite come
+    from its source's document record, read through `DocumentRecord.to_parsed_document` (no tag
+    is `None` there since v1-e31-t14). Since v1-e31-t26 the local aggregates leave held rows
+    out; the index is built from the occurrence table and never from a per-source document that
+    no occurrence row names. For the size estimate: the `2026.10.18-docx-5` directories are 2.4
+    GB (hsld26), 1.2 GB (hspf26), 3.2 GB (hspolicy26) and 192 MB (openev), document records
+    included.
   priority: 1
   constraints:
     packages: [debate_core.domain, debate_core.application, debate_core.integrations, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/data, docs/guides, docs/architecture, infrastructure/modules/evidence_bucket]
@@ -96,6 +104,11 @@ spec:
         manifest's two sha256 values, SQLite version and format version are checked by test;
         a test opens the index with SQLite 3.40.0's feature set (no newer function, pragma
         or FTS5 option is used), by a check the report names.
+    - id: ac8
+      description: >-
+        (PM amendment 2026-10-20) The tag and cite of every indexed document come from its
+        document record, `None` for no tag; no document is indexed for a source no
+        occurrence row names, by tests shown failing first.
 status:
   phase: Pending
 ---

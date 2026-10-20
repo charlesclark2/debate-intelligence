@@ -30,6 +30,9 @@ spec:
     quotas). A downloaded file is kept under that limit with headroom, or the route streams it;
     a cart that would exceed the cap is refused before building, with a plain message, never
     failed at the response.
+    (PM amendment 2026-10-20, from v1-e33-t06's Follow-up 3.) The writer reading the bucket is
+    given `source_stores`, one `SnapshotStore` per `raw/` prefix (`raw/caselist/<slug>` and
+    `raw/openev/<year>`), so camp cards download as caselist cards do.
   priority: 2
   constraints:
     packages: [debate_api, debate_core.application, packages/debate_api/tests]
@@ -67,6 +70,10 @@ spec:
         (PM amendment 2026-10-19) A cart whose built file would pass the buffered-response
         limit is refused before building, or streamed, by test with a synthetic cart near
         the limit.
+    - id: ac6
+      description: >-
+        (PM amendment 2026-10-20) A camp card downloads with its OpenEv line, read from its
+        `raw/openev/<year>` store, by test with stubbed stores.
 status:
   phase: Pending
 ---

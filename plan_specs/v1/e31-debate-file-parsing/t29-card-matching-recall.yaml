@@ -23,6 +23,13 @@ spec:
     evidence beyond the bodies, such as an identical cite and tag, and must never rejoin
     Brannock's rows, the shape of v1-e31-t11's false join. Count each first, sample with
     v1-e31-t21's sampler, and build only what keeps precision at 1.000 on every labelled set.
+    (PM amendment 2026-10-20, from v1-e31-t22's sample.) v1-e31-t20 refuses as a witness a body
+    holding two passages that do not overlap. In v1-e31-t22's sample such bodies were one card
+    cut twice, 20 of 20, so the refusal may keep cuts out of their own card's cluster. But
+    v1-e31-t11's one false join was this shape, a 150-word body holding two shorter bodies
+    whole. Sample the 216 holders under 300 words (42, 45, 122 and 7 by caselist; positions in
+    `~/t22-card-boundary-candidates.jsonl`) before any change to the refusal, and rule on the
+    sample.
   priority: 3
   constraints:
     packages: [debate_core.evidence, debate_core.application, packages/debate_core/tests, scripts, tests/scripts, docs/data]
@@ -43,6 +50,11 @@ spec:
       description: >-
         Precision stays 1.000 on every labelled set, Brannock's rows stay apart, and each
         recovered shape has fixtures shown failing first.
+    - id: ac3
+      description: >-
+        (PM amendment 2026-10-20) A sample of the holders under 300 words is tallied (one
+        card cut twice, or two cards) before the witness refusal changes; any change keeps
+        v1-e31-t11's false join apart, by test.
 status:
   phase: Pending
 ---

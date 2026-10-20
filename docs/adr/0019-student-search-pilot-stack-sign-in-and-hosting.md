@@ -569,9 +569,10 @@ publish a real-corpus index to dev for validation, because only operators have a
 - **Revocation is bounded, not instant.** A removed or disabled student's open session lasts up to
   five minutes, the same bound the gate sets for a removed card. A server-side store would make it
   instant, at the cost of a table, a read on every request and more IAM.
-- **Two settings are runbook steps, not Terraform,** until the repository's AWS provider moves past
-  5.100.0: the managed login branding and the audit group's deletion protection. Each has a
-  read-back check in the runbook. Moving to provider 6 is a separate change, not part of the pilot.
+- **Three settings are runbook steps, not Terraform,** until the repository's AWS provider moves past
+  5.100.0: the managed login branding, the audit group's deletion protection, and the login
+  domain's minimum TLS version (`v1-e39-t04` found the third; corrected by the PM, 2026-10-20).
+  Each has a read-back check in the runbook. Moving to provider 6 is a separate change, not part of the pilot.
 - **The index is pinned to SQLite 3.40.0's features** for as long as the function runs on that
   base image. A newer FTS5 option needs a different base image first. A change to the declared
   Python also changes the base image, so it re-checks the SQLite version and FTS5 as (c) 1 did.

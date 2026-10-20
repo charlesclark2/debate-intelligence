@@ -695,5 +695,25 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e01-t28-affected-test-selection
+    - id: t29
+      kind: Task
+      name: 'debate_core.testing and debate_core.evidence stop importing more than a caller asks for'
+      description: >-
+        debate_core.testing and debate_core.evidence stop importing more than a caller asks
+        for.
+      inputs:
+        specRef: plan_specs/v1/e01-repo-foundation/t29-slim-package-reexports.yaml
+        goalRef: v1-e01-t29-slim-package-reexports
+      dependsOn:
+      - t28
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e01-t29-slim-package-reexports reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e01-t29-slim-package-reexports
 status:
   phase: Pending

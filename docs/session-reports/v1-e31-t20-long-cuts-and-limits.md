@@ -820,3 +820,17 @@ from the after-merge list, so the merge uses `--partial`.
 
 **`v1-e31-t24` (the bold tag, p1):** the combined re-parse does not wait for it. When t24 merges,
 it bumps the parser again and carries a re-parse of its own.
+
+### The after-merge list, run 2026-10-19 (recorded by the PM)
+
+A1 to A13 ran as written. On the store, under `card-fingerprint-v4`:
+- **ac4:** clusters `v3` → `v4` on the same `docx-5` cards: hsld26 11,636 → 11,675, hspf26 10,085 →
+  10,365, hspolicy26 18,780 → 18,772, openev 5,882 → 5,846, with no fingerprint and no card changed and
+  no cluster absorbing more than 4;
+- **ac5:** no pair sharing nothing or a little in any of the twelve largest clusters, and no
+  few-run pair that fails to overlap;
+- **ac1:** the store's join sample, 20 of 1,844 newly joined pairs, all the same card.
+
+The prod publish and the one agent reinstall followed. The figures are in
+[the parse report](../data/caselist-parse-report.md#the-re-parse-to-docx-5-and-the-re-cluster-on-the-store-operator-run-2026-10-19).
+Every criterion passes, and the PM sets the Goal `Succeeded` in the close-out of 2026-10-20.

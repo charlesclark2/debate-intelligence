@@ -1,0 +1,79 @@
+# TASK v1-e33-t07-camp-path-on-occurrence-rows - A camp occurrence row carries its camp path's digest, so a camp-path withdrawal stops it before a rebuild
+# Epic: E33 Evidence File Builder | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e33-t07-camp-path-on-occurrence-rows
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e33-file-builder
+  annotations:
+    debate/title: "A camp occurrence row carries its camp path's digest, so a camp-path withdrawal stops it before a rebuild"
+spec:
+  # Filed by the PM, 2026-10-20, from v1-e33-t06's question 2 and the PM's ruling (a).
+  description: >-
+    A camp path withdrawn from one release (v1-e30-t14) stops that release's occurrence rows
+    only once the release manifest is rewritten and `caselist parse --caselist openev` runs
+    again, because an occurrence row carries no camp path digest. The file-recipe resolver and
+    the parse pipeline both have that gap. Carry the camp path's digest (`camp_path_disclosure`)
+    on a camp occurrence row, additively, so the resolver and the parse can ask the suppression
+    state about the path before a rebuild, as they do for a caselist disclosure.
+  priority: 3
+  constraints:
+    packages: [debate_core.domain, debate_core.application, packages/debate_core/tests, docs/data]
+    forbidden:
+      - A stored record an earlier build cannot read; a record shape change bumps its schema version and is shown read by the agent's build
+      - A path, camp file name or school in a record or a log
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e33-t06-camp-pins
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A camp occurrence row carries its camp path's digest; a camp path withdrawn from one
+        release stops that release's rows for the resolver and the parse before a rebuild,
+        by tests shown failing first.
+    - id: ac2
+      description: >-
+        An earlier build (the agent's at the time) reads every file this build writes, by
+        the cross-build check.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e33-t07-camp-path-on-occurrence-rows-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e33-file-builder
+spec:
+  description: >-
+    Carry the camp path digest on camp occurrence rows and ask about it before a rebuild.
+  goalRef:
+    name: v1-e33-t07-camp-path-on-occurrence-rows
+  graph:
+    nodes:
+      - id: camp-path
+        kind: Task
+        name: Camp path on occurrence rows
+        description: >-
+          Carry the camp path digest on camp occurrence rows and ask about it before a
+          rebuild.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Occurrence and recipe tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, camp or occurrence]
+status:
+  phase: Pending

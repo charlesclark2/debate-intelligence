@@ -288,3 +288,11 @@ after the merge, is recorded under a later heading in this report.
   blocks until told), not a longer limit.
 * **ac3:** the operator runs it from a detached worktree of `origin/dev` after the merge, as
   written. Steps 3 and 5 are recorded here by the PM.
+
+### ac3: the reinstall, 2026-10-19 (recorded by the PM)
+
+The agent was reinstalled on `1.1.0.dev64` (A12 of `v1-e31-t20`'s after-merge list) with this
+task's wrapper. `ops/launchd/install.sh --check-launchd` exited 0, with the evidence profile signed in
+as `DebateDevEvidenceOperator` and `runs` 0 before and after; the agent's dry run shows
+`2026.10.18-docx-5` and `to_parse` 0. ac3 passes, and the PM sets the Goal `Succeeded` in the
+close-out of 2026-10-20.

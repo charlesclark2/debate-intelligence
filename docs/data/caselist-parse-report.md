@@ -1796,6 +1796,87 @@ does not overlap 1,422; witnesses in several clusters 435; own cluster and anoth
 rule 54; nine-tenths inside a body holding neither end 13; under the share 23; joining texts that do
 not overlap 12; ends held by too many clusters 4.
 
+### The re-parse to `docx-5` and the re-cluster on the store (operator-run, 2026-10-19)
+
+The after-merge list (A1 to A13) in `v1-e31-t20`'s report. It is the combined re-parse that closes
+`v1-e31-t15`'s ac4 and `v1-e31-t19`'s ac4, and `v1-e31-t20`'s rebuild, closing its ac1, ac4 and ac5
+on the store. It ran from `dev` with both merges (`card-fingerprint-v4`, `MIN_CUT_SHARE` 0.1,
+`MIN_OVERLAP_SHARE` 0.3), over the dev data directory. Recorded by the PM from the operator's output.
+
+**The parse and publish (A3, dev).** Every source was parsed again at `2026.10.18-docx-5`, and the
+`v4` occurrence table was written in the same run.
+
+| | hsld26 | hspf26 | hspolicy26 | openev |
+|---|---|---|---|---|
+| Sources / parsed | 4,970 / 4,860 | 4,437 / 3,033 | 3,190 / 3,159 | 104 / 102 |
+| Cards | 75,399 | 50,246 | 101,826 | 8,081 |
+| Unsupported | PDF 66, other 43, CMIR 1 | PDF 1,387, other 17 | PDF 19, other 12 | other 2 |
+| Failed | 0 | 0 | 0 | 0 |
+| Seconds | 714 | 538 | 991 | 180 |
+| Published to dev | 4,973 | 4,440 | 3,193 | 107 |
+
+**`v1-e31-t15`'s ac4, the refusal counts.** No source failed. Every source not parsed is counted as
+an unsupported format, a `.cmir` file under its own format (`CMIR`, 1 in hsld26). Forbidden XML
+characters were replaced one for one in 5 sources, 66 characters in all.
+
+**`v1-e31-t19`'s ac4, the cites before and after,** over the same sources (`docx-3` against
+`docx-5`):
+
+| | Cards | `CITE_ONLY` | No tag | With a cite | Tagged, no cite | With a short cite |
+|---|---|---|---|---|---|---|
+| hsld26 | 74,725 → 75,399 | 707 → 676 | 1,495 → 1,563 | 68,921 → 70,977 | 5,804 → 4,422 | 48,313 → 50,512 |
+| hspf26 | 49,204 → 50,246 | 408 → 390 | 2,682 → 3,038 | 35,092 → 41,696 | 14,112 → 8,550 | 31,193 → 35,638 |
+| hspolicy26 | 101,681 → 101,826 | 1,251 → 1,265 | 1,072 → 1,093 | 94,309 → 95,713 | 7,372 → 6,113 | 56,818 → 61,162 |
+| openev | 8,033 → 8,081 | 78 → 80 | 73 → 78 | 7,267 → 7,619 | 766 → 462 | 4,203 → 4,490 |
+| **Total** | 233,643 → 235,552 | 2,444 → 2,411 | 5,322 → 5,772 | 205,589 → 216,005 | 28,054 → 19,547 | 140,527 → 151,802 |
+
+Every `docx-5` figure is exactly the one `v1-e31-t19`'s report predicted, and no card is
+`ABBREVIATED`. The new rules read these cards (hsld26, hspf26, hspolicy26, openev): a cite behind a
+name 1,042, 2,866, 1,025, 256; a highlighted cite 29, 426, 34, 4; a cite through an unmapped style
+3,414, 9,473, 963, 89; a short cite with a left quote 1,679, 3,412, 4,259, 252. Of the PF sources,
+1,387 (31%) are PDFs the parser does not read.
+
+**The second run (A5)** parsed and uploaded nothing: `attempted` 0, `skipped` equal to the sources and
+`uploaded` 0 in each caselist.
+
+**Five files by eye (A6).** In the five files `v1-e31-t19`'s step 2f names, every card printed had its
+own tag, its own cite and evidence starting where the quoted text starts.
+
+**`v1-e31-t20`'s ac4, the clusters before and after on the same `docx-5` cards (A7).** In every
+caselist `exact_fingerprints_changed`, `cards_only_before` and `cards_only_after` are 0, and no cluster
+absorbed more than 4 others.
+
+| | hsld26 | hspf26 | hspolicy26 | openev |
+|---|---|---|---|---|
+| Clusters, `v3` → `v4` | 11,636 → 11,675 | 10,085 → 10,365 | 18,780 → 18,772 | 5,882 → 5,846 |
+| Clusters merged into another | 506 | 451 | 778 | 109 |
+| Clusters divided | 292 | 386 | 417 | 45 |
+| Absorbing 2 / 3 to 5 / 6 or more | 448 / 29 / 0 | 415 / 18 / 0 | 695 / 40 / 0 | 104 / 2 / 0 |
+| Largest cluster, cards, before → after | 710 → 385 | 700 → 621 | 1,609 → 665 | 22 → 13 |
+| Distinct texts in the largest, before → after | 53 → 22 | 86 → 72 | 190 → 72 | 14 → 9 |
+| Seconds | 393 | 209 | 445 | 67 |
+
+**`v1-e31-t20`'s ac5 on the store (A8).** The store's table, `card-fingerprint-v4`: no pair sharing
+nothing and no pair sharing a little in any of the twelve largest clusters (hsld26 385, 339, 314;
+hspf26 621, 222, 205; hspolicy26 665, 648, 602; openev 13, 12, 12 cards). Over every cluster with two
+or more texts, 5 pairs share only one or two runs (hsld26 4 of 15,515, hspolicy26 1 of 22,378), and
+none fails to overlap.
+
+**`v1-e31-t20`'s ac1 on the store (A9).** 20 of the 1,844 newly joined pairs, seed 988006232: 20 the
+same card (15 contained under a third of the larger, 5 a third or more), none different.
+
+**The prod publish (A11)** published all four caselists' `docx-5` directories: 4,973, 4,440, 3,193 and
+107 objects, none failed. hspf26 and openev ended `RETRIEVAL_FAILURE` on the first attempt, when the
+sign-in's credentials expired after about an hour of uploads, and were run again after a new sign-in.
+
+**The agent (A12)** runs `1.1.0.dev64`: `--check-launchd` exit 0, and its dry run shows
+`2026.10.18-docx-5`, `card-fingerprint-v4` and `to_parse` 0.
+
+**Status (A13).** Dev: in sync but for `testcl26`, as before; no removal residue, withdrawn copy,
+held upload or held parsed file. Prod: in sync but for the 2026-10-13 weeks of the three caselists
+and openev's `2026-ld` release, which prod has not yet been sent (`caselist publish`); no removal
+residue.
+
 ## Card boundaries: bodies too long to be one card, and two cards stored as one (`v1-e31-t22`)
 
 Operator-run, read-only, over the dev data directory's `2026.10.18-docx-5` store on 2026-10-19:

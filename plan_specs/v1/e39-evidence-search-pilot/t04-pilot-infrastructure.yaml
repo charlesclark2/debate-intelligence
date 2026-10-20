@@ -47,7 +47,7 @@ spec:
     before the web-filter request goes to school IT.
   priority: 1
   constraints:
-    packages: [infrastructure, scripts, docs/runbooks, packages/debate_api]
+    packages: [infrastructure, scripts, docs/runbooks, packages/debate_api, tests/scripts, uv.lock]
     forbidden:
       - terraform apply or a deploy in a session (operator-run)
       - Changing the evidence buckets' public-access settings or the website's module

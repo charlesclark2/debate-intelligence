@@ -43,6 +43,12 @@ spec:
     Before resolving anything, `files build` compares the parsed store's parser and fingerprint
     versions with the running build's and, when they differ, refuses once with a message naming
     both and saying to re-parse.
+    (PM amendment 2026-10-20, from v1-e31-t26's Follow-up 1 and v1-e33-t06's Follow-up 1.) The
+    resolver asks the held-path rule through `publish_plan.stored_row_hold`, as it asks the
+    suppression list, so a hold merged from another machine stops an occurrence before this
+    machine's next rebuild. And when AUTO prefers attributed occurrences, a camp occurrence with
+    its release record counts as attributed: a camp file has no disclosure, and its provenance
+    line names the camp.
   priority: 1
   constraints:
     packages: [debate_cli, debate_core.application, tests/smoke]
@@ -99,6 +105,11 @@ spec:
         (PM amendment 2026-10-19) A store parsed by another parser or fingerprint version is
         refused once, before any card is resolved, with both versions and the re-parse
         named, by test shown failing first.
+    - id: ac9
+      description: >-
+        (PM amendment 2026-10-20) An occurrence a hold stops is never resolved, by AUTO or
+        by a pin, before a rebuild, through `stored_row_hold`; a camp occurrence with a
+        release record counts as attributed for AUTO; each by test shown failing first.
 status:
   phase: Pending
 ---

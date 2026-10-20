@@ -525,7 +525,28 @@ resolve to `assumed-role/AWSReservedSSO_DebateDevTubDeployer_…` and
 `assumed-role/AWSReservedSSO_DebateDevTubAccounts_…`. The prod pair is configured, and works once
 prod is applied.
 
-**Steps 8–10: not yet run.** Step 3 waits for the concurrency increase, and will plan 37 to
+**2026-10-19, step 8 (deploy as TubDeployer; the path through CloudFront):**
+
+- **The deploy:** `scripts/tub_deploy.sh dev` ended
+  `Deployed 47bf8a25b66a6835226e3fdedda48b50cf6640ed to dev: https://tub.dev.wfbdebate.com/`, with
+  the function on `<account>.dkr.ecr.us-east-1.amazonaws.com/debate-dev-tub@sha256:7ddc815bbda13a5e60676abfaa3514f299bb66366ae8661f067b68bb2cbd0e9a`.
+- **Through CloudFront:** `200 private, no-store` and `<title>Team evidence search</title>`.
+- **The headers:**
+  - `content-security-policy: default-src 'self'; frame-ancestors 'none'; object-src 'none'; base-uri 'none'; form-action 'self' https://auth.tub.dev.wfbdebate.com`
+  - `strict-transport-security: max-age=31536000; includeSubDomains`
+  - `referrer-policy: no-referrer`
+  - `x-frame-options: DENY`
+  - `x-content-type-options: nosniff`
+  - `x-robots-tag: noindex, nofollow`
+- **Direct calls to the function URL** (`/healthz` and `/`): `{"Message":"Forbidden"}` / `403`
+  both times. That is Lambda's own refusal, from before the function runs; the app never answers
+  403.
+- **Cold starts from the `REPORT` lines (ADR-0019 (c) 7):**
+  - `Init Duration: 4115.24 ms` (the first environment after the deploy, pulling the new image);
+  - `Init Duration: 1848.35 ms` (within the ADR's expected 1–2 s);
+  - `Max Memory Used` 81–82 MB of 2,048 MB.
+
+**Steps 9–10: not yet run.** Step 3 waits for the concurrency increase, and will plan 37 to
 add, not 41. ac5, the runbook's tables
 and the `Succeeded` phase wait for steps 3–10.
 

@@ -6,7 +6,7 @@
 | Spec | [`plan_specs/v1/e39-evidence-search-pilot/t02-search-index-build.yaml`](../../plan_specs/v1/e39-evidence-search-pilot/t02-search-index-build.yaml) |
 | Epic / release | `v1-e39-evidence-search-pilot` / `v1.7` |
 | Branch | `task/v1-e39-t02-search-index-build` |
-| Session status | PARTIAL <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | COMPLETE <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
@@ -20,16 +20,19 @@ version mismatch before uploading anything. School, team code, tournament and ro
 stored `occurrences` table that no FTS5 table covers. The SQLite 3.40.0 ceiling is proven two ways:
 a traced-statement check in every run, and a slow test that opens a built index with the Lambda
 image's own SQLite (3.40.0). Given an index that uses a 3.47 option, that image refuses it with
-`unrecognized option: "locale"`. The phase stays **InProgress**: ac6, the operator's full-store build
-with its time, peak memory and size, needs the operator's run (Operator follow-ups 1). **PM, look
-first at** Deviation 2 (the camp file title is stored, against "never store a file name") and the
-relay block under Decisions.
+`unrecognized option: "locale"`. The operator's full-store build (ac6) took 233 s at 1.18 GB peak
+memory. It gave 46,658 documents, a 1.48 GB SQLite file and a 320 MB gzip object, and the real file
+opens in the image's 3.40.0. Every criterion passes, and the Goal is **Succeeded**. **PM, look
+first at** relay question 4. The gzip object is under ADR-0019's 400 MB revisit trigger, but the
+SQLite file is 2.7 times the ADR's 550 MB upper estimate and above its 1 GB season allowance, and
+54% of it is formatting-span JSON that a compact encoding would cut by about four fifths. Then look
+at Deviation 2: the camp file title is stored, against "never store a file name".
 
 ## Plan nodes
 
 | Node | Status | Notes |
 |---|---|---|
-| `index-build` — Search index build and publish | Done, but for ac6 | Every criterion but ac6 passes; ac6 is the operator's full-store build |
+| `index-build` — Search index build and publish | Done | Every criterion passes; ac6 by the operator's build of 2026-10-20 |
 
 ## Acceptance criteria
 
@@ -40,7 +43,7 @@ relay block under Decisions.
 | ac3 — a suppressed occurrence never appears; a cluster with none surviving is absent | PASS | `test_search_index_leaves_out_a_suppressed_occurrence_and_an_emptied_cluster` (whole-source and one-disclosure suppressions; the emptied cluster's text matches nothing; counts 4 documents, 3 suppressed, 1 left out) and `test_search_index_leaves_out_a_row_a_path_hold_covers`, red under the skeleton, green on the service; three suppression mutants killed |
 | ac4 — byte-identical index and manifest; manifest validates against a committed schema with a drift test | PASS | `test_search_index_same_store_gives_identical_bytes_under_shuffles`: the SQLite file, gzip object and manifest are each one value across six builds, and so is the index id. `test_search_index_manifest_schema_committed_matches_the_models` (drift, as `v1-e33-t02`'s) and `test_search_index_manifest_validates_against_the_committed_schema` (jsonschema) pass. `uv run scripts/export_search_index_schema.py --check` → `OK` |
 | ac5 — `publish` writes the pointer last and refuses a version mismatch, against the S3 test double; layout document and listing grant name `reports/tub/search/` | PASS | `uv run pytest packages/debate_core/tests/application/test_search_index_publish.py -q -n0` → `11 passed`, against moto through `S3EvidenceObjectStore`: write order object, manifest, `current.json`; a refused write at each of the three leaves the previous pointer; parser, fingerprint and format mismatches upload nothing; an object landing with another digest stops before the pointer. CLI, through the real app over moto: `uv run pytest packages/debate_cli/tests/test_tub_index.py -q -n0` → `6 passed`. Layout: `docs/architecture/evidence-store-layout.md` (prefix table, example keys, a `reports/tub/search/` section, the access table). Grant: `infrastructure/modules/evidence_bucket/operator_access.tf` `named_list_prefixes`; `terraform test` → `13 passed, 0 failed`, and with the expectation removed → `12 passed, 1 failed` (`operator_permission_set_reads_and_publishes_but_cannot_delete`) |
-| ac6 — the operator's full-store build recorded in the report and docs/data: documents, size, build time, peak memory | **NOT RUN** | Operator-run by the spec's forbidden list. The command is Operator follow-ups 1; `docs/data/search-index.md` has the table, with a "Not yet run" row |
+| ac6 — the operator's full-store build recorded in the report and docs/data: documents, size, build time, peak memory | PASS | The operator's run of 2026-10-20 (Operator follow-ups 1): 46,658 documents, SQLite file 1,483,825,152 bytes, gzip object 319,949,165 bytes, 233.12 s, 1,181,515,776 bytes peak resident. Recorded in `docs/data/search-index.md`, "Full-store builds", with where the space goes. The image's SQLite 3.40.0 opened the real file: `3.40.0 ok 46658 8612` |
 | ac7 — gzip byte-identical; manifest's two sha256, SQLite version and format version checked by test; a test opens the index with SQLite 3.40.0's feature set, by a check the report names | PASS | Identical gzip: as ac4. `test_search_index_manifest_records_both_digests_and_the_versions` and `test_search_index_gzip_header_has_no_time_and_no_name`. **The checks named:** in every run, `test_search_index_writer_runs_only_statements_sqlite_3_40_has` traces every statement against a hand-written list; `test_search_index_fts5_table_takes_only_options_3_40_has` and `test_search_index_file_is_the_schema_written_by_hand` check the options, schema and header. Marked slow: `test_search_index_opens_in_the_lambda_image_sqlite` opens a built index in `public.ecr.aws/lambda/python:3.12` by `docker run --network none`. `uv run pytest packages/debate_core/tests/integrations/local/test_search_index_sqlite_features.py -m "slow or not slow" -n0` → `4 passed` (the docker test 0.56 s). Shown failing: an FTS5 `locale=1` mutant → `3 failed, 1 passed`, and the image says `sqlite3.OperationalError: unrecognized option: "locale"`; a `journal_mode = WAL` mutant → `3 failed, 1 passed` |
 | ac8 — tag and cite from the document record, `None` for no tag; no document for a source no occurrence row names, by tests shown failing first | PASS | `test_search_index_tag_and_cite_come_from_the_document_record` was red under the skeleton (tag and cite not taken from the record) and is green. `test_search_index_holds_nothing_from_a_source_no_occurrence_row_names` was red under a second skeleton that indexes every card of each source it reads (`1 failed`, `matches('"invented colonies"') == 1`) and is green |
 | Node criterion — `uv run pytest packages/debate_core/tests packages/debate_cli/tests -k "tub_index or search_index"` | PASS | → `57 passed in 10.06s` |
@@ -95,7 +98,7 @@ relay block under Decisions.
    occurrence's source sha256 and disclosure digest, with its provenance columns null. `v1-e39-t07` hides
    a newly suppressed occurrence at run time, and "a card left with no occurrence answers as not found".
    It can only do that knowing every occurrence's digests, and digests are what the suppression list
-   itself holds. About 235,000 rows; the size shows in ac6.
+   itself holds. 273,390 rows in the full build, 59.3 MB plus a 20.8 MB index by source.
 4. **Path holds are applied as well as the suppression list's own entries.** The spec says "the
    suppression list applies". Holds live beside the list and govern the same rows, so the build asks
    `publish_plan.stored_row_hold` for each disclosure of a row, as `v1-e33-t03`'s PM amendment of
@@ -141,7 +144,7 @@ relay block under Decisions.
 
 **Relay prompt for the PM** (paste as is):
 
-> v1-e39-t02 has three questions; each has a recommendation and works as built until you say otherwise.
+> v1-e39-t02 has four questions; each has a recommendation and works as built until you say otherwise.
 >
 > 1. **Camp file title.** The spec says never store a file name; Attribution rule 2 and E39 gate item 7
 >    need a camp card's line to name its file title. Options: (a) store `CampFile.file_title` (the
@@ -156,34 +159,39 @@ relay block under Decisions.
 > 3. **`--env`.** Built as a confirmation that must equal `DEBATE_ENV`, never an override. Options: (a)
 >    keep; (b) let `--env` choose the bucket. **Recommend (a)**: it is the rule every other bucket command
 >    keeps, and a typo cannot reach prod.
+> 4. **Index size.** The full build is 1.48 GB as SQLite and 320 MB gzipped. The gzip object is under
+>    ADR-0019 (c) 8's 400 MB revisit trigger, about 4.1 s to download at the cap. The file is 2.7 times
+>    the (c) 6 upper estimate of 550 MB and above its 1 GB season allowance, and a live copy plus a
+>    swap copy take 2.97 GB of the 4,096 MB of ephemeral storage. 805 MB (54%) is `formatting_spans`:
+>    about 115 spans a card, each a JSON object carrying the parser's `rule_id` and `match_source`,
+>    which neither the card page nor `formatting_sha256`'s coverage needs. Options: (a) before t03
+>    reads the index, store the spans compactly, as `[emphasis, start, end, colour]` arrays without
+>    `rule_id` and `match_source`, which is about 20 bytes a span instead of about 150, and the font
+>    sizes likewise. Estimate about 0.75 GB as SQLite and under 250 MB gzipped. It is format version 1
+>    still, since nothing has read it, with one more 4-minute operator build. (b) keep it, and record the
+>    size against the ADR's estimate for `v1-e39-t04` to size ephemeral storage by. **Recommend (a)**:
+>    it puts the file back near the ADR's estimate and leaves room for the season, at the cost of one
+>    change here and one rebuild.
 
 ## Operator follow-ups
 
-**1. The full-store build (ac6).** Expected runtime 15 to 40 minutes: it reads and validates about
-7 GB of document records, one per source an occurrence row names. It reads the dev data directory,
-where the `2026.10.18-docx-5` store lives, and writes about 0.5 GB under
-`~/.debate-research/dev/tub-index/`. It reaches no bucket and calls no model. `/usr/bin/time -l` runs
-the venv's `debate-research` itself, so its maximum resident set size is the build's peak memory.
-
-Where: your Mac, in this task worktree.
+**1. The full-store build (ac6): done, 2026-10-20.** The operator ran, in this worktree:
 ```bash
 cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e39-t02-search-index-build
 uv sync --all-packages
 DEBATE_ENV=dev /usr/bin/time -l .venv/bin/debate-research --json tub index build --caselist hsld26 --caselist hspf26 --caselist hspolicy26 --caselist openev > /tmp/tub-index-build.json 2> /tmp/tub-index-build.time
-grep -E "real|maximum resident" /tmp/tub-index-build.time
-python3 -c "import json; m = json.load(open('/tmp/tub-index-build.json'))['data']['manifest']; print(json.dumps({k: m[k] for k in ('index_id', 'sqlite_version', 'snapshot', 'counts', 'sqlite_file', 'gzip_object')}, indent=2))"
 ```
-Success looks like: a `real` time, a `maximum resident set size` in bytes, and a JSON block with about
-46,700 documents (`documents_by_store` near hsld26 11,675, hspf26 10,365, hspolicy26 18,772,
-openev 5,846) and the two file sizes. It holds counts, versions and digests only. Paste all of it back.
-A `SEARCH_INDEX_STORE_NOT_READY` error instead names the store and the `caselist parse` that fixes it.
+The result: 233.12 s real, 1,181,515,776 bytes maximum resident. Index `5119ffd998e18ad9`, latest
+snapshot 2026-10-13, built by SQLite 3.50.4. It has 46,658 documents (hsld26 11,675, hspf26 10,365,
+hspolicy26 18,772, openev 5,846), the per-store cluster counts the PM's notes give. All 273,390 rows
+read were indexed, with 0 suppressed, 0 clusters left out and 0 unattributed representatives;
+115,140 rows keep their provenance. The SQLite file is 1,483,825,152 bytes and the gzip object
+319,949,165.
 
-Then open the real index in the Lambda image's SQLite, as the slow test does with a synthetic one.
-Expected runtime under a minute. Replace `INDEX_ID` with the `index_id` above.
-```bash
-docker run --rm --pull never --network none --platform linux/arm64 --entrypoint python3 -v "$HOME/.debate-research/dev/tub-index/INDEX_ID:/index:ro" public.ecr.aws/lambda/python:3.12 -c "import sqlite3; c = sqlite3.connect('file:/index/search-index.sqlite?mode=ro', uri=True); print(sqlite3.sqlite_version, c.execute('PRAGMA integrity_check').fetchone()[0], c.execute('SELECT count(*) FROM documents').fetchone()[0])"
-```
-Success looks like: `3.40.0 ok` and the document count. Paste it back.
+The session then opened the real file in the Lambda image's SQLite, read-only, with no network
+(12 s): `3.40.0 ok 46658 8612`. That is the version, `integrity_check`, the document count, and the
+documents a full-text query for `economy` matched. A read-only `dbstat` and column-length query
+gave the breakdown recorded in `docs/data/search-index.md`; it printed sizes only.
 
 **2. The listing grant in dev, after this PR merges into `dev`.** Apply from a checkout with every merged
 task: the dev-preview worktree, whose `infrastructure/envs/dev/owner.auto.tfvars` is complete (two
@@ -259,7 +267,7 @@ No publish is needed for this task. The first one, to dev, is `docs/guides/searc
   and publish: 19 killed at first, one survivor ("publish: landed digest not checked"). A test was added
   for it (`test_search_index_publish_stops_before_the_pointer_when_the_object_lands_with_another_digest`)
   and it was killed on the re-run: 20 of 20.
-* `uv run scripts/validate_specs.py` → `OK: 396 files, 39 epics, 336 tasks, 21 releases`; the task Goal stays `InProgress` (ac6).
+* `uv run scripts/task_helper.py set-phase v1-e39-t02-search-index-build Succeeded`, then `uv run scripts/validate_specs.py` → `OK: 396 files, 39 epics, 336 tasks, 21 releases`, and `--require-succeeded v1-e39-t02-search-index-build` → `Succeeded`.
 
 ## PM review
 

@@ -61,7 +61,7 @@ v2.3's extension work.
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 41 | 41 | 220 |
-| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 97 | 70 | 473 |
+| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 97 | 71 | 473 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 20 | 5 | 188 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 13 | 1 | 108 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 14 | 0 | 96 |
@@ -214,7 +214,7 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [Copies split apart by the short-body rule, and long bodies merged through a fragment](plan_specs/v1/e31-debate-file-parsing/t11-long-card-splits-and-fragment-merges.yaml) `v1-e31-t11-long-card-splits-and-fragment-merges` | Succeeded | 2 | 5.0 |
 | [Cites the parser misses or misreads](plan_specs/v1/e31-debate-file-parsing/t12-cite-detection.yaml) `v1-e31-t12-cite-detection` | Succeeded | 1 | 5.0 |
 | [Split a cite from its words when a card or wiki entry is one paragraph](plan_specs/v1/e31-debate-file-parsing/t13-one-paragraph-cards-and-wiki-entries.yaml) `v1-e31-t13-one-paragraph-cards-and-wiki-entries` | Pending | 1 | 6.0 |
-| [A card with no tag has no tag in memory and in every output](plan_specs/v1/e31-debate-file-parsing/t14-card-tag-optional.yaml) `v1-e31-t14-card-tag-optional` | Pending | 2 | 2.0 |
+| [A card with no tag has no tag in memory and in every output](plan_specs/v1/e31-debate-file-parsing/t14-card-tag-optional.yaml) `v1-e31-t14-card-tag-optional` | Succeeded | 2 | 2.0 |
 | [The zip guard judges only the parts it reads, and exporter quirks are decided](plan_specs/v1/e31-debate-file-parsing/t15-zip-guard-and-exporter-quirks.yaml) `v1-e31-t15-zip-guard-and-exporter-quirks` | InProgress | 1 | 2.0 |
 | [Superseded parsed-store version directories are retired, locally and in both buckets](plan_specs/v1/e31-debate-file-parsing/t16-version-directory-retention.yaml) `v1-e31-t16-version-directory-retention` | InProgress | 1 | 3.0 |
 | [A transient parse failure is retried, and one data directory publishes a bucket's parsed store](plan_specs/v1/e31-debate-file-parsing/t17-parse-retries-and-one-publisher.yaml) `v1-e31-t17-parse-retries-and-one-publisher` | Pending | 1 | 2.0 |

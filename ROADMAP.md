@@ -61,7 +61,7 @@ v2.3's extension work.
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 41 | 41 | 220 |
-| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 97 | 69 | 473 |
+| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 97 | 70 | 473 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 20 | 5 | 188 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 13 | 1 | 108 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 14 | 0 | 96 |
@@ -163,7 +163,7 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [The takedown preflight refuses the everyday profile before it writes anything](plan_specs/v1/e29-cloud-evidence-store/t08-takedown-preflight-identity.yaml) `v1-e29-t08-takedown-preflight-identity` | InProgress | 1 | 2.0 |
 | [Loose ends in how store errors are classified, worded and wrapped](plan_specs/v1/e29-cloud-evidence-store/t09-store-error-loose-ends.yaml) `v1-e29-t09-store-error-loose-ends` | Succeeded | 1 | 2.0 |
 | [The retirement rule reaches empty objects, the tagging grant names its one tag, and the module's failures print](plan_specs/v1/e29-cloud-evidence-store/t10-retention-rule-and-grant-loose-ends.yaml) `v1-e29-t10-retention-rule-and-grant-loose-ends` | Pending | 1 | 3.0 |
-| [store sync says why it skipped what it skipped](plan_specs/v1/e29-cloud-evidence-store/t11-store-sync-skip-reasons.yaml) `v1-e29-t11-store-sync-skip-reasons` | Pending | 1 | 2.0 |
+| [store sync says why it skipped what it skipped](plan_specs/v1/e29-cloud-evidence-store/t11-store-sync-skip-reasons.yaml) `v1-e29-t11-store-sync-skip-reasons` | Succeeded | 1 | 2.0 |
 
 #### [E30 — Caselist Evidence Ingestion](plan_specs/v1/e30-caselist-ingestion/epic.yaml)
 

@@ -1003,7 +1003,57 @@ the audit log. No password or code was pasted.
   session's WARNING in `debate-dev-tub-app`.
 
 To tell them apart: what the reload after six minutes showed, and the app log for 05:00 to 05:30Z.
-The operator has both. They are recorded below when they come in.
+
+### The diagnosis: R1, and a second finding
+
+**The operator's answers:**
+
+1. The reload after six minutes showed *Set up a new authenticator app* with a **Start** button and
+   no QR code: still signed in.
+2. At managed login's first setup, the operator chose the **authenticator app**, not email.
+3. The operator entered a code from a new authenticator entry, and the page said it was set up.
+
+**The app log** (`debate-dev-tub-app`, 05:00 to 05:30Z). The request log is off, so each request is
+one `START`/`REPORT` pair. A request that calls Cognito takes about 400 ms or more; one that calls
+nothing takes about 4 ms. There is no `tub audit:` line, no warning and no error.
+
+| Time (UTC) | Duration | Request, from its timing and the audit log |
+|---|---|---|
+| 05:02:45.2 | 484 ms | `/auth/callback`: code exchange, then `GetUser` found **no** authenticator, so a pending enrolment |
+| 05:02:45.8 | 495 ms | The pending enrolment's `GET /account/authenticator`: refresh and `AssociateSoftwareToken` |
+| 05:03:30.4 | 1037 ms | Its confirm: `authenticator-registered` at 05:03:31Z |
+| 05:03:31.5 | 418 ms | `GET /account` |
+| 05:03:58.6 | 7 ms | The *Start* page, which calls nothing, as the first review required |
+| 05:04:15.8 | 899 ms | *Start*: `authenticator-replacement-started` at 05:04:16Z |
+| 05:08:11.7 | 6 ms | The reload at 3:56 after *Start*: not yet due, so the *Start* page |
+| 05:10:36.2 | 851 ms | The reload at 6:20 after *Start*: revalidation (refresh, `GetUser`) **passed**, then the *Start* page |
+| 05:11:59 to 05:13:03 | 3 to 7 ms each | 16 more requests, none calling Cognito (revalidated at 05:10:36) |
+
+After 05:10:36 there is no callback, so the browser did not go through managed login: **R2 is
+ruled out.** No record was lost, and the WARNING path never ran.
+
+**What this run found:**
+
+1. **At this account's first sign-in, managed login's authenticator setup did not register
+   with the app.** The operator chose the authenticator app at managed login, yet the callback's
+   `GetUser` did not list `SOFTWARE_TOKEN_MFA`. The app then showed its own enrolment page, and the
+   student scanned a second QR code. The confirm the operator describes under answer 3 is that page,
+   at 05:03:30. So a student may be asked to set up the app twice at a first sign-in.
+2. **This time, *Start* did not drop the authenticator.** Six minutes after `AssociateSoftwareToken`,
+   `GetUser` still listed `SOFTWARE_TOKEN_MFA`. In the first run, `AdminGetUser` after *Start*
+   listed none.
+
+   The two accounts differ in how their authenticator was registered:
+   - **This run:** by the app (`VerifySoftwareToken`, then `SetUserMFAPreference`), as the audit
+     record shows.
+   - **The first run:** not known. That run read only the `tub-users` stream.
+3. **The code did what its rules say.** Revalidation found an authenticator and kept the session.
+   Only the copy is wrong for this case: the *Start* page says the old app stops working at once.
+4. **A replacement through *Start* and confirm has not yet run on dev.** The only confirm in this run
+   was the first-sign-in enrolment.
+
+**The question for the PM** is in the review request: measure Cognito's behaviour first, then fix the
+copy and the double enrolment to match.
 
 ## PM review
 

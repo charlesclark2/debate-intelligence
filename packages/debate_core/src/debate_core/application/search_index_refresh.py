@@ -293,6 +293,10 @@ class SearchIndexRefresh:
             except StoreError as refused:
                 unreachable = refused
                 local_only = f"the bucket's copy could not be reached ({type(refused).__name__})"
+        # The reason says `local_only` however the bucket's copy was missed. The summary's
+        # `suppression_list_local_copy_only` is a login the run did not have and nothing else, so a
+        # bucket that refused or did not answer is said in the reason alone.
+        login_only = local_only if unreachable is None else None
 
         # 2. The digests, through the method the build records them with.
         try:
@@ -306,7 +310,7 @@ class SearchIndexRefresh:
                 counts=_counts(newest, built=False, published=False) if newest is not None else None,
             )
         except Exception as failed:
-            return self._failed(f"the index was not built; {_locally(newest)}", failed, newest, local_only)
+            return self._failed(f"the index was not built; {_locally(newest)}", failed, newest, login_only)
 
         # 3. Build when they differ from the newest local index's.
         current = newest if newest is not None and self._reusable(newest, sources) else None
@@ -317,7 +321,7 @@ class SearchIndexRefresh:
                 )
             except Exception as failed:
                 return self._failed(
-                    f"the index was not built; {_locally(newest)}", failed, newest, local_only
+                    f"the index was not built; {_locally(newest)}", failed, newest, login_only
                 )
             current = LocalSearchIndex(built.directory, built.manifest)
         built_now = current is not newest
@@ -331,7 +335,7 @@ class SearchIndexRefresh:
                 outcome=outcome,
                 reason=reason,
                 counts=_counts(current, built=built_now, published=published),
-                local_copy_only=local_only,
+                local_copy_only=login_only,
             )
 
         # 4. Publish it when current.json is behind it, and there is a session to do it with.
@@ -345,7 +349,7 @@ class SearchIndexRefresh:
                 f"{said}; not published, and current.json is as it was",
                 unreachable,
                 current,
-                local_only,
+                login_only,
                 counts=_counts(current, built=built_now, published=False),
             )
         if no_session is not None:
@@ -361,7 +365,7 @@ class SearchIndexRefresh:
                 f"{said}; current.json could not be read, so it is not published",
                 failed,
                 current,
-                local_only,
+                login_only,
                 counts=_counts(current, built=built_now, published=False),
             )
         if pointer is not None and pointer.index_id == current.index_id:
@@ -384,7 +388,7 @@ class SearchIndexRefresh:
                 f"{said}; not published, {_published(pointer)}",
                 failed,
                 current,
-                local_only,
+                login_only,
                 counts=_counts(current, built=built_now, published=False),
             )
         logger.info(

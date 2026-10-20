@@ -513,7 +513,8 @@ def test_index_stage_with_an_unreachable_bucket_builds_from_the_local_copy_and_f
     assert report.outcome is StageOutcome.FAILED
     assert isinstance(report.failure, StoreUnavailable)
     assert report.counts.built and not report.counts.published
-    assert report.local_copy_only == "the bucket's copy could not be reached (StoreUnavailable)"
+    assert report.local_copy_only is None, "the summary's field is a login the run did not have"
+    assert "alone: the bucket's copy could not be reached (StoreUnavailable)" in report.reason
     assert "not published, and current.json is as it was" in report.reason
     assert published_with(world, first) == first.counts.index_id
 

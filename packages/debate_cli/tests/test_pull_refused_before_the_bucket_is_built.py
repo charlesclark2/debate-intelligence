@@ -246,6 +246,7 @@ def test_its_details_name_the_code_and_the_setting(
             "failure_codes": ["STORE_PROFILE_NOT_CONFIGURED"],
             "hint": THE_FIX,
             "parse": None,
+            "search_index": None,
             "held_by_request": {},
         }
     ]

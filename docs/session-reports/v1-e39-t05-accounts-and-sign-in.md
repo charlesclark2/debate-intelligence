@@ -1168,3 +1168,144 @@ app's enrolment page.
 
 **Re-allowing self-service replacement,** if a later version wants it, means measuring Cognito's
 behaviour first, as option (a) set out.
+
+## Fifth session: ruling (d), no self-service replacement (2026-10-20)
+
+The third review accepted with ruling (d): self-service authenticator replacement is withdrawn for
+the pilot, and a new phone goes to the coach for a reset. Conditions 1 to 6 are closed below. No
+dev run was made (condition 6). Both runs' facts above are unchanged.
+
+### Condition 1: *Start* removed
+
+**Removed:**
+- the `POST /account/authenticator/begin` route and its `ROUTE_ACCESS` entry;
+- `authenticator_start.html`;
+- `AccountPageService.begin_replacement`;
+- `refreshed_account` and `RefreshedAccount` (*Start*'s revalidation path); `_revalidated` has its
+  first-session shape again;
+- the `authenticator-replacement-started` action;
+- the `authenticator-replaced` notice;
+- the replacement wording in `authenticator.html`;
+- `app.js`'s HTML-answer branch, which only *Start* used.
+
+**Kept:**
+- the pending enrolment's GET and confirm, unchanged in behaviour;
+- revalidation's second-factor check (deviation 4);
+- `session-ended-no-second-factor`, now written by a small helper, `_record_no_second_factor`;
+- the WARNING when that record is lost.
+
+`AccountPageService.begin_authenticator` and `confirm_authenticator` now take a `PendingEnrolment`
+only, so the type checker holds the rule too.
+
+### Condition 2: a full session's GET goes to `/account`
+
+`ROUTE_ACCESS` gives `/account/authenticator` a new access level, `PENDING_ENROLMENT`: a pending
+enrolment only. Sign-out keeps `ENROLMENT` (a session or a pending enrolment). The gate answers a
+full session on that path before any route runs:
+- a GET gets `303` to `/account`;
+- a POST gets `403`, with `{"message": "Your authenticator app is already set up.", "location":
+  "/account"}`.
+
+Neither calls Cognito. The account page's authenticator section reads *For a new phone, ask your
+coach for a reset. You then sign in with the temporary password and set up the app again.*
+
+### Condition 3: tests, shown failing first
+
+The tests were committed before the change (`2ebb134`). Run against the code with *Start*:
+**14 failed, 361 passed** (`packages/debate_api/tests`). Each failed for its reason:
+
+| Test | How it failed |
+|---|---|
+| `test_no_route_a_full_session_can_reach_calls_associate_software_token[student]`, `[coach]`, `[email-second-factor]` | `AssociateSoftwareToken` in the calls (from `/begin`) |
+| `test_a_full_sessions_get_goes_to_the_account_page_and_calls_nothing` | `200 == 303`: the *Start* page |
+| `test_a_full_sessions_confirm_is_refused_and_calls_nothing` | `400 == 403`: the route ran |
+| `test_there_is_no_route_to_begin_a_replacement` | `200 == 404` |
+| The matrix's valid-session rows for `GET` and `POST /account/authenticator`, student and coach (4) | `(200, None) == (303, '/account')`; `400 == 403` |
+| `test_the_matrix_covers_every_route_the_app_serves` | `/begin` served but not listed: the coverage test still fails on an unlisted route |
+| `test_the_script_answers_only_with_a_place_to_go_or_a_message` | `DOMParser` still in `app.js` |
+| `test_the_account_page_sends_a_new_phone_to_the_coach` | the sentence was not on the page |
+| `test_an_account_with_no_authenticator_is_sent_to_the_coach_too` | the same |
+
+Tests that passed before the change and now hold their behaviour:
+- `test_a_forged_confirm_is_refused_before_cognito_is_asked`: three forgeries of a pending
+  enrolment's confirm. The CSRF list for full sessions dropped `/account/authenticator`, which a
+  full session can no longer reach, so the confirm's CSRF checks are held here.
+- `test_a_pending_enrolment_still_begins_on_the_get`.
+- The four `session-ended-no-second-factor` tests. The account now loses its authenticator directly
+  instead of through *Start*.
+
+`test_no_route_a_full_session_can_reach_calls_associate_software_token` is the test that holds the
+decision. It sends every route the app serves, read from `app.routes`, as a full session with a
+fresh session per request and a valid CSRF token, and asserts that no request was refused for want
+of a session. It does this for a student, a coach, and an `email-second-factor` account with no
+authenticator.
+
+**Mutants** (same driver; byte restore; `git status --porcelain` empty after):
+
+| Mutant | Result | Caught by |
+|---|---|---|
+| The gate lets a full session reach the authenticator page | CAUGHT (9) | the decision test for all three accounts, the two full-session tests, the matrix's four rows |
+| `/account/authenticator` back to `ENROLMENT` | CAUGHT (9) | the same |
+| Revalidation writes no record | CAUGHT (2) | `test_a_session_ended_for_want_of_a_second_factor_is_recorded` |
+| A lost record is raised | CAUGHT (2) | `test_a_session_end_that_cannot_be_recorded_still_ends_the_session` |
+| A lost record leaves no WARNING | CAUGHT (1) | `test_a_lost_session_end_record_is_logged_once_without_a_name_or_subject` |
+
+The last three first reported `DID NOT APPLY`: moving the code into the helper changed its
+indentation. They were rewritten and run again, and are counted only from that run.
+
+### Condition 4: the guide
+
+- **First sign-in.** Step 4 says to choose the authenticator app *here*. The email paragraph says
+  that after email, the search asks for the authenticator app as well, and that this is expected.
+- **Students.** The new-phone steps are now the reset path: a new phone, a lost phone (a backup email
+  still signs in until the reset), a forgotten password.
+- **Coach.** *Resetting a password or a phone* (renamed from *…a lost password or a lost phone*,
+  with its link) lists when to reset.
+
+### Condition 5: the spec
+
+ac6 reads "…the account page adds, verifies and removes the backup email and, for a new phone,
+sends the student to the coach for a reset (no self-service replacement in the pilot)…", with the
+comment `PM ruling 2026-10-20 (ac5 re-run)` above it. `spec.description` said the same thing ("and
+replace the authenticator"), so it was amended to match, under the same comment. That edit is
+beyond the condition's wording. `validate_specs.py`: `OK: 394 files, 39 epics, 334 tasks, 21
+releases`.
+
+### Decisions in this session
+
+1. **A full session's POST to `/account/authenticator` is refused by the gate,** not answered by
+   the route. "Enrolment only" then holds for both methods in one place, and a full session's
+   request never reaches `confirm_authenticator`.
+2. **An `email-second-factor` account with no authenticator** is also told "To set one up, ask your
+   coach", and its link to the authenticator page is gone. The page would now send it straight back.
+   The coach's fix already exists: `email-second-factor --withdraw`, after which managed login asks
+   for the app.
+3. **One line kept from the third session's guide wording**, in both sections: being asked to set
+   up an authenticator app unexpectedly (not a first sign-in, and no reset just made) means telling
+   the coach, because someone may have the password. It no longer mentions *Start*.
+4. **ADR-0019 line 369** still says a student with a backup email can "replace the authenticator
+   from the account page". It is left for the PM's ADR consequence, which the review says is filed
+   in the next batch.
+
+### ac5, and dev
+
+**ac5 stays PASS on the first run** (condition 6), which covered sign-in, enrolment, sign-out and a
+reset forcing enrolment again. The re-run's facts stay above as recorded. **Dev still runs
+`93ed3f1`, with *Start***, until the next deploy of the pilot app to dev. No synthetic account is
+left: both were removed.
+
+### Checks run
+
+| Check | Result |
+|---|---|
+| The same affected selection as before | `757 passed in 8.70s` (the *Start* tests removed, the new ones added) |
+| `uv run scripts/affected_tests.py` | The whole selection is affected (`packages/debate_api/pyproject.toml`), so the PR's CI runs it (working agreement 10) |
+| `ruff check .`, `ruff format --check .` | `All checks passed!`, `940 files already formatted` |
+| `pyright packages/debate_api packages/debate_cli packages/debate_core` | `0 errors, 0 warnings, 0 informations` |
+| `lint-imports` | `Contracts: 12 kept, 0 broken.` |
+| `scripts/check_thin_handlers.py` | `OK: 42 CLI command and API route handlers within 25 statements` (one fewer: the begin route) |
+| `scripts/validate_specs.py` | `OK: 394 files, 39 epics, 334 tasks, 21 releases` |
+| `scripts/check_links.py`, `scripts/check_command_blocks.py` | `OK: 1875 relative links and anchors in 270 Markdown files`; `OK: no # comments in 327 shell code blocks in 127 Markdown files` |
+
+Nothing came out differently from what was expected, so the task is ready for the pull request
+under the third review's ACCEPTED verdict.

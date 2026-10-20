@@ -417,7 +417,33 @@ created on its own to start SES's review clock, with
 records). The runbook's step 4 now describes this route. The verification check and the
 production-access request itself are not yet reported.
 
-**Steps 3 and 5–10: not yet run.** Step 3 waits for the concurrency increase, and will plan 37 to
+**2026-10-19, the SES identity did not verify.** Hours after the targeted apply,
+`VerifiedForSendingStatus` was still `False`.
+
+- **SES reported** `DkimAttributes.Status: PENDING` and `VerificationInfo.ErrorType: HOST_NOT_FOUND`.
+- **The records are right.** SES's three tokens match the three `_domainkey.tub.dev.wfbdebate.com`
+  CNAMEs in Route 53 exactly, so no token rotation or module bug is involved.
+- **Public DNS cannot reach them.** Run by the session at 19:40 CDT (read-only, no AWS profile):
+  - all three CNAMEs return nothing, from the default resolver and from 8.8.8.8;
+  - the `.com` servers answer `NXDOMAIN` for the domain;
+  - `whois -h whois.verisign-grs.com wfbdebate.com` shows `Domain Status: clientHold`, `Creation
+    Date: 2026-09-20`, `Updated Date: 2026-10-05`, with the four Route 53 name servers still
+    listed.
+
+The registrar has suspended the domain's resolution. The 15 days from registration to the hold
+match ICANN's registrant-email verification deadline, so an unverified contact email is the likely
+cause. The operator was given the `route53domains` commands to check and resend it. **The public
+website at `wfbdebate.com` does not resolve either**, probably since 2026-10-05; that is outside
+this task and was flagged to the operator at once.
+
+Until the hold is lifted, nothing under `wfbdebate.com` can be validated:
+
+- the SES identity (step 4);
+- the ACM certificate, CloudFront and the managed login domain (step 3, which would time out
+  waiting for ACM).
+
+**Steps 3 and 5–10: not yet run.** They need both the domain hold lifted and the concurrency
+increase. Step 3 waits for the concurrency increase, and will plan 37 to
 add, not 41. ac5, the runbook's tables
 and the `Succeeded` phase wait for steps 3–10.
 

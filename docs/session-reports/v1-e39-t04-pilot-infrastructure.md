@@ -455,7 +455,16 @@ address is recorded here.
 **The concurrency quota was raised.** `get-requested-service-quota-change` → `CASE_CLOSED`, and
 `get-account-settings` → `1000	1000`. At 19:52 CDT the domain was still on `clientHold`.
 
-**Steps 3 and 5–10: not yet run.** They wait only for the domain hold to lift. Step 3 waits for the concurrency increase, and will plan 37 to
+**The hold lifted at 20:15 CDT.** The session's poll of `a.gtld-servers.net` found the domain
+delegated again to the four Route 53 name servers, and the registry whois read
+`Domain Status: ok`. At 20:16 CDT, from public DNS:
+
+- `dev.wfbdebate.com` resolves;
+- all three DKIM CNAMEs resolve to their `dkim.amazonses.com` targets;
+- `https://wfbdebate.com/` answers `200`.
+
+**Steps 3 and 5–10: not yet run.** Nothing blocks them now. Step 4's request waits for SES to
+report the identity verified. Step 3 waits for the concurrency increase, and will plan 37 to
 add, not 41. ac5, the runbook's tables
 and the `Succeeded` phase wait for steps 3–10.
 

@@ -62,7 +62,7 @@ v2.3's extension work.
 |---|---|---|---|---|---|
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 42 | 41 | 224 |
 | [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 97 | 75 | 473 |
-| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 21 | 6 | 190 |
+| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 21 | 7 | 190 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 13 | 1 | 108 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 14 | 0 | 96 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 0 | 66 |
@@ -303,7 +303,7 @@ Weekly argument-landscape reports show which positions are being read and with w
 | [File recipe format](plan_specs/v1/e33-file-builder/t01-file-recipe-format.yaml) `v1-e33-t01-file-recipe-format` | Succeeded | 1 | 11.0 |
 | [Lossless card writer](plan_specs/v1/e33-file-builder/t02-lossless-card-writer.yaml) `v1-e33-t02-lossless-card-writer` | Succeeded | 3 | 15.0 |
 | [`debate-research files` commands](plan_specs/v1/e33-file-builder/t03-file-build-cli.yaml) `v1-e33-t03-file-build-cli` | Pending | 3 | 10.0 |
-| [Built-file quality checks](plan_specs/v1/e33-file-builder/t04-file-quality-checks.yaml) `v1-e33-t04-file-quality-checks` | Pending | 2 | 11.0 |
+| [Built-file quality checks](plan_specs/v1/e33-file-builder/t04-file-quality-checks.yaml) `v1-e33-t04-file-quality-checks` | Succeeded | 2 | 11.0 |
 | [Publish built files to S3](plan_specs/v1/e33-file-builder/t05-file-publish.yaml) `v1-e33-t05-file-publish` | Pending | 3 | 9.0 |
 | [A recipe can name a camp (OpenEv) card](plan_specs/v1/e33-file-builder/t06-camp-pins.yaml) `v1-e33-t06-camp-pins` | Succeeded | 1 | 2.0 |
 | [A camp occurrence row carries its camp path's digest, so a camp-path withdrawal stops it before a rebuild](plan_specs/v1/e33-file-builder/t07-camp-path-on-occurrence-rows.yaml) `v1-e33-t07-camp-path-on-occurrence-rows` | Pending | 1 | 2.0 |

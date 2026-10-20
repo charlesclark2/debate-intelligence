@@ -378,7 +378,11 @@ def test_mutation_one_character_flipped_in_a_copied_run_fails_evidence_identity(
     tamper(standard.path, flip)
     report = check(parser, standard)
     assert report.status is CheckStatus.FAIL
-    assert failing(report) == {QualityCheck.EVIDENCE_IDENTITY, QualityCheck.SIDECAR}
+    assert failing(report) == {
+        QualityCheck.EVIDENCE_IDENTITY,
+        QualityCheck.SIDECAR,
+        QualityCheck.MANIFEST_ALIGNMENT,  # the card's fingerprint changed with its text
+    }
     assert messages(report, QualityCheck.SIDECAR)[0].startswith("the sidecar describes a file with SHA-256 ")
     found = [
         result

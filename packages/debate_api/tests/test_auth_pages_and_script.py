@@ -156,6 +156,7 @@ def test_the_templates_and_the_script_ship_in_the_package() -> None:
         "authenticator.html",
         "coach.html",
         "signed_out.html",
+        "authenticator_start.html",
         "sign_in_failed.html",
         "refused.html",
     ]:

@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Set up a new authenticator app · Team evidence search{% endblock %}
+{% block main %}
+<h1>Set up a new authenticator app</h1>
+<p>Use this when you have a new phone. Have the new phone ready, with an authenticator app on it,
+and finish in one sitting.</p>
+<p>Choosing <strong>Start</strong> shows a new QR code to scan.</p>
+<form method="post" action="/account/authenticator/begin">
+<button type="submit">Start</button>
+<p data-tub-message role="status"></p>
+</form>
+<p><a href="/account">Back to your account</a></p>
+{% endblock %}

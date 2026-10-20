@@ -34,6 +34,7 @@ ROUTE_ACCESS: Final = {
     "/signed-out": Access.PUBLIC,
     "/auth/sign-out": Access.ENROLMENT,
     "/account/authenticator": Access.ENROLMENT,
+    "/account/authenticator/begin": Access.SIGNED_IN,
     "/": Access.SIGNED_IN,
     "/account": Access.SIGNED_IN,
     "/account/email": Access.SIGNED_IN,
@@ -64,6 +65,9 @@ def register_routes(app: FastAPI, routes: RouteAccess) -> None:
     app.add_api_route("/account/authenticator", authenticator_page, methods=["GET"], include_in_schema=False)
     app.add_api_route(
         "/account/authenticator", confirm_authenticator, methods=["POST"], include_in_schema=False
+    )
+    app.add_api_route(
+        "/account/authenticator/begin", begin_authenticator, methods=["POST"], include_in_schema=False
     )
     app.add_api_route("/", home, methods=["GET"], include_in_schema=False)
     app.add_api_route("/account", account, methods=["GET"], include_in_schema=False)
@@ -170,8 +174,25 @@ async def sign_out(request: Request) -> JSONResponse:
 
 
 def authenticator_page(request: Request) -> HTMLResponse:
-    """A new authenticator secret as a QR code, and the form for a code from it."""
+    """A pending enrolment's QR page; for a full session, the Start page, which calls nothing.
+
+    The session cookie is `SameSite=Lax`, so a cross-site link reaches this GET with a session. For a
+    full session it therefore only offers *Start*, a POST through the CSRF checks
+    (:func:`begin_authenticator`). A pending enrolment has no authenticator to lose, and the
+    callback's 303 lands here, so its GET begins the secret (PM review, 2026-10-20).
+    """
     holder = _holder(request)
+    if isinstance(holder, Session):
+        return pilot_state(request).renderer.render("authenticator_start.html", holder=holder)
+    return _authenticator_qr_page(request, holder)
+
+
+def begin_authenticator(request: Request) -> HTMLResponse:
+    """*Start*, for a full session: begin a new secret and answer with its QR page."""
+    return _authenticator_qr_page(request, _session(request))
+
+
+def _authenticator_qr_page(request: Request, holder: Session | PendingEnrolment) -> HTMLResponse:
     enrolment = pilot_state(request).services.account_page.begin_authenticator(holder)
     secret = enrolment.secret.reveal()
     return pilot_state(request).renderer.render(

@@ -7,7 +7,8 @@
 // token in X-CSRF-Token. A plain form post, sent with this script off, is refused at the origin.
 //
 // Every <form method="post"> on a page is sent this way. The app answers with JSON: a `location`
-// to go to next, or a `message` to show in the form's [data-tub-message] element.
+// to go to next, or a `message` to show in the form's [data-tub-message] element. Or it answers
+// with a page, as Start does with the new authenticator's QR code, whose <main> replaces this one's.
 // v1-e39-t06 extends this file for Copy card.
 "use strict";
 
@@ -46,6 +47,13 @@
       },
       body,
     });
+    const type = response.headers.get("content-type") || "";
+    if (response.ok && type.startsWith("text/html")) {
+      // A page in answer, such as Start's QR code: it takes the place of this page's <main>.
+      const page = new DOMParser().parseFromString(await response.text(), "text/html");
+      document.querySelector("main").replaceWith(document.importNode(page.querySelector("main"), true));
+      return;
+    }
     let answer = {};
     try {
       answer = await response.json();

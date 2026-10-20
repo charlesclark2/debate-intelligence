@@ -96,6 +96,8 @@ def test_start_is_for_a_full_session_only(world: Any) -> None:
         world.sealer.open(ENROLMENT_COOKIE, world.browser.cookies.get(ENROLMENT_COOKIE))
     )
 
+    assert enrolment is not None
+
     response = world.post(BEGIN, csrf_token=enrolment.csrf_token)
 
     assert response.status_code == 403

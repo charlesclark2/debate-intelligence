@@ -339,9 +339,40 @@ None.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-20
 
 **Notes:**
+
+Accepted, with the phase `Succeeded`. The branch predates the close-out of 2026-10-20 (its spec
+check reads 394 files against 396 on `dev`), so it syncs before its pull request. The pull request
+needs no `--partial`.
+
+**The work itself:**
+
+* **It trusts neither the file nor its sidecar.** Every digest is recomputed from two re-parses, with
+  t02's own readings, and mutant I07 (the sidecar's digests trusted) is caught.
+* **ac1's mutations are real OOXML edits of files t02 built,** and each lands on the check that owns
+  it. "Removes one underline run" is tested both ways it can be read.
+* **A hand-written expectation caught a real bug,** the section path taken before a new heading
+  closed the levels below it. That is why expectations are written by hand (agreement 6).
+* **Survivors handled honestly:** three checks deleted because mutation could not tell them from
+  their absence (I08, S04, V01, each argued), and the one that changes what a reader sees (S10) kept
+  with a test.
+* **The commit that went in on a red test (`52ebdc1`) was reported and fixed in the next commit,**
+  and every later commit was gated.
+* **0.14 s per 100 cards,** against a 5 s budget, so the timing test stays on the PR path.
+
+**Rulings:**
+
+1. **Deviations 1 to 5 are accepted.** 1 and 2 are my rulings of 2026-10-19 and 2026-10-20. 3, the
+   schema export script, follows t01's and t02's shape.
+2. **Decisions 1 to 11 are accepted.** Decision 6, checking the line's form without copying the
+   writer's function, is the right boundary. Decision 7 errs towards flagging, as ruled.
+3. **Follow-ups 1 and 3 go to `v1-e33-t03`** by PM amendment in the next batch: wire the service in
+   the container, refuse an output directory inside a git working tree, and give the removal
+   runbook's step 8 its `files check` command. **Follow-up 2 goes to `v1-e33-t05`:** gate on
+   `status` PASS, with warnings never blocking. **Follow-up 4** is already `v1-e33-t07`'s, by the
+   amendment I'm making.

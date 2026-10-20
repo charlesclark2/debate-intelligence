@@ -24,12 +24,14 @@ regenerates it on `dev` ([`v1-e01-t16`](../plan_specs/v1/e01-repo-foundation/t16
 | [data/debate-file-style-survey.md](data/debate-file-style-survey.md) | Which Word styles real team, caselist and camp `.docx` files use, and the share of files per template family |
 | [data/parsed-card-store.md](data/parsed-card-store.md) | Layout and record shapes of the parsed card store that caselist parse writes |
 | [data/parser-eval-2026-10.md](data/parser-eval-2026-10.md) | Parser evaluation baseline on 2026.10.18-docx-5: per-unit scores for the labelled tiers |
+| [data/search-index.md](data/search-index.md) | The student search pilot's SQLite FTS5 index: its schema, manifest and pointer, and the record of each full-store build |
 | [evidence/normalization.md](evidence/normalization.md) | Evidence text normalization policy: the frozen, versioned rules every snapshot offset, hash and verification depends on |
 | [evidence/snapshot-text-format.md](evidence/snapshot-text-format.md) | `debate-snapshot-text/1`: how a snapshot's normalized text and paragraph map are stored, the canonical encoding, the key check every read makes, and what `SnapshotService.load` verifies |
 | [guides/coach-website-editing.md](guides/coach-website-editing.md) | For coaches: adding, changing and removing events and announcements on the team website, with no code |
 | [guides/evidence-store-cli.md](guides/evidence-store-cli.md) | Using `debate-research store sync\|ls\|get`: environments, the dry-run default, the production guard, verification and resume |
 | [guides/file-recipes.md](guides/file-recipes.md) | For coaches: writing a file recipe, the YAML that names the cards and headings of an evidence file to build |
 | [guides/parent-email-updates.md](guides/parent-email-updates.md) | Parent email updates: the channel chosen and why, how a parent's address travels, who owns the list, how a coach sends an update and what may not go in one about students |
+| [guides/search-index.md](guides/search-index.md) | Building and publishing the student search pilot's index with `debate-research tub index build\|publish` |
 | [policies/caselist-data-use.md](policies/caselist-data-use.md) | Data-use policy for OpenCaselist disclosures and OpenEv camp files |
 | [policies/website-publishing.md](policies/website-publishing.md) | What may be published on the public team website: student names and photos, results, branding, accessibility, third parties, donations, removal on request |
 | [process/branching-and-environments.md](process/branching-and-environments.md) | `main` = prod, `dev` = development; promotion rules |

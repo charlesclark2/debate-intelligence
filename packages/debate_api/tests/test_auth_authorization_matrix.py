@@ -47,6 +47,7 @@ ROUTE_REQUESTS: list[RouteRequest] = [
     RouteRequest("POST", "/auth/sign-out", "/auth/sign-out", {}),
     RouteRequest("GET", "/account/authenticator", "/account/authenticator"),
     RouteRequest("POST", "/account/authenticator", "/account/authenticator", {"code": "424242"}),
+    RouteRequest("POST", "/account/authenticator/begin", "/account/authenticator/begin", {}),
     RouteRequest("GET", "/", "/"),
     RouteRequest("GET", "/account", "/account"),
     RouteRequest("POST", "/account/email", "/account/email", {"email": "debater.one@example.test"}),

@@ -504,9 +504,87 @@ the same with `infrastructure/envs/prod`.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** CHANGES_REQUESTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-20
 
 **Notes:**
+
+The work is strong and nearly done. There is one small change, and then ac5 closes in this session.
+I review again after both; the pull request opens with no `--partial`, because v1-e39-t06 depends on
+this task.
+
+**What is good:**
+
+* **The evidence is real.** The callback tests run the real OAuth client and verifier on RS256
+  tokens signed for the run, including `alg` `none` and `HS256`. The matrix fails when a route has no
+  row. 23 of 23 mutants were caught, and the one that did not apply was reported, not counted. The
+  red run says plainly that the skeleton was made from the finished code.
+* **Deviation 4 is the right call.** Re-reading the account at revalidation is what makes "no
+  session without an authenticator" hold after sign-in, not only at it. One extra call every five
+  minutes is cheap.
+* **The password handling** (shown once, never in stderr, `--verbose`, errors or a `DEBUG` capture),
+  the username refusals before any call, and audit records with subjects and no names are what the
+  E39 gate needs.
+
+**The change: replacing an authenticator starts with a POST.**
+
+`GET /account/authenticator` calls `AssociateSoftwareToken` for a full session. The session cookie
+is `SameSite=Lax`, which is right for the return from managed login, but it means a cross-site link
+to that page, clicked by a signed-in student, starts an association. Two consequences:
+
+* **It may break the old authenticator.** The page's copy relies on the old authenticator working
+  until the new one is confirmed. AWS's API reference has described both behaviours over time:
+  older text says association disassociates the existing token at once, newer text says this happens
+  at verification. ac5 step 4 tests it, but the design should not depend on the answer.
+* **Your own deviation 4 makes it worse.** If association does drop the old token, the next
+  revalidation's `GetUser` finds no second factor and ends the session. The student must then enrol
+  again at sign-in, with only the password standing between that and someone else's phone.
+
+**What to change:**
+
+1. **For a full session,** `GET /account/authenticator` renders a page with a *Start* button and
+   calls nothing in Cognito. The button is a form POST (say `POST /account/authenticator/begin`)
+   through the CSRF, `Origin` and `Sec-Fetch-Site` checks. That POST calls `begin_authenticator`
+   and renders the QR page. `POST /account/authenticator` (confirm) is unchanged.
+2. **A pending enrolment keeps today's GET.** It has no authenticator to lose, and the 303 from the
+   callback lands there.
+3. **Tests, shown failing first:**
+   * a GET with a full session makes no self-service call (the stub asserts none);
+   * the begin POST without the CSRF token, or cross-site, is refused before the route runs;
+   * the matrix gains the new route's row and its `ROUTE_ACCESS` entry;
+   * a mutant that lets the GET begin for a full session is caught.
+4. **The copy follows ac5 step 4's answer.**
+   * If the old app still signs in after *Start* without confirming, keep "your old one keeps
+     working until you confirm".
+   * If not, say on the *Start* page and in the guide that the old app stops working once you
+     start, and that you should finish in one sitting.
+   * The `authenticator-replaced` message is right either way.
+5. **ac5's operator block:** step 4 now presses *Start* and then goes back without scanning. Give
+   the operator the corrected block (A and B together) in this session after the change. Then
+   record the outputs, set ac5 PASS and the Goal `Succeeded` in your own sections, and ask for a
+   second review.
+
+**Rulings on the deviations and decisions** (all accepted):
+
+* **D1, the package list:** accepted, including `packages/debate_core/pyproject.toml` for the `tub`
+  extra. Writing the additions into the spec, with a reason for each, is the right way to do it.
+* **D2, the `/coach` page:** accepted. v1-e39-t07 or t06 gives it content.
+* **D3, `tub users enable`:** accepted.
+* **D5, runbook steps 6, 8, 11e and 12:** accepted. They would have been wrong after this deploy.
+* **D6, smoke checks:** v1-e39-t10 owns them. I am adding an amendment for the checks that need no
+  account (`/healthz`, the `302` to managed login, and the hashed script with its cache header).
+  There is no signed-in smoke check and no TOTP secret in CI.
+* **Not checking `x-amz-content-sha256` in the app:** accepted. Lambda refuses the POST first, and a
+  check that failed on every POST in AWS was the worse risk.
+* **The 15-minute enrolment cookie,** the pool id from `--pool-id` or `TUB_USER_POOL_ID`, refusing
+  capitals rather than folding them, the password shape, and a failed audit write as exit 3 with no
+  password shown: all accepted.
+* **The whole selection to CI:** accepted, under working agreement 10.
+
+**Operator follow-up C** (the module apply, dev then prod) goes on the PM's promotion list after the
+merge. The prod apply runs from `prod-deploy` after its `owner.auto.tfvars` gains the pilot lines.
+
+**The conflict with v1-e39-t02** in `debate_cli/commands/__init__.py`: whichever merges second keeps
+both subgroups under one `tub` group, as you say.

@@ -171,7 +171,7 @@ def test_replacing_the_authenticator_keeps_the_old_one_until_the_new_one_is_conf
 ) -> None:
     world, session = student
 
-    page = world.browser.get("/account/authenticator")
+    page = post(world, session, "/account/authenticator/begin")
 
     assert page.status_code == 200
     assert "Your old one keeps working until you confirm" in page.text
@@ -180,7 +180,7 @@ def test_replacing_the_authenticator_keeps_the_old_one_until_the_new_one_is_conf
 
 def test_a_confirmed_new_authenticator_replaces_the_old_one(student: tuple[Any, Any]) -> None:
     world, session = student
-    world.browser.get("/account/authenticator")
+    post(world, session, "/account/authenticator/begin")
 
     response = post(world, session, "/account/authenticator", {"code": world.good_authenticator_code})
 

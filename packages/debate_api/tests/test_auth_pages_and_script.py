@@ -28,10 +28,13 @@ def pages(world: Any) -> dict[str, str]:
     """Every page the app renders, for a coach (who sees every link) and a pending enrolment."""
     world.login.add_account("coach.one", "coach")
     world.login.add_account("debater.two", "student", has_authenticator=False)
-    world.use_session(world.session_for("coach.one"))
+    session = world.use_session(world.session_for("coach.one"))
     rendered = {
         path: world.browser.get(path).text for path in ["/", "/account", "/coach", "/account/authenticator"]
     }
+    rendered["POST /account/authenticator/begin"] = world.post(
+        "/account/authenticator/begin", csrf_token=session.csrf_token
+    ).text
     rendered["/signed-out"] = world.new_browser().get("/signed-out").text
     rendered["/auth/callback (refused)"] = world.new_browser().get("/auth/callback?code=x&state=y").text
     enrolling = world.new_browser()
@@ -66,6 +69,7 @@ def test_every_form_that_changes_something_is_a_post_form(pages: dict[str, str])
         "/account/email/verify",
         "/account/email/remove",
         "/account/authenticator",
+        "/account/authenticator/begin",
     }
 
 
@@ -76,6 +80,13 @@ def test_the_script_sends_every_post_with_the_body_hash_and_the_csrf_token() -> 
     assert 'meta[name="tub-csrf"]' in SCRIPT
     assert 'method: "POST"' in SCRIPT and 'credentials: "same-origin"' in SCRIPT
     assert 'form.method.toLowerCase() !== "post"' in SCRIPT and "event.preventDefault()" in SCRIPT
+
+
+def test_the_script_puts_an_html_answer_in_place_of_the_main_element() -> None:
+    """Start answers with the QR page; the script parses it and swaps `<main>`, without innerHTML."""
+    assert 'headers.get("content-type")' in SCRIPT and '"text/html"' in SCRIPT
+    assert "new DOMParser().parseFromString(" in SCRIPT
+    assert 'document.querySelector("main").replaceWith(document.importNode(' in SCRIPT
 
 
 def test_the_script_reaches_no_other_origin() -> None:

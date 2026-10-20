@@ -19,6 +19,14 @@ marked; and 10 cards that gain a short cite written with a left quote, with that
 Those two compare the parser's cards with the cards the store holds for the same source, read
 in place.
 
+For `v1-e31-t24`, a third plan, `--plan bold-tag`, asks about the line above a cite that opens a card
+with no tag, 36 items. (7)'s two lines are tags typed with nothing set in a file whose defaults make
+text bold, so the reader saw neither bold nor size; the line is shown as Word shows it, with what it
+inherits. 10 lines the rule proposed to the PM would read as the card's tag above a bracketed cite,
+10 above another cite, and 6 such lines read as body or as nothing that it leaves; then 10 lines in
+files whose defaults make text bold, read as body or as nothing, that Word shows as the classifier's
+bold-heading rule would take them, and that stand above no cite.
+
 It parses every source in the store with the parser this branch carries. The sample was taken on
 2026-10-18 with the three rules behind a flag that only this script switched on, so it judged the
 code that would ship; the rules were switched on for good once the tallies supported them, and the
@@ -34,6 +42,8 @@ paragraph, tag, cite, file name, path or digest.
     uv run python scripts/sample_cite_shapes.py --seed 20261018 \\
       --save-tallies ~/cite-shape-sample-tallies.txt
     uv run python scripts/sample_cite_shapes.py --plan left-quote --seed 20261019 \\
+      --save-tallies ~/cite-shape-sample-tallies.txt
+    uv run python scripts/sample_cite_shapes.py --plan bold-tag --seed 20261020 \\
       --save-tallies ~/cite-shape-sample-tallies.txt
 
 Keys: `y` yes, `n` no, `u` unsure, with no Enter; `q` stops and keeps the tallies so far.
@@ -52,7 +62,7 @@ import time
 from collections import Counter
 from collections.abc import Callable, Iterable, Sequence
 from concurrent.futures import ProcessPoolExecutor
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -71,6 +81,12 @@ from debate_core.domain.debate_files import (  # noqa: E402
     ParsedDocument,
 )
 from debate_core.domain.style_profile import RunEmphasis, StructuralUnit, StyleProfile  # noqa: E402
+from debate_core.evidence.line_above_a_cite import (  # noqa: E402
+    BRACKETED_CITE_RULES,
+    bold_lines_read_as_body_or_nothing,
+    line_above,
+    lines_above_cites,
+)
 from debate_core.evidence.style_classifier import (  # noqa: E402
     first_name_and_year,
     for_matching,
@@ -78,19 +94,26 @@ from debate_core.evidence.style_classifier import (  # noqa: E402
     the_cite_style_marks_a_name_and_year_at_the_head,
 )
 from debate_core.integrations.docx_parser import DebateDocxParser  # noqa: E402
-from debate_core.integrations.docx_parser.runs import ReadParagraph  # noqa: E402
+from debate_core.integrations.docx_parser.package import DocxPackage  # noqa: E402
+from debate_core.integrations.docx_parser.runs import (  # noqa: E402
+    ReadParagraph,
+    as_word_shows_it,
+    defaults_make_text_bold,
+)
 from debate_core.integrations.local.fs_blob_store import BLOB_DIRECTORY  # noqa: E402
 from debate_core.integrations.local.parsed_store import LocalParsedStore  # noqa: E402
 
-__all__ = ["STRATA", "Stratum", "card_strata", "main", "strata_of"]
+__all__ = ["STRATA", "Stratum", "bold_tag_strata", "card_strata", "main", "strata_of"]
 
 CITE_QUESTION = "Is the marked paragraph this card's cite, or a line of it?"
 TEXT_QUESTION = "Is the marked paragraph part of the card's text, the evidence?"
 EITHER_QUESTION = "Is the marked paragraph a cite, or part of a card's text?"
 SHORT_CITE_QUESTION = "Is the short cite shown the right short cite for the marked cite?"
+TAG_QUESTION = "Is the marked line the tag of the card whose cite is below it?"
+HEADING_QUESTION = "Is the marked line a heading: a card's tag, or a pocket, hat or block?"
 
-#: The plan the PM approved first, and the one after the review of 2026-10-18.
-FIRST_PLAN, LEFT_QUOTE_PLAN = "first", "left-quote"
+#: The plan the PM approved first, the one after the review of 2026-10-18, and `v1-e31-t24`'s.
+FIRST_PLAN, LEFT_QUOTE_PLAN, BOLD_TAG_PLAN = "first", "left-quote", "bold-tag"
 LEFT_QUOTE = "\u2018"
 
 ANSWERS = {"y": "yes", "n": "no", "u": "unsure"}
@@ -148,8 +171,24 @@ STRATA: tuple[Stratum, ...] = (
         10,
         LEFT_QUOTE_PLAN,
     ),
+    Stratum("a bold line above a cite", "taken, above a bracketed cite", TAG_QUESTION, 10, BOLD_TAG_PLAN),
+    Stratum("a bold line above a cite", "taken, above another cite", TAG_QUESTION, 10, BOLD_TAG_PLAN),
+    Stratum("a bold line above a cite", "left, read as body or nothing", TAG_QUESTION, 6, BOLD_TAG_PLAN),
+    Stratum(
+        "a bold line in a file whose defaults make text bold",
+        "above no cite, read as body or nothing",
+        HEADING_QUESTION,
+        10,
+        BOLD_TAG_PLAN,
+    ),
 )
 _LEAVES_NO_BODY, _GAINS_A_SHORT_CITE = 11, 12
+_TAKEN_ABOVE_A_BRACKETED_CITE, _TAKEN_ABOVE_ANOTHER_CITE, _LEFT_ABOVE_A_CITE, _BOLD_LINE_ELSEWHERE = (
+    13,
+    14,
+    15,
+    16,
+)
 
 
 # ------------------------------------------------------------------------------------------------
@@ -333,16 +372,73 @@ def card_strata(
     return found, without_a_left_quoted_line
 
 
+def bold_tag_strata(
+    reads: Sequence[ReadParagraph],
+    shown: Sequence[ReadParagraph],
+    document: ParsedDocument,
+    profile: StyleProfile,
+    *,
+    defaults_bold: bool,
+) -> list[tuple[int, int]]:
+    """The bold-tag plan's items in one file, as (stratum, position of the line).
+
+    `reads` and `shown` are the file's paragraphs as read and as Word shows them, aligned with the
+    document's sections. A line above a cite that opens a card with no tag is taken or left by the
+    rule proposed to the PM; a bold line above no cite is looked for only in a file whose defaults
+    make text bold.
+    """
+    sections = document.sections
+    found: list[tuple[int, int]] = []
+    above_a_cite: set[int] = set()
+    lines = lines_above_cites(
+        [read.description for read in reads],
+        sections,
+        document.cards,
+        profile,
+        shown=[read.description for read in shown],
+        cite_rules=None,
+    )
+    for cite, line in lines:
+        position = line_above(sections, cite)
+        if position is None:
+            continue
+        above_a_cite.add(position)
+        if line.the_proposed_rule_takes:
+            bracketed = line.cite_rule in BRACKETED_CITE_RULES
+            found.append(
+                (_TAKEN_ABOVE_A_BRACKETED_CITE if bracketed else _TAKEN_ABOVE_ANOTHER_CITE, position)
+            )
+        elif line.cite_opens_a_card_with_no_tag and line.read_as_body_or_nothing:
+            found.append((_LEFT_ABOVE_A_CITE, position))
+    if defaults_bold:
+        for bold in bold_lines_read_as_body_or_nothing(
+            [read.description for read in reads],
+            [read.description for read in shown],
+            sections,
+            document.cards,
+            profile,
+        ):
+            if bold.position not in above_a_cite:
+                found.append((_BOLD_LINE_ELSEWHERE, bold.position))
+    return found
+
+
+def _as_word_shows_them(reads: Sequence[ReadParagraph], package: DocxPackage) -> list[ReadParagraph]:
+    return [replace(read, description=as_word_shows_it(read.description, package)) for read in reads]
+
+
 class _ReadingParser(DebateDocxParser):
-    """The parser, keeping each file's paragraphs as it read them."""
+    """The parser, keeping each file's paragraphs as it read them, and the file's package."""
 
     def __init__(self) -> None:
         super().__init__()
         self.reads: list[ReadParagraph] = []
+        self.package: DocxPackage | None = None
 
     def _read_sections(self, package: Any) -> Any:  # pyright: ignore[reportIncompatibleMethodOverride]
         sections = super()._read_sections(package)  # pyright: ignore[reportPrivateUsage]
         self.reads = [section.read for section in sections]
+        self.package = package
         return sections
 
 
@@ -353,6 +449,7 @@ class _Source:
     blob: Path
     data_dir: Path
     version: str
+    plan: str = FIRST_PLAN
 
 
 def _version_directory(parsed: Path, caselist: str) -> Path:
@@ -368,7 +465,7 @@ def _version_directory(parsed: Path, caselist: str) -> Path:
     return max(versions, key=lambda path: parse_version_directory(path.name))
 
 
-def sources_in(data_dir: Path, caselists: Iterable[str]) -> list[_Source]:
+def sources_in(data_dir: Path, caselists: Iterable[str], plan: str = FIRST_PLAN) -> list[_Source]:
     """Every source the store recorded as parsed, in a fixed order."""
     sources: list[_Source] = []
     for caselist in caselists:
@@ -378,7 +475,7 @@ def sources_in(data_dir: Path, caselists: Iterable[str]) -> list[_Source]:
             if record.get("outcome") == "PARSED":
                 digest = record["source_sha256"]
                 blob = data_dir / BLOB_DIRECTORY / digest[:2] / digest[2:4] / digest
-                sources.append(_Source(caselist, digest, blob, data_dir, version.name))
+                sources.append(_Source(caselist, digest, blob, data_dir, version.name, plan))
     return sorted(sources, key=lambda source: (source.caselist, source.sha256))
 
 
@@ -420,6 +517,13 @@ def _strata_in(source: _Source) -> tuple[list[tuple[int, int]], int]:
         return [], 0
     reads, document = parsed
     profile = _PARSER.profile  # type: ignore[union-attr]
+    if source.plan == BOLD_TAG_PLAN:
+        package = _PARSER.package  # type: ignore[union-attr]
+        assert package is not None  # noqa: S101 - set by the parse
+        shown = _as_word_shows_them(reads, package)
+        return bold_tag_strata(
+            reads, shown, document, profile, defaults_bold=defaults_make_text_bold(package)
+        ), 0
     by_card, without = card_strata(reads, document, _stored_cards(source), profile)
     return strata_of(reads, document.sections, profile) + by_card, without
 
@@ -582,6 +686,11 @@ def prepare(drawn: Sequence[tuple[int, _Source, int]]) -> list[_Item]:
         if parsed is None:
             continue
         reads, document = parsed
+        if source.plan == BOLD_TAG_PLAN:
+            # The line is shown with the bold and size it inherits, as the person sees it in Word.
+            package = _PARSER.package  # type: ignore[union-attr]
+            assert package is not None  # noqa: S101 - set by the parse
+            reads = _as_word_shows_them(reads, package)
         shown = render_item(reads, document.sections, position)
         if STRATA[stratum].question is SHORT_CITE_QUESTION:
             element = document.sections[position].element_index
@@ -645,9 +754,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument(
         "--plan",
-        choices=(FIRST_PLAN, LEFT_QUOTE_PLAN),
+        choices=(FIRST_PLAN, LEFT_QUOTE_PLAN, BOLD_TAG_PLAN),
         default=FIRST_PLAN,
-        help="first: the 70 items approved first. left-quote: the 28 asked for in the PM's review.",
+        help=(
+            "first: the 70 items approved first. left-quote: the 28 asked for in the PM's review. "
+            "bold-tag: v1-e31-t24's 36, the line above a cite."
+        ),
     )
     parser.add_argument("--seed", type=int, help="Draws the same items again. Default: a new one, recorded.")
     parser.add_argument("--save-tallies", type=Path, required=True, help="A file outside the repository.")
@@ -662,7 +774,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     seed = arguments.seed if arguments.seed is not None else random.SystemRandom().randrange(10**9)
     caselists = arguments.caselist or ["hsld26", "hspf26", "hspolicy26", "openev"]
 
-    sources = sources_in(arguments.data_dir, caselists)
+    sources = sources_in(arguments.data_dir, caselists, arguments.plan)
     print(f"Reading {len(sources):,} parsed sources; a few minutes …", flush=True)
     found, without = scan(sources, arguments.workers)
     items = prepare(draw(found, seed, arguments.plan))

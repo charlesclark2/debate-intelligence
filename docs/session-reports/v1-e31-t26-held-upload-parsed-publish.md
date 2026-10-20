@@ -6,7 +6,7 @@
 | Spec | [`plan_specs/v1/e31-debate-file-parsing/t26-held-upload-parsed-publish.yaml`](../../plan_specs/v1/e31-debate-file-parsing/t26-held-upload-parsed-publish.yaml) |
 | Epic / release | `v1-e31-debate-file-parsing` / `v1.1` |
 | Branch | `task/v1-e31-t26-held-upload-parsed-publish` |
-| Session status | IN PROGRESS: waiting on the operator's affected-set run (Operator follow-up 1) <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | COMPLETE <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
@@ -48,7 +48,7 @@ after-merge list, as your notes say: until the agent is reinstalled, an older bu
 
 | Check | Result |
 |---|---|
-| `uv run scripts/affected_tests.py --run` | **Handed to the operator** (Operator follow-up 1): 270 of 316 test files, 7,692 of the selection's 9,627 tests, about 5 minutes here. Measured by `pytest --collect-only` over its list (5.8 s) |
+| `uv run scripts/affected_tests.py --run` | **Left to the pull request's `ci` check, by the PM's ruling of 2026-10-19** (Operator follow-up 1). The affected set is 270 of 316 test files, 7,692 of the selection's 9,627 tests, about 5 minutes here, measured by `pytest --collect-only` over its list (5.8 s). The ruling: when the affected set would take longer than about two minutes, the session neither runs it nor hands it to the operator, and CI runs it on the pull request. A CI failure comes back to the session under agreement 10 |
 | `uv run ruff format --check .` / `uv run ruff check .` | `886 files already formatted` / `All checks passed!` |
 | `uv run pyright packages/debate_core packages/debate_cli` | `0 errors, 0 warnings, 0 informations` (10 s) |
 | `uv run lint-imports` | `Contracts: 12 kept, 0 broken.` |
@@ -181,16 +181,9 @@ and the re-run clears (Operator follow-up 2).
 
 ## Operator follow-ups
 
-1. **The affected set** (expected runtime about 5 minutes; now, before the PM review). Where: this
-   task's worktree, `debate-intelligence-worktrees/v1-e31-t26-held-upload-parsed-publish`.
-
-   ```bash
-   cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e31-t26-held-upload-parsed-publish
-   uv run scripts/affected_tests.py --run
-   ```
-
-   Success looks like a last line with no `failed` and no `error`, about 7,692 tests passed or skipped. Paste the last
-   20 lines back into the session.
+1. **The affected set: waived, nothing to run.** By the PM's ruling of 2026-10-19 the pull
+   request's `ci` check runs it, because here it would take about 5 minutes. If `ci` fails, the
+   failing part's output comes back to the session.
 2. **After this merges, which is after A11**: the status check in each environment, from the removal
    runbook (steps 3 and 9). Where: a checkout of `dev` at or after the merge, set up as the runbook
    says. Expect no *HELD UPLOADS PARSED IN THE BUCKET* line, since neither environment has had a
@@ -230,9 +223,48 @@ and the re-run clears (Operator follow-up 2).
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-19
 
 **Notes:**
+
+Accepted. Before the pull request the session records the waiver below and sets the phase
+`Succeeded`, in its own section above this review. The pull request needs no `--partial`, and it
+merges after A11 of v1-e31-t20's list.
+
+**The affected-set run is waived; CI runs it** (Operator follow-up 1). Here the affected set is
+270 of 316 files, about 80% of the suite. Handing it to the operator moves the bottleneck agreement
+10 removed from the session to the person, while CI runs the whole selection on the pull request
+anyway. The rule from now on, which the PM writes into agreement 10 in the next batch: when the
+affected set would take longer than about two minutes, the session does not hand it to the operator.
+It says so in the report and lets the pull request's `ci` check run it. A CI failure comes back to
+the session as agreement 10 already says.
+
+**The work itself:**
+
+* **One rule, made public rather than copied.** `stored_row_hold` was extracted in a commit of its
+  own, and the publisher, the parse and status all ask it. Mutants 3 and 4 restate it and are caught.
+* **Per disclosure, not per digest,** because the occurrence table needs it (Decision 1). That is the
+  right reading of my note, which pointed at the plan.
+* **The local aggregates leave held rows out too,** so v1-e39-t02's index never sees them, as I asked.
+* **Two survivors became better tests:** what clustering is handed, and the window between a hold's
+  arrival and the next run.
+* **The cross-build check shows the latent risk plainly:** an older build republishes a held file and,
+  on `docx-5`, puts the rows back. Status now names that state, and the re-run clears it.
+
+**Rulings:**
+
+1. **Deviations 1 and 2 are accepted.** The publisher needs this machine's manifests, so wiring them
+   as a required argument is right, and status without a line saying what is owed would only half
+   name it. The spec's packages already carry the session's addition.
+2. **Decisions 1 to 7 are accepted.** Decision 3, a parse stricter than `caselist publish` for a
+   source withdrawn everywhere and held at one path, is right for a store whose rows are disclosures.
+3. **Follow-up 1** (the file-recipe resolver does not ask about holds) goes to `v1-e33-t03` by PM
+   amendment in the next batch: resolve through `stored_row_hold`, as it does through the suppression
+   list.
+4. **Follow-up 2** (an order-dependent conftest error with interleaved paths) goes on the deferred
+   tooling list. CI and `affected_tests.py` sort their paths, so neither meets it.
+5. **Follow-up 3** is why the agent reinstall (A12) matters; it is already on the list. The status
+   runs after merge fold into A13's, one per environment.

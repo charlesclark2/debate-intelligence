@@ -110,7 +110,7 @@ spec:
         document record, `None` for no tag; no document is indexed for a source no
         occurrence row names, by tests shown failing first.
 status:
-  phase: Succeeded
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

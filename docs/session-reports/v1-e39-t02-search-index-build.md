@@ -274,9 +274,83 @@ No publish is needed for this task. The first one, to dev, is `docs/guides/searc
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** CHANGES_REQUESTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-20
 
 **Notes:**
+
+This is careful work, and the one change I ask for is question 4. The full-store build has to be
+re-run anyway: v1-e31-t24 bumps the parser to `docx-6`, and this index must be rebuilt on it. So
+doing the compact encoding now costs almost nothing. I review again after the change and the
+operator's new build. The Goal goes back to `InProgress` until then.
+
+**What is good:**
+
+* **The 3.40.0 ceiling is proven against the real image.** It is also shown failing with the
+  image's own error on a `locale` mutant. That is the check ADR-0019 asked for.
+* **Privacy is enforced by structure, not convention.** The FTS5 table has exactly four columns,
+  provenance sits in a table no FTS5 index covers, and there is a test that no path or file name is
+  stored. Mutants placing the school and team code in searchable columns were killed.
+* **The publish order holds when a write is refused at any of the three steps,** and a digest
+  mismatch stops before the pointer. The survivor found by the mutation run became a test.
+* **Byte-identical output under six orders,** via `rebuild`, `optimize` and `VACUUM`.
+
+**The change: question 4, option (a).**
+
+1. **Store formatting spans and font-size spans compactly.** Use arrays such as `[emphasis, start,
+   end, colour]` without `rule_id` or `match_source`, and a compact form for font sizes. The format
+   version stays 1, since nothing has read the index. Regenerate the schema, and update
+   `docs/data/search-index.md`'s column descriptions.
+2. **Tests, shown failing first:**
+   * decoding the stored spans gives exactly the store's spans minus the two dropped fields, in
+     order, for a card using every emphasis kind and a colour;
+   * the read-aloud text and `formatting_sha256` coverage are unchanged by the encoding;
+   * byte-identity under the six orders still holds.
+3. **Give the operator one block for a new full-store build,** on the current `docx-5` store, the
+   same as follow-up 1 plus the read-only check in the image's 3.40.0. Record it in "Full-store
+   builds" as a second row, keeping the first row and saying what changed between them. Also give
+   bytes per document and the share each column now takes. v1-e39-t09 will track growth against
+   ADR-0019's 1 GB season allowance from those figures.
+4. **The size ruling:** if the SQLite file comes in under about 0.9 GB, no ADR change is needed.
+   If it is above that, say so, and I will add an ADR-0019 note in my next batch.
+
+**Rulings on the relay questions:**
+
+* **Q1: (a).** Store `CampFile.file_title`, stored and never searchable. Attribution rule 2 and
+  gate item 7 need it on every camp card. It is the title the writer already prints, with the lab
+  initials stripped. Amend the spec's "never stored" line to "a disclosure path or a caselist file
+  name", with a comment `PM ruling 2026-10-20 (v1-e39-t02 Q1)`. Also extend
+  `test_search_index_school_and_team_code_match_nothing`, or add a sibling, so that a full-text
+  query for a word found only in a camp file title matches nothing.
+* **Q2: (a).** The build stays offline. Add one line to `docs/guides/search-index.md`'s build
+  step: run the sync that merges the suppression copies before a build that will be published. The
+  manifest's `suppression.sha256` already shows which list a build used.
+* **Q3: (a).** `--env` confirms and never overrides, with `--confirm-prod` for prod.
+
+**Rulings on the deviations** (all accepted):
+
+* **D1:** accepted. Add `scripts/export_search_index_schema.py` to the spec's
+  `constraints.packages`, with a comment.
+* **D2:** settled by Q1.
+* **D3, every surviving occurrence's digests:** accepted. v1-e39-t07's run-time hiding needs them,
+  and 80 MB is the right price.
+* **D4, path holds:** accepted. It is the same `stored_row_hold` rule everywhere, as intended.
+* **D5:** settled by Q3.
+* **D6, smoke checks:** v1-e39-t10 owns them, as it does for t05. My next batch amends it with a
+  synthetic build-and-publish to the dev bucket.
+
+**Follow-ups, filed in my next batch:**
+
+* **2:** a v1-e39-t03 amendment. A "first seen" filter leaves out undated camp documents, and its
+  label says it applies to caselist cards.
+* **3:** a v1-e39-t07 amendment. When the run-time list stops a cluster's representative, the card
+  is hidden until the next build, as you recommend.
+* **4:** a v1-e39-t09 amendment that detects change from the manifest's two digests.
+
+**Merge note.** v1-e39-t05 also edits `debate_cli/commands/__init__.py`, `container.py` and the
+hand-written service lists in `test_app.py`, `test_doctor.py` and `test_installation.py`. Whichever
+merges second keeps both: one `tub` group holding `index` and `users`, and both sets of services.
+
+**Operator follow-ups 2 and 3** (the listing grant, dev then prod) go on the PM's promotion list.

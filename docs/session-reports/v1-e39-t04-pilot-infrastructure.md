@@ -470,8 +470,27 @@ delegated again to the four Route 53 name servers, and the registry whois read
 - `get-account` then read `True	PENDING`. The review is pending; the first value was not the
   runbook's expected `False`. The runbook now reads the sandbox state from `SendQuota` instead,
   and that read-back is awaited.
+- The read-back: `get-account --query '[SendQuota.Max24HourSend,SendQuota.MaxSendRate,EnforcementStatus]'`
+  → `50000.0	14.0	HEALTHY`. The account is already out of the SES sandbox, so the `True` was
+  real.
 
-**Steps 3 and 5–10: not yet run.** Nothing blocks them. Step 3 waits for the concurrency increase, and will plan 37 to
+**2026-10-19, step 3, first attempt.**
+
+- After a fresh sign-in the plan read `Plan: 37 to add, 0 to change, 0 to destroy.` (the SES
+  identity and DKIM records were already there), all under `module.evidence_search`.
+- 22 resources were created: the pool, the groups, the log groups and stream, the role, the
+  certificate and its validation, the permission sets and assignments, the budget, and the rest.
+- The apply then stopped on `aws_cognito_user_pool_client.web`, with `Provider produced inconsistent
+  result after apply ... .refresh_token_rotation[0].retry_grace_period_seconds: was null, but now
+  cty.NumberIntVal(0)`. This is a provider 5.100.0 bug: AWS reports the grace period of a disabled
+  rotation as 0.
+
+The fix, on this branch, writes `retry_grace_period_seconds = 0` in the module, and
+`app_client_is_confidential_code_flow_only` asserts it. Without the line the run fails
+(`15 passed, 1 failed`); with it, `16 passed`. `scripts/terraform_checks.sh` → `All Terraform checks
+passed.`
+
+**Steps 3 (to finish) and 5–10: not yet run.** Step 3 waits for the concurrency increase, and will plan 37 to
 add, not 41. ac5, the runbook's tables
 and the `Succeeded` phase wait for steps 3–10.
 

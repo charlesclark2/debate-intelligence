@@ -192,7 +192,11 @@ resource "aws_cognito_user_pool_client" "web" {
     refresh_token = "hours"
   }
 
+  # The grace period is written out although rotation is off: AWS reports it back as 0, and
+  # provider 5.100.0 fails the apply with "inconsistent result after apply" when the config leaves
+  # it unset (seen on the first dev apply, 2026-10-19).
   refresh_token_rotation {
-    feature = "DISABLED"
+    feature                    = "DISABLED"
+    retry_grace_period_seconds = 0
   }
 }

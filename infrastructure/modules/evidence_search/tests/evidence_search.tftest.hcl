@@ -665,7 +665,8 @@ run "app_client_is_confidential_code_flow_only" {
     condition = (
       aws_cognito_user_pool_client.web.enable_token_revocation &&
       aws_cognito_user_pool_client.web.prevent_user_existence_errors == "ENABLED" &&
-      aws_cognito_user_pool_client.web.refresh_token_rotation[0].feature == "DISABLED"
+      aws_cognito_user_pool_client.web.refresh_token_rotation[0].feature == "DISABLED" &&
+      aws_cognito_user_pool_client.web.refresh_token_rotation[0].retry_grace_period_seconds == 0
     )
     error_message = "Token revocation on, user-existence errors suppressed, refresh token rotation off."
   }

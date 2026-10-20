@@ -6,8 +6,9 @@
 1. It reads the sidecar against its own schema, and checks it describes these bytes.
 2. It re-parses the built file with the E31 parser, through the
    :class:`~debate_core.application.ports.debate_files.DebateFileParser` port.
-3. For each card, it fetches the source the sidecar names from the blob store by its SHA-256,
-   hashes the bytes itself, re-parses them, and finds the card at the recorded paragraphs.
+3. For each card, it fetches the source the sidecar names from the blob store by its SHA-256 (the
+   store re-hashes what it reads, by its port's contract), re-parses the bytes, and finds the card at
+   the recorded paragraphs.
 4. It runs every check in :mod:`debate_core.evidence.file_checks` and reads the suppression list.
 5. :meth:`FileQualityService.check` writes `<file>.quality.json` and `<file>.quality.md` beside the
    built file.
@@ -300,8 +301,6 @@ class FileQualityService:
         except NotFound:
             return "the source's bytes are not in the blob store"
         except BlobIntegrityError:
-            return "the stored bytes no longer hash to the source's SHA-256"
-        if hashlib.sha256(content).hexdigest() != entry.source_sha256:
             return "the stored bytes no longer hash to the source's SHA-256"
         camp = entry.caselist == OPENEV_STORE
         source = SourceDocument(

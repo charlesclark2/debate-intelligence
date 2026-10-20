@@ -20,7 +20,8 @@ An account in neither `coach` nor `student` gets nothing.
 minutes it redeems the refresh token again and re-reads the account, so a coach's disable, reset or
 removal, which signs the account out everywhere, ends the session within five minutes, and so does
 losing the last second factor or the role. A session ended for want of a second factor is written to
-the audit log as `session-ended-no-second-factor`.
+the audit log as `session-ended-no-second-factor`; if that record cannot be written, the session
+ends anyway and the app log gets one WARNING naming the action, never the account.
 
 **Start counts as a revalidation.** Choosing *Start* to replace an authenticator drops the old one
 at once, so the next revalidation would find no second factor. *Start* makes revalidation's other
@@ -32,6 +33,7 @@ from __future__ import annotations
 
 import contextlib
 import hmac
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from datetime import datetime
@@ -71,6 +73,9 @@ __all__ = [
     "refreshed_account",
     "sign_in_decision",
 ]
+
+
+logger = logging.getLogger(__name__)
 
 
 class SignInRefusal(StrEnum):
@@ -267,16 +272,22 @@ class SignInService:
         if sign_in_decision(email_second_factor=account.email_second_factor, standing=standing) is not (
             SignInDecision.START_SESSION
         ):
-            # A lost record must not keep the session open: it ends either way.
-            with contextlib.suppress(DomainError):
+            # A lost record must not keep the session open: it ends either way, and the app log
+            # says a record was lost, naming only its action (second PM review, 2026-10-20).
+            action = AuditAction.SESSION_ENDED_NO_SECOND_FACTOR
+            try:
                 self._audit.record(
                     AuditRecord(
                         time=now,
-                        action=AuditAction.SESSION_ENDED_NO_SECOND_FACTOR,
+                        action=action,
                         actor_role=session.role,
                         actor_subject=session.subject,
                         account_subject=session.subject,
                     )
+                )
+            except DomainError:
+                logger.warning(
+                    "tub audit: a %s record was not written; the session ended anyway", action.value
                 )
             raise SessionEnded("the account no longer has a second factor it may sign in with")
         return account.applied_to(session, now)

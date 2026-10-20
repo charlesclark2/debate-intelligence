@@ -1092,9 +1092,79 @@ token MFA enabled, email MFA configured. This is as the module sets it.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-20
 
 **Notes:**
+
+Accepted, with a different answer from the three offered: **(d) withdraw self-service
+replacement for the pilot.** A student with a new phone asks the coach for a reset. The conditions
+below close in this session; then the pull request opens with no `--partial`. As before, if
+anything comes out differently from what you expect, stop and ask for another review.
+
+**Stopping the PR under condition 3, and the diagnosis, were exactly right.** The app log's request
+timings ruled out R2 without guessing. The audit streams showed the first run never reached the
+app's enrolment page.
+
+**Why (d), not (a):**
+
+* **The common path is the dangerous one.** Students set up the authenticator at managed login at
+  first sign-in, as the first run's account did. There, *Start* dropped the authenticator at once. A
+  *Start* left unfinished then leaves enrolment open to anyone with the student's password, for as
+  long as the student stays away. The audit record makes that visible, but it does not close it.
+* **Measuring would settle the wording, not the risk.** Cognito's effect depends on undocumented
+  account state. Under either rule, the case students would hit most is the one that drops.
+* **A reset is already built, tested on dev and audited.** Its temporary password comes from the
+  coach, so enrolment after a reset is never open to a password alone. In a one-team pilot, a new
+  phone is rare, and a lost phone needs the coach anyway.
+
+**Conditions:**
+
+1. **Remove *Start*:**
+   * the `POST /account/authenticator/begin` route and the *Start* page;
+   * `begin_replacement`, and *Start*'s revalidation path;
+   * the `authenticator-replacement-started` action;
+   * the `authenticator-replaced` message.
+
+   **Keep:**
+   * the pending enrolment's GET and confirm, unchanged;
+   * `session-ended-no-second-factor` and its WARNING;
+   * revalidation's second-factor check (deviation 4).
+2. **For a full session,** `GET /account/authenticator` calls nothing in Cognito and goes to
+   `/account`. The account page's authenticator section says: for a new phone, ask your coach for a
+   reset; you then sign in with the temporary password and set up the app again. The route's
+   `ROUTE_ACCESS` entry becomes enrolment only.
+3. **Tests:**
+   * the route list and matrix lose `/begin`, and the coverage test still fails on an unlisted route;
+   * a full session's GET makes no self-service call and renders no QR code;
+   * no route a full session can reach calls `AssociateSoftwareToken`. That is the test that holds
+     the decision.
+
+   Show the new tests failing on the current code where they can, and catch one mutant that brings
+   back a full session's association.
+4. **The guide:**
+   * Replace the student's new-phone steps with the reset path, and the coach's section with when to
+     reset.
+   * Add one line on first sign-in: choose the authenticator app at managed login. If you chose
+     email, the app asks you to set up the authenticator app as well; that is expected.
+5. **The spec:** amend ac6's "replaces the authenticator" to "for a new phone, sends the student
+   to the coach for a reset (no self-service replacement in the pilot)". Add a comment
+   `PM ruling 2026-10-20 (ac5 re-run)`.
+6. **The report:**
+   * Keep both runs' facts as they are.
+   * ac5 stays PASS on the first run, which covered sign-in, enrolment, sign-out and a reset forcing
+     enrolment again. The re-run tested *Start*, which is withdrawn.
+   * No further dev run is needed.
+
+**Filed by the PM in the next batch:**
+
+* an ADR-0019 consequence recording why self-service replacement was withdrawn, with both runs'
+  `AssociateSoftwareToken` results;
+* a v1-e39-t10 amendment: the coach's beta records each tester's first sign-in with screenshots
+  (which factor managed login offered, which was chosen, and whether the app's enrolment page then
+  appeared). That settles finding 1 with real accounts.
+
+**Re-allowing self-service replacement,** if a later version wants it, means measuring Cognito's
+behaviour first, as option (a) set out.

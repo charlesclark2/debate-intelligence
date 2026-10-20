@@ -27,6 +27,7 @@ import sqlite3
 import subprocess
 import tomllib
 from collections.abc import Iterator
+from dataclasses import replace
 from datetime import date
 from pathlib import Path
 from typing import Any, Final
@@ -37,7 +38,7 @@ from hypothesis import strategies as st
 
 from debate_core.application.evidence_search import EvidenceSearchService
 from debate_core.application.ports.search_index import IndexedOccurrence, SearchDocument
-from debate_core.application.ports.search_index_reader import UnreadableSearchIndex
+from debate_core.application.ports.search_index_reader import MatchRequest, UnreadableSearchIndex
 from debate_core.domain.caselist import Event, Side
 from debate_core.domain.evidence_search import SearchFilters, parse_query
 from debate_core.integrations.local.search_index import SqliteSearchIndexWriter
@@ -271,6 +272,22 @@ def test_search_index_reader_refuses_a_file_that_is_not_this_index(tmp_path: Pat
         connection.execute("PRAGMA user_version = 2")
     with pytest.raises(UnreadableSearchIndex, match="format version 2"):
         SqliteSearchIndexReader(newer, index_id=INDEX_ID)
+
+
+def test_search_index_reader_stopped_by_the_budget_is_interrupted_and_not_exhausted(index_path: Path) -> None:
+    """A stopped statement keeps the rows it fetched, and says the ranking may go on past them."""
+    with SqliteSearchIndexReader(index_path, index_id=INDEX_ID) as reader:
+        request = MatchRequest(
+            expression='"invented"', rank="bm25(10.0, 6.0, 3.0, 1.0)", filters=SearchFilters(), offset=0, limit=100,
+            expired=lambda: True,
+        )
+        stopped = reader.match(request)
+        whole = reader.match(replace(request, expired=lambda: False))
+    assert stopped.interrupted
+    assert not stopped.exhausted
+    assert len(stopped.hits) < len(whole.hits) == 30
+    assert [hit.doc_id for hit in stopped.hits] == [hit.doc_id for hit in whole.hits][: len(stopped.hits)]
+    assert whole.exhausted and not whole.interrupted
 
 
 def test_search_index_reader_opens_read_only(index_path: Path) -> None:

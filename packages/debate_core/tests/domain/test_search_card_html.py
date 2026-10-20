@@ -11,8 +11,10 @@ The fixtures are invented: no card text from any real file (data-use policy, rul
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from html.parser import HTMLParser
+from typing import Final
 
 import pytest
 from hypothesis import given, settings
@@ -137,12 +139,47 @@ def _parser_span(span: IndexedFormattingSpan) -> FormattingSpan:
     )
 
 
+#: The allow-list, written by hand rather than read from the module, so a test cannot pass by a change
+#: to the list it checks.
+TAGS_BY_HAND: Final = {"span", "mark", "br"}
+CLASSES_BY_HAND: Final = {
+    "card-underline", "card-emphasis", "card-cite", "card-undertag", "card-analytic", "card-highlight",
+    "card-bold", "card-shrunk", "card-heading", "card-highlight-other",
+    *(
+        f"card-highlight-{colour}"
+        for colour in (
+            "black", "blue", "cyan", "darkBlue", "darkCyan", "darkGray", "darkGreen", "darkMagenta", "darkRed",
+            "darkYellow", "green", "lightGray", "magenta", "red", "white", "yellow",
+        )
+    ),
+}
+SIZE_CLASS_BY_HAND: Final = re.compile(r"card-size-[1-9][0-9]{0,3}")
+
+
+def allowed_by_hand(name: str) -> bool:
+    return name in CLASSES_BY_HAND or SIZE_CLASS_BY_HAND.fullmatch(name) is not None
+
+
 def assert_only_allowed_markup(reader: ReadBack) -> None:
     opened = [tag for tag in reader.tags if not tag.startswith("/")]
-    assert set(opened) <= ALLOWED_TAGS
+    assert set(opened) <= TAGS_BY_HAND
     assert {key for key, _ in reader.attributes} <= {"class"}
     names = {name for _, value in reader.attributes if value for name in value.split()}
-    assert all(is_allowed_class(name) for name in names), names
+    assert all(allowed_by_hand(name) for name in names), names
+
+
+def test_search_card_html_allow_list_is_the_one_written_by_hand() -> None:
+    assert ALLOWED_TAGS == TAGS_BY_HAND
+    assert {*EMPHASIS_CLASSES.values(), OTHER_HIGHLIGHT_CLASS, *(f"card-highlight-{c}" for c in HIGHLIGHT_COLOURS)} == CLASSES_BY_HAND
+
+
+@pytest.mark.parametrize(
+    "name",
+    ["card-size-0", "card-size-10000", "card-size-022", "card-size-", "onclick", "x", "card-highlight-cyan\" onclick", "card-highlight-none", "CARD-BOLD"],
+)
+def test_search_card_html_refuses_a_class_off_the_list(name: str) -> None:
+    assert not is_allowed_class(name)
+    assert not allowed_by_hand(name)
 
 
 # ------------------------------------------------------------------------------------------------

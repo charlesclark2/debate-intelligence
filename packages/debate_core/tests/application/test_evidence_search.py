@@ -21,6 +21,13 @@ import pytest
 
 from debate_core.application.evidence_search import EvidenceSearchService, SuppressionPredicate
 from debate_core.application.ports.search_index import IndexedOccurrence, SearchDocument
+from debate_core.application.ports.search_index_reader import (
+    MatchBatch,
+    MatchRequest,
+    StoredDocument,
+    StoredHit,
+    StoredOccurrence,
+)
 from debate_core.domain.caselist import Event, Side
 from debate_core.domain.debate_files import FontSizeSpan, FormattingSpan
 from debate_core.domain.evidence_search import (
@@ -542,6 +549,54 @@ def test_evidence_search_past_its_budget_returns_what_it_has_flagged_partial(lar
         fetched.add(len(page.hits))
     assert 0 in fetched, "a budget spent at once returns nothing, flagged partial"
     assert any(0 < count < 20 for count in fetched), "a budget spent part-way returns the rows fetched by then"
+
+
+class InterruptedAfterAFullBatch:
+    """A reader whose one batch holds a whole page and the next hit, and was stopped by the budget anyway."""
+
+    index_id = INDEX_ID
+
+    def __init__(self, hits: Sequence[StoredHit]) -> None:
+        self.hits = tuple(hits)
+
+    def match(self, request: MatchRequest) -> MatchBatch:
+        return MatchBatch(hits=self.hits[request.offset : request.offset + request.limit], exhausted=False, interrupted=True)
+
+    def document(self, caselist: str, cluster_id: str) -> StoredDocument | None:
+        raise AssertionError("not asked")
+
+    def occurrences(self, doc_id: int) -> tuple[StoredOccurrence, ...]:
+        raise AssertionError("not asked")
+
+
+def stored_hit(position: int) -> StoredHit:
+    return StoredHit(
+        position=position,
+        doc_id=position + 1,
+        caselist="hsld26",
+        cluster_id=cluster(position + 1),
+        event="LD",
+        camp=None,
+        tag=None,
+        short_cite=None,
+        snippet="",
+        file_count=1,
+        team_count=1,
+        representative=StoredOccurrence(
+            doc_id=position + 1, ordinal=0, caselist="hsld26", source_sha256=source(position + 1), disclosure=None,
+            snapshot="2026-09-01", last_snapshot="2026-09-01", completeness="FULL", attributed=False, provenance=True,
+        ),
+    )
+
+
+def test_evidence_search_stopped_after_finding_the_next_hit_resumes_at_that_hit() -> None:
+    """The budget can run out after the twenty-first row: the cursor still points at row twenty, not past it."""
+    searched = EvidenceSearchService(InterruptedAfterAFullBatch([stored_hit(position) for position in range(30)]))
+    page = searched.search("numbat")
+    assert page.partial
+    assert len(page.hits) == 20
+    resumed = searched.search("numbat", cursor=page.next_cursor)
+    assert ids(resumed)[0] == 21
 
 
 def test_evidence_search_within_its_budget_is_not_partial(large_index: Path) -> None:

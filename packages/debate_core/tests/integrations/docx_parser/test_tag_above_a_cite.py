@@ -149,3 +149,183 @@ class TestAnUndertagBetweenAHighlightedCiteAndItsBody:
             (TAG, "", HIGHLIGHTED_TEXT),
             (None, CITE_TEXT, BODY_TEXT),
         ]
+
+
+# --------------------------------------------------------------------------------------------
+# A bold tag above a cite that opens a card with no tag (ac2, the PM's ruling of 2026-10-20)
+# --------------------------------------------------------------------------------------------
+
+W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+NORMAL_AND_HEADINGS = (
+    '<w:style w:type="paragraph" w:styleId="Normal" w:default="1"><w:name w:val="normal"/></w:style>'
+    '<w:style w:type="paragraph" w:styleId="Heading4"><w:name w:val="heading 4"/><w:basedOn w:val="Normal"/>'
+    "</w:style>"
+    '<w:style w:type="paragraph" w:styleId="Undertag"><w:name w:val="Undertag"/></w:style>'
+    '<w:style w:type="character" w:styleId="StyleUnderline"><w:name w:val="Style Underline"/></w:style>'
+    '<w:style w:type="character" w:styleId="Emphasis"><w:name w:val="Emphasis"/></w:style>'
+)
+
+
+def styles_with_defaults(run_properties: str) -> str:
+    return (
+        f'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="{W}">'
+        f"<w:docDefaults><w:rPrDefault><w:rPr>{run_properties}</w:rPr></w:rPrDefault></w:docDefaults>"
+        f"{NORMAL_AND_HEADINGS}</w:styles>"
+    )
+
+
+#: (7)'s file: every run that says nothing is bold at 13 pt.
+BOLD_DEFAULTS = styles_with_defaults('<w:b w:val="1"/><w:sz w:val="26"/>')
+#: An ordinary Word file: defaults that set a size and nothing else.
+SIZE_DEFAULTS = styles_with_defaults('<w:sz w:val="24"/>')
+TAKEN = "assembly-bold-tag-above-a-cite"
+
+LINE = "Demand outruns new generation"
+
+
+def off(text: str, **formatting: Any) -> tuple[str, dict[str, Any]]:
+    """A run that switches bold off and sets its size, as the file's bodies and cites write theirs."""
+    return (text, {"bold": False, "half_points": READING_SIZE, **formatting})
+
+
+SECOND_CITE_MARKUP, SECOND_CITE_TEXT = paragraph(
+    [off("Okonkwo 26"), off(f", Adaeze Okonkwo, invented for this test, {SOURCE}.")]
+)
+SECOND_BODY_TEXT = prose(260, "Reserve margins ")
+SECOND_BODY, _ = paragraph(
+    [
+        off(SECOND_BODY_TEXT[:80], half_points=SMALL_PRINT),
+        off(SECOND_BODY_TEXT[80:], underline="single", half_points=SMALL_PRINT),
+    ]
+)
+#: (7)'s line: nothing set of bold or size, its last words underlined directly.
+SEVENS_LINE, _ = paragraph([("Demand outruns ", {}), ("new generation", {"underline": "single"})])
+
+
+def card_above_then(
+    line: str, *, styles_xml: str = BOLD_DEFAULTS, parser: DebateDocxParser
+) -> ParsedDocument:
+    """A card under a tag, then `line`, then a cite that opens a card with no tag, and its body."""
+    return parse(
+        parser,
+        tag_paragraph(),
+        CITE_MARKUP,
+        BODY,
+        line,
+        SECOND_CITE_MARKUP,
+        SECOND_BODY,
+        styles_xml=styles_xml,
+    )
+
+
+def cards_of(document: ParsedDocument) -> list[tuple[str | None, str, str]]:
+    return [(card.tag, card.full_cite, card.evidence_text) for card in document.cards]
+
+
+def section_with(document: ParsedDocument, text: str) -> Any:
+    (section,) = [section for section in document.sections if section.text == text]
+    return section
+
+
+AS_IT_SHOULD = [(TAG, CITE_TEXT, BODY_TEXT), (LINE, SECOND_CITE_TEXT, SECOND_BODY_TEXT)]
+
+
+class TestABoldLineAboveACiteThatOpensACardWithNoTag:
+    def test_a_line_bold_only_through_the_document_defaults_is_the_cards_tag(
+        self, parser: DebateDocxParser
+    ) -> None:
+        document = card_above_then(SEVENS_LINE, parser=parser)
+
+        assert cards_of(document) == AS_IT_SHOULD, "the card above loses the line and the card below gains it"
+        line = section_with(document, LINE)
+        assert line.match.rule_id == f"{TAKEN}:heuristic-marked-up-body-text"
+        assert line.match.confidence == 0.5
+        assert document.cards[1].provenance.first_element_index == line.element_index
+
+    def test_a_line_bold_by_its_own_run_with_no_size_stated_is_the_cards_tag(
+        self, parser: DebateDocxParser
+    ) -> None:
+        markup, _ = paragraph([(LINE, {"bold": True})])
+        document = card_above_then(markup, styles_xml=SIZE_DEFAULTS, parser=parser)
+
+        assert cards_of(document) == AS_IT_SHOULD
+        assert section_with(document, LINE).match.rule_id == f"{TAKEN}:heuristic-unclassified-paragraph"
+
+    def test_a_blank_line_between_it_and_the_cite_is_stepped_over(self, parser: DebateDocxParser) -> None:
+        document = card_above_then(SEVENS_LINE + paragraph_xml(run_xml("")), parser=parser)
+
+        assert cards_of(document) == AS_IT_SHOULD
+
+    def test_with_no_card_above_it_the_line_still_tags_the_card(self, parser: DebateDocxParser) -> None:
+        document = parse(parser, SEVENS_LINE, SECOND_CITE_MARKUP, SECOND_BODY, styles_xml=BOLD_DEFAULTS)
+
+        assert cards_of(document) == [(LINE, SECOND_CITE_TEXT, SECOND_BODY_TEXT)]
+
+    def test_the_classifier_still_reads_only_what_a_run_says(self, parser: DebateDocxParser) -> None:
+        """Inherited formatting is read inside this rule only: elsewhere the line is what it was."""
+        document = parse(
+            parser, tag_paragraph(), CITE_MARKUP, BODY, SEVENS_LINE, BODY, styles_xml=BOLD_DEFAULTS
+        )
+
+        assert cards_of(document) == [(TAG, CITE_TEXT, f"{BODY_TEXT}\n{LINE}\n{BODY_TEXT}")]
+        assert section_with(document, LINE).match.rule_id == "heuristic-marked-up-body-text"
+
+
+class TestWhatTheRuleLeaves:
+    """Each guard's refusal: the file reads as it did at `2026.10.18-docx-5`."""
+
+    def assert_left(self, document: ParsedDocument, line: str, rule: str) -> None:
+        assert [card.tag for card in document.cards] == [TAG, None]
+        assert line in document.cards[0].evidence_text or rule == "heuristic-unclassified-paragraph"
+        assert section_with(document, line).match.rule_id == rule
+
+    def test_a_card_that_already_has_a_tag(self, parser: DebateDocxParser) -> None:
+        markup, _ = paragraph([(LINE, {"bold": True})])
+        document = parse(
+            parser, tag_paragraph(), markup, SECOND_CITE_MARKUP, SECOND_BODY, styles_xml=SIZE_DEFAULTS
+        )
+
+        assert cards_of(document) == [(TAG, SECOND_CITE_TEXT, SECOND_BODY_TEXT)]
+        assert section_with(document, LINE).match.rule_id == "heuristic-unclassified-paragraph"
+
+    def test_a_line_with_a_highlighted_run(self, parser: DebateDocxParser) -> None:
+        markup, _ = paragraph([("Demand outruns ", {}), ("new generation", {"highlight": "yellow"})])
+        self.assert_left(card_above_then(markup, parser=parser), LINE, "heuristic-marked-up-body-text")
+
+    @pytest.mark.parametrize("style", ["StyleUnderline", "Emphasis"])
+    def test_a_line_in_the_underline_or_emphasis_style(self, parser: DebateDocxParser, style: str) -> None:
+        markup, _ = paragraph([("Demand outruns ", {}), ("new generation", {"character_style": style})])
+        document = card_above_then(markup, parser=parser)
+
+        assert [card.tag for card in document.cards] == [TAG, None]
+        assert not section_with(document, LINE).match.rule_id.startswith(TAKEN)
+
+    def test_a_line_over_300_characters(self, parser: DebateDocxParser) -> None:
+        long_line = "Demand outruns new generation in " + "every region and every season, " * 9 + "again."
+        assert len(long_line) > 300
+        markup, _ = paragraph([(long_line[:-6], {}), (long_line[-6:], {"underline": "single"})])
+        self.assert_left(card_above_then(markup, parser=parser), long_line, "heuristic-marked-up-body-text")
+
+    def test_a_line_that_names_a_source_at_its_head(self, parser: DebateDocxParser) -> None:
+        named = "As Lindqvist 2019 warned, demand outruns new generation"
+        markup, _ = paragraph([(named[:-14], {}), (named[-14:], {"underline": "single"})])
+        self.assert_left(card_above_then(markup, parser=parser), named, "heuristic-marked-up-body-text")
+
+    def test_a_bold_line_with_no_size_anywhere(self, parser: DebateDocxParser) -> None:
+        """Word shows no size the bold-heading rule could read: the rule's size test is not passed."""
+        markup, _ = paragraph([(LINE, {"bold": True})])
+        document = card_above_then(markup, styles_xml=styles_with_defaults(""), parser=parser)
+
+        self.assert_left(document, LINE, "heuristic-unclassified-paragraph")
+
+    def test_a_line_bold_off_by_its_own_run(self, parser: DebateDocxParser) -> None:
+        markup, _ = paragraph([off("Demand outruns "), off("new generation", underline="single")])
+        self.assert_left(card_above_then(markup, parser=parser), LINE, "heuristic-marked-up-body-text")
+
+    def test_only_the_paragraph_directly_above_and_never_a_second(self, parser: DebateDocxParser) -> None:
+        between, between_text = paragraph([off("A note left plain")])
+        document = card_above_then(SEVENS_LINE + between, parser=parser)
+
+        assert [card.tag for card in document.cards] == [TAG, None]
+        for text in (LINE, between_text):
+            assert not section_with(document, text).match.rule_id.startswith(TAKEN)

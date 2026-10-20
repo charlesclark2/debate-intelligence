@@ -6,7 +6,7 @@
 | Spec | [`plan_specs/v1/e39-evidence-search-pilot/t04-pilot-infrastructure.yaml`](../../plan_specs/v1/e39-evidence-search-pilot/t04-pilot-infrastructure.yaml) |
 | Epic / release | `v1-e39-evidence-search-pilot` / `v1.7` |
 | Branch | `task/v1-e39-t04-pilot-infrastructure` |
-| Session status | PARTIAL: dev steps 1–10 are run and recorded, and ac5 is closed; waiting on the operator's own run of `scripts/terraform_checks.sh` before `Succeeded` |
+| Session status | COMPLETE: every criterion passes; dev is applied, deployed and checked; the Goal is `Succeeded`. Prod (runbook steps 11–12) follows the promotion |
 
 ## Summary
 
@@ -31,27 +31,27 @@ code held it up:
 - `wfbdebate.com` was on registrar `clientHold`, which also took the public website offline;
 - a provider bug on the app client, fixed in `beafdbe`.
 
-The one remaining check is `scripts/terraform_checks.sh` on the operator's machine (see the node
-row below).
+The operator's own run of `scripts/terraform_checks.sh` passed every check, and the Goal is
+`Succeeded`.
 
 ## Plan nodes
 
 | Node | Status | Notes |
 |---|---|---|
-| `infrastructure` | Done; its criterion's last run is the operator's | The module, both roots, the placeholder app, the image, the deploy script and the runbook, all applied and checked on dev |
+| `infrastructure` | Done; its criterion passes | The module, both roots, the placeholder app, the image, the deploy script and the runbook, all applied and checked on dev |
 
 ## Acceptance criteria
 
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
-| Node `infrastructure`: Terraform checks pass | **Awaiting the operator's run** | Before the dev applies: `bash scripts/terraform_checks.sh` → `All Terraform checks passed.` After the grace-period fix (`beafdbe`), in this session: every check `ok` except `validate infrastructure/envs/dev`, which fails with `No valid credential sources found`. The operator's `terraform init` gave that directory the S3 backend, and the session has no AWS credentials. The same configuration validated with `TF_DATA_DIR` in a scratch directory → `Success! The configuration is valid.`; all four module tests and `tflint --recursive` → `ok`. The operator runs the script with credentials before `Succeeded` is set |
+| Node `infrastructure`: Terraform checks pass | PASS | Before the dev applies: `bash scripts/terraform_checks.sh` → `All Terraform checks passed.` After the grace-period fix (`beafdbe`), in this session: every check `ok` except `validate infrastructure/envs/dev`, which fails with `No valid credential sources found`. The operator's `terraform init` gave that directory the S3 backend, and the session has no AWS credentials. The same configuration validated with `TF_DATA_DIR` in a scratch directory → `Success! The configuration is valid.`; all four module tests and `tflint --recursive` → `ok`. **The operator's run, with credentials, after step 10:** `bash scripts/terraform_checks.sh` → `ok` for fmt, all nine validates (`envs/dev` included), the nine tflint configs, `tflint --recursive` and the four module tests; `All Terraform checks passed.` |
 | ac1: checks pass for both roots and the new module; the roots differ only in their tfvars, as the website's do | PASS | As above. `diff -r infrastructure/envs/dev infrastructure/envs/prod -x .terraform -x owner.auto.tfvars` → only `backend.tf` and `terraform.tfvars` differ, as before this task. `evidence_search.tf`, `variables.tf`, `outputs.tf` and `owner.auto.tfvars.example` are identical. `tests/scripts/test_tub_deploy.py::test_the_script_names_the_resources_adr_0019_names` also reads the root's module call |
 | ac2: mocked test: evidence buckets keep all four BPA flags; no bucket policy grants CloudFront or the public; the role reads only the three key patterns, writes nothing in the bucket, holds no delete on its log group; the log group keeps 400 days | PASS | `terraform -chdir=infrastructure/modules/evidence_search test` → `Success! 16 passed, 0 failed.` Runs: `evidence_bucket_keeps_block_public_access_and_grants_cloudfront_nothing` plans `../evidence_bucket` with the roots' inputs and asserts the four flags, no `Allow` in the bucket policy and no CloudFront or public principal in the key policy. `cloudfront_reaches_the_function_url_and_nothing_else` asserts the only origin is the function URL. `function_role_is_the_adr_role_table_entry_by_entry` covers GetObject on exactly the three patterns, no other S3 action, and only CreateLogStream/PutLogEvents on the log groups. `audit_log_keeps_four_hundred_days_and_the_app_log_thirty` |
 | ac3: mocked test: no self sign-up, TOTP required, email MFA offered, no SMS configuration, no attribute beyond username and optional email | PASS | Same command. `user_pool_admits_only_coach_created_accounts_with_totp`: admin-only creation, MFA `ON`, TOTP enabled, email MFA present, the password as the only first factor, no device remembering. `user_pool_has_no_sms_and_nothing_beyond_a_username_and_an_optional_email`: no `sms_configuration`, no schema block, no username or alias attributes, case-insensitive, email the only auto-verified attribute, client reads `email`/`email_verified` and writes `email` only |
 | ac4: the runbook writes out apply dev, deploy a placeholder page that requires sign-in, apply prod, request SES production access, and the web-filter request (hostnames only), with expected output | PASS | [`docs/runbooks/evidence-search.md`](../runbooks/evidence-search.md), steps 1–12 in the PM's order, each with "Success looks like". Step 8 proves the path as the PM defined it: through CloudFront `200 private, no-store`; a direct call to the function URL gets `{"Message":"Forbidden"}`/`403`, Lambda's own refusal. Step 10 renders the managed login at the login host. Step 4 is SES, moved to right after the dev apply by the PM's review; step 12 is the IT text (prod hostnames only). `check_links.py`, `docs_index.py --check-descriptions`, `check_command_blocks.py --base origin/dev` → all OK. Steps 1–10 have since been run on dev, with the outputs in [Dev run](#dev-run-as-reported-by-the-operator) and in the runbook's "What to record" table |
 | ac5: the role checked against the role table entry by entry, incl. the app log group, the two SSM parameters and no other grant; the runbook's CLI steps for branding and deletion protection, and the measured asset hosts, written out with expected output | PASS | **The role:** `function_role_is_the_adr_role_table_entry_by_entry` compares every action with every resource against a hand-written copy of the table (`expected_role_table`, app group and both parameters included). `function_role_has_no_other_grant` checks the exclusive-policy resources (one inline policy, zero managed) and the trust policy. On dev, step 9's `simulate-principal-policy` gave the same decisions. **The CLI steps:** runbook steps 5a and 5b, run on dev with read-backs `debate-dev-tub-audit 400 True` and `True`. **The measured asset hosts:** runbook step 10, measured on dev on 2026-10-19 over a first and an ordinary sign-in. They are `auth.tub.dev.wfbdebate.com`, `dnh6qh3zeqkj3.cloudfront.net`, `d14wtojjlkahd9.cloudfront.net` and `d2gc27jy00o0yk.cloudfront.net` (plus the callback on `tub.dev.wfbdebate.com`), now in the runbook's table, with step 12 confirming them on prod's login page before the IT request |
 
-The Goal stays `InProgress` only until the operator's run of `scripts/terraform_checks.sh` (node row).
+Every criterion passes, and the Goal is `Succeeded` (`uv run scripts/task_helper.py set-phase v1-e39-t04-pilot-infrastructure Succeeded`; `validate_specs.py --require-succeeded` → `Succeeded`).
 
 **Mutation runs** (agreement 8; agreement 10 caps them at about 20, and this ran 29: 24 on the
 module, aimed at the role and the pool, and 5 on the deploy script). Every mutant was applied to the
@@ -273,67 +273,29 @@ PM questions from v1-e39-t04-pilot-infrastructure, 2026-10-19
 
 ## Operator follow-ups
 
-Everything is in [`docs/runbooks/evidence-search.md`](../runbooks/evidence-search.md), in order,
-with expected output. Its "Before you start" section covers:
+**Dev is done.** Runbook steps 1–10 were run on 2026-10-19 and are recorded under
+[Dev run](#dev-run-as-reported-by-the-operator). The SES production-access request was step 4; it
+covers prod too, and the account is already out of the sandbox.
 
-- the `WT` variables and `uv sync --all-packages`;
-- the Docker and AWS CLI versions; the CLI needs upgrading on this Mac for step 5a;
-- `debate-admin`;
-- the three lines for each `owner.auto.tfvars`;
-- the Lambda concurrency check.
+**Next: sync with `dev`.** `v1-e01-t28` merged first, and both tasks change `uv.lock`. Run
+`scripts/task sync v1-e39-t04-pilot-infrastructure`. If the rebase stops on `uv.lock`, resolve it
+with `git checkout --ours uv.lock && uv lock && git add uv.lock`, then `git rebase --continue`
+(`pyproject.toml` first, if it conflicts too; this branch changes only `debate_api`'s). After the
+sync, the session runs:
 
-**Dev, now, from this task's worktree:** runbook steps 1 to 10, with `debate-admin` for steps 1–6. Step 4, the SES production-access request, goes as soon as step 3 has verified the dev SES identity.
-The first three, for orientation:
+- `uv run scripts/affected_tests.py --run`, which should run nothing and say CI covers it, since a
+  lock change selects the whole suite;
+- `uv lock --check`;
+- `scripts/terraform_checks.sh`. In this worktree the session's run fails `validate
+  infrastructure/envs/dev` on credentials, so the operator runs it, as after step 10.
 
-**Operator command** (expected runtime ~2 min)
-Where: `debate-intelligence-worktrees/v1-e39-t04-pilot-infrastructure`
-```bash
-cd /Users/charlesclark/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e39-t04-pilot-infrastructure
-export AWS_PROFILE=debate-admin
-terraform -chdir=infrastructure/envs/dev init
-terraform -chdir=infrastructure/envs/dev apply -target=module.evidence_search.aws_ecr_repository.function
-```
-Success looks like: `Apply complete! Resources: 1 added, 0 changed, 0 destroyed.`
+**Prod, after this task is merged and promoted:** runbook step 11, with the deploys from a `main`
+worktree. Then step 12:
 
-**Operator command** (expected runtime ~2 min)
-Where: the same worktree
-```bash
-cd /Users/charlesclark/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e39-t04-pilot-infrastructure
-TUB_DEPLOY_PROFILE=debate-admin scripts/tub_deploy.sh dev
-```
-Success looks like: `pushed: ...debate-dev-tub@sha256:...` and `the function debate-dev-tub does not exist yet`.
-
-**Operator command** (expected runtime ~25 min)
-Where: the same worktree
-```bash
-cd /Users/charlesclark/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e39-t04-pilot-infrastructure
-export AWS_PROFILE=debate-admin
-terraform -chdir=infrastructure/envs/dev apply
-```
-Success looks like: the plan reads `Plan: 41 to add, 0 to change, 0 to destroy.`, all under
-`module.evidence_search`, with nothing under `module.evidence_store` or `module.site`. After
-approving: `Apply complete! Resources: 41 added, 0 changed, 0 destroyed.`
-
-Then steps 4 to 10. **Paste back:**
-
-- step 3's apply summary;
-- step 4's `True` and `False	PENDING`, with the date sent;
-- the read-backs from 5a, 5b and 5c;
-- step 6's `2` and `['current', 'previous'] True`;
-- step 8's two `curl` results and its `Init Duration` lines;
-- step 10's list of hosts.
-
-Those fill in the runbook's tables and close ac5.
-
-**Prod, after this task is merged and promoted:** runbook step 11. The deploys run from a `main`
-worktree. The SES request was step 4, on dev, and covers prod too. Step 12 goes to school IT once
-step 10's hosts are recorded.
+- confirm the three CloudFront hosts on prod's login page;
+- send the request to school IT.
 
 **No whole-selection run:** the PM's review ruled it unnecessary; CI runs it on the pull request.
-
-**Merging `uv.lock`:** `v1-e01-t28` may add `grimp` to the dev dependencies. Whichever task merges
-second regenerates the lock as `docs/process/task-workflow.md` says
-(`git checkout --ours uv.lock && uv lock`), never by hand.
 
 ## Follow-up work
 
@@ -379,8 +341,8 @@ The PM accepted the review on condition that ac5 closes in this session, with no
 **Then: ac5, the runbook's tables, and the phase.** The PM's message said "with the dev outputs
 below" but carried none, so that round recorded nothing and set nothing. The operator then ran dev
 steps 1–10 over the evening of 2026-10-19; the next section records each. The runbook's two tables
-are filled in, and ac5 is closed. The phase waits only for the operator's run of
-`scripts/terraform_checks.sh`.
+are filled in, and ac5 is closed. The operator's run of `scripts/terraform_checks.sh` passed, and
+the phase is `Succeeded`.
 
 ## Dev run, as reported by the operator
 

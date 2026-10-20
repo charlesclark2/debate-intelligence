@@ -313,20 +313,23 @@ def test_a_heading_in_an_alias_of_its_style_is_not_in_the_profiles_style(
     ]
 
 
-def test_a_heading_found_by_its_outline_level_is_not_in_the_profiles_style(
+def test_a_tag_found_by_its_outline_level_is_not_in_the_profiles_style(
     read: Callable[[bytes], ParsedDocument], profile: StyleProfile
 ) -> None:
-    body = (
-        _heading(1, "Pocket A")
-        + _heading(2, "Hat A")
-        + paragraph_xml(run_xml("Block A"), outline_level=2)
-        + _card(1)
+    #   0 Pocket A, 1 Hat A, 2 Block A, 3 a tag with no style, bold at outline level 3, 4 its cite, 5 its body
+    tag = paragraph_xml(run_xml("Synthetic claim 1"), outline_level=3, bold=True, half_points=24)
+    cite = paragraph_xml(run_xml("Okonkwo 26", bold=True) + run_xml(", Analyst, Review"))
+    evidence = paragraph_xml(
+        run_xml("Synthetic evidence ", half_points=16) + run_xml("read", underline="single")
     )
-    (violation,) = _violations(_headings(read, profile, body))
-    assert violation[:2] == (2, ("Pocket A", "Hat A"))
-    assert violation[2].startswith("a block heading not in the profile's Heading3 style (heuristic-"), (
-        violation
-    )
+    body = _heading(1, "Pocket A") + _heading(2, "Hat A") + _heading(3, "Block A") + tag + cite + evidence
+    assert _violations(_headings(read, profile, body)) == [
+        (
+            3,
+            ("Pocket A", "Hat A", "Block A"),
+            "a tag heading not in the profile's Heading4 style (heuristic-outline-level-3)",
+        )
+    ]
 
 
 def test_a_heading_the_sidecar_does_not_name_is_given_by_its_level_and_paragraph(

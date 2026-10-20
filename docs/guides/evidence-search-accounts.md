@@ -19,7 +19,7 @@ section (d). How it is set up in AWS: [the pilot's runbook](../runbooks/evidence
   - [Before you start](#before-you-start)
   - [Adding a student](#adding-a-student)
   - [A student with no phone](#a-student-with-no-phone)
-  - [Resetting a lost password or a lost phone](#resetting-a-lost-password-or-a-lost-phone)
+  - [Resetting a password or a phone](#resetting-a-password-or-a-phone)
   - [Suspending and removing accounts](#suspending-and-removing-accounts)
 - [When something goes wrong](#when-something-goes-wrong)
 
@@ -35,14 +35,14 @@ temporary password works for seven days; after that, ask the coach for a new one
 2. Enter your username and the temporary password.
 3. Choose your own password: at least 12 characters. A short sentence you will remember works well.
    Nobody else, the coach included, can see it.
-4. Set up two-step sign-in. Choose the **authenticator app**. Open the app on your phone, choose to
-   add an account by scanning a QR code, and scan the code on the screen. The app now shows a
-   six-digit code that changes every 30 seconds. Type the code it shows.
+4. Set up two-step sign-in. Choose the **authenticator app** here. Open the app on your phone,
+   choose to add an account by scanning a QR code, and scan the code on the screen. The app now
+   shows a six-digit code that changes every 30 seconds. Type the code it shows.
 5. You are signed in.
 
-If at step 4 you chose to get codes by **email** instead, the search shows you its own *Set up your
-authenticator app* page before anything else. Scan its QR code the same way and enter a code.
-Email codes are only a backup; your account needs the app first.
+If at step 4 you chose **email** instead, the search then asks you to set up the authenticator app
+as well, on its own *Set up your authenticator app* page; that is expected. Scan its QR code the
+same way and enter a code. Email codes are only a backup; your account needs the app first.
 
 **On a shared Chromebook, sign out when you finish**: the *Sign out* button at the top of every page.
 The search also signs you out on its own after an hour without using it, and twelve hours after you
@@ -77,20 +77,18 @@ email. To stop using the address, choose **Remove the backup email** on the same
 
 ### A new phone, a lost phone, a forgotten password
 
-- **A new phone, and you still have the old one** (or a backup email): sign in as usual, open **Your
-  account**, choose **Set up a new authenticator app**, then **Start**, and scan the new code with
-  the app on the new phone. The old phone stops working as soon as you choose **Start**, so have the
-  new phone in hand and finish in one sitting. You have five minutes to enter a code from the new
-  app. If you are signed out partway through, sign in again straight away and finish setting up the
-  authenticator app.
-- **The sign-in page asks you to set up an authenticator, and you did not choose Start**: tell the
-  coach. The coach's fix is `tub users reset`.
-- **A lost phone and a backup email**: sign in, choose the email code when the sign-in page asks,
-  then set up the app on your new phone from **Your account** as above.
-- **A lost phone and no backup email**: ask the coach for a reset. You get a new temporary password,
-  and at your next sign-in you choose a new password and set up the authenticator app again, as on
-  your [first sign-in](#your-first-sign-in).
+In the pilot you cannot move the authenticator app to a new phone yourself. The coach resets your
+account instead: you get a new temporary password from the coach, and at your next sign-in you choose
+a new password and set up the authenticator app on your phone, as on your [first
+sign-in](#your-first-sign-in).
+
+- **A new phone**: ask the coach for a reset, and have the new phone with you when you next sign in.
+  Afterwards, delete the old entry from the authenticator app; it no longer works.
+- **A lost phone**: ask the coach for a reset. With a backup email you can still sign in with an
+  email code until then.
 - **A forgotten password**: there is no "forgot password" link. Ask the coach for a reset.
+- **The sign-in page asks you to set up an authenticator app** when it is not your first sign-in and
+  the coach has not just reset your account: tell the coach.
 
 ## For the coach
 
@@ -177,7 +175,7 @@ must set up an authenticator app.
 Until AWS grants the pilot production email sending (the runbook's step 4), codes reach only
 addresses the operator has verified, so check with the operator before relying on this.
 
-### Resetting a lost password or a lost phone
+### Resetting a password or a phone
 
 ```bash
 STUDENT='debater.2027'
@@ -185,15 +183,19 @@ uv run debate-research tub users reset "$STUDENT" --env prod
 ```
 Success looks like `Reset debater.2027 (student).` and a new temporary password, shown once. The reset
 also removes the student's authenticator app and signs them out everywhere within five minutes. At
-their next sign-in they choose a new password and set up the authenticator app again. A student with
-a verified backup email can replace a lost phone themselves instead ([students' section](#a-new-phone-a-lost-phone-a-forgotten-password)).
+their next sign-in they choose a new password and set up the authenticator app again.
 
-When a student replaces their phone from the account page, choosing **Start** stops the old phone at
-once. If they are signed out partway through, they sign in again straight away and finish setting up
-the authenticator app. If the sign-in page ever asks a student to set up an authenticator when they
-did not choose **Start**, they tell you, and your fix is `tub users reset`: someone may have their
-password. The audit log shows each replacement as `authenticator-replacement-started`, then
-`authenticator-registered` when it finished.
+Reset when a student:
+
+- has a new phone. Students cannot move the authenticator app themselves in the pilot (PM ruling,
+  2026-10-20), so a reset is the only way;
+- has lost their phone. One with a verified backup email can still sign in with email codes until
+  you do;
+- has forgotten their password;
+- tells you the sign-in page asked them to set up an authenticator app when it was not their first
+  sign-in and you had not just reset them. Someone else may have their password.
+
+Give the new temporary password in person, as when [adding a student](#adding-a-student).
 
 ### Suspending and removing accounts
 

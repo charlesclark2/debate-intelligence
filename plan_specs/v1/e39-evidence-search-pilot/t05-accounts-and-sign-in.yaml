@@ -16,6 +16,8 @@ metadata:
 spec:
   # Filed by the PM, 2026-10-19, from Charlie's direction of 2026-10-19 (a student search pilot before the
   # semester ends, on Chromebooks, signing in with a username, password and 2FA, outside the school's systems).
+  # PM ruling 2026-10-20 (ac5 re-run): the account page no longer replaces the authenticator; for a new
+  # phone it sends the student to the coach for a reset (no self-service replacement in the pilot).
   description: >-
     The application side of ADR-0019's sign-in. In debate_api: the authorization-code flow with
     PKCE against the v1-e39-t04 pool's managed login, the token exchange on the server, an
@@ -34,7 +36,7 @@ spec:
     assets with no data) and no others. No session starts until the account has an authenticator
     registered: a student who chose email at managed login's first setup is sent to the app's
     own authenticator enrolment page. An account page lets a student add, verify and remove the
-    backup email and replace the authenticator. The fallback for a debater with no phone (PM
+    backup email and, for a new phone, sends the student to the coach for a reset. The fallback for a debater with no phone (PM
     ruling, 2026-10-19): the coach adds the account to an `email-second-factor` group (`tub
     users add --group` or a `tub users` subcommand), and for that account alone a verified email
     is accepted as the only second factor. `debate_api` moves from the boto3 contract's
@@ -85,12 +87,15 @@ spec:
       description: >-
         On dev, the operator signs in as a synthetic user, enrols TOTP, signs out, and a
         reset forces enrolment again (operator follow-up, recorded in the report).
+    # PM ruling 2026-10-20 (ac5 re-run): "replaces the authenticator" became "for a new phone, sends
+    # the student to the coach for a reset (no self-service replacement in the pilot)".
     - id: ac6
       description: >-
         (PM amendment 2026-10-19) The authorization matrix covers exactly the four
         session-free routes; an account with no authenticator gets no session and is sent to
         enrolment unless it is in `email-second-factor` with a verified email; the account
-        page adds, verifies and removes the backup email and replaces the authenticator; a
+        page adds, verifies and removes the backup email and, for a new phone, sends the student
+        to the coach for a reset (no self-service replacement in the pilot); a
         disabled account's session ends within five minutes; each by test shown failing
         first.
 status:

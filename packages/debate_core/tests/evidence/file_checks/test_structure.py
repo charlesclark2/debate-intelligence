@@ -504,6 +504,15 @@ def test_a_provenance_line_not_in_the_policys_form_fails(standard: Checked) -> N
     ]
 
 
+def test_a_line_that_does_not_name_the_team_on_record_fails(standard: Checked) -> None:
+    """PM amendment to ac4, 2026-10-20: a card whose disclosure names a team carries a line naming it."""
+    line = "[Disclosed: hspolicy26 2026-09-15 — Cedar Hollow ZaLu, Aff vs. Riverbend Invitational Round 4]"
+    assert _provenance(standard, 2, provenance_line=line) == [
+        (CheckStatus.FAIL, 2, "the provenance line does not name the school and team code on record"),
+        (CheckStatus.FAIL, 2, "the card's provenance line is not below its cite in the Undertag style"),
+    ]
+
+
 def _camp(entry: FileProvenanceEntry, **changes: object) -> FileProvenanceEntry:
     return FileProvenanceEntry.model_validate(
         {

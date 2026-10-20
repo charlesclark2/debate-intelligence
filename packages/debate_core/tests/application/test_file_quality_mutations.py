@@ -362,6 +362,31 @@ def test_the_reports_hold_no_card_text_school_or_team_code(
         assert card_words not in written, card_words
 
 
+CHECK_MODULES = [
+    REPOSITORY
+    / "packages"
+    / "debate_core"
+    / "src"
+    / "debate_core"
+    / "application"
+    / "file_quality_service.py",
+    *sorted(
+        (REPOSITORY / "packages" / "debate_core" / "src" / "debate_core" / "evidence" / "file_checks").glob(
+            "*.py"
+        )
+    ),
+]
+
+
+def test_no_check_calls_a_model() -> None:
+    """The forbidden list's second item: nothing the checks or the service import or name reaches a model."""
+    assert len(CHECK_MODULES) == 5, CHECK_MODULES
+    for path in CHECK_MODULES:
+        text = path.read_text(encoding="utf-8")
+        for word in ("ModelRouter", "model_router", "generate_structured", "bedrock", "integrations.models"):
+            assert word not in text, (path.name, word)
+
+
 # ------------------------------------------------------------------------------------------------
 # ac1: the mutation suite
 # ------------------------------------------------------------------------------------------------

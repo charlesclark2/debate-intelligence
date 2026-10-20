@@ -401,6 +401,16 @@ def test_a_card_missing_from_the_sidecar_fails(standard: Checked) -> None:
     ]
 
 
+def test_a_card_the_document_holds_more_often_than_the_sidecar_fails_at_the_extra_copy(
+    standard: Checked,
+) -> None:
+    results = check_alignment(standard[0].manifest.cards, [*standard[1].cards, standard[1].cards[0]])
+    assert _not_passing(results) == [
+        (CheckStatus.FAIL, None, "the sidecar lists 4 cards and the document reads as 5"),
+        (CheckStatus.FAIL, 5, "the document holds this card more times than the sidecar lists it"),
+    ]
+
+
 def test_cards_in_the_wrong_order_fail_at_each_place(standard: Checked) -> None:
     one, two, three, four = standard[1].cards
     results = check_alignment(standard[0].manifest.cards, [one, three, two, four])

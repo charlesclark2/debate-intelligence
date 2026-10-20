@@ -51,6 +51,7 @@ from debate_cli.commands import (
     config,
     doctor,
     store,
+    tub_index,
     verify,
 )
 
@@ -92,6 +93,15 @@ def register_commands(app: typer.Typer) -> None:
     evidence_store.command("ls")(store.ls)
     evidence_store.command("get")(store.get)
     app.add_typer(evidence_store)
+
+    search_pilot = command_group(
+        "tub", "The student search pilot: its index (and, from v1-e39-t05, its users)."
+    )
+    search_index = command_group("index", "Build the search pilot's index and publish it to a bucket.")
+    search_index.command("build")(tub_index.build)
+    search_index.command("publish")(tub_index.publish)
+    search_pilot.add_typer(search_index)
+    app.add_typer(search_pilot)
 
 
 def command_group(name: str, help_text: str) -> typer.Typer:

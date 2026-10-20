@@ -16,6 +16,9 @@ metadata:
 spec:
   # Filed by the PM, 2026-10-19, from Charlie's direction of 2026-10-19 (a student search pilot before the
   # semester ends, on Chromebooks, signing in with a username, password and 2FA, outside the school's systems).
+  # PM ruling 2026-10-20 (v1-e39-t02 Q1): "never stored" names a disclosure path or a caselist file name.
+  # A camp file title (CampFile.file_title) is stored and never searchable: Attribution rule 2 and E39
+  # gate item 7 need it on every camp card's provenance line.
   description: >-
     `tub index build` (debate_cli, logic in debate_core) builds the pilot's index from the
     operator's local parsed store: one document per card cluster under the current fingerprint
@@ -28,7 +31,7 @@ spec:
     slug or the camp), caselist or camp, sides, first and last seen, the counts of files and
     teams, and the provenance of up to a configured number of occurrences (school, team code,
     side, tournament and round as disclosed) for the provenance line. Never stored: a cutter
-    mark, a file name, or a name from a document body. The suppression list applies: a
+    mark, a disclosure path or a caselist file name, or a name from a document body. The suppression list applies: a
     suppressed occurrence never appears and a cluster with no surviving occurrence is left out.
     The output is one SQLite file with FTS5 and a JSON manifest (index format version, parser
     version, fingerprint version, store snapshot, counts, sha256), byte-identical for the same
@@ -53,7 +56,8 @@ spec:
     included.
   priority: 1
   constraints:
-    packages: [debate_core.domain, debate_core.application, debate_core.integrations, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/data, docs/guides, docs/architecture, infrastructure/modules/evidence_bucket]
+    # PM ruling 2026-10-20 (v1-e39-t02 D1): the manifest schema's export script, as v1-e33-t02's.
+    packages: [debate_core.domain, debate_core.application, debate_core.integrations, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/data, docs/guides, docs/architecture, infrastructure/modules/evidence_bucket, scripts/export_search_index_schema.py]
     forbidden:
       - Card text, a school, team code, file name, student name, username or email in any fixture, log, report or commit (synthetic values only)
       - Making a school, team code, tournament or round searchable
@@ -110,7 +114,7 @@ spec:
         document record, `None` for no tag; no document is indexed for a source no
         occurrence row names, by tests shown failing first.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

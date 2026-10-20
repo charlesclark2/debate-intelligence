@@ -46,8 +46,17 @@ locals {
   # and an absent condition key matches no StringLike, so the root listing is refused. That is the
   # scoping the task spec asks for, and the runbook says so in as many words: list a prefix.
   list_prefix_conditions = flatten([
-    for prefix in local.evidence_prefixes : [prefix, "${prefix}*"]
+    for prefix in concat(local.evidence_prefixes, local.named_list_prefixes) : [prefix, "${prefix}*"]
   ])
+
+  # Prefixes below a documented one that a command lists, named in the grant as the layout document
+  # names them. `reports/*` already matches each; naming it keeps the listing its command depends on
+  # if `reports/` is ever narrowed. `reports/tub/search/` holds the student search pilot's index
+  # versions and their `current.json` (v1-e39-t02); listing it is how an operator sees which versions
+  # are there before v1-e39-t07 prunes them. A listing grant only: nothing here adds a delete.
+  named_list_prefixes = [
+    "reports/tub/search/",
+  ]
 
   # The prefixes a takedown may delete from. reports/ is not among them: a report is derived,
   # regenerable and cites evidence rather than holding it, and leaving it out is what makes "this

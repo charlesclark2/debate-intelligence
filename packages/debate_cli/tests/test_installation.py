@@ -66,7 +66,7 @@ runner = CliRunner()
 
 
 def test_the_container_wires_these_integrations() -> None:
-    # Read by hand from debate_cli/container.py: five module-level imports from `local`, the
+    # Read by hand from debate_cli/container.py: six module-level imports from `local`, the
     # `local` package itself, `macos_notifier` inside sync_notifier, `docx_parser` inside the parse
     # and retention factories, `models.routing_policy` at module level for the startup check of the
     # routing file (v1-e05-t03), `opencaselist` under TYPE_CHECKING and inside two factories, `s3`
@@ -77,6 +77,7 @@ def test_the_container_wires_these_integrations() -> None:
         "debate_core.integrations.local.fs_version_store",
         "debate_core.integrations.local.macos_notifier",
         "debate_core.integrations.local.parsed_store",
+        "debate_core.integrations.local.search_index",
         "debate_core.integrations.local.sqlite_caselist_repository",
         "debate_core.integrations.local.suppression_list",
         "debate_core.integrations.local.version_directories",
@@ -214,7 +215,7 @@ def test_the_check_exits_zero_and_reports_json_for_this_checkout(capsys: pytest.
     report = json.loads(capsys.readouterr().out)
     assert report["complete"] is True
     assert report["covered"] is True
-    assert len(report["imported"]) == len(report["wired"]) == 12
+    assert len(report["imported"]) == len(report["wired"]) == 13
 
 
 # ---------------------------------------------------------------------------------------------

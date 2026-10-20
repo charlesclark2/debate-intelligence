@@ -1,0 +1,292 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "IndexCounts": {
+      "additionalProperties": false,
+      "description": "What the build read, kept and left out. Counts only.",
+      "properties": {
+        "documents": {
+          "description": "Documents in the index: one per cluster with a surviving occurrence.",
+          "minimum": 0,
+          "title": "Documents",
+          "type": "integer"
+        },
+        "documents_by_store": {
+          "additionalProperties": {
+            "type": "integer"
+          },
+          "description": "Documents per caselist slug or `openev`.",
+          "title": "Documents By Store",
+          "type": "object"
+        },
+        "occurrences": {
+          "description": "Occurrences indexed: every surviving row of every document.",
+          "minimum": 0,
+          "title": "Occurrences",
+          "type": "integer"
+        },
+        "provenance_rows": {
+          "description": "Occurrences whose provenance the index keeps.",
+          "minimum": 0,
+          "title": "Provenance Rows",
+          "type": "integer"
+        },
+        "occurrence_rows_read": {
+          "description": "Occurrence rows read from the stores.",
+          "minimum": 0,
+          "title": "Occurrence Rows Read",
+          "type": "integer"
+        },
+        "suppressed_occurrences": {
+          "description": "Rows the suppression list or a path hold stops, left out.",
+          "minimum": 0,
+          "title": "Suppressed Occurrences",
+          "type": "integer"
+        },
+        "clusters_left_out": {
+          "description": "Clusters with no surviving occurrence, left out.",
+          "minimum": 0,
+          "title": "Clusters Left Out",
+          "type": "integer"
+        },
+        "unattributed_representatives": {
+          "description": "Documents whose representative has no disclosure or release record on record.",
+          "minimum": 0,
+          "title": "Unattributed Representatives",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "documents",
+        "documents_by_store",
+        "occurrences",
+        "provenance_rows",
+        "occurrence_rows_read",
+        "suppressed_occurrences",
+        "clusters_left_out",
+        "unattributed_representatives"
+      ],
+      "title": "IndexCounts",
+      "type": "object"
+    },
+    "IndexFile": {
+      "additionalProperties": false,
+      "description": "One file of a built index: its name, size and sha256.",
+      "properties": {
+        "name": {
+          "description": "File name, the same locally and in the bucket.",
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "bytes": {
+          "description": "Size in bytes.",
+          "minimum": 0,
+          "title": "Bytes",
+          "type": "integer"
+        },
+        "sha256": {
+          "description": "SHA-256 of the file's bytes.",
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "bytes",
+        "sha256"
+      ],
+      "title": "IndexFile",
+      "type": "object"
+    },
+    "StoreState": {
+      "additionalProperties": false,
+      "description": "One store an index was built from: which directory, and a digest of the rows read in it.",
+      "properties": {
+        "caselist": {
+          "description": "Caselist slug, or `openev` for camp files.",
+          "minLength": 1,
+          "title": "Caselist",
+          "type": "string"
+        },
+        "version_directory": {
+          "description": "The parsed store's version directory read.",
+          "minLength": 1,
+          "title": "Version Directory",
+          "type": "string"
+        },
+        "latest_snapshot": {
+          "description": "The latest `last_snapshot` among its rows: a date, or a release for `openev`.",
+          "minLength": 1,
+          "title": "Latest Snapshot",
+          "type": "string"
+        },
+        "occurrence_rows": {
+          "description": "How many occurrence rows the directory held.",
+          "minimum": 0,
+          "title": "Occurrence Rows",
+          "type": "integer"
+        },
+        "occurrences_sha256": {
+          "description": "SHA-256 of the rows as sorted canonical JSON lines, whatever order they are listed in.",
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Occurrences Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "caselist",
+        "version_directory",
+        "latest_snapshot",
+        "occurrence_rows",
+        "occurrences_sha256"
+      ],
+      "title": "StoreState",
+      "type": "object"
+    },
+    "SuppressionListState": {
+      "additionalProperties": false,
+      "description": "The suppression list the build applied, as a digest: its entries are not repeated here.",
+      "properties": {
+        "entries": {
+          "description": "Suppression entries read, every action included.",
+          "minimum": 0,
+          "title": "Entries",
+          "type": "integer"
+        },
+        "path_holds": {
+          "description": "Path-hold entries read, lifted or not.",
+          "minimum": 0,
+          "title": "Path Holds",
+          "type": "integer"
+        },
+        "sha256": {
+          "description": "SHA-256 of the entries and holds as canonical lines, sorted.",
+          "maxLength": 64,
+          "minLength": 64,
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "entries",
+        "path_holds",
+        "sha256"
+      ],
+      "title": "SuppressionListState",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "`manifest.json`: what one index is, what built it and what it was built from.",
+  "properties": {
+    "manifest_version": {
+      "const": 1,
+      "default": 1,
+      "description": "This manifest's own shape: 1.",
+      "title": "Manifest Version",
+      "type": "integer"
+    },
+    "format_version": {
+      "description": "The SQLite schema's version (`docs/data/search-index.md`).",
+      "minimum": 1,
+      "title": "Format Version",
+      "type": "integer"
+    },
+    "index_id": {
+      "description": "The first 16 hex characters of the SQLite file's sha256.",
+      "minLength": 1,
+      "title": "Index Id",
+      "type": "string"
+    },
+    "parser_version": {
+      "description": "The parser version every store read was parsed by.",
+      "minLength": 1,
+      "title": "Parser Version",
+      "type": "string"
+    },
+    "fingerprint_version": {
+      "description": "The fingerprint version every cluster id is under.",
+      "minLength": 1,
+      "title": "Fingerprint Version",
+      "type": "string"
+    },
+    "sqlite_version": {
+      "description": "The SQLite library that wrote the file.",
+      "minLength": 1,
+      "title": "Sqlite Version",
+      "type": "string"
+    },
+    "sqlite_feature_ceiling": {
+      "description": "The newest SQLite whose features the file may use: the function's image's.",
+      "minLength": 1,
+      "title": "Sqlite Feature Ceiling",
+      "type": "string"
+    },
+    "gzip_level": {
+      "const": 6,
+      "default": 6,
+      "description": "The gzip object's compression level.",
+      "title": "Gzip Level",
+      "type": "integer"
+    },
+    "provenance_limit": {
+      "description": "How many occurrences of a document keep their provenance.",
+      "minimum": 1,
+      "title": "Provenance Limit",
+      "type": "integer"
+    },
+    "stores": {
+      "description": "Every store read, by caselist slug.",
+      "items": {
+        "$ref": "#/$defs/StoreState"
+      },
+      "title": "Stores",
+      "type": "array"
+    },
+    "snapshot": {
+      "description": "The latest caselist snapshot among the stores read; a release when only `openev` is.",
+      "minLength": 1,
+      "title": "Snapshot",
+      "type": "string"
+    },
+    "suppression": {
+      "$ref": "#/$defs/SuppressionListState",
+      "description": "The suppression list the build applied."
+    },
+    "counts": {
+      "$ref": "#/$defs/IndexCounts"
+    },
+    "sqlite_file": {
+      "$ref": "#/$defs/IndexFile",
+      "description": "The SQLite file, as built."
+    },
+    "gzip_object": {
+      "$ref": "#/$defs/IndexFile",
+      "description": "The gzip object: what is published and downloaded."
+    }
+  },
+  "required": [
+    "format_version",
+    "index_id",
+    "parser_version",
+    "fingerprint_version",
+    "sqlite_version",
+    "sqlite_feature_ceiling",
+    "provenance_limit",
+    "stores",
+    "snapshot",
+    "suppression",
+    "counts",
+    "sqlite_file",
+    "gzip_object"
+  ],
+  "title": "SearchIndexManifest",
+  "type": "object"
+}

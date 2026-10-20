@@ -28,13 +28,13 @@ from debate_core.evidence.extractor import EvidenceExtractor
 from debate_core.evidence.markup import CardMarkup, EvidenceMarkupSpan
 from debate_core.evidence.selection import EvidenceSelection
 from debate_core.evidence.verification_types import VerificationResult
-from debate_core.testing import (
+from debate_core.testing.builders import DEFAULT_OWNER_ID, build_citation
+from debate_core.testing.fakes import (
     FixedClock,
     InMemoryArticleRepository,
     InMemorySnapshotStore,
     SequentialIdGenerator,
 )
-from debate_core.testing.builders import DEFAULT_OWNER_ID, build_citation
 
 ARTICLE_ID = "0ART0000000000000000000001"
 CANONICAL_URL = "https://example.org/water/invented-basin"

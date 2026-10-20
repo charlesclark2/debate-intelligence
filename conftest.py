@@ -28,7 +28,7 @@ import typer.rich_utils
 
 from debate_core.application.ports.model_router import ModelRouter
 from debate_core.integrations.models.fake_router import DEFAULT_FIXTURE_DIRECTORY, FakeModelRouter
-from debate_core.testing import FixedClock
+from debate_core.testing.fakes import FixedClock
 
 REPOSITORY_ROOT = Path(__file__).parent
 

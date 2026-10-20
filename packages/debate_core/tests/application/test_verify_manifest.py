@@ -46,7 +46,7 @@ from debate_core.application.verify_manifest import (
 )
 from debate_core.domain import Card, SourceSnapshot, VerificationStatus
 from debate_core.evidence.verification_types import ReasonCode, VerificationCheck, VerificationResult
-from debate_core.testing import InMemoryArticleRepository, InMemorySnapshotStore
+from debate_core.testing.fakes import InMemoryArticleRepository, InMemorySnapshotStore
 
 VERIFIED = VerificationStatus.VERIFIED
 UNVERIFIED = VerificationStatus.UNVERIFIED

@@ -27,9 +27,8 @@ from debate_core.integrations.models import (
     RoutingPolicy,
     build_model_router,
 )
-from debate_core.testing import ScriptedModelRouter
 from debate_core.testing.contracts.model_router import ContractPassage
-from debate_core.testing.fakes import ScriptedModelResponse
+from debate_core.testing.fakes import ScriptedModelResponse, ScriptedModelRouter
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[5]
 EXAMPLE_ROUTING_FILE = REPOSITORY_ROOT / "config" / "model_routing.example.yaml"

@@ -80,8 +80,11 @@ email. To stop using the address, choose **Remove the backup email** on the same
 - **A new phone, and you still have the old one** (or a backup email): sign in as usual, open **Your
   account**, choose **Set up a new authenticator app**, then **Start**, and scan the new code with
   the app on the new phone. The old phone stops working as soon as you choose **Start**, so have the
-  new phone in hand and finish in one sitting. If you are signed out before you finish, sign in
-  again: the sign-in page asks you to set up an authenticator app, and you do it there.
+  new phone in hand and finish in one sitting. You have five minutes to enter a code from the new
+  app. If you are signed out partway through, sign in again straight away and finish setting up the
+  authenticator app.
+- **The sign-in page asks you to set up an authenticator, and you did not choose Start**: tell the
+  coach. The coach's fix is `tub users reset`.
 - **A lost phone and a backup email**: sign in, choose the email code when the sign-in page asks,
   then set up the app on your new phone from **Your account** as above.
 - **A lost phone and no backup email**: ask the coach for a reset. You get a new temporary password,
@@ -184,6 +187,13 @@ Success looks like `Reset debater.2027 (student).` and a new temporary password,
 also removes the student's authenticator app and signs them out everywhere within five minutes. At
 their next sign-in they choose a new password and set up the authenticator app again. A student with
 a verified backup email can replace a lost phone themselves instead ([students' section](#a-new-phone-a-lost-phone-a-forgotten-password)).
+
+When a student replaces their phone from the account page, choosing **Start** stops the old phone at
+once. If they are signed out partway through, they sign in again straight away and finish setting up
+the authenticator app. If the sign-in page ever asks a student to set up an authenticator when they
+did not choose **Start**, they tell you, and your fix is `tub users reset`: someone may have their
+password. The audit log shows each replacement as `authenticator-replacement-started`, then
+`authenticator-registered` when it finished.
 
 ### Suspending and removing accounts
 

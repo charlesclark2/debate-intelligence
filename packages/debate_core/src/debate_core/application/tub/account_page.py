@@ -12,7 +12,8 @@ none, so the student asks the coach.
 
 **The authenticator.** Beginning gives a new secret, and Cognito drops the current authenticator at
 once (measured on dev, 2026-10-20); confirming a code from the new secret turns the factor on. The
-same two calls serve a first enrolment and a replacement.
+same two calls serve a first enrolment and a replacement. A replacement begins with *Start*, which
+counts as the session's revalidation and is recorded as `authenticator-replacement-started`.
 
 Each completed change writes one audit record with the student's subject and no address (ADR-0019
 (d) 5: "the audit record says an email was added or removed, never which").
@@ -39,7 +40,7 @@ from debate_core.application.ports.tub import (
 from debate_core.application.tub.audit import AuditAction, AuditRecord
 from debate_core.application.tub.identity import AuthenticatorSecret, Role
 from debate_core.application.tub.sessions import PendingEnrolment, Session
-from debate_core.application.tub.sign_in import SessionEnded
+from debate_core.application.tub.sign_in import SessionEnded, refreshed_account
 
 __all__ = [
     "ONE_TIME_CODE_PATTERN",
@@ -184,13 +185,18 @@ class AccountPageService:
     def begin_authenticator(self, holder: Session | PendingEnrolment) -> AuthenticatorEnrolment:
         """A new secret for the enrolment page. Cognito drops the current authenticator at once."""
         secret = self._self_service.begin_authenticator(self._access_token(holder.refresh_token))
-        return AuthenticatorEnrolment(
-            secret=secret, uri=authenticator_uri(secret, issuer=self._issuer, username=holder.username)
-        )
+        return self._enrolment(secret, holder.username)
 
     def begin_replacement(self, session: Session) -> tuple[AuthenticatorEnrolment, Session]:
-        """*Start*, for a full session: a new secret, and the session to write back."""
-        return self.begin_authenticator(session), session
+        """*Start*, for a full session: a new secret, and the session revalidated as of now.
+
+        The record is written before Cognito is asked, so a start that cannot be recorded leaves the
+        old authenticator working (PM ruling, 2026-10-20).
+        """
+        account = refreshed_account(self._identity_provider, session)
+        self._record(AuditAction.AUTHENTICATOR_REPLACEMENT_STARTED, session)
+        secret = self._self_service.begin_authenticator(account.access_token)
+        return self._enrolment(secret, session.username), account.applied_to(session, self._clock())
 
     def confirm_authenticator(self, holder: Session | PendingEnrolment, raw_code: str) -> None:
         """Confirm the new secret with a code from it; it replaces any earlier authenticator."""
@@ -204,6 +210,11 @@ class AccountPageService:
             email=standing.email is not None and standing.email_verified,
         )
         self._record(AuditAction.AUTHENTICATOR_REGISTERED, holder)
+
+    def _enrolment(self, secret: AuthenticatorSecret, username: str) -> AuthenticatorEnrolment:
+        return AuthenticatorEnrolment(
+            secret=secret, uri=authenticator_uri(secret, issuer=self._issuer, username=username)
+        )
 
     def _standing(self, refresh_token: str) -> AccountStanding:
         return self._self_service.standing(self._access_token(refresh_token))

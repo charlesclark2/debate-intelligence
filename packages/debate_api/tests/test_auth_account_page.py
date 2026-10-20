@@ -166,70 +166,34 @@ def test_the_audit_record_names_no_address_and_no_username(student: tuple[Any, A
 # --------------------------------------------------------------------------------------------
 
 
-def test_the_start_page_warns_that_the_old_authenticator_stops_at_once(student: tuple[Any, Any]) -> None:
-    """ac5 step 4 on dev, 2026-10-20: after Start, Cognito listed no authenticator on the account."""
-    world, _ = student
-
-    page = world.browser.get("/account/authenticator")
-
-    assert "your current authenticator app stops working at once" in page.text
-    assert "finish in one sitting" in page.text
-
-
-def test_the_start_page_says_what_to_do_if_signed_out_or_asked_unexpectedly(
-    student: tuple[Any, Any],
-) -> None:
-    """PM ruling, 2026-10-20: the same two lines as the guide's."""
-    world, _ = student
-
-    page = world.browser.get("/account/authenticator")
-
-    assert (
-        "If you are signed out partway through, sign in again straight away and finish setting up "
-        "the authenticator app." in page.text
-    )
-    assert (
-        "If the sign-in page ever asks you to set up an authenticator when you did not choose "
-        "<strong>Start</strong>, tell the coach." in page.text
-    )
-
-
-def test_after_start_the_qr_page_says_the_old_authenticator_has_stopped(student: tuple[Any, Any]) -> None:
-    world, session = student
-
-    page = post(world, session, "/account/authenticator/begin")
-
-    assert page.status_code == 200
-    assert "Your old authenticator app has stopped working" in page.text
-    assert "keeps working" not in page.text
-    assert not world.login.accounts["debater.one"].has_authenticator
-
-
-def test_the_account_page_says_the_old_app_stops_when_you_start(student: tuple[Any, Any]) -> None:
+def test_the_account_page_sends_a_new_phone_to_the_coach(student: tuple[Any, Any]) -> None:
+    """PM ruling (d), 2026-10-20: no self-service replacement in the pilot."""
     world, _ = student
 
     page = world.browser.get("/account")
 
-    assert "stops working as soon as you choose Start" in page.text
+    assert "For a new phone, ask your coach for a reset." in page.text
+    assert "sign in with the temporary password and set up the app again" in page.text
+    assert "/account/authenticator" not in page.text
+    assert "Start" not in page.text
 
 
-def test_a_confirmed_new_authenticator_replaces_the_old_one(student: tuple[Any, Any]) -> None:
-    world, session = student
-    post(world, session, "/account/authenticator/begin")
-
-    response = post(world, session, "/account/authenticator", {"code": world.good_authenticator_code})
-
-    assert response.json() == {"location": "/account?done=authenticator-replaced"}
-    assert (
-        "VerifySoftwareToken",
+def test_an_account_with_no_authenticator_is_sent_to_the_coach_too(world: Any) -> None:
+    world.login.add_account(
         "debater.one",
-        {"code": world.good_authenticator_code},
-    ) in world.self_service.calls
-    assert actions(world) == ["authenticator-replacement-started", "authenticator-registered"]
-    assert (
-        "Your new authenticator app is set up"
-        in world.browser.get("/account?done=authenticator-replaced").text
+        "student",
+        "email-second-factor",
+        has_authenticator=False,
+        email=EMAIL,
+        email_verified=True,
+        email_factor=True,
     )
+    world.use_session(world.session_for("debater.one"))
+
+    page = world.browser.get("/account")
+
+    assert "To set one up, ask your coach." in page.text
+    assert "/account/authenticator" not in page.text
 
 
 def test_an_unknown_notice_is_not_shown(student: tuple[Any, Any]) -> None:

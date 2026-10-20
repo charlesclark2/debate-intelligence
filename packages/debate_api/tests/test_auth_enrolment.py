@@ -103,6 +103,28 @@ def test_a_wrong_code_starts_no_session(world: Any) -> None:
     assert world.browser.cookies.get(SESSION_COOKIE) is None
 
 
+@pytest.mark.parametrize(
+    "forgery",
+    [{"csrf_token": None}, {"origin": "https://evil.example"}, {"fetch_site": "cross-site"}],
+    ids=["no-token", "other-origin", "cross-site"],
+)
+def test_a_forged_confirm_is_refused_before_cognito_is_asked(world: Any, forgery: dict[str, Any]) -> None:
+    without_an_authenticator(world).sign_in("debater.two")
+    world.browser.get("/account/authenticator")
+    enrolment = world.app.state.pilot.enrolment_in(_request_with_cookies(world))
+    world.self_service.calls.clear()
+
+    response = world.post(
+        "/account/authenticator",
+        {"code": world.good_authenticator_code},
+        **{"csrf_token": enrolment.csrf_token, **forgery},
+    )
+
+    assert response.status_code == 403
+    assert world.self_service.calls == []
+    assert world.audit.records == []
+
+
 def test_a_confirmed_authenticator_starts_the_session_and_returns_to_the_page_asked_for(world: Any) -> None:
     without_an_authenticator(world)
     world.sign_in("debater.two", "/account")

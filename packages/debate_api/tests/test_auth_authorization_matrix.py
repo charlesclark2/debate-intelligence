@@ -47,7 +47,6 @@ ROUTE_REQUESTS: list[RouteRequest] = [
     RouteRequest("POST", "/auth/sign-out", "/auth/sign-out", {}),
     RouteRequest("GET", "/account/authenticator", "/account/authenticator"),
     RouteRequest("POST", "/account/authenticator", "/account/authenticator", {"code": "424242"}),
-    RouteRequest("POST", "/account/authenticator/begin", "/account/authenticator/begin", {}),
     RouteRequest("GET", "/", "/"),
     RouteRequest("GET", "/account", "/account"),
     RouteRequest("POST", "/account/email", "/account/email", {"email": "debater.one@example.test"}),
@@ -58,6 +57,8 @@ ROUTE_REQUESTS: list[RouteRequest] = [
 
 SESSION_FREE = {"/healthz", "/static/{digest}/app.js", "/auth/callback", "/signed-out"}
 COACH_ONLY = {"/coach"}
+PENDING_ENROLMENT_ONLY = {"/account/authenticator"}
+"""A full session is sent to `/account` from these (PM ruling (d), 2026-10-20)."""
 
 
 def send(world: Any, request: RouteRequest, csrf_token: str | None) -> Any:
@@ -180,7 +181,7 @@ def test_without_a_valid_session_only_the_four_session_free_routes_answer(
 
 
 @pytest.mark.parametrize("route", ROUTE_REQUESTS, ids=lambda route: f"{route.method} {route.path}")
-def test_with_a_valid_session_every_route_answers_and_coach_routes_refuse_a_student(
+def test_with_a_valid_session_every_route_answers_but_coach_and_enrolment_routes_refuse(
     signed_up: tuple[Any, str], route: RouteRequest
 ) -> None:
     world, username = signed_up
@@ -191,6 +192,11 @@ def test_with_a_valid_session_every_route_answers_and_coach_routes_refuse_a_stud
     if route.path in COACH_ONLY and session.role.value == "student":
         assert response.status_code == 403
         assert "For the coach only" in response.text
+    elif route.path in PENDING_ENROLMENT_ONLY and route.method == "GET":
+        assert (response.status_code, response.headers.get("location")) == (303, "/account")
+    elif route.path in PENDING_ENROLMENT_ONLY:
+        assert response.status_code == 403
+        assert response.json()["location"] == "/account"
     else:
         assert not refused_by_the_gate(response), (response.status_code, response.text[:200])
 

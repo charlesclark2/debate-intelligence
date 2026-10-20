@@ -15,8 +15,6 @@ from debate_api.cookies import ALL_COOKIES
 
 STATE_CHANGING = [
     ("/auth/sign-out", {}),
-    ("/account/authenticator", {"code": "424242"}),
-    ("/account/authenticator/begin", {}),
     ("/account/email", {"email": "debater.one@example.test"}),
     ("/account/email/verify", {"code": "135790"}),
     ("/account/email/remove", {}),
@@ -78,9 +76,9 @@ def test_another_sessions_token_is_refused(world: Any) -> None:
     assert response.status_code == 403
 
 
-@pytest.mark.parametrize("path", [path for path in PATHS if path != "/account/authenticator"])
+@pytest.mark.parametrize("path", PATHS)
 def test_get_never_reaches_a_state_changing_route(student: tuple[Any, Any], path: str) -> None:
-    """`GET /account/authenticator` is a page; for a full session it calls nothing (the Start page)."""
+    """A pending enrolment's confirm is CSRF-checked in `test_auth_enrolment.py`."""
     world, _ = student
 
     assert world.browser.get(path).status_code == 405

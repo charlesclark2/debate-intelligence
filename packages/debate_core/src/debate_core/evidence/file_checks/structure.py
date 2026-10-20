@@ -244,12 +244,14 @@ def check_headings(
     card_starts = {card.provenance.first_element_index for card in document.cards}
     opened: dict[StructuralUnit, FileSection] = {}
 
-    def path() -> tuple[str, ...]:
+    def path(unit: StructuralUnit) -> tuple[str, ...]:
+        """The open headings above a paragraph of `unit`: for a heading, only the levels above its own."""
+        above = _LEVELS[: _LEVELS.index(unit)] if unit in _LEVELS else _LEVELS
         return tuple(
             opened[level].text
             if opened[level].text in known_headings
             else f"{opened[level].unit.lower()} at paragraph {opened[level].element_index}"
-            for level in _LEVELS
+            for level in above
             if level in opened
         )
 
@@ -258,7 +260,11 @@ def check_headings(
     def violation(section: FileSection, message: str) -> None:
         results.append(
             _result(
-                check, CheckStatus.FAIL, message, section_path=path(), paragraph_index=section.element_index
+                check,
+                CheckStatus.FAIL,
+                message,
+                section_path=path(section.unit),
+                paragraph_index=section.element_index,
             )
         )
 

@@ -313,6 +313,27 @@ def test_a_heading_in_an_alias_of_its_style_is_not_in_the_profiles_style(
     ]
 
 
+def test_a_misplaced_heading_is_named_under_the_levels_above_it_not_the_one_it_closes(
+    read: Callable[[bytes], ParsedDocument], profile: StyleProfile
+) -> None:
+    #   0 Pocket A, 1 Hat A, 2 Block A, 3-5 a card, 6 a second block styled `Block`, 7-9 a card
+    body = (
+        _heading(1, "Pocket A")
+        + _heading(2, "Hat A")
+        + _heading(3, "Block A")
+        + _card(1)
+        + paragraph_xml(run_xml("Block B"), style="Block")
+        + _card(2)
+    )
+    assert _violations(_headings(read, profile, body)) == [
+        (
+            6,
+            ("Pocket A", "Hat A"),
+            "a block heading not in the profile's Heading3 style (verbatim-alias-id:Block)",
+        )
+    ]
+
+
 def test_a_tag_found_by_its_outline_level_is_not_in_the_profiles_style(
     read: Callable[[bytes], ParsedDocument], profile: StyleProfile
 ) -> None:

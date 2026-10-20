@@ -19,3 +19,14 @@ evidence_operator_user_names = ["your-identity-center-user-name"]
 # one name: the module refuses a second, because a removal purges noncurrent versions and there is
 # nothing left to restore from. Leave it empty and no one can run a takedown.
 evidence_removal_user_names = ["your-identity-center-user-name"]
+
+# The student evidence search pilot (v1-e39-t04-pilot-infrastructure). Adult maintainers only.
+#
+# TubDeployer is what scripts/tub_deploy.sh runs as: push the image, update the function.
+evidence_search_deployer_user_names = ["your-identity-center-user-name"]
+
+# TubAccounts is what the coach's `tub users` commands run as (v1-e39-t05).
+evidence_search_accounts_user_names = ["your-identity-center-user-name"]
+
+# Where the pilot's $10 budget alarm writes. Leave it out and the alarm goes to `owner` above.
+evidence_search_budget_emails = ["you@example.com"]

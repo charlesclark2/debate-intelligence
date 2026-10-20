@@ -117,3 +117,78 @@ output "evidence_removal_profile_name" {
   description = "The name to give the takedown SSO profile for this environment."
   value       = module.evidence_store.removal_profile_name
 }
+
+# --- The student evidence search pilot (v1-e39-t04-pilot-infrastructure) ----------------------
+#
+# docs/runbooks/evidence-search.md reads these. scripts/tub_deploy.sh does not: it derives the
+# repository and function names from the environment, so a deploy never reads Terraform state.
+
+output "evidence_search_url" {
+  description = "Where students open the pilot in this environment."
+  value       = module.evidence_search.pilot_url
+}
+
+output "evidence_search_login_host" {
+  description = "The managed login's host, which school IT allows alongside the pilot host."
+  value       = module.evidence_search.login_host
+}
+
+output "evidence_search_repository_url" {
+  description = "The image repository scripts/tub_deploy.sh pushes to."
+  value       = module.evidence_search.repository_url
+}
+
+output "evidence_search_function_name" {
+  description = "The pilot's function."
+  value       = module.evidence_search.function_name
+}
+
+output "evidence_search_function_url" {
+  description = "The function URL, which refuses a direct request with 403; the runbook checks that it does."
+  value       = module.evidence_search.function_url
+}
+
+output "evidence_search_distribution_id" {
+  description = "The pilot's CloudFront distribution."
+  value       = module.evidence_search.distribution_id
+}
+
+output "evidence_search_user_pool_id" {
+  description = "The pilot's user pool."
+  value       = module.evidence_search.user_pool_id
+}
+
+output "evidence_search_client_id" {
+  description = "The confidential app client's id. Not a secret."
+  value       = module.evidence_search.client_id
+}
+
+output "evidence_search_cookie_keys_parameter_name" {
+  description = "The SecureString parameter the operator writes the session cookie keys to."
+  value       = module.evidence_search.cookie_keys_parameter_name
+}
+
+output "evidence_search_audit_log_group_name" {
+  description = "The append-only access audit log, kept 400 days."
+  value       = module.evidence_search.audit_log_group_name
+}
+
+output "evidence_search_account_changes_log_stream_name" {
+  description = "The audit stream the coach's `tub users` commands write to."
+  value       = module.evidence_search.account_changes_log_stream_name
+}
+
+output "evidence_search_app_log_group_name" {
+  description = "The function's application log, kept 30 days."
+  value       = module.evidence_search.app_log_group_name
+}
+
+output "evidence_search_deployer_profile_name" {
+  description = "The name to give the deployer's SSO profile (debate-dev-tub-deployer / debate-prod-tub-deployer)."
+  value       = module.evidence_search.deployer_profile_name
+}
+
+output "evidence_search_accounts_profile_name" {
+  description = "The name to give the accounts SSO profile (debate-dev-tub-accounts / debate-prod-tub-accounts)."
+  value       = module.evidence_search.accounts_profile_name
+}

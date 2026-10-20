@@ -4,7 +4,16 @@ version = "1.1.0"
 description = "HTTP API service (thin surface over debate_core)."
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
-dependencies = ["debate-core"]
+# The student search pilot's app (v1-e39-t04, ADR-0019 (b)): a plain ASGI app served by uvicorn,
+# which the Lambda Web Adapter forwards function URL events to. No Mangum and no Lambda code here,
+# so the same app runs under uvicorn locally, in tests and in V2's container. uvicorn without its
+# `standard` extra: the pure-Python h11 server is enough for one function, and adds nothing to
+# the image that needs compiling.
+dependencies = [
+    "debate-core",
+    "fastapi>=0.115",
+    "uvicorn>=0.32",
+]
 
 [tool.uv.sources]
 debate-core = { workspace = true }

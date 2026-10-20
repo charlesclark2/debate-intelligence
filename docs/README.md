@@ -28,6 +28,7 @@ regenerates it on `dev` ([`v1-e01-t16`](../plan_specs/v1/e01-repo-foundation/t16
 | [evidence/normalization.md](evidence/normalization.md) | Evidence text normalization policy: the frozen, versioned rules every snapshot offset, hash and verification depends on |
 | [evidence/snapshot-text-format.md](evidence/snapshot-text-format.md) | `debate-snapshot-text/1`: how a snapshot's normalized text and paragraph map are stored, the canonical encoding, the key check every read makes, and what `SnapshotService.load` verifies |
 | [guides/coach-website-editing.md](guides/coach-website-editing.md) | For coaches: adding, changing and removing events and announcements on the team website, with no code |
+| [guides/evidence-search-accounts.md](guides/evidence-search-accounts.md) | For the coach and students: accounts for the team evidence search, first sign-in, the authenticator app, the backup email, resets and lost phones |
 | [guides/evidence-store-cli.md](guides/evidence-store-cli.md) | Using `debate-research store sync\|ls\|get`: environments, the dry-run default, the production guard, verification and resume |
 | [guides/file-recipes.md](guides/file-recipes.md) | For coaches: writing a file recipe, the YAML that names the cards and headings of an evidence file to build |
 | [guides/parent-email-updates.md](guides/parent-email-updates.md) | Parent email updates: the channel chosen and why, how a parent's address travels, who owns the list, how a coach sends an update and what may not go in one about students |

@@ -1,4 +1,4 @@
-<!-- docs-index: Building and publishing the student search pilot's index with `debate-research tub index build|publish` -->
+<!-- docs-index: Building and publishing the student search pilot's index with `debate-research tub index build\|publish` -->
 # Building and publishing the search pilot's index
 
 How the operator turns this machine's parsed store into the index the student search pilot serves,

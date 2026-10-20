@@ -22,11 +22,6 @@ removal, which signs the account out everywhere, ends the session within five mi
 losing the last second factor or the role. A session ended for want of a second factor is written to
 the audit log as `session-ended-no-second-factor`; if that record cannot be written, the session
 ends anyway and the app log gets one WARNING naming the action, never the account.
-
-**Start counts as a revalidation.** Choosing *Start* to replace an authenticator drops the old one
-at once, so the next revalidation would find no second factor. *Start* makes revalidation's other
-checks itself (:func:`refreshed_account`) and resets the clock, so the student has five minutes to
-confirm the new one (PM ruling, 2026-10-20).
 """
 
 from __future__ import annotations
@@ -35,7 +30,7 @@ import contextlib
 import hmac
 import logging
 from collections.abc import Callable
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 from datetime import datetime
 from enum import StrEnum
 
@@ -48,7 +43,7 @@ from debate_core.application.ports.tub import (
     TokenRefused,
 )
 from debate_core.application.tub.audit import AuditAction, AuditRecord
-from debate_core.application.tub.identity import EMAIL_SECOND_FACTOR_GROUP, Role, role_from_groups
+from debate_core.application.tub.identity import EMAIL_SECOND_FACTOR_GROUP, role_from_groups
 from debate_core.application.tub.sessions import (
     PendingEnrolment,
     Session,
@@ -63,14 +58,12 @@ from debate_core.application.tub.sessions import (
 
 __all__ = [
     "EnrolmentRequired",
-    "RefreshedAccount",
     "SessionEnded",
     "SessionStarted",
     "SignInDecision",
     "SignInRefusal",
     "SignInRefused",
     "SignInService",
-    "refreshed_account",
     "sign_in_decision",
 ]
 
@@ -264,69 +257,44 @@ class SignInService:
         return self._identity_provider.sign_out_url()
 
     def _revalidated(self, session: Session, now: datetime) -> Session:
-        account = refreshed_account(self._identity_provider, session)
         try:
-            standing = self._self_service.standing(account.access_token)
+            tokens = self._identity_provider.refresh(session.refresh_token)
         except TokenRefused as refused:
             raise SessionEnded("the account was signed out, disabled or removed") from refused
-        if sign_in_decision(email_second_factor=account.email_second_factor, standing=standing) is not (
+        identity = tokens.identity
+        if identity.subject != session.subject:
+            raise SessionEnded("the refresh token belongs to another account")
+        role = role_from_groups(identity.groups)
+        if role is None:
+            raise SessionEnded("the account no longer has a role in the pilot")
+        email_second_factor = EMAIL_SECOND_FACTOR_GROUP in identity.groups
+        try:
+            standing = self._self_service.standing(tokens.access_token)
+        except TokenRefused as refused:
+            raise SessionEnded("the account was signed out, disabled or removed") from refused
+        if sign_in_decision(email_second_factor=email_second_factor, standing=standing) is not (
             SignInDecision.START_SESSION
         ):
-            # A lost record must not keep the session open: it ends either way, and the app log
-            # says a record was lost, naming only its action (second PM review, 2026-10-20).
-            action = AuditAction.SESSION_ENDED_NO_SECOND_FACTOR
-            try:
-                self._audit.record(
-                    AuditRecord(
-                        time=now,
-                        action=action,
-                        actor_role=session.role,
-                        actor_subject=session.subject,
-                        account_subject=session.subject,
-                    )
-                )
-            except DomainError:
-                logger.warning(
-                    "tub audit: a %s record was not written; the session ended anyway", action.value
-                )
+            self._record_no_second_factor(session, now)
             raise SessionEnded("the account no longer has a second factor it may sign in with")
-        return account.applied_to(session, now)
+        return replace(session, role=role, email_second_factor=email_second_factor, revalidated_at=now)
 
+    def _record_no_second_factor(self, session: Session, now: datetime) -> None:
+        """Write `session-ended-no-second-factor`, or one WARNING naming only the action if it is lost.
 
-@dataclass(frozen=True, slots=True)
-class RefreshedAccount:
-    """What a redeemed refresh token says about the session's account now."""
-
-    access_token: str = field(repr=False)
-    role: Role
-    email_second_factor: bool
-
-    def applied_to(self, session: Session, now: datetime) -> Session:
-        """`session`, revalidated at `now` with the account's current role and group."""
-        return replace(
-            session, role=self.role, email_second_factor=self.email_second_factor, revalidated_at=now
-        )
-
-
-def refreshed_account(identity_provider: IdentityProvider, session: Session) -> RefreshedAccount:
-    """Redeem the session's refresh token and re-read its account: revalidation's checks, but the last.
-
-    `SessionEnded` if the account was signed out, disabled or removed, the token is another
-    account's, or the account has no role. Whether it still has a second factor is the caller's to
-    ask: *Start* asks it of an account that has just lost one on purpose.
-    """
-    try:
-        tokens = identity_provider.refresh(session.refresh_token)
-    except TokenRefused as refused:
-        raise SessionEnded("the account was signed out, disabled or removed") from refused
-    identity = tokens.identity
-    if identity.subject != session.subject:
-        raise SessionEnded("the refresh token belongs to another account")
-    role = role_from_groups(identity.groups)
-    if role is None:
-        raise SessionEnded("the account no longer has a role in the pilot")
-    return RefreshedAccount(
-        access_token=tokens.access_token,
-        role=role,
-        email_second_factor=EMAIL_SECOND_FACTOR_GROUP in identity.groups,
-    )
+        A lost record must not keep the session open: it ends either way (second PM review,
+        2026-10-20).
+        """
+        action = AuditAction.SESSION_ENDED_NO_SECOND_FACTOR
+        try:
+            self._audit.record(
+                AuditRecord(
+                    time=now,
+                    action=action,
+                    actor_role=session.role,
+                    actor_subject=session.subject,
+                    account_subject=session.subject,
+                )
+            )
+        except DomainError:
+            logger.warning("tub audit: a %s record was not written; the session ended anyway", action.value)

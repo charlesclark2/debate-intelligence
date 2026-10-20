@@ -10,10 +10,11 @@ Removing it turns the email factor off first. An account whose email is its only
 `email-second-factor`, with no authenticator) cannot remove it here: that would leave it with
 none, so the student asks the coach.
 
-**The authenticator.** Beginning gives a new secret, and Cognito drops the current authenticator at
-once (measured on dev, 2026-10-20); confirming a code from the new secret turns the factor on. The
-same two calls serve a first enrolment and a replacement. A replacement begins with *Start*, which
-counts as the session's revalidation and is recorded as `authenticator-replacement-started`.
+**The authenticator**, for a pending enrolment only. Beginning gives a new secret; confirming a code
+from it turns the factor on. There is no self-service replacement in the pilot (PM ruling (d),
+2026-10-20): on dev, beginning a secret dropped an authenticator managed login had set up at once,
+which would leave an unfinished replacement open to enrolment by anyone with the password. A
+student with a new phone asks the coach for a reset.
 
 Each completed change writes one audit record with the student's subject and no address (ADR-0019
 (d) 5: "the audit record says an email was added or removed, never which").
@@ -40,7 +41,7 @@ from debate_core.application.ports.tub import (
 from debate_core.application.tub.audit import AuditAction, AuditRecord
 from debate_core.application.tub.identity import AuthenticatorSecret, Role
 from debate_core.application.tub.sessions import PendingEnrolment, Session
-from debate_core.application.tub.sign_in import SessionEnded, refreshed_account
+from debate_core.application.tub.sign_in import SessionEnded
 
 __all__ = [
     "ONE_TIME_CODE_PATTERN",
@@ -182,26 +183,17 @@ class AccountPageService:
         self._self_service.remove_backup_email(access_token)
         self._record(AuditAction.BACKUP_EMAIL_REMOVED, session)
 
-    def begin_authenticator(self, holder: Session | PendingEnrolment) -> AuthenticatorEnrolment:
-        """A new secret for the enrolment page. Cognito drops the current authenticator at once."""
-        secret = self._self_service.begin_authenticator(self._access_token(holder.refresh_token))
-        return self._enrolment(secret, holder.username)
+    def begin_authenticator(self, enrolment: PendingEnrolment) -> AuthenticatorEnrolment:
+        """A new secret for the enrolment page."""
+        secret = self._self_service.begin_authenticator(self._access_token(enrolment.refresh_token))
+        return AuthenticatorEnrolment(
+            secret=secret, uri=authenticator_uri(secret, issuer=self._issuer, username=enrolment.username)
+        )
 
-    def begin_replacement(self, session: Session) -> tuple[AuthenticatorEnrolment, Session]:
-        """*Start*, for a full session: a new secret, and the session revalidated as of now.
-
-        The record is written before Cognito is asked, so a start that cannot be recorded leaves the
-        old authenticator working (PM ruling, 2026-10-20).
-        """
-        account = refreshed_account(self._identity_provider, session)
-        self._record(AuditAction.AUTHENTICATOR_REPLACEMENT_STARTED, session)
-        secret = self._self_service.begin_authenticator(account.access_token)
-        return self._enrolment(secret, session.username), account.applied_to(session, self._clock())
-
-    def confirm_authenticator(self, holder: Session | PendingEnrolment, raw_code: str) -> None:
-        """Confirm the new secret with a code from it; it replaces any earlier authenticator."""
+    def confirm_authenticator(self, enrolment: PendingEnrolment, raw_code: str) -> None:
+        """Confirm the new secret with a code from it, and turn the factor on."""
         code = _one_time_code(raw_code, "authenticator")
-        access_token = self._access_token(holder.refresh_token)
+        access_token = self._access_token(enrolment.refresh_token)
         self._self_service.confirm_authenticator(access_token, code)
         standing = self._self_service.standing(access_token)
         self._self_service.set_second_factors(
@@ -209,12 +201,7 @@ class AccountPageService:
             authenticator=True,
             email=standing.email is not None and standing.email_verified,
         )
-        self._record(AuditAction.AUTHENTICATOR_REGISTERED, holder)
-
-    def _enrolment(self, secret: AuthenticatorSecret, username: str) -> AuthenticatorEnrolment:
-        return AuthenticatorEnrolment(
-            secret=secret, uri=authenticator_uri(secret, issuer=self._issuer, username=username)
-        )
+        self._record(AuditAction.AUTHENTICATOR_REGISTERED, enrolment)
 
     def _standing(self, refresh_token: str) -> AccountStanding:
         return self._self_service.standing(self._access_token(refresh_token))

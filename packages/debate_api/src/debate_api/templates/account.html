@@ -6,12 +6,10 @@
 
 <h2>Authenticator app</h2>
 {% if account.has_authenticator %}
-<p>Your authenticator app is set up. If you have a new phone, set up the new one here. The old one
-stops working as soon as you choose Start, so have the new phone ready.</p>
+<p>Your authenticator app is set up. For a new phone, ask your coach for a reset. You then sign in with the temporary password and set up the app again.</p>
 {% else %}
-<p>You have no authenticator app set up.</p>
+<p>You have no authenticator app set up. To set one up, ask your coach.</p>
 {% endif %}
-<p><a href="/account/authenticator">Set up {% if account.has_authenticator %}a new{% else %}an{% endif %} authenticator app</a></p>
 
 <h2>Backup email</h2>
 {% if account.email and account.email_verified %}

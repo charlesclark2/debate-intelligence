@@ -6,7 +6,8 @@ needing a session, so a route that forgets to say what it needs is closed, not o
 | Access | Who | Routes |
 |---|---|---|
 | `PUBLIC` | anyone | `/healthz`, `/auth/callback`, `/signed-out`, `/static/...` and no others |
-| `ENROLMENT` | a session, or a pending enrolment | the authenticator page, sign-out |
+| `PENDING_ENROLMENT` | a pending enrolment only | the authenticator page and its confirm |
+| `ENROLMENT` | a session, or a pending enrolment | sign-out |
 | `SIGNED_IN` | a session | every other page |
 | `COACH` | a coach's session | coach pages |
 
@@ -15,7 +16,9 @@ route cannot be added without changing this module.
 
 **Without a session**, a `GET` is sent to managed login with a new sign-in transaction, and any
 other method is answered `401`. **With a pending enrolment** only, every page sends the browser
-to the authenticator page. **A student on a coach route** gets `403`.
+to the authenticator page. **A session on the authenticator page** is sent to `/account`: there is no
+self-service replacement in the pilot, so a full session never begins a secret (PM ruling (d),
+2026-10-20). **A student on a coach route** gets `403`.
 
 **Every state-changing request** (anything but `GET` and `HEAD`) must also carry the session's CSRF
 token in `X-CSRF-Token`, compared in constant time, an `Origin` equal to the pilot's own origin and
@@ -57,10 +60,12 @@ SESSION_FREE_PATHS: Final = frozenset({"/healthz", "/auth/callback", "/signed-ou
 STATIC_PREFIX: Final = "/static/"
 SAFE_METHODS: Final = frozenset({"GET", "HEAD"})
 AUTHENTICATOR_PAGE: Final = "/account/authenticator"
+ACCOUNT_PAGE: Final = "/account"
 
 
 class Access(StrEnum):
     PUBLIC = "public"
+    PENDING_ENROLMENT = "pending-enrolment"
     ENROLMENT = "enrolment"
     SIGNED_IN = "signed-in"
     COACH = "coach"
@@ -165,11 +170,16 @@ def _not_signed_in(request: Request, state: PilotState) -> Response:
 def _refused(
     request: Request, access: Access, holder: Session | PendingEnrolment, state: PilotState
 ) -> Response | None:
-    if isinstance(holder, PendingEnrolment) and access is not Access.ENROLMENT:
+    if isinstance(holder, PendingEnrolment) and access not in {Access.PENDING_ENROLMENT, Access.ENROLMENT}:
         if request.method in SAFE_METHODS:
             return RedirectResponse(AUTHENTICATOR_PAGE, status_code=303)
         message = "Set up your authenticator app first."
         return JSONResponse({"message": message, "location": AUTHENTICATOR_PAGE}, status_code=403)
+    if isinstance(holder, Session) and access is Access.PENDING_ENROLMENT:
+        if request.method in SAFE_METHODS:
+            return RedirectResponse(ACCOUNT_PAGE, status_code=303)
+        message = "Your authenticator app is already set up."
+        return JSONResponse({"message": message, "location": ACCOUNT_PAGE}, status_code=403)
     if access is Access.COACH and holder.role is not Role.COACH:
         return state.renderer.render(
             "refused.html",

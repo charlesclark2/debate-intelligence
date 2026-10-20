@@ -22,7 +22,6 @@ from debate_api.access import Access, RouteAccess
 from debate_api.cookies import ALL_COOKIES, ENROLMENT_COOKIE, SESSION_COOKIE, SIGN_IN_COOKIE
 from debate_api.pages import IMMUTABLE, qr_code_svg
 from debate_api.state import pilot_state
-from debate_core.application.tub.account_page import AuthenticatorEnrolment
 from debate_core.application.tub.sessions import PendingEnrolment, Session
 from debate_core.application.tub.sign_in import EnrolmentRequired, SignInRefusal, SignInRefused
 
@@ -34,8 +33,7 @@ ROUTE_ACCESS: Final = {
     "/auth/callback": Access.PUBLIC,
     "/signed-out": Access.PUBLIC,
     "/auth/sign-out": Access.ENROLMENT,
-    "/account/authenticator": Access.ENROLMENT,
-    "/account/authenticator/begin": Access.SIGNED_IN,
+    "/account/authenticator": Access.PENDING_ENROLMENT,
     "/": Access.SIGNED_IN,
     "/account": Access.SIGNED_IN,
     "/account/email": Access.SIGNED_IN,
@@ -49,7 +47,6 @@ ACCOUNT_NOTICES: Final = {
     "email-sent": "We sent a code to that address. Enter it below to confirm it.",
     "email-confirmed": "Your backup email is confirmed. When you sign in you can choose a code sent to it.",
     "email-removed": "Your backup email is removed.",
-    "authenticator-replaced": "Your new authenticator app is set up. The old one no longer works.",
 }
 """The account page's notices, chosen by a fixed key: the page never repeats what a URL says."""
 
@@ -67,9 +64,6 @@ def register_routes(app: FastAPI, routes: RouteAccess) -> None:
     app.add_api_route(
         "/account/authenticator", confirm_authenticator, methods=["POST"], include_in_schema=False
     )
-    app.add_api_route(
-        "/account/authenticator/begin", begin_authenticator, methods=["POST"], include_in_schema=False
-    )
     app.add_api_route("/", home, methods=["GET"], include_in_schema=False)
     app.add_api_route("/account", account, methods=["GET"], include_in_schema=False)
     app.add_api_route("/account/email", add_email, methods=["POST"], include_in_schema=False)
@@ -86,6 +80,10 @@ def _holder(request: Request) -> Session | PendingEnrolment:
 
 def _session(request: Request) -> Session:
     return cast(Session, request.state.holder)
+
+
+def _enrolment(request: Request) -> PendingEnrolment:
+    return cast(PendingEnrolment, request.state.holder)
 
 
 async def _form(request: Request) -> dict[str, str]:
@@ -175,57 +173,27 @@ async def sign_out(request: Request) -> JSONResponse:
 
 
 def authenticator_page(request: Request) -> HTMLResponse:
-    """A pending enrolment's QR page; for a full session, the Start page, which calls nothing.
-
-    The session cookie is `SameSite=Lax`, so a cross-site link reaches this GET with a session. For a
-    full session it therefore only offers *Start*, a POST through the CSRF checks
-    (:func:`begin_authenticator`). A pending enrolment has no authenticator to lose, and the
-    callback's 303 lands here, so its GET begins the secret (PM review, 2026-10-20).
-    """
-    holder = _holder(request)
+    """A pending enrolment's QR page. The gate sends a full session to `/account` (PM ruling (d))."""
     state = pilot_state(request)
-    if isinstance(holder, Session):
-        return state.renderer.render("authenticator_start.html", holder=holder)
-    return _authenticator_qr_page(request, holder, state.services.account_page.begin_authenticator(holder))
-
-
-def begin_authenticator(request: Request) -> HTMLResponse:
-    """*Start*, for a full session: begin a new secret and answer with its QR page.
-
-    Starting counts as the session's revalidation, so the cookie is written with the session the
-    use case returns (PM ruling, 2026-10-20).
-    """
-    state = pilot_state(request)
-    enrolment, session = state.services.account_page.begin_replacement(_session(request))
-    response = _authenticator_qr_page(request, session, enrolment)
-    state.write_session(response, session)
-    request.state.cookies_written = True
-    return response
-
-
-def _authenticator_qr_page(
-    request: Request, holder: Session | PendingEnrolment, enrolment: AuthenticatorEnrolment
-) -> HTMLResponse:
-    secret = enrolment.secret.reveal()
-    return pilot_state(request).renderer.render(
+    enrolment = _enrolment(request)
+    authenticator = state.services.account_page.begin_authenticator(enrolment)
+    secret = authenticator.secret.reveal()
+    return state.renderer.render(
         "authenticator.html",
-        holder=holder,
-        enrolling=isinstance(holder, PendingEnrolment),
-        qr_svg=qr_code_svg(enrolment.uri),
+        holder=enrolment,
+        qr_svg=qr_code_svg(authenticator.uri),
         secret_groups=" ".join(secret[index : index + 4] for index in range(0, len(secret), 4)),
     )
 
 
 async def confirm_authenticator(request: Request) -> JSONResponse:
-    """Confirm the new authenticator; a pending enrolment becomes a session."""
+    """Confirm the new authenticator; the pending enrolment becomes a session."""
     state = pilot_state(request)
-    holder = _holder(request)
+    enrolment = _enrolment(request)
     code = (await _form(request)).get("code", "")
-    await run_in_threadpool(state.services.account_page.confirm_authenticator, holder, code)
-    if isinstance(holder, Session):
-        return _go("/account?done=authenticator-replaced")
-    session = state.services.sign_in.finish_enrolment(holder)
-    response = _go(holder.return_to)
+    await run_in_threadpool(state.services.account_page.confirm_authenticator, enrolment, code)
+    session = state.services.sign_in.finish_enrolment(enrolment)
+    response = _go(enrolment.return_to)
     state.write_session(response, session)
     state.clear(response, ENROLMENT_COOKIE)
     request.state.cookies_written = True

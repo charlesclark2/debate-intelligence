@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Set up your authenticator app · Team evidence search{% endblock %}
+{% block main %}
+<h1>Set up your authenticator app</h1>
+<p>Before you can use the search, your account needs an authenticator app: an app on your phone
+that shows a new six-digit code every 30 seconds.</p>
+<ol>
+<li>On your phone, open an authenticator app (for example Google Authenticator or Microsoft
+Authenticator) and choose to add an account by scanning a QR code.</li>
+<li>Scan this code.
+<figure>
+<div role="img" aria-label="QR code for your authenticator app">{{ qr_svg | safe }}</div>
+<figcaption>If you cannot scan it, choose to enter a setup key and type:
+<code>{{ secret_groups }}</code></figcaption>
+</figure>
+</li>
+<li>Enter the six-digit code the app now shows.</li>
+</ol>
+<form method="post" action="/account/authenticator">
+<label for="authenticator-code">Code from the app</label>
+<input id="authenticator-code" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required>
+<button type="submit">Confirm</button>
+<p data-tub-message role="status"></p>
+</form>
+<p>Reloading this page makes a new code to scan; scan the one shown last.</p>
+{% endblock %}

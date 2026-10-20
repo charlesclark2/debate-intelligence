@@ -36,7 +36,7 @@ BROKEN_VERDICT = re.compile(r"^(?P<name>.+) BROKEN(?: \(\d+ ignored imports?\))?
 AWS_SDK = "The AWS SDK never reaches the domain, the application layer or the other adapters"
 HTTP_CLIENT = "The HTTP client and the keychain library stay inside debate_core.integrations.opencaselist"
 CLI_HTTP_CLIENT = "The CLI reaches httpx and keyring only through debate_core.integrations.opencaselist"
-CLI_AWS_SDK = "The CLI reaches the AWS SDK only through debate_core.integrations.s3"
+DELIVERY_AWS_SDK = "The CLI and the API reach the AWS SDK only through debate_core.integrations"
 DOCUMENT_LIBRARIES = "Document libraries stay inside debate_core.integrations.docx_parser"
 CLI_DOCUMENT_LIBRARIES = "The CLI reaches lxml only through debate_core.integrations.docx_parser"
 CORE_LAYERS = (
@@ -66,11 +66,14 @@ VIOLATIONS = [
     # The AWS SDK, httpx and document libraries outside their adapters.
     Violation("debate_core.application.boundary_probe", "import boto3", AWS_SDK),
     Violation("debate_core.domain.boundary_probe", "import botocore", AWS_SDK),
-    Violation("debate_api.boundary_probe", "import boto3", AWS_SDK),
+    # debate_api builds AWS adapters in its composition root since v1-e39-t05, so it is held to the
+    # direct form of the rule: a route or page importing the SDK itself.
+    Violation("debate_api.boundary_probe", "import boto3", DELIVERY_AWS_SDK),
+    Violation("debate_api.routes_probe", "from botocore.exceptions import ClientError", DELIVERY_AWS_SDK),
     Violation("debate_core.domain.boundary_probe", "import httpx", HTTP_CLIENT),
     Violation("debate_core.testing.boundary_probe", "import keyring", HTTP_CLIENT),
     Violation("debate_cli.commands.boundary_probe", "import httpx", CLI_HTTP_CLIENT),
-    Violation("debate_cli.commands.boundary_probe", "import boto3", CLI_AWS_SDK),
+    Violation("debate_cli.commands.boundary_probe", "import boto3", DELIVERY_AWS_SDK),
     Violation("debate_core.application.boundary_probe", "import lxml", DOCUMENT_LIBRARIES),
     Violation("debate_cli.commands.boundary_probe", "import lxml", CLI_DOCUMENT_LIBRARIES),
     # Retrieval is the pure layer of E04: fetching and parsing are adapters (PM ruling, v1-e04-t01).

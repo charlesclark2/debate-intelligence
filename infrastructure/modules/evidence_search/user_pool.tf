@@ -132,6 +132,18 @@ resource "aws_cognito_user_group" "student" {
   precedence   = 2
 }
 
+# Not a role: the coach's ruling that this one account may sign in with a verified email as its only
+# second factor, for a debater with no phone (PM ruling, 2026-10-19). The app gives an account with
+# no authenticator a session only when it is in this group and its email is verified; every other
+# such account is sent to enrol an authenticator. `tub users add --email-second-factor` and
+# `tub users email-second-factor` put an account in it and take it out (v1-e39-t05).
+resource "aws_cognito_user_group" "email_second_factor" {
+  name         = "email-second-factor"
+  user_pool_id = aws_cognito_user_pool.pilot.id
+  description  = "May use a verified email as the only second factor (no phone). Set by the coach."
+  precedence   = 3
+}
+
 # ---------------------------------------------------------------------------------------------
 # Managed login, at the login host
 # ---------------------------------------------------------------------------------------------

@@ -27,7 +27,8 @@ dev = [
     # the adapter, and boto3-stubs because pyright runs strict over debate_core and boto3 itself
     # ships no inline types. moto, below, is what answers the adapter in place of AWS.
     "boto3>=1.35",
-    "boto3-stubs[s3]>=1.35",
+    # cognito-idp, logs and ssm for the pilot's adapters (v1-e39-t05), for the same reason as s3.
+    "boto3-stubs[cognito-idp,logs,s3,ssm]>=1.35",
     # scripts/affected_tests.py (v1-e01-t28) builds the workspace packages' import graph with grimp.
     # import-linter brings it in too, but the script uses it directly, so it is named here. The lock
     # holds the version; the floor is the 3 series, whose build_graph takes cache_dir=None. The floor is
@@ -35,6 +36,9 @@ dev = [
     # a three-point-teen specifier as a Python version.
     "grimp>=3.0",
     "httpx>=0.28",
+    # Starlette's TestClient, which the pilot's app tests run through, deprecates httpx in favour of
+    # httpx2 from Starlette 1.9 (v1-e39-t04's report; added by v1-e39-t05, which writes most of them).
+    "httpx2>=2.15",
     "hypothesis>=6.100",
     # `uv run lint-imports` checks the ports-and-adapters boundaries. v1-e29-t04 adds the first
     # contract (no AWS SDK outside debate_core.integrations.s3); v1-e02-t06-import-boundary-guard
@@ -149,7 +153,12 @@ type = "forbidden"
 # `debate_core.integrations` is named by its subpackages rather than whole, because listing the
 # parent would include `integrations.s3` itself; a new adapter subpackage is added to this list in
 # the PR that creates it. `integrations.bedrock` (v1-e05-t02-bedrock-adapter) is the other adapter
-# allowed the SDK, so it is not listed; it is on the httpx and lxml lists below instead.
+# allowed the SDK, so it is not listed; it is on the httpx and lxml lists below instead. So are the
+# student search pilot's three (v1-e39-t05): `cognito`, `cloudwatch_audit` and `parameter_store`.
+#
+# `debate_api` left this list in v1-e39-t05, as ADR-0019 (Where the code goes) decided: its
+# composition root builds the pilot's Cognito, audit and parameter adapters, so it is held to the
+# direct form of the rule below, as the CLI is.
 source_modules = [
     "debate_core.domain",
     "debate_core.retrieval",
@@ -161,7 +170,6 @@ source_modules = [
     "debate_core.integrations.docx_file_writer",
     "debate_core.integrations.file_streaming",
     "debate_core.integrations.opencaselist",
-    "debate_api",
     "debate_workers",
 ]
 forbidden_modules = ["boto3", "botocore"]
@@ -185,6 +193,9 @@ source_modules = [
     "debate_core.integrations.file_streaming",
     "debate_core.integrations.s3",
     "debate_core.integrations.bedrock",
+    "debate_core.integrations.cognito",
+    "debate_core.integrations.cloudwatch_audit",
+    "debate_core.integrations.parameter_store",
     "debate_api",
     "debate_workers",
 ]
@@ -200,7 +211,7 @@ source_modules = ["debate_cli"]
 forbidden_modules = ["httpx", "keyring"]
 
 [[tool.importlinter.contracts]]
-name = "The CLI reaches the AWS SDK only through debate_core.integrations.s3"
+name = "The CLI and the API reach the AWS SDK only through debate_core.integrations"
 type = "forbidden"
 # The delivery packages are held to the *direct* form of the same rule, because a composition root
 # has to be able to construct an adapter: `debate_cli.container` imports
@@ -210,10 +221,13 @@ type = "forbidden"
 # `botocore` exception caught outside the adapter that is supposed to translate it — which is the
 # part that would put AWS back into code that is meant not to know about it (ADR-0003, §6).
 #
+# `debate_api` is held to the same form since v1-e39-t05 (ADR-0019): `debate_api.container` builds
+# the pilot's Cognito, audit and parameter adapters, and no route or page imports boto3 itself.
+#
 # The layers contract below is what forbids debate_core.application from importing
 # debate_core.integrations at all.
 allow_indirect_imports = true
-source_modules = ["debate_cli"]
+source_modules = ["debate_cli", "debate_api"]
 forbidden_modules = ["boto3", "botocore"]
 
 # v1-e31-t03-debate-docx-parser. A document library is an adapter's business: the parse output
@@ -234,6 +248,9 @@ source_modules = [
     "debate_core.integrations.s3",
     "debate_core.integrations.bedrock",
     "debate_core.integrations.file_streaming",
+    "debate_core.integrations.cognito",
+    "debate_core.integrations.cloudwatch_audit",
+    "debate_core.integrations.parameter_store",
     "debate_api",
     "debate_workers",
 ]
@@ -311,7 +328,8 @@ name = "Delivery packages reach debate_core.integrations only through their comp
 type = "forbidden"
 # A command, route or job calls use cases in debate_core.application; which adapter implements a
 # port is decided in one place per front end, the composition root (`debate_cli.container` for the
-# CLI; debate_api and debate_workers add theirs to ignore_imports when they get one). Indirect
+# CLI, `debate_api.container` for the pilot's app since v1-e39-t05; debate_workers adds its own to
+# ignore_imports when it gets one). Indirect
 # chains through that root are the design, so only direct imports are checked.
 #
 # The composition roots are the only entries. The four command imports that were grandfathered here
@@ -322,6 +340,7 @@ source_modules = ["debate_cli", "debate_api", "debate_workers"]
 forbidden_modules = ["debate_core.integrations"]
 ignore_imports = [
     "debate_cli.container -> debate_core.integrations.**",
+    "debate_api.container -> debate_core.integrations.**",
 ]
 
 [[tool.importlinter.contracts]]

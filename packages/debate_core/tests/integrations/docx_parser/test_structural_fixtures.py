@@ -167,7 +167,7 @@ def test_every_underline_span_selects_the_characters_the_fixture_names(
             for span in card.formatting_spans
             if span.emphasis is RunEmphasis.UNDERLINE
         ]
-        assert underlined == answer["underlined_text"], f"{fixture.name}: {card.tag[:40]!r}"
+        assert underlined == answer["underlined_text"], f"{fixture.name}: {(card.tag or '')[:40]!r}"
 
 
 @pytest.mark.parametrize("fixture", FIXTURES, ids=str)

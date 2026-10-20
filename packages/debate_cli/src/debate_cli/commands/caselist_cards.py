@@ -27,7 +27,8 @@ initials in its cite tail — is never printed, with or without the flag.
 
 Accepted here as well as before the command group (`debate-research --json caselist cards …`), so
 the invocation in the spec works as written. Either way the output is the one JSON envelope every
-command writes.
+command writes. A cluster labelled by a card with no tag says `"tag": null`, and `-` in the table
+(`v1-e31-t14`).
 """
 
 from __future__ import annotations
@@ -138,7 +139,7 @@ def _table(report: CaselistCardReport, *, by_team: bool) -> TableSpec:
             str(cluster.occurrences),
             str(cluster.files),
             cluster.short_cite or "-",
-            _shorten(cluster.tag),
+            _shorten(cluster.tag) if cluster.tag is not None else "-",
         ]
         if by_team:
             row.append(", ".join(f"{school} {code}" for school, code in cluster.teams or ()))

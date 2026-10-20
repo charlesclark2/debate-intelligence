@@ -631,7 +631,7 @@ class DocxEvidenceFileWriter:
                     tag_overridden=override is not None,
                     tag_authored_by=TagAuthor.COACH if override is not None else None,
                     original_tag_sha256=(
-                        text_sha256(card.tag) if override is not None and card.has_tag else None
+                        text_sha256(card.tag) if override is not None and card.tag is not None else None
                     ),
                     provenance_line=provenance_line(occurrence, disclosure),
                     forbidden_characters_replaced=copied.forbidden_characters_replaced,

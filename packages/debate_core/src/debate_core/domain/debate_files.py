@@ -33,9 +33,9 @@ able to list what it could not read.
 the path it came from. There is no field for a debater, and the parser never reads `docProps`
 authorship or comment authors out of the package (architecture proposal §14).
 
-**"No tag" is said one way.** A card the file gave no tag has :attr:`ParsedCard.has_tag` false, and
-every record written from it says `"tag": null`: never an empty string, which reads the same as a
-tag the parser lost (`v1-e31-t09`).
+**"No tag" is said one way.** A card the file gave no tag has :attr:`ParsedCard.tag` `None` (since
+`v1-e31-t14`) and :attr:`ParsedCard.has_tag` false, and every record written from it says
+`"tag": null`: never an empty string, which reads the same as a tag the parser lost (`v1-e31-t09`).
 """
 
 from __future__ import annotations
@@ -43,7 +43,7 @@ from __future__ import annotations
 from enum import StrEnum
 from typing import Self
 
-from pydantic import Field, field_serializer, field_validator, model_validator
+from pydantic import Field, field_validator, model_validator
 
 from debate_core.domain.base import DomainModel, NonEmptyText, Sha256Hex
 from debate_core.domain.caselist.values import CaselistSlug, SnapshotDate, SourceFormat, SourceOrigin
@@ -350,17 +350,17 @@ class ParsedCard(DomainModel):
     ## A card with no tag
 
     A file may give a card no tag: a citation listed on its own, or a second card under one tag.
-    :attr:`has_tag` says which, and it is the only thing to ask.
 
+    * **In memory**, "no tag" is `tag is None`, and :attr:`has_tag` says the same (`v1-e31-t14`).
+      Code that sorts or compares tags as text has to say where `None` goes; the cards statistics
+      put it where `""` was, before every tag (`caselist_card_stats`).
     * **In a record**, "no tag" is `"tag": null`. :meth:`model_dump` and :meth:`model_dump_json`
       never write an empty string for it, so a reader of the parsed store cannot mistake a card
       the file left untagged for a tag that was lost on the way.
-    * **In memory**, :attr:`tag` is a string either way, `""` when there is none, because the code
-      that counts and labels cards (`caselist_card_stats`) sorts and compares it as text.
     * **A tag of nothing but whitespace is refused.** It is neither a tag nor "no tag"; a blank
       heading line is where one would come from, and the parser reads that as no heading at all.
-    * `""` is still accepted on the way in, as "no tag": the `2026.09.20-docx-1` store wrote it
-      15,528 times, and that store stays readable.
+    * `""` is still accepted on the way in, and read as `None`: the `2026.09.20-docx-1` store wrote
+      it 15,528 times, and that store stays readable. The parser hands over `""` too.
 
     What a reader should make of a card with no tag depends on its completeness. `CITE_ONLY`: the
     file names a source there and gives it no claim and no text, so it is a citation, not an
@@ -374,12 +374,12 @@ class ParsedCard(DomainModel):
     every offset is the file's. The parsed document's `warnings` say how many a source had.
     """
 
-    tag: str = Field(
-        default="",
+    tag: str | None = Field(
+        default=None,
         description=(
             "The claim the card is read for, exactly as written, except that a character XML 1.0 "
-            "forbids is replaced by U+FFFD. Empty when the file gave the card none, which a record "
-            "writes as null: ask `has_tag`."
+            "forbids is replaced by U+FFFD. None, and null in a record, when the file gave the card "
+            "none; an empty string is read as None."
         ),
     )
     short_cite: str | None = Field(
@@ -428,18 +428,13 @@ class ParsedCard(DomainModel):
 
     @field_validator("tag", mode="before")
     @classmethod
-    def _read_null_as_no_tag(cls, value: object) -> object:
-        """A record's `null` is this model's "no tag"."""
-        return "" if value is None else value
-
-    @field_serializer("tag")
-    def _write_no_tag_as_null(self, tag: str) -> str | None:
-        """A record never says `""` for a card the file gave no tag."""
-        return tag or None
+    def _read_empty_as_no_tag(cls, value: object) -> object:
+        """`""`, how version 1 of the store and the parser say "no tag", is this model's `None`."""
+        return None if value == "" else value
 
     @model_validator(mode="after")
     def _check_card(self) -> Self:
-        if self.tag and not self.tag.strip():
+        if self.tag is not None and not self.tag.strip():
             raise ValueError(
                 "a tag of nothing but whitespace is neither a tag nor the absence of one; a card "
                 "the file gave no tag has none"
@@ -460,8 +455,8 @@ class ParsedCard(DomainModel):
 
     @property
     def has_tag(self) -> bool:
-        """Whether the file gave this card a tag. False is written to a record as `"tag": null`."""
-        return bool(self.tag)
+        """Whether the file gave this card a tag: `tag is not None`, written as `"tag": null` if not."""
+        return self.tag is not None
 
     @property
     def is_abbreviated(self) -> bool:

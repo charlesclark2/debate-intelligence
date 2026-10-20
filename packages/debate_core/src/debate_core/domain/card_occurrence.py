@@ -8,7 +8,9 @@ the platform say "this is one card, and these are the thirty places it was read"
 * :class:`CardFingerprint` — the exact identity of one card body, under a documented, versioned
   normalization (:mod:`debate_core.evidence.fingerprints`).
 * :class:`CardOccurrence` — one place a card appears: which cluster it belongs to, which file and
-  paragraph it sits in, who disclosed it and in which snapshots it was seen.
+  paragraph it sits in, who disclosed it and in which snapshots it was seen. It is built in memory
+  by `caselist_card_stats` and never stored; the parsed store's own occurrence record holds no tag
+  (`OccurrenceRecord`, `docs/data/parsed-card-store.md`).
 
 ## Rules these models carry
 
@@ -42,7 +44,7 @@ from datetime import date
 from enum import StrEnum
 from typing import Annotated, Final, Self
 
-from pydantic import AfterValidator, Field, StringConstraints, model_validator
+from pydantic import AfterValidator, Field, StringConstraints, field_validator, model_validator
 
 from debate_core.domain.base import DomainModel, NonEmptyText, Sha256Hex
 from debate_core.domain.caselist.values import CaselistSlug, RoundLabel, Side, TeamCodeText
@@ -124,7 +126,7 @@ class CardFingerprint(DomainModel):
     fingerprint_version: NonEmptyText = Field(
         description=(
             "Version of the matching rules the digest was computed under. The normalization, and so "
-            "the digest, is the same in card-fingerprint-v1 and card-fingerprint-v2."
+            "the digest, is the same in card-fingerprint-v1, v2, v3 and v4; only the clusters changed."
         )
     )
     basis: FingerprintBasis = Field(description="Whether the digest covers the body or the cite line.")
@@ -175,8 +177,20 @@ class CardOccurrence(DomainModel):
             "logged or shown in a report."
         ),
     )
-    tag: str = Field(default="", description="The card's tag in this file, copied exactly.")
+    tag: str | None = Field(
+        default=None,
+        description=(
+            "The card's tag in this file, copied exactly. None, and null in JSON, when the file gave "
+            "the card none; an empty string is read as None."
+        ),
+    )
     short_cite: str | None = Field(default=None, description="The card's short cite in this file, copied.")
+
+    @field_validator("tag", mode="before")
+    @classmethod
+    def _read_empty_as_no_tag(cls, value: object) -> object:
+        """`""`, what every build before `v1-e31-t14` held for "no tag", is this model's `None`."""
+        return None if value == "" else value
 
     @model_validator(mode="after")
     def _check_occurrence(self) -> Self:

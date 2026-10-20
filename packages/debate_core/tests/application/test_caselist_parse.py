@@ -1078,7 +1078,7 @@ async def test_nothing_the_run_logs_names_a_school_a_team_a_path_or_a_card(
     assert record is not None
     for card in record.to_parsed_document("x").cards:
         assert card.evidence_text[:40] not in logged
-        assert card.tag not in logged
+        assert card.tag is None or card.tag not in logged
     assert repr(report.plan).count("Maple") == 0
 
 

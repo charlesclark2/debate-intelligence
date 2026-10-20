@@ -549,7 +549,7 @@ class TestACiteThatIsStillACite:
 
         assert [(card.tag, card.short_cite) for card in document.cards] == [
             (TAG, "Okonkwo 26"),
-            ("", "Ferreira 25"),
+            (None, "Ferreira 25"),
         ]
         assert [card.has_tag for card in document.cards] == [True, False]
         assert document.cards[0].evidence_text == "".join(MARKED_UP)
@@ -1204,7 +1204,7 @@ class TestABodyFiledAsTheCardsCite:
 
         assert [(card.tag, card.short_cite, card.evidence_text) for card in document.cards] == [
             (TAG, "Okonkwo 26", WHOLE_BODY_IN_ONE_PARAGRAPH),
-            ("", "Ferreira 25", "".join(SECOND_BODY)),
+            (None, "Ferreira 25", "".join(SECOND_BODY)),
         ]
 
     def test_two_guesses_in_a_row_under_the_cite_are_both_body(self, parser: DebateDocxParser) -> None:

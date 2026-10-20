@@ -6,7 +6,7 @@
 | Spec | [`plan_specs/v1/e39-evidence-search-pilot/t02-search-index-build.yaml`](../../plan_specs/v1/e39-evidence-search-pilot/t02-search-index-build.yaml) |
 | Epic / release | `v1-e39-evidence-search-pilot` / `v1.7` |
 | Branch | `task/v1-e39-t02-search-index-build` |
-| Session status | COMPLETE <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | PARTIAL <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
@@ -22,7 +22,10 @@ a traced-statement check in every run, and a slow test that opens a built index 
 image's own SQLite (3.40.0). Given an index that uses a 3.47 option, that image refuses it with
 `unrecognized option: "locale"`. The operator's full-store build (ac6) took 233 s at 1.18 GB peak
 memory. It gave 46,658 documents, a 1.48 GB SQLite file and a 320 MB gzip object, and the real file
-opens in the image's 3.40.0. Every criterion passes, and the Goal is **Succeeded**. **PM, look
+opens in the image's 3.40.0. **After the PM's review** (CHANGES_REQUESTED, question 4 (a)) the spans
+are stored compactly and the Goal is back at **InProgress** until the operator's second build is
+recorded: see "After the PM review of 2026-10-20" and Operator follow-up 4. The first round's
+note follows: **PM, look
 first at** relay question 4. The gzip object is under ADR-0019's 400 MB revisit trigger, but the
 SQLite file is 2.7 times the ADR's 550 MB upper estimate and above its 1 GB season allowance, and
 54% of it is formatting-span JSON that a compact encoding would cut by about four fifths. Then look
@@ -227,6 +230,26 @@ that last applied prod if it has none, and check `owner` against the deployed `O
 `infrastructure/envs/prod` and `/tmp/search-listing-prod.tfplan`; success looks the same. No delete
 grant is added: that is `v1-e39-t07`'s.
 
+**4. The second full-store build, with the compact spans (PM review 2026-10-20).** On the same
+`2026.10.18-docx-5` store, the same build as follow-up 1, then the read-only check in the image's
+3.40.0. Expected runtime about 4 minutes for the build and 15 seconds for the check. It writes a new
+index directory beside the first, which can be deleted afterwards.
+
+Where: your Mac, in this task worktree.
+```bash
+cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e39-t02-search-index-build
+uv sync --all-packages
+DEBATE_ENV=dev /usr/bin/time -l .venv/bin/debate-research --json tub index build --caselist hsld26 --caselist hspf26 --caselist hspolicy26 --caselist openev > /tmp/tub-index-build-2.json 2> /tmp/tub-index-build-2.time
+grep -E "real|maximum resident" /tmp/tub-index-build-2.time
+python3 -c "import json; m = json.load(open('/tmp/tub-index-build-2.json'))['data']['manifest']; print(json.dumps({k: m[k] for k in ('index_id', 'sqlite_version', 'snapshot', 'counts', 'sqlite_file', 'gzip_object')}, indent=2))"
+INDEX_ID=$(python3 -c "import json; print(json.load(open('/tmp/tub-index-build-2.json'))['data']['manifest']['index_id'])")
+docker run --rm --pull never --network none --platform linux/arm64 --entrypoint python3 -v "$HOME/.debate-research/dev/tub-index/${INDEX_ID}:/index:ro" public.ecr.aws/lambda/python:3.12 -c "import sqlite3; c = sqlite3.connect('file:/index/search-index.sqlite?mode=ro', uri=True); print(sqlite3.sqlite_version, c.execute('PRAGMA integrity_check').fetchone()[0], c.execute('SELECT count(*) FROM documents').fetchone()[0])"
+```
+Success looks like: a `real` time, a `maximum resident set size`, 46,658 documents in the same per-store
+counts, a SQLite file much smaller than the first build's 1,483,825,152 bytes, and then
+`3.40.0 ok 46658`. Paste it all back. The session then measures the share of each column, read-only,
+as it did for the first build.
+
 No publish is needed for this task. The first one, to dev, is `docs/guides/search-index.md`'s
 "Publish" once a build exists.
 
@@ -242,6 +265,10 @@ No publish is needed for this task. The first one, to dev, is `docs/guides/searc
    Recommend hiding it until the rebuild, since the shown text would be the suppressed file's.
 4. **`v1-e39-t09`** can tell "the store changed" from the manifest's `stores[].occurrences_sha256` and
    `suppression.sha256`, which change exactly when the rows or the list do.
+
+5. **A command that reconciles the suppression copies** (`v1-e30` or `v1-e39-t09`, the PM's choice):
+   `RecordedSuppressionList.reconcile()` exists and nothing calls it. The weekly stage of `v1-e39-t09`
+   could call it before it builds, so a removal made on another machine reaches the index too.
 
 ## Checks run before the report
 
@@ -268,6 +295,59 @@ No publish is needed for this task. The first one, to dev, is `docs/guides/searc
   for it (`test_search_index_publish_stops_before_the_pointer_when_the_object_lands_with_another_digest`)
   and it was killed on the re-run: 20 of 20.
 * `uv run scripts/task_helper.py set-phase v1-e39-t02-search-index-build Succeeded`, then `uv run scripts/validate_specs.py` → `OK: 396 files, 39 epics, 336 tasks, 21 releases`, and `--require-succeeded v1-e39-t02-search-index-build` → `Succeeded`.
+
+## After the PM review of 2026-10-20
+
+The review asked for one change, question 4 (a), and four small amendments. All are made except the
+new full-store build, which is the operator's. The Goal is back at **InProgress** until that build is
+recorded.
+
+**The spans are stored compactly** (`debate_core.domain.search_index`, format version still 1).
+`formatting_spans` is `[emphasis, start, end]`, with the colour after a highlight's; `font_size_spans`
+is `[start, end, half_points]`; both are in the parser's order, without `rule_id` or `match_source`.
+`decode_formatting_spans` and `decode_font_size_spans` read them back and refuse anything the encoder
+never writes. `read_aloud_text(text, spans)` moved to the same module, so `v1-e39-t03` can rebuild the
+read-aloud text from what is stored. The manifest is unchanged (`export_search_index_schema.py
+--check` → `OK`); `docs/data/search-index.md`'s two column descriptions say the new shape.
+
+| The PM's test | Shown failing first | Now |
+|---|---|---|
+| Decoding gives the store's spans, without the two fields, in order, for every emphasis and a colour: `test_search_index_stored_spans_decode_to_the_parser_spans_without_rule_or_match_source`, which also compares the stored column with hand-written text | Against a skeleton that still wrote the parser's objects and decoded nothing: `assert ('[{"emphasis...offset":34}]') == ('[["UNDERLIN...,[34,55,12]]')` | PASS |
+| Read-aloud text and `formatting_sha256` coverage unchanged: `test_search_index_read_aloud_and_formatting_coverage_are_unchanged_by_the_encoding` | Same skeleton: `AssertionError: assert '' == 'Invented growth always badly'` | PASS |
+| Byte identity under six orders: `test_search_index_same_store_gives_identical_bytes_under_shuffles` | Against an encoding that differs on each build: `assert 6 == 1` for `search-index.sqlite`. It first **survived** that mutant, because no card of the standard store carried formatting; three now do (commit `8845978`) | PASS |
+
+Also new: `test_search_index_decode_refuses_what_the_encoder_never_writes` (four malformed shapes, red
+against the skeleton, `DID NOT RAISE`). Red run, the new tests against the skeleton: `uv run pytest
+packages/debate_core/tests/application/test_search_index_build.py -q -n0` → `6 failed, 38 passed`.
+Five further mutants on the encoder, decoder and read-aloud set were all killed (25 in all on this
+task, five over the cap of about 20, all on the new code).
+
+**The rulings:**
+
+* **Q1 (a).** The spec's "never stored" line now reads "a disclosure path or a caselist file name",
+  under a comment `PM ruling 2026-10-20 (v1-e39-t02 Q1)` above `description:`. A comment cannot sit
+  inside the folded scalar. New test `test_search_index_camp_file_title_matches_nothing`: the
+  title is in `occurrences.camp_file_title`, and `MATCH` for each of its words, and for the whole
+  phrase, gives 0. It passed on the first run, since the title was never indexed; the test pins it.
+* **Q2 (a), with one correction.** No command merges the suppression copies today. A read takes the
+  union of the copies; `RecordedSuppressionList.reconcile()` writes it back, but no command calls it.
+  What does hold is that every command that writes the list writes this machine's copy and the
+  bucket's together, which is `LocalFallbackSuppressionList`'s argument. So the guide's line says to
+  build an index you will publish on the machine that makes the removals, says no command yet copies a
+  removal made elsewhere down from the bucket, and points at the manifest's `suppression.sha256`.
+  Follow-up 5.
+* **Q3 (a).** As built.
+* **D1.** `scripts/export_search_index_schema.py` is in the spec's `constraints.packages`, with a comment.
+
+**Checks this round:** `uv run pytest packages/debate_core/tests/domain packages/debate_core/tests/integrations/local packages/debate_core/tests/application/test_search_index_build.py packages/debate_core/tests/application/test_search_index_publish.py packages/debate_core/tests/application/test_file_recipes.py packages/debate_cli/tests/test_tub_index.py packages/debate_cli/tests/test_app.py tests/architecture tests/specs -q`
+→ `1238 passed`. The four index test files with the slow image check, `-m "slow or not slow"` → `65
+passed`. `uv run scripts/affected_tests.py --run` (128 of 330 files, 3,346 tests) hit the two-minute
+stop at 92% with no failure among the tests reached; the PR's `ci` runs it whole. `ruff format
+--check .`, `ruff check .`, `lint-imports` (12 kept), `pyright packages/debate_core packages/debate_cli`
+(0 errors), `validate_specs.py`, `check_links.py`, `check_command_blocks.py` and `docs_index.py
+--check-descriptions` all pass.
+
+**The second full-store build** is Operator follow-up 4, waiting for the operator.
 
 ## PM review
 

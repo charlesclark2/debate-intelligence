@@ -1052,8 +1052,40 @@ ruled out.** No record was lost, and the WARNING path never ran.
 4. **A replacement through *Start* and confirm has not yet run on dev.** The only confirm in this run
    was the first-sign-in enrolment.
 
-**The question for the PM** is in the review request: measure Cognito's behaviour first, then fix the
-copy and the double enrolment to match.
+### Two read-only checks, and what they change
+
+**The first run's audit records** (`debate-dev-tub-audit`, 04:15 to 04:35Z, all streams):
+`account-added` 04:18:53Z, `account-reset` 04:26:44Z, `account-removed` 04:29:20Z, all with
+`actor_role` `coach` and the same subject. There is **no app record.** The code at `329a082`
+already wrote `authenticator-registered` on the app's enrolment page, so the first run never
+reached that page. Its authenticator was set up at managed login alone, and the callback found
+`SOFTWARE_TOKEN_MFA`.
+
+**The pool's MFA configuration** (`get-user-pool-mfa-config`): `MfaConfiguration` `ON`, software
+token MFA enabled, email MFA configured. This is as the module sets it.
+
+**What this changes:**
+
+- **Finding 1 is not established.** In the first run, the authenticator chosen at managed login
+  reached the app. In this run it did not, though the operator recalls choosing the authenticator
+  app. Choosing **email** at managed login would explain this run exactly, since that is the
+  guide's own email path. Managed login sometimes not registering a TOTP would explain it too. Only
+  a run with screenshots can tell them apart.
+- **Finding 2 now has a likely cause.** The two accounts went into *Start* in different states:
+
+  | Run | How the authenticator was set up | Factors when *Start* ran | After `AssociateSoftwareToken` |
+  |---|---|---|---|
+  | First | Managed login only (no app record) | the authenticator alone | `AdminGetUser`: no MFA setting at all |
+  | This | The app's enrolment page (`authenticator-registered`) | the authenticator, and email too if email was chosen at managed login | `GetUser` 6 minutes later: `SOFTWARE_TOKEN_MFA` still listed |
+
+  Two rules would explain both rows:
+  - Cognito drops the old authenticator only when it is the account's only factor;
+  - or it drops one set up in managed login's challenge, but not one turned on with
+    `SetUserMFAPreference`.
+
+  The page and guide wording depend on which rule holds.
+
+**The question for the PM** is in the review request: measure first, then fix the wording to match.
 
 ## PM review
 

@@ -496,7 +496,18 @@ configuration, validated with `TF_DATA_DIR` pointing at a scratch directory, giv
 file keeps its 12:27 timestamp). An earlier commit of this report (`beafdbe`) said the script
 passed; it did not, and this paragraph replaces that line.
 
-**Steps 3 (to finish) and 5–10: not yet run.** Step 3 waits for the concurrency increase, and will plan 37 to
+**2026-10-19, step 3, second attempt (with the fix):**
+
+- `Apply complete! Resources: 15 added, 0 changed, 1 destroyed.` Terraform had recorded the failed
+  client as tainted and replaced it, so the 22 resources from the first attempt and these 15 make
+  the plan's 37.
+- Outputs include `evidence_search_url = "https://tub.dev.wfbdebate.com/"`,
+  `evidence_search_login_host = "auth.tub.dev.wfbdebate.com"` and
+  `evidence_search_function_name = "debate-dev-tub"`.
+- `list-user-pool-clients` lists exactly one client, `debate-dev-tub-web`, whose id equals the
+  `evidence_search_client_id` output, so no orphan client was left behind.
+
+**Steps 5–10: not yet run.** Step 3 waits for the concurrency increase, and will plan 37 to
 add, not 41. ac5, the runbook's tables
 and the `Succeeded` phase wait for steps 3–10.
 

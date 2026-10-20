@@ -657,3 +657,47 @@ the phase `Succeeded`. The pull request then needs no `--partial`.
    * PKCE enforced by the app;
    * `tub users add` replacing step 9's CLI account creation;
    * the Starlette `httpx2` dev dependency.
+
+## PM review, second
+
+<!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
+this report is ACCEPTED. -->
+
+**Verdict:** ACCEPTED
+<!-- ACCEPTED / CHANGES_REQUESTED -->
+
+**Reviewed by / date:** PM, 2026-10-19
+
+**Notes:**
+
+The first review's condition is met. ac5 closed in this session: dev steps 1 to 10 are recorded,
+the runbook's tables are filled in, the phase is `Succeeded`, and the branch is synced onto `dev`
+with the operator's `scripts/terraform_checks.sh` passing all 24 checks. The pull request needs no
+`--partial`.
+
+**What the dev run proved, beyond the mocked tests:**
+
+* **Least privilege, by AWS's own evaluation.** `simulate-principal-policy` agrees with ADR-0019's
+  role table for the function and for both permission sets, including the denials.
+* **The path.** Through CloudFront the page is `200 private, no-store` with every header the ADR
+  names. A direct call to the function URL gets Lambda's own `403` before the function runs.
+* **The cold start:** 1.8 s for an ordinary environment, inside the ADR's 1 to 2 s; 4.1 s for the
+  first after a deploy.
+* **SES is already out of the sandbox,** so emailed codes are not waiting on AWS.
+* **The asset hosts for school IT are measured,** with Chrome's own new-tab traffic traced and left
+  out. Step 12 re-confirms them on prod before the request goes.
+
+**Three problems outside the code, each handled and written into the runbook:**
+
+* **The Lambda concurrency quota (10) was raised to 1,000.** The runbook now checks it first.
+* **The registrar's `clientHold` on `wfbdebate.com`,** caused by a mistyped registrant email, had
+  taken the public website offline as well, probably since 2026-10-05. The session diagnosed it from
+  public DNS and whois, the operator corrected the contacts, and the hold lifted at 20:15 CDT.
+* **A provider 5.100.0 bug on the app client** (`retry_grace_period_seconds`) is fixed in the module
+  and pinned by a test.
+
+**The step 5c read-back** found AWS's default already `TLS_V1_2_2021`, so the step stays as a
+check, as ruled. The report's own correction of `beafdbe`'s claim that the checks had passed is the
+right instinct.
+
+**Prod** (runbook steps 11 and 12) follows the promotion, as the runbook says.

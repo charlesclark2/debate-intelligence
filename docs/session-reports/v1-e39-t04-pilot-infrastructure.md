@@ -507,7 +507,17 @@ passed; it did not, and this paragraph replaces that line.
 - `list-user-pool-clients` lists exactly one client, `debate-dev-tub-web`, whose id equals the
   `evidence_search_client_id` output, so no orphan client was left behind.
 
-**Steps 5–10: not yet run.** Step 3 waits for the concurrency increase, and will plan 37 to
+**2026-10-19, step 5 (the three CLI-only settings):**
+
+- **5a:** `put-log-group-deletion-protection` printed nothing; the read-back is
+  `debate-dev-tub-audit	400	True`.
+- **5b:** `create-managed-login-branding` returned a branding id (a UUID);
+  `UseCognitoProvidedValues` reads `True`.
+- **5c:** `describe-user-pool-domain` → `ACTIVE	2	TLS_V1_2_2021` at the first read-back, so the
+  `update-user-pool-domain` fallback was not needed. AWS's default for a managed login version 2
+  custom domain is already `TLS_V1_2_2021`, and the step stays as a read-back.
+
+**Steps 6–10: not yet run.** Step 3 waits for the concurrency increase, and will plan 37 to
 add, not 41. ac5, the runbook's tables
 and the `Succeeded` phase wait for steps 3–10.
 

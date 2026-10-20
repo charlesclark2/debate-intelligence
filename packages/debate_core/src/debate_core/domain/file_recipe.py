@@ -33,6 +33,14 @@ import, so `debate_core.application.file_recipes` checks it.
 format does not debate, a pocket without hats beside one with them, a pocket with both or neither)
 run on the input as given and are reported beside the field errors of the same pass.
 
+**A camp card is named by its release (`v1-e33-t06`).** A pin's `caselist` may be `openev`, the
+store camp (OpenEv) files are parsed into, and its `snapshot` is then the release the file came in,
+`<year>-<event>` such as `2031-policy`, as `caselist publish --caselist openev --snapshot` names it.
+The release is required: the same camp file in two releases is two occurrences. A camp file has no
+disclosure, so a camp pin names no school, team code, side, tournament or round. The recipe's own
+`caselist` may be `openev` too, for a file of camp cards, and AUTO then chooses among camp
+occurrences. Both are additions: every recipe valid before stays valid, with the same hash.
+
 **A pin names who disclosed a card, which is personal data.** A recipe lives in the evidence
 workspace, which the data-use policy allows to hold a school and team code
 (`docs/policies/caselist-data-use.md`, personal data). The pin's school, team code, tournament and
@@ -41,6 +49,7 @@ round are kept off its `repr`, so a recipe that reaches a log line does not carr
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterator, Mapping, Sequence
 from datetime import date, datetime
 from enum import StrEnum
@@ -55,6 +64,7 @@ from pydantic import (
     Strict,
     StringConstraints,
     Tag,
+    TypeAdapter,
     ValidationError,
     field_validator,
     model_validator,
@@ -62,14 +72,23 @@ from pydantic import (
 from pydantic_core import InitErrorDetails, PydanticCustomError
 
 from debate_core.domain.base import DomainModel, NonEmptyText, Sha256Hex
-from debate_core.domain.caselist.values import CaselistSlug, Event, Side, TeamCodeText, sides_for_event
+from debate_core.domain.caselist.values import (
+    CASELIST_SLUG_PATTERN,
+    Event,
+    Side,
+    TeamCodeText,
+    sides_for_event,
+)
 
 __all__ = [
     "ANALYTIC_MAX_LENGTH",
+    "CAMP_RELEASE_PATTERN",
+    "CAMP_STORE",
     "FILE_RECIPE_SCHEMA_VERSION",
     "HEADING_MAX_LENGTH",
     "RECIPE_ID_PATTERN",
     "RECIPE_ITEM_TAGS",
+    "RECIPE_STORE_PATTERN",
     "TAG_OVERRIDE_MAX_LENGTH",
     "Analytic",
     "Block",
@@ -104,7 +123,20 @@ ANALYTIC_MAX_LENGTH: Final = 2000
 RECIPE_ITEM_TAGS: Final = ("card", "analytic")
 """The two kinds of item, as validation errors name them inside an item's location."""
 
+CAMP_STORE: Final = "openev"
+"""The store camp (OpenEv) files are parsed into, as `--caselist openev` names it (`v1-e33-t06`)."""
+
+CAMP_RELEASE_PATTERN: Final = rf"^[0-9]{{4}}-(?:{'|'.join(sorted(event.value.lower() for event in Event))})$"
+"""A camp release, `2031-policy`: the topic year and the event, as `manifests/openev/` names it."""
+
+RECIPE_STORE_PATTERN: Final = (
+    rf"^(?:{CASELIST_SLUG_PATTERN.removeprefix('^').removesuffix('$')}|{CAMP_STORE})$"
+)
+"""What a recipe's or a pin's `caselist` may be: a caselist slug, or :data:`CAMP_STORE`."""
+
 RecipeId = Annotated[str, StringConstraints(pattern=RECIPE_ID_PATTERN, max_length=64)]
+StoreName = Annotated[str, StringConstraints(pattern=RECIPE_STORE_PATTERN)]
+CampRelease = Annotated[str, StringConstraints(pattern=CAMP_RELEASE_PATTERN)]
 HeadingText = Annotated[
     str, StringConstraints(strip_whitespace=True, min_length=1, max_length=HEADING_MAX_LENGTH)
 ]
@@ -183,15 +215,37 @@ TagOverrideField = Annotated[
 ]
 
 
-def _date_as_written(value: object) -> object:
-    """A snapshot is a calendar date, `2026-09-15`, quoted or not. A number or a timestamp is not one."""
+_RELEASE: Final = re.compile(CAMP_RELEASE_PATTERN)
+_RELEASE_LIKE: Final = re.compile(r"^[0-9]{4}-[A-Za-z]")
+_DATE: Final = TypeAdapter(date)
+
+
+def _snapshot_as_written(value: object) -> object:
+    """A caselist's snapshot is a calendar date, `2026-09-15`, quoted or not; a camp's is its release.
+
+    A release (`2031-policy`) is kept as text, and anything else is read as a date exactly as a date
+    field reads it, so a caselist pin's snapshot is what it was before camp pins (`v1-e33-t06`). A
+    number or a timestamp is neither. Which of the two a pin needs is the pin's own check.
+    """
     if isinstance(value, datetime) or not isinstance(value, date | str):
-        raise ValueError("a snapshot is a date written YYYY-MM-DD")
-    return value
+        raise ValueError("a snapshot is a date written YYYY-MM-DD, or a camp release written <year>-<event>")
+    if not isinstance(value, str):
+        return value
+    if _RELEASE.match(value) is not None:
+        return value
+    if _RELEASE_LIKE.match(value) is not None:
+        raise ValueError("a camp release is <year>-<event>, the event policy, ld or pf: 2031-policy")
+    try:
+        return _DATE.validate_python(value)
+    except ValidationError as error:
+        first = error.errors()[0]
+        raise _custom_error(first["type"], first["msg"]) from None
 
 
 ElementIndex = Annotated[int, Strict(), Field(ge=0)]
-SnapshotOnRecord = Annotated[date, BeforeValidator(_date_as_written, json_schema_input_type=date)]
+PinSnapshot = Annotated[
+    date | str, BeforeValidator(_snapshot_as_written, json_schema_input_type=date | CampRelease)
+]
 
 
 class OccurrencePin(DomainModel):
@@ -202,19 +256,107 @@ class OccurrencePin(DomainModel):
     are two occurrences there, so the rest narrow a pin to one disclosure: the snapshot it was seen
     in and who disclosed it, exactly as disclosed. A pin is never moved to another occurrence: one
     that matches none, or more than one, is an error (`v1-e33-t01` ac4).
+
+    A camp pin (`caselist: openev`, `v1-e33-t06`) names the release instead, as its `snapshot`, and
+    nothing else: a camp file is one occurrence per release and has no disclosure.
     """
 
-    caselist: CaselistSlug = Field(description="The caselist whose occurrence store holds the card.")
+    caselist: StoreName = Field(
+        description="The caselist whose occurrence store holds the card, or `openev` for a camp file."
+    )
     source_sha256: Sha256Hex = Field(description="SHA-256 of the file the card is read from.")
     element_index: ElementIndex = Field(description="Index of the card's first paragraph in that file.")
-    snapshot: SnapshotOnRecord | None = Field(
-        default=None, description="A snapshot the disclosure was seen in: between its first and latest."
+    snapshot: PinSnapshot | None = Field(
+        default=None,
+        description=(
+            "For a caselist, a snapshot the disclosure was seen in, between its first and latest; for "
+            "`openev`, the camp release, `<year>-<event>` such as 2031-policy, which a camp pin requires."
+        ),
     )
     school: NonEmptyText | None = Field(default=None, repr=False, description="School, as disclosed.")
     team_code: TeamCodeText | None = Field(default=None, repr=False, description="Team code, as disclosed.")
     side: Side | None = Field(default=None, description="Side the disclosing file was read on.")
     tournament: NonEmptyText | None = Field(default=None, repr=False, description="Tournament, as disclosed.")
     round: NonEmptyText | None = Field(default=None, repr=False, description="Round, exactly as disclosed.")
+
+    @model_validator(mode="wrap")
+    @classmethod
+    def _camp_or_caselist(
+        cls, value: object, handler: ModelWrapValidatorHandler[OccurrencePin]
+    ) -> OccurrencePin:
+        given = _as_mapping(value)
+        problems = _pin_problems(given) if given is not None else []
+        return _validate_with_problems(value, handler, problems, cls.__name__)
+
+
+_DISCLOSURE_FIELDS: Final = ("school", "team_code", "side", "tournament", "round")
+
+
+def _is_a_date(value: object) -> bool:
+    """Whether a pin's `snapshot`, as given, is a date that the field reads as one."""
+    if isinstance(value, datetime):
+        return False
+    if isinstance(value, date):
+        return True
+    if not isinstance(value, str) or _RELEASE_LIKE.match(value) is not None:
+        return False
+    try:
+        _DATE.validate_python(value)
+    except ValidationError:
+        return False
+    return True
+
+
+def _pin_problems(pin: Mapping[str, object]) -> list[InitErrorDetails]:
+    """A camp pin names its release and no disclosure; a caselist pin's snapshot is not a release.
+
+    Read on the input as given, beside the field errors, and only where the field itself is well
+    formed, so one mistake is one error.
+    """
+    caselist, snapshot = pin.get("caselist"), pin.get("snapshot")
+    if caselist != CAMP_STORE:
+        if isinstance(caselist, str) and isinstance(snapshot, str) and _RELEASE.match(snapshot):
+            return [
+                _problem(
+                    ("snapshot",),
+                    "release_in_a_caselist_pin",
+                    "a release names a camp file, which a pin reaches as `caselist: openev`; a caselist "
+                    "pin's snapshot is a date written YYYY-MM-DD",
+                    snapshot,
+                )
+            ]
+        return []
+    problems: list[InitErrorDetails] = []
+    if snapshot is None:
+        problems.append(
+            _problem(
+                ("snapshot",),
+                "camp_pin_without_a_release",
+                "a camp pin names its release as `snapshot`, <year>-<event> such as 2031-policy: the same "
+                "camp file in two releases is two occurrences",
+                pin,
+            )
+        )
+    elif _is_a_date(snapshot):
+        problems.append(
+            _problem(
+                ("snapshot",),
+                "camp_pin_with_a_date",
+                "a camp pin's snapshot is its release, <year>-<event> such as 2031-policy, not a date",
+                snapshot,
+            )
+        )
+    problems += [
+        _problem(
+            (name,),
+            "camp_pin_with_a_disclosure",
+            f"a camp pin names no {name}: a camp file has no disclosure to narrow it to",
+            pin[name],
+        )
+        for name in _DISCLOSURE_FIELDS
+        if pin.get(name) is not None
+    ]
+    return problems
 
 
 class CardRef(DomainModel):
@@ -359,8 +501,11 @@ class FileRecipe(DomainModel):
     title: HeadingText = Field(description="The file's title.")
     topic: RecipeId = Field(description="The topic id, kebab-case, as the landscape taxonomy names it.")
     format: Event = Field(description="POLICY, LD or PF.")
-    caselist: CaselistSlug = Field(
-        description="The caselist whose occurrence store unpinned cards come from."
+    caselist: StoreName = Field(
+        description=(
+            "The caselist whose occurrence store unpinned cards come from, or `openev` for a file of "
+            "camp cards."
+        )
     )
     position: RecipeId = Field(description="The position id, kebab-case, as the landscape taxonomy names it.")
     side: Side = Field(description="The side the file is for: AFF or NEG, or PRO or CON for PF.")

@@ -455,7 +455,7 @@ def test_a_camp_pin_names_openev_and_its_release(release: str) -> None:
     data = camp_pin_data(**{**CAMP_PIN, "snapshot": release})
     pin = next(ref for _, ref in FileRecipe.model_validate(data).card_refs()).pin
     assert pin == OccurrencePin(caselist="openev", source_sha256=SOURCE, element_index=4, snapshot=release)
-    assert pin.snapshot == release
+    assert pin is not None and pin.snapshot == release
 
 
 def test_a_camp_pin_needs_the_release_it_names() -> None:

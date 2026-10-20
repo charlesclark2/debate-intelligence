@@ -11,6 +11,16 @@
       "title": "CardCompleteness",
       "type": "string"
     },
+    "Event": {
+      "description": "The debate event a caselist covers.\n\nUnlike the caselist slug, this really is closed: the three high-school events the platform\nsupports decide which sides are legal and which file conventions apply.",
+      "enum": [
+        "LD",
+        "POLICY",
+        "PF"
+      ],
+      "title": "Event",
+      "type": "string"
+    },
     "FileProvenanceEntry": {
       "additionalProperties": false,
       "description": "One card of a built file: which occurrence it was copied from, and what it was.",
@@ -79,8 +89,48 @@
           "description": "Camp for an OpenEv file; None otherwise.",
           "title": "Camp"
         },
+        "camp_year": {
+          "anyOf": [
+            {
+              "minimum": 2000,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Year of the camp release, for an OpenEv file; None otherwise.",
+          "title": "Camp Year"
+        },
+        "camp_event": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Event"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Event of the camp release, for an OpenEv file; None otherwise."
+        },
+        "camp_file_title": {
+          "anyOf": [
+            {
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The camp file's title as its release records it, for an OpenEv file; None otherwise, or with no release record.",
+          "title": "Camp File Title"
+        },
         "snapshot": {
-          "description": "The first snapshot listing the occurrence.",
+          "description": "The first snapshot listing the occurrence; for an OpenEv file, its release.",
           "minLength": 1,
           "title": "Snapshot",
           "type": "string"

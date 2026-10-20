@@ -341,12 +341,14 @@ def test_assembly_takes_no_card_text_through_its_api() -> None:
         "parser",
         "base",
         "limits",
+        "source_stores",
     ]
     reachable = (
         {field.name for field in dataclasses.fields(ResolvedRecipe)}
         | {field.name for field in dataclasses.fields(ResolvedCard)}
         | set(OccurrenceRecord.model_fields)
         | set(Disclosure.model_fields)
+        | set(CampFile.model_fields)
     )
     for name in reachable:
         assert not any(word in name for word in ("evidence", "cite", "run", "body", "text")), name

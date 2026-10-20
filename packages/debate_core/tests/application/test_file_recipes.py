@@ -178,7 +178,7 @@ structure:
   - {pocket: P, blocks: [{block: B, items: [
       {analytic: fine},
       {fingerprint: zz, tag_override: ""},
-      {fingerprint: a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0, pin: {caselist: openev,
+      {fingerprint: a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0, pin: {caselist: OpenEv,
                      source_sha256: 1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a,
                      element_index: true}},
       {analytic: fine, extra: 1}
@@ -1400,6 +1400,17 @@ def test_examples_validate_against_the_published_schema(name: str) -> None:
     data = yaml.safe_load((EXAMPLES / name).read_text(encoding="utf-8"))
     schema = json.loads(SCHEMA.read_text(encoding="utf-8"))
     jsonschema.validate(json.loads(json.dumps(data, default=str)), schema)
+
+
+def test_a_camp_pin_and_a_camp_recipe_validate_against_the_published_schema() -> None:
+    """`v1-e33-t06`: the schema says what the models take; the cross-field rules stay the loader's."""
+    schema = json.loads(SCHEMA.read_text(encoding="utf-8"))
+    text = recipe_text(card(CARD_A, pin=CAMP_PIN), card(CARD_B), header=CAMP_HEADER)
+    data = yaml.safe_load(text)
+    jsonschema.validate(json.loads(json.dumps(data, default=str)), schema)
+    data["structure"][0]["blocks"][0]["items"][0]["pin"]["caselist"] = "OpenEv"
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(json.loads(json.dumps(data, default=str)), schema)
 
 
 @pytest.mark.parametrize("name", EXAMPLE_NAMES)

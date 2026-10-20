@@ -10,7 +10,8 @@ unverified, and the data-use policy's provenance line below each cite (PM amendm
 
 :class:`FileBuildRequest` holds the resolved recipe and the time of the request, and nothing else.
 The resolved recipe names each card by fingerprint and occurrence, and carries the coach's text and
-who disclosed the card; no field of it, or of this request, can carry evidence or cite text. The
+who disclosed the card, or for a camp card its release record (`v1-e33-t06`); no field of it, or of
+this request, can carry evidence or cite text. The
 writer reads a card's text only from its source's bytes, which it takes from the blob store by the
 occurrence's SHA-256 (the task's first forbidden item).
 

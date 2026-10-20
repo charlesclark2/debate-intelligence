@@ -130,7 +130,7 @@ debate-research store sync --prefix manifests/hsld26/
 |---|---|
 | `new` | Not in the bucket. Will be uploaded. |
 | `changed` | In the bucket with different bytes. Will be overwritten. **Named objects only** — a manifest that gained rows is the normal case. |
-| `skipped` | Already there and identical, or outside the documented prefixes. Also, either way: anything under `manifests/_suppression/` (the suppression list and removal log, which only `caselist remove` and `unsuppress` append to) and a blob whose sha256 is on the removal suppression list (`v1-e30-t07`). On a push only: a blob named only by manifest rows at a path a removal holds (`v1-e30-t22`), and a manifest `caselist publish` withholds, because a row of it names a removed file or sits at a path a removal holds (`v1-e30-t25`). Its reason is the publisher's own message, which names the rows by digest or by the request holding the path, and its fix is the publisher's too: run the same removal again on this machine. A manifest the publisher cannot read is skipped too, with the key and line number it refuses. |
+| `skipped` | Already there and identical, or outside the documented prefixes. Also, either way: anything under `manifests/_suppression/` (the suppression list and removal log, which only `caselist remove` and `unsuppress` append to) and a blob whose sha256 is on the removal suppression list (`v1-e30-t07`). On a push only: a blob named only by manifest rows at a path a removal holds (`v1-e30-t22`), and a manifest `caselist publish` withholds, because a row of it names a removed file or sits at a path a removal holds (`v1-e30-t25`). Its reason is the publisher's own message, which names the rows by digest or by the request holding the path, and its fix is the publisher's too: run the same removal again on this machine. A manifest the publisher cannot read is skipped too, with the key and line number it refuses. **Which of these each skip was** is in `skipped_reasons` in `--json`, and a withheld or unreadable manifest gets a line under the table: see [Why something was skipped](#why-something-was-skipped). |
 | `would_delete` | In the bucket and not on your machine. **Reported and left alone.** |
 | `mismatched` | A content-addressed key whose two sides differ. Never written over, and it fails the run — see below. |
 
@@ -138,6 +138,43 @@ debate-research store sync --prefix manifests/hsld26/
 delete, and removing evidence is a separate procedure with its own credential
 ([runbooks/caselist-removal.md](../runbooks/caselist-removal.md)). A large `would_delete` count
 usually just means your machine holds less than the bucket does.
+
+### Why something was skipped
+
+`--json` breaks the `skipped` count down by kind under `skipped_reasons` (`v1-e29-t11`). Each kind
+the run has carries its `count` and up to three 12-character `key_prefixes`, such as `manifests/hs`
+or `raw/caselist`. A key outside the documented prefixes is counted with no prefix, because its first
+characters can be anything, a school's name included. A kind the run has none of is absent.
+
+| Kind | What was skipped |
+|---|---|
+| `identical` | Already in the bucket (on a pull, on your machine) with the same bytes |
+| `journaled` | In the bucket, and the journal says this machine sent these bytes |
+| `held_only_blob` | Push only: a blob only rows at a path a removal holds name |
+| `withheld_manifest` | Push only: a manifest `caselist publish` withholds |
+| `unreadable_manifest` | Push only: a manifest `caselist publish` cannot read |
+| `suppressed_source` | A blob whose sha256 is on the removal suppression list |
+| `suppression_record` | The suppression list and removal log under `manifests/_suppression/` |
+| `another_keyspace` | A key the other local tree owns: a file under `objects/raw/…` |
+| `undocumented_prefix` | A key under none of the documented prefixes |
+
+The two publisher kinds also carry `messages`, the publisher's message for each manifest word for
+word, and `request_ids`, the removal requests those messages name. When a push leaves such a
+manifest on your machine, the table says so on a line of its own:
+
+```
+ WITHHELD MANIFESTS: 1 manifest(s) the publisher withholds, left on this machine (RM-2026-01). Run
+ the same removal again on this machine (caselist remove … --request RM-2026-01) to rewrite them,
+ then push again; --json has the publisher's message for each.
+```
+
+Run that removal again as the [removal runbook](../runbooks/caselist-removal.md) writes it, then
+push again. A manifest the publisher cannot read gets an `UNREADABLE MANIFESTS` line instead; its
+message in `--json` names the key and the line number. Every other kind stays a count in the table.
+
+```bash
+debate-research --json store sync | jq '.data.skipped_reasons'
+```
 
 ## Verification
 

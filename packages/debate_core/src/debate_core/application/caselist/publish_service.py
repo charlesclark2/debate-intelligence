@@ -98,6 +98,7 @@ from debate_core.application.errors import (
     error_code_of,
     reported_error_message,
 )
+from debate_core.application.evidence_sync import ManifestWithholding
 from debate_core.application.ports.evidence_store import EvidenceObjectStore, ObjectInfo, ObjectKey
 from debate_core.application.ports.suppression import SuppressionList, SuppressionState
 from debate_core.domain import Sha256Hex
@@ -531,8 +532,8 @@ class CaselistPublishService:
 
 async def withheld_manifest_reason(
     local: LocalEvidence, manifest: ObjectInfo, suppression: SuppressionState
-) -> str | None:
-    """Why a publish withholds this local manifest for its rows, in its own words; `None` when it does not.
+) -> ManifestWithholding | None:
+    """Why a publish withholds this local manifest, in its own words; `None` when it does not.
 
     What `store sync` asks before it pushes a manifest (`v1-e30-t25`), so that a push never sends
     what a publish withholds. The answer is the plan of that one snapshot
@@ -547,17 +548,22 @@ async def withheld_manifest_reason(
     A manifest a publish cannot read is refused, and nothing of it is published, so its refusal is
     the reason: :class:`~debate_core.application.caselist.publish_plan.UnreadableManifest` names the
     key and the line number, never the line.
+
+    The answer says which of the two it is, and which removal requests the message names, so that
+    `store sync` can group and caption it without reading the message (`v1-e29-t11`).
     """
     try:
         snapshot = await read_local_manifest(local, manifest)
     except UnreadableManifest as refused:
-        return str(refused)
+        return ManifestWithholding(str(refused), unreadable=True)
     if snapshot is None:
         return None
     (plan,) = build_publish_plan(
         snapshot.caselist, [snapshot], local_blobs=(), remote={}, suppression=suppression
     ).snapshots
-    return _withheld_for_rows(plan) if plan.withholding_rows else None
+    if not plan.withholding_rows:
+        return None
+    return ManifestWithholding(_withheld_for_rows(plan), request_ids=_requests_named(plan))
 
 
 # ------------------------------------------------------------------------------------------------
@@ -590,6 +596,12 @@ def _withheld_for_rows(plan: SnapshotPlan) -> str:
         f"the local manifest still has {'; and '.join(rows)}; re-run `caselist remove` for them on this "
         "machine to rewrite it"
     )
+
+
+def _requests_named(plan: SnapshotPlan) -> tuple[str, ...]:
+    """The removal requests :func:`_withheld_for_rows` names, sorted: each held row's and each held
+    skipped row's. A row the list stops is named by its digest alone."""
+    return tuple(sorted({*(row.request_id for row in plan.held_rows), *plan.held_skipped_rows}))
 
 
 def _presence_problem(planned: PlannedSource, present: ObjectInfo) -> str | None:

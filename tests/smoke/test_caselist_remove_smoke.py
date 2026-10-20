@@ -1318,6 +1318,10 @@ def test_junk_beside_a_held_link_has_no_row_and_a_push_sends_no_manifest_the_pub
     assert pushed in keys
     assert withheld not in keys, "the push sent a manifest the publisher withholds"
     assert name not in json.dumps(synced)
+    left_behind = synced["data"]["skipped_reasons"]["withheld_manifest"]
+    assert (left_behind["count"], left_behind["request_ids"]) == (1, ["RM-2026-03"]), (
+        "v1-e29-t11: the push says which removal to run again"
+    )
 
 
 # ------------------------------------------------------------------------------------------------

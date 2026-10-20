@@ -405,6 +405,205 @@ class TestSyncPlansByDefault:
 
 
 # ------------------------------------------------------------------------------------------------
+# store sync: why it skipped what it skipped (v1-e29-t11)
+# ------------------------------------------------------------------------------------------------
+
+#: Every key of `store sync --json`'s `data` before `v1-e29-t11`, as `v1.1.0-dev.59` writes it.
+PAYLOAD_KEYS_BEFORE_SKIP_REASONS = frozenset(
+    {
+        "environment",
+        "bucket",
+        "direction",
+        "prefix",
+        "applied",
+        "counts",
+        "bytes",
+        "remote_head_requests",
+        "transferred",
+        "bytes_transferred",
+        "failed",
+        "mismatched",
+        "journal",
+    }
+)
+HELD_BODY = b"uploaded again after the removal"
+OTHER_BODY = b"the other team's file"
+WITHHELD_WEEK = f"manifests/{HELD_CASELIST}/2026-10-08.jsonl"
+PUSHED_WEEK = f"manifests/{HELD_CASELIST}/2026-10-15.jsonl"
+
+
+def a_week_the_publisher_withholds(data_dir: Path) -> str:
+    """`v1-e30-t25`'s scene: a removal holds the revised path, and an older build's manifest for
+    2026-10-08 has a row there whose bytes no other row names, beside the other team's row. The week
+    after has only the other team's row. Returns the held upload's digest."""
+    held = write_local_blob(data_dir, HELD_BODY)
+    other = write_local_blob(data_dir, OTHER_BODY)
+    write_local_object(
+        data_dir,
+        WITHHELD_WEEK,
+        manifest_of([(REVISED_PATH, held, len(HELD_BODY)), (KEPT_PATH, other, len(OTHER_BODY))]),
+    )
+    write_local_object(data_dir, PUSHED_WEEK, manifest_of([(KEPT_PATH, other, len(OTHER_BODY))]))
+    hold_the_revised_path(data_dir)
+    return held.rsplit("/", 1)[-1]
+
+
+def flattened(result: Result) -> str:
+    """The output with every run of whitespace one space: a caption wraps at the table's width."""
+    return " ".join(result.stdout.split())
+
+
+def push_everything(*options: str) -> Result:
+    return invoke(*options, "store", "sync", "--blob-prefix", f"raw/caselist/{HELD_CASELIST}", "--apply")
+
+
+class TestSkipReasons:
+    @pytest.fixture(autouse=True)
+    def temporary_home(self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+        monkeypatch.setenv("HOME", str(tmp_path / "home"))
+
+    def test_the_json_breaks_the_skips_down_by_kind_with_the_publishers_message(
+        self, buckets: S3Client, dev_data_dir: Path
+    ) -> None:
+        """A push that withholds a manifest and leaves out a held-only blob: each kind with its count
+        and key prefixes, and the withheld manifest with the publisher's message, word for word."""
+        held = a_week_the_publisher_withholds(dev_data_dir)
+
+        result = push_everything("--json")
+
+        assert result.exit_code == ExitCode.OK, result.stdout
+        assert envelope_of(result)["data"]["skipped_reasons"] == {
+            "held_only_blob": {"count": 1, "key_prefixes": ["raw/caselist"]},
+            "withheld_manifest": {
+                "count": 1,
+                "key_prefixes": ["manifests/te"],
+                "messages": [
+                    f"the local manifest still has 1 row(s) at a path a removal holds: {held} (RM-2026-01), "
+                    "whose bytes no other row names and were not uploaded (1); re-run `caselist remove` "
+                    "for them on this machine to rewrite it"
+                ],
+                "request_ids": ["RM-2026-01"],
+            },
+        }
+        assert not [word for word in ("Alder Point", "Birch Hill", "KR", ".docx") if word in result.stdout]
+
+    def test_the_caption_names_the_withheld_manifest_and_the_removal_to_run_again(
+        self, buckets: S3Client, dev_data_dir: Path
+    ) -> None:
+        a_week_the_publisher_withholds(dev_data_dir)
+
+        result = push_everything()
+
+        assert result.exit_code == ExitCode.OK, result.stdout
+        assert (
+            "WITHHELD MANIFESTS: 1 manifest(s) the publisher withholds, left on this machine (RM-2026-01). "
+            "Run the same removal again on this machine (caselist remove … --request RM-2026-01) to "
+            "rewrite them, then push again; --json has the publisher's message for each."
+        ) in flattened(result)
+        assert "held_only_blob" not in result.stdout
+        assert not [word for word in ("Alder Point", "Birch Hill", ".docx") if word in result.stdout]
+
+    def test_a_manifest_the_publisher_cannot_read_has_its_own_caption_line(
+        self, buckets: S3Client, dev_data_dir: Path
+    ) -> None:
+        unreadable = f"manifests/{HELD_CASELIST}/2026-10-13.jsonl"
+        write_local_object(dev_data_dir, unreadable, b"not a manifest row\n")
+
+        table = invoke("store", "sync", "--prefix", "manifests/")
+        data = envelope_of(invoke("--json", "store", "sync", "--prefix", "manifests/"))["data"]
+
+        assert (
+            "UNREADABLE MANIFESTS: 1 manifest(s) the publisher cannot read, left on this machine; "
+            "--json has the key and line number of each."
+        ) in flattened(table)
+        assert "WITHHELD MANIFESTS" not in flattened(table)
+        assert data["skipped_reasons"] == {
+            "unreadable_manifest": {
+                "count": 1,
+                "key_prefixes": ["manifests/te"],
+                "messages": [f"{unreadable} line 1 is not a usable manifest row: not JSON"],
+                "request_ids": [],
+            }
+        }
+
+    def test_identical_and_journaled_skips_stay_a_count_with_no_caption_line(
+        self, buckets: S3Client, dev_data_dir: Path
+    ) -> None:
+        """One manifest pushed by this machine, so journaled, and one report the bucket already held."""
+        write_local_object(dev_data_dir, MANIFEST_KEY, MANIFEST_BODY)
+        invoke("store", "sync", "--apply")
+        write_local_object(dev_data_dir, "reports/sync/run.json", b"{}")
+        put_remote_object(buckets, DEV_BUCKET, "reports/sync/run.json", b"{}")
+
+        data = envelope_of(invoke("--json", "store", "sync"))["data"]
+        table = invoke("store", "sync")
+
+        assert data["skipped_reasons"] == {
+            "identical": {"count": 1, "key_prefixes": ["reports/sync"]},
+            "journaled": {"count": 1, "key_prefixes": ["manifests/hs"]},
+        }
+        assert "MANIFESTS:" not in flattened(table)
+        assert "Planned only" in flattened(table)
+
+    def test_a_pull_reports_the_same_way(self, buckets: S3Client, dev_data_dir: Path) -> None:
+        write_local_object(dev_data_dir, MANIFEST_KEY, MANIFEST_BODY)
+        put_remote_object(buckets, DEV_BUCKET, MANIFEST_KEY, MANIFEST_BODY)
+
+        data = envelope_of(invoke("--json", "store", "sync", "--pull"))["data"]
+
+        assert data["skipped_reasons"] == {"identical": {"count": 1, "key_prefixes": ["manifests/hs"]}}
+
+    def test_every_earlier_key_keeps_its_shape_and_value_beside_the_new_one(
+        self, buckets: S3Client, dev_data_dir: Path
+    ) -> None:
+        """Acceptance criterion 2. `skipped_reasons` is the one key added; a reader that knows only the
+        earlier keys reads each with the value it had: one manifest and one blob sent, one of each
+        left out, nothing failed."""
+        a_week_the_publisher_withholds(dev_data_dir)
+
+        data = envelope_of(push_everything("--json"))["data"]
+
+        assert set(data) == PAYLOAD_KEYS_BEFORE_SKIP_REASONS | {"skipped_reasons"}
+        withheld_size = (dev_data_dir / "objects" / WITHHELD_WEEK).stat().st_size
+        pushed_size = (dev_data_dir / "objects" / PUSHED_WEEK).stat().st_size
+        assert {key: data[key] for key in PAYLOAD_KEYS_BEFORE_SKIP_REASONS} == {
+            "environment": "dev",
+            "bucket": DEV_BUCKET,
+            "direction": "push",
+            "prefix": "",
+            "applied": True,
+            "counts": {"new": 2, "changed": 0, "skipped": 2, "would_delete": 0, "mismatched": 0},
+            "bytes": {
+                "new": len(OTHER_BODY) + pushed_size,
+                "changed": 0,
+                "skipped": len(HELD_BODY) + withheld_size,
+                "would_delete": 0,
+                "mismatched": 0,
+            },
+            "remote_head_requests": 0,
+            "transferred": 2,
+            "bytes_transferred": len(OTHER_BODY) + pushed_size,
+            "failed": [],
+            "mismatched": [],
+            "journal": str(dev_data_dir / "sync-journal" / "dev.jsonl"),
+        }
+
+    def test_a_failed_run_carries_the_breakdown_for_the_scheduled_consumer(
+        self, buckets: S3Client, dev_data_dir: Path
+    ) -> None:
+        key = write_local_blob(dev_data_dir, b"a disclosed file")
+        put_remote_object(buckets, DEV_BUCKET, f"{BLOB_PREFIX}/{key}", b"something else entirely")
+        write_local_object(dev_data_dir, MANIFEST_KEY, MANIFEST_BODY)
+        put_remote_object(buckets, DEV_BUCKET, MANIFEST_KEY, MANIFEST_BODY)
+
+        details = envelope_of(invoke("--json", "store", "sync", "--blob-prefix", BLOB_PREFIX))["error"][
+            "details"
+        ]
+
+        assert details["skipped_reasons"] == {"identical": {"count": 1, "key_prefixes": ["manifests/hs"]}}
+
+
+# ------------------------------------------------------------------------------------------------
 # The environments and the production guard (acceptance criterion 4)
 # ------------------------------------------------------------------------------------------------
 

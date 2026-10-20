@@ -63,6 +63,7 @@ from debate_cli.context import CliContext, cli_context, command_name
 from debate_cli.exit_codes import ExitCode, exit_code_for_failure_codes
 from debate_cli.output import CommandFailure, JsonValue, TableSpec
 from debate_core.application.evidence_sync import (
+    SkipKind,
     SyncAction,
     SyncDirection,
     SyncPlan,
@@ -298,9 +299,14 @@ def _unconfirmed_production_write(
 def sync_report(report: SyncReport, settings: Settings) -> dict[str, JsonValue]:
     """The `--json` envelope's `data` for `store sync`.
 
-    The shape the scheduled caselist sync (`v1-e34-t02`) reads, so it is written for a program
-    first: every action has a count and a byte total whether or not it happened, `applied` says
-    whether anything moved, and `failed` is a list of objects rather than a sentence to parse.
+    Written for a program first: every action has a count and a byte total whether or not it
+    happened, `applied` says whether anything moved, and `failed` is a list of objects rather than
+    a sentence to parse.
+
+    `skipped_reasons` (`v1-e29-t11`) breaks the `skipped` count down by kind of skip, each with its
+    count and up to three 12-character key prefixes, and a manifest the publisher withholds or cannot
+    read with the publisher's message and the requests it names. It is the one key added since; a
+    reader that does not know it reads every other key as before.
     """
     plan = report.plan
     return {
@@ -324,6 +330,7 @@ def sync_report(report: SyncReport, settings: Settings) -> dict[str, JsonValue]:
         ],
         "mismatched": [planned.remote_key for planned in plan.of(SyncAction.MISMATCHED)],
         "journal": str(report.journal_path) if report.journal_path is not None else None,
+        "skipped_reasons": {reason.kind.value: reason.as_json() for reason in plan.skipped_reasons},
     }
 
 
@@ -348,6 +355,10 @@ def _sync_table(report: SyncReport, settings: Settings) -> TableSpec:
 
 
 def _caption(report: SyncReport) -> str:
+    return "\n".join([_outcome(report), *_left_behind_lines(report.plan)])
+
+
+def _outcome(report: SyncReport) -> str:
     if not report.applied:
         return (
             f"Planned only; nothing was transferred. {report.plan.remote_head_requests} head "
@@ -357,6 +368,32 @@ def _caption(report: SyncReport) -> str:
     if report.failed:
         return f"{moved}; {len(report.failed)} failed."
     return f"{moved}, each verified at the destination."
+
+
+def _left_behind_lines(plan: SyncPlan) -> list[str]:
+    """Under the table: the manifests a push left on this machine because of the publisher (`v1-e29-t11`).
+
+    By kind, count and the requests the publisher's messages name, never the messages themselves,
+    which `--json` carries. Every other kind of skip stays a count in the table.
+    """
+    lines: list[str] = []
+    for reason in plan.skipped_reasons:
+        if reason.kind is SkipKind.WITHHELD_MANIFEST:
+            named = f" ({', '.join(reason.request_ids)})" if reason.request_ids else ""
+            removals = " and ".join(
+                f"caselist remove … --request {request}" for request in reason.request_ids or ("<id>",)
+            )
+            lines.append(
+                f"WITHHELD MANIFESTS: {reason.count} manifest(s) the publisher withholds, left on this "
+                f"machine{named}. Run the same removal again on this machine ({removals}) to rewrite "
+                "them, then push again; --json has the publisher's message for each."
+            )
+        elif reason.kind is SkipKind.UNREADABLE_MANIFEST:
+            lines.append(
+                f"UNREADABLE MANIFESTS: {reason.count} manifest(s) the publisher cannot read, left on "
+                "this machine; --json has the key and line number of each."
+            )
+    return lines
 
 
 def _filtered(plan: SyncPlan) -> str:

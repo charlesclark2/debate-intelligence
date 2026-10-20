@@ -44,13 +44,13 @@ spec:
         shown failing first.
     - id: ac2
       description: >-
-        The existing summary keys are unchanged, and the scheduled run's reader (v1-e34-t02)
-        reads the new payload, by test.
+        Every earlier key keeps its value, and an earlier build's store tests pass against this
+        build (PM amendment 2026-10-19).
     - id: ac3
       description: >-
         The guide's `skipped` row points at the breakdown.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

@@ -67,6 +67,12 @@ skipped with that refusal, which names the key and the line number. Asking costs
 manifest is read from the local listing's entry, once per manifest the push would send, and one
 already in the bucket, identical or journaled, is not asked about. A pull is not affected.
 
+Every one of these skips, and the ordinary ones, carries a :class:`SkipKind` beside its reason, set
+by the branch that skipped it (`v1-e29-t11`). :attr:`SyncPlan.skipped_reasons` groups by the kind,
+because the reason is free text and the publisher's names rows by digest, so no two manifests share
+one. The publisher says whether it withholds a manifest or cannot read it, and which requests its
+message names (:class:`ManifestWithholding`), so the grouping never reads the message.
+
 ## How few HeadObject calls this makes
 
 `list_objects` states no digest, by design, in either implementation — S3's `ListObjectsV2` does not
@@ -146,7 +152,10 @@ __all__ = [
     "EvidenceSyncService",
     "HeldBackDigests",
     "JournalEntry",
+    "ManifestWithholding",
     "PlannedObject",
+    "SkipKind",
+    "SkippedReason",
     "SyncAction",
     "SyncDirection",
     "SyncJournal",
@@ -178,7 +187,7 @@ passing every test against moto, which grants everything. So an unfiltered run l
 turn, and an object whose key is under none of them is reported and not transferred.
 """
 
-type WithheldManifests = Callable[[ObjectInfo, SuppressionState], Awaitable[str | None]]
+type WithheldManifests = Callable[[ObjectInfo, SuppressionState], Awaitable[ManifestWithholding | None]]
 """Why `caselist publish` withholds a local manifest, or `None` when it does not (`v1-e30-t25`).
 
 :func:`~debate_core.application.caselist.publish_service.withheld_manifest_reason` over this machine's
@@ -240,6 +249,59 @@ class SyncAction(StrEnum):
 
     MISMATCHED = "mismatched"
     """A content-addressed key whose two sides differ. Never written over; fails the run."""
+
+
+class SkipKind(StrEnum):
+    """Why the planner skipped an object, as one stable word a summary can group by (`v1-e29-t11`).
+
+    :attr:`PlannedObject.reason` is free text, and some reasons carry specifics: the publisher's
+    message names rows by digest and request id. Grouping by that text would give one group per
+    object, so every `skipped` object also carries one of these, and the `skipped_reasons` breakdown
+    of `store sync --json` is grouped by it. The reason text stays the plan's own; this names its kind.
+    """
+
+    IDENTICAL = "identical"
+    """The destination already holds these bytes: the same digest, or a blob's key on both sides."""
+
+    JOURNALED = "journaled"
+    """Present at the destination, and the journal recorded this digest as transferred."""
+
+    HELD_ONLY_BLOB = "held_only_blob"
+    """A push: a blob only manifest rows at a path a removal holds name (`v1-e30-t22`)."""
+
+    WITHHELD_MANIFEST = "withheld_manifest"
+    """A push: a manifest `caselist publish` withholds for its rows (`v1-e30-t25`)."""
+
+    UNREADABLE_MANIFEST = "unreadable_manifest"
+    """A push: a manifest `caselist publish` cannot read, and so refuses whole (`v1-e30-t25`)."""
+
+    SUPPRESSED_SOURCE = "suppressed_source"
+    """A blob whose digest is on the removal suppression list, either way (`v1-e30-t07`)."""
+
+    SUPPRESSION_RECORD = "suppression_record"
+    """Under `manifests/_suppression/`, which only `caselist remove` and `unsuppress` append to."""
+
+    ANOTHER_KEYSPACE = "another_keyspace"
+    """A key another keyspace's longer prefix owns, so that one plans it and this one moves nothing."""
+
+    UNDOCUMENTED_PREFIX = "undocumented_prefix"
+    """A key under none of :data:`EVIDENCE_PREFIXES`."""
+
+
+PUBLISHER_SKIP_KINDS: frozenset[SkipKind] = frozenset(
+    {SkipKind.WITHHELD_MANIFEST, SkipKind.UNREADABLE_MANIFEST}
+)
+"""The kinds whose reason is the publisher's message, which the breakdown carries word for word."""
+
+KEY_PREFIX_LENGTH = 12
+"""How much of a key the breakdown shows: `manifests/hs`, `raw/caselist`, `files/hsld26`.
+
+Short enough that a key under any of :data:`EVIDENCE_PREFIXES` is cut before anything after its
+caselist or tenant segment, which is where a built file's name would start.
+"""
+
+KEY_PREFIXES_PER_REASON = 3
+"""At most this many distinct key prefixes per kind of skip."""
 
 
 class UnsyncableKeyspace(DomainError):
@@ -325,6 +387,23 @@ class SyncKeyspace:
 
 
 @dataclass(frozen=True, slots=True)
+class ManifestWithholding:
+    """Why `caselist publish` would not upload one local manifest: its answer to a push (`v1-e30-t25`).
+
+    :func:`~debate_core.application.caselist.publish_service.withheld_manifest_reason` builds it.
+    The message is the publisher's own, which a push plans as the skip's reason word for word.
+    """
+
+    message: str
+    """The publisher's words: the rows by digest and the requests holding their paths, or the
+    refusal of a manifest it cannot read, which names the key and the line number."""
+    unreadable: bool = False
+    """True when the publisher cannot read the manifest at all, rather than withholding it for rows."""
+    request_ids: tuple[str, ...] = ()
+    """The removal requests :attr:`message` names, sorted: the removal to run again."""
+
+
+@dataclass(frozen=True, slots=True)
 class PlannedObject:
     """One object and what the planner decided about it."""
 
@@ -338,11 +417,44 @@ class PlannedObject:
     """Short, stable English for why: `absent at the destination`, `journaled at this digest`."""
     sha256: Sha256Hex | None = None
     """The source digest, when the planner had to work it out. `None` when it did not need to."""
+    skip_kind: SkipKind | None = None
+    """What kind of skip this is, for :attr:`SyncAction.SKIPPED` and nothing else."""
+    request_ids: tuple[str, ...] = ()
+    """The removal requests the publisher's reason names, for a manifest it withholds."""
+
+    def __post_init__(self) -> None:
+        if (self.action is SyncAction.SKIPPED) is (self.skip_kind is None):
+            raise ValueError(
+                f"{self.remote_key} is planned {self.action.value} with skip_kind {self.skip_kind}: a "
+                "skip carries the kind of reason it was skipped for, and nothing else carries one"
+            )
 
     @property
     def transfers(self) -> bool:
         """Whether executing the plan moves this object's bytes."""
         return self.action in (SyncAction.NEW, SyncAction.CHANGED)
+
+
+@dataclass(frozen=True, slots=True)
+class SkippedReason:
+    """Every object one plan skipped for one kind of reason, as `store sync --json` reports it."""
+
+    kind: SkipKind
+    count: int
+    key_prefixes: tuple[str, ...]
+    """Up to three distinct 12-character key prefixes, in key order."""
+    messages: tuple[str, ...] = ()
+    """The publisher's message for each object, word for word, for the two publisher kinds only."""
+    request_ids: tuple[str, ...] = ()
+    """The removal requests those messages name, sorted, for the two publisher kinds only."""
+
+    def as_json(self) -> dict[str, int | list[str]]:
+        """The entry under this kind's name in `store sync --json`'s `skipped_reasons`."""
+        entry: dict[str, int | list[str]] = {"count": self.count, "key_prefixes": list(self.key_prefixes)}
+        if self.kind in PUBLISHER_SKIP_KINDS:
+            entry["messages"] = list(self.messages)
+            entry["request_ids"] = list(self.request_ids)
+        return entry
 
 
 @dataclass(frozen=True, slots=True)
@@ -389,6 +501,21 @@ class SyncPlan:
     @property
     def byte_counts(self) -> dict[str, int]:
         return {action.value: self.bytes_for(action) for action in SyncAction}
+
+    @property
+    def skipped_reasons(self) -> tuple[SkippedReason, ...]:
+        """One entry per kind of skip this plan has, in :class:`SkipKind`'s order (`v1-e29-t11`).
+
+        Grouped by :attr:`PlannedObject.skip_kind`, never by the reason's text, which for a manifest
+        the publisher withholds is different for every manifest. A kind the plan has no skip of is
+        absent, so a pull simply has no push-only kind.
+        """
+        skipped = self.of(SyncAction.SKIPPED)
+        return tuple(
+            _skipped_reason(kind, [planned for planned in skipped if planned.skip_kind is kind])
+            for kind in SkipKind
+            if any(planned.skip_kind is kind for planned in skipped)
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -754,6 +881,7 @@ class EvidenceSyncService:
                     SyncAction.SKIPPED,
                     source.size,
                     "the suppression list and removal log are appended to by caselist remove only",
+                    skip_kind=SkipKind.SUPPRESSION_RECORD,
                 ),
                 0,
             )
@@ -768,6 +896,7 @@ class EvidenceSyncService:
                         source.size,
                         "on the removal suppression list",
                         digest,
+                        skip_kind=SkipKind.SUPPRESSED_SOURCE,
                     ),
                     0,
                 )
@@ -780,6 +909,7 @@ class EvidenceSyncService:
                         source.size,
                         "named only by manifest rows at a path a removal holds",
                         digest,
+                        skip_kind=SkipKind.HELD_ONLY_BLOB,
                     ),
                     0,
                 )
@@ -795,6 +925,7 @@ class EvidenceSyncService:
                     SyncAction.SKIPPED,
                     source.size,
                     f"in the {owner.name} keyspace, not this one",
+                    skip_kind=SkipKind.ANOTHER_KEYSPACE,
                 ),
                 0,
             )
@@ -806,6 +937,7 @@ class EvidenceSyncService:
                     SyncAction.SKIPPED,
                     source.size,
                     "not under a documented evidence prefix",
+                    skip_kind=SkipKind.UNDOCUMENTED_PREFIX,
                 ),
                 0,
             )
@@ -841,6 +973,7 @@ class EvidenceSyncService:
                     source.size,
                     "already stored under this digest",
                     keyspace.digest_of_key(key),
+                    skip_kind=SkipKind.IDENTICAL,
                 ),
                 0,
             )
@@ -855,7 +988,13 @@ class EvidenceSyncService:
         if source_digest is not None and journaled == source_digest:
             return (
                 _planned(
-                    keyspace, key, SyncAction.SKIPPED, source.size, "journaled at this digest", source_digest
+                    keyspace,
+                    key,
+                    SyncAction.SKIPPED,
+                    source.size,
+                    "journaled at this digest",
+                    source_digest,
+                    skip_kind=SkipKind.JOURNALED,
                 ),
                 0,
             )
@@ -864,7 +1003,15 @@ class EvidenceSyncService:
         heads = 1 if side.destination is keyspace.remote else 0
         if source_digest is not None and source_digest == destination_digest:
             return (
-                _planned(keyspace, key, SyncAction.SKIPPED, source.size, "identical", source_digest),
+                _planned(
+                    keyspace,
+                    key,
+                    SyncAction.SKIPPED,
+                    source.size,
+                    "identical",
+                    source_digest,
+                    skip_kind=SkipKind.IDENTICAL,
+                ),
                 heads,
             )
         reason = "no digest recorded at the destination" if destination_digest is None else "different digest"
@@ -884,10 +1031,19 @@ class EvidenceSyncService:
             or not entry.remote_key.startswith(f"{MANIFEST_DIRECTORY}/")
         ):
             return entry
-        reason = await self._withheld_manifests(source, suppression)
-        if reason is None:
+        withholding = await self._withheld_manifests(source, suppression)
+        if withholding is None:
             return entry
-        return _planned(keyspace, entry.local_key, SyncAction.SKIPPED, entry.size, reason, entry.sha256)
+        return _planned(
+            keyspace,
+            entry.local_key,
+            SyncAction.SKIPPED,
+            entry.size,
+            withholding.message,
+            entry.sha256,
+            skip_kind=SkipKind.UNREADABLE_MANIFEST if withholding.unreadable else SkipKind.WITHHELD_MANIFEST,
+            request_ids=withholding.request_ids,
+        )
 
     async def _list_remote(self, keyspace: SyncKeyspace, local_filter: str) -> tuple[ObjectInfo, ...]:
         """List the remote side, never asking for the bucket root.
@@ -1114,6 +1270,9 @@ def _planned(
     size: int,
     reason: str,
     sha256: Sha256Hex | None = None,
+    *,
+    skip_kind: SkipKind | None = None,
+    request_ids: tuple[str, ...] = (),
 ) -> PlannedObject:
     return PlannedObject(
         keyspace=keyspace.name,
@@ -1123,6 +1282,32 @@ def _planned(
         size=size,
         reason=reason,
         sha256=sha256,
+        skip_kind=skip_kind,
+        request_ids=request_ids,
+    )
+
+
+def _skipped_reason(kind: SkipKind, skipped: Sequence[PlannedObject]) -> SkippedReason:
+    """One kind's entry in the breakdown, from the plan's skips of that kind in key order.
+
+    A key under no documented prefix gives no prefix: it is whatever someone put in the local tree,
+    and its first 12 characters can be a school's name. The publisher's messages are the plans'
+    reasons as they are, and only the two publisher kinds carry them.
+    """
+    prefixes: list[str] = []
+    for planned in skipped:
+        prefix = planned.remote_key[:KEY_PREFIX_LENGTH]
+        if _is_documented_prefix(planned.remote_key) and prefix not in prefixes:
+            prefixes.append(prefix)
+    publisher = kind in PUBLISHER_SKIP_KINDS
+    return SkippedReason(
+        kind=kind,
+        count=len(skipped),
+        key_prefixes=tuple(prefixes[:KEY_PREFIXES_PER_REASON]),
+        messages=tuple(planned.reason for planned in skipped) if publisher else (),
+        request_ids=tuple(sorted({request for planned in skipped for request in planned.request_ids}))
+        if publisher
+        else (),
     )
 
 

@@ -734,6 +734,7 @@ async def test_a_release_manifest_the_publisher_cannot_read_fails_publish_in_a_w
         "import",
         "publish",
         "parse",
+        "search_index",
         "landscape",
         "report",
         "retention",

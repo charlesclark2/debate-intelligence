@@ -1497,3 +1497,14 @@ def _side(one: Disclosure, recipe: FileRecipe) -> Side:
 def test_examples_are_each_walked_through_in_the_guide(name: str) -> None:
     guide = GUIDE.read_text(encoding="utf-8")
     assert (EXAMPLES / name).read_text(encoding="utf-8") in guide
+
+
+def test_the_guide_shows_a_camp_pin_the_models_take() -> None:
+    """`v1-e33-t06` ac1: the guide's camp pin is a card item a recipe loads, with its release."""
+    guide = GUIDE.read_text(encoding="utf-8")
+    blocks = re.findall(r"```yaml\n(.*?)```", guide, flags=re.DOTALL)
+    (camp,) = [block for block in blocks if "caselist: openev" in block]
+    item = yaml.safe_load(camp)[0]
+    ((_, ref),) = load_ok(recipe_text("- " + json.dumps(item))).card_refs()
+    assert ref.pin is not None and (ref.pin.caselist, ref.pin.snapshot) == ("openev", "2031-policy")
+    assert "[OpenEv: Cascade Institute 2026 — Policy, Climate Adv CP]" in guide

@@ -101,11 +101,15 @@ from debate_core.domain.debate_files import (
 )
 from debate_core.domain.style_profile import (
     ParagraphStyleMatch,
+    RunEmphasis,
     StructuralUnit,
     StyleMatchSource,
     StyleProfile,
 )
 from debate_core.evidence.style_classifier import (
+    MAXIMUM_HEADING_CHARACTERS,
+    NAME_AND_YEAR_AT_THE_HEAD_CHARACTERS,
+    RunDescription,
     classify_paragraph,
     first_name_and_year,
     for_matching,
@@ -127,6 +131,7 @@ from debate_core.integrations.docx_parser.package import (
 from debate_core.integrations.docx_parser.runs import (
     ReadParagraph,
     SpannedText,
+    as_word_shows_it,
     concatenate_spanned_text,
     font_size_spans_for,
     formatting_spans_for,
@@ -160,7 +165,10 @@ __all__ = ["DOCX_PARSER_VERSION", "BodyParagraph", "DebateDocxParser", "body_par
 #: below it, where a cite stands; reads the cite and body rules through a paragraph style that maps
 #: to no unit; holds a long guess by its cite style only when the style marks a name and year at its
 #: head; and reads `Okonkwo ‘26`, with a left quote before the year, as a short cite.
-DOCX_PARSER_VERSION: Final = "2026.10.18-docx-5"
+#: `2026.10.20-docx-6` (`v1-e31-t24`) reads a bold line directly above a cite that opens a card with no
+#: tag as that card's tag, its bold and size read as Word shows them, and steps over an Undertag line
+#: when it looks for the body below a highlighted cite.
+DOCX_PARSER_VERSION: Final = "2026.10.20-docx-6"
 
 W_PARAGRAPH: Final = qualified_name("p")
 W_TABLE: Final = qualified_name("tbl")
@@ -222,6 +230,10 @@ _REREAD_BODY_CONFIDENCE: Final = 0.6
 
 #: A cite read from its bracket and its place is a guess of the same weight as a cite line.
 _BRACKETED_CITE_CONFIDENCE: Final = 0.6
+
+#: A tag read from its bold and its place above a cite is a guess of the same weight as the
+#: classifier's own bold line at reading size (`heuristic-direct-formatted-heading-tag`).
+_BOLD_TAG_CONFIDENCE: Final = 0.5
 
 #: The units after which a cite may stand: a tag, a line under it, or a line of the cite itself.
 _UNITS_A_CITE_STANDS_AFTER: Final = (StructuralUnit.TAG, StructuralUnit.UNDERTAG, StructuralUnit.CITE)
@@ -342,6 +354,27 @@ class _ReadSection:
     It is no longer a tag, but it still sits where one sat: the next paragraph is its sibling,
     not its child, and no tag is open beneath it.
     """
+
+
+@dataclass(frozen=True, slots=True)
+class _Provenance:
+    """What every card of one file records about where it came from."""
+
+    source: SourceDocument
+    source_path: str
+    snapshot: date
+    camp: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class _Assembled:
+    """One walk over a file's classified paragraphs: its sections and cards."""
+
+    sections: list[FileSection]
+    decided: list[_ReadSection]
+    """Each paragraph as the walk finally read it, aligned with `sections`."""
+    cards: list[ParsedCard]
+    deletions_dropped: int
 
 
 class DebateDocxParser:
@@ -746,12 +779,49 @@ class DebateDocxParser:
         snapshot: date,
         camp: str | None,
     ) -> ParsedDocument:
-        read_sections = self._demote_tags_with_no_card(
-            self._read_cites_where_a_cite_stands(self._read_sections(package))
+        classified = self._read_cites_where_a_cite_stands(self._read_sections(package))
+        provenance = _Provenance(source=source, source_path=source_path, snapshot=snapshot, camp=camp)
+        assembled = self._assemble(self._demote_tags_with_no_card(classified), provenance)
+        tags = self._bold_tags_above_cites(assembled, package)
+        if tags:
+            classified = [
+                _read_as_a_bold_tag(section) if position in tags else section
+                for position, section in enumerate(classified)
+            ]
+            assembled = self._assemble(self._demote_tags_with_no_card(classified), provenance)
+
+        warnings = list(package.warnings)
+        if package.forbidden_characters_replaced:
+            warnings.append(
+                f"{package.forbidden_characters_replaced} character(s) XML 1.0 forbids were each "
+                "replaced by U+FFFD; no other character moved"
+            )
+        if assembled.deletions_dropped:
+            warnings.append(
+                f"{assembled.deletions_dropped} tracked deletion(s) were dropped; the card is what the file "
+                "would read as, not what it used to read as"
+            )
+        return ParsedDocument(
+            source_sha256=source.sha256,
+            source_path=source_path,
+            parser_version=DOCX_PARSER_VERSION,
+            profile_version=self._profile.profile_version,
+            sections=tuple(assembled.sections),
+            cards=tuple(assembled.cards),
+            warnings=tuple(warnings),
         )
 
+    def _assemble(self, read_sections: list[_ReadSection], provenance: _Provenance) -> _Assembled:
+        """Walk the classified paragraphs once, building sections and cards."""
+        source, source_path, snapshot, camp = (
+            provenance.source,
+            provenance.source_path,
+            provenance.snapshot,
+            provenance.camp,
+        )
         open_headings: list[str | None] = [None, None, None, None]
         sections: list[FileSection] = []
+        decided: list[_ReadSection] = []
         cards: list[ParsedCard] = []
         building: _CardUnderConstruction | None = None
         deletions_dropped = 0
@@ -794,32 +864,87 @@ class DebateDocxParser:
                     in_table=section.read.in_table,
                 )
             )
+            decided.append(section)
 
             building = self._advance(building, section, path, cards, source, source_path, snapshot, camp)
 
         if building is not None:
             self._close(building, cards, source, source_path, snapshot, camp)
-
-        warnings = list(package.warnings)
-        if package.forbidden_characters_replaced:
-            warnings.append(
-                f"{package.forbidden_characters_replaced} character(s) XML 1.0 forbids were each "
-                "replaced by U+FFFD; no other character moved"
-            )
-        if deletions_dropped:
-            warnings.append(
-                f"{deletions_dropped} tracked deletion(s) were dropped; the card is what the file "
-                "would read as, not what it used to read as"
-            )
-        return ParsedDocument(
-            source_sha256=source.sha256,
-            source_path=source_path,
-            parser_version=DOCX_PARSER_VERSION,
-            profile_version=self._profile.profile_version,
-            sections=tuple(sections),
-            cards=tuple(cards),
-            warnings=tuple(warnings),
+        return _Assembled(
+            sections=sections, decided=decided, cards=cards, deletions_dropped=deletions_dropped
         )
+
+    def _bold_tags_above_cites(self, assembled: _Assembled, package: DocxPackage) -> frozenset[int]:
+        """The positions of the lines that are the tags of the cards their cites open (`v1-e31-t24`).
+
+        A cite that opens a card with no tag, and the paragraph directly above it, blank lines and
+        page furniture stepped over and never a second paragraph that says something. The line is
+        the card's tag when :meth:`_is_a_bold_tag` says so, and the cite is no guess a body may yet
+        take for itself: re-read with a tag above it, such a guess could become the body. A card
+        that already has a tag is never touched.
+        """
+        tagless = {
+            card.provenance.first_element_index for card in assembled.cards if not (card.tag or "").strip()
+        }
+        tags: set[int] = set()
+        for position, section in enumerate(assembled.sections):
+            if section.unit is not StructuralUnit.CITE or section.element_index not in tagless:
+                continue
+            if self._is_a_guess_a_body_may_take(assembled.decided[position]):
+                continue
+            above = position - 1
+            while above >= 0 and _says_nothing(assembled.sections[above]):
+                above -= 1
+            if above >= 0 and self._is_a_bold_tag(assembled.decided[above], package):
+                tags.add(above)
+        return frozenset(tags)
+
+    def _is_a_bold_tag(self, section: _ReadSection, package: DocxPackage) -> bool:
+        """Whether a line read as body or nothing is a tag in bold that the reader could not see.
+
+        `v1-e31-t19`'s item (7): a tag typed with nothing set, in a file whose document defaults make
+        every run bold at 13 pt, gave the reader an unbolded line of no size, and a bold tag with no
+        size of its own gave it no size; the classifier's bold-heading rule needs both. Here, and
+        only here, the line's bold and size are read as Word shows them
+        (:func:`~debate_core.integrations.docx_parser.runs.as_word_shows_it`): bold throughout, at
+        reading size or larger. The classifier and every other rule read what a run says.
+
+        It must also be no longer than a heading and name no source at its head; read as body or
+        nothing by a heuristic, not through a paragraph style and not by an assembly rule's re-reading;
+        and hold no highlighted run
+        and no run in the underline or emphasis style, which is read evidence, not a heading (the
+        PM's ruling of 2026-10-20).
+        """
+        match = section.match
+        # A body or nothing read through a paragraph style is refused below; what an assembly rule
+        # re-read, a cite guess the body took, keeps its reading.
+        if match.unit not in (StructuralUnit.EVIDENCE, StructuralUnit.OTHER) or match.rule_id.startswith(
+            "assembly-"
+        ):
+            return False
+        description = section.read.description
+        if self._profile.resolve_paragraph_style(
+            description.style_id, description.style_name, description.style_based_on
+        ):
+            return False
+        text = section.read.text.strip()
+        if not text or len(text) > MAXIMUM_HEADING_CHARACTERS or description.has_highlighted_run:
+            return False
+        if any(self._marks_read_evidence(run) for run in description.visible_runs):
+            return False
+        source = first_name_and_year(text, self._profile)
+        if source is not None and source.start() <= NAME_AND_YEAR_AT_THE_HEAD_CHARACTERS:
+            return False
+        shown = as_word_shows_it(description, package)
+        size = shown.effective_half_points
+        return shown.effective_bold and size is not None and size >= self._profile.shrink.body_half_points
+
+    def _marks_read_evidence(self, run: RunDescription) -> bool:
+        """Whether a run carries the underline or emphasis character style: evidence a debater cut."""
+        match = self._profile.resolve_character_style(
+            run.character_style_id, run.character_style_name, run.character_style_based_on
+        )
+        return match is not None and match.emphasis in (RunEmphasis.UNDERLINE, RunEmphasis.EMPHASIS)
 
     def _advance(
         self,
@@ -1011,14 +1136,45 @@ def _reread_as_body(section: _ReadSection, reason: str) -> _ReadSection:
     )
 
 
+#: What the look-ahead for a body steps over: page furniture, blank lines and lines read as nothing,
+#: and an Undertag line, which belongs to the card above it. A built file writes its provenance line
+#: as an Undertag below every cite (`v1-e33-t02`), and a highlighted cite with that line between it
+#: and its body was read as body until `v1-e31-t24`.
+_UNITS_A_BODY_IS_LOOKED_FOR_PAST: Final = (StructuralUnit.OTHER, StructuralUnit.UNDERTAG)
+
+
+def _read_as_a_bold_tag(section: _ReadSection) -> _ReadSection:
+    """The same paragraph as the tag of the card below it, with the rule it overrode on record."""
+    match = section.match
+    return _ReadSection(
+        read=section.read,
+        match=ParagraphStyleMatch(
+            unit=StructuralUnit.TAG,
+            rule_id=f"assembly-bold-tag-above-a-cite:{match.rule_id}",
+            match_source=StyleMatchSource.HEURISTIC,
+            confidence=_BOLD_TAG_CONFIDENCE,
+        ),
+        in_text_box=section.in_text_box,
+    )
+
+
+def _says_nothing(section: FileSection) -> bool:
+    """A blank line, a table cell or a text box: stepped over, as the cite rules step over them."""
+    return (
+        not section.text.strip()
+        or section.in_table
+        or section.match.rule_id.startswith(("assembly-text-box", "assembly-table-cell"))
+    )
+
+
 def _followed_by_a_body(sections: Sequence[_ReadSection]) -> list[bool]:
-    """For each paragraph, whether the next one that is not `OTHER` was classified as body."""
+    """For each paragraph, whether the next one that is not `OTHER` or an undertag is body."""
     followed = [False] * len(sections)
     a_body_is_next = False
     for position in range(len(sections) - 1, -1, -1):
         followed[position] = a_body_is_next
         unit = sections[position].match.unit
-        if unit is not StructuralUnit.OTHER:
+        if unit not in _UNITS_A_BODY_IS_LOOKED_FOR_PAST:
             a_body_is_next = unit is StructuralUnit.EVIDENCE
     return followed
 

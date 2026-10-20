@@ -101,6 +101,7 @@ __all__ = [
     "W_NAMESPACE",
     "DocxPackage",
     "DocxPackageError",
+    "InheritedRunProperties",
     "REPLACEMENT_CHARACTER",
     "PackageLimits",
     "StyleDefinition",
@@ -264,6 +265,22 @@ class DocxPackageError(Exception):
 
 
 @dataclass(frozen=True, slots=True)
+class InheritedRunProperties:
+    """The bold and size a style, or the document's defaults, give a run that says nothing of either.
+
+    Word shows a run's bold and size from the nearest of: the run itself, its character style, its
+    paragraph style (the document's default paragraph style when it names none), and the document's
+    defaults, each style through its `w:basedOn` chain. The parser reads a run's own properties
+    only, so a file whose defaults are bold at 13 pt shows a line typed with nothing set as a bold
+    tag and gives the reader an unbolded line of no size (`v1-e31-t24`). What is here is read so
+    that it can be counted; nothing in the parser reads it.
+    """
+
+    bold: bool | None = None
+    half_points: int | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class StyleDefinition:
     """One `w:style` from `word/styles.xml`: enough to resolve it through the style profile."""
 
@@ -271,6 +288,10 @@ class StyleDefinition:
     style_name: str | None
     style_type: str | None
     based_on: str | None
+    run_properties: InheritedRunProperties = field(default=InheritedRunProperties())
+    """The style's own `w:rPr` bold and size, not its ancestors'."""
+    is_default: bool = False
+    """`w:default="1"`: the style a paragraph (or run) of its type has when it names none."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -292,6 +313,8 @@ class DocxPackage:
     """How many characters XML 1.0 forbids were replaced by U+FFFD, over every part parsed."""
     document_part: str = "word/document.xml"
     """The main document part's name, as the package relationships give it."""
+    run_defaults: InheritedRunProperties = field(default=InheritedRunProperties())
+    """`w:docDefaults/w:rPrDefault`'s bold and size: what a run has when nothing else says."""
 
     def style_name(self, style_id: str | None) -> str | None:
         """The `w:name` of a style as this document defines it, or None."""
@@ -608,6 +631,25 @@ def _styles_part(archive: zipfile.ZipFile, document_part: str) -> str | None:
     return candidate if candidate in names else None
 
 
+#: `w:val` spellings of "off", read as :mod:`debate_core.integrations.docx_parser.runs` reads a run's.
+_OFF_VALUES: Final = frozenset({"0", "false", "off"})
+
+
+def _read_inherited_run_properties(properties: XmlElement | None) -> InheritedRunProperties:
+    """The bold and size in one `w:rPr`, each None when it says nothing of it."""
+    if properties is None:
+        return InheritedRunProperties()
+    bold_element = properties.find(qualified_name("b"))
+    bold = None
+    if bold_element is not None:
+        value = bold_element.get(qualified_name("val"))
+        bold = value is None or value.strip().lower() not in _OFF_VALUES
+    size_element = properties.find(qualified_name("sz"))
+    size = None if size_element is None else size_element.get(qualified_name("val"))
+    half_points = int(size) if size is not None and size.strip().isdigit() and int(size) > 0 else None
+    return InheritedRunProperties(bold=bold, half_points=half_points)
+
+
 def _read_styles(root: XmlElement) -> dict[str, StyleDefinition]:
     """Build the document's own style table: id, name, type and `basedOn` for every `w:style`."""
     styles: dict[str, StyleDefinition] = {}
@@ -617,13 +659,25 @@ def _read_styles(root: XmlElement) -> dict[str, StyleDefinition]:
             continue
         name_element = element.find(qualified_name("name"))
         based_on_element = element.find(qualified_name("basedOn"))
+        default = element.get(qualified_name("default"))
         styles[style_id] = StyleDefinition(
             style_id=style_id,
             style_name=None if name_element is None else name_element.get(qualified_name("val")),
             style_type=element.get(qualified_name("type")),
             based_on=None if based_on_element is None else based_on_element.get(qualified_name("val")),
+            run_properties=_read_inherited_run_properties(element.find(qualified_name("rPr"))),
+            is_default=default is not None and default.strip().lower() in ("1", "true", "on"),
         )
     return styles
+
+
+def _read_run_defaults(root: XmlElement) -> InheritedRunProperties:
+    """`w:docDefaults/w:rPrDefault/w:rPr`'s bold and size."""
+    defaults = root.find(qualified_name("docDefaults"))
+    run_default = None if defaults is None else defaults.find(qualified_name("rPrDefault"))
+    return _read_inherited_run_properties(
+        None if run_default is None else run_default.find(qualified_name("rPr"))
+    )
 
 
 def open_debate_docx(
@@ -678,6 +732,7 @@ def open_debate_docx(
             parts_read.insert(0, "_rels/.rels")
         warnings: list[str] = []
         styles: dict[str, StyleDefinition] = {}
+        run_defaults = InheritedRunProperties()
         styles_part = _styles_part(archive, document_part)
         if styles_part is None:
             warnings.append("the package defines no styles part; every unit comes from a heuristic")
@@ -685,6 +740,7 @@ def open_debate_docx(
             styles_xml = _parse_xml(_read_part(archive, styles_part, limits), styles_part, replacement)
             replaced += styles_xml.forbidden_characters_replaced
             styles = _read_styles(styles_xml.root)
+            run_defaults = _read_run_defaults(styles_xml.root)
             parts_read.append(styles_part)
 
         return DocxPackage(
@@ -696,6 +752,7 @@ def open_debate_docx(
             warnings=tuple(warnings),
             forbidden_characters_replaced=replaced,
             document_part=document_part,
+            run_defaults=run_defaults,
         )
 
 

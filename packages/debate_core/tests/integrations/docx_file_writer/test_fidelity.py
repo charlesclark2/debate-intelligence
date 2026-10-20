@@ -5,7 +5,7 @@ highlight colour, font size) read from the built file are compared with the same
 source. These tests re-parse the built file themselves: they do not rely on the writer's own
 read-back, which they are also a check on.
 
-The parser is the current one, `2026.10.18-docx-5`. Formatting is compared as the characters each
+The parser is the current one, `2026.10.20-docx-6`. Formatting is compared as the characters each
 emphasis covers (:func:`~debate_core.domain.file_provenance.formatting_sha256`'s reading), because the
 parser joins two touching spans only when the same rule found them, and the writer re-maps a source's
 style aliases to the profile's ids. Font-size spans are compared exactly.
@@ -37,7 +37,7 @@ from debate_core.application.ports.evidence_file_writer import (
 from debate_core.domain.caselist import SourceDocument, SourceFormat, SourceOrigin
 from debate_core.domain.debate_files import ParsedCard, ParsedDocument
 from debate_core.domain.style_profile import RunEmphasis
-from debate_core.integrations.docx_file_writer.writer import HIGHLIGHTED_CITE_CAUSE, DocxEvidenceFileWriter
+from debate_core.integrations.docx_file_writer.writer import DocxEvidenceFileWriter
 from debate_core.integrations.docx_parser.parser import DOCX_PARSER_VERSION, DebateDocxParser
 from debate_core.testing.docx_builder import build_docx, paragraph_xml, run_xml
 from debate_core.testing.file_builder import (
@@ -248,7 +248,7 @@ def test_the_tracked_change_and_the_comment_are_resolved_the_parsers_way(parser:
 
 
 def test_the_parser_ac1_is_measured_with_is_the_current_one(parser: DebateDocxParser) -> None:
-    assert parser.parser_version == DOCX_PARSER_VERSION == "2026.10.18-docx-5"
+    assert parser.parser_version == DOCX_PARSER_VERSION == "2026.10.20-docx-6"
 
 
 # ------------------------------------------------------------------------------------------------
@@ -386,39 +386,34 @@ UNDERTAG_LINE = paragraph([("[Disclosed: hspolicy26 2026-09-15]", {})], "Underta
 def parser_steps_over_an_undertag(parser: DebateDocxParser) -> bool:
     """Whether the parser reads a highlighted cite as a cite with an Undertag line before its body.
 
-    False at `2026.10.18-docx-5`. `v1-e31-t24` is to make it True (PM ruling, 2026-10-19).
+    False at `2026.10.18-docx-5`; `v1-e31-t24` made it True (PM ruling, 2026-10-19).
     """
     card = _source_card(parser, build_docx(TAG + HIGHLIGHTED_CITE + UNDERTAG_LINE + BODY))
     return card.full_cite.startswith("Okonkwo 26")
 
 
-def test_a_highlighted_cite_is_refused_until_the_parser_steps_over_the_line(parser: DebateDocxParser) -> None:
-    """The one shape the provenance line changes, pinned so it flips with `v1-e31-t24`.
+def test_a_highlighted_cite_builds_and_reads_back_with_the_line_below_it(parser: DebateDocxParser) -> None:
+    """The one shape the provenance line changed, until `v1-e31-t24`.
 
-    The parser reads a highlighted cite as a cite only when its body is directly below it, and the
-    line stands between them, so today the read-back refuses the card and names that as the cause.
-    When `v1-e31-t24` makes the parser step over an Undertag line, the same card builds and reads
-    back as its source, and this test then asserts that instead: the writer moves with the parser
-    and needs no change of its own.
+    The parser read a highlighted cite as a cite only when its body was directly below it, and the
+    line stands between them, so the read-back refused the card and named the line as the cause.
+    Now the parser steps over an Undertag line, so the card builds and reads back as its source, with
+    the line as its undertag: the writer moved with the parser and did not change.
     """
     content = build_docx(TAG + HIGHLIGHTED_CITE + BODY)
     source = _source_card(parser, content)
     assert any(rule_id.startswith("assembly-highlighted-cite-before-the-body") for rule_id in source.rule_ids)
     cards, result = build_all(parser, content)
-    if parser_steps_over_an_undertag(parser):
-        assert_every_card_reads_as_its_source(parser, cards, result)
-        return
-    assert isinstance(result, FileBuildRefusal), "the line changes this card today; it must not be built"
-    (refusal,) = result.refusals
-    assert refusal.code is CardRefusalCode.READBACK_MISMATCH
-    assert refusal.detail.startswith(HIGHLIGHTED_CITE_CAUSE + ": ")
-    assert refusal.detail.endswith("; without the line the card reads as its source")
+    assert_every_card_reads_as_its_source(parser, cards, result)
+    assert isinstance(result, BuiltEvidenceFile)
+    built = reparse(parser, result.docx).cards[0]
+    assert built.full_cite == source.full_cite
+    assert result.manifest.cards[0].provenance_line in built.undertag.split("\n")
 
 
-def test_today_the_parser_does_not_step_over_the_line(parser: DebateDocxParser) -> None:
-    """The state the pin above is in at `2026.10.18-docx-5`; `v1-e31-t24` turns this over."""
-    assert parser.parser_version == "2026.10.18-docx-5"
-    assert parser_steps_over_an_undertag(parser) is False
+def test_the_parser_steps_over_the_line(parser: DebateDocxParser) -> None:
+    """The state the test above rests on, turned over by `v1-e31-t24`."""
+    assert parser_steps_over_an_undertag(parser) is True
 
 
 def test_a_card_the_line_does_not_change_is_refused_without_blaming_the_line(

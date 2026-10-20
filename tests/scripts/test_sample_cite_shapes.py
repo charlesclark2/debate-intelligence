@@ -23,6 +23,7 @@ from debate_core.application.ports.parsed_store import DocumentRecord, SourceEnt
 from debate_core.domain.caselist import SourceFormat
 from debate_core.domain.debate_files import CardCompleteness, ParsedCard, ParsedDocument
 from debate_core.evidence.fingerprints import FINGERPRINT_VERSION
+from debate_core.integrations.docx_parser.parser import DebateDocxParser
 from debate_core.integrations.local.parsed_store import LocalParsedStore
 from debate_core.testing.docx_builder import build_docx, paragraph_xml, run_xml
 
@@ -612,5 +613,149 @@ def test_the_left_quote_plan_asks_its_28_and_shows_the_short_cite(
     assert f"Short cite read:  Okonkwo {LEFT_QUOTE}26" in capsys.readouterr().out
     written = saved.read_text()
     for word in ("Okonkwo", "Adaeze", "Tenth", "Grid", CASELIST):
+        assert word not in written, word
+    assert not re.search(r"[0-9a-f]{12}", written)
+
+
+# ------------------------------------------------------------------------------------------------
+# v1-e31-t24: the bold-tag plan, the line above a cite
+# ------------------------------------------------------------------------------------------------
+
+#: (7)'s formatting: document defaults bold at 13 pt; bodies and cites switch bold off and set a size.
+BOLD_DEFAULT_STYLES = (
+    '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+    '<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+    '<w:docDefaults><w:rPrDefault><w:rPr><w:b w:val="1"/><w:sz w:val="26"/></w:rPr></w:rPrDefault>'
+    "</w:docDefaults>"
+    '<w:style w:type="paragraph" w:styleId="Normal" w:default="1"><w:name w:val="normal"/></w:style>'
+    '<w:style w:type="paragraph" w:styleId="Heading4"><w:name w:val="heading 4"/>'
+    '<w:basedOn w:val="Normal"/></w:style>'
+    "</w:styles>"
+)
+
+
+def _off(text: str, **formatting: Any) -> str:
+    return run_xml(text, bold=False, half_points=READING_SIZE, **formatting)
+
+
+def _bracketed(name: str) -> str:
+    return paragraph_xml(_off(f"{name} [{qualifications(450)}, {SOURCE}] KR"))
+
+
+def _cut(stem: str) -> str:
+    return paragraph_xml(_off(prose(400, f"{stem} "), underline="single"))
+
+
+#: 0 tag, 1 bracketed cite, 2 body; 3 (7)'s line, nothing set, above 4 a bracketed cite: taken;
+#: 5 body; 6 a plain line above 7 a bracketed cite: left; 8 body; 9 a line with nothing set above
+#: 10 a short name-and-year cite: taken; 11 body; 12 a line with nothing set inside the body, above
+#: no cite; 13 body.
+BOLD_TAG_FILE = build_docx(
+    paragraph_xml(run_xml("First tag"), style="Heading4")
+    + _bracketed("Okonkwo 26")
+    + _cut("Alpha")
+    + paragraph_xml(run_xml("Demand outruns ") + run_xml("new generation", underline="single"))
+    + _bracketed("Ferreira 25")
+    + _cut("Bravo")
+    + paragraph_xml(_off("A note left plain"))
+    + _bracketed("Achebe 23")
+    + _cut("Charlie")
+    + paragraph_xml(run_xml("Imports cannot ") + run_xml("close the gap", underline="single"))
+    + paragraph_xml(_off("Nakamura 20, invented report on grid imports"))
+    + _cut("Delta")
+    + paragraph_xml(run_xml("A line in the middle of a body"))
+    + _cut("Echo"),
+    styles_xml=BOLD_DEFAULT_STYLES,
+)
+BOLD_TAG_DIGEST = hashlib.sha256(BOLD_TAG_FILE).hexdigest()
+TAKEN_BRACKETED, TAKEN_OTHER, LEFT, ELSEWHERE = 13, 14, 15, 16
+
+
+def _bold_tag_strata() -> list[tuple[int, int]]:
+    parser = script._ReadingParser()  # pyright: ignore[reportPrivateUsage]
+    source = script._Source(CASELIST, BOLD_TAG_DIGEST, Path("unused"), Path("unused"), VERSION)  # pyright: ignore[reportPrivateUsage]
+    document = parser.parse(BOLD_TAG_FILE, script_source(source), source_path="sample.docx")
+    assert isinstance(document, ParsedDocument)
+    assert parser.package is not None
+    shown = script._as_word_shows_them(parser.reads, parser.package)  # pyright: ignore[reportPrivateUsage]
+    return script.bold_tag_strata(
+        parser.reads,
+        shown,
+        document,
+        parser.profile,
+        defaults_bold=script.defaults_make_text_bold(parser.package),
+    )
+
+
+@pytest.fixture
+def as_docx_5_read_it(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The sample was taken on `2026.10.18-docx-5`, before `v1-e31-t24`'s rule: switch the rule off."""
+    monkeypatch.setattr(DebateDocxParser, "_bold_tags_above_cites", lambda *_: frozenset())
+
+
+@pytest.mark.usefixtures("as_docx_5_read_it")
+def test_the_bold_tag_strata_of_a_file_in_sevens_formatting() -> None:
+    assert _bold_tag_strata() == [(TAKEN_BRACKETED, 3), (LEFT, 6), (TAKEN_OTHER, 9), (ELSEWHERE, 12)]
+
+
+def test_at_docx_6_only_what_the_rule_leaves_is_drawn() -> None:
+    assert _bold_tag_strata() == [(LEFT, 6), (ELSEWHERE, 12)]
+
+
+def test_the_bold_tag_plan_draws_36() -> None:
+    source = script._Source(CASELIST, BOLD_TAG_DIGEST, Path("unused"), Path("unused"), VERSION)  # pyright: ignore[reportPrivateUsage]
+    found = {number: [(source, position) for position in range(30)] for number in range(len(script.STRATA))}
+    drawn = Counter(stratum for stratum, _, _ in script.draw(found, 5, script.BOLD_TAG_PLAN))
+    assert drawn == {TAKEN_BRACKETED: 10, TAKEN_OTHER: 10, LEFT: 6, ELSEWHERE: 10}
+    assert [script.STRATA[n].question for n in (TAKEN_BRACKETED, TAKEN_OTHER, LEFT, ELSEWHERE)] == [
+        script.TAG_QUESTION,
+        script.TAG_QUESTION,
+        script.TAG_QUESTION,
+        script.HEADING_QUESTION,
+    ]
+
+
+@pytest.fixture
+def bold_tag_dir(tmp_path: Path) -> Path:
+    blob = tmp_path / "blobs" / "sha256" / BOLD_TAG_DIGEST[:2] / BOLD_TAG_DIGEST[2:4] / BOLD_TAG_DIGEST
+    blob.parent.mkdir(parents=True)
+    blob.write_bytes(BOLD_TAG_FILE)
+    version = tmp_path / "parsed" / CASELIST / VERSION
+    version.mkdir(parents=True)
+    (version / "index.jsonl").write_text(
+        json.dumps({"source_sha256": BOLD_TAG_DIGEST, "outcome": "PARSED"}) + "\n"
+    )
+    return tmp_path
+
+
+@pytest.mark.usefixtures("as_docx_5_read_it")
+def test_the_bold_tag_plan_shows_each_line_as_word_shows_it_and_saves_counts_alone(
+    bold_tag_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    saved = tmp_path / "tallies.txt"
+    _keys(monkeypatch, ["y", "n", "u", "y"])
+
+    arguments = ["--data-dir", str(bold_tag_dir), "--caselist", CASELIST, "--plan", "bold-tag", "--seed", "3"]
+    assert script.main([*arguments, "--save-tallies", str(saved), "--workers", "1"]) == 0
+
+    lines = saved.read_text().splitlines()
+    assert (
+        lines[0]
+        == "Cite-shape sample (v1-e31-t19), bold-tag plan, seed 3: drew 4 items from 1 parsed sources."
+    )
+    assert re.fullmatch(r"  Asked 4; answered 4 in \d+ seconds\.", lines[1])
+    assert [line.split(":")[0].strip() for line in lines[2:]] == [
+        "a bold line above a cite | taken, above a bracketed cite",
+        "a bold line above a cite | taken, above another cite",
+        "a bold line above a cite | left, read as body or nothing",
+        "a bold line in a file whose defaults make text bold | above no cite, read as body or nothing",
+    ]
+    for line in lines[2:]:
+        assert re.fullmatch(r"  .+: in the corpus 1; drew 1 of \d+; yes \d, no \d, unsure \d", line), line
+    shown = capsys.readouterr().out
+    assert ">>> \x1b[1mDemand outruns \x1b[0m" in shown, "bold by the file's defaults, as Word shows it"
+    assert ">>> A note left plain" in shown, "bold switched off is shown plain"
+    written = saved.read_text()
+    for word in ("Demand", "Okonkwo", "First tag", CASELIST):
         assert word not in written, word
     assert not re.search(r"[0-9a-f]{12}", written)

@@ -1935,3 +1935,100 @@ paragraphs, 2,914 were read as small-print body and 329 as a cite the body kept.
 
 No long body was answered "no cards". With ten a stratum, 2 of 10 is 6% to 51% at 95% (Wilson),
 and 0 of 10 is at most 28%; 0 of 20 at most 16%.
+
+## A bold tag above a cite that opens a card with no tag (`v1-e31-t24`)
+
+`v1-e31-t19`'s item (7): in one hspf26 file, two cards read by the bracketed cite-line rule had no
+tag, and the line above each cite was read as body; in Word each line is the card's tag in bold.
+The two lines say nothing of bold or size themselves. Their file, a Google Docs export, sets its
+document defaults to bold at 13 pt, so Word shows a tag, and the parser, which reads what a run
+says, saw an unbolded line of no size that the bold-heading rule could not take. The counts read
+bold and size both ways: as the reader gives them, and as Word shows them, with what a run
+inherits from its styles and the document's defaults.
+
+All counts are read-only over the dev data directory's `2026.10.18-docx-5` store (11,154 parsed
+sources), counts and rule names only. Every source parsed again gave back its stored cards' ranges:
+0 not reproduced, 0 without a blob.
+
+### The counts, before any rule changed
+
+`scripts/count_tag_above_bracketed_cite.py --expect-version 2026.10.18-docx-5`, in the session,
+2026-10-19, 15 seconds; `--every-source` by the operator, 2026-10-19, 353 seconds.
+
+| | hsld26 | hspf26 | hspolicy26 | openev | Total |
+|---|---|---|---|---|---|
+| Cites read by a bracketed rule | 153 | 255 | 51 | 39 | 498 |
+| **The shape: the line above one, read as body or nothing, bold as Word shows it or in a tag style** | 0 | **17** | 0 | 0 | **17** |
+| Files holding the shape | 0 | 10 | 0 | 0 | 10 |
+| Files whose defaults make text bold | 3 | 30 | 9 | 0 | 42 |
+| Lines the rule proposed to the PM would take, above any cite, in every file | 115 | 784 | 22 | 0 | 921 |
+| Files holding them | 61 | 239 | 10 | 0 | 310 |
+| Of the 921, bold only by inheritance | 6 | 60 | 5 | 0 | 71 |
+
+All 17 lines of the shape stand above a cite that opens a card with no tag, are 300 characters or
+fewer and name no source at their head; 15 are bold only by their file's defaults, and all 17 state
+no size of their own. 12 were read as body (the last paragraph of the card above) and 5 as nothing.
+Lines Word shows as bold headings, read as body or nothing and above no cite, in the 42 files with
+bold defaults: 417.
+
+### The sample
+
+`scripts/sample_cite_shapes.py --plan bold-tag --seed 20261020`, by the operator, 2026-10-19: 36
+items, 845 seconds answering. Each marked line was shown with the bold and size Word gives it.
+
+| Stratum | In the store | Asked | Answers |
+|---|---|---|---|
+| The proposed rule takes it, above a bracketed cite | 17 | 10 | the card's tag 10 |
+| The proposed rule takes it, above another cite | 904 | 10 | the card's tag 10 |
+| The proposed rule leaves it, read as body or nothing | 3,573 | 6 | the card's tag 1, not 5 |
+| A bold line above no cite, in a file whose defaults make text bold | 417 | 10 | a heading 3, not 7 |
+
+0 wrong takes of 20 is at most 16% at 95% (Wilson). Reading Word's formatting in the classifier
+everywhere would be wrong 7 times in 10 on the last stratum.
+
+### The PM's ruling (2026-10-20)
+
+The rule above any cite, with guards: only where the cite opens a card with no tag; inherited
+formatting is read inside this rule only, never by the classifier; a line with a highlighted run or
+a run in the underline or emphasis style stays body; one paragraph only (blank lines and page
+furniture stepped over, never a second text paragraph). The rule is
+`assembly-bold-tag-above-a-cite`; the parser is `2026.10.20-docx-6`, which also steps over an
+Undertag line when it looks for the body below a highlighted cite (ac4).
+
+### Before and after, over the files the rule can reach
+
+`scripts/diff_tag_above_a_cite.py`, in the session, 2026-10-20, 175 seconds: every source whose
+stored cards hold a card with no tag and a cite (2,373), parsed twice by `docx-6`, with the rule off
+and on. With the rule off every one gives back its stored cards' ranges, so the Undertag step-over
+changes none of them.
+
+| | hsld26 | hspf26 | hspolicy26 | openev | Total |
+|---|---|---|---|---|---|
+| Lines the sampled rule takes | 115 | 784 | 22 | 0 | 921 |
+| Lines the parser takes | 101 | 760 | 14 | 0 | **875** |
+| Left by the guard on a highlighted run | 9 | 21 | 8 | 0 | 38 |
+| Left by the guard on the underline or emphasis style | 5 | 2 | 0 | 0 | 7 |
+| Left because the cite is a guess a body may yet take | 0 | 1 | 0 | 0 | 1 |
+| Files with a line taken | 48 | 225 | 6 | 0 | 279 |
+| **Cards that gain a tag** | 101 | 760 | 14 | 0 | **875** |
+| **Cards above that lose their last body paragraph** | 28 | 112 | 10 | 0 | **150** |
+| Cards above that vanish: a tag whose only body was the taken line, now an analytic | 0 | 5 | 0 | 0 | 5 |
+| Cards with no tag further down whose heading path now names the taken line | 2 | 103 | 2 | 0 | 107 |
+| of which changed in nothing else | 2 | 97 | 1 | 0 | 100 |
+| **Any other card that changed** | 0 | 0 | 0 | 0 | **0** |
+| Cards unchanged | 13,541 | 14,975 | 26,267 | 5,114 | 59,897 |
+
+A card can show more than one effect: one that gains a tag can also lose its last paragraph to the
+tag of the card below. (7)'s cards 2 and 3 of 16 both read with their tags, the line that was the
+last paragraph of the card above each.
+
+### The labelled evaluation
+
+`scripts/run_parser_eval.py --tier pr-subset`, before (`docx-5`) and after (`docx-6`): every score
+the same, the gate passed both times. TAG precision 0.949 and recall 0.861; CITE precision 0.969 and
+recall 0.705. The six labelled files hold none of the shape.
+
+### The re-parse to `docx-6` (operator-run, after the merge)
+
+Not run yet. The steps are in `docs/session-reports/v1-e31-t24-bold-tag-above-bracketed-cite.md`,
+Operator follow-ups; the counts go here when they are in.

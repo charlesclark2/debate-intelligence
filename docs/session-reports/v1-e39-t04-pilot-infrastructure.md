@@ -452,8 +452,10 @@ domain's status list straight afterwards. At 19:50 CDT the registry still showed
 `NXDOMAIN`. The session is polling the `.com` servers until the domain is delegated again. Neither
 address is recorded here.
 
-**Steps 3 and 5–10: not yet run.** They need both the domain hold lifted and the concurrency
-increase. Step 3 waits for the concurrency increase, and will plan 37 to
+**The concurrency quota was raised.** `get-requested-service-quota-change` → `CASE_CLOSED`, and
+`get-account-settings` → `1000	1000`. At 19:52 CDT the domain was still on `clientHold`.
+
+**Steps 3 and 5–10: not yet run.** They wait only for the domain hold to lift. Step 3 waits for the concurrency increase, and will plan 37 to
 add, not 41. ac5, the runbook's tables
 and the `Succeeded` phase wait for steps 3–10.
 

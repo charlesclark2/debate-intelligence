@@ -1,4 +1,5 @@
-# TASK v1-e31-t24-bold-tag-above-bracketed-cite - A bold tag above a bracketed cite is read as the card's tag
+# TASK v1-e31-t24-bold-tag-above-bracketed-cite - A bold tag above a cite is read as the card's tag
+# PM ruling 2026-10-20: scope (a), the rule above any cite, with four guards. The id and file name keep "bracketed".
 # Epic: E31 Debate File Parsing | Release: v1.1 | Major: V1
 ---
 apiVersion: planspec.io/v1alpha1
@@ -12,9 +13,11 @@ metadata:
     debate/release: v1.1
     debate/epic: v1-e31-debate-file-parsing
   annotations:
-    debate/title: "A bold tag above a bracketed cite is read as the card's tag"
+    # PM ruling 2026-10-20: scope (a), the rule above any cite, with four guards.
+    debate/title: "A bold tag above a cite is read as the card's tag"
 spec:
   # Filed by the PM, 2026-10-19, from v1-e31-t19's ac5 item (7), with the operator's check in Word of 2026-10-19.
+  # PM ruling 2026-10-20: scope (a), the rule above any cite, with four guards.
   description: >-
     v1-e31-t19's (7): in the hspf26 file of v1-e31-t12's step 6
     (`heuristic-cite-line-bracketed`), cards 2 and 3 of 16 have no tag, and the line above each
@@ -23,7 +26,12 @@ spec:
     the dev store as t12 and t19 counted (a line directly above a cite the bracketed rule reads,
     read as body or nothing, in bold or a tag style), then sample it with
     `scripts/sample_cite_shapes.py` if more than a few files hold it, then fix the parser for
-    what is a defect. Counts come first and the PM rules before the rule changes. Merge before
+    what is a defect. Counts come first and the PM rules before the rule changes. (PM ruling
+    2026-10-20: scope (a), the rule above any cite, with four guards.) The fix reads a bold line
+    directly above a cite as the card's tag: only where the cite opens a card with no tag; its
+    bold and size read as Word shows them inside this rule only, never by the classifier; never a
+    line with a highlighted run or a run in the underline or emphasis style; one paragraph only,
+    blank lines and page furniture stepped over. Merge before
     the combined re-parse of v1-e31-t19 and v1-e31-t20 if it can, so one re-parse carries it.
     (PM amendment 2026-10-19, from v1-e33-t02's ruling (d) and its Follow-up 1.) The same task
     makes the highlighted-cite look-ahead (v1-e31-t19's
@@ -53,8 +61,10 @@ spec:
         caselist and, if sampled, the coach's tallies.
     - id: ac2
       description: >-
-        The fix has synthetic fixtures shown failing first, the two cards of (7) read with
-        their tags, and the labelled evaluation's tag and cite precision do not fall.
+        (PM ruling 2026-10-20: scope (a), the rule above any cite, with four guards.) The fix,
+        a bold tag above a cite that opens a card with no tag read as the card's tag, has
+        synthetic fixtures shown failing first, the two cards of (7) read with their tags, and
+        the labelled evaluation's tag and cite precision do not fall.
     - id: ac3
       description: >-
         `parser_version` is bumped; the re-parse is the operator's and is recorded in
@@ -80,16 +90,16 @@ metadata:
     debate/epic: v1-e31-debate-file-parsing
 spec:
   description: >-
-    Count the bold tag above a bracketed cite, then read it as the card's tag.
+    Count the bold tag above a cite, then read it as the card's tag.
   goalRef:
     name: v1-e31-t24-bold-tag-above-bracketed-cite
   graph:
     nodes:
       - id: bold-tag
         kind: Task
-        name: Bold tag above a bracketed cite
+        name: Bold tag above a cite
         description: >-
-          Count the bold tag above a bracketed cite, then read it as the card's tag.
+          Count the bold tag above a cite, then read it as the card's tag.
         estimatedEffort: 3h
         acceptanceCriteria:
           - type: test_passes

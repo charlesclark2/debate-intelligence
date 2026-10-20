@@ -468,17 +468,68 @@ whenever it is built, build it from the `docx-6` store, after step 3 here.
 - **The 417 bold lines above no cite, in files with bold defaults:** 3 of 10 were headings. They
   may be tags of cards with no cite, or blocks, typed with nothing set. They are not read now, and
   that is a separate question from this rule.
-- **Scratch files**, in the session's scratchpad, hold counts, booleans and lengths only. They will
-  be deleted at the PM's word.
+- **Scratch files** (counts, booleans and lengths only) were deleted on 2026-10-20, at the PM's word.
 
 ## PM review
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-20
 
 **Notes:**
+
+Accepted. Two small things happen in this session before the pull request (below). The pull
+request then opens with `--partial`: ac3's re-parse is the operator's after the merge, and no task
+depends on this one, so nothing is held back.
+
+**What is good:**
+
+* **The cause was found, not guessed.** Document defaults making every run bold at 13 pt is why the
+  bold-heading rule never saw (7). Reading inherited formatting inside this rule only, as ruled,
+  keeps the classifier unchanged everywhere else.
+* **The before-and-after diff is the evidence I asked for:**
+  * 875 cards gain a tag;
+  * 150 cards above lose a paragraph;
+  * 0 other cards change.
+  * When the first run showed 160 "other" cards, you broke them down rather than explaining them
+    away, and the script now tests each kind of change, including a real "other".
+* **The figures agree with each other:** 875 = 101 + 760 + 14, and the operator's expected no-tag
+  falls match them exactly (1,563 → 1,462; 3,038 → 2,278; 1,093 → 1,079). hspf26's 50,246 cards
+  become 50,241 by the 5 that vanish.
+* **The labelled evaluation is unchanged, score for score,** and `--write-baseline` was not passed.
+* **The mutation survivors were handled honestly:** four got fixtures, and one check that no input
+  reaches was deleted, with the hspf26 diff re-run to show nothing changed. 25 runs against a cap of
+  about 20 is fine for that reason.
+
+**Rulings:**
+
+* **Deviation 6: both accepted.**
+  * **The 100 heading-path-only cards** are the rule's reading followed through. A tagless card sits
+    under the open tag above it, and that tag is now the taken line.
+  * **The 5 cards that vanish** were never cards. They were a tag whose "body" was the next card's
+    tag line, so becoming analytics is a fix, not a loss.
+  * Record both categories beside the three numbers in `docs/data/caselist-parse-report.md`'s
+    section, as the report already does.
+* **Deviation 3: amend the spec in this session.**
+  * Change "bracketed cite" to "a cite" in its title, description and ac2.
+  * Add a comment: `PM ruling 2026-10-20: scope (a), the rule above any cite, with four guards`.
+  * Keep the task id and file name.
+  * Run `validate_specs.py`.
+* **Deviations 1, 2, 4, 5 and 7:** accepted. The three extra refusals keep the rule inside what was
+  sampled, which is what I want.
+* **The 1 tag of 6 the rule leaves:** your breakdown is the right starting point. I will file a p3
+  task that draws again from "bold in part", counts first.
+* **The writer's `HIGHLIGHTED_CITE_CAUSE` branch:** the v1-e33-t03 amendment is in my next batch.
+* **Scratch files:** delete them before the pull request.
+
+**When the operator re-parses.** The agent runs Wednesday at 06:00 on `dev64`, which parses as
+`docx-5`. The re-parse (steps 1 to 7) and the agent reinstall (step 8) belong on the same day, after
+Wednesday's run has finished. Step 1's `caselist runs --last 1` is then also v1-e34-t17 ac5's
+check. Steps 4 to 6 come to the PM before step 7, as you wrote. The PM records ac3 in a close-out.
+
+**The search index (v1-e39-t02):** its measurement build now can stay on `docx-5`. The first
+index that is published is built from the `docx-6` store, after step 3.

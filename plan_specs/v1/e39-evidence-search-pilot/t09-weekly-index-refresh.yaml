@@ -16,13 +16,39 @@ metadata:
 spec:
   # Filed by the PM, 2026-10-19, from Charlie's direction of 2026-10-19 (a student search pilot before the
   # semester ends, on Chromebooks, signing in with a username, password and 2FA, outside the school's systems).
+  # PM ruling 2026-10-20 (v1-e39-t09 Q1): (a) the stage builds whenever the store changed, offline;
+  # (b) it publishes to the agent's own environment when a session exists, after the sha256 check,
+  # pointer last, through v1-e39-t02's publish service, and otherwise reports "built, publish
+  # pending", which the next run with a session or `tub index publish --index <newest>` catches up;
+  # (c) publishing the index to prod stays the operator's step until the agent runs against prod.
+  # This replaces "publishes it to prod".
+  # PM amendment 2026-10-20 (v1-e39-t02 second review): reconcile the suppression copies before the
+  # build when the bucket is reachable; report the SQLite size for every build.
+  # PM rulings 2026-10-20 (v1-e39-t09 Q2, Q3, Q5): the digests come from one build-service method the
+  # build itself uses; the stores are the run's configured caselists plus openev; the size warnings
+  # are ADR-0019's lines.
   description: >-
-    After the weekly run's parse and publish stages (E34), a new stage builds the index with
-    v1-e39-t02's command and publishes it to prod when the parsed store changed since the
-    current index's snapshot; it is reported in the run summary, and a failure leaves the
-    previous index current and shows in the stale-data warning (v1-e34-t03). The pointer moves
-    only after the uploaded index's sha256 is verified. The stage is skipped, and says so, when
-    the installed build's parser or fingerprint version is not the parsed store's.
+    After the weekly run's parse stage (E34), and before landscape, a new stage keeps the student
+    search index current for the run's configured caselists plus openev. In order: when an AWS
+    session exists it reconciles the suppression list's copies (RecordedSuppressionList.reconcile),
+    so a removal made on another machine reaches the index, and when the bucket cannot be reached
+    it builds from this machine's copy and the summary says so; it computes the stores'
+    occurrences_sha256 and the suppression list's sha256 through one build-service method, the one
+    the build's own manifest is computed by; it builds with v1-e39-t02's build service, offline,
+    when those digests (or the build's versions and settings) differ from the newest local index's
+    manifest under <data_dir>/tub-index/, and otherwise skips the build saying so; and when a
+    session exists and the published current.json names another index than that one, it publishes
+    it to the agent's own environment through v1-e39-t02's publish service, each object's sha256
+    checked as it lands and the pointer last. Without a session the stage reports "built, publish
+    pending", and the next run with a session publishes that index without rebuilding it unless
+    reconciling changed the suppression digest; `tub index publish --index <newest>` is the
+    by-hand catch-up. Publishing to prod stays the operator's step until the agent runs against
+    prod. A failed build or upload leaves the previous pointer and the previous local index, and
+    the failure reason names the index still current. The run summary reports the SQLite bytes and
+    bytes per document for every build, and warns above 900,000,000 SQLite bytes (ADR-0019's 1 GB
+    uncompressed ceiling) and above 400,000,000 gzip bytes (ADR-0019's bandwidth revisit trigger).
+    The stage is skipped, and says so, when the installed build's parser or fingerprint version is
+    not the parsed store's, and when this run's parse stage failed.
   priority: 2
   constraints:
     packages: [debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/runbooks]
@@ -39,10 +65,14 @@ spec:
       description: >-
         The stage builds and publishes only when the store changed, by test over a stubbed
         run, shown failing first.
+    # PM ruling 2026-10-20 (v1-e39-t09 Q4): the v1-e34-t03 stale-data warning is the landscape
+    # banner, which names no index; a failed stage reaches the operator through the run's failure
+    # notification, and its reason names the index still current. Was "and stale-data warning".
     - id: ac2
       description: >-
-        A failed build or upload leaves the previous pointer and appears in the run summary
-        and stale-data warning, by test.
+        A failed build or upload leaves the previous pointer and the previous local index, and
+        appears in the run summary and failure notification (v1-e34-t03), its reason naming the
+        index still current, by test.
     - id: ac3
       description: >-
         A version mismatch skips the stage with its reason, by test.
@@ -50,6 +80,22 @@ spec:
       description: >-
         The next agent install records one weekly run that published an index (operator
         follow-up).
+    # PM amendment 2026-10-20 (v1-e39-t02 second review).
+    - id: ac5
+      description: >-
+        With a session the stage reconciles the suppression copies before the build, and without
+        one it builds from this machine's copy and the summary says so; an index built without a
+        session is published by the next run that has one without a rebuild, unless reconciling
+        changed the suppression digest. By test, both paths shown failing first.
+    - id: ac6
+      description: >-
+        The summary reports the SQLite bytes and bytes per document for every build, and warns
+        above 900,000,000 SQLite bytes and 400,000,000 gzip bytes, naming ADR-0019's line, by test.
+    # PM ruling 2026-10-20 (v1-e39-t09 Q2).
+    - id: ac7
+      description: >-
+        The build-service method the stage compares with returns the same digests as a real
+        build's manifest on the same store, by test.
 status:
   phase: InProgress
 ---

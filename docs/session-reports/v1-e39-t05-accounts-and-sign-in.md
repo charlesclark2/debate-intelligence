@@ -6,7 +6,7 @@
 | Spec | [`plan_specs/v1/e39-evidence-search-pilot/t05-accounts-and-sign-in.yaml`](../../plan_specs/v1/e39-evidence-search-pilot/t05-accounts-and-sign-in.yaml) |
 | Epic / release | `v1-e39-evidence-search-pilot` / `v1.7` |
 | Branch | `task/v1-e39-t05-accounts-and-sign-in` |
-| Session status | COMPLETE except ac5, the operator's dev run; the Goal stays `InProgress` until it is recorded |
+| Session status | COMPLETE: every criterion PASS, ac5 on the operator's first dev run; the Goal is `Succeeded` (corrected after ruling (d), 2026-10-20) |
 
 ## Summary
 
@@ -21,7 +21,9 @@ The pilot now has ADR-0019 (d)'s sign-in, built as the PM's notes set out. In `d
 - **The gate:** exactly four session-free routes, enforced when a route is registered. No session
   until an authenticator is registered, through the app's own enrolment page, except for an
   `email-second-factor` account with a verified email.
-- **The account page:** add, verify and remove the backup email, and replace the authenticator.
+- **The account page:** add, verify and remove the backup email; for a new phone, it sends the
+  student to the coach for a reset, as there is no self-service replacement in the pilot (corrected
+  after ruling (d), 2026-10-20).
 - **The script:** the one first-party `/static/<hash>/app.js`, which sends every POST with the body
   hash and the CSRF header.
 

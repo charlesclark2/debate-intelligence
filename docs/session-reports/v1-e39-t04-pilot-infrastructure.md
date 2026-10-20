@@ -546,7 +546,27 @@ prod is applied.
   - `Init Duration: 1848.35 ms` (within the ADR's expected 1–2 s);
   - `Max Memory Used` 81–82 MB of 2,048 MB.
 
-**Steps 9–10: not yet run.** Step 3 waits for the concurrency increase, and will plan 37 to
+**2026-10-19, step 9 (least privilege, `simulate-principal-policy`):** every decision as expected.
+
+- **The function's role:**
+  - `allowed`: `s3:GetObject` on `reports/tub/search/current.json`, `raw/example/file.docx` and
+    `manifests/_suppression/suppression-list.jsonl`; `logs:CreateLogStream` and
+    `logs:PutLogEvents` on the audit group; `ssm:GetParameter` on the cookie-keys parameter.
+  - `implicitDeny`: `s3:GetObjectVersion`, `s3:PutObject` and `s3:DeleteObject` under `raw/`;
+    `s3:GetObject` under `parsed/`; `s3:ListBucket`; `logs:DeleteLogGroup`, `logs:DeleteLogStream`
+    and `logs:PutRetentionPolicy`; `cognito-idp:AdminCreateUser` and `cognito-idp:ListUsers`.
+  - No attached managed policy.
+- **TubDeployer:**
+  - `allowed`: `lambda:UpdateFunctionCode` on `debate-dev-tub`.
+  - `implicitDeny`: the same action on `debate-prod-tub`; `lambda:UpdateFunctionConfiguration`,
+    `iam:PassRole` and `s3:GetObject`.
+- **TubAccounts:**
+  - `allowed`: `cognito-idp:AdminCreateUser` on the dev pool.
+  - `implicitDeny`: `cognito-idp:AdminInitiateAuth` and `cognito-idp:AdminUpdateUserAttributes`.
+
+ADR-0019's role table is thus confirmed against AWS's own evaluation, not only the mocked test.
+
+**Step 10: not yet run.** Step 3 waits for the concurrency increase, and will plan 37 to
 add, not 41. ac5, the runbook's tables
 and the `Succeeded` phase wait for steps 3–10.
 

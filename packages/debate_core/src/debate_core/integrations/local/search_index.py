@@ -32,9 +32,9 @@ file name in its header, so it depends on the file and on zlib.
 ## SQLite 3.40.0's features and no newer
 
 The function's Lambda image runs SQLite 3.40.0 (ADR-0019 (c) 1), so every statement here uses only
-what 3.40.0 has: plain tables, a `WITHOUT ROWID` table (3.8.2), FTS5 with an external content table
-and the `unicode61` tokenizer with `remove_diacritics 2` (3.27.0), and the `rebuild` and `optimize`
-commands. No `STRICT` table, no JSON function, no `contentless_delete`, no `locale`, no trigram
+what 3.40.0 has: plain tables, a `WITHOUT ROWID` table (in SQLite since 2013), FTS5 with an external
+content table and the `unicode61` tokenizer with `remove_diacritics 2` (3.27.0), and the `rebuild`
+and `optimize` commands. No `STRICT` table, no JSON function, no `contentless_delete`, no `locale`, no trigram
 tokenizer. :data:`WRITER_PRAGMAS` lists every pragma the writer sets, and the tests trace every
 statement it runs against that list.
 """

@@ -38,7 +38,7 @@ from typing import Final
 from debate_core.domain.debate_files import FileSection, ParsedCard, ParsedDocument
 from debate_core.domain.file_provenance import FileProvenanceEntry
 from debate_core.domain.file_recipe import CAMP_STORE
-from debate_core.domain.style_profile import StructuralUnit, StyleMatchSource, StyleProfile
+from debate_core.domain.style_profile import StructuralUnit, StyleProfile
 from debate_core.evidence.file_checks.report import CheckResult, CheckStatus, QualityCheck
 from debate_core.evidence.fingerprints import card_fingerprint
 from debate_core.evidence.near_duplicates import cluster_near_duplicates
@@ -273,10 +273,9 @@ def check_headings(
         if unit in _HEADINGS:
             expected = style_ids[unit]
             match = section.match
-            if (
-                match.match_source is not StyleMatchSource.VERBATIM
-                or match.rule_id != f"verbatim-style-id:{expected}"
-            ):
+            # The exact style id's rule, and only it, is a VERBATIM match: an alias, a display name,
+            # a `basedOn` ancestor or a heuristic each has a rule id of its own.
+            if match.rule_id != f"verbatim-style-id:{expected}":
                 violation(
                     section,
                     f"a {unit.lower()} heading not in the profile's {expected} style ({match.rule_id})",

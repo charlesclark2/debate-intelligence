@@ -50,11 +50,16 @@ def _differs(field: str, built: str, source: str) -> str:
     )
 
 
-def _against_source(
-    entry: FileProvenanceEntry, built: ParsedCard, source: ParsedCard, built_fingerprint: str
-) -> list[str]:
-    """Every way the built card is not the source card, by field."""
+def _against_source(entry: FileProvenanceEntry, built: ParsedCard, source: ParsedCard) -> list[str]:
+    """Every way the built card is not the source card, by field.
+
+    The built card's fingerprint is compared with the source card's and not again with the
+    sidecar's: the source card's is checked against the sidecar's, and the alignment check compares
+    the document's fingerprints with the sidecar's (a mutation run could not tell a third comparison
+    from its absence, so it was removed).
+    """
     problems: list[str] = []
+    built_fingerprint = card_fingerprint(built).exact_fingerprint
     source_fingerprint = card_fingerprint(source).exact_fingerprint
     if built_fingerprint != source_fingerprint:
         problems.append(_differs("fingerprint", built_fingerprint, source_fingerprint))
@@ -137,14 +142,8 @@ def check_identity(
         built = built_cards[entry.position - 1] if entry.position <= len(built_cards) else None
         if built is None:
             problems.append("the built file has no card at this position")
-        else:
-            built_fingerprint = card_fingerprint(built).exact_fingerprint
-            if built_fingerprint != entry.fingerprint:
-                problems.append(
-                    f"the built card's fingerprint is not the sidecar's (built {_prefix(built_fingerprint)})"
-                )
-            if source is not None:
-                problems.extend(_against_source(entry, built, source, built_fingerprint))
+        elif source is not None:
+            problems.extend(_against_source(entry, built, source))
         if not problems:
             results.append(
                 CheckResult(

@@ -324,6 +324,7 @@ def sync_report(report: SyncReport, settings: Settings) -> dict[str, JsonValue]:
         ],
         "mismatched": [planned.remote_key for planned in plan.of(SyncAction.MISMATCHED)],
         "journal": str(report.journal_path) if report.journal_path is not None else None,
+        "skipped_reasons": {},
     }
 
 

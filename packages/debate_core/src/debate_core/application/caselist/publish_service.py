@@ -98,6 +98,7 @@ from debate_core.application.errors import (
     error_code_of,
     reported_error_message,
 )
+from debate_core.application.evidence_sync import ManifestWithholding
 from debate_core.application.ports.evidence_store import EvidenceObjectStore, ObjectInfo, ObjectKey
 from debate_core.application.ports.suppression import SuppressionList, SuppressionState
 from debate_core.domain import Sha256Hex
@@ -531,7 +532,7 @@ class CaselistPublishService:
 
 async def withheld_manifest_reason(
     local: LocalEvidence, manifest: ObjectInfo, suppression: SuppressionState
-) -> str | None:
+) -> ManifestWithholding | None:
     """Why a publish withholds this local manifest for its rows, in its own words; `None` when it does not.
 
     What `store sync` asks before it pushes a manifest (`v1-e30-t25`), so that a push never sends
@@ -551,13 +552,13 @@ async def withheld_manifest_reason(
     try:
         snapshot = await read_local_manifest(local, manifest)
     except UnreadableManifest as refused:
-        return str(refused)
+        return ManifestWithholding(str(refused))
     if snapshot is None:
         return None
     (plan,) = build_publish_plan(
         snapshot.caselist, [snapshot], local_blobs=(), remote={}, suppression=suppression
     ).snapshots
-    return _withheld_for_rows(plan) if plan.withholding_rows else None
+    return ManifestWithholding(_withheld_for_rows(plan)) if plan.withholding_rows else None
 
 
 # ------------------------------------------------------------------------------------------------

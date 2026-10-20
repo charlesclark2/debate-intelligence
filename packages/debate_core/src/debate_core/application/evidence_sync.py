@@ -146,7 +146,10 @@ __all__ = [
     "EvidenceSyncService",
     "HeldBackDigests",
     "JournalEntry",
+    "ManifestWithholding",
     "PlannedObject",
+    "SkipKind",
+    "SkippedReason",
     "SyncAction",
     "SyncDirection",
     "SyncJournal",
@@ -178,7 +181,7 @@ passing every test against moto, which grants everything. So an unfiltered run l
 turn, and an object whose key is under none of them is reported and not transferred.
 """
 
-type WithheldManifests = Callable[[ObjectInfo, SuppressionState], Awaitable[str | None]]
+type WithheldManifests = Callable[[ObjectInfo, SuppressionState], Awaitable[ManifestWithholding | None]]
 """Why `caselist publish` withholds a local manifest, or `None` when it does not (`v1-e30-t25`).
 
 :func:`~debate_core.application.caselist.publish_service.withheld_manifest_reason` over this machine's
@@ -240,6 +243,43 @@ class SyncAction(StrEnum):
 
     MISMATCHED = "mismatched"
     """A content-addressed key whose two sides differ. Never written over; fails the run."""
+
+
+class SkipKind(StrEnum):
+    """Why the planner skipped an object, as one stable word a summary can group by (`v1-e29-t11`).
+
+    :attr:`PlannedObject.reason` is free text, and some reasons carry specifics: the publisher's
+    message names rows by digest and request id. Grouping by that text would give one group per
+    object, so every `skipped` object also carries one of these, and the `skipped_reasons` breakdown
+    of `store sync --json` is grouped by it. The reason text stays the plan's own; this names its kind.
+    """
+
+    IDENTICAL = "identical"
+    """The destination already holds these bytes: the same digest, or a blob's key on both sides."""
+
+    JOURNALED = "journaled"
+    """Present at the destination, and the journal recorded this digest as transferred."""
+
+    HELD_ONLY_BLOB = "held_only_blob"
+    """A push: a blob only manifest rows at a path a removal holds name (`v1-e30-t22`)."""
+
+    WITHHELD_MANIFEST = "withheld_manifest"
+    """A push: a manifest `caselist publish` withholds for its rows (`v1-e30-t25`)."""
+
+    UNREADABLE_MANIFEST = "unreadable_manifest"
+    """A push: a manifest `caselist publish` cannot read, and so refuses whole (`v1-e30-t25`)."""
+
+    SUPPRESSED_SOURCE = "suppressed_source"
+    """A blob whose digest is on the removal suppression list, either way (`v1-e30-t07`)."""
+
+    SUPPRESSION_RECORD = "suppression_record"
+    """Under `manifests/_suppression/`, which only `caselist remove` and `unsuppress` append to."""
+
+    ANOTHER_KEYSPACE = "another_keyspace"
+    """A key another keyspace's longer prefix owns, so that one plans it and this one moves nothing."""
+
+    UNDOCUMENTED_PREFIX = "undocumented_prefix"
+    """A key under none of :data:`EVIDENCE_PREFIXES`."""
 
 
 class UnsyncableKeyspace(DomainError):
@@ -325,6 +365,23 @@ class SyncKeyspace:
 
 
 @dataclass(frozen=True, slots=True)
+class ManifestWithholding:
+    """Why `caselist publish` would not upload one local manifest: its answer to a push (`v1-e30-t25`).
+
+    :func:`~debate_core.application.caselist.publish_service.withheld_manifest_reason` builds it.
+    The message is the publisher's own, which a push plans as the skip's reason word for word.
+    """
+
+    message: str
+    """The publisher's words: the rows by digest and the requests holding their paths, or the
+    refusal of a manifest it cannot read, which names the key and the line number."""
+    unreadable: bool = False
+    """True when the publisher cannot read the manifest at all, rather than withholding it for rows."""
+    request_ids: tuple[str, ...] = ()
+    """The removal requests :attr:`message` names, sorted: the removal to run again."""
+
+
+@dataclass(frozen=True, slots=True)
 class PlannedObject:
     """One object and what the planner decided about it."""
 
@@ -338,11 +395,32 @@ class PlannedObject:
     """Short, stable English for why: `absent at the destination`, `journaled at this digest`."""
     sha256: Sha256Hex | None = None
     """The source digest, when the planner had to work it out. `None` when it did not need to."""
+    skip_kind: SkipKind | None = None
+    """What kind of skip this is, for :attr:`SyncAction.SKIPPED` and nothing else."""
+    request_ids: tuple[str, ...] = ()
+    """The removal requests the publisher's reason names, for a manifest it withholds."""
 
     @property
     def transfers(self) -> bool:
         """Whether executing the plan moves this object's bytes."""
         return self.action in (SyncAction.NEW, SyncAction.CHANGED)
+
+
+@dataclass(frozen=True, slots=True)
+class SkippedReason:
+    """Every object one plan skipped for one kind of reason, as `store sync --json` reports it."""
+
+    kind: SkipKind
+    count: int
+    key_prefixes: tuple[str, ...]
+    """Up to three distinct 12-character key prefixes, in key order."""
+    messages: tuple[str, ...] = ()
+    """The publisher's message for each object, word for word, for the two publisher kinds only."""
+    request_ids: tuple[str, ...] = ()
+    """The removal requests those messages name, sorted, for the two publisher kinds only."""
+
+    def as_json(self) -> dict[str, int | list[str]]:
+        return {}
 
 
 @dataclass(frozen=True, slots=True)
@@ -389,6 +467,11 @@ class SyncPlan:
     @property
     def byte_counts(self) -> dict[str, int]:
         return {action.value: self.bytes_for(action) for action in SyncAction}
+
+    @property
+    def skipped_reasons(self) -> tuple[SkippedReason, ...]:
+        """One entry per kind of skip this plan has, in :class:`SkipKind`'s order."""
+        return ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -884,10 +967,12 @@ class EvidenceSyncService:
             or not entry.remote_key.startswith(f"{MANIFEST_DIRECTORY}/")
         ):
             return entry
-        reason = await self._withheld_manifests(source, suppression)
-        if reason is None:
+        withholding = await self._withheld_manifests(source, suppression)
+        if withholding is None:
             return entry
-        return _planned(keyspace, entry.local_key, SyncAction.SKIPPED, entry.size, reason, entry.sha256)
+        return _planned(
+            keyspace, entry.local_key, SyncAction.SKIPPED, entry.size, withholding.message, entry.sha256
+        )
 
     async def _list_remote(self, keyspace: SyncKeyspace, local_filter: str) -> tuple[ObjectInfo, ...]:
         """List the remote side, never asking for the bucket root.

@@ -52,7 +52,7 @@ spec:
         field description in `debate_core/domain/card_occurrence.py` says the exact digest is the
         same in card-fingerprint-v1, v2 and v3.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

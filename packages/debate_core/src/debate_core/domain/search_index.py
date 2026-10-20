@@ -33,7 +33,7 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Iterable, Sequence
-from typing import Any, Final, Literal, NamedTuple, Self
+from typing import Any, Final, Literal, NamedTuple, Self, cast
 
 from pydantic import Field, model_validator
 
@@ -234,33 +234,89 @@ class IndexedFontSizeSpan(NamedTuple):
 
 
 def encode_formatting_spans(spans: Sequence[FormattingSpan]) -> str:
-    """`documents.formatting_spans`: the spans as compact JSON. Skeleton: still the parser's objects."""
-    return json.dumps(
-        [span.model_dump(mode="json") for span in spans],
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=False,
+    """`documents.formatting_spans`: each span as `[emphasis, start, end]`, and a colour after a highlight's.
+
+    In the parser's order, as compact JSON: `[["UNDERLINE",0,15],["HIGHLIGHT",9,22,"cyan"]]`. The
+    parser's `rule_id` and `match_source` say how a span was found, not what it looks like, so they
+    are left out: neither the card page nor `formatting_sha256`'s coverage reads them, and they were
+    more than half the index (PM review 2026-10-20, question 4).
+    """
+    return _compact(
+        [span.emphasis.value, span.start_offset, span.end_offset]
+        + ([span.highlight_color] if span.highlight_color is not None else [])
+        for span in spans
     )
 
 
 def decode_formatting_spans(stored: str) -> tuple[IndexedFormattingSpan, ...]:
-    """The spans `encode_formatting_spans` wrote. Skeleton."""
-    return ()
+    """The spans :func:`encode_formatting_spans` wrote, in order. `ValueError` for anything else."""
+    decoded: list[IndexedFormattingSpan] = []
+    for item in _items(stored):
+        if len(item) not in (3, 4) or not isinstance(item[0], str):
+            raise ValueError(
+                "a stored formatting span is [emphasis, start, end] or [emphasis, start, end, colour]"
+            )
+        try:
+            emphasis = RunEmphasis(item[0])
+        except ValueError:
+            raise ValueError(f"not an emphasis: {item[0]!r}") from None
+        start, end = _offsets(item[1], item[2])
+        colour = item[3] if len(item) == 4 else None
+        if not isinstance(colour, str | None) or (emphasis is RunEmphasis.HIGHLIGHT) != (colour is not None):
+            raise ValueError("a highlight span names its colour, and only a highlight span does")
+        decoded.append(IndexedFormattingSpan(emphasis, start, end, colour))
+    return tuple(decoded)
 
 
 def encode_font_size_spans(spans: Sequence[FontSizeSpan]) -> str:
-    """`documents.font_size_spans`. Skeleton: still the parser's objects."""
-    return json.dumps(
-        [span.model_dump(mode="json") for span in spans],
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=False,
-    )
+    """`documents.font_size_spans`: each span as `[start, end, half_points]`, in order, as compact JSON."""
+    return _compact([span.start_offset, span.end_offset, span.half_points] for span in spans)
 
 
 def decode_font_size_spans(stored: str) -> tuple[IndexedFontSizeSpan, ...]:
-    """The spans `encode_font_size_spans` wrote. Skeleton."""
-    return ()
+    """The spans :func:`encode_font_size_spans` wrote, in order. `ValueError` for anything else."""
+    decoded: list[IndexedFontSizeSpan] = []
+    for item in _items(stored):
+        if len(item) != 3:
+            raise ValueError("a stored font-size span is [start, end, half_points]")
+        start, end = _offsets(item[0], item[1])
+        half_points = _integer(item[2])
+        if half_points <= 0:
+            raise ValueError("a stored font size is a positive number of half-points")
+        decoded.append(IndexedFontSizeSpan(start, end, half_points))
+    return tuple(decoded)
+
+
+def _compact(items: Iterable[list[Any]]) -> str:
+    return json.dumps(list(items), separators=(",", ":"), ensure_ascii=False)
+
+
+def _items(stored: str) -> list[list[object]]:
+    try:
+        parsed: object = json.loads(stored)
+    except json.JSONDecodeError:
+        raise ValueError("stored spans are not JSON") from None
+    if not isinstance(parsed, list):
+        raise ValueError("stored spans are a JSON array of arrays")
+    items: list[list[object]] = []
+    for item in cast(list[object], parsed):
+        if not isinstance(item, list):
+            raise ValueError("stored spans are a JSON array of arrays")
+        items.append(cast(list[object], item))
+    return items
+
+
+def _integer(value: object) -> int:
+    if not isinstance(value, int) or isinstance(value, bool):
+        raise ValueError("a stored span's offsets and sizes are integers")
+    return value
+
+
+def _offsets(start: object, end: object) -> tuple[int, int]:
+    first, last = _integer(start), _integer(end)
+    if not 0 <= first < last:
+        raise ValueError("a stored span starts before it ends, at an offset of 0 or more")
+    return first, last
 
 
 def read_aloud_text(text: str, spans: Iterable[FormattingSpan | IndexedFormattingSpan]) -> str:

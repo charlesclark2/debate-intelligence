@@ -58,17 +58,24 @@ from debate_core.domain.caselist import (
 from debate_core.domain.debate_files import (
     CardCompleteness,
     FileImportProvenance,
+    FontSizeSpan,
     FormattingSpan,
     ParsedCard,
     ParsedDocument,
 )
+from debate_core.domain.file_provenance import formatting_sha256
 from debate_core.domain.search_index import (
     SEARCH_INDEX_FORMAT_VERSION,
     SEARCH_INDEX_GZIP_NAME,
     SEARCH_INDEX_MANIFEST_NAME,
     SEARCH_INDEX_MANIFEST_SCHEMA_FILENAME,
     SEARCH_INDEX_SQLITE_NAME,
+    IndexedFontSizeSpan,
+    IndexedFormattingSpan,
     SearchIndexManifest,
+    decode_font_size_spans,
+    decode_formatting_spans,
+    read_aloud_text,
     render_search_index_manifest_schema,
 )
 from debate_core.domain.style_profile import RunEmphasis, StyleMatchSource
@@ -135,6 +142,7 @@ def parsed_card(
     cite: str = "Okonkwo 26, Invented Journal of Growth",
     completeness: CardCompleteness = CardCompleteness.FULL,
     spans: Sequence[FormattingSpan] = (),
+    font_sizes: Sequence[FontSizeSpan] = (),
     camp: str | None = None,
 ) -> ParsedCard:
     return ParsedCard(
@@ -144,6 +152,7 @@ def parsed_card(
         evidence_text=text,
         completeness=completeness,
         formatting_spans=tuple(spans),
+        font_size_spans=tuple(font_sizes),
         match_source=StyleMatchSource.HEURISTIC,
         confidence=0.9,
         provenance=FileImportProvenance(
@@ -784,12 +793,8 @@ def test_search_index_read_aloud_is_the_underlined_or_highlighted_text(tmp_path:
     store.occurs(card, disclosed_by=(SCHOOL, TEAM))
     built = store.service(tmp_path / "data").build(tmp_path / "out")
     assert built.query("SELECT read_aloud FROM documents") == [("Invented growth always badly",)]
-    stored = json.loads(built.query("SELECT formatting_spans FROM documents")[0][0])
-    assert [(one["emphasis"], one["start_offset"], one["end_offset"]) for one in stored] == [
-        ("UNDERLINE", 0, 15),
-        ("HIGHLIGHT", 9, 22),
-        ("BOLD", 23, 27),
-        ("UNDERLINE", 28, 33),
+    assert built.query("SELECT formatting_spans FROM documents") == [
+        ('[["UNDERLINE",0,15],["HIGHLIGHT",9,22,"cyan"],["BOLD",23,27],["UNDERLINE",28,33]]',)
     ]
 
 
@@ -847,3 +852,146 @@ def test_search_index_refuses_a_row_whose_card_is_not_in_its_source(tmp_path: Pa
     with pytest.raises(SearchIndexStoreNotReady, match="holds no card"):
         store.service(tmp_path / "data").build(tmp_path / "out")
     assert [path.name for path in (tmp_path / "out").iterdir()] == [], "a failed build leaves nothing behind"
+
+
+# ------------------------------------------------------------------------------------------------
+# The stored spans: compact, and the same formatting (PM review 2026-10-20, question 4 (a))
+# ------------------------------------------------------------------------------------------------
+
+EVERY_EMPHASIS_TEXT: Final = "Invented growth always ends badly for everyone involved in invented trade"
+
+
+def span(emphasis: RunEmphasis, start: int, end: int, colour: str | None = None) -> FormattingSpan:
+    return FormattingSpan(
+        emphasis=emphasis,
+        start_offset=start,
+        end_offset=end,
+        highlight_color=colour,
+        rule_id=f"verbatim-style-id:{emphasis.value.title()}",
+        match_source=StyleMatchSource.VERBATIM,
+    )
+
+
+#: Every emphasis the parser writes, in the parser's order (not sorted), one with a colour.
+EVERY_EMPHASIS: Final = (
+    span(RunEmphasis.UNDERLINE, 0, 15),
+    span(RunEmphasis.EMPHASIS, 9, 15),
+    span(RunEmphasis.HIGHLIGHT, 9, 22, "cyan"),
+    span(RunEmphasis.BOLD, 23, 27),
+    span(RunEmphasis.UNDERLINE, 28, 33),
+    span(RunEmphasis.SHRUNK, 34, 55),
+    span(RunEmphasis.CITE, 56, 60),
+    span(RunEmphasis.UNDERTAG, 60, 62),
+    span(RunEmphasis.ANALYTIC, 62, 64),
+    span(RunEmphasis.HEADING, 64, 66),
+)
+FONT_SIZES: Final = (
+    FontSizeSpan(start_offset=0, end_offset=33, half_points=22),
+    FontSizeSpan(start_offset=34, end_offset=55, half_points=12),
+)
+
+#: Written by hand from the two tuples above: what `documents` stores for them, byte for byte.
+STORED_FORMATTING: Final = (
+    '[["UNDERLINE",0,15],["EMPHASIS",9,15],["HIGHLIGHT",9,22,"cyan"],["BOLD",23,27],'
+    '["UNDERLINE",28,33],["SHRUNK",34,55],["CITE",56,60],["UNDERTAG",60,62],["ANALYTIC",62,64],'
+    '["HEADING",64,66]]'
+)
+STORED_FONT_SIZES: Final = "[[0,33,22],[34,55,12]]"
+
+
+@pytest.fixture
+def every_emphasis(tmp_path: Path) -> Built:
+    store = Store()
+    card = store.card(
+        S_ONE, 0, sha("every emphasis"), EVERY_EMPHASIS_TEXT, spans=EVERY_EMPHASIS, font_sizes=FONT_SIZES
+    )
+    store.occurs(card, disclosed_by=(SCHOOL, TEAM))
+    return store.service(tmp_path / "data").build(tmp_path / "out")
+
+
+def test_search_index_stored_spans_decode_to_the_parser_spans_without_rule_or_match_source(
+    every_emphasis: Built,
+) -> None:
+    assert {one.emphasis for one in EVERY_EMPHASIS} == set(RunEmphasis), "the fixture uses every emphasis"
+    formatting, font_sizes = every_emphasis.query("SELECT formatting_spans, font_size_spans FROM documents")[
+        0
+    ]
+
+    assert (formatting, font_sizes) == (STORED_FORMATTING, STORED_FONT_SIZES)
+    assert decode_formatting_spans(formatting) == (
+        IndexedFormattingSpan(RunEmphasis.UNDERLINE, 0, 15),
+        IndexedFormattingSpan(RunEmphasis.EMPHASIS, 9, 15),
+        IndexedFormattingSpan(RunEmphasis.HIGHLIGHT, 9, 22, "cyan"),
+        IndexedFormattingSpan(RunEmphasis.BOLD, 23, 27),
+        IndexedFormattingSpan(RunEmphasis.UNDERLINE, 28, 33),
+        IndexedFormattingSpan(RunEmphasis.SHRUNK, 34, 55),
+        IndexedFormattingSpan(RunEmphasis.CITE, 56, 60),
+        IndexedFormattingSpan(RunEmphasis.UNDERTAG, 60, 62),
+        IndexedFormattingSpan(RunEmphasis.ANALYTIC, 62, 64),
+        IndexedFormattingSpan(RunEmphasis.HEADING, 64, 66),
+    )
+    assert decode_font_size_spans(font_sizes) == (
+        IndexedFontSizeSpan(0, 33, 22),
+        IndexedFontSizeSpan(34, 55, 12),
+    )
+    assert (
+        "rule_id" not in formatting and "verbatim-style-id" not in formatting and "VERBATIM" not in formatting
+    )
+
+
+def test_search_index_read_aloud_and_formatting_coverage_are_unchanged_by_the_encoding(
+    every_emphasis: Built,
+) -> None:
+    text, read_aloud, formatting, font_sizes = every_emphasis.query(
+        "SELECT text, read_aloud, formatting_spans, font_size_spans FROM documents"
+    )[0]
+    decoded = decode_formatting_spans(formatting)
+
+    assert read_aloud == "Invented growth always badly"
+    assert (
+        read_aloud_text(text, decoded) == read_aloud == read_aloud_text(EVERY_EMPHASIS_TEXT, EVERY_EMPHASIS)
+    )
+    rebuilt = tuple(
+        FormattingSpan(
+            emphasis=one.emphasis,
+            start_offset=one.start_offset,
+            end_offset=one.end_offset,
+            highlight_color=one.highlight_color,
+            rule_id="read back from the index",
+            match_source=StyleMatchSource.HEURISTIC,
+        )
+        for one in decoded
+    )
+    sizes = tuple(
+        FontSizeSpan(start_offset=one.start_offset, end_offset=one.end_offset, half_points=one.half_points)
+        for one in decode_font_size_spans(font_sizes)
+    )
+    assert formatting_sha256(rebuilt, sizes) == formatting_sha256(EVERY_EMPHASIS, FONT_SIZES)
+
+
+@pytest.mark.parametrize(
+    "stored",
+    ['{"emphasis": "UNDERLINE"}', '[["UNDERLINE",0]]', '[["NOT_AN_EMPHASIS",0,1]]', '[["UNDERLINE",5,2]]'],
+)
+def test_search_index_decode_refuses_what_the_encoder_never_writes(stored: str) -> None:
+    with pytest.raises(ValueError):
+        decode_formatting_spans(stored)
+
+
+# ------------------------------------------------------------------------------------------------
+# A camp file title is stored, never searchable (PM ruling 2026-10-20, question 1 (a))
+# ------------------------------------------------------------------------------------------------
+
+
+def test_search_index_camp_file_title_matches_nothing(tmp_path: Path) -> None:
+    store = Store()
+    card = store.card(
+        S_ONE, 0, sha("camp title"), "Invented camp evidence about invented trade", camp="Cascade Institute"
+    )
+    store.released(card, "2026-policy", recorded=True, title="Zanzibar Quorum Counterplan")
+    built = store.service(tmp_path / "data").build(tmp_path / "out", stores=(CAMP,))
+
+    assert built.query("SELECT camp_file_title FROM occurrences") == [("Zanzibar Quorum Counterplan",)]
+    for word in ("Zanzibar", "Quorum", "Counterplan", '"Zanzibar Quorum Counterplan"', "Cascade"):
+        assert built.matches(word) == 0, word
+    assert built.matches('"invented camp evidence"') == 1, "the same query finds what is searchable"

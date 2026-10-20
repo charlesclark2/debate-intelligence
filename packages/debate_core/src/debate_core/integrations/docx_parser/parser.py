@@ -1011,14 +1011,21 @@ def _reread_as_body(section: _ReadSection, reason: str) -> _ReadSection:
     )
 
 
+#: What the look-ahead for a body steps over: page furniture, blank lines and lines read as nothing,
+#: and an Undertag line, which belongs to the card above it. A built file writes its provenance line
+#: as an Undertag below every cite (`v1-e33-t02`), and a highlighted cite with that line between it
+#: and its body was read as body until `v1-e31-t24`.
+_UNITS_A_BODY_IS_LOOKED_FOR_PAST: Final = (StructuralUnit.OTHER, StructuralUnit.UNDERTAG)
+
+
 def _followed_by_a_body(sections: Sequence[_ReadSection]) -> list[bool]:
-    """For each paragraph, whether the next one that is not `OTHER` was classified as body."""
+    """For each paragraph, whether the next one that is not `OTHER` or an undertag is body."""
     followed = [False] * len(sections)
     a_body_is_next = False
     for position in range(len(sections) - 1, -1, -1):
         followed[position] = a_body_is_next
         unit = sections[position].match.unit
-        if unit is not StructuralUnit.OTHER:
+        if unit not in _UNITS_A_BODY_IS_LOOKED_FOR_PAST:
             a_body_is_next = unit is StructuralUnit.EVIDENCE
     return followed
 

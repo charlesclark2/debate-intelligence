@@ -67,7 +67,7 @@ v2.3's extension work.
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 14 | 0 | 96 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 0 | 66 |
 | [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 19 | 12 | 146 |
-| [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 10 | 2 | 46 |
+| [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 10 | 3 | 46 |
 | [v2.0](plan_specs/releases/v2.0.yaml) | Cloud platform foundation | 3 | 17 | 0 | 164 |
 | [v2.1](plan_specs/releases/v2.1.yaml) | Web app, debate tub & async jobs | 3 | 18 | 0 | 198 |
 | [v2.2](plan_specs/releases/v2.2.yaml) | Research workspace | 2 | 12 | 0 | 117 |
@@ -225,7 +225,7 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [Measure cluster shapes, and ask a person only about the pairs a rule cannot decide](plan_specs/v1/e31-debate-file-parsing/t21-cluster-shapes-and-sampler.yaml) `v1-e31-t21-cluster-shapes-and-sampler` | Succeeded | 1 | 4.0 |
 | [Bodies too long to be one card, and two cards stored as one](plan_specs/v1/e31-debate-file-parsing/t22-card-boundaries.yaml) `v1-e31-t22-card-boundaries` | Succeeded | 2 | 6.0 |
 | [In-round markers kept in a card's evidence text](plan_specs/v1/e31-debate-file-parsing/t23-in-round-markers.yaml) `v1-e31-t23-in-round-markers` | Pending | 2 | 3.0 |
-| [A bold tag above a bracketed cite is read as the card's tag](plan_specs/v1/e31-debate-file-parsing/t24-bold-tag-above-bracketed-cite.yaml) `v1-e31-t24-bold-tag-above-bracketed-cite` | Pending | 1 | 3.0 |
+| [A bold tag above a cite is read as the card's tag](plan_specs/v1/e31-debate-file-parsing/t24-bold-tag-above-bracketed-cite.yaml) `v1-e31-t24-bold-tag-above-bracketed-cite` | InProgress | 1 | 3.0 |
 | [The labeller warns before a card is lost, and import refuses a file already corrected](plan_specs/v1/e31-debate-file-parsing/t25-labeller-safeguards.yaml) `v1-e31-t25-labeller-safeguards` | Pending | 1 | 3.0 |
 | [parse --publish sends nothing of a held upload](plan_specs/v1/e31-debate-file-parsing/t26-held-upload-parsed-publish.yaml) `v1-e31-t26-held-upload-parsed-publish` | Succeeded | 1 | 2.0 |
 | [The parse time-limit test does not depend on the machine's load](plan_specs/v1/e31-debate-file-parsing/t27-parse-time-limit-test.yaml) `v1-e31-t27-parse-time-limit-test` | Pending | 1 | 1.0 |
@@ -431,7 +431,7 @@ Debaters search the team's evidence store from a school Chromebook or at home: a
 | Task | Status | Prereqs | Est. hours |
 |---|---|---|---|
 | [ADR-0019: the student search pilot's stack, sign-in and hosting](plan_specs/v1/e39-evidence-search-pilot/t01-pilot-architecture-adr.yaml) `v1-e39-t01-pilot-architecture-adr` | Succeeded | 1 | 3.0 |
-| [tub index build and publish: one searchable document per card cluster, from the parsed store](plan_specs/v1/e39-evidence-search-pilot/t02-search-index-build.yaml) `v1-e39-t02-search-index-build` | Pending | 3 | 6.0 |
+| [tub index build and publish: one searchable document per card cluster, from the parsed store](plan_specs/v1/e39-evidence-search-pilot/t02-search-index-build.yaml) `v1-e39-t02-search-index-build` | Succeeded | 3 | 6.0 |
 | [Search core: safe queries, ranking, filters, pages and card rendering over the index](plan_specs/v1/e39-evidence-search-pilot/t03-search-core.yaml) `v1-e39-t03-search-core` | Pending | 1 | 5.0 |
 | [Pilot infrastructure: the function, CloudFront, the user pool and the audit log, in dev and prod](plan_specs/v1/e39-evidence-search-pilot/t04-pilot-infrastructure.yaml) `v1-e39-t04-pilot-infrastructure` | Succeeded | 1 | 6.0 |
 | [Accounts and sign-in: the session flow, roles, and the coach's tub users commands](plan_specs/v1/e39-evidence-search-pilot/t05-accounts-and-sign-in.yaml) `v1-e39-t05-accounts-and-sign-in` | Pending | 1 | 5.0 |

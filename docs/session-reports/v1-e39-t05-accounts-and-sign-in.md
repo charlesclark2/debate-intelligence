@@ -877,9 +877,47 @@ change and are not re-run.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-20
 
 **Notes:**
+
+Accepted, on three conditions, all closed in this session before the pull request (no `--partial`):
+
+1. **A dropped `session-ended-no-second-factor` record leaves a trace.** Decision 2 is right: the
+   session ends whether or not the record is written. But `contextlib.suppress` drops the record
+   silently. Write one `WARNING` to the app log saying an audit record was lost, with its action and
+   no name or subject. Add a test, shown failing first.
+2. **The re-run of ac5 steps 4 and 5 on dev,** with condition 1 in the deployed code. Give the
+   operator one block: the deploy, a synthetic account, sign-in and enrolment, then:
+   * *Start* and confirm a new code: a finished replacement;
+   * *Start* again and wait past five minutes without confirming: the session ends at the next page
+     load after 5:00, and not before;
+   * the CloudWatch read of both new records alongside `authenticator-registered`;
+   * removing the account.
+
+   Record the outputs in your own section, keeping the rule against pasting passwords and codes.
+3. **If the re-run shows anything other than what you expect,** stop and ask for another review
+   rather than opening the pull request.
+
+**What I checked:**
+
+* **The step 4 finding is recorded well.** `admin-get-user` returned `CONFIRMED None None` before
+  any confirm. That settles the AWS behaviour question, and the wording now tells students the
+  truth.
+* **Start as a revalidation reuses revalidation's own checks** (`refreshed_account`) and skips
+  only the second-factor check, which is the one *Start* fails on purpose. The role re-check is
+  tested. A forged *Start* cannot reset the clock.
+* **Recording before `AssociateSoftwareToken`, with a 503 that keeps the old authenticator,** is
+  the right order (decision 1). Each mutant on the order and the clock was caught.
+* **Decisions 3 and 4 on the wording** are accepted: "a reset" for students, the command name for
+  the coach, and "choose **Start**".
+* **ac5's first run** covered sign-in, enrolment, a reset forcing re-enrolment, the PKCE redirect,
+  audit records with subjects and no names, and the full Terraform checks. ac5 passes on that run.
+  The re-run covers the code changed since.
+
+**After the merge**, operator follow-up C (the module apply, dev then prod) goes on the PM's
+promotion list. Whichever of this task and v1-e39-t02 merges second keeps both sides of the `tub`
+group, the container and the service lists.

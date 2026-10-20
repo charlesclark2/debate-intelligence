@@ -6,7 +6,7 @@
 | Spec | [`plan_specs/v1/e39-evidence-search-pilot/t02-search-index-build.yaml`](../../plan_specs/v1/e39-evidence-search-pilot/t02-search-index-build.yaml) |
 | Epic / release | `v1-e39-evidence-search-pilot` / `v1.7` |
 | Branch | `task/v1-e39-t02-search-index-build` |
-| Session status | PARTIAL <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | COMPLETE <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
@@ -46,7 +46,7 @@ at Deviation 2: the camp file title is stored, against "never store a file name"
 | ac3 — a suppressed occurrence never appears; a cluster with none surviving is absent | PASS | `test_search_index_leaves_out_a_suppressed_occurrence_and_an_emptied_cluster` (whole-source and one-disclosure suppressions; the emptied cluster's text matches nothing; counts 4 documents, 3 suppressed, 1 left out) and `test_search_index_leaves_out_a_row_a_path_hold_covers`, red under the skeleton, green on the service; three suppression mutants killed |
 | ac4 — byte-identical index and manifest; manifest validates against a committed schema with a drift test | PASS | `test_search_index_same_store_gives_identical_bytes_under_shuffles`: the SQLite file, gzip object and manifest are each one value across six builds, and so is the index id. `test_search_index_manifest_schema_committed_matches_the_models` (drift, as `v1-e33-t02`'s) and `test_search_index_manifest_validates_against_the_committed_schema` (jsonschema) pass. `uv run scripts/export_search_index_schema.py --check` → `OK` |
 | ac5 — `publish` writes the pointer last and refuses a version mismatch, against the S3 test double; layout document and listing grant name `reports/tub/search/` | PASS | `uv run pytest packages/debate_core/tests/application/test_search_index_publish.py -q -n0` → `11 passed`, against moto through `S3EvidenceObjectStore`: write order object, manifest, `current.json`; a refused write at each of the three leaves the previous pointer; parser, fingerprint and format mismatches upload nothing; an object landing with another digest stops before the pointer. CLI, through the real app over moto: `uv run pytest packages/debate_cli/tests/test_tub_index.py -q -n0` → `6 passed`. Layout: `docs/architecture/evidence-store-layout.md` (prefix table, example keys, a `reports/tub/search/` section, the access table). Grant: `infrastructure/modules/evidence_bucket/operator_access.tf` `named_list_prefixes`; `terraform test` → `13 passed, 0 failed`, and with the expectation removed → `12 passed, 1 failed` (`operator_permission_set_reads_and_publishes_but_cannot_delete`) |
-| ac6 — the operator's full-store build recorded in the report and docs/data: documents, size, build time, peak memory | PASS | The operator's run of 2026-10-20 (Operator follow-ups 1): 46,658 documents, SQLite file 1,483,825,152 bytes, gzip object 319,949,165 bytes, 233.12 s, 1,181,515,776 bytes peak resident. Recorded in `docs/data/search-index.md`, "Full-store builds", with where the space goes. The image's SQLite 3.40.0 opened the real file: `3.40.0 ok 46658 8612` |
+| ac6 — the operator's full-store build recorded in the report and docs/data: documents, size, build time, peak memory | PASS | The operator's run of 2026-10-20 (Operator follow-ups 1): 46,658 documents, SQLite file 1,483,825,152 bytes, gzip object 319,949,165 bytes, 233.12 s, 1,181,515,776 bytes peak resident. Recorded in `docs/data/search-index.md`, "Full-store builds", with where the space goes. The image's SQLite 3.40.0 opened the real file: `3.40.0 ok 46658 8612`. **Second build, compact spans** (Operator follow-up 4, 2026-10-20): 46,658 documents, SQLite file 752,369,664 bytes, gzip object 281,749,702 bytes, 205.25 s, 1,141,374,976 bytes peak resident; 16,125 and 6,039 bytes a document; `3.40.0 ok 46658`. Recorded as the second row, with each part's share |
 | ac7 — gzip byte-identical; manifest's two sha256, SQLite version and format version checked by test; a test opens the index with SQLite 3.40.0's feature set, by a check the report names | PASS | Identical gzip: as ac4. `test_search_index_manifest_records_both_digests_and_the_versions` and `test_search_index_gzip_header_has_no_time_and_no_name`. **The checks named:** in every run, `test_search_index_writer_runs_only_statements_sqlite_3_40_has` traces every statement against a hand-written list; `test_search_index_fts5_table_takes_only_options_3_40_has` and `test_search_index_file_is_the_schema_written_by_hand` check the options, schema and header. Marked slow: `test_search_index_opens_in_the_lambda_image_sqlite` opens a built index in `public.ecr.aws/lambda/python:3.12` by `docker run --network none`. `uv run pytest packages/debate_core/tests/integrations/local/test_search_index_sqlite_features.py -m "slow or not slow" -n0` → `4 passed` (the docker test 0.56 s). Shown failing: an FTS5 `locale=1` mutant → `3 failed, 1 passed`, and the image says `sqlite3.OperationalError: unrecognized option: "locale"`; a `journal_mode = WAL` mutant → `3 failed, 1 passed` |
 | ac8 — tag and cite from the document record, `None` for no tag; no document for a source no occurrence row names, by tests shown failing first | PASS | `test_search_index_tag_and_cite_come_from_the_document_record` was red under the skeleton (tag and cite not taken from the record) and is green. `test_search_index_holds_nothing_from_a_source_no_occurrence_row_names` was red under a second skeleton that indexes every card of each source it reads (`1 failed`, `matches('"invented colonies"') == 1`) and is green |
 | Node criterion — `uv run pytest packages/debate_core/tests packages/debate_cli/tests -k "tub_index or search_index"` | PASS | → `57 passed in 10.06s` |
@@ -230,7 +230,7 @@ that last applied prod if it has none, and check `owner` against the deployed `O
 `infrastructure/envs/prod` and `/tmp/search-listing-prod.tfplan`; success looks the same. No delete
 grant is added: that is `v1-e39-t07`'s.
 
-**4. The second full-store build, with the compact spans (PM review 2026-10-20).** On the same
+**4. The second full-store build, with the compact spans (PM review 2026-10-20): done, 2026-10-20,** results above. On the same
 `2026.10.18-docx-5` store, the same build as follow-up 1, then the read-only check in the image's
 3.40.0. Expected runtime about 4 minutes for the build and 15 seconds for the check. It writes a new
 index directory beside the first, which can be deleted afterwards.
@@ -298,9 +298,11 @@ No publish is needed for this task. The first one, to dev, is `docs/guides/searc
 
 ## After the PM review of 2026-10-20
 
-The review asked for one change, question 4 (a), and four small amendments. All are made except the
-new full-store build, which is the operator's. The Goal is back at **InProgress** until that build is
-recorded.
+The review asked for one change, question 4 (a), and four small amendments. All are made, and the
+operator's second full-store build is recorded. **The size ruling:** the SQLite file is 752 MB, under
+the PM's 0.9 GB line, so no ADR-0019 note is needed. That is 16,125 bytes a document, down from
+31,802. It leaves 248 MB of the 1 GB season allowance, about 33% growth. The gzip object is 282 MB,
+under the 400 MB trigger. The Goal is **Succeeded** again, for the second review.
 
 **The spans are stored compactly** (`debate_core.domain.search_index`, format version still 1).
 `formatting_spans` is `[emphasis, start, end]`, with the colour after a highlight's; `font_size_spans`
@@ -347,7 +349,15 @@ stop at 92% with no failure among the tests reached; the PR's `ci` runs it whole
 (0 errors), `validate_specs.py`, `check_links.py`, `check_command_blocks.py` and `docs_index.py
 --check-descriptions` all pass.
 
-**The second full-store build** is Operator follow-up 4, waiting for the operator.
+**The second full-store build** (Operator follow-up 4), run by the operator on 2026-10-20 on the same
+docx-5 store: 205.25 s, 1,141,374,976 bytes peak resident, index `b9fd48d280ab1c71`. It has 46,658
+documents in the same per-store counts and the same 273,390 occurrences, 0 suppressed, 0 left out.
+The SQLite file is 752,369,664 bytes and the gzip object 281,749,702. In the image:
+`3.40.0 ok 46658`. The session's read-only `dbstat` query gave each part's share. Formatting spans
+fell from 805.3 to 128.5 MB (17.1% of the file) and font sizes from 73.5 to 19.0 MB; text, 241.4 MB
+(32.1%), and the FTS5 index, 157.6 MB (20.9%), are now the largest parts.
+`docs/data/search-index.md` has both rows and says what changed between them. The first index's
+directory, `~/.debate-research/dev/tub-index/5119ffd998e18ad9/` (1.8 GB), can be deleted.
 
 ## PM review
 

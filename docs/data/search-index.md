@@ -158,29 +158,46 @@ format version it does not write, before it uploads anything.
 Each operator-run build of the whole store, recorded for the size ADR-0019 (c) 6 estimated (280 to
 550 MB, 110 to 220 MB gzipped, with a revisit trigger at 400 MB gzipped). Counts only.
 
-| Date | Parser | Stores | Documents | Occurrences | SQLite file | gzip object | Build time | Peak memory |
-|---|---|---|---|---|---|---|---|---|
-| 2026-10-20 | `2026.10.18-docx-5` | hsld26 11,675; hspf26 10,365; hspolicy26 18,772; openev 5,846 | 46,658 | 273,390 | 1,483,825,152 bytes (1.48 GB) | 319,949,165 bytes (320 MB) | 233 s | 1.18 GB resident |
+| Date | Parser | Spans stored | Stores | Documents | Occurrences | SQLite file | gzip object | Bytes per document (SQLite, gzip) | Build time | Peak memory |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 2026-10-20 | `2026.10.18-docx-5` | As parser objects | hsld26 11,675; hspf26 10,365; hspolicy26 18,772; openev 5,846 | 46,658 | 273,390 | 1,483,825,152 bytes (1.48 GB) | 319,949,165 bytes (320 MB) | 31,802 and 6,857 | 233 s | 1.18 GB resident |
+| 2026-10-20 | `2026.10.18-docx-5` | Compact | The same | 46,658 | 273,390 | 752,369,664 bytes (752 MB) | 281,749,702 bytes (282 MB) | 16,125 and 6,039 | 205 s | 1.14 GB resident |
 
-**2026-10-20** (`v1-e39-t02`, index `5119ffd998e18ad9`, latest snapshot 2026-10-13, built by SQLite
-3.50.4 on the operator's Mac from the dev data directory). 273,390 occurrence rows read and indexed,
-0 suppressed, 0 clusters left out, every representative attributed; 115,140 occurrences keep their
-provenance (limit 5). The Lambda image's SQLite 3.40.0 opened it read-only: `integrity_check` `ok`,
-46,658 documents, and a full-text query answered.
+Both builds read the same store: the dev data directory on the operator's Mac, latest snapshot
+2026-10-13, built by SQLite 3.50.4. All 273,390 occurrence rows were read and indexed, with 0
+suppressed, 0 clusters left out and every representative attributed; 115,140 occurrences keep their
+provenance (limit 5). The Lambda image's SQLite 3.40.0 opened each read-only: `integrity_check` `ok`
+and 46,658 documents.
 
-Against ADR-0019 (c) 6: the gzip object, 320 MB, is above the 110 to 220 MB estimate and below the
-400 MB revisit trigger, which is about 4.1 s at 78 MB/s. The SQLite file, 1.48 GB, is 2.7 times the
-550 MB upper estimate and above the 1 GB the plan allows for the season. A live copy and an
-incoming one at a weekly swap take 2.97 GB of the function's 4,096 MB of ephemeral storage.
+**What changed between them.** The first build (index `5119ffd998e18ad9`) stored each formatting and
+font-size span as a JSON object carrying the parser's `rule_id` and `match_source`. That was 805 MB,
+54% of the file, at about 115 spans a document. The second (index `b9fd48d280ab1c71`, PM review
+2026-10-20, question 4 (a)) stores them as compact arrays without those two fields, still format
+version 1. Formatting spans fell from 805.3 to 128.5 MB and font sizes from 73.5 to 19.0 MB; nothing
+else changed. The gzip object fell only 12%, because the repeated JSON keys had compressed well.
 
-Where the space goes, in MB:
+**Against ADR-0019 (c) 6, the second build.** The SQLite file, 752 MB, is 1.4 times the 550 MB
+upper estimate and under the 0.9 GB the PM set as the line for an ADR note. It leaves 248 MB of the
+1 GB the plan allows for the season, about 33% growth at today's 16,125 bytes a document. The gzip
+object, 282 MB, is above the 110 to 220 MB estimate and below the 400 MB revisit trigger; at 78 MB/s
+it downloads in about 3.6 s. A live copy and an incoming one at a weekly swap take 1.50 GB of the
+function's 4,096 MB of ephemeral storage.
 
-| Part | MB | |
+Where the space goes in the second build, as a share of the 752 MB file (MB from SQLite's `dbstat`
+and the columns' byte lengths, read-only):
+
+| Part | MB | Share |
 |---|---|---|
-| `documents.formatting_spans` | 805.3 | About 115 spans a document, each a JSON object with its `rule_id` and `match_source` |
-| `documents.text` | 241.4 | |
-| `search_data` (the FTS5 index) | 157.6 | |
-| `documents.font_size_spans` | 73.5 | |
-| `documents.read_aloud` | 60.8 | |
-| `occurrences`, and its index by source | 59.3 and 20.8 | |
-| `documents.cite`, `documents.tag` | 15.5 and 4.1 | |
+| `documents.text` | 241.4 | 32.1% |
+| `search_data` (the FTS5 index) | 157.6 | 20.9% |
+| `documents.formatting_spans` | 128.5 | 17.1% |
+| `documents.read_aloud` | 60.8 | 8.1% |
+| `occurrences` | 59.3 | 7.9% |
+| `occurrences_by_source` (its index) | 20.8 | 2.8% |
+| `documents.font_size_spans` | 19.0 | 2.5% |
+| `documents.cite` | 15.5 | 2.1% |
+| `documents.tag` | 4.1 | 0.5% |
+| The `(caselist, cluster_id)` index, `short_cite`, `sides` and the FTS5 bookkeeping | 5.4 | 0.7% |
+
+The `documents` table is 509.9 MB in all, 67.8%; the rest of it is page and record overhead.
+`v1-e39-t09` can track growth against the 1 GB allowance by bytes per document.

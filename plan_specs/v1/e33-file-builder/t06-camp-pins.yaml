@@ -52,7 +52,7 @@ spec:
         provenance line below its cite and the occurrence in the sidecar, and reads back as
         its source, by test shown failing first.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

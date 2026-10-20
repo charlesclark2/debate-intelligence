@@ -37,11 +37,10 @@ PASSWORD_SHAPE = re.compile(
 runner = CliRunner()
 
 
-def _client(service: str) -> Any:
-    session = boto3.session.Session(
+def _session() -> boto3.session.Session:
+    return boto3.session.Session(
         aws_access_key_id="synthetic", aws_secret_access_key="synthetic", region_name="us-east-1"
     )
-    return session.client(service)  # pyright: ignore[reportUnknownMemberType]
 
 
 @dataclass(repr=False)
@@ -108,7 +107,7 @@ class StubbedPilot:
 @pytest.fixture(scope="module")
 def clients() -> tuple[Any, Any]:
     """Building a boto3 client takes longer than a test; each test gets its own Stubber on these."""
-    return _client("cognito-idp"), _client("logs")
+    return _session().client("cognito-idp"), _session().client("logs")
 
 
 @pytest.fixture

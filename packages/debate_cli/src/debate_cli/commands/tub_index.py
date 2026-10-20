@@ -46,13 +46,15 @@ from debate_cli.exit_codes import ExitCode
 from debate_cli.output import CommandFailure, JsonValue, TableSpec
 from debate_core.application.search_index_build import BuiltSearchIndex
 from debate_core.application.search_index_publish import PublishedSearchIndex
+from debate_core.application.search_index_refresh import SEARCH_INDEX_DIRECTORY
 from debate_core.application.settings import Environment, Settings
 from debate_core.domain.search_index import DEFAULT_PROVENANCE_LIMIT, SearchIndexManifest
 
 __all__ = ["DEFAULT_OUT_DIRECTORY", "build", "build_summary", "publish", "publish_summary"]
 
-DEFAULT_OUT_DIRECTORY = "tub-index"
-"""Where `build` writes when `--out` is not given: `<data_dir>/tub-index`."""
+DEFAULT_OUT_DIRECTORY = SEARCH_INDEX_DIRECTORY
+"""Where `build` writes when `--out` is not given: `<data_dir>/tub-index`, where the weekly run's
+search index stage builds too (`v1-e39-t09`), so `publish --index` finds what either built."""
 
 CONFIRM_PROD_FLAG = "--confirm-prod"
 

@@ -24,10 +24,10 @@ otherwise *skipped with a recorded reason*. Parse is wired in unless a setting t
 (`v1-e34-t17`; see "The parse stage" below); landscape does not exist yet. Neither a missing stage
 nor a failing one can fail a run whose bytes are already safe.
 
-The order is download, import, publish, parse, landscape, report, retention. Goal criterion ac1 lists parsing
-before publishing; the spec's own description ("the run still completes download, import and
-publish before anything optional") is what is implemented, and the session report records the
-difference.
+The order is download, import, publish, parse, search index, landscape, report, retention. Goal
+criterion ac1 lists parsing before publishing; the spec's own description ("the run still completes
+download, import and publish before anything optional") is what is implemented, and the session
+report records the difference.
 
 ## The daily download budget
 
@@ -327,6 +327,21 @@ pending-work file. Every way it can go wrong is a line in the summary:
 The stage is not in :data:`REQUIRED_STAGES`, so by `v1-e34-t13`'s rule none of this changes the
 command's exit status: the run captured everything.
 
+## The search index stage
+
+After parse, the student search pilot's index (`v1-e39-t09`): rebuilt from the parsed store when
+its digests changed since the newest local index, and published to this environment's bucket when
+`current.json` is behind it and there is a session.
+:class:`~debate_core.application.search_index_refresh.SearchIndexRefresh` decides each step; this
+module runs it, for the run's configured caselists plus `openev`, and records what it reports. It
+runs whether or not the run imported anything, because a parse by hand or a removal changes the
+store too. It is skipped when this run's parse stage failed, since an index of what a failed parse
+left is not one to publish; and it is told the run has no session when the publish or the parse
+stage pended for want of one, so that it builds and does not try the bucket. Like parse it is not in
+:data:`REQUIRED_STAGES`: it can fail, and its publish can pend, without touching the exit status.
+A pending index publish is in no file: what is owed is `current.json` naming another index than
+the newest local one, which the next run with a session works out again.
+
 ## Credentials, and stages that come back later
 
 The local stages need no AWS session. If the operator's SSO session has expired, the S3 adapter
@@ -552,6 +567,7 @@ from debate_core.application.ports.caselist_source import (
     openev_id_of_inbox_name,
     openev_inbox_name,
 )
+from debate_core.application.ports.parsed_store import OPENEV_STORE
 from debate_core.application.ports.suppression import (
     SuppressionAction,
     SuppressionList,
@@ -588,6 +604,9 @@ __all__ = [
     "InboxFileVerdict",
     "InboxRetention",
     "LandscapeStage",
+    "SearchIndexStage",
+    "SearchIndexStageCounts",
+    "SearchIndexStageReport",
     "LandscapeStageResult",
     "NoCaselistsConfigured",
     "OpenEvDeliveries",
@@ -696,7 +715,9 @@ Version 5 (`v1-e34-t17`) replaces `cards_parsed` and `parse_failures` with one o
 parse stage's counts (:class:`ParseStageCounts`), or `null` when the stage parsed nothing. Two keys
 removed, so the version moves; no stage ever filled them, and both were `0` in every summary
 written. The run log's record schema is untouched again: the stage's counts reach `caselist runs`
-in the parse stage's `reason`, which every build reads.
+in the parse stage's `reason`, which every build reads. Under version 5, `search_index` (`v1-e39-t09`)
+is added: the search index stage's index id, sizes and warnings (:class:`SearchIndexStageCounts`),
+or `null` when the stage did not run. A key added, so the version stays.
 """
 RUN_SUMMARY_DIRECTORY: Final = "caselist-sync-runs"
 
@@ -722,6 +743,10 @@ class SyncStage(StrEnum):
 
     PARSE = "parse"
     """Optional (`v1-e31-t06`, wired by `v1-e34-t17`). Skipped with a reason when it is turned off."""
+
+    SEARCH_INDEX = "search_index"
+    """Optional (`v1-e39-t09`). Rebuilds the search pilot's index when the parsed store changed, and
+    publishes it; its publish needs an AWS session and pends without one."""
 
     LANDSCAPE = "landscape"
     """Optional (`v1-e32-t05`). Skipped with a reason when no landscape service was wired in."""
@@ -1478,6 +1503,79 @@ class ParseStageCounts:
 
 
 @dataclass(frozen=True, slots=True)
+class SearchIndexStageCounts:
+    """The index the search index stage left current, and its size (`v1-e39-t09`). No store, no path.
+
+    The sizes are the PM's amendment of 2026-10-20 (`v1-e39-t02` second review): every build reports
+    its SQLite bytes and bytes per document, and a warning past ADR-0019's lines.
+    """
+
+    index_id: str
+    """The newest index on this machine once the stage ran: the one it built, or the one it kept."""
+
+    built: bool
+    """The stage built it in this run; otherwise it was already there, built from the same digests."""
+
+    published: bool
+    """The stage published it in this run, so `current.json` names it."""
+
+    documents: int
+    sqlite_bytes: int
+    gzip_bytes: int
+    bytes_per_document: int | None
+    """SQLite bytes over documents, rounded down; `None` for an index of no document."""
+
+    warnings: tuple[str, ...] = ()
+    """A sentence for each of ADR-0019's size lines the index has passed."""
+
+    def as_json(self) -> dict[str, object]:
+        return {
+            "index_id": self.index_id,
+            "built": self.built,
+            "published": self.published,
+            "documents": self.documents,
+            "sqlite_bytes": self.sqlite_bytes,
+            "gzip_bytes": self.gzip_bytes,
+            "bytes_per_document": self.bytes_per_document,
+            "warnings": list(self.warnings),
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class SearchIndexStageReport:
+    """What the search index stage did, as the run records it."""
+
+    outcome: StageOutcome
+    reason: str
+    """The stage's sentence. On a failure, what the stage did and the index still current; the
+    failure's own sentence is added by the run."""
+
+    counts: SearchIndexStageCounts | None = None
+    """The index the stage left current, or `None` when it reached none."""
+
+    failure: Exception | None = None
+    """What failed the stage, for a :attr:`StageOutcome.FAILED` report; the run records its code."""
+
+    hint: str | None = None
+    """The fix for a failure, when it has one beyond the error's own."""
+
+    local_copy_only: str | None = None
+    """Why the build read this machine's copy of the suppression list alone, or `None`."""
+
+
+class SearchIndexStage(Protocol):
+    """The search index stage, as this run needs it (`v1-e39-t09`).
+
+    Implemented by :class:`~debate_core.application.search_index_refresh.SearchIndexRefresh`. It
+    reports every outcome, failures included, rather than raising one.
+    """
+
+    async def refresh(self, stores: Sequence[str], *, no_session: str | None) -> SearchIndexStageReport:
+        """Keep the index of `stores` current. `no_session` is why the run knows it has no login."""
+        ...
+
+
+@dataclass(frozen=True, slots=True)
 class LandscapeStageResult:
     """What regenerating the argument-landscape reports did (`v1-e32-t05`)."""
 
@@ -2141,6 +2239,9 @@ class RunSummary:
     parse: ParseStageCounts | None = None
     """The parse stage's counts, or `None` when it parsed nothing: turned off, or nothing imported."""
 
+    search_index: SearchIndexStageCounts | None = None
+    """The index the search index stage left current, or `None` when the stage reached none."""
+
     objects_published: int = 0
     reports_written: int = 0
     snapshots_imported: tuple[str, ...] = ()
@@ -2280,6 +2381,8 @@ class RunSummary:
             "files_skipped": self.files_skipped,
             "blobs_stored": self.blobs_stored,
             "parse": self.parse.as_json() if self.parse is not None else None,
+            # Additive (`v1-e39-t09`): the version stays.
+            "search_index": self.search_index.as_json() if self.search_index is not None else None,
             "objects_published": self.objects_published,
             "reports_written": self.reports_written,
             "snapshots_imported": list(self.snapshots_imported),
@@ -2343,6 +2446,7 @@ class _RunTally:
     files_skipped: int = 0
     blobs_stored: int = 0
     parse: ParseStageCounts | None = None
+    search_index: SearchIndexStageCounts | None = None
     objects_published: int = 0
     reports_written: int = 0
     snapshots_imported: list[str] = field(default_factory=lambda: list[str]())
@@ -2509,6 +2613,7 @@ class CaselistSyncService:
         status: The local-against-bucket comparison used by the report stage, or `None`.
         parse: The parse stage (`v1-e34-t17`), built over this same `suppression`, or `None` when
             `caselist.parse_imported_sources` turns it off.
+        search_index: The search index stage (`v1-e39-t09`), or `None` where none is wired in.
         landscape: Landscape regeneration (`v1-e32-t05`), or `None` — the normal case today.
         openev_event: The event to file OpenEv files under when their own tags do not say.
         openev_year: The OpenEv release year to list, or `None` for the API's current year.
@@ -2537,6 +2642,7 @@ class CaselistSyncService:
         publisher: CaselistPublishService | None = None,
         status: CaselistStatusService | None = None,
         parse: CaselistParseStage | None = None,
+        search_index: SearchIndexStage | None = None,
         landscape: LandscapeStage | None = None,
         openev_event: Event | None = None,
         openev_year: int | None = None,
@@ -2564,6 +2670,7 @@ class CaselistSyncService:
         self._publisher = publisher
         self._status = status
         self._parse = parse
+        self._search_index = search_index
         self._landscape = landscape
         self._openev_event = openev_event
         self._openev_year = openev_year
@@ -2709,7 +2816,7 @@ class CaselistSyncService:
             for stage in (SyncStage.DOWNLOAD, SyncStage.IMPORT):
                 tally.record(stage, StageOutcome.SKIPPED, "publish-pending does no fetching or importing")
             await self._publish_stage(tally)
-            for stage in (SyncStage.PARSE, SyncStage.LANDSCAPE):
+            for stage in (SyncStage.PARSE, SyncStage.SEARCH_INDEX, SyncStage.LANDSCAPE):
                 tally.record(stage, StageOutcome.SKIPPED, "publish-pending runs no derived stages")
             await self._report_stage(tally)
             tally.record(
@@ -3174,6 +3281,14 @@ class CaselistSyncService:
             else _PARSE_TURNED_OFF,
         )
         tally.record(
+            SyncStage.SEARCH_INDEX,
+            StageOutcome.PLANNED if self._search_index is not None else StageOutcome.SKIPPED,
+            "would rebuild the search index if the parsed store changed since the newest one, and "
+            "publish it if current.json is behind it"
+            if self._search_index is not None
+            else _NO_SEARCH_INDEX,
+        )
+        tally.record(
             SyncStage.LANDSCAPE,
             StageOutcome.PLANNED if self._landscape is not None else StageOutcome.SKIPPED,
             "would regenerate the landscape reports" if self._landscape is not None else _NO_LANDSCAPE,
@@ -3197,6 +3312,7 @@ class CaselistSyncService:
         self._note_local_copy_only(tally, SyncStage.IMPORT, since=fallbacks)
         await self._publish_stage(tally)
         await self._parse_stage(tally)
+        await self._search_index_stage(plan, tally)
         await self._landscape_stage(plan, tally)
         await self._report_stage(tally)
 
@@ -3861,6 +3977,46 @@ class CaselistSyncService:
             tally.record(SyncStage.PARSE, StageOutcome.COMPLETED, reason)
         self._note_local_copy_only(tally, SyncStage.PARSE, since=before_the_stage)
 
+    async def _search_index_stage(self, plan: SyncPlan, tally: _RunTally) -> None:
+        """Keep the search pilot's index current: rebuild it when the store changed, publish it when behind.
+
+        See "The search index stage" in this module's docstring. Every decision is the stage's
+        (:class:`~debate_core.application.search_index_refresh.SearchIndexRefresh`); this records
+        it. Nothing here can touch what an earlier stage did, and a bug in the stage is caught and
+        recorded as its failure.
+        """
+        if self._search_index is None:
+            tally.record(SyncStage.SEARCH_INDEX, StageOutcome.SKIPPED, _NO_SEARCH_INDEX)
+            return
+        if tally.outcome_of(SyncStage.PARSE) is StageOutcome.FAILED:
+            tally.record(SyncStage.SEARCH_INDEX, StageOutcome.SKIPPED, _PARSE_FAILED_SO_NO_INDEX)
+            return
+        no_session = next(
+            (
+                f"the {stage} stage found no AWS session"
+                for stage in (SyncStage.PUBLISH, SyncStage.PARSE)
+                if tally.outcome_of(stage) is StageOutcome.PENDING
+            ),
+            None,
+        )
+        stores = (*dict.fromkeys(plan.caselists), OPENEV_STORE)
+        try:
+            report = await self._search_index.refresh(stores, no_session=no_session)
+        except Exception as failed:
+            failure = self._failure(failed)
+            tally.fail(SyncStage.SEARCH_INDEX, failure.sentence, [failure])
+            return
+        tally.search_index = report.counts
+        if report.local_copy_only is not None and tally.suppression_list_local_copy_only is None:
+            tally.suppression_list_local_copy_only = report.local_copy_only
+        if report.failure is not None:
+            failure = self._failure(report.failure)
+            tally.fail(
+                SyncStage.SEARCH_INDEX, f"{report.reason}; {failure.sentence}", [failure], fix=report.hint
+            )
+            return
+        tally.record(SyncStage.SEARCH_INDEX, report.outcome, report.reason)
+
     async def _landscape_stage(self, plan: SyncPlan, tally: _RunTally) -> None:
         """Regenerate the landscape reports, when that service exists. It does not yet."""
         if self._landscape is None:
@@ -4367,6 +4523,7 @@ class CaselistSyncService:
             files_skipped=tally.files_skipped,
             blobs_stored=tally.blobs_stored,
             parse=tally.parse,
+            search_index=tally.search_index,
             objects_published=tally.objects_published,
             reports_written=tally.reports_written,
             snapshots_imported=tuple(tally.snapshots_imported),
@@ -4512,6 +4669,13 @@ _UNPUBLISHED_PARSED_STORE_FIX: Final = (
     "`caselist pull --publish-pending` does not."
 )
 _NO_LANDSCAPE: Final = "no landscape service is installed (v1-e32-t05 has not shipped)"
+_NO_SEARCH_INDEX: Final = (
+    "no search index stage is wired in: an environment that names no evidence bucket has none"
+)
+_PARSE_FAILED_SO_NO_INDEX: Final = (
+    "the parse stage failed in this run, so the index is not rebuilt from what it left; "
+    "the previous index stays current"
+)
 
 
 def caselists_to_parse(imported: Iterable[PendingSnapshot]) -> tuple[str, ...]:

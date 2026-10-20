@@ -234,9 +234,37 @@ None. The affected set is near the whole selection and goes to the PR's CI under
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-19
 
 **Notes:**
+
+Accepted, with the phase `Succeeded`. The pull request needs no `--partial`.
+
+**The work itself:**
+
+* **No stored record changed, and the session proved why there was nothing to keep** rather than
+  following my note blindly. The trap I named (an older reader refusing `null`) is real, and the red
+  run shows it. It does not apply to a store whose tags already say `null`.
+* **The label rule keeps "no tag" as `""`,** so tied clusters keep their labels. Mutant 8, the other
+  choice, is caught.
+* **The ac3 test passes on the old code, on dev.18 and on this build,** which is what "before and
+  after" has to mean.
+* **The cross-build check was written fresh,** because t26's world had no untagged card. dev.18 and
+  dev.61 read everything this build writes.
+* **The one surviving mutant (12) is argued equivalent,** and it is the boundary doing its job.
+
+**Rulings:**
+
+1. **Deviation 2: my note was wrong.** The stored `occurrences.jsonl` carries no tag; tags live in
+   the per-source document records. **Option A** for v1-e39-t02: the tag, and the cite, come from
+   the document record through `DocumentRecord.to_parsed_document`. The PM amends t02's description
+   in the next batch.
+2. **Deviations 1 and 3 are accepted.** One writer line for pyright, and four test expectations in
+   the parser's tests; v1-e31-t24 will meet them as one-line conflicts at most.
+3. **Decisions 1 to 7 are accepted.** `-` for no tag in the table matches the short-cite column.
+4. **The affected set was left to CI** by my ruling, and the session ran every directory it changed
+   within the two-minute line.
+5. **Follow-up 2** (`has_tag`) stays as it is; no task.

@@ -172,6 +172,8 @@ from debate_core.application.ports.caller_identity import CallerIdentity
 from debate_core.application.ports.evidence_store import EvidenceObjectStore, ObjectKey
 from debate_core.application.ports.notifier import Notifier, NullNotifier
 from debate_core.application.ports.suppression import SuppressionList
+from debate_core.application.search_index_build import SearchIndexBuildService
+from debate_core.application.search_index_publish import SearchIndexPublishService
 from debate_core.application.settings import ConfigurationError, Environment, Settings, SyncNotifierKind
 from debate_core.application.snapshot_service import SnapshotService
 from debate_core.application.sync_runs import (
@@ -193,6 +195,7 @@ from debate_core.integrations.local import (
 )
 from debate_core.integrations.local.fs_version_store import FsEvidenceVersionStore
 from debate_core.integrations.local.parsed_store import LocalParsedStore
+from debate_core.integrations.local.search_index import SqliteSearchIndexWriter
 from debate_core.integrations.local.sqlite_caselist_repository import SqliteCaselistRepository
 from debate_core.integrations.local.suppression_list import (
     local_removal_log_file,
@@ -230,6 +233,8 @@ SERVICE_NAMES: Final[tuple[str, ...]] = (
     "evidence_sync",
     "openev_import",
     "opencaselist_client",
+    "search_index_build",
+    "search_index_publish",
     "verify_manifest",
 )
 """Names of the services this container can build, for `debate-research doctor` to report."""
@@ -517,6 +522,50 @@ class ServiceContainer:
             remote=self._evidence_bucket(),
             suppression=self.suppression_list(),
             evidence=self._local_evidence(),
+        )
+
+    def search_index_build(
+        self, *, event_for_caselist: Callable[[str], Event | None]
+    ) -> SearchIndexBuildService:
+        """Build the student search pilot's index builder over this machine's store (`v1-e39-t02`).
+
+        Offline, like `caselist parse` without `--publish`: the local parsed store, the local caselist
+        records and this environment's local copy of the suppression list. `event_for_caselist` is the
+        command's table, for the reason :meth:`caselist_sync` gives.
+        """
+        return self.singleton(
+            "search_index_build", lambda: self._build_search_index_build(event_for_caselist)
+        )
+
+    def _build_search_index_build(
+        self, event_for_caselist: Callable[[str], Event | None]
+    ) -> SearchIndexBuildService:
+        # Imported here, not at module scope: lxml is loaded only by a command that needs the parser.
+        from debate_core.integrations.docx_parser import DebateDocxParser
+
+        return SearchIndexBuildService(
+            parsed_store=LocalParsedStore(self.settings.storage.data_dir),
+            caselists=SqliteCaselistRepository(self.database),
+            suppression=self.local_suppression_list(),
+            writer=SqliteSearchIndexWriter(),
+            parser_version=DebateDocxParser().parser_version,
+            event_for_caselist=event_for_caselist,
+        )
+
+    def search_index_publish(self) -> SearchIndexPublishService:
+        """Build the publish of a built index to this environment's bucket (`v1-e39-t02`).
+
+        Signed with the everyday evidence profile, which may write `reports/`. Raises
+        :class:`EvidenceStoreNotConfigured` when this environment names no bucket.
+        """
+        return self.singleton("search_index_publish", self._build_search_index_publish)
+
+    def _build_search_index_publish(self) -> SearchIndexPublishService:
+        # Imported here, not at module scope: lxml is loaded only by a command that needs the parser.
+        from debate_core.integrations.docx_parser import DebateDocxParser
+
+        return SearchIndexPublishService(
+            bucket=self._evidence_bucket(), parser_version=DebateDocxParser().parser_version
         )
 
     def version_retention(self, *, bucket: bool) -> VersionDirectoryRetention:

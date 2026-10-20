@@ -32,12 +32,15 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Any, Final, Literal, Self
+from collections.abc import Iterable, Sequence
+from typing import Any, Final, Literal, NamedTuple, Self
 
 from pydantic import Field, model_validator
 
 from debate_core.domain.base import DomainModel, NonEmptyText, Sha256Hex
+from debate_core.domain.debate_files import FontSizeSpan, FormattingSpan
 from debate_core.domain.schema_export import JSON_SCHEMA_DIALECT
+from debate_core.domain.style_profile import RunEmphasis
 
 __all__ = [
     "DEFAULT_PROVENANCE_LIMIT",
@@ -52,11 +55,18 @@ __all__ = [
     "SQLITE_FEATURE_CEILING",
     "IndexCounts",
     "IndexFile",
+    "IndexedFontSizeSpan",
+    "IndexedFormattingSpan",
     "SearchIndexManifest",
     "SearchIndexPointer",
     "StoreState",
     "SuppressionListState",
+    "decode_font_size_spans",
+    "decode_formatting_spans",
+    "encode_font_size_spans",
+    "encode_formatting_spans",
     "index_object_key",
+    "read_aloud_text",
     "render_search_index_manifest_schema",
 ]
 
@@ -204,6 +214,73 @@ class SearchIndexPointer(DomainModel):
     def to_json_bytes(self) -> bytes:
         """The pointer's bytes, written the way the manifest's are."""
         return (json.dumps(self.model_dump(mode="json"), indent=2, ensure_ascii=False) + "\n").encode("utf-8")
+
+
+class IndexedFormattingSpan(NamedTuple):
+    """A formatting span as the index stores it: a parser span without its rule id and match source."""
+
+    emphasis: RunEmphasis
+    start_offset: int
+    end_offset: int
+    highlight_color: str | None = None
+
+
+class IndexedFontSizeSpan(NamedTuple):
+    """A font-size span as the index stores it."""
+
+    start_offset: int
+    end_offset: int
+    half_points: int
+
+
+def encode_formatting_spans(spans: Sequence[FormattingSpan]) -> str:
+    """`documents.formatting_spans`: the spans as compact JSON. Skeleton: still the parser's objects."""
+    return json.dumps(
+        [span.model_dump(mode="json") for span in spans],
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    )
+
+
+def decode_formatting_spans(stored: str) -> tuple[IndexedFormattingSpan, ...]:
+    """The spans `encode_formatting_spans` wrote. Skeleton."""
+    return ()
+
+
+def encode_font_size_spans(spans: Sequence[FontSizeSpan]) -> str:
+    """`documents.font_size_spans`. Skeleton: still the parser's objects."""
+    return json.dumps(
+        [span.model_dump(mode="json") for span in spans],
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    )
+
+
+def decode_font_size_spans(stored: str) -> tuple[IndexedFontSizeSpan, ...]:
+    """The spans `encode_font_size_spans` wrote. Skeleton."""
+    return ()
+
+
+def read_aloud_text(text: str, spans: Iterable[FormattingSpan | IndexedFormattingSpan]) -> str:
+    """The stretches of `text` that are underlined or highlighted, in order, joined by a space.
+
+    Touching or overlapping spans are one stretch, so an underline and the highlight inside it give
+    the words once. Takes the parser's spans or the index's, which read the same here.
+    """
+    intervals = sorted((span.start_offset, span.end_offset) for span in spans if span.emphasis in _READ_ALOUD)
+    merged: list[list[int]] = []
+    for start, end in intervals:
+        if merged and start <= merged[-1][1]:
+            merged[-1][1] = max(merged[-1][1], end)
+        else:
+            merged.append([start, end])
+    stretches = (text[start:end].strip() for start, end in merged)
+    return " ".join(stretch for stretch in stretches if stretch)
+
+
+_READ_ALOUD: Final = frozenset({RunEmphasis.UNDERLINE, RunEmphasis.HIGHLIGHT})
 
 
 def render_search_index_manifest_schema() -> dict[str, Any]:

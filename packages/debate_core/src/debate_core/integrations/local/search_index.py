@@ -45,13 +45,16 @@ import gzip
 import json
 import shutil
 import sqlite3
-from collections.abc import Sequence
 from pathlib import Path
 from typing import Final
 
 from debate_core.application.ports.search_index import IndexedOccurrence, SearchDocument
-from debate_core.domain.debate_files import FontSizeSpan, FormattingSpan
-from debate_core.domain.search_index import SEARCH_INDEX_FORMAT_VERSION, SQLITE_FEATURE_CEILING
+from debate_core.domain.search_index import (
+    SEARCH_INDEX_FORMAT_VERSION,
+    SQLITE_FEATURE_CEILING,
+    encode_font_size_spans,
+    encode_formatting_spans,
+)
 
 __all__ = [
     "APPLICATION_ID",
@@ -165,16 +168,6 @@ _FINISH: Final = (
 )
 
 
-def _spans_json(spans: Sequence[FormattingSpan] | Sequence[FontSizeSpan]) -> str:
-    """Spans as compact JSON with sorted keys, so equal spans are equal text."""
-    return json.dumps(
-        [span.model_dump(mode="json") for span in spans],
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=False,
-    )
-
-
 def _occurrence_row(doc_id: int, one: IndexedOccurrence) -> tuple[object, ...]:
     return (
         doc_id,
@@ -233,8 +226,8 @@ class _SqliteSink:
                 document.read_aloud,
                 document.text,
                 document.completeness,
-                _spans_json(document.formatting_spans),
-                _spans_json(document.font_size_spans),
+                encode_formatting_spans(document.formatting_spans),
+                encode_font_size_spans(document.font_size_spans),
                 json.dumps(list(document.sides), separators=(",", ":")),
                 document.first_seen,
                 document.last_seen,

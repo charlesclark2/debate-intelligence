@@ -127,8 +127,8 @@ from debate_core.domain.search_index import (
     SearchIndexManifest,
     StoreState,
     SuppressionListState,
+    read_aloud_text,
 )
-from debate_core.domain.style_profile import RunEmphasis
 from debate_core.evidence.fingerprints import FINGERPRINT_VERSION, card_fingerprint
 
 __all__ = [
@@ -136,7 +136,6 @@ __all__ = [
     "SearchIndexBuildService",
     "SearchIndexStoreNotReady",
     "cite_without_cutter_mark",
-    "read_aloud_text",
     "representative_order",
 ]
 
@@ -153,7 +152,6 @@ _COMPLETENESS_RANK: Final = {
     CardCompleteness.CITE_ONLY: 2,
 }
 
-_READ_ALOUD: Final = frozenset({RunEmphasis.UNDERLINE, RunEmphasis.HIGHLIGHT})
 
 #: `// JD` closing the last line of a cite: the convention a cutter signs with, of any length.
 _CUTTER_MARK_TAIL: Final = re.compile(r"[ \t]*//[ \t]*[^\s/][^\s]*[ \t]*$")
@@ -208,25 +206,6 @@ def cite_without_cutter_mark(full_cite: str) -> str:
             return full_cite
         return "".join(lines[:position]) + kept + ending
     return full_cite
-
-
-def read_aloud_text(card: ParsedCard) -> str:
-    """The stretches of the evidence that are underlined or highlighted, in order, joined by a space.
-
-    Touching or overlapping spans are one stretch, so an underline and the highlight inside it give
-    the words once.
-    """
-    intervals = sorted(
-        (span.start_offset, span.end_offset) for span in card.formatting_spans if span.emphasis in _READ_ALOUD
-    )
-    merged: list[list[int]] = []
-    for start, end in intervals:
-        if merged and start <= merged[-1][1]:
-            merged[-1][1] = max(merged[-1][1], end)
-        else:
-            merged.append([start, end])
-    stretches = (card.evidence_text[start:end].strip() for start, end in merged)
-    return " ".join(stretch for stretch in stretches if stretch)
 
 
 def _recency(row: OccurrenceRecord) -> tuple[int, str]:
@@ -639,7 +618,7 @@ def _document(
         tag=card.tag,
         cite=cite_without_cutter_mark(card.full_cite),
         short_cite=card.short_cite,
-        read_aloud=read_aloud_text(card),
+        read_aloud=read_aloud_text(card.evidence_text, card.formatting_spans),
         text=card.evidence_text,
         completeness=card.completeness.value,
         formatting_spans=card.formatting_spans,

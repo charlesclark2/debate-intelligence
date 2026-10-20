@@ -1295,16 +1295,41 @@ def test_resolve_auto_in_a_camp_recipe_takes_the_latest_release() -> None:
 
 
 def test_resolve_auto_breaks_a_tie_in_one_camp_year_by_the_release_then_the_lowest_source() -> None:
+    # The release that wins by name is in the file with the highest digest, so the two rules disagree.
     rows = [
-        camp_occurrence(CARD_A, SOURCE_3, 1, release="2031-policy"),
         camp_occurrence(CARD_A, SOURCE_2, 7, release="2031-policy"),
-        camp_occurrence(CARD_A, SOURCE_1, 4, release="2031-pf"),
+        camp_occurrence(CARD_A, SOURCE_1, 1, release="2031-policy"),
+        camp_occurrence(CARD_A, SOURCE_3, 4, release="2031-pf"),
     ]
     for order in (rows, rows[::-1]):
         resolved = camp_world(order).resolve(recipe_text(card(CARD_A), header=CAMP_HEADER))
-        assert chosen(resolved) == [(SOURCE_1, 4, "AUTO")], "2031-pf before 2031-policy, by name"
+        assert chosen(resolved) == [(SOURCE_3, 4, "AUTO")], "2031-pf before 2031-policy, by name"
     resolved = camp_world(rows[:2]).resolve(recipe_text(card(CARD_A), header=CAMP_HEADER))
-    assert chosen(resolved) == [(SOURCE_2, 7, "AUTO")]
+    assert chosen(resolved) == [(SOURCE_1, 1, "AUTO")]
+
+
+def test_resolve_auto_takes_a_camp_release_whose_bytes_a_team_withdrew_from_its_own_disclosure() -> None:
+    """The question the parse pipeline asks of a camp file: only its source, suppressed as a whole."""
+    rows = [
+        camp_occurrence(CARD_A, SOURCE_1, 5, release="2031-policy"),
+        camp_occurrence(CARD_A, SOURCE_2, 9, release="2030-policy"),
+    ]
+    withdrawn = suppress(SOURCE_1, path=path_of(SOURCE_1))
+    resolved = camp_world(rows, suppressions=[withdrawn]).resolve(
+        recipe_text(card(CARD_A), header=CAMP_HEADER)
+    )
+    assert (chosen(resolved), resolved.errors) == ([(SOURCE_1, 5, "AUTO")], ())
+
+
+def test_resolve_a_camp_pin_to_a_removed_camp_file_the_store_no_longer_holds_is_refused_as_suppressed() -> (
+    None
+):
+    """After `caselist parse --caselist openev` rebuilds the store, the removed file has no row left."""
+    rows = [camp_occurrence(CARD_A, SOURCE_2, 9)]
+    resolved = camp_world(rows, suppressions=[suppress(SOURCE_1)]).resolve(
+        recipe_text(card(CARD_A, pin=CAMP_PIN))
+    )
+    assert (chosen(resolved), codes(resolved)) == ([], [("SUPPRESSED_OCCURRENCE", f"{ITEM}.pin")])
 
 
 def test_resolve_auto_never_picks_a_suppressed_camp_occurrence() -> None:

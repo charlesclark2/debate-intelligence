@@ -442,6 +442,13 @@ Until the hold is lifted, nothing under `wfbdebate.com` can be validated:
 - the ACM certificate, CloudFront and the managed login domain (step 3, which would time out
   waiting for ACM).
 
+**The cause, found by the operator:** `resend-contact-reachability-email` showed the domain's
+registrant contact email had been entered with the wrong top-level domain, so the ICANN verification
+email could never be confirmed, and the registrar put the domain on hold at the 15-day deadline.
+The operator is correcting the address on all three contacts in the Route 53 Domains console,
+because `update-domain-contact` needs the whole contact record written out, and then verifying the
+new address. Neither address is recorded here.
+
 **Steps 3 and 5–10: not yet run.** They need both the domain hold lifted and the concurrency
 increase. Step 3 waits for the concurrency increase, and will plan 37 to
 add, not 41. ac5, the runbook's tables

@@ -74,7 +74,7 @@ spec:
         team or filename. The removal runbook's step 8 (flag built files that quoted a removed card) is
         manual until this exists; for files this tool builds, it then has a command behind it.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

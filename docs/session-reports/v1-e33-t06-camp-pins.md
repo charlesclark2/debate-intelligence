@@ -257,9 +257,38 @@ Reply with 1: a or b, 2: a or b.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-19
 
 **Notes:**
+
+Accepted, with the phase `Succeeded`. The pull request needs no `--partial`.
+
+**The work itself:**
+
+* **Additive within schema version 1:** every existing recipe, example and sidecar still validates,
+  and a caselist recipe's hash is unchanged.
+* **The camp line is proven by the read-back,** as t02's disclosed line was. It is read as the
+  card's undertag and is in neither cite nor evidence, so no Word check was needed.
+* **Each part of the line has a source written down,** never the lab, which can carry initials.
+* **Suppression asks a camp row exactly what the parse pipeline asks a camp file,** and the gap that
+  leaves (Decision 3) is stated rather than hidden.
+* **The affected set took 26 s and passed,** and 20 mutants were run at the cap, aimed where I asked.
+  Three survivors became tests, and the one equivalent is argued.
+
+**Rulings:**
+
+1. **Question 1: (a), keep it.** A file of camp cards built by AUTO is useful, and it is the only way
+   ac1's AUTO clause has a real case. The PM amends the spec's description in the next batch to say
+   the recipe's own `caselist` may be `openev`.
+2. **Question 2: (a).** The PM files a p3 follow-up to carry the camp path's digest on occurrence
+   rows, so the resolver and the parse can ask about a camp-path withdrawal before a rebuild.
+3. **The FYIs are agreed:** the optional `source_stores` (no new port; the re-hash still guards the
+   bytes) and `FILE_BUILDER_VERSION` `2026.10.19-file-writer-2`, since every sidecar gains keys.
+4. **Deviations 1 to 4 and Decisions 1 to 9 are accepted.** Deviation 4's changes to t01's and t02's
+   tests are the behaviour this task reverses, each kept purposeful.
+5. **Follow-ups 1 and 3 go into amendments:** `v1-e33-t03` counts a camp row with a release record
+   as attributed; `v1-e39-t08` passes `source_stores` for the bucket's prefixes. **Follow-up 4**
+   (the schema's `format: date` is not asserted) goes on the deferred list.

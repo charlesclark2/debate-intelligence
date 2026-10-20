@@ -487,8 +487,14 @@ delegated again to the four Route 53 name servers, and the registry whois read
 
 The fix, on this branch, writes `retry_grace_period_seconds = 0` in the module, and
 `app_client_is_confidential_code_flow_only` asserts it. Without the line the run fails
-(`15 passed, 1 failed`); with it, `16 passed`. `scripts/terraform_checks.sh` → `All Terraform checks
-passed.`
+(`15 passed, 1 failed`); with it, `16 passed`. `scripts/terraform_checks.sh` → **one failure**, `validate
+infrastructure/envs/dev`, with `No valid credential sources found`. The operator's `terraform init`
+gave this worktree's `envs/dev` the S3 backend, so its `init -backend=false` now reaches for state,
+and the session has no AWS credentials. Every other check in the script passed. The same
+configuration, validated with `TF_DATA_DIR` pointing at a scratch directory, gives
+`Success! The configuration is valid.` The operator's `.terraform` was not modified (its state
+file keeps its 12:27 timestamp). An earlier commit of this report (`beafdbe`) said the script
+passed; it did not, and this paragraph replaces that line.
 
 **Steps 3 (to finish) and 5–10: not yet run.** Step 3 waits for the concurrency increase, and will plan 37 to
 add, not 41. ac5, the runbook's tables

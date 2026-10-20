@@ -82,7 +82,7 @@ public season-and-division archive rather than a person or a school.
 | `parsed/` | Extracted cards, paragraphs and offsets derived from a raw file by one parser version | The parse pipeline (E31 `t06`) | Kept; regenerable by re-parsing |
 | `files/` | Built team files — the DOCX and its provenance sidecar (E33) | The file builder (E33) | Kept |
 | `manifests/` | One JSONL row per source: sha256, size, content type, caselist, snapshot, provenance | The importers and `caselist publish` (E30 `t03`–`t05`) | Kept. The record of what the store holds |
-| `reports/` | Run logs and derived reports: argument-landscape output, sync run summaries | Landscape analysis (E32), sync runs (E34), V2 tub index (`reports/tub/`) | Kept; regenerable |
+| `reports/` | Run logs and derived reports: argument-landscape output, sync run summaries, the student search pilot's index (`reports/tub/search/`) | Landscape analysis (E32), sync runs (E34), `tub index publish` (`v1-e39-t02`), V2 tub index (`reports/tub/`) | Kept; regenerable. Superseded index versions pruned by `v1-e39-t07` |
 | `uploads/` | Files a coach or a user put in themselves, after they have passed scanning | V2 debate tub (`v2-e35-t03`), V3 user uploads (`v3-e20-t02`) | Kept |
 | `exports/` | Bulk zip downloads built for one download | V2 bulk export (`v2-e35-t03`, `v2-e17-t05`) | **Expires after 1 day**, versions included |
 | `quarantine/` | Files held before they are trusted: fresh uploads awaiting scanning and validation, and material held pending a removal decision | V3 upload pipeline (`v3-e20-t02`), the operator | Kept until promoted to `uploads/` or deleted |
@@ -107,6 +107,9 @@ manifests/_suppression/suppression-list.jsonl           sha256 values that must 
 manifests/_suppression/removal-log.jsonl                request id, date, reason code, environment
 reports/hsld26/2026-09-15/argument-landscape.json       what the field is running
 reports/sync/2026-09-15T06-00Z.json                     one scheduled sync run
+reports/tub/search/3f9a0c1d2e4b5a69/search-index.sqlite.gz  one build of the search pilot's index
+reports/tub/search/3f9a0c1d2e4b5a69/manifest.json       what that build is and was built from
+reports/tub/search/current.json                         which build the pilot serves; written last
 uploads/wfb/sha256/7c/2b/7c2b90ab…33ef                  a coach's own file (V2)
 exports/wfb/2026-09-15T18-04Z-selection.zip             a bulk download (gone within a day)
 quarantine/wfb/01J9Z4K7QF3M2N                           an upload awaiting scanning (V3)
@@ -115,11 +118,30 @@ quarantine/wfb/01J9Z4K7QF3M2N                           an upload awaiting scann
 `manifests/_suppression/` is singled out in the IAM policies: it is the one place the takedown
 credential may write, because a suppression list that is appended to has to be read first.
 
+### `reports/tub/search/`: the student search pilot's index
+
+`debate-research tub index publish` (`v1-e39-t02`, [ADR-0019](../adr/0019-student-search-pilot-stack-sign-in-and-hosting.md)
+(c)) writes one directory per build, named by its index id, the first 16 hex characters of the
+SQLite file's sha256: the SQLite file gzipped, and its manifest. Then, last, it writes `current.json`,
+which names that build's object and manifest by key and sha256. The pilot's function reads
+`current.json` and follows it, so a publish stopped part-way leaves the previous build current and
+whole. The SQLite file and the manifest are described in
+[docs/data/search-index.md](../data/search-index.md).
+
+Unlike the rest of `reports/`, the index holds card text, and in stored provenance columns, never
+searchable, the school, team code, side, tournament and round of each disclosure it keeps
+(data-use policy, "Where personal data is allowed to live"). Its key holds none of them: an index id
+is a digest. It is written by the everyday `EvidenceOperator` profile and read by the pilot's
+function. The operator's listing grant names `reports/tub/search/` beside the documented prefixes, so
+the listing that `v1-e39-t07`'s pruning depends on survives a narrower `reports/` grant. Deleting a
+superseded build needs the one delete grant under `reports/` that `v1-e39-t07` adds, on this prefix
+alone.
+
 ## Who may touch what
 
 | | `EvidenceOperator` | `EvidenceRemoval` |
 |---|---|---|
-| List | Every prefix in the table above, one prefix at a time | `raw/`, `parsed/`, `files/`, `manifests/`, `quarantine/`, with versions |
+| List | Every prefix in the table above, one prefix at a time, and `reports/tub/search/` by name | `raw/`, `parsed/`, `files/`, `manifests/`, `quarantine/`, with versions |
 | Read | Any object, any version | Versions under those five prefixes; current objects under `manifests/_suppression/` |
 | Write | Any object | `manifests/_suppression/` only |
 | Delete | **Nothing** | Objects and noncurrent versions under those five prefixes |

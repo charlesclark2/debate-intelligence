@@ -70,7 +70,7 @@ spec:
         On a synthetic index of 250,000 documents generated in the run (marked slow), the
         95th-percentile query time is reported in the session report.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

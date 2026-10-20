@@ -520,7 +520,12 @@ passed; it did not, and this paragraph replaces that line.
 **2026-10-19, step 6 (the cookie keys):** `put-parameter` → `2`, and the check printed
 `['current', 'previous'] True`, without printing either key.
 
-**Steps 7–10: not yet run.** Step 3 waits for the concurrency increase, and will plan 37 to
+**2026-10-19, step 7 (the permission-set profiles):** after `aws sso login`, the two dev profiles
+resolve to `assumed-role/AWSReservedSSO_DebateDevTubDeployer_…` and
+`assumed-role/AWSReservedSSO_DebateDevTubAccounts_…`. The prod pair is configured, and works once
+prod is applied.
+
+**Steps 8–10: not yet run.** Step 3 waits for the concurrency increase, and will plan 37 to
 add, not 41. ac5, the runbook's tables
 and the `Succeeded` phase wait for steps 3–10.
 

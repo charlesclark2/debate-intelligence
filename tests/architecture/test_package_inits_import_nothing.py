@@ -8,10 +8,11 @@ of 79% of the test files into a task's affected set (`scripts/affected_tests.py`
 Callers now import from the submodule that defines a name, and these two modules hold only a
 docstring.
 
-import-linter cannot say this: a contract on `debate_core.testing` covers its submodules as well,
-and `import pytest` is not a module it tracks. So this test reads both files with `ast` and fails
-on any import statement, anywhere in the module (a lazy one inside a function as well), and on
-any call to `__import__` or `import_module`.
+import-linter says only part of this. A forbidden contract with `as_packages = false` can be
+narrowed to the package module alone, but it forbids only the modules it names: a stdlib or
+third-party import (`import pytest`) is outside its graph, and it does not see a dynamic import. So
+this test reads both files with `ast` and fails on any import statement, anywhere in the module (a
+lazy one inside a function as well), and on any call to `__import__` or `import_module`.
 """
 
 from __future__ import annotations

@@ -301,3 +301,25 @@ def test_search_index_publish_refuses_a_directory_without_a_manifest(
     (built.directory / SEARCH_INDEX_MANIFEST_NAME).unlink()
     with pytest.raises(UnreadableSearchIndexManifest):
         asyncio.run(publisher(bucket).publish(built.directory))
+
+
+class MisreportingStore(RecordingStore):
+    """A bucket that stores the gzip object and says it holds other bytes, as a damaged write would."""
+
+    async def put_file(self, key: str, source: Path) -> ObjectInfo:
+        stored = await super().put_file(key, source)
+        if key.endswith(SEARCH_INDEX_GZIP_NAME):
+            return ObjectInfo(key=stored.key, size=stored.size, sha256="0" * 64, version_id=stored.version_id)
+        return stored
+
+
+def test_search_index_publish_stops_before_the_pointer_when_the_object_lands_with_another_digest(
+    tmp_path: Path, bucket: S3EvidenceObjectStore
+) -> None:
+    built = build(tmp_path, "Invented growth always ends badly")
+    misreporting = MisreportingStore(bucket)
+    with pytest.raises(SearchIndexFilesDamaged, match="landed in the bucket with another digest"):
+        asyncio.run(publisher(misreporting).publish(built.directory))
+    assert misreporting.puts == [f"reports/tub/search/{built.manifest.index_id}/search-index.sqlite.gz"]
+    with pytest.raises(NotFound):
+        asyncio.run(bucket.head(SEARCH_INDEX_POINTER_KEY))

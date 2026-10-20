@@ -27,7 +27,8 @@ dev = [
     # the adapter, and boto3-stubs because pyright runs strict over debate_core and boto3 itself
     # ships no inline types. moto, below, is what answers the adapter in place of AWS.
     "boto3>=1.35",
-    "boto3-stubs[s3]>=1.35",
+    # cognito-idp, logs and ssm for the pilot's adapters (v1-e39-t05), for the same reason as s3.
+    "boto3-stubs[cognito-idp,logs,s3,ssm]>=1.35",
     # scripts/affected_tests.py (v1-e01-t28) builds the workspace packages' import graph with grimp.
     # import-linter brings it in too, but the script uses it directly, so it is named here. The lock
     # holds the version; the floor is the 3 series, whose build_graph takes cache_dir=None. The floor is
@@ -35,6 +36,9 @@ dev = [
     # a three-point-teen specifier as a Python version.
     "grimp>=3.0",
     "httpx>=0.28",
+    # Starlette's TestClient, which the pilot's app tests run through, deprecates httpx in favour of
+    # httpx2 from Starlette 1.9 (v1-e39-t04's report; added by v1-e39-t05, which writes most of them).
+    "httpx2>=2.15",
     "hypothesis>=6.100",
     # `uv run lint-imports` checks the ports-and-adapters boundaries. v1-e29-t04 adds the first
     # contract (no AWS SDK outside debate_core.integrations.s3); v1-e02-t06-import-boundary-guard

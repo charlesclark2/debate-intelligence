@@ -100,8 +100,9 @@ variables {
   # The s3:prefix condition each bucket-level action must carry, exactly. Without one, a listing
   # grant covers the whole bucket while the action set stays the same.
   #
-  # ListBucket: the documented prefixes of docs/architecture/evidence-store-layout.md, all of them.
-  # A prefix missing here is a prefix the CLI cannot see.
+  # ListBucket: the documented prefixes of docs/architecture/evidence-store-layout.md, all of them,
+  # and the student search pilot's reports/tub/search/ by name (v1-e39-t02). A prefix missing here is
+  # a prefix the CLI cannot see.
   #
   # ListBucketVersions: the prefixes a takedown may delete from, and no others. reports/ is not
   # one of them (operator_access.tf).
@@ -115,6 +116,7 @@ variables {
       "uploads/", "uploads/*",
       "exports/", "exports/*",
       "quarantine/", "quarantine/*",
+      "reports/tub/search/", "reports/tub/search/*",
     ]
     "s3:ListBucketVersions" = [
       "raw/", "raw/*",

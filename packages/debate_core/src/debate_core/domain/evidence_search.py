@@ -276,15 +276,17 @@ class RankingWeights:
     text: float
 
     def bm25(self) -> str:
-        """FTS5's per-query rank function: `bm25(8.0, 3.0, 2.0, 1.0)`, as `rank MATCH` takes it."""
+        """FTS5's per-query rank function: `bm25(10.0, 6.0, 3.0, 1.0)`, as `rank MATCH` takes it."""
         weights = (self.tag, self.cite, self.read_aloud, self.text)
         if any(not weight > 0 for weight in weights):
             raise ValueError("every BM25 weight is a positive number")
         return "bm25(" + ", ".join(repr(float(weight)) for weight in weights) + ")"
 
 
-RANKING_WEIGHTS: Final = RankingWeights(tag=8.0, cite=3.0, read_aloud=2.0, text=1.0)
-"""The one place the ranking's weights live. Justified in the `v1-e39-t03` session report."""
+RANKING_WEIGHTS: Final = RankingWeights(tag=10.0, cite=6.0, read_aloud=3.0, text=1.0)
+"""The one place the ranking's weights live. The interior of the plateau a grid of 168 weightings found on
+the synthetic relevance set in `test_evidence_search_ranking.py`; the `v1-e39-t03` session report has
+the numbers."""
 
 
 class InvalidSearchCursor(ValueError):

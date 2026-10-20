@@ -236,9 +236,10 @@ class EvidenceSearchService:
         if document is None:
             return None
         occurrences = self._reader.occurrences(document.doc_id)
-        if not occurrences or occurrences[0].ordinal != 0 or _suppressed(occurrences[0], is_suppressed):
+        stopped = [_suppressed(one, is_suppressed) for one in occurrences]
+        if not occurrences or occurrences[0].ordinal != 0 or stopped[0]:
             return None
-        survivors = [one for one in occurrences if not _suppressed(one, is_suppressed)]
+        survivors = [one for one, out in zip(occurrences, stopped, strict=True) if not out]
         files, teams = surviving_counts(document.file_count, document.team_count, occurrences, survivors)
         return Card(
             caselist=document.caselist,

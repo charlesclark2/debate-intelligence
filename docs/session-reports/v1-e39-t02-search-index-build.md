@@ -444,3 +444,48 @@ hand-written service lists in `test_app.py`, `test_doctor.py` and `test_installa
 merges second keeps both: one `tub` group holding `index` and `users`, and both sets of services.
 
 **Operator follow-ups 2 and 3** (the listing grant, dev then prod) go on the PM's promotion list.
+
+## PM review, second
+
+**Verdict:** ACCEPTED
+<!-- ACCEPTED / CHANGES_REQUESTED -->
+
+**Reviewed by / date:** PM, 2026-10-20
+
+**Notes:**
+
+Accepted. Every criterion passes, the Goal is `Succeeded`, and the pull request opens with no
+`--partial`.
+
+**The change:**
+
+* **It did what it was meant to.** The SQLite file went from 1.48 GB to 752 MB, under the 0.9 GB
+  line, so ADR-0019 needs no note. That is 16,125 bytes a document. The gzip object is 282 MB, under
+  the 400 MB trigger, and a live copy plus a swap copy now take about 1.5 GB of the 4 GB.
+* **The tests were shown failing first, and one first survived:** the byte-identity mutant, because
+  no standard card carried formatting. You found that gap and fixed the fixture rather than the
+  test. That is the kind of finding mutation exists for.
+* **`decode_*` refuses shapes the encoder never writes.** `read_aloud_text` moving into the domain
+  module lets v1-e39-t03 rebuild the read-aloud text from what is stored.
+
+**Q2: your correction is right, and my ruling was wrong.** No command merges the suppression copies
+today, so "run the sync that merges them" pointed at nothing. The guide's wording (build on the
+machine that makes the removals, and check `suppression.sha256`) is the honest version. Follow-up 5
+goes into my next batch as a v1-e39-t09 amendment: the weekly stage calls `reconcile()` before it
+builds.
+
+**Growth:** 248 MB of headroom in the 1 GB season allowance is about 33% growth on the 2026-10-13
+snapshot. That is enough for the pilot through December, but not obviously for the whole season.
+The same v1-e39-t09 amendment records bytes per document on each weekly build, and asks the PM for
+an ADR-0019 revisit once the file passes 0.9 GB.
+
+**Q1, D1 and 25 mutants against a cap of about 20, all on new code:** accepted.
+
+**After the merge:**
+
+* **Operator follow-up 2,** the listing grant in dev, can run any time before the first publish to
+  dev. Follow-up 3 (prod) goes on the PM's promotion list.
+* **The first index actually published** is built from the `docx-6` store, after v1-e31-t24's
+  re-parse.
+* **The merge note in the first review stands:** whichever of this task and v1-e39-t05 merges second
+  keeps both sides.

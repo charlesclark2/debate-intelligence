@@ -431,3 +431,11 @@ stays `InProgress` for ac4, so the merge uses `--partial`.
   recorded in a close-out.
 * **`v1-e31-t19` also bumps `DOCX_PARSER_VERSION`.** Whichever merges second rebases and takes a
   later version string, with its own history line.
+
+### ac4: the operator's re-parse, 2026-10-19 (recorded by the PM)
+
+The combined re-parse to `2026.10.18-docx-5` (`v1-e31-t20`'s after-merge list) parsed every source
+again. No source failed; every source not parsed is counted as an unsupported format, the one `.cmir`
+file under `CMIR`; forbidden characters were replaced in 5 sources, 66 characters. The counts are in
+[the parse report](../data/caselist-parse-report.md#the-re-parse-to-docx-5-and-the-re-cluster-on-the-store-operator-run-2026-10-19).
+ac4 passes, and the PM sets the Goal `Succeeded` in the close-out of 2026-10-20.

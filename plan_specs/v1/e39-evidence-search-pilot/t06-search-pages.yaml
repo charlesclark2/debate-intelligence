@@ -26,6 +26,10 @@ spec:
     built file has it. The pages work in a Chromebook's Chrome at 1366x768 and 1280x800, by
     keyboard alone, and on a phone; they load nothing from another origin and use no inline
     script; a page weighs under 150 KB before the card body.
+    (PM amendment 2026-10-20, from v1-e31-t22.) 12,048 stored cards (5%) run over 3,000 words,
+    and nearly all are real cards. A card page leads with what is read aloud (the underlined and
+    highlighted text), with the rest of the card shown on request, and a result's snippet never
+    carries a whole long card. Copy card still copies the whole card with its formatting.
   priority: 1
   constraints:
     packages: [debate_api, packages/debate_api/tests, tests/integration]
@@ -59,6 +63,11 @@ spec:
       description: >-
         On dev, the operator's Chromebook check: search, open a card, copy it into Google
         Docs, formatting kept; reported yes or no for each (operator follow-up).
+    - id: ac5
+      description: >-
+        (PM amendment 2026-10-20) A card over 3,000 words shows its read-aloud text first
+        and the rest on request, and its search result's snippet stays within the
+        page-weight budget, by test.
 status:
   phase: Pending
 ---

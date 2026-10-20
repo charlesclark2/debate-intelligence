@@ -1,0 +1,89 @@
+# TASK v1-e01-t29-slim-package-reexports - debate_core.testing and debate_core.evidence stop importing more than a caller asks for
+# Epic: E01 Repository & Delivery Foundation | Release: v1.0 (Foundation & verified evidence core) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e01-t29-slim-package-reexports
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+  annotations:
+    debate/title: "debate_core.testing and debate_core.evidence stop importing more than a caller asks for"
+spec:
+  # Filed by the PM, 2026-10-20, from v1-e01-t28's Follow-up work and the PM's ruling 4 on it.
+  description: >-
+    `scripts/affected_tests.py` selects a median of 79% of test files for a task, and v1-e01-t28
+    traced most of it to two package `__init__` modules. `debate_core/testing/__init__.py`
+    imports `fakes`, which imports caselist suppression, so every test that imports any testing
+    helper reaches the caselist code; and the root conftest imports `debate_core.testing`.
+    `debate_core/evidence/__init__.py` imports the style classifier among others, so a parser
+    change reaches every test that imports any `debate_core.evidence.*` module. Make both
+    packages' `__init__` import nothing a caller did not ask for: callers import from the
+    submodule (`debate_core.testing.fakes`, `debate_core.evidence.style_classifier`), and the
+    package keeps no re-export that pulls in another layer. No behaviour changes; this is
+    imports only. An import contract keeps the two `__init__` modules thin.
+  priority: 2
+  constraints:
+    packages: [debate_core.testing, debate_core.evidence, debate_core, debate_cli, debate_api, packages, tests, conftest.py, pyproject.toml]
+    forbidden:
+      - Any change of behaviour, output or stored data
+      - Moving a test off the PR path or marking it slow
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e01-t28-affected-test-selection
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        `debate_core/testing/__init__.py` and `debate_core/evidence/__init__.py` import no
+        submodule eagerly, and an import-linter contract (or a test) fails if either does
+        again, shown failing on a deliberate re-export.
+    - id: ac2
+      description: >-
+        Every caller imports from the submodule; pyright and `lint-imports` pass, and the
+        whole default selection passes in CI.
+    - id: ac3
+      description: >-
+        Over the same 20 task commits v1-e01-t28 measured, `scripts/affected_tests.py
+        --diff` gives the median and largest selected share after this change, against 79.4%
+        and 100% before, recorded in the report.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e01-t29-slim-package-reexports-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+spec:
+  description: >-
+    Thin the two package __init__ modules and import from submodules, then re-measure the
+    affected-set shares.
+  goalRef:
+    name: v1-e01-t29-slim-package-reexports
+  graph:
+    nodes:
+      - id: slim-reexports
+        kind: Task
+        name: Slim package re-exports
+        description: >-
+          Thin the two package __init__ modules and import from submodules, then
+          re-measure the affected-set shares.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Architecture and import tests pass
+            command: uv
+            args: [run, pytest, tests/architecture, tests/scripts, -k, import or affected]
+status:
+  phase: Pending

@@ -22,6 +22,16 @@ spec:
     (2) The 5,189 cites read behind a first name have no short cite: `Okonkwo 26` sits behind
     `Adaeze`. Reading it changes the short-cite pattern's "front only" rule, so the PM rules on
     the counts before anything is built.
+    (PM amendment 2026-10-20, from v1-e31-t22's sample and the PM's ruling.) Also the narrow
+    long-body shape: in two of ten sampled long bodies of the stratum "a short line above a
+    cite-shaped paragraph" (about 54 of its 271 distinct texts, 15 to 138 at 95%), a tag typed
+    in body style stood above a cite the parser did not read, so one stored card holds two. The
+    shape alone is one card eight times in ten, so no rule is written on it. First the operator
+    finds the two misses again (`scripts/sample_card_boundaries.py --seed 20261019` over
+    `~/t22-card-boundary-candidates.jsonl` redraws the same items) and describes, in formatting
+    terms only, how their line and cite differ from the other eight; then that narrower shape is
+    counted and sampled, and a rule is proposed to the PM only if it takes the misses without
+    the eight.
   priority: 3
   constraints:
     packages: [debate_core.evidence, debate_core.integrations.docx_parser, packages/debate_core/tests, scripts, tests/scripts, docs/data]
@@ -43,6 +53,12 @@ spec:
         Each built rule has synthetic fixtures shown failing first, and the labelled
         evaluation's cite precision does not fall; `parser_version` is bumped if output
         changes.
+    - id: ac3
+      description: >-
+        (PM amendment 2026-10-20) The narrow long-body shape is described from the two
+        misses, counted and sampled before any rule, tallies only; a rule, if the PM rules
+        one, splits the sampled misses and none of the sampled single cards, by synthetic
+        fixtures shown failing first.
 status:
   phase: Pending
 ---

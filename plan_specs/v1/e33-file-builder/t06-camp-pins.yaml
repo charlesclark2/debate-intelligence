@@ -26,6 +26,9 @@ spec:
     provenance line, `[OpenEv: <camp> <year> — <event>, <file title>]` as the data-use policy's
     Attribution 2 gives it, and the source document for a camp occurrence, read from
     `raw/openev/` by its sha256.
+    (PM amendment 2026-10-20, recording the PM's ruling on v1-e33-t06's question 1.) A recipe's
+    own `caselist` may also be `openev`, so AUTO chooses among camp releases by the documented
+    rule; a caselist recipe reaches a camp card only by a pin.
   priority: 3
   constraints:
     # debate_core.integrations (the writer, debate_core.integrations.docx_file_writer, never

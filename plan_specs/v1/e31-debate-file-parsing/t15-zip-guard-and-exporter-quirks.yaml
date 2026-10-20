@@ -61,7 +61,7 @@ spec:
         Operator-run: the next parse's refusal counts, recorded in
         docs/data/caselist-parse-report.md.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

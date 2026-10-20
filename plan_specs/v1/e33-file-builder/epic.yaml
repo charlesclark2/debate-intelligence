@@ -226,5 +226,23 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e33-t06-camp-pins
+    - id: t07
+      kind: Task
+      name: 'A camp occurrence row carries its camp path''s digest, so a camp-path withdrawal stops it before a rebuild'
+      description: >-
+        A camp occurrence row carries its camp path's digest, so a camp-path withdrawal
+        stops it before a rebuild.
+      inputs:
+        specRef: plan_specs/v1/e33-file-builder/t07-camp-path-on-occurrence-rows.yaml
+        goalRef: v1-e33-t07-camp-path-on-occurrence-rows
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e33-t07-camp-path-on-occurrence-rows reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e33-t07-camp-path-on-occurrence-rows
 status:
   phase: Pending

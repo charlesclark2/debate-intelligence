@@ -224,6 +224,10 @@ gate, and it runs once per push rather than once per idea. (Added by the PM, 202
     the branch changes shared test ground (`pyproject.toml`, `uv.lock`, the root `conftest.py`,
     `tests/pytest_plugins/`, `ci.yml`) it prints that the whole selection is affected and runs
     nothing: that run is CI's, or the operator's under the exception below;
+  * **when the affected set would take longer than about two minutes,** the session does not hand it
+    to the operator: it says so in the report and leaves it to the pull request's `ci` check, which
+    runs the whole selection anyway. It still runs, within the two minutes, the test directories of
+    what it changed and the always-run list (the PM's ruling of 2026-10-19, written in 2026-10-20);
   * `ruff format --check`, `ruff check`, `pyright packages/<changed packages>`, `lint-imports`,
     `scripts/validate_specs.py`, and the docs checks when docs changed. These take seconds.
 * **After a sync or rebase**, run the affected set again, never the whole selection.

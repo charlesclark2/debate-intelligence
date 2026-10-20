@@ -689,3 +689,13 @@ tag. So the shape is a defect: ac5's second half, "counted and fixed", is carrie
 `v1-e31-t24-bold-tag-above-bracketed-cite`, filed in the PM close-out of 2026-10-19, which counts
 the shape over the corpus before any rule changes. This task's Goal stays `InProgress` for ac4's
 re-parse; (7) closes when `v1-e31-t24` does.
+
+### ac4: the operator's re-parse, 2026-10-19 (recorded by the PM)
+
+The combined re-parse to `2026.10.18-docx-5` matched this report's expected tables exactly: 235,552
+cards, 216,005 with a cite (205,589 before), 151,802 with a short cite (140,527), 19,547 tagged with no
+cite (28,054), and the four new rules' counts line for line. Five files by eye (step 2f) were right on
+every card. The before-and-after table is in
+[the parse report](../data/caselist-parse-report.md#the-re-parse-to-docx-5-and-the-re-cluster-on-the-store-operator-run-2026-10-19).
+ac4 passes. ac5's (7) was recorded above and is carried by `v1-e31-t24`. The PM sets the Goal
+`Succeeded` in the close-out of 2026-10-20.

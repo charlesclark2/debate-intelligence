@@ -88,7 +88,7 @@ spec:
         test; the operator's sample of contained pairs under a third of the larger, through it,
         sets or confirms `MIN_CUT_SHARE` with ac2. Added by the PM, 2026-10-17.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

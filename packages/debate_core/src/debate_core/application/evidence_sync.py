@@ -67,6 +67,12 @@ skipped with that refusal, which names the key and the line number. Asking costs
 manifest is read from the local listing's entry, once per manifest the push would send, and one
 already in the bucket, identical or journaled, is not asked about. A pull is not affected.
 
+Every one of these skips, and the ordinary ones, carries a :class:`SkipKind` beside its reason, set
+by the branch that skipped it (`v1-e29-t11`). :attr:`SyncPlan.skipped_reasons` groups by the kind,
+because the reason is free text and the publisher's names rows by digest, so no two manifests share
+one. The publisher says whether it withholds a manifest or cannot read it, and which requests its
+message names (:class:`ManifestWithholding`), so the grouping never reads the message.
+
 ## How few HeadObject calls this makes
 
 `list_objects` states no digest, by design, in either implementation — S3's `ListObjectsV2` does not

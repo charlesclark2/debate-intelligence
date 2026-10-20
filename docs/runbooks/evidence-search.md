@@ -342,9 +342,18 @@ aws sesv2 put-account-details --region us-east-1 \
 aws sesv2 get-account --region us-east-1 \
   --query '[ProductionAccessEnabled,Details.ReviewDetails.Status]' --output text
 ```
-Success looks like: no output from the request, then `False	PENDING`. AWS writes to
-`$OWNER_EMAIL`. Run the second command again later: `True	GRANTED` is the end of this step, and it
-holds for prod too. If AWS asks for more information, answer from the description above. Record
+Success looks like: no output from the request, then a review status of `PENDING`. The first
+value read `True` on 2026-10-19, straight after the request, rather than the `False` an account in
+the sandbox might be expected to show. So whether the account has left the sandbox is read from its
+sending quota instead:
+
+```bash
+aws sesv2 get-account --region us-east-1 \
+  --query '[SendQuota.Max24HourSend,SendQuota.MaxSendRate,EnforcementStatus]' --output text
+```
+`200	1	HEALTHY` is the sandbox: the review is still pending. AWS writes to `$OWNER_EMAIL`. Run both
+checks again later: a review status of `GRANTED` and a daily quota far above 200 (typically `50000`)
+are the end of this step, and they hold for prod too. If AWS asks for more information, answer from the description above. Record
 the dates in [What to record](#what-to-record).
 
 ## Step 5 — The settings Terraform cannot make

@@ -463,8 +463,15 @@ delegated again to the four Route 53 name servers, and the registry whois read
 - all three DKIM CNAMEs resolve to their `dkim.amazonses.com` targets;
 - `https://wfbdebate.com/` answers `200`.
 
-**Steps 3 and 5–10: not yet run.** Nothing blocks them now. Step 4's request waits for SES to
-report the identity verified. Step 3 waits for the concurrency increase, and will plan 37 to
+**2026-10-19, step 4 (SES production access).**
+
+- After a fresh SSO sign-in, `VerifiedForSendingStatus` read `True`, once the domain resolved again.
+- `put-account-details` was sent the same evening, with the prod URL and the coach as contact.
+- `get-account` then read `True	PENDING`. The review is pending; the first value was not the
+  runbook's expected `False`. The runbook now reads the sandbox state from `SendQuota` instead,
+  and that read-back is awaited.
+
+**Steps 3 and 5–10: not yet run.** Nothing blocks them. Step 3 waits for the concurrency increase, and will plan 37 to
 add, not 41. ac5, the runbook's tables
 and the `Succeeded` phase wait for steps 3–10.
 

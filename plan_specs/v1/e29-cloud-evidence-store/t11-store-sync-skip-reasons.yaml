@@ -50,7 +50,7 @@ spec:
       description: >-
         The guide's `skipped` row points at the breakdown.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

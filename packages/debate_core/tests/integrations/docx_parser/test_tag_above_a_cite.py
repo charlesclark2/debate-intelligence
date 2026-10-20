@@ -252,6 +252,12 @@ class TestABoldLineAboveACiteThatOpensACardWithNoTag:
         assert cards_of(document) == AS_IT_SHOULD
         assert section_with(document, LINE).match.rule_id == f"{TAKEN}:heuristic-unclassified-paragraph"
 
+    def test_reading_size_itself_is_enough(self, parser: DebateDocxParser) -> None:
+        """The bold-heading rule's floor is the profile's reading size, 22 half-points, inclusive."""
+        markup, _ = paragraph([(LINE, {"bold": True})])
+        styles = styles_with_defaults(f'<w:sz w:val="{READING_SIZE}"/>')
+        assert cards_of(card_above_then(markup, styles_xml=styles, parser=parser)) == AS_IT_SHOULD
+
     def test_a_blank_line_between_it_and_the_cite_is_stepped_over(self, parser: DebateDocxParser) -> None:
         document = card_above_then(SEVENS_LINE + paragraph_xml(run_xml("")), parser=parser)
 
@@ -322,6 +328,46 @@ class TestWhatTheRuleLeaves:
     def test_a_line_bold_off_by_its_own_run(self, parser: DebateDocxParser) -> None:
         markup, _ = paragraph([off("Demand outruns "), off("new generation", underline="single")])
         self.assert_left(card_above_then(markup, parser=parser), LINE, "heuristic-marked-up-body-text")
+
+    def test_a_line_in_a_paragraph_style_that_maps_to_no_unit(self, parser: DebateDocxParser) -> None:
+        """The classifier's heading rules never see through such a style (`v1-e31-t19`); nor does this one."""
+        markup, _ = paragraph(
+            [("Demand outruns ", {}), ("new generation", {"underline": "single"})], "NormalWeb"
+        )
+        styles = BOLD_DEFAULTS.replace(
+            "</w:styles>",
+            '<w:style w:type="paragraph" w:styleId="NormalWeb"><w:name w:val="Normal (Web)"/></w:style>'
+            "</w:styles>",
+        )
+        document = card_above_then(markup, styles_xml=styles, parser=parser)
+
+        assert [card.tag for card in document.cards] == [TAG, None]
+        assert (
+            section_with(document, LINE).match.rule_id
+            == "heuristic-marked-up-body-text:verbatim-alias-id:NormalWeb"
+        )
+
+    def test_a_cite_guess_the_body_took_keeps_that_reading(self, parser: DebateDocxParser) -> None:
+        """An assembly rule's re-reading is not undone: here a wiki-style guess in small print by its mark."""
+        guess = "Grid operators warn of shortfalls … and prices rise, as Lindqvist 2019 found"
+        markup = paragraph_xml(run_xml(guess), half_points=SMALL_PRINT)
+        document = card_above_then(markup, parser=parser)
+
+        assert [card.tag for card in document.cards] == [TAG, None]
+        assert (
+            section_with(document, guess).match.rule_id
+            == "assembly-cite-guess-inside-card-body:heuristic-wiki-cite-entry"
+        )
+
+    def test_a_cite_a_body_may_yet_take_is_left_with_no_tag(self, parser: DebateDocxParser) -> None:
+        """A guessed cite longer than any cite entry, under a tag, would become the body: it is not tagged."""
+        long_guess = "Okonkwo 26 … " + prose(2_100, "the reserve margin ")
+        line, _ = paragraph([(LINE, {"bold": True})])
+        guess, _ = paragraph([(long_guess, {"half_points": SMALL_PRINT})])
+        document = parse(parser, line, guess, SECOND_BODY, styles_xml=SIZE_DEFAULTS)
+
+        assert [(card.tag, card.full_cite) for card in document.cards] == [(None, long_guess)]
+        assert section_with(document, LINE).match.rule_id == "heuristic-unclassified-paragraph"
 
     def test_only_the_paragraph_directly_above_and_never_a_second(self, parser: DebateDocxParser) -> None:
         between, between_text = paragraph([off("A note left plain")])

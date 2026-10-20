@@ -909,16 +909,17 @@ class DebateDocxParser:
         (:func:`~debate_core.integrations.docx_parser.runs.as_word_shows_it`): bold throughout, at
         reading size or larger. The classifier and every other rule read what a run says.
 
-        It must also be no longer than a heading and name no source at its head; read by a
-        heuristic, as body or nothing, not through a paragraph style; and hold no highlighted run
+        It must also be no longer than a heading and name no source at its head; read as body or
+        nothing by a heuristic, not through a paragraph style and not by an assembly rule's re-reading;
+        and hold no highlighted run
         and no run in the underline or emphasis style, which is read evidence, not a heading (the
         PM's ruling of 2026-10-20).
         """
         match = section.match
-        if (
-            match.unit not in (StructuralUnit.EVIDENCE, StructuralUnit.OTHER)
-            or match.match_source is not StyleMatchSource.HEURISTIC
-            or match.rule_id.startswith("assembly-")
+        # A body or nothing read through a paragraph style is refused below; what an assembly rule
+        # re-read, a cite guess the body took, keeps its reading.
+        if match.unit not in (StructuralUnit.EVIDENCE, StructuralUnit.OTHER) or match.rule_id.startswith(
+            "assembly-"
         ):
             return False
         description = section.read.description

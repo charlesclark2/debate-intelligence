@@ -299,9 +299,9 @@ def _unconfirmed_production_write(
 def sync_report(report: SyncReport, settings: Settings) -> dict[str, JsonValue]:
     """The `--json` envelope's `data` for `store sync`.
 
-    The shape the scheduled caselist sync (`v1-e34-t02`) reads, so it is written for a program
-    first: every action has a count and a byte total whether or not it happened, `applied` says
-    whether anything moved, and `failed` is a list of objects rather than a sentence to parse.
+    Written for a program first: every action has a count and a byte total whether or not it
+    happened, `applied` says whether anything moved, and `failed` is a list of objects rather than
+    a sentence to parse.
 
     `skipped_reasons` (`v1-e29-t11`) breaks the `skipped` count down by kind of skip, each with its
     count and up to three 12-character key prefixes, and a manifest the publisher withholds or cannot

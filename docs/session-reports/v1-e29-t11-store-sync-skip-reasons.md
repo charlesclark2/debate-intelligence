@@ -203,9 +203,42 @@ v1-e29-t11 asks the PM, 2026-10-19:
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-19
 
 **Notes:**
+
+Accepted, with the phase `Succeeded`, once the session makes the two small changes in ruling 2 and
+commits them. The pull request needs no `--partial`.
+
+**The work itself:**
+
+* **Grouped by kind, set where the skip happens,** with an invariant that refuses a skip without a
+  kind. Mutant G8, which groups by text, is caught.
+* **The publisher answers with a value, not a string.** Withheld and unreadable are told apart, and
+  the request ids are carried without parsing the message. The message itself is unchanged, and t25's
+  tests pass apart from annotations.
+* **Nine kinds, counted from the planner rather than taken from my five,** and the reason for each is
+  written down.
+* **Deviation 1 corrected my spec, not just the code.** I wrote that v1-e34-t02 reads this payload,
+  and no build does. The session searched, said so, and checked compatibility the way that actually
+  exists: older builds' own store tests pass against this build.
+* **20 mutants, all caught.**
+
+**Rulings:**
+
+1. **Question 1: (a).** Distinct 12-character key prefixes say where in the store, never which file.
+   The publisher's messages carry the digests and requests that identify rows, and `caselist status`
+   already names held blobs by digest prefix.
+2. **Question 2: (a).** Amend ac2 in the spec to "every earlier key keeps its value, and an earlier
+   build's store tests pass against this build", marked "PM amendment 2026-10-19", and drop the
+   v1-e34-t02 claim from `sync_report`'s docstring (Follow-up 1). A promise about a reader nobody
+   wrote stops being checked. Both are one-line changes in this session, before the pull request.
+3. **Question 3: keep `3a5f3a7`.** Agreement 5 asks for it, and it is shown failing on a mutant.
+4. **Deviation 3 is accepted.** An unreadable manifest is damage, not a removal's leftover, so its
+   line must not send the operator to rerun a removal.
+5. **Decisions 1 to 6 are accepted.**
+6. **The affected set was left to CI by my ruling,** and the session ran the changed modules' direct
+   importers and the always-run list itself. That is the right use of the rule.

@@ -1309,3 +1309,45 @@ left: both were removed.
 
 Nothing came out differently from what was expected, so the task is ready for the pull request
 under the third review's ACCEPTED verdict.
+
+## PM review, fourth
+
+**Verdict:** ACCEPTED
+<!-- ACCEPTED / CHANGES_REQUESTED -->
+
+**Reviewed by / date:** PM, 2026-10-20
+
+**Notes:**
+
+The third review's six conditions are closed as asked, and nothing came out differently. Open the
+pull request with no `--partial`, after the sync.
+
+**What I checked:**
+
+* **The decision test holds the ruling at the right level.** It walks every route in `app.routes`
+  as a full session (student, coach, and an `email-second-factor` account with no authenticator) and
+  asserts that no request calls `AssociateSoftwareToken`. It failed against the *Start* code for all
+  three. The two mutants that reopen the route were caught nine times each.
+* **Refusing a full session's POST in the gate, not the route** (decision 1), and narrowing
+  `begin_authenticator` and `confirm_authenticator` to `PendingEnrolment` so the type checker holds
+  the rule as well: both good.
+* **Decisions 2 and 3 are accepted.** An email-only account goes to the coach, and the "set up
+  unexpectedly, tell the coach" line stays. Amending `spec.description` to match ac6 is accepted.
+* **Re-applied mutants that first did not apply are counted only from the run that applied.**
+  That is the right practice again.
+
+**Before the pull request, two lines of this report to correct**, since a reader starts at the top:
+
+* the header's *Session status*, which still says ac5 is not run;
+* the Summary's account-page bullet, which still says "replace the authenticator".
+
+Fix them in place with a note that they were corrected after ruling (d). This is no change to the
+verdict.
+
+**After the merge:**
+
+* **ADR-0019's line on replacing from the account page** (decision 4): the PM's next batch amends it
+  with the consequence.
+* **Dev still runs `93ed3f1`, with *Start*.** Nothing reaches it but synthetic accounts, so the next
+  pilot deploy to dev (v1-e39-t06, or before) replaces it. No separate deploy is needed.
+* **Operator follow-up C,** the module apply dev then prod, stays on the promotion list.

@@ -1381,3 +1381,25 @@ as the second review asked:
 | `scripts/validate_specs.py` | `OK: 396 files, 39 epics, 336 tasks, 21 releases` |
 | `scripts/check_links.py`, `scripts/check_command_blocks.py` | `OK: 1907 relative links and anchors in 276 Markdown files`; `OK: no # comments in 331 shell code blocks in 130 Markdown files` |
 | `debate-research tub --help` | lists `index` and `users` |
+
+## CI on PR #371 (2026-10-20)
+
+The first CI run on the PR (`494df86`) failed in one test of shard `test (2)`, and the required
+`ci` job failed with it. `1 failed, 2129 passed, 1 xfailed`. Every other job passed.
+
+```text
+FAILED packages/debate_cli/tests/test_installation.py::test_dropping_the_tub_extra_leaves_the_cognito_adapter_without_cryptography - AssertionError: assert {} == {'debate_core...ryptography'}}
+```
+
+**The cause.** The test is this task's, from the first session; the sync did not cause it. It
+follows each declared distribution's own requirements with the markers of the machine it runs on.
+On Linux, `keyring`, which the `opencaselist` extra brings, requires `SecretStorage`
+(`sys_platform == 'linux'`), and `SecretStorage` requires `cryptography`. So in CI, `aws,docx,opencaselist`
+still provided `cryptography`, and no gap was left. On macOS the marker is false, so the test passed
+in every local run. In `uv.lock`, only `debate-api`, `debate-core[tub]`, `moto` and `secretstorage`
+depend on `cryptography`.
+
+**The fix.** The test now drops `opencaselist` as well (`aws,docx`). It expects both gaps:
+`cognito` without `cryptography`, and `opencaselist` without `httpx` and `keyring`. Nothing else the
+CLI depends on brings `cryptography` on either platform. Locally: `27 passed` in
+`test_installation.py`. On Linux, the PR's next CI run is the check; it cannot be run from this Mac.

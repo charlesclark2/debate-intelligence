@@ -319,9 +319,13 @@ def test_dropping_the_aws_extra_leaves_the_s3_adapter_without_boto3() -> None:
 
 
 def test_dropping_the_tub_extra_leaves_the_cognito_adapter_without_cryptography() -> None:
-    gaps = undeclared_imports(_with_core_extras("aws,docx,opencaselist"), wired_integrations())
+    """`opencaselist` goes too: on Linux, its `keyring` brings `cryptography` through `SecretStorage`."""
+    gaps = undeclared_imports(_with_core_extras("aws,docx"), wired_integrations())
 
-    assert gaps == {"debate_core.integrations.cognito": {"cryptography"}}
+    assert gaps == {
+        "debate_core.integrations.cognito": {"cryptography"},
+        "debate_core.integrations.opencaselist": {"httpx", "keyring"},
+    }
 
 
 def test_dropping_the_opencaselist_extra_leaves_the_client_without_httpx_and_keyring() -> None:

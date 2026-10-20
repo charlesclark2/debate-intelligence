@@ -92,6 +92,7 @@ __all__ = [
     "StoreRecord",
     "parse_version_directory",
     "skip_key",
+    "source_digest_of_key",
     "source_object_key",
     "version_directory_name",
 ]
@@ -171,6 +172,18 @@ def source_object_key(caselist: str, version: str, sha256: str) -> str:
     `caselist remove` matches a parsed file by.
     """
     return f"{caselist}/{version}/sha256/{sha256[0:2]}/{sha256[2:4]}/{sha256}.jsonl"
+
+
+def source_digest_of_key(key: str) -> str | None:
+    """The digest a per-source file's key names, the inverse of :func:`source_object_key`.
+
+    `None` for any other key under the store's root, such as an aggregate's.
+    """
+    parts = key.split("/")
+    if len(parts) != 6 or parts[2] != "sha256" or not parts[5].endswith(".jsonl"):
+        return None
+    digest = parts[5].removesuffix(".jsonl")
+    return digest if source_object_key(parts[0], parts[1], digest) == key else None
 
 
 class SkipKey(NamedTuple):

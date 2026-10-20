@@ -221,7 +221,11 @@ async def test_the_parsed_store_publisher_stops_rather_than_publishing_nothing(
     held.parent.mkdir(parents=True)
     held.write_bytes(b'{"an invented": "parsed record"}\n')
     publisher = ParsedStorePublisher(
-        local=parsed, local_path_for=parsed.path_for, remote=bucket, suppression=empty_suppression_list()
+        local=parsed,
+        local_path_for=parsed.path_for,
+        remote=bucket,
+        suppression=empty_suppression_list(),
+        evidence=LocalEvidence(objects=FsEvidenceObjectStore(data_dir), blobs=parsed),
     )
 
     with refused(parsed.root), pytest.raises(StoreAccessDenied) as caught:

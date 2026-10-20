@@ -65,7 +65,9 @@ comparison reports both (`v1-e30-t21`):
   waiting to be;
 * an upload an import refused at a held path, which the same removal run again has not yet put on
   the list (:attr:`CaselistStatusReport.refused_at_import`, `v1-e30-t24`), whether or not its
-  archive is still in the inbox: see below.
+  archive is still in the inbox: see below;
+* a parsed file in the bucket of bytes only a held path discloses
+  (:attr:`CaselistStatusReport.held_parsed_objects`, `v1-e31-t26`): see below.
 
 None is a difference between this machine and the bucket, so none changes
 :attr:`CaselistStatusReport.in_sync` or the command's exit status. Each is named by the request that
@@ -85,6 +87,20 @@ bucket's), and names a line whose request holds that path in a caselist compared
 does not stop there, whole or as the held path's disclosure. A hold an un-suppress lifted holds
 nothing, and the re-run lists nothing for it, so nothing is owed for it either. The record holds no
 date, so `--snapshot` does not narrow it.
+
+### A held upload's parsed file (`v1-e31-t26`)
+
+An earlier build's `caselist parse --publish` sent the parsed file of a stored row at a held path,
+and this build's does not: the parse pipeline leaves a source that only a held path discloses out of
+every aggregate and holds back its file
+(:func:`~debate_core.application.caselist.parse_sources.held_only_sources`, which asks the
+publisher's rule for a held row). The comparison asks the same function of each compared caselist's
+manifests, and names each such source the bucket holds a current file of under
+`parsed/<caselist>/`, in any version directory, by its caselist, its digest and the request holding
+the path. The same removal run again deletes it: the held row is a later upload held at no other
+path, so it is removed whole, with every `parsed/` object of it. Bytes another live path discloses
+are not named: their parsed file is published. Read only when the list holds a path, and then one
+listing of `parsed/<caselist>/` per caselist with such a source.
 
 ## Bytes the publisher does not upload
 
@@ -153,6 +169,7 @@ from debate_core.application.caselist.evidence_listing import (
     local_blob_sizes,
     read_local_snapshots,
 )
+from debate_core.application.caselist.parse_sources import enumerate_sources, held_only_sources
 from debate_core.application.caselist.publish_plan import (
     OPENEV,
     HeldRow,
@@ -184,6 +201,7 @@ from debate_core.application.caselist.suppression import (
 from debate_core.application.errors import DomainError, NotFound
 from debate_core.application.ports.evidence_store import EvidenceObjectStore, ObjectInfo, ObjectKey
 from debate_core.application.ports.evidence_versions import EvidenceVersionStore
+from debate_core.application.ports.parsed_store import PARSED_PREFIX, source_digest_of_key
 from debate_core.application.ports.suppression import (
     RemovalLog,
     RemovalScopeLog,
@@ -201,6 +219,7 @@ __all__ = [
     "CaselistStatusReport",
     "CaselistStatusService",
     "HeldInboxUpload",
+    "HeldParsedObject",
     "InboxHolds",
     "MismatchKind",
     "NoCaselistEvidence",
@@ -251,6 +270,20 @@ class RefusedAtImport:
 
     The caselist of the hold that refused it, its digest, and the request holding the path. Never the
     path: the record holds the path's digest alone.
+    """
+
+    caselist: str
+    sha256: Sha256Hex
+    request_id: str
+
+
+@dataclass(frozen=True, slots=True, order=True)
+class HeldParsedObject:
+    """A parsed file in the bucket of bytes that only a held path discloses (`v1-e31-t26`).
+
+    An earlier build parsed and published it; this build's `caselist parse --publish` does not. Its
+    caselist, its source's digest and the request holding the path. Never the path, and never its
+    key's version directory, which says nothing the request does not.
     """
 
     caselist: str
@@ -381,6 +414,9 @@ class CaselistStatusReport:
     """Uploads an import refused at a held path in a caselist compared, from the held-digest record,
     that the same removal run again has not yet listed (`v1-e30-t24`). Read when the inbox is, and
     empty when the caller did not ask. Not part of :attr:`in_sync`."""
+    held_parsed_objects: tuple[HeldParsedObject, ...] = ()
+    """Parsed files in the bucket, under a caselist compared, of bytes only a held path discloses
+    (`v1-e31-t26`): an earlier build's `caselist parse --publish` sent them. Not part of :attr:`in_sync`."""
 
     @property
     def in_sync(self) -> bool:
@@ -433,12 +469,14 @@ class CaselistStatusReport:
 
     @property
     def removals_owed(self) -> tuple[str, ...]:
-        """The request ids whose removal a held row, a held inbox upload or an upload refused at
-        import says to run again, sorted."""
+        """The request ids whose removal a held row, a held inbox upload, an upload refused at import
+        or a held upload's parsed file in the bucket says to run again, sorted."""
         rows = {row.request_id for snapshot in self.snapshots for row in snapshot.held_rows}
         skipped = {request for snapshot in self.snapshots for request in snapshot.held_skipped_rows}
         inbox = {upload.request_id for upload in self.held_in_inbox}
-        return tuple(sorted(rows | skipped | inbox | {one.request_id for one in self.refused_at_import}))
+        refused = {one.request_id for one in self.refused_at_import}
+        parsed = {one.request_id for one in self.held_parsed_objects}
+        return tuple(sorted(rows | skipped | inbox | refused | parsed))
 
     def held_in_inbox_of(self, caselist: str) -> tuple[HeldInboxUpload, ...]:
         """The :attr:`held_in_inbox` uploads of `caselist`."""
@@ -447,6 +485,10 @@ class CaselistStatusReport:
     def refused_at_import_of(self, caselist: str) -> tuple[RefusedAtImport, ...]:
         """The :attr:`refused_at_import` uploads of `caselist`."""
         return tuple(upload for upload in self.refused_at_import if upload.caselist == caselist)
+
+    def held_parsed_objects_of(self, caselist: str) -> tuple[HeldParsedObject, ...]:
+        """The :attr:`held_parsed_objects` of `caselist`."""
+        return tuple(one for one in self.held_parsed_objects if one.caselist == caselist)
 
     @property
     def residue_found(self) -> bool:
@@ -577,6 +619,7 @@ class CaselistStatusService:
             )
             refused = await self._refused_at_import(suppression, caselists)
         return CaselistStatusReport(
+            held_parsed_objects=await self._held_parsed_objects(suppression, caselists),
             snapshots=tuple(compared),
             suppressed_objects=tuple(sorted(set(leftovers))),
             residue=tuple(left),
@@ -585,6 +628,25 @@ class CaselistStatusService:
             withdrawals_not_attributed=not_attributed,
             refused_at_import=refused,
         )
+
+    async def _held_parsed_objects(
+        self, suppression: SuppressionState, caselists: Sequence[str]
+    ) -> tuple[HeldParsedObject, ...]:
+        """The bucket's parsed files of sources only a held path discloses: see "A held upload's
+        parsed file" in the module docstring."""
+        if not suppression.held_paths:
+            return ()
+        found: set[HeldParsedObject] = set()
+        for caselist in caselists:
+            held = held_only_sources(await enumerate_sources(self._local, caselist), suppression)
+            if not held:
+                continue
+            prefix = f"{PARSED_PREFIX}/"
+            for info in await self._remote.list_objects(f"{prefix}{caselist}/"):
+                digest = source_digest_of_key(info.key.removeprefix(prefix))
+                if digest is not None and digest in held:
+                    found.add(HeldParsedObject(caselist=caselist, sha256=digest, request_id=held[digest]))
+        return tuple(sorted(found))
 
     async def _refused_at_import(
         self, suppression: SuppressionState, caselists: Sequence[str]

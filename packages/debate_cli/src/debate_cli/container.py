@@ -516,6 +516,7 @@ class ServiceContainer:
             local_path_for=local.path_for,
             remote=self._evidence_bucket(),
             suppression=self.suppression_list(),
+            evidence=self._local_evidence(),
         )
 
     def version_retention(self, *, bucket: bool) -> VersionDirectoryRetention:

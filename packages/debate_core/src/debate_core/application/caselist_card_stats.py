@@ -163,7 +163,8 @@ class ClusterSummary:
 
     cluster_id: str
     short_cite: str | None
-    tag: str
+    tag: str | None
+    """The label's tag; `None` when the label is a card with no tag."""
     distinct_teams: int
     occurrences: int
     files: int
@@ -451,11 +452,13 @@ def _top_clusters(
     members: defaultdict[str, list[CardOccurrence]] = defaultdict(list)
     for occurrence in occurrences:
         members[occurrence.cluster_id].append(occurrence)
-    # A full card's short cite and tag describe a cluster better than an abbreviated one's.
+    # A full card's short cite and tag describe a cluster better than an abbreviated one's. No short
+    # cite and no tag count as "", as they did before either was None, so ties go as they always
+    # went: "no tag" before every tag (`v1-e31-t14`).
     labels: defaultdict[str, Counter[tuple[str, str]]] = defaultdict(Counter)
     for item in placed:
         if item.card.completeness is CardCompleteness.FULL or item.cluster_id == item.fingerprint:
-            labels[item.cluster_id][(item.card.short_cite or "", item.card.tag)] += 1
+            labels[item.cluster_id][(item.card.short_cite or "", item.card.tag or "")] += 1
 
     summaries: list[ClusterSummary] = []
     for cluster_id, rows in members.items():
@@ -465,7 +468,7 @@ def _top_clusters(
             ClusterSummary(
                 cluster_id=cluster_id,
                 short_cite=short_cite or None,
-                tag=tag,
+                tag=tag or None,
                 distinct_teams=len({row.team for row in rows if row.team is not None}),
                 occurrences=len(rows),
                 files=len({row.source_sha256 for row in rows}),

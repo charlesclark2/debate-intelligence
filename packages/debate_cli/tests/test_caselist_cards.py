@@ -63,10 +63,16 @@ def installation(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Iterator[Pa
 
 
 def card(
-    source: str, body: str, short_cite: str, *, snapshot: date = WEEK_ONE, cite_tail: str = ""
+    source: str,
+    body: str,
+    short_cite: str,
+    *,
+    snapshot: date = WEEK_ONE,
+    cite_tail: str = "",
+    tag: str | None = "",
 ) -> ParsedCard:
     return ParsedCard(
-        tag=f"Invented tag for {short_cite}",
+        tag=f"Invented tag for {short_cite}" if tag == "" else tag,
         short_cite=short_cite,
         full_cite=f"{short_cite} (Invented Author, Fictional Journal, 2026){cite_tail}",
         evidence_text=body,
@@ -182,6 +188,44 @@ def test_cards_json_carries_counts_and_no_identities(parsed: Path) -> None:
         assert (warehouse["short_cite"], warehouse["distinct_teams"]) == ("Thorne 26", 1)
         assert "teams" not in heat
         assert "QX" not in result.stdout and "zzTEST" not in result.stdout
+
+
+@pytest.mark.parametrize("spelling", ["null", '""'])
+def test_cards_json_says_null_for_a_cluster_whose_cards_have_no_tag(parsed: Path, spelling: str) -> None:
+    """`v1-e31-t14`: no tag is `null` in the JSON, however the parsed-card file spelled it.
+
+    `null` is what every `ParsedCard` record has said since `v1-e31-t09`; `""` is how the first
+    corpus parse said it. The warehouse card's tag is taken away; the heat card keeps its own.
+    """
+    heat = card(FILE_A, HEAT, "Pellam 26")
+    warehouse = json.loads(
+        card(FILE_C, WAREHOUSE, "Thorne 26", snapshot=WEEK_TWO, tag=None).model_dump_json()
+    )
+    lines = [heat.model_dump_json(), json.dumps(warehouse).replace('"tag": null', f'"tag": {spelling}')]
+    (parsed / "cards.jsonl").write_text("".join(line + "\n" for line in lines), encoding="utf-8")
+
+    result = invoke("--json", "caselist", "cards", "--caselist", CASELIST, "--parsed", str(parsed))
+
+    assert result.exit_code == ExitCode.OK, result.output
+    clusters = json.loads(result.stdout)["data"]["top_clusters"]
+    assert [(cluster["short_cite"], cluster["tag"]) for cluster in clusters] == [
+        ("Pellam 26", "Invented tag for Pellam 26"),
+        ("Thorne 26", None),
+    ]
+    assert '"tag": ""' not in result.stdout and '"tag":""' not in result.stdout
+
+
+def test_the_cards_table_shows_a_dash_for_a_cluster_with_no_tag(parsed: Path) -> None:
+    """As it does for a cluster with no short cite, rather than an empty cell."""
+    tagless = card(FILE_C, WAREHOUSE, "Thorne 26", snapshot=WEEK_TWO, tag=None)
+    (parsed / "cards.jsonl").write_text(tagless.model_dump_json() + "\n", encoding="utf-8")
+
+    result = invoke("caselist", "cards", "--caselist", CASELIST, "--parsed", str(parsed))
+
+    assert result.exit_code == ExitCode.OK, result.output
+    (row,) = [line for line in result.output.splitlines() if "Thorne 26" in line]
+    cells = [cell.strip() for cell in row.split("│")[1:-1]]
+    assert cells[-2:] == ["Thorne 26", "-"], row
 
 
 def test_cards_by_team_shows_school_and_team_code_only(parsed: Path) -> None:

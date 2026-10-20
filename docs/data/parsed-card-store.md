@@ -183,7 +183,8 @@ characters between them, every one in evidence text.
 #### A card with no tag
 
 A file may give a card no tag. In a record that is **`"tag": null`**, and from `2026.10.10-docx-2`
-on it is never an empty string. In Python, ask `card.has_tag`.
+on it is never an empty string. In Python it is **`card.tag is None`**, which `card.has_tag` also
+says (`v1-e31-t14`); before that task the attribute held `""`.
 
 `null` is not a parser failure to work around. What it means depends on the card's `completeness`:
 
@@ -197,6 +198,31 @@ both. That directory also holds 15,528 such cards against 4,455 expected in the 
 about 11,000 of them were not cards the file holds: a paragraph inside a card's body had been
 read as the cite of a new one. A card whose `rule_ids` include
 `assembly-cite-guess-inside-card-body:…` kept such a paragraph in its body.
+
+**What each output says for a card with no tag**, as of `v1-e31-t14`. The task changed the
+in-memory value and the JSON of the cards statistics. No stored record changed shape, so the
+record `schema_version` stays 2 and nothing is re-parsed or rebuilt.
+
+| Output | Says for no tag | Before `v1-e31-t14` |
+|---|---|---|
+| A stored card, in a per-source file's `document` record | `"tag": null` (`schema_version` 2) | the same since `v1-e31-t09`; `"tag": ""` under `schema_version` 1 |
+| A line of `occurrences.jsonl` | nothing: an occurrence record has no `tag` field | the same |
+| Any `ParsedCard` or `ParsedDocument` JSON, such as the files `caselist cards --parsed` reads | `"tag": null` | the same since `v1-e31-t09` |
+| `ParsedCard.tag` in Python | `None` | `""` |
+| `CardOccurrence.tag` in Python, and in its JSON | `None`, and `"tag": null` | `""` |
+| `caselist cards --json`, a top cluster's `tag` | `null` | `""` |
+| `caselist cards` table, the Tag column | `-`, as the Short cite column shows no short cite | an empty cell |
+
+Every reader takes both spellings: `ParsedCard` and `CardOccurrence` read `""` and `null` alike as
+`None`, so a version 1 record, or a file an earlier build wrote, reads as it did. A
+`CardOccurrence` is built in memory by the cards statistics and is never stored. A reader of the
+store takes a card's tag from its `document` record, and finds `null` there, or `""` in a
+version 1 directory.
+
+The cards statistics label a cluster with its most frequent (short cite, tag) and break a tie by
+the smallest. No tag counts as `""` there, as it always did, so it sorts before every tag and a
+tagged card's cluster keeps the label and the place it had
+([`test_untagged_cards_keep_the_order_of_tagged_cards.py`](../../packages/debate_core/tests/application/test_untagged_cards_keep_the_order_of_tagged_cards.py)).
 
 A heading in a card's `section_path` is never an empty string either. In `2026.09.20-docx-1`,
 1,847 cards carry one, from a blank line in a heading style.

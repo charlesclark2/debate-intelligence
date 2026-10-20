@@ -269,7 +269,7 @@ class TestCompleteness:
         """Ordinary in a wiki-converted disclosure, where the tag was not carried across."""
         document = parse(parser, cite_paragraph() + evidence_paragraph())
         assert document.card_count == 1
-        assert document.cards[0].tag == ""
+        assert document.cards[0].tag is None
 
     def test_a_stray_body_with_no_cite_and_no_tag_is_not_a_card(self, parser: DebateDocxParser) -> None:
         document = parse(parser, evidence_paragraph())

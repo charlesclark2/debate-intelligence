@@ -19,7 +19,11 @@ from typing import Any, Final
 
 import pytest
 
-from debate_core.application.evidence_search import EvidenceSearchService, SuppressionPredicate
+from debate_core.application.evidence_search import (
+    EvidenceSearchService,
+    SuppressionPredicate,
+    surviving_counts,
+)
 from debate_core.application.ports.search_index import IndexedOccurrence, SearchDocument
 from debate_core.application.ports.search_index_reader import (
     MatchBatch,
@@ -519,10 +523,14 @@ def test_evidence_search_leaves_out_a_suppressed_occurrence_and_counts_again(
     assert (hit.file_count, hit.team_count) == (2, 2)
 
 
-def test_evidence_search_counts_teams_past_the_provenance_limit_as_the_stored_count_capped(
+def test_evidence_search_gives_no_team_count_when_a_survivor_kept_no_provenance(
     suppressible: EvidenceSearchService,
 ) -> None:
-    """Seven occurrences, five with provenance: one suppressed leaves six files; teams min(7, 6)."""
+    """PM ruling 2026-10-20: seven occurrences, five with provenance, one suppressed.
+
+    Six files survive, exactly. Two survivors are past the provenance limit, so nobody can say which
+    teams are left: the stored seven would count the hidden team, and the card gives no team count.
+    """
     card = suppressible.card("hsld26", cluster(2), is_suppressed=stopping(21))
     assert card is not None
     assert [one.ordinal for one in card.occurrences] == [0, 2, 3, 4, 5, 6]
@@ -534,7 +542,76 @@ def test_evidence_search_counts_teams_past_the_provenance_limit_as_the_stored_co
         False,
         False,
     ]
-    assert (card.file_count, card.team_count) == (6, 6)
+    assert (card.file_count, card.team_count) == (6, None)
+    (hit,) = [
+        hit
+        for hit in suppressible.search("pangolin", is_suppressed=stopping(21)).hits
+        if hit.cluster_id == cluster(2)
+    ]
+    assert (hit.file_count, hit.team_count) == (6, None)
+
+
+def test_evidence_search_keeps_the_stored_counts_when_nothing_is_suppressed_past_the_limit(
+    suppressible: EvidenceSearchService,
+) -> None:
+    """With nothing suppressed the build's counts stand, survivors past the provenance limit or not."""
+    card = suppressible.card("hsld26", cluster(2), is_suppressed=stopping(99))
+    assert card is not None
+    assert (card.file_count, card.team_count) == (7, 7)
+
+
+def occurrence_row(ordinal: int, school: str | None, *, provenance: bool = True) -> StoredOccurrence:
+    return StoredOccurrence(
+        doc_id=1,
+        ordinal=ordinal,
+        caselist="hsld26",
+        source_sha256=source(ordinal),
+        disclosure=None,
+        snapshot="2026-09-01",
+        last_snapshot="2026-09-01",
+        completeness="FULL",
+        attributed=school is not None,
+        provenance=provenance,
+        school=school,
+        team_code="QX" if school else None,
+    )
+
+
+@pytest.mark.parametrize(
+    ("survivor_ordinals", "expected"),
+    [
+        ((0, 1, 2, 3, 4), (5, 3)),
+        ((0, 2, 3), (3, 2)),
+        ((0, 1, 3), (3, 1)),
+        ((0, 3), (2, 1)),
+        ((0, 1, 2, 4), (4, None)),
+        ((0, 4), (2, None)),
+    ],
+    ids=[
+        "nothing-suppressed-the-stored-counts",
+        "every-survivor-kept-provenance-exact",
+        "one-team-twice-counted-once",
+        "an-unattributed-survivor-names-no-team",
+        "a-survivor-past-the-limit-no-team-count",
+        "only-the-representative-and-one-past-the-limit",
+    ],
+)
+def test_evidence_search_surviving_counts_are_the_pms_rule(
+    survivor_ordinals: tuple[int, ...], expected: tuple[int, int | None]
+) -> None:
+    """PM ruling 2026-10-20, written by hand. Occurrences 0 and 1 are Maple Grove's, 2 Riverbend's, 3
+    attributed to nobody, and 4 past the provenance limit, from five sources; the build stored 5 files
+    and 3 teams. Files are always the survivors' sources; teams are exact only when every survivor kept
+    its provenance, and `None` otherwise."""
+    occurrences = [
+        occurrence_row(0, SCHOOL),
+        occurrence_row(1, SCHOOL),
+        occurrence_row(2, OTHER_SCHOOL),
+        occurrence_row(3, None),
+        occurrence_row(4, None, provenance=False),
+    ]
+    survivors = [occurrences[one] for one in survivor_ordinals]
+    assert surviving_counts(5, 3, occurrences, survivors) == expected
 
 
 def test_evidence_search_asks_about_a_camp_occurrence_with_no_disclosure_digest(

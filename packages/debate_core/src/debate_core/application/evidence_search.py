@@ -19,13 +19,15 @@ wires it to the live suppression list; without one, nothing is hidden. With one:
   `v1-e39-t07`). A card whose every occurrence is suppressed has its representative suppressed, so it
   is not found either;
 * any other suppressed occurrence is left out of the card's occurrences, and the card's file and team
-  counts are counted again over the survivors (:func:`surviving_counts`).
+  counts are counted again over the survivors (:func:`surviving_counts`); when the survivors cannot
+  say which teams are left, the card gives no team count (the PM's ruling of 2026-10-20).
 
 ## The time budget
 
 A search that runs past its budget stops where it is and returns what it has fetched, with
 `partial` set and a cursor that resumes where it stopped. The budget is checked inside SQLite while a
-statement runs, through the reader, against the service's clock.
+statement runs, through the reader, against the service's clock. FTS5's ranking sort cannot be
+stopped (:meth:`EvidenceSearchService.search` says why and how long it takes).
 """
 
 from __future__ import annotations
@@ -100,23 +102,22 @@ def surviving_counts(
     stored_teams: int,
     occurrences: Sequence[StoredOccurrence],
     survivors: Sequence[StoredOccurrence],
-) -> tuple[int, int]:
+) -> tuple[int, int | None]:
     """A card's file and team counts once some of its occurrences are suppressed.
 
     Nothing suppressed: the counts the build stored. Otherwise files are the distinct sources among
     the survivors, exactly. Teams are the distinct school and team code pairs among them when every
-    survivor kept its provenance; when some did not (they are past the build's provenance limit), the
-    index cannot say which team disclosed them, so the stored count stands, capped at the number of
-    survivors, since each occurrence has one disclosure at most.
+    survivor kept its provenance. When some did not (they are past the build's provenance limit), the
+    index cannot say which teams disclosed them, and the stored count may include the hidden team, so
+    the team count is `None` (the PM's ruling of 2026-10-20: a count above the truth right after a
+    removal is the wrong way to err). That lasts until the next build. `v1-e39-t07` changes it here.
     """
     if len(survivors) == len(occurrences):
         return stored_files, stored_teams
     files = len({one.source_sha256 for one in survivors})
-    if all(one.provenance for one in survivors):
-        teams = len({(one.school, one.team_code) for one in survivors if one.school is not None})
-    else:
-        teams = min(stored_teams, len(survivors))
-    return files, teams
+    if not all(one.provenance for one in survivors):
+        return files, None
+    return files, len({(one.school, one.team_code) for one in survivors if one.school is not None})
 
 
 class EvidenceSearchService:
@@ -151,6 +152,16 @@ class EvidenceSearchService:
 
         Raises :class:`~debate_core.domain.evidence_search.InvalidSearchCursor` for a cursor that is
         not this query's, these filters' and this index's.
+
+        **A known limit of the time budget** (accepted by the PM, 2026-10-20). The budget is checked by
+        SQLite's progress handler, which runs between virtual-machine instructions. FTS5 ranks every
+        match and sorts them inside one instruction, before the first row comes back, and nothing in
+        SQLite 3.40.0 (the Lambda image's) can interrupt that sort. So a search can overrun its budget
+        by the length of that sort. Measured on the operator's Mac, not on the function: on the dev
+        index of 46,658 documents, twenty generic queries ran at a warm p50 of 3.9 ms, p95 12.1 ms
+        and max 207 ms (`the`, which matches 45,948 documents); on a synthetic index of 250,000
+        documents, p95 341 ms and max 421 ms. `v1-e39-t10` measures query time on the Lambda function
+        itself.
         """
         filters = filters if filters is not None else SearchFilters()
         parsed = parse_query(query)

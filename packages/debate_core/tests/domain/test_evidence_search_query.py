@@ -12,6 +12,8 @@ Every school, team code, tournament, camp and file title is invented (data-use p
 from __future__ import annotations
 
 import base64
+import dataclasses
+import json
 import re
 from datetime import date
 
@@ -394,6 +396,27 @@ def test_search_card_runs_cut_at_every_span_edge_and_join_what_looks_the_same() 
         CardRun("badly", emphases=(B,), font_sizes=(22,)),
     )
     assert "".join(run.text for run in runs) == text
+
+
+def test_search_card_runs_are_plain_values_a_page_can_style_its_own_way() -> None:
+    """For Copy card's inline styles (`v1-e39-t06`): emphasis name, colour and size per run, as JSON."""
+    runs = card_runs(
+        "ab cd",
+        (IndexedFormattingSpan(U, 0, 2), IndexedFormattingSpan(H, 0, 2, "cyan")),
+        (IndexedFontSizeSpan(0, 5, 22),),
+    )
+    as_json = json.loads(json.dumps([dataclasses.asdict(run) for run in runs]))
+    assert as_json == [
+        {
+            "text": "ab",
+            "emphases": ["UNDERLINE", "HIGHLIGHT"],
+            "highlight_colors": ["cyan"],
+            "font_sizes": [22],
+        },
+        {"text": " cd", "emphases": [], "highlight_colors": [], "font_sizes": [22]},
+    ]
+    assert all(type(size) is int for run in runs for size in run.font_sizes)
+    assert all(isinstance(emphasis, str) for run in runs for emphasis in run.emphases)
 
 
 def test_search_card_runs_keep_two_overlapping_colours_and_cut_a_span_at_the_text_end() -> None:

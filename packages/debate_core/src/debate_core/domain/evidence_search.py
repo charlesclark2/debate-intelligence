@@ -394,6 +394,11 @@ class CardRun:
     `emphases` in :class:`RunEmphasis` order. A highlight's colours are in `highlight_colors` and the
     sizes in `font_sizes`, each sorted; two of either mean two stored spans of different colour or size
     overlap there, and both are kept, so a render covers exactly what the spans cover.
+
+    Every field is a plain value: the text, each emphasis's name (a :class:`RunEmphasis`, which is a
+    `str`: `"UNDERLINE"`), each `w:highlight` colour token as stored (`"cyan"`) and each size in
+    half-points (`22`). A page that renders runs its own way, such as Copy card's inline styles
+    (`v1-e39-t06`), needs nothing else and never needs card HTML.
     """
 
     text: str
@@ -521,7 +526,11 @@ def occurrence_provenance_line(
 
 @dataclass(frozen=True, slots=True)
 class SearchHit:
-    """One result: enough for a results page, and the card's key to open it by."""
+    """One result: enough for a results page, and the card's key to open it by.
+
+    `team_count` is `None` when a suppression left the card with survivors the index kept no
+    provenance for (:func:`~debate_core.application.evidence_search.surviving_counts`).
+    """
 
     caselist: str
     cluster_id: str
@@ -531,7 +540,7 @@ class SearchHit:
     short_cite: str | None
     snippet: tuple[SnippetSegment, ...] = field(repr=False)
     file_count: int
-    team_count: int
+    team_count: int | None
     provenance_line: str | None = field(repr=False)
 
 
@@ -575,7 +584,10 @@ class OccurrenceProvenance:
 
 @dataclass(frozen=True, slots=True)
 class Card:
-    """A card as its page shows it: its representative's text as formatted runs, every survivor's line."""
+    """A card as its page shows it: its representative's text as formatted runs, every survivor's line.
+
+    `team_count` is `None` in the case :class:`SearchHit` describes.
+    """
 
     caselist: str
     cluster_id: str
@@ -592,5 +604,5 @@ class Card:
     first_seen: str | None
     last_seen: str | None
     file_count: int
-    team_count: int
+    team_count: int | None
     occurrences: tuple[OccurrenceProvenance, ...] = field(repr=False)

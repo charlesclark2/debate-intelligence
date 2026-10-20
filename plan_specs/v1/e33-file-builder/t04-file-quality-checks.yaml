@@ -30,7 +30,8 @@ spec:
     this task owns the service, check library and report only, with no CLI surface.
   priority: 1
   constraints:
-    packages: [debate_core.evidence, debate_core.application, docs/data]
+    # packages/debate_core/tests: PM amendment, 2026-10-19 (the task's tests live there).
+    packages: [debate_core.evidence, debate_core.application, docs/data, packages/debate_core/tests]
     forbidden:
       - Trusting writer-reported hashes without re-parsing the built file and the source document
       - Model calls in any check
@@ -61,7 +62,11 @@ spec:
     - id: ac4
       description: >-
         Manifest/document disagreements (card missing from either side, wrong order, missing source sha256,
-        team code, round or snapshot, provenance_mode not FILE_IMPORT) are FAIL.
+        team code, round or snapshot, provenance_mode not FILE_IMPORT) are FAIL. PM amendment 2026-10-20:
+        a disclosure on record that names no round or no tournament is a WARN naming the card, not a FAIL;
+        it is metadata the writer copied faithfully, not an identity failure. A card whose disclosure
+        names a team still carries a provenance line naming that team (FAIL otherwise), and the
+        evidence-identity checks stay FAIL.
     - id: ac5
       description: >-
         <file>.quality.json validates against docs/data/file-quality-report.schema.json and records
@@ -74,7 +79,7 @@ spec:
         team or filename. The removal runbook's step 8 (flag built files that quoted a removed card) is
         manual until this exists; for files this tool builds, it then has a command behind it.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

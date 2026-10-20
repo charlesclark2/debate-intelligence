@@ -15,6 +15,7 @@ ends are in the audit log (PM ruling, 2026-10-20).
 
 from __future__ import annotations
 
+import logging
 from datetime import timedelta
 from typing import Any
 
@@ -298,3 +299,27 @@ def test_a_session_end_that_cannot_be_recorded_still_ends_the_session(
     monkeypatch.setattr(world.audit, "record", unreachable)
 
     assert is_signed_out(world.browser.get("/account"), world)
+
+
+def test_a_lost_session_end_record_is_logged_once_without_a_name_or_subject(
+    student: tuple[Any, Any], monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Second PM review, 2026-10-20: a dropped record leaves one WARNING naming its action."""
+    world, session = student
+    world.post(BEGIN, csrf_token=session.csrf_token)
+    world.clock.advance(timedelta(minutes=5))
+
+    def unreachable(record: Any) -> None:
+        raise StoreError("the audit log did not answer")
+
+    monkeypatch.setattr(world.audit, "record", unreachable)
+
+    with caplog.at_level(logging.WARNING):
+        world.browser.get("/account")
+
+    [warning] = [record for record in caplog.records if record.levelno >= logging.WARNING]
+    assert warning.levelno == logging.WARNING
+    assert "session-ended-no-second-factor" in warning.getMessage()
+    logged = warning.getMessage() + repr(warning.args)
+    assert "debater.one" not in logged
+    assert session.subject not in logged

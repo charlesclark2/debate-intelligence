@@ -570,6 +570,31 @@ ADR-0019's role table is thus confirmed against AWS's own evaluation, not only t
 add, not 41. ac5, the runbook's tables
 and the `Succeeded` phase wait for steps 3–10.
 
+## Sync with dev (2026-10-19)
+
+`v1-e01-t28` merged into `dev` first, and both tasks change `uv.lock`.
+
+- **The rebase:** the operator ran `scripts/task sync v1-e39-t04-pilot-infrastructure` →
+  `Successfully rebased and updated refs/heads/task/v1-e39-t04-pilot-infrastructure.` It did not
+  stop: git merged the two lock changes itself, so the PM's `git checkout --ours uv.lock && uv lock`
+  resolution was not needed. The branch now sits on `origin/dev` at `cd69a3d`.
+- **The lock:** `uv lock --check` (run bare) → `Resolved 116 packages`, exit 0. It holds dev's
+  `grimp`, and against `origin/dev` this branch adds only `fastapi`, `starlette`, `uvicorn` and
+  `opentelemetry-api`.
+- **The environment:** `uv sync --all-packages` reinstalled `debate-api` only.
+- **The affected tests:** `uv run scripts/affected_tests.py --run` → `The whole selection is affected:
+  packages/debate_api/pyproject.toml is shared test ground. CI runs it on the pull request; a session
+  does not (working agreement 10).` Exit 0, nothing run.
+- **The cheap whole-repo checks:**
+  - `uv run lint-imports` → `12 kept, 0 broken`;
+  - `uv run pytest -q tests/architecture tests/specs` → `181 passed`;
+  - `validate_specs.py` → OK, and `--require-succeeded v1-e39-t04-pilot-infrastructure` →
+    `Succeeded`;
+  - `ruff check .` → `All checks passed!`; `ruff format --check .` → `899 files already formatted`;
+  - `pyright packages/debate_api` → `0 errors`.
+- **The Terraform checks:** the operator, with credentials, ran `bash scripts/terraform_checks.sh` →
+  `ok` for all 24 checks, `All Terraform checks passed.`
+
 ## PM review
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in

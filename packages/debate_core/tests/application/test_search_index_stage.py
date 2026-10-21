@@ -812,6 +812,8 @@ def test_index_stage_without_reading_current_json_keeps_only_the_two_newest(worl
     report = reports[-1]
 
     assert report.counts is not None and report.counts.removed == 1
+    # With no pointer read, the two newest are kept by that rule alone: the one built, and the one before.
+    assert set(world.local_ids()) == {one.counts.index_id for one in reports if one.counts is not None}
     assert first.counts.index_id not in world.local_ids()
     assert published_with(world, first) == first.counts.index_id, "the bucket's copy is not this machine's"
 

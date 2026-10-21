@@ -636,6 +636,7 @@ class PilotWorld:
     authenticator_secret = AUTHENTICATOR_SECRET
 
     cards = CARDS
+    corpus = CORPUS
 
     def __init__(self) -> None:
         self.clock = MutableClock()

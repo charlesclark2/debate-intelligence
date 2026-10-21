@@ -169,6 +169,7 @@ label { display: block; font-weight: 600; margin-bottom: 0.25rem; }
 .card-undertag { color: #385623; }
 .card-analytic { font-weight: 700; color: #1f3864; }
 .card-bold { font-weight: 700; }
+.card-shrunk { font-size: 0.85em; }
 .card-heading { font-weight: 700; }
 .card-highlight-other { background: #e6e6e6; }
 

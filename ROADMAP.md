@@ -60,14 +60,14 @@ v2.3's extension work.
 
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
-| [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 42 | 41 | 224 |
+| [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 42 | 42 | 224 |
 | [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 97 | 75 | 473 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 21 | 7 | 190 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 13 | 1 | 108 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 14 | 0 | 96 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 0 | 66 |
 | [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 19 | 12 | 146 |
-| [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 10 | 4 | 46 |
+| [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 10 | 5 | 46 |
 | [v2.0](plan_specs/releases/v2.0.yaml) | Cloud platform foundation | 3 | 17 | 0 | 164 |
 | [v2.1](plan_specs/releases/v2.1.yaml) | Web app, debate tub & async jobs | 3 | 18 | 0 | 198 |
 | [v2.2](plan_specs/releases/v2.2.yaml) | Research workspace | 2 | 12 | 0 | 117 |
@@ -120,7 +120,7 @@ Repo, tooling, CI, promotion flow, task tooling, domain core, and deterministic 
 | [The manual sweep also opens the back-merge pull request](plan_specs/v1/e01-repo-foundation/t26-dispatch-opens-back-merge.yaml) `v1-e01-t26-dispatch-opens-back-merge` | Succeeded | 1 | 1.5 |
 | [The CI test job finishes well inside the five-minute budget](plan_specs/v1/e01-repo-foundation/t27-ci-test-job-within-budget.yaml) `v1-e01-t27-ci-test-job-within-budget` | Succeeded | 1 | 3.0 |
 | [scripts/affected_tests.py prints the tests a branch's changes can break](plan_specs/v1/e01-repo-foundation/t28-affected-test-selection.yaml) `v1-e01-t28-affected-test-selection` | Succeeded | 1 | 4.0 |
-| [debate_core.testing and debate_core.evidence stop importing more than a caller asks for](plan_specs/v1/e01-repo-foundation/t29-slim-package-reexports.yaml) `v1-e01-t29-slim-package-reexports` | Pending | 1 | 3.0 |
+| [debate_core.testing and debate_core.evidence stop importing more than a caller asks for](plan_specs/v1/e01-repo-foundation/t29-slim-package-reexports.yaml) `v1-e01-t29-slim-package-reexports` | Succeeded | 1 | 3.0 |
 
 #### [E02 — Domain Core: Entities, Ports & Local Persistence](plan_specs/v1/e02-domain-core/epic.yaml)
 
@@ -432,7 +432,7 @@ Debaters search the team's evidence store from a school Chromebook or at home: a
 |---|---|---|---|
 | [ADR-0019: the student search pilot's stack, sign-in and hosting](plan_specs/v1/e39-evidence-search-pilot/t01-pilot-architecture-adr.yaml) `v1-e39-t01-pilot-architecture-adr` | Succeeded | 1 | 3.0 |
 | [tub index build and publish: one searchable document per card cluster, from the parsed store](plan_specs/v1/e39-evidence-search-pilot/t02-search-index-build.yaml) `v1-e39-t02-search-index-build` | Succeeded | 3 | 6.0 |
-| [Search core: safe queries, ranking, filters, pages and card rendering over the index](plan_specs/v1/e39-evidence-search-pilot/t03-search-core.yaml) `v1-e39-t03-search-core` | Pending | 1 | 5.0 |
+| [Search core: safe queries, ranking, filters, pages and card rendering over the index](plan_specs/v1/e39-evidence-search-pilot/t03-search-core.yaml) `v1-e39-t03-search-core` | Succeeded | 1 | 5.0 |
 | [Pilot infrastructure: the function, CloudFront, the user pool and the audit log, in dev and prod](plan_specs/v1/e39-evidence-search-pilot/t04-pilot-infrastructure.yaml) `v1-e39-t04-pilot-infrastructure` | Succeeded | 1 | 6.0 |
 | [Accounts and sign-in: the session flow, roles, and the coach's tub users commands](plan_specs/v1/e39-evidence-search-pilot/t05-accounts-and-sign-in.yaml) `v1-e39-t05-accounts-and-sign-in` | Succeeded | 1 | 5.0 |
 | [Search pages: search, results, the card page and Copy card, on a Chromebook](plan_specs/v1/e39-evidence-search-pilot/t06-search-pages.yaml) `v1-e39-t06-search-pages` | Pending | 2 | 6.0 |

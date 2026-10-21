@@ -803,8 +803,7 @@ PARSE_COMMAND: Final = "debate-research caselist parse --caselist <slug> --publi
 """What finishes a parse stage that failed (`v1-e34-t17`). Running the pull again does not: a pull
 that imports nothing parses nothing. The stage's reason in `caselist runs` names the caselists."""
 SEARCH_INDEX_PUBLISH_COMMAND: Final = (
-    "DEBATE_ENV={environment} debate-research tub index publish --env {environment} "
-    "--index <data_dir>/tub-index/{index_id}"
+    "DEBATE_ENV={environment} debate-research tub index publish --env {environment} --newest"
 )
 """What publishes an index whose publish pended (`v1-e39-t09`), by hand; the next run with a session
 does it too. `--publish-pending` does not."""
@@ -1153,9 +1152,7 @@ def notifications_for(
                     + (
                         f" The search index {index_waits.index_id} waits too; the next run with a session "
                         "publishes it, or after the login: "
-                        + SEARCH_INDEX_PUBLISH_COMMAND.format(
-                            environment=record.environment, index_id=index_waits.index_id
-                        )
+                        + SEARCH_INDEX_PUBLISH_COMMAND.format(environment=record.environment)
                         if index_waits is not None
                         else ""
                     )

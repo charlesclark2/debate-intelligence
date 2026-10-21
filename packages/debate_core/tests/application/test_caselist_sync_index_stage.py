@@ -355,8 +355,8 @@ def test_index_stage_pending_publish_makes_the_run_publish_pending_and_the_login
     [login] = [one for one in banners if one.title == "caselist publish waiting for an AWS login"]
     assert f"The search index {INDEX_ID} waits too" in login.message
     assert (
-        "DEBATE_ENV=dev debate-research tub index publish --env dev --index <data_dir>/tub-index/"
-        f"{INDEX_ID}" in login.message
+        "after the login: DEBATE_ENV=dev debate-research tub index publish --env dev --newest"
+        in login.message
     )
 
 

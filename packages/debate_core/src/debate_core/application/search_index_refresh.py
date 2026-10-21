@@ -557,8 +557,7 @@ class SearchIndexRefresh:
     def _pending(self, said: str, why: str) -> str:
         return (
             f"{said}; built, publish pending, for want of an AWS login ({why}): the next run with a "
-            "session publishes it, and `debate-research tub index publish` with the newest index "
-            "under the data directory's tub-index publishes it by hand"
+            "session publishes it, and `debate-research tub index publish --newest` publishes it by hand"
         )
 
     def _failed(
@@ -572,8 +571,8 @@ class SearchIndexRefresh:
     ) -> SearchIndexStageReport:
         hint = (
             f"`DEBATE_ENV={self._environment} debate-research tub index publish --env {self._environment} "
-            f"--index <data_dir>/{SEARCH_INDEX_DIRECTORY}/{still.index_id}` publishes the newest index by "
-            "hand once the cause is fixed; the next weekly run tries again either way."
+            f"--newest` publishes the newest index, {still.index_id}, by hand once the cause is fixed; the "
+            "next weekly run tries again either way."
             if counts is not None and still is not None
             else None
         )

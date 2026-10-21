@@ -1227,7 +1227,11 @@ What each outcome means:
 | `failed` | The build or an upload failed. The previous index is still on this Mac and `current.json` still names the previous index; the reason names both. | The stage's hint and the notification say what to fix. The next run tries again. |
 
 Every build's summary reports the SQLite file's size and its bytes per document (`search_index` in
-the run summary, and in the reason). A warning in the reason means the index has passed one of
+the run summary, and in the reason). An index directory is about a gigabyte, so after a successful
+build the stage removes superseded ones from this Mac and says how many and the bytes freed
+(`removed`, `bytes_freed`). It never removes the two newest, the one `current.json` named when the
+run read it, a directory without a readable manifest, or a dot-directory, and a run that built
+nothing removes nothing. The copies in the bucket are not touched. A warning in the reason means the index has passed one of
 ADR-0019's lines: 900,000,000 SQLite bytes, under its 1 GB uncompressed ceiling, or 400,000,000
 gzip bytes, at which `v1-e39-t04` asks for a higher bandwidth quota. Bring either to the PM.
 
@@ -1235,12 +1239,12 @@ gzip bytes, at which `v1-e39-t04` asks for a higher bandwidth quota. Bring eithe
 
 `caselist pull --publish-pending` does not publish the index. The next weekly run with a session
 does, without rebuilding it unless reconciling the suppression list changed its digest. To publish
-it now to dev, with the newest index the run built:
+it now to dev: `--newest` picks the newest index under the data directory's `tub-index` by the
+stage's own rule, which is the one the run built.
 
 ```bash
 aws sso login --profile debate-dev-evidence
-NEWEST=$(ls -t "${HOME}/.debate-research/dev/tub-index" | head -1)
-DEBATE_ENV=dev debate-research tub index publish --env dev --index "${HOME}/.debate-research/dev/tub-index/${NEWEST}"
+DEBATE_ENV=dev debate-research tub index publish --env dev --newest
 ```
 
 To prod, from the same data directory, as the parsed store is
@@ -1248,15 +1252,15 @@ To prod, from the same data directory, as the parsed store is
 
 ```bash
 aws sso login --profile debate-prod-evidence
-NEWEST=$(ls -t "${HOME}/.debate-research/dev/tub-index" | head -1)
 export DEBATE_ENV=prod DEBATE_STORAGE__DATA_DIR="${HOME}/.debate-research/dev"
-debate-research tub index publish --env prod --index "${HOME}/.debate-research/dev/tub-index/${NEWEST}" --confirm-prod
+debate-research tub index publish --env prod --newest --confirm-prod
 unset DEBATE_ENV DEBATE_STORAGE__DATA_DIR
 ```
 
-Success is a table whose last row is `reports/tub/search/current.json`, naming the index id. A
-refusal names a parser or fingerprint version: that index was built by another build than the one
-on your `PATH`.
+Success is a table whose last row is `reports/tub/search/current.json`, naming the index id, which
+is the one the last run's `search_index` row names. A refusal names a parser or fingerprint version:
+that index was built by another build than the one on your `PATH`. `--newest` and `--index` are
+refused together; `--index <directory>` publishes one directory you name instead.
 
 **An index built without a session read this Mac's copy of the suppression list alone.** That is safe
 while this Mac is the only machine that imports and removes: every removal writes both copies, so

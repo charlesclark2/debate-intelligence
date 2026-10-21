@@ -452,7 +452,7 @@ def test_index_stage_without_a_session_builds_from_the_local_copy_and_the_publis
     assert world.pointer() is None
     assert world.local_ids() == [report.counts.index_id]
     assert "built, publish pending, for want of an AWS login" in report.reason
-    assert "`debate-research tub index publish`" in report.reason
+    assert "`debate-research tub index publish --newest`" in report.reason
     assert report.local_copy_only is not None
     assert "built from this machine's copy of the suppression list alone" in report.reason
 
@@ -559,8 +559,8 @@ def test_index_stage_a_failed_upload_leaves_the_previous_pointer_and_names_it(wo
     assert f"current.json still names {first.counts.index_id}" in report.reason
     assert published_with(world, first) == first.counts.index_id
     assert report.hint is not None
-    assert f"--index <data_dir>/tub-index/{report.counts.index_id}" in report.hint
-    assert "DEBATE_ENV=dev debate-research tub index publish --env dev" in report.hint
+    assert "`DEBATE_ENV=dev debate-research tub index publish --env dev --newest`" in report.hint
+    assert f"the newest index, {report.counts.index_id}" in report.hint
 
 
 def test_index_stage_a_session_that_expires_mid_publish_pends_and_leaves_the_pointer(world: World) -> None:

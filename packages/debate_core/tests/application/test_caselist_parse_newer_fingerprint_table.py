@@ -261,6 +261,33 @@ async def test_a_publish_over_the_buckets_equal_or_older_table_replaces_it_as_be
     assert bucket_objects(s3_client, evidence_bucket)[TABLE] == world.tree()["occurrences.jsonl"]
 
 
+async def test_a_publish_that_sends_no_table_asks_nothing_of_the_buckets(
+    world: World,
+    as_build: Callable[[str], None],
+    bucket: S3EvidenceObjectStore,
+    s3_client: S3Client,
+    evidence_bucket: str,
+    tmp_path: Path,
+) -> None:
+    """A removal deletes the aggregates until the next parse: such a publish sends per-source files
+    only, and replaces nothing, so the newer table the bucket holds stays and nothing is refused."""
+    as_build(NEWER)
+    newer_machine = await a_world(tmp_path, "newer-machine")
+    await newer_machine.run()
+    assert (await publisher(newer_machine, bucket).publish(CASELIST, DOCX_PARSER_VERSION)).succeeded
+    held = bucket_objects(s3_client, evidence_bucket)[TABLE]
+    as_build(NEWER)
+    await world.run()
+    (world.store.root / CASELIST / DOCX_PARSER_VERSION / "occurrences.jsonl").unlink()
+    as_build(BUILD)
+
+    report = await publisher(world, bucket).publish(CASELIST, DOCX_PARSER_VERSION)
+
+    assert report.succeeded
+    assert TABLE not in {outcome.key for outcome in report.objects}
+    assert bucket_objects(s3_client, evidence_bucket)[TABLE] == held
+
+
 # ------------------------------------------------------------------------------------------------
 # Neither path decides for itself
 # ------------------------------------------------------------------------------------------------

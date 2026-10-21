@@ -291,3 +291,68 @@ def test_tub_index_publish_refuses_an_index_of_another_parser_version(
     error = envelope_of(result)["error"]
     assert (error["code"], error["details"]["field"]) == ("SEARCH_INDEX_VERSION_MISMATCH", "parser version")
     assert keys_in(buckets, DEV_BUCKET) == set()
+
+
+# ------------------------------------------------------------------------------------------------
+# `--newest`: the weekly stage's own rule picks the directory (v1-e39-t09, PM amendment, review)
+# ------------------------------------------------------------------------------------------------
+
+
+def built_again_with_a_later_snapshot(parsed: Path) -> Path:
+    """A second real index of the same store: its one row seen a week later, so other bytes and another id."""
+    store = LocalParsedStore(parsed)
+    rows = asyncio.run(store.read_occurrences(CASELIST, PARSER))
+    entries = asyncio.run(store.read_index(CASELIST, PARSER))
+    assert rows is not None and entries is not None
+    later = tuple(row.model_copy(update={"last_snapshot": "2026-09-15"}) for row in rows)
+    asyncio.run(store.write_aggregates(CASELIST, PARSER, index=entries, failures=(), occurrences=later))
+    return built(parsed)
+
+
+@pytest.mark.parametrize("the_first_is_newest", [False, True])
+def test_tub_index_publish_newest_publishes_the_index_the_weekly_stage_calls_newest(
+    parsed: Path, buckets: S3Client, the_first_is_newest: bool
+) -> None:
+    first = built(parsed)
+    second = built_again_with_a_later_snapshot(parsed)
+    assert first.name != second.name
+    older, newer = (second, first) if the_first_is_newest else (first, second)
+    os.utime(older / "manifest.json", ns=(1_000_000_000, 1_000_000_000))
+    os.utime(newer / "manifest.json", ns=(2_000_000_000, 2_000_000_000))
+    (first.parent / ".building-abandoned").mkdir()
+
+    result = invoke("--json", "tub", "index", "publish", "--env", "dev", "--newest")
+
+    assert result.exit_code == ExitCode.OK, result.stdout
+    assert envelope_of(result)["data"]["index_id"] == newer.name
+    assert f"reports/tub/search/{newer.name}/manifest.json" in keys_in(buckets, DEV_BUCKET)
+    assert f"reports/tub/search/{older.name}/manifest.json" not in keys_in(buckets, DEV_BUCKET)
+
+
+def test_tub_index_publish_refuses_newest_together_with_index(parsed: Path, buckets: S3Client) -> None:
+    directory = built(parsed)
+
+    result = invoke(
+        "--json", "tub", "index", "publish", "--env", "dev", "--newest", "--index", str(directory)
+    )
+
+    assert result.exit_code == ExitCode.USAGE_ERROR
+    assert "--newest" in result.output and "--index" in result.output
+    assert keys_in(buckets, DEV_BUCKET) == set()
+
+
+def test_tub_index_publish_needs_newest_or_index(parsed: Path, buckets: S3Client) -> None:
+    result = invoke("--json", "tub", "index", "publish", "--env", "dev")
+
+    assert result.exit_code == ExitCode.USAGE_ERROR
+    assert keys_in(buckets, DEV_BUCKET) == set()
+
+
+def test_tub_index_publish_newest_with_nothing_built_names_the_build(parsed: Path, buckets: S3Client) -> None:
+    result = invoke("--json", "tub", "index", "publish", "--env", "dev", "--newest")
+
+    assert result.exit_code == ExitCode.DOMAIN_FAILURE
+    error = envelope_of(result)["error"]
+    assert error["code"] == "NO_BUILT_SEARCH_INDEX"
+    assert "tub index build" in error["hint"]
+    assert keys_in(buckets, DEV_BUCKET) == set()

@@ -5,6 +5,7 @@
     debate-research tub index build --caselist hsld26 --caselist hspf26 --caselist openev
     debate-research tub index build --caselist hsld26 --out ~/tub-index --provenance-limit 5
     DEBATE_ENV=dev debate-research tub index publish --env dev --index <data_dir>/tub-index/<index id>
+    DEBATE_ENV=dev debate-research tub index publish --env dev --newest
     DEBATE_ENV=prod debate-research tub index publish --env prod --index <dir> --confirm-prod
 
 `build` reads this machine's parsed store, caselist records and suppression list, and writes one
@@ -14,7 +15,11 @@ no bucket and calls no model. `--out` defaults to `<data_dir>/tub-index`, outsid
 
 `publish` uploads one built directory to this environment's evidence bucket under
 `reports/tub/search/<index id>/` and writes `reports/tub/search/current.json` last. It refuses an
-index built under another parser or fingerprint version than this build's.
+index built under another parser or fingerprint version than this build's. `--newest` names the
+directory instead of `--index`: the newest under `<data_dir>/tub-index`, by the rule the weekly run's
+search index stage keeps current
+(:func:`~debate_core.application.search_index_refresh.newest_local_index`, `v1-e39-t09`). One of the
+two is required, and both together are refused.
 
 Every decision is :class:`~debate_core.application.search_index_build.SearchIndexBuildService`'s and
 :class:`~debate_core.application.search_index_publish.SearchIndexPublishService`'s; this is the surface.
@@ -46,7 +51,7 @@ from debate_cli.exit_codes import ExitCode
 from debate_cli.output import CommandFailure, JsonValue, TableSpec
 from debate_core.application.search_index_build import BuiltSearchIndex
 from debate_core.application.search_index_publish import PublishedSearchIndex
-from debate_core.application.search_index_refresh import SEARCH_INDEX_DIRECTORY
+from debate_core.application.search_index_refresh import SEARCH_INDEX_DIRECTORY, newest_local_index
 from debate_core.application.settings import Environment, Settings
 from debate_core.domain.search_index import DEFAULT_PROVENANCE_LIMIT, SearchIndexManifest
 
@@ -57,6 +62,7 @@ DEFAULT_OUT_DIRECTORY = SEARCH_INDEX_DIRECTORY
 search index stage builds too (`v1-e39-t09`), so `publish --index` finds what either built."""
 
 CONFIRM_PROD_FLAG = "--confirm-prod"
+NEWEST_FLAG = "--newest"
 
 _PUBLISHABLE = (Environment.DEV, Environment.PROD)
 
@@ -94,22 +100,37 @@ def build(
 
 def publish(
     ctx: typer.Context,
-    index: Annotated[
-        Path,
-        typer.Option("--index", exists=True, file_okay=False, help="A directory `tub index build` wrote."),
-    ],
     env: Annotated[
         Environment,
         typer.Option("--env", help="dev or prod: must be the environment DEBATE_ENV selects."),
     ],
+    index: Annotated[
+        Path | None,
+        typer.Option("--index", exists=True, file_okay=False, help="A directory `tub index build` wrote."),
+    ] = None,
+    newest: Annotated[
+        bool,
+        typer.Option(
+            NEWEST_FLAG,
+            help="The newest index under <data_dir>/tub-index, by the weekly stage's rule. Not with --index.",
+        ),
+    ] = False,
     confirm_prod: Annotated[
         bool,
         typer.Option(CONFIRM_PROD_FLAG, help="Required to write to the production evidence bucket."),
     ] = False,
 ) -> None:
     """Publish a built index to this environment's bucket, its pointer last."""
+    if newest and index is not None:
+        raise typer.BadParameter(
+            f"{NEWEST_FLAG} picks the directory --index names; pass one or the other", param_hint=NEWEST_FLAG
+        )
+    if not newest and index is None:
+        raise typer.BadParameter(f"name the index with --index, or pass {NEWEST_FLAG}", param_hint="--index")
     cli = cli_context(ctx)
     _refuse(cli, ctx, _not_this_environment(cli.services.settings, env, confirmed=confirm_prod))
+    if index is None:
+        index = _newest_built(cli, ctx)
     service = cli.services.search_index_publish()
     cli.output.detail(f"publishing {index.name} to {cli.services.settings.storage.s3.bucket}")
     published = asyncio.run(service.publish(index))
@@ -167,6 +188,27 @@ def _not_this_environment(settings: Settings, env: Environment, *, confirmed: bo
             hint=f"Publish to dev first, then run it again with {CONFIRM_PROD_FLAG}.",
         )
     return None
+
+
+def _newest_built(cli: CliContext, ctx: typer.Context) -> Path:
+    """The directory `--newest` names, or the command refused for want of one."""
+    out = cli.services.settings.storage.data_dir / DEFAULT_OUT_DIRECTORY
+    found = newest_local_index(out)
+    if found is None:
+        _refuse(
+            cli,
+            ctx,
+            CommandFailure(
+                code="NO_BUILT_SEARCH_INDEX",
+                message=f"no built search index under {out}",
+                exit_code=ExitCode.DOMAIN_FAILURE,
+                details={"directory": str(out)},
+                hint="Build one with `debate-research tub index build`, or let the weekly run build it.",
+            ),
+        )
+        raise AssertionError("unreachable")  # pragma: no cover - _refuse exits
+    cli.output.detail(f"the newest index under {out} is {found.directory.name}")
+    return found.directory
 
 
 def _refuse(cli: CliContext, ctx: typer.Context, refusal: CommandFailure | None) -> None:

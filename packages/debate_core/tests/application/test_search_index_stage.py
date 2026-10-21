@@ -785,10 +785,12 @@ def test_index_stage_never_removes_the_index_current_json_names(world: World) ->
     first = world.refresh()
     assert first.counts is not None
     world.bucket.refuse = SEARCH_INDEX_MANIFEST_NAME
+    reports: list[SearchIndexStageReport] = []
     for week in CAMP_WEEKS:
         write_store(world.parsed, OPENEV_STORE, week)
-        report = world.refresh()
-        assert report.outcome is StageOutcome.FAILED
+        reports.append(world.refresh())
+    assert [one.outcome for one in reports] == [StageOutcome.FAILED, StageOutcome.FAILED]
+    report = reports[-1]
 
     assert report.counts is not None
     assert first.counts.index_id in world.local_ids()
@@ -802,9 +804,12 @@ def test_index_stage_without_reading_current_json_keeps_only_the_two_newest(worl
     first = world.refresh()
     assert first.counts is not None
     world.bucket.session = False
+    reports: list[SearchIndexStageReport] = []
     for week in CAMP_WEEKS:
         write_store(world.parsed, OPENEV_STORE, week)
-        report = world.refresh()
+        reports.append(world.refresh())
+    assert [one.outcome for one in reports] == [StageOutcome.PENDING, StageOutcome.PENDING]
+    report = reports[-1]
 
     assert report.counts is not None and report.counts.removed == 1
     assert first.counts.index_id not in world.local_ids()

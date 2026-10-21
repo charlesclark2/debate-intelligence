@@ -42,7 +42,8 @@ spec:
     # path, swapped in, and the old file deleted, never rewritten in place. It is one refresh loop,
     # which v1-e39-t07 extends with the suppression list's re-read (`is_suppressed` stays None here).
     # So the holder's port and use case go in debate_core.application, its S3 adapter in
-    # debate_core.integrations.s3, and their tests in packages/debate_core/tests. The PM's notes of
+    # debate_core.integrations.s3, an in-memory published index for the tests of both packages in
+    # debate_core.testing, and their tests in packages/debate_core/tests. The PM's notes of
     # the same day add Playwright and axe as dev dependencies, so pyproject.toml and uv.lock too.
     packages:
       - debate_api
@@ -50,6 +51,7 @@ spec:
       - tests/integration
       - debate_core.application
       - debate_core.integrations.s3
+      - debate_core.testing
       - packages/debate_core/tests
       - pyproject.toml
       - uv.lock

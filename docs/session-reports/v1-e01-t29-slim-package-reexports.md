@@ -253,9 +253,50 @@ PM's call).
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-20
 
 **Notes:**
+
+Accepted. One step in this session before the pull request: set the phase `Succeeded` (question 2
+below). The pull request then opens with no `--partial`. If its `ci` check fails, paste the failure
+back here.
+
+**What is good:**
+
+* **The evidence is honest.** "Behaviour unchanged" is shown by identical collected counts
+  (10,613/10,632, the same with the new file ignored). The guard was red against the old files and
+  against a deliberate re-export in each.
+* **The ac3 table explains its own median.** It says three rows crossing the 10th and 11th
+  boundary carry most of the headline drop, and that without the whole-selection commits the gain
+  is 1.7 points. That is the reading I need, not a flattering number.
+* **Decision 3 was tested, not assumed:** a module `__getattr__` would silence pyright for stale
+  imports, the earliest signal an in-flight branch gets. Declining it is right.
+* **The coordination check** against v1-e39-t03's and t09's branches was done read-only.
+
+**Rulings:**
+
+1. **ac3's method: (a), accepted.** The own-tree column matching t28 row for row is the proof the
+   harness reproduces the tool. The `--graph REV` option goes into the follow-up task (point 3),
+   since that task has to be measured the same way.
+2. **The phase: set it `Succeeded` now, in this session, with no spec amendment.** Every task since
+   working agreement 10 has left the whole selection to the PR's `ci` check, and that check gates
+   the merge: a red `ci` means no merge. So ac2's last clause is closed by the gate itself. Record
+   that in ac2's row as "the CI clause is the pull request's required `ci` check, which gates the
+   merge (working agreement 10)", then run `validate_specs.py`. Leaving the phase `InProgress`
+   would force `--partial`, which holds back the follow-up task that will depend on this one.
+3. **The follow-up: one p2 task in E01,** which owns `affected_tests.py`. The PM files it in the
+   next batch. Its scope:
+   * split `debate_core/testing/fakes.py` by port or area;
+   * remove `application/ports/__init__.py`'s re-exports;
+   * drop `settings.py`'s import of `evidence.near_duplicates`;
+   * look at the test conftest's reach into `tests/smoke/stand_ins/s3.py`;
+   * add `--graph REV` to `affected_tests.py`;
+   * fix the one-word stale name in `docs/evidence/snapshot-text-format.md`.
+
+   It is measured over the same 20 commits with that option.
+
+**Not syncing with `dev`** (decision 5) is fine. `scripts/task sync` does it before the pull
+request.

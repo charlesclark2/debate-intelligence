@@ -38,6 +38,12 @@ the same bytes. Such a file is reported `suppressed`, like a suppressed source's
 list. Bytes another live path discloses are published as before. The manifests are read only when
 the list holds a path.
 
+Nor anything at all over an occurrence table stamped with a newer fingerprint version than this
+build's (`v1-e34-t29`): the one it would send, or the bucket's it would replace. Before the first
+upload the publish reads the stamps of both, downloading the bucket's only when its bytes differ,
+and is refused with both versions named, leaving the bucket as it was
+(:mod:`debate_core.application.caselist.occurrence_table_guard`).
+
 ## What is logged
 
 Counts, the caselist, the version and keys. A key here is a caselist, a parser version and a
@@ -47,12 +53,19 @@ digest; the store holds no path or name to leak (`docs/data/parsed-card-store.md
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable, Mapping
+import tempfile
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
 from debate_core.application.caselist.evidence_listing import LocalEvidence, local_file
+from debate_core.application.caselist.occurrence_table_guard import (
+    THE_BUCKET,
+    THIS_MACHINES_PARSED_STORE,
+    fingerprint_stamps_of_file,
+    refuse_newer_table,
+)
 from debate_core.application.caselist.parse_sources import enumerate_sources, held_only_sources
 from debate_core.application.caselist.publish_service import (
     DEFAULT_CONCURRENCY,
@@ -70,7 +83,7 @@ from debate_core.application.errors import (
     reported_error_message,
 )
 from debate_core.application.ports.evidence_store import EvidenceObjectStore, ObjectKey
-from debate_core.application.ports.parsed_store import AGGREGATE_NAMES, PARSED_PREFIX
+from debate_core.application.ports.parsed_store import AGGREGATE_NAMES, OCCURRENCES_NAME, PARSED_PREFIX
 from debate_core.application.ports.suppression import SuppressionList, SuppressionState
 
 __all__ = ["ParsedObjectOutcome", "ParsedPublishReport", "ParsedStorePublisher"]
@@ -179,6 +192,7 @@ class ParsedStorePublisher:
         )
         local_keys = [info.key for info in await self._local.list_objects(directory)]
         listed = {info.key for info in await self._remote.list_objects(prefix)}
+        await self._refuse_a_newer_table(caselist, version, local_keys, listed)
         sources = [key for key in local_keys if key.split("/")[2:3] == [_SOURCE_SEGMENT]]
         aggregates = [
             key for key in local_keys if key.rsplit("/", 1)[-1] in AGGREGATE_NAMES and key.count("/") == 2
@@ -203,6 +217,33 @@ class ParsedStorePublisher:
         )
         _log(report)
         return report
+
+    async def _refuse_a_newer_table(
+        self, caselist: str, version: str, local_keys: Sequence[ObjectKey], listed: set[ObjectKey]
+    ) -> None:
+        """Ask :func:`~debate_core.application.caselist.occurrence_table_guard.refuse_newer_table`
+        of the occurrence table this publish would send, and of the bucket's it would replace when
+        the bucket holds other bytes, before anything is uploaded."""
+        key = f"{caselist}/{version}/{OCCURRENCES_NAME}"
+        if key not in local_keys:
+            return
+        async with local_file(self._local, self._local_path_for, key) as path:
+            stamps = fingerprint_stamps_of_file(path)
+        refuse_newer_table(stamps, caselist=caselist, version=version, store=THIS_MACHINES_PARSED_STORE)
+        remote_key = f"{PARSED_PREFIX}/{key}"
+        if remote_key not in listed:
+            return
+        try:
+            present = await self._remote.head(remote_key)
+        except NotFound:
+            return
+        if present.sha256 == (await self._local.head(key)).sha256:
+            return
+        with tempfile.TemporaryDirectory(prefix="debate-publish-") as directory:
+            downloaded = Path(directory) / OCCURRENCES_NAME
+            await self._remote.get_file(remote_key, downloaded)
+            stamps = fingerprint_stamps_of_file(downloaded)
+        refuse_newer_table(stamps, caselist=caselist, version=version, store=THE_BUCKET)
 
     async def _source(
         self,

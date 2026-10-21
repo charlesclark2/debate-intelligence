@@ -311,9 +311,11 @@ pending-work file. Every way it can go wrong is a line in the summary:
 
 * *Failed*, with the code of each failure (`error_codes`): a caselist whose failure rate is over the
   threshold in a run large enough for the rate to be judged
-  (:data:`~debate_core.application.caselist_parse.PARSE_FAILURE_RATE_EXCEEDED`), a store that did
-  not answer or refused, an object the bucket did not confirm (the code `caselist publish` reports
-  it under), and anything the pipeline raised, a bug included, which is recorded by its class alone.
+  (:data:`~debate_core.application.caselist_parse.PARSE_FAILURE_RATE_EXCEEDED`), an occurrence
+  table, here or in the bucket, stamped with a newer fingerprint version than this build's, which is
+  left as it was (`NEWER_FINGERPRINT_TABLE`, `v1-e34-t29`), a store that did not answer or
+  refused, an object the bucket did not confirm (the code `caselist publish` reports it under),
+  and anything the pipeline raised, a bug included, which is recorded by its class alone.
   The other caselists are still parsed. A store that did not answer, a refusal and a profile the
   AWS config does not define are true of every caselist still to publish, so the first caselist to
   meet one is the last offered to the bucket (`v1-e29-t09`).
@@ -511,6 +513,7 @@ from debate_core.application.caselist.manifest import (
     write_manifest,
     write_manifest_lines,
 )
+from debate_core.application.caselist.occurrence_table_guard import NewerFingerprintTable
 from debate_core.application.caselist.openev_import_service import (
     OpenEvImportReport,
     OpenEvImportService,
@@ -5055,7 +5058,8 @@ def fix_for(error: BaseException) -> str | None:
     directory's role, and any other :class:`~debate_core.application.errors.StoreAccessDenied`
     came from the bucket. Neither is fixed by a login, and neither sentence offers one. The
     bucket's refusal, and a profile the AWS config does not define, carry the fix the store's
-    adapter wrote, and that is the one given (`v1-e29-t07`).
+    adapter wrote, and that is the one given (`v1-e29-t07`). An occurrence table a newer build
+    stamped carries its own, which names both versions and the store (`v1-e34-t29`).
 
     Public because the run monitor asks the same question of an error that ended a run before any
     stage could record it (`v1-e34-t19`): that run's notification carries the same fix.
@@ -5072,6 +5076,8 @@ def fix_for(error: BaseException) -> str | None:
         return f"The bucket was never reached: {error.hint}."
     if isinstance(error, PendingWorkUnreadable):
         return _UNREADABLE_PENDING_WORK_FIX
+    if isinstance(error, NewerFingerprintTable):
+        return error.fix
     return None
 
 

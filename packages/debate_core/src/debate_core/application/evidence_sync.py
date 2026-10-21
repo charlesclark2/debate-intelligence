@@ -67,6 +67,14 @@ skipped with that refusal, which names the key and the line number. Asking costs
 manifest is read from the local listing's entry, once per manifest the push would send, and one
 already in the bucket, identical or journaled, is not asked about. A pull is not affected.
 
+Neither way moves **an occurrence table over one stamped with a newer fingerprint version** than
+this build's (`v1-e34-t29`). `parsed/` is a named-object prefix, so a push of a copy this machine
+pulled earlier would otherwise put an older build's clusters back in the bucket. Before an
+`occurrences.jsonl` under `parsed/` is moved, its stamps are read: a push's own copy and the
+bucket's it would overwrite, and the local copy a pull would overwrite. A newer one fails that
+object with both versions named, leaving both sides as they were
+(:mod:`debate_core.application.caselist.occurrence_table_guard`).
+
 Every one of these skips, and the ordinary ones, carries a :class:`SkipKind` beside its reason, set
 by the branch that skipped it (`v1-e29-t11`). :attr:`SyncPlan.skipped_reasons` groups by the kind,
 because the reason is free text and the publisher's names rows by digest, so no two manifests share
@@ -126,6 +134,13 @@ from enum import StrEnum
 from pathlib import Path
 
 from debate_core.application.caselist.manifest import MANIFEST_DIRECTORY
+from debate_core.application.caselist.occurrence_table_guard import (
+    THE_BUCKET,
+    THIS_MACHINES_SYNCED_COPY,
+    fingerprint_stamps_of_file,
+    occurrence_table_of,
+    refuse_newer_table,
+)
 from debate_core.application.caselist.suppression import is_suppression_key, load_suppression_state
 from debate_core.application.errors import (
     STORE_ERRORS_TRUE_OF_EVERY_OBJECT,
@@ -1127,9 +1142,33 @@ class EvidenceSyncService:
         self, keyspace: SyncKeyspace, planned: PlannedObject, direction: SyncDirection
     ) -> Sha256Hex:
         """Move one object and return the digest that was verified at the destination."""
+        table = None if keyspace.content_addressed else occurrence_table_of(planned.remote_key)
+        if table is not None:
+            await self._refuse_a_newer_table(keyspace, planned, direction, *table)
         if direction is SyncDirection.PUSH:
             return await self._push(keyspace, planned)
         return await self._pull(keyspace, planned)
+
+    async def _refuse_a_newer_table(
+        self,
+        keyspace: SyncKeyspace,
+        planned: PlannedObject,
+        direction: SyncDirection,
+        caselist: str,
+        version: str,
+    ) -> None:
+        """Ask :func:`~debate_core.application.caselist.occurrence_table_guard.refuse_newer_table`
+        of an occurrence table a push would send, and of the copy either way would overwrite, before
+        anything is moved (`v1-e34-t29`)."""
+        if direction is SyncDirection.PUSH or planned.action is SyncAction.CHANGED:
+            async with _readable_source(keyspace, planned.local_key) as local:
+                stamps = fingerprint_stamps_of_file(local)
+            refuse_newer_table(stamps, caselist=caselist, version=version, store=THIS_MACHINES_SYNCED_COPY)
+        if direction is SyncDirection.PUSH and planned.action is SyncAction.CHANGED:
+            with _staging_file(planned.local_key) as staged:
+                await keyspace.remote.get_file(planned.remote_key, staged)
+                stamps = fingerprint_stamps_of_file(staged)
+            refuse_newer_table(stamps, caselist=caselist, version=version, store=THE_BUCKET)
 
     async def _push(self, keyspace: SyncKeyspace, planned: PlannedObject) -> Sha256Hex:
         """Upload one object, then confirm from the bucket's own head that it holds those bytes."""

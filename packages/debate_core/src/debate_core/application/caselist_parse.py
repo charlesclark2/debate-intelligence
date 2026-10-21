@@ -49,6 +49,14 @@ removal and the next run there is no aggregate holding the source either; the ru
 is this command. The session report for this task gives the reasons for rebuilding rather than
 filtering on read.
 
+## A table a newer build stamped
+
+The occurrence table is rebuilt under this build's fingerprint version, so a build older than the
+table's stamp would put its own clusters back. Before it writes anything, a run reads the stamps of
+the table it would replace, its own directory's or the one a new directory supersedes, and is
+refused with both versions named when one is newer than this build's (`v1-e34-t29`,
+:mod:`debate_core.application.caselist.occurrence_table_guard`). An equal or older table is rebuilt.
+
 ## What is logged
 
 Counts, the caselist, the version and sha256 values. Never a path, a school, a team code or a word
@@ -67,6 +75,10 @@ from dataclasses import dataclass, field
 from typing import Final
 
 from debate_core.application.caselist.evidence_listing import LocalEvidence
+from debate_core.application.caselist.occurrence_table_guard import (
+    THIS_MACHINES_PARSED_STORE,
+    refuse_newer_table,
+)
 from debate_core.application.caselist.parse_sources import (
     EnumeratedSource,
     enumerate_sources,
@@ -390,7 +402,13 @@ class CaselistParseService:
         )
 
     async def run(self, plan: ParsePlan) -> ParseRunReport:
-        """Parse what `plan` names, then rebuild the version directory's aggregates."""
+        """Parse what `plan` names, then rebuild the version directory's aggregates.
+
+        Raises :class:`~debate_core.application.caselist.occurrence_table_guard.NewerFingerprintTable`,
+        having written nothing, when the table this run would replace is stamped with a newer
+        fingerprint version than this build's (`v1-e34-t29`).
+        """
+        await self._refuse_a_newer_table(plan)
         started = self._clock()
         by_digest = {source.sha256: source for source in plan.sources}
         parsed = cards = 0
@@ -496,6 +514,18 @@ class CaselistParseService:
         return SourceEntry.for_failure(reason=str(result.reason), detail=result.detail, **common), None
 
     # -- the aggregates -----------------------------------------------------------------------
+
+    async def _refuse_a_newer_table(self, plan: ParsePlan) -> None:
+        """Ask :func:`~debate_core.application.caselist.occurrence_table_guard.refuse_newer_table`
+        of the table this run would replace as the caselist's current one: its own directory's, or,
+        for a new directory, the one it supersedes."""
+        for version in (plan.version, plan.superseded):
+            if version is None:
+                continue
+            stamps = await self._store.read_occurrence_stamps(plan.caselist, version)
+            refuse_newer_table(
+                stamps or (), caselist=plan.caselist, version=version, store=THIS_MACHINES_PARSED_STORE
+            )
 
     async def _rebuild(self, plan: ParsePlan) -> StoreTotals:
         """Rewrite the index, failures and occurrence files from the per-source files and manifests.

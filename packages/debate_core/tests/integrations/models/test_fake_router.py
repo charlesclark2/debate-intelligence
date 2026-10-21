@@ -30,7 +30,6 @@ from debate_core.integrations.models.fake_router import (
     lexical_overlap_scores,
 )
 from debate_core.integrations.models.fixture_key import fixture_key
-from debate_core.testing import FixedClock
 from debate_core.testing.contracts import (
     EmbeddingAnswer,
     ModelRouterContract,
@@ -40,6 +39,7 @@ from debate_core.testing.contracts import (
     StructuredAnswer,
 )
 from debate_core.testing.contracts.model_router import ContractPassage
+from debate_core.testing.fakes import FixedClock
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[5]
 COMMITTED_FIXTURES = REPOSITORY_ROOT / "tests" / "fixtures" / "model_outputs"

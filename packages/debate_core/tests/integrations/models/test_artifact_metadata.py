@@ -30,8 +30,8 @@ from debate_core.integrations.models.fake_router import FakeModelRouter
 from debate_core.integrations.models.model_mode import ModelMode
 from debate_core.integrations.models.prompt_registry import PromptRegistry
 from debate_core.integrations.models.record_replay import RecordReplayModelRouter
-from debate_core.testing import FixedClock, ScriptedModelRouter
 from debate_core.testing.contracts.model_router import ContractPassage
+from debate_core.testing.fakes import FixedClock, ScriptedModelRouter
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[5]
 FIXTURES = REPOSITORY_ROOT / "tests" / "fixtures"

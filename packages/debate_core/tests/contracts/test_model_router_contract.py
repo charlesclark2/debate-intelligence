@@ -37,7 +37,6 @@ from debate_core.domain.model_contracts import (
     TaskClass,
 )
 from debate_core.integrations.models import ModelRoute, RoutingPolicy
-from debate_core.testing import FAKE_EPOCH, ScriptedModelRouter
 from debate_core.testing.contracts import (
     EmbeddingAnswer,
     ModelRouterContract,
@@ -47,7 +46,7 @@ from debate_core.testing.contracts import (
     RouteExpectation,
     StructuredAnswer,
 )
-from debate_core.testing.fakes import ScriptedModelResponse
+from debate_core.testing.fakes import FAKE_EPOCH, ScriptedModelResponse, ScriptedModelRouter
 
 
 def _route(task_class: TaskClass) -> ModelRoute:

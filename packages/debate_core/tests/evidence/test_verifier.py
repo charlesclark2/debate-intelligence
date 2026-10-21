@@ -48,8 +48,8 @@ from debate_core.evidence.verification_types import (
     VerificationResult,
 )
 from debate_core.evidence.verifier import first_difference
-from debate_core.testing import FAKE_EPOCH, InMemorySnapshotStore, SequentialIdGenerator
 from debate_core.testing.builders import build_citation
+from debate_core.testing.fakes import FAKE_EPOCH, InMemorySnapshotStore, SequentialIdGenerator
 
 #: Raw extracted text: CRLF breaks and a trailing newline, which normalization tidies.
 EXTRACTED = (

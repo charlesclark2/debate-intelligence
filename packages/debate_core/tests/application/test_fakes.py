@@ -46,7 +46,7 @@ from debate_core.domain import (
     new_id,
 )
 from debate_core.domain.model_contracts import ModelParams, ModelPrompt, ModelProvider, TaskClass
-from debate_core.testing import (
+from debate_core.testing.fakes import (
     FAKE_EPOCH,
     FakeArticleFetcher,
     FakeContentExtractor,

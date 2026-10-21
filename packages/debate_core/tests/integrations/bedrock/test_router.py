@@ -56,7 +56,6 @@ from debate_core.integrations.bedrock.router import (
     client_config,
 )
 from debate_core.integrations.models import ModelRoute, RoutingPolicy
-from debate_core.testing import FixedClock
 from debate_core.testing.contracts import (
     EmbeddingAnswer,
     ModelRouterContract,
@@ -66,6 +65,7 @@ from debate_core.testing.contracts import (
     RouteExpectation,
     StructuredAnswer,
 )
+from debate_core.testing.fakes import FixedClock
 
 pytestmark = pytest.mark.anyio
 

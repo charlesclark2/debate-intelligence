@@ -372,3 +372,14 @@ Both now read `--newest`, per Deviation 7.
 **ac4** is recorded by the PM after the first Wednesday run, under an install that carries this
 task, that published. Before that run: the dev listing grant (v1-e39-t02 operator follow-up 2) and a
 live `debate-dev-evidence` session at 06:00.
+
+## Criteria still open at the pull request (2026-10-20)
+
+The review additions (ac8, ac9) and the report fixes after the second PM review changed no
+criterion's status. One criterion is still open, which is why the pull request is `--partial`:
+
+| Criterion | Status | Why |
+|---|---|---|
+| ac4 the next agent install records one weekly run that published an index | NOT RUN | The operator's, after this merges, at the next agent install; a session never runs the agent or a publish. The commands are in Operator follow-ups above. |
+
+Every other criterion is PASS, as recorded above. The Goal stays InProgress.

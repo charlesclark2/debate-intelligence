@@ -76,12 +76,18 @@ _NUMBERED: Final = re.compile(r"(?P<family>.+)-v(?P<number>[1-9][0-9]*)")
 
 def is_newer_fingerprint_version(stamped: str, build: str) -> bool:
     """Whether a table stamped `stamped` is newer than a build at `build`. See "The order"."""
-    return False  # refuse-nothing skeleton (red run)
+    if stamped == build:
+        return False
+    theirs, ours = _NUMBERED.fullmatch(stamped), _NUMBERED.fullmatch(build)
+    if theirs is None or ours is None or theirs["family"] != ours["family"]:
+        return True
+    return int(theirs["number"]) > int(ours["number"])
 
 
 def newer_stamp(stamps: Iterable[str]) -> str | None:
     """The newest of `stamps` that is newer than this build's fingerprint version, or `None`."""
-    return None  # refuse-nothing skeleton (red run)
+    newer = [stamp for stamp in set(stamps) if is_newer_fingerprint_version(stamp, FINGERPRINT_VERSION)]
+    return max(newer, key=_newest_first_key) if newer else None
 
 
 def _newest_first_key(stamp: str) -> tuple[bool, int, str]:
@@ -122,7 +128,11 @@ def refuse_newer_table(stamps: Iterable[str], *, caselist: str, version: str, st
     The one rule every path that writes an occurrence table asks before it writes anything. An
     equal or older stamp, and a table with no rows, pass.
     """
-    return None  # refuse-nothing skeleton (red run)
+    stamped = newer_stamp(stamps)
+    if stamped is not None:
+        raise NewerFingerprintTable(
+            caselist=caselist, version=version, store=store, stamped=stamped, build=FINGERPRINT_VERSION
+        )
 
 
 def fingerprint_stamps(lines: Iterable[str]) -> frozenset[str]:

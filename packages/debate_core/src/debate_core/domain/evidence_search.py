@@ -40,7 +40,9 @@ debater").
 :class:`SearchFilters` narrows by event, caselist or camp, side and first seen on or after a date. A
 camp (`openev`) document has no first or last seen, so a first-seen filter leaves every camp card out,
 and the page carries :attr:`SearchNotice.FIRST_SEEN_CASELIST_CARDS_ONLY` so the search page can say so
-(PM amendment 2026-10-20, `v1-e39-t02` follow-up 2).
+(PM amendment 2026-10-20, `v1-e39-t02` follow-up 2). A camp document has no side either, so a side
+filter leaves camp cards out too, and the page carries :attr:`SearchNotice.SIDE_CASELIST_CARDS_ONLY`
+(the PM's ruling of 2026-10-20 on `v1-e39-t03` Decision 5).
 
 Results come :data:`SEARCH_PAGE_SIZE` to a page. A page's cursor is an offset into that query's
 ranking and the first 128 bits of :func:`search_binding`, a digest of the index id, the parsed query
@@ -349,6 +351,9 @@ class SearchNotice(StrEnum):
 
     FIRST_SEEN_CASELIST_CARDS_ONLY = "FIRST_SEEN_CASELIST_CARDS_ONLY"
     """First seen applies to caselist cards only: camp cards have no first-seen day and are left out."""
+
+    SIDE_CASELIST_CARDS_ONLY = "SIDE_CASELIST_CARDS_ONLY"
+    """A side filter applies to caselist cards only: camp cards have no side, and are left out."""
 
 
 @dataclass(frozen=True, slots=True)

@@ -140,10 +140,20 @@ Final: 19 killed, 1 equivalent.
   `debate_core.evidence` at package level. The new code imports neither at all, which I checked by
   grep over the branch's files.
 
+**After the PM's review (Decision 5 ruling, 2026-10-20).** `SearchNotice.SIDE_CASELIST_CARDS_ONLY`
+now sits beside the first-seen notice. I wrote the tests first:
+`test_evidence_search_side_filter_leaves_camp_cards_out_and_says_so`, one case per side (AFF, NEG,
+PRO, CON), and `test_evidence_search_side_and_first_seen_filters_each_say_so` (both notices, in
+order, and none for an event and caselist filter). For the red run the enum member existed with
+nothing behind it, so the tests failed on their assertions and not on a missing name:
+`uv run pytest -q packages/debate_core/tests/application/test_evidence_search.py -k "says_so or
+say_so"` → **5 failed, 2 passed**. The 5 are the new cases; the 2 are the existing first-seen and
+no-search-terms tests. After the one-line service change: green.
+
 **Checks before the report:**
 
-* `uv run scripts/affected_tests.py --run`, after the PM's rulings → 32 test files, `1322 passed in
-  31.39s`, exit 0. On the rulings' first pass the same architecture test flagged the p50 figure
+* `uv run scripts/affected_tests.py --run`, after the side notice → 32 test files, `1329 passed in
+  32.23s`, exit 0; the node command → `327 passed`. After the PM's rulings → `1322 passed in 31.39s`. On the rulings' first pass the same architecture test flagged the p50 figure
   `3.9 ms` in the new docs (see the PM's rulings section). Before the rulings → `1314 passed in 43.20s`. The
   first run found one failure, `test_no_python_version_is_named_outside_the_one_declaration`: my
   reader docstring named SQLite's `3.11.0`, which the test reads as a Python version. I reworded it
@@ -243,7 +253,8 @@ Final: 19 killed, 1 equivalent.
    reader may use no JSON function. A camp filter implies `openev`, and a camp with a caselist slug
    is refused. A first-seen filter leaves camp cards out (their `first_seen` is NULL) and adds
    `FIRST_SEEN_CASELIST_CARDS_ONLY`. A side filter also leaves camp cards out, since they have no
-   sides. That needed no notice under the amendment; say if you want one.
+   sides, and adds `SIDE_CASELIST_CARDS_ONLY` (the PM's ruling in the review of 2026-10-20). With both
+   filters the page carries both notices, first seen first.
 6. **The time budget, and where it cannot reach.** The default is 2.0 s. The reader installs
    `sqlite3_progress_handler` (every 1,000 VM instructions) for each ranked statement. When the budget
    is spent, the statement stops and the page returns the rows fetched so far, with `partial` set and

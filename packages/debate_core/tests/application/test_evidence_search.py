@@ -260,6 +260,26 @@ def test_evidence_search_first_seen_leaves_camp_cards_out_and_says_so(
     assert filtered.search("zephyr", SearchFilters(caselist="openev")).notices == ()
 
 
+@pytest.mark.parametrize("side", [Side.AFF, Side.NEG, Side.PRO, Side.CON])
+def test_evidence_search_side_filter_leaves_camp_cards_out_and_says_so(
+    filtered: EvidenceSearchService, side: Side
+) -> None:
+    """PM ruling 2026-10-20 (v1-e39-t03 Decision 5): camp cards have no side, as they have no first seen."""
+    page = filtered.search("zephyr", SearchFilters(side=side))
+    assert not {7, 8} & set(ids(page))
+    assert page.notices == (SearchNotice.SIDE_CASELIST_CARDS_ONLY,)
+
+
+def test_evidence_search_side_and_first_seen_filters_each_say_so(filtered: EvidenceSearchService) -> None:
+    page = filtered.search("zephyr", SearchFilters(side=Side.AFF, first_seen_on_or_after=date(2026, 9, 20)))
+    assert set(ids(page)) == {3}
+    assert page.notices == (
+        SearchNotice.FIRST_SEEN_CASELIST_CARDS_ONLY,
+        SearchNotice.SIDE_CASELIST_CARDS_ONLY,
+    )
+    assert filtered.search("zephyr", SearchFilters(event=Event.LD, caselist="hsld26")).notices == ()
+
+
 def test_evidence_search_with_nothing_to_search_for_returns_no_results_and_says_so(
     filtered: EvidenceSearchService,
 ) -> None:

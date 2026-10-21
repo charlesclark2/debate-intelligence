@@ -170,6 +170,8 @@ class EvidenceSearchService:
             notices.append(SearchNotice.QUERY_SHORTENED)
         if filters.first_seen_on_or_after is not None:
             notices.append(SearchNotice.FIRST_SEEN_CASELIST_CARDS_ONLY)
+        if filters.side is not None:
+            notices.append(SearchNotice.SIDE_CASELIST_CARDS_ONLY)
         binding = search_binding(self._reader.index_id, parsed, filters)
         offset = decode_search_cursor(cursor, binding) if cursor is not None else 0
         expression = parsed.fts5_expression()

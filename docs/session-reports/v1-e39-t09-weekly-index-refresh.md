@@ -23,7 +23,7 @@ landscape. It runs for the run's configured caselists plus `openev`, in the PM's
 
 Without a session the stage reports "built, publish pending". The next run with a session
 publishes that same index without rebuilding it, unless reconciling changed the suppression
-digest. The runbook gives `tub index publish --index <newest>` as the by-hand catch-up, for dev and
+digest. The runbook gives `tub index publish --newest` as the by-hand catch-up, for dev and
 for prod.
 
 After a successful build the stage removes superseded local index directories. It never removes
@@ -55,7 +55,7 @@ ac9, and Deviations 7 and 8).
 |---|---|---|
 | Node `refresh`: Run stage tests pass | PASS | `uv run pytest packages/debate_core/tests packages/debate_cli/tests -k "index_stage or tub_index" -q -n auto` → `41 passed in 11.97s` at the time. With the tests added since, the stage files hold 27 + 11 tests. |
 | ac1 builds and publishes only when the store changed, over a stubbed run, shown failing first | PASS | `test_search_index_stage.py` covers: first index built and published; unchanged store means no build and no upload; changed rows or suppression list mean rebuild and publish; a damaged local index is rebuilt. `test_caselist_sync_index_stage.py` is the stubbed run: stage order, the stores handed over (caselists plus `openev`), runs with nothing imported. Red against a refuse-nothing skeleton (always build, always publish): stage file `16 failed, 9 passed` (the 9 are the always-rebuild cases and the pure helpers a skeleton satisfies); run file `7 failed, 3 passed`. Green: 27 and 11 passed. |
-| ac2 a failed build or upload leaves the previous pointer and local index, appears in the run summary and failure notification, reason names the index still current | PASS | `test_index_stage_a_failed_build_leaves_the_previous_index_and_pointer_and_names_them`, `…_a_failed_upload_leaves_the_previous_pointer_and_names_it` (hint carries `DEBATE_ENV=dev debate-research tub index publish --env dev --index <data_dir>/tub-index/<id>`), `…_a_session_that_expires_mid_publish_pends_and_leaves_the_pointer`, `…_with_an_unreachable_bucket_…_fails_its_publish`; run level `test_index_stage_failure_is_recorded_with_its_code_and_the_index_still_current_and_notified` (stage `failed` on `SEARCH_INDEX_STORE_NOT_READY`, record `incomplete`, run still `succeeded`, notification "caselist pull finished with a failed stage … the search_index stage failed on SEARCH_INDEX_STORE_NOT_READY" with the hint). All red under the skeleton, green now. |
+| ac2 a failed build or upload leaves the previous pointer and local index, appears in the run summary and failure notification, reason names the index still current | PASS | `test_index_stage_a_failed_build_leaves_the_previous_index_and_pointer_and_names_them`, `…_a_failed_upload_leaves_the_previous_pointer_and_names_it` (hint carries `DEBATE_ENV=dev debate-research tub index publish --env dev --newest` and names the index id), `…_a_session_that_expires_mid_publish_pends_and_leaves_the_pointer`, `…_with_an_unreachable_bucket_…_fails_its_publish`; run level `test_index_stage_failure_is_recorded_with_its_code_and_the_index_still_current_and_notified` (stage `failed` on `SEARCH_INDEX_STORE_NOT_READY`, record `incomplete`, run still `succeeded`, notification "caselist pull finished with a failed stage … the search_index stage failed on SEARCH_INDEX_STORE_NOT_READY" with the hint). All red under the skeleton, green now. |
 | ac3 a version mismatch skips the stage with its reason | PASS | `test_index_stage_skips_a_store_parsed_by_another_parser[older]` and `[newer]`, and `…_whose_rows_carry_another_fingerprint_version`. Synthetic versions only (`2026.01.05-synthetic-a`, `2026.02.05-synthetic-b`, `2025.12.01-synthetic-0`, `card-fingerprint-synthetic-z`). Nothing built, nothing uploaded. Red under the skeleton, green now. |
 | ac4 the next agent install records one weekly run that published an index | NOT RUN | The operator's, after the merge, at the next agent install; a session never runs the agent or a publish. See Operator follow-ups. |
 | ac5 reconcile with a session; local copy without one, said in the summary; next run with a session publishes without rebuild unless reconciling changed the digest; both paths failing first | PASS | `test_index_stage_reconciles_the_suppression_copies_before_it_builds`, `…_without_a_session_builds_from_the_local_copy_and_the_publish_pends`, `…_told_there_is_no_session_does_not_try_the_bucket`, `…_publishes_an_index_built_without_a_session_at_the_next_run_without_a_rebuild`, `…_rebuilds_at_the_next_run_when_reconciling_changed_the_suppression_digest`; run level `…_is_told_there_is_no_session_when_the_publish_stage_pended` and `…_pending_publish_makes_the_run_publish_pending_and_the_login_banner_names_it`. Both paths red under the skeleton, green now. |
@@ -228,8 +228,9 @@ error. One CLI mutant: `--newest` picks the oldest, killed.
 * **The record stays frozen** (`v1-e34-t19`). The stage is a `StageEntry` by name, which every
   build reads; its counts go in the run's details. A pending index publish is in no file. What is
   owed is worked out again each run, as for the parsed store.
-* **Reasons name no path,** since `redact` would take it out. The by-hand command, with
-  `<data_dir>/tub-index/<id>`, is in the hint and the login banner, which keep relative paths.
+* **Reasons name no path,** since `redact` would take it out. The by-hand command,
+  `tub index publish --newest`, is in the hint and the login banner, each naming the index id in
+  its sentence (Deviation 7).
 
 ## Operator follow-ups
 

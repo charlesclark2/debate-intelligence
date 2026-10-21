@@ -26,8 +26,12 @@ publishes that same index without rebuilding it, unless reconciling changed the 
 digest. The runbook gives `tub index publish --index <newest>` as the by-hand catch-up, for dev and
 for prod.
 
-A failed build or upload leaves the previous pointer and the previous local index, and the
-stage's reason names them. A version mismatch skips the stage with its reason, and so does a failed
+After a successful build the stage removes superseded local index directories. It never removes
+the two newest, the one `current.json` named when it was read, a directory without a readable
+manifest, or a dot-directory, and the summary gives the count removed and the bytes freed.
+`tub index publish --newest` publishes the stage's own newest index, so the runbook's dev and prod
+catch-ups need no `ls -t` (both added at the PM's review). A failed build or upload leaves the
+previous pointer and the previous local index, and the stage's reason names them. A version mismatch skips the stage with its reason, and so does a failed
 parse in the same run. Every build reports its SQLite bytes and bytes per document, with warnings
 at ADR-0019's two lines. Turned off by `caselist.refresh_search_index`, the stage is shown as
 skipped and is never absent from the run.
@@ -36,8 +40,8 @@ skipped and is never absent from the run.
 weekly run that published an index. Every other criterion passed.
 
 **Look at first:** the cross-build record comparison. It now reads the start commit's records with
-the one stage entry this build adds (Deviation 6). Also look at the local disk growth of
-`tub-index/` (Follow-up 1).
+the one stage entry this build adds (Deviation 6). Also look at the two review additions (ac8 and
+ac9, and Deviations 7 and 8).
 
 ## Plan nodes
 
@@ -57,6 +61,8 @@ the one stage entry this build adds (Deviation 6). Also look at the local disk g
 | ac5 reconcile with a session; local copy without one, said in the summary; next run with a session publishes without rebuild unless reconciling changed the digest; both paths failing first | PASS | `test_index_stage_reconciles_the_suppression_copies_before_it_builds`, `…_without_a_session_builds_from_the_local_copy_and_the_publish_pends`, `…_told_there_is_no_session_does_not_try_the_bucket`, `…_publishes_an_index_built_without_a_session_at_the_next_run_without_a_rebuild`, `…_rebuilds_at_the_next_run_when_reconciling_changed_the_suppression_digest`; run level `…_is_told_there_is_no_session_when_the_publish_stage_pended` and `…_pending_publish_makes_the_run_publish_pending_and_the_login_banner_names_it`. Both paths red under the skeleton, green now. |
 | ac6 SQLite bytes and bytes per document for every build; warnings past 900,000,000 SQLite and 400,000,000 gzip bytes naming ADR-0019 | PASS | `test_index_stage_reports_the_sqlite_bytes_and_bytes_per_document_of_every_build`; `test_index_stage_warns_past_each_of_adr_0019s_lines` at each boundary (equal: no warning; one more: the warning). |
 | ac7 the method's digests equal a real build's manifest digests on the same store | PASS | `test_search_index_sources_digests_are_the_digests_a_real_build_records`, plus `…_built_from_sources_read_first_is_the_same_index` and `…_refuses_sources_read_for_other_stores` in `test_search_index_build.py`. Red first: `3 failed` (`no attribute 'sources'`); green: `47 passed`. |
+| ac8 after a build, superseded local indexes are removed and never the two newest, the one `current.json` names when read, a directory without a readable manifest or a dot-directory; count removed and bytes freed in the summary, each rule failing first | PASS | `test_index_stage_after_a_build_keeps_the_two_newest_and_removes_the_rest` (`removed 1 superseded index on this machine, <n> bytes freed`, and `bytes_freed` equals the removed directory's bytes), `…_never_removes_the_index_current_json_names`, `…_without_reading_current_json_keeps_only_the_two_newest`, `…_never_removes_a_directory_without_a_readable_manifest_or_a_dot_directory`, `…_that_builds_nothing_removes_nothing`. Red first: all 5 failed before retention existed. Then each rule failed under a planted fault breaking it alone: keep only the newest; `current.json` not protected; every directory a candidate; retention without a build. Each was caught by its own test (output below). |
+| ac9 `tub index publish --newest` publishes the directory `newest_local_index` picks and is refused with `--index`; both runbook sections use it | PASS | `packages/debate_cli/tests/test_tub_index.py`: `…_newest_publishes_the_index_the_weekly_stage_calls_newest[False]` and `[True]` (two real builds, either one newer by manifest time, a dot-directory beside them), `…_refuses_newest_together_with_index` (usage error, nothing written), `…_needs_newest_or_index`, `…_newest_with_nothing_built_names_the_build` (`NO_BUILT_SEARCH_INDEX`, hint names `tub index build`). Red first: 4 failed before the option existed; `…_needs_newest_or_index` passed throughout, since `--index` was required before. Mutant `--newest` picks the oldest: killed by both parametrised cases. The runbook's dev and prod blocks in [Publishing a pending index by hand](../runbooks/caselist-scheduled-sync.md#publishing-a-pending-index-by-hand) use `--newest`, and `evidence-search.md` points at that section. |
 | Q6: the setting stays on in the bundled profiles; turned off, the stage is skipped and never absent | PASS | `test_the_bundled_dev_and_prod_profiles_leave_the_weekly_index_refresh_on[dev-dev]` and `[stable-prod]` (the committed `config/` copied as the wheel bundles it, read from `$HOME`), `test_a_bundled_profile_is_what_decides_the_weekly_index_refresh`, `test_index_stage_turned_off_by_setting_is_skipped_with_the_settings_name_and_never_absent`, and the smoke world `test_a_pull_is_listed_by_caselist_runs_locally_and_from_the_bucket` asserting `skipped`, `turned off by setting`. Red with three planted faults (profile turned off, reason not used, container gate dropped): `3 failed, 2 passed`, each for its fault. |
 
 ### Mutation run
@@ -78,6 +84,22 @@ The other two are equivalent:
 
 Final: 22 killed, 2 equivalent.
 
+**Review additions.** Four planted faults on the keep rules, run with `.venv/bin/python -m pytest -n 0`
+over the retention tests:
+
+* keep only the newest: killed by `…_never_removes_the_index_current_json_names` and
+  `…_without_reading_current_json_keeps_only_the_two_newest`;
+* `current.json` not protected: killed by `…_never_removes_the_index_current_json_names`;
+* every directory a candidate: killed by `…_never_removes_a_directory_without_a_readable_manifest_or_a_dot_directory`;
+* retention without a build: killed by `…_that_builds_nothing_removes_nothing`.
+
+The first pass had "keep only the newest" caught by the `current.json` test alone. With a session,
+the pointer read before the publish names the previous index, which masks the two-newest rule, so
+the no-session test now pins which two directories stay. The first driver run reported all four as
+surviving: `-p no:xdist` clashed with the project's `--numprocesses`, every run was a usage error,
+and the driver read "no FAILED line" as a survivor. The driver now reports a run that errors as an
+error. One CLI mutant: `--newest` picks the oldest, killed.
+
 ### The affected set and the whole-repo checks
 
 1. `uv run scripts/affected_tests.py` selected 193 files (the caselist sync is imported widely).
@@ -95,7 +117,10 @@ Final: 22 killed, 2 equivalent.
    `perl -e 'alarm 115; exec @ARGV' .venv/bin/python -m pytest -n auto -q -m "not slow and not live" <the 7 files, test_caselist_sync.py, test_caselist_sync_index_stage.py, test_sync_runs.py, test_search_index_{stage,build,publish}.py, test_settings*.py, test_landscape_staleness.py, test_caselist_pull_parses.py (core and CLI), test_sync_runs_banners_say_what_waits.py, test_pull_contains_unreadable_local_files.py, the CLI pull, runs and tub index tests, tests/smoke/test_caselist_pull*.py, tests/smoke/test_caselist_runs.py, tests/architecture, tests/specs, test_app.py, test_installation.py>`
    → `796 passed in 86.06s`. The rest of the selection is left to the pull request's `ci`, under
    agreement 10.
-3. Whole-repo checks:
+3. After the review additions, the same set plus `tests/docs` and `test_help_rendering.py`:
+   `perl -e 'alarm 115; exec @ARGV' .venv/bin/python -m pytest -n auto -q -m "not slow and not live" <…>`
+   → `860 passed in 97.02s`.
+4. Whole-repo checks (rerun after the additions, chained bare):
    * `uv run ruff format --check .` → `940 files already formatted`
    * `uv run ruff check .` → `All checks passed!`
    * `uv run pyright packages/debate_core packages/debate_cli` → `0 errors`
@@ -130,11 +155,16 @@ Final: 22 killed, 2 equivalent.
 * `packages/debate_cli/src/debate_cli/container.py`: wires the stage where the environment names a
   bucket and the setting is on. One argument and one builder method.
 * `packages/debate_cli/src/debate_cli/commands/tub_index.py`: the default `--out` directory name now
-  comes from the stage module, so both write to one place.
+  comes from the stage module, so both write to one place. `publish --newest` (review) makes
+  `--index` optional; exactly one of the two is required.
+* Review addition, local retention: `local_indexes`, `remove_superseded` and `KEEP_NEWEST` in
+  `search_index_refresh.py`, and `removed` and `bytes_freed` on `SearchIndexStageCounts` and on the
+  details' `SearchIndexCounts`.
 * Tests, new:
   * `packages/debate_core/tests/application/test_search_index_stage.py`;
   * `packages/debate_core/tests/application/test_caselist_sync_index_stage.py`;
-  * additions to `test_search_index_build.py` and `test_settings_environments.py`.
+  * additions to `test_search_index_build.py`, `test_settings_environments.py` and
+    `packages/debate_cli/tests/test_tub_index.py` (`--newest`).
 * Tests, pinned values updated:
   * `caselist/test_pull_run_record_is_read_by_every_build.py`;
   * `caselist/test_pull_contains_unreadable_local_files.py`;
@@ -173,6 +203,13 @@ Final: 22 killed, 2 equivalent.
    (`as_this_build_records_it`). Every written record is still validated against the older builds'
    schema, so the property it guards is unchanged. Expected details gain `"search_index": null`.
    One stage-list assertion gains the new stage, and one stage count goes from 7 to 8.
+7. **The stage's failure hint and the login banner now give `tub index publish --newest`** in place
+   of `--index <data_dir>/tub-index/<id>`, still naming the index id in their sentence. This goes
+   one step past the review's "update both runbook sections": I did it so that no message asks for
+   a path.
+8. **`tub index publish --index` is no longer a required option.** One of `--index` and `--newest`
+   is required. A call with neither is still a usage error, as it was, and `--index` behaves as
+   before.
 
 ## Decisions and assumptions
 
@@ -220,15 +257,12 @@ needed.
 
 ## Follow-up work
 
-1. **`tub-index/` grows on this Mac.** Every rebuild leaves the previous index directory, and nothing
-   removes superseded local ones. At ADR-0019's estimate of 280 to 550 MB a directory (SQLite plus
-   gzip), a few weeks of changed stores is several GB. Bucket pruning is `v1-e39-t07`'s; local
-   retention (keep the newest two, say) belongs to the PM to place, perhaps in `v1-e39-t07` or a
-   small E39 task.
+1. ~~`tub-index/` grows on this Mac.~~ Closed in this session at the PM's review (ac8). Bucket
+   pruning stays `v1-e39-t07`'s.
 2. **A fresh installation fails the stage until every store is parsed.** That includes `openev`,
    per the Q3 ruling. `debate-research doctor` could say so before the first Wednesday (E34 or E39).
-3. **The by-hand catch-up picks the newest directory with `ls -t`.** A `tub index publish --newest`
-   flag in `v1-e39-t02`'s command would remove that step.
+3. ~~The by-hand catch-up picks the newest directory with `ls -t`.~~ Closed in this session at the
+   PM's review (ac9).
 4. **Pre-existing pyright errors.** `tests/smoke/test_caselist_pull_in_process.py` (lines 546, 727,
    957) and `tests/smoke/test_caselist_runs.py` (188 to 189) have pyright errors about boto3's
    optional TypedDict keys. They date from 2026-10-12 and 2026-10-14, are outside the packages CI

@@ -653,9 +653,10 @@ Which failure is which:
 
 **The parse stage decides nothing here.** It is not one of the stages that had to finish, so a
 failed parse stage leaves the exit code where the four above put it, `0` when they finished. It
-records its codes all the same, in its own `error_codes`: `PARSE_FAILURE_RATE_EXCEEDED`, the codes
-above for a store that did not answer or refused, the code of each object of the parsed store the
-bucket did not confirm, and `INTERNAL_ERROR` for a parse that crashed.
+records its codes all the same, in its own `error_codes`: `PARSE_FAILURE_RATE_EXCEEDED`,
+`NEWER_FINGERPRINT_TABLE`, the codes above for a store that did not answer or refused, the code of
+each object of the parsed store the bucket did not confirm, and `INTERNAL_ERROR` for a parse that
+crashed.
 [The parse stage](#the-parse-stage) says what to do about each.
 
 **`publish: pending` decides nothing either, whatever it found first.** A publish that the session
@@ -1542,6 +1543,17 @@ parsed store for want of an AWS session. See
   caselist.
 * `CHECKSUM_MISMATCH`: the bucket holds a file of the parsed store with other bytes, which the
   same parser never produces twice. It needs a person; nothing was overwritten.
+* `NEWER_FINGERPRINT_TABLE` (`v1-e34-t29`): the caselist's occurrence table, on this Mac or in the
+  bucket, is stamped with a newer fingerprint version than the build that ran, which is usually the
+  installed agent's after the checkout moved ahead. The older build would have put its own
+  clusters back, so it wrote nothing and sent nothing: the table is as it was in both places. The
+  stage's reason and the notification's hint name both versions and the store. Install a build at
+  the newer version for the agent ([Reinstalling the agent](#reinstalling-the-agent)), then run
+  `caselist parse --caselist <slug> --publish` from it to parse what the refused runs imported.
+  Until then every pull that imports into the caselist fails its parse stage the same way, and still
+  imports and publishes. `caselist parse` by hand, its `--publish`, and `store sync` over a
+  `parsed/` occurrence table are refused by the same rule, with exit `1` or a failed object, and an
+  equal or older stamp is rebuilt and published as before. Never delete the table to get past it.
 * `INTERNAL_ERROR`: the parse crashed. Run `caselist parse --caselist <slug>` by hand to see it,
   and report it.
 

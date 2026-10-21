@@ -689,3 +689,23 @@ def test_files_a_previous_process_left_are_deleted_when_a_holder_starts(
     )
 
     assert [path.name for path in files_in(directory)] == ["unrelated.txt"]
+
+
+def test_the_recheck_comes_five_minutes_on_as_adr_0019_sets_it(
+    make_holder: Callable[[], SearchIndexHolder],
+    bucket: InMemorySearchIndexSource,
+    first_index: PublishedIndex,
+    clock: Clock,
+) -> None:
+    """Written in minutes, not through the constant, so a changed interval fails here."""
+    bucket.publish(first_index)
+    holder = make_holder()
+    found(holder)
+
+    clock.advance(timedelta(minutes=4, seconds=59))
+    found(holder)
+    assert bucket.reads.count(SEARCH_INDEX_POINTER_KEY) == 1
+
+    clock.advance(timedelta(seconds=1))
+    found(holder)
+    assert bucket.reads.count(SEARCH_INDEX_POINTER_KEY) == 2

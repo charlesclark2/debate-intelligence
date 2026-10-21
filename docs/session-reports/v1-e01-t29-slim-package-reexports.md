@@ -16,9 +16,9 @@ and every caller imports from the submodule. That was 20 files, all importing fr
 fails on any import; it fails on a deliberate re-export in each. Behaviour is unchanged: the root
 `conftest.py` collects **10,613/10,632** tests before and after.
 
-**The Goal stays InProgress.** ac2 ends "and the whole default selection passes in CI". Only the
-pull request's `ci` check can close that clause, and a session cannot run it. Everything else in
-ac2, and all of ac1 and ac3, passes.
+**The Goal is Succeeded** (the PM's ruling 2). ac2 ends "and the whole default selection passes in
+CI". That clause is the pull request's required `ci` check, which gates the merge (working
+agreement 10). Everything else in ac2, and all of ac1 and ac3, passed in the session.
 
 **Read ac3 first: the gain is smaller than the follow-up hoped.**
 - **Shares:** over the same 20 commits, the median selected share falls from 79.4% (t28) to
@@ -43,7 +43,7 @@ ac2, and all of ac1 and ac3, passes.
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
 | ac1: both `__init__` modules import no submodule eagerly, and an import-linter contract (or a test) fails if either does again, shown failing on a deliberate re-export | PASS | Both files are a docstring only. `tests/architecture/test_package_inits_import_nothing.py` reads each with `ast` and fails on any `import`/`from` statement anywhere in the module, and on any `__import__`/`import_module` call. **Red against the old files** (fat `__init__`s from `a6d2fb2` swapped in, then the thin ones restored and `cmp`-equal): `2 failed, 8 passed`. **Deliberate re-export** at `dbd9108`: appended `from debate_core.testing.fakes import FixedClock` to the testing `__init__` and `from debate_core.evidence.style_classifier import classify_paragraph` to the evidence one → `2 failed, 8 passed`, each failure naming its line, e.g. `AssertionError: packages/debate_core/src/debate_core/testing/__init__.py imports ['line 25: from debate_core.testing.fakes import FixedClock']`. Restored with `git checkout`; `git status --porcelain` printed nothing. **Green:** `10 passed`. A test rather than a contract: Decision 2. |
-| ac2: every caller imports from the submodule; pyright and `lint-imports` pass; the whole default selection passes in CI | PASS, except the CI clause: NOT RUN | **Callers:** an `ast` scan of every tracked `.py` file finds no `from debate_core.{testing,evidence} import <re-exported name>`. Running the codemod again in `--check` mode → `0 files`. No plain `import` of either package, no `from debate_core import testing/evidence`, and no attribute chain through either package. Every `mock.patch`-style string target already names a submodule. The three `debate_core.evidence` callers import submodules (`fingerprints`, `style_classifier`, `near_duplicates`) and were not touched. `scripts/` needed no change. **pyright:** `uv run pyright` (as CI runs it) → `0 errors, 0 warnings, 0 informations`; `uv run pyright packages/debate_core packages/debate_cli packages/debate_api` → the same. **lint-imports:** `Contracts: 12 kept, 0 broken.` **CI:** NOT RUN. The branch changes the root `conftest.py`, so the affected set is the whole selection, which the pull request's `ci` check runs (working agreement 10; the PM's note). |
+| ac2: every caller imports from the submodule; pyright and `lint-imports` pass; the whole default selection passes in CI | PASS | **Callers:** an `ast` scan of every tracked `.py` file finds no `from debate_core.{testing,evidence} import <re-exported name>`. Running the codemod again in `--check` mode → `0 files`. No plain `import` of either package, no `from debate_core import testing/evidence`, and no attribute chain through either package. Every `mock.patch`-style string target already names a submodule. The three `debate_core.evidence` callers import submodules (`fingerprints`, `style_classifier`, `near_duplicates`) and were not touched. `scripts/` needed no change. **pyright:** `uv run pyright` (as CI runs it) → `0 errors, 0 warnings, 0 informations`; `uv run pyright packages/debate_core packages/debate_cli packages/debate_api` → the same. **lint-imports:** `Contracts: 12 kept, 0 broken.` **CI:** the CI clause is the pull request's required `ci` check, which gates the merge (working agreement 10). The branch changes the root `conftest.py`, so the affected set is the whole selection, which that check runs; the session did not (the PM's note, and ruling 2). |
 | ac3: over t28's 20 commits, the median and largest selected share after this change, against 79.4% and 100% | PASS | **After: median 65.8%, largest 100%** (before: 79.4% and 100%). The table and method are below. Measured with the tool's own functions rather than its `--diff` flag alone: Deviation 1. |
 | Node `slim-reexports`: `uv run pytest tests/architecture tests/scripts -k "import or affected"` | PASS | `114 passed in 9.71s` |
 | PM: collected test count unchanged | PASS | `uv run pytest --collect-only -q`, last line. Before (at `c1a2345`): `10613/10632 tests collected (19 deselected)`. After (at `dbd9108`): `10623/10642`, which is the same plus the new test file's 10 cases. With `--ignore=tests/architecture/test_package_inits_import_nothing.py`: `10613/10632 tests collected (19 deselected)`, identical. |
@@ -156,7 +156,8 @@ for sha in COMMITS:  # the 20 commits of t28's ac4 table
   - `conftest.py`: a comment naming `debate_core.testing.ScriptedModelRouter` now names `.fakes`.
 - **`986299f`:** the guard's docstring said import-linter cannot express the rule. It can express
   part of it (Decision 2), so the docstring now says what it can and cannot do.
-- **This report and the spec's phase:** none, because the phase stays InProgress.
+- **The spec:** the Goal's phase, InProgress at the start and Succeeded at the end (the PM's
+  ruling 2).
 
 ## Deviations from the spec
 
@@ -222,9 +223,8 @@ for sha in COMMITS:  # the 20 commits of t28's ac4 table
 
 ## Operator follow-ups
 
-None. The whole default selection runs in the pull request's `ci` check, as the PM's note says. When
-that check is green, ac2's last clause is met, and the Goal's phase can be set to `Succeeded` (the
-PM's call).
+None. The whole default selection runs in the pull request's required `ci` check, which gates the
+merge. If it fails, the failing part's output comes back to this session (working agreement 10).
 
 ## Follow-up work
 

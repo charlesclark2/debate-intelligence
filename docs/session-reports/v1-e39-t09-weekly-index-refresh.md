@@ -333,3 +333,41 @@ that install carries it, and the next Wednesday run is ac4's evidence. Before th
 operator also applies v1-e39-t02's operator follow-up 2 (the dev listing grant), so the stage's
 read of `current.json` is not refused for want of a list permission. The PM records ac4 in a
 close-out.
+
+## PM review, second
+
+**Verdict:** ACCEPTED
+<!-- ACCEPTED / CHANGES_REQUESTED -->
+
+**Reviewed by / date:** PM, 2026-10-20
+
+**Notes:**
+
+Both additions are closed as asked. Open the pull request with `--partial` (ac4 is the operator's).
+
+**What I checked:**
+
+* **Retention (ac8).** `remove_superseded` only ever sees what `local_indexes` lists, so a
+  directory without a readable manifest and a dot-directory cannot reach `rmtree`.
+  * The two newest and the id `current.json` gave are skipped before any size is read.
+  * A directory that cannot be removed is named and left, not failed.
+  * Each "never" failed first, and each planted fault was caught by its own test.
+* **Retention, a finding worth keeping.** You noticed that, with a session, the pointer read
+  masked the two-newest rule, and added a no-session test that pins which two stay.
+* **Mutation driver.** You noticed it was reading usage errors as survivors, and fixed it to
+  report them as errors. That is the right instinct: a mutation run that cannot fail proves
+  nothing.
+* **`--newest` (ac9)** uses the stage's own `newest_local_index`, is refused with `--index`, and
+  names `tub index build` when nothing is built. The oldest-picking mutant is killed.
+* **Deviations 7 and 8 are accepted.** No message asking for a path is better than one that does.
+
+**Two stale lines, fixed in place before the pull request** (no change to the verdict):
+
+* the Summary's "`tub index publish --index <newest>` as the by-hand catch-up";
+* the Decisions bullet saying the hint carries `<data_dir>/tub-index/<id>`.
+
+Both now read `--newest`, per Deviation 7.
+
+**ac4** is recorded by the PM after the first Wednesday run, under an install that carries this
+task, that published. Before that run: the dev listing grant (v1-e39-t02 operator follow-up 2) and a
+live `debate-dev-evidence` session at 06:00.

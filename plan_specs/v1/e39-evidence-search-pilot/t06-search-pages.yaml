@@ -69,7 +69,7 @@ spec:
         and the rest on request, and its search result's snippet stays within the
         page-weight budget, by test.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

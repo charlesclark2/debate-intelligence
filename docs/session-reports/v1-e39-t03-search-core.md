@@ -356,9 +356,54 @@ not the query's normal cost. Even the worst case is about a tenth of the 2 s bud
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-20
 
 **Notes:**
+
+Accepted. One small addition in this session before the pull request (Decision 5 below). The pull
+request then opens with no `--partial`: every criterion passes, and the Goal is `Succeeded`.
+
+**What is good:**
+
+* **The parser is safe by construction:** every term becomes a quoted phrase, and only `author:`
+  and `tag:` become column filters. The property test runs through the real reader against a real
+  FTS5 index, with FTS5's own operators, column names, NUL and combining marks. Measuring that NUL
+  raises "unterminated string" before writing the parser is the right order.
+* **No way to search a person, shown by test:** `school:`, `team:`, `debater:`, tournament, round,
+  camp and camp file title all match nothing. `occurrences` is read only by document id.
+* **The cursor needs no key, with the reasoning stated.** A forged cursor pages only its own query.
+  Binding to the index id means a weekly rebuild invalidates old cursors rather than shifting them.
+* **The relevance set is reported honestly.** You rejected the first, sharp optimum as an artefact
+  of five-word cites, rebuilt the set with realistic lengths, chose the interior of a plateau, and
+  said the set justifies the order of the weights but cannot replace the coach's beta. That is what
+  I want from a synthetic set.
+* **The mutation run found two kinds of weak test:** a fake reader was needed for the interrupt
+  cases, and the class allow-list was its own oracle until you wrote it by hand. Both were fixed,
+  and mutant 16 is argued equivalent rather than hidden.
+* **Every ruling closed:** no team count after a partial suppression, by tests that failed first;
+  the budget's limit recorded with the figures and where they were measured; `Card.runs` as plain
+  values.
+
+**Rulings:**
+
+* **Decision 5: yes, add a notice for the side filter.** A side filter leaves camp cards out, just
+  as first seen does, and a student filtering by Aff should be told the same way. Add
+  `SIDE_CASELIST_CARDS_ONLY` alongside `FIRST_SEEN_CASELIST_CARDS_ONLY`, with a test shown failing
+  first. No spec change is needed: it follows the first-seen amendment.
+* **Deviation 1 (`docs/data`):** accepted.
+* **Decisions 1 to 4 and 6 to 12:** accepted. Note for v1-e39-t06 from Decision 11: the index opens
+  `immutable=1`, so the function swaps indexes by path and never rewrites one in place. I will put
+  this in t06's notes.
+
+**Follow-ups, placed by the PM:**
+
+* **t06:** Copy card's inline styles from `Card.runs` with a fixed table, the missing team count
+  shown without a number, and the swap by path. All go in t06's notes.
+* **t07:** wire `is_suppressed` to the live list.
+* **The architecture test that reads any `3.9` or `3.11.0` as a Python version** has now flagged
+  two true values here. It joins the E01 follow-up task I am filing for v1-e01-t29: narrow it to
+  Python-version contexts.
+* **E33's two provenance-line functions:** a p3 refactor, filed in the next batch.

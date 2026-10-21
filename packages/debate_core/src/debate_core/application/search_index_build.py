@@ -73,6 +73,21 @@ exact fingerprint.
   :class:`~debate_core.application.ports.search_index.SearchDocument` handed to the writer has no
   field for one.
 
+## What a build is built from, read before it
+
+:meth:`SearchIndexBuildService.sources` reads the rows of every store and the suppression list, and
+computes the digests the manifest records of them: each store's `occurrences_sha256` and the list's
+`sha256`. It builds nothing. :meth:`~SearchIndexBuildService.build` reads them through the same
+method, or takes what a caller read with it, so that the weekly run's question "has anything changed
+since the newest index?" (`v1-e39-t09`) is asked of the very digests a build would record, and never
+of a second copy of the rule (PM ruling 2026-10-20, question 2).
+
+**A store parsed under another version** is :class:`SearchIndexStoreVersionMismatch`, a
+:class:`SearchIndexStoreNotReady` reported under the same code: a store that holds only another
+parser's directories, one a newer parser than this build's has written to, or rows of another
+fingerprint version. The weekly run skips its index stage on it with that reason; a build by hand
+fails on it as on any store not ready.
+
 ## The same store gives the same bytes
 
 Documents are numbered by their (caselist, cluster id) rank, the writer lays them out by number, and
@@ -91,7 +106,7 @@ from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import date
 from pathlib import Path
-from typing import Final
+from typing import ClassVar, Final
 
 from debate_core.application.caselist.publish_plan import stored_row_hold
 from debate_core.application.caselist.suppression import read_path_holds
@@ -134,7 +149,9 @@ from debate_core.evidence.fingerprints import FINGERPRINT_VERSION, card_fingerpr
 __all__ = [
     "BuiltSearchIndex",
     "SearchIndexBuildService",
+    "SearchIndexSources",
     "SearchIndexStoreNotReady",
+    "SearchIndexStoreVersionMismatch",
     "cite_without_cutter_mark",
     "representative_order",
 ]
@@ -166,6 +183,34 @@ class SearchIndexStoreNotReady(DomainError):
         self.caselist = caselist
         self.reason = reason
         super().__init__(f"the parsed store of {caselist} cannot be indexed: {reason}")
+
+
+class SearchIndexStoreVersionMismatch(SearchIndexStoreNotReady):
+    """A store parsed under another parser or fingerprint version than this build runs.
+
+    Reported under :class:`SearchIndexStoreNotReady`'s code, so `tub index build` fails on it as it
+    always did; the weekly run tells it apart and skips its index stage with the reason (`v1-e39-t09`
+    ac3).
+    """
+
+    ERROR_CODE: ClassVar[str] = "SEARCH_INDEX_STORE_NOT_READY"
+
+
+@dataclass(frozen=True, slots=True)
+class SearchIndexSources:
+    """What an index of some stores is built from, read once, with the digests its manifest records."""
+
+    tables: Mapping[str, tuple[tuple[OccurrenceRecord, ...], StoreState]]
+    """Each store's occurrence rows and their state, by store name."""
+
+    suppression: SuppressionState
+    suppression_list: SuppressionListState
+    """The suppression list's entry counts and digest, as the manifest's `suppression`."""
+
+    @property
+    def stores(self) -> tuple[StoreState, ...]:
+        """Every store's state, by name: the manifest's `stores`."""
+        return tuple(state for _, state in (self.tables[name] for name in sorted(self.tables)))
 
 
 @dataclass(frozen=True, slots=True)
@@ -291,17 +336,12 @@ class SearchIndexBuildService:
         self._parser_version = parser_version
         self._event_for_caselist = event_for_caselist
 
-    async def build(
-        self, stores: Sequence[str], out: Path, *, provenance_limit: int = DEFAULT_PROVENANCE_LIMIT
-    ) -> BuiltSearchIndex:
-        """Build the index of `stores` under `out/<index id>/` and return it with its manifest.
+    async def sources(self, stores: Sequence[str]) -> SearchIndexSources:
+        """Read what an index of `stores` would be built from, and its digests, building nothing.
 
-        Raises :class:`SearchIndexStoreNotReady` for a store that cannot be read as it stands. An
-        index already at `out/<index id>/` is the same bytes, since the id is the SQLite file's
-        digest, and is replaced by the new build.
+        Raises :class:`SearchIndexStoreNotReady` for a store that cannot be read as it stands, and
+        its :class:`SearchIndexStoreVersionMismatch` for one parsed under another version.
         """
-        if provenance_limit < 1:
-            raise ValueError(f"provenance_limit is at least 1; got {provenance_limit}")
         names = sorted(set(stores))
         if not names:
             raise ValueError("an index is built from at least one store")
@@ -312,7 +352,35 @@ class SearchIndexBuildService:
                 )
         state, suppression_state = await self._suppression_state()
         tables = {name: await self._read(name) for name in names}
-        clusters, counts = await self._clusters(tables, state)
+        return SearchIndexSources(tables=tables, suppression=state, suppression_list=suppression_state)
+
+    async def build(
+        self,
+        stores: Sequence[str],
+        out: Path,
+        *,
+        provenance_limit: int = DEFAULT_PROVENANCE_LIMIT,
+        sources: SearchIndexSources | None = None,
+    ) -> BuiltSearchIndex:
+        """Build the index of `stores` under `out/<index id>/` and return it with its manifest.
+
+        `sources` is what :meth:`sources` read of the same stores, when the caller has read it
+        already; it is read here otherwise. Raises :class:`SearchIndexStoreNotReady` for a store that
+        cannot be read as it stands. An index already at `out/<index id>/` is the same bytes, since
+        the id is the SQLite file's digest, and is replaced by the new build.
+        """
+        if provenance_limit < 1:
+            raise ValueError(f"provenance_limit is at least 1; got {provenance_limit}")
+        names = sorted(set(stores))
+        if sources is None:
+            sources = await self.sources(names)
+        elif sorted(sources.tables) != names:
+            raise ValueError(
+                f"these sources were read for other stores ({', '.join(sorted(sources.tables))}) "
+                f"than the build is asked for ({', '.join(names)})"
+            )
+        tables = sources.tables
+        clusters, counts = await self._clusters(tables, sources.suppression)
         out.mkdir(parents=True, exist_ok=True)
         building = Path(tempfile.mkdtemp(prefix=".building-", dir=out))
         try:
@@ -328,9 +396,9 @@ class SearchIndexBuildService:
                 sqlite_version=self._writer.sqlite_version,
                 sqlite_feature_ceiling=SQLITE_FEATURE_CEILING,
                 provenance_limit=provenance_limit,
-                stores=tuple(state_of for _, state_of in tables.values()),
+                stores=sources.stores,
                 snapshot=_snapshot_of(tables),
-                suppression=suppression_state,
+                suppression=sources.suppression_list,
                 counts=IndexCounts(
                     documents=len(clusters),
                     documents_by_store={
@@ -374,18 +442,30 @@ class SearchIndexBuildService:
         )
 
     async def _read(self, caselist: str) -> tuple[tuple[OccurrenceRecord, ...], StoreState]:
-        """The rows of the newest generation of the running parser version's directory, and its state."""
-        generations = [
-            generation
-            for name in await self._store.version_directories(caselist)
-            for named, generation in [parse_version_directory(name)]
-            if named == self._parser_version
+        """The rows of the newest generation of the running parser version's directory, and its state.
+
+        A parser version begins with its date, so a version that sorts after this build's was written
+        by a newer build (`v1-e31-t16`'s order).
+        """
+        directories = [
+            parse_version_directory(name) for name in await self._store.version_directories(caselist)
         ]
+        parsed_by = sorted({named for named, _ in directories})
+        generations = [generation for named, generation in directories if named == self._parser_version]
         if not generations:
-            raise SearchIndexStoreNotReady(
+            refusal = SearchIndexStoreVersionMismatch if parsed_by else SearchIndexStoreNotReady
+            raise refusal(
                 caselist,
-                f"no version directory of parser {self._parser_version}; "
-                f"run `debate-research caselist parse --caselist {caselist}`",
+                f"no version directory of parser {self._parser_version}"
+                + (f" (it was parsed by {', '.join(parsed_by)})" if parsed_by else "")
+                + f"; run `debate-research caselist parse --caselist {caselist}`",
+            )
+        newer = [named for named in parsed_by if named > self._parser_version]
+        if newer:
+            raise SearchIndexStoreVersionMismatch(
+                caselist,
+                f"it was parsed by {newer[-1]}, a newer parser than this build's {self._parser_version}; "
+                "index it with the build that parsed it",
             )
         version = version_directory_name(self._parser_version, max(generations))
         rows = await self._store.read_occurrences(caselist, version)
@@ -399,7 +479,7 @@ class SearchIndexBuildService:
             raise SearchIndexStoreNotReady(caselist, f"{version}'s occurrence table holds no rows")
         stale = sorted({row.fingerprint_version for row in rows} - {FINGERPRINT_VERSION})
         if stale:
-            raise SearchIndexStoreNotReady(
+            raise SearchIndexStoreVersionMismatch(
                 caselist,
                 f"its rows carry fingerprint version {', '.join(stale)}, "
                 f"not this build's {FINGERPRINT_VERSION}; "

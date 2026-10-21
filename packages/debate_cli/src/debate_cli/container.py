@@ -174,6 +174,7 @@ from debate_core.application.ports.notifier import Notifier, NullNotifier
 from debate_core.application.ports.suppression import SuppressionList
 from debate_core.application.search_index_build import SearchIndexBuildService
 from debate_core.application.search_index_publish import SearchIndexPublishService
+from debate_core.application.search_index_refresh import SEARCH_INDEX_DIRECTORY, SearchIndexRefresh
 from debate_core.application.settings import ConfigurationError, Environment, Settings, SyncNotifierKind
 from debate_core.application.snapshot_service import SnapshotService
 from debate_core.application.sync_runs import (
@@ -1067,6 +1068,12 @@ class ServiceContainer:
         `caselist.parse_imported_sources` is off, and the run then records the stage as skipped
         with that setting's name. Landscape (`v1-e32-t05`) is `None` because it does not exist yet.
 
+        The search index stage (`v1-e39-t09`) is `tub index build` and `tub index publish` over this
+        environment's bucket, with the suppression list's two copies to reconcile first. It is wired
+        in only where the environment names a bucket, because an index nothing can publish is not
+        the weekly run's to build, and `caselist.refresh_search_index` is on; turned off, the run
+        records the stage as skipped by that setting.
+
         Raises :class:`~debate_core.application.ports.caselist_source.CaselistApiDisabled` unless
         the operator has turned the API on, which is the data-use policy's E34 gate.
         """
@@ -1127,6 +1134,10 @@ class ServiceContainer:
             )
             if caselist.parse_imported_sources
             else None,
+            search_index=self._pull_search_index(event_for_caselist)
+            if settings.storage.s3.bucket and caselist.refresh_search_index
+            else None,
+            search_index_turned_off=not caselist.refresh_search_index,
             openev_event=caselist.openev_event,
             openev_year=caselist.openev_year,
             bulk_downloads_per_day=caselist.bulk_downloads_per_day,
@@ -1138,6 +1149,21 @@ class ServiceContainer:
             if caselist.full_archive_rotation
             else None,
             read_full_archive=self.read_full_archive,
+        )
+
+    def _pull_search_index(self, event_for_caselist: Callable[[str], Event | None]) -> SearchIndexRefresh:
+        # Imported here, not at module scope: lxml is loaded only by a command that needs the parser.
+        from debate_core.integrations.docx_parser import DebateDocxParser
+
+        settings = self.settings
+        return SearchIndexRefresh(
+            builder=self.search_index_build(event_for_caselist=event_for_caselist),
+            out=settings.storage.data_dir / SEARCH_INDEX_DIRECTORY,
+            parser_version=DebateDocxParser().parser_version,
+            publisher=self.search_index_publish(),
+            bucket=self._evidence_bucket(),
+            reconcile=self.suppression_list().reconcile,
+            environment=settings.environment.value,
         )
 
     def caselist_sync_monitor(self) -> SyncRunMonitor:

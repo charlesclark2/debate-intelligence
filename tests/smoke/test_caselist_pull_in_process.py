@@ -710,6 +710,9 @@ def test_the_week_after_a_refused_run_the_pull_imports_publishes_and_publishes_t
     times = iter([datetime(2026, 9, 16, 6, 0, tzinfo=UTC), datetime(2026, 9, 23, 6, 0, tzinfo=UTC)])
     now = {"at": next(times)}
     monkeypatch.setattr(ServiceContainer, "clock", lambda _: lambda: now["at"])
+    # This world parses no camp store, so the search index stage would fail on `openev` every run;
+    # it is about the refused run's record, not the index (PM ruling 2026-10-20, v1-e39-t09 Q6).
+    monkeypatch.setenv("DEBATE_CASELIST__REFRESH_SEARCH_INDEX", "false")
     monkeypatch.setenv("DEBATE_STORAGE__S3__AWS_PROFILE", MISSPELT_PROFILE)
     refused = run("caselist", "pull")
     assert refused["exit_code"] == ExitCode.DOMAIN_FAILURE, refused
@@ -969,6 +972,9 @@ def test_a_mismatch_and_then_an_expired_session_exits_zero_and_says_a_person_is_
     Publish is pending and the exit is `0`, exactly as before: a pending stage carries no code for
     the exit. What changed is that the mismatch is no longer invisible until the retry: it is on
     the stage as an earlier finding, and the login banner says a person has to look as well."""
+    # This world parses no camp store, so the search index stage would fail on `openev` every run;
+    # it is about the publish's earlier finding, not the index (PM ruling 2026-10-20, v1-e39-t09 Q6).
+    monkeypatch.setenv("DEBATE_CASELIST__REFRESH_SEARCH_INDEX", "false")
     week_one_only = digest_of_body("grove-round-2-neg-first")
     key = f"raw/caselist/{SYNTHETIC_CASELIST}/sha256/{week_one_only[:2]}/{week_one_only[2:4]}/{week_one_only}"
     bucket.put_object(Bucket=BUCKET, Key=key, Body=b"other bytes")

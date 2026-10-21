@@ -282,3 +282,45 @@ def test_bundled_dev_and_prod_never_share_a_data_dir_routing_file_or_budget(
     assert development.storage.data_dir != production.storage.data_dir
     assert development.models.routing_file != production.models.routing_file
     assert development.models.budget_usd_daily != production.models.budget_usd_daily
+
+
+# ---------------------------------------------------------------------------------------------
+# The search pilot's weekly index is on where the agent runs (v1-e39-t09, PM ruling Q6)
+# ---------------------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(("channel", "environment"), [("dev", Environment.DEV), ("stable", Environment.PROD)])
+def test_the_bundled_dev_and_prod_profiles_leave_the_weekly_index_refresh_on(
+    channel: str, environment: Environment, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, no_dotenv: Path
+) -> None:
+    """The committed `config/` as the wheel bundles it, read from `$HOME` as the launchd agent reads it."""
+    bundled = tmp_path / "bundled"
+    shutil.copytree(CONFIG, bundled / "config")
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.chdir(home)
+
+    settings = load_settings(env_file=no_dotenv, build_channel=channel, bundled_config_root=bundled)
+
+    assert settings.environment is environment
+    assert settings.caselist.refresh_search_index is True
+
+
+def test_a_bundled_profile_is_what_decides_the_weekly_index_refresh(
+    bundled_root: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, no_dotenv: Path
+) -> None:
+    """The check above can fail: a profile that turns the stage off is read as off."""
+    profile = bundled_root / "config" / "profiles" / "dev.toml"
+    profile.write_text(
+        profile.read_text("utf-8").replace(
+            "api_enabled = true\n", "api_enabled = true\nrefresh_search_index = false\n"
+        ),
+        encoding="utf-8",
+    )
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.chdir(home)
+
+    settings = load_settings(env_file=no_dotenv, build_channel="dev", bundled_config_root=bundled_root)
+
+    assert settings.caselist.refresh_search_index is False

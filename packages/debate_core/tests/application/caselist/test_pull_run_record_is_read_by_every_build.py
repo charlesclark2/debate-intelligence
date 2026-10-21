@@ -103,6 +103,7 @@ NO_DETAILS_TO_SPEAK_OF: dict[str, Any] = {
     "failure_codes": [],
     "hint": None,
     "parse": None,
+    "search_index": None,
     "held_by_request": {},
 }
 
@@ -123,6 +124,7 @@ EXPECTED_DETAILS: dict[str, list[dict[str, Any]]] = {
             "failure_codes": ["STORE_UNAVAILABLE"],
             "hint": None,
             "parse": None,
+            "search_index": None,
             "held_by_request": {},
         }
     ],
@@ -141,6 +143,7 @@ EXPECTED_DETAILS: dict[str, list[dict[str, Any]]] = {
             "failure_codes": ["STORE_ACCESS_DENIED"],
             "hint": None,
             "parse": None,
+            "search_index": None,
             "held_by_request": {},
         }
     ],
@@ -159,6 +162,7 @@ EXPECTED_DETAILS: dict[str, list[dict[str, Any]]] = {
             "failure_codes": ["UNREADABLE_ARCHIVE"],
             "hint": None,
             "parse": None,
+            "search_index": None,
             "held_by_request": {},
         }
     ],
@@ -181,6 +185,7 @@ EXPECTED_DETAILS: dict[str, list[dict[str, Any]]] = {
             "failure_codes": [],
             "hint": None,
             "parse": None,
+            "search_index": None,
             "held_by_request": {},
         }
     ],
@@ -191,6 +196,7 @@ EXPECTED_DETAILS: dict[str, list[dict[str, Any]]] = {
             "failure_codes": ["CASELIST_AUTH_EXPIRED"],
             "hint": None,
             "parse": None,
+            "search_index": None,
             "held_by_request": {},
         }
     ],
@@ -201,6 +207,7 @@ EXPECTED_DETAILS: dict[str, list[dict[str, Any]]] = {
             "failure_codes": ["INTERNAL_ERROR"],
             "hint": None,
             "parse": None,
+            "search_index": None,
             "held_by_request": {},
         }
     ],
@@ -222,6 +229,7 @@ EXPECTED_DETAILS: dict[str, list[dict[str, Any]]] = {
                 "uploaded": 9,
                 "not_published": 0,
             },
+            "search_index": None,
             "held_by_request": {},
         }
     ],
@@ -233,6 +241,7 @@ EXPECTED_DETAILS: dict[str, list[dict[str, Any]]] = {
             "failure_codes": ["STORE_PROFILE_NOT_CONFIGURED"],
             "hint": THE_FIX_FOR_A_PROFILE_NOT_DEFINED,
             "parse": None,
+            "search_index": None,
             "held_by_request": {},
         },
         {"run_id": SECOND_RUN_ID, **NO_DETAILS_TO_SPEAK_OF},
@@ -305,6 +314,35 @@ def as_this_build_words_it(text: str) -> str:
     return text
 
 
+SEARCH_INDEX_STAGE_THIS_BUILD_ADDS: Final = {
+    "run": "no search index stage is wired in: an environment that names no evidence bucket has none",
+    "publish_pending": "publish-pending runs no derived stages",
+}
+"""The stage entry this build records after parse and the start commit did not (`v1-e39-t09`): the
+search index stage, skipped, by the reason each mode gives. These scenarios build their run with no
+search index stage. A stage entry is a name, an outcome and a reason, all strings, so an older build
+reads it: :func:`read_as_an_older_build_reads` holds every written record to that."""
+
+
+def as_this_build_records_it(text: str) -> str:
+    """A stored record as this build writes it: :func:`as_this_build_words_it`, and the search index
+    stage's entry after the parse stage's, where the start commit's has a parse stage and no search
+    index stage. Nothing else changes."""
+    record = json.loads(as_this_build_words_it(text))
+    stages = record.get("stages", [])
+    names = [one["stage"] for one in stages]
+    if "parse" in names and "search_index" not in names:
+        stages.insert(
+            names.index("parse") + 1,
+            {
+                "stage": "search_index",
+                "outcome": "skipped",
+                "reason": SEARCH_INDEX_STAGE_THIS_BUILD_ADDS[record["mode"]],
+            },
+        )
+    return json.dumps(record)
+
+
 def details_file(world: World) -> Path:
     return world.installation.data_dir / DETAILS_FILE
 
@@ -370,7 +408,7 @@ async def test_the_run_log_this_build_writes_is_read_by_the_older_builds(name: s
     await SCENARIOS[name](world)
 
     written = world.run_log().decode("utf-8").splitlines()
-    stored = [as_this_build_words_it(line) for line in stored_lines(name)]
+    stored = [as_this_build_records_it(line) for line in stored_lines(name)]
     assert len(written) == len(stored) == len(EXPECTED_DETAILS[name])
     for ours, theirs in zip(written, stored, strict=True):
         read_as_an_older_build_reads(json.loads(ours))
@@ -388,7 +426,7 @@ async def test_the_bucket_prefix_an_older_build_lists_holds_only_records_it_read
     await SCENARIOS[name](world)
 
     ours = world.records_in_the_bucket()
-    theirs = {key: as_this_build_words_it(body) for key, body in stored_bucket_objects(name).items()}
+    theirs = {key: as_this_build_records_it(body) for key, body in stored_bucket_objects(name).items()}
     assert sorted(ours) == sorted(theirs)
     for key, body in ours.items():
         assert key.startswith(RECORDS_PREFIX)
@@ -407,7 +445,7 @@ async def test_a_refusal_that_carries_the_adapters_fix_is_still_a_record_the_old
     await a_publish_the_bucket_refused_with_the_adapters_fix(world)
 
     [written] = world.run_log().decode("utf-8").splitlines()
-    [stored] = stored_lines("a_publish_the_bucket_refused")
+    [stored] = [as_this_build_records_it(line) for line in stored_lines("a_publish_the_bucket_refused")]
     [(key, in_the_bucket)] = world.records_in_the_bucket().items()
     assert [key] == list(stored_bucket_objects("a_publish_the_bucket_refused"))
     for ours in (json.loads(written), json.loads(in_the_bucket)):

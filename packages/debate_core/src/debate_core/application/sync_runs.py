@@ -58,7 +58,10 @@ What a newer build knows beyond the record is kept **beside** it, keyed by run i
 * each failed stage's error codes and its hint, and a pending stage's earlier findings;
 * the codes the command's exit status was decided from, for a run that returned a summary and for
   one that stopped on an error;
-* the parse stage's nine counts, or nothing when the stage did not run.
+* the parse stage's nine counts, or nothing when the stage did not run;
+* the search index stage's index id, sizes and warnings (`v1-e39-t09`), or nothing when it reached
+  no index. The stage itself is a :class:`StageEntry` like any other, by its name, which every
+  build reads: `stage` is a string, never a list of the names a build knew.
 
 One line a run in :data:`SYNC_RUN_DETAILS_FILENAME`, next to the run log, and one object a run
 under :data:`SYNC_RUN_DETAILS_KEY_PREFIX`, next to the records' prefix and not under it: an older
@@ -159,6 +162,7 @@ __all__ = [
     "NEEDS_A_PERSON",
     "NEEDS_A_PERSON_TITLE",
     "PENDING_RECORDS_FILENAME",
+    "SEARCH_INDEX_PUBLISH_COMMAND",
     "RETRIED_AFTER_ITS_FIX",
     "RETRIED_AFTER_ITS_FIX_TITLE",
     "RETRIED_BY_THE_NEXT_RUN",
@@ -174,6 +178,7 @@ __all__ = [
     "RecordedRun",
     "RetryRule",
     "RunMode",
+    "SearchIndexCounts",
     "StageDetails",
     "StageEntry",
     "SyncRunDetails",
@@ -419,6 +424,24 @@ class ParseCounts(BaseModel):
     not_published: int = Field(ge=0)
 
 
+class SearchIndexCounts(BaseModel):
+    """The search index stage's index and its size: a run summary's `search_index`, and nothing else
+    (:class:`~debate_core.application.caselist_sync.SearchIndexStageCounts`, `v1-e39-t09`)."""
+
+    model_config = ConfigDict(frozen=True, extra="ignore")
+
+    index_id: str
+    built: bool
+    published: bool
+    documents: int = Field(ge=0)
+    sqlite_bytes: int = Field(ge=0)
+    gzip_bytes: int = Field(ge=0)
+    bytes_per_document: int | None = Field(default=None, ge=0)
+    warnings: tuple[str, ...] = ()
+    removed: int = Field(default=0, ge=0)
+    bytes_freed: int = Field(default=0, ge=0)
+
+
 class SyncRunDetails(BaseModel):
     """What one run has to say that its :class:`SyncRunRecord` cannot hold, keyed by its run id.
 
@@ -448,6 +471,10 @@ class SyncRunDetails(BaseModel):
 
     parse: ParseCounts | None = None
     """The parse stage's counts, or `None` when the stage did not run."""
+
+    search_index: SearchIndexCounts | None = None
+    """The search index stage's index and size, or `None` when it reached no index (`v1-e39-t09`).
+    A key a build from before it passes over."""
 
     held_by_request: dict[str, int] = Field(default_factory=lambda: dict[str, int]())
     """Uploads the run's imports refused because a removal holds their path, by request id
@@ -617,7 +644,8 @@ def _reason_limit(stage: SyncStage) -> int:
         return _MAX_RETENTION_REASON_CHARACTERS
     if stage is SyncStage.SELECT:
         return _MAX_SELECT_REASON_CHARACTERS
-    if stage is SyncStage.PARSE:
+    if stage in (SyncStage.PARSE, SyncStage.SEARCH_INDEX):
+        # The search index stage's sizes and warnings reach `caselist runs` the same way.
         return _MAX_PARSE_REASON_CHARACTERS
     return _MAX_MESSAGE_CHARACTERS
 
@@ -671,6 +699,9 @@ def details_for_summary(summary: RunSummary, *, secrets: Sequence[str] = ()) -> 
         ),
         failure_codes=summary.failure_codes,
         parse=ParseCounts(**summary.parse.as_json()) if summary.parse is not None else None,
+        search_index=SearchIndexCounts.model_validate(summary.search_index.as_json())
+        if summary.search_index is not None
+        else None,
         held_by_request=dict(summary.held_by_request),
     )
 
@@ -698,8 +729,11 @@ def _outcome_of(summary: RunSummary) -> SyncRunOutcome:
     # tests were the same, so no run's outcome moves.
     if _stage_is(summary, SyncStage.PUBLISH, StageOutcome.PENDING):
         return SyncRunOutcome.PUBLISH_PENDING
-    if _stage_is(summary, SyncStage.PARSE, StageOutcome.PENDING):
-        # The parsed store's publish is a publish, and it waits for the same login (`v1-e34-t17`).
+    if _stage_is(summary, SyncStage.PARSE, StageOutcome.PENDING) or _stage_is(
+        summary, SyncStage.SEARCH_INDEX, StageOutcome.PENDING
+    ):
+        # The parsed store's publish is a publish, and it waits for the same login (`v1-e34-t17`);
+        # so does the search index's (`v1-e39-t09`).
         return SyncRunOutcome.PUBLISH_PENDING
     if any(record.outcome is StageOutcome.FAILED for record in summary.stages):
         return SyncRunOutcome.INCOMPLETE
@@ -768,6 +802,11 @@ PUBLISH_PENDING_COMMAND: Final = "debate-research caselist pull --publish-pendin
 PARSE_COMMAND: Final = "debate-research caselist parse --caselist <slug> --publish"
 """What finishes a parse stage that failed (`v1-e34-t17`). Running the pull again does not: a pull
 that imports nothing parses nothing. The stage's reason in `caselist runs` names the caselists."""
+SEARCH_INDEX_PUBLISH_COMMAND: Final = (
+    "DEBATE_ENV={environment} debate-research tub index publish --env {environment} --newest"
+)
+"""What publishes an index whose publish pended (`v1-e39-t09`), by hand; the next run with a session
+does it too. `--publish-pending` does not."""
 
 
 RETRIED_BY_THE_NEXT_RUN_TITLE: Final = "caselist pull failed: will be retried"
@@ -1045,6 +1084,13 @@ def notifications_for(
             entry.stage == str(SyncStage.PARSE) and entry.outcome == str(StageOutcome.PENDING)
             for entry in record.stages
         )
+        # Nor a search index: the next run with a session publishes it, or this by hand (`v1-e39-t09`).
+        index_waits = (
+            details.search_index
+            if details.search_index is not None
+            and _stage_outcome(record, SyncStage.SEARCH_INDEX) == str(StageOutcome.PENDING)
+            else None
+        )
         # What a stage had already found when the session expired that no later run cures by
         # itself. Only a pending stage records an earlier finding, so there is no outcome to ask.
         # A manifest the report found rewritten is the exception: it is owed again, and the publish
@@ -1101,6 +1147,13 @@ def notifications_for(
                     + (
                         f" The parsed store waits too; after the login: {PARSE_COMMAND}"
                         if parse_waits
+                        else ""
+                    )
+                    + (
+                        f" The search index {index_waits.index_id} waits too; the next run with a session "
+                        "publishes it, or after the login: "
+                        + SEARCH_INDEX_PUBLISH_COMMAND.format(environment=record.environment)
+                        if index_waits is not None
                         else ""
                     )
                 ),
@@ -1635,7 +1688,7 @@ class SyncRunMonitor:
         )
         publish_pending = any(
             _stage_is(summary, stage, StageOutcome.PENDING)
-            for stage in (SyncStage.PUBLISH, SyncStage.REPORT, SyncStage.PARSE)
+            for stage in (SyncStage.PUBLISH, SyncStage.REPORT, SyncStage.PARSE, SyncStage.SEARCH_INDEX)
         )
         details = details_for_summary(summary, secrets=self._secret_values())
         notifications, published = await self._finish(record, details, publish_pending_stage=publish_pending)

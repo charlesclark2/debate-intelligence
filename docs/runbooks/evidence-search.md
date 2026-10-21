@@ -937,7 +937,10 @@ Success looks like `InProgress`, then `{"status":"ok"}`. For prod, the same with
 - **Create a student's account.** That is the coach's `tub users add`, in prod
   ([the accounts guide](../guides/evidence-search-accounts.md)). The dev pool never holds a student.
 - **Publish an index.** `tub index publish` is `v1-e39-t02`'s, under the `EvidenceOperator`
-  profile, and the weekly refresh is `v1-e39-t09`'s.
+  profile. The weekly agent run rebuilds the index when the parsed store changed and publishes it to
+  dev (`v1-e39-t09`); publishing it to prod is the operator's, with `tub index publish --newest`, as
+  [Publishing a pending index by hand](caselist-scheduled-sync.md#publishing-a-pending-index-by-hand)
+  says.
 - **Turn on access logging, a WAF or a second origin.** The pilot keeps no per-request record of a
   student's address, and CloudFront reaches nothing but the function (ADR-0019 (a) 4).
 - **Change the evidence bucket.** Its Block Public Access settings and policy are untouched; the

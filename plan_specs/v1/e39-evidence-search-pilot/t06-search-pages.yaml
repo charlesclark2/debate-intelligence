@@ -32,7 +32,27 @@ spec:
     carries a whole long card. Copy card still copies the whole card with its formatting.
   priority: 1
   constraints:
-    packages: [debate_api, packages/debate_api/tests, tests/integration]
+    # PM ruling 2026-10-20: this task owns the function's index holder (ADR-0019 (c) 3 and 5), which
+    # no spec had assigned and the pages need. The first request that needs the index reads
+    # `reports/tub/search/current.json` and the manifest, streams the object through gunzip and sha256
+    # into /tmp, refuses it on a digest mismatch or an unknown format version, and opens it read-only
+    # and immutable. Sign-in, the callback, the health check and the empty search page never wait for
+    # it. The pointer is re-read by conditional GET at most five minutes apart, and a frozen
+    # environment past five minutes rechecks before it answers; a new pointer is downloaded to a new
+    # path, swapped in, and the old file deleted, never rewritten in place. It is one refresh loop,
+    # which v1-e39-t07 extends with the suppression list's re-read (`is_suppressed` stays None here).
+    # So the holder's port and use case go in debate_core.application, its S3 adapter in
+    # debate_core.integrations.s3, and their tests in packages/debate_core/tests. The PM's notes of
+    # the same day add Playwright and axe as dev dependencies, so pyproject.toml and uv.lock too.
+    packages:
+      - debate_api
+      - packages/debate_api/tests
+      - tests/integration
+      - debate_core.application
+      - debate_core.integrations.s3
+      - packages/debate_core/tests
+      - pyproject.toml
+      - uv.lock
     forbidden:
       - A third-party script, font, analytics or tracking
       - Inline script or a CSP exception for one

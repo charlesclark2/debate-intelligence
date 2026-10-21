@@ -114,6 +114,28 @@ An external-content FTS5 table over the four searchable columns, so the text is 
 (`v1-e39-t03`). The `search_data`, `search_idx`, `search_docsize` and `search_config` tables are
 FTS5's own.
 
+## How the index is read
+
+`EvidenceSearchService` in `debate_core.application.evidence_search` reads the index read-only and
+immutable, through `SqliteSearchIndexReader` (`v1-e39-t03`). A student's query is parsed into quoted
+FTS5 phrases and never handed to `MATCH` as typed. It is ranked by `bm25()` with the weights in
+`RANKING_WEIGHTS` (tag 10, cite 6, read-aloud text 3, text 1), filtered on `documents`' stored
+columns, and paged 20 at a time. `occurrences` is read only by `doc_id`.
+
+**The time budget has a known limit** (accepted by the PM, 2026-10-20). A search that runs past its
+budget, 2 s by default, returns what it has fetched, flagged partial. SQLite's progress handler checks
+the budget between virtual-machine instructions. FTS5 ranks and sorts every match inside one
+instruction, before the first row comes back, and nothing in SQLite 3.40.0 can interrupt that sort.
+So a search can overrun its budget by the length of that sort.
+
+The times below were measured on the operator's Mac, not on the function. `v1-e39-t10` measures
+query time on the Lambda function itself.
+
+| Index | Queries | Warm p50 | Warm p95 | Warm max |
+|---|---|---|---|---|
+| The dev index `b9fd48d280ab1c71`, 46,658 documents | Twenty generic queries, 60 timed runs | under 4 ms | 12.1 ms | 207 ms (`the`, 45,948 matches) |
+| Synthetic, 250,000 documents | Twenty queries over a skewed invented vocabulary, 60 timed runs | 69.1 ms | 341 ms | 421 ms |
+
 ## Never searchable, never stored
 
 * **School, team code, tournament and round** are in `occurrences` and in no FTS5 table, so no query

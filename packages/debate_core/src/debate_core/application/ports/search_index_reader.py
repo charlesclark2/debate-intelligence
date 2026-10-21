@@ -1,0 +1,155 @@
+"""The port the student search pilot reads its index through (`v1-e39-t03`).
+
+:class:`~debate_core.application.evidence_search.EvidenceSearchService` decides what a query means,
+which rows a student may see and what a page holds. A :class:`SearchIndexReader` only runs the
+statements that fetch rows from one `v1-e39-t02` index file, and
+:class:`~debate_core.integrations.local.search_index_reader.SqliteSearchIndexReader` is the one that
+does, read-only, with the standard library's `sqlite3`.
+
+The rows carry what the index stores (`docs/data/search-index.md`), typed. A row's provenance fields
+are as disclosed and kept off every `repr`; the evidence text is too.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from typing import Protocol, runtime_checkable
+
+from debate_core.domain.evidence_search import SearchFilters
+from debate_core.domain.search_index import IndexedFontSizeSpan, IndexedFormattingSpan
+
+__all__ = [
+    "MatchBatch",
+    "MatchRequest",
+    "SearchIndexReader",
+    "StoredDocument",
+    "StoredHit",
+    "StoredOccurrence",
+    "UnreadableSearchIndex",
+]
+
+
+class UnreadableSearchIndex(Exception):
+    """An index file this build cannot read: not an index, or another format version."""
+
+
+@dataclass(frozen=True, slots=True)
+class StoredOccurrence:
+    """One row of the index's `occurrences` table. `ordinal` 0 is the document's representative."""
+
+    doc_id: int
+    ordinal: int
+    caselist: str
+    source_sha256: str
+    disclosure: str | None
+    snapshot: str
+    last_snapshot: str
+    completeness: str
+    attributed: bool
+    provenance: bool
+    side: str | None = None
+    school: str | None = field(default=None, repr=False)
+    team_code: str | None = field(default=None, repr=False)
+    tournament: str | None = field(default=None, repr=False)
+    round_label: str | None = field(default=None, repr=False)
+    camp: str | None = None
+    camp_year: int | None = None
+    camp_event: str | None = None
+    camp_file_title: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class StoredHit:
+    """One matching document at `position` in its query's ranking, with its representative occurrence.
+
+    `snippet` is FTS5's, its matched words between the domain's snippet markers.
+    """
+
+    position: int
+    doc_id: int
+    caselist: str
+    cluster_id: str
+    event: str
+    camp: str | None
+    tag: str | None
+    short_cite: str | None
+    snippet: str = field(repr=False)
+    file_count: int
+    team_count: int
+    representative: StoredOccurrence
+
+
+@dataclass(frozen=True, slots=True)
+class StoredDocument:
+    """One row of the index's `documents` table, its spans decoded."""
+
+    doc_id: int
+    caselist: str
+    cluster_id: str
+    event: str
+    camp: str | None
+    tag: str | None
+    cite: str
+    short_cite: str | None
+    read_aloud: str = field(repr=False)
+    text: str = field(repr=False)
+    completeness: str
+    formatting_spans: tuple[IndexedFormattingSpan, ...] = field(repr=False)
+    font_size_spans: tuple[IndexedFontSizeSpan, ...] = field(repr=False)
+    sides: tuple[str, ...]
+    first_seen: str | None
+    last_seen: str | None
+    file_count: int
+    team_count: int
+
+
+@dataclass(frozen=True, slots=True)
+class MatchRequest:
+    """One batch of a ranking: the FTS5 expression, the rank function, the filters and the window.
+
+    `expired` says whether the search's time budget is spent; the reader asks it while a statement
+    runs, and stops the statement when it says so.
+    """
+
+    expression: str
+    rank: str
+    filters: SearchFilters
+    offset: int
+    limit: int
+    expired: Callable[[], bool] = field(repr=False)
+
+
+@dataclass(frozen=True, slots=True)
+class MatchBatch:
+    """What one batch fetched, in ranking order.
+
+    `exhausted` when the ranking has no row after these; `interrupted` when the time budget stopped
+    the statement, and `hits` is what it had fetched by then.
+    """
+
+    hits: tuple[StoredHit, ...]
+    exhausted: bool
+    interrupted: bool = False
+
+
+@runtime_checkable
+class SearchIndexReader(Protocol):
+    """Reads one index file. Never writes it."""
+
+    @property
+    def index_id(self) -> str:
+        """The index's id, as its manifest and pointer name it: cursors are bound to it."""
+        ...
+
+    def match(self, request: MatchRequest) -> MatchBatch:
+        """One batch of the documents the expression matches, best first, filtered."""
+        ...
+
+    def document(self, caselist: str, cluster_id: str) -> StoredDocument | None:
+        """The document for one cluster, or `None` when the index has none."""
+        ...
+
+    def occurrences(self, doc_id: int) -> tuple[StoredOccurrence, ...]:
+        """Every occurrence of one document, by ordinal."""
+        ...

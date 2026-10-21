@@ -16,6 +16,8 @@ metadata:
 spec:
   # Filed by the PM, 2026-10-19, from Charlie's direction of 2026-10-19 (a student search pilot before the
   # semester ends, on Chromebooks, signing in with a username, password and 2FA, outside the school's systems).
+  # PM amendment 2026-10-20 (v1-e39-t02 follow-up 2): camp (openev) documents have no first or last seen,
+  # so a first-seen filter leaves them out, and the result says the filter applies to caselist cards only.
   description: >-
     Query and ranking in debate_core, pure over the v1-e39-t02 index. A student's query is
     parsed here and never handed raw to FTS5's MATCH: words, "quoted phrases", a leading minus
@@ -29,9 +31,13 @@ spec:
     occurrence's provenance. Rendering to HTML escapes every character of card text, since
     disclosed files are untrusted input, and emits only an allow-listed set of tags and classes.
     A query past a time budget returns what it has, flagged as partial.
+    (PM amendment 2026-10-20, v1-e39-t02 follow-up 2.) Camp (openev) documents have no first or
+    last seen, so a first-seen filter leaves them out, and the result tells the caller that the
+    filter applies to caselist cards only, so the search page can label it; by test.
   priority: 1
   constraints:
-    packages: [debate_core.domain, debate_core.application, debate_core.integrations, packages/debate_core/tests]
+    # PM ruling 2026-10-20 (v1-e39-t03 Q2): the time budget's known limit is recorded in docs/data/search-index.md.
+    packages: [debate_core.domain, debate_core.application, debate_core.integrations, packages/debate_core/tests, docs/data]
     forbidden:
       - fastapi, boto3 or httpx in debate_core.domain or debate_core.application
       - Card text, a school, team code, file name, student name, username or email in any fixture, log, report or commit (synthetic values only)
@@ -65,7 +71,7 @@ spec:
         On a synthetic index of 250,000 documents generated in the run (marked slow), the
         95th-percentile query time is reported in the session report.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

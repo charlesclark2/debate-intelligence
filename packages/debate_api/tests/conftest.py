@@ -27,6 +27,7 @@ import base64
 import hashlib
 import json
 import os
+import re
 import secrets
 import tempfile
 from collections.abc import Callable, Iterator, Mapping, Sequence
@@ -780,6 +781,77 @@ class PilotWorld:
         if fetch_site is not None:
             headers["Sec-Fetch-Site"] = fetch_site
         return (browser or self.browser).post(path, content=body, headers=headers)
+
+
+# --------------------------------------------------------------------------------------------
+# Reading Copy card's spans back (v1-e39-t06 ac2)
+# --------------------------------------------------------------------------------------------
+
+
+def _declarations(style: str) -> str:
+    """A `style` attribute as one canonical string: Chrome's paste may space or terminate it."""
+    parts = [part.strip() for part in style.split(";") if part.strip()]
+    return ";".join(re.sub(r"\s*:\s*", ":", part) for part in parts)
+
+
+def copied_spans(
+    styles_by_character: Sequence[Sequence[str]],
+) -> tuple[list[FormattingSpan], list[FontSizeSpan]]:
+    """The spans a copy's span styles say, character by character, each as the runs it covers.
+
+    The inverse of `debate_api.copy_card`'s table. A style the table does not write is an error,
+    so a paste that rewrote a declaration fails the read-back rather than dropping a span.
+    """
+    from debate_api.copy_card import EMPHASIS_STYLES, HIGHLIGHT_STYLES
+
+    by_style = {
+        **{_declarations(style): ("emphasis", emphasis.value) for emphasis, style in EMPHASIS_STYLES.items()},
+        **{_declarations(style): ("highlight", colour) for colour, style in HIGHLIGHT_STYLES.items()},
+    }
+    covered: dict[tuple[str, str], list[int]] = {}
+    for offset, styles in enumerate(styles_by_character):
+        for style in map(_declarations, styles):
+            size = re.fullmatch(r"font-size:(\d+)(\.5)?pt", style)
+            if size is not None:
+                key = ("size", str(int(size.group(1)) * 2 + (1 if size.group(2) else 0)))
+            else:
+                key = by_style[style]
+            covered.setdefault(key, []).append(offset)
+    spans: list[FormattingSpan] = []
+    sizes: list[FontSizeSpan] = []
+    for (kind, value), offsets in covered.items():
+        for start, end in _runs_of(offsets):
+            if kind == "size":
+                sizes.append(FontSizeSpan(start_offset=start, end_offset=end, half_points=int(value)))
+                continue
+            highlight = kind == "highlight"
+            spans.append(
+                FormattingSpan(
+                    emphasis=RunEmphasis.HIGHLIGHT if highlight else RunEmphasis(value),
+                    start_offset=start,
+                    end_offset=end,
+                    highlight_color=value if highlight else None,
+                    rule_id="read-back",
+                    match_source=StyleMatchSource.VERBATIM,
+                )
+            )
+    return spans, sizes
+
+
+def _runs_of(offsets: Sequence[int]) -> list[tuple[int, int]]:
+    runs: list[list[int]] = []
+    for offset in sorted(offsets):
+        if runs and runs[-1][1] == offset:
+            runs[-1][1] = offset + 1
+        else:
+            runs.append([offset, offset + 1])
+    return [(start, end) for start, end in runs]
+
+
+@pytest.fixture
+def read_back() -> Callable[[Sequence[Sequence[str]]], tuple[list[FormattingSpan], list[FontSizeSpan]]]:
+    """:func:`copied_spans`, for the Copy card tests in Python and in Chromium."""
+    return copied_spans
 
 
 @pytest.fixture

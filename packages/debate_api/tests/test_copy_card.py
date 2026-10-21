@@ -10,7 +10,6 @@ an editable region in Chromium and reads that back too (ac2).
 from __future__ import annotations
 
 import re
-from collections import defaultdict
 from html.parser import HTMLParser
 from typing import Any
 
@@ -25,10 +24,9 @@ from debate_api.copy_card import (
     copied_card,
     font_size_style,
 )
-from debate_core.domain.debate_files import FontSizeSpan, FormattingSpan
 from debate_core.domain.file_provenance import formatting_sha256
 from debate_core.domain.search_card_html import HIGHLIGHT_COLOURS
-from debate_core.domain.style_profile import RunEmphasis, StyleMatchSource
+from debate_core.domain.style_profile import RunEmphasis
 
 FEATURED_LINE = "[Disclosed: hsld26 2026-09-15 — Maple Grove QX, Neg vs. Invented Invitational Round 4]"
 
@@ -118,12 +116,6 @@ def test_no_two_entries_of_the_table_are_the_same_declarations_so_each_reads_bac
 # Reading the copy back
 # ------------------------------------------------------------------------------------------------
 
-_SIZE = re.compile(r"font-size:(\d+)(\.5)?pt")
-_BY_STYLE = {
-    **{style: ("emphasis", emphasis.value) for emphasis, style in EMPHASIS_STYLES.items()},
-    **{style: ("highlight", colour) for colour, style in HIGHLIGHT_STYLES.items()},
-}
-
 
 class CopyReader(HTMLParser):
     """Each paragraph of the copy: its own style, its text, and each character's span styles."""
@@ -157,47 +149,6 @@ class CopyReader(HTMLParser):
         self.paragraphs[-1]["styles"].append(tuple(self._spans))
 
 
-def read_back(styles_by_character: list[tuple[str, ...]]) -> tuple[list[FormattingSpan], list[FontSizeSpan]]:
-    """The spans the characters' styles say, each as maximal runs of characters it covers."""
-    covered: dict[tuple[str, str], list[int]] = defaultdict(list)
-    for offset, styles in enumerate(styles_by_character):
-        for style in styles:
-            size = _SIZE.fullmatch(style)
-            if size is not None:
-                covered[("size", str(int(size.group(1)) * 2 + (1 if size.group(2) else 0)))].append(offset)
-            else:
-                covered[_BY_STYLE[style]].append(offset)
-    spans: list[FormattingSpan] = []
-    sizes: list[FontSizeSpan] = []
-    for (kind, value), offsets in covered.items():
-        for start, end in _runs(offsets):
-            if kind == "size":
-                sizes.append(FontSizeSpan(start_offset=start, end_offset=end, half_points=int(value)))
-            else:
-                emphasis = RunEmphasis.HIGHLIGHT if kind == "highlight" else RunEmphasis(value)
-                spans.append(
-                    FormattingSpan(
-                        emphasis=emphasis,
-                        start_offset=start,
-                        end_offset=end,
-                        highlight_color=value if kind == "highlight" else None,
-                        rule_id="read-back",
-                        match_source=StyleMatchSource.VERBATIM,
-                    )
-                )
-    return spans, sizes
-
-
-def _runs(offsets: list[int]) -> list[tuple[int, int]]:
-    runs: list[list[int]] = []
-    for offset in sorted(offsets):
-        if runs and runs[-1][1] == offset:
-            runs[-1][1] = offset + 1
-        else:
-            runs.append([offset, offset + 1])
-    return [(start, end) for start, end in runs]
-
-
 def paragraphs_of(html: str) -> list[dict[str, Any]]:
     reader = CopyReader()
     reader.feed(html)
@@ -205,7 +156,9 @@ def paragraphs_of(html: str) -> list[dict[str, Any]]:
     return reader.paragraphs
 
 
-def test_the_copy_read_back_carries_every_formatting_span_of_the_stored_card(student: Any) -> None:
+def test_the_copy_read_back_carries_every_formatting_span_of_the_stored_card(
+    student: Any, read_back: Any
+) -> None:
     """ac2 in Python: the copy's spans give the stored spans' `formatting_sha256` coverage exactly."""
     stored = document_named(student, "featured")
     copied = copied_card(card_named(student, "featured"))
@@ -219,7 +172,7 @@ def test_the_copy_read_back_carries_every_formatting_span_of_the_stored_card(stu
     )
 
 
-def test_the_read_back_tells_apart_two_cards_whose_formatting_differs(student: Any) -> None:
+def test_the_read_back_tells_apart_two_cards_whose_formatting_differs(student: Any, read_back: Any) -> None:
     """The comparison above can fail: one emphasis dropped from the copy changes the reading."""
     stored = document_named(student, "featured")
     copied = copied_card(card_named(student, "featured"))
@@ -232,6 +185,19 @@ def test_the_read_back_tells_apart_two_cards_whose_formatting_differs(student: A
     assert formatting_sha256(spans, sizes) != formatting_sha256(
         stored.formatting_spans, stored.font_size_spans
     )
+
+
+def test_a_runs_spans_nest_its_emphases_then_its_colours_then_its_sizes_innermost(student: Any) -> None:
+    """Written from the featured card's spans: `winds raise` is underlined, cyan and 11 points; the shrunk
+    `second paragraph ` is 8 points; the line break is inside the yellow highlight that crosses it."""
+    html = copied_card(card_named(student, "featured")).html
+
+    winds = '<span style="text-decoration:underline"><span style="background-color:#00FFFF">'
+    assert winds + '<span style="font-size:11pt">winds raise</span></span></span>' in html
+    assert (
+        '<span style="font-size:smaller"><span style="font-size:8pt">second paragraph </span></span>' in html
+    )
+    assert '<span style="background-color:#FFFF00"><br></span>' in html
 
 
 def test_the_copy_is_the_tag_the_cite_the_provenance_line_below_it_then_the_card(student: Any) -> None:

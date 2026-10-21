@@ -5,16 +5,19 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 {% if csrf_token %}<meta name="tub-csrf" content="{{ csrf_token }}">
 {% endif %}<title>{% block title %}Team evidence search{% endblock %}</title>
+<link rel="stylesheet" href="{{ app_css }}">
 <script src="{{ app_js }}" defer></script>
 </head>
 <body>
-<header>
-<p><a href="/">Team evidence search</a></p>
+<a class="skip-link" href="#main">Skip to the page</a>
+<header class="site-header">
+<p class="site-name"><a href="/">Team evidence search</a></p>
 {% if username %}
 <nav aria-label="Your account">
 <p>Signed in as <strong>{{ username }}</strong>{% if role == "coach" %} (coach){% endif %}.</p>
 <ul>
-{% if signed_in %}<li><a href="/account">Your account</a></li>
+{% if signed_in %}<li><a href="/">Search</a></li>
+<li><a href="/account">Your account</a></li>
 {% endif %}{% if role == "coach" and signed_in %}<li><a href="/coach">Coach</a></li>
 {% endif %}</ul>
 <form method="post" action="/auth/sign-out">
@@ -24,7 +27,7 @@
 </nav>
 {% endif %}
 </header>
-<main>
+<main id="main">
 {% block main %}{% endblock %}
 </main>
 </body>

@@ -275,6 +275,7 @@ def test_the_app_refuses_to_start_on_the_placeholder_keys(monkeypatch: pytest.Mo
         "TUB_CLIENT_SECRET_PARAMETER": "/debate-dev-tub/client-secret",
         "TUB_COOKIE_KEYS_PARAMETER": "/debate-dev-tub/cookie-keys",
         "TUB_AUDIT_LOG_GROUP": "debate-dev-tub-audit",
+        "TUB_EVIDENCE_BUCKET": "debate-dev-evidence-synthetic",
     }.items():
         monkeypatch.setenv(name, value)
 

@@ -41,13 +41,16 @@ def _script_url(world: Any) -> str:
 
 ROUTE_REQUESTS: list[RouteRequest] = [
     RouteRequest("GET", "/healthz", "/healthz"),
-    RouteRequest("GET", "/static/{digest}/app.js", "<script>"),
+    RouteRequest("GET", "/static/{digest}/{name}", "<script>"),
     RouteRequest("GET", "/auth/callback", "/auth/callback?code=synthetic-code&state=synthetic-state"),
     RouteRequest("GET", "/signed-out", "/signed-out"),
     RouteRequest("POST", "/auth/sign-out", "/auth/sign-out", {}),
     RouteRequest("GET", "/account/authenticator", "/account/authenticator"),
     RouteRequest("POST", "/account/authenticator", "/account/authenticator", {"code": "424242"}),
     RouteRequest("GET", "/", "/"),
+    RouteRequest("GET", "/search", "/search?q=zephyr&event=LD"),
+    RouteRequest("GET", "/cards/{caselist}/{cluster_id}", "<card featured>"),
+    RouteRequest("GET", "/cards/{caselist}/{cluster_id}/copy", "<card featured>/copy"),
     RouteRequest("GET", "/account", "/account"),
     RouteRequest("POST", "/account/email", "/account/email", {"email": "debater.one@example.test"}),
     RouteRequest("POST", "/account/email/verify", "/account/email/verify", {"code": "135790"}),
@@ -55,7 +58,7 @@ ROUTE_REQUESTS: list[RouteRequest] = [
     RouteRequest("GET", "/coach", "/coach"),
 ]
 
-SESSION_FREE = {"/healthz", "/static/{digest}/app.js", "/auth/callback", "/signed-out"}
+SESSION_FREE = {"/healthz", "/static/{digest}/{name}", "/auth/callback", "/signed-out"}
 COACH_ONLY = {"/coach"}
 PENDING_ENROLMENT_ONLY = {"/account/authenticator"}
 """A full session is sent to `/account` from these (PM ruling (d), 2026-10-20)."""
@@ -63,6 +66,7 @@ PENDING_ENROLMENT_ONLY = {"/account/authenticator"}
 
 def send(world: Any, request: RouteRequest, csrf_token: str | None) -> Any:
     url = _script_url(world) if request.url == "<script>" else request.url
+    url = url.replace("<card featured>", world.card_path("featured"))
     if request.method == "GET":
         return world.browser.get(url)
     return world.post(url, request.data, csrf_token=csrf_token or "no-session-token")

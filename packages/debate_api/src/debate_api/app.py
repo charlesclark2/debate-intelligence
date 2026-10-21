@@ -1,7 +1,8 @@
-"""The student search pilot's ASGI app (ADR-0019 (b)): sign-in, the session and the account pages.
+"""The student search pilot's ASGI app (ADR-0019 (b)): sign-in, the session, the account and search pages.
 
 v1-e39-t04 proved the infrastructure with a placeholder page; v1-e39-t05 puts sign-in in front of
-everything (ADR-0019 (d)); v1-e39-t06 adds the search pages behind it.
+everything (ADR-0019 (d)); v1-e39-t06 adds the search pages behind it, over the index the function
+fetches the first time a search needs it.
 
 It is a plain ASGI app with no Lambda code in it. In the image, uvicorn serves it on port 8080
 with its access log off, because an access log line holds the client's address and the query
@@ -12,7 +13,7 @@ through `debate_api.container`. A test passes its own :class:`~debate_api.state.
 What holds for every response:
 
 * `Cache-Control: private, no-store` unless a route said otherwise ((a) 5): only the content-hashed
-  script under `/static/` is cacheable;
+  script and stylesheet under `/static/` are cacheable;
 * no interactive API documentation, because FastAPI's pages load scripts from a third-party CDN and
   the pilot loads none ((b) 1);
 * no CORS headers.
@@ -31,7 +32,7 @@ from fastapi import FastAPI, Request, Response
 from debate_api.access import RouteAccess, install_gate
 from debate_api.cookies import CookieSealer
 from debate_api.errors import install_error_handlers
-from debate_api.pages import PageRenderer, load_app_script
+from debate_api.pages import PageRenderer, load_app_script, load_app_stylesheet
 from debate_api.routes import register_routes
 from debate_api.state import PilotServices, PilotState
 
@@ -59,12 +60,13 @@ def create_app(services: PilotServices | None = None) -> FastAPI:
 
         services = build_pilot_services(os.environ)
     app = FastAPI(title="Team evidence search", docs_url=None, redoc_url=None, openapi_url=None)
-    script = load_app_script()
+    script, stylesheet = load_app_script(), load_app_stylesheet()
     app.state.pilot = PilotState(
         services=services,
         sealer=CookieSealer(services.cookie_keys),
-        renderer=PageRenderer(app_script=script),
+        renderer=PageRenderer(app_script=script, app_stylesheet=stylesheet),
         app_script=script,
+        app_stylesheet=stylesheet,
     )
     routes = RouteAccess()
     register_routes(app, routes)

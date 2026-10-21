@@ -3,24 +3,31 @@
 It reads :class:`~debate_api.configuration.PilotConfiguration` from the environment, reads the
 client secret and the cookie keys from Parameter Store once (a cold start), refuses the
 placeholder keys, and wires the Cognito, audit and parameter adapters from
-`debate_core.integrations` into the two use cases. Routes ask `app.state.pilot` for the use cases
+`debate_core.integrations` into the two use cases. It also builds the search index holder over the
+evidence bucket (`v1-e39-t06`), which fetches nothing until the first search: a cold start reads
+only the two parameters. Routes ask `app.state.pilot` for the use cases
 and never import an adapter (the import contracts and `scripts/check_thin_handlers.py` hold them
 to that).
 
 The function's role allows exactly what is built here and nothing more (ADR-0019, The function's
 role): `ssm:GetParameter` on the two parameters, `logs:CreateLogStream` and `logs:PutLogEvents` on
-its audit group. The Cognito calls need no IAM grant: the token-authorized ones send the student's
-access token through an unsigned client, and the OAuth endpoints take the client secret.
+its audit group, and `s3:GetObject` under `reports/tub/search/` for the index, which the holder
+reads to a directory of its own in the function's ephemeral storage, `/tmp/tub-index`. The Cognito
+calls need no IAM grant: the token-authorized ones send the student's access token through an
+unsigned client, and the OAuth endpoints take the client secret.
 """
 
 from __future__ import annotations
 
+import tempfile
 import uuid
 from collections.abc import Mapping
 from datetime import UTC, datetime
+from pathlib import Path
 
 from debate_api.configuration import PilotConfiguration, parse_cookie_keys
 from debate_api.state import PilotServices
+from debate_core.application.search_index_holder import SearchIndexHolder
 from debate_core.application.tub.account_page import AccountPageService
 from debate_core.application.tub.sign_in import SignInService
 from debate_core.integrations.cloudwatch_audit import CloudWatchAuditSink, build_logs_client
@@ -33,9 +40,14 @@ from debate_core.integrations.cognito import (
     build_cognito_self_service_client,
     issuer_for,
 )
+from debate_core.integrations.local.search_index_reader import SqliteSearchIndexReader
 from debate_core.integrations.parameter_store import build_ssm_client, read_secure_parameter
+from debate_core.integrations.s3 import S3SearchIndexSource
 
-__all__ = ["build_pilot_services"]
+__all__ = ["INDEX_DIRECTORY_NAME", "build_pilot_services"]
+
+INDEX_DIRECTORY_NAME = "tub-index"
+"""The holder's own directory under the function's `/tmp`, which nothing else writes to."""
 
 
 def _now() -> datetime:
@@ -86,5 +98,16 @@ def build_pilot_services(environ: Mapping[str, str]) -> PilotServices:
             clock=_now,
             authenticator_issuer=configuration.authenticator_issuer,
         ),
+        search_index=SearchIndexHolder(
+            S3SearchIndexSource(bucket=configuration.evidence_bucket, region=configuration.region),
+            directory=Path(tempfile.gettempdir()) / INDEX_DIRECTORY_NAME,
+            open_reader=_open_index,
+            clock=_now,
+        ),
         clock=_now,
     )
+
+
+def _open_index(path: Path, index_id: str) -> SqliteSearchIndexReader:
+    """One checked index file, opened read-only and immutable."""
+    return SqliteSearchIndexReader(path, index_id=index_id)

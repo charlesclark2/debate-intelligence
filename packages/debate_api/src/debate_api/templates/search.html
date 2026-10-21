@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}{% if searched %}Search results{% else %}Search{% endif %} · Team evidence search{% endblock %}
+{% block main %}
+<h1>Search the team's evidence</h1>
+<form class="search-form" method="get" action="/search" role="search">
+<div class="search-box">
+<label for="q">Words in the tag, the author or the card</label>
+<input id="q" name="q" type="search" value="{{ form.query }}" maxlength="1024" autocomplete="off" spellcheck="false" aria-describedby="q-help">
+<button type="submit">Search</button>
+</div>
+<p id="q-help" class="help">Put a phrase in "quotes". Start a word with - to leave it out. author: or tag: searches only the cite or the tag.</p>
+<fieldset class="filters">
+<legend>Filters</legend>
+<div class="filter">
+<label for="event">Event</label>
+<select id="event" name="event">
+<option value="">Any event</option>
+{% for value, label in event_choices %}<option value="{{ value }}"{% if form.event == value %} selected{% endif %}>{{ label }}</option>
+{% endfor %}</select>
+</div>
+<div class="filter">
+<label for="caselist">Caselist</label>
+<select id="caselist" name="caselist">
+<option value="">Any caselist</option>
+{% for value, label in caselist_choices %}<option value="{{ value }}"{% if form.caselist == value %} selected{% endif %}>{{ label }}</option>
+{% endfor %}</select>
+</div>
+<div class="filter">
+<label for="side">Side</label>
+<select id="side" name="side" aria-describedby="side-note">
+<option value="">Any side</option>
+{% for value, label in side_choices %}<option value="{{ value }}"{% if form.side == value %} selected{% endif %}>{{ label }}</option>
+{% endfor %}</select>
+<p id="side-note" class="filter-note{% if side_caselist_only %} filter-note-applied{% endif %}">Caselist cards only: camp cards have no side, so choosing one leaves them out.</p>
+</div>
+<div class="filter">
+<label for="since">First seen on or after</label>
+<input id="since" name="since" type="date" value="{{ form.since }}" aria-describedby="since-note">
+<p id="since-note" class="filter-note{% if since_caselist_only %} filter-note-applied{% endif %}">Caselist cards only: camp cards have no first-seen date, so choosing one leaves them out.</p>
+</div>
+</fieldset>
+</form>
+{% if problem %}<p class="problem" role="alert">{{ problem }}</p>{% endif %}
+{% if searched %}
+<section class="results" aria-labelledby="results-heading">
+<h2 id="results-heading">Results</h2>
+{% if query_shortened %}<p class="notice" role="status">Your search was long, so only its first part was used.</p>{% endif %}
+{% if no_search_terms %}<p class="notice" role="status">There is no word to search for. A search of only left-out words (-word) finds nothing.</p>{% endif %}
+{% if partial %}<p class="notice" role="status">The search took a long time, so these are the results found so far. The next page carries on from here.</p>{% endif %}
+{% if not results and not no_search_terms %}<p>No cards matched.{% if form.cursor %} There are no more results.{% endif %}</p>{% endif %}
+{% if results %}<ol class="result-list">
+{% for result in results %}<li class="result">
+<h3 class="result-tag"><a href="{{ result.href }}">{{ result.tag or "A card with no tag" }}</a></h3>
+{% if result.short_cite %}<p class="result-cite">{{ result.short_cite }}</p>{% endif %}
+<p class="result-snippet">{{ result.snippet_html | safe }}</p>
+<p class="result-counts">{{ result.counts }}</p>
+{% if result.provenance_line %}<p class="provenance">{{ result.provenance_line }}</p>{% endif %}
+</li>
+{% endfor %}</ol>{% endif %}
+{% if next_link or first_link %}<nav class="pages" aria-label="More results">
+<ul>
+{% if first_link %}<li><a href="{{ first_link }}">First page</a></li>{% endif %}
+{% if next_link %}<li><a href="{{ next_link }}" rel="next">Next results</a></li>{% endif %}
+</ul>
+</nav>{% endif %}
+</section>
+{% endif %}
+<p class="reminder">On a shared Chromebook, sign out when you finish.</p>
+{% endblock %}

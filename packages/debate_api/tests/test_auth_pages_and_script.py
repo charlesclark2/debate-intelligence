@@ -53,8 +53,12 @@ def test_every_page_loads_the_one_first_party_script_and_nothing_inline(
 
 
 def test_every_form_that_changes_something_is_a_post_form(pages: dict[str, str]) -> None:
+    """The one other form is the search form, a `GET` to `/search` that changes nothing (v1-e39-t06)."""
     forms = [form for page in pages.values() for form in re.findall(r"<form\b[^>]*>", page)]
+    searches = [form for form in forms if 'role="search"' in form]
+    forms = [form for form in forms if form not in searches]
 
+    assert searches == ['<form class="search-form" method="get" action="/search" role="search">']
     assert forms
     assert all('method="post"' in form for form in forms)
     actions = {re.search(r'action="([^"]+)"', form).group(1) for form in forms}  # type: ignore[union-attr]
@@ -82,11 +86,16 @@ def test_the_script_answers_only_with_a_place_to_go_or_a_message() -> None:
 
 
 def test_the_script_reaches_no_other_origin() -> None:
-    """Its one request goes to the form's own action; the one URL prefix in it checks where to go next."""
+    """Its requests go to the form's own action and to Copy card's path, which must be the pilot's own.
+
+    The one URL prefix in it checks where to go next.
+    """
     code = SCRIPT.split('"use strict";', 1)[1]
     assert re.findall(r"[a-z]+://[^\s\"']*", code) == ["https://"]
     assert 'location.startsWith("https://")' in code
-    assert re.findall(r"fetch\(([^,]+),", code) == ["form.action"]
+    assert re.findall(r"fetch\(([^,]+),", code) == ["form.action", "path"]
+    assert 'path.startsWith("/") && !path.startsWith("//")' in code
+    assert "if (!isOwnPath(path)" in code
     assert "eval(" not in SCRIPT and "innerHTML" not in SCRIPT and "document.write" not in SCRIPT
 
 
@@ -143,7 +152,8 @@ def test_the_templates_and_the_script_ship_in_the_package() -> None:
     package = files("debate_api")
     for name in [
         "base.html",
-        "home.html",
+        "search.html",
+        "card.html",
         "account.html",
         "authenticator.html",
         "coach.html",
@@ -153,3 +163,4 @@ def test_the_templates_and_the_script_ship_in_the_package() -> None:
     ]:
         assert package.joinpath("templates", name).is_file(), name
     assert package.joinpath("static", "app.js").is_file()
+    assert package.joinpath("static", "app.css").is_file()

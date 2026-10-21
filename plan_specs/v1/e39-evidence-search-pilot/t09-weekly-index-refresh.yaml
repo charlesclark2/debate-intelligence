@@ -24,6 +24,8 @@ spec:
   # This replaces "publishes it to prod".
   # PM amendment 2026-10-20 (v1-e39-t02 second review): reconcile the suppression copies before the
   # build when the bucket is reachable; report the SQLite size for every build.
+  # PM amendment 2026-10-20 (v1-e39-t09 review): local retention of superseded index directories,
+  # and `tub index publish --newest`.
   # PM rulings 2026-10-20 (v1-e39-t09 Q2, Q3, Q5): the digests come from one build-service method the
   # build itself uses; the stores are the run's configured caselists plus openev; the size warnings
   # are ADR-0019's lines.
@@ -48,7 +50,12 @@ spec:
     bytes per document for every build, and warns above 900,000,000 SQLite bytes (ADR-0019's 1 GB
     uncompressed ceiling) and above 400,000,000 gzip bytes (ADR-0019's bandwidth revisit trigger).
     The stage is skipped, and says so, when the installed build's parser or fingerprint version is
-    not the parsed store's, and when this run's parse stage failed.
+    not the parsed store's, and when this run's parse stage failed. After a successful build it
+    removes superseded index directories under <data_dir>/tub-index/, never the two newest, the one
+    current.json names when it was read, a directory without a readable manifest or a
+    dot-directory, and the run summary says how many it removed and the bytes freed.
+    `tub index publish --newest` publishes the directory newest_local_index picks, the stage's own
+    rule, and is refused together with --index.
   priority: 2
   constraints:
     # PM ruling 2026-10-20 (v1-e39-t09 Q6): caselist.refresh_search_index (default true, and true in
@@ -99,6 +106,18 @@ spec:
       description: >-
         The build-service method the stage compares with returns the same digests as a real
         build's manifest on the same store, by test.
+    # PM amendment 2026-10-20 (v1-e39-t09 review): an index directory is about 1.03 GB, so a week
+    # with a change adds a gigabyte locally; and the weekly by-hand prod publish needs no `ls -t`.
+    - id: ac8
+      description: >-
+        After a successful build the stage removes superseded local index directories and never
+        the two newest, the one current.json names when it was read, a directory without a
+        readable manifest or a dot-directory; the run summary gives the count removed and the
+        bytes freed. By test, each rule shown failing first.
+    - id: ac9
+      description: >-
+        `tub index publish --newest` publishes the directory newest_local_index picks and is
+        refused together with --index, by test; both runbook sections use it.
 status:
   phase: InProgress
 ---

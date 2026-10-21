@@ -7,7 +7,8 @@ read with the build's `SyncRunLog`, which skips and logs a line it cannot valida
 reader of it; the pending-work file, when a scenario has one, with the build's own `PendingWork`
 (`v1-e34-t26`); and every object under `reports/` in the bucket with the model of its kind. Any line
 or object the build skips or refuses is counted and printed, and makes the exit status `1`. It also
-reads what `write_drift_owed_again_files.py` writes.
+reads what `write_drift_owed_again_files.py` and `write_newer_fingerprint_table_files.py` write,
+printing a refused parse stage's reason and its details' hint (`v1-e34-t29`).
 
     python read_sync_run_files.py <directory written> <label of the reader>
 """
@@ -51,6 +52,7 @@ def main(directory: Path, reader: str) -> int:
                     "full/" in one.reason
                     or "docs/runbooks/" in one.reason
                     or "refused at a path" in one.reason
+                    or "occurrence table" in one.reason
                 ):
                     print(f"    {one.stage} reason: {one.reason}")
         details_log = getattr(sync_runs, "SyncRunDetailsLog", None)
@@ -61,6 +63,9 @@ def main(directory: Path, reader: str) -> int:
             for run_id, one in sorted(details.items()):
                 codes = list(one.failure_codes)
                 print(f"  details {run_id}: read, failure_codes {codes}, {len(one.stages)} stage(s)")
+                for told in one.stages:
+                    if "NEWER_FINGERPRINT_TABLE" in told.error_codes:
+                        print(f"    {told.stage} error_codes {list(told.error_codes)}; hint: {told.hint}")
             missing = sorted({record.run_id for record in records} - set(details))
             if missing:
                 print(f"  details missing for: {missing}")

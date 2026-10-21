@@ -18,7 +18,7 @@ import asyncio
 import hashlib
 import os
 import shutil
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -727,3 +727,123 @@ def test_index_stage_rebuilds_an_index_built_by_hand_with_another_provenance_lim
     assert world.builder.builds == 2
     newest = newest_local_index(world.out)
     assert newest is not None and newest.manifest.provenance_limit == DEFAULT_PROVENANCE_LIMIT
+
+
+# ------------------------------------------------------------------------------------------------
+# ac8: superseded local indexes are removed after a build, and some never are (PM amendment, review)
+# ------------------------------------------------------------------------------------------------
+
+
+CAMP_WEEKS: Final = (
+    ["Invented camp evidence", "Invented week two camp evidence"],
+    ["Invented camp evidence", "Invented week two camp evidence", "Invented week three camp evidence"],
+)
+"""Two changes to the camp store after the first index, so three indexes are built in turn."""
+
+
+def bytes_under(directory: Path) -> int:
+    return sum(one.stat().st_size for one in directory.rglob("*") if one.is_file())
+
+
+def three_builds(
+    world: World, *, after_the_first: Callable[[], None] = lambda: None
+) -> list[SearchIndexStageReport]:
+    """The first index, then one after each camp week; manifests written a second apart, oldest first."""
+    reports = [world.refresh()]
+    after_the_first()
+    for week in CAMP_WEEKS:
+        write_store(world.parsed, OPENEV_STORE, week)
+        reports.append(world.refresh())
+    for second, report in enumerate(reports, start=1):
+        assert report.counts is not None and report.counts.built
+        manifest = world.out / report.counts.index_id / SEARCH_INDEX_MANIFEST_NAME
+        if manifest.exists():
+            os.utime(manifest, ns=(second * 1_000_000_000, second * 1_000_000_000))
+    return reports
+
+
+def test_index_stage_after_a_build_keeps_the_two_newest_and_removes_the_rest(world: World) -> None:
+    first = world.refresh()
+    assert first.counts is not None
+    first_bytes = bytes_under(world.out / first.counts.index_id)
+    write_store(world.parsed, OPENEV_STORE, CAMP_WEEKS[0])
+    second = world.refresh()
+    write_store(world.parsed, OPENEV_STORE, CAMP_WEEKS[1])
+
+    third = world.refresh()
+
+    assert second.counts is not None and third.counts is not None
+    assert world.local_ids() == sorted([second.counts.index_id, third.counts.index_id])
+    assert (third.counts.removed, third.counts.bytes_freed) == (1, first_bytes)
+    assert f"removed 1 superseded index on this machine, {first_bytes:,} bytes freed" in third.reason
+    assert (second.counts.removed, second.counts.bytes_freed) == (0, 0)
+    assert "no superseded index to remove" in second.reason
+
+
+def test_index_stage_never_removes_the_index_current_json_names(world: World) -> None:
+    """Published once; the next two builds' uploads fail, so current.json, read each time, names the first."""
+    first = world.refresh()
+    assert first.counts is not None
+    world.bucket.refuse = SEARCH_INDEX_MANIFEST_NAME
+    for week in CAMP_WEEKS:
+        write_store(world.parsed, OPENEV_STORE, week)
+        report = world.refresh()
+        assert report.outcome is StageOutcome.FAILED
+
+    assert report.counts is not None
+    assert first.counts.index_id in world.local_ids()
+    assert len(world.local_ids()) == 3
+    assert (report.counts.removed, report.counts.bytes_freed) == (0, 0)
+    assert published_with(world, first) == first.counts.index_id
+
+
+def test_index_stage_without_reading_current_json_keeps_only_the_two_newest(world: World) -> None:
+    """The pointer's index is kept "when it was read": with no session it is not, and it goes."""
+    first = world.refresh()
+    assert first.counts is not None
+    world.bucket.session = False
+    for week in CAMP_WEEKS:
+        write_store(world.parsed, OPENEV_STORE, week)
+        report = world.refresh()
+
+    assert report.counts is not None and report.counts.removed == 1
+    assert first.counts.index_id not in world.local_ids()
+    assert published_with(world, first) == first.counts.index_id, "the bucket's copy is not this machine's"
+
+
+def test_index_stage_never_removes_a_directory_without_a_readable_manifest_or_a_dot_directory(
+    world: World,
+) -> None:
+    def plant() -> None:
+        (world.out / "not-an-index").mkdir()
+        (world.out / "not-an-index" / "notes.txt").write_text("kept", encoding="utf-8")
+        torn = world.out / "torn-index"
+        shutil.copytree(newest_index_directory(world), torn)
+        (torn / SEARCH_INDEX_MANIFEST_NAME).write_text("{", encoding="utf-8")
+        shutil.copytree(newest_index_directory(world), world.out / ".building-killed")
+
+    reports = three_builds(world, after_the_first=plant)
+
+    newest_two = {one.counts.index_id for one in reports[1:] if one.counts is not None}
+    assert set(world.local_ids()) == newest_two | {"not-an-index", "torn-index", ".building-killed"}
+    assert reports[-1].counts is not None and reports[-1].counts.removed == 1, "only the first index"
+
+
+def test_index_stage_that_builds_nothing_removes_nothing(world: World) -> None:
+    reports = three_builds(world)
+    assert reports[-1].counts is not None
+    by_hand = asyncio.run(world.builder.build((CASELIST,), world.out))
+    os.utime(by_hand.directory / SEARCH_INDEX_MANIFEST_NAME, ns=(500_000_000, 500_000_000))
+    kept = world.local_ids()
+
+    unchanged = world.refresh()
+
+    assert unchanged.outcome is StageOutcome.SKIPPED
+    assert unchanged.counts is not None and (unchanged.counts.removed, unchanged.counts.bytes_freed) == (0, 0)
+    assert world.local_ids() == kept and len(kept) == 3
+
+
+def newest_index_directory(world: World) -> Path:
+    newest = newest_local_index(world.out)
+    assert newest is not None
+    return newest.directory

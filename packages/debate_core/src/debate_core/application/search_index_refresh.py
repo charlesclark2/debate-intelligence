@@ -44,6 +44,16 @@ skipped with that reason (ac3): the parser moves to a new version on the day a r
 the agent's build may be the older one until it is reinstalled. Any other store that is not ready
 fails the stage, and the previous index stays (PM ruling 2026-10-20, question 3).
 
+## What is kept on this machine
+
+An index directory is about a gigabyte (the SQLite file and its gzip object), so after a
+successful build the stage removes superseded ones (PM amendment 2026-10-20, `v1-e39-t09` review;
+:func:`remove_superseded`). It never removes the two newest (:data:`KEEP_NEWEST`, by
+:func:`newest_local_index`'s order), the one `current.json` names when the stage read it this run,
+a directory without a readable manifest, or a dot-directory, which is a build's scratch directory.
+A run that built nothing removes nothing. The bucket's copies are not this stage's: pruning them is
+`v1-e39-t07`'s, under the removal credential.
+
 ## Size
 
 Every build's SQLite bytes and bytes per document are reported, with a warning past either of
@@ -59,9 +69,10 @@ reason names a directory by its role.
 from __future__ import annotations
 
 import logging
+import shutil
 import tempfile
 from collections.abc import Awaitable, Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Final
 
@@ -98,12 +109,16 @@ from debate_core.evidence.fingerprints import FINGERPRINT_VERSION
 
 __all__ = [
     "GZIP_BYTES_WARNING",
+    "KEEP_NEWEST",
     "SEARCH_INDEX_DIRECTORY",
     "SQLITE_BYTES_WARNING",
+    "LocalRetention",
     "LocalSearchIndex",
     "SearchIndexRefresh",
     "built_from",
+    "local_indexes",
     "newest_local_index",
+    "remove_superseded",
     "size_warnings",
 ]
 
@@ -118,6 +133,9 @@ SQLITE_BYTES_WARNING: Final = 900_000_000
 
 GZIP_BYTES_WARNING: Final = 400_000_000
 """Gzip bytes past which a build is warned of: ADR-0019's trigger for a higher bandwidth quota."""
+
+KEEP_NEWEST: Final = 2
+"""How many of the newest local indexes a build never removes: the one it built and the one before."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -135,12 +153,22 @@ class LocalSearchIndex:
 def newest_local_index(out: Path) -> LocalSearchIndex | None:
     """The index under `out` whose manifest was written last, or `None` when there is none.
 
+    The first of :func:`local_indexes`: what this stage keeps current, and what `tub index publish
+    --newest` publishes.
+    """
+    indexes = local_indexes(out)
+    return indexes[0] if indexes else None
+
+
+def local_indexes(out: Path) -> list[LocalSearchIndex]:
+    """Every index under `out`, the newest first: by when its manifest was written, then by directory name.
+
     A build's scratch directory (a name starting with a dot) and a directory without a readable
     manifest are not indexes and are passed over. Two manifests written in the same instant are
-    ordered by index id, so the answer never depends on the order the directory is listed in.
+    ordered by name, so the answer never depends on the order the directory is listed in.
     """
     if not out.is_dir():
-        return None
+        return []
     found: list[tuple[int, str, LocalSearchIndex]] = []
     for directory in out.iterdir():
         if directory.name.startswith(".") or not directory.is_dir():
@@ -151,7 +179,70 @@ def newest_local_index(out: Path) -> LocalSearchIndex | None:
         except (UnreadableSearchIndexManifest, OSError):
             continue
         found.append((written, directory.name, LocalSearchIndex(directory, manifest)))
-    return max(found, key=lambda one: (one[0], one[1]))[2] if found else None
+    return [one[2] for one in sorted(found, key=lambda one: (one[0], one[1]), reverse=True)]
+
+
+@dataclass(frozen=True, slots=True)
+class LocalRetention:
+    """What :func:`remove_superseded` removed from this machine, and what it could not."""
+
+    removed: tuple[str, ...] = ()
+    """The directories removed, by name."""
+
+    bytes_freed: int = 0
+    not_removed: tuple[str, ...] = ()
+    """Superseded directories the operating system would not let go, by name and error class."""
+
+    @property
+    def sentence(self) -> str:
+        if not self.removed:
+            said = "no superseded index to remove"
+        else:
+            said = (
+                f"removed {len(self.removed)} superseded {'index' if len(self.removed) == 1 else 'indexes'} "
+                f"on this machine, {self.bytes_freed:,} bytes freed"
+            )
+        if self.not_removed:
+            said += f"; could not remove {', '.join(self.not_removed)}"
+        return said
+
+
+def remove_superseded(out: Path, *, published: str | None, keep_newest: int = KEEP_NEWEST) -> LocalRetention:
+    """Remove the indexes under `out` that are superseded, and say what that freed.
+
+    Kept: the `keep_newest` newest (:func:`local_indexes`' order) and the one `published` names,
+    the index id `current.json` gave when it was read, or `None` when it was not. Never touched,
+    because :func:`local_indexes` never lists them: a directory without a readable manifest, and a
+    dot-directory. A directory that cannot be removed is named and left; it is not a failure.
+    """
+    removed: list[str] = []
+    not_removed: list[str] = []
+    freed = 0
+    for index in local_indexes(out)[keep_newest:]:
+        if published is not None and published in (index.index_id, index.directory.name):
+            continue
+        size = sum(one.stat().st_size for one in index.directory.rglob("*") if one.is_file())
+        try:
+            shutil.rmtree(index.directory)
+        except OSError as refused:
+            not_removed.append(f"{index.directory.name} ({type(refused).__name__})")
+            continue
+        removed.append(index.directory.name)
+        freed += size
+    if removed:
+        logger.info(
+            "superseded search indexes removed", extra={"removed": len(removed), "bytes_freed": freed}
+        )
+    return LocalRetention(removed=tuple(removed), bytes_freed=freed, not_removed=tuple(not_removed))
+
+
+@dataclass(slots=True)
+class _Seen:
+    """What one refresh found on its way, for what follows it: the index it built, and the pointer."""
+
+    built: LocalSearchIndex | None = None
+    pointer_read: bool = False
+    pointer: SearchIndexPointer | None = field(default=None)
 
 
 def built_from(
@@ -275,7 +366,25 @@ class SearchIndexRefresh:
 
         Every outcome is a report, failures included, so that the run records them as a stage. Only
         a bug in this method itself escapes, and the run records that as the stage's failure too.
+        After a successful build, superseded local indexes are removed (:func:`remove_superseded`),
+        whatever the publish then did.
         """
+        seen = _Seen()
+        report = await self._keep_current(stores, no_session=no_session, seen=seen)
+        if seen.built is None or report.counts is None:
+            return report
+        retention = remove_superseded(
+            self._out, published=seen.pointer.index_id if seen.pointer_read and seen.pointer else None
+        )
+        return replace(
+            report,
+            reason=f"{report.reason}; {retention.sentence}",
+            counts=replace(report.counts, removed=len(retention.removed), bytes_freed=retention.bytes_freed),
+        )
+
+    async def _keep_current(
+        self, stores: Sequence[str], *, no_session: str | None, seen: _Seen
+    ) -> SearchIndexStageReport:
         newest = newest_local_index(self._out)
         publishing = self._publisher is not None
 
@@ -324,6 +433,7 @@ class SearchIndexRefresh:
                     f"the index was not built; {_locally(newest)}", failed, newest, login_only
                 )
             current = LocalSearchIndex(built.directory, built.manifest)
+            seen.built = current
         built_now = current is not newest
         said = f"built {current.index_id}" if built_now else f"unchanged since {current.index_id}"
         said += f" ({_size_sentence(_counts(current, built=built_now, published=False))})"
@@ -368,6 +478,7 @@ class SearchIndexRefresh:
                 login_only,
                 counts=_counts(current, built=built_now, published=False),
             )
+        seen.pointer_read, seen.pointer = True, pointer
         if pointer is not None and pointer.index_id == current.index_id:
             if built_now:
                 return report(StageOutcome.COMPLETED, f"{said}; current.json already names it")

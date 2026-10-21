@@ -1528,6 +1528,12 @@ class SearchIndexStageCounts:
     warnings: tuple[str, ...] = ()
     """A sentence for each of ADR-0019's size lines the index has passed."""
 
+    removed: int = 0
+    """Superseded index directories the stage removed from this machine after it built this one."""
+
+    bytes_freed: int = 0
+    """What removing them freed."""
+
     def as_json(self) -> dict[str, object]:
         return {
             "index_id": self.index_id,
@@ -1538,6 +1544,8 @@ class SearchIndexStageCounts:
             "gzip_bytes": self.gzip_bytes,
             "bytes_per_document": self.bytes_per_document,
             "warnings": list(self.warnings),
+            "removed": self.removed,
+            "bytes_freed": self.bytes_freed,
         }
 
 

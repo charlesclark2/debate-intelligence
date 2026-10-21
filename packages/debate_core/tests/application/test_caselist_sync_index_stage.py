@@ -263,6 +263,8 @@ def test_index_stage_runs_after_parse_and_before_landscape_even_when_nothing_was
         "gzip_bytes": 12_000,
         "bytes_per_document": 10_000,
         "warnings": [],
+        "removed": 0,
+        "bytes_freed": 0,
     }
 
 

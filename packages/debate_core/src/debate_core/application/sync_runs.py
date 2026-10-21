@@ -438,6 +438,8 @@ class SearchIndexCounts(BaseModel):
     gzip_bytes: int = Field(ge=0)
     bytes_per_document: int | None = Field(default=None, ge=0)
     warnings: tuple[str, ...] = ()
+    removed: int = Field(default=0, ge=0)
+    bytes_freed: int = Field(default=0, ge=0)
 
 
 class SyncRunDetails(BaseModel):

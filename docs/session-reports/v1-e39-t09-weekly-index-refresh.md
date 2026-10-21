@@ -239,9 +239,63 @@ needed.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-20
 
 **Notes:**
+
+Accepted, with two small additions closed in this session before the pull request (below). The pull
+request then opens with `--partial`, since ac4 is the operator's after the next agent install. No
+task depends on this one, so nothing is held back. As before, if anything comes out differently
+from what you expect, stop and ask for another review.
+
+**What is good:**
+
+* **The stage follows the ruled order exactly:** reconcile with a session, digests through the
+  one `sources()` method, build only on a change, publish pointer-last only when `current.json` is
+  behind.
+* **The build and the check cannot disagree:** ac7's test pins that the method's digests are a real
+  build's.
+* **The failure paths name what is still current,** and the by-hand command is in the hint and the
+  login banner rather than in a redacted reason.
+* **Checking a reused index against its manifest before publishing it** (Decisions) is a good
+  catch: a damaged directory cannot fail every week.
+* **The mutation run found two real gaps** (the provenance limit, and a scratch directory counted
+  as an index), and both now have tests. The two equivalents are argued.
+* **Deviation 6 keeps the cross-build guarantee:** records are still validated against the older
+  builds' schema, and the change is additive at schema version 5.
+
+**The two additions:**
+
+1. **Local retention, here rather than later.** Your Follow-up 1 underestimates the cost. The real
+   index directory is about 1.03 GB (752 MB SQLite plus 282 MB gzip), so every week with a change
+   adds a gigabyte to a Mac that had 54 GB free. After a successful build, the stage removes
+   superseded directories under `<data_dir>/tub-index/`. It never removes:
+   * the two newest;
+   * the one `current.json` names, when it was read;
+   * any directory without a readable manifest, or a dot-directory.
+
+   The run summary says how many it removed and the bytes freed. Show each "never" failing first,
+   and add a mutant or two on the keep rule. Write it into the spec with a comment
+   `PM amendment 2026-10-20 (v1-e39-t09 review)`.
+2. **`tub index publish --newest`.** Prod publishing stays the operator's by-hand step every week,
+   so remove the `ls -t` step. `--newest` picks the directory by `newest_local_index`, the stage's
+   own rule, and refuses together with `--index`. Update both runbook sections to use it, with a test.
+
+**Rulings on the rest:**
+
+* **Deviations 1 to 6:** accepted.
+* **The affected-set over-run:** reported honestly. The lesson for every session is that an alarm
+  on `uv` does not stop its pytest child, while your second form, the alarm on `.venv/bin/python -m
+  pytest`, does. I am adding that to working agreement 10 in my next batch.
+* **Follow-up 2** (doctor warns before a store is parsed): a p3, filed in the next batch.
+* **Follow-up 4** (the pre-existing pyright errors in `tests/smoke`): this joins the E01 follow-up
+  task I am filing.
+
+**ac4 timing.** If this merges before the operator's agent reinstall after v1-e31-t24's re-parse,
+that install carries it, and the next Wednesday run is ac4's evidence. Before that run, the
+operator also applies v1-e39-t02's operator follow-up 2 (the dev listing grant), so the stage's
+read of `current.json` is not refused for want of a list permission. The PM records ac4 in a
+close-out.

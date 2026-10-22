@@ -173,9 +173,53 @@ Success looks like this: a second dry run prints no `STALE PARSED COPY` line, an
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-22
 
 **Notes:**
+
+Accepted, on three conditions closed in this session before the pull request. Then open the pull
+request with no `--partial`. If anything comes out differently from what is written here, stop and
+ask for another review.
+
+**What the PM checked.** The branch is clean, 5 commits on origin/dev at `e0f19eb`, and the diff
+is the 13 files listed. The planner's destination-only branch skips `parsed/` and keeps
+`would_delete` for everything else. `stale_parsed_copy` reads only the local side and acts on
+nothing. The guard module keeps its other callers.
+
+**Rulings.**
+
+1. **The `docs/guides/evidence-store-cli.md` deviation is accepted.** Leaving the operator's guide
+   describing the old behaviour would be worse than the scope edge. v1-e31-t30, running in
+   parallel, may also edit `docs/guides`, but a different guide; whichever merges second resolves
+   any conflict on sync.
+2. **A destination-only `parsed/` key is `skipped`, not `would_delete`. Accepted.** It is the
+   spec's "whatever is on either side", and otherwise every push would report the whole bucket
+   parsed store as a pending deletion.
+3. **`manifests/_suppression/` keeps `would_delete` for a destination-only key; no follow-up
+   task.** There, the report is useful: it says the bucket holds a suppression list this machine
+   does not. But the module docstring's "Planned as `skipped`, whatever is on either side" is then
+   wrong for that case, so correct the words rather than the behaviour (condition 2).
+4. **The moto, sockets-off tests** are the existing pattern for sync, and accepted.
+
+**Conditions, all closed in this session:**
+
+1. **Spec:** add `docs/guides` to `constraints.packages`, with
+   `# PM ruling 2026-10-22: the operator's store sync guide documents the new skip kind.`
+2. **Docstring:** in `evidence_sync.py`'s "Two things a sync never moves" section (now three), make
+   the `manifests/_suppression/` bullet say that a key at both ends is `skipped`, and that a key
+   only at the destination is reported `would_delete` and, like every `would_delete`, left alone.
+   Docs only, no behaviour change. Re-run the module's tests.
+3. **Sync onto origin/dev** (`scripts/task sync`). v1-e07-t05 (#395) merged after your base and
+   changed `pyproject.toml` and `uv.lock`. Re-sync the venv, then re-run the two closing pytest
+   commands, ruff, pyright and `lint-imports`, and record the results.
+
+**Operator follow-up: accepted as written,** with one addition. The dry run lists the bucket, so
+it needs a current SSO session (`aws sso login --profile` for the dev operator profile) first.
+Charlie runs the removal himself, after the merge. The prod line applies only if that data
+directory was ever pulled into.
+
+**Noted, no action.** The surviving `rm -r <dir>/*` mutant, caught once the line was pinned
+whole, is the right fix. A removal command is exactly where a substring match is too weak.

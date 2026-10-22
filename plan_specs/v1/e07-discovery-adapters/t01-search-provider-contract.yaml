@@ -94,13 +94,15 @@ spec:
           Implement ResilientProvider with asyncio timeouts, a clock-injected breaker (closed/open/half-open)
           and error classification into ProviderError types.
         dependsOn: [candidate-types]
-        outputs: [packages/debate_core/src/debate_core/integrations/search/resilience.py]
+        # PM ruling 2026-10-20: the integration code is debate_core.integrations.discovery; "search" now means the pilot's index.
+        outputs: [packages/debate_core/src/debate_core/integrations/discovery/resilience.py]
         estimatedEffort: 3h
         acceptanceCriteria:
           - type: test_passes
             name: Breaker and timeout tests pass
             command: uv
-            args: [run, pytest, packages/debate_core/tests/integrations/search/test_resilience.py]
+            # PM ruling 2026-10-20: the tests live in packages/debate_core/tests/integrations/discovery/.
+            args: [run, pytest, packages/debate_core/tests/integrations/discovery/test_resilience.py]
       - id: registry-health
         kind: Task
         name: ProviderRegistry and health metrics
@@ -108,13 +110,15 @@ spec:
           Build providers from settings.providers (enabled, api keys, contact email), wrap each in
           ResilientProvider and collect health snapshots.
         dependsOn: [resilient-wrapper]
-        outputs: [packages/debate_core/src/debate_core/integrations/search/registry.py]
+        # PM ruling 2026-10-20: the integration code is debate_core.integrations.discovery; "search" now means the pilot's index.
+        outputs: [packages/debate_core/src/debate_core/integrations/discovery/registry.py]
         estimatedEffort: 2h
         acceptanceCriteria:
           - type: test_passes
             name: Registry tests pass
             command: uv
-            args: [run, pytest, packages/debate_core/tests/integrations/search/test_registry.py]
+            # PM ruling 2026-10-20: the tests live in packages/debate_core/tests/integrations/discovery/.
+            args: [run, pytest, packages/debate_core/tests/integrations/discovery/test_registry.py]
       - id: contract-kit
         kind: Task
         name: Provider contract test kit
@@ -128,7 +132,8 @@ spec:
           - type: test_passes
             name: FakeProvider passes the contract kit
             command: uv
-            args: [run, pytest, packages/debate_core/tests/integrations/search/test_fake_provider.py]
+            # PM ruling 2026-10-20: the tests live in packages/debate_core/tests/integrations/discovery/.
+            args: [run, pytest, packages/debate_core/tests/integrations/discovery/test_fake_provider.py]
           - type: command_succeeds
             name: Import boundaries hold
             command: uv

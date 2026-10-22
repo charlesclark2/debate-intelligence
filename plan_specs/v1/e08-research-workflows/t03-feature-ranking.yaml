@@ -78,12 +78,13 @@ spec:
       # PM ruling 2026-10-22: config/federated_ranking.yaml, not config/ranking.yaml.
       description: >-
         Changing a weight in config/federated_ranking.yaml changes ordering on a fixture set without code changes.
+    # PM ruling 2026-10-22: the mean nDCG@10 over the three queries; per-query values are reported, not gated.
     - id: ac4
       description: >-
         On a coach-labeled fixture of 3 queries, relevant items appear in the top 10 at least as often as
         in raw provider order (nDCG@10 not lower), reported by a test.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

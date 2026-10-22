@@ -6,7 +6,7 @@
 | Spec | [`plan_specs/v1/e08-research-workflows/t03-feature-ranking.yaml`](../../plan_specs/v1/e08-research-workflows/t03-feature-ranking.yaml) |
 | Epic / release | `v1-e08-research-workflows` / `v1.4` |
 | Branch | `task/v1-e08-t03-feature-ranking` |
-| Session status | PARTIAL <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | COMPLETE <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
@@ -37,9 +37,9 @@ On the coach's labels, mean nDCG@10 is **0.711 ranked against 0.607 in raw provi
 passes. **Look first at the per-query line for LD**: there the ranking is very slightly lower
 (0.579 against 0.583).
 
-All four Goal criteria pass. The Goal stays **InProgress**, because one criterion cannot be closed
-in a session: the `relevance-check` node's custom criterion asks the coach to approve the labelled
-fixture in the PR. The labelling itself is done.
+All four Goal criteria pass, and the Goal is **Succeeded** by the PM's ruling of 2026-10-22. ac4 is
+read as the mean over the three queries. The coach's approving review of the pull request is the
+merge condition for the custom criterion.
 
 ## Plan nodes
 
@@ -47,7 +47,7 @@ fixture in the PR. The labelling itself is done.
 |---|---|---|
 | `features` | Done | `federated_ranking_features.py`: the seven features, BM25 over the result set, and a documented tokenizer that reuses dedupe's text normalization. |
 | `scorer-explainer` | Done | `federated_ranking.py` and `config/federated_ranking.yaml`: the table loader and its refusals, the weighted score, the tie order, explanations, `FederatedRankStage` and `search_result_for`. |
-| `relevance-check` | Done except PR approval | `tests/fixtures/federated_ranking/labeled_queries.json` (path per the PM's FYI ruling) and `labelling_sheet.md`. The coach labelled all three queries in this session. Approval in the PR is still to come. |
+| `relevance-check` | Done | `tests/fixtures/federated_ranking/labeled_queries.json` (path per the PM's FYI ruling) and `labelling_sheet.md`. The coach labelled all three queries in this session; the coach's approving review of the pull request is required before merge (PM ruling 2026-10-22). |
 
 ## Acceptance criteria
 
@@ -56,11 +56,11 @@ fixture in the PR. The labelling itself is done.
 | ac1: each ranked SearchResult carries rank, total score, the named feature vector (seven names) and an explanation | PASS | `test_score_search_result_for_carries_rank_scores_the_vector_the_explanation_and_providers`: all seven names in order, `peer_reviewed` None, raw BM25 as `lexical_score`. `test_score_search_result_for_a_stored_ranking_comes_back_as_built` round-trips through the in-memory repository. The new contract test `test_an_unknown_feature_comes_back_as_none_not_zero_or_missing` passes for `TestInMemorySearchRepository` and `TestSqliteSearchRepository`. Per the PM's ruling, real searches store results once v1-e08-t05 registers Articles. |
 | ac2: deterministic; ties broken by published_at, then canonical URL | PASS | `test_score_identical_inputs_and_config_give_identical_order_whatever_the_input_order`; `..._ties_break_by_published_at_newest_first_with_undated_last`; `..._ties_then_break_by_canonical_url_ascending`; `..._ties_fall_back_to_the_url_when_there_is_no_canonical_form`. |
 | ac3: changing a weight in config/federated_ranking.yaml changes ordering on a fixture set without code changes | PASS | `test_score_changing_a_weight_in_the_yaml_changes_the_order_without_code_changes` copies the committed table, edits one line (`recency: 0.15` → `0.6`), and the order of two results reverses. |
-| ac4: on a coach-labelled fixture of 3 queries, nDCG@10 not lower than raw provider order | PASS (mean) | `uv run pytest packages/debate_core/tests/application/test_federated_ranking.py -k relevance -s` → `3 passed`, printing the per-query table below. |
+| ac4: on a coach-labelled fixture of 3 queries, nDCG@10 not lower than raw provider order | PASS (mean, as the PM ruled 2026-10-22; per-query values are reported, not gated) | `uv run pytest packages/debate_core/tests/application/test_federated_ranking.py -k relevance -s` → `3 passed`, printing the per-query table below. |
 | Node `features`: feature tests pass | PASS | `uv run pytest packages/debate_core/tests/application/test_federated_ranking.py -k feature` → `60 passed in 1.96s` |
 | Node `scorer-explainer`: scorer and explanation tests pass | PASS | `uv run pytest packages/debate_core/tests/application/test_federated_ranking.py -k "score or explain"` → `57 passed in 1.86s` |
 | Node `relevance-check`: full ranking module passes | PASS | `uv run pytest packages/debate_core/tests/application/test_federated_ranking.py` → `128 passed in 1.82s` |
-| Node `relevance-check`: coach labels relevance for the Policy, LD and PF current topics and approves it in the PR | NOT RUN | Labelling is done: the coach labelled all three queries on 2026-10-22, recorded in commit `f237a0d` before the ranking was run over the set. Approval in the PR has to happen in the PR. The three queries are mine, offered as debate-style stand-ins; the coach was invited to reword them for this season's topics and did not. |
+| Node `relevance-check`: coach labels relevance for the Policy, LD and PF current topics and approves it in the PR | PASS at merge | The coach's approving review of this pull request, naming `tests/fixtures/federated_ranking/labeled_queries.json`, is required before merge (PM ruling 2026-10-22). The labels were recorded on 2026-10-22 in commit `f237a0d`, before the ranking was run over the set. The queries are stand-ins for the current topics (Deviation 4). |
 
 ### ac4, per query (the coach's labels, by count)
 
@@ -81,7 +81,8 @@ fixture in the PR. The labelling itself is done.
   feeds newest first. Citation counts follow popularity, not relevance, so the most cited records
   are off-topic.
 * **One label line to confirm.** The coach's PF line ended in a trailing comma (`F02, F04, F06, `).
-  It was recorded as those three items.
+  It was recorded as those three items. **Confirmed by the coach on 2026-10-22: the PF line is F02,
+  F04 and F06 and nothing more.**
 
 ### Red run, then green
 
@@ -150,8 +151,9 @@ equal, and `git status` was clean after every batch.
 | `uv run --frozen ruff check .` | `All checks passed!` |
 | `.venv/bin/python -m pyright packages/debate_core` | `0 errors, 0 warnings, 0 informations` |
 | `uv run --frozen lint-imports` | `Contracts: 13 kept, 0 broken.` |
-| `uv run scripts/validate_specs.py` | `OK: 404 files, 39 epics, 344 tasks, 21 releases`; the Goal is left `InProgress` (see Summary) |
+| `uv run scripts/validate_specs.py` | `OK: 404 files, 39 epics, 344 tasks, 21 releases`; re-run after the Goal was set `Succeeded`, below |
 | `uv run python scripts/check_links.py` | `OK: 1940 relative links and anchors in 291 Markdown files` |
+| After the PM's four conditions (2026-10-22): `uv run scripts/validate_specs.py`; `--require-succeeded v1-e08-t03-feature-ranking`; `check_links.py`; `check_command_blocks.py --base origin/dev`; `.venv/bin/python -m pytest -q tests/docs tests/scripts/test_check_command_blocks.py tests/scripts/test_docs_index.py tests/specs` | `OK: 404 files, 39 epics, 344 tasks, 21 releases`; `v1-e08-t03-feature-ranking: Succeeded`; `OK: 1940 relative links and anchors in 291 Markdown files`; `OK: no # comments in 334 shell code blocks`; `244 passed in 2.96s` |
 | `uv run python scripts/check_command_blocks.py --base origin/dev` | `OK: no # comments in 334 shell code blocks in 135 Markdown files (1 session reports changed since origin/dev)` |
 
 ## Files changed
@@ -192,6 +194,10 @@ equal, and `git status` was clean after every batch.
    an unknown above or below a known 0 would be a policy choice the spec does not make.
 3. **Provider agreement is unknown when one provider or none answered.** With nothing to agree
    with, a 0 would read as disagreement. Like every unknown it contributes nothing.
+4. **The three queries are stand-ins, not the current topics.** The custom criterion names the
+   Policy, LD and PF current topics; the fixture's queries are debate-style stand-ins I wrote. The
+   coach was offered the rewording and labelled them knowingly, and the PM accepted them (ruling 2,
+   2026-10-22). The measurement on the current topics moves to v1-e08-t05, on real search results.
 
 ## Decisions and assumptions
 
@@ -265,9 +271,76 @@ changed.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-22
 
 **Notes:**
+
+Accepted, on four conditions closed in this session before the pull request. Then set the Goal
+`Succeeded`, set the session status COMPLETE, and open the pull request with no `--partial`, since
+v1-e08-t05 depends on this task. If anything comes out differently from what is written here, stop
+and ask for another review.
+
+**What the PM checked.** The branch is clean and based on origin/dev at `2a96979`, 11 commits.
+The diff is the 16 files listed, with nothing outside the spec's packages. The ac4 test asserts
+the mean (`ranked_mean >= raw_mean`), and its docstring says so. The committed table matches the
+weights reported. The labels in `labeled_queries.json` match the per-query counts (7, 7 and 3).
+`scripts/task pr` without `--partial` needs `Succeeded`, which is why condition 3 is written as it
+is.
+
+**Rulings.**
+
+1. **ac4 is read as the mean over the three queries.** The criterion speaks of the fixture as a
+   whole, "at least as often as in raw provider order", and the test already asserts the mean.
+   LD's 0.579 against 0.583 is one swapped pair at the bottom of the top ten on a synthetic set,
+   and it is recorded, not ruled a failure. No weight is tuned on this set. Tuning waits for the
+   coach's labels on real results (ruling 2).
+2. **The three queries are stand-ins, not the current topics the custom criterion names**
+   (Policy: national health insurance; LD and PF: the September–October resolutions). The PM
+   accepts them for this task:
+   * the candidates are synthetic, so a current-topic wording would add no realism;
+   * the coach was offered the rewording, labelled the stand-ins knowingly, and approves them in
+     the PR (condition 3);
+   * rewriting them would mean new candidates and fresh labels, for evidence the report already
+     calls weak.
+
+   The measurement on current topics moves to real searches. The PM amends v1-e08-t05 in the next
+   batch: once the search command runs, the coach labels real results for one query per format on
+   the topics current then, and the report records nDCG@10 ranked against provider order. If
+   ranking comes out lower, that opens a weight-tuning ticket rather than blocking t05.
+3. **The coach approves in the PR, as the criterion says, and that approval is the merge
+   condition.** Set the custom criterion's row to "PASS at merge: the coach's approving review of
+   this pull request, naming `tests/fixtures/federated_ranking/labeled_queries.json`, is required
+   before merge." Set the node `Done` and the Goal `Succeeded` on that basis. If the coach asks for
+   changes in the PR instead, nothing merges, and the task comes back for review.
+4. **Deviations 1 to 3 are accepted.**
+   * The `federated_ranking` names throughout the spec follow the naming ruling; amending the
+     description, the forbidden entry, ac3 and the node description is in scope.
+   * Unknown contributes 0 and is stored as None and left unsaid, as ruled.
+   * Provider agreement is unknown with one provider or none.
+
+**Conditions, all closed in this session:**
+
+1. **Spec.** Add a comment above ac4: `# PM ruling 2026-10-22: the mean nDCG@10 over the three
+   queries; per-query values are reported, not gated.`
+2. **Report, Deviations.** Add a fourth deviation: the queries are debate-style stand-ins rather
+   than the current Policy, LD and PF topics; the coach labelled them knowingly; the PM accepted
+   them, and the current-topic measurement moves to v1-e08-t05 on real results (ruling 2).
+3. **The PF trailing comma.** The coach confirms in this session that the PF line is F02, F04 and
+   F06 and nothing more. Record the confirmation, with its date, under "One label line to confirm".
+4. **The custom criterion and the Goal**, as in ruling 3. Re-run `scripts/validate_specs.py` and
+   the docs checks after the edits.
+
+**Noted, no action.**
+
+* The first mutation batch's false catch for mutant 7, and the bytecode explanation, are recorded
+  well. Re-running with bytecode disabled and saved-byte restores was the right response.
+* The peer-reviewed weight (0.10) is dead until an adapter reports peer review, so the highest
+  score anything can reach today is 0.90. It does not change any order. Leave it in the table, as
+  the YAML explains.
+* The affected set (369 files) left to the PR's `ci` follows agreement 10.
+* The `FIELD_PRECEDENCE` rows: whichever of this task and v1-e07-t05 merges second adds
+  `google_news` after `rss` in the `open_access` and `citation_count` rows, per the PM's note of
+  2026-10-22.

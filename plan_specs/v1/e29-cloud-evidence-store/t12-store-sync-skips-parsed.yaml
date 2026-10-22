@@ -47,7 +47,7 @@ spec:
         A stale `objects/parsed/` copy is reported by `--dry-run` with the command that
         removes it, and the per-source stamp line is in docs/data/parsed-card-store.md.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

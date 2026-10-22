@@ -126,7 +126,8 @@ spec:
           Shared fixtures/assertions under tests/contracts for adapters (maps fixture → expected
           CandidateResults, error mapping, rate-limit headers) validated with a FakeProvider.
         dependsOn: [candidate-types]
-        outputs: [packages/debate_core/tests/contracts/search_provider_contract.py]
+        # PM ruling 2026-10-21 (v1-e07-t01 review): the kit lives in debate_core.testing.contracts so t02-t07 can import it.
+        outputs: [packages/debate_core/src/debate_core/testing/contracts/search_provider.py]
         estimatedEffort: 2h
         acceptanceCriteria:
           - type: test_passes

@@ -22,7 +22,9 @@ Feeds are parsed with defusedxml over the standard library's ElementTree, with e
 external references refused (PM ruling 2026-10-22). Conditional GET keeps each feed's validators and
 already-trimmed entries in one JSON file per feed under `<storage.data_dir>/feeds/`. The starter feed
 lists (politics, and the Policy 2026-27 health-insurance topic) all await the coach's review, and
-Google News is off in both. The PM should look first at the Google News resolution rule
+Google News is off in both. The operator's feed check of 2026-10-22 had all eight starter feeds
+answer `HTTP 200`. Seven dated every entry; Roll Call's dates carry no time zone, so its entries are
+undated (Operator follow-ups). The PM should look first at the Google News resolution rule
 (`google_news_rss.py`), which drops most current items by design, and at the three edits outside
 `debate_core.integrations` listed under Deviations. Every acceptance criterion passed, so the phase
 is `Succeeded`.
@@ -215,19 +217,42 @@ The setting stays, as defence in depth.
 
 ## Operator follow-ups
 
-The starter feeds have not been fetched by anyone. This check fetches each configured feed once,
+### Done: the feed check, 2026-10-22
+
+The operator ran the feed check once in the task worktree. It fetches each configured feed once,
 one after another, and prints per feed only the topic, publisher, status, entry count, how many
-entries carried a date, and the URL: no titles. It takes about 10 to 30 seconds and needs network
-access. Run it in the task worktree `debate-intelligence-worktrees/v1-e07-t05-rss-news-adapter`, or
-anywhere on `dev` after the merge:
+entries carried a date, and the URL: no titles.
 
 ```bash
 uv run python -m debate_core.integrations.discovery.feed_check --feeds-dir config/feeds
 ```
 
-Success looks like `8 feeds checked, 0 failed`, with every status `HTTP 200` and a dated count close
-to the entry count. It exits 1 when any feed failed. A failing or undated feed is one to replace, and
-the output, not the listing, is what may then be called verified. Paste the table back for the coach.
+The result, as printed:
+
+| Topic | Publisher | Status | Entries | Dated |
+|---|---|---|---|---|
+| health-insurance | KFF Health News | HTTP 200 | 10 | 10 |
+| health-insurance | NPR | HTTP 200 | 10 | 10 |
+| health-insurance | STAT | HTTP 200 | 20 | 20 |
+| politics | NPR | HTTP 200 | 10 | 10 |
+| politics | PBS NewsHour | HTTP 200 | 20 | 20 |
+| politics | Politico | HTTP 200 | 30 | 30 |
+| politics | The Hill | HTTP 200 | 15 | 15 |
+| politics | Roll Call | HTTP 200 | 10 | 0 |
+
+`8 feeds checked, 0 failed`. Every starter feed answers and parses through the safe parser, so seven
+of the eight can now be called verified as reachable and dated. None has been reviewed by the coach,
+so every `review:` stays `awaiting_coach_review`.
+
+**Roll Call answers but carries no date this platform can place.** To see why, the session fetched
+`https://rollcall.com/feed/` once and printed only its date elements. Every `<pubDate>` is in the form
+`2026-10-21 20:18:41`: not RFC 822, and with no time zone, so it cannot be told apart as UTC or
+Washington time. The parser therefore gives no date, as the PM ruled ("a zone that can't be placed
+gives no date, never a guessed UTC"). The result is that every Roll Call entry is dropped from a
+search with a date window and kept only in one without. Both feed files now record the check's
+result in a comment, and Roll Call's entry says why it is undated.
+
+No operator commands remain for this task beyond the review, PR and finish steps of the task workflow.
 
 ## Follow-up work
 
@@ -235,6 +260,11 @@ the output, not the listing, is what may then be called verified. Paste the tabl
   the PM files it). An item whose id cannot be decoded offline could still be resolved when its
   `<source url>` host is a configured publisher and that publisher's own feed carries the same
   headline. That is the only offline route to most current items.
+* **Roll Call's undated feed** (for the coach, or the PM if it should become a task). Roll Call's
+  dates have no zone, so its entries never fall in a search window. There are two ways forward:
+  * the coach replaces it with another politics feed (no code), which is the simpler choice;
+  * a per-feed `timezone:` key in `config/feeds/` declares the zone a feed's zoneless dates are in.
+    That is a change to the date rule the PM ruled on, so it is the PM's to open.
 * **Wire topics into searches: v1-e08-t07's presets** (the PM amends that spec). `ProviderQuery` has
   no topic. The providers read the topics they were built with, and choosing those per preset belongs
   to the daily-digest presets.

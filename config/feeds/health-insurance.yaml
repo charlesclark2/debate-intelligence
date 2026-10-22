@@ -4,7 +4,8 @@
 #
 # A starter set, not a reviewed list. Every feed says `review: awaiting_coach_review` until the
 # coach has looked at it and changed it to `coach_reviewed`. No URL here has been shown to answer
-# by being listed: the operator's feed check is what does that.
+# by being listed: the operator's feed check is what does that. Its run of 2026-10-22 had every
+# feed here answer HTTP 200 with every entry dated.
 #
 # Google News is off. Its items can rarely be traced to the publisher's own URL without asking
 # Google, which the platform does not do (PM ruling 2026-10-22).

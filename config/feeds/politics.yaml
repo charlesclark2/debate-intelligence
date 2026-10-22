@@ -4,7 +4,8 @@
 #
 # A starter set, not a reviewed list. Every feed says `review: awaiting_coach_review` until the
 # coach has looked at it and changed it to `coach_reviewed`. No URL here has been shown to answer
-# by being listed: the operator's feed check is what does that.
+# by being listed: the operator's feed check is what does that. Its run of 2026-10-22 had every
+# feed here answer HTTP 200, and every entry dated except Roll Call's (see its entry).
 #
 # Google News is off. Its items can rarely be traced to the publisher's own URL without asking
 # Google, which the platform does not do (PM ruling 2026-10-22).
@@ -25,6 +26,9 @@ feeds:
   - url: https://thehill.com/homenews/feed/
     publisher: The Hill
     review: awaiting_coach_review
+  # The operator's feed check of 2026-10-22: HTTP 200, 10 entries, 0 dated. Roll Call's pubDate is
+  # `2026-10-21 20:18:41`, with no time zone, so no entry can be placed in a search's date window.
+  # Worth replacing unless undated results are wanted.
   - url: https://rollcall.com/feed/
     publisher: Roll Call
     review: awaiting_coach_review

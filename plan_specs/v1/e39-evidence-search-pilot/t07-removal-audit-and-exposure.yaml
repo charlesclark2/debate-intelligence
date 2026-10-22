@@ -94,7 +94,7 @@ spec:
         (PM amendment 2026-10-21) The evidence-search runbook says what the function
         fetches, when, and what an index refusal looks like, and the docs checks pass.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

@@ -16,11 +16,13 @@ metadata:
     debate/title: Normalization and deduplication
     debate/architecture-refs: §6, §9, §16
 spec:
+  # PM ruling 2026-10-21 (v1-e08-t02 Deviation 1: no threshold separated the labelled pairs)
   description: >-
     Implement the normalize stage of SearchService: collapse CandidateResults from all providers into
     MergedCandidates. Matching proceeds in order of confidence: DOI, then canonical URL (via the E04 URL
-    canonicalizer), then provider ids (OpenAlex/S2/arXiv/PMID cross-links), then fuzzy title similarity
-    (normalized token-set ratio above a threshold) gated by first-author surname and publication year. Merged
+    canonicalizer), then provider ids (OpenAlex/S2/arXiv/PMID cross-links), then
+    normalized title agreement (equal normalized words, in order, at least 3, a subtitle
+    droppable on one side), gated by first-author surname and date. Merged
     metadata keeps every contributing provider and applies a documented per-field precedence (e.g. Crossref
     for DOI/venue/date, OpenAlex/S2 for citation counts and OA links, publisher feed for news dates), recording
     which provider supplied each field. Boundaries: no scoring (t03); does not fetch articles.
@@ -80,8 +82,10 @@ spec:
       - id: labeled-pairs
         kind: Task
         name: Labeled dedupe pair fixtures
+        # PM ruling 2026-10-21 (v1-e08-t02 Deviation 1: no threshold separated the labelled pairs)
         description: >-
-          Assemble at least 40 same/different pairs from recorded provider fixtures (papers and news).
+          Assemble at least 40 same/different pairs (papers and news): hand-written CandidateResults in
+          each adapter's documented shape, answers by hand.
         outputs: [tests/fixtures/dedupe/pairs.json]
         estimatedEffort: 2h
         acceptanceCriteria:
@@ -108,9 +112,10 @@ spec:
         kind: Task
         name: Fuzzy title matching with author/year gate
         # PM ruling 2026-10-21: the standard library, not rapidfuzz, unless a real need is shown.
+        # PM ruling 2026-10-21 (v1-e08-t02 Deviation 1: no threshold separated the labelled pairs)
         description: >-
-          Normalized title similarity (standard library) with author-surname and year agreement; threshold
-          tuned on the labeled pairs.
+          Normalized title agreement (equal normalized words, in order, at least 3, a subtitle droppable on
+          one side), gated by first-author surname and date (standard library).
         dependsOn: [exact-keys]
         estimatedEffort: 2h
         acceptanceCriteria:

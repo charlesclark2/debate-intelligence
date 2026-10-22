@@ -277,9 +277,51 @@ None. The affected set ran in 39 s, and no shared test ground changed.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-21
 
 **Notes:**
+
+Accepted. Two spec amendments in this session before the pull request (rulings 1 and 3); then it
+opens with no `--partial`.
+
+**What is good:**
+
+* **Deviation 1 is argued from measurements, not taste.** The table shows the spec's token-set
+  measure scoring "The case for a carbon tax" against "... in Canada" at 1.000, while a true pair
+  scores 0.949. No threshold can meet a zero-false-merge bar on that, and equality after stated
+  normalizations does.
+* **The labelled pairs were written before the code,** including three known misses labelled in
+  advance, and the result (0 false merges in 21, recall 27/30) lands exactly on them.
+* **The identifier guard and the preprint decision are right for debate.** A card cites the version
+  it was read from, so a preprint must not inherit a journal's venue or peer-review status.
+* **Mutation found a design flaw,** not just a test gap: the year was checked twice, each check
+  hiding a fault in the other. Restructuring so each gate lives in one place, before counting
+  mutants, is the right order. Both survivors got tests, including WordPress's `/?p=` front page.
+* **`MergedCandidate` in the application layer** because it is recomputable from stored results is
+  sound reasoning.
+
+**Rulings:**
+
+1. **Accept, and amend.** Change the Goal description's "fuzzy title similarity (normalized
+   token-set ratio above a threshold)" and the `fuzzy-match` node's "threshold tuned on the labeled
+   pairs" to "normalized title agreement (equal normalized words, in order, at least 3, a subtitle
+   droppable on one side), gated by first-author surname and date". Add a comment
+   `PM ruling 2026-10-21 (v1-e08-t02 Deviation 1: no threshold separated the labelled pairs)`.
+2. **Accept.** The same day and the same site outside scholarship is the right rule, because a card
+   cites the outlet it was read at.
+3. **Accept, and amend.** The `labeled-pairs` node reads "hand-written CandidateResults in each
+   adapter's documented shape, answers by hand", with the same comment. When the adapters merge,
+   their recorded fixtures may add pairs; that is not required.
+4. **Accept.** v1-e07-t02 (OpenAlex), which maps both, is adding `citation_count: int | None` and
+   `open_access: bool | None` to `CandidateResult` now, by the PM's note. v1-e08-t03 (ranking)
+   adds their `FIELD_PRECEDENCE` rows (OpenAlex, then Semantic Scholar) and the matching
+   `EXPECTED_PRECEDENCE` rows, by a PM amendment in the next batch. Peer-review status waits for
+   the adapter that can supply it.
+
+**The FYIs** go into the next batch: v1-e08-t05 wires `normalize=DedupeStage()`. v1-e08-t03 or t05
+turns a merged candidate into an `Article` before its result is stored, and t03 breaks ties on
+`canonical_url`, falling back to `url`. v1-e07-t05 takes the publisher URL from Google News'
+`<source url>` where it can.

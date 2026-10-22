@@ -150,9 +150,21 @@ label { display: block; font-weight: 600; margin-bottom: 0.25rem; }
 
 .card-cite-line { margin: 0.25rem 0; }
 
-.copy { margin: 1rem 0; }
+/* The card's actions, in one bar directly above its text: Copy card now, v1-e39-t08's download later.
+   The status shares the line with the button; on a narrow screen the bar wraps. */
+.card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.75rem;
+  margin: 1rem 0 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--panel);
+}
 
-.copy p { margin: 0.4rem 0 0; }
+.copy-status { font-weight: 600; }
 
 .card-text { font-family: Calibri, Carlito, "Segoe UI", Arial, sans-serif; line-height: 1.6; }
 

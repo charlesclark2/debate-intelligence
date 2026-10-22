@@ -7,10 +7,10 @@
 <p class="card-cite-line">{{ card.cite }}</p>
 {% if provenance_line %}<p class="provenance">{{ provenance_line }}</p>{% endif %}
 <p class="card-counts">{{ counts }}</p>
-<div class="copy">
-<button type="button" data-tub-copy="{{ copy_href }}">Copy card</button>
-<p class="copy-help">Copies the whole card with its formatting and the line above, for Google Docs or Word.</p>
-<p data-tub-copy-message role="status"></p>
+<div class="card-actions">
+<button type="button" data-tub-copy="{{ copy_href }}" aria-describedby="copy-help">Copy card</button>
+<span id="copy-help" class="copy-help">Keeps its formatting and source line.</span>
+<span class="copy-status" data-tub-copy-message role="status"></span>
 </div>
 <!--card-body-->
 {% if long_card %}

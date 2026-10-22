@@ -486,6 +486,14 @@ def test_copy_card_writes_the_clipboard_inside_the_click_before_the_fetch_answer
         "write done",
     ]
 
+    button = page.get_by_role("button", name="Copy card").bounding_box()
+    status = page.locator("[data-tub-copy-message]").bounding_box()
+    text = page.locator(".card-text").bounding_box()
+    assert button is not None and status is not None and text is not None
+    assert status["y"] < button["y"] + button["height"] and button["y"] < status["y"] + status["height"]
+    assert status["x"] > button["x"] + button["width"]
+    assert 0 < text["y"] - (button["y"] + button["height"]) < 40
+
 
 def test_a_card_no_longer_in_the_index_is_not_copied_and_says_so(chromebook: Pilot) -> None:
     page = chromebook.page

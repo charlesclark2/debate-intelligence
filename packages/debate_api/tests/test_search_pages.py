@@ -330,8 +330,17 @@ def test_the_card_page_shows_the_label_tag_cite_line_counts_copy_card_and_every_
     head = page.split("<!--card-body-->")[0]
     assert f'<p class="provenance">{FEATURED_LINE}</p>' in head
     assert '<p class="card-counts">In 3 files from 2 teams.</p>' in head
-    copy = f'<button type="button" data-tub-copy="{student.card_path("featured")}/copy">Copy card</button>'
+    copy = (
+        f'<button type="button" data-tub-copy="{student.card_path("featured")}/copy" '
+        'aria-describedby="copy-help">Copy card</button>'
+    )
     assert copy in head
+    bar = head.split('<div class="card-actions">')[1]
+    assert bar.startswith("\n" + copy)
+    assert '<span id="copy-help" class="copy-help">' in bar
+    assert bar.rstrip().endswith(
+        '<span class="copy-status" data-tub-copy-message role="status"></span>\n</div>'
+    )
     occurrences = page.split('<ul class="occurrences">')[1].split("</ul>")[0]
     assert re.findall(r'<li class="provenance">(.*?)</li>', occurrences) == [FEATURED_LINE, OTHER_LINE]
     assert "1 more file. The search keeps who disclosed a card for its first five files only." in occurrences

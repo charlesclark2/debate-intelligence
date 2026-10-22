@@ -21,7 +21,9 @@ own `http` extra, and its import contract is split from keyring's, as the PM rul
 criteria and every node criterion pass, and the Goal is `Succeeded`. Look first at
 `retrieval/robots_rules.py`, rewritten to the PM's ruling (e).
 
-Commits are relative to `dev` at `1b999dc` (v1-e07-t01, #380), synced with `scripts/task sync`.
+Commits are relative to `dev` at `b85babc` (the ROADMAP refresh after v1-e07-t01, #380 and #381),
+synced with `scripts/task sync`. The checks below ran on `1b999dc`; the last sync brought in only
+`ROADMAP.md` and `docs/README.md`.
 
 ## PM rulings applied (2026-10-21)
 

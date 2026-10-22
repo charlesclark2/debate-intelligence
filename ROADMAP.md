@@ -64,7 +64,7 @@ v2.3's extension work.
 | [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 101 | 76 | 484 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 22 | 7 | 191 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 13 | 2 | 108 |
-| [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 15 | 2 | 96 |
+| [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 15 | 3 | 96 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 0 | 66 |
 | [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 19 | 12 | 146 |
 | [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 10 | 6 | 46 |
@@ -366,7 +366,7 @@ A student can run `debate-research cut <URL>` and receive a verified, tagged, ci
 | Task | Status | Prereqs | Est. hours |
 |---|---|---|---|
 | [SearchService fan-out](plan_specs/v1/e08-research-workflows/t01-federated-search-service.yaml) `v1-e08-t01-federated-search-service` | Succeeded | 1 | 7.0 |
-| [Normalization and deduplication](plan_specs/v1/e08-research-workflows/t02-normalize-dedupe.yaml) `v1-e08-t02-normalize-dedupe` | Pending | 2 | 8.0 |
+| [Normalization and deduplication](plan_specs/v1/e08-research-workflows/t02-normalize-dedupe.yaml) `v1-e08-t02-normalize-dedupe` | Succeeded | 2 | 8.0 |
 | [Explainable feature ranking](plan_specs/v1/e08-research-workflows/t03-feature-ranking.yaml) `v1-e08-t03-feature-ranking` | Pending | 1 | 8.0 |
 | [Argument/need query expansion](plan_specs/v1/e08-research-workflows/t04-argument-need-expansion.yaml) `v1-e08-t04-argument-need-expansion` | Pending | 3 | 7.5 |
 | [`debate-research search` command](plan_specs/v1/e08-research-workflows/t05-search-command.yaml) `v1-e08-t05-search-command` | Pending | 4 | 6.0 |

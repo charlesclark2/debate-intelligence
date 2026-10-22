@@ -439,6 +439,35 @@ by digest, and `/healthz` through CloudFront answered `{"status":"ok"}`. `Deploy
 f8545cc7cc650841ba055982a2a22504b5f7bde3 to dev`, the branch's head at the time; the commits after it
 change this report only.
 
+### Block 3 — the deployed exposure checks, dev (2026-10-22)
+
+**Signed-in responses**, read from a HAR the operator saved in Chrome while signed in (the
+operator's own dev account, a coach). I read only each request's status, method, path and two
+response headers; no cookie, token or body. Every document was **`200`, `cache-control: private,
+no-store`, `x-cache: Miss from cloudfront`**: `/` (twice), `/search?q=…`, a card page
+(`/cards/hspolicy26/ee37e841…`) and `/account`. The only other response, the content-hashed
+`/static/ec32aeae1d1518e4/app.js`, was `public, max-age=31536000, immutable`, as ADR-0019 (a) 5
+intends. It holds no data.
+
+**Without a session** (curl): `/`, `/search?q=reserve` and `/account` answered `302` to sign-in,
+and `/signed-out` and `/healthz` answered `200`. All five were `private, no-store` and `Miss from
+cloudfront`. Two first attempts to send the copied cookie with curl failed: once on whitespace
+(curl error 43), once on a value that was not the cookie (a `302`). Block 3 now strips whitespace,
+and the signed-in reading came from the HAR instead.
+
+**The bucket, the edge and the function** (`debate-admin`, read only):
+
+| Check | Result |
+|---|---|
+| Block Public Access, all four flags | `True True True True` |
+| Bucket policy status `IsPublic` | `False` |
+| ACL grants to a group URI (public or authenticated users) | none |
+| Anonymous `GET` of `reports/tub/search/current.json` and of the suppression list | `403`, `403` |
+| Unsigned request to the function URL | `403` |
+| CloudFront standard logging, real-time log config, origins | `False None 1` |
+| CloudWatch log deliveries (vended logs) | none |
+| Dev suppression list | exists: 1,239 bytes, `aws:kms` |
+
 ## Follow-up work
 
 1. **`tub index prune` (p3).** The PM's ruling names it: a CLI command that does the runbook's P4

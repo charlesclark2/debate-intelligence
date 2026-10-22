@@ -57,6 +57,13 @@ from debate_core.domain import (
     UtcDatetime,
     VerificationStatus,
 )
+from debate_core.domain.discovery import (
+    CandidateResult,
+    ProviderOutcome,
+    ProviderQuery,
+    ProviderResponse,
+    ProviderStatus,
+)
 from debate_core.testing.fakes import FAKE_EPOCH
 
 __all__ = [
@@ -74,9 +81,11 @@ __all__ = [
     "DEFAULT_SEARCH_ID",
     "DEFAULT_SNAPSHOT_ID",
     "build_article",
+    "build_candidate_result",
     "build_card",
     "build_card_span",
     "build_citation",
+    "build_provider_status",
     "build_search",
     "build_search_result",
     "build_source_snapshot",
@@ -498,4 +507,68 @@ def build_search_result(
         ),
         explanation=explanation,
         providers=providers,
+    )
+
+
+def build_candidate_result(
+    *,
+    provider: NonEmptyText = "openalex",
+    title: NonEmptyText = DEFAULT_TITLE,
+    url: HttpUrlStr = DEFAULT_CANONICAL_URL,
+    identifiers: ArticleIdentifiers = DEFAULT_IDENTIFIERS,
+    source_type: SourceType = SourceType.SCHOLARLY,
+    authors: tuple[NonEmptyText, ...] = ("Rivera, Ana", "Okafor, James"),
+    publication: NonEmptyText | None = DEFAULT_PUBLICATION,
+    published_at: UtcDatetime | None = DEFAULT_PUBLISHED_AT,
+    snippet: str | None = "Methane release from thawing permafrost has accelerated since 2010.",
+) -> CandidateResult:
+    """Build one provider's result: a dated, attributed paper with a DOI, the shape dedupe reads."""
+    return CandidateResult(
+        provider=provider,
+        title=title,
+        url=url,
+        identifiers=identifiers,
+        source_type=source_type,
+        authors=authors,
+        publication=publication,
+        published_at=published_at,
+        snippet=snippet,
+    )
+
+
+def build_provider_status(
+    *,
+    provider: NonEmptyText = "openalex",
+    query: ProviderQuery | None = None,
+    outcome: ProviderOutcome = ProviderOutcome.OK,
+    elapsed_ms: float = 212.0,
+    results: tuple[CandidateResult, ...] | None = None,
+    error: str | None = None,
+) -> ProviderStatus:
+    """Build one call's record in a federated search: answered by default, or failed with `error`.
+
+    `query` becomes the default search's own query and filters. An `OK` outcome gets a response
+    holding `results` (one :func:`build_candidate_result` under `provider` when `None`); any other
+    outcome gets no response and `error`, defaulting to a message naming the outcome.
+    """
+    asked = (
+        ProviderQuery(query="arctic methane feedback", filters=DEFAULT_SEARCH_FILTERS)
+        if query is None
+        else query
+    )
+    if outcome is not ProviderOutcome.OK:
+        return ProviderStatus(
+            provider=provider,
+            query=asked,
+            outcome=outcome,
+            elapsed_ms=elapsed_ms,
+            error=f"{provider}: {outcome.value}" if error is None else error,
+        )
+    answered = (build_candidate_result(provider=provider),) if results is None else results
+    return ProviderStatus(
+        provider=provider,
+        query=asked,
+        outcome=outcome,
+        elapsed_ms=elapsed_ms,
+        response=ProviderResponse(provider=provider, results=answered, elapsed_ms=elapsed_ms),
     )

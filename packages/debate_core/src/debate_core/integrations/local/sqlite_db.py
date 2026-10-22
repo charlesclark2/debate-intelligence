@@ -23,8 +23,8 @@ it.
   reprocessing job writes, and under the default rollback journal that is a locked database.
   WAL is a property of the *file*, so it is set once and persists.
 * **`foreign_keys=ON`** — SQLite defaults this off, per connection, for backwards compatibility.
-  It is the only foreign key in the schema (`search_results` → `searches`) that needs it, and a
-  connection that forgot it would silently leave orphaned rankings behind.
+  The schema's two foreign keys (`search_results` and `search_provider_statuses` → `searches`)
+  need it, and a connection that forgot it would silently leave orphaned rankings behind.
 * **`synchronous=FULL`** — the default in WAL mode is `NORMAL`, which can lose the last committed
   transactions if the machine loses power. This is a student's evidence on a laptop that gets
   closed mid-write; a few milliseconds per commit is the right trade.

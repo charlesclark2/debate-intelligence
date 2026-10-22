@@ -5,7 +5,8 @@ Four ports live here, and together they are the only way a use case reaches stor
 * :class:`ArticleRepository` — articles and the metadata of the snapshots taken of them.
 * :class:`SnapshotStore` — the snapshot *bytes*, addressed by their SHA-256.
 * :class:`CardRepository` — cards, with the optimistic-concurrency check that protects edits.
-* :class:`SearchRepository` — searches and their ranked results.
+* :class:`SearchRepository` — searches, what each provider returned for them, and their ranked
+  results.
 
 They are :class:`~typing.Protocol` classes, not base classes, so an adapter conforms by having the
 right methods and never imports this module at runtime. V1 satisfies them with SQLite and the
@@ -51,6 +52,7 @@ from debate_core.domain import (
     SourceSnapshot,
     Ulid,
 )
+from debate_core.domain.discovery import ProviderStatus
 
 __all__ = [
     "DEFAULT_PAGE_SIZE",
@@ -293,11 +295,16 @@ class CardRepository(Protocol):
 
 @runtime_checkable
 class SearchRepository(Protocol):
-    """Stores searches and their ranked results.
+    """Stores searches, what each provider returned for them, and their ranked results.
 
     Searches are kept rather than discarded once rendered, so a piece of research can be replayed
-    and audited: which query, which filters, which providers answered, and what order the results
-    came back in.
+    and audited: which query, which filters, which providers answered, what each one returned, and
+    what order the results came back in.
+
+    The per-provider record (:class:`~debate_core.domain.discovery.ProviderStatus`) is the raw
+    material: each provider's answer exactly as it came back, or the reason it did not answer. It
+    is stored as a set per search too, in the order the search made its calls, and replaced whole
+    (v1-e08-t01-federated-search-service).
 
     Results are stored as a set per search rather than one at a time. A ranking is only meaningful
     as a whole, so `save_results` replaces the whole ranking and re-running it cannot leave a
@@ -331,6 +338,22 @@ class SearchRepository(Protocol):
 
         Returns an empty tuple for a search that stored no results; raises `NotFound` only when
         the search itself does not exist.
+        """
+        ...
+
+    async def save_provider_statuses(self, search_id: Ulid, statuses: Sequence[ProviderStatus]) -> None:
+        """Replace the stored per-provider record for one search.
+
+        Kept in the order given, which is the order the search made its calls. Raises `NotFound`
+        when the search does not exist, and then writes nothing.
+        """
+        ...
+
+    async def list_provider_statuses(self, search_id: Ulid) -> tuple[ProviderStatus, ...]:
+        """Return one search's per-provider record in the order it was saved.
+
+        Returns an empty tuple for a search that stored none; raises `NotFound` only when the
+        search itself does not exist.
         """
         ...
 

@@ -21,6 +21,7 @@ and the local filesystem while V2 runs the same use cases on DynamoDB, S3 and Be
 | `ParsedStore` | `parsed_store` | The parsed card store `caselist parse` writes (E31) |
 | `Notifier` | `notifier` | Telling the operator an unattended run needs attention (E34) |
 | `SearchProvider` | `providers` | One discovery source |
+| `DiscoveryProviders` | `providers` | The enabled discovery sources and their health (E08) |
 | `ArticleFetcher` | `providers` | HTTP retrieval |
 | `ContentExtractor` | `providers` | Readable-text extraction |
 | `ModelRouter` | `model_router` | Every LLM call: structured generation, embeddings, rerank |
@@ -80,6 +81,7 @@ from debate_core.application.ports.providers import (
     CandidateResult,
     Clock,
     ContentExtractor,
+    DiscoveryProviders,
     ExtractedContent,
     ExtractionQuality,
     FetchResult,
@@ -111,6 +113,7 @@ __all__ = [
     "Clock",
     "ContentExtractor",
     "DebateFileParser",
+    "DiscoveryProviders",
     "DownloadedFile",
     "EvidenceObjectStore",
     "ExtractedContent",

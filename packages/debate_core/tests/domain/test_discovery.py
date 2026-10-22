@@ -1,4 +1,4 @@
-"""The discovery values: ProviderQuery, CandidateResult, ProviderResponse and ProviderHealth.
+"""The discovery values: ProviderQuery, CandidateResult, ProviderResponse, ProviderHealth and ProviderStatus.
 
 Every expected value here is written out by hand from the input beside it (working agreement 6).
 """
@@ -18,8 +18,10 @@ from debate_core.domain.discovery import (
     BreakerState,
     CandidateResult,
     ProviderHealth,
+    ProviderOutcome,
     ProviderQuery,
     ProviderResponse,
+    ProviderStatus,
 )
 
 
@@ -253,6 +255,111 @@ def test_only_an_open_breaker_has_an_end(state: BreakerState) -> None:
 
 def test_the_breaker_states_have_stable_values() -> None:
     assert [state.value for state in BreakerState] == ["closed", "open", "half_open"]
+
+
+# --------------------------------------------------------------------------------------------
+# ProviderStatus
+# --------------------------------------------------------------------------------------------
+
+
+def test_an_answered_call_keeps_the_query_and_the_response_as_returned() -> None:
+    query = ProviderQuery(query="methane leakage")
+    response = ProviderResponse(provider="openalex", results=(make_candidate(),), elapsed_ms=212.0)
+
+    status = ProviderStatus(
+        provider="openalex", query=query, outcome=ProviderOutcome.OK, elapsed_ms=215.0, response=response
+    )
+
+    assert status.response == response
+    assert status.query.query == "methane leakage"
+    assert status.error is None
+    assert ProviderStatus.model_validate_json(status.model_dump_json()) == status
+
+
+def test_a_failed_call_keeps_its_reason_and_no_response() -> None:
+    status = ProviderStatus(
+        provider="crossref",
+        query=ProviderQuery(query="methane leakage"),
+        outcome=ProviderOutcome.TIMEOUT,
+        elapsed_ms=10_000.0,
+        error="crossref: no answer within 10s",
+    )
+
+    assert status.response is None
+    assert status.model_dump(mode="json")["outcome"] == "timeout"
+
+
+def test_an_ok_call_must_carry_its_response() -> None:
+    with pytest.raises(ValidationError, match="carries a response exactly when its outcome is ok"):
+        ProviderStatus(
+            provider="openalex",
+            query=ProviderQuery(query="methane leakage"),
+            outcome=ProviderOutcome.OK,
+            elapsed_ms=1.0,
+        )
+
+
+@pytest.mark.parametrize(
+    "outcome", [outcome for outcome in ProviderOutcome if outcome is not ProviderOutcome.OK]
+)
+def test_a_call_that_did_not_answer_carries_no_response(outcome: ProviderOutcome) -> None:
+    with pytest.raises(ValidationError, match="carries a response exactly when its outcome is ok"):
+        ProviderStatus(
+            provider="openalex",
+            query=ProviderQuery(query="methane leakage"),
+            outcome=outcome,
+            elapsed_ms=1.0,
+            response=ProviderResponse(provider="openalex", elapsed_ms=1.0),
+            error="openalex: unavailable",
+        )
+
+
+@pytest.mark.parametrize(
+    "outcome", [outcome for outcome in ProviderOutcome if outcome is not ProviderOutcome.OK]
+)
+def test_a_call_that_did_not_answer_must_say_why(outcome: ProviderOutcome) -> None:
+    with pytest.raises(ValidationError, match="carries an error exactly when its outcome is not ok"):
+        ProviderStatus(
+            provider="openalex",
+            query=ProviderQuery(query="methane leakage"),
+            outcome=outcome,
+            elapsed_ms=1.0,
+        )
+
+
+def test_an_answered_call_carries_no_error() -> None:
+    with pytest.raises(ValidationError, match="carries an error exactly when its outcome is not ok"):
+        ProviderStatus(
+            provider="openalex",
+            query=ProviderQuery(query="methane leakage"),
+            outcome=ProviderOutcome.OK,
+            elapsed_ms=1.0,
+            response=ProviderResponse(provider="openalex", elapsed_ms=1.0),
+            error="openalex: unavailable",
+        )
+
+
+def test_a_status_refuses_another_providers_response() -> None:
+    with pytest.raises(ValidationError, match="for 'openalex' carries a response from 'crossref'"):
+        ProviderStatus(
+            provider="openalex",
+            query=ProviderQuery(query="methane leakage"),
+            outcome=ProviderOutcome.OK,
+            elapsed_ms=1.0,
+            response=ProviderResponse(provider="crossref", elapsed_ms=1.0),
+        )
+
+
+def test_the_provider_outcomes_have_stable_values() -> None:
+    """Stored with every search, so a renamed value would strand the searches already kept."""
+    assert [outcome.value for outcome in ProviderOutcome] == [
+        "ok",
+        "timeout",
+        "error",
+        "rate_limited",
+        "breaker_open",
+        "not_configured",
+    ]
 
 
 # --------------------------------------------------------------------------------------------

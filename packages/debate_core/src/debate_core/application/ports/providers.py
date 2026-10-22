@@ -1,9 +1,11 @@
 """Ports for everything outside the platform, plus the two ambient dependencies.
 
-Five ports live here:
+Six ports live here:
 
 * :class:`SearchProvider` — one discovery source in the federated search (OpenAlex, an RSS feed,
   a government search endpoint).
+* :class:`DiscoveryProviders` — the discovery sources settings enable, and how each is faring: what
+  a federated search fans out over (v1-e08-t01-federated-search-service).
 * :class:`ArticleFetcher` — retrieves the bytes at a URL, politely and without circumventing any
   access control.
 * :class:`ContentExtractor` — turns those bytes into readable paragraphs.
@@ -46,13 +48,14 @@ from debate_core.domain import (
     Ulid,
     UtcDatetime,
 )
-from debate_core.domain.discovery import CandidateResult, ProviderQuery, ProviderResponse
+from debate_core.domain.discovery import CandidateResult, ProviderHealth, ProviderQuery, ProviderResponse
 
 __all__ = [
     "ArticleFetcher",
     "CandidateResult",
     "Clock",
     "ContentExtractor",
+    "DiscoveryProviders",
     "ExtractedContent",
     "ExtractionQuality",
     "FetchResult",
@@ -97,6 +100,28 @@ class SearchProvider(Protocol):
 
     async def search(self, query: ProviderQuery) -> ProviderResponse:
         """Run one query against this provider and return its normalized results."""
+        ...
+
+
+@runtime_checkable
+class DiscoveryProviders(Protocol):
+    """The discovery providers settings enable, each ready to call, and the health of each.
+
+    What a federated search fans out over. The application layer may not import
+    :mod:`debate_core.integrations`, so it cannot take
+    :class:`~debate_core.integrations.discovery.registry.ProviderRegistry` by name; this is the part
+    of the registry a search needs, and the registry satisfies it as it stands. Every provider it
+    hands out is already wrapped in its timeout, circuit breaker and rate-limit hold, so a caller
+    adds none of its own.
+    """
+
+    @property
+    def providers(self) -> tuple[SearchProvider, ...]:
+        """The enabled providers, in settings order, each under its settings name."""
+        ...
+
+    def health(self) -> tuple[ProviderHealth, ...]:
+        """One snapshot per enabled provider, in settings order, for the provider status footer."""
         ...
 
 

@@ -70,6 +70,7 @@ from debate_core.domain import (
     SearchResult,
     SourceSnapshot,
 )
+from debate_core.domain.discovery import ProviderStatus
 from debate_core.integrations.local.sqlite_db import SqliteDatabase
 
 __all__ = [
@@ -522,7 +523,8 @@ def _raise_write_conflict(connection: sqlite3.Connection, card_id: str, expected
 
 
 class SqliteSearchRepository:
-    """Searches in `searches`, and their rankings in `search_results`.
+    """Searches in `searches`, their rankings in `search_results`, and what each provider returned
+    for them in `search_provider_statuses`.
 
     A ranking is stored as a set rather than a row at a time: an order is only meaningful as a
     whole, so :meth:`save_results` replaces all of it inside one transaction and a re-run cannot
@@ -599,6 +601,40 @@ class SqliteSearchRepository:
                 cast("str", row["document"]),
                 "SearchResult",
                 f"{search_id}/{cast('str', row['article_id'])}",
+            )
+            for row in rows
+        )
+
+    async def save_provider_statuses(self, search_id: str, statuses: Sequence[ProviderStatus]) -> None:
+        """Replace one search's per-provider record, keeping the order given, in one transaction."""
+        with self._database.transaction() as connection:
+            if (
+                connection.execute("SELECT 1 FROM searches WHERE search_id = ?", (search_id,)).fetchone()
+                is None
+            ):
+                raise NotFound("Search", search_id)
+            connection.execute("DELETE FROM search_provider_statuses WHERE search_id = ?", (search_id,))
+            connection.executemany(
+                "INSERT INTO search_provider_statuses (search_id, position, document) VALUES (?, ?, ?)",
+                [(search_id, position, _document_of(status)) for position, status in enumerate(statuses)],
+            )
+
+    async def list_provider_statuses(self, search_id: str) -> tuple[ProviderStatus, ...]:
+        """One search's per-provider record in the order it was saved; empty when it stored none."""
+        connection = self._database.connection
+        if connection.execute("SELECT 1 FROM searches WHERE search_id = ?", (search_id,)).fetchone() is None:
+            raise NotFound("Search", search_id)
+        rows = connection.execute(
+            "SELECT position, document FROM search_provider_statuses "
+            "WHERE search_id = ? ORDER BY position ASC",
+            (search_id,),
+        ).fetchall()
+        return tuple(
+            _decode(
+                ProviderStatus,
+                cast("str", row["document"]),
+                "ProviderStatus",
+                f"{search_id}/{cast('int', row['position'])}",
             )
             for row in rows
         )

@@ -91,6 +91,7 @@ from debate_core.domain.caselist import (
     SourceFormat,
 )
 from debate_core.domain.debate_files import ParsedDocument, ParseFailure, ParseFailureReason
+from debate_core.domain.discovery import ProviderStatus
 from debate_core.domain.model_contracts import (
     EmbeddingResponse,
     ModelParams,
@@ -382,11 +383,12 @@ class InMemoryCardEditLog:
 
 
 class InMemorySearchRepository:
-    """Searches and their rankings, with the ranking replaced as a whole."""
+    """Searches, their per-provider records and their rankings, each set replaced as a whole."""
 
     def __init__(self) -> None:
         self._searches: dict[str, Search] = {}
         self._results: dict[str, tuple[SearchResult, ...]] = {}
+        self._provider_statuses: dict[str, tuple[ProviderStatus, ...]] = {}
 
     async def get(self, search_id: str) -> Search:
         stored = self._searches.get(search_id)
@@ -422,6 +424,16 @@ class InMemorySearchRepository:
         if search_id not in self._searches:
             raise NotFound("Search", search_id)
         return self._results.get(search_id, ())
+
+    async def save_provider_statuses(self, search_id: str, statuses: Sequence[ProviderStatus]) -> None:
+        if search_id not in self._searches:
+            raise NotFound("Search", search_id)
+        self._provider_statuses[search_id] = tuple(statuses)
+
+    async def list_provider_statuses(self, search_id: str) -> tuple[ProviderStatus, ...]:
+        if search_id not in self._searches:
+            raise NotFound("Search", search_id)
+        return self._provider_statuses.get(search_id, ())
 
     async def list_by_owner(
         self, owner_id: str, *, limit: int = DEFAULT_PAGE_SIZE, cursor: str | None = None

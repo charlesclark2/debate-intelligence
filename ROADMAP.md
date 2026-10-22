@@ -60,11 +60,11 @@ v2.3's extension work.
 
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
-| [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 42 | 42 | 224 |
-| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 97 | 76 | 473 |
-| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 21 | 7 | 190 |
+| [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 44 | 42 | 228 |
+| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 101 | 76 | 484 |
+| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 22 | 7 | 191 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 13 | 2 | 108 |
-| [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 14 | 2 | 96 |
+| [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 15 | 2 | 96 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 0 | 66 |
 | [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 19 | 12 | 146 |
 | [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 10 | 5 | 46 |
@@ -121,6 +121,8 @@ Repo, tooling, CI, promotion flow, task tooling, domain core, and deterministic 
 | [The CI test job finishes well inside the five-minute budget](plan_specs/v1/e01-repo-foundation/t27-ci-test-job-within-budget.yaml) `v1-e01-t27-ci-test-job-within-budget` | Succeeded | 1 | 3.0 |
 | [scripts/affected_tests.py prints the tests a branch's changes can break](plan_specs/v1/e01-repo-foundation/t28-affected-test-selection.yaml) `v1-e01-t28-affected-test-selection` | Succeeded | 1 | 4.0 |
 | [debate_core.testing and debate_core.evidence stop importing more than a caller asks for](plan_specs/v1/e01-repo-foundation/t29-slim-package-reexports.yaml) `v1-e01-t29-slim-package-reexports` | Succeeded | 1 | 3.0 |
+| [Tests stop reaching code they do not use: fakes by port, no port re-exports, and a graph option](plan_specs/v1/e01-repo-foundation/t30-test-selection-reach.yaml) `v1-e01-t30-test-selection-reach` | Pending | 1 | 4.0 |
+| [Repository checks stop flagging true values, and the smoke tests type-check](plan_specs/v1/e01-repo-foundation/t31-repo-check-false-positives.yaml) `v1-e01-t31-repo-check-false-positives` | Pending | 1 | 1.0 |
 
 #### [E02 — Domain Core: Entities, Ports & Local Persistence](plan_specs/v1/e02-domain-core/epic.yaml)
 
@@ -165,6 +167,7 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [Loose ends in how store errors are classified, worded and wrapped](plan_specs/v1/e29-cloud-evidence-store/t09-store-error-loose-ends.yaml) `v1-e29-t09-store-error-loose-ends` | Succeeded | 1 | 2.0 |
 | [The retirement rule reaches empty objects, the tagging grant names its one tag, and the module's failures print](plan_specs/v1/e29-cloud-evidence-store/t10-retention-rule-and-grant-loose-ends.yaml) `v1-e29-t10-retention-rule-and-grant-loose-ends` | Pending | 1 | 3.0 |
 | [store sync says why it skipped what it skipped](plan_specs/v1/e29-cloud-evidence-store/t11-store-sync-skip-reasons.yaml) `v1-e29-t11-store-sync-skip-reasons` | Succeeded | 1 | 2.0 |
+| [store sync stops moving the parsed store, which caselist parse --publish publishes](plan_specs/v1/e29-cloud-evidence-store/t12-store-sync-skips-parsed.yaml) `v1-e29-t12-store-sync-skips-parsed` | Pending | 1 | 2.0 |
 
 #### [E30 — Caselist Evidence Ingestion](plan_specs/v1/e30-caselist-ingestion/epic.yaml)
 
@@ -232,6 +235,8 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [What the cautious cite rules leave, and a short cite behind a first name](plan_specs/v1/e31-debate-file-parsing/t28-cite-rules-leftovers.yaml) `v1-e31-t28-cite-rules-leftovers` | Pending | 1 | 3.0 |
 | [Card matching recovers two kinds of pair it now keeps apart](plan_specs/v1/e31-debate-file-parsing/t29-card-matching-recall.yaml) `v1-e31-t29-card-matching-recall` | Pending | 1 | 4.0 |
 | [Publish the parsed store without rebuilding it](plan_specs/v1/e31-debate-file-parsing/t30-parsed-store-publish-only.yaml) `v1-e31-t30-parsed-store-publish-only` | Pending | 1 | 2.0 |
+| [Where the labelled evaluation's missed cites, tags and highlights go, counted before any rule](plan_specs/v1/e31-debate-file-parsing/t31-labelled-evaluation-gaps.yaml) `v1-e31-t31-labelled-evaluation-gaps` | Pending | 1 | 5.0 |
+| [A tag with a word left unbolded, above a cite, counted before any rule](plan_specs/v1/e31-debate-file-parsing/t32-bold-in-part-tags.yaml) `v1-e31-t32-bold-in-part-tags` | Pending | 1 | 3.0 |
 
 #### [E34 — Scheduled Caselist Sync](plan_specs/v1/e34-caselist-sync/epic.yaml)
 
@@ -266,6 +271,7 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [The wrapper exports no AWS_PROFILE, and --check-launchd refuses options it ignores](plan_specs/v1/e34-caselist-sync/t27-wrapper-and-check-launchd-options.yaml) `v1-e34-t27-wrapper-and-check-launchd-options` | Succeeded | 1 | 1.0 |
 | [Publish-stage loose ends: a cut-short report check, the manifest count, and a report-only outcome](plan_specs/v1/e34-caselist-sync/t28-publish-stage-loose-ends.yaml) `v1-e34-t28-publish-stage-loose-ends` | Pending | 1 | 2.0 |
 | [An older build never rewrites or publishes an occurrence table stamped with a newer fingerprint version](plan_specs/v1/e34-caselist-sync/t29-newer-fingerprint-table-guard.yaml) `v1-e34-t29-newer-fingerprint-table-guard` | Succeeded | 1 | 2.0 |
+| [doctor says when a store the weekly run will index has never been parsed](plan_specs/v1/e34-caselist-sync/t30-doctor-unparsed-store.yaml) `v1-e34-t30-doctor-unparsed-store` | Pending | 0 | 1.0 |
 
 
 ### v1.2 — Argument landscape & file building
@@ -307,6 +313,7 @@ Weekly argument-landscape reports show which positions are being read and with w
 | [Publish built files to S3](plan_specs/v1/e33-file-builder/t05-file-publish.yaml) `v1-e33-t05-file-publish` | Pending | 3 | 9.0 |
 | [A recipe can name a camp (OpenEv) card](plan_specs/v1/e33-file-builder/t06-camp-pins.yaml) `v1-e33-t06-camp-pins` | Succeeded | 1 | 2.0 |
 | [A camp occurrence row carries its camp path's digest, so a camp-path withdrawal stops it before a rebuild](plan_specs/v1/e33-file-builder/t07-camp-path-on-occurrence-rows.yaml) `v1-e33-t07-camp-path-on-occurrence-rows` | Pending | 1 | 2.0 |
+| [The file writer and the search pilot compose a provenance line with one function](plan_specs/v1/e33-file-builder/t08-provenance-line-one-function.yaml) `v1-e33-t08-provenance-line-one-function` | Pending | 0 | 1.0 |
 
 
 ### v1.3 — URL → verified card
@@ -346,12 +353,13 @@ A student can run `debate-research cut <URL>` and receive a verified, tagged, ci
 | Task | Status | Prereqs | Est. hours |
 |---|---|---|---|
 | [SearchProvider contract, health and circuit breaking](plan_specs/v1/e07-discovery-adapters/t01-search-provider-contract.yaml) `v1-e07-t01-search-provider-contract` | Succeeded | 1 | 9.0 |
-| [OpenAlex adapter](plan_specs/v1/e07-discovery-adapters/t02-openalex-adapter.yaml) `v1-e07-t02-openalex-adapter` | Pending | 1 | 5.0 |
-| [Crossref adapter](plan_specs/v1/e07-discovery-adapters/t03-crossref-adapter.yaml) `v1-e07-t03-crossref-adapter` | Pending | 2 | 5.0 |
-| [Semantic Scholar adapter](plan_specs/v1/e07-discovery-adapters/t04-semantic-scholar-adapter.yaml) `v1-e07-t04-semantic-scholar-adapter` | Pending | 1 | 4.0 |
-| [Publisher RSS/Atom and Google News RSS adapter](plan_specs/v1/e07-discovery-adapters/t05-rss-news-adapter.yaml) `v1-e07-t05-rss-news-adapter` | Pending | 1 | 8.0 |
-| [GDELT news adapter](plan_specs/v1/e07-discovery-adapters/t06-gdelt-adapter.yaml) `v1-e07-t06-gdelt-adapter` | Pending | 1 | 4.0 |
-| [Government and policy source adapters](plan_specs/v1/e07-discovery-adapters/t07-government-adapters.yaml) `v1-e07-t07-government-adapters` | Pending | 1 | 8.0 |
+| [OpenAlex adapter](plan_specs/v1/e07-discovery-adapters/t02-openalex-adapter.yaml) `v1-e07-t02-openalex-adapter` | Pending | 2 | 5.0 |
+| [Crossref adapter](plan_specs/v1/e07-discovery-adapters/t03-crossref-adapter.yaml) `v1-e07-t03-crossref-adapter` | Pending | 3 | 5.0 |
+| [Semantic Scholar adapter](plan_specs/v1/e07-discovery-adapters/t04-semantic-scholar-adapter.yaml) `v1-e07-t04-semantic-scholar-adapter` | Pending | 2 | 4.0 |
+| [Publisher RSS/Atom and Google News RSS adapter](plan_specs/v1/e07-discovery-adapters/t05-rss-news-adapter.yaml) `v1-e07-t05-rss-news-adapter` | Pending | 2 | 8.0 |
+| [GDELT news adapter](plan_specs/v1/e07-discovery-adapters/t06-gdelt-adapter.yaml) `v1-e07-t06-gdelt-adapter` | Pending | 2 | 4.0 |
+| [Government and policy source adapters](plan_specs/v1/e07-discovery-adapters/t07-government-adapters.yaml) `v1-e07-t07-government-adapters` | Pending | 2 | 8.0 |
+| [One Retry-After reader for every HTTP adapter, on an injected clock](plan_specs/v1/e07-discovery-adapters/t08-shared-retry-after.yaml) `v1-e07-t08-shared-retry-after` | Pending | 2 | 1.0 |
 
 #### [E08 — Federated Research Workflows](plan_specs/v1/e08-research-workflows/epic.yaml)
 

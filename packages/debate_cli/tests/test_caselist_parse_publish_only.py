@@ -221,7 +221,9 @@ def test_the_table_says_nothing_was_rebuilt_and_names_no_school_team_or_path(
 # ------------------------------------------------------------------------------------------------
 
 
-def test_a_caselist_never_parsed_is_refused_and_nothing_is_uploaded(imported: Path, buckets: S3Client) -> None:
+def test_a_caselist_never_parsed_is_refused_and_nothing_is_uploaded(
+    imported: Path, buckets: S3Client
+) -> None:
     result = publish_only()
 
     assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.stdout

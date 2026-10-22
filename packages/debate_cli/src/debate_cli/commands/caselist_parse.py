@@ -19,8 +19,8 @@ Every decision is :class:`~debate_core.application.caselist_parse.CaselistParseS
 
 0 unless the share of the sources this run tried to read that failed is above
 `parse.failure_rate_threshold` (`PARSE_FAILURE_RATE_EXCEEDED`, exit `1`), or a `--publish` or
-`--publish-only` left something unconfirmed in the bucket (`PARSED_PUBLISH_INCOMPLETE`). A PDF or a legacy `.doc` is an
-outcome, not a failure, and counts on neither side of the rate.
+`--publish-only` left something unconfirmed in the bucket (`PARSED_PUBLISH_INCOMPLETE`). A PDF or a
+legacy `.doc` is an outcome, not a failure, and counts on neither side of the rate.
 
 The rate is judged only in a run that tried at least `parse.failure_rate_minimum_sources` sources
 (`v1-e34-t17`). A smaller run reports its failures, says `failure_rate_judged: false`, and exits 0

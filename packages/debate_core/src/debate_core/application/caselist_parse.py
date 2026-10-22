@@ -79,7 +79,6 @@ from debate_core.application.caselist.occurrence_table_guard import (
     THIS_MACHINES_PARSED_STORE,
     refuse_newer_table,
 )
-from debate_core.application.caselist.parsed_publish_only import refuse_unpublishable
 from debate_core.application.caselist.parse_sources import (
     EnumeratedSource,
     enumerate_sources,
@@ -93,6 +92,7 @@ from debate_core.application.caselist.parse_workers import (
     SourceLoadError,
     WorkerFailure,
 )
+from debate_core.application.caselist.parsed_publish_only import refuse_unpublishable
 from debate_core.application.caselist.publish_plan import local_blob_key, validate_publish_target
 from debate_core.application.caselist.suppression import load_suppression_state
 from debate_core.application.caselist_card_stats import CardPlacement

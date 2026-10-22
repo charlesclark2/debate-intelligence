@@ -273,7 +273,9 @@ async def refused(world: World, tmp_path: Path, parser: CountingParser | None = 
     return caught.value
 
 
-async def test_a_caselist_never_parsed_is_refused_as_having_no_directory(world: World, tmp_path: Path) -> None:
+async def test_a_caselist_never_parsed_is_refused_as_having_no_directory(
+    world: World, tmp_path: Path
+) -> None:
     refusal = await refused(world, tmp_path)
 
     assert isinstance(refusal, ParsedVersionDirectoryMissing)

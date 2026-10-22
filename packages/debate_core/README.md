@@ -80,13 +80,14 @@ cross them. Full write-up: [docs/architecture/ports-and-adapters.md](../../docs/
 | Module | Contents |
 |---|---|
 | `errors.py` | `DomainError` and the errors a port may raise: `NotFound`, `Conflict` (`AlreadyExists`, `RevisionMismatch`), `InvalidCursor`, `BlobIntegrityError`, `StoreError` (`StoreAccessDenied`, `StoreCredentialsExpired`, `StoreProfileNotConfigured`, `StoreUnavailable`), `InvalidModelOutput`, `ProviderError` (`ProviderUnavailable` and its `ModelUnavailableError`, `ProviderRateLimited`) |
-| `ports/persistence.py` | `ArticleRepository`, `SnapshotStore`, `CardRepository`, `SearchRepository`, and the `Page` returned by every listing |
-| `ports/providers.py` | `SearchProvider`, `ArticleFetcher`, `ContentExtractor`, `Clock`, `IdGenerator`, and the value objects they exchange |
+| `ports/persistence.py` | `ArticleRepository`, `SnapshotStore`, `CardRepository`, `SearchRepository` (which also keeps each search's per-provider record, v1-e08-t01), and the `Page` returned by every listing |
+| `ports/providers.py` | `SearchProvider`, `DiscoveryProviders` (the enabled providers and their health: what a federated search fans out over, v1-e08-t01), `ArticleFetcher`, `ContentExtractor`, `Clock`, `IdGenerator`, and the value objects they exchange |
 | `ports/model_router.py` | `ModelRouter` (`generate_structured`, `embed`, `rerank`) and `RoutingConfigError`; every model call goes through it (v1-e05-t01-model-router-port) |
 | `ports/caselist.py` | `CaselistRepository`, the boundary the E30 importers, publisher and removal command store through (v1-e30-t02) |
 | `ports/debate_files.py` | `DebateFileParser`, the boundary a debate `.docx` is taken apart behind. Synchronous, because parsing waits on nothing, and a file it cannot read comes back as a `ParseFailure` rather than an exception (v1-e31-t03) |
 | `ports/evidence_store.py` | `EvidenceObjectStore` and `ObjectInfo`: evidence stored under a *name* rather than a digest — manifests, reports — plus the key validation both its adapters share (v1-e29-t04) |
 | `services/article_registration.py` | The worked example of the constructor-injection pattern every service follows |
+| `federated_search.py`, `federated_search_types.py` | `FederatedSearchService`: the expand, fan_out, normalize and rank stages of a federated search, the concurrent fan-out under one deadline, and the COMPLETE / PARTIAL / FAILED rule (v1-e08-t01) |
 
 Things worth knowing before you write a service:
 
@@ -108,6 +109,10 @@ adapter. `build_fake_ports()` assembles one of each, and is where pyright checks
 still conform to the Protocols. `InMemoryCaselistRepository` lives there too — built by
 `build_fake_caselist_repository()` rather than by `build_fake_ports()`, because a caselist
 repository is not one of the ten ports every service takes.
+
+`debate_core.testing.virtual_time` has `VirtualTimeEventLoop`, an asyncio loop whose clock jumps to
+the next timer instead of waiting, and `EventLoopClock`, the `Clock` port read from it: a test of
+timeouts and deadlines measured in seconds runs in milliseconds (v1-e08-t01).
 
 ### `integrations/local/` — the filesystem and SQLite adapters (v1-e02-t03-local-repositories)
 

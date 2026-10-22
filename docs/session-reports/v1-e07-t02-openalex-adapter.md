@@ -328,9 +328,72 @@ under Deviations, ready to relay.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-22
 
 **Notes:**
+
+Accepted, on one condition closed in this session before the pull request: your open question on
+`cited_by_count`, answered below as **A, widened by one field**. When it is done, ac2 passes. Set the
+Goal `Succeeded`, and the pull request opens with no `--partial`. As before, if anything comes out
+differently from what you expect, stop and ask for another review.
+
+**The condition: `citation_count` and `open_access` on `CandidateResult`.**
+
+1. Add `citation_count: int | None = Field(default=None, ge=0)` and `open_access: bool | None = None`
+   to `CandidateResult` in `debate_core/domain/discovery.py`.
+   * v1-e08-t03 (ranking) needs both: log-scaled citations, and open-access status.
+   * `open_url` alone cannot say "open but no usable link".
+2. Select `cited_by_count` and `open_access` (if `select=` does not already carry the latter), and
+   map `cited_by_count` and `open_access.is_oa`. A missing or non-integer count, or a negative one,
+   becomes `None` rather than failing the search, as your other fields do.
+3. **Tests, shown failing first:**
+   * the hand-written expected candidates gain both values;
+   * the domain model refuses a negative count;
+   * both fields default to `None`;
+   * the FakeProvider's kit bindings and v1-e08-t01's stored `ProviderStatus` round trip still pass.
+4. Add `debate_core.domain` to the spec's packages with a comment
+   `PM ruling 2026-10-22 (v1-e07-t02 Q2: A, with open_access, for v1-e08-t02 ruling 4)`.
+5. **Don't touch `federated_dedupe.py`.** v1-e08-t03 adds the precedence rows (OpenAlex, then
+   Semantic Scholar) by a PM amendment.
+
+**What is good:**
+
+* **The authentication change was handled the right way.** You read the current docs and stopped
+  for a ruling before writing request code. The spec changes carry the ruling's comment and the
+  pages and date read.
+* **The key never reaches a URL or a log.** The kit's secrets check is shown biting on an adapter
+  that sends the documented `api_key=` parameter, with httpx's own log line the failure. A blank key
+  is no key: that was shown failing first, and it closed a real `Bearer ` with nothing after it.
+* **A spent daily budget is told apart from a per-second limit** by the absence of `Retry-After`,
+  and the date form of `Retry-After` is read on the injected clock. Both are tested, and the breaker
+  is shown opening through the registry.
+* **The red run accounts for its 34 passes one by one,** including the vacuous ORCID test, which a
+  separate mutant then shows biting. Your note that the `protect_logs` mutant could not have failed
+  is honestly labelled as reasoning, not a measurement.
+* **The one-process run** (OpenCaselist, the fetcher, the discovery suites, then OpenAlex last) is
+  exactly the check working agreement 10 now asks for.
+
+**Rulings on the rest:**
+
+* **Deviations: accepted.** That covers the authentication changes, `.env.example` and the two
+  secret checks outside the packages (an existing test requires them), and the fixture topics
+  following the PM's brief.
+* **Decisions: accepted.**
+  * Leaving out authorships OpenAlex could not match is the conservative choice, and it costs only
+    dedupe recall, never a false merge.
+  * One request per search is right while the wrapper owns retries.
+* **Operator follow-ups:** setting the key is the operator's, whenever convenient. The live smoke
+  is optional and does not hold the pull request. If it is run, the `rate-limit headers present`
+  line goes into v1-e07-t08's notes.
+
+**Follow-ups, placed by the PM in the next batch:**
+
+* **v1-e08-t05:** register `openalex_factory` in the CLI's registry, and give `ProviderRegistry` (or
+  `ResilientProvider`) an `aclose` so adapters that own a client are closed when the CLI exits.
+* **E08:** which layer applies `SearchFilters.source_types` and `language`, decided in v1-e08-t03's
+  amendment. OpenAlex's `language` filter is noted there.
+* **The `tests/smoke/test_cli_smoke.py` pyright errors** are covered by v1-e01-t31, which already
+  makes `pyright tests/smoke` clean.

@@ -56,9 +56,9 @@ one that is left signed in.
 | SSO profile | `debate-dev-evidence`, `debate-prod-evidence` | `debate-dev-evidence-removal`, `debate-prod-evidence-removal` |
 | Session | 8 hours | 1 hour |
 | Who | Adult maintainers | One accountable person |
-| S3 | `ListBucket` (scoped to the documented prefixes), `ListBucketVersions` (read-only, scoped to the takedown's prefixes, so a removal's dry run can count versions and `caselist status` can report what a removal left), `GetObject`, `GetObjectVersion`, `PutObject`; `GetObjectTagging` and `PutObjectTagging` under `parsed/` only, so `caselist retire --bucket` can tag a superseded version directory for the lifecycle rule (`v1-e31-t16`) | `ListBucketVersions`, `GetObjectVersion`, `DeleteObject`, `DeleteObjectVersion` under `raw/`, `parsed/`, `files/`, `manifests/`, `quarantine/`; `GetObject`/`PutObject` under `manifests/_suppression/` only |
+| S3 | `ListBucket` (scoped to the documented prefixes), `ListBucketVersions` (read-only, scoped to the takedown's prefixes of disclosed material, so a removal's dry run can count versions and `caselist status` can report what a removal left), `GetObject`, `GetObjectVersion`, `PutObject`; `GetObjectTagging` and `PutObjectTagging` under `parsed/` only, so `caselist retire --bucket` can tag a superseded version directory for the lifecycle rule (`v1-e31-t16`) | `ListBucketVersions`, `GetObjectVersion`, `DeleteObject`, `DeleteObjectVersion` under `raw/`, `parsed/`, `files/`, `manifests/`, `quarantine/`, and under `reports/tub/search/` for the student search pilot's superseded index versions (`v1-e39-t07`); `GetObject`/`PutObject` under `manifests/_suppression/` only |
 | KMS | `Encrypt`, `Decrypt`, `GenerateDataKey` on this key | `Decrypt`, `GenerateDataKey` on this key |
-| Cannot | Delete anything. Tag anything outside `parsed/`. Change a bucket policy, a lifecycle rule or a key policy | Delete under `reports/`. Delete the bucket. Change a bucket policy, a lifecycle rule or a key policy |
+| Cannot | Delete anything. Tag anything outside `parsed/`. Change a bucket policy, a lifecycle rule or a key policy | Delete under `reports/` outside `reports/tub/search/`. Delete the bucket. Change a bucket policy, a lifecycle rule or a key policy |
 
 Two consequences worth knowing before they surprise someone:
 

@@ -43,8 +43,13 @@ output "evidence_prefixes" {
 }
 
 output "removable_prefixes" {
-  description = "The prefixes a takedown may delete from. reports/ is deliberately not among them."
+  description = "The prefixes of disclosed material a takedown may delete from. reports/ is deliberately not among them; the one part of it a takedown may delete under is removable_index_prefix."
   value       = local.removable_prefixes
+}
+
+output "removable_index_prefix" {
+  description = "The student search pilot's index versions, the one part of reports/ the takedown credential may delete under (v1-e39-t07)."
+  value       = local.removable_index_prefix
 }
 
 output "operator_permission_set_name" {

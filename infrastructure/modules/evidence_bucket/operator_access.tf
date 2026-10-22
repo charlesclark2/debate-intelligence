@@ -8,8 +8,9 @@
 #                      lifecycle rule (v1-e31-t16). No DeleteObject at all. This is what the
 #                      operator and `debate-research store sync|ls|get` (v1-e29-t05) run as.
 #   EvidenceRemoval  - takedowns only: delete objects and their noncurrent versions under the five
-#                      prefixes that hold disclosed material, and append to the suppression list.
-#                      Assigned to one accountable person.
+#                      prefixes that hold disclosed material, and under reports/tub/search/, the
+#                      student search pilot's index versions, which hold card text (v1-e39-t07);
+#                      append to the suppression list. Assigned to one accountable person.
 #
 # Why two sets rather than one that can do everything: a removal under
 # docs/policies/caselist-data-use.md is irreversible — the noncurrent versions go too, so there is
@@ -60,7 +61,8 @@ locals {
 
   # The prefixes a takedown may delete from. reports/ is not among them: a report is derived,
   # regenerable and cites evidence rather than holding it, and leaving it out is what makes "this
-  # credential deletes disclosed material and nothing else" a statement IAM can enforce.
+  # credential deletes disclosed material and nothing else" a statement IAM can enforce. The one
+  # exception is removable_index_prefix below, granted to the takedown credential alone.
   removable_prefixes = [
     "raw/",
     "parsed/",
@@ -76,6 +78,19 @@ locals {
   removable_list_prefix_conditions = flatten([
     for prefix in local.removable_prefixes : [prefix, "${prefix}*"]
   ])
+
+  # The student search pilot's index versions (ADR-0019 (c), the PM's amendment of 2026-10-19 to
+  # v1-e39-t07). An index holds card text, school and team code, so after a removal the rebuilt
+  # index is published and every superseded version is deleted, noncurrent versions included. That
+  # needs delete and version listing here, on the takedown credential only: kept out of
+  # removable_prefixes, which the everyday credential's own version listing reads, and nothing else
+  # under reports/ gains a delete. docs/architecture/evidence-store-layout.md says the same.
+  removable_index_prefix = "reports/tub/search/"
+
+  removal_list_prefix_conditions = concat(
+    local.removable_list_prefix_conditions,
+    [local.removable_index_prefix, "${local.removable_index_prefix}*"],
+  )
 
   # manifests/_suppression/suppression-list.jsonl and removal-log.jsonl (v1-e30-t07). Appending to
   # an append-only list means reading it first, so this prefix — and only this prefix — is
@@ -168,7 +183,7 @@ locals {
         Action   = "s3:ListBucketVersions"
         Resource = aws_s3_bucket.evidence.arn
         Condition = {
-          StringLike = { "s3:prefix" = local.removable_list_prefix_conditions }
+          StringLike = { "s3:prefix" = local.removal_list_prefix_conditions }
         }
       },
       {
@@ -180,6 +195,19 @@ locals {
           "s3:DeleteObjectVersion",
         ]
         Resource = local.removable_object_arns
+      },
+      {
+        # Pruning the pilot's superseded index versions after a removal (v1-e39-t07): the same three
+        # actions, under reports/tub/search/ alone. A statement of its own, so the delete-scoping
+        # tests can name exactly which part of reports/ it reaches.
+        Sid    = "DeleteSupersededSearchIndexVersions"
+        Effect = "Allow"
+        Action = [
+          "s3:GetObjectVersion",
+          "s3:DeleteObject",
+          "s3:DeleteObjectVersion",
+        ]
+        Resource = "${aws_s3_bucket.evidence.arn}/${local.removable_index_prefix}*"
       },
       {
         Sid    = "MaintainSuppressionList"
@@ -232,7 +260,7 @@ resource "aws_ssoadmin_permission_set" "evidence_removal" {
   count = local.create_permission_sets ? 1 : 0
 
   name             = local.removal_permission_set_name
-  description      = "Takedowns only: deletes ${var.environment} evidence and its versions under raw/, parsed/, files/, manifests/ and quarantine/ (docs/policies/caselist-data-use.md)."
+  description      = "Takedowns only: deletes ${var.environment} evidence and its versions under raw/, parsed/, files/, manifests/, quarantine/ and reports/tub/search/ (docs/policies/caselist-data-use.md)."
   instance_arn     = var.identity_center_instance_arn
   session_duration = "PT1H"
 }

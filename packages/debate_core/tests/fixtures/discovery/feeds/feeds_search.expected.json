@@ -1,0 +1,85 @@
+[
+  {
+    "provider": "rss",
+    "provider_record_id": "courier-1001",
+    "title": "Senate panel advances health insurance subsidy bill",
+    "url": "https://news.example.org/2026/10/20/senate-subsidy-bill",
+    "source_type": "news",
+    "authors": ["Dana Whitfield"],
+    "publication": "Example Courier",
+    "published_at": "2026-10-20T14:05:00Z",
+    "snippet": "The health insurance subsidies would expire in January without a vote."
+  },
+  {
+    "provider": "rss",
+    "provider_record_id": "tag:example.com,2026:mergers",
+    "title": "Health insurance mergers draw scrutiny",
+    "url": "https://www.example.com/2026/10/20/insurer-mergers",
+    "source_type": "news",
+    "authors": ["Priya Raman"],
+    "publication": "Example Health Ledger",
+    "published_at": "2026-10-20T12:00:00Z",
+    "snippet": "Regulators question two health insurance mergers."
+  },
+  {
+    "provider": "rss",
+    "provider_record_id": "courier-1002",
+    "title": "Insurers brace for an enrollment drop",
+    "url": "https://news.example.org/2026/10/19/enrollment-drop",
+    "source_type": "news",
+    "publication": "Example Courier",
+    "published_at": "2026-10-19T09:30:00Z",
+    "snippet": "Marketplace health insurance premiums rise again & enrollment may fall."
+  },
+  {
+    "provider": "rss",
+    "provider_record_id": "courier-1003",
+    "title": "Governors split over Medicaid health insurance waivers",
+    "url": "https://news.example.org/2026/10/18/medicaid-waivers",
+    "source_type": "news",
+    "authors": ["Marcus Bell"],
+    "publication": "Example Courier",
+    "published_at": "2026-10-18T14:15:00Z",
+    "snippet": "State plans differ."
+  },
+  {
+    "provider": "rss",
+    "provider_record_id": "courier-1004",
+    "title": "Health insurance in Nepal's new budget",
+    "url": "https://news.example.org/2026/10/17/nepal-budget",
+    "source_type": "news",
+    "publication": "Example Courier",
+    "published_at": "2026-10-17T14:05:00Z"
+  },
+  {
+    "provider": "rss",
+    "provider_record_id": "tag:example.com,2026:costs",
+    "title": "Health insurance costs, explained",
+    "url": "https://www.example.com/2026/10/16/costs-explained",
+    "source_type": "news",
+    "authors": ["Lee Okafor", "Sam Ortiz"],
+    "publication": "Example Health Ledger",
+    "published_at": "2026-10-16T23:30:00Z",
+    "snippet": "Why premiums rise."
+  },
+  {
+    "provider": "rss",
+    "provider_record_id": "courier-1011",
+    "title": "India health insurance expansion",
+    "url": "https://news.example.org/2026/10/15/india-expansion",
+    "source_type": "news",
+    "publication": "Example Courier",
+    "published_at": "2026-10-15T14:05:00Z",
+    "snippet": "Coverage widens."
+  },
+  {
+    "provider": "rss",
+    "provider_record_id": "tag:example.com,2026:employers",
+    "title": "Employers rethink coverage",
+    "url": "https://www.example.com/2026/10/14/employers",
+    "source_type": "news",
+    "publication": "Example Health Ledger",
+    "published_at": "2026-10-14T00:00:00Z",
+    "snippet": "Employer health insurance shifts."
+  }
+]

@@ -396,6 +396,34 @@ opens in prod**, run the evidence-search runbook's "The list must exist before a
 check. If prod has no suppression list, the function refuses every search there until the runbook's
 create command has run. `v1-e39-t10` exercises the removal steps on prod.
 
+## The operator's dev run
+
+### Block 1 — the dev apply (2026-10-22)
+
+**The plan was `1 to add, 4 to change, 0 to destroy`, not the `0 to add, 2 to change` block 1
+expected.** I stopped and asked. Its five resources, read from the pasted plan:
+
+| Resource | Change | From |
+|---|---|---|
+| `module.evidence_store.aws_ssoadmin_permission_set.evidence_removal[0]` | description names `reports/tub/search/` | this task |
+| `module.evidence_store.aws_ssoadmin_permission_set_inline_policy.evidence_removal[0]` | `ListBucketVersions` condition gains `reports/tub/search/` and `reports/tub/search/*`; new statement `DeleteSupersededSearchIndexVersions` (`GetObjectVersion`, `DeleteObject`, `DeleteObjectVersion` on `reports/tub/search/*`) | this task |
+| `module.evidence_search.aws_cognito_user_group.email_second_factor` | created | `v1-e39-t05` (#371), its operator follow-up C |
+| `module.evidence_search.aws_ssoadmin_permission_set_inline_policy.accounts[0]` | gains `cognito-idp:AdminRemoveUserFromGroup` | `v1-e39-t05`, its operator follow-up C |
+| `module.evidence_store.aws_ssoadmin_permission_set_inline_policy.evidence_operator[0]` | its `ListBucket` condition gains `reports/tub/search/` and `reports/tub/search/*`; its `ListBucketVersions` statement is unchanged | `v1-e39-t02` (#368), its operator follow-up 2 |
+
+Nothing is destroyed and no `aws_ssoadmin_account_assignment` is touched. The everyday credential's
+version listing is unchanged, as the grant-scope test says.
+
+**PM ruling, 2026-10-22: A, apply the plan as it stands.** So this apply also closes, in dev,
+`v1-e39-t05`'s operator follow-up C (the `email-second-factor` group and
+`AdminRemoveUserFromGroup`) and `v1-e39-t02`'s operator follow-up 2 (the operator's listing grant on
+`reports/tub/search/`). The PM records them against those tasks; their prod applies stay on the
+promotion list. **A discrepancy, noted at the PM's request:** `v1-e39-t06`'s ac4 step 1 reported
+`No changes` for `v1-e39-t02`'s grant on 2026-10-21, most likely because the `dev-preview`
+worktree it planned from was not current. It changes nothing now.
+
+Apply result: APPLY_RESULT_PENDING.
+
 ## Follow-up work
 
 1. **`tub index prune` (p3).** The PM's ruling names it: a CLI command that does the runbook's P4

@@ -301,9 +301,47 @@ None. The affected set is the pull request's `ci` check (agreement 10).
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-21
 
 **Notes:**
+
+Accepted. One edit in this session before the pull request: amend the spec's packages (question 1
+below). The pull request then opens with no `--partial`.
+
+**What is good:**
+
+* **The path list is found from the code,** not from my notes: `write_aggregates` callers,
+  `AGGREGATE_NAMES` and `OCCURRENCES_NAME` users, and `store sync`'s keyspaces. It also says why
+  `caselist remove` is deliberately unguarded: a removal must never be refused.
+* **One rule, with tests that fail if a path decides for itself,** and an AST inventory for future
+  callers. This is the `stored_row_hold` pattern again, as asked.
+* **The red run taught something real:** without the guard, the two-machine bucket case failed on
+  `CHECKSUM_MISMATCH`, which protects the table only by accident. That is the best argument for
+  this task.
+* **Counting the superseded table** (a `--reparse` or parser bump by an older build) closes the
+  route around the rule that I had not named.
+* **The cross-build check uses the agent's actual build** (`v1.1.0-dev.64`), with run files and a
+  parsed store read back.
+
+**Rulings:**
+
+1. **Deviation 1: accepted.** Add `debate_core.integrations` and `debate_core.testing` to
+   `constraints.packages`, with a comment `PM ruling 2026-10-21 (v1-e34-t29 review)`. Run
+   `validate_specs.py` and commit. Reading the stamp from raw JSON is what makes a newer build's
+   table a refusal by name rather than an `INTERNAL_ERROR`.
+2. **Deviation 2: accepted.** A `frozenset` has no order, and ordering by `N` within a family,
+   with anything unorderable treated as newer, is the safe reading. The one real-versions test is
+   the right tie.
+3. **Follow-up 1: a small p2 task in E29**, which owns `store sync`: stop moving `parsed/`, since
+   `caselist parse --publish` is its only publisher. Follow-up 2 (the per-source stamp) goes into
+   the same task as a line in the parsed-store layout doc. The PM files it in the next batch.
+
+**Noted, no change:** a weekly publish after new sources downloads the bucket's table when its
+bytes differ, up to about 130 MB per caselist. That is acceptable at weekly cadence. If it ever
+matters, a ranged read of the first stamped row would do.
+
+**Note for the operator's re-parse to `docx-6` today:** the fingerprint stays `card-fingerprint-v4`,
+so the guard sees an equal stamp and refuses nothing, whether or not this has merged first.

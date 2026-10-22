@@ -41,14 +41,13 @@ from typing import Protocol, runtime_checkable
 from pydantic import Field
 
 from debate_core.domain import (
-    AccessStatus,
     DomainModel,
     HttpUrlStr,
     NonEmptyText,
     Ulid,
-    UtcDatetime,
 )
 from debate_core.domain.discovery import CandidateResult, ProviderHealth, ProviderQuery, ProviderResponse
+from debate_core.retrieval.fetch_types import FetchResult
 
 __all__ = [
     "ArticleFetcher",
@@ -129,41 +128,9 @@ class DiscoveryProviders(Protocol):
 # Retrieval
 # --------------------------------------------------------------------------------------------
 
-
-class FetchResult(DomainModel):
-    """The outcome of one retrieval attempt: the bytes, and everything about the response.
-
-    Carries bytes, not text. Decoding is part of extraction, and the SHA-256 that anchors a
-    snapshot is taken over exactly these bytes (architecture proposal §8).
-
-    `access_status` records only what the fetcher itself knows — a refusal under robots rules, a
-    404, a transport failure. Deciding that a 200 response is actually a paywall or a bot
-    challenge is classification, and belongs to v1-e04-t03-access-status.
-    """
-
-    requested_url: HttpUrlStr = Field(description="The URL the fetch was asked for.")
-    final_url: HttpUrlStr = Field(description="The URL that answered, after any redirects.")
-    status_code: int | None = Field(
-        default=None, ge=100, le=599, description="HTTP status, or None when no response arrived."
-    )
-    headers: dict[str, str] = Field(
-        default_factory=dict, description="Response headers, lowercased keys, as strings."
-    )
-    content_type: NonEmptyText | None = Field(
-        default=None, description="Content type as reported, parameters included."
-    )
-    body: bytes = Field(default=b"", description="Exactly the bytes received, unmodified.")
-    elapsed_ms: float = Field(ge=0, description="Wall-clock time the fetch took, in milliseconds.")
-    fetched_at: UtcDatetime = Field(description="When the fetch completed, in UTC.")
-    access_status: AccessStatus = Field(
-        default=AccessStatus.UNKNOWN,
-        description="Transport-level outcome only; paywall classification happens downstream.",
-    )
-
-    @property
-    def byte_size(self) -> int:
-        """Number of bytes received."""
-        return len(self.body)
+# FetchResult and the errors it carries live in debate_core.retrieval.fetch_types since
+# v1-e04-t02-http-fetcher, beside the access classifier that reads them; FetchResult is re-exported
+# here so the port's signature still names it.
 
 
 @runtime_checkable

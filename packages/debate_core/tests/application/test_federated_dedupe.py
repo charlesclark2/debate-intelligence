@@ -771,11 +771,11 @@ def test_labeled_pairs_deduplicated_all_at_once_agree_with_each_pair_alone() -> 
 # Field precedence and provenance (ac3)
 # --------------------------------------------------------------------------------------------
 
-#: Each merged field's expected source when all five providers supply it, and the next one when the
+#: Each merged field's expected source when all six providers supply it, and the next one when the
 #: first does not. Written by hand from the precedence the report justifies, not read from the table.
 EXPECTED_PRECEDENCE: dict[str, tuple[str, str]] = {
     "title": ("crossref", "openalex"),
-    "url": ("rss", "crossref"),
+    "url": ("rss", "google_news"),
     "identifiers.doi": ("crossref", "openalex"),
     "identifiers.arxiv_id": ("semantic_scholar", "openalex"),
     "identifiers.pmid": ("openalex", "semantic_scholar"),
@@ -791,14 +791,15 @@ EXPECTED_PRECEDENCE: dict[str, tuple[str, str]] = {
     "citation_count": ("openalex", "semantic_scholar"),
 }
 
-PROVIDERS = ("gdelt", "semantic_scholar", "rss", "openalex", "crossref")
-"""The five configured providers, deliberately not in any precedence order."""
+PROVIDERS = ("gdelt", "semantic_scholar", "rss", "google_news", "openalex", "crossref")
+"""The six configured providers, deliberately not in any precedence order."""
 
 SOURCE_TYPE_OF = {
     "crossref": SourceType.SCHOLARLY,
     "openalex": SourceType.GOVERNMENT,
     "semantic_scholar": SourceType.THINK_TANK,
     "rss": SourceType.NEWS,
+    "google_news": SourceType.NEWS,
     "gdelt": SourceType.OTHER,
 }
 
@@ -879,7 +880,7 @@ def test_precedence_rule_falls_back_to_the_next_provider_when_the_first_has_no_v
 
 
 def test_precedence_url_falls_back_to_crossref_when_no_feed_found_the_source() -> None:
-    records = [record_from(provider) for provider in PROVIDERS if provider != "rss"]
+    records = [record_from(provider) for provider in PROVIDERS if provider not in ("rss", "google_news")]
 
     merged = merge_group(records)
 

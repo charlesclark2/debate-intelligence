@@ -35,6 +35,9 @@ dev = [
     # not the locked minor version because tests/architecture/test_single_interpreter_source.py reads
     # a three-point-teen specifier as a Python version.
     "grimp>=3.0",
+    # PM ruling 2026-10-22 (v1-e07-t05: feedparser falls back to a loose parser on a hostile feed).
+    # The feed providers parse untrusted RSS and Atom with defusedxml, debate-core's `feeds` extra.
+    "defusedxml>=0.7.1",
     "httpx>=0.28",
     # Starlette's TestClient, which the pilot's app tests run through, deprecates httpx in favour of
     # httpx2 from Starlette 1.9 (v1-e39-t04's report; added by v1-e39-t05, which writes most of them).
@@ -81,6 +84,9 @@ dev = [
     # on a laptop and on a CI runner. scripts/site_deploy.sh (v1-e36-t05) is the first shell script
     # with a lint criterion of its own.
     "shellcheck-py>=0.10",
+    # PM ruling 2026-10-22 (v1-e07-t05: feedparser falls back to a loose parser on a hostile feed).
+    # defusedxml ships no inline types; the feed parser is type-checked strictly. Same reason as lxml-stubs.
+    "types-defusedxml>=0.7",
     # PyYAML ships no inline types; debate_core.integrations.models.routing_policy is type-checked strictly.
     "types-pyyaml>=6.0",
 ]
@@ -289,6 +295,9 @@ source_modules = [
     "debate_core.integrations.cloudwatch_audit",
     "debate_core.integrations.parameter_store",
     "debate_core.integrations.http_fetcher",
+    # PM ruling 2026-10-22 (v1-e07-t05: feedparser falls back to a loose parser on a hostile feed).
+    # The feed providers parse XML with defusedxml only, so lxml stays out of discovery too.
+    "debate_core.integrations.discovery",
     "debate_api",
     "debate_workers",
 ]
@@ -304,6 +313,45 @@ type = "forbidden"
 allow_indirect_imports = true
 source_modules = ["debate_cli"]
 forbidden_modules = ["lxml", "docx"]
+
+# PM ruling 2026-10-22 (v1-e07-t05: feedparser falls back to a loose parser on a hostile feed).
+# defusedxml is the `feeds` extra: the feed providers in debate_core.integrations.discovery parse RSS
+# and Atom from strangers with it, refusing entity declarations and external references. Nothing
+# else parses feeds, so every other module is held off it, the other adapters included.
+[[tool.importlinter.contracts]]
+name = "The safe XML parser stays inside debate_core.integrations.discovery"
+type = "forbidden"
+source_modules = [
+    "debate_core.domain",
+    "debate_core.retrieval",
+    "debate_core.application",
+    "debate_core.testing",
+    "debate_core.integrations.local",
+    "debate_core.integrations.models",
+    "debate_core.integrations.docx_parser",
+    "debate_core.integrations.docx_file_writer",
+    "debate_core.integrations.file_streaming",
+    "debate_core.integrations.s3",
+    "debate_core.integrations.bedrock",
+    "debate_core.integrations.cognito",
+    "debate_core.integrations.cloudwatch_audit",
+    "debate_core.integrations.parameter_store",
+    "debate_core.integrations.opencaselist",
+    "debate_core.integrations.http_fetcher",
+    "debate_api",
+    "debate_workers",
+]
+forbidden_modules = ["defusedxml"]
+
+# PM ruling 2026-10-22 (v1-e07-t05: feedparser falls back to a loose parser on a hostile feed).
+# A composition root that builds the feed providers reaches defusedxml through them by design; no
+# command imports it itself.
+[[tool.importlinter.contracts]]
+name = "The CLI reaches defusedxml only through debate_core.integrations.discovery"
+type = "forbidden"
+allow_indirect_imports = true
+source_modules = ["debate_cli"]
+forbidden_modules = ["defusedxml"]
 
 # v1-e02-t06-import-boundary-guard. The contracts from here down are the shape of the architecture
 # itself (§1, §2): the ones above keep a named library inside its adapter, these keep each layer

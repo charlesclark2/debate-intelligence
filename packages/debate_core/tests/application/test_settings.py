@@ -581,6 +581,7 @@ def test_the_provider_names_configuration_accepts_are_the_ones_e07_builds() -> N
         "crossref",
         "semantic_scholar",
         "rss",
+        "google_news",
         "gdelt",
     }
 

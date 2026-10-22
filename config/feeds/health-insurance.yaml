@@ -1,0 +1,27 @@
+# Publisher feeds for the 2026-27 Policy topic on health insurance.
+# Read by debate_core.integrations.discovery.feed_config (v1-e07-t05); a mistake here fails the load
+# with this file and the field named. config/feeds/README.md describes every key.
+#
+# A starter set, not a reviewed list. Every feed says `review: awaiting_coach_review` until the
+# coach has looked at it and changed it to `coach_reviewed`. No URL here has been shown to answer
+# by being listed: the operator's feed check is what does that. Its run of 2026-10-22 had every
+# feed here answer HTTP 200 with every entry dated.
+#
+# Google News is off. Its items can rarely be traced to the publisher's own URL without asking
+# Google, which the platform does not do (PM ruling 2026-10-22).
+topic: health-insurance
+description: >-
+  The 2026-27 Policy topic: US health insurance coverage, the ACA marketplaces, Medicare and
+  Medicaid, and national health insurance proposals.
+feeds:
+  - url: https://kffhealthnews.org/feed/
+    publisher: KFF Health News
+    review: awaiting_coach_review
+  - url: https://feeds.npr.org/1128/rss.xml
+    publisher: NPR
+    review: awaiting_coach_review
+  - url: https://www.statnews.com/feed/
+    publisher: STAT
+    review: awaiting_coach_review
+google_news:
+  enabled: false

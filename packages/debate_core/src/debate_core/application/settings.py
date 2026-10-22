@@ -236,6 +236,7 @@ class SearchProviderName(StrEnum):
     CROSSREF = "crossref"
     SEMANTIC_SCHOLAR = "semantic_scholar"
     RSS = "rss"
+    GOOGLE_NEWS = "google_news"
     GDELT = "gdelt"
 
 

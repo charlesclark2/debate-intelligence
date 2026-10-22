@@ -1,0 +1,36 @@
+# Publisher feeds for the politics topic: elections, Congress, polling, the White House.
+# Read by debate_core.integrations.discovery.feed_config (v1-e07-t05); a mistake here fails the load
+# with this file and the field named. config/feeds/README.md describes every key.
+#
+# A starter set, not a reviewed list. Every feed says `review: awaiting_coach_review` until the
+# coach has looked at it and changed it to `coach_reviewed`. No URL here has been shown to answer
+# by being listed: the operator's feed check is what does that. Its run of 2026-10-22 had every
+# feed here answer HTTP 200, and every entry dated except Roll Call's (see its entry).
+#
+# Google News is off. Its items can rarely be traced to the publisher's own URL without asking
+# Google, which the platform does not do (PM ruling 2026-10-22).
+topic: politics
+description: >-
+  US national politics for politics disadvantages and uniqueness: elections, Senate and House
+  votes, polling and the administration.
+feeds:
+  - url: https://feeds.npr.org/1014/rss.xml
+    publisher: NPR
+    review: awaiting_coach_review
+  - url: https://www.pbs.org/newshour/feeds/rss/politics
+    publisher: PBS NewsHour
+    review: awaiting_coach_review
+  - url: https://rss.politico.com/politics-news.xml
+    publisher: Politico
+    review: awaiting_coach_review
+  - url: https://thehill.com/homenews/feed/
+    publisher: The Hill
+    review: awaiting_coach_review
+  # The operator's feed check of 2026-10-22: HTTP 200, 10 entries, 0 dated. Roll Call's pubDate is
+  # `2026-10-21 20:18:41`, with no time zone, so no entry can be placed in a search's date window.
+  # Worth replacing unless undated results are wanted.
+  - url: https://rollcall.com/feed/
+    publisher: Roll Call
+    review: awaiting_coach_review
+google_news:
+  enabled: false

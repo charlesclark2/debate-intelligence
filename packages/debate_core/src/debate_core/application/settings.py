@@ -399,6 +399,33 @@ class HttpSettings(SettingsGroup):
     max_retries: int = Field(
         default=2, ge=0, le=10, description="Retries for an idempotent request that failed transiently."
     )
+    backoff_base_seconds: float = Field(
+        default=1.0,
+        gt=0,
+        le=60,
+        description="First backoff wait when the server gives no Retry-After; doubles per retry, jittered.",
+    )
+    backoff_max_seconds: float = Field(
+        default=30.0, gt=0, le=600, description="Ceiling on one backoff wait the fetcher chose itself."
+    )
+    max_retry_wait_seconds: float = Field(
+        default=120.0,
+        ge=0,
+        le=3600,
+        description=(
+            "Longest Retry-After the fetcher will sit through. A longer one ends the fetch with the "
+            "server's answer instead of being slept on."
+        ),
+    )
+    max_response_bytes: int = Field(
+        default=25 * 1024 * 1024,
+        ge=1024,
+        le=512 * 1024 * 1024,
+        description="Largest body the fetcher reads; a larger one is abandoned, never truncated.",
+    )
+    max_redirects: int = Field(
+        default=5, ge=0, le=20, description="Redirects one fetch may follow; each one is a new request."
+    )
 
     @field_validator("contact_url")
     @classmethod

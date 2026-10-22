@@ -171,17 +171,19 @@ source_modules = [
     "debate_core.integrations.file_streaming",
     "debate_core.integrations.opencaselist",
     "debate_core.integrations.discovery",
+    "debate_core.integrations.http_fetcher",
     "debate_workers",
 ]
 forbidden_modules = ["boto3", "botocore"]
 
 [[tool.importlinter.contracts]]
-name = "The HTTP client and the keychain library stay inside debate_core.integrations.opencaselist"
+name = "The HTTP client stays inside the adapters that talk HTTP"
 type = "forbidden"
-# v1-e34-t01-caselist-api-client brings httpx and keyring in as the `opencaselist` extra. Like
-# boto3, neither may reach the domain, the application layer, the shared test fakes or another
-# adapter, even indirectly. The article fetcher (v1-e04-t02) adds its own adapter to the allowed
-# side when it arrives, by leaving it off this list. `debate_core.retrieval` is on it (PM ruling,
+# httpx is the `http` extra (PM ruling 2026-10-21, v1-e04-t02 packaging). Like boto3, it may not
+# reach the domain, the application layer, the shared test fakes or an adapter that has no business
+# on the network, even indirectly. The adapters allowed it are the ones left off this list:
+# debate_core.integrations.opencaselist (v1-e34-t01), debate_core.integrations.discovery (E07) and
+# debate_core.integrations.http_fetcher (v1-e04-t02). `debate_core.retrieval` is on it (PM ruling,
 # v1-e04-t01, 2026-10-19): retrieval holds the types, errors and rules, and the fetching adapter
 # lives in debate_core.integrations.
 source_modules = [
@@ -200,13 +202,40 @@ source_modules = [
     "debate_api",
     "debate_workers",
 ]
-forbidden_modules = ["httpx", "keyring"]
+forbidden_modules = ["httpx"]
 
 [[tool.importlinter.contracts]]
-name = "The CLI reaches httpx and keyring only through debate_core.integrations.opencaselist"
+name = "The keychain library stays inside debate_core.integrations.opencaselist"
 type = "forbidden"
-# The composition root builds the OpenCaselist client, so the chain to httpx is by design; what is
-# forbidden is a command importing httpx or keyring itself.
+# keyring is the `opencaselist` extra: the operator's caselist_token lives in the macOS keychain
+# (v1-e34-t01). Nothing else reads a keychain, so every other module is held off it, the other
+# HTTP adapters included.
+source_modules = [
+    "debate_core.domain",
+    "debate_core.retrieval",
+    "debate_core.application",
+    "debate_core.testing",
+    "debate_core.integrations.local",
+    "debate_core.integrations.docx_file_writer",
+    "debate_core.integrations.file_streaming",
+    "debate_core.integrations.s3",
+    "debate_core.integrations.bedrock",
+    "debate_core.integrations.cognito",
+    "debate_core.integrations.cloudwatch_audit",
+    "debate_core.integrations.parameter_store",
+    "debate_core.integrations.discovery",
+    "debate_core.integrations.http_fetcher",
+    "debate_api",
+    "debate_workers",
+]
+forbidden_modules = ["keyring"]
+
+[[tool.importlinter.contracts]]
+name = "The CLI reaches httpx and keyring only through debate_core.integrations"
+type = "forbidden"
+# The composition root builds the OpenCaselist client (and, from v1-e04-t06, the article fetcher),
+# so the chain to httpx is by design; what is forbidden is a command importing httpx or keyring
+# itself.
 allow_indirect_imports = true
 source_modules = ["debate_cli"]
 forbidden_modules = ["httpx", "keyring"]
@@ -252,6 +281,7 @@ source_modules = [
     "debate_core.integrations.cognito",
     "debate_core.integrations.cloudwatch_audit",
     "debate_core.integrations.parameter_store",
+    "debate_core.integrations.http_fetcher",
     "debate_api",
     "debate_workers",
 ]

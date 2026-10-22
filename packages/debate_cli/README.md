@@ -81,9 +81,10 @@ $ debate-research --version --json | jq .data
 | A dev pre-release | `dev` | `dev` | the `config/` bundled in the wheel |
 | A stable release (v1-e09-t06) | `stable` | `prod` | the `config/` bundled in the wheel |
 
-**What an installed build contains.** This package requires `debate-core[aws,docx,opencaselist]`:
-the extras behind the adapters `debate_cli.container` wires, so a channel install has boto3, lxml,
-httpx and keyring without anything added by hand. `scripts/install_channel.sh` proves it after every
+**What an installed build contains.** This package requires
+`debate-core[aws,docx,http,opencaselist,tub]`: the extras behind the adapters `debate_cli.container`
+wires, so a channel install has boto3, lxml, httpx, keyring and cryptography without anything added
+by hand. `scripts/install_channel.sh` proves it after every
 install with `python -m debate_cli.installation`. That check reads the list of
 `debate_core.integrations` modules from the installed container's own import statements, imports
 each one, and fails unless it tried and imported them all. It also confirms that every distribution

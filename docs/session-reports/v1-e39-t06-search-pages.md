@@ -383,6 +383,39 @@ PM questions from v1-e39-t06-search-pages (session of 2026-10-20)
    a checkout at docx-5's parser and would test a store this release will not serve.
 ```
 
+## After the PM review of 2026-10-21
+
+**Condition 1, PM question 1 (a): done.**
+
+* `.github/workflows/validate-dev.yml`'s `slow` job gains one step, after *Install the locked
+  workspace*: *Install Playwright's Chromium for the browser tests*, running
+  `uv run --locked playwright install --with-deps chromium`.
+  * A comment above the step says why it is there.
+  * The workflow's header comment, at the `slow` tier, says the tier includes the browser suite and
+    why the job installs Chromium first.
+* The workflow is in the spec's packages with the comment `PM ruling 2026-10-21 (v1-e39-t06 Q1)`.
+* **The slow job's marker selects the browser suite.** `scripts/validate_dev.py`'s `SLOW` tier
+  passes `-m "slow and not live and not eval"` and no paths, so pytest reads `pyproject.toml`'s
+  `testpaths`, which include `packages/debate_api/tests`. Collected that way from the repository
+  root, `.venv/bin/python -m pytest -m "slow and not live and not eval" --collect-only -q -n 0`
+  gives `24/11004 tests collected (10980 deselected)`, and 12 of the 24 are
+  `packages/debate_api/tests/browser/test_search_pages_in_chromium.py`.
+* The installed Chromium is the one the locked Playwright (1.63.0) names, v1243, the build the tests
+  ran on here.
+* Checks:
+  * the workflow parses, and the slow job's steps are, in order: *Install Python*, *Install the
+    locked workspace*, *Install Playwright's Chromium…*, *Run pytest…*;
+  * `tests/scripts/test_workflow_runners.py`, `tests/scripts/test_validate_dev.py` and
+    `tests/specs` → `165 passed`;
+  * `uv run scripts/validate_specs.py` → `OK`.
+* What this cannot show here: the step runs on the runner only after the merge, in the first
+  validate-dev run.
+
+**Condition 2, ac4: waiting for the re-parse.** On 2026-10-21, before the session went on,
+`ls ~/.debate-research/dev/parsed/*` still listed only `2026.10.18-docx-5` for all four stores. The
+operator runs Operator follow-up 1 once the re-parse has written `2026.10.20-docx-6`, and the
+results go here.
+
 ## PM review
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in

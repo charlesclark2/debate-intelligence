@@ -4,7 +4,8 @@
 into what `tub index publish` would put in the bucket: the gzip object, the manifest and the
 pointer, each with the digests the real ones carry. :class:`InMemorySearchIndexSource` serves them
 the way the bucket does, entity tags and `304`s included, and records every read, so a test can see
-that an unchanged pointer cost no body and that nothing but the three keys was asked for.
+that an unchanged pointer cost no body and that nothing but the three keys was asked for. It also serves the suppression list beside them, the
+fourth key the function reads (`v1-e39-t07`), from :meth:`InMemorySearchIndexSource.write_suppression_list`.
 
 Every value here is synthetic: invented caselist slugs, versions and counts.
 """
@@ -17,8 +18,10 @@ from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field, replace
 from typing import Final
 
-from debate_core.application.errors import NotFound
-from debate_core.application.ports.search_index_source import PointerRead
+from debate_core.application.caselist.suppression import SUPPRESSION_LIST_KEY
+from debate_core.application.errors import NotFound, StoreError
+from debate_core.application.ports.search_index_source import SUPPRESSION_LIST_MAX_BYTES, PointerRead
+from debate_core.application.ports.suppression import SuppressionEntry
 from debate_core.domain.search_index import (
     INDEX_ID_LENGTH,
     SEARCH_INDEX_FORMAT_VERSION,
@@ -149,7 +152,9 @@ class InMemorySearchIndexSource:
 
     :meth:`publish` writes an index's objects and then its pointer, as `tub index publish` does.
     Each pointer write gets a new entity tag. `reads` lists every key read, in order, and
-    `not_modified` counts the pointer reads answered `304`.
+    `not_modified` counts the pointer reads answered `304`; `suppression_not_modified` counts the
+    suppression list's. A list never written has no lines; `suppression_list_failure`, when set, is
+    raised by every read of it, as an unreachable bucket would.
     """
 
     def __init__(self) -> None:
@@ -157,7 +162,11 @@ class InMemorySearchIndexSource:
         self.etag: str | None = None
         self.reads: list[str] = []
         self.not_modified = 0
+        self.suppression_etag: str | None = None
+        self.suppression_not_modified = 0
+        self.suppression_list_failure: StoreError | None = None
         self._writes = 0
+        self._suppression_writes = 0
 
     def publish(self, index: PublishedIndex) -> None:
         self.objects.update(index.objects)
@@ -176,6 +185,31 @@ class InMemorySearchIndexSource:
             self.not_modified += 1
             return PointerRead(body=None, etag=if_none_match)
         return PointerRead(body=self.objects[SEARCH_INDEX_POINTER_KEY], etag=self.etag)
+
+    def write_suppression_list(self, body: bytes) -> None:
+        """Replace the list's bytes, with a new entity tag."""
+        self._suppression_writes += 1
+        self.objects[SUPPRESSION_LIST_KEY] = body
+        self.suppression_etag = f'"suppression-{self._suppression_writes}"'
+
+    def append_suppression(self, *entries: SuppressionEntry) -> None:
+        """Append entries as `caselist remove` does: one canonical line each, newline-terminated."""
+        lines = "".join(entry.to_line() + "\n" for entry in entries).encode()
+        self.write_suppression_list(self.objects.get(SUPPRESSION_LIST_KEY, b"") + lines)
+
+    def read_suppression_list(self, *, if_none_match: str | None) -> PointerRead:
+        self.reads.append(SUPPRESSION_LIST_KEY)
+        if self.suppression_list_failure is not None:
+            raise self.suppression_list_failure
+        if SUPPRESSION_LIST_KEY not in self.objects:
+            return PointerRead(body=b"", etag=None)
+        if if_none_match is not None and if_none_match == self.suppression_etag:
+            self.suppression_not_modified += 1
+            return PointerRead(body=None, etag=if_none_match)
+        body = self.objects[SUPPRESSION_LIST_KEY]
+        if len(body) > SUPPRESSION_LIST_MAX_BYTES:
+            raise ValueError(f"the object is longer than {SUPPRESSION_LIST_MAX_BYTES} bytes")
+        return PointerRead(body=body, etag=self.suppression_etag)
 
     def read_object(self, key: str, *, max_bytes: int) -> bytes:
         data = self._get(key)

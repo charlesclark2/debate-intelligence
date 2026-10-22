@@ -6,23 +6,39 @@
 | Spec | [`plan_specs/v1/e04-article-retrieval/t02-http-fetcher.yaml`](../../plan_specs/v1/e04-article-retrieval/t02-http-fetcher.yaml) |
 | Epic / release | `v1-e04-article-retrieval` / `v1.3` |
 | Branch | `task/v1-e04-t02-http-fetcher` |
-| Session status | IN PROGRESS <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | COMPLETE <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
 `HttpArticleFetcher` (`debate_core.integrations.http_fetcher`) implements the `ArticleFetcher` port
 and always returns a `FetchResult`; a refusal or failure is a typed `FetchError` value on it, never
 an httpx exception. Every request and every redirect hop passes four gates in order: a public
-address, robots.txt for the hop's origin (read through the same client, cached per origin), the
-per-host minimum interval, and bounded retries (connect failures, 429, 502, 503, 504; `Retry-After`
-honoured on 429 and 503). Bodies are streamed and abandoned at `http.max_response_bytes`. The URL is
-fetched as given, never its canonical form. All five Goal criteria and every node criterion pass.
-**Waiting on the PM:** the packaging proposal (an `http` extra for httpx, and the import-linter
-entries) is sent as a relay prompt and not applied; no `pyproject.toml` is touched yet, so the Goal
-stays `InProgress` until it is ruled on and done. Look first at the robots.txt reading
-(`retrieval/robots_rules.py`), which deliberately refuses more than `urllib.robotparser` alone.
+address, robots.txt for the hop's origin (read through the same client, by RFC 9309 alone, used for
+at most 24 hours), the per-host minimum interval, and bounded retries (connect failures, 429, 502,
+503, 504; `Retry-After` honoured on 429 and 503). Bodies are streamed and abandoned at
+`http.max_response_bytes`. The URL is fetched as given, never its canonical form. httpx now has its
+own `http` extra, and its import contract is split from keyring's, as the PM ruled. All five Goal
+criteria and every node criterion pass, and the Goal is `Succeeded`. Look first at
+`retrieval/robots_rules.py`, rewritten to the PM's ruling (e).
 
 Commits are relative to `dev` at `1b999dc` (v1-e07-t01, #380), synced with `scripts/task sync`.
+
+## PM rulings applied (2026-10-21)
+
+1. Packaging, option A: the `http` extra holds httpx; `opencaselist` keeps keyring, with a comment
+   that it needs `http`; the CLI declares `debate-core[aws,docx,http,opencaselist,tub]`; `uv.lock`
+   re-locked; `test_installation.py`'s pinned extras and drop cases updated; the import-linter
+   contract split into an httpx contract and a keyring contract, the CLI contract renamed;
+   `debate_core.integrations.http_fetcher` on the boto3 and lxml lists. The spec's
+   `constraints.packages` now names the three `pyproject.toml` files and `uv.lock`, each with the
+   comment `PM ruling 2026-10-21 (v1-e04-t02 packaging)`. No operator whole-selection run.
+2. Retry-After: settled by the import from `discovery.http_failures`; OpenCaselist's own
+   `_retry_after` stays a follow-up.
+3. FYIs a, b, c, d and f accepted; `debate_core.application.settings` added to the spec's packages
+   with the same comment. FYI e changed: RFC 9309 alone decides robots.txt, `urllib.robotparser` is
+   dropped, 401/403 keep refusing everything (stricter than the RFC, said in a docstring), 429, 5xx
+   and unreachable still refuse after retries, and the per-origin cache is capped at 24 hours on the
+   injected clock. Shown failing first: the allow-list case was refused by the old reading.
 
 ## Plan nodes
 
@@ -31,8 +47,9 @@ Commits are relative to `dev` at `1b999dc` (v1-e07-t01, #380), synced with `scri
 | `fetch-types` | Done | `FetchResult` moved from the port to `retrieval/fetch_types.py`, re-exported by the port; eight error types |
 | `http-client` | Done | `integrations/http_fetcher.py`; new limits in `HttpSettings` |
 | `retry-policy` | Done | Retry-After read with v1-e07-t01's `retry_after_seconds` (imported, not copied) |
-| `robots-and-rate-limit` | Done | `retrieval/robots_rules.py` (stdlib plus an RFC 9309 check), `HostRateLimiter` |
-| `test-suite` | Done | 101 fetcher tests, 56 retrieval unit tests; pyright and lint-imports clean |
+| `robots-and-rate-limit` | Done | `retrieval/robots_rules.py` (RFC 9309, 24-hour cache), `HostRateLimiter` |
+| `test-suite` | Done | 103 fetcher tests, 81 retrieval unit tests; pyright and lint-imports clean |
+| Packaging (PM ruling) | Done | `http` extra, contract split, installation and architecture tests |
 
 ## Acceptance criteria
 
@@ -41,35 +58,57 @@ Commits are relative to `dev` at `1b999dc` (v1-e07-t01, #380), synced with `scri
 | ac1: implements ArticleFetcher, FetchResult with final URL, status, headers, content type, bytes, byte length, elapsed, fetched_at | PASS | `test_the_fetcher_implements_the_article_fetcher_port`, `test_a_page_comes_back_with_its_bytes_and_everything_about_the_response` (elapsed 500.0 ms and `fetched_at` asserted exactly on the simulated clock) |
 | ac2: timeouts, max size, max redirects from settings; exceeding any is a typed FetchError | PASS | `uv run pytest …/test_http_fetcher.py -k limits` → `30 passed` |
 | ac3: only connect errors, 429, 502/503/504 retried, bounded exponential backoff honouring Retry-After; other 4xx never | PASS | `uv run pytest …/test_http_fetcher.py -k retry` → `30 passed` (11 non-retried statuses parametrized, 400 to 505) |
-| ac4: disallowed path refused with ROBOTS_DISALLOWED, no request to the target; robots.txt cached per host | PASS | `test_robots_a_disallowed_path_is_refused_and_never_requested` asserts the target route was never called and the only request was robots.txt; `test_robots_is_read_once_per_origin_and_cached` asserts one robots request per origin over four fetches |
+| ac4: disallowed path refused with ROBOTS_DISALLOWED, no request to the target; robots.txt cached per host | PASS | `test_robots_a_disallowed_path_is_refused_and_never_requested` asserts the target route was never called and the only request was robots.txt; `test_robots_is_read_once_per_origin_and_cached` asserts one robots request per origin over four fetches; `test_robots_rules_are_read_again_once_they_are_24_hours_old` asserts no re-read at 23:59:59 and one at 24:00 |
 | ac5: per-host minimum interval from settings; identifying User-Agent with contact URL on every request | PASS | `uv run pytest …/test_http_fetcher.py -k "robots or rate"` → `30 passed`; request start times asserted as `[0.0, 2.5, 5.0]` s |
 | Node `fetch-types`: `fetch_types.py` exists containing `class FetchResult` | PASS | `grep -c "class FetchResult" packages/debate_core/src/debate_core/retrieval/fetch_types.py` → `1` |
-| Node `http-client`: `uv run pytest packages/debate_core/tests/integrations/test_http_fetcher.py -k limits` | PASS | `30 passed in 2.17s` |
-| Node `retry-policy`: `… -k retry` | PASS | `30 passed in 2.03s` |
-| Node `robots-and-rate-limit`: `… -k "robots or rate"` | PASS | `30 passed in 2.13s` |
-| Node `test-suite`: `uv run pytest packages/debate_core/tests/integrations/test_http_fetcher.py` | PASS | `101 passed in 1.97s` |
+| Node `http-client`: `uv run pytest packages/debate_core/tests/integrations/test_http_fetcher.py -k limits` | PASS | `30 passed in 3.91s` |
+| Node `retry-policy`: `… -k retry` | PASS | `30 passed in 2.57s` |
+| Node `robots-and-rate-limit`: `… -k "robots or rate"` | PASS | `32 passed in 2.56s` |
+| Node `test-suite`: `uv run pytest packages/debate_core/tests/integrations/test_http_fetcher.py` | PASS | `103 passed in 2.28s` |
 | Node `test-suite`: `uv run pyright packages/debate_core` | PASS | `0 errors, 0 warnings, 0 informations` |
-| Node `test-suite`: `uv run lint-imports` | PASS | `Contracts: 12 kept, 0 broken.` |
+| Node `test-suite`: `uv run lint-imports` | PASS | `Contracts: 13 kept, 0 broken.` (one more since the split) |
+| Goal phase | PASS | `uv run scripts/validate_specs.py --require-succeeded v1-e04-t02-http-fetcher` → `Succeeded` |
 
-The three `-k` filters each select 30 tests; I checked that with `--co` because the equal counts
-looked like a mistake. They are not.
+Before the robots change the first three `-k` filters each selected 30 tests; I checked that with
+`--co` because the equal counts looked like a mistake. They were not. The robots change added two
+fetcher tests, both under `robots`.
 
 ## Checks run before the report
 
 | Command | Result |
 |---|---|
-| `uv run scripts/affected_tests.py` | 305 of 369 test files: `settings.py` and `ports/providers.py` are imported by the root `conftest.py`'s fake router. Over two minutes, so not run here; it is the pull request's `ci` run (agreement 10) |
-| `.venv/bin/python -m pytest -q` over `application/test_settings.py`, `test_fakes.py`, `test_port_conformance.py`, `tests/retrieval`, `test_http_fetcher.py`, `tests/architecture`, `tests/specs`, the CLI's `test_app.py`, `test_help_rendering.py`, `test_config_command.py` | `1005 passed in 16.56s` |
-| `.venv/bin/python -m pytest -q -n 0 -p no:randomly` over `integrations/opencaselist`, `integrations/discovery`, then `test_http_fetcher.py` (PM's ordering check) | `367 passed` |
+| `uv run scripts/affected_tests.py` | Before the packaging change: 305 of 369 test files (`settings.py` and `ports/providers.py` reach the root `conftest.py`'s fake router), over two minutes, so not run. After it: "The whole selection is affected: packages/debate_cli/pyproject.toml is shared test ground." Both are the pull request's `ci` run (agreement 10; the PM ruled out an operator run) |
+| `.venv/bin/python -m pytest -q` over `tests/retrieval`, `test_http_fetcher.py`, `application/test_settings.py`, `test_fakes.py`, `test_port_conformance.py`, `tests/architecture`, `tests/specs`, the CLI's `test_app.py`, `test_help_rendering.py`, `test_installation.py`, `commands/test_doctor.py`, `test_config_command.py` | `1101 passed in 26.04s`, after the packaging commit |
+| `.venv/bin/python -m pytest -q -n 0 -p no:randomly` over `integrations/opencaselist`, `integrations/discovery`, then `test_http_fetcher.py` (the PM's ordering check) | `369 passed`, after the last fetcher change |
 | `uv run ruff format --check .` / `uv run ruff check .` | `1027 files already formatted` / `All checks passed!` |
-| `uv run pyright packages/debate_core` | `0 errors` |
-| `uv run lint-imports` | `12 kept, 0 broken` |
+| `uv run pyright packages/debate_core packages/debate_cli` | `0 errors, 0 warnings, 0 informations` |
+| `uv run lint-imports` | `Contracts: 13 kept, 0 broken.` |
 | `uv run scripts/validate_specs.py` | `OK: 396 files, 39 epics, 336 tasks, 21 releases` |
+| `uv run scripts/check_command_blocks.py --base origin/dev` | `OK`, this report included |
 
-Two wider runs were stopped by the 115-second limit, not by a failure: the changed packages' whole
-test directories (`application`, `retrieval`, `integrations` and the always-run list), and then
-`packages/debate_core/tests/application` alone. The machine's load average was about 24 on 11 cores
-from another checkout's pytest run at the time. Neither is quoted as a result.
+Earlier, two wider runs were stopped by the 115-second limit, not by a failure: the changed
+packages' whole test directories, and then `packages/debate_core/tests/application` alone. The
+machine's load average was about 24 on 11 cores from another checkout's pytest run at the time.
+Neither is quoted as a result.
+
+### Import contracts, shown biting
+
+Each new list entry for `http_fetcher` was checked by appending an import to
+`integrations/http_fetcher.py` and running `uv run lint-imports` with the new `pyproject.toml` and
+then with the one from before the change:
+
+| Planted import | Before the change | After it |
+|---|---|---|
+| `import boto3` | `12 kept, 0 broken` | the AWS SDK contract BROKEN |
+| `import lxml` | `12 kept, 0 broken` | "Document libraries stay inside debate_core.integrations.docx_parser" BROKEN |
+| `import keyring` | `12 kept, 0 broken` | "The keychain library stays inside debate_core.integrations.opencaselist" BROKEN |
+
+`tests/architecture/test_import_contracts.py` carries the renamed contracts and a new permanent
+probe, `import keyring` in `debate_core.integrations.discovery`, which only the new keyring contract
+catches (`111 passed`).
+
+The installation tests were run red first: with the extras changed and the tests not yet updated,
+3 failed (the pinned extras, and the two drop cases that left out `http`).
 
 ### Mutation run
 
@@ -89,14 +128,25 @@ Hypothesis property is involved, so agreement 8 does not apply.
 | RFC 9309 tie between equal-length Allow and Disallow goes to Disallow | **survived**, then killed by the new `test_an_allow_and_a_disallow_of_equal_length_resolve_to_allow` |
 | size limit inclusive; declared `Content-Length` ignored; stream read far past the limit | killed |
 
+After the robots change (ruling e), a second run of 13 mutants on the new reading, all killed:
+expiry exclusive at 24 hours; rules never expire; the fetcher ignoring expiry; first match instead
+of longest; a tie going to Disallow; a group matched by a substring of the token; `*` ignored; `$`
+ignored; percent-encoding not normalised; the rules ignored; 401/403 allowing; an unreachable
+robots.txt allowing; the refusal ignored by the fetcher.
+
+The robots change itself was shown red first, against the old two-reading code with a skeleton
+`robots_rules_expired` that never expires: `7 failed, 46 passed`. The failures were the
+disallow-first allow-list, the §5.1 answers for `foobot` (two) and `quxbot`, the group named only
+by part of the token, the 24-hour expiry, and the stdlib still being imported.
+
 The log-leak test was also shown red twice: before the log filter existed (httpx's own
 `HTTP Request: GET <full URL>` line), and with the filter disarmed (`if _SENDING.get()` → `if False`).
 
 ## Files changed
 
 * `packages/debate_core/src/debate_core/retrieval/`: `fetch_types.py` (FetchResult and the
-  FetchError types), `robots_rules.py` (robots.txt readings), `content_sniffing.py`. Pure, no
-  network; the no-network scan still passes.
+  FetchError types), `robots_rules.py` (RFC 9309 reading, 24-hour age), `content_sniffing.py`. Pure,
+  no network; the no-network scan still passes.
 * `packages/debate_core/src/debate_core/integrations/http_fetcher.py`: the adapter, the per-host
   limiter and the request-URL log filter.
 * `packages/debate_core/src/debate_core/application/ports/providers.py`: `FetchResult` re-exported
@@ -104,16 +154,25 @@ The log-leak test was also shown red twice: before the log filter existed (httpx
 * `packages/debate_core/src/debate_core/application/settings.py`: `HttpSettings` gains
   `max_response_bytes`, `max_redirects`, `backoff_base_seconds`, `backoff_max_seconds`,
   `max_retry_wait_seconds`.
+* Packaging: `packages/debate_core/pyproject.toml` (the `http` extra), `packages/debate_cli/pyproject.toml`,
+  `uv.lock`, the root `pyproject.toml` (contract split, list entries);
+  `packages/debate_cli/tests/test_installation.py` and `tests/architecture/test_import_contracts.py`
+  follow them.
+* Spec: `constraints.packages` amended as the PM ruled; Goal set to `Succeeded`.
 * Tests: `tests/integrations/test_http_fetcher.py`, `tests/retrieval/test_fetch_types.py`,
   `test_content_sniffing.py`, `test_robots_rules.py`; synthetic fixtures in
   `tests/fixtures/http_fetcher/` (each written by hand, README says so).
 
 ## Deviations from the spec
 
-* **`HttpSettings` is in `debate_core.application`, outside `constraints.packages`**
-  (`debate_core.retrieval`, `debate_core.integrations`). ac2 requires the size and redirect limits
-  to be configurable via settings, and `settings.py` is the only place settings live, so the five
-  fields were added there. The spec's package list should name `debate_core.application.settings`.
+* **`HttpSettings` is in `debate_core.application`, which `constraints.packages` did not name.**
+  ac2 requires the size and redirect limits to be configurable via settings, and `settings.py` is
+  the only place settings live, so the five fields were added there. The PM added
+  `debate_core.application.settings` to the spec's packages (ruling 2026-10-21), and the packaging
+  files with it.
+* **Outside the amended packages:** `packages/debate_cli/tests/test_installation.py` and
+  `tests/architecture/test_import_contracts.py`, which pin the extras and the contract names the
+  ruling changed.
 * **`FetchResult` moved** from `application/ports/providers.py` to `retrieval/fetch_types.py`, as
   the `fetch-types` node's output path requires, and the port re-exports it, so every existing
   import still works (the port's own docstring said this task would extend it).
@@ -135,19 +194,20 @@ The log-leak test was also shown red twice: before the log filter existed (httpx
   spellings `127.1`, `0x7f000001`, `2130706433` and IPv4-mapped IPv6. Not covered: a public *name*
   that resolves to a private address (DNS rebinding); that needs a resolver hook in the transport
   and is listed under follow-up work.
-* **robots.txt readings.** 2xx: its rules. 401/403: refuse everything (`ROBOTS_ACCESS_DENIED`, as
-  `urllib.robotparser.read()` does). Other 4xx: allow everything (RFC 9309 §2.3.1.3). 429, 5xx, a
-  timeout, a failed connection or a redirect loop, after the usual retries: refuse everything
-  (`ROBOTS_UNREACHABLE`, RFC 9309 §2.3.1.4), the conservative reading the PM named. Redirects on
-  robots.txt are followed through the same gates (minus robots), up to `http.max_redirects`. A file
-  over 500 KiB is cut at its last whole line. The cache lives as long as the fetcher, keyed by
-  scheme, host and port, since RFC 9309 scopes robots.txt to an origin.
-* **Two readings of robots.txt, and a URL needs both.** `urllib.robotparser` (given only text, never
-  a URL; a test pins that) applies the first matching rule and ignores `*` and `$`, both of which
-  make it more permissive than the site meant (`Allow: /` then `Disallow: /private` allows
-  `/private/x`). An RFC 9309 longest-match reading of the same text is required to agree. The cost:
-  an allow-list written disallow-first (`Disallow: /`, `Allow: /public/`) refuses `/public/a`, as the
-  stdlib alone does. `Crawl-delay` is not read.
+* **robots.txt readings.** 2xx: its rules. 401/403: refuse everything (`ROBOTS_ACCESS_DENIED`),
+  deliberately stricter than RFC 9309, as the module docstring says. Other 4xx: allow everything
+  (RFC 9309 §2.3.1.3). 429, 5xx, a timeout, a failed connection or a redirect loop, after the usual
+  retries: refuse everything (`ROBOTS_UNREACHABLE`, RFC 9309 §2.3.1.4), the conservative reading the
+  PM named. Redirects on robots.txt are followed through the same gates (minus robots), up to
+  `http.max_redirects`. A file over 500 KiB is cut at its last whole line. Rules are kept per origin
+  (scheme, host and port, since RFC 9309 scopes robots.txt to an origin) with the time they were
+  read, and read again once 24 hours old by the injected clock (RFC 9309 §2.4).
+* **RFC 9309 alone decides** (the PM's ruling e). The group naming the whole product token
+  (`http.user_agent_product`, matched without regard to case, repeated groups merged), else the `*`
+  groups; the longest matching pattern wins, a tie goes to Allow, `*` and a final `$` are
+  understood, and paths and patterns are compared in one percent-encoded form. `urllib.robotparser`
+  is not imported (a test pins that). The tests' expected answers are the RFC's own examples
+  (§2.2.2, §2.2.3, §5.1, §5.2) and the stdlib-gap cases, written by hand. `Crawl-delay` is not read.
 * **The URL is fetched as given** (the PM's amendment from v1-e04-t01): a test fetches a mixed-case,
   AMP, tracking-parameter URL and asserts its canonical form was never requested.
 * **Retries.** `ConnectTimeout` counts as a connect failure and is retried (nothing was sent);
@@ -183,16 +243,18 @@ The log-leak test was also shown red twice: before the log filter existed (httpx
 
 ## Operator follow-ups
 
-None yet. The packaging change, if the PM approves it, changes `pyproject.toml` and `uv.lock`, which
-makes the affected set the whole selection; that run is the pull request's `ci` check.
+None. The packaging change makes the affected set the whole selection; per the PM's ruling, that run
+is the pull request's `ci` check.
 
 ## Follow-up work
 
 * **A third Retry-After parser** remains in `integrations/opencaselist/transport.py` (`_retry_after`),
   which reads the wall clock rather than an injected one. Moving `retry_after_seconds` to a shared
   `debate_core.integrations` module and using it there is a small task of its own (E34 or E01).
-* **DNS-resolved private addresses** are not refused (see Decisions). A resolver check in the
-  transport belongs with the V2 worker that fetches in the cloud.
+* **Public names that resolve to private addresses are not refused** (the PM's ruling d keeps this
+  open). Only literal addresses and `localhost` are checked today; a resolver check in the transport,
+  so the address actually connected to is the one judged (DNS rebinding included), belongs with the
+  V2 worker that fetches in the cloud.
 * **`FakeArticleFetcher`** still answers unknown URLs with `access_status=NOT_FOUND` and no `error`;
   t05 may want it to return `HttpStatusError(404)` and `UNKNOWN` like the real fetcher.
 * **v1-e04-t03** must map `UnsupportedScheme` and `NonPublicAddress` as well as the node's six.

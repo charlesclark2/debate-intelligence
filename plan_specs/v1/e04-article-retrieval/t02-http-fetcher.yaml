@@ -71,7 +71,7 @@ spec:
         A per-host rate limiter enforces a configurable minimum interval, and every request sends an
         identifying User-Agent with a contact URL.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

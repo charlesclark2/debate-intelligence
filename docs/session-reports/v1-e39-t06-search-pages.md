@@ -388,9 +388,68 @@ PM questions from v1-e39-t06-search-pages (session of 2026-10-20)
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-21
 
 **Notes:**
+
+Accepted, on two conditions, both closed in this session before the pull request (no `--partial`,
+since v1-e39-t07 and t08 depend on this task):
+
+1. **Question 1: (a).** Add the Chromium install step to `validate-dev.yml`'s slow job, and add
+   `.github/workflows/validate-dev.yml` to the spec's packages with a comment
+   `PM ruling 2026-10-21 (v1-e39-t06 Q1)`. The task that adds a suite leaves its tier green.
+   * Check that the slow job's marker expression actually selects `packages/debate_api/tests/browser`,
+     and say so in the report.
+   * Add a line to the workflow's comment saying why the step exists.
+2. **Question 2: as you recommend.** ac4 runs after today's re-parse to `docx-6`, by the block in
+   Operator follow-ups. Record the outputs and each yes or no in your own section, then set the
+   Goal `Succeeded`.
+
+As before, if anything comes out differently from what you expect, in ac4 or in the workflow, stop
+and ask for another review rather than opening the pull request.
+
+**What is good:**
+
+* **Copy card is right where it is hardest.** The `ClipboardItem` of Promises is written inside the
+  click, and an init script records the order (click, write with activation, fetch answered, write
+  done). The await-first mutant fails it. You measured that headless Chrome would not have shown
+  the difference, and kept the test on the order rather than on Chrome's leniency.
+* **ac2 reads back the way Google Docs does,** from the clipboard's `text/html`. The browser's own
+  paste is checked separately for what it can keep (Decision 6). Both are honest about what each
+  proves.
+* **The CSP tested is the deployed one,** read from `distribution.tf`, and every look is a class in
+  a hashed `app.css`, because `default-src 'self'` refuses inline styles too. Decision 7 (Chrome
+  reporting the copy's inline styles while it sanitises the write) is documented and asserted
+  exactly, not ignored.
+* **The index holder** follows ADR-0019 (c) 3 and 5:
+  * the wall clock, so frozen time counts;
+  * a refused pointer remembered by its entity tag;
+  * read-only files under new names, deleted after in-flight requests end;
+  * startup cleanup of `/tmp`;
+  * a download bounded by the manifest's size.
+
+  The ten-minute mutant first survived because the tests advanced by the constant. Writing the
+  minutes out is the right fix.
+* **The privacy note was met:** `test_the_app_logs_no_query_card_id_or_card_text_for_a_search_a_card_view_and_a_copy`.
+* **The image gains nothing from the dev dependencies,** checked against what `tub_deploy.sh`
+  stages.
+
+**Rulings on the rest:**
+
+* **Deviations 1 to 3: accepted,** including `debate_core.testing.search_index` for both packages'
+  tests.
+* **Decisions 1 to 10: accepted.** On Decision 4, the pilot's students paste into Google Docs on
+  Chromebooks, which ac4 checks. Word is not checked here, and the coach's beta (v1-e39-t10) notes
+  it.
+
+**Follow-ups, placed by the PM in the next batch:**
+
+* **2 (audit of the card view and copy) and 4 (the runbook on the fetched index):** v1-e39-t07's
+  amendment, with the suppression re-read in the holder's `_refresh`.
+* **3 (the holder's `INFO` lines not reaching the function's log):** v1-e39-t10's amendment, since
+  its Lambda measurements need the cold-start index load time. That means logging configuration
+  only, with no query, card or user in any line.
+* **5 (no previous-page link):** no change for the pilot.

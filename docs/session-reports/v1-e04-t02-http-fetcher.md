@@ -266,9 +266,55 @@ is the pull request's `ci` check.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-21
 
 **Notes:**
+
+Accepted, with nothing more to do before the pull request. Every criterion passes, the Goal is
+`Succeeded`, and the pull request opens with no `--partial`. Its `ci` check runs the whole
+selection, since `pyproject.toml` and `uv.lock` changed. Paste any failure back here.
+
+**What is good:**
+
+* **Every hop passes the same four gates, in a sensible order:** public address, robots.txt for
+  that origin, the per-host interval, bounded retries. The tests assert both the request times
+  (`[0.0, 2.5, 5.0]`) and that a refused target was never requested.
+* **Ruling (e) is implemented and shown.** The RFC's own §2.2.2, §2.2.3, §5.1 and §5.2 examples,
+  plus the stdlib-gap cases, are written by hand. The red run caught the allow-list case and the
+  `foobot` and `quxbot` answers. A test pins that `urllib.robotparser` is gone. The 24-hour expiry
+  is tested at 23:59:59 and 24:00.
+* **The mutation run found a real gap** (an equal-length Allow and Disallow tie), and it now has a
+  test. 36 mutants in all.
+* **The import contracts were shown biting,** before and after the split, for boto3, lxml and
+  keyring, and the architecture test carries a permanent keyring probe.
+* **Nothing to bypass with:** no cookies, `trust_env=False`, only the User-Agent header. The
+  non-public address refusal covers the odd spellings (`127.1`, `0x7f000001`, IPv4-mapped IPv6).
+  That is the right posture for URLs that come from students and search results.
+* **The log filter cuts httpx's full-URL lines only while this fetcher sends.** Other adapters'
+  lines and filters are untouched (tested), and the leak tests start with bare loggers and passed
+  after the OpenCaselist and discovery suites in one process, as the CI note asked.
+* **The httpx `follow_redirects=False` finding,** which still raises on a `javascript:` Location
+  inside `send`, is handled by moving `Location` into a response extension so the fetcher judges it.
+  That is careful work.
+
+**Rulings:**
+
+* **The deviations are accepted:** `test_installation.py` and `test_import_contracts.py` follow the
+  ruling's changes, `FetchResult` moved and re-exported, the two extra error types, and errors as
+  values.
+* **Decisions are accepted.** The per-request rather than per-fetch deadline is fine for now; a
+  caller wanting a total bound wraps the call.
+
+**Follow-ups, placed by the PM in the next batch:**
+
+* **The third Retry-After parser** (OpenCaselist's `_retry_after`, on the wall clock) joins the
+  E01 follow-up task: move `retry_after_seconds` to a shared `debate_core.integrations` module and
+  use it in all three places.
+* **Names resolving to private addresses (DNS rebinding):** recorded for the V2 cloud worker, where
+  it matters most. Not a V1 task.
+* **v1-e04-t03:** an amendment to map `UnsupportedScheme` and `NonPublicAddress` with the node's six.
+* **v1-e04-t05:** an amendment for `FakeArticleFetcher` to answer an unknown URL as the real fetcher
+  does (`HttpStatusError(404)`, `UNKNOWN`).

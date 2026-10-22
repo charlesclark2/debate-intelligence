@@ -42,15 +42,27 @@ cannot delete, and removing evidence is an operator procedure with its own crede
 still worth doing: it is how an operator notices that the bucket holds a corpus their laptop does
 not.
 
-## Two things a sync never moves, either way
+## Three things a sync never moves, either way
 
 * **`manifests/_suppression/`** — the suppression list and the removal log. They are append-only
   and merged as a set union by `caselist remove` and `unsuppress`
   (`debate_core.application.caselist.suppression`); a sync that copied one side over the other
-  would truncate whichever had more lines. Planned as `skipped`, whatever is on either side.
+  would truncate whichever had more lines. A key at both ends is planned `skipped`, whatever
+  either side holds, and so is a key only at the source. A key only at the destination is reported
+  `would_delete` and, like every `would_delete`, left alone: it says the destination holds a list
+  or log the source does not.
 * **A blob whose digest is on the removal suppression list.** A takedown deleted it everywhere;
   a sync from a store that still held a copy must not put it back. Planned as `skipped`. The list
   is a required constructor argument, like every other path that can store a source (`v1-e30-t07`).
+* **`parsed/`** — the parsed card store (`v1-e29-t12`). `caselist parse --publish` is its only
+  publisher, and it reads the store from `<data_dir>/parsed/`, which is not a keyspace here. A pull
+  used to copy the bucket's `parsed/` into `<data_dir>/objects/parsed/`, which no reader opens, and
+  a push from a machine that had pulled could put an older per-source file, index, failures file or
+  occurrence table over the one the publisher had sent since. Planned as `skipped`, whatever is on
+  either side: a key only at the destination is skipped too, never `would_delete`, because the
+  bucket's parsed store is not something this machine's `objects/` was meant to hold. A stale
+  `objects/parsed/` copy is reported by :meth:`EvidenceSyncService.stale_parsed_copy`, for the
+  operator to remove, and never deleted here.
 
 A push also leaves out **a blob that only rows at a path a removal holds name** (`v1-e30-t22`): the
 bytes a build from before `v1-e30-t13` imported at a removed file's path, which `caselist publish`
@@ -67,13 +79,10 @@ skipped with that refusal, which names the key and the line number. Asking costs
 manifest is read from the local listing's entry, once per manifest the push would send, and one
 already in the bucket, identical or journaled, is not asked about. A pull is not affected.
 
-Neither way moves **an occurrence table over one stamped with a newer fingerprint version** than
-this build's (`v1-e34-t29`). `parsed/` is a named-object prefix, so a push of a copy this machine
-pulled earlier would otherwise put an older build's clusters back in the bucket. Before an
-`occurrences.jsonl` under `parsed/` is moved, its stamps are read: a push's own copy and the
-bucket's it would overwrite, and the local copy a pull would overwrite. A newer one fails that
-object with both versions named, leaving both sides as they were
-(:mod:`debate_core.application.caselist.occurrence_table_guard`).
+From `v1-e34-t29` until `v1-e29-t12` a sync moved `parsed/` and guarded only its occurrence
+tables, refusing one stamped with a newer fingerprint version than this build's
+(:mod:`debate_core.application.caselist.occurrence_table_guard`). Skipping `parsed/` leaves that
+guard nothing to refuse here; the parse pipeline and the parsed store's publisher still ask it.
 
 Every one of these skips, and the ordinary ones, carries a :class:`SkipKind` beside its reason, set
 by the branch that skipped it (`v1-e29-t11`). :attr:`SyncPlan.skipped_reasons` groups by the kind,
@@ -134,13 +143,6 @@ from enum import StrEnum
 from pathlib import Path
 
 from debate_core.application.caselist.manifest import MANIFEST_DIRECTORY
-from debate_core.application.caselist.occurrence_table_guard import (
-    THE_BUCKET,
-    THIS_MACHINES_SYNCED_COPY,
-    fingerprint_stamps_of_file,
-    occurrence_table_of,
-    refuse_newer_table,
-)
 from debate_core.application.caselist.suppression import is_suppression_key, load_suppression_state
 from debate_core.application.errors import (
     STORE_ERRORS_TRUE_OF_EVERY_OBJECT,
@@ -156,6 +158,7 @@ from debate_core.application.ports.evidence_store import (
     ObjectKey,
     validate_object_key,
 )
+from debate_core.application.ports.parsed_store import PARSED_PREFIX
 from debate_core.application.ports.providers import Clock
 from debate_core.application.ports.suppression import SuppressionList, SuppressionState
 from debate_core.domain import Sha256Hex
@@ -164,6 +167,7 @@ __all__ = [
     "BLOB_KEY_SEGMENT",
     "EVIDENCE_PREFIXES",
     "JOURNAL_DIRECTORY",
+    "PARSED_STORE_PREFIX",
     "EvidenceSyncService",
     "HeldBackDigests",
     "JournalEntry",
@@ -171,6 +175,7 @@ __all__ = [
     "PlannedObject",
     "SkipKind",
     "SkippedReason",
+    "StaleParsedCopy",
     "SyncAction",
     "SyncDirection",
     "SyncJournal",
@@ -232,6 +237,12 @@ A sibling of `objects/` and `blobs/` rather than a file inside either, so that t
 can never be mistaken for something the sync is supposed to move.
 """
 
+PARSED_STORE_PREFIX = f"{PARSED_PREFIX}/"
+"""The parsed card store's prefix, which a sync plans `skipped` either way (`v1-e29-t12`).
+
+`caselist parse --publish` publishes it from `<data_dir>/parsed/`; see this module's docstring.
+"""
+
 
 class SyncDirection(StrEnum):
     """Which way evidence is moving."""
@@ -257,7 +268,8 @@ class SyncAction(StrEnum):
     """Present at the destination with different bytes; will be overwritten. Named objects only."""
 
     SKIPPED = "skipped"
-    """Present at the destination and identical, or outside the documented prefixes."""
+    """Present at the destination and identical, outside the documented prefixes, or one of the
+    things a sync never moves; :class:`SkipKind` says which."""
 
     WOULD_DELETE = "would_delete"
     """At the destination and not at the source. Reported; V1 never deletes."""
@@ -295,6 +307,10 @@ class SkipKind(StrEnum):
 
     SUPPRESSION_RECORD = "suppression_record"
     """Under `manifests/_suppression/`, which only `caselist remove` and `unsuppress` append to."""
+
+    PARSED_STORE = "parsed_store"
+    """Under `parsed/`, either way and on either side, which only `caselist parse --publish` publishes
+    (`v1-e29-t12`)."""
 
     ANOTHER_KEYSPACE = "another_keyspace"
     """A key another keyspace's longer prefix owns, so that one plans it and this one moves nothing."""
@@ -531,6 +547,19 @@ class SyncPlan:
             for kind in SkipKind
             if any(planned.skip_kind is kind for planned in skipped)
         )
+
+
+@dataclass(frozen=True, slots=True)
+class StaleParsedCopy:
+    """What an earlier `store sync --pull` copied of the bucket's `parsed/` onto this machine (`v1-e29-t12`).
+
+    `<data_dir>/objects/parsed/`, which no reader opens: the parsed store is `<data_dir>/parsed/`.
+    A dry run reports it for the operator to remove; nothing in this module deletes it, and it is
+    never journaled. A count and the directory, never a file's name.
+    """
+
+    directory: Path
+    files: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -871,7 +900,7 @@ class EvidenceSyncService:
             planned.append(entry)
             heads += cost
         planned.extend(
-            _planned(keyspace, key, SyncAction.WOULD_DELETE, destination[key].size, "absent at the source")
+            _only_at_the_destination(keyspace, key, destination[key].size)
             for key in sorted(set(destination) - set(source))
         )
         return planned, heads
@@ -900,6 +929,8 @@ class EvidenceSyncService:
                 ),
                 0,
             )
+        if _is_parsed_store_key(remote_key):
+            return _parsed_store_skip(keyspace, key, source.size), 0
         if keyspace.content_addressed:
             digest = keyspace.digest_of_key(key)
             if digest is not None and suppression.suppresses_source(digest):
@@ -1142,33 +1173,9 @@ class EvidenceSyncService:
         self, keyspace: SyncKeyspace, planned: PlannedObject, direction: SyncDirection
     ) -> Sha256Hex:
         """Move one object and return the digest that was verified at the destination."""
-        table = None if keyspace.content_addressed else occurrence_table_of(planned.remote_key)
-        if table is not None:
-            await self._refuse_a_newer_table(keyspace, planned, direction, *table)
         if direction is SyncDirection.PUSH:
             return await self._push(keyspace, planned)
         return await self._pull(keyspace, planned)
-
-    async def _refuse_a_newer_table(
-        self,
-        keyspace: SyncKeyspace,
-        planned: PlannedObject,
-        direction: SyncDirection,
-        caselist: str,
-        version: str,
-    ) -> None:
-        """Ask :func:`~debate_core.application.caselist.occurrence_table_guard.refuse_newer_table`
-        of an occurrence table a push would send, and of the copy either way would overwrite, before
-        anything is moved (`v1-e34-t29`)."""
-        if direction is SyncDirection.PUSH or planned.action is SyncAction.CHANGED:
-            async with _readable_source(keyspace, planned.local_key) as local:
-                stamps = fingerprint_stamps_of_file(local)
-            refuse_newer_table(stamps, caselist=caselist, version=version, store=THIS_MACHINES_SYNCED_COPY)
-        if direction is SyncDirection.PUSH and planned.action is SyncAction.CHANGED:
-            with _staging_file(planned.local_key) as staged:
-                await keyspace.remote.get_file(planned.remote_key, staged)
-                stamps = fingerprint_stamps_of_file(staged)
-            refuse_newer_table(stamps, caselist=caselist, version=version, store=THE_BUCKET)
 
     async def _push(self, keyspace: SyncKeyspace, planned: PlannedObject) -> Sha256Hex:
         """Upload one object, then confirm from the bucket's own head that it holds those bytes."""
@@ -1223,6 +1230,28 @@ class EvidenceSyncService:
     def _now(self) -> str:
         moment = self._clock.now() if self._clock is not None else datetime.now(UTC)
         return moment.isoformat()
+
+    # --------------------------------------------------------------------------------------
+    # The stale parsed copy an earlier pull left
+    # --------------------------------------------------------------------------------------
+
+    async def stale_parsed_copy(self) -> StaleParsedCopy | None:
+        """The `parsed/` copy a pull from before `v1-e29-t12` left in this machine's store, or `None`.
+
+        Read from the local side of each named-object keyspace that can name its files, and never
+        acted on: the operator removes it with the command a dry run prints. `None` when no such
+        keyspace holds a file under `parsed/`.
+        """
+        for keyspace in self._keyspaces:
+            local_filter = _local_filter_for(keyspace, PARSED_STORE_PREFIX)
+            if keyspace.content_addressed or keyspace.local_path_for is None or local_filter is None:
+                continue
+            held = await keyspace.local.list_objects(local_filter)
+            if held:
+                return StaleParsedCopy(
+                    directory=keyspace.local_path_for(local_filter.rstrip("/")), files=len(held)
+                )
+        return None
 
     # --------------------------------------------------------------------------------------
     # The two read-only commands
@@ -1326,6 +1355,24 @@ def _planned(
     )
 
 
+def _parsed_store_skip(keyspace: SyncKeyspace, local_key: ObjectKey, size: int) -> PlannedObject:
+    return _planned(
+        keyspace,
+        local_key,
+        SyncAction.SKIPPED,
+        size,
+        "the parsed store is published by caselist parse --publish only",
+        skip_kind=SkipKind.PARSED_STORE,
+    )
+
+
+def _only_at_the_destination(keyspace: SyncKeyspace, local_key: ObjectKey, size: int) -> PlannedObject:
+    """`would_delete`, except under `parsed/`, which is skipped whatever is on either side."""
+    if _is_parsed_store_key(keyspace.remote_key(local_key)):
+        return _parsed_store_skip(keyspace, local_key, size)
+    return _planned(keyspace, local_key, SyncAction.WOULD_DELETE, size, "absent at the source")
+
+
 def _skipped_reason(kind: SkipKind, skipped: Sequence[PlannedObject]) -> SkippedReason:
     """One kind's entry in the breakdown, from the plan's skips of that kind in key order.
 
@@ -1389,6 +1436,10 @@ def _local_filter_for(keyspace: SyncKeyspace, prefix: str) -> str | None:
 
 def _is_documented_prefix(remote_key: ObjectKey) -> bool:
     return any(remote_key.startswith(documented) for documented in EVIDENCE_PREFIXES)
+
+
+def _is_parsed_store_key(remote_key: ObjectKey) -> bool:
+    return remote_key.startswith(PARSED_STORE_PREFIX)
 
 
 def _stated_digest(landed: ObjectInfo, key: ObjectKey) -> Sha256Hex:

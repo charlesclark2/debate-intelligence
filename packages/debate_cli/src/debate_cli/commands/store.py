@@ -53,6 +53,7 @@ is missing.
 from __future__ import annotations
 
 import asyncio
+import shlex
 from collections.abc import Coroutine
 from pathlib import Path
 from typing import Annotated, Any
@@ -64,6 +65,7 @@ from debate_cli.exit_codes import ExitCode, exit_code_for_failure_codes
 from debate_cli.output import CommandFailure, JsonValue, TableSpec
 from debate_core.application.evidence_sync import (
     SkipKind,
+    StaleParsedCopy,
     SyncAction,
     SyncDirection,
     SyncPlan,
@@ -132,6 +134,7 @@ def sync(
 
     if not apply_changes:
         report = SyncReport(plan=plan, applied=False)
+        _note_a_stale_parsed_copy(cli, _run(service.stale_parsed_copy()))
     else:
         cli.output.detail(f"transferring {len(plan.transfers)} object(s)")
         report = _run(service.execute(plan))
@@ -371,14 +374,20 @@ def _outcome(report: SyncReport) -> str:
 
 
 def _left_behind_lines(plan: SyncPlan) -> list[str]:
-    """Under the table: the manifests a push left on this machine because of the publisher (`v1-e29-t11`).
+    """Under the table: the manifests a push left on this machine because of the publisher (`v1-e29-t11`),
+    and the parsed store a sync never moves, either way (`v1-e29-t12`).
 
     By kind, count and the requests the publisher's messages name, never the messages themselves,
     which `--json` carries. Every other kind of skip stays a count in the table.
     """
     lines: list[str] = []
     for reason in plan.skipped_reasons:
-        if reason.kind is SkipKind.WITHHELD_MANIFEST:
+        if reason.kind is SkipKind.PARSED_STORE:
+            lines.append(
+                f"PARSED STORE: {reason.count} object(s) under parsed/ left as they are on both sides. "
+                "store sync never moves the parsed store: caselist parse --publish is what publishes it."
+            )
+        elif reason.kind is SkipKind.WITHHELD_MANIFEST:
             named = f" ({', '.join(reason.request_ids)})" if reason.request_ids else ""
             removals = " and ".join(
                 f"caselist remove … --request {request}" for request in reason.request_ids or ("<id>",)
@@ -394,6 +403,22 @@ def _left_behind_lines(plan: SyncPlan) -> list[str]:
                 "this machine; --json has the key and line number of each."
             )
     return lines
+
+
+def _note_a_stale_parsed_copy(cli: CliContext, stale: StaleParsedCopy | None) -> None:
+    """On a dry run, the `objects/parsed/` copy an earlier pull left, and the command that removes it.
+
+    On the console only (`v1-e29-t12`): a note on stderr, so the path and the command are one
+    unbroken line whatever the terminal's width, and never in `--json`'s payload or the journal. The
+    directory and a count, never a file's name. Nothing here deletes it; the operator runs the command.
+    """
+    if stale is None:
+        return
+    cli.output.note(
+        f"STALE PARSED COPY: {stale.directory} holds {stale.files} file(s) an earlier store sync --pull "
+        "copied from the bucket. Nothing reads them, and store sync no longer moves them. Remove them "
+        f"with: rm -r {shlex.quote(str(stale.directory))}"
+    )
 
 
 def _filtered(plan: SyncPlan) -> str:

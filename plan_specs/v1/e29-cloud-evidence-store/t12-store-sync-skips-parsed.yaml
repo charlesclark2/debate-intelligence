@@ -28,7 +28,8 @@ spec:
     the same bytes, and their publishes meet as `CHECKSUM_MISMATCH`.
   priority: 2
   constraints:
-    packages: [debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/data, docs/runbooks]
+    # PM ruling 2026-10-22: the operator's store sync guide documents the new skip kind.
+    packages: [debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/data, docs/runbooks, docs/guides]
     forbidden:
       - Deleting a local file without the operator's command
       - A path, school, team code or file name in a record or a log
@@ -47,7 +48,7 @@ spec:
         A stale `objects/parsed/` copy is reported by `--dry-run` with the command that
         removes it, and the per-source stamp line is in docs/data/parsed-card-store.md.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

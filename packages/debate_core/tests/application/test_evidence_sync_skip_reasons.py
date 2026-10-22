@@ -371,8 +371,8 @@ async def test_at_most_three_distinct_key_prefixes_in_key_order(
         "files/synth26/2026-09-01/aff.docx",
         "manifests/synth26/2026-09-01.jsonl",
         "manifests/synth26/2026-09-08.jsonl",
-        "parsed/synth26/v3/cards.jsonl",
         "reports/synth26/2026-09-01/landscape.json",
+        "uploads/synth26/2026-09-01/upload.json",
     ):
         body = key.encode()
         write_local_object(data_dir, key, body)
@@ -381,7 +381,7 @@ async def test_at_most_three_distinct_key_prefixes_in_key_order(
     plan = await sync_service(data_dir, s3_client, evidence_bucket).plan(direction=SyncDirection.PUSH)
 
     assert plan.skipped_reasons == (
-        SkippedReason(SkipKind.IDENTICAL, 5, ("files/synth2", "manifests/sy", "parsed/synth")),
+        SkippedReason(SkipKind.IDENTICAL, 5, ("files/synth2", "manifests/sy", "reports/synt")),
     )
 
 

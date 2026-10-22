@@ -363,6 +363,16 @@ Success looks like: `Removed chromebook.check. Any open session ends within five
 6. **A real Chromebook check is `v1-e39-t10`'s** (PM ruling 2026-10-21): sign-in, search, a card,
    and Copy card into Google Docs, on a Chromebook. ac4 here ran in desktop Chrome at 1366x768;
    the PM adds the Chromebook check to that task's spec.
+7. **A worktree cut before a newer migration refuses the shared data directory's database.** Every
+   checkout uses `~/.debate-research/<env>/debate.sqlite3`. A command run from a newer one (here the
+   main checkout on `dev`) upgrades it, and every older worktree then stops with `MigrationError`.
+   **The hint does not say to sync.** `MigrationError` has no mapping in the CLI, so it is reported
+   as `INTERNAL_ERROR`. The hint (`debate_cli/output.py`) says "This is a bug in debate-research. Re-run
+   with --verbose…", and the error's own sentence ("written by a newer build of debate_core;
+   upgrade rather than downgrade") is not printed, since it can quote a path. Proposed for a later
+   task: map the newer-schema case to its own code, with the one-line hint *"This data directory's
+   database was upgraded by a newer build: update this checkout (`scripts/task sync <task>`, or
+   `git pull` and `uv sync --all-packages`) and run the command again."*
 
 ## PM questions
 
@@ -431,6 +441,47 @@ the Chromebook check as `v1-e39-t10`'s. On 2026-10-21, before the session went o
 `ls ~/.debate-research/dev/parsed/*` still listed only `2026.10.18-docx-5` for all four stores. The
 operator runs Operator follow-up 1 once the re-parse has written `2026.10.20-docx-6`, and the
 results go here.
+
+**ac4's first attempt, 2026-10-21: stopped at step 3, and a second review.**
+
+* **What passed.** Step 1: the store listed `2026.10.20-docx-6` four times; `grep -c` and
+  `terraform init` ran; the plan said `No changes.` (the listing grant was already applied), so
+  nothing was applied. Step 2: all four stores are `2026.10.20-docx-6`. The re-parse, run from the
+  main checkout on `dev`, finished at 22:45 CDT with `status: ok` for each store: hsld26 86,675
+  occurrence rows, hspf26 62,292, hspolicy26 116,337, openev 8,081.
+* **What stopped.** Step 3's `tub index build` refused with `INTERNAL_ERROR`
+  (`exception_type: MigrationError`) before reading any store. Nothing was built, published or
+  written.
+* **Why.** The re-parse ran on `dev`, which carries migration
+  `0003_search_provider_statuses.sql`, `v1-e08-t01`'s (#383). That run applied it to
+  `~/.debate-research/dev/debate.sqlite3`. This branch, cut before it, shipped migrations 1 and 2
+  only, so it refused a database at schema version 3 rather than read a newer schema. The relay
+  message first named the migration `v1-e07-t01`'s; the PM corrected it.
+* **The ruling (PM, 2026-10-21): (a), sync.**
+  * `scripts/task sync v1-e39-t06-search-pages` rebased the branch's 14 commits onto `origin/dev`
+    with no conflict; git merged `pyproject.toml` and `uv.lock` itself, and pushed nothing, since
+    the branch is not on the remote.
+  * Re-locking: `uv lock --check` passed on the merged lock, and `uv lock` changed nothing (the tree
+    stayed clean; playwright is still 1.63.0). `uv sync --all-packages` ran.
+  * The branch now ships migrations 1 to 3.
+* **The checks again, on the synced branch.**
+  * `uv run scripts/affected_tests.py --run` → the whole selection is affected (`pyproject.toml`),
+    so that is CI's.
+  * Within two minutes each:
+    * the debate_api tests, the holder, search, publish and S3 tests, `tests/architecture`,
+      `tests/specs`, the CLI's wiring tests and the workflow tests → `1065 passed in 21.76s`;
+    * `packages/debate_core/tests/application` → `2729 passed in 90.17s`;
+    * `packages/debate_core/tests/integrations/local`, `tests/docs` and the docs-check tests →
+      `382 passed in 4.79s`.
+  * `uv run pytest -m slow packages/debate_api/tests/browser -n 0` → `12 passed`.
+  * ruff format (`1046 files already formatted`), ruff check, pyright on both packages (0 errors),
+    `lint-imports` (`13 kept, 0 broken`), the thin-handler check and `validate_specs.py` (`OK`).
+  * The slow tier's collection is still `24/11564`, 12 of them the browser suite.
+  * Two attempts at the application directory were cut off by my two-minute alarm, with no failure.
+    The machine's load average was near 10, with another `python3` from the main checkout's venv
+    at about 90% CPU. A serial run showed the tests still passing when it was stopped, and the third
+    attempt finished as above.
+* ac4 restarts from step 3, unchanged: step 5's `git rev-parse` now prints the rebased head.
 
 ## PM review
 

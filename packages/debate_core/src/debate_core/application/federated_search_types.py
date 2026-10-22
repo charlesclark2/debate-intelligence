@@ -7,7 +7,8 @@ A federated search (E08) is four stages run in a fixed order over one value, :cl
    record how each call ended (:mod:`debate_core.application.federated_search`, this task);
 3. **normalize** — collapse what the providers returned into distinct sources, `merged_candidates`
    (:mod:`debate_core.application.federated_dedupe`, v1-e08-t02);
-4. **rank** — order them by explainable features (v1-e08-t03).
+4. **rank** — order them by explainable features, `ranked_candidates`
+   (:mod:`debate_core.application.federated_ranking`, v1-e08-t03).
 
 Each stage is a :class:`SearchStage`: it takes the state and returns the next one. The stages that
 belong to sibling tasks default to :class:`PassThroughStage`, which returns the state unchanged, so
@@ -43,6 +44,7 @@ from debate_core.domain.discovery import CandidateResult, ProviderHealth, Provid
 
 if TYPE_CHECKING:
     from debate_core.application.federated_dedupe import MergedCandidate
+    from debate_core.application.federated_ranking import RankedCandidate
 
 __all__ = [
     "PassThroughStage",
@@ -105,8 +107,12 @@ class SearchState:
     merged_candidates: tuple[MergedCandidate, ...] = ()
     """`candidates` collapsed into one entry per distinct source, by the normalize stage."""
 
+    ranked_candidates: tuple[RankedCandidate, ...] = ()
+    """`merged_candidates` in rank order, each with its features and explanation, by the rank stage."""
+
     results: tuple[SearchResult, ...] = ()
-    """The ranking, once a rank stage has produced one. Stored with the search."""
+    """The ranking as stored with the search: one SearchResult per ranked candidate that has an
+    Article. Empty until a stage registers ranked candidates as Articles (v1-e08-t05)."""
 
     @classmethod
     def start(cls, search_id: Ulid, request: SearchRequest) -> SearchState:
@@ -124,6 +130,7 @@ class SearchState:
         provider_statuses: tuple[ProviderStatus, ...] | None = None,
         candidates: tuple[CandidateResult, ...] | None = None,
         merged_candidates: tuple[MergedCandidate, ...] | None = None,
+        ranked_candidates: tuple[RankedCandidate, ...] | None = None,
         results: tuple[SearchResult, ...] | None = None,
     ) -> SearchState:
         """A copy with the given fields replaced; `search_id` and `request` never change."""
@@ -133,6 +140,7 @@ class SearchState:
             provider_statuses=self.provider_statuses if provider_statuses is None else provider_statuses,
             candidates=self.candidates if candidates is None else candidates,
             merged_candidates=self.merged_candidates if merged_candidates is None else merged_candidates,
+            ranked_candidates=self.ranked_candidates if ranked_candidates is None else ranked_candidates,
             results=self.results if results is None else results,
         )
 

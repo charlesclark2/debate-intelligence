@@ -82,6 +82,12 @@ Data-use policy, [E39 gate](../policies/caselist-data-use.md#e39--student-eviden
   `13 kept, 0 broken`. `uv run scripts/validate_specs.py` → `OK: 404 files, 39 epics, 344 tasks, 21
   releases`.
 
+- **After `scripts/task sync`** (onto `origin/dev` at `2a96979`, a clean rebase): `uv sync
+  --all-packages`; the affected set is still over two minutes (233 of 385 files); the same
+  changed-directories run → **1405 passed in 23.53s**; pyright `0 errors`; `lint-imports` 13 kept;
+  `validate_specs.py` OK; `check_links.py` OK (1946 links); `check_command_blocks.py --base
+  origin/dev` OK (349 blocks).
+
 ### Mutation run (20 mutants, agreement 8 and 10)
 
 Each mutant ran against only the tests that cover it, with `HYPOTHESIS_STORAGE_DIRECTORY` a new,

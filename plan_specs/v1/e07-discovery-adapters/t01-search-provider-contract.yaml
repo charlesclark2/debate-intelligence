@@ -56,7 +56,7 @@ spec:
         A contract test kit (fixture loader + assertions) exists and a FakeProvider passes it; each later
         adapter imports it.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

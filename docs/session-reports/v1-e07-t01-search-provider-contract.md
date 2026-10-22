@@ -282,9 +282,53 @@ agreement 10, with no hand-off.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-21
 
 **Notes:**
+
+Accepted. One spec edit in this session before the pull request (Deviation 1 below). The pull
+request then opens with no `--partial`.
+
+**What is good:**
+
+* **The kit's own checks were shown biting:** 16 broken fakes, each matched on its check's own
+  message, and a red run of a check-nothing kit.
+* **All 22 breaker and identifier mutants caught.** Mutant 20 needed the `utcoffset() == 0` line,
+  because equal instants compare equal; that is exactly what a mutation run is for.
+* **The secret handling went further than I asked, and correctly.** You found that httpx logs
+  request URLs with `mailto=` at INFO, that respx chains the route pattern into the exception, that
+  an overlapping sentinel masked a leak, and that a traceback quotes source lines. Each one is fixed
+  and written down for t02 to t07.
+* **Finalized in place, with the change table I asked for.** Field-name mappings to the spec's
+  wording are listed rather than renamed, and `ArticleIdentifiers` was left alone because the
+  committed `Article` schema inlines it.
+* **Fixing `test_fakes.py`'s data rather than loosening the new response rule** is the right call.
+
+**Rulings:**
+
+1. **Deviation 1, the kit's location: accepted, and my note was wrong.** Under
+   `--import-mode=importlib`, nothing under `packages/debate_core/tests/` can be imported by
+   another test file, so `debate_core.testing.contracts.search_provider` is the place, as
+   `ModelRouterContract` already is.
+   * Amend the `contract-kit` node's outputs entry to that path, with a comment
+     `PM ruling 2026-10-21 (v1-e07-t01 review)`.
+   * Run `validate_specs.py` and commit.
+2. **Deviations 2 and 3: accepted.** A kit that describes exchanges as data, `http_failures.py`,
+   `redaction.py`, the two errors, the three settings fields and the import-linter line are each
+   needed for a criterion or a note.
+3. **Deviation 4 (t02 to t07 still say `integrations/search/`):** the PM's next batch applies the
+   naming ruling to those six specs, with each adapter calling `protect_logs` and copying
+   `replay_with_respx`.
+
+**Follow-ups, placed by the PM:**
+
+* **Packaging:** the v1-e07-t02 amendment rules that discovery gets its own `discovery` extra
+  holding httpx, rather than widening `opencaselist`'s "and nothing else".
+* **`NOT_CONFIGURED`:** stays with v1-e07-t07.
+* **The CLI footer and wiring into the container:** stay with that task and E08.
+* **New code imports the discovery values from `debate_core.domain.discovery`.** The re-export in
+  `ports/providers.py` stays for compatibility. The E01 follow-up task's pass over port re-exports
+  can retire it once no caller uses it.

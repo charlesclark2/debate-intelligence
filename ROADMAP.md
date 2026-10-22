@@ -61,7 +61,7 @@ v2.3's extension work.
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 42 | 42 | 224 |
-| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 97 | 75 | 473 |
+| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 97 | 76 | 473 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 21 | 7 | 190 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 13 | 1 | 108 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 14 | 0 | 96 |
@@ -265,7 +265,7 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [A drifted snapshot is owed again, and the banner and run list say what is pending](plan_specs/v1/e34-caselist-sync/t26-pending-work-and-banner-words.yaml) `v1-e34-t26-pending-work-and-banner-words` | Succeeded | 2 | 3.0 |
 | [The wrapper exports no AWS_PROFILE, and --check-launchd refuses options it ignores](plan_specs/v1/e34-caselist-sync/t27-wrapper-and-check-launchd-options.yaml) `v1-e34-t27-wrapper-and-check-launchd-options` | Succeeded | 1 | 1.0 |
 | [Publish-stage loose ends: a cut-short report check, the manifest count, and a report-only outcome](plan_specs/v1/e34-caselist-sync/t28-publish-stage-loose-ends.yaml) `v1-e34-t28-publish-stage-loose-ends` | Pending | 1 | 2.0 |
-| [An older build never rewrites or publishes an occurrence table stamped with a newer fingerprint version](plan_specs/v1/e34-caselist-sync/t29-newer-fingerprint-table-guard.yaml) `v1-e34-t29-newer-fingerprint-table-guard` | Pending | 1 | 2.0 |
+| [An older build never rewrites or publishes an occurrence table stamped with a newer fingerprint version](plan_specs/v1/e34-caselist-sync/t29-newer-fingerprint-table-guard.yaml) `v1-e34-t29-newer-fingerprint-table-guard` | Succeeded | 1 | 2.0 |
 
 
 ### v1.2 — Argument landscape & file building

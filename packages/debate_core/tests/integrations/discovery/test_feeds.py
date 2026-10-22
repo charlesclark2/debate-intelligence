@@ -764,6 +764,31 @@ async def test_the_google_news_registry_builds_it_wrapped_under_its_own_name() -
     assert dumped(response.results) == dumped(recording("google_news_search").expected)
 
 
+@pytest.mark.parametrize(
+    ("build", "name"),
+    [(build_feeds, "feeds_search"), (build_google_news, "google_news_search")],
+    ids=["feeds", "google-news"],
+)
+async def test_feed_and_google_news_candidates_carry_discovery_fields_only(
+    build: Callable[[httpx.AsyncBaseTransport], SearchProvider], name: str
+) -> None:
+    """A title, a publisher, a date, a short snippet and the publisher's URL; nothing an article has."""
+    replayed = replay_with_respx(build)(recording(name))
+    response = await replayed.provider.search(ProviderQuery(query="health insurance", filters=WINDOW))
+    assert response.results
+    for result in response.results:
+        assert result.source_type.value == "news"
+        assert result.snippet is None or len(result.snippet) <= MAX_SNIPPET_CHARS
+        assert result.canonical_url is None
+        assert result.identifiers.model_dump(exclude_defaults=True) == {}
+        assert (result.open_access_url, result.open_access, result.citation_count, result.raw_ref) == (
+            None,
+            None,
+            None,
+            None,
+        )
+
+
 @pytest.mark.usefixtures("bare_protected_loggers")
 class TestGoogleNewsRssProviderContract(SearchProviderContract):
     """The Google News provider on its recorded search."""

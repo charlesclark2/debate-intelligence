@@ -1,0 +1,1215 @@
+{
+  "description": "Labelled pairs for federated deduplication (v1-e08-t02-normalize-dedupe, ac4). Each pair is two CandidateResults as the discovery adapters map them, and `expected` says whether they are the same source (one MergedCandidate) or different sources (two). Every record and every expected answer was written by hand, before the matching code, from what each provider is documented to return; none was produced by running the deduplication. The records are synthetic: titles, authors, DOIs and URLs are invented in the shape of real ones. Every pair is a different work, so the whole file can also be deduplicated at once without one pair's records belonging with another's. `tags` names the case a pair stands for; the hard negatives the PM asked for are tagged near-identical-headlines-different-authors, same-title-different-years, preprint-and-published and syndicated-news.",
+  "pairs": [
+    {
+      "id": "same-doi-openalex-and-crossref-with-different-spellings",
+      "expected": "same",
+      "tags": ["doi"],
+      "why": "One DOI, written as a bare DOI by OpenAlex and as an upper-case resolver URL by Crossref.",
+      "left": {
+        "provider": "openalex",
+        "provider_record_id": "W4321000001",
+        "title": "Methane emissions from thawing permafrost in eastern Siberia",
+        "url": "https://www.nature.com/articles/s41558-021-01001-1",
+        "identifiers": {"doi": "10.1038/s41558-021-01001-1", "openalex_id": "W4321000001"},
+        "source_type": "scholarly",
+        "authors": ["Ana Rivera", "James Okafor"],
+        "publication": "Nature Climate Change",
+        "published_at": "2021-03-15T00:00:00Z"
+      },
+      "right": {
+        "provider": "crossref",
+        "title": "Methane Emissions from Thawing Permafrost in Eastern Siberia",
+        "url": "http://dx.doi.org/10.1038/s41558-021-01001-1",
+        "identifiers": {"doi": "https://doi.org/10.1038/S41558-021-01001-1"},
+        "source_type": "scholarly",
+        "authors": ["Rivera, Ana", "Okafor, James"],
+        "publication": "Nature Climate Change",
+        "published_at": "2021-03-01T00:00:00Z"
+      }
+    },
+    {
+      "id": "same-doi-online-first-and-print-in-different-years",
+      "expected": "same",
+      "tags": ["doi"],
+      "why": "Crossref dates the article by its online-first publication in December, OpenAlex by its issue in the new year. The DOI names one article whatever the dates say.",
+      "left": {
+        "provider": "crossref",
+        "title": "Drought, crop failure and rural migration in the Sahel",
+        "url": "https://doi.org/10.1016/j.gloenvcha.2019.101987",
+        "identifiers": {"doi": "10.1016/j.gloenvcha.2019.101987"},
+        "source_type": "scholarly",
+        "authors": ["Diallo, Mariam", "Sow, Ibrahima"],
+        "publication": "Global Environmental Change",
+        "published_at": "2019-12-20T00:00:00Z"
+      },
+      "right": {
+        "provider": "openalex",
+        "title": "Drought, crop failure and rural migration in the Sahel",
+        "url": "https://www.sciencedirect.com/science/article/pii/S0959378019301234",
+        "identifiers": {"doi": "10.1016/j.gloenvcha.2019.101987", "openalex_id": "W2990000002"},
+        "source_type": "scholarly",
+        "authors": ["Mariam Diallo", "Ibrahima Sow"],
+        "publication": "Global Environmental Change",
+        "published_at": "2020-01-01T00:00:00Z"
+      }
+    },
+    {
+      "id": "same-doi-with-a-truncated-title",
+      "expected": "same",
+      "tags": ["doi"],
+      "why": "Semantic Scholar's title is cut short; the DOI is the same.",
+      "left": {
+        "provider": "semantic_scholar",
+        "title": "Sanctions and the Russian economy: evidence from",
+        "url": "https://www.semanticscholar.org/paper/5b7e0c1a9d3f4e2b8c6a1d0e9f8a7b6c5d4e3f21",
+        "identifiers": {"doi": "10.1093/qje/qjab042", "semantic_scholar_id": "5b7e0c1a9d3f4e2b8c6a1d0e9f8a7b6c5d4e3f21"},
+        "source_type": "scholarly",
+        "authors": ["Petrova, Elena"],
+        "published_at": "2022-05-01T00:00:00Z"
+      },
+      "right": {
+        "provider": "crossref",
+        "title": "Sanctions and the Russian Economy: Evidence from Firm-Level Customs Data",
+        "url": "https://doi.org/10.1093/qje/qjab042",
+        "identifiers": {"doi": "doi:10.1093/QJE/QJAB042"},
+        "source_type": "scholarly",
+        "authors": ["Petrova, Elena"],
+        "publication": "The Quarterly Journal of Economics",
+        "published_at": "2022-05-01T00:00:00Z"
+      }
+    },
+    {
+      "id": "same-news-story-with-utm-tracking-parameters",
+      "expected": "same",
+      "tags": ["canonical-url", "syndicated-news"],
+      "why": "The same Reuters story, once shared with utm_* parameters. The parameters select nothing.",
+      "left": {
+        "provider": "gdelt",
+        "title": "EU agrees gas price cap after marathon talks",
+        "url": "https://www.reuters.com/world/europe/eu-agrees-gas-price-cap-2026-10-20/?utm_source=twitter&utm_medium=social&utm_campaign=eu",
+        "source_type": "news",
+        "published_at": "2026-10-20T09:00:00Z"
+      },
+      "right": {
+        "provider": "rss",
+        "title": "EU agrees gas price cap after marathon talks",
+        "url": "https://www.reuters.com/world/europe/eu-agrees-gas-price-cap-2026-10-20/",
+        "source_type": "news",
+        "authors": ["Kate Abnett"],
+        "publication": "Reuters",
+        "published_at": "2026-10-20T08:47:00Z"
+      }
+    },
+    {
+      "id": "same-news-story-on-an-amp-host",
+      "expected": "same",
+      "tags": ["canonical-url", "syndicated-news", "amp"],
+      "why": "amp.theguardian.com renders the www.theguardian.com article.",
+      "left": {
+        "provider": "gdelt",
+        "title": "Coral bleaching reaches record extent across the Pacific",
+        "url": "https://amp.theguardian.com/environment/2026/oct/19/coral-bleaching-record",
+        "source_type": "news",
+        "published_at": "2026-10-19T06:00:00Z"
+      },
+      "right": {
+        "provider": "rss",
+        "title": "Coral bleaching reaches record extent across the Pacific",
+        "url": "https://www.theguardian.com/environment/2026/oct/19/coral-bleaching-record",
+        "source_type": "news",
+        "authors": ["Graham Readfearn"],
+        "publication": "The Guardian",
+        "published_at": "2026-10-19T05:30:00Z"
+      }
+    },
+    {
+      "id": "same-news-story-with-an-amp-path-segment",
+      "expected": "same",
+      "tags": ["canonical-url", "syndicated-news", "amp"],
+      "why": "The /amp/ segment is the AMP rendering of the same BBC article.",
+      "left": {
+        "provider": "gdelt",
+        "title": "China's exports fall for a third month",
+        "url": "https://www.bbc.co.uk/news/amp/world-asia-china-67012345",
+        "source_type": "news",
+        "published_at": "2026-10-14T03:00:00Z"
+      },
+      "right": {
+        "provider": "rss",
+        "title": "China exports fall for third month in a row",
+        "url": "https://www.bbc.co.uk/news/world-asia-china-67012345",
+        "source_type": "news",
+        "publication": "BBC News",
+        "published_at": "2026-10-14T02:41:00Z"
+      }
+    },
+    {
+      "id": "same-news-story-with-output-type-amp",
+      "expected": "same",
+      "tags": ["canonical-url", "syndicated-news", "amp"],
+      "why": "?outputType=amp is the Washington Post's AMP switch, not a different article.",
+      "left": {
+        "provider": "gdelt",
+        "title": "Senate fails to advance filibuster rules change",
+        "url": "https://www.washingtonpost.com/politics/2026/10/18/senate-filibuster-vote/?outputType=amp",
+        "source_type": "news",
+        "published_at": "2026-10-18T22:00:00Z"
+      },
+      "right": {
+        "provider": "rss",
+        "title": "Senate fails to advance filibuster rules change",
+        "url": "https://www.washingtonpost.com/politics/2026/10/18/senate-filibuster-vote/",
+        "source_type": "news",
+        "authors": ["Liz Goodwin"],
+        "publication": "The Washington Post",
+        "published_at": "2026-10-18T21:15:00Z"
+      }
+    },
+    {
+      "id": "same-news-story-behind-a-google-redirect",
+      "expected": "same",
+      "tags": ["canonical-url", "syndicated-news"],
+      "why": "A google.com/url redirect whose destination is literally in its q parameter.",
+      "left": {
+        "provider": "gdelt",
+        "title": "Colorado River states reach drought deal",
+        "url": "https://www.google.com/url?q=https://apnews.com/article/colorado-river-drought-deal-4f1c2b&sa=D&source=editors",
+        "source_type": "news",
+        "published_at": "2026-10-16T17:00:00Z"
+      },
+      "right": {
+        "provider": "rss",
+        "title": "Colorado River states reach drought deal",
+        "url": "https://apnews.com/article/colorado-river-drought-deal-4f1c2b",
+        "source_type": "news",
+        "authors": ["Suman Naishadham"],
+        "publication": "The Associated Press",
+        "published_at": "2026-10-16T16:40:00Z"
+      }
+    },
+    {
+      "id": "same-news-story-with-a-fragment-a-default-port-and-an-upper-case-host",
+      "expected": "same",
+      "tags": ["canonical-url"],
+      "why": "Host case, the https default port and a #comments fragment never change the page.",
+      "left": {
+        "provider": "gdelt",
+        "title": "Farm subsidies swell as the trade war drags on",
+        "url": "https://WWW.NPR.ORG:443/2026/10/17/1234567/farm-subsidies-trade-war#comments",
+        "source_type": "news",
+        "published_at": "2026-10-17T10:00:00Z"
+      },
+      "right": {
+        "provider": "rss",
+        "title": "Farm subsidies swell as the trade war drags on",
+        "url": "https://www.npr.org/2026/10/17/1234567/farm-subsidies-trade-war",
+        "source_type": "news",
+        "authors": ["Scott Horsley"],
+        "publication": "NPR",
+        "published_at": "2026-10-17T09:05:00Z"
+      }
+    },
+    {
+      "id": "same-news-story-with-click-identifiers",
+      "expected": "same",
+      "tags": ["canonical-url", "syndicated-news"],
+      "why": "fbclid and gclid are click identifiers added by Facebook and Google Ads.",
+      "left": {
+        "provider": "gdelt",
+        "title": "House passes stopgap budget to avert shutdown",
+        "url": "https://www.politico.com/news/2026/10/14/house-budget-stopgap-00123456?fbclid=IwAR0abc&gclid=Cj0KCQ",
+        "source_type": "news",
+        "published_at": "2026-10-14T23:00:00Z"
+      },
+      "right": {
+        "provider": "rss",
+        "title": "House passes stopgap budget to avert shutdown",
+        "url": "https://www.politico.com/news/2026/10/14/house-budget-stopgap-00123456",
+        "source_type": "news",
+        "authors": ["Jennifer Scholtes"],
+        "publication": "Politico",
+        "published_at": "2026-10-14T22:30:00Z"
+      }
+    },
+    {
+      "id": "same-think-tank-report-behind-outlook-safe-links",
+      "expected": "same",
+      "tags": ["canonical-url"],
+      "why": "An Outlook Safe Links URL carries the Brookings address, percent-encoded but literal, in its url parameter.",
+      "left": {
+        "provider": "gdelt",
+        "title": "The future of NATO burden sharing",
+        "url": "https://nam12.safelinks.protection.outlook.com/?url=https%3A%2F%2Fwww.brookings.edu%2Farticles%2Fthe-future-of-nato-burden-sharing%2F&data=05%7C01&reserved=0",
+        "source_type": "think_tank",
+        "published_at": "2026-10-09T14:00:00Z"
+      },
+      "right": {
+        "provider": "rss",
+        "title": "The future of NATO burden sharing",
+        "url": "https://www.brookings.edu/articles/the-future-of-nato-burden-sharing/",
+        "source_type": "think_tank",
+        "authors": ["Constanze Stelzenmüller"],
+        "publication": "Brookings",
+        "published_at": "2026-10-09T13:00:00Z"
+      }
+    },
+    {
+      "id": "same-news-story-behind-a-facebook-outbound-link",
+      "expected": "same",
+      "tags": ["canonical-url", "syndicated-news"],
+      "why": "l.facebook.com/l.php carries the Vox address in its u parameter.",
+      "left": {
+        "provider": "gdelt",
+        "title": "The child tax credit expansion, explained",
+        "url": "https://l.facebook.com/l.php?u=https%3A%2F%2Fwww.vox.com%2Fpolicy%2F2026%2F10%2F12%2Fchild-tax-credit-expansion&h=AT0x",
+        "source_type": "news",
+        "published_at": "2026-10-12T15:00:00Z"
+      },
+      "right": {
+        "provider": "rss",
+        "title": "The child tax credit expansion, explained",
+        "url": "https://www.vox.com/policy/2026/10/12/child-tax-credit-expansion",
+        "source_type": "news",
+        "authors": ["Dylan Matthews"],
+        "publication": "Vox",
+        "published_at": "2026-10-12T14:00:00Z"
+      }
+    },
+    {
+      "id": "same-news-story-with-an-amp-html-suffix-and-tracking",
+      "expected": "same",
+      "tags": ["canonical-url", "syndicated-news", "amp"],
+      "why": "index.amp.html is the AMP rendering of index.html, shared with a utm parameter.",
+      "left": {
+        "provider": "gdelt",
+        "title": "Supreme Court agrees to hear challenge to emergency tariffs",
+        "url": "https://www.cnn.com/2026/10/15/politics/supreme-court-tariffs-case/index.amp.html?utm_source=twitter",
+        "source_type": "news",
+        "published_at": "2026-10-15T16:00:00Z"
+      },
+      "right": {
+        "provider": "rss",
+        "title": "Supreme Court agrees to hear challenge to emergency tariffs",
+        "url": "https://www.cnn.com/2026/10/15/politics/supreme-court-tariffs-case/index.html",
+        "source_type": "news",
+        "authors": ["John Fritze"],
+        "publication": "CNN",
+        "published_at": "2026-10-15T15:20:00Z"
+      }
+    },
+    {
+      "id": "same-news-story-through-the-google-amp-viewer",
+      "expected": "same",
+      "tags": ["canonical-url", "syndicated-news", "amp"],
+      "why": "google.com/amp/s/ spells the Axios origin out in its path.",
+      "left": {
+        "provider": "gdelt",
+        "title": "House Republicans move to repeal EV tax credit",
+        "url": "https://www.google.com/amp/s/www.axios.com/2026/10/13/ev-tax-credit-repeal",
+        "source_type": "news",
+        "published_at": "2026-10-13T12:00:00Z"
+      },
+      "right": {
+        "provider": "rss",
+        "title": "House Republicans move to repeal EV tax credit",
+        "url": "https://www.axios.com/2026/10/13/ev-tax-credit-repeal",
+        "source_type": "news",
+        "authors": ["Ben Geman"],
+        "publication": "Axios",
+        "published_at": "2026-10-13T11:30:00Z"
+      }
+    },
+    {
+      "id": "same-paper-linked-by-pmid",
+      "expected": "same",
+      "tags": ["provider-id"],
+      "why": "Neither record has a DOI; both name PubMed record 34567890.",
+      "left": {
+        "provider": "openalex",
+        "title": "Heat waves and emergency department visits among older adults",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/34567890/",
+        "identifiers": {"pmid": "34567890", "openalex_id": "W3200000003"},
+        "source_type": "scholarly",
+        "authors": ["Nguyen, Linh"],
+        "published_at": "2021-09-01T00:00:00Z"
+      },
+      "right": {
+        "provider": "semantic_scholar",
+        "title": "Heat Waves and Emergency Department Visits Among Older Adults.",
+        "url": "https://www.semanticscholar.org/paper/0a1b2c3d4e5f60718293a4b5c6d7e8f901234567",
+        "identifiers": {"pmid": "34567890", "semantic_scholar_id": "0a1b2c3d4e5f60718293a4b5c6d7e8f901234567"},
+        "source_type": "scholarly",
+        "authors": ["L. Nguyen"],
+        "published_at": "2021-09-01T00:00:00Z"
+      }
+    },
+    {
+      "id": "same-preprint-linked-by-arxiv-id-with-and-without-a-version",
+      "expected": "same",
+      "tags": ["provider-id"],
+      "why": "Both records are the arXiv preprint 2310.01234; one gives it with its v2 suffix.",
+      "left": {
+        "provider": "openalex",
+        "title": "Large language models as election forecasters",
+        "url": "https://arxiv.org/abs/2310.01234",
+        "identifiers": {"arxiv_id": "2310.01234", "openalex_id": "W4380000004"},
+        "source_type": "scholarly",
+        "authors": ["Chen, Wei"],
+        "publication": "arXiv",
+        "published_at": "2023-10-02T00:00:00Z"
+      },
+      "right": {
+        "provider": "semantic_scholar",
+        "title": "Large Language Models as Election Forecasters",
+        "url": "https://www.semanticscholar.org/paper/1f2e3d4c5b6a79880716253443526170819a2b3c",
+        "identifiers": {"arxiv_id": "2310.01234v2", "semantic_scholar_id": "1f2e3d4c5b6a79880716253443526170819a2b3c"},
+        "source_type": "scholarly",
+        "authors": ["Wei Chen"],
+        "publication": "arXiv.org",
+        "published_at": "2023-10-02T00:00:00Z"
+      }
+    },
+    {
+      "id": "same-paper-linked-by-pmid-when-only-one-side-has-the-doi",
+      "expected": "same",
+      "tags": ["provider-id"],
+      "why": "OpenAlex has the DOI and the PMID, Semantic Scholar only the PMID. A missing DOI is not a different DOI.",
+      "left": {
+        "provider": "openalex",
+        "title": "Air pollution and childhood asthma in Delhi",
+        "url": "https://www.thelancet.com/journals/lanplh/article/PIIS2542-5196(22)00123-4/fulltext",
+        "identifiers": {"doi": "10.1016/s2542-5196(22)00123-4", "pmid": "35678901", "openalex_id": "W4280000005"},
+        "source_type": "scholarly",
+        "authors": ["Sharma, Priya"],
+        "publication": "The Lancet Planetary Health",
+        "published_at": "2022-06-01T00:00:00Z"
+      },
+      "right": {
+        "provider": "semantic_scholar",
+        "title": "Air pollution and childhood asthma in Delhi",
+        "url": "https://www.semanticscholar.org/paper/2a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d",
+        "identifiers": {"pmid": "35678901", "semantic_scholar_id": "2a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d"},
+        "source_type": "scholarly",
+        "authors": ["P. Sharma"],
+        "published_at": "2022-06-01T00:00:00Z"
+      }
+    },
+    {
+      "id": "same-working-paper-by-title-with-different-name-formats",
+      "expected": "same",
+      "tags": ["fuzzy-title"],
+      "why": "A working paper with no DOI: the title differs only in case and the U.S. abbreviation, the first author is written surname-first by one provider, and the year agrees.",
+      "left": {
+        "provider": "openalex",
+        "title": "Trade Wars and U.S. Farm Income",
+        "url": "https://www.nber.org/papers/w31234",
+        "identifiers": {"openalex_id": "W4360000006"},
+        "source_type": "scholarly",
+        "authors": ["Okafor, James", "Lindqvist, Maja"],
+        "publication": "NBER Working Paper Series",
+        "published_at": "2023-04-01T00:00:00Z"
+      },
+      "right": {
+        "provider": "semantic_scholar",
+        "title": "Trade wars and US farm income",
+        "url": "https://www.semanticscholar.org/paper/3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e",
+        "identifiers": {"semantic_scholar_id": "3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e"},
+        "source_type": "scholarly",
+        "authors": ["James Okafor", "Maja Lindqvist"],
+        "published_at": "2023-04-17T00:00:00Z"
+      }
+    },
+    {
+      "id": "same-paper-by-title-when-one-provider-drops-the-subtitle",
+      "expected": "same",
+      "tags": ["fuzzy-title"],
+      "why": "Semantic Scholar keeps only the main title; first author and year agree.",
+      "left": {
+        "provider": "openalex",
+        "title": "Arctic methane feedbacks: a review of the evidence",
+        "url": "https://openalex.org/W4310000007",
+        "identifiers": {"openalex_id": "W4310000007"},
+        "source_type": "scholarly",
+        "authors": ["Maja Lindqvist"],
+        "published_at": "2022-11-01T00:00:00Z"
+      },
+      "right": {
+        "provider": "semantic_scholar",
+        "title": "Arctic methane feedbacks",
+        "url": "https://www.semanticscholar.org/paper/4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f",
+        "identifiers": {"semantic_scholar_id": "4c5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f"},
+        "source_type": "scholarly",
+        "authors": ["M. Lindqvist"],
+        "published_at": "2022-11-01T00:00:00Z"
+      }
+    },
+    {
+      "id": "same-paper-by-title-with-accents-and-an-ampersand",
+      "expected": "same",
+      "tags": ["fuzzy-title"],
+      "why": "Müller and Muller are one surname with and without its accent; & and 'and' are one word.",
+      "left": {
+        "provider": "openalex",
+        "title": "Migration & Labour Markets in the European Union",
+        "url": "https://openalex.org/W4250000008",
+        "identifiers": {"openalex_id": "W4250000008"},
+        "source_type": "scholarly",
+        "authors": ["Müller, Jonas"],
+        "published_at": "2020-02-01T00:00:00Z"
+      },
+      "right": {
+        "provider": "semantic_scholar",
+        "title": "Migration and labour markets in the European Union",
+        "url": "https://www.semanticscholar.org/paper/5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f80",
+        "identifiers": {"semantic_scholar_id": "5d6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f80"},
+        "source_type": "scholarly",
+        "authors": ["Jonas Muller"],
+        "published_at": "2020-01-01T00:00:00Z"
+      }
+    },
+    {
+      "id": "same-paper-by-title-with-crossref-markup-when-openalex-lacks-the-doi",
+      "expected": "same",
+      "tags": ["fuzzy-title"],
+      "why": "Crossref titles keep JATS italics; OpenAlex has no DOI for this record. Same title, author and year.",
+      "left": {
+        "provider": "crossref",
+        "title": "<i>Vibrio cholerae</i> outbreaks after coastal flooding",
+        "url": "https://doi.org/10.3201/eid2801.210456",
+        "identifiers": {"doi": "10.3201/eid2801.210456"},
+        "source_type": "scholarly",
+        "authors": ["Haque, Farhana"],
+        "publication": "Emerging Infectious Diseases",
+        "published_at": "2022-01-01T00:00:00Z"
+      },
+      "right": {
+        "provider": "openalex",
+        "title": "Vibrio cholerae outbreaks after coastal flooding",
+        "url": "https://wwwnc.cdc.gov/eid/article/28/1/21-0456_article",
+        "identifiers": {"openalex_id": "W4200000009"},
+        "source_type": "scholarly",
+        "authors": ["Farhana Haque"],
+        "published_at": "2022-01-15T00:00:00Z"
+      }
+    },
+    {
+      "id": "same-paper-by-title-with-british-and-american-spelling",
+      "expected": "same",
+      "tags": ["fuzzy-title"],
+      "why": "One indexer normalized the spelling to American English.",
+      "left": {
+        "provider": "openalex",
+        "title": "Organisational behaviour and climate adaptation in coastal cities",
+        "url": "https://openalex.org/W4300000010",
+        "identifiers": {"openalex_id": "W4300000010"},
+        "source_type": "scholarly",
+        "authors": ["Clarke, Fiona"],
+        "published_at": "2022-03-01T00:00:00Z"
+      },
+      "right": {
+        "provider": "semantic_scholar",
+        "title": "Organizational behavior and climate adaptation in coastal cities",
+        "url": "https://www.semanticscholar.org/paper/6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8091",
+        "identifiers": {"semantic_scholar_id": "6e7f8091a2b3c4d5e6f708192a3b4c5d6e7f8091"},
+        "source_type": "scholarly",
+        "authors": ["Fiona Clarke"],
+        "published_at": "2022-03-01T00:00:00Z"
+      }
+    },
+    {
+      "id": "same-paper-by-title-with-a-pubmed-style-author",
+      "expected": "same",
+      "tags": ["fuzzy-title"],
+      "why": "'Rivera A' is PubMed's surname-then-initials form of Ana Rivera.",
+      "left": {
+        "provider": "openalex",
+        "title": "Wildfire smoke exposure and preterm birth in California",
+        "url": "https://openalex.org/W4330000011",
+        "identifiers": {"openalex_id": "W4330000011"},
+        "source_type": "scholarly",
+        "authors": ["Ana Rivera", "Tomás Herrera"],
+        "published_at": "2023-02-01T00:00:00Z"
+      },
+      "right": {
+        "provider": "semantic_scholar",
+        "title": "Wildfire smoke exposure and preterm birth in California.",
+        "url": "https://www.semanticscholar.org/paper/7f8091a2b3c4d5e6f708192a3b4c5d6e7f8091a2",
+        "identifiers": {"semantic_scholar_id": "7f8091a2b3c4d5e6f708192a3b4c5d6e7f8091a2"},
+        "source_type": "scholarly",
+        "authors": ["Rivera A", "Herrera T"],
+        "published_at": "2023-02-01T00:00:00Z"
+      }
+    },
+    {
+      "id": "same-news-story-on-the-www-and-bare-host",
+      "expected": "same",
+      "tags": ["fuzzy-title"],
+      "why": "Two of the outlet's feeds link the story on www.nytimes.com and on nytimes.com. The canonicalizer keeps www (it can name another server), so the URLs differ; site, day, author and headline agree.",
+      "left": {
+        "provider": "rss",
+        "title": "Treasury Weighs New Sanctions on Iranian Oil Exports",
+        "url": "https://www.nytimes.com/2026/10/11/us/politics/iran-oil-sanctions.html",
+        "source_type": "news",
+        "authors": ["Alan Rappeport"],
+        "publication": "The New York Times",
+        "published_at": "2026-10-11T19:00:00Z"
+      },
+      "right": {
+        "provider": "rss",
+        "title": "Treasury weighs new sanctions on Iranian oil exports",
+        "url": "https://nytimes.com/2026/10/11/us/politics/iran-oil-sanctions.html",
+        "source_type": "news",
+        "authors": ["Rappeport, Alan"],
+        "publication": "New York Times",
+        "published_at": "2026-10-11T19:00:00Z"
+      }
+    },
+    {
+      "id": "same-news-story-over-http-and-https",
+      "expected": "same",
+      "tags": ["fuzzy-title"],
+      "why": "An old feed still links the http address. http is never upgraded by the canonicalizer, so this rests on site, day, author and headline.",
+      "left": {
+        "provider": "rss",
+        "title": "The case against abolishing the filibuster",
+        "url": "http://www.theatlantic.com/ideas/archive/2026/10/filibuster-reform/680001/",
+        "source_type": "news",
+        "authors": ["Jonathan Chait"],
+        "publication": "The Atlantic",
+        "published_at": "2026-10-10T11:00:00Z"
+      },
+      "right": {
+        "provider": "gdelt",
+        "title": "The Case Against Abolishing the Filibuster",
+        "url": "https://www.theatlantic.com/ideas/archive/2026/10/filibuster-reform/680001/",
+        "source_type": "news",
+        "authors": ["Jonathan Chait"],
+        "published_at": "2026-10-10T11:00:00Z"
+      }
+    },
+    {
+      "id": "same-government-report-with-and-without-a-trailing-slash",
+      "expected": "same",
+      "tags": ["fuzzy-title"],
+      "why": "The canonicalizer never adds or removes a trailing slash; the same report is linked both ways. Same site, day, issuing author and title.",
+      "left": {
+        "provider": "rss",
+        "title": "The Budget and Economic Outlook: 2026 to 2036",
+        "url": "https://www.cbo.gov/publication/61001/",
+        "source_type": "government",
+        "authors": ["Congressional Budget Office"],
+        "published_at": "2026-02-05T15:00:00Z"
+      },
+      "right": {
+        "provider": "gdelt",
+        "title": "The Budget and Economic Outlook: 2026 to 2036",
+        "url": "https://www.cbo.gov/publication/61001",
+        "source_type": "government",
+        "authors": ["Congressional Budget Office"],
+        "published_at": "2026-02-05T15:00:00Z"
+      }
+    },
+    {
+      "id": "same-news-story-through-an-encoded-google-news-link",
+      "expected": "same",
+      "tags": ["syndicated-news", "expected-miss"],
+      "why": "The same AP story. Google News RSS encodes the destination (/rss/articles/CBMi...) and appends ' - The Associated Press' to the headline, and gives no author. Nothing literal ties the two records together, so this is a known miss: decoding the link would mean guessing its format or following it.",
+      "left": {
+        "provider": "rss",
+        "title": "Colorado River states reach a seven-state drought deal - The Associated Press",
+        "url": "https://news.google.com/rss/articles/CBMiYWh0dHBzOi8vYXBuZXdzLmNvbS9hcnRpY2xlL2NvbG9yYWRv?oc=5",
+        "source_type": "news",
+        "publication": "The Associated Press",
+        "published_at": "2026-10-16T16:40:00Z"
+      },
+      "right": {
+        "provider": "rss",
+        "title": "Colorado River states reach a seven-state drought deal",
+        "url": "https://apnews.com/article/colorado-river-seven-state-deal-9a8b7c",
+        "source_type": "news",
+        "authors": ["Suman Naishadham"],
+        "publication": "The Associated Press",
+        "published_at": "2026-10-16T16:40:00Z"
+      }
+    },
+    {
+      "id": "same-news-story-from-gdelt-without-an-author-under-another-slug",
+      "expected": "same",
+      "tags": ["expected-miss"],
+      "why": "GDELT saw the story before the outlet changed its slug, and GDELT gives no author. Different canonical URLs and no author to gate a title match on, so this is a known miss.",
+      "left": {
+        "provider": "gdelt",
+        "title": "Fed holds rates steady and signals patience",
+        "url": "https://www.cnbc.com/2026/10/08/fed-rate-decision-october-2026.html",
+        "source_type": "news",
+        "published_at": "2026-10-08T18:05:00Z"
+      },
+      "right": {
+        "provider": "rss",
+        "title": "Fed holds rates steady and signals patience",
+        "url": "https://www.cnbc.com/2026/10/08/fed-holds-rates-steady-signals-patience.html",
+        "source_type": "news",
+        "authors": ["Jeff Cox"],
+        "publication": "CNBC",
+        "published_at": "2026-10-08T18:00:00Z"
+      }
+    },
+    {
+      "id": "same-paper-with-a-double-surname-shortened-by-one-provider",
+      "expected": "same",
+      "tags": ["fuzzy-title", "expected-miss"],
+      "why": "One provider has the first author's full name with both surnames, the other only the first surname. A name written given-name-first cannot be split into given names and surnames reliably, so the author gate sees Gómez against Rivera: a known miss.",
+      "left": {
+        "provider": "openalex",
+        "title": "Remittances and household resilience after hurricanes in Central America",
+        "url": "https://openalex.org/W4340000012",
+        "identifiers": {"openalex_id": "W4340000012"},
+        "source_type": "scholarly",
+        "authors": ["Ana María Rivera Gómez"],
+        "published_at": "2023-08-01T00:00:00Z"
+      },
+      "right": {
+        "provider": "semantic_scholar",
+        "title": "Remittances and household resilience after hurricanes in Central America",
+        "url": "https://www.semanticscholar.org/paper/8091a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3",
+        "identifiers": {"semantic_scholar_id": "8091a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3"},
+        "source_type": "scholarly",
+        "authors": ["Ana Rivera"],
+        "published_at": "2023-08-01T00:00:00Z"
+      }
+    },
+    {
+      "id": "same-doi-with-the-title-in-another-language",
+      "expected": "same",
+      "tags": ["doi"],
+      "why": "Crossref has the article's original Spanish title and OpenAlex its English one; one DOI.",
+      "left": {
+        "provider": "crossref",
+        "title": "Sequía y migración interna en el Corredor Seco centroamericano",
+        "url": "https://doi.org/10.1590/0102-311x00012321",
+        "identifiers": {"doi": "10.1590/0102-311X00012321"},
+        "source_type": "scholarly",
+        "authors": ["Morales, Lucía"],
+        "published_at": "2021-07-01T00:00:00Z"
+      },
+      "right": {
+        "provider": "openalex",
+        "title": "Drought and internal migration in the Central American Dry Corridor",
+        "url": "https://www.scielo.br/j/csp/a/abc123",
+        "identifiers": {"doi": "10.1590/0102-311x00012321", "openalex_id": "W3180000013"},
+        "source_type": "scholarly",
+        "authors": ["Lucía Morales"],
+        "published_at": "2021-07-01T00:00:00Z"
+      }
+    },
+    {
+      "id": "different-news-stories-with-near-identical-headlines-and-different-authors",
+      "expected": "different",
+      "tags": ["near-identical-headlines-different-authors"],
+      "why": "Two Politico stories on the same day, by different reporters, on two different bills with near-identical headlines.",
+      "left": {
+        "provider": "rss",
+        "title": "Senate Democrats unveil climate bill",
+        "url": "https://www.politico.com/news/2026/10/07/senate-democrats-climate-bill-00120001",
+        "source_type": "news",
+        "authors": ["Zack Colman"],
+        "publication": "Politico",
+        "published_at": "2026-10-07T14:00:00Z"
+      },
+      "right": {
+        "provider": "rss",
+        "title": "Senate Democrats unveil a climate bill",
+        "url": "https://www.politico.com/news/2026/10/07/senate-democrats-farm-climate-bill-00120002",
+        "source_type": "news",
+        "authors": ["Meredith Lee Hill"],
+        "publication": "Politico",
+        "published_at": "2026-10-07T16:00:00Z"
+      }
+    },
+    {
+      "id": "different-papers-with-the-same-title-by-different-authors",
+      "expected": "different",
+      "tags": ["near-identical-headlines-different-authors"],
+      "why": "Two working papers in the same year with the same title, by different first authors. No identifiers on either.",
+      "left": {
+        "provider": "openalex",
+        "title": "Climate change and armed conflict in East Africa",
+        "url": "https://openalex.org/W4210000014",
+        "identifiers": {"openalex_id": "W4210000014"},
+        "source_type": "scholarly",
+        "authors": ["Hendrix, Cullen"],
+        "published_at": "2021-05-01T00:00:00Z"
+      },
+      "right": {
+        "provider": "semantic_scholar",
+        "title": "Climate Change and Armed Conflict in East Africa",
+        "url": "https://www.semanticscholar.org/paper/91a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4",
+        "identifiers": {"semantic_scholar_id": "91a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4"},
+        "source_type": "scholarly",
+        "authors": ["Okonjo, Grace"],
+        "published_at": "2021-09-01T00:00:00Z"
+      }
+    },
+    {
+      "id": "different-wire-stories-with-the-same-headline-on-different-sites",
+      "expected": "different",
+      "tags": ["near-identical-headlines-different-authors"],
+      "why": "AP and Reuters each wrote their own story on the same event under the same headline.",
+      "left": {
+        "provider": "rss",
+        "title": "Hurricane Delia makes landfall in Louisiana",
+        "url": "https://apnews.com/article/hurricane-delia-landfall-louisiana-1a2b3c",
+        "source_type": "news",
+        "authors": ["Jack Brook"],
+        "publication": "The Associated Press",
+        "published_at": "2026-09-28T04:00:00Z"
+      },
+      "right": {
+        "provider": "rss",
+        "title": "Hurricane Delia makes landfall in Louisiana",
+        "url": "https://www.reuters.com/world/us/hurricane-delia-makes-landfall-louisiana-2026-09-28/",
+        "source_type": "news",
+        "authors": ["Brad Brooks"],
+        "publication": "Reuters",
+        "published_at": "2026-09-28T04:10:00Z"
+      }
+    },
+    {
+      "id": "different-editions-of-an-annual-report-with-the-same-title",
+      "expected": "different",
+      "tags": ["same-title-different-years"],
+      "why": "The 2025 and 2026 editions of the same annual report, by the same issuing body.",
+      "left": {
+        "provider": "rss",
+        "title": "Global Risks Report",
+        "url": "https://www.weforum.org/publications/global-risks-report-2025/",
+        "source_type": "think_tank",
+        "authors": ["World Economic Forum"],
+        "published_at": "2025-01-15T00:00:00Z"
+      },
+      "right": {
+        "provider": "rss",
+        "title": "Global Risks Report",
+        "url": "https://www.weforum.org/publications/global-risks-report-2026/",
+        "source_type": "think_tank",
+        "authors": ["World Economic Forum"],
+        "published_at": "2026-01-14T00:00:00Z"
+      }
+    },
+    {
+      "id": "different-annual-editorials-with-the-same-title",
+      "expected": "different",
+      "tags": ["same-title-different-years"],
+      "why": "The same editor's year-in-review editorial, 2024 and 2025. Neither record has a DOI.",
+      "left": {
+        "provider": "openalex",
+        "title": "The year in climate science",
+        "url": "https://openalex.org/W4390000015",
+        "identifiers": {"openalex_id": "W4390000015"},
+        "source_type": "scholarly",
+        "authors": ["Hausfather, Zeke"],
+        "published_at": "2024-12-18T00:00:00Z"
+      },
+      "right": {
+        "provider": "semantic_scholar",
+        "title": "The Year in Climate Science",
+        "url": "https://www.semanticscholar.org/paper/a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5",
+        "identifiers": {"semantic_scholar_id": "a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5"},
+        "source_type": "scholarly",
+        "authors": ["Zeke Hausfather"],
+        "published_at": "2025-12-17T00:00:00Z"
+      }
+    },
+    {
+      "id": "different-columns-with-the-same-title-a-year-apart",
+      "expected": "different",
+      "tags": ["same-title-different-years"],
+      "why": "A columnist's start-of-term preview, same headline every October.",
+      "left": {
+        "provider": "rss",
+        "title": "What to watch in the Supreme Court's new term",
+        "url": "https://www.npr.org/2025/10/06/1200001/supreme-court-new-term-preview",
+        "source_type": "news",
+        "authors": ["Nina Totenberg"],
+        "publication": "NPR",
+        "published_at": "2025-10-06T09:00:00Z"
+      },
+      "right": {
+        "provider": "rss",
+        "title": "What to watch in the Supreme Court's new term",
+        "url": "https://www.npr.org/2026/10/05/1300001/supreme-court-new-term-preview",
+        "source_type": "news",
+        "authors": ["Nina Totenberg"],
+        "publication": "NPR",
+        "published_at": "2026-10-05T09:00:00Z"
+      }
+    },
+    {
+      "id": "different-versions-an-arxiv-preprint-and-its-journal-publication",
+      "expected": "different",
+      "tags": ["preprint-and-published"],
+      "why": "The preprint and the published article are different versions: their text, pagination and peer-review status differ, and a card cites the version it was read from. OpenAlex's preprint record has only the arXiv id; Crossref's published record has the journal DOI. Same title, authors and year.",
+      "left": {
+        "provider": "openalex",
+        "title": "Carbon border adjustments and the competitiveness of European steel",
+        "url": "https://arxiv.org/abs/2209.05678",
+        "identifiers": {"arxiv_id": "2209.05678", "openalex_id": "W4290000016"},
+        "source_type": "scholarly",
+        "authors": ["Bauer, Katrin", "Rossi, Marco"],
+        "publication": "arXiv",
+        "published_at": "2022-09-12T00:00:00Z"
+      },
+      "right": {
+        "provider": "crossref",
+        "title": "Carbon border adjustments and the competitiveness of European steel",
+        "url": "https://doi.org/10.1016/j.ecolecon.2022.107590",
+        "identifiers": {"doi": "10.1016/j.ecolecon.2022.107590"},
+        "source_type": "scholarly",
+        "authors": ["Bauer, Katrin", "Rossi, Marco"],
+        "publication": "Ecological Economics",
+        "published_at": "2022-12-01T00:00:00Z"
+      }
+    },
+    {
+      "id": "different-versions-a-biorxiv-preprint-and-its-journal-publication",
+      "expected": "different",
+      "tags": ["preprint-and-published"],
+      "why": "bioRxiv mints its own DOI for the preprint; the journal article has another. Two DOIs, two versions.",
+      "left": {
+        "provider": "crossref",
+        "title": "Antibody escape by an emerging influenza H5N1 clade",
+        "url": "https://doi.org/10.1101/2025.04.12.648512",
+        "identifiers": {"doi": "10.1101/2025.04.12.648512"},
+        "source_type": "scholarly",
+        "authors": ["Tanaka, Hiroshi"],
+        "publication": "bioRxiv",
+        "published_at": "2025-04-14T00:00:00Z"
+      },
+      "right": {
+        "provider": "crossref",
+        "title": "Antibody escape by an emerging influenza H5N1 clade",
+        "url": "https://doi.org/10.1038/s41586-025-09123-4",
+        "identifiers": {"doi": "10.1038/s41586-025-09123-4"},
+        "source_type": "scholarly",
+        "authors": ["Tanaka, Hiroshi"],
+        "publication": "Nature",
+        "published_at": "2025-10-01T00:00:00Z"
+      }
+    },
+    {
+      "id": "different-versions-a-published-record-that-cross-links-its-preprint",
+      "expected": "different",
+      "tags": ["preprint-and-published"],
+      "why": "Semantic Scholar's record of the published article lists the preprint's arXiv id beside the journal DOI. The shared arXiv id is a link between versions, not proof of one version.",
+      "left": {
+        "provider": "semantic_scholar",
+        "title": "Misinformation exposure and vaccine uptake: a field experiment",
+        "url": "https://www.semanticscholar.org/paper/b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6",
+        "identifiers": {"doi": "10.1126/sciadv.adk1234", "arxiv_id": "2302.04567", "semantic_scholar_id": "b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6"},
+        "source_type": "scholarly",
+        "authors": ["Osei, Kwame"],
+        "publication": "Science Advances",
+        "published_at": "2023-11-01T00:00:00Z"
+      },
+      "right": {
+        "provider": "openalex",
+        "title": "Misinformation exposure and vaccine uptake: a field experiment",
+        "url": "https://arxiv.org/abs/2302.04567",
+        "identifiers": {"arxiv_id": "2302.04567", "openalex_id": "W4320000017"},
+        "source_type": "scholarly",
+        "authors": ["Kwame Osei"],
+        "publication": "arXiv",
+        "published_at": "2023-02-09T00:00:00Z"
+      }
+    },
+    {
+      "id": "different-outlets-carrying-the-same-syndicated-wire-story",
+      "expected": "different",
+      "tags": ["syndicated-news"],
+      "why": "The Seattle Times and the Washington Post both ran the same AP story, shared with utm parameters. Same text, same byline, same day, but two outlets: a card cites the outlet it was read at, and each outlet's page is reached, and may be paywalled, separately.",
+      "left": {
+        "provider": "rss",
+        "title": "Wildfire smoke reaches the East Coast",
+        "url": "https://www.seattletimes.com/nation-world/wildfire-smoke-reaches-east-coast/?utm_source=rss&utm_medium=referral",
+        "source_type": "news",
+        "authors": ["Seth Borenstein"],
+        "publication": "The Seattle Times",
+        "published_at": "2026-08-20T12:00:00Z"
+      },
+      "right": {
+        "provider": "gdelt",
+        "title": "Wildfire smoke reaches the East Coast",
+        "url": "https://www.washingtonpost.com/national/wildfire-smoke-reaches-east-coast/2026/08/20/abc123_story.html?utm_campaign=wp_main",
+        "source_type": "news",
+        "authors": ["Seth Borenstein"],
+        "publication": "The Washington Post",
+        "published_at": "2026-08-20T12:00:00Z"
+      }
+    },
+    {
+      "id": "different-stories-whose-feed-links-to-the-front-page",
+      "expected": "different",
+      "tags": ["canonical-url"],
+      "why": "A local feed links every item to the site's front page. The front page names the site, not either story.",
+      "left": {
+        "provider": "rss",
+        "title": "Storm closes schools across the county",
+        "url": "https://www.dailyherald.com/",
+        "source_type": "news",
+        "publication": "Daily Herald",
+        "published_at": "2026-10-02T07:00:00Z"
+      },
+      "right": {
+        "provider": "rss",
+        "title": "City council approves transit levy",
+        "url": "https://www.dailyherald.com/?utm_source=rss",
+        "source_type": "news",
+        "publication": "Daily Herald",
+        "published_at": "2026-10-02T08:00:00Z"
+      }
+    },
+    {
+      "id": "different-papers-where-one-title-extends-the-other",
+      "expected": "different",
+      "tags": ["fuzzy-title"],
+      "why": "The same author's general paper and their country study in the same year. Every word of the shorter title is in the longer one, and the extra words are not a subtitle.",
+      "left": {
+        "provider": "openalex",
+        "title": "The case for a carbon tax",
+        "url": "https://openalex.org/W4350000018",
+        "identifiers": {"openalex_id": "W4350000018"},
+        "source_type": "scholarly",
+        "authors": ["Tremblay, Louis"],
+        "published_at": "2023-03-01T00:00:00Z"
+      },
+      "right": {
+        "provider": "semantic_scholar",
+        "title": "The case for a carbon tax in Canada",
+        "url": "https://www.semanticscholar.org/paper/c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7",
+        "identifiers": {"semantic_scholar_id": "c4d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f7"},
+        "source_type": "scholarly",
+        "authors": ["Louis Tremblay"],
+        "published_at": "2023-10-01T00:00:00Z"
+      }
+    },
+    {
+      "id": "different-papers-whose-titles-differ-in-one-word",
+      "expected": "different",
+      "tags": ["fuzzy-title"],
+      "why": "Companion papers by the same author in the same year: one on employment, one on emissions.",
+      "left": {
+        "provider": "openalex",
+        "title": "Carbon tax effects on employment in British Columbia",
+        "url": "https://openalex.org/W4360000019",
+        "identifiers": {"openalex_id": "W4360000019"},
+        "source_type": "scholarly",
+        "authors": ["Yamazaki, Akio"],
+        "published_at": "2024-02-01T00:00:00Z"
+      },
+      "right": {
+        "provider": "semantic_scholar",
+        "title": "Carbon tax effects on emissions in British Columbia",
+        "url": "https://www.semanticscholar.org/paper/d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708",
+        "identifiers": {"semantic_scholar_id": "d5e6f708192a3b4c5d6e7f8091a2b3c4d5e6f708"},
+        "source_type": "scholarly",
+        "authors": ["Akio Yamazaki"],
+        "published_at": "2024-06-01T00:00:00Z"
+      }
+    },
+    {
+      "id": "different-papers-whose-titles-differ-in-a-number",
+      "expected": "different",
+      "tags": ["fuzzy-title"],
+      "why": "A working paper and its update covering two more years, by the same author in the same year.",
+      "left": {
+        "provider": "openalex",
+        "title": "Tariff pass-through to consumer prices, 2018-2020",
+        "url": "https://openalex.org/W4370000020",
+        "identifiers": {"openalex_id": "W4370000020"},
+        "source_type": "scholarly",
+        "authors": ["Amiti, Mary"],
+        "published_at": "2024-01-01T00:00:00Z"
+      },
+      "right": {
+        "provider": "semantic_scholar",
+        "title": "Tariff pass-through to consumer prices, 2018-2022",
+        "url": "https://www.semanticscholar.org/paper/e6f708192a3b4c5d6e7f8091a2b3c4d5e6f70819",
+        "identifiers": {"semantic_scholar_id": "e6f708192a3b4c5d6e7f8091a2b3c4d5e6f70819"},
+        "source_type": "scholarly",
+        "authors": ["Mary Amiti"],
+        "published_at": "2024-09-01T00:00:00Z"
+      }
+    },
+    {
+      "id": "different-parts-of-a-series",
+      "expected": "different",
+      "tags": ["fuzzy-title"],
+      "why": "Part 1 and Part 2 of the same author's series in the same year.",
+      "left": {
+        "provider": "openalex",
+        "title": "Nuclear deterrence after the Cold War: Part 1",
+        "url": "https://openalex.org/W4380000021",
+        "identifiers": {"openalex_id": "W4380000021"},
+        "source_type": "scholarly",
+        "authors": ["Sagan, Scott"],
+        "published_at": "2023-05-01T00:00:00Z"
+      },
+      "right": {
+        "provider": "semantic_scholar",
+        "title": "Nuclear deterrence after the Cold War: Part 2",
+        "url": "https://www.semanticscholar.org/paper/f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a",
+        "identifiers": {"semantic_scholar_id": "f708192a3b4c5d6e7f8091a2b3c4d5e6f708192a"},
+        "source_type": "scholarly",
+        "authors": ["Scott Sagan"],
+        "published_at": "2023-11-01T00:00:00Z"
+      }
+    },
+    {
+      "id": "different-dois-for-a-conference-paper-and-its-journal-version",
+      "expected": "different",
+      "tags": ["preprint-and-published"],
+      "why": "The proceedings paper and the extended journal article carry the same title and authors in the same year, under two DOIs.",
+      "left": {
+        "provider": "crossref",
+        "title": "Detecting coordinated inauthentic behaviour on social platforms",
+        "url": "https://doi.org/10.1145/3543507.3583201",
+        "identifiers": {"doi": "10.1145/3543507.3583201"},
+        "source_type": "scholarly",
+        "authors": ["Kim, Soo-ah"],
+        "publication": "Proceedings of the ACM Web Conference 2023",
+        "published_at": "2023-04-30T00:00:00Z"
+      },
+      "right": {
+        "provider": "crossref",
+        "title": "Detecting coordinated inauthentic behaviour on social platforms",
+        "url": "https://doi.org/10.1145/3617654",
+        "identifiers": {"doi": "10.1145/3617654"},
+        "source_type": "scholarly",
+        "authors": ["Kim, Soo-ah"],
+        "publication": "ACM Transactions on the Web",
+        "published_at": "2023-12-01T00:00:00Z"
+      }
+    },
+    {
+      "id": "different-pubmed-records-with-the-same-title",
+      "expected": "different",
+      "tags": ["provider-id"],
+      "why": "An article and the published correction notice that repeats its title, each with its own PMID.",
+      "left": {
+        "provider": "openalex",
+        "title": "Lead exposure and cognitive outcomes in Flint children",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/31111111/",
+        "identifiers": {"pmid": "31111111", "openalex_id": "W2950000022"},
+        "source_type": "scholarly",
+        "authors": ["Hanna-Attisha, Mona"],
+        "published_at": "2019-06-01T00:00:00Z"
+      },
+      "right": {
+        "provider": "semantic_scholar",
+        "title": "Lead exposure and cognitive outcomes in Flint children",
+        "url": "https://www.semanticscholar.org/paper/08192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b",
+        "identifiers": {"pmid": "31222222", "semantic_scholar_id": "08192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b"},
+        "source_type": "scholarly",
+        "authors": ["Mona Hanna-Attisha"],
+        "published_at": "2019-11-01T00:00:00Z"
+      }
+    },
+    {
+      "id": "different-book-introductions-by-the-same-editor",
+      "expected": "different",
+      "tags": ["fuzzy-title"],
+      "why": "The same editor's introductions to two different edited volumes in the same year. 'Introduction' names a kind of chapter, not a work.",
+      "left": {
+        "provider": "openalex",
+        "title": "Introduction",
+        "url": "https://openalex.org/W4310000023",
+        "identifiers": {"openalex_id": "W4310000023"},
+        "source_type": "scholarly",
+        "authors": ["Ikenberry, G. John"],
+        "published_at": "2022-01-01T00:00:00Z"
+      },
+      "right": {
+        "provider": "semantic_scholar",
+        "title": "Introduction",
+        "url": "https://www.semanticscholar.org/paper/192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c",
+        "identifiers": {"semantic_scholar_id": "192a3b4c5d6e7f8091a2b3c4d5e6f708192a3b4c"},
+        "source_type": "scholarly",
+        "authors": ["G. John Ikenberry"],
+        "published_at": "2022-01-01T00:00:00Z"
+      }
+    },
+    {
+      "id": "different-live-blogs-on-consecutive-days",
+      "expected": "different",
+      "tags": ["same-title-different-years"],
+      "why": "Election-night and morning-after live blogs: same site, same author, same headline, different days and different pages.",
+      "left": {
+        "provider": "rss",
+        "title": "Live updates: midterm election results",
+        "url": "https://www.cnn.com/politics/live-news/midterm-election-results-11-03-26",
+        "source_type": "news",
+        "authors": ["Maureen Chowdhury"],
+        "publication": "CNN",
+        "published_at": "2026-11-03T23:00:00Z"
+      },
+      "right": {
+        "provider": "rss",
+        "title": "Live updates: midterm election results",
+        "url": "https://www.cnn.com/politics/live-news/midterm-election-results-11-04-26",
+        "source_type": "news",
+        "authors": ["Maureen Chowdhury"],
+        "publication": "CNN",
+        "published_at": "2026-11-04T11:00:00Z"
+      }
+    },
+    {
+      "id": "different-articles-at-one-issue-url-with-different-dois",
+      "expected": "different",
+      "tags": ["canonical-url"],
+      "why": "Two articles whose only URL is their journal issue's PDF. The DOIs say they are different articles.",
+      "left": {
+        "provider": "openalex",
+        "title": "Groundwater depletion in the Indo-Gangetic Plain",
+        "url": "https://www.water-journal.example.org/issues/12/3/issue.pdf",
+        "identifiers": {"doi": "10.5555/wj.2021.12.3.101", "openalex_id": "W3150000024"},
+        "source_type": "scholarly",
+        "authors": ["Singh, Arjun"],
+        "published_at": "2021-03-01T00:00:00Z"
+      },
+      "right": {
+        "provider": "openalex",
+        "title": "Desalination costs in the Gulf states",
+        "url": "https://www.water-journal.example.org/issues/12/3/issue.pdf?utm_source=alerts",
+        "identifiers": {"doi": "10.5555/wj.2021.12.3.117", "openalex_id": "W3150000025"},
+        "source_type": "scholarly",
+        "authors": ["Al-Harthy, Salim"],
+        "published_at": "2021-03-01T00:00:00Z"
+      }
+    },
+    {
+      "id": "different-sources-a-paper-and-its-authors-news-explainer",
+      "expected": "different",
+      "tags": ["fuzzy-title"],
+      "why": "The author wrote a piece for The Conversation under the paper's title, in the same year. A news article about a study is not the study.",
+      "left": {
+        "provider": "openalex",
+        "title": "Why sea level rise is accelerating along the Gulf Coast",
+        "url": "https://openalex.org/W4400000026",
+        "identifiers": {"openalex_id": "W4400000026"},
+        "source_type": "scholarly",
+        "authors": ["Dangendorf, Sönke"],
+        "published_at": "2025-03-01T00:00:00Z"
+      },
+      "right": {
+        "provider": "rss",
+        "title": "Why sea level rise is accelerating along the Gulf Coast",
+        "url": "https://theconversation.com/why-sea-level-rise-is-accelerating-along-the-gulf-coast-240001",
+        "source_type": "news",
+        "authors": ["Sönke Dangendorf"],
+        "publication": "The Conversation",
+        "published_at": "2025-03-01T10:00:00Z"
+      }
+    }
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "description": "One paper as OpenAlex, Crossref and Semantic Scholar each describe it, in that order, mapped to CandidateResults by hand from each provider's documented record (v1-e08-t02-normalize-dedupe, ac1). Synthetic: the title, authors, DOI and ids are invented in the shape of real ones. The expected merge is written out by hand in packages/debate_core/tests/application/test_federated_dedupe.py.",
+  "candidates": [
+    {
+      "provider": "openalex",
+      "provider_record_id": "W4390012345",
+      "title": "Glacier retreat and downstream water security in High Mountain Asia",
+      "url": "https://www.science.org/doi/10.1126/science.adj1234",
+      "identifiers": {"doi": "https://doi.org/10.1126/science.adj1234", "pmid": "38123456", "openalex_id": "W4390012345"},
+      "source_type": "scholarly",
+      "authors": ["Tenzing Sherpa", "Ana Rivera", "Wei Chen"],
+      "publication": "Science",
+      "published_at": "2024-01-12T00:00:00Z",
+      "snippet": "Glaciers in High Mountain Asia lost mass faster between 2000 and 2023 than in any comparable period on record.",
+      "open_access_url": "https://europepmc.org/articles/PMC10789012"
+    },
+    {
+      "provider": "crossref",
+      "title": "Glacier Retreat and Downstream Water Security in High Mountain Asia",
+      "url": "https://doi.org/10.1126/science.adj1234",
+      "identifiers": {"doi": "10.1126/SCIENCE.ADJ1234"},
+      "source_type": "scholarly",
+      "authors": ["Sherpa, Tenzing", "Rivera, Ana", "Chen, Wei"],
+      "publication": "Science",
+      "published_at": "2024-01-11T00:00:00Z"
+    },
+    {
+      "provider": "semantic_scholar",
+      "provider_record_id": "9f8e7d6c5b4a39281706f5e4d3c2b1a098765432",
+      "title": "Glacier retreat and downstream water security in High Mountain Asia",
+      "url": "https://www.semanticscholar.org/paper/9f8e7d6c5b4a39281706f5e4d3c2b1a098765432",
+      "identifiers": {"doi": "10.1126/science.adj1234", "pmid": "38123456", "semantic_scholar_id": "9f8e7d6c5b4a39281706f5e4d3c2b1a098765432"},
+      "source_type": "scholarly",
+      "authors": ["T. Sherpa", "A. Rivera", "W. Chen"],
+      "publication": "Science",
+      "published_at": "2024-01-12T00:00:00Z",
+      "snippet": "Using satellite altimetry, we show that glacier mass loss in High Mountain Asia accelerated after 2000.",
+      "open_access_url": "https://www.science.org/doi/pdf/10.1126/science.adj1234"
+    }
+  ]
+}

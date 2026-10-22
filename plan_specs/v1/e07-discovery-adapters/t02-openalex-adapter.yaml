@@ -73,7 +73,7 @@ spec:
         secrets never reach a log line, and its tests pass in one process after the
         OpenCaselist and discovery suites.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

@@ -194,23 +194,25 @@ Run them in order, in one zsh window, from the task worktree. Before handing the
 dev run; block 6 is for the PM's promotion list.
 
 **1. Apply the removal grant to dev** (expected runtime ~3 min). The worktree is fresh, so it has
-no `owner.auto.tfvars`. Copy the dev file from the checkout you last applied dev from (the main
-clone below), and check it has the pilot's three lines. `init -reconfigure` is needed because my
+no `owner.auto.tfvars`. Copy the dev file from the `dev-preview` worktree (the main clone has none;
+PM correction 2026-10-22). It names the pilot's deployer and accounts users, so `grep` prints `2`:
+it sets no `evidence_search_budget_emails`, and with none the dev root sends the budget alarm to the
+`owner` address, the same one the runbook put in that list, so the plan does not change it. `init -reconfigure` is needed because my
 `scripts/terraform_checks.sh` run initialised the roots with `-backend=false`.
 
 Where: the task worktree
 ```bash
 cd /Users/charlesclark/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e39-t07-removal-audit-and-exposure
-cp ../../debate-intelligence/infrastructure/envs/dev/owner.auto.tfvars infrastructure/envs/dev/owner.auto.tfvars
+cp ../dev-preview/infrastructure/envs/dev/owner.auto.tfvars infrastructure/envs/dev/owner.auto.tfvars
 grep -c evidence_search infrastructure/envs/dev/owner.auto.tfvars
 export AWS_PROFILE=debate-admin
 aws sso login --sso-session debate
 terraform -chdir=infrastructure/envs/dev init -reconfigure
 terraform -chdir=infrastructure/envs/dev plan -out=/tmp/t07-dev.tfplan
 ```
-Success looks like `3` from `grep`, then a plan of **`0 to add, 2 to change, 0 to destroy`**: the
+Success looks like `2` from `grep`, then a plan of **`0 to add, 2 to change, 0 to destroy`**: the
 `DebateDevEvidenceRemoval` permission set's description and its inline policy, in
-`module.evidence_store`. If `grep` prints anything but `3`, or the plan destroys anything (above
+`module.evidence_store`. If `grep` prints anything but `2`, or the plan destroys anything (above
 all an `aws_ssoadmin_account_assignment`), stop and paste the plan back. If it changes anything
 else, paste it back before applying: dev has moved since the last apply, and I would rather read
 it than guess. Otherwise:
@@ -286,6 +288,17 @@ and removal log; record it in the register as the exercise. The store is a scrat
 removed file is the fixture body `direct`, sha256 `058e2b1ce922…`, disclosed by one invented team
 only, so its card goes whole. The exercise replaces the dev pilot's current index with the
 synthetic one. Block 5's last command puts dev's own index back.
+
+4-pre. **No pull is running** (PM correction 2026-10-22). The weekly agent run started 2026-10-22
+may publish a dev index, which would replace the synthetic one in the middle of the exercise.
+
+Where: the task worktree
+```bash
+pgrep -fl 'caselist pull'
+```
+Success looks like nothing printed. If it prints a process, wait until it has finished and run
+the check again before 4a. (P4's delete block also refuses if `current.json` changed after its dry
+run.)
 
 4a. Build and publish the synthetic index.
 
@@ -366,10 +379,15 @@ unset AWS_PROFILE DEBATE_STORAGE__DATA_DIR X REMOVED
 aws sso login --profile debate-dev-evidence
 DEBATE_ENV=dev debate-research tub index publish --env dev --newest
 unset DEBATE_ENV
+BUCKET=$(aws s3api list-buckets --profile debate-dev-evidence --query 'Buckets[?starts_with(Name, `debate-dev-evidence-`)].Name' --output text)
+echo "republished: $(aws s3 cp "s3://${BUCKET}/reports/tub/search/current.json" - --profile debate-dev-evidence | python3 -c 'import json, sys; print(json.load(sys.stdin)["index_id"])')"
+ls -td "${HOME}/.debate-research/dev/tub-index"/*/ | head -1
 ```
 Success looks like `0` after every word, and audit lines holding only `action`, `actor_role`,
 `actor_subject`, `cards` or `count`, `format_version` and `time`: `searched` with a `count`, and
-`card-viewed` with one `testcl26/<64 hex>`. The last line publishes dev's own index again.
+`card-viewed` with one `testcl26/<64 hex>`. Then the publish table, a `republished: <index id>` line,
+and the newest local index directory, whose name is that same index id: dev's own index is current
+again.
 
 **6. For the PM's promotion list (prod, after the merge).** Apply the grant to prod as
 `evidence-store.md` gives it, from a worktree whose `owner.auto.tfvars` prints `3` for

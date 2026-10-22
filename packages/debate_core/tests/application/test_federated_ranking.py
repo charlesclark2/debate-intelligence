@@ -344,6 +344,24 @@ def test_feature_recency_within_a_window_is_the_position_in_it(published: dateti
     assert recency(published, reference=until, since=since, half_life_days=90) == pytest.approx(expected)
 
 
+@pytest.mark.parametrize(("half_life_days", "expected"), [(30, 0.25), (60, 0.5), (240, 0.5**0.25)])
+def test_feature_recency_uses_its_configured_half_life(half_life_days: float, expected: float) -> None:
+    published = NOW - timedelta(days=60)
+
+    assert recency(published, reference=NOW, since=None, half_life_days=half_life_days) == pytest.approx(
+        expected
+    )
+
+
+def test_score_recency_reads_the_half_life_from_the_table() -> None:
+    sixty_days_old = one(published_at=NOW - timedelta(days=60))
+    short = config_with(recency={"half_life_days": 30})
+
+    (entry,) = rank([sixty_days_old], config=short)
+
+    assert entry.features["recency"] == pytest.approx(0.25)
+
+
 def test_feature_recency_of_a_window_with_no_length_falls_back_to_the_half_life() -> None:
     published = NOW - timedelta(days=90)
 

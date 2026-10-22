@@ -217,6 +217,16 @@ def test_exact_canonical_url_of_a_sites_front_page_is_not_a_key() -> None:
     assert groups((storm, levy)) == [[0], [1]]
 
 
+def test_exact_canonical_url_of_a_front_page_whose_query_selects_the_article_is_a_key() -> None:
+    """WordPress serves posts at /?p=N: there the query, not the path, names the article."""
+    post = story(url="https://blog.example.org/?p=1234", authors=())
+    shared = story(provider="gdelt", url="https://blog.example.org/?p=1234&utm_source=twitter", authors=())
+    another_post = story(provider="gdelt", url="https://blog.example.org/?p=5678", authors=())
+
+    assert groups((post, shared)) == [[0, 1]]
+    assert groups((post, another_post)) == [[0], [1]]
+
+
 def test_exact_canonical_url_with_a_path_below_the_front_page_is_a_key() -> None:
     section = story(url="https://www.example-news.com/politics", authors=())
     same_section = story(
@@ -475,9 +485,10 @@ def test_fuzzy_title_needs_the_publication_year_to_agree_for_scholarship() -> No
         pytest.param({"authors": (), "published_at": None}, id="neither"),
     ],
 )
-def test_fuzzy_title_never_merges_on_title_alone(missing: dict[str, object]) -> None:
-    """The forbidden case: identical titles and nothing else to go on."""
-    one = paper()
+@pytest.mark.parametrize("on_both", [False, True], ids=["one-record", "both-records"])
+def test_fuzzy_title_never_merges_on_title_alone(missing: dict[str, object], on_both: bool) -> None:
+    """The forbidden case: identical titles and nothing else to go on, on one side or on both."""
+    one = paper().evolve(**missing) if on_both else paper()
     other = paper(provider="semantic_scholar", url="https://www.semanticscholar.org/paper/1").evolve(
         **missing
     )

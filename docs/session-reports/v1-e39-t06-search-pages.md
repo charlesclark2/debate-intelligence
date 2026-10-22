@@ -485,8 +485,19 @@ results go here.
 
 **ac4's second attempt, 2026-10-21, in desktop Chrome at 1366x768 on dev: four yes, and a third review.**
 
-* **Steps 3 to 6** ran: the build, the publish, the deploy of the synced branch and the account
-  `chromebook.check`. Their outputs are still to be recorded here; the operator is pasting them.
+* **Step 3, the build:** index `690a21db0c94f4ed`, parser `2026.10.20-docx-6`, 46,653 documents,
+  SQLite file 752,316,416 bytes, gzip object 281,749,938 bytes. That is five documents fewer than the
+  docx-5 build's 46,658, with the sizes within 0.01%.
+* **Step 4, the publish:** `Search index 690a21db0c94f4ed published`. It wrote, in order,
+  `reports/tub/search/690a21db0c94f4ed/search-index.sqlite.gz`, then `.../manifest.json`, then
+  `reports/tub/search/current.json`, and printed `current.json names 690a21db0c94f4ed; object
+  sha256 4c5f8a145d89.`
+* **Step 5, the deploy:** `{"status":"ok"}`, then `Deployed ece0ac19177fae121f758c9a992313b586fb33f8 to
+  dev`, the function running image digest `sha256:10c433b0…526f9d`. `ece0ac1` was the synced branch's
+  head. The commit after it changes only this report, so the code checked is the code in the pull
+  request.
+* **Step 6, the account:** `Created chromebook.check (student).` The temporary password was not
+  pasted back.
 * **Step 7**, the operator's answers:
 
   | Question | Answer |

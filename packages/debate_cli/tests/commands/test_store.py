@@ -687,7 +687,7 @@ class TestTheParsedStoreIsNotSynced:
         result = invoke("store", "sync", *direction)
 
         assert result.exit_code == ExitCode.OK, result.stdout
-        assert stale_copy_line(dev_data_dir, 3) in result.stderr
+        assert stale_copy_line(dev_data_dir, 3) in result.stderr.splitlines()
         assert (dev_data_dir / "objects" / PARSED_SOURCE).is_file()
         assert PARSED_SOURCE_NAME not in result.stdout + result.stderr
         assert "occurrences.jsonl" not in result.stdout + result.stderr
@@ -707,6 +707,27 @@ class TestTheParsedStoreIsNotSynced:
         journal = (dev_data_dir / "sync-journal" / "dev.jsonl").read_text(encoding="utf-8")
         assert [json.loads(line)["key"] for line in journal.splitlines()] == [MANIFEST_KEY]
         assert (dev_data_dir / "objects" / PARSED_SOURCE).is_file()
+
+    def test_the_command_quotes_a_data_directory_a_shell_would_split(
+        self, buckets: S3Client, isolated_environment: Path, tmp_path: Path
+    ) -> None:
+        """A space and an apostrophe in the path: the printed `rm -r` names the one directory."""
+        data_dir = tmp_path / "Charlie's evidence" / "dev"
+        dev_profile = isolated_environment / "dev.toml"
+        dev_profile.write_text(
+            dev_profile.read_text(encoding="utf-8").replace(
+                f'data_dir = "{tmp_path / "dev"}"', f'data_dir = "{data_dir}"'
+            ),
+            encoding="utf-8",
+        )
+        a_stale_copy(data_dir)
+
+        result = invoke("store", "sync")
+
+        assert result.exit_code == ExitCode.OK, result.stdout
+        [line] = [line for line in result.stderr.splitlines() if line.startswith("STALE PARSED COPY")]
+        assert line == stale_copy_line(data_dir, 3)
+        assert line.endswith(f"rm -r '{tmp_path}/Charlie'\"'\"'s evidence/dev/objects/parsed'")
 
     def test_a_machine_with_no_stale_copy_hears_nothing_about_one(
         self, buckets: S3Client, dev_data_dir: Path

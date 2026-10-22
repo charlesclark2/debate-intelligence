@@ -2,8 +2,9 @@
 
 Discovery adapters are handed an API key or two and a coach's contact email
 (:class:`~debate_core.application.settings.ProviderSettings`). They send them to the provider, as a
-header or as a query parameter (`mailto=` for the OpenAlex and Crossref polite pools), and they must
-not appear anywhere else: not in an error, a health snapshot, a `repr` or a log line.
+header (OpenAlex's `Authorization: Bearer` key) or as a query parameter (`mailto=` for Crossref's
+polite pool), and they must not appear anywhere else: not in an error, a health snapshot, a `repr`
+or a log line.
 
 Two places they would otherwise leak from:
 

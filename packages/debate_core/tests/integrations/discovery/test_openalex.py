@@ -1,8 +1,9 @@
 """OpenAlexProvider: the request it sends, how works map to candidates, and the contract kit.
 
 Every OpenAlex answer here is hand-written from OpenAlex's documented response shape and lives in
-`tests/fixtures/providers/openalex/`; every expected mapping is written by hand from those bodies
-(working agreement 6). Nothing here reaches the network.
+`packages/debate_core/tests/fixtures/discovery/openalex/`, beside the fake provider's; every
+expected mapping is written by hand from those bodies (working agreement 6). Nothing here reaches
+the network.
 """
 
 from __future__ import annotations
@@ -21,7 +22,7 @@ from debate_core.integrations.discovery.openalex import (
     source_type_for,
 )
 
-FIXTURES: Final = Path(__file__).resolve().parents[5] / "tests" / "fixtures" / "providers" / "openalex"
+FIXTURES: Final = Path(__file__).resolve().parents[2] / "fixtures" / "discovery" / "openalex"
 
 
 def body(name: str) -> dict[str, Any]:

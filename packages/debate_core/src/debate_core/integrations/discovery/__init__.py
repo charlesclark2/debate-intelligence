@@ -10,6 +10,9 @@ v1-e07-t01-search-provider-contract put here what every adapter shares:
   the providers settings enable, wraps each one and reports their health.
 * :mod:`~debate_core.integrations.discovery.http_failures` — the one mapping from an HTTP status and
   its `Retry-After` to a typed :class:`~debate_core.application.errors.ProviderError`.
+* :mod:`~debate_core.integrations.discovery.redaction` — keeping credentials and the contact email
+  out of messages, exceptions and log lines, httpx's included; and the one logger every module here
+  writes to.
 
 The adapters (OpenAlex, Crossref, Semantic Scholar, feeds, GDELT, government sources) arrive with
 v1-e07-t02 to t07, each held to the shared contract kit in

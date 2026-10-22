@@ -75,7 +75,7 @@ from __future__ import annotations
 import json
 import logging
 from collections import Counter
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Generator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from enum import StrEnum
@@ -423,7 +423,7 @@ def _assert_not_resent(replayed: ReplayedProvider, recording: Recording, max_att
 
 
 @contextmanager
-def _every_log_record() -> Iterator[list[logging.LogRecord]]:
+def _every_log_record() -> Generator[list[logging.LogRecord]]:
     """Capture every record, at every level, from every logger that propagates to the root."""
     records: list[logging.LogRecord] = []
 

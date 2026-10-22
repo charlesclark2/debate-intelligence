@@ -73,7 +73,7 @@ def test_every_module_in_the_package_logs_on_the_one_protected_logger() -> None:
     """A child logger's records would pass the package logger's filter by, so nothing here uses one."""
     from debate_core.integrations.discovery import registry, resilience
 
-    assert resilience.logger is logging.getLogger(LOGGER_NAME)
+    assert getattr(resilience, "logger") is logging.getLogger(LOGGER_NAME)  # noqa: B009
     for module in (resilience, registry):
         assert "getLogger(__name__)" not in Path(module.__file__ or "").read_text(encoding="utf-8")
 

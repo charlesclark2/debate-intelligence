@@ -28,6 +28,7 @@ from pydantic import SecretStr
 
 from debate_core.application.errors import ProviderError, ProviderRateLimited, ProviderUnavailable
 from debate_core.application.ports.providers import SearchProvider
+from debate_core.domain.article import ArticleIdentifiers
 from debate_core.domain.discovery import CandidateResult, ProviderQuery, ProviderResponse
 from debate_core.domain.enums import SourceType
 from debate_core.integrations.discovery.http_failures import provider_error_for_status
@@ -136,7 +137,7 @@ class FakeProvider:
             provider_record_id=item["id"],
             title=item["title"],
             url=item["link"],
-            identifiers={"doi": item.get("doi")},
+            identifiers=ArticleIdentifiers(doi=item.get("doi")),
             source_type=_KINDS.get(item.get("kind", ""), SourceType.OTHER),
             authors=tuple(item.get("authors", ())),
             publication=item.get("venue"),

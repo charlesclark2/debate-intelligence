@@ -279,7 +279,12 @@ def test_the_list_is_read_before_the_pointer_and_not_again_within_five_minutes(
     clock.advance(JUST_UNDER)
     found(holder)
 
-    assert bucket.reads == [SUPPRESSION_LIST_KEY, SEARCH_INDEX_POINTER_KEY, index.manifest_key, index.object_key]
+    assert bucket.reads == [
+        SUPPRESSION_LIST_KEY,
+        SEARCH_INDEX_POINTER_KEY,
+        index.manifest_key,
+        index.object_key,
+    ]
 
 
 def test_five_minutes_on_an_unchanged_list_costs_a_conditional_get_and_no_body(
@@ -369,4 +374,4 @@ def test_closing_the_holder_forgets_the_list_so_the_next_lease_reads_it_whole(
 
 
 def test_the_interval_is_the_pointers_five_minutes() -> None:
-    assert POINTER_RECHECK_INTERVAL == timedelta(minutes=5)
+    assert timedelta(minutes=5) == POINTER_RECHECK_INTERVAL

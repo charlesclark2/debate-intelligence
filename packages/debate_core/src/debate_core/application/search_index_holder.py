@@ -207,7 +207,9 @@ class ScreenedSearch:
         self._service = service
         self._is_suppressed = is_suppressed
 
-    def search(self, query: str, filters: SearchFilters | None = None, cursor: str | None = None) -> SearchPage:
+    def search(
+        self, query: str, filters: SearchFilters | None = None, cursor: str | None = None
+    ) -> SearchPage:
         return self._service.search(query, filters, cursor, is_suppressed=self._is_suppressed)
 
     def card(self, caselist: str, cluster_id: str) -> Card | None:
@@ -510,7 +512,9 @@ def _suppression_state(raw: bytes) -> SuppressionState:
         raise ValueError("the suppression list's last line is unfinished")
     try:
         lines = raw.decode("utf-8").splitlines()
-        return SuppressionState.from_entries(SuppressionEntry.from_line(line) for line in lines if line.strip())
+        return SuppressionState.from_entries(
+            SuppressionEntry.from_line(line) for line in lines if line.strip()
+        )
     except (UnicodeDecodeError, ValidationError):
         raise ValueError("the suppression list holds a line this build cannot read") from None
 

@@ -157,7 +157,9 @@ def test_a_list_the_role_may_not_read_is_refused_as_access_denied(evidence_bucke
 def test_a_list_past_its_limit_is_refused(
     source: S3SearchIndexSource, s3_client: S3Client, evidence_bucket: str
 ) -> None:
-    s3_client.put_object(Bucket=evidence_bucket, Key=SUPPRESSION_LIST_KEY, Body=b"\n" * (SUPPRESSION_LIST_MAX_BYTES + 1))
+    s3_client.put_object(
+        Bucket=evidence_bucket, Key=SUPPRESSION_LIST_KEY, Body=b"\n" * (SUPPRESSION_LIST_MAX_BYTES + 1)
+    )
 
     with pytest.raises(ValueError, match="longer than"):
         source.read_suppression_list(if_none_match=None)

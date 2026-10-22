@@ -52,7 +52,12 @@ def written(world: Any) -> list[dict[str, Any]]:
 
 def accesses(world: Any) -> list[dict[str, Any]]:
     """The records this task adds, leaving out any account change a sign-in made."""
-    ours = {AuditAction.SEARCHED, AuditAction.CARD_VIEWED, AuditAction.CARD_COPIED, AuditAction.CARDS_DOWNLOADED}
+    ours = {
+        AuditAction.SEARCHED,
+        AuditAction.CARD_VIEWED,
+        AuditAction.CARD_COPIED,
+        AuditAction.CARDS_DOWNLOADED,
+    }
     return [record for record in written(world) if record["action"] in {action.value for action in ours}]
 
 
@@ -154,7 +159,9 @@ def test_audit_a_search_for_a_school_and_team_code_records_none_of_its_words_fil
     student: Any,
 ) -> None:
     """The query names the corpus's school and team code; the filters and both pages are used."""
-    first = student.browser.get("/search?q=zephyr+Maple+Grove+QX&event=LD&side=NEG&caselist=hsld26&since=2026-09-01")
+    first = student.browser.get(
+        "/search?q=zephyr+Maple+Grove+QX&event=LD&side=NEG&caselist=hsld26&since=2026-09-01"
+    )
     assert first.status_code == 200
     plain = student.browser.get("/search?q=zephyr&event=LD")
     assert student.browser.get(next_link(plain.text)).status_code == 200
@@ -162,7 +169,19 @@ def test_audit_a_search_for_a_school_and_team_code_records_none_of_its_words_fil
     records = accesses(student)
     assert [set(record) for record in records] == [SEARCH_FIELDS, SEARCH_FIELDS]
     text = json.dumps(records).lower()
-    for word in ("zephyr", "maple", "grove", "qx", "hsld26", "2026-09-01", "neg", '"ld"', "cursor", "q=", "/search"):
+    for word in (
+        "zephyr",
+        "maple",
+        "grove",
+        "qx",
+        "hsld26",
+        "2026-09-01",
+        "neg",
+        '"ld"',
+        "cursor",
+        "q=",
+        "/search",
+    ):
         assert word not in text, word
     for doc_id in range(1, 26):
         assert f"{doc_id:064x}" not in text

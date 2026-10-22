@@ -1,4 +1,4 @@
-"""Exposure: nothing the pilot answers is cached, and the plan checks the gate rests on are in place (`v1-e39-t07`).
+"""Exposure: nothing the pilot answers is cached, and the plan checks the gate rests on exist (`v1-e39-t07`).
 
 The data-use policy's E39 gate item 3 has two halves.
 
@@ -66,7 +66,7 @@ PLAN_CHECKS: Final = {
         "operator_permission_set_reads_and_publishes_but_cannot_delete",
     ],
 }
-"""The Terraform runs the gate table (session report, ac5) cites for gate items 3 and 6 of the removal grant."""
+"""The Terraform runs the session report's gate table (ac5) cites, for gate item 3 and the removal grant."""
 
 
 def test_exposure_every_route_has_a_path_here() -> None:
@@ -82,7 +82,9 @@ def answers(world: Any, csrf_token: str | None) -> list[tuple[str, str, int, str
                 if method == "GET":
                     response = world.browser.get(path)
                 else:
-                    response = world.post(path, {"email": "synthetic@example.test", "code": "135790"}, csrf_token=csrf_token)
+                    response = world.post(
+                        path, {"email": "synthetic@example.test", "code": "135790"}, csrf_token=csrf_token
+                    )
                 seen.append((method, path, response.status_code, response.headers.get("cache-control")))
     return seen
 
@@ -128,6 +130,8 @@ def test_exposure_only_the_hashed_static_files_may_be_cached_and_they_hold_no_da
 
 @pytest.mark.parametrize(("test_file", "runs"), list(PLAN_CHECKS.items()), ids=list(PLAN_CHECKS))
 def test_exposure_the_plan_checks_the_gate_table_cites_exist(test_file: str, runs: list[str]) -> None:
-    named = set(re.findall(r'^run "([a-z_]+)"', (REPOSITORY / test_file).read_text(encoding="utf-8"), re.MULTILINE))
+    named = set(
+        re.findall(r'^run "([a-z_]+)"', (REPOSITORY / test_file).read_text(encoding="utf-8"), re.MULTILINE)
+    )
 
     assert set(runs) <= named, sorted(set(runs) - named)

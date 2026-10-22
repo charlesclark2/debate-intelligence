@@ -303,7 +303,9 @@ def card_page(caselist: str, cluster_id: str, request: Request) -> HTMLResponse:
     if card is None:
         return _refused(request, 404, _NOT_FOUND_HEADING, _NOT_FOUND)
     try:
-        pilot_state(request).services.access_audit.card_viewed(_session(request), card.caselist, card.cluster_id)
+        pilot_state(request).services.access_audit.card_viewed(
+            _session(request), card.caselist, card.cluster_id
+        )
     except AccessNotRecorded:
         return _refused(request, 503, _UNAVAILABLE_HEADING, _UNAVAILABLE)
     words = len(card.text.split())
@@ -333,7 +335,9 @@ def card_copy(caselist: str, cluster_id: str, request: Request) -> Response:
     if card is None:
         return JSONResponse({"message": "That card is not in the search any more."}, status_code=404)
     try:
-        pilot_state(request).services.access_audit.card_copied(_session(request), card.caselist, card.cluster_id)
+        pilot_state(request).services.access_audit.card_copied(
+            _session(request), card.caselist, card.cluster_id
+        )
     except AccessNotRecorded:
         return JSONResponse({"message": _UNAVAILABLE}, status_code=503)
     copied = copied_card(card)

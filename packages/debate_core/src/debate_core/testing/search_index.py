@@ -4,8 +4,9 @@
 into what `tub index publish` would put in the bucket: the gzip object, the manifest and the
 pointer, each with the digests the real ones carry. :class:`InMemorySearchIndexSource` serves them
 the way the bucket does, entity tags and `304`s included, and records every read, so a test can see
-that an unchanged pointer cost no body and that nothing but the three keys was asked for. It also serves the suppression list beside them, the
-fourth key the function reads (`v1-e39-t07`), from :meth:`InMemorySearchIndexSource.write_suppression_list`.
+that an unchanged pointer cost no body and that nothing but the three keys was asked for. It also
+serves the suppression list beside them, the fourth key the function reads (`v1-e39-t07`), from
+:meth:`InMemorySearchIndexSource.write_suppression_list`.
 
 Every value here is synthetic: invented caselist slugs, versions and counts.
 """

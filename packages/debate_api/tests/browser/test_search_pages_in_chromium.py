@@ -663,7 +663,9 @@ def bare_loggers() -> Iterator[_Captured]:
     loggers = [logging.getLogger()] + [
         one for one in logging.Logger.manager.loggerDict.values() if isinstance(one, logging.Logger)
     ]
-    saved = [(one, one.level, one.handlers[:], one.filters[:], one.propagate, one.disabled) for one in loggers]
+    saved = [
+        (one, one.level, one.handlers[:], one.filters[:], one.propagate, one.disabled) for one in loggers
+    ]
     captured = _Captured()
     try:
         for one in loggers:
@@ -685,7 +687,9 @@ JOURNEY_QUERY: Final = "zephyr Maple Grove QX"
 """The fixture school and team code, typed into the search box beside a word that finds cards."""
 
 
-def test_exposure_a_whole_journey_logs_no_query_school_team_code_or_card_text(world: Any, browser: Browser) -> None:
+def test_exposure_a_whole_journey_logs_no_query_school_team_code_or_card_text(
+    world: Any, browser: Browser
+) -> None:
     """Sign in through the app's callback, search with the school and team code, filter, page, open,
     copy, visit the account page and sign out through managed login's `/logout`; the app's log records
     hold none of what was seen or typed.
@@ -701,7 +705,9 @@ def test_exposure_a_whole_journey_logs_no_query_school_team_code_or_card_text(wo
 
     def managed_login_logout(route: Route) -> None:
         target = parse_qs(urlsplit(route.request.url).query)["logout_uri"][0]
-        page_body = f'<!doctype html><meta http-equiv="refresh" content="0;url={target}"><title>Signed out</title>'
+        page_body = (
+            f'<!doctype html><meta http-equiv="refresh" content="0;url={target}"><title>Signed out</title>'
+        )
         route.fulfill(status=200, content_type="text/html; charset=utf-8", body=page_body)
 
     pilot.context.route(lambda url: url.startswith(world.login_origin + "/logout"), managed_login_logout)
@@ -733,7 +739,9 @@ def test_exposure_a_whole_journey_logs_no_query_school_team_code_or_card_text(wo
             expect(page.get_by_role("link", name="First page")).to_be_visible()
             page.goto(pilot.origin + world.card_path("featured"))
             page.get_by_role("button", name="Copy card").click()
-            expect(page.locator("[data-tub-copy-message]")).to_have_text("Copied. Paste it into Google Docs or Word.")
+            expect(page.locator("[data-tub-copy-message]")).to_have_text(
+                "Copied. Paste it into Google Docs or Word."
+            )
             page.goto(pilot.origin + "/account")
             page.get_by_role("button", name="Sign out").click()
             page.wait_for_url(pilot.origin + "/signed-out")
@@ -756,7 +764,15 @@ def test_exposure_a_whole_journey_logs_no_query_school_team_code_or_card_text(wo
     ]
     assert any(f"search index {world.index.index_id} loaded" in line for line in logged), logged
     for line in logged:
-        for word in ("zephyr", "maple grove", "riverbend", "granite", "lindqvist", "invented", "debater.journey"):
+        for word in (
+            "zephyr",
+            "maple grove",
+            "riverbend",
+            "granite",
+            "lindqvist",
+            "invented",
+            "debater.journey",
+        ):
             assert word not in line.lower(), (word, line)
         for exact in ("QX", "ZT", "q=", f"{1:064x}"):
             assert exact not in line, (exact, line)

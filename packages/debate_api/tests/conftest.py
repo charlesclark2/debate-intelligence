@@ -381,7 +381,9 @@ class FakeSelfService(AccountSelfService):
         return [operation for operation, _, _ in self.calls]
 
 
-AUDIT_RECORD_SCHEMA: Final = Path(__file__).resolve().parents[3] / "docs" / "data" / "tub-audit-record.schema.json"
+AUDIT_RECORD_SCHEMA: Final = (
+    Path(__file__).resolve().parents[3] / "docs" / "data" / "tub-audit-record.schema.json"
+)
 
 
 @cache

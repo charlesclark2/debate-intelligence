@@ -46,11 +46,17 @@ def index_objects(index_id: str, *, latest: bool, suffix: str = "1") -> list[dic
     ]
 
 
-def run(tmp_path: Path, versions: list[dict[str, Any]], markers: list[dict[str, Any]], current: str = CURRENT) -> Any:
+def run(
+    tmp_path: Path, versions: list[dict[str, Any]], markers: list[dict[str, Any]], current: str = CURRENT
+) -> Any:
     (tmp_path / "current.json").write_text(json.dumps({"index_id": current}))
     (tmp_path / "versions.json").write_text(json.dumps({"Versions": versions, "DeleteMarkers": markers}))
     return subprocess.run(
-        [sys.executable, "-I", "-", str(tmp_path)], input=prune_script(), capture_output=True, text=True, check=False
+        [sys.executable, "-I", "-", str(tmp_path)],
+        input=prune_script(),
+        capture_output=True,
+        text=True,
+        check=False,
     )
 
 

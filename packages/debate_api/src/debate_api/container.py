@@ -6,9 +6,9 @@ placeholder keys, and wires the Cognito, audit and parameter adapters from
 `debate_core.integrations` into the two use cases. It also builds the search index holder over the
 evidence bucket (`v1-e39-t06`), which fetches nothing until the first search: a cold start reads
 only the two parameters. The holder re-reads the suppression list through the same bucket adapter,
-and the access audit writes to the same audit stream as the account page (`v1-e39-t07`). Routes ask `app.state.pilot` for the use cases
-and never import an adapter (the import contracts and `scripts/check_thin_handlers.py` hold them
-to that).
+and the access audit writes to the same audit stream as the account page (`v1-e39-t07`). Routes
+ask `app.state.pilot` for the use cases and never import an adapter (the import contracts and
+`scripts/check_thin_handlers.py` hold them to that).
 
 The function's role allows exactly what is built here and nothing more (ADR-0019, The function's
 role): `ssm:GetParameter` on the two parameters, `logs:CreateLogStream` and `logs:PutLogEvents` on

@@ -28,8 +28,8 @@ from typing import TYPE_CHECKING, Any, Final
 
 from botocore.exceptions import ClientError
 
-from debate_core.application.ports.evidence_store import validate_object_key
 from debate_core.application.caselist.suppression import SUPPRESSION_LIST_KEY
+from debate_core.application.ports.evidence_store import validate_object_key
 from debate_core.application.ports.search_index_source import SUPPRESSION_LIST_MAX_BYTES, PointerRead
 from debate_core.domain.search_index import SEARCH_INDEX_POINTER_KEY
 from debate_core.integrations.s3.client import build_s3_client

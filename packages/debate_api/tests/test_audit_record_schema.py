@@ -35,7 +35,9 @@ from debate_core.application.tub.audit import (
 from debate_core.application.tub.identity import Role, TemporaryPassword
 from debate_core.application.tub.sessions import Session
 
-AUDIT_RECORD_SCHEMA: Final = Path(__file__).resolve().parents[3] / "docs" / "data" / "tub-audit-record.schema.json"
+AUDIT_RECORD_SCHEMA: Final = (
+    Path(__file__).resolve().parents[3] / "docs" / "data" / "tub-audit-record.schema.json"
+)
 NOW: Final = datetime(2026, 11, 2, 15, 0, tzinfo=UTC)
 SUBJECT: Final = "0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0"
 """A synthetic pool subject, in the UUID shape Cognito gives one."""
@@ -148,7 +150,9 @@ class Directory:
     """One synthetic account, for the coach's commands."""
 
     def __init__(self) -> None:
-        self.account = DirectoryAccount(username=USERNAME, subject=SUBJECT, groups=frozenset({"student"}), enabled=True)
+        self.account = DirectoryAccount(
+            username=USERNAME, subject=SUBJECT, groups=frozenset({"student"}), enabled=True
+        )
 
     def create(self, username: str, temporary_password: TemporaryPassword) -> str:
         return SUBJECT
@@ -205,7 +209,10 @@ def every_action() -> dict[str, AuditRecord]:
     would only repeat `v1-e39-t05`'s tests, whose records `FakeAuditSink` already validates."""
     sink = Sink()
     accounts = AccountAdministration(
-        directory=Directory(), audit=sink, clock=lambda: NOW, new_password=lambda: TemporaryPassword("Synthetic-pass-1")
+        directory=Directory(),
+        audit=sink,
+        clock=lambda: NOW,
+        new_password=lambda: TemporaryPassword("Synthetic-pass-1"),
     )
     accounts.add(USERNAME, Role.STUDENT)
     accounts.list()
@@ -227,7 +234,13 @@ def every_action() -> dict[str, AuditRecord]:
         AuditAction.SESSION_ENDED_NO_SECOND_FACTOR,
     ):
         sink.record(
-            AuditRecord(time=NOW, action=action, actor_role=Role.STUDENT, actor_subject=SUBJECT, account_subject=SUBJECT)
+            AuditRecord(
+                time=NOW,
+                action=action,
+                actor_role=Role.STUDENT,
+                actor_subject=SUBJECT,
+                account_subject=SUBJECT,
+            )
         )
     return {record.action.value: record for record in sink.records}
 
@@ -282,7 +295,9 @@ def test_audit_schema_refuses_a_record_with_a_forbidden_field(field: str) -> Non
     ("action", "change"),
     [
         pytest.param("card-viewed", {"cards": list(CARDS)}, id="a view of two cards"),
-        pytest.param("card-copied", {"cards": [f"hsld26/{1:064x} {SCHOOL}"]}, id="a card reference with words"),
+        pytest.param(
+            "card-copied", {"cards": [f"hsld26/{1:064x} {SCHOOL}"]}, id="a card reference with words"
+        ),
         pytest.param("card-viewed", {"count": 1}, id="a view with a count"),
         pytest.param("searched", {"cards": [CARDS[0]]}, id="a search naming a card"),
         pytest.param("searched", {"count": -1}, id="a negative count"),
@@ -303,11 +318,19 @@ def test_audit_schema_refuses_a_record_out_of_shape(action: str, change: dict[st
     "fields",
     [
         pytest.param({"action": AuditAction.CARD_VIEWED, "cards": CARDS}, id="a view of two cards"),
-        pytest.param({"action": AuditAction.CARD_COPIED, "cards": ("hsld26/Maple Grove",)}, id="a card with words"),
+        pytest.param(
+            {"action": AuditAction.CARD_COPIED, "cards": ("hsld26/Maple Grove",)}, id="a card with words"
+        ),
         pytest.param({"action": AuditAction.SEARCHED}, id="a search with no count"),
-        pytest.param({"action": AuditAction.SEARCHED, "count": 3, "cards": CARDS[:1]}, id="a search naming a card"),
-        pytest.param({"action": AuditAction.CARDS_DOWNLOADED, "cards": CARDS * 16}, id="a download of 32 cards"),
-        pytest.param({"action": AuditAction.ACCOUNT_ADDED, "cards": CARDS[:1]}, id="an account change naming a card"),
+        pytest.param(
+            {"action": AuditAction.SEARCHED, "count": 3, "cards": CARDS[:1]}, id="a search naming a card"
+        ),
+        pytest.param(
+            {"action": AuditAction.CARDS_DOWNLOADED, "cards": CARDS * 16}, id="a download of 32 cards"
+        ),
+        pytest.param(
+            {"action": AuditAction.ACCOUNT_ADDED, "cards": CARDS[:1]}, id="an account change naming a card"
+        ),
     ],
 )
 def test_audit_record_refuses_to_be_built_out_of_shape(fields: dict[str, Any]) -> None:

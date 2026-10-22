@@ -8,7 +8,13 @@
 //
 // Every <form method="post"> on a page is sent this way. The app answers with JSON: a `location`
 // to go to next, or a `message` to show in the form's [data-tub-message] element.
-// v1-e39-t06 extends this file for Copy card.
+//
+// Copy card (v1-e39-t06). A card page's [data-tub-copy] button names the card's copy path on the
+// pilot. On the click, the script fetches that path and writes text/html and text/plain to the
+// clipboard with the Clipboard API. The write is made inside the click, while its user activation
+// lasts: the ClipboardItem is given Promises of the fetch, and the browser waits for them itself.
+// Awaiting the fetch first and writing after would lose the activation (Safari on a phone at once,
+// Chrome once the fetch is slow), and the copy would be refused.
 "use strict";
 
 (() => {
@@ -58,6 +64,63 @@
     }
     say(form, typeof answer.message === "string" ? answer.message : "That did not work. Reload the page and try again.");
   }
+
+  const isOwnPath = (path) => typeof path === "string" && path.startsWith("/") && !path.startsWith("//");
+
+  const sayCopied = (button, text) => {
+    const place = button.parentElement ? button.parentElement.querySelector("[data-tub-copy-message]") : null;
+    if (place) {
+      place.textContent = text;
+    }
+  };
+
+  function copyCard(button) {
+    const path = button.getAttribute("data-tub-copy");
+    if (!isOwnPath(path) || button.getAttribute("aria-busy") === "true") {
+      return;
+    }
+    if (!navigator.clipboard || typeof navigator.clipboard.write !== "function" || typeof ClipboardItem === "undefined") {
+      sayCopied(button, "This browser cannot copy a formatted card. Select the card's text and copy that.");
+      return;
+    }
+    const copied = fetch(path, {
+      credentials: "same-origin",
+      cache: "no-store",
+      redirect: "error",
+      headers: { Accept: "application/json" },
+    }).then((response) =>
+      response.json().then((answer) => {
+        if (!response.ok || typeof answer.html !== "string" || typeof answer.text !== "string") {
+          throw new Error(typeof answer.message === "string" ? answer.message : "");
+        }
+        return answer;
+      }),
+    );
+    const item = new ClipboardItem({
+      "text/html": copied.then((answer) => new Blob([answer.html], { type: "text/html" })),
+      "text/plain": copied.then((answer) => new Blob([answer.text], { type: "text/plain" })),
+    });
+    button.setAttribute("aria-busy", "true");
+    sayCopied(button, "Copying the card…");
+    navigator.clipboard
+      .write([item])
+      .then(() => sayCopied(button, "Copied. Paste it into Google Docs or Word."))
+      .catch(() =>
+        copied.then(
+          () => sayCopied(button, "The card was not copied. Try again."),
+          (error) => sayCopied(button, error.message || "The card was not copied. Try again."),
+        ),
+      )
+      .finally(() => button.removeAttribute("aria-busy"));
+  }
+
+  document.addEventListener("click", (event) => {
+    const button = event.target instanceof Element ? event.target.closest("button[data-tub-copy]") : null;
+    if (button) {
+      event.preventDefault();
+      copyCard(button);
+    }
+  });
 
   document.addEventListener("submit", (event) => {
     const form = event.target;

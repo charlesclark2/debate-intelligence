@@ -32,7 +32,32 @@ spec:
     carries a whole long card. Copy card still copies the whole card with its formatting.
   priority: 1
   constraints:
-    packages: [debate_api, packages/debate_api/tests, tests/integration]
+    # PM ruling 2026-10-20: this task owns the function's index holder (ADR-0019 (c) 3 and 5), which
+    # no spec had assigned and the pages need. The first request that needs the index reads
+    # `reports/tub/search/current.json` and the manifest, streams the object through gunzip and sha256
+    # into /tmp, refuses it on a digest mismatch or an unknown format version, and opens it read-only
+    # and immutable. Sign-in, the callback, the health check and the empty search page never wait for
+    # it. The pointer is re-read by conditional GET at most five minutes apart, and a frozen
+    # environment past five minutes rechecks before it answers; a new pointer is downloaded to a new
+    # path, swapped in, and the old file deleted, never rewritten in place. It is one refresh loop,
+    # which v1-e39-t07 extends with the suppression list's re-read (`is_suppressed` stays None here).
+    # So the holder's port and use case go in debate_core.application, its S3 adapter in
+    # debate_core.integrations.s3, an in-memory published index for the tests of both packages in
+    # debate_core.testing, and their tests in packages/debate_core/tests. The PM's notes of
+    # the same day add Playwright and axe as dev dependencies, so pyproject.toml and uv.lock too.
+    packages:
+      - debate_api
+      - packages/debate_api/tests
+      - tests/integration
+      - debate_core.application
+      - debate_core.integrations.s3
+      - debate_core.testing
+      - packages/debate_core/tests
+      - pyproject.toml
+      - uv.lock
+      # PM ruling 2026-10-21 (v1-e39-t06 Q1): the task that adds a suite leaves its tier green, so this
+      # task adds the Chromium install to validate-dev's slow job, which runs the browser tests.
+      - .github/workflows/validate-dev.yml
     forbidden:
       - A third-party script, font, analytics or tracking
       - Inline script or a CSP exception for one
@@ -59,17 +84,18 @@ spec:
       description: >-
         No page requests another origin or carries inline script, by a test over every
         response and its CSP; the page-weight budget holds, by test.
+    # PM ruling 2026-10-21: no Chromebook available; the Chromebook check moves to v1-e39-t10.
     - id: ac4
       description: >-
-        On dev, the operator's Chromebook check: search, open a card, copy it into Google
-        Docs, formatting kept; reported yes or no for each (operator follow-up).
+        On dev, in desktop Chrome with the window at 1366x768 (DevTools device toolbar): search,
+        open a card, Copy card into Google Docs, formatting kept; yes or no each.
     - id: ac5
       description: >-
         (PM amendment 2026-10-20) A card over 3,000 words shows its read-aloud text first
         and the rest on request, and its search result's snippet stays within the
         page-weight budget, by test.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

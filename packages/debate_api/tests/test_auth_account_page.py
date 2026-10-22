@@ -202,7 +202,7 @@ def test_an_unknown_notice_is_not_shown(student: tuple[Any, Any]) -> None:
     page = world.browser.get("/account?done=%3Cscript%3Ealert(1)%3C/script%3E")
 
     assert "alert(1)" not in page.text
-    assert 'role="status"' not in page.text.split("<main>")[1].split("<h2>")[0]
+    assert 'role="status"' not in page.text.split('<main id="main">')[1].split("<h2>")[0]
 
 
 def test_a_change_after_the_account_was_signed_out_ends_the_session(student: tuple[Any, Any]) -> None:

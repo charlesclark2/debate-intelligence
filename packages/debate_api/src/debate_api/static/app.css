@@ -1,0 +1,271 @@
+/* The pilot's one stylesheet (ADR-0019 (b) 1, v1-e39-t06): first-party, at a content-hashed path
+   under /static/. The edge's default-src 'self' refuses inline styles, so every look is a class here.
+   No font, image or anything else is loaded from anywhere: the system's own fonts are used.
+
+   The card classes are the ones debate_core.domain.search_card_html writes: one per emphasis, one
+   per highlight colour, and card-size-<half points>. A size outside 8 to 72 half-points keeps the
+   text's size. */
+
+:root {
+  --text: #1a1a1a;
+  --muted: #4a4a4a;
+  --link: #0b57a4;
+  --line: #c9c9c9;
+  --panel: #f4f6f8;
+  --focus: #b3470b;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  color: var(--text);
+  background: #ffffff;
+  font: 1rem/1.5 system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  overflow-wrap: break-word;
+}
+
+a { color: var(--link); }
+
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+
+.skip-link {
+  position: absolute;
+  left: 0.5rem;
+  top: -3rem;
+  padding: 0.5rem 0.75rem;
+  background: #ffffff;
+  border: 2px solid var(--focus);
+}
+
+.skip-link:focus { top: 0.5rem; }
+
+.site-header, main { max-width: 56rem; margin: 0 auto; padding: 0 1rem; }
+
+.site-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  border-bottom: 1px solid var(--line);
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+}
+
+.site-header p { margin: 0; }
+
+.site-name a { font-weight: 700; text-decoration: none; }
+
+.site-header nav { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 1rem; }
+
+.site-header ul { display: flex; flex-wrap: wrap; gap: 0 1rem; margin: 0; padding: 0; list-style: none; }
+
+.site-header form { display: flex; align-items: center; gap: 0.5rem; }
+
+h1 { font-size: 1.5rem; line-height: 1.25; margin: 1.25rem 0 0.75rem; }
+
+h2 { font-size: 1.2rem; margin: 1.5rem 0 0.5rem; }
+
+h3 { font-size: 1.05rem; margin: 0 0 0.25rem; }
+
+button {
+  font: inherit;
+  padding: 0.45rem 1rem;
+  border: 1px solid var(--link);
+  border-radius: 4px;
+  background: var(--link);
+  color: #ffffff;
+  cursor: pointer;
+}
+
+button:disabled { background: var(--muted); border-color: var(--muted); }
+
+.site-header button { background: #ffffff; color: var(--link); padding: 0.25rem 0.75rem; }
+
+input, select { font: inherit; padding: 0.4rem 0.5rem; border: 1px solid var(--muted); border-radius: 4px; max-width: 100%; }
+
+label { display: block; font-weight: 600; margin-bottom: 0.25rem; }
+
+.help, .filter-note, .copy-help, .reminder, .result-counts, .card-counts { color: var(--muted); font-size: 0.9rem; }
+
+.search-box { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0.5rem; }
+
+.search-box label { flex-basis: 100%; margin-bottom: 0; }
+
+.search-box input { flex: 1 1 14rem; min-width: 0; }
+
+.filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: 0.75rem 1rem;
+  margin: 1rem 0 0;
+  padding: 0.75rem 1rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--panel);
+}
+
+.filters legend { font-weight: 700; padding: 0 0.25rem; }
+
+.filter select, .filter input { width: 100%; }
+
+.filter-note { margin: 0.25rem 0 0; }
+
+.filter-note-applied { color: var(--text); font-weight: 600; border-left: 3px solid var(--focus); padding-left: 0.5rem; }
+
+.problem { border-left: 4px solid #b00020; padding: 0.5rem 0.75rem; background: #fdecee; }
+
+.notice { border-left: 4px solid var(--link); padding: 0.5rem 0.75rem; background: var(--panel); }
+
+.result-list { list-style: none; margin: 0; padding: 0; }
+
+.result { padding: 0.75rem 0; border-bottom: 1px solid var(--line); }
+
+.result p { margin: 0.2rem 0; }
+
+.result-cite { font-weight: 600; }
+
+.result-snippet mark { background: #ffe873; color: var(--text); }
+
+.provenance { color: #385623; font-size: 0.9rem; }
+
+.pages ul { display: flex; flex-wrap: wrap; gap: 1rem; margin: 1rem 0; padding: 0; list-style: none; }
+
+.card-label {
+  display: inline-block;
+  margin: 1rem 0 0;
+  padding: 0.15rem 0.5rem;
+  border: 1px solid #8a5300;
+  border-radius: 4px;
+  color: #6b4000;
+  background: #fff6e5;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.card-tag { margin-top: 0.75rem; }
+
+.card-cite-line { margin: 0.25rem 0; }
+
+/* The card's actions, in one bar directly above its text: Copy card now, v1-e39-t08's download later.
+   The status shares the line with the button; on a narrow screen the bar wraps. */
+.card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.75rem;
+  margin: 1rem 0 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--panel);
+}
+
+.copy-status { font-weight: 600; }
+
+.card-text { font-family: Calibri, Carlito, "Segoe UI", Arial, sans-serif; line-height: 1.6; }
+
+.card-whole { margin-top: 1rem; }
+
+.card-whole summary { cursor: pointer; font-weight: 600; color: var(--link); padding: 0.25rem 0; }
+
+.occurrences { padding-left: 1.25rem; }
+
+/* What each emphasis looks like, after the Verbatim style it stands for. */
+.card-underline { text-decoration: underline; }
+.card-emphasis { font-weight: 700; text-decoration: underline; }
+.card-cite { font-weight: 700; }
+.card-undertag { color: #385623; }
+.card-analytic { font-weight: 700; color: #1f3864; }
+.card-bold { font-weight: 700; }
+.card-shrunk { font-size: 0.85em; }
+.card-heading { font-weight: 700; }
+.card-highlight-other { background: #e6e6e6; }
+
+/* Highlight colours, as Word draws them; the dark ones with white text, so the words stay readable. */
+.card-highlight-black { background: #000000; color: #ffffff; }
+.card-highlight-blue { background: #0000ff; color: #ffffff; }
+.card-highlight-cyan { background: #00ffff; color: #000000; }
+.card-highlight-darkBlue { background: #000080; color: #ffffff; }
+.card-highlight-darkCyan { background: #008080; color: #ffffff; }
+.card-highlight-darkGray { background: #808080; color: #000000; }
+.card-highlight-darkGreen { background: #008000; color: #ffffff; }
+.card-highlight-darkMagenta { background: #800080; color: #ffffff; }
+.card-highlight-darkRed { background: #800000; color: #ffffff; }
+.card-highlight-darkYellow { background: #808000; color: #000000; }
+.card-highlight-green { background: #00ff00; color: #000000; }
+.card-highlight-lightGray { background: #c0c0c0; color: #000000; }
+.card-highlight-magenta { background: #ff00ff; color: #000000; }
+.card-highlight-red { background: #ff0000; color: #000000; }
+.card-highlight-white { background: #ffffff; color: #000000; }
+.card-highlight-yellow { background: #ffff00; color: #000000; }
+
+/* Sizes relative to the 11-point (22 half-point) body, held between .6em and 2em to stay readable. */
+.card-size-8{font-size:.6em}
+.card-size-9{font-size:.6em}
+.card-size-10{font-size:.6em}
+.card-size-11{font-size:.6em}
+.card-size-12{font-size:.6em}
+.card-size-13{font-size:.6em}
+.card-size-14{font-size:.636em}
+.card-size-15{font-size:.682em}
+.card-size-16{font-size:.727em}
+.card-size-17{font-size:.773em}
+.card-size-18{font-size:.818em}
+.card-size-19{font-size:.864em}
+.card-size-20{font-size:.909em}
+.card-size-21{font-size:.955em}
+.card-size-22{font-size:1em}
+.card-size-23{font-size:1.045em}
+.card-size-24{font-size:1.091em}
+.card-size-25{font-size:1.136em}
+.card-size-26{font-size:1.182em}
+.card-size-27{font-size:1.227em}
+.card-size-28{font-size:1.273em}
+.card-size-29{font-size:1.318em}
+.card-size-30{font-size:1.364em}
+.card-size-31{font-size:1.409em}
+.card-size-32{font-size:1.455em}
+.card-size-33{font-size:1.5em}
+.card-size-34{font-size:1.545em}
+.card-size-35{font-size:1.591em}
+.card-size-36{font-size:1.636em}
+.card-size-37{font-size:1.682em}
+.card-size-38{font-size:1.727em}
+.card-size-39{font-size:1.773em}
+.card-size-40{font-size:1.818em}
+.card-size-41{font-size:1.864em}
+.card-size-42{font-size:1.909em}
+.card-size-43{font-size:1.955em}
+.card-size-44{font-size:2em}
+.card-size-45{font-size:2em}
+.card-size-46{font-size:2em}
+.card-size-47{font-size:2em}
+.card-size-48{font-size:2em}
+.card-size-49{font-size:2em}
+.card-size-50{font-size:2em}
+.card-size-51{font-size:2em}
+.card-size-52{font-size:2em}
+.card-size-53{font-size:2em}
+.card-size-54{font-size:2em}
+.card-size-55{font-size:2em}
+.card-size-56{font-size:2em}
+.card-size-57{font-size:2em}
+.card-size-58{font-size:2em}
+.card-size-59{font-size:2em}
+.card-size-60{font-size:2em}
+.card-size-61{font-size:2em}
+.card-size-62{font-size:2em}
+.card-size-63{font-size:2em}
+.card-size-64{font-size:2em}
+.card-size-65{font-size:2em}
+.card-size-66{font-size:2em}
+.card-size-67{font-size:2em}
+.card-size-68{font-size:2em}
+.card-size-69{font-size:2em}
+.card-size-70{font-size:2em}
+.card-size-71{font-size:2em}
+.card-size-72{font-size:2em}

@@ -1,7 +1,8 @@
 """What the app is built with, and the cookie reads and writes every part of it shares.
 
 :class:`PilotServices` is what a composition root hands :func:`debate_api.app.create_app`: the
-configuration, the cookie keys, the two use cases and the clock. `debate_api.container` builds it
+configuration, the cookie keys, the two sign-in use cases, the search index holder (`v1-e39-t06`)
+and the clock. `debate_api.container` builds it
 from the function's environment; a test builds it from fakes. :class:`PilotState` adds what the
 app derives from it once, and lives on `app.state.pilot` for the gate and the routes.
 """
@@ -29,6 +30,7 @@ from debate_api.cookies import (
     transaction_payload,
 )
 from debate_api.pages import PageRenderer, StaticAsset
+from debate_core.application.search_index_holder import SearchIndexHolder
 from debate_core.application.tub.account_page import AccountPageService
 from debate_core.application.tub.sessions import (
     ENROLMENT_LIFETIME,
@@ -49,6 +51,7 @@ class PilotServices:
     cookie_keys: CookieKeys
     sign_in: SignInService
     account_page: AccountPageService
+    search_index: SearchIndexHolder
     clock: Callable[[], datetime]
 
 
@@ -58,6 +61,12 @@ class PilotState:
     sealer: CookieSealer
     renderer: PageRenderer
     app_script: StaticAsset
+    app_stylesheet: StaticAsset
+
+    @property
+    def static_assets(self) -> tuple[StaticAsset, ...]:
+        """Every file under `/static/`: the one script and the one stylesheet."""
+        return (self.app_script, self.app_stylesheet)
 
     @property
     def public_origin(self) -> str:

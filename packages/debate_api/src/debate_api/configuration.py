@@ -10,6 +10,7 @@ v1-e39-t04's Terraform sets these on the function (`infrastructure/modules/evide
 | `TUB_USER_POOL_ID`, `TUB_CLIENT_ID` | the ID token's issuer and audience |
 | `TUB_CLIENT_SECRET_PARAMETER`, `TUB_COOKIE_KEYS_PARAMETER` | the two SecureString parameters |
 | `TUB_AUDIT_LOG_GROUP` | where the account page's audit records go |
+| `TUB_EVIDENCE_BUCKET` | the evidence bucket the search index is fetched from (`v1-e39-t06`) |
 
 The app never reads its origin from a `Host` or `X-Forwarded-*` header: CloudFront's origin request
 policy drops the viewer's `Host`, and a forwarded one is the viewer's to choose.
@@ -109,6 +110,7 @@ class PilotConfiguration:
     client_secret_parameter: str
     cookie_keys_parameter: str
     audit_log_group: str
+    evidence_bucket: str
     region: str = _DEFAULT_REGION
 
     @classmethod
@@ -128,6 +130,7 @@ class PilotConfiguration:
             client_secret_parameter=required("TUB_CLIENT_SECRET_PARAMETER"),
             cookie_keys_parameter=required("TUB_COOKIE_KEYS_PARAMETER"),
             audit_log_group=required("TUB_AUDIT_LOG_GROUP"),
+            evidence_bucket=required("TUB_EVIDENCE_BUCKET"),
             region=environ.get("AWS_REGION", "").strip() or _DEFAULT_REGION,
         )
         return configuration

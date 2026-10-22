@@ -10,6 +10,8 @@ Import from the submodule that defines a name; this package re-exports nothing:
 * :mod:`debate_core.testing.fakes` — an in-memory implementation of every port.
 * :mod:`debate_core.testing.builders` — builders that produce complete, valid domain entities
   from a handful of keyword arguments.
+* :mod:`debate_core.testing.search_index` — a published search index in memory, and the source
+  that serves it as the bucket does (`v1-e39-t06`).
 * :mod:`debate_core.testing.contracts` — the shared contract suites. They import pytest, so they
   are importable in a test environment and not in a running CLI or API.
 

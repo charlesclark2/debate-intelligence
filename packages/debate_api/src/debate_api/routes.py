@@ -1,4 +1,4 @@
-"""The pilot's routes for sign-in and the account (v1-e39-t05). The search pages are v1-e39-t06's.
+"""The pilot's routes: sign-in and the account (v1-e39-t05), and the search pages (v1-e39-t06).
 
 Each route parses its input, calls a use case in `debate_core.application.tub`, and renders or
 answers. The gate in :mod:`debate_api.access` has already decided who may reach it and checked a
@@ -7,6 +7,8 @@ never checks a session itself.
 
 A state-changing route is a POST that `app.js` sends with `fetch`, and it answers JSON: a
 `location` to go to next, or, through the app's error handlers, a `message` to show.
+
+The search pages' handlers are in :mod:`debate_api.search_pages`; every one is a `GET`.
 """
 
 from __future__ import annotations
@@ -21,6 +23,7 @@ from starlette.concurrency import run_in_threadpool
 from debate_api.access import Access, RouteAccess
 from debate_api.cookies import ALL_COOKIES, ENROLMENT_COOKIE, SESSION_COOKIE, SIGN_IN_COOKIE
 from debate_api.pages import IMMUTABLE, qr_code_svg
+from debate_api.search_pages import card_copy, card_page, search_page
 from debate_api.state import pilot_state
 from debate_core.application.tub.sessions import PendingEnrolment, Session
 from debate_core.application.tub.sign_in import EnrolmentRequired, SignInRefusal, SignInRefused
@@ -29,12 +32,15 @@ __all__ = ["ACCOUNT_NOTICES", "ROUTE_ACCESS", "register_routes"]
 
 ROUTE_ACCESS: Final = {
     "/healthz": Access.PUBLIC,
-    "/static/{digest}/app.js": Access.PUBLIC,
+    "/static/{digest}/{name}": Access.PUBLIC,
     "/auth/callback": Access.PUBLIC,
     "/signed-out": Access.PUBLIC,
     "/auth/sign-out": Access.ENROLMENT,
     "/account/authenticator": Access.PENDING_ENROLMENT,
     "/": Access.SIGNED_IN,
+    "/search": Access.SIGNED_IN,
+    "/cards/{caselist}/{cluster_id}": Access.SIGNED_IN,
+    "/cards/{caselist}/{cluster_id}/copy": Access.SIGNED_IN,
     "/account": Access.SIGNED_IN,
     "/account/email": Access.SIGNED_IN,
     "/account/email/verify": Access.SIGNED_IN,
@@ -56,7 +62,7 @@ _FORM_FIELDS_LIMIT: Final = 8
 def register_routes(app: FastAPI, routes: RouteAccess) -> None:
     """Attach every route to `app`, and record the access each needs from :data:`ROUTE_ACCESS`."""
     app.add_api_route("/healthz", healthz, methods=["GET"], include_in_schema=False)
-    app.add_api_route("/static/{digest}/app.js", app_script, methods=["GET"], include_in_schema=False)
+    app.add_api_route("/static/{digest}/{name}", static_asset, methods=["GET"], include_in_schema=False)
     app.add_api_route("/auth/callback", callback, methods=["GET"], include_in_schema=False)
     app.add_api_route("/signed-out", signed_out, methods=["GET"], include_in_schema=False)
     app.add_api_route("/auth/sign-out", sign_out, methods=["POST"], include_in_schema=False)
@@ -64,7 +70,12 @@ def register_routes(app: FastAPI, routes: RouteAccess) -> None:
     app.add_api_route(
         "/account/authenticator", confirm_authenticator, methods=["POST"], include_in_schema=False
     )
-    app.add_api_route("/", home, methods=["GET"], include_in_schema=False)
+    app.add_api_route("/", search_page, methods=["GET"], include_in_schema=False)
+    app.add_api_route("/search", search_page, methods=["GET"], include_in_schema=False)
+    app.add_api_route("/cards/{caselist}/{cluster_id}", card_page, methods=["GET"], include_in_schema=False)
+    app.add_api_route(
+        "/cards/{caselist}/{cluster_id}/copy", card_copy, methods=["GET"], include_in_schema=False
+    )
     app.add_api_route("/account", account, methods=["GET"], include_in_schema=False)
     app.add_api_route("/account/email", add_email, methods=["POST"], include_in_schema=False)
     app.add_api_route("/account/email/verify", confirm_email, methods=["POST"], include_in_schema=False)
@@ -106,12 +117,12 @@ async def healthz() -> JSONResponse:
     return JSONResponse({"status": "ok"})
 
 
-async def app_script(digest: str, request: Request) -> Response:
-    """The pilot's one script, at its content-hashed path; any other digest is not found."""
-    script = pilot_state(request).app_script
-    if digest != script.digest:
-        return Response(status_code=404, headers={"Cache-Control": "private, no-store"})
-    return Response(script.content, media_type=script.media_type, headers={"Cache-Control": IMMUTABLE})
+async def static_asset(digest: str, name: str, request: Request) -> Response:
+    """The pilot's script or stylesheet, at its content-hashed path; any other path is not found."""
+    for asset in pilot_state(request).static_assets:
+        if (asset.name, asset.digest) == (name, digest):
+            return Response(asset.content, media_type=asset.media_type, headers={"Cache-Control": IMMUTABLE})
+    return Response(status_code=404, headers={"Cache-Control": "private, no-store"})
 
 
 def callback(request: Request) -> Response:
@@ -203,10 +214,6 @@ async def confirm_authenticator(request: Request) -> JSONResponse:
 # --------------------------------------------------------------------------------------------
 # A session
 # --------------------------------------------------------------------------------------------
-
-
-def home(request: Request) -> HTMLResponse:
-    return pilot_state(request).renderer.render("home.html", holder=_session(request))
 
 
 def coach(request: Request) -> HTMLResponse:

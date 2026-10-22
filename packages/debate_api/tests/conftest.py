@@ -11,8 +11,14 @@ Only two things are stand-ins, and both answer as Cognito would:
   checks every one of them, and a test can change any claim or sign with another key.
 * :class:`FakeSelfService` is the token-authorized API over the same accounts.
 
-Every name, address, code and secret here is synthetic. No test reaches a network: the app runs
-in-process through Starlette's test client.
+The search pages (v1-e39-t06) run over a real index: :data:`CORPUS`, built once by `v1-e39-t02`'s
+writer, published in memory by :mod:`debate_core.testing.search_index`, and fetched by the real
+:class:`~debate_core.application.search_index_holder.SearchIndexHolder` into the world's own
+directory, so a page test goes through the same download, digest checks and read-only open the
+function does.
+
+Every name, address, code, secret, tag, cite and card here is synthetic. No test reaches a network:
+the app runs in-process through Starlette's test client.
 """
 
 from __future__ import annotations
@@ -21,11 +27,15 @@ import base64
 import hashlib
 import json
 import os
+import re
 import secrets
-from collections.abc import Callable, Mapping
+import tempfile
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from functools import cache
+from pathlib import Path
+from typing import Any, Final
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
@@ -38,12 +48,17 @@ from debate_api.app import create_app
 from debate_api.configuration import CookieKeys, PilotConfiguration
 from debate_api.cookies import SESSION_COOKIE, CookieSealer, session_payload
 from debate_api.state import PilotServices
+from debate_core.application.ports.search_index import IndexedOccurrence, SearchDocument
 from debate_core.application.ports.tub import AccountSelfService, AccountStanding, CodeRefused, TokenRefused
+from debate_core.application.search_index_holder import SearchIndexHolder
 from debate_core.application.tub.account_page import AccountPageService
 from debate_core.application.tub.audit import AuditRecord
 from debate_core.application.tub.identity import AuthenticatorSecret, Role
 from debate_core.application.tub.sessions import Session
 from debate_core.application.tub.sign_in import SignInService
+from debate_core.domain.debate_files import FontSizeSpan, FormattingSpan
+from debate_core.domain.search_index import read_aloud_text
+from debate_core.domain.style_profile import RunEmphasis, StyleMatchSource
 from debate_core.integrations.cognito import (
     CognitoIdTokenVerifier,
     CognitoOAuthClient,
@@ -52,6 +67,9 @@ from debate_core.integrations.cognito import (
     PublishedKeySet,
     issuer_for,
 )
+from debate_core.integrations.local.search_index import SqliteSearchIndexWriter
+from debate_core.integrations.local.search_index_reader import SqliteSearchIndexReader
+from debate_core.testing.search_index import InMemorySearchIndexSource, PublishedIndex, published_index
 
 REGION = "us-east-1"
 POOL_ID = "us-east-1_SyntheticPool"
@@ -368,6 +386,226 @@ class FakeAuditSink:
         self.records.append(record)
 
 
+# --------------------------------------------------------------------------------------------
+# The search pages' synthetic index (v1-e39-t06)
+# --------------------------------------------------------------------------------------------
+
+SCHOOL, TEAM, OTHER_SCHOOL, OTHER_TEAM = "Maple Grove", "QX", "Riverbend", "ZT"
+TOURNAMENT, ROUND = "Invented Invitational", "Round 4"
+CAMP = "Cascade Institute"
+
+FEATURED_TEXT: Final = "Zephyr winds raise granite costs.\nThe second paragraph says basalt holds."
+"""The featured card's text: every kind of span lands on it, one highlight across the line break."""
+
+LONG_CARD_WORDS: Final = 3200
+LONG_READ_ALOUD: Final = "Zephyr read aloud stretch"
+FILLER_CARDS: Final = 20
+"""Cards 6 to 25: with the five named cards, 25 match `zephyr`, so the results run to two pages."""
+
+
+def _span(text: str, emphasis: RunEmphasis, words: str, colour: str | None = None) -> FormattingSpan:
+    start = text.index(words)
+    return FormattingSpan(
+        emphasis=emphasis,
+        start_offset=start,
+        end_offset=start + len(words),
+        highlight_color=colour,
+        rule_id="synthetic",
+        match_source=StyleMatchSource.VERBATIM,
+    )
+
+
+def _size(text: str, words: str, half_points: int) -> FontSizeSpan:
+    start = text.index(words)
+    return FontSizeSpan(start_offset=start, end_offset=start + len(words), half_points=half_points)
+
+
+def cluster_of(doc_id: int) -> str:
+    return f"{doc_id:064x}"
+
+
+def _occurrence(
+    ordinal: int,
+    doc_id: int,
+    *,
+    caselist: str = "hsld26",
+    school: str | None = SCHOOL,
+    team: str | None = TEAM,
+    side: str = "NEG",
+    provenance: bool = True,
+) -> IndexedOccurrence:
+    camp = caselist == "openev"
+    kept = provenance and not camp
+    return IndexedOccurrence(
+        ordinal=ordinal,
+        caselist=caselist,
+        source_sha256=f"{doc_id:032x}{ordinal:032x}",
+        disclosure=None if camp else f"{ordinal:032x}{doc_id:032x}",
+        first_element_index=0,
+        last_element_index=2,
+        snapshot="2026-policy" if camp else "2026-09-15",
+        last_snapshot="2026-policy" if camp else "2026-10-13",
+        completeness="FULL",
+        attributed=True,
+        provenance=provenance,
+        side=side if kept else None,
+        school=school if kept else None,
+        team_code=team if kept else None,
+        tournament=TOURNAMENT if kept else None,
+        round=ROUND if kept else None,
+        camp=CAMP if camp else None,
+        camp_year=2026 if camp else None,
+        camp_event="POLICY" if camp else None,
+        camp_file_title="Invented Adv CP" if camp else None,
+    )
+
+
+def _document(
+    doc_id: int,
+    *,
+    text: str,
+    tag: str | None,
+    cite: str = "Lindqvist 26, Invented Quarterly, 2026",
+    caselist: str = "hsld26",
+    event: str = "LD",
+    sides: tuple[str, ...] = ("NEG",),
+    spans: Sequence[FormattingSpan] = (),
+    sizes: Sequence[FontSizeSpan] = (),
+    occurrences: Sequence[IndexedOccurrence] | None = None,
+    team_count: int = 1,
+) -> SearchDocument:
+    held = tuple(occurrences) if occurrences is not None else (_occurrence(0, doc_id, caselist=caselist),)
+    camp = caselist == "openev"
+    return SearchDocument(
+        doc_id=doc_id,
+        caselist=caselist,
+        cluster_id=cluster_of(doc_id),
+        event=event,
+        camp=CAMP if camp else None,
+        tag=tag,
+        cite=cite,
+        short_cite=cite.split(",")[0],
+        read_aloud=read_aloud_text(text, spans),
+        text=text,
+        completeness="FULL",
+        formatting_spans=tuple(spans),
+        font_size_spans=tuple(sizes),
+        sides=sides,
+        first_seen=None if camp else "2026-09-15",
+        last_seen=None if camp else "2026-10-13",
+        file_count=len(held),
+        team_count=0 if camp else team_count,
+        occurrences=held,
+    )
+
+
+def _long_text() -> str:
+    vocabulary = ("granite", "basalt", "quartz", "feldspar", "mica", "gneiss", "schist", "slate")
+    rest = " ".join(vocabulary[index % len(vocabulary)] for index in range(LONG_CARD_WORDS - 5))
+    return f"{LONG_READ_ALOUD}. Zephyr {rest}."
+
+
+FEATURED_SPANS: Final = (
+    _span(FEATURED_TEXT, RunEmphasis.UNDERLINE, "Zephyr winds raise granite costs"),
+    _span(FEATURED_TEXT, RunEmphasis.HIGHLIGHT, "winds raise", "cyan"),
+    _span(FEATURED_TEXT, RunEmphasis.EMPHASIS, "granite"),
+    _span(FEATURED_TEXT, RunEmphasis.HIGHLIGHT, "costs.\nThe", "yellow"),
+    _span(FEATURED_TEXT, RunEmphasis.SHRUNK, "second paragraph says"),
+    _span(FEATURED_TEXT, RunEmphasis.BOLD, "basalt holds"),
+    _span(FEATURED_TEXT, RunEmphasis.UNDERTAG, "says basalt"),
+    _span(FEATURED_TEXT, RunEmphasis.ANALYTIC, "holds"),
+    _span(FEATURED_TEXT, RunEmphasis.CITE, "Zephyr"),
+    _span(FEATURED_TEXT, RunEmphasis.HEADING, "The"),
+)
+FEATURED_SIZES: Final = (
+    _size(FEATURED_TEXT, "Zephyr winds raise granite costs.", 22),
+    _size(FEATURED_TEXT, "second paragraph says", 16),
+    _size(FEATURED_TEXT, "basalt holds.", 21),
+)
+
+HOSTILE_TAG: Final = "<script>alert('tag')</script> zephyr hostile"
+HOSTILE_CITE: Final = 'Hostile 26, "onerror=alert(1)" <b>Quarterly</b>'
+HOSTILE_TEXT: Final = "<img src=x onerror=alert(1)> zephyr javascript:alert(1) </p><style>body{}</style>"
+
+
+def _corpus() -> tuple[SearchDocument, ...]:
+    long_text = _long_text()
+    return (
+        _document(
+            1,
+            text=FEATURED_TEXT,
+            tag="Zephyr winds raise granite costs",
+            spans=FEATURED_SPANS,
+            sizes=FEATURED_SIZES,
+            occurrences=(
+                _occurrence(0, 1),
+                _occurrence(1, 1, school=OTHER_SCHOOL, team=OTHER_TEAM, side="AFF"),
+                _occurrence(2, 1, provenance=False),
+            ),
+            sides=("AFF", "NEG"),
+            team_count=2,
+        ),
+        _document(
+            2,
+            text="Invented text about zephyr tariffs.",
+            tag="Zephyr tariffs help farmers",
+            caselist="hspf26",
+            event="PF",
+            sides=("PRO",),
+            occurrences=(_occurrence(0, 2, caselist="hspf26", side="PRO"),),
+        ),
+        _document(
+            3,
+            text="A camp card about zephyr basalt.",
+            tag="Camp zephyr card",
+            caselist="openev",
+            event="POLICY",
+            sides=(),
+        ),
+        _document(
+            4,
+            text=long_text,
+            tag="A very long zephyr card",
+            spans=(
+                _span(long_text, RunEmphasis.UNDERLINE, LONG_READ_ALOUD),
+                _span(long_text, RunEmphasis.HIGHLIGHT, "read aloud", "green"),
+            ),
+        ),
+        _document(
+            5,
+            text=HOSTILE_TEXT,
+            tag=HOSTILE_TAG,
+            cite=HOSTILE_CITE,
+            spans=(_span(HOSTILE_TEXT, RunEmphasis.HIGHLIGHT, "zephyr", "chartreuse"),),
+        ),
+        *(
+            _document(doc_id, text=f"Filler card {doc_id} about zephyr.", tag=f"Zephyr filler {doc_id}")
+            for doc_id in range(6, 6 + FILLER_CARDS)
+        ),
+    )
+
+
+CORPUS: Final = _corpus()
+CARDS: Final = {"featured": 1, "public forum": 2, "camp": 3, "long": 4, "hostile": 5}
+"""The named cards of :data:`CORPUS` by doc id; the rest are fillers."""
+
+
+@cache
+def corpus_index() -> PublishedIndex:
+    """:data:`CORPUS` built once per process and published in memory."""
+    with tempfile.TemporaryDirectory() as scratch:
+        path = Path(scratch) / "search-index.sqlite"
+        sink = SqliteSearchIndexWriter().create(path)
+        for document in CORPUS:
+            sink.add(document)
+        sink.finish()
+        sqlite = path.read_bytes()
+    stores: dict[str, int] = {}
+    for document in CORPUS:
+        stores[document.caselist] = stores.get(document.caselist, 0) + 1
+    return published_index(sqlite, documents_by_store=stores)
+
+
 def configuration() -> PilotConfiguration:
     return PilotConfiguration(
         environment="dev",
@@ -378,6 +616,7 @@ def configuration() -> PilotConfiguration:
         client_secret_parameter="/debate-dev-tub/client-secret",
         cookie_keys_parameter="/debate-dev-tub/cookie-keys",
         audit_log_group="debate-dev-tub-audit",
+        evidence_bucket="debate-dev-evidence-synthetic",
     )
 
 
@@ -397,8 +636,16 @@ class PilotWorld:
     good_email_code = GOOD_EMAIL_CODE
     authenticator_secret = AUTHENTICATOR_SECRET
 
+    cards = CARDS
+    corpus = CORPUS
+
     def __init__(self) -> None:
         self.clock = MutableClock()
+        self.index = corpus_index()
+        self.index_source = InMemorySearchIndexSource()
+        self.index_source.publish(self.index)
+        self._index_directory = tempfile.TemporaryDirectory(prefix="tub-index-")
+        self.index_directory = Path(self._index_directory.name)
         self.login = FakeManagedLogin(self.clock)
         self.self_service = FakeSelfService(self.login)
         self.audit = FakeAuditSink()
@@ -433,10 +680,27 @@ class PilotWorld:
                 clock=self.clock,
                 authenticator_issuer="Team evidence search (dev)",
             ),
+            search_index=SearchIndexHolder(
+                self.index_source,
+                directory=self.index_directory,
+                open_reader=lambda path, index_id: SqliteSearchIndexReader(path, index_id=index_id),
+                clock=self.clock,
+            ),
             clock=self.clock,
         )
         self.app = create_app(self.services)
         self.browser = self.new_browser()
+
+    def card_path(self, name: str) -> str:
+        """The page of one of :data:`CARDS`."""
+        doc_id = CARDS[name]
+        caselist = next(document.caselist for document in CORPUS if document.doc_id == doc_id)
+        return f"/cards/{caselist}/{cluster_of(doc_id)}"
+
+    def signed_in_student(self, username: str = "debater.one") -> Session:
+        """A student account and its session, planted in the browser."""
+        self.login.add_account(username, "student")
+        return self.use_session(self.session_for(username))
 
     def new_browser(self) -> TestClient:
         return TestClient(self.app, base_url=PUBLIC_ORIGIN, follow_redirects=False)
@@ -519,9 +783,82 @@ class PilotWorld:
         return (browser or self.browser).post(path, content=body, headers=headers)
 
 
+# --------------------------------------------------------------------------------------------
+# Reading Copy card's spans back (v1-e39-t06 ac2)
+# --------------------------------------------------------------------------------------------
+
+
+def _declarations(style: str) -> str:
+    """A `style` attribute as one canonical string: Chrome's paste may space or terminate it."""
+    parts = [part.strip() for part in style.split(";") if part.strip()]
+    return ";".join(re.sub(r"\s*:\s*", ":", part) for part in parts)
+
+
+def copied_spans(
+    styles_by_character: Sequence[Sequence[str]],
+) -> tuple[list[FormattingSpan], list[FontSizeSpan]]:
+    """The spans a copy's span styles say, character by character, each as the runs it covers.
+
+    The inverse of `debate_api.copy_card`'s table. A style the table does not write is an error,
+    so a paste that rewrote a declaration fails the read-back rather than dropping a span.
+    """
+    from debate_api.copy_card import EMPHASIS_STYLES, HIGHLIGHT_STYLES
+
+    by_style = {
+        **{_declarations(style): ("emphasis", emphasis.value) for emphasis, style in EMPHASIS_STYLES.items()},
+        **{_declarations(style): ("highlight", colour) for colour, style in HIGHLIGHT_STYLES.items()},
+    }
+    covered: dict[tuple[str, str], list[int]] = {}
+    for offset, styles in enumerate(styles_by_character):
+        for style in map(_declarations, styles):
+            size = re.fullmatch(r"font-size:(\d+)(\.5)?pt", style)
+            if size is not None:
+                key = ("size", str(int(size.group(1)) * 2 + (1 if size.group(2) else 0)))
+            else:
+                key = by_style[style]
+            covered.setdefault(key, []).append(offset)
+    spans: list[FormattingSpan] = []
+    sizes: list[FontSizeSpan] = []
+    for (kind, value), offsets in covered.items():
+        for start, end in _runs_of(offsets):
+            if kind == "size":
+                sizes.append(FontSizeSpan(start_offset=start, end_offset=end, half_points=int(value)))
+                continue
+            highlight = kind == "highlight"
+            spans.append(
+                FormattingSpan(
+                    emphasis=RunEmphasis.HIGHLIGHT if highlight else RunEmphasis(value),
+                    start_offset=start,
+                    end_offset=end,
+                    highlight_color=value if highlight else None,
+                    rule_id="read-back",
+                    match_source=StyleMatchSource.VERBATIM,
+                )
+            )
+    return spans, sizes
+
+
+def _runs_of(offsets: Sequence[int]) -> list[tuple[int, int]]:
+    runs: list[list[int]] = []
+    for offset in sorted(offsets):
+        if runs and runs[-1][1] == offset:
+            runs[-1][1] = offset + 1
+        else:
+            runs.append([offset, offset + 1])
+    return [(start, end) for start, end in runs]
+
+
 @pytest.fixture
-def world() -> PilotWorld:
-    return PilotWorld()
+def read_back() -> Callable[[Sequence[Sequence[str]]], tuple[list[FormattingSpan], list[FontSizeSpan]]]:
+    """:func:`copied_spans`, for the Copy card tests in Python and in Chromium."""
+    return copied_spans
+
+
+@pytest.fixture
+def world() -> Iterator[PilotWorld]:
+    made = PilotWorld()
+    yield made
+    made.services.search_index.close()
 
 
 @pytest.fixture

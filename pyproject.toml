@@ -60,6 +60,13 @@ dev = [
     "flask>=3.0",
     "flask-cors>=5.0",
     "numbers-parser>=4.19",
+    # The student search pilot's pages are tested in Chromium (v1-e39-t06): Playwright drives it, and
+    # axe-playwright-python carries axe-core's script, which the tests inject into a page and the app
+    # never serves. The browser is Playwright's own build, installed once per machine with
+    # `uv run playwright install chromium`; the tests are marked `slow` (working agreement 1: browser
+    # suites run outside the PR path). The lock holds playwright 1.63.0, whose Chromium is v1243.
+    "axe-playwright-python>=0.1.8",
+    "playwright>=1.63",
     "pre-commit>=4.0",
     "pre-commit-hooks>=5.0",
     "pyright[nodejs]>=1.1.400",

@@ -483,6 +483,40 @@ results go here.
     attempt finished as above.
 * ac4 restarts from step 3, unchanged: step 5's `git rev-parse` now prints the rebased head.
 
+**ac4's second attempt, 2026-10-21, in desktop Chrome at 1366x768 on dev: four yes, and a third review.**
+
+* **Steps 3 to 6** ran: the build, the publish, the deploy of the synced branch and the account
+  `chromebook.check`. Their outputs are still to be recorded here; the operator is pasting them.
+* **Step 7**, the operator's answers:
+
+  | Question | Answer |
+  |---|---|
+  | Results appear, each with a tag, short cite, snippet, counts and a provenance line | **Yes.** Every result had a tag, a snippet, counts and a provenance line; not every one had a short cite (below) |
+  | The first search's time | About 5 to 6 seconds |
+  | A card opens, labelled "Disclosed evidence, not platform-verified", underlined and highlighted | **Yes**, in about 4 to 5 seconds |
+  | Copy card pasted into Google Docs as the tag, the cite, the provenance line below the cite, then the card | **Yes** |
+  | The formatting was kept | **Yes** |
+
+* **Step 8**: `Removed chromebook.check. Any open session ends within five minutes.`
+* **What came out differently, raised with the PM before the Goal is set:**
+  1. **The operator would rather the copy left the provenance line out.** The spec's description,
+     ADR-0019's gate item 6 ("copy and download carry the provenance line") and the data-use
+     policy's Attribution rule 2 all require it. That is the PM's ruling to make, not this session's.
+  2. **The Copy card button's place reads oddly** (the operator's screenshot): between the counts
+     and the card's text, with its help line and status under it.
+  3. **Some results have no short cite.** The index stores none when the build could not read one
+     from the cite (`docs/data/search-index.md`), and the results page then leaves the line out.
+     That is the data, not a fault in the page; a fallback (the cite's first words) would be new
+     scope.
+  4. **Opening a card took 4 to 5 seconds** after a 5 to 6 second first search. That is consistent
+     with a second cold execution environment fetching the index again: CloudFront does not keep a
+     viewer on one environment, and reserved concurrency allows ten. `v1-e39-t10` measures the
+     function's timings; its logging follow-up (3) would show each load.
+  5. **DevTools counted about 160 console errors** on the card page after the copy. These are most
+     likely Decision 7's reports: Chrome reports each inline style of the copied HTML against the
+     page's CSP while it sanitises the write, and this card has many spans. The paste was whole. Not
+     confirmed from the console's text.
+
 ## PM review
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in

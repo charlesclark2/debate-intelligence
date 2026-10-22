@@ -1,0 +1,25 @@
+[
+  {
+    "provider": "fake",
+    "provider_record_id": "FK-0001",
+    "title": "Fugitive methane from invented gas fields",
+    "url": "https://journal.example.org/articles/fk-0001",
+    "identifiers": {"doi": "10.5555/fake.0001"},
+    "source_type": "scholarly",
+    "authors": ["Ada Placeholder", "Grace Example"],
+    "publication": "Journal of Invented Results",
+    "published_at": "2024-03-04T14:30:00Z",
+    "snippet": "An invented abstract about leakage rates.",
+    "raw_ref": "fake/FK-0001"
+  },
+  {
+    "provider": "fake",
+    "provider_record_id": "FK-0002",
+    "title": "Regulators weigh a made-up methane rule",
+    "url": "https://news.example.org/2024/05/methane-rule",
+    "source_type": "news",
+    "publication": "The Example Ledger",
+    "published_at": "2024-05-20T00:00:00Z",
+    "raw_ref": "fake/FK-0002"
+  }
+]

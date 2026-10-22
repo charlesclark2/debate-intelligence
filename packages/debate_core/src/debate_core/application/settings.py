@@ -426,6 +426,18 @@ class ProviderSettings(SettingsGroup):
     enabled: tuple[SearchProviderName, ...] = Field(
         default=(), description="Discovery providers this environment may call, in no order."
     )
+    timeout_seconds: float = Field(
+        default=10.0, gt=0, le=120, description="How long one discovery call may take before it is cancelled."
+    )
+    breaker_failure_threshold: int = Field(
+        default=3, ge=1, le=100, description="Consecutive failures after which a provider is skipped."
+    )
+    breaker_cooldown_seconds: float = Field(
+        default=60.0,
+        gt=0,
+        le=3600,
+        description="How long a skipped provider waits before one probe call is let through.",
+    )
     contact_email: SecretStr | None = Field(
         default=None,
         description=(

@@ -537,3 +537,12 @@ class ParsedStore(Protocol):
     async def read_occurrences(self, caselist: str, version: str) -> tuple[OccurrenceRecord, ...] | None:
         """`occurrences.jsonl`, or `None` when it is absent."""
         ...
+
+    async def read_occurrence_stamps(self, caselist: str, version: str) -> frozenset[str] | None:
+        """The fingerprint version of every row of `occurrences.jsonl`, or `None` when it is absent.
+
+        Read without the record's model (`v1-e34-t29`): a newer build may write rows this build
+        cannot validate, and its table must still say which version wrote it
+        (:func:`~debate_core.application.caselist.occurrence_table_guard.fingerprint_stamps`).
+        """
+        ...

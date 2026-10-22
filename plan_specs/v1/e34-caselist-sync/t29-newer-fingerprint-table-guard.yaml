@@ -27,7 +27,9 @@ spec:
     rebuilt as today.
   priority: 2
   constraints:
-    packages: [debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/runbooks]
+    # PM ruling 2026-10-21 (v1-e34-t29 review): debate_core.integrations and debate_core.testing
+    # added for ParsedStore.read_occurrence_stamps and its two implementations (Deviation 1).
+    packages: [debate_core.application, debate_core.integrations, debate_core.testing, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/runbooks]
     forbidden:
       - Changing the fingerprint or clustering rules
       - A path, school, team code or file name in a record or a log
@@ -42,16 +44,20 @@ spec:
         A rebuild or publish over a table stamped with a newer fingerprint version is
         refused with both versions named, by tests for the parse stage and the publish stage
         shown failing first.
+    # PM ruling 2026-10-20 (as v1-e39-t09 Q4): the v1-e34-t03 stale-data warning is the landscape
+    # banner hook, which names no occurrence table; a refused stage reaches the operator through the
+    # run summary and the run's failure notification (v1-e34-t03), and the refusal names both
+    # versions and the store. Was "the run summary and the stale-data warning name a refusal".
     - id: ac2
       description: >-
-        An equal or older stamp rebuilds as before, by test; the run summary and the
-        stale-data warning name a refusal.
+        An equal or older stamp rebuilds as before, by test; a refusal appears in the run summary
+        and the failure notification (v1-e34-t03), naming both versions and the store, by test.
     - id: ac3
       description: >-
         An earlier build (the agent's at the time) reads every file this build writes, by
         the cross-build check.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

@@ -27,13 +27,13 @@ is `skipped` rather than `would_delete`.
 
 | Node | Status | Notes |
 |---|---|---|
-| `skip-parsed` (store sync skips parsed/) | Done | Red first (`c17245a`), implementation (`98302fe`), quoting test after a surviving mutant (`8e5c91a`) |
+| `skip-parsed` (store sync skips parsed/) | Done | Commit ids are on `origin/dev` at `cd6f374`, after the sync below. Red first (`51d746e`), implementation (`b249766`), quoting test after a surviving mutant (`3400462`) |
 
 ## Acceptance criteria
 
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
-| ac1: `store sync --push` and `--pull` move nothing under `parsed/` and say so in the summary, by tests shown failing first; every other keyspace moves as before | PASS | **Red**, at `c17245a` against the unchanged code: `.venv/bin/python -m pytest packages/debate_core/tests/application/test_store_sync_skips_parsed.py -q -p no:randomly` → `24 failed`. Each failed on its own assertion: `parsed/` keys planned `new`/`changed` and transferred, or `AttributeError: 'EvidenceSyncService' object has no attribute 'stale_parsed_copy'`. `... packages/debate_cli/tests/commands/test_store.py -k TestTheParsedStoreIsNotSynced` → `6 failed, 1 passed`. The pass was `test_a_machine_with_no_stale_copy_hears_nothing_about_one`, a negative test that the old code also satisfies. **Green**: the same files plus the guard and skip-reason tests → `165 passed`. Other keyspaces: `test_every_other_keyspace_is_planned_and_moved_as_it_is_without_parsed[push/pull]` runs the same `manifests/`, `reports/`, `files/` and blob scene with and without `parsed/` objects. The non-parsed plan is equal object for object and the outcomes are equal. The two `*_plans_parsed_skipped_on_either_side_and_every_other_keyspace_as_written` tests write the expected actions by hand. |
+| ac1: `store sync --push` and `--pull` move nothing under `parsed/` and say so in the summary, by tests shown failing first; every other keyspace moves as before | PASS | **Red**, at `51d746e` against the unchanged code: `.venv/bin/python -m pytest packages/debate_core/tests/application/test_store_sync_skips_parsed.py -q -p no:randomly` → `24 failed`. Each failed on its own assertion: `parsed/` keys planned `new`/`changed` and transferred, or `AttributeError: 'EvidenceSyncService' object has no attribute 'stale_parsed_copy'`. `... packages/debate_cli/tests/commands/test_store.py -k TestTheParsedStoreIsNotSynced` → `6 failed, 1 passed`. The pass was `test_a_machine_with_no_stale_copy_hears_nothing_about_one`, a negative test that the old code also satisfies. **Green**: the same files plus the guard and skip-reason tests → `165 passed`. Other keyspaces: `test_every_other_keyspace_is_planned_and_moved_as_it_is_without_parsed[push/pull]` runs the same `manifests/`, `reports/`, `files/` and blob scene with and without `parsed/` objects. The non-parsed plan is equal object for object and the outcomes are equal. The two `*_plans_parsed_skipped_on_either_side_and_every_other_keyspace_as_written` tests write the expected actions by hand. |
 | ac2: a stale `objects/parsed/` copy is reported by `--dry-run` with the command that removes it, and the per-source stamp line is in docs/data/parsed-card-store.md | PASS | `test_a_dry_run_reports_a_stale_copy_with_the_command_that_removes_it[push/pull]`: the whole line, the file left in place, no file name in the output. `test_the_stale_copy_is_reported_on_the_console_and_nowhere_else`: not in `--json`, not printed on `--apply`, the journal holds only the manifest's key. `test_the_command_quotes_a_data_directory_a_shell_would_split`: a path with a space and an apostrophe. `test_a_stale_copy_is_its_directory_and_its_file_count_and_is_left_where_it_is`. The doc line is in the "On a `source` or a `document`" bullet of [Fingerprint versions](../data/parsed-card-store.md#fingerprint-versions). |
 | Node `skip-parsed`: Store sync tests pass (`uv run pytest packages/debate_core/tests/application -k sync`) | PASS | `uv run pytest packages/debate_core/tests/application -k sync` → `405 passed in 16.80s` |
 
@@ -73,7 +73,7 @@ afterwards). Hypothesis plays no part in these tests.
 | Stale copy counted one file short | caught, 1 failed |
 | Stale note printed on `--apply` too | caught, 3 failed |
 | `PARSED STORE` caption line dropped | caught, 2 failed |
-| `rm -r <dir>/*` instead of `rm -r <dir>` | **survived** at first, because the test matched a substring. Now caught, 3 failed, after the line was pinned whole (`8e5c91a`) |
+| `rm -r <dir>/*` instead of `rm -r <dir>` | **survived** at first, because the test matched a substring. Now caught, 3 failed, after the line was pinned whole (`3400462`) |
 | The path left unquoted | caught, 1 failed, by the new quoting test |
 
 ### Closing checks
@@ -167,6 +167,44 @@ Success looks like this: a second dry run prints no `STALE PARSED COPY` line, an
 * `manifests/_suppression/` keys only at the destination are still planned `would_delete`, while
   the module docstring says "skipped, whatever is on either side". This is harmless because nothing
   deletes, but it is inconsistent with `parsed/` now. It belongs to E29 if the PM wants it aligned.
+
+## The PM's conditions, closed (2026-10-22)
+
+All three were closed in this session after the ACCEPTED verdict below. Nothing came out
+differently from the review's expectations.
+
+1. **Spec.** `docs/guides` was added to `constraints.packages`, with the PM's ruling as a comment on
+   the line above the flow list. The parsed node lists seven packages and no comment text, and
+   `uv run scripts/validate_specs.py` reports `OK: 404 files, 39 epics, 344 tasks, 21 releases`.
+2. **Docstring.** The `manifests/_suppression/` bullet now says a key at both ends is planned
+   `skipped`, and that a key only at the destination is reported `would_delete` and, like every
+   `would_delete`, left alone. I added one clause the code also bears out: a key only at the source
+   is `skipped` too, because `_classify` checks for the suppression prefix before anything else.
+   This changed words only. `.venv/bin/python -m pytest packages/debate_core/tests/application/test_evidence_sync.py packages/debate_core/tests/application/test_evidence_sync_skip_reasons.py packages/debate_core/tests/application/test_store_sync_skips_parsed.py -q`
+   → `89 passed in 6.70s`.
+3. **Sync.** `scripts/task sync v1-e29-t12-store-sync-skips-parsed` rebased the 7 commits cleanly
+   onto `origin/dev` at `cd6f374`, which includes v1-e07-t05 (#395). Nothing was pushed, because the
+   branch is not on origin. `uv sync --all-packages` installed `defusedxml==0.7.1` and
+   `types-defusedxml==0.7.0.20260504`. I then re-ran:
+   * `perl -e 'alarm 115; exec @ARGV' .venv/bin/python -m pytest packages/debate_core/tests/application -q -m "not slow and not live"` → `3007 passed in 76.25s`
+   * `perl -e 'alarm 115; exec @ARGV' .venv/bin/python -m pytest packages/debate_cli/tests/commands tests/architecture tests/specs packages/debate_cli/tests/test_app.py packages/debate_cli/tests/test_help_rendering.py tests/docs tests/scripts/test_check_command_blocks.py tests/scripts/test_docs_index.py tests/smoke/test_store_cli.py -q -m "not slow and not live"` → `792 passed in 31.31s`
+   * `uv run ruff format --check .` → `1073 files already formatted`; `uv run ruff check .` → `All checks passed!`
+   * `uv run pyright packages/debate_core packages/debate_cli` → `0 errors, 0 warnings, 0 informations`
+   * `uv run lint-imports` → `Contracts: 15 kept, 0 broken.`
+   * `uv run scripts/check_command_blocks.py --base origin/dev` → OK, including this report
+
+   Two numbers moved because dev moved, not because of this branch. The second pytest command ran
+   792 tests, up from 788, and lint-imports kept 15 contracts, up from 13. #395 added two
+   import-linter contracts to `pyproject.toml` and their cases to
+   `tests/architecture/test_import_contracts.py`. The affected set is now
+   `212 of 385 test files (55.1%)`, still past two minutes, so it stays with the pull request's `ci`.
+
+The operator follow-up stands, with the PM's addition: the dry run lists the bucket, so it needs a
+current SSO session first.
+
+```bash
+aws sso login --profile debate-dev-evidence
+```
 
 ## PM review
 

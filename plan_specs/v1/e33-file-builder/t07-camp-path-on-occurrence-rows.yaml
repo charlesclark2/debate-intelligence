@@ -22,6 +22,9 @@ spec:
     the parse pipeline both have that gap. Carry the camp path's digest (`camp_path_disclosure`)
     on a camp occurrence row, additively, so the resolver and the parse can ask the suppression
     state about the path before a rebuild, as they do for a caselist disclosure.
+    (PM amendment 2026-10-21, from v1-e33-t04's PM review.) The camp path's digest also goes
+    into a built file's provenance sidecar for each camp card, so `files check` matches a
+    camp-path suppression exactly rather than flagging every camp card.
   priority: 3
   constraints:
     packages: [debate_core.domain, debate_core.application, packages/debate_core/tests, docs/data]
@@ -43,6 +46,11 @@ spec:
       description: >-
         An earlier build (the agent's at the time) reads every file this build writes, by
         the cross-build check.
+    - id: ac3
+      description: >-
+        (PM amendment 2026-10-21) A built file's sidecar carries each camp card's camp path
+        digest, and `files check` flags exactly the cards a camp-path suppression names, by
+        test.
 status:
   phase: Pending
 ---

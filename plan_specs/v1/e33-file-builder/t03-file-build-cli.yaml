@@ -49,9 +49,16 @@ spec:
     machine's next rebuild. And when AUTO prefers attributed occurrences, a camp occurrence with
     its release record counts as attributed: a camp file has no disclosure, and its provenance
     line names the camp.
+    (PM amendment 2026-10-21, from v1-e33-t04's PM review and v1-e31-t24's.) `files build` runs
+    v1-e33-t04's quality check through the `FileQualityService` the container wires, and refuses
+    an output directory inside a git working tree (built files hold card text and provenance).
+    The removal runbook's step 8 gains its `files check` command over built files. The writer's
+    `HIGHLIGHTED_CITE_CAUSE` refusal is kept as a safeguard and reached by a writer-level test
+    on a constructed card, since v1-e31-t24's step-over means no parsed card reaches it.
   priority: 1
   constraints:
-    packages: [debate_cli, debate_core.application, tests/smoke]
+    # PM amendment 2026-10-21: the writer's test, the container and the removal runbook's step 8.
+    packages: [debate_cli, debate_core.application, tests/smoke, debate_core.integrations, packages/debate_core/tests, packages/debate_cli/tests, docs/runbooks]
     forbidden:
       - Business logic in debate_cli (commands only parse options, call a service and render output)
       - Model calls in build or suggest
@@ -110,6 +117,11 @@ spec:
         (PM amendment 2026-10-20) An occurrence a hold stops is never resolved, by AUTO or
         by a pin, before a rebuild, through `stored_row_hold`; a camp occurrence with a
         release record counts as attributed for AUTO; each by test shown failing first.
+    - id: ac10
+      description: >-
+        (PM amendment 2026-10-21) `files build` runs the wired quality check, refuses an
+        output directory inside a git working tree, and the writer's highlighted-cite
+        refusal is reached by a test on a constructed card, each shown failing first.
 status:
   phase: Pending
 ---

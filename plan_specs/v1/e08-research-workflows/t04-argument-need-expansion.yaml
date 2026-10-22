@@ -27,6 +27,10 @@ spec:
     high_volume task class and returns a validated QueryExpansion schema of extra query strings with
     rationale, fail-open (falls back to templates on ModelOutputError since no evidence is produced).
     Boundaries: no ranking changes (t03) and no CLI (t05).
+    (PM amendment 2026-10-21, from v1-e08-t01's PM review.) Expansion is the pipeline's `expand`
+    stage. Each provider call's exact query is already stored in its `ProviderStatus.query`, so
+    the expanded queries are recoverable from a persisted search; this task decides whether
+    `Search` also needs a field and says why.
   priority: 2
   constraints:
     packages: [debate_core.application, config/argument_taxonomy.yaml, prompts/search]

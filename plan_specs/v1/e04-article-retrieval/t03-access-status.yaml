@@ -26,6 +26,10 @@ spec:
     continue" overlays), CAPTCHA/challenge pages, and a truncated-text heuristic. It classifies only
     and never retries with different headers, cookies, archive mirrors or any bypass. It does not
     extract text (t04) or orchestrate (t05).
+    (PM amendment 2026-10-21, from v1-e04-t02's PM review.) v1-e04-t02's fetcher has eight error
+    types: the node's six plus `UnsupportedScheme` (a hop to anything but http or https) and
+    `NonPublicAddress` (a private, loopback or other non-global address). The mapping covers all
+    eight.
   priority: 2
   constraints:
     packages: [debate_core.retrieval]

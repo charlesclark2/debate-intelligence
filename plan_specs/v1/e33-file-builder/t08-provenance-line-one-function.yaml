@@ -1,0 +1,67 @@
+# TASK v1-e33-t08-provenance-line-one-function - The file writer and the search pilot compose a provenance line with one function
+# Epic: E33 Evidence File Builder | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e33-t08-provenance-line-one-function
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e33-file-builder
+  annotations:
+    debate/title: "The file writer and the search pilot compose a provenance line with one function"
+spec:
+  # Filed by the PM, 2026-10-21, from v1-e39-t03's Follow-up work.
+  description: >-
+    The E33 writer's `provenance_line` and
+    `debate_core.domain.evidence_search.occurrence_provenance_line` compose the same line from
+    different records, held together only by tests. The writer calls the domain function,
+    converting its record at the boundary, and the duplicate is removed. A built file's bytes do
+    not change.
+  priority: 3
+  constraints:
+    packages: [debate_core.domain, debate_core.integrations, packages/debate_core/tests]
+    forbidden:
+      - Any change to a built file's bytes or a provenance line's wording
+      - Network or AWS access in any test
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        One function composes the provenance line for both, and the writer's golden files
+        are byte for byte unchanged.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e33-t08-provenance-line-one-function-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e33-file-builder
+spec:
+  description: >-
+    Point the writer at the domain's provenance-line function and remove the copy.
+  goalRef:
+    name: v1-e33-t08-provenance-line-one-function
+  graph:
+    nodes:
+      - id: one-line
+        kind: Task
+        name: One provenance line
+        description: >-
+          Point the writer at the domain's provenance-line function and remove the copy.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Writer tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/docx_file_writer]
+status:
+  phase: Pending

@@ -167,6 +167,14 @@ grep -c evidence_search infrastructure/envs/dev/owner.auto.tfvars infrastructure
 Success looks like: no `MISSING` line, and `3` for each file. A `6` means the block was run twice:
 delete the repeated lines. `git status` still reports a clean tree; these files are gitignored.
 
+**Every later apply needs the same lines, from whichever worktree it runs.** A task's follow-up
+that applies another module (the evidence store's listing grant, for example) from a worktree whose
+`owner.auto.tfvars` lacks the pilot's lines plans to destroy the `TubDeployer` and `TubAccounts`
+assignments. Before any `terraform apply` in `dev` or `prod`, `grep -c evidence_search` on that
+root's file must print `3`. A plan that destroys an account assignment means the file is missing
+or stale: stop and fix the file, never apply (seen on dev on 2026-10-20; added by the PM,
+2026-10-21).
+
 **Lambda's concurrency allowance.** Each environment reserves 10 concurrent executions for the
 pilot, and Lambda refuses a reservation that would leave fewer than 100 unreserved. A new account's
 allowance can be as low as 10, so check it before applying.

@@ -210,5 +210,24 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e07-t07-government-adapters
+    - id: t08
+      kind: Task
+      name: 'One Retry-After reader for every HTTP adapter, on an injected clock'
+      description: >-
+        One Retry-After reader for every HTTP adapter, on an injected clock.
+      inputs:
+        specRef: plan_specs/v1/e07-discovery-adapters/t08-shared-retry-after.yaml
+        goalRef: v1-e07-t08-shared-retry-after
+      dependsOn:
+      - t01
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e07-t08-shared-retry-after reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e07-t08-shared-retry-after
 status:
   phase: Pending

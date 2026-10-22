@@ -325,5 +325,22 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e29-t11-store-sync-skip-reasons
+    - id: t12
+      kind: Task
+      name: 'store sync stops moving the parsed store, which caselist parse --publish publishes'
+      description: >-
+        store sync stops moving the parsed store, which caselist parse --publish publishes.
+      inputs:
+        specRef: plan_specs/v1/e29-cloud-evidence-store/t12-store-sync-skips-parsed.yaml
+        goalRef: v1-e29-t12-store-sync-skips-parsed
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e29-t12-store-sync-skips-parsed reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e29-t12-store-sync-skips-parsed
 status:
   phase: Pending

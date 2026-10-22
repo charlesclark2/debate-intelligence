@@ -714,5 +714,44 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e31-t30-parsed-store-publish-only
+    - id: t31
+      kind: Task
+      name: 'Where the labelled evaluation''s missed cites, tags and highlights go, counted before any rule'
+      description: >-
+        Where the labelled evaluation's missed cites, tags and highlights go, counted before
+        any rule.
+      inputs:
+        specRef: plan_specs/v1/e31-debate-file-parsing/t31-labelled-evaluation-gaps.yaml
+        goalRef: v1-e31-t31-labelled-evaluation-gaps
+      dependsOn:
+      - t24
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e31-t31-labelled-evaluation-gaps reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e31-t31-labelled-evaluation-gaps
+    - id: t32
+      kind: Task
+      name: 'A tag with a word left unbolded, above a cite, counted before any rule'
+      description: >-
+        A tag with a word left unbolded, above a cite, counted before any rule.
+      inputs:
+        specRef: plan_specs/v1/e31-debate-file-parsing/t32-bold-in-part-tags.yaml
+        goalRef: v1-e31-t32-bold-in-part-tags
+      dependsOn:
+      - t24
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e31-t32-bold-in-part-tags reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e31-t32-bold-in-part-tags
 status:
   phase: Pending

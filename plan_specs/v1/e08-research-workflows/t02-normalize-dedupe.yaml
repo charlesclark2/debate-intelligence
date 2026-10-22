@@ -24,6 +24,10 @@ spec:
     metadata keeps every contributing provider and applies a documented per-field precedence (e.g. Crossref
     for DOI/venue/date, OpenAlex/S2 for citation counts and OA links, publisher feed for news dates), recording
     which provider supplied each field. Boundaries: no scoring (t03); does not fetch articles.
+    (PM amendment 2026-10-21, from v1-e08-t01's PM review.) The merged candidates are a new
+    field of v1-e08-t01's immutable `SearchState`, with a default, produced in the `normalize`
+    slot of `FederatedSearchService`'s pipeline; the orchestration does not change, and stages
+    after fan out leave `provider_statuses` alone.
   priority: 1
   constraints:
     packages: [debate_core.application, debate_core.retrieval]

@@ -24,6 +24,21 @@ spec:
     partial-date handling), authors, type → source_type, is-referenced-by-count and license/link entries to
     CandidateResult. Reuses the DOI normalization from v1-e06-t01's Crossref DOI client where practical so
     there is one DOI mapping. Boundaries: search only; citation resolution by DOI stays in CitationService.
+    (PM amendment 2026-10-21, from v1-e07-t01's and v1-e04-t02's PM reviews and v1-e07-t01's CI
+    notes.) The adapter lives in `debate_core.integrations.discovery` and its tests in
+    `packages/debate_core/tests/integrations/discovery/` (the PM's naming ruling of 2026-10-20:
+    "search" in module names means the student pilot's index); the paths below say so. It
+    imports the discovery values from `debate_core.domain.discovery`, is wrapped in
+    `ResilientProvider`, maps HTTP failures and `Retry-After` with
+    `debate_core.integrations.discovery.http_failures`, calls `protect_logs` in its constructor
+    and logs on the package's one protected logger. It passes the contract kit,
+    `debate_core.testing.contracts.search_provider`, on its own recorded fixtures, served
+    through a copy of the FakeProvider binding's `replay_with_respx`. httpx comes from
+    debate-core's `http` extra (v1-e04-t02); no new extra. Any test that asserts on httpx or
+    httpcore log records starts from bare loggers and restores them, and before the report the
+    adapter's tests run once in one process after the OpenCaselist client and discovery suites
+    (`-n 0 -p no:randomly`), since logger filters are shared by the whole process (working
+    agreement 10).
   priority: 2
   constraints:
     packages: [debate_core.integrations]
@@ -38,6 +53,9 @@ spec:
     - kind: TaskRef
       name: v1-e06-t01-citation-service
       relation: dependsOn
+    - kind: TaskRef
+      name: v1-e04-t02-http-fetcher
+      relation: dependsOn
   acceptanceCriteria:
     - id: ac1
       description: >-
@@ -51,6 +69,12 @@ spec:
       description: >-
         The adapter reads X-Rate-Limit headers into the resilience layer, maps fixtures to expected
         CandidateResults and passes the contract kit.
+    - id: ac4
+      description: >-
+        (PM amendment 2026-10-21) The adapter, in `debate_core.integrations.discovery`,
+        passes `debate_core.testing.contracts.search_provider` on its recorded fixtures, its
+        secrets never reach a log line, and its tests pass in one process after the
+        OpenCaselist and discovery suites.
 status:
   phase: Pending
 ---
@@ -89,13 +113,13 @@ spec:
         description: >-
           Build requests with filters and select, polite User-Agent/mailto, and rate-limit header parsing.
         dependsOn: [record-fixtures]
-        outputs: [packages/debate_core/src/debate_core/integrations/search/crossref.py]
+        outputs: [packages/debate_core/src/debate_core/integrations/discovery/crossref.py]
         estimatedEffort: 2h
         acceptanceCriteria:
           - type: test_passes
             name: Request and etiquette tests pass
             command: uv
-            args: [run, pytest, packages/debate_core/tests/integrations/search/test_crossref.py, -k, request]
+            args: [run, pytest, packages/debate_core/tests/integrations/discovery/test_crossref.py, -k, request]
       - id: item-mapping
         kind: Task
         name: Item to CandidateResult mapping
@@ -107,6 +131,6 @@ spec:
           - type: test_passes
             name: Full Crossref adapter tests pass
             command: uv
-            args: [run, pytest, packages/debate_core/tests/integrations/search/test_crossref.py]
+            args: [run, pytest, packages/debate_core/tests/integrations/discovery/test_crossref.py]
 status:
   phase: Pending

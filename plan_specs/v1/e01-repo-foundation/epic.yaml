@@ -715,5 +715,44 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e01-t29-slim-package-reexports
+    - id: t30
+      kind: Task
+      name: 'Tests stop reaching code they do not use: fakes by port, no port re-exports, and a graph option'
+      description: >-
+        Tests stop reaching code they do not use: fakes by port, no port re-exports, and a
+        graph option.
+      inputs:
+        specRef: plan_specs/v1/e01-repo-foundation/t30-test-selection-reach.yaml
+        goalRef: v1-e01-t30-test-selection-reach
+      dependsOn:
+      - t29
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e01-t30-test-selection-reach reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e01-t30-test-selection-reach
+    - id: t31
+      kind: Task
+      name: 'Repository checks stop flagging true values, and the smoke tests type-check'
+      description: >-
+        Repository checks stop flagging true values, and the smoke tests type-check.
+      inputs:
+        specRef: plan_specs/v1/e01-repo-foundation/t31-repo-check-false-positives.yaml
+        goalRef: v1-e01-t31-repo-check-false-positives
+      dependsOn:
+      - t29
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e01-t31-repo-check-false-positives reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e01-t31-repo-check-false-positives
 status:
   phase: Pending

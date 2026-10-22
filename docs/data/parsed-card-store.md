@@ -556,6 +556,9 @@ versions and the delete markers left under one caselist's `sha256/`, which shoul
 | `2026.10.10-docx-2` | this machine | 2026-10-17, deleted | 11,138 | about 6.3 GB | |
 | `2026.10.10-docx-2` | dev bucket | 2026-10-17, tagged | 11,138 | about 6.3 GB | |
 | `2026.10.10-docx-2` | prod bucket | not yet | | | |
+| `2026.10.12-docx-3` | dev bucket | 2026-10-20, tagged | 12,713 | about 7.5 GB (hsld26 4,973 objects, 2.5 GB; hspf26 4,440, 1.3 GB; hspolicy26 3,193, 3.5 GB; openev 107, 198.9 MB) | |
+| `2026.10.12-docx-3` | this machine | 2026-10-20, deleted | 12,713 | about 7.5 GB | |
+| `2026.10.12-docx-3` | prod bucket | not yet: refused (`STORE_ACCESS_DENIED` on `GetObjectTagging`) until prod has v1-e29-t16's Terraform, at the promotion | | | |
 
 ## Reading it from a shell
 

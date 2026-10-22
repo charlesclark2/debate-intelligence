@@ -36,6 +36,9 @@ spec:
     carries no pin's `school`, `team_code`, `tournament` or `round`: those are removed before
     upload, and the provenance sidecar carries the attribution. `source_sha256` and
     `element_index` still identify each occurrence.
+    (PM amendment 2026-10-21, from v1-e33-t04's PM review.) The publish gate reads the quality
+    check's status: a file publishes only when it is PASS, and a warning never blocks a publish;
+    it is printed and recorded.
   priority: 2
   constraints:
     packages: [debate_core.application, debate_core.domain, debate_cli, docs/data, tests/smoke]
@@ -86,6 +89,10 @@ spec:
       description: >-
         (PM amendment 2026-10-19) The uploaded recipe holds no school, team code, tournament
         or round in any pin, and still resolves to the same occurrences, by test.
+    - id: ac8
+      description: >-
+        (PM amendment 2026-10-21) A file whose quality status is not PASS is refused before
+        any upload, and a warning alone never blocks, by tests shown failing first.
 status:
   phase: Pending
 ---

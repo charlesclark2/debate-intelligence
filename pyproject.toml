@@ -170,6 +170,7 @@ source_modules = [
     "debate_core.integrations.docx_file_writer",
     "debate_core.integrations.file_streaming",
     "debate_core.integrations.opencaselist",
+    "debate_core.integrations.discovery",
     "debate_workers",
 ]
 forbidden_modules = ["boto3", "botocore"]

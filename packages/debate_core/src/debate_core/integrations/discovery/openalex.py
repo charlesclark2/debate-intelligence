@@ -18,32 +18,84 @@ plain-text abstracts. :func:`rebuild_abstract` puts each word back at its positi
 snippet for discovery only: card evidence comes from a stored snapshot, never from here.
 
 **The venue** is `primary_location.source.display_name`. OpenAlex removed `host_venue`.
+
+**The request** is one `GET /works` (:func:`works_parameters`): `search=` the query, the date window
+as `from_publication_date`/`to_publication_date` filters, `per_page` and a `select=` of the fields
+mapped here. OpenAlex serves at most 100 works a page and this adapter asks for one page, so a query
+whose `max_results` is above 100 returns at most 100 results.
+
+**Authentication** (PM ruling 2026-10-21). OpenAlex retired its `mailto` polite pool in February
+2026 and now ignores `mailto`; a free API key replaced it (help.openalex.org/api/deprecations and
+/api/authentication, read 2026-10-21). When `providers.openalex_api_key` is set it is sent as
+`Authorization: Bearer <key>`, a header rather than the documented `api_key=` parameter so that it
+never appears in a URL, and httpx's request log line never carries it. Without a key the request
+goes out bare and OpenAlex still answers, on a smaller budget: about 100 searches a day rather than
+1,000. The contact email is never sent to OpenAlex.
+
+**Refusals** go through :func:`~debate_core.integrations.discovery.http_failures.provider_error_for_status`.
+OpenAlex answers `429` both to more requests a second than the plan allows and to a spent daily
+budget, so a spent budget looks like any other rate limit: :class:`ProviderRateLimited`, carrying
+the `Retry-After` when OpenAlex sends one, and the wrapper's cool-down when it does not.
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+import time
+from collections.abc import Callable, Mapping
 from datetime import UTC, date, datetime
+from http.cookiejar import CookieJar, DefaultCookiePolicy
 from types import MappingProxyType
 from typing import Any, Final, cast
 from urllib.parse import urlsplit
 
-from pydantic import ValidationError
+import httpx
+from pydantic import SecretStr, ValidationError
 
+from debate_core.application.errors import ProviderUnavailable
+from debate_core.application.ports.providers import Clock
+from debate_core.application.settings import HttpSettings, ProviderSettings
 from debate_core.domain.article import ArticleIdentifiers
-from debate_core.domain.discovery import CandidateResult
+from debate_core.domain.discovery import CandidateResult, ProviderQuery, ProviderResponse
 from debate_core.domain.enums import SourceType
+from debate_core.integrations.discovery.http_failures import provider_error_for_status
+from debate_core.integrations.discovery.redaction import protect_logs
 
 __all__ = [
+    "MAX_PER_PAGE",
+    "OPENALEX_WORKS_URL",
     "PROVIDER_NAME",
+    "SELECTED_FIELDS",
     "SOURCE_TYPE_BY_WORK_TYPE",
+    "OpenAlexProvider",
     "candidate_from_work",
+    "openalex_factory",
     "rebuild_abstract",
     "source_type_for",
+    "works_parameters",
 ]
 
 PROVIDER_NAME: Final = "openalex"
 """The name settings enable this provider by, and every result carries."""
+
+OPENALEX_WORKS_URL: Final = "https://api.openalex.org/works"
+"""The works list endpoint."""
+
+MAX_PER_PAGE: Final = 100
+"""OpenAlex's largest page (help.openalex.org/api/paging; 200 is deprecated)."""
+
+SELECTED_FIELDS: Final = (
+    "id",
+    "doi",
+    "display_name",
+    "publication_date",
+    "type",
+    "open_access",
+    "best_oa_location",
+    "primary_location",
+    "authorships",
+    "abstract_inverted_index",
+)
+"""The root-level work fields :func:`candidate_from_work` reads; `select=` takes nothing nested."""
 
 SOURCE_TYPE_BY_WORK_TYPE: Final[Mapping[str, SourceType]] = MappingProxyType(
     {
@@ -218,3 +270,116 @@ def _text(value: object) -> str | None:
 
 def _mapping(value: object) -> Mapping[str, Any]:
     return cast(Mapping[str, Any], value) if isinstance(value, Mapping) else {}
+
+
+# --------------------------------------------------------------------------------------------
+# The request and the adapter
+# --------------------------------------------------------------------------------------------
+
+
+def works_parameters(query: ProviderQuery) -> dict[str, str]:
+    """The `/works` query parameters for `query`; see the module docstring for what each one does."""
+    parameters = {"search": query.query}
+    window: list[str] = []
+    if query.filters.since is not None:
+        window.append(f"from_publication_date:{query.filters.since.date().isoformat()}")
+    if query.filters.until is not None:
+        window.append(f"to_publication_date:{query.filters.until.date().isoformat()}")
+    if window:
+        parameters["filter"] = ",".join(window)
+    parameters["per_page"] = str(min(query.filters.max_results, MAX_PER_PAGE))
+    parameters["select"] = ",".join(SELECTED_FIELDS)
+    return parameters
+
+
+class OpenAlexProvider:
+    """Searches OpenAlex's works; a :class:`~debate_core.application.ports.providers.SearchProvider`.
+
+    Sends one request per search and never retries it: the wrapper decides what happens after a
+    failure. Owns `client`; close it with :meth:`aclose`.
+    """
+
+    def __init__(self, client: httpx.AsyncClient, *, api_key: SecretStr | None, clock: Clock) -> None:
+        self._client = client
+        self._api_key = api_key
+        self._clock = clock
+        if api_key is not None:
+            protect_logs((api_key.get_secret_value(),))
+
+    @property
+    def name(self) -> str:
+        return PROVIDER_NAME
+
+    def __repr__(self) -> str:
+        key = "configured" if self._api_key is not None else "none"
+        return f"{type(self).__name__}(api_key={key})"
+
+    async def aclose(self) -> None:
+        """Close the HTTP client and its connections."""
+        await self._client.aclose()
+
+    async def search(self, query: ProviderQuery) -> ProviderResponse:
+        started = time.perf_counter()
+        headers = (
+            {} if self._api_key is None else {"Authorization": f"Bearer {self._api_key.get_secret_value()}"}
+        )
+        try:
+            response = await self._client.get(
+                OPENALEX_WORKS_URL, params=works_parameters(query), headers=headers
+            )
+        except httpx.TimeoutException as error:
+            raise ProviderUnavailable(self.name, "timed out") from error
+        except httpx.HTTPError as error:
+            raise ProviderUnavailable(self.name, f"transport failure: {type(error).__name__}") from error
+        failure = provider_error_for_status(
+            self.name, response.status_code, response.headers, now=self._clock.now()
+        )
+        if failure is not None:
+            raise failure
+        results = self._read(response, query)
+        elapsed_ms = (time.perf_counter() - started) * 1000
+        return ProviderResponse(provider=self.name, results=results, elapsed_ms=elapsed_ms)
+
+    def _read(self, response: httpx.Response, query: ProviderQuery) -> tuple[CandidateResult, ...]:
+        try:
+            document = response.json()
+        except ValueError as error:
+            raise ProviderUnavailable(self.name, f"unreadable response: {type(error).__name__}") from error
+        works = _mapping(document).get("results")
+        if not isinstance(works, list) or not all(
+            isinstance(work, dict) for work in cast(list[object], works)
+        ):
+            raise ProviderUnavailable(self.name, "unreadable response: no list of works")
+        candidates = (candidate_from_work(work) for work in cast(list[dict[str, Any]], works))
+        return tuple(candidate for candidate in candidates if candidate is not None)[
+            : query.filters.max_results
+        ]
+
+
+def openalex_factory(
+    http: HttpSettings,
+    *,
+    version: str,
+    clock: Clock,
+    transport: httpx.AsyncBaseTransport | None = None,
+) -> Callable[[ProviderSettings], OpenAlexProvider]:
+    """The registry's factory for `openalex`: an adapter over a client built from the HTTP settings.
+
+    The client identifies the platform with the same User-Agent as the article fetcher, keeps no
+    cookies and reads nothing from the environment (no `~/.netrc`, no proxy). Its own timeouts are
+    the HTTP settings'; the wrapper's `providers.timeout_seconds` bounds the whole call. `transport`
+    is for tests, which pass a mock.
+    """
+
+    def build(settings: ProviderSettings) -> OpenAlexProvider:
+        client = httpx.AsyncClient(
+            headers={"User-Agent": http.user_agent(version)},
+            timeout=httpx.Timeout(http.request_timeout_seconds, connect=http.connect_timeout_seconds),
+            follow_redirects=False,
+            cookies=CookieJar(policy=DefaultCookiePolicy(allowed_domains=[])),
+            trust_env=False,
+            transport=transport,
+        )
+        return OpenAlexProvider(client, api_key=settings.openalex_api_key, clock=clock)
+
+    return build

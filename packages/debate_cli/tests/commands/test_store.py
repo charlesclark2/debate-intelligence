@@ -21,6 +21,7 @@ import asyncio
 import hashlib
 import json
 import os
+import shlex
 from collections.abc import Iterator
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -601,6 +602,120 @@ class TestSkipReasons:
         ]
 
         assert details["skipped_reasons"] == {"identical": {"count": 1, "key_prefixes": ["manifests/hs"]}}
+
+
+# ------------------------------------------------------------------------------------------------
+# store sync never moves parsed/, and names the stale copy an earlier pull left (v1-e29-t12)
+# ------------------------------------------------------------------------------------------------
+
+PARSED_TABLE = "parsed/hsld26/2099.01.01-docx-9/occurrences.jsonl"
+PARSED_INDEX = "parsed/hsld26/2099.01.01-docx-9/index.jsonl"
+PARSED_SOURCE_NAME = f"{'5e88' * 16}.jsonl"
+PARSED_SOURCE = f"parsed/hsld26/2099.01.01-docx-9/sha256/5e/88/{PARSED_SOURCE_NAME}"
+
+
+def parsed_store_line(count: int) -> str:
+    return (
+        f"PARSED STORE: {count} object(s) under parsed/ left as they are on both sides. store sync never "
+        "moves the parsed store: caselist parse --publish is what publishes it."
+    )
+
+
+def stale_copy_line(data_dir: Path, files: int) -> str:
+    directory = data_dir / "objects" / "parsed"
+    return (
+        f"STALE PARSED COPY: {directory} holds {files} file(s) an earlier store sync --pull copied from "
+        "the bucket. Nothing reads them, and store sync no longer moves them. Remove them with: "
+        f"rm -r {shlex.quote(str(directory))}"
+    )
+
+
+def a_stale_copy(data_dir: Path) -> None:
+    """What `store sync --pull` copied into `objects/parsed/` before this task: three files."""
+    for key in (PARSED_TABLE, PARSED_INDEX, PARSED_SOURCE):
+        write_local_object(data_dir, key, b'{"record": "synthetic"}\n')
+
+
+class TestTheParsedStoreIsNotSynced:
+    def test_a_push_moves_nothing_under_parsed_and_says_who_publishes_it(
+        self, buckets: S3Client, dev_data_dir: Path
+    ) -> None:
+        a_stale_copy(dev_data_dir)
+        put_remote_object(buckets, DEV_BUCKET, PARSED_TABLE, b'{"record": "the bucket\'s"}\n')
+        write_local_object(dev_data_dir, MANIFEST_KEY, MANIFEST_BODY)
+
+        result = invoke("store", "sync", "--apply")
+
+        assert result.exit_code == ExitCode.OK, result.stdout
+        assert parsed_store_line(3) in flattened(result)
+        assert remote_keys(buckets, DEV_BUCKET) == [MANIFEST_KEY, PARSED_TABLE]
+        assert buckets.get_object(Bucket=DEV_BUCKET, Key=PARSED_TABLE)["Body"].read() == (
+            b'{"record": "the bucket\'s"}\n'
+        )
+
+    def test_a_pull_brings_nothing_under_parsed_down_and_says_the_same(
+        self, buckets: S3Client, dev_data_dir: Path
+    ) -> None:
+        for key in (PARSED_TABLE, PARSED_INDEX):
+            put_remote_object(buckets, DEV_BUCKET, key, b'{"record": "synthetic"}\n')
+        put_remote_object(buckets, DEV_BUCKET, MANIFEST_KEY, MANIFEST_BODY)
+
+        result = invoke("store", "sync", "--pull", "--apply")
+
+        assert result.exit_code == ExitCode.OK, result.stdout
+        assert parsed_store_line(2) in flattened(result)
+        assert (dev_data_dir / "objects" / MANIFEST_KEY).read_bytes() == MANIFEST_BODY
+        assert not (dev_data_dir / "objects" / "parsed").exists()
+
+    def test_the_json_counts_parsed_as_its_own_kind_of_skip(self, buckets: S3Client, dev_data_dir: Path) -> None:
+        a_stale_copy(dev_data_dir)
+        put_remote_object(buckets, DEV_BUCKET, "parsed/hsld26/2099.01.01-docx-9/failures.jsonl", b"{}\n")
+
+        for direction in ((), ("--pull",)):
+            data = envelope_of(invoke("--json", "store", "sync", *direction))["data"]
+            assert data["skipped_reasons"] == {"parsed_store": {"count": 4, "key_prefixes": ["parsed/hsld2"]}}
+            assert data["counts"]["would_delete"] == 0
+
+    @pytest.mark.parametrize("direction", [(), ("--pull",)])
+    def test_a_dry_run_reports_a_stale_copy_with_the_command_that_removes_it(
+        self, buckets: S3Client, dev_data_dir: Path, direction: tuple[str, ...]
+    ) -> None:
+        a_stale_copy(dev_data_dir)
+
+        result = invoke("store", "sync", *direction)
+
+        assert result.exit_code == ExitCode.OK, result.stdout
+        assert stale_copy_line(dev_data_dir, 3) in result.stderr
+        assert (dev_data_dir / "objects" / PARSED_SOURCE).is_file()
+        assert PARSED_SOURCE_NAME not in result.stdout + result.stderr
+        assert "occurrences.jsonl" not in result.stdout + result.stderr
+
+    def test_the_stale_copy_is_reported_on_the_console_and_nowhere_else(
+        self, buckets: S3Client, dev_data_dir: Path
+    ) -> None:
+        """Not in the `--json` payload and not in the journal, and never deleted by an apply either."""
+        a_stale_copy(dev_data_dir)
+        write_local_object(dev_data_dir, MANIFEST_KEY, MANIFEST_BODY)
+
+        payload = invoke("--json", "store", "sync").stdout
+        applied = invoke("store", "sync", "--apply")
+
+        assert "objects/parsed" not in payload
+        assert "STALE PARSED COPY" not in applied.stdout + applied.stderr
+        journal = (dev_data_dir / "sync-journal" / "dev.jsonl").read_text(encoding="utf-8")
+        assert [json.loads(line)["key"] for line in journal.splitlines()] == [MANIFEST_KEY]
+        assert (dev_data_dir / "objects" / PARSED_SOURCE).is_file()
+
+    def test_a_machine_with_no_stale_copy_hears_nothing_about_one(
+        self, buckets: S3Client, dev_data_dir: Path
+    ) -> None:
+        write_local_object(dev_data_dir, MANIFEST_KEY, MANIFEST_BODY)
+
+        result = invoke("store", "sync")
+
+        assert result.exit_code == ExitCode.OK, result.stdout
+        assert "STALE PARSED COPY" not in result.stdout + result.stderr
+        assert "PARSED STORE" not in flattened(result)
 
 
 # ------------------------------------------------------------------------------------------------

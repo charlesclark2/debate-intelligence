@@ -395,9 +395,77 @@ create command has run. `v1-e39-t10` exercises the removal steps on prod.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-22
 
 **Notes:**
+
+Accepted, on one condition closed in this session before the pull request: the operator's dev run
+(blocks 1 to 5), with the two corrections below. Record the outputs, set the Goal `Succeeded`, and
+open the pull request with no `--partial`, since v1-e39-t08 depends on this task. As before, if
+anything comes out differently from what you expect, stop and ask for another review.
+
+**Two corrections to the operator blocks, before they are handed over:**
+
+1. **Block 1's `owner.auto.tfvars`.**
+   * The main clone has no `infrastructure/envs/dev/owner.auto.tfvars`, so the `cp` fails. The
+     checkout that last applied dev is the **dev-preview** worktree
+     (`../dev-preview/infrastructure/envs/dev/owner.auto.tfvars`). Copy from there.
+   * Its `grep -c evidence_search` prints **`2`**: the deployer and accounts lines, with no budget
+     emails line. Dev's last plan with that file was `No changes`, so `2` is right for dev. Expect
+     `2`, not `3`.
+   * The PM corrects the evidence-search runbook's "must print 3" in the next batch, to "names the
+     deployer and accounts lines".
+2. **Block 4 waits until the weekly agent run started on 2026-10-22 has finished.** That run's
+   search-index stage may publish a new dev index. If it lands during the exercise, it replaces the
+   synthetic pointer, and P1 to P3 read the wrong index.
+   * Block 4 starts with a check that no `caselist pull` is running
+     (`pgrep -f 'caselist pull'` prints nothing).
+   * Block 5's republish says which index id it put back. It should be the newest real dev index
+     (the agent's, if it built one), not the synthetic one.
+
+**What is good:**
+
+* **The suppression re-read sits in the holder's `_refresh`, before the pointer.** Every route
+  reaches the index only through `lease()`'s `ScreenedSearch`, so a download built later cannot skip
+  the list. ac1 and ac7 were red first, at 4:59 and 5:00.
+* **A list that cannot be read refuses, while a pointer that cannot be read serves.** ADR-0019 says
+  an environment never serves a stale list, and you kept those two failures apart deliberately. Your
+  catch that the function, lacking `s3:ListBucket`, sees a missing list as `AccessDenied` is what
+  makes the prod check (block 6) necessary.
+* **The audit record is a schema, not a convention.** It has a committed JSON Schema with
+  `additionalProperties: false`, and a `FakeAuditSink` that validates every record any `debate_api`
+  test writes (566 tests). The forbidden values are checked for all 16 actions as their real writers
+  build them.
+* **ac3's journey was shown failing** on a planted `debug("searched %s", query)`, and the logs are
+  captured from bare loggers in one process. That is working agreement 10's new rule, followed.
+* **The prune is tested from the runbook's own text,** and the mutant that deletes the current
+  `current.json` is caught. The Terraform mutants were re-read to confirm which `run` failed.
+* **The gate table (ac5) maps all ten items,** with the known limit on path holds stated beside
+  item 5, as ruled.
+
+**Rulings on the rest:**
+
+* **Deviations 1 to 3: accepted.** That covers the S3 adapter's list read and the test bucket, the
+  ac4 amendment, and downloads covered by construction. v1-e39-t08 adds the download's own
+  suppression test, and the PM's next batch says so in its spec.
+* **Decisions: accepted.**
+  * No record for a card not found or hidden.
+  * `card-viewed` for the card page only.
+  * The reused 503 sentence.
+  * The browser harness's `Sec-Fetch-Site`, set only for the pilot's own origin.
+  * The in-process sign-in.
+  * The prune keeping the whole current directory.
+  * `RM-2026-91`.
+
+**Follow-ups, placed by the PM:**
+
+* **1 (`tub index prune`):** a p3 task in the next batch.
+* **2 (prod's suppression list):** on the promotion list, run before the pilot opens on prod, and
+  added to v1-e39-t10's checklist beside the prod removal exercise.
+* **3 (path holds on the function):** recorded for V2 (E35).
+* **Gate item 6 changes with policy 1.11.** The coach has ruled that copies, downloads and built
+  files carry no provenance line. The PM's next batch amends the policy, ADR-0019 and the gate
+  table's item 6 together. Nothing changes in this task.

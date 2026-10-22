@@ -21,9 +21,15 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
+from pydantic import BaseModel, ConfigDict
 
 from debate_core.application import federated_ranking, federated_ranking_features
-from debate_core.application.federated_dedupe import DedupeStage, MergedCandidate, merge_group
+from debate_core.application.federated_dedupe import (
+    DedupeStage,
+    MergedCandidate,
+    merge_candidates,
+    merge_group,
+)
 from debate_core.application.federated_ranking import (
     FEDERATED_RANKING_CONFIG_PATH,
     FederatedRankingConfig,
@@ -1126,3 +1132,108 @@ def test_the_ranking_modules_hold_no_weight_of_their_own(module: object) -> None
     )
 
     assert floats == []
+
+
+# --------------------------------------------------------------------------------------------
+# The coach-labelled relevance check (ac4)
+# --------------------------------------------------------------------------------------------
+
+RELEVANCE_FIXTURE = REPOSITORY / "tests" / "fixtures" / "federated_ranking" / "labeled_queries.json"
+
+
+class LabelledRecord(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    item: str
+    record: CandidateResult
+
+
+class LabelledQuery(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    id: str
+    format: str
+    query: str
+    records: tuple[LabelledRecord, ...]
+    relevant: tuple[str, ...] | None
+
+
+class LabelledQueries(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+    description: str
+    now: datetime
+    labelled_by: str | None
+    labelled_on: str | None
+    queries: tuple[LabelledQuery, ...]
+
+
+def labelled_queries() -> LabelledQueries:
+    return LabelledQueries.model_validate_json(RELEVANCE_FIXTURE.read_text(encoding="utf-8"))
+
+
+def ndcg_at_10(order: Sequence[str], relevant: set[str]) -> float:
+    """Binary-gain nDCG@10: each relevant item in the first ten gains 1 / log2(position + 1)."""
+    gained = sum(
+        1 / math.log2(position + 1) for position, item in enumerate(order[:10], start=1) if item in relevant
+    )
+    ideal = sum(1 / math.log2(position + 1) for position in range(1, min(len(relevant), 10) + 1))
+    return gained / ideal if ideal else 0.0
+
+
+def test_relevance_ndcg_at_10_by_hand() -> None:
+    assert ndcg_at_10(["a", "b", "c"], {"a"}) == 1.0
+    assert ndcg_at_10(["a", "b", "c"], {"b"}) == pytest.approx(1 / math.log2(3))
+    assert ndcg_at_10(["a", "b", "c"], {"a", "c"}) == pytest.approx((1 + 1 / 2) / (1 + 1 / math.log2(3)))
+    assert ndcg_at_10([str(n) for n in range(12)], {"11"}) == 0.0
+    assert ndcg_at_10(["a"], set()) == 0.0
+
+
+def test_relevance_fixture_has_three_labelled_queries_one_per_format() -> None:
+    fixture = labelled_queries()
+
+    assert [query.format for query in fixture.queries] == ["Policy", "LD", "PF"]
+    assert fixture.labelled_by is not None, "the coach has not labelled labelling_sheet.md yet"
+    for query in fixture.queries:
+        items = {entry.item for entry in query.records}
+        assert query.relevant is not None, f"{query.id} is not labelled yet"
+        assert set(query.relevant) <= items, query.id
+
+
+def raw_and_ranked(query: LabelledQuery, now: datetime) -> tuple[list[str], list[str]]:
+    """The items in raw provider order (merged, first appearance) and in the committed table's order."""
+    item_of = {id(entry.record): entry.item for entry in query.records}
+    merged_candidates = merge_candidates([entry.record for entry in query.records])
+    raw = [item_of[id(candidate.members[0])] for candidate in merged_candidates]
+    ranked = rank_merged_candidates(
+        merged_candidates,
+        queries=(query.query,),
+        filters=SearchFilters(max_results=200),
+        answered_providers=len({entry.record.provider for entry in query.records}),
+        now=now,
+        config=load_federated_ranking_config(REPOSITORY / FEDERATED_RANKING_CONFIG_PATH),
+    )
+    return raw, [item_of[id(entry.candidate.members[0])] for entry in ranked]
+
+
+def test_relevance_ranking_puts_relevant_items_in_the_top_10_at_least_as_well_as_provider_order(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """ac4: mean nDCG@10 over the three coach-labelled queries is not lower than raw provider order."""
+    fixture = labelled_queries()
+    raw_scores: list[float] = []
+    ranked_scores: list[float] = []
+    for query in fixture.queries:
+        assert query.relevant is not None, f"{query.id} is not labelled yet"
+        relevant = set(query.relevant)
+        raw, ranked = raw_and_ranked(query, fixture.now)
+        assert sorted(raw) == sorted(ranked), query.id
+        raw_scores.append(ndcg_at_10(raw, relevant))
+        ranked_scores.append(ndcg_at_10(ranked, relevant))
+        with capsys.disabled():
+            print(
+                f"\n{query.id}: {len(relevant)} of {len(raw)} relevant; nDCG@10 raw "
+                f"{raw_scores[-1]:.3f}, ranked {ranked_scores[-1]:.3f}"
+            )
+    raw_mean, ranked_mean = sum(raw_scores) / 3, sum(ranked_scores) / 3
+    with capsys.disabled():
+        print(f"mean nDCG@10: raw {raw_mean:.3f}, ranked {ranked_mean:.3f}")
+
+    assert ranked_mean >= raw_mean

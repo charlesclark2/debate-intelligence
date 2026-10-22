@@ -1,0 +1,835 @@
+{
+  "description": "Coach-labelled relevance set for the federated ranking (v1-e08-t03 ac4). Synthetic: every record is hand-written, with invented titles, authors and outlets on example domains. Records are in raw provider order: providers in the production fan-out order (openalex, crossref, semantic_scholar, rss), each provider's records in the order that provider would return them. Records of one source share an item. Labels are the coach's, from labelling_sheet.md.",
+  "now": "2026-10-22T12:00:00Z",
+  "labelled_by": null,
+  "labelled_on": null,
+  "queries": [
+    {
+      "id": "policy-carbon-border-adjustment",
+      "format": "Policy",
+      "query": "carbon border adjustment trade retaliation",
+      "records": [
+        {
+          "item": "P04",
+          "record": {
+            "provider": "openalex",
+            "title": "Carbon capture in cement production: a techno-economic review",
+            "source_type": "scholarly",
+            "authors": [
+              "Ingrid Halvorsen",
+              "Tomas Reyes"
+            ],
+            "publication": "Journal of Cleaner Industry",
+            "published_at": "2024-03-01T00:00:00Z",
+            "identifiers": {
+              "doi": "10.5555/jci.2024.0311",
+              "openalex_id": "W4101"
+            },
+            "url": "https://openalex.org/W4101",
+            "snippet": "Reviews 62 carbon capture pilots in cement kilns and estimates capture costs per tonne of CO2."
+          }
+        },
+        {
+          "item": "P03",
+          "record": {
+            "provider": "openalex",
+            "title": "Carbon border adjustments and the risk of trade retaliation: evidence from WTO disputes",
+            "source_type": "scholarly",
+            "authors": [
+              "Mara Okonkwo",
+              "Daniel Ferreira"
+            ],
+            "publication": "World Trade Review Letters",
+            "published_at": "2025-02-01T00:00:00Z",
+            "identifiers": {
+              "doi": "10.5555/wtrl.2025.0042",
+              "openalex_id": "W4102"
+            },
+            "url": "https://openalex.org/W4102",
+            "snippet": "Across 41 trade disputes, border carbon adjustments raised the probability that partners exporting carbon-intensive goods imposed retaliatory tariffs within two years.",
+            "open_access_url": "https://repository.example.edu/okonkwo-cbam-retaliation.pdf"
+          }
+        },
+        {
+          "item": "P01",
+          "record": {
+            "provider": "openalex",
+            "title": "Border carbon adjustment design under WTO law",
+            "source_type": "scholarly",
+            "authors": [
+              "Helena Brandt"
+            ],
+            "publication": "Journal of International Economic Law Studies",
+            "published_at": "2022-06-01T00:00:00Z",
+            "identifiers": {
+              "doi": "10.5555/jiels.2022.0610",
+              "openalex_id": "W4103"
+            },
+            "url": "https://openalex.org/W4103",
+            "snippet": "Assesses whether a border carbon adjustment can be justified under GATT Article XX and which design choices invite legal challenge."
+          }
+        },
+        {
+          "item": "P08",
+          "record": {
+            "provider": "openalex",
+            "title": "Leakage and competitiveness effects of the EU carbon border adjustment mechanism",
+            "source_type": "scholarly",
+            "authors": [
+              "Pieter Janssens",
+              "Lucia Moretti"
+            ],
+            "publication": "Energy Policy Review",
+            "published_at": "2023-09-01T00:00:00Z",
+            "identifiers": {
+              "doi": "10.5555/epr.2023.0915",
+              "openalex_id": "W4104"
+            },
+            "url": "https://openalex.org/W4104",
+            "snippet": "Simulates carbon leakage and export losses for steel, aluminium and cement under the EU mechanism and the responses of affected exporters.",
+            "open_access_url": "https://repository.example.org/janssens-cbam.pdf"
+          }
+        },
+        {
+          "item": "P14",
+          "record": {
+            "provider": "openalex",
+            "title": "Trade retaliation and the 2018-2019 tariff escalation",
+            "source_type": "scholarly",
+            "authors": [
+              "Samuel Whitaker"
+            ],
+            "publication": "Review of Trade Politics",
+            "published_at": "2021-04-01T00:00:00Z",
+            "identifiers": {
+              "doi": "10.5555/rtp.2021.0407",
+              "openalex_id": "W4105"
+            },
+            "url": "https://openalex.org/W4105",
+            "snippet": "Documents how retaliatory tariffs targeted politically salient agricultural exports during the 2018-2019 escalation."
+          }
+        },
+        {
+          "item": "P02",
+          "record": {
+            "provider": "crossref",
+            "title": "Carbon border adjustment mechanism",
+            "source_type": "scholarly",
+            "authors": [
+              "Editorial Board"
+            ],
+            "publication": "Encyclopedia of Climate Policy Terms",
+            "published_at": "2023-01-01T00:00:00Z",
+            "identifiers": {
+              "doi": "10.5555/ecpt.2023.cbam"
+            },
+            "url": "https://doi.org/10.5555/ecpt.2023.cbam"
+          }
+        },
+        {
+          "item": "P10",
+          "record": {
+            "provider": "crossref",
+            "title": "Retaliation in the digital services tax disputes",
+            "source_type": "scholarly",
+            "authors": [
+              "Aiko Tanaka"
+            ],
+            "publication": "Tax Policy Quarterly",
+            "published_at": "2022-11-01T00:00:00Z",
+            "identifiers": {
+              "doi": "10.5555/tpq.2022.1104"
+            },
+            "url": "https://doi.org/10.5555/tpq.2022.1104",
+            "snippet": "Traces threatened tariff retaliation against digital services taxes in six countries."
+          }
+        },
+        {
+          "item": "P12",
+          "record": {
+            "provider": "crossref",
+            "title": "The political economy of carbon tariffs: exporter responses in India and China",
+            "source_type": "scholarly",
+            "authors": [
+              "Rohan Mehta",
+              "Li Wen"
+            ],
+            "publication": "Global Environmental Politics Notes",
+            "published_at": "2024-08-01T00:00:00Z",
+            "identifiers": {
+              "doi": "10.5555/gepn.2024.0808"
+            },
+            "url": "https://doi.org/10.5555/gepn.2024.0808",
+            "snippet": "Interviews with trade officials show both governments preparing countermeasures against carbon tariffs on steel and fertiliser."
+          }
+        },
+        {
+          "item": "P03",
+          "record": {
+            "provider": "semantic_scholar",
+            "title": "Carbon border adjustments and the risk of trade retaliation: evidence from WTO disputes",
+            "source_type": "scholarly",
+            "authors": [
+              "Mara Okonkwo",
+              "Daniel Ferreira"
+            ],
+            "publication": "World Trade Review Letters",
+            "published_at": "2025-02-01T00:00:00Z",
+            "identifiers": {
+              "doi": "10.5555/wtrl.2025.0042",
+              "semantic_scholar_id": "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678"
+            },
+            "url": "https://www.semanticscholar.org/paper/a1b2c3d4e5f60718293a4b5c6d7e8f9012345678",
+            "snippet": "Across 41 trade disputes, border carbon adjustments raised the probability that partners exporting carbon-intensive goods imposed retaliatory tariffs within two years."
+          }
+        },
+        {
+          "item": "P08",
+          "record": {
+            "provider": "semantic_scholar",
+            "title": "Leakage and competitiveness effects of the EU carbon border adjustment mechanism",
+            "source_type": "scholarly",
+            "authors": [
+              "Pieter Janssens",
+              "Lucia Moretti"
+            ],
+            "publication": "Energy Policy Review",
+            "published_at": "2023-09-01T00:00:00Z",
+            "identifiers": {
+              "doi": "10.5555/epr.2023.0915",
+              "semantic_scholar_id": "b2c3d4e5f60718293a4b5c6d7e8f901234567890"
+            },
+            "url": "https://www.semanticscholar.org/paper/b2c3d4e5f60718293a4b5c6d7e8f901234567890"
+          }
+        },
+        {
+          "item": "P06",
+          "record": {
+            "provider": "semantic_scholar",
+            "title": "Climate clubs and border adjustments: a game-theoretic analysis",
+            "source_type": "scholarly",
+            "authors": [
+              "Oskar Lindqvist"
+            ],
+            "publication": "Environmental and Resource Economics Letters",
+            "published_at": "2020-05-01T00:00:00Z",
+            "identifiers": {
+              "doi": "10.5555/erel.2020.0505",
+              "semantic_scholar_id": "c3d4e5f60718293a4b5c6d7e8f90123456789012"
+            },
+            "url": "https://www.semanticscholar.org/paper/c3d4e5f60718293a4b5c6d7e8f90123456789012",
+            "snippet": "Models when a border adjustment sustains a climate club and when it triggers a tariff war with non-members."
+          }
+        },
+        {
+          "item": "P13",
+          "record": {
+            "provider": "rss",
+            "title": "Trade ministers meet ahead of G20",
+            "url": "https://www.example-wire.com/2026/10/20/g20-trade-ministers",
+            "source_type": "news",
+            "authors": [
+              "Priya Nair"
+            ],
+            "publication": "Example Wire",
+            "published_at": "2026-10-20T09:00:00Z",
+            "snippet": "Ministers discussed supply chains, critical minerals and the WTO's dispute system."
+          }
+        },
+        {
+          "item": "P05",
+          "record": {
+            "provider": "rss",
+            "title": "Carbon offsets market rebounds",
+            "url": "https://markets.example.net/2026/10/18/offsets-rebound",
+            "source_type": "news",
+            "authors": [
+              "Greg Olsen"
+            ],
+            "publication": "Example Markets",
+            "published_at": "2026-10-18T09:00:00Z",
+            "snippet": "Prices for voluntary carbon offsets rose for a third month as airlines bought credits."
+          }
+        },
+        {
+          "item": "P07",
+          "record": {
+            "provider": "rss",
+            "title": "EU's carbon border levy enters full phase as India threatens countermeasures",
+            "url": "https://www.example-times.com/world/2026/10/15/eu-carbon-levy-india",
+            "source_type": "news",
+            "authors": [
+              "Anna Kovacs"
+            ],
+            "publication": "The Example Times",
+            "published_at": "2026-10-15T09:00:00Z",
+            "snippet": "India's commerce ministry said it would respond to the EU carbon border levy on steel with measures of its own."
+          }
+        },
+        {
+          "item": "P11",
+          "record": {
+            "provider": "rss",
+            "title": "Steelmakers brace for carbon border costs",
+            "url": "https://business.example.com/2026/10/02/steel-cbam",
+            "source_type": "news",
+            "authors": [
+              "Marcus Bell"
+            ],
+            "publication": "Example Business",
+            "published_at": "2026-10-02T09:00:00Z",
+            "snippet": "Exporters to Europe expect certificate costs to cut margins and are lobbying for exemptions."
+          }
+        },
+        {
+          "item": "P09",
+          "record": {
+            "provider": "rss",
+            "title": "Retaliation fears weigh on soybean farmers",
+            "url": "https://farm.example.org/2026/09/28/soybean-retaliation",
+            "source_type": "news",
+            "authors": [
+              "Jenna Pratt"
+            ],
+            "publication": "Example Farm Journal",
+            "published_at": "2026-09-28T09:00:00Z",
+            "snippet": "Growers worry new tariffs on farm machinery imports could prompt retaliation against soybeans."
+          }
+        }
+      ],
+      "relevant": null
+    },
+    {
+      "id": "ld-universal-basic-income",
+      "format": "LD",
+      "query": "universal basic income labor force participation",
+      "records": [
+        {
+          "item": "L13",
+          "record": {
+            "provider": "openalex",
+            "title": "Universal design for learning in higher education: a systematic review",
+            "source_type": "scholarly",
+            "authors": [
+              "Claire Dubois"
+            ],
+            "publication": "Higher Education Practice",
+            "published_at": "2019-10-01T00:00:00Z",
+            "identifiers": {
+              "doi": "10.5555/hep.2019.1001",
+              "openalex_id": "W5101"
+            },
+            "url": "https://openalex.org/W5101",
+            "snippet": "Synthesizes 120 studies of universal design for learning in university courses."
+          }
+        },
+        {
+          "item": "L12",
+          "record": {
+            "provider": "openalex",
+            "title": "Universal basic income and labor supply: evidence from a Kenyan cash transfer experiment",
+            "source_type": "scholarly",
+            "authors": [
+              "Wanjiru Kamau",
+              "Ethan Cole"
+            ],
+            "publication": "Development Economics Letters",
+            "published_at": "2023-07-01T00:00:00Z",
+            "identifiers": {
+              "doi": "10.5555/del.2023.0712",
+              "openalex_id": "W5102"
+            },
+            "url": "https://openalex.org/W5102",
+            "snippet": "Recipients of a 12-year unconditional transfer did not reduce hours worked and shifted from wage labour to self-employment.",
+            "open_access_url": "https://repository.example.edu/kamau-ubi-kenya.pdf"
+          }
+        },
+        {
+          "item": "L07",
+          "record": {
+            "provider": "openalex",
+            "title": "Labor force participation trends among prime-age men, 1970-2020",
+            "source_type": "scholarly",
+            "authors": [
+              "Robert Haines"
+            ],
+            "publication": "Labor Statistics Review",
+            "published_at": "2021-03-01T00:00:00Z",
+            "identifiers": {
+              "doi": "10.5555/lsr.2021.0303",
+              "openalex_id": "W5103"
+            },
+            "url": "https://openalex.org/W5103",
+            "snippet": "Decomposes the fall in prime-age male participation into disability, education and regional factors."
+          }
+        },
+        {
+          "item": "L11",
+          "record": {
+            "provider": "openalex",
+            "title": "Unconditional cash and work: a meta-analysis of 38 programs",
+            "source_type": "scholarly",
+            "authors": [
+              "Sofia Lindgren",
+              "Arjun Rao"
+            ],
+            "publication": "Journal of Social Policy Evidence",
+            "published_at": "2024-01-01T00:00:00Z",
+            "identifiers": {
+              "doi": "10.5555/jspe.2024.0115",
+              "openalex_id": "W5104"
+            },
+            "url": "https://openalex.org/W5104",
+            "snippet": "Pooled estimates show no significant reduction in labour force participation from unconditional cash transfers.",
+            "open_access_url": "https://repository.example.org/lindgren-cash-work.pdf"
+          }
+        },
+        {
+          "item": "L01",
+          "record": {
+            "provider": "openalex",
+            "title": "Basic income as a republican ideal of non-domination",
+            "source_type": "scholarly",
+            "authors": [
+              "Thomas Ashworth"
+            ],
+            "publication": "Political Philosophy Quarterly",
+            "published_at": "2018-09-01T00:00:00Z",
+            "identifiers": {
+              "doi": "10.5555/ppq.2018.0909",
+              "openalex_id": "W5105"
+            },
+            "url": "https://openalex.org/W5105",
+            "snippet": "Argues that an unconditional basic income secures freedom as non-domination by giving workers the power to refuse exploitative work."
+          }
+        },
+        {
+          "item": "L10",
+          "record": {
+            "provider": "crossref",
+            "title": "The Alaska Permanent Fund dividend and employment",
+            "source_type": "scholarly",
+            "authors": [
+              "Jennifer Holt",
+              "Mikael Strand"
+            ],
+            "publication": "Applied Public Economics",
+            "published_at": "2020-02-01T00:00:00Z",
+            "identifiers": {
+              "doi": "10.5555/ape.2020.0202"
+            },
+            "url": "https://doi.org/10.5555/ape.2020.0202",
+            "snippet": "The annual dividend had no effect on employment and raised part-time work."
+          }
+        },
+        {
+          "item": "L05",
+          "record": {
+            "provider": "crossref",
+            "title": "Income inequality and health: a review",
+            "source_type": "scholarly",
+            "authors": [
+              "Nadia Petrov"
+            ],
+            "publication": "Public Health Reviews Digest",
+            "published_at": "2017-06-01T00:00:00Z",
+            "identifiers": {
+              "doi": "10.5555/phrd.2017.0606"
+            },
+            "url": "https://doi.org/10.5555/phrd.2017.0606",
+            "snippet": "Reviews evidence linking income inequality to mortality and self-rated health."
+          }
+        },
+        {
+          "item": "L10",
+          "record": {
+            "provider": "semantic_scholar",
+            "title": "The Alaska Permanent Fund dividend and employment",
+            "source_type": "scholarly",
+            "authors": [
+              "Jennifer Holt",
+              "Mikael Strand"
+            ],
+            "publication": "Applied Public Economics",
+            "published_at": "2020-02-01T00:00:00Z",
+            "identifiers": {
+              "doi": "10.5555/ape.2020.0202",
+              "semantic_scholar_id": "d4e5f60718293a4b5c6d7e8f9012345678901234"
+            },
+            "url": "https://www.semanticscholar.org/paper/d4e5f60718293a4b5c6d7e8f9012345678901234",
+            "open_access_url": "https://repository.example.edu/holt-alaska-dividend.pdf"
+          }
+        },
+        {
+          "item": "L04",
+          "record": {
+            "provider": "semantic_scholar",
+            "title": "Guaranteed income pilots in U.S. cities: preliminary employment outcomes",
+            "source_type": "scholarly",
+            "authors": [
+              "Keisha Monroe"
+            ],
+            "publication": "Urban Policy Working Papers",
+            "published_at": "2025-04-01T00:00:00Z",
+            "identifiers": {
+              "doi": "10.5555/upwp.2025.0411",
+              "semantic_scholar_id": "e5f60718293a4b5c6d7e8f901234567890123456"
+            },
+            "url": "https://www.semanticscholar.org/paper/e5f60718293a4b5c6d7e8f901234567890123456",
+            "snippet": "Across eleven city pilots, full-time employment rose slightly more among recipients than in control groups."
+          }
+        },
+        {
+          "item": "L08",
+          "record": {
+            "provider": "semantic_scholar",
+            "title": "Labor market participation of older workers in Japan",
+            "source_type": "scholarly",
+            "authors": [
+              "Kenji Watanabe"
+            ],
+            "publication": "Asian Labour Studies",
+            "published_at": "2016-11-01T00:00:00Z",
+            "identifiers": {
+              "doi": "10.5555/als.2016.1101",
+              "semantic_scholar_id": "f60718293a4b5c6d7e8f90123456789012345678"
+            },
+            "url": "https://www.semanticscholar.org/paper/f60718293a4b5c6d7e8f90123456789012345678",
+            "snippet": "Pension reform raised participation among workers aged 60 to 64."
+          }
+        },
+        {
+          "item": "L02",
+          "record": {
+            "provider": "rss",
+            "title": "Basic income bill stalls in state senate",
+            "url": "https://www.example-gazette.com/2026/10/19/basic-income-bill",
+            "source_type": "news",
+            "authors": [
+              "Leah Morgan"
+            ],
+            "publication": "The Example Gazette",
+            "published_at": "2026-10-19T09:00:00Z",
+            "snippet": "The proposal would have paid every adult resident $500 a month; opponents cited work incentives."
+          }
+        },
+        {
+          "item": "L09",
+          "record": {
+            "provider": "rss",
+            "title": "Study: cash payments did not reduce work hours",
+            "url": "https://www.example-daily.com/2026/10/12/cash-study",
+            "source_type": "news",
+            "authors": [
+              "Victor Han"
+            ],
+            "publication": "Example Daily",
+            "published_at": "2026-10-12T09:00:00Z",
+            "snippet": "Researchers found recipients of monthly payments worked about as many hours as the control group."
+          }
+        },
+        {
+          "item": "L03",
+          "record": {
+            "provider": "rss",
+            "title": "City's guaranteed income pilot ends with mixed jobs data",
+            "url": "https://metro.example.net/2026/10/10/guaranteed-income-pilot-ends",
+            "source_type": "news",
+            "authors": [
+              "Rosa Delgado"
+            ],
+            "publication": "Example Metro",
+            "published_at": "2026-10-10T09:00:00Z",
+            "snippet": "Participants were more likely to find full-time work, but the effect faded after the payments stopped."
+          }
+        },
+        {
+          "item": "L06",
+          "record": {
+            "provider": "rss",
+            "title": "Jobs report: participation rate ticks up to 62.9%",
+            "url": "https://www.example-wire.com/2026/10/03/jobs-report",
+            "source_type": "news",
+            "authors": [
+              "Priya Nair"
+            ],
+            "publication": "Example Wire",
+            "published_at": "2026-10-03T09:00:00Z",
+            "snippet": "The labor force participation rate rose a tenth of a point as more prime-age women returned to work."
+          }
+        },
+        {
+          "item": "L14",
+          "record": {
+            "provider": "rss",
+            "title": "Universal pre-K enrollment climbs",
+            "url": "https://schools.example.org/2026/09/30/pre-k-enrollment",
+            "source_type": "news",
+            "authors": [
+              "Hannah Wu"
+            ],
+            "publication": "Example Schools Report",
+            "published_at": "2026-09-30T09:00:00Z",
+            "snippet": "Enrollment in the state's universal pre-K program reached 71 percent of four-year-olds."
+          }
+        }
+      ],
+      "relevant": null
+    },
+    {
+      "id": "pf-nuclear-power-grid",
+      "format": "PF",
+      "query": "nuclear power expansion grid reliability",
+      "records": [
+        {
+          "item": "F05",
+          "record": {
+            "provider": "openalex",
+            "title": "Nuclear magnetic resonance spectroscopy of battery electrolytes",
+            "source_type": "scholarly",
+            "authors": [
+              "Felix Wagner"
+            ],
+            "publication": "Electrochemistry Methods",
+            "published_at": "2022-05-01T00:00:00Z",
+            "identifiers": {
+              "doi": "10.5555/em.2022.0505",
+              "openalex_id": "W6101"
+            },
+            "url": "https://openalex.org/W6101",
+            "snippet": "Uses nuclear magnetic resonance to track electrolyte decomposition in lithium cells."
+          }
+        },
+        {
+          "item": "F09",
+          "record": {
+            "provider": "openalex",
+            "title": "Public attitudes to nuclear power after Fukushima",
+            "source_type": "scholarly",
+            "authors": [
+              "Yuki Mori",
+              "Alan Price"
+            ],
+            "publication": "Energy and Society",
+            "published_at": "2016-02-01T00:00:00Z",
+            "identifiers": {
+              "doi": "10.5555/es.2016.0201",
+              "openalex_id": "W6102"
+            },
+            "url": "https://openalex.org/W6102",
+            "snippet": "Survey data from 24 countries show support for nuclear power fell and partly recovered by 2015."
+          }
+        },
+        {
+          "item": "F06",
+          "record": {
+            "provider": "openalex",
+            "title": "Nuclear power and grid reliability in high-renewable systems",
+            "source_type": "scholarly",
+            "authors": [
+              "Grace Okafor",
+              "Henrik Dahl"
+            ],
+            "publication": "Power Systems Analysis",
+            "published_at": "2024-06-01T00:00:00Z",
+            "identifiers": {
+              "doi": "10.5555/psa.2024.0618",
+              "openalex_id": "W6103"
+            },
+            "url": "https://openalex.org/W6103",
+            "snippet": "Firm nuclear capacity cut loss-of-load hours by two-thirds in modelled grids with 70 percent wind and solar.",
+            "open_access_url": "https://repository.example.edu/okafor-nuclear-reliability.pdf"
+          }
+        },
+        {
+          "item": "F04",
+          "record": {
+            "provider": "openalex",
+            "title": "Grid reliability under extreme heat: lessons from the 2021 Texas outage",
+            "source_type": "scholarly",
+            "authors": [
+              "Carlos Mendez"
+            ],
+            "publication": "Energy Infrastructure Review",
+            "published_at": "2023-08-01T00:00:00Z",
+            "identifiers": {
+              "doi": "10.5555/eir.2023.0801",
+              "openalex_id": "W6104"
+            },
+            "url": "https://openalex.org/W6104",
+            "snippet": "Attributes the outage to gas supply failures and unweatherized plants of every fuel type."
+          }
+        },
+        {
+          "item": "F11",
+          "record": {
+            "provider": "openalex",
+            "title": "Small modular reactor cost overruns: a reference-class forecast",
+            "source_type": "scholarly",
+            "authors": [
+              "Martin Kessler"
+            ],
+            "publication": "Energy Economics Briefs",
+            "published_at": "2025-01-01T00:00:00Z",
+            "identifiers": {
+              "doi": "10.5555/eeb.2025.0120",
+              "openalex_id": "W6105"
+            },
+            "url": "https://openalex.org/W6105",
+            "snippet": "Historical megaproject overruns suggest first small modular reactors will cost twice their estimates and arrive years late."
+          }
+        },
+        {
+          "item": "F01",
+          "record": {
+            "provider": "crossref",
+            "title": "Capacity factors of the US nuclear fleet, 2000-2024",
+            "source_type": "scholarly",
+            "authors": [
+              "Dana Whitfield"
+            ],
+            "publication": "Nuclear Operations Data",
+            "published_at": "2025-03-01T00:00:00Z",
+            "identifiers": {
+              "doi": "10.5555/nod.2025.0301"
+            },
+            "url": "https://doi.org/10.5555/nod.2025.0301",
+            "snippet": "The fleet averaged a 92 percent capacity factor, the highest of any generation source."
+          }
+        },
+        {
+          "item": "F08",
+          "record": {
+            "provider": "crossref",
+            "title": "Power expansion in rural electrification programs",
+            "source_type": "scholarly",
+            "authors": [
+              "Amara Diallo"
+            ],
+            "publication": "Development Energy Notes",
+            "published_at": "2019-07-01T00:00:00Z",
+            "identifiers": {
+              "doi": "10.5555/den.2019.0707"
+            },
+            "url": "https://doi.org/10.5555/den.2019.0707",
+            "snippet": "Evaluates mini-grid expansion in West African villages."
+          }
+        },
+        {
+          "item": "F06",
+          "record": {
+            "provider": "semantic_scholar",
+            "title": "Nuclear power and grid reliability in high-renewable systems",
+            "source_type": "scholarly",
+            "authors": [
+              "Grace Okafor",
+              "Henrik Dahl"
+            ],
+            "publication": "Power Systems Analysis",
+            "published_at": "2024-06-01T00:00:00Z",
+            "identifiers": {
+              "doi": "10.5555/psa.2024.0618",
+              "semantic_scholar_id": "0718293a4b5c6d7e8f9012345678901234567890"
+            },
+            "url": "https://www.semanticscholar.org/paper/0718293a4b5c6d7e8f9012345678901234567890"
+          }
+        },
+        {
+          "item": "F03",
+          "record": {
+            "provider": "semantic_scholar",
+            "title": "Firm low-carbon generation and the cost of decarbonized grids",
+            "source_type": "scholarly",
+            "authors": [
+              "Elena Russo"
+            ],
+            "publication": "Joule Letters Example",
+            "published_at": "2020-10-01T00:00:00Z",
+            "identifiers": {
+              "doi": "10.5555/jle.2020.1010",
+              "semantic_scholar_id": "18293a4b5c6d7e8f901234567890123456789012"
+            },
+            "url": "https://www.semanticscholar.org/paper/18293a4b5c6d7e8f901234567890123456789012",
+            "snippet": "Grids with firm low-carbon power such as nuclear reach deep decarbonization at 10 to 62 percent lower cost."
+          }
+        },
+        {
+          "item": "F12",
+          "record": {
+            "provider": "rss",
+            "title": "Uranium prices hit 18-year high",
+            "url": "https://markets.example.net/2026/10/21/uranium-high",
+            "source_type": "news",
+            "authors": [
+              "Greg Olsen"
+            ],
+            "publication": "Example Markets",
+            "published_at": "2026-10-21T09:00:00Z",
+            "snippet": "Utilities signing long-term fuel contracts pushed spot uranium above $110 a pound."
+          }
+        },
+        {
+          "item": "F13",
+          "record": {
+            "provider": "rss",
+            "title": "Utility files plan for two new reactors citing reliability",
+            "url": "https://www.example-times.com/energy/2026/10/16/utility-new-reactors",
+            "source_type": "news",
+            "authors": [
+              "Anna Kovacs"
+            ],
+            "publication": "The Example Times",
+            "published_at": "2026-10-16T09:00:00Z",
+            "snippet": "The utility told regulators the reactors are needed to keep the grid reliable as coal plants retire."
+          }
+        },
+        {
+          "item": "F07",
+          "record": {
+            "provider": "rss",
+            "title": "Nuclear talks resume in Vienna",
+            "url": "https://www.example-wire.com/2026/10/14/vienna-talks",
+            "source_type": "news",
+            "authors": [
+              "Priya Nair"
+            ],
+            "publication": "Example Wire",
+            "published_at": "2026-10-14T09:00:00Z",
+            "snippet": "Diplomats returned to talks on enrichment limits and sanctions relief."
+          }
+        },
+        {
+          "item": "F10",
+          "record": {
+            "provider": "rss",
+            "title": "Regulator warns of winter grid shortfall",
+            "url": "https://www.example-gazette.com/2026/10/08/grid-shortfall",
+            "source_type": "news",
+            "authors": [
+              "Leah Morgan"
+            ],
+            "publication": "The Example Gazette",
+            "published_at": "2026-10-08T09:00:00Z",
+            "snippet": "The grid operator projected a reserve margin below target during a severe cold snap."
+          }
+        },
+        {
+          "item": "F02",
+          "record": {
+            "provider": "rss",
+            "title": "Data center demand drives calls for new nuclear",
+            "url": "https://tech.example.com/2026/10/05/data-centers-nuclear",
+            "source_type": "news",
+            "authors": [
+              "Victor Han"
+            ],
+            "publication": "Example Tech",
+            "published_at": "2026-10-05T09:00:00Z",
+            "snippet": "Technology companies are seeking firm round-the-clock power and backing restarts of closed reactors."
+          }
+        }
+      ],
+      "relevant": null
+    }
+  ]
+}

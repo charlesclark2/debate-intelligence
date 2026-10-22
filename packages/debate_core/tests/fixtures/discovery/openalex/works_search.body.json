@@ -1,0 +1,239 @@
+{
+  "meta": {
+    "count": 1287,
+    "db_response_time_ms": 41,
+    "page": 1,
+    "per_page": 3,
+    "groups_count": null
+  },
+  "results": [
+    {
+      "id": "https://openalex.org/W4390000001",
+      "doi": "https://doi.org/10.5555/HIP.2023.0142",
+      "display_name": "Premium subsidies and enrollment in invented state marketplaces",
+      "publication_date": "2023-06-15",
+      "type": "article",
+      "cited_by_count": 42,
+      "open_access": {
+        "is_oa": true,
+        "oa_status": "gold",
+        "oa_url": "https://journal.example.org/hip/2023/0142.pdf",
+        "any_repository_has_fulltext": false
+      },
+      "best_oa_location": {
+        "is_oa": true,
+        "landing_page_url": "https://doi.org/10.5555/hip.2023.0142",
+        "pdf_url": "https://journal.example.org/hip/2023/0142.pdf",
+        "source": {
+          "id": "https://openalex.org/S4200000001",
+          "display_name": "Journal of Invented Health Policy",
+          "type": "journal"
+        },
+        "license": "cc-by",
+        "version": "publishedVersion"
+      },
+      "primary_location": {
+        "is_oa": true,
+        "landing_page_url": "https://doi.org/10.5555/hip.2023.0142",
+        "pdf_url": "https://journal.example.org/hip/2023/0142.pdf",
+        "source": {
+          "id": "https://openalex.org/S4200000001",
+          "display_name": "Journal of Invented Health Policy",
+          "type": "journal"
+        },
+        "license": "cc-by",
+        "version": "publishedVersion"
+      },
+      "authorships": [
+        {
+          "author_position": "first",
+          "author": {
+            "id": "https://openalex.org/A5000000001",
+            "display_name": "Ada Placeholder",
+            "orcid": "https://orcid.org/0000-0000-0000-0001"
+          },
+          "institutions": [
+            {
+              "id": "https://openalex.org/I1000000001",
+              "display_name": "University of Nowhere",
+              "ror": "https://ror.org/000000001",
+              "country_code": "US",
+              "type": "education"
+            }
+          ],
+          "countries": ["US"],
+          "is_corresponding": true,
+          "raw_author_name": "A. Placeholder",
+          "raw_affiliation_strings": ["Department of Invented Economics, University of Nowhere"]
+        },
+        {
+          "author_position": "middle",
+          "author": {
+            "id": "https://openalex.org/A5000000002",
+            "display_name": "Grace Example",
+            "orcid": null
+          },
+          "institutions": [],
+          "countries": [],
+          "is_corresponding": false,
+          "raw_author_name": "Grace Example",
+          "raw_affiliation_strings": []
+        },
+        {
+          "author_position": "last",
+          "author": {
+            "id": "https://openalex.org/A5000000003",
+            "display_name": "Rosalind Invented",
+            "orcid": "https://orcid.org/0000-0000-0000-0003"
+          },
+          "institutions": [
+            {
+              "id": "https://openalex.org/I1000000002",
+              "display_name": "Example Policy Institute",
+              "ror": "https://ror.org/000000002",
+              "country_code": "GB",
+              "type": "nonprofit"
+            }
+          ],
+          "countries": ["GB"],
+          "is_corresponding": false,
+          "raw_author_name": "R. Invented",
+          "raw_affiliation_strings": ["Example Policy Institute, Nowhereshire"]
+        }
+      ],
+      "abstract_inverted_index": {
+        "enrollment": [4],
+        "Premium": [0],
+        "marketplace": [3, 10],
+        "fell.": [12],
+        "subsidies": [1],
+        "in": [5],
+        "state,": [8],
+        "raised": [2],
+        "every": [6],
+        "premiums": [11],
+        "invented": [7],
+        "and": [9]
+      }
+    },
+    {
+      "id": "https://openalex.org/W4390000002",
+      "doi": null,
+      "display_name": "Coverage gaps among invented gig workers",
+      "publication_date": "2021-11-02",
+      "type": "report",
+      "cited_by_count": 3,
+      "open_access": {
+        "is_oa": false,
+        "oa_status": "closed",
+        "oa_url": null,
+        "any_repository_has_fulltext": false
+      },
+      "best_oa_location": null,
+      "primary_location": {
+        "is_oa": false,
+        "landing_page_url": "https://reports.example.org/coverage-gaps-2021",
+        "pdf_url": null,
+        "source": null,
+        "license": null,
+        "version": null
+      },
+      "authorships": [
+        {
+          "author_position": "first",
+          "author": {
+            "id": "https://openalex.org/A5000000004",
+            "display_name": "Linus Sample",
+            "orcid": null
+          },
+          "institutions": [],
+          "countries": [],
+          "is_corresponding": false,
+          "raw_author_name": "Linus Sample",
+          "raw_affiliation_strings": ["Sample Research Group"]
+        },
+        {
+          "author_position": "last",
+          "author": {
+            "id": "https://openalex.org/A5000000002",
+            "display_name": "Grace Example",
+            "orcid": null
+          },
+          "institutions": [],
+          "countries": [],
+          "is_corresponding": false,
+          "raw_author_name": "G. Example",
+          "raw_affiliation_strings": []
+        }
+      ],
+      "abstract_inverted_index": null
+    },
+    {
+      "id": "https://openalex.org/W4390000003",
+      "doi": "https://doi.org/10.5555/handbook.ch7",
+      "display_name": "Risk pools in a made-up insurance market",
+      "publication_date": "2020-02-29",
+      "type": "book-chapter",
+      "cited_by_count": 0,
+      "open_access": {
+        "is_oa": true,
+        "oa_status": "green",
+        "oa_url": "https://repository.example.edu/handle/123/456",
+        "any_repository_has_fulltext": true
+      },
+      "best_oa_location": {
+        "is_oa": true,
+        "landing_page_url": "https://repository.example.edu/handle/123/456",
+        "pdf_url": null,
+        "source": {
+          "id": "https://openalex.org/S4200000003",
+          "display_name": "Example University Repository",
+          "type": "repository"
+        },
+        "license": null,
+        "version": "acceptedVersion"
+      },
+      "primary_location": {
+        "is_oa": false,
+        "landing_page_url": "https://doi.org/10.5555/handbook.ch7",
+        "pdf_url": null,
+        "source": {
+          "id": "https://openalex.org/S4200000002",
+          "display_name": "Invented Handbook of Insurance Economics",
+          "type": "book series"
+        },
+        "license": null,
+        "version": "publishedVersion"
+      },
+      "authorships": [
+        {
+          "author_position": "first",
+          "author": {
+            "id": "https://openalex.org/A5000000005",
+            "display_name": "Mira Fictional",
+            "orcid": "https://orcid.org/0000-0000-0000-0005"
+          },
+          "institutions": [],
+          "countries": [],
+          "is_corresponding": true,
+          "raw_author_name": "Mira Fictional",
+          "raw_affiliation_strings": []
+        },
+        {
+          "author_position": "last",
+          "author": {
+            "id": null,
+            "display_name": null,
+            "orcid": null
+          },
+          "institutions": [],
+          "countries": [],
+          "is_corresponding": false,
+          "raw_author_name": "Q. Unmatched",
+          "raw_affiliation_strings": []
+        }
+      ],
+      "abstract_inverted_index": {}
+    }
+  ]
+}

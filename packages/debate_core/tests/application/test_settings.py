@@ -550,7 +550,7 @@ def test_the_committed_test_profile_is_offline() -> None:
 def test_no_committed_profile_contains_anything_that_looks_like_a_secret() -> None:
     """A profile file is committed, so a secret in one is a secret published."""
     assert REPOSITORY_ROOT is not None
-    secret_fields = ("contact_email", "semantic_scholar_api_key", "caselist_token")
+    secret_fields = ("contact_email", "openalex_api_key", "semantic_scholar_api_key", "caselist_token")
     for path in sorted((REPOSITORY_ROOT / "config" / "profiles").glob("*.toml")):
         body = "\n".join(
             line for line in path.read_text(encoding="utf-8").splitlines() if not line.startswith("#")
@@ -567,6 +567,7 @@ def test_the_example_env_file_documents_every_secret_without_setting_one() -> No
     for variable in (
         "DEBATE_PROVIDERS__CASELIST_TOKEN",
         "DEBATE_PROVIDERS__SEMANTIC_SCHOLAR_API_KEY",
+        "DEBATE_PROVIDERS__OPENALEX_API_KEY",
         "DEBATE_PROVIDERS__CONTACT_EMAIL",
     ):
         assert variable in body

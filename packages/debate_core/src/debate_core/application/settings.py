@@ -468,8 +468,16 @@ class ProviderSettings(SettingsGroup):
     contact_email: SecretStr | None = Field(
         default=None,
         description=(
-            "Address sent to OpenAlex and Crossref for their polite pools. Redacted like a "
-            "secret: it is not one, but it is a person's email address (§14)."
+            "Address sent to Crossref for its polite pool. Redacted like a secret: it is not one, "
+            "but it is a person's email address (§14). OpenAlex retired its polite pool in "
+            "February 2026 and is not sent it."
+        ),
+    )
+    openalex_api_key: SecretStr | None = Field(
+        default=None,
+        description=(
+            "OpenAlex API key, free from openalex.org. Optional: without one OpenAlex allows about "
+            "100 searches a day, with one about 1,000 (PM ruling 2026-10-21)."
         ),
     )
     semantic_scholar_api_key: SecretStr | None = Field(

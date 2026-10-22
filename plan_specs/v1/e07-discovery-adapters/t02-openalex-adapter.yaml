@@ -16,10 +16,14 @@ metadata:
     debate/title: OpenAlex adapter
     debate/architecture-refs: §9, §15, §16, §21
 spec:
+  # PM ruling 2026-10-21 (OpenAlex authentication): OpenAlex retired the mailto polite pool in February 2026 and now ignores
+  # mailto; a free API key replaces it (help.openalex.org/api/deprecations and /api/authentication, read 2026-10-21). The key is sent as
+  # `Authorization: Bearer` when configured, and contact_email is no longer sent to OpenAlex.
   description: >-
     Implement OpenAlexProvider, the primary scholarly SearchProvider (satisfies the V1 "at least one
     scholarly adapter" criterion). It calls the /works endpoint with search=<query>, from/to_publication_date
-    filters, per-page limits and a select= field list, sending the polite-pool mailto from settings. It maps
+    filters, per-page limits and a select= field list, sending the OpenAlex API key from settings in the
+    Authorization header when one is configured (keyless requests still work). It maps
     works to CandidateResult: DOI, OpenAlex ID, title, authorships (display names only), host venue,
     publication date, type → source_type, cited_by_count, is_oa, best_oa_location/primary_location URLs,
     and reconstructs the abstract from abstract_inverted_index. Boundaries: no ranking or dedupe (E08); the
@@ -41,10 +45,15 @@ spec:
     agreement 10).
   priority: 1
   constraints:
-    packages: [debate_core.integrations]
+    # PM ruling 2026-10-21 (OpenAlex authentication): the settings group gains providers.openalex_api_key.
+    # PM ruling 2026-10-22 (v1-e07-t02 Q2: A, with open_access, for v1-e08-t02 ruling 4):
+    # CandidateResult gains citation_count and open_access in debate_core.domain.discovery.
+    packages: [debate_core.integrations, debate_core.application.settings, debate_core.domain]
     forbidden:
       - Live OpenAlex calls in CI (respx-recorded fixtures only)
-      - Omitting the polite-pool contact identity when configured
+      # PM ruling 2026-10-21 (OpenAlex authentication): was "Omitting the polite-pool contact identity when configured";
+      # OpenAlex ignores mailto since February 2026 (help.openalex.org/api/deprecations and /api/authentication, read 2026-10-21).
+      - Omitting the configured OpenAlex API key
       - Storing author affiliations or ORCIDs beyond what CandidateResult defines
   context:
     - kind: TaskRef
@@ -54,10 +63,12 @@ spec:
       name: v1-e04-t02-http-fetcher
       relation: dependsOn
   acceptanceCriteria:
+    # PM ruling 2026-10-21 (OpenAlex authentication): was "... filters and mailto parameter, verified by respx route
+    # assertions"; OpenAlex ignores mailto since February 2026 (help.openalex.org/api/deprecations and /api/authentication, read 2026-10-21).
     - id: ac1
       description: >-
-        A query with --since/--until produces a request with from_publication_date/to_publication_date
-        filters and mailto parameter, verified by respx route assertions.
+        A query with --since/--until produces a request with the date filters, and the API key in the
+        Authorization header when configured, verified by respx route assertions.
     - id: ac2
       description: >-
         Recorded fixtures map to CandidateResults with DOI, OpenAlex id, authors, venue, published_at,
@@ -73,7 +84,7 @@ spec:
         secrets never reach a log line, and its tests pass in one process after the
         OpenCaselist and discovery suites.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan
@@ -95,21 +106,25 @@ spec:
       - id: record-fixtures
         kind: Task
         name: Record OpenAlex fixtures
+        # PM ruling 2026-10-21 (OpenAlex authentication): fixtures live beside the fake provider's, so every adapter's
+        # fixtures are in one place; written by hand from the documented response shape (PM brief).
         description: >-
-          Capture representative /works responses (health insurance, AI regulation, space policy queries;
-          empty result; 429) into tests/fixtures/providers/openalex/.
-        outputs: [tests/fixtures/providers/openalex/]
+          Write representative /works responses by hand from OpenAlex's documented response shape (a
+          search, an empty result, 429, 503 with Retry-After, a malformed body) into
+          packages/debate_core/tests/fixtures/discovery/openalex/.
+        outputs: [packages/debate_core/tests/fixtures/discovery/openalex/]
         estimatedEffort: 1h
         acceptanceCriteria:
           - type: artifact_exists
             name: OpenAlex fixtures recorded
-            path: tests/fixtures/providers/openalex/works_search.json
+            path: packages/debate_core/tests/fixtures/discovery/openalex/works_search.json
       - id: request-builder
         kind: Task
         name: Query and filter request builder
         description: >-
-          Build /works requests with search, date filters, per_page, select and mailto; async httpx client
-          from the shared integrations HTTP settings.
+          Build /works requests with search, date filters, per_page and select, and the API key header
+          when configured (PM ruling 2026-10-21, OpenAlex authentication); async httpx client from the
+          shared integrations HTTP settings.
         dependsOn: [record-fixtures]
         outputs: [packages/debate_core/src/debate_core/integrations/discovery/openalex.py]
         estimatedEffort: 2h

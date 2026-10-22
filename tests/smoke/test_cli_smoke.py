@@ -148,6 +148,7 @@ def test_doctor_checks_the_evidence_profiles_only_when_asked_and_fails_on_one_th
 
 SECRET_SETTINGS = {
     "providers.semantic_scholar_api_key": "DEBATE_PROVIDERS__SEMANTIC_SCHOLAR_API_KEY",
+    "providers.openalex_api_key": "DEBATE_PROVIDERS__OPENALEX_API_KEY",
     "providers.caselist_token": "DEBATE_PROVIDERS__CASELIST_TOKEN",
     "providers.contact_email": "DEBATE_PROVIDERS__CONTACT_EMAIL",
 }

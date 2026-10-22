@@ -1,0 +1,13 @@
+{
+  "query": {"query": "orbital debris liability", "filters": {"max_results": 5}},
+  "exchanges": [
+    {
+      "request": {
+        "method": "GET",
+        "url": "https://api.openalex.org/works?search=orbital+debris+liability&per_page=5&select=id%2Cdoi%2Cdisplay_name%2Cpublication_date%2Ctype%2Ccited_by_count%2Copen_access%2Cbest_oa_location%2Cprimary_location%2Cauthorships%2Cabstract_inverted_index"
+      },
+      "response": {"status": 200, "headers": {"content-type": "application/json"}, "body_file": "works_empty.body.json"}
+    }
+  ],
+  "expected_results_file": "works_empty.expected.json"
+}

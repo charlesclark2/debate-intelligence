@@ -48,7 +48,7 @@ Each feature has one phrase:
 | source_type | "scholarly source", "government source", "think-tank source", "news source", "other source" |
 | peer_reviewed | none: it is always unknown; the task that reads a provider's field adds one |
 | open_access | "open access" |
-| citations | "cited 1,204 times" |
+| citations | "cited once", "cited 1,204 times" |
 | provider_agreement | "found by 3 providers" |
 
 A result to which no feature contributed reads "no feature contributed to the score".
@@ -323,7 +323,8 @@ def _phrase(
         case "open_access":
             return "open access"
         case "citations":
-            return "cited"
+            count = candidate.citation_count or 0
+            return "cited once" if count == 1 else f"cited {count:,} times"
         case "provider_agreement":
             return f"found by {len(candidate.providers)} providers"
         case _:

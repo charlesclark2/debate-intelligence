@@ -46,6 +46,7 @@ from debate_core.application.federated_ranking_features import (
     FeatureVector,
     age_in_days,
     bm25_scores,
+    citations,
     document_tokens,
     open_access,
     peer_reviewed,
@@ -134,6 +135,8 @@ def record(
     open_access_url: str | None = None,
     publication: str | None = None,
     doi: str | None = None,
+    open_access_status: bool | None = None,
+    citation_count: int | None = None,
 ) -> CandidateResult:
     return CandidateResult(
         provider=provider,
@@ -146,6 +149,8 @@ def record(
         open_access_url=open_access_url,
         publication=publication,
         identifiers=ArticleIdentifiers(doi=doi),
+        open_access=open_access_status,
+        citation_count=citation_count,
     )
 
 
@@ -395,9 +400,49 @@ def test_feature_peer_review_is_unknown_and_never_read_from_the_source_type(
     assert peer_reviewed(candidate) is None
 
 
-def test_feature_open_access_is_known_only_when_a_provider_names_an_open_copy() -> None:
-    assert open_access(one(open_access_url="https://repository.example.edu/carbon.pdf")) == 1.0
-    assert open_access(one()) is None
+@pytest.mark.parametrize(
+    ("open_access_url", "status", "expected"),
+    [
+        ("https://repository.example.edu/carbon.pdf", None, 1.0),
+        ("https://repository.example.edu/carbon.pdf", False, 1.0),
+        (None, True, 1.0),
+        (None, False, 0.0),
+        (None, None, None),
+    ],
+    ids=["open-copy", "open-copy-though-a-provider-says-closed", "said-open", "said-closed", "nobody-said"],
+)
+def test_feature_open_access_is_an_open_copy_or_the_providers_word_and_unknown_otherwise(
+    open_access_url: str | None, status: bool | None, expected: float | None
+) -> None:
+    """A copy someone found outranks a provider's "closed"; with neither, nobody said."""
+    candidate = one(open_access_url=open_access_url, open_access_status=status)
+
+    assert open_access(candidate) == expected
+
+
+@pytest.mark.parametrize(
+    ("count", "expected"),
+    [
+        (0, 0.0),
+        (9, math.log(10) / math.log(1001)),
+        (99, math.log(100) / math.log(1001)),
+        (1000, 1.0),
+        (25000, 1.0),
+    ],
+)
+def test_feature_citations_are_log_scaled_up_to_the_saturation(count: int, expected: float) -> None:
+    assert citations(one(citation_count=count), saturation=1000) == pytest.approx(expected)
+
+
+@pytest.mark.parametrize(
+    "source_type", [SourceType.NEWS, SourceType.GOVERNMENT, SourceType.THINK_TANK, SourceType.OTHER]
+)
+def test_feature_citations_count_only_for_scholarship(source_type: SourceType) -> None:
+    assert citations(one(source_type=source_type, citation_count=500), saturation=1000) is None
+
+
+def test_feature_citations_are_unknown_without_a_count() -> None:
+    assert citations(one(citation_count=None), saturation=1000) is None
 
 
 @pytest.mark.parametrize(
@@ -936,6 +981,15 @@ def test_explain_term_match_is_strong_above_the_threshold_and_some_below_it() ->
 )
 def test_explain_source_type_phrase(source_type: SourceType, phrase: str) -> None:
     (entry,) = rank([one(source_type=source_type)], config=only_weight("source_type"))
+
+    assert entry.explanation == phrase
+
+
+@pytest.mark.parametrize(
+    ("count", "phrase"), [(1, "cited once"), (12, "cited 12 times"), (1204, "cited 1,204 times")]
+)
+def test_explain_citation_phrase(count: int, phrase: str) -> None:
+    (entry,) = rank([one(citation_count=count)], config=only_weight("citations"))
 
     assert entry.explanation == phrase
 

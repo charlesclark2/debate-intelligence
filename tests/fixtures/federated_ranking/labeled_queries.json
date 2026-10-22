@@ -26,7 +26,9 @@
               "openalex_id": "W4101"
             },
             "url": "https://openalex.org/W4101",
-            "snippet": "Reviews 62 carbon capture pilots in cement kilns and estimates capture costs per tonne of CO2."
+            "snippet": "Reviews 62 carbon capture pilots in cement kilns and estimates capture costs per tonne of CO2.",
+            "open_access": false,
+            "citation_count": 850
           }
         },
         {
@@ -47,7 +49,9 @@
             },
             "url": "https://openalex.org/W4102",
             "snippet": "Across 41 trade disputes, border carbon adjustments raised the probability that partners exporting carbon-intensive goods imposed retaliatory tariffs within two years.",
-            "open_access_url": "https://repository.example.edu/okonkwo-cbam-retaliation.pdf"
+            "open_access_url": "https://repository.example.edu/okonkwo-cbam-retaliation.pdf",
+            "open_access": true,
+            "citation_count": 34
           }
         },
         {
@@ -66,7 +70,9 @@
               "openalex_id": "W4103"
             },
             "url": "https://openalex.org/W4103",
-            "snippet": "Assesses whether a border carbon adjustment can be justified under GATT Article XX and which design choices invite legal challenge."
+            "snippet": "Assesses whether a border carbon adjustment can be justified under GATT Article XX and which design choices invite legal challenge.",
+            "open_access": false,
+            "citation_count": 210
           }
         },
         {
@@ -87,7 +93,9 @@
             },
             "url": "https://openalex.org/W4104",
             "snippet": "Simulates carbon leakage and export losses for steel, aluminium and cement under the EU mechanism and the responses of affected exporters.",
-            "open_access_url": "https://repository.example.org/janssens-cbam.pdf"
+            "open_access_url": "https://repository.example.org/janssens-cbam.pdf",
+            "open_access": true,
+            "citation_count": 95
           }
         },
         {
@@ -106,7 +114,9 @@
               "openalex_id": "W4105"
             },
             "url": "https://openalex.org/W4105",
-            "snippet": "Documents how retaliatory tariffs targeted politically salient agricultural exports during the 2018-2019 escalation."
+            "snippet": "Documents how retaliatory tariffs targeted politically salient agricultural exports during the 2018-2019 escalation.",
+            "open_access": false,
+            "citation_count": 320
           }
         },
         {
@@ -180,7 +190,8 @@
               "semantic_scholar_id": "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678"
             },
             "url": "https://www.semanticscholar.org/paper/a1b2c3d4e5f60718293a4b5c6d7e8f9012345678",
-            "snippet": "Across 41 trade disputes, border carbon adjustments raised the probability that partners exporting carbon-intensive goods imposed retaliatory tariffs within two years."
+            "snippet": "Across 41 trade disputes, border carbon adjustments raised the probability that partners exporting carbon-intensive goods imposed retaliatory tariffs within two years.",
+            "citation_count": 34
           }
         },
         {
@@ -199,7 +210,8 @@
               "doi": "10.5555/epr.2023.0915",
               "semantic_scholar_id": "b2c3d4e5f60718293a4b5c6d7e8f901234567890"
             },
-            "url": "https://www.semanticscholar.org/paper/b2c3d4e5f60718293a4b5c6d7e8f901234567890"
+            "url": "https://www.semanticscholar.org/paper/b2c3d4e5f60718293a4b5c6d7e8f901234567890",
+            "citation_count": 95
           }
         },
         {
@@ -218,7 +230,8 @@
               "semantic_scholar_id": "c3d4e5f60718293a4b5c6d7e8f90123456789012"
             },
             "url": "https://www.semanticscholar.org/paper/c3d4e5f60718293a4b5c6d7e8f90123456789012",
-            "snippet": "Models when a border adjustment sustains a climate club and when it triggers a tariff war with non-members."
+            "snippet": "Models when a border adjustment sustains a climate club and when it triggers a tariff war with non-members.",
+            "citation_count": 410
           }
         },
         {
@@ -320,7 +333,9 @@
               "openalex_id": "W5101"
             },
             "url": "https://openalex.org/W5101",
-            "snippet": "Synthesizes 120 studies of universal design for learning in university courses."
+            "snippet": "Synthesizes 120 studies of universal design for learning in university courses.",
+            "open_access": false,
+            "citation_count": 960
           }
         },
         {
@@ -341,7 +356,9 @@
             },
             "url": "https://openalex.org/W5102",
             "snippet": "Recipients of a 12-year unconditional transfer did not reduce hours worked and shifted from wage labour to self-employment.",
-            "open_access_url": "https://repository.example.edu/kamau-ubi-kenya.pdf"
+            "open_access_url": "https://repository.example.edu/kamau-ubi-kenya.pdf",
+            "open_access": true,
+            "citation_count": 140
           }
         },
         {
@@ -360,7 +377,9 @@
               "openalex_id": "W5103"
             },
             "url": "https://openalex.org/W5103",
-            "snippet": "Decomposes the fall in prime-age male participation into disability, education and regional factors."
+            "snippet": "Decomposes the fall in prime-age male participation into disability, education and regional factors.",
+            "open_access": false,
+            "citation_count": 275
           }
         },
         {
@@ -381,7 +400,9 @@
             },
             "url": "https://openalex.org/W5104",
             "snippet": "Pooled estimates show no significant reduction in labour force participation from unconditional cash transfers.",
-            "open_access_url": "https://repository.example.org/lindgren-cash-work.pdf"
+            "open_access_url": "https://repository.example.org/lindgren-cash-work.pdf",
+            "open_access": true,
+            "citation_count": 88
           }
         },
         {
@@ -400,7 +421,9 @@
               "openalex_id": "W5105"
             },
             "url": "https://openalex.org/W5105",
-            "snippet": "Argues that an unconditional basic income secures freedom as non-domination by giving workers the power to refuse exploitative work."
+            "snippet": "Argues that an unconditional basic income secures freedom as non-domination by giving workers the power to refuse exploitative work.",
+            "open_access": false,
+            "citation_count": 190
           }
         },
         {
@@ -457,7 +480,8 @@
               "semantic_scholar_id": "d4e5f60718293a4b5c6d7e8f9012345678901234"
             },
             "url": "https://www.semanticscholar.org/paper/d4e5f60718293a4b5c6d7e8f9012345678901234",
-            "open_access_url": "https://repository.example.edu/holt-alaska-dividend.pdf"
+            "open_access_url": "https://repository.example.edu/holt-alaska-dividend.pdf",
+            "citation_count": 520
           }
         },
         {
@@ -476,7 +500,8 @@
               "semantic_scholar_id": "e5f60718293a4b5c6d7e8f901234567890123456"
             },
             "url": "https://www.semanticscholar.org/paper/e5f60718293a4b5c6d7e8f901234567890123456",
-            "snippet": "Across eleven city pilots, full-time employment rose slightly more among recipients than in control groups."
+            "snippet": "Across eleven city pilots, full-time employment rose slightly more among recipients than in control groups.",
+            "citation_count": 12
           }
         },
         {
@@ -495,7 +520,8 @@
               "semantic_scholar_id": "f60718293a4b5c6d7e8f90123456789012345678"
             },
             "url": "https://www.semanticscholar.org/paper/f60718293a4b5c6d7e8f90123456789012345678",
-            "snippet": "Pension reform raised participation among workers aged 60 to 64."
+            "snippet": "Pension reform raised participation among workers aged 60 to 64.",
+            "citation_count": 150
           }
         },
         {
@@ -597,7 +623,9 @@
               "openalex_id": "W6101"
             },
             "url": "https://openalex.org/W6101",
-            "snippet": "Uses nuclear magnetic resonance to track electrolyte decomposition in lithium cells."
+            "snippet": "Uses nuclear magnetic resonance to track electrolyte decomposition in lithium cells.",
+            "open_access": false,
+            "citation_count": 430
           }
         },
         {
@@ -617,7 +645,9 @@
               "openalex_id": "W6102"
             },
             "url": "https://openalex.org/W6102",
-            "snippet": "Survey data from 24 countries show support for nuclear power fell and partly recovered by 2015."
+            "snippet": "Survey data from 24 countries show support for nuclear power fell and partly recovered by 2015.",
+            "open_access": false,
+            "citation_count": 1200
           }
         },
         {
@@ -638,7 +668,9 @@
             },
             "url": "https://openalex.org/W6103",
             "snippet": "Firm nuclear capacity cut loss-of-load hours by two-thirds in modelled grids with 70 percent wind and solar.",
-            "open_access_url": "https://repository.example.edu/okafor-nuclear-reliability.pdf"
+            "open_access_url": "https://repository.example.edu/okafor-nuclear-reliability.pdf",
+            "open_access": true,
+            "citation_count": 61
           }
         },
         {
@@ -657,7 +689,9 @@
               "openalex_id": "W6104"
             },
             "url": "https://openalex.org/W6104",
-            "snippet": "Attributes the outage to gas supply failures and unweatherized plants of every fuel type."
+            "snippet": "Attributes the outage to gas supply failures and unweatherized plants of every fuel type.",
+            "open_access": false,
+            "citation_count": 180
           }
         },
         {
@@ -676,7 +710,9 @@
               "openalex_id": "W6105"
             },
             "url": "https://openalex.org/W6105",
-            "snippet": "Historical megaproject overruns suggest first small modular reactors will cost twice their estimates and arrive years late."
+            "snippet": "Historical megaproject overruns suggest first small modular reactors will cost twice their estimates and arrive years late.",
+            "open_access": false,
+            "citation_count": 23
           }
         },
         {
@@ -731,7 +767,8 @@
               "doi": "10.5555/psa.2024.0618",
               "semantic_scholar_id": "0718293a4b5c6d7e8f9012345678901234567890"
             },
-            "url": "https://www.semanticscholar.org/paper/0718293a4b5c6d7e8f9012345678901234567890"
+            "url": "https://www.semanticscholar.org/paper/0718293a4b5c6d7e8f9012345678901234567890",
+            "citation_count": 61
           }
         },
         {
@@ -750,7 +787,8 @@
               "semantic_scholar_id": "18293a4b5c6d7e8f901234567890123456789012"
             },
             "url": "https://www.semanticscholar.org/paper/18293a4b5c6d7e8f901234567890123456789012",
-            "snippet": "Grids with firm low-carbon power such as nuclear reach deep decarbonization at 10 to 62 percent lower cost."
+            "snippet": "Grids with firm low-carbon power such as nuclear reach deep decarbonization at 10 to 62 percent lower cost.",
+            "citation_count": 740
           }
         },
         {

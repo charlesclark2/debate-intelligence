@@ -12,7 +12,8 @@ Each feature, and when it is unknown:
   when the result is undated.
 * `source_type`: the configured value of its category. Always known.
 * `peer_reviewed`: always unknown, because no provider reports it yet.
-* `open_access`: 1 when a provider names an open copy. Unknown when none did.
+* `open_access`: 1 when a provider names an open copy or says one exists, 0 when the provider
+  trusted for it says none does and nobody named one. Unknown when no provider said.
 * `citations`: the log-scaled count, for scholarship only. Unknown for anything else, or with no
   count.
 * `provider_agreement`: the share of the other answering providers that also found it. Unknown when
@@ -221,16 +222,29 @@ def peer_reviewed(candidate: MergedCandidate) -> float | None:
 
 
 def open_access(candidate: MergedCandidate) -> float | None:
-    """1 when a provider names an open copy of the result; unknown otherwise.
+    """Whether a debater can read the result free: 1, 0, or unknown.
 
-    A provider that names none has not said the result is closed, so its absence is not 0.
+    An open copy that some provider named is 1 even when the provider trusted for the open-access
+    flag says there is none: the copy is there to be read. Otherwise the flag decides (OpenAlex,
+    then Semantic Scholar, by deduplication's precedence), and with no flag nobody said, which is
+    not 0.
     """
-    return 1.0 if candidate.open_access_url is not None else None
+    if candidate.open_access_url is not None or candidate.open_access is True:
+        return 1.0
+    if candidate.open_access is False:
+        return 0.0
+    return None
 
 
 def citations(candidate: MergedCandidate, *, saturation: int) -> float | None:
-    """Unknown until the providers' citation counts are merged (v1-e07-t02)."""
-    return None
+    """`log(1 + count) / log(1 + saturation)`, at most 1, for scholarship; unknown otherwise.
+
+    Only scholarship: a citation count measures how much other papers rely on a paper, and a news
+    story, a government report or a think-tank brief that no index counts is not thereby uncited.
+    """
+    if candidate.source_type is not SourceType.SCHOLARLY or candidate.citation_count is None:
+        return None
+    return min(math.log1p(candidate.citation_count) / math.log1p(saturation), 1.0)
 
 
 def provider_agreement(candidate: MergedCandidate, *, answered: int) -> float | None:

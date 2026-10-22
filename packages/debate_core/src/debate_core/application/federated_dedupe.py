@@ -69,7 +69,8 @@ one title is one of the normalizations above, so the rule is equality after them
 trusted for it. A field takes the value of the first member, in that order, that has one; members
 from a provider outside the table come after every provider in it; between two members from one
 provider the earlier wins. Empty values (`None`, no authors, a blank snippet, source type `other`)
-give way to the next member. `canonical_url` is not in the table: it is the canonical form of the
+give way to the next member; `False` for open access and a citation count of 0 are values, not
+empty. `canonical_url` is not in the table: it is the canonical form of the
 merged `url`, from the same provider.
 
 Every field with a value names the provider it came from in `field_sources`, and the model refuses
@@ -156,6 +157,8 @@ MERGED_FIELDS: Final = (
     "published_at",
     "snippet",
     "open_access_url",
+    "open_access",
+    "citation_count",
 )
 """Every field a :class:`MergedCandidate` takes from its members, as `field_sources` names them."""
 
@@ -205,6 +208,12 @@ class MergedCandidate(DomainModel):
         default=None, description="Abstract or snippet: discovery context only, never quoted on a card."
     )
     open_access_url: HttpUrlStr | None = Field(default=None, description="Open-access copy, if any.")
+    open_access: bool | None = Field(
+        default=None, description="Whether a free-to-read copy exists, by the provider trusted for it."
+    )
+    citation_count: int | None = Field(
+        default=None, ge=0, description="Citations, by the count of the provider trusted for it."
+    )
     providers: tuple[NonEmptyText, ...] = Field(
         description="Every provider that returned this source, each once, in the order of `members`."
     )
@@ -291,6 +300,10 @@ FIELD_PRECEDENCE: Final[Mapping[str, tuple[str, ...]]] = MappingProxyType(
         # Crossref has an abstract only when the publisher deposited one.
         "snippet": _INDEXES_FIRST,
         "open_access_url": _INDEXES_FIRST,
+        # Citation counts and open-access status are the indexes' own measurements: OpenAlex, then
+        # Semantic Scholar (v1-e08-t02 PM ruling 4, added by v1-e08-t03).
+        "open_access": _INDEXES_FIRST,
+        "citation_count": _INDEXES_FIRST,
         "identifiers.pmid": _INDEXES_FIRST,
         # Each index first for its own id; Semantic Scholar is the one that lists arXiv ids.
         "identifiers.openalex_id": _INDEXES_FIRST,
@@ -354,6 +367,8 @@ def merge_group(members: Sequence[CandidateResult], matched_on: Sequence[MatchRu
     published_at_from = chosen("published_at")
     snippet_from = chosen("snippet")
     open_access_from = chosen("open_access_url")
+    open_access_status_from = chosen("open_access")
+    citation_count_from = chosen("citation_count")
     return MergedCandidate(
         title=title_from.title,
         url=url_from.url,
@@ -373,6 +388,8 @@ def merge_group(members: Sequence[CandidateResult], matched_on: Sequence[MatchRu
         published_at=published_at_from.published_at if published_at_from else None,
         snippet=snippet_from.snippet if snippet_from else None,
         open_access_url=open_access_from.open_access_url if open_access_from else None,
+        open_access=open_access_status_from.open_access if open_access_status_from else None,
+        citation_count=citation_count_from.citation_count if citation_count_from else None,
         providers=tuple(dict.fromkeys(member.provider for member in members)),
         members=tuple(members),
         matched_on=tuple(rule for rule in MatchRule if rule in matched_on),

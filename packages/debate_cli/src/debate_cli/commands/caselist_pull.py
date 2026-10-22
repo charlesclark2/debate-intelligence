@@ -55,6 +55,14 @@ stage's row says the same in a sentence. A failed parse stage records the code o
 (`PARSE_FAILURE_RATE_EXCEEDED`, `STORE_UNAVAILABLE`, …) and, by the rule above, leaves the exit code
 alone; `caselist parse --caselist <slug> --publish` is what finishes it.
 
+When what failed is only the publish, the rebuild is done: the stage's reason says the parsed store
+had objects the bucket did not confirm, and the summary has no `suppression_list_local_copy_only`,
+so the aggregates were rebuilt from every copy of the list. Then
+`caselist parse --caselist <slug> --publish-only` finishes it without rebuilding (`v1-e31-t30`). A
+stage left `pending` for want of a login may have rebuilt from this machine's copy of the list
+alone, which is never published, so it takes `--publish`. `--publish-pending` is neither: it
+completes the snapshot publishes an earlier run deferred, never a parsed store's.
+
 When a download, an import or a publish failed, the exit code comes from **what they failed on**
 (`v1-e34-t13`). Each failed stage records the error code of every failure behind it, and
 :func:`~debate_cli.exit_codes.exit_code_for_failure_codes` reads those of the stages that had to
@@ -152,7 +160,10 @@ def pull(
         bool,
         typer.Option(
             "--publish-pending",
-            help="Only complete the publishes an earlier run deferred, and exit.",
+            help=(
+                "Only complete the snapshot publishes an earlier run deferred, and exit. The parsed "
+                "store is `caselist parse`'s to publish."
+            ),
         ),
     ] = False,
     full_archive: Annotated[

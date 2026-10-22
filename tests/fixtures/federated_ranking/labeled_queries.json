@@ -1,8 +1,8 @@
 {
   "description": "Coach-labelled relevance set for the federated ranking (v1-e08-t03 ac4). Synthetic: every record is hand-written, with invented titles, authors and outlets on example domains. Records are in raw provider order: providers in the production fan-out order (openalex, crossref, semantic_scholar, rss), each provider's records in the order that provider would return them. Records of one source share an item. Labels are the coach's, from labelling_sheet.md.",
   "now": "2026-10-22T12:00:00Z",
-  "labelled_by": null,
-  "labelled_on": null,
+  "labelled_by": "Charlie, coach",
+  "labelled_on": "2026-10-22",
   "queries": [
     {
       "id": "policy-carbon-border-adjustment",
@@ -310,7 +310,15 @@
           }
         }
       ],
-      "relevant": null
+      "relevant": [
+        "P01",
+        "P02",
+        "P03",
+        "P06",
+        "P08",
+        "P12",
+        "P14"
+      ]
     },
     {
       "id": "ld-universal-basic-income",
@@ -600,7 +608,15 @@
           }
         }
       ],
-      "relevant": null
+      "relevant": [
+        "L01",
+        "L03",
+        "L04",
+        "L09",
+        "L10",
+        "L11",
+        "L12"
+      ]
     },
     {
       "id": "pf-nuclear-power-grid",
@@ -867,7 +883,11 @@
           }
         }
       ],
-      "relevant": null
+      "relevant": [
+        "F02",
+        "F04",
+        "F06"
+      ]
     }
   ]
 }

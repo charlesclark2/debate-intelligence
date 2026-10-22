@@ -284,9 +284,68 @@ No operator commands remain for this task beyond the review, PR and finish steps
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-22
 
 **Notes:**
+
+Accepted, on two spec corrections closed in this session before the pull request, plus one
+optional step if the coach gives his feed review now. Then open the pull request with no
+`--partial`. If anything comes out differently from what is written here, stop and ask for another
+review.
+
+**What the PM checked.** The branch is clean, 10 commits on origin/dev at `9e89869`. The one dev
+commit since then, #392, is a docs refresh, so no sync is needed. The diff is the 38 files listed.
+Every fixture URL is on an example domain or is Google's own host, in the form the provider
+decodes, and no fixture carries a real headline. `feed_check` prints counts and URLs, no titles.
+The spec amendments match the rulings, except for the two points below.
+
+**Spec corrections (conditions):**
+
+1. **The forbidden entry's comment names the wrong ruling.** The entry defines "resolvable" for
+   Google News links, but its comment cites "feedparser falls back to a loose parser on a hostile
+   feed". "The same comment" meant the same form of comment, not the same text. Change it to
+   `# PM ruling 2026-10-22 (v1-e07-t05: a Google News link counts as resolvable only offline).`
+   Also check that the `constraints.packages` comment on the pyproject and lock lines names the
+   defusedxml ruling, which it does, and leave it.
+2. **Name the two outside edits in `constraints.packages`.**
+   * Add `packages/debate_core/tests/application/test_settings.py` under the provider-name ruling's
+     comment.
+   * Add `tests/architecture/test_import_contracts.py` with
+     `# PM ruling 2026-10-22: each new import contract needs its failing probe.`
+
+   Both edits were forced by ruled changes, and the PM accepts them. The spec should still list
+   every path the diff touches. Re-run `scripts/validate_specs.py` afterwards.
+
+**Optional, only if the coach gives it in this session: his review of the starter feeds.** If he
+approves a feed list, set its `review:` to approved, with his name and date, and record it in the
+report. If he gives no review, every list stays `awaiting_coach_review`, which does not block the
+merge.
+
+**Rulings on the report's open points:**
+
+* **Roll Call.** No code change now. The coach decides at his review: replace it with another
+  politics feed (the simpler route), or keep it for searches with no date window. A per-feed
+  `timezone:` key, where the zone is declared and never guessed, is acceptable in principle. The PM
+  files it as a p3 only if the coach wants to keep Roll Call dated.
+* **Google News dropping most current items** is the ruled behaviour, and it is off in both topics.
+  The PM files the title-match follow-up (p3) in the next batch, as already planned.
+* **CLI composition** (`feed_factory`, `google_news_factory`, `FileFeedCache` on
+  `<storage.data_dir>/feeds/`, debate-cli requiring `debate-core[http,feeds]`) goes into the PM's
+  v1-e08-t05 amendment, alongside the OpenAlex factory. **Topic wiring** goes into v1-e08-t07's
+  presets amendment.
+* **v1-e08-t03's precedence rows.** Whichever merges second gives `google_news` its place after
+  `rss` in the `open_access` and `citation_count` rows. The table test enforces it.
+* **The survived mutant** (`forbid_external=False`) is accepted as unobservable while
+  `forbid_entities` refuses first. The probe table is good evidence. Keep the setting.
+
+**Noted, no action.**
+
+* The session's one live fetch of Roll Call's feed (date elements only, nothing kept) was a
+  reasonable diagnostic. Next time, give the operator the one-line command instead, so that every
+  live call in a task runs on the operator's side.
+* The `-k feed` node criterion selects the whole module, as t03's `-k feature` did. It is the
+  spec's wording, recorded as run.
+* The pyproject edit makes the whole selection the PR's `ci`, under agreement 10.

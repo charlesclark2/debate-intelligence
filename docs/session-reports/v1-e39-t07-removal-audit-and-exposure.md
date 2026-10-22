@@ -237,14 +237,17 @@ head after the sync.
 
 **3. The deployed exposure checks, dev** (expected runtime ~1 min; reads only). In Chrome, sign in
 to `https://tub.dev.wfbdebate.com/` with your dev account. Open DevTools, then Application, then
-Cookies, and copy the value of `__Host-tub_session`; the first `read` asks for it and does not echo
-it. It is your own dev session; the block clears it at the end.
+Cookies, and copy the value of `__Host-tub_session`; the block reads it from the clipboard with
+`pbpaste`, never prints it, and empties the clipboard straight after. It is your own dev session.
+(The first version used `read`, which, pasted as part of a block, takes the block's next line as
+its input; corrected 2026-10-22.)
 
 Where: the task worktree
 ```bash
 cd /Users/charlesclark/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e39-t07-removal-audit-and-exposure
-read -rs 'TUB_SESSION?Paste the dev session cookie: '
-echo
+TUB_SESSION=$(pbpaste)
+pbcopy < /dev/null
+echo "cookie length: ${#TUB_SESSION}"
 for P in / '/search?q=reserve' /account /signed-out /healthz; do
   curl -sS -o /dev/null -H "Cookie: __Host-tub_session=${TUB_SESSION}" \
     -w "%{http_code} ${P} cache-control=%header{cache-control} x-cache=%header{x-cache}\n" "https://tub.dev.wfbdebate.com${P}"

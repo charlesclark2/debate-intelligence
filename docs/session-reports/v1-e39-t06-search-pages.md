@@ -43,7 +43,7 @@ Chromium tests on a runner with no Chromium.
 | ac1 — Playwright against the app served locally with a synthetic index: search, filter, page, open a card and copy it at 1366x768 and 390x844; axe no serious or critical | PASS | `uv run pytest -m slow packages/debate_api/tests/browser -n 0 -v` → `12 passed in 7.55s`. `test_search_filter_page_open_and_copy_a_card_by_keyboard` runs at **1366x768, 1280x800 and 390x844** (phone: mobile, touch, scale 3), all by keyboard. It tabs to the box and searches, gets 20 results, tabs to *Next results* and gets 5, then filters to Public Forum by typing into the select and gets the one PF card. It searches again, opens a card, and presses *Copy card*: the clipboard holds `text/html` and `text/plain`, equal to the copy route's. On every page there is no CSP violation, no horizontal scroll, and axe-core 4.12.1 finds no serious or critical violation |
 | ac2 — copied HTML pasted into a fixture editable region keeps every formatting span, compared as coverage, with the provenance line below the cite | PASS | Chromium, `test_a_pasted_copy_keeps_every_formatting_span_with_the_provenance_line_below_the_cite`: a keyboard paste into an editable region that reads the clipboard's `text/html` in its paste event, as Google Docs does. Read back, the paragraphs are the tag, the cite, then `[Disclosed: hsld26 2026-09-15 — Maple Grove QX, Neg vs. Invented Invitational Round 4]`, then the card. The card's span coverage gives the stored spans' `formatting_sha256` exactly: ten emphasis spans, two highlight colours (one across the line break) and three sizes. `test_the_browsers_own_paste_keeps_how_every_character_of_the_copy_looks`: Chrome's own paste looks the same, character by character, by computed style (Decision 6). In Python, `test_copy_card.py` → the same `formatting_sha256` equality, a negative control that differs, and the table pinned by hand |
 | ac3 — no page requests another origin or carries inline script, by a test over every response and its CSP; the page-weight budget holds | PASS | Chromium, `test_no_page_requests_another_origin_or_runs_inline_script_under_the_edges_csp`. Every response carries the CSP `distribution.tf` writes, read from the file. Every request is to the pilot's origin, over 8 pages and a copy, with no other origin recorded. There are no inline scripts and no CSP violations, and the only script is `app.js`. `test_an_inline_script_would_be_refused_by_the_edges_csp` shows that CSP refusing one. HTTP level (`test_search_pages.py`, 12 pages including account and coach): no `style`, `on*=` or `javascript:` in any tag; every `src`, `href`, `action` and `data-tub-copy` is a path or `#main`; each page under 150 KB with `app.js` and `app.css` counted and the card body left out |
-| ac4 — on dev, the operator's Chromebook check: search, open a card, copy into Google Docs, formatting kept; yes or no each | NOT RUN | It needs the docx-6 store, which this Mac does not have yet: `ls ~/.debate-research/dev/parsed/*` lists only `2026.10.18-docx-5` (read 2026-10-20). Operator follow-up 1 is the whole sequence, in order |
+| ac4 — on dev, in desktop Chrome with the window at 1366x768 (DevTools device toolbar): search, open a card, Copy card into Google Docs, formatting kept; yes or no each (amended, PM ruling 2026-10-21) | NOT RUN | It needs the docx-6 store, which this Mac does not have yet: `ls ~/.debate-research/dev/parsed/*` lists only `2026.10.18-docx-5` (read 2026-10-20). Operator follow-up 1 is the whole sequence, in order |
 | ac5 — a card over 3,000 words shows its read-aloud text first and the rest on request; its result's snippet stays within the page-weight budget | PASS | HTTP: the 3,200-word card's body is *Read aloud* and `Zephyr read aloud stretch`, then `<details class="card-whole">` holding the whole card; a 3,000-word-or-shorter card is shown whole; the results page for a word only that card holds has a snippet of 24 words or fewer, under 150 KB. Chromium, at all three sizes: the read-aloud text is visible and the whole card hidden; Tab to *Show the whole card* and Enter opens it |
 
 ### Shown failing first, and the mutants
@@ -237,14 +237,20 @@ Mutants, 22, each run against its covering tests with `-x`, then restored from t
 
 ## Operator follow-ups
 
-**1. ac4: the Chromebook check on dev, in order.** It needs the docx-6 store, so step 2 checks it
-first. About 30 minutes in all: the build about 4, the publish about 2, the deploy about 3, the
-Chromebook about 10. Every block runs in one terminal, so the variables carry on. Never paste back a
+**1. ac4: the check on dev in desktop Chrome at 1366x768, in order.** There is no Chromebook until
+Saturday, so ac4 runs in Chrome on the operator's Mac (PM ruling 2026-10-21); the Chromebook check
+is `v1-e39-t10`'s. It needs the docx-6 store, so steps 1 and 2 both check it first. About 30 minutes
+in all: the build about 4, the publish about 2, the deploy about 3, Chrome about 10. Every block runs in one terminal, so the variables carry on. Never paste back a
 password or a code. Paste back the outputs and the yes or no for each question in step 7.
 
 Step 1, v1-e39-t02's operator follow-up 2, the dev listing grant, skipped if it is already applied.
 Where: the dev-preview worktree. About 3 minutes. If you use it for the site preview, run
-`pnpm install` after the pull as usual.
+`pnpm install` after the pull as usual. First, the store: if this does not list
+`2026.10.20-docx-6` four times, stop, and run nothing below until the re-parse has.
+```bash
+ls ~/.debate-research/dev/parsed/hsld26 ~/.debate-research/dev/parsed/hspf26 ~/.debate-research/dev/parsed/hspolicy26 ~/.debate-research/dev/parsed/openev
+```
+Then the grant:
 ```bash
 cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/dev-preview
 git pull --ff-only
@@ -312,19 +318,21 @@ STUDENT='chromebook.check'
 uv run debate-research tub users add "$STUDENT" --role student --env dev
 ```
 Success looks like: `Created chromebook.check (student).` and a temporary password. Write the
-password down for the Chromebook and do not paste it back; paste back only the first line.
+password down for the sign-in in step 7 and do not paste it back; paste back only the first line.
 
-Step 7, on a Chromebook, in Chrome. About 10 minutes. Use a network whose web filter lets the dev
-hostnames through: school IT allows the prod hostnames only.
+Step 7, in desktop Chrome on your Mac. About 10 minutes.
 
-1. Open `https://tub.dev.wfbdebate.com/` and sign in as `chromebook.check` with the temporary
-   password. Choose a new password and set up an authenticator app on your phone.
+1. Open `https://tub.dev.wfbdebate.com/` in a new Chrome window. Open DevTools (Cmd+Option+I), turn
+   on the device toolbar (Cmd+Shift+M), choose *Dimensions: Responsive*, and set it to `1366` by
+   `768`. Leave the device type desktop, with no touch. Then sign in as `chromebook.check` with the
+   temporary password. Choose a new password and set up an authenticator app on your phone.
 2. Search for a word such as `economy` and press Enter. The first search fetches the index, so
    expect a few seconds. **Yes or no: results appear**, each with a tag, short cite, snippet, counts
    and a provenance line. Roughly how long did the first search take?
 3. Open a card. **Yes or no: the card opens**, labelled "Disclosed evidence, not platform-verified",
    its text underlined and highlighted as in the file.
-4. Press *Copy card*, then paste with Ctrl+V into a new Google Doc. **Yes or no: it pasted** as the
+4. Click on the page once (so it, not DevTools, has the focus), press *Copy card*, then paste with
+   Cmd+V into a new Google Doc in another tab. **Yes or no: it pasted** as the
    tag, the cite, the provenance line below the cite, then the card.
 5. **Yes or no: the formatting was kept**: underlining, the highlight colours, bold, and the small
    shrunk text.
@@ -352,6 +360,9 @@ Success looks like: `Removed chromebook.check. Any open session ends within five
    packages; `v1-e39-t07` or `v1-e39-t10`.
 5. **No "previous page" link.** A cursor runs forward only (`v1-e39-t03`), so results offer *First
    page* and *Next results*, and the browser's Back for the rest.
+6. **A real Chromebook check is `v1-e39-t10`'s** (PM ruling 2026-10-21): sign-in, search, a card,
+   and Copy card into Google Docs, on a Chromebook. ac4 here ran in desktop Chrome at 1366x768;
+   the PM adds the Chromebook check to that task's spec.
 
 ## PM questions
 
@@ -411,7 +422,12 @@ PM questions from v1-e39-t06-search-pages (session of 2026-10-20)
 * What this cannot show here: the step runs on the runner only after the merge, in the first
   validate-dev run.
 
-**Condition 2, ac4: waiting for the re-parse.** On 2026-10-21, before the session went on,
+**Condition 2, ac4: waiting for the re-parse, and now in desktop Chrome.** The PM's ruling of
+2026-10-21 moves ac4 to Chrome on the operator's Mac at 1366x768 (no Chromebook until Saturday). The
+spec's ac4 is amended, with the ruling as a comment; step 7 of Operator follow-up 1 is rewritten for
+Chrome on a Mac (the device toolbar at 1366x768, Cmd+V), with the same four questions and the
+first-search time; step 1 now checks the docx-6 store before anything else. Follow-up work 6 records
+the Chromebook check as `v1-e39-t10`'s. On 2026-10-21, before the session went on,
 `ls ~/.debate-research/dev/parsed/*` still listed only `2026.10.18-docx-5` for all four stores. The
 operator runs Operator follow-up 1 once the re-parse has written `2026.10.20-docx-6`, and the
 results go here.

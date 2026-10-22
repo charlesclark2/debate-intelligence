@@ -84,10 +84,11 @@ spec:
       description: >-
         No page requests another origin or carries inline script, by a test over every
         response and its CSP; the page-weight budget holds, by test.
+    # PM ruling 2026-10-21: no Chromebook available; the Chromebook check moves to v1-e39-t10.
     - id: ac4
       description: >-
-        On dev, the operator's Chromebook check: search, open a card, copy it into Google
-        Docs, formatting kept; reported yes or no for each (operator follow-up).
+        On dev, in desktop Chrome with the window at 1366x768 (DevTools device toolbar): search,
+        open a card, Copy card into Google Docs, formatting kept; yes or no each.
     - id: ac5
       description: >-
         (PM amendment 2026-10-20) A card over 3,000 words shows its read-aloud text first

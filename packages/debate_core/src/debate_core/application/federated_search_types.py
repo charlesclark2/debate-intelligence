@@ -5,7 +5,8 @@ A federated search (E08) is four stages run in a fixed order over one value, :cl
 1. **expand** — turn the request into the queries to ask (argument and need templates, v1-e08-t04);
 2. **fan_out** — ask every selected provider every query, concurrently, under one deadline, and
    record how each call ended (:mod:`debate_core.application.federated_search`, this task);
-3. **normalize** — collapse what the providers returned into distinct sources (v1-e08-t02);
+3. **normalize** — collapse what the providers returned into distinct sources, `merged_candidates`
+   (:mod:`debate_core.application.federated_dedupe`, v1-e08-t02);
 4. **rank** — order them by explainable features (v1-e08-t03).
 
 Each stage is a :class:`SearchStage`: it takes the state and returns the next one. The stages that
@@ -24,7 +25,7 @@ from __future__ import annotations
 import dataclasses
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import Protocol, Self, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, Self, runtime_checkable
 
 from pydantic import Field, model_validator
 
@@ -39,6 +40,9 @@ from debate_core.domain import (
 )
 from debate_core.domain.base import ORGANIZATION_ID_FIELD, OWNER_ID_FIELD
 from debate_core.domain.discovery import CandidateResult, ProviderHealth, ProviderQuery, ProviderStatus
+
+if TYPE_CHECKING:
+    from debate_core.application.federated_dedupe import MergedCandidate
 
 __all__ = [
     "PassThroughStage",
@@ -98,6 +102,9 @@ class SearchState:
     candidates: tuple[CandidateResult, ...] = ()
     """What the providers that answered returned, in the order of `provider_statuses`."""
 
+    merged_candidates: tuple[MergedCandidate, ...] = ()
+    """`candidates` collapsed into one entry per distinct source, by the normalize stage."""
+
     results: tuple[SearchResult, ...] = ()
     """The ranking, once a rank stage has produced one. Stored with the search."""
 
@@ -116,6 +123,7 @@ class SearchState:
         queries: tuple[ProviderQuery, ...] | None = None,
         provider_statuses: tuple[ProviderStatus, ...] | None = None,
         candidates: tuple[CandidateResult, ...] | None = None,
+        merged_candidates: tuple[MergedCandidate, ...] | None = None,
         results: tuple[SearchResult, ...] | None = None,
     ) -> SearchState:
         """A copy with the given fields replaced; `search_id` and `request` never change."""
@@ -124,6 +132,7 @@ class SearchState:
             queries=self.queries if queries is None else queries,
             provider_statuses=self.provider_statuses if provider_statuses is None else provider_statuses,
             candidates=self.candidates if candidates is None else candidates,
+            merged_candidates=self.merged_candidates if merged_candidates is None else merged_candidates,
             results=self.results if results is None else results,
         )
 

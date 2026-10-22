@@ -27,7 +27,9 @@ spec:
     rebuilt as today.
   priority: 2
   constraints:
-    packages: [debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/runbooks]
+    # PM ruling 2026-10-21 (v1-e34-t29 review): debate_core.integrations and debate_core.testing
+    # added for ParsedStore.read_occurrence_stamps and its two implementations (Deviation 1).
+    packages: [debate_core.application, debate_core.integrations, debate_core.testing, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/runbooks]
     forbidden:
       - Changing the fingerprint or clustering rules
       - A path, school, team code or file name in a record or a log

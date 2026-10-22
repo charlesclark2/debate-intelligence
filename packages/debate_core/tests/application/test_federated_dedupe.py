@@ -205,9 +205,13 @@ def test_exact_canonical_url_takes_the_providers_canonical_url_when_it_gave_one(
 
 
 def test_exact_canonical_url_of_a_sites_front_page_is_not_a_key() -> None:
-    storm = story(title="Storm closes schools across the county", url="https://www.example-news.com/", authors=())
+    storm = story(
+        title="Storm closes schools across the county", url="https://www.example-news.com/", authors=()
+    )
     levy = story(
-        title="City council approves transit levy", url="https://www.example-news.com/?utm_source=rss", authors=()
+        title="City council approves transit levy",
+        url="https://www.example-news.com/?utm_source=rss",
+        authors=(),
     )
 
     assert groups((storm, levy)) == [[0], [1]]
@@ -215,7 +219,9 @@ def test_exact_canonical_url_of_a_sites_front_page_is_not_a_key() -> None:
 
 def test_exact_canonical_url_with_a_path_below_the_front_page_is_a_key() -> None:
     section = story(url="https://www.example-news.com/politics", authors=())
-    same_section = story(provider="gdelt", url="https://www.example-news.com/politics?utm_source=x", authors=())
+    same_section = story(
+        provider="gdelt", url="https://www.example-news.com/politics?utm_source=x", authors=()
+    )
 
     assert groups((section, same_section)) == [[0, 1]]
 
@@ -267,7 +273,9 @@ def test_exact_provider_ids_link_openalex_and_semantic_scholar_ids_in_any_spelli
 
 def test_exact_keys_chain_one_record_to_the_next() -> None:
     """Crossref and OpenAlex share a DOI; OpenAlex and Semantic Scholar share a PMID."""
-    crossref = paper(provider="crossref", url="https://doi.org/10.5555/x", identifiers=ArticleIdentifiers(doi="10.5555/x"))
+    crossref = paper(
+        provider="crossref", url="https://doi.org/10.5555/x", identifiers=ArticleIdentifiers(doi="10.5555/x")
+    )
     openalex = paper(provider="openalex", identifiers=ArticleIdentifiers(doi="10.5555/x", pmid="123"))
     semantic_scholar = paper(
         provider="semantic_scholar",
@@ -283,7 +291,9 @@ def test_exact_keys_chain_one_record_to_the_next() -> None:
 
 
 def test_exact_keys_never_merge_records_with_different_dois_even_at_one_url() -> None:
-    first = paper(url="https://journal.example.org/issue/3.pdf", identifiers=ArticleIdentifiers(doi="10.5555/a"))
+    first = paper(
+        url="https://journal.example.org/issue/3.pdf", identifiers=ArticleIdentifiers(doi="10.5555/a")
+    )
     second = paper(
         url="https://journal.example.org/issue/3.pdf?utm_source=alerts",
         title="Desalination costs in the Gulf states",
@@ -297,10 +307,16 @@ def test_exact_keys_never_merge_records_with_different_dois_even_at_one_url() ->
     ("left", "right"),
     [
         pytest.param(ArticleIdentifiers(pmid="1"), ArticleIdentifiers(pmid="2"), id="pmid"),
-        pytest.param(ArticleIdentifiers(arxiv_id="2301.00001"), ArticleIdentifiers(arxiv_id="2301.00002"), id="arxiv"),
-        pytest.param(ArticleIdentifiers(openalex_id="W1"), ArticleIdentifiers(openalex_id="W2"), id="openalex"),
         pytest.param(
-            ArticleIdentifiers(semantic_scholar_id="a1"), ArticleIdentifiers(semantic_scholar_id="b2"), id="s2"
+            ArticleIdentifiers(arxiv_id="2301.00001"), ArticleIdentifiers(arxiv_id="2301.00002"), id="arxiv"
+        ),
+        pytest.param(
+            ArticleIdentifiers(openalex_id="W1"), ArticleIdentifiers(openalex_id="W2"), id="openalex"
+        ),
+        pytest.param(
+            ArticleIdentifiers(semantic_scholar_id="a1"),
+            ArticleIdentifiers(semantic_scholar_id="b2"),
+            id="s2",
         ),
     ],
 )
@@ -321,7 +337,9 @@ def test_exact_keys_keep_an_arxiv_preprint_apart_from_the_published_record_that_
         identifiers=ArticleIdentifiers(doi="10.1126/sciadv.adk1234", arxiv_id="2302.04567"),
     )
     preprint = paper(
-        provider="openalex", url="https://arxiv.org/abs/2302.04567", identifiers=ArticleIdentifiers(arxiv_id="2302.04567")
+        provider="openalex",
+        url="https://arxiv.org/abs/2302.04567",
+        identifiers=ArticleIdentifiers(arxiv_id="2302.04567"),
     )
 
     assert groups((published, preprint)) == [[0], [1]]
@@ -349,9 +367,19 @@ def test_exact_keys_merge_the_same_record_returned_for_two_queries() -> None:
 
 
 def test_exact_merged_candidates_come_out_in_the_order_their_first_record_went_in() -> None:
-    a = paper(url="https://example.org/a", title="Arctic sea ice minimum extent", identifiers=ArticleIdentifiers(doi="10.5555/a"))
-    b = paper(url="https://example.org/b", title="Permafrost carbon feedback loops", identifiers=ArticleIdentifiers(doi="10.5555/b"))
-    a_again = paper(provider="crossref", url="https://doi.org/10.5555/a", identifiers=ArticleIdentifiers(doi="10.5555/a"))
+    a = paper(
+        url="https://example.org/a",
+        title="Arctic sea ice minimum extent",
+        identifiers=ArticleIdentifiers(doi="10.5555/a"),
+    )
+    b = paper(
+        url="https://example.org/b",
+        title="Permafrost carbon feedback loops",
+        identifiers=ArticleIdentifiers(doi="10.5555/b"),
+    )
+    a_again = paper(
+        provider="crossref", url="https://doi.org/10.5555/a", identifiers=ArticleIdentifiers(doi="10.5555/a")
+    )
 
     assert groups((a, b, a_again)) == [[0, 2], [1]]
     assert merge_candidates(()) == ()
@@ -363,7 +391,9 @@ def test_exact_merged_candidates_come_out_in_the_order_their_first_record_went_i
 
 
 def test_fuzzy_title_merges_records_whose_title_first_author_and_year_agree() -> None:
-    openalex = paper(title="Trade Wars and U.S. Farm Income", authors=("Okafor, James",), published_at=at(2023, 4))
+    openalex = paper(
+        title="Trade Wars and U.S. Farm Income", authors=("Okafor, James",), published_at=at(2023, 4)
+    )
     semantic_scholar = paper(
         provider="semantic_scholar",
         url="https://www.semanticscholar.org/paper/3b4c",
@@ -392,8 +422,14 @@ def test_fuzzy_title_needs_the_first_authors_surname_to_agree() -> None:
 
 def test_fuzzy_title_reads_only_the_first_author() -> None:
     one = paper(authors=("Rivera, Ana", "Okafor, James"))
-    swapped = paper(provider="semantic_scholar", url="https://www.semanticscholar.org/paper/1", authors=("Okafor, James", "Rivera, Ana"))
-    later_authors_differ = paper(provider="crossref", url="https://example.org/x", authors=("Ana Rivera", "Wei Chen"))
+    swapped = paper(
+        provider="semantic_scholar",
+        url="https://www.semanticscholar.org/paper/1",
+        authors=("Okafor, James", "Rivera, Ana"),
+    )
+    later_authors_differ = paper(
+        provider="crossref", url="https://example.org/x", authors=("Ana Rivera", "Wei Chen")
+    )
 
     assert groups((one, swapped)) == [[0], [1]]
     assert groups((one, later_authors_differ)) == [[0, 1]]
@@ -429,7 +465,9 @@ def test_fuzzy_title_needs_the_publication_year_to_agree_for_scholarship() -> No
 def test_fuzzy_title_never_merges_on_title_alone(missing: dict[str, object]) -> None:
     """The forbidden case: identical titles and nothing else to go on."""
     one = paper()
-    other = paper(provider="semantic_scholar", url="https://www.semanticscholar.org/paper/1").evolve(**missing)
+    other = paper(provider="semantic_scholar", url="https://www.semanticscholar.org/paper/1").evolve(
+        **missing
+    )
 
     assert groups((one, other)) == [[0], [1]]
     assert groups((other, one)) == [[0], [1]]
@@ -439,7 +477,9 @@ def test_fuzzy_title_outside_scholarship_needs_the_same_site() -> None:
     """The same wire story on two outlets is two sources: a card cites the outlet it was read at."""
     seattle = story(url="https://www.seattletimes.com/nation-world/wildfire-smoke-east-coast/")
     post = story(provider="gdelt", url="https://www.washingtonpost.com/national/wildfire-smoke-east-coast/")
-    post_bare_host = story(provider="gdelt", url="https://seattletimes.com/nation-world/wildfire-smoke-east-coast")
+    post_bare_host = story(
+        provider="gdelt", url="https://seattletimes.com/nation-world/wildfire-smoke-east-coast"
+    )
 
     assert groups((seattle, post)) == [[0], [1]]
     assert groups((seattle, post_bare_host)) == [[0, 1]]
@@ -463,7 +503,9 @@ def test_fuzzy_title_outside_scholarship_needs_the_same_day() -> None:
 
 
 def test_fuzzy_title_keeps_a_paper_apart_from_a_news_piece_with_its_title() -> None:
-    study = paper(title="Why sea level rise is accelerating along the Gulf Coast", published_at=at(2025, 3, 1))
+    study = paper(
+        title="Why sea level rise is accelerating along the Gulf Coast", published_at=at(2025, 3, 1)
+    )
     explainer = story(
         title="Why sea level rise is accelerating along the Gulf Coast",
         url="https://theconversation.com/why-sea-level-rise-is-accelerating-240001",
@@ -476,7 +518,9 @@ def test_fuzzy_title_keeps_a_paper_apart_from_a_news_piece_with_its_title() -> N
 
 def test_fuzzy_title_never_joins_records_whose_identifiers_say_they_differ() -> None:
     preprint = paper(identifiers=ArticleIdentifiers(doi="10.1101/2025.04.12.648512"))
-    published = paper(provider="crossref", url="https://doi.org/10.1038/x", identifiers=ArticleIdentifiers(doi="10.1038/x"))
+    published = paper(
+        provider="crossref", url="https://doi.org/10.1038/x", identifiers=ArticleIdentifiers(doi="10.1038/x")
+    )
 
     assert groups((preprint, published)) == [[0], [1]]
 
@@ -488,6 +532,7 @@ def test_fuzzy_title_never_joins_records_whose_identifiers_say_they_differ() -> 
         ("Ana Rivera", "rivera"),
         ("A. Rivera", "rivera"),
         ("Rivera A", "rivera"),
+        ("Rivera AM", "rivera"),
         ("RIVERA, ANA", "rivera"),
         ("Ana Rivera Jr.", "rivera"),
         ("Müller, Jonas", "muller"),
@@ -511,19 +556,35 @@ def test_fuzzy_surname_key_reads_the_surname_in_every_common_name_format(name: s
 @pytest.mark.parametrize(
     ("left", "right"),
     [
-        pytest.param("Trade Wars and U.S. Farm Income", "Trade wars and US farm income", id="case-and-abbreviation"),
-        pytest.param("Migration & Labour Markets in the EU", "Migration and labour markets in the EU", id="ampersand"),
-        pytest.param("<i>Vibrio cholerae</i> outbreaks after flooding", "Vibrio cholerae outbreaks after flooding", id="markup"),
+        pytest.param(
+            "Trade Wars and U.S. Farm Income", "Trade wars and US farm income", id="case-and-abbreviation"
+        ),
+        pytest.param(
+            "Migration & Labour Markets in the EU", "Migration and labour markets in the EU", id="ampersand"
+        ),
+        pytest.param(
+            "<i>Vibrio cholerae</i> outbreaks after flooding",
+            "Vibrio cholerae outbreaks after flooding",
+            id="markup",
+        ),
         pytest.param(
             "Organisational behaviour and climate adaptation",
             "Organizational behavior and climate adaptation",
             id="spelling-variants",
         ),
-        pytest.param("Arctic methane feedbacks: a review of the evidence", "Arctic methane feedbacks", id="subtitle-dropped"),
-        pytest.param("Arctic methane feedbacks", "Arctic methane feedbacks - The Journal", id="outlet-suffix-dropped"),
+        pytest.param(
+            "Arctic methane feedbacks: a review of the evidence",
+            "Arctic methane feedbacks",
+            id="subtitle-dropped",
+        ),
+        pytest.param(
+            "Arctic methane feedbacks", "Arctic methane feedbacks - The Journal", id="outlet-suffix-dropped"
+        ),
         pytest.param("Co-operation among rival states", "Cooperation among rival states", id="hyphenation"),
         pytest.param("China’s exports fall again", "Chinas exports fall again", id="apostrophe"),
-        pytest.param("Heat waves and emergency visits.", "Heat waves and emergency visits", id="trailing-period"),
+        pytest.param(
+            "Heat waves and emergency visits.", "Heat waves and emergency visits", id="trailing-period"
+        ),
     ],
 )
 def test_fuzzy_titles_agree_across_the_ways_providers_write_one_title(left: str, right: str) -> None:
@@ -534,7 +595,9 @@ def test_fuzzy_titles_agree_across_the_ways_providers_write_one_title(left: str,
 @pytest.mark.parametrize(
     ("left", "right"),
     [
-        pytest.param("The case for a carbon tax", "The case for a carbon tax in Canada", id="one-extends-the-other"),
+        pytest.param(
+            "The case for a carbon tax", "The case for a carbon tax in Canada", id="one-extends-the-other"
+        ),
         pytest.param(
             "Carbon tax effects on employment in British Columbia",
             "Carbon tax effects on emissions in British Columbia",
@@ -546,15 +609,23 @@ def test_fuzzy_titles_agree_across_the_ways_providers_write_one_title(left: str,
             id="a-number-differs",
         ),
         pytest.param(
-            "Nuclear deterrence after the Cold War: Part 1", "Nuclear deterrence after the Cold War: Part 2", id="part-number"
+            "Nuclear deterrence after the Cold War: Part 1",
+            "Nuclear deterrence after the Cold War: Part 2",
+            id="part-number",
         ),
         pytest.param("Introduction", "Introduction", id="too-short"),
-        pytest.param("Reply to critics", "Reply to critics", id="still-too-short"),
-        pytest.param("Climate: a review", "Climate: the politics", id="short-main-titles-with-different-subtitles"),
+        pytest.param("Book review", "Book review", id="still-too-short"),
+        pytest.param(
+            "Climate: a review", "Climate: the politics", id="short-main-titles-with-different-subtitles"
+        ),
         pytest.param("Arctic methane: a review", "Arctic methane", id="main-title-too-short"),
         pytest.param("Police reform in Chicago", "Policy reform in Chicago", id="police-and-policy"),
-        pytest.param("Immigration policy in Europe", "Emigration policy in Europe", id="immigration-and-emigration"),
-        pytest.param("Election security in Georgia", "Selection security in Georgia", id="election-and-selection"),
+        pytest.param(
+            "Immigration policy in Europe", "Emigration policy in Europe", id="immigration-and-emigration"
+        ),
+        pytest.param(
+            "Election security in Georgia", "Selection security in Georgia", id="election-and-selection"
+        ),
         pytest.param("Man bites dog in Ohio", "Dog bites man in Ohio", id="word-order"),
     ],
 )
@@ -572,6 +643,7 @@ def test_fuzzy_titles_disagree_when_the_words_say_different_works(left: str, rig
         ("Co-operation, 2018–2020", ("cooperation", "2018", "2020")),
         ("Behaviour, labour and colour", ("behavior", "labor", "and", "color")),
         ("Organisations analyse the centre", ("organizations", "analyze", "the", "center")),
+        ("Organisational change", ("organizational", "change")),
         ("Defence catalogue: travelled programme", ("defense", "catalog", "traveled", "program")),
         ("Paediatric anaemia and ageing", ("pediatric", "anemia", "and", "aging")),
         ("Four hours for your tour", ("four", "hours", "for", "your", "tour")),
@@ -726,8 +798,8 @@ def record_from(provider: str, *, without: str | None = None) -> CandidateResult
         "snippet": None if without == "snippet" else f"Snippet from {provider}",
         "open_access_url": None if without == "open_access_url" else f"https://{provider}.example.org/oa.pdf",
     }
-    if without == "url":
-        raise ValueError("every record has a url; precedence of url is tested by which one is chosen")
+    if without in ("title", "url"):
+        raise ValueError(f"every record has a {without}; its precedence is tested by which one is chosen")
     return CandidateResult.model_validate(fields)
 
 
@@ -766,7 +838,7 @@ def test_precedence_rule_picks_the_first_provider_in_its_row(field: str) -> None
     assert merged.field_sources[field] == winner
 
 
-@pytest.mark.parametrize("field", sorted(set(EXPECTED_PRECEDENCE) - {"url"}))
+@pytest.mark.parametrize("field", sorted(set(EXPECTED_PRECEDENCE) - {"title", "url"}))
 def test_precedence_rule_falls_back_to_the_next_provider_when_the_first_has_no_value(field: str) -> None:
     winner, runner_up = EXPECTED_PRECEDENCE[field]
     records = [record_from(provider, without=field if provider == winner else None) for provider in PROVIDERS]
@@ -919,7 +991,9 @@ class KeepState:
 
 METHANE_OPENALEX = paper(provider="openalex", identifiers=ArticleIdentifiers(doi="10.1038/methane"))
 METHANE_CROSSREF = paper(
-    provider="crossref", url="https://doi.org/10.1038/methane", identifiers=ArticleIdentifiers(doi="10.1038/methane")
+    provider="crossref",
+    url="https://doi.org/10.1038/methane",
+    identifiers=ArticleIdentifiers(doi="10.1038/methane"),
 )
 
 

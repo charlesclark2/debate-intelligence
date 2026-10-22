@@ -50,6 +50,7 @@ spec:
       - debate_core.integrations
       # PM ruling 2026-10-22 (v1-e07-t05: Google News gets its own provider name).
       - debate_core.application.settings
+      - packages/debate_core/tests/application/test_settings.py
       # PM ruling 2026-10-22 (v1-e07-t05: a new provider name needs its precedence place).
       - debate_core.application.federated_dedupe
       - packages/debate_core/tests/application/test_federated_dedupe.py
@@ -57,10 +58,11 @@ spec:
       - packages/debate_core/pyproject.toml
       - pyproject.toml
       - uv.lock
+      # PM ruling 2026-10-22: each new import contract needs its failing probe.
+      - tests/architecture/test_import_contracts.py
     forbidden:
       - Using feed-embedded full content (content:encoded) as evidence text
-      # PM ruling 2026-10-22 (v1-e07-t05: feedparser falls back to a loose parser on a hostile feed): "resolvable"
-      # means without any request to Google beyond the RSS search feed itself.
+      # PM ruling 2026-10-22 (v1-e07-t05: a Google News link counts as resolvable only offline).
       - >-
         Returning news.google.com redirect URLs as the candidate URL when the publisher URL is
         resolvable, where resolvable means without any request to Google beyond the RSS search feed

@@ -48,9 +48,11 @@ from debate_api.app import create_app
 from debate_api.configuration import CookieKeys, PilotConfiguration
 from debate_api.cookies import SESSION_COOKIE, CookieSealer, session_payload
 from debate_api.state import PilotServices
+from debate_core.application.errors import StoreUnavailable
 from debate_core.application.ports.search_index import IndexedOccurrence, SearchDocument
 from debate_core.application.ports.tub import AccountSelfService, AccountStanding, CodeRefused, TokenRefused
 from debate_core.application.search_index_holder import SearchIndexHolder
+from debate_core.application.tub.access_audit import AccessAuditService
 from debate_core.application.tub.account_page import AccountPageService
 from debate_core.application.tub.audit import AuditRecord
 from debate_core.application.tub.identity import AuthenticatorSecret, Role
@@ -379,10 +381,15 @@ class FakeSelfService(AccountSelfService):
 
 
 class FakeAuditSink:
+    """The audit log in memory. With `failing` set, every write raises as an unreachable log group would."""
+
     def __init__(self) -> None:
         self.records: list[AuditRecord] = []
+        self.failing = False
 
     def record(self, record: AuditRecord) -> None:
+        if self.failing:
+            raise StoreUnavailable("PutLogEvents", "debate-dev-tub-audit", "synthetic outage")
         self.records.append(record)
 
 
@@ -685,7 +692,9 @@ class PilotWorld:
                 directory=self.index_directory,
                 open_reader=lambda path, index_id: SqliteSearchIndexReader(path, index_id=index_id),
                 clock=self.clock,
+                suppression_list=self.index_source,
             ),
+            access_audit=AccessAuditService(audit=self.audit, clock=self.clock),
             clock=self.clock,
         )
         self.app = create_app(self.services)

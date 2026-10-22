@@ -944,6 +944,120 @@ one. The capture also held `ogs.google.com`, `www.gstatic.com`, `fonts.gstatic.c
 one of them traced back to `ogs.google.com`, the account widget of Chrome's new-tab page, so none is
 the login's, and none goes on the request.
 
+## What the function fetches, and when
+
+ADR-0019 (c) 3 and 5, as `v1-e39-t06` and `v1-e39-t07` built them. The function holds no index in
+its image. It reads four things from its own environment's evidence bucket, with `s3:GetObject` and
+nothing else, and only when a request needs them:
+
+| What | Key | When it is read | What an unchanged read costs |
+|---|---|---|---|
+| The suppression list | `manifests/_suppression/suppression-list.jsonl` | Before the pointer, at most five minutes apart | A conditional GET answered `304`, no body |
+| The pointer | `reports/tub/search/current.json` | Right after the list, in the same pass | A conditional GET answered `304`, no body |
+| The manifest | `reports/tub/search/<index id>/manifest.json` | When the pointer names an index this environment has not loaded | — |
+| The index | `reports/tub/search/<index id>/search-index.sqlite.gz` | Right after its manifest, streamed through `gunzip` and `sha256` into `/tmp/tub-index` | — |
+
+- **Who waits.** Only a request that searches or shows a card: a results page, a card page, a copy
+  and, from `v1-e39-t08`, a download. Sign-in, the callback, `/healthz`, the account page and the
+  empty search page never read anything from the bucket, so a cold environment answers them at once.
+- **Five minutes.** The first such request in a new environment reads the list, then the pointer,
+  then fetches the index. After that, the first such request five minutes or more after the last
+  check reads the list and the pointer again before it is answered. An environment Lambda froze for
+  an hour does the same on its first request after thawing, so it never answers from a list or a
+  pointer older than five minutes. A removal is therefore hidden within five minutes, and a weekly
+  publish is picked up within five minutes, by each environment on its next request.
+- **A new pointer.** The environment fetches the new index to a new file, checks both digests and
+  the size against the manifest, swaps to it and deletes the old file once no request is reading it.
+  That is one cold-start-length wait, once per environment per publish.
+- **What the list does.** Every request that searches or shows a card hides each occurrence the
+  list stops, by its source's sha256 or its disclosure digest. A card whose representative occurrence
+  is stopped answers as not found until the next build chooses another; any other stopped occurrence
+  leaves the card without its provenance line, with its file count recounted (and its team count
+  dropped when the survivors cannot say which teams are left). A path hold is not read by the
+  function: a removal that only holds a path is followed by a rebuild and publish straight away
+  ([removal runbook, the student search pilot](caselist-removal.md#the-student-search-pilot-e39)).
+
+**The list must exist before anyone searches.** The function may not list the bucket, so S3 answers
+its read of a key that does not exist with `AccessDenied`, the same as a failure. The function then
+refuses every search and card page, as it must for a list it cannot read. An environment that has
+had a removal has the list; dev has had one since `RM-2026-90`. Check before the first deploy to an
+environment, and before the pilot opens there:
+
+**Operator command** (expected runtime seconds)
+Where: `$WT`
+```bash
+cd "$WT"
+export AWS_PROFILE=debate-admin
+for env in dev prod; do
+  BUCKET=$(terraform -chdir="infrastructure/envs/$env" output -raw evidence_bucket_name)
+  aws s3api head-object --bucket "$BUCKET" --key manifests/_suppression/suppression-list.jsonl \
+    --query '[ContentLength,ServerSideEncryption]' --output text \
+    || echo "NO LIST in $env: create it below before the pilot opens there"
+done
+unset AWS_PROFILE
+```
+Success looks like a size and `aws:kms` for each environment.
+
+If an environment has no list, create it empty under the takedown profile, which is the one
+credential that may write there, encrypted with the bucket's key as its policy requires. An empty
+list stops nothing and every reader accepts it; the first removal appends to it.
+
+**Operator command** (expected runtime seconds; changes the bucket)
+Where: `$WT`. Set `ENV` to the environment the check named.
+```bash
+cd "$WT"
+ENV=prod
+BUCKET=$(AWS_PROFILE=debate-admin terraform -chdir="infrastructure/envs/$ENV" output -raw evidence_bucket_name)
+KEY_ARN=$(AWS_PROFILE=debate-admin terraform -chdir="infrastructure/envs/$ENV" output -raw evidence_kms_key_arn)
+aws sso login --profile "debate-$ENV-evidence-removal"
+aws s3api put-object --profile "debate-$ENV-evidence-removal" --bucket "$BUCKET" \
+  --key manifests/_suppression/suppression-list.jsonl --body /dev/null \
+  --server-side-encryption aws:kms --ssekms-key-id "$KEY_ARN" --if-none-match '*'
+```
+Success looks like an `ETag` and `"ServerSideEncryption": "aws:kms"`. `--if-none-match '*'` makes
+S3 refuse the write with `PreconditionFailed` if a list appeared in the meantime, so an existing
+list is never replaced.
+
+## What a refusal looks like in the app log
+
+The function logs to `debate-<env>-tub-app` (30 days). It never logs a query, a card id, a card's
+text, a school, a team code, a username or an address (data-use policy, E39 gate item 4); what it
+logs about the index is the index id and the kind of failure. A student sees one page for every
+refusal below, **Search is not available right now** (`503`), or for Copy card the same sentence
+beside the button.
+
+| App log line (`WARNING` unless marked) | What happened | What to do |
+|---|---|---|
+| `search index <id> loaded` (`INFO`) | An environment fetched and checked an index | Nothing |
+| `search index <id> closed and deleted` (`INFO`) | A newer index replaced it, or the environment closed it | Nothing |
+| `the published search index was refused: the pointer is not a search index pointer this build reads` | `current.json` is not a pointer, or names keys outside its own index's directory | Publish again with `tub index publish` |
+| `search index <id> was refused: its format version is not 1, the one this build reads` | The index was built by a build whose format this deploy does not read | Deploy the build that wrote it, or rebuild and publish with this one |
+| `search index <id> was refused: its manifest is not a search index manifest` | The manifest is unreadable or too large | Publish again |
+| `search index <id> was refused: its manifest is not the one the pointer names` | The manifest's sha256 is not the pointer's | Publish again; if it repeats, compare the bucket's objects with the build directory |
+| `search index <id> was refused: its manifest and the pointer name different files` | The manifest and the pointer disagree on the index or its digests | Publish again |
+| `search index <id> was refused: its object is not one whole gzip stream` | The gzip object is cut short, damaged or followed by other bytes | Publish again |
+| `search index <id> was refused: its object is not the one the pointer names` | The gzip object's bytes or size are not the pointer's | Publish again |
+| `search index <id> was refused: its object does not inflate to the file the pointer names` | The SQLite file it inflates to is not the one the pointer names | Publish again |
+| `search index <id> was refused: the reader refuses the file it inflates to` | The file checks out but is not a search index this build reads | Rebuild with this build, then publish |
+| `the search index was not refreshed; index <id> still serves: <error type>` | A recheck of the pointer failed; the loaded index keeps serving and the next recheck is five minutes later | Nothing if it does not repeat; otherwise check the bucket and the role |
+| `the suppression list was not read, so no search is answered until it is: <error type>` | The list could not be read (`StoreAccessDenied` when it does not exist, see above), or holds a line this build cannot read (`ValueError`). Every search and card page answers `503`, and every request tries again | Create the list if it is missing; otherwise read the list with the operator profile and find the line, as the removal runbook's residue section does |
+| `tub audit: a card-viewed record was not written, so the card was not sent` (or `card-copied`, `cards-downloaded`) | The audit log refused a write; the card was not sent (gate item 4) | Check the audit group exists and the role may write to it (step 9) |
+| `tub audit: a searched record was not written` | A search count was lost; the search was answered | Nothing if it does not repeat |
+
+A refused index leaves the last loaded one serving in an environment that has one. An environment
+with none, a new one, answers `503` to every search until an index loads, and tries again on every
+request. Find the lines with:
+
+**Operator command** (expected runtime seconds)
+Where: your Mac, anywhere
+```bash
+aws logs filter-log-events --profile debate-admin --region us-east-1 --log-group-name debate-dev-tub-app \
+  --filter-pattern '?refused ?"not read" ?"not refreshed" ?"not written"' \
+  --query 'events[-20:].message' --output text
+```
+Success looks like nothing printed. Any line is one of the rows above. For prod, the same with
+`debate-prod-tub-app`.
+
 ## What to record
 
 Fill these in as the steps complete; they are the evidence the spec's criteria and ADR-0019 ask

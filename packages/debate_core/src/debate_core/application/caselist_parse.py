@@ -79,6 +79,7 @@ from debate_core.application.caselist.occurrence_table_guard import (
     THIS_MACHINES_PARSED_STORE,
     refuse_newer_table,
 )
+from debate_core.application.caselist.parsed_publish_only import refuse_unpublishable
 from debate_core.application.caselist.parse_sources import (
     EnumeratedSource,
     enumerate_sources,
@@ -653,6 +654,27 @@ class CaselistParseService:
                 )
             )
         return FailureListing(caselist=caselist, version=version, present=True, rows=tuple(rows))
+
+    # -- publishing without a rebuild ---------------------------------------------------------
+
+    async def publishable_version(self, caselist: str) -> str:
+        """The current version directory, for `caselist parse --publish-only` to publish as it is.
+
+        The newest generation of the running parser version, which is what `--publish` publishes
+        once it has rebuilt (`v1-e31-t30`). Raises a
+        :class:`~debate_core.application.caselist.parsed_publish_only.PublishOnlyRefused`, having
+        read and written nothing else, when there is none, when it is incomplete, or when it is not
+        what this build's rebuild would publish
+        (:func:`~debate_core.application.caselist.parsed_publish_only.refuse_unpublishable`).
+        """
+        validate_publish_target(caselist)
+        return await refuse_unpublishable(
+            self._store,
+            caselist,
+            await self._current_version(caselist),
+            parser_version=self._parser.parser_version,
+            profile_version=self._parser.profile_version,
+        )
 
     async def _current_version(self, caselist: str) -> str | None:
         parser_version = self._parser.parser_version

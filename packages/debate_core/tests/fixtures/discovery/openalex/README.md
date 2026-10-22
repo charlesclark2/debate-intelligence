@@ -20,7 +20,9 @@ never in a URL.
   * a `book-chapter` whose only open copy is a repository landing page, with an empty abstract index
     and one authorship OpenAlex could not match to an author.
 * `works_search.expected.json` is what that body must map to, written by hand: bare lowercase DOIs,
-  dates at midnight UTC, display names only, and `other` for the report.
+  dates at midnight UTC, display names only, `other` for the report, and each work's
+  `cited_by_count` and `open_access.is_oa` as `citation_count` and `open_access` (42 and open, 3 and
+  closed, 0 and open).
 * `works_empty.json` is a search with no results.
 * `works_rate_limited.json` is a `429` with `Retry-After: 30` (the per-second limit), and
   `works_daily_budget_spent.json` a `429` with no `Retry-After` (a spent daily budget). Both must be

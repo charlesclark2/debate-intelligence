@@ -8,8 +8,9 @@ benches it after repeated failures and holds it through a rate limit. It never r
 
 **What is kept from a work** is what `CandidateResult` defines and no more: the DOI and the OpenAlex
 id, the title, the authors' display names (never their affiliations or ORCIDs), the venue, the
-publication date, the work's type as a :class:`~debate_core.domain.enums.SourceType`, the abstract
-and the best open-access URL. A work with no title or no OpenAlex id is not a candidate and is
+publication date, the work's type as a :class:`~debate_core.domain.enums.SourceType`, the abstract,
+the best open-access URL, whether OpenAlex says the work is open (`open_access.is_oa`) and its
+citation count (`cited_by_count`). A work with no title or no OpenAlex id is not a candidate and is
 skipped; any other field OpenAlex leaves out, or sends in a shape this module does not read, is left
 empty rather than failing the search.
 
@@ -89,6 +90,7 @@ SELECTED_FIELDS: Final = (
     "display_name",
     "publication_date",
     "type",
+    "cited_by_count",
     "open_access",
     "best_oa_location",
     "primary_location",
@@ -184,6 +186,8 @@ def candidate_from_work(work: Mapping[str, Any]) -> CandidateResult | None:
         published_at=_publication_date(work.get("publication_date")),
         snippet=rebuild_abstract(work.get("abstract_inverted_index")),
         open_access_url=_open_access_url(work),
+        open_access=_is_open_access(work),
+        citation_count=_citation_count(work.get("cited_by_count")),
     )
 
 
@@ -202,6 +206,19 @@ def _open_access_url(work: Mapping[str, Any]) -> str | None:
     if status.get("is_oa") is True:
         return _http_url(status.get("oa_url"))
     return None
+
+
+def _is_open_access(work: Mapping[str, Any]) -> bool | None:
+    """OpenAlex's `open_access.is_oa`: open even when no usable link is known; `None` when unsaid."""
+    is_oa = _mapping(work.get("open_access")).get("is_oa")
+    return is_oa if isinstance(is_oa, bool) else None
+
+
+def _citation_count(value: object) -> int | None:
+    """`cited_by_count` when it is a non-negative integer; anything else is unknown, not a failure."""
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        return None
+    return value
 
 
 def _author_names(authorships: object) -> tuple[str, ...]:

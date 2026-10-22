@@ -46,7 +46,9 @@ spec:
   priority: 1
   constraints:
     # PM ruling 2026-10-21 (OpenAlex authentication): the settings group gains providers.openalex_api_key.
-    packages: [debate_core.integrations, debate_core.application.settings]
+    # PM ruling 2026-10-22 (v1-e07-t02 Q2: A, with open_access, for v1-e08-t02 ruling 4):
+    # CandidateResult gains citation_count and open_access in debate_core.domain.discovery.
+    packages: [debate_core.integrations, debate_core.application.settings, debate_core.domain]
     forbidden:
       - Live OpenAlex calls in CI (respx-recorded fixtures only)
       # PM ruling 2026-10-21 (OpenAlex authentication): was "Omitting the polite-pool contact identity when configured";

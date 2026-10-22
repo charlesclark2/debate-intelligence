@@ -103,6 +103,18 @@ class CandidateResult(DomainModel):
     open_access_url: HttpUrlStr | None = Field(
         default=None, description="Publisher-declared open-access copy, when the provider exposes one."
     )
+    open_access: bool | None = Field(
+        default=None,
+        description=(
+            "Whether the provider says a free-to-read copy exists, even one it gives no usable link "
+            "for; None when it does not say."
+        ),
+    )
+    citation_count: int | None = Field(
+        default=None,
+        ge=0,
+        description="How many works cite this one, by the provider's count; None when unknown.",
+    )
     raw_ref: NonEmptyText | None = Field(
         default=None,
         description=(

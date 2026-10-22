@@ -69,7 +69,8 @@ one title is one of the normalizations above, so the rule is equality after them
 trusted for it. A field takes the value of the first member, in that order, that has one; members
 from a provider outside the table come after every provider in it; between two members from one
 provider the earlier wins. Empty values (`None`, no authors, a blank snippet, source type `other`)
-give way to the next member. `canonical_url` is not in the table: it is the canonical form of the
+give way to the next member; `False` for open access and a citation count of 0 are values, not
+empty. `canonical_url` is not in the table: it is the canonical form of the
 merged `url`, from the same provider.
 
 Every field with a value names the provider it came from in `field_sources`, and the model refuses
@@ -116,9 +117,11 @@ __all__ = [
     "DedupeStage",
     "MatchRule",
     "MergedCandidate",
+    "american_spelling",
     "candidate_canonical_url",
     "merge_candidates",
     "merge_group",
+    "plain_text",
     "surname_key",
     "title_tokens",
     "titles_agree",
@@ -154,6 +157,8 @@ MERGED_FIELDS: Final = (
     "published_at",
     "snippet",
     "open_access_url",
+    "open_access",
+    "citation_count",
 )
 """Every field a :class:`MergedCandidate` takes from its members, as `field_sources` names them."""
 
@@ -203,6 +208,12 @@ class MergedCandidate(DomainModel):
         default=None, description="Abstract or snippet: discovery context only, never quoted on a card."
     )
     open_access_url: HttpUrlStr | None = Field(default=None, description="Open-access copy, if any.")
+    open_access: bool | None = Field(
+        default=None, description="Whether a free-to-read copy exists, by the provider trusted for it."
+    )
+    citation_count: int | None = Field(
+        default=None, ge=0, description="Citations, by the count of the provider trusted for it."
+    )
     providers: tuple[NonEmptyText, ...] = Field(
         description="Every provider that returned this source, each once, in the order of `members`."
     )
@@ -289,6 +300,10 @@ FIELD_PRECEDENCE: Final[Mapping[str, tuple[str, ...]]] = MappingProxyType(
         # Crossref has an abstract only when the publisher deposited one.
         "snippet": _INDEXES_FIRST,
         "open_access_url": _INDEXES_FIRST,
+        # Citation counts and open-access status are the indexes' own measurements: OpenAlex, then
+        # Semantic Scholar (v1-e08-t02 PM ruling 4, added by v1-e08-t03).
+        "open_access": _INDEXES_FIRST,
+        "citation_count": _INDEXES_FIRST,
         "identifiers.pmid": _INDEXES_FIRST,
         # Each index first for its own id; Semantic Scholar is the one that lists arXiv ids.
         "identifiers.openalex_id": _INDEXES_FIRST,
@@ -352,6 +367,8 @@ def merge_group(members: Sequence[CandidateResult], matched_on: Sequence[MatchRu
     published_at_from = chosen("published_at")
     snippet_from = chosen("snippet")
     open_access_from = chosen("open_access_url")
+    open_access_status_from = chosen("open_access")
+    citation_count_from = chosen("citation_count")
     return MergedCandidate(
         title=title_from.title,
         url=url_from.url,
@@ -371,6 +388,8 @@ def merge_group(members: Sequence[CandidateResult], matched_on: Sequence[MatchRu
         published_at=published_at_from.published_at if published_at_from else None,
         snippet=snippet_from.snippet if snippet_from else None,
         open_access_url=open_access_from.open_access_url if open_access_from else None,
+        open_access=open_access_status_from.open_access if open_access_status_from else None,
+        citation_count=citation_count_from.citation_count if citation_count_from else None,
         providers=tuple(dict.fromkeys(member.provider for member in members)),
         members=tuple(members),
         matched_on=tuple(rule for rule in MatchRule if rule in matched_on),
@@ -505,7 +524,8 @@ not in it (poured and pored, pouring and poring)."""
 _MIN_REWRITTEN_LENGTH: Final = 6
 
 
-def _american(word: str) -> str:
+def american_spelling(word: str) -> str:
+    """The American spelling of one normalized word, by the tables above; other words unchanged."""
     if word in _AMERICAN_WORDS:
         return _AMERICAN_WORDS[word]
     if len(word) < _MIN_REWRITTEN_LENGTH:
@@ -516,7 +536,7 @@ def _american(word: str) -> str:
     return word
 
 
-def _plain(text: str) -> str:
+def plain_text(text: str) -> str:
     """Entities decoded, markup removed, accents dropped and case folded."""
     decoded = _MARKUP.sub("", html.unescape(text))
     decomposed = unicodedata.normalize("NFKD", decoded)
@@ -529,7 +549,7 @@ def _words(plain: str) -> tuple[str, ...]:
 
 def title_tokens(title: str) -> tuple[str, ...]:
     """A title's words after every normalization two providers' copies of one title can differ by."""
-    return tuple(_american(word) for word in _words(_plain(title)))
+    return tuple(american_spelling(word) for word in _words(plain_text(title)))
 
 
 def _title_forms(title: str) -> tuple[tuple[str, ...], tuple[str, ...] | None]:
@@ -581,7 +601,7 @@ def surname_key(name: str) -> str | None:
     keys = [
         "".join(_WORD.findall(_JOINED_INSIDE_WORDS.sub("", piece)))
         for word in words
-        for piece in _plain(word).replace("-", " ").split()
+        for piece in plain_text(word).replace("-", " ").split()
     ]
     keys = [key for key in keys if len(key) > 1 and key not in _NAME_SUFFIXES]
     return keys[-1] if keys else None

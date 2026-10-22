@@ -480,7 +480,7 @@ def build_search_result(
     lexical_score: float | None = 0.74,
     semantic_score: float | None = None,
     rerank_score: float | None = None,
-    source_quality_features: dict[str, float] | None = None,
+    source_quality_features: dict[str, float | None] | None = None,
     explanation: str | None = "recent (3 days), peer-reviewed, two providers agree",
     providers: tuple[NonEmptyText, ...] = ("openalex", "crossref"),
 ) -> SearchResult:

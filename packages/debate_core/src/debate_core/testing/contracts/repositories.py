@@ -838,6 +838,21 @@ class SearchRepositoryContract(AdapterContract):
 
         assert await repository.list_results(search.search_id) == tuple(replacement)
 
+    async def test_an_unknown_feature_comes_back_as_none_not_zero_or_missing(
+        self, repository: SearchRepository
+    ) -> None:
+        """Unknown is not 0: a result whose peer review nobody reported must not come back as unreviewed."""
+        search = await repository.save(build_search())
+        result = build_search_result(
+            search_id=search.search_id,
+            source_quality_features={"bm25": 0.5, "recency": None, "peer_reviewed": None},
+        )
+
+        await repository.save_results(search.search_id, [result])
+
+        (stored,) = await repository.list_results(search.search_id)
+        assert stored.source_quality_features == {"bm25": 0.5, "recency": None, "peer_reviewed": None}
+
     async def test_saving_an_empty_ranking_clears_the_stored_one(self, repository: SearchRepository) -> None:
         search = await repository.save(build_search())
         await repository.save_results(

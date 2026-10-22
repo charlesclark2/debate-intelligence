@@ -787,6 +787,8 @@ EXPECTED_PRECEDENCE: dict[str, tuple[str, str]] = {
     "published_at": ("crossref", "rss"),
     "snippet": ("openalex", "semantic_scholar"),
     "open_access_url": ("openalex", "semantic_scholar"),
+    "open_access": ("openalex", "semantic_scholar"),
+    "citation_count": ("openalex", "semantic_scholar"),
 }
 
 PROVIDERS = ("gdelt", "semantic_scholar", "rss", "openalex", "crossref")
@@ -821,6 +823,9 @@ def record_from(provider: str, *, without: str | None = None) -> CandidateResult
         "published_at": None if without == "published_at" else at(2020 + number),
         "snippet": None if without == "snippet" else f"Snippet from {provider}",
         "open_access_url": None if without == "open_access_url" else f"https://{provider}.example.org/oa.pdf",
+        # Only OpenAlex says an open copy exists, so the winner and the runner-up differ in value.
+        "open_access": None if without == "open_access" else provider == "openalex",
+        "citation_count": None if without == "citation_count" else 100 * number,
     }
     if without in ("title", "url"):
         raise ValueError(f"every record has a {without}; its precedence is tested by which one is chosen")
@@ -906,6 +911,18 @@ def test_precedence_skips_an_empty_snippet() -> None:
 
     assert merged.snippet == "Snippet from semantic_scholar"
     assert merged.field_sources["snippet"] == "semantic_scholar"
+
+
+def test_precedence_takes_false_for_open_access_and_zero_citations_as_values() -> None:
+    """ "No open copy" and "never cited" are answers, so a later provider's other answer does not win."""
+    closed = record_from("openalex").evolve(open_access=False, citation_count=0)
+    semantic_scholar = record_from("semantic_scholar").evolve(open_access=True, citation_count=12)
+
+    merged = merge_group((semantic_scholar, closed))
+
+    assert merged.open_access is False
+    assert merged.citation_count == 0
+    assert merged.field_sources["open_access"] == merged.field_sources["citation_count"] == "openalex"
 
 
 def test_precedence_keeps_other_as_the_source_type_only_when_no_provider_knows_better() -> None:

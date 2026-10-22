@@ -82,6 +82,10 @@ class SearchResult(DomainModel):
     The scores are all optional because the V1 ranking pipeline is deterministic and lexical;
     `semantic_score` and `rerank_score` are filled in by the embedding and rerank stages that
     arrive with the V2 search index.
+
+    A feature can be unknown, and is then stored as None rather than left out or written as 0: no
+    discovery provider says whether a paper was peer-reviewed yet, and 0 would say it was not
+    (v1-e08-t03-feature-ranking).
     """
 
     search_id: Ulid = Field(description="The search this result belongs to.")
@@ -93,11 +97,12 @@ class SearchResult(DomainModel):
     lexical_score: float | None = Field(default=None, description="BM25 relevance of title and snippet.")
     semantic_score: float | None = Field(default=None, description="Embedding similarity to the query.")
     rerank_score: float | None = Field(default=None, description="Cross-encoder rerank score, when run.")
-    source_quality_features: dict[str, float] = Field(
+    source_quality_features: dict[str, float | None] = Field(
         default_factory=dict,
         description=(
             "Named ranking features and their values, for example recency, peer_reviewed, "
-            "open_access, citations, provider_agreement. Never a hidden credibility score."
+            "open_access, citations, provider_agreement; None where a feature is unknown, which is "
+            "not the same as 0. Never a hidden credibility score."
         ),
     )
     explanation: str | None = Field(

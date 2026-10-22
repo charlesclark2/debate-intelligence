@@ -265,12 +265,16 @@ def test_a_directory_a_removal_left_without_aggregates_is_refused_and_nothing_is
 def test_an_option_publish_only_has_no_use_for_is_refused_before_anything_runs(
     imported: Path, buckets: S3Client, beside: tuple[str, ...]
 ) -> None:
-    result = invoke("caselist", "parse", "--caselist", CASELIST, "--publish-only", *beside)
+    result = publish_only(*beside)
 
-    assert result.exit_code == ExitCode.USAGE_ERROR, result.output
-    flat = " ".join(result.output.split())
-    assert f"--publish-only publishes the directory the last rebuild left, so it cannot be combined with {beside[0]}" in flat
-    assert "pass one or the other" in flat
+    assert result.exit_code == ExitCode.USAGE_ERROR, result.stdout
+    error = envelope_of(result)["error"]
+    assert error["code"] == "USAGE_ERROR"
+    assert (
+        "--publish-only publishes the directory the last rebuild left, so it cannot be combined with "
+        f"{beside[0]}: {beside[0]} "
+    ) in error["message"]
+    assert error["message"].endswith("; pass one or the other")
     assert not (imported / "parsed").exists()
     assert "Contents" not in buckets.list_objects_v2(Bucket=DEV_BUCKET)
 

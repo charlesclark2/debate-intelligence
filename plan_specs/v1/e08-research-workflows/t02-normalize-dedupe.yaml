@@ -94,26 +94,31 @@ spec:
         description: >-
           Union-find grouping on normalized DOI, canonical URL and cross-provider ids.
         dependsOn: [labeled-pairs]
-        outputs: [packages/debate_core/src/debate_core/application/search_dedupe.py]
+        # PM ruling 2026-10-21: "federated" is E08's word and "search" names belong to the pilot,
+        # so the module and its tests are federated_dedupe, not search_dedupe.
+        outputs: [packages/debate_core/src/debate_core/application/federated_dedupe.py]
         estimatedEffort: 2h
         acceptanceCriteria:
           - type: test_passes
             name: Exact-key dedupe tests pass
+            # PM ruling 2026-10-21: test_federated_dedupe.py, not test_search_dedupe.py.
             command: uv
-            args: [run, pytest, packages/debate_core/tests/application/test_search_dedupe.py, -k, exact]
+            args: [run, pytest, packages/debate_core/tests/application/test_federated_dedupe.py, -k, exact]
       - id: fuzzy-match
         kind: Task
         name: Fuzzy title matching with author/year gate
+        # PM ruling 2026-10-21: the standard library, not rapidfuzz, unless a real need is shown.
         description: >-
-          Normalized token-set similarity (rapidfuzz) with author-surname and year agreement; threshold
+          Normalized title similarity (standard library) with author-surname and year agreement; threshold
           tuned on the labeled pairs.
         dependsOn: [exact-keys]
         estimatedEffort: 2h
         acceptanceCriteria:
           - type: test_passes
             name: Labeled pair precision/recall test passes
+            # PM ruling 2026-10-21: test_federated_dedupe.py, not test_search_dedupe.py.
             command: uv
-            args: [run, pytest, packages/debate_core/tests/application/test_search_dedupe.py, -k, labeled]
+            args: [run, pytest, packages/debate_core/tests/application/test_federated_dedupe.py, -k, labeled]
       - id: merge-precedence
         kind: Task
         name: Field merge precedence with provenance
@@ -125,7 +130,8 @@ spec:
         acceptanceCriteria:
           - type: test_passes
             name: Full dedupe module passes
+            # PM ruling 2026-10-21: test_federated_dedupe.py, not test_search_dedupe.py.
             command: uv
-            args: [run, pytest, packages/debate_core/tests/application/test_search_dedupe.py]
+            args: [run, pytest, packages/debate_core/tests/application/test_federated_dedupe.py]
 status:
   phase: Pending

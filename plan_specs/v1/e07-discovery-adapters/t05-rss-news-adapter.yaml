@@ -44,10 +44,23 @@ spec:
     agreement 10).
   priority: 1
   constraints:
-    packages: [debate_core.integrations, config/feeds]
+    # PM ruling 2026-10-22 (v1-e07-t05: feedparser falls back to a loose parser on a hostile feed): defusedxml joins debate-core
+    # as the `feeds` extra, so the two pyproject files and uv.lock are in this task's packages.
+    packages:
+      - debate_core.integrations
+      - config/feeds
+      - packages/debate_core/pyproject.toml
+      - pyproject.toml
+      - uv.lock
     forbidden:
       - Using feed-embedded full content (content:encoded) as evidence text
-      - Returning news.google.com redirect URLs as the candidate URL when the publisher URL is resolvable
+      # PM ruling 2026-10-22 (v1-e07-t05: feedparser falls back to a loose parser on a hostile feed): "resolvable"
+      # means without any request to Google beyond the RSS search feed itself.
+      - >-
+        Returning news.google.com redirect URLs as the candidate URL when the publisher URL is
+        resolvable, where resolvable means without any request to Google beyond the RSS search feed
+        itself (no batchexecute call, no per-article page request); an item that cannot be resolved
+        that way is dropped and counted in the log, and a <source url> is never a candidate URL
       - Live feed fetches in CI (recorded feed fixtures only)
   context:
     - kind: TaskRef
@@ -115,8 +128,10 @@ spec:
       - id: feed-provider
         kind: Task
         name: FeedProvider with filtering and conditional GET
+        # PM ruling 2026-10-22 (v1-e07-t05: feedparser falls back to a loose parser on a hostile feed).
         description: >-
-          Parse feeds with feedparser, filter by terms and dates, cache ETag/Last-Modified in the data dir.
+          Parse feeds with defusedxml over the standard library's ElementTree (entities and external
+          references refused), filter by terms and dates, cache ETag/Last-Modified in the data dir.
         dependsOn: [feed-config]
         outputs: [packages/debate_core/src/debate_core/integrations/discovery/feeds.py]
         estimatedEffort: 3h

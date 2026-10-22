@@ -487,7 +487,7 @@ def test_score_config_path_is_the_committed_table() -> None:
         "missing-source-type",
         "source-type-above-one",
         "publisher-as-source-type",
-        "no-explained-features",
+        "explains-nothing",
         "zero-strong-match",
     ],
 )
@@ -552,7 +552,7 @@ STORY = one(
 """One provider, undated, news, no open copy, and none of the query's terms."""
 
 
-def test_score_is_the_sum_of_weight_times_value_over_the_known_features() -> None:
+def test_score_is_the_sum_of_weight_times_value_over_what_is_known() -> None:
     study, story = rank([STORY, STUDY])
 
     assert study.candidate is STUDY
@@ -620,7 +620,7 @@ def test_score_reads_every_expanded_query() -> None:
         assert bm25 is not None and bm25 > 0, entry.candidate.title
 
 
-def test_score_unknown_features_contribute_nothing() -> None:
+def test_score_unknown_values_contribute_nothing() -> None:
     (story,) = rank([STORY])
 
     for name in ("recency", "peer_reviewed", "open_access", "citations"):
@@ -802,7 +802,7 @@ def test_score_changing_a_weight_in_the_yaml_changes_the_order_without_code_chan
 # --------------------------------------------------------------------------------------------
 
 
-def test_score_search_result_for_carries_rank_scores_every_feature_the_explanation_and_providers() -> None:
+def test_score_search_result_for_carries_rank_scores_the_vector_the_explanation_and_providers() -> None:
     study, _ = rank([STUDY, STORY])
 
     result = search_result_for(study, search_id=readable_id("SRCH"), article_id=readable_id("ART", 7))
@@ -839,7 +839,7 @@ def test_score_search_result_for_a_stored_ranking_comes_back_as_built() -> None:
     assert stored == built
 
 
-def test_score_ranked_candidate_names_exactly_the_seven_features() -> None:
+def test_score_ranked_candidate_names_exactly_the_seven() -> None:
     (study,) = rank([STUDY])
 
     with pytest.raises(ValueError, match="features"):
@@ -861,7 +861,7 @@ def test_explain_names_the_largest_contributions_largest_first() -> None:
     assert study.explanation == "strong term match, published 3 months ago, scholarly source, open access"
 
 
-def test_explain_says_nothing_about_unknown_features() -> None:
+def test_explain_says_nothing_about_what_is_unknown() -> None:
     """Undated, peer review unknown, no open copy: none of them is mentioned (PM, 2026-10-22)."""
     _, story = rank([STUDY, STORY])
 
@@ -880,7 +880,7 @@ def test_explain_says_so_when_nothing_contributed() -> None:
     assert entry.explanation == "no feature contributed to the score"
 
 
-def test_explain_names_at_most_max_features() -> None:
+def test_explain_names_at_most_the_configured_number() -> None:
     two = config_with(explanation={"max_features": 2, "strong_term_match": 0.6})
 
     study, _ = rank([STUDY, STORY], config=two)

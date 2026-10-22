@@ -71,10 +71,14 @@ spec:
       description: >-
         Running the full Playwright journey with a fixture school, team code and query, the
         captured application logs contain none of them, by test.
+    # PM ruling 2026-10-22 (prod exercise moves to v1-e39-t10): this task exercises the pilot steps
+    # on dev only, with a synthetic source; v1-e39-t10 runs them on prod after the promotion.
     - id: ac4
       description: >-
-        The removal runbook's pilot steps are exercised in dev and prod with a synthetic
-        source, and the operator's record is in the report.
+        The removal runbook's pilot steps are exercised in dev with a synthetic source (remove
+        it, see it gone within five minutes, rebuild and publish the index, delete the
+        superseded index versions, noncurrent ones included), and the operator's record is in
+        the report. The prod exercise is v1-e39-t10's.
     - id: ac5
       description: >-
         The report maps each item of the policy's E39 gate to the test or operator record

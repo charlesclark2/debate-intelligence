@@ -30,7 +30,9 @@ The hierarchy::
     ├── InvalidModelOutput
     └── ProviderError
         ├── ProviderUnavailable
-        │   └── ModelUnavailableError
+        │   ├── ModelUnavailableError
+        │   ├── ProviderTimedOut
+        │   └── ProviderCircuitOpen
         ├── ProviderRateLimited
         ├── ModelAccessDenied
         └── ModelRequestRejected
@@ -52,6 +54,7 @@ this package never reads anything from there.
 from __future__ import annotations
 
 import re
+from datetime import datetime
 from enum import StrEnum
 from typing import ClassVar, Final
 
@@ -70,8 +73,10 @@ __all__ = [
     "ModelRequestRejected",
     "ModelUnavailableError",
     "NotFound",
+    "ProviderCircuitOpen",
     "ProviderError",
     "ProviderRateLimited",
+    "ProviderTimedOut",
     "ProviderUnavailable",
     "RevisionMismatch",
     "STORE_ERRORS_TRUE_OF_EVERY_OBJECT",
@@ -501,6 +506,45 @@ class ProviderUnavailable(ProviderError):
 
     def __init__(self, provider: str, message: str = "unavailable") -> None:
         super().__init__(provider, message)
+
+
+class ProviderTimedOut(ProviderUnavailable):
+    """A provider did not answer within the timeout the platform gives it.
+
+    Raised by :class:`~debate_core.integrations.discovery.resilience.ResilientProvider`, which
+    cancels the call when its time is up, so a slow provider costs a federated search exactly its
+    timeout and no more. To a program it is the same failure as its parent, so it keeps the
+    `PROVIDER_UNAVAILABLE` code.
+    """
+
+    ERROR_CODE: ClassVar[str] = "PROVIDER_UNAVAILABLE"
+
+    def __init__(self, provider: str, timeout_seconds: float) -> None:
+        self.timeout_seconds = timeout_seconds
+        """The timeout the call was given, in seconds."""
+        super().__init__(provider, f"no answer within {timeout_seconds:g}s")
+
+
+class ProviderCircuitOpen(ProviderUnavailable):
+    """A call was refused without reaching the provider, because its circuit breaker is open.
+
+    The provider failed several times in a row, and the platform is giving it a cool-down rather
+    than making every search wait on it (architecture proposal §15). `retry_at` is when the next
+    call may go through as a probe; it is `None` when the cool-down is over but another call is
+    already probing. Keeps the `PROVIDER_UNAVAILABLE` code: to a program the provider is down.
+    """
+
+    ERROR_CODE: ClassVar[str] = "PROVIDER_UNAVAILABLE"
+
+    def __init__(self, provider: str, retry_at: datetime | None) -> None:
+        self.retry_at = retry_at
+        """When the breaker lets a probe through, or `None` while a probe is in flight."""
+        detail = (
+            "another call is already probing it"
+            if retry_at is None
+            else f"skipped until {retry_at.isoformat()}"
+        )
+        super().__init__(provider, f"circuit breaker open after repeated failures; {detail}")
 
 
 class ProviderRateLimited(ProviderError):

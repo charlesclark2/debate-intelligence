@@ -7,6 +7,8 @@ the hierarchy is part of the contract, not an implementation detail of the messa
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 import pytest
 
 from debate_core.application.errors import (
@@ -20,8 +22,10 @@ from debate_core.application.errors import (
     ModelRequestRejected,
     ModelUnavailableError,
     NotFound,
+    ProviderCircuitOpen,
     ProviderError,
     ProviderRateLimited,
+    ProviderTimedOut,
     ProviderUnavailable,
     RevisionMismatch,
     SnapshotIntegrityCheck,
@@ -46,6 +50,8 @@ EVERY_ERROR = (
     ProviderUnavailable("openalex"),
     ModelUnavailableError("bedrock", "a-model"),
     ProviderRateLimited("openalex"),
+    ProviderTimedOut("openalex", 10.0),
+    ProviderCircuitOpen("openalex", None),
     ModelAccessDenied("bedrock", "a-model", "not allowed"),
     ModelRequestRejected("bedrock", "a-model", "ValidationException", "bad parameter"),
 )
@@ -67,6 +73,24 @@ def test_provider_failures_share_a_base_and_name_the_provider() -> None:
     assert issubclass(ProviderUnavailable, ProviderError)
     assert issubclass(ProviderRateLimited, ProviderError)
     assert ProviderUnavailable("openalex", "timed out").provider == "openalex"
+
+
+def test_a_timeout_and_an_open_breaker_are_the_provider_being_unavailable_to_a_program() -> None:
+    """Both keep `PROVIDER_UNAVAILABLE`, so a run that records them exits as one a retry may cure."""
+    timed_out = ProviderTimedOut("openalex", 2.5)
+    benched = ProviderCircuitOpen("openalex", datetime(2026, 10, 21, 12, 1, tzinfo=UTC))
+    assert isinstance(timed_out, ProviderUnavailable)
+    assert isinstance(benched, ProviderUnavailable)
+    assert error_code_of(timed_out) == error_code_of(benched) == "PROVIDER_UNAVAILABLE"
+    assert timed_out.timeout_seconds == 2.5
+    assert str(timed_out) == "openalex: no answer within 2.5s"
+    assert benched.retry_at == datetime(2026, 10, 21, 12, 1, tzinfo=UTC)
+    assert str(benched) == (
+        "openalex: circuit breaker open after repeated failures; skipped until 2026-10-21T12:01:00+00:00"
+    )
+    assert str(ProviderCircuitOpen("openalex", None)) == (
+        "openalex: circuit breaker open after repeated failures; another call is already probing it"
+    )
 
 
 def test_a_revision_mismatch_carries_both_revisions() -> None:

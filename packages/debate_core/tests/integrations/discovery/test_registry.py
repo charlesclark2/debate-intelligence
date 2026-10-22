@@ -12,6 +12,7 @@ import pytest
 from pydantic import SecretStr, ValidationError
 
 from debate_core.application.errors import NotFound, ProviderUnavailable
+from debate_core.application.ports import DiscoveryProviders
 from debate_core.application.settings import ConfigurationError, ProviderSettings, SearchProviderName
 from debate_core.domain.discovery import BreakerState, ProviderQuery, ProviderResponse
 from debate_core.integrations.discovery.registry import (
@@ -83,6 +84,24 @@ def test_only_the_enabled_providers_are_built() -> None:
     assert set(factories.built) == {SearchProviderName.RSS, SearchProviderName.OPENALEX}
     assert registry.names == ("rss", "openalex")
     assert all(isinstance(provider, ResilientProvider) for provider in registry.providers)
+
+
+def test_the_registry_is_the_discovery_providers_port_a_federated_search_fans_out_over() -> None:
+    """The application layer cannot import the registry, so it takes `DiscoveryProviders`; this is that.
+
+    The annotated assignment is the real check: pyright strict fails it if the registry stops
+    satisfying the port. The `isinstance` is the runtime half, and the reads show the two members a
+    search uses answer through the port as they do on the registry.
+    """
+    clock = FixedClock()
+    settings = ProviderSettings(enabled=(SearchProviderName.RSS, SearchProviderName.OPENALEX))
+    registry = ProviderRegistry.from_settings(settings, Factories(clock).every_name(), clock=clock)
+
+    port: DiscoveryProviders = registry
+
+    assert isinstance(registry, DiscoveryProviders)
+    assert [provider.name for provider in port.providers] == ["rss", "openalex"]
+    assert [health.provider for health in port.health()] == ["rss", "openalex"]
 
 
 def test_nothing_enabled_builds_nothing() -> None:

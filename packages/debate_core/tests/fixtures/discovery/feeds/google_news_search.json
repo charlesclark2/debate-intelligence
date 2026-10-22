@@ -1,0 +1,10 @@
+{
+  "query": {"query": "health insurance", "filters": {"since": "2026-10-01T00:00:00Z", "until": "2026-10-21T00:00:00Z", "max_results": 10}},
+  "exchanges": [
+    {
+      "request": {"method": "GET", "url": "https://news.google.com/rss/search?q=health+insurance+after%3A2026-09-30+before%3A2026-10-22&hl=en-US&gl=US&ceid=US%3Aen"},
+      "response": {"status": 200, "headers": {"content-type": "application/xml; charset=utf-8"}, "body_file": "google_news_search.xml"}
+    }
+  ],
+  "expected_results_file": "google_news_search.expected.json"
+}

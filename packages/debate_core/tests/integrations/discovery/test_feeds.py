@@ -26,7 +26,12 @@ from debate_core.domain.discovery import CandidateResult, ProviderQuery
 from debate_core.domain.search import SearchFilters
 from debate_core.integrations.discovery import feeds as feeds_module
 from debate_core.integrations.discovery.feed_cache import FeedCache, FileFeedCache, InMemoryFeedCache
-from debate_core.integrations.discovery.feed_config import FeedConfig, FeedReview, FeedSource
+from debate_core.integrations.discovery.feed_config import (
+    FeedConfig,
+    FeedReview,
+    FeedSource,
+    GoogleNewsConfig,
+)
 from debate_core.integrations.discovery.feed_parsing import MAX_SNIPPET_CHARS, FeedEntry
 from debate_core.integrations.discovery.feeds import (
     PROVIDER_NAME,
@@ -35,6 +40,15 @@ from debate_core.integrations.discovery.feeds import (
     in_window,
     matches_terms,
     query_terms,
+)
+from debate_core.integrations.discovery.google_news_rss import PROVIDER_NAME as GOOGLE_NEWS_PROVIDER_NAME
+from debate_core.integrations.discovery.google_news_rss import (
+    GoogleNewsRssProvider,
+    candidate_from_item,
+    google_news_factory,
+    is_google_hosted,
+    publisher_url_from_google_link,
+    search_url,
 )
 from debate_core.integrations.discovery.redaction import PROTECTED_LOGGERS
 from debate_core.integrations.discovery.registry import ProviderRegistry
@@ -528,6 +542,239 @@ class TestFeedProviderContract(SearchProviderContract):
     @pytest.fixture
     def recording(self) -> Recording:
         return recording("feeds_search")
+
+    @pytest.fixture
+    def secrets(self) -> tuple[str, ...]:
+        return (CONTACT_EMAIL, OPENALEX_KEY)
+
+    @pytest.fixture
+    def max_attempts(self) -> int:
+        return 1
+
+
+# --------------------------------------------------------------------------------------------
+# Google News RSS
+# --------------------------------------------------------------------------------------------
+
+GOOGLE_TOPIC: Final = FeedConfig(
+    topic="health-insurance", description="The Policy topic.", google_news=GoogleNewsConfig(enabled=True)
+)
+GOOGLE_SEARCH_URL: Final = (
+    "https://news.google.com/rss/search?q=health+insurance+after%3A2026-09-30+before%3A2026-10-22"
+    "&hl=en-US&gl=US&ceid=US%3Aen"
+)
+GOOGLE_SEARCH_URL_NO_WINDOW: Final = (
+    "https://news.google.com/rss/search?q=health+insurance&hl=en-US&gl=US&ceid=US%3Aen"
+)
+LEGACY_LINK: Final = (
+    "https://news.google.com/rss/articles/"
+    "CBMiPGh0dHBzOi8vd3d3LmV4YW1wbGUubmV0L25ld3MvMjAyNi8xMC8xOS9tYXJrZXRwbGFjZS1wcmVtaXVtc9IBAA?oc=5"
+)
+OPAQUE_LINK: Final = (
+    "https://news.google.com/rss/articles/CBMiaEFVX3lxTE1zeW50aGV0aWNPcGFxdWVUb2tlbk5vdEFVcmwtMDEyMzQ1Njc4OWFi"
+    "Y2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6QUJDREVGR0hJSktMTU5PUFFSU1RVVl8wMTIzNDU2Nzg5?oc=5"
+)
+GOOGLE_OWN_LINK: Final = "https://news.google.com/rss/articles/CBMiMWh0dHBzOi8vbmV3cy5nb29nbGUuY29tL3N0b3JpZXMvc3ludGhldGljLWNsdXN0ZXLSAQA?oc=5"
+
+
+def build_google_news(
+    transport: httpx.AsyncBaseTransport,
+    *,
+    topics: tuple[FeedConfig, ...] = (GOOGLE_TOPIC,),
+    cache: FeedCache | None = None,
+) -> GoogleNewsRssProvider:
+    """The Google News provider exactly as the registry builds it, over `transport`."""
+    factory = google_news_factory(
+        HttpSettings(),
+        version=VERSION,
+        clock=FixedClock(),
+        topics=topics,
+        cache=cache if cache is not None else InMemoryFeedCache(),
+        transport=transport,
+    )
+    return factory(provider_settings())
+
+
+def test_google_news_search_url_carries_the_query_the_widened_window_and_the_edition() -> None:
+    assert search_url(ProviderQuery(query="health insurance", filters=WINDOW), GOOGLE_TOPIC.google_news) == (
+        GOOGLE_SEARCH_URL
+    )
+    british = GoogleNewsConfig(enabled=True, language="en-GB", country="GB", edition="GB:en")
+    assert search_url(ProviderQuery(query="NHS waiting lists"), british) == (
+        "https://news.google.com/rss/search?q=NHS+waiting+lists&hl=en-GB&gl=GB&ceid=GB%3Aen"
+    )
+
+
+@pytest.mark.parametrize(
+    ("link", "publisher_url"),
+    [
+        pytest.param(
+            LEGACY_LINK, "https://www.example.net/news/2026/10/19/marketplace-premiums", id="legacy-id"
+        ),
+        pytest.param(OPAQUE_LINK, None, id="current-opaque-id"),
+        pytest.param(GOOGLE_OWN_LINK, None, id="id-holding-a-google-url"),
+        pytest.param("https://news.google.com/rss/articles/!!!not-base64!!!", None, id="not-base64"),
+        pytest.param("https://news.google.com/rss/articles/CBMi", None, id="truncated"),
+        pytest.param("https://news.google.com/rss/articles/", None, id="no-id"),
+        pytest.param("https://news.google.com/topics/CAAqBwgKMKHL9QowkqbaAg", None, id="not-an-article"),
+        pytest.param("https://www.google.com/url?q=https://www.example.net/a", None, id="google-redirect"),
+        pytest.param(
+            "https://www.example.net/news/direct",
+            "https://www.example.net/news/direct",
+            id="already-publisher",
+        ),
+    ],
+)
+def test_google_news_links_resolve_offline_or_not_at_all(link: str, publisher_url: str | None) -> None:
+    assert publisher_url_from_google_link(link) == publisher_url
+
+
+def test_google_news_hosts_are_google_and_lookalikes_are_not() -> None:
+    assert is_google_hosted("https://news.google.com/rss/articles/x")
+    assert is_google_hosted("https://google.com/")
+    assert not is_google_hosted("https://notgoogle.com/news")
+    assert not is_google_hosted("https://google.com.example.net/news")
+
+
+async def test_google_news_recording_maps_to_publisher_urls_and_names() -> None:
+    replayed = replay_with_respx(build_google_news)(recording("google_news_search"))
+    response = await replayed.provider.search(ProviderQuery(query="health insurance", filters=WINDOW))
+    assert dumped(response.results) == dumped(recording("google_news_search").expected)
+    assert [request.url for request in replayed.sent()] == [GOOGLE_SEARCH_URL]
+
+
+async def test_google_news_never_returns_a_google_url_or_a_source_url() -> None:
+    provider = build_google_news(
+        serving({GOOGLE_SEARCH_URL_NO_WINDOW: feed_response("google_news_search.xml")})
+    )
+    response = await provider.search(ProviderQuery(query="health insurance"))
+    source_urls = {"https://www.example.net", "https://herald.example.com", "https://www.example.org"}
+    assert response.results
+    for result in response.results:
+        assert not is_google_hosted(result.url), result.url
+        assert result.url not in source_urls
+        assert result.snippet is None
+
+
+async def test_google_news_drops_unresolvable_items_and_logs_the_count(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    provider = build_google_news(
+        serving({GOOGLE_SEARCH_URL_NO_WINDOW: feed_response("google_news_search.xml")})
+    )
+    with caplog.at_level(logging.INFO, logger="debate_core.integrations.discovery"):
+        response = await provider.search(ProviderQuery(query="health insurance"))
+    lines = [
+        record.getMessage()
+        for record in caplog.records
+        if record.name == "debate_core.integrations.discovery"
+    ]
+    assert lines == ["google_news: 2 of 5 items dropped, publisher URL not resolvable without asking Google"]
+    assert [result.title for result in response.results] == [
+        "Marketplace premiums climb for 2027",
+        "Medicaid rolls shrink again",
+        "Open enrollment preview",
+    ]
+
+
+async def test_google_news_off_for_every_topic_sends_nothing() -> None:
+    def refuse(request: httpx.Request) -> httpx.Response:
+        raise AssertionError(f"Google News is off, yet {request.url} was requested")
+
+    provider = build_google_news(httpx.MockTransport(refuse), topics=(TOPIC,))
+    response = await provider.search(ProviderQuery(query="health insurance"))
+    assert response.results == ()
+    assert not response.partial
+    assert provider.editions == ()
+
+
+async def test_google_news_asks_once_per_edition_of_the_topics_that_enable_it() -> None:
+    off = FeedConfig(topic="politics", description="Off.", google_news=GoogleNewsConfig(enabled=False))
+    same_edition = FeedConfig(topic="other", description="Same.", google_news=GoogleNewsConfig(enabled=True))
+    british = FeedConfig(
+        topic="nhs",
+        description="UK.",
+        google_news=GoogleNewsConfig(enabled=True, language="en-GB", country="GB", edition="GB:en"),
+    )
+    provider = build_google_news(
+        httpx.MockTransport(lambda request: httpx.Response(500)),
+        topics=(off, GOOGLE_TOPIC, same_edition, british),
+    )
+    assert [edition.edition for edition in provider.editions] == ["US:en", "GB:en"]
+
+
+async def test_google_news_with_one_edition_failing_is_partial() -> None:
+    british = FeedConfig(
+        topic="nhs",
+        description="UK.",
+        google_news=GoogleNewsConfig(enabled=True, language="en-GB", country="GB", edition="GB:en"),
+    )
+    query = ProviderQuery(query="health insurance", filters=WINDOW)
+    british_url = search_url(query, british.google_news)
+    transport = serving(
+        {GOOGLE_SEARCH_URL: feed_response("google_news_search.xml"), british_url: httpx.Response(503)}
+    )
+    response = await build_google_news(transport, topics=(GOOGLE_TOPIC, british)).search(query)
+    assert response.partial
+    assert response.error == "1 of 2 editions failed: GB:en: HTTP 503"
+    assert dumped(response.results) == dumped(recording("google_news_search").expected)
+
+
+@pytest.mark.parametrize(
+    ("title", "source", "kept_title"),
+    [
+        ("Marketplace premiums climb - Example Gazette", "Example Gazette", "Marketplace premiums climb"),
+        (
+            "Marketplace premiums climb - Example Gazette",
+            "Other Outlet",
+            "Marketplace premiums climb - Example Gazette",
+        ),
+        (" - Example Gazette", "Example Gazette", "- Example Gazette"),
+        ("Marketplace premiums climb", None, "Marketplace premiums climb"),
+    ],
+)
+def test_google_news_titles_lose_only_their_own_publisher_suffix(
+    title: str, source: str | None, kept_title: str
+) -> None:
+    entry = FeedEntry(title=title.strip(), link=LEGACY_LINK, source_name=source)
+    candidate = candidate_from_item(entry)
+    assert candidate is not None
+    assert candidate.title == kept_title
+
+
+async def test_the_google_news_registry_builds_it_wrapped_under_its_own_name() -> None:
+    def build(transport: httpx.AsyncBaseTransport) -> SearchProvider:
+        factory = google_news_factory(
+            HttpSettings(),
+            version=VERSION,
+            clock=FixedClock(),
+            topics=(GOOGLE_TOPIC,),
+            cache=InMemoryFeedCache(),
+            transport=transport,
+        )
+        settings = ProviderSettings(enabled=(SearchProviderName.GOOGLE_NEWS,))
+        registry = ProviderRegistry.from_settings(
+            settings, {SearchProviderName.GOOGLE_NEWS: factory}, clock=FixedClock()
+        )
+        assert registry.names == (GOOGLE_NEWS_PROVIDER_NAME,) == ("google_news",)
+        return registry.get(GOOGLE_NEWS_PROVIDER_NAME)
+
+    replayed = replay_with_respx(build)(recording("google_news_search"))
+    response = await replayed.provider.search(ProviderQuery(query="health insurance", filters=WINDOW))
+    assert dumped(response.results) == dumped(recording("google_news_search").expected)
+
+
+@pytest.mark.usefixtures("bare_protected_loggers")
+class TestGoogleNewsRssProviderContract(SearchProviderContract):
+    """The Google News provider on its recorded search."""
+
+    @pytest.fixture
+    def replay(self) -> ReplayFactory:
+        return replay_with_respx(build_google_news)
+
+    @pytest.fixture
+    def recording(self) -> Recording:
+        return recording("google_news_search")
 
     @pytest.fixture
     def secrets(self) -> tuple[str, ...]:

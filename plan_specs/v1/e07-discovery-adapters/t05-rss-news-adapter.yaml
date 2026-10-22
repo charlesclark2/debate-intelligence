@@ -48,6 +48,8 @@ spec:
     # as the `feeds` extra, so the two pyproject files and uv.lock are in this task's packages.
     packages:
       - debate_core.integrations
+      # PM ruling 2026-10-22 (v1-e07-t05: Google News gets its own provider name).
+      - debate_core.application.settings
       - config/feeds
       - packages/debate_core/pyproject.toml
       - pyproject.toml

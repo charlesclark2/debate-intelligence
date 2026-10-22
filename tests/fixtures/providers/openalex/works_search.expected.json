@@ -1,0 +1,37 @@
+[
+  {
+    "provider": "openalex",
+    "provider_record_id": "W4390000001",
+    "title": "Premium subsidies and enrollment in invented state marketplaces",
+    "url": "https://doi.org/10.5555/hip.2023.0142",
+    "identifiers": {"doi": "10.5555/hip.2023.0142", "openalex_id": "W4390000001"},
+    "source_type": "scholarly",
+    "authors": ["Ada Placeholder", "Grace Example", "Rosalind Invented"],
+    "publication": "Journal of Invented Health Policy",
+    "published_at": "2023-06-15T00:00:00Z",
+    "snippet": "Premium subsidies raised marketplace enrollment in every invented state, and marketplace premiums fell.",
+    "open_access_url": "https://journal.example.org/hip/2023/0142.pdf"
+  },
+  {
+    "provider": "openalex",
+    "provider_record_id": "W4390000002",
+    "title": "Coverage gaps among invented gig workers",
+    "url": "https://reports.example.org/coverage-gaps-2021",
+    "identifiers": {"openalex_id": "W4390000002"},
+    "source_type": "other",
+    "authors": ["Linus Sample", "Grace Example"],
+    "published_at": "2021-11-02T00:00:00Z"
+  },
+  {
+    "provider": "openalex",
+    "provider_record_id": "W4390000003",
+    "title": "Risk pools in a made-up insurance market",
+    "url": "https://doi.org/10.5555/handbook.ch7",
+    "identifiers": {"doi": "10.5555/handbook.ch7", "openalex_id": "W4390000003"},
+    "source_type": "scholarly",
+    "authors": ["Mira Fictional"],
+    "publication": "Invented Handbook of Insurance Economics",
+    "published_at": "2020-02-29T00:00:00Z",
+    "open_access_url": "https://repository.example.edu/handle/123/456"
+  }
+]

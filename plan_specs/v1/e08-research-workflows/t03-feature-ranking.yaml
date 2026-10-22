@@ -16,22 +16,36 @@ metadata:
     debate/title: Explainable feature ranking
     debate/architecture-refs: §6, §9, §11
 spec:
+  # PM ruling 2026-10-22: "ranking" alone also names the pilot's search weights, so this task's
+  # module, tests and weight table are federated_ranking (config/federated_ranking.yaml).
+  # PM amendment 2026-10-22: the last four sentences of the description.
   description: >-
     Implement the V1 rank stage with deterministic, transparent features. For each MergedCandidate compute:
     BM25 lexical relevance of title+abstract/snippet against the (expanded) query, recency relative to the
     requested window, source_type, peer-reviewed flag, open-access/accessibility, log-scaled citation count
-    (scholarship only) and provider agreement. A config/ranking.yaml weight table combines them into a score,
+    (scholarship only) and provider agreement. A config/federated_ranking.yaml weight table combines them into a score,
     and every SearchResult stores the feature vector and a human-readable explanation ("recent (3 days),
     peer-reviewed, open access, strong term match"). Source quality is expressed as features — never a hidden
     truth or ideology score — and no publisher allow/deny list is applied beyond user filters. Boundaries:
     embeddings, Cohere rerank and LLM rationales are V2 search work; this task does not call a model.
+    (PM amendment 2026-10-22.) The stage fills the rank slot of v1-e08-t01's FederatedSearchService,
+    reading SearchState.merged_candidates (v1-e08-t02), and leaves provider_statuses alone. The
+    citation and open-access features read CandidateResult.citation_count and open_access
+    (v1-e07-t02), and FIELD_PRECEDENCE in federated_dedupe.py gains a row for each (OpenAlex, then
+    Semantic Scholar) with matching EXPECTED_PRECEDENCE test rows (v1-e08-t02 PM ruling 4). No
+    adapter supplies peer review yet: peer_reviewed is unknown, contributes nothing, and the
+    explanation says nothing about it; it is never inferred from source_type, since a preprint is
+    scholarly and not peer-reviewed. The stage applies the user filter SearchFilters.source_types;
+    ties fall back from canonical_url to url when a candidate has no canonical form.
   priority: 1
   constraints:
-    packages: [debate_core.application, config/ranking.yaml]
+    # PM ruling 2026-10-22: config/federated_ranking.yaml, not config/ranking.yaml.
+    packages: [debate_core.application, config/federated_ranking.yaml]
     forbidden:
       - Opaque or politically-weighted source "truth" scores
       - Model calls in the V1 ranking stage
-      - Weights hard-coded in Python instead of config/ranking.yaml
+      # PM ruling 2026-10-22: config/federated_ranking.yaml, not config/ranking.yaml.
+      - Weights hard-coded in Python instead of config/federated_ranking.yaml
   context:
     - kind: TaskRef
       name: v1-e08-t02-normalize-dedupe
@@ -46,8 +60,9 @@ spec:
         Ranking is deterministic: identical inputs and config produce identical order, with ties broken by
         published_at then canonical URL.
     - id: ac3
+      # PM ruling 2026-10-22: config/federated_ranking.yaml, not config/ranking.yaml.
       description: >-
-        Changing a weight in config/ranking.yaml changes ordering on a fixture set without code changes.
+        Changing a weight in config/federated_ranking.yaml changes ordering on a fixture set without code changes.
     - id: ac4
       description: >-
         On a coach-labeled fixture of 3 queries, relevant items appear in the top 10 at least as often as
@@ -77,30 +92,37 @@ spec:
         name: Feature extractors including BM25
         description: >-
           Implement per-candidate feature functions; BM25 over the result set with a documented tokenizer.
-        outputs: [packages/debate_core/src/debate_core/application/ranking_features.py]
+        # PM ruling 2026-10-22: federated_ranking_features.py, not ranking_features.py.
+        outputs: [packages/debate_core/src/debate_core/application/federated_ranking_features.py]
         estimatedEffort: 3h
         acceptanceCriteria:
           - type: test_passes
             name: Feature tests pass
+            # PM ruling 2026-10-22: test_federated_ranking.py, not test_ranking.py.
             command: uv
-            args: [run, pytest, packages/debate_core/tests/application/test_ranking.py, -k, feature]
+            args: [run, pytest, packages/debate_core/tests/application/test_federated_ranking.py, -k, feature]
       - id: scorer-explainer
         kind: Task
         name: Weighted scorer and explanations
+        # PM ruling 2026-10-22: config/federated_ranking.yaml, not config/ranking.yaml.
         description: >-
-          Load config/ranking.yaml, combine normalized features, deterministic tie-breaks, and template
+          Load config/federated_ranking.yaml, combine normalized features, deterministic tie-breaks, and template
           explanations from the top contributing features; register as rank stage.
         dependsOn: [features]
-        outputs: [packages/debate_core/src/debate_core/application/ranking.py, config/ranking.yaml]
+        # PM ruling 2026-10-22: federated_ranking.py and config/federated_ranking.yaml.
+        outputs:
+          - packages/debate_core/src/debate_core/application/federated_ranking.py
+          - config/federated_ranking.yaml
         estimatedEffort: 3h
         acceptanceCriteria:
           - type: test_passes
             name: Scorer and explanation tests pass
+            # PM ruling 2026-10-22: test_federated_ranking.py, not test_ranking.py.
             command: uv
             args:
               - run
               - pytest
-              - packages/debate_core/tests/application/test_ranking.py
+              - packages/debate_core/tests/application/test_federated_ranking.py
               - -k
               - "score or explain"
       - id: relevance-check
@@ -114,8 +136,9 @@ spec:
         acceptanceCriteria:
           - type: test_passes
             name: Full ranking module passes
+            # PM ruling 2026-10-22: test_federated_ranking.py, not test_ranking.py.
             command: uv
-            args: [run, pytest, packages/debate_core/tests/application/test_ranking.py]
+            args: [run, pytest, packages/debate_core/tests/application/test_federated_ranking.py]
           - type: custom
             name: Coach labels relevance judgments
             description: >-

@@ -47,7 +47,10 @@ not.
 * **`manifests/_suppression/`** — the suppression list and the removal log. They are append-only
   and merged as a set union by `caselist remove` and `unsuppress`
   (`debate_core.application.caselist.suppression`); a sync that copied one side over the other
-  would truncate whichever had more lines. Planned as `skipped`, whatever is on either side.
+  would truncate whichever had more lines. A key at both ends is planned `skipped`, whatever
+  either side holds, and so is a key only at the source. A key only at the destination is reported
+  `would_delete` and, like every `would_delete`, left alone: it says the destination holds a list
+  or log the source does not.
 * **A blob whose digest is on the removal suppression list.** A takedown deleted it everywhere;
   a sync from a store that still held a copy must not put it back. Planned as `skipped`. The list
   is a required constructor argument, like every other path that can store a source (`v1-e30-t07`).

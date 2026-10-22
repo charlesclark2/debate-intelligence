@@ -16,7 +16,14 @@ There are five persistence contract classes, one per port, and a sixth for the m
 | `SearchRepositoryContract` | `SearchRepository` | `SearchRepositoryFactory` |
 | `EvidenceObjectStoreContract` | `EvidenceObjectStore` | `EvidenceObjectStoreFactory` |
 
-The last one arrived with the S3 adapters (`v1-e29-t04-s3-blob-store`) and is the first contract
+A seventh, `SearchProviderContract` in `search_provider.py` (v1-e07-t01-search-provider-contract),
+holds every discovery adapter to one set of rules on that adapter's own recorded HTTP fixtures:
+mapping, rate limits, server and transport failures, unreadable bodies, no resending of a
+non-idempotent request, and no credential in any error, `repr` or log line. Its module docstring is
+its walkthrough. Import it from `debate_core.testing.contracts.search_provider`; this package's
+`__init__` does not re-export it.
+
+The last one in the table arrived with the S3 adapters (`v1-e29-t04-s3-blob-store`) and is the first contract
 whose two bindings are a cloud service and a local directory rather than two local implementations.
 Its S3 binding runs against `moto`, through the fixtures in `packages/debate_core/tests/conftest.py`:
 a contract binding for a cloud adapter opts in against a mock or an emulator, never an account.

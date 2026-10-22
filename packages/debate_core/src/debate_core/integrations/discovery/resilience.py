@@ -25,7 +25,9 @@ A federated search asks several providers at once and must not be held hostage b
   own call, under the same timeout.
 
 Every message this module records, logs or raises has the configured credentials and contact email
-removed first (:func:`redact`), in an adapter's exception and in each exception it was raised from.
+removed first, in an adapter's exception and in each exception it was raised from, and the same
+values are filtered out of httpx's and this package's log records
+(:mod:`~debate_core.integrations.discovery.redaction`).
 
 The breaker reads time only from the injected
 :class:`~debate_core.application.ports.providers.Clock`, so every transition can be driven by hand
@@ -36,14 +38,11 @@ because cancelling a call that is still running is the event loop's job.
 from __future__ import annotations
 
 import asyncio
-import logging
 import statistics
 from collections import deque
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Final
-from urllib.parse import quote, quote_plus
 
 from debate_core.application.errors import (
     ProviderCircuitOpen,
@@ -59,52 +58,14 @@ from debate_core.application.ports.providers import (
     SearchProvider,
 )
 from debate_core.domain.discovery import BreakerState, ProviderHealth
+from debate_core.integrations.discovery.redaction import logger, protect_logs, redact_exception_chain
 
 __all__ = [
-    "REDACTED",
     "BreakerPermit",
     "CircuitBreaker",
     "ResiliencePolicy",
     "ResilientProvider",
-    "redact",
 ]
-
-logger = logging.getLogger(__name__)
-
-REDACTED: Final = "***"
-"""What a credential or contact email becomes in a message: the settings module's placeholder."""
-
-
-def redact(text: str, secrets: Iterable[str]) -> str:
-    """`text` with every value in `secrets` replaced by :data:`REDACTED`.
-
-    Each value is also removed in its URL-encoded spellings, because an adapter's error is as likely
-    to quote the request URL (`mailto=coach%40example.org`) as the value itself. Longer values go
-    first, so a value that contains another is not left half-replaced.
-    """
-    spellings = {
-        spelling
-        for secret in secrets
-        if secret
-        for spelling in (secret, quote(secret, safe=""), quote_plus(secret))
-    }
-    for spelling in sorted(spellings, key=len, reverse=True):
-        text = text.replace(spelling, REDACTED)
-    return text
-
-
-def _redact_exception_chain(error: BaseException, secrets: tuple[str, ...]) -> None:
-    """Scrub `error` and every exception it was raised from, in place.
-
-    An exception's message is its `args`, so replacing the string arguments changes what `str()`,
-    a log line and a printed traceback show, while the exception keeps its type and attributes.
-    """
-    seen: set[int] = set()
-    current: BaseException | None = error
-    while current is not None and id(current) not in seen:
-        seen.add(id(current))
-        current.args = tuple(redact(arg, secrets) if isinstance(arg, str) else arg for arg in current.args)
-        current = current.__cause__ or current.__context__
 
 
 @dataclass(frozen=True, slots=True)
@@ -260,6 +221,7 @@ class ResilientProvider:
         self._policy = policy
         self._clock = clock
         self._secrets = tuple(value for value in secrets if value)
+        protect_logs(self._secrets)
         self._breaker = CircuitBreaker(
             failure_threshold=policy.failure_threshold,
             cooldown=timedelta(seconds=policy.cooldown_seconds),
@@ -378,9 +340,9 @@ class ResilientProvider:
         *,
         cause: BaseException | None = None,
     ) -> None:
-        _redact_exception_chain(failure, self._secrets)
+        redact_exception_chain(failure, self._secrets)
         if cause is not None:
-            _redact_exception_chain(cause, self._secrets)
+            redact_exception_chain(cause, self._secrets)
         was = self._breaker.state
         self._breaker.record_failure(permit)
         self._error_count += 1

@@ -23,12 +23,12 @@ from debate_core.application.errors import (
     ProviderUnavailable,
 )
 from debate_core.domain.discovery import BreakerState, CandidateResult, ProviderQuery, ProviderResponse
+from debate_core.integrations.discovery.redaction import redact
 from debate_core.integrations.discovery.resilience import (
     BreakerPermit,
     CircuitBreaker,
     ResiliencePolicy,
     ResilientProvider,
-    redact,
 )
 from debate_core.testing.fakes import FAKE_EPOCH, FixedClock
 

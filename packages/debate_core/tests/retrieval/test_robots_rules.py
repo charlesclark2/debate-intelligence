@@ -127,3 +127,12 @@ def test_robotparser_is_only_ever_handed_text() -> None:
     }
     assert "parse" in called
     assert not called & {"read", "set_url"}
+
+
+def test_an_allow_and_a_disallow_of_equal_length_resolve_to_allow() -> None:
+    """RFC 9309 §2.2.2: the least restrictive of two equally specific rules. `/a*` and `/ab` both
+    match `/abc` and are both three characters; the stdlib cannot read the wildcard, so only the
+    RFC reading decides."""
+    rules = rules_from("User-agent: *\nDisallow: /a*\nAllow: /ab\n")
+    assert refusal(rules, "/abc") is None
+    assert refusal(rules, "/axe") is RobotsRefusalReason.DISALLOWED

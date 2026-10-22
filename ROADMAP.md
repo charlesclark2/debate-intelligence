@@ -64,7 +64,7 @@ v2.3's extension work.
 | [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 101 | 76 | 484 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 22 | 7 | 191 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 13 | 2 | 108 |
-| [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 15 | 5 | 96 |
+| [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 15 | 6 | 96 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 0 | 66 |
 | [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 19 | 12 | 146 |
 | [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 10 | 6 | 46 |
@@ -356,7 +356,7 @@ A student can run `debate-research cut <URL>` and receive a verified, tagged, ci
 | [OpenAlex adapter](plan_specs/v1/e07-discovery-adapters/t02-openalex-adapter.yaml) `v1-e07-t02-openalex-adapter` | Succeeded | 2 | 5.0 |
 | [Crossref adapter](plan_specs/v1/e07-discovery-adapters/t03-crossref-adapter.yaml) `v1-e07-t03-crossref-adapter` | Pending | 3 | 5.0 |
 | [Semantic Scholar adapter](plan_specs/v1/e07-discovery-adapters/t04-semantic-scholar-adapter.yaml) `v1-e07-t04-semantic-scholar-adapter` | Pending | 2 | 4.0 |
-| [Publisher RSS/Atom and Google News RSS adapter](plan_specs/v1/e07-discovery-adapters/t05-rss-news-adapter.yaml) `v1-e07-t05-rss-news-adapter` | Pending | 2 | 8.0 |
+| [Publisher RSS/Atom and Google News RSS adapter](plan_specs/v1/e07-discovery-adapters/t05-rss-news-adapter.yaml) `v1-e07-t05-rss-news-adapter` | Succeeded | 2 | 8.0 |
 | [GDELT news adapter](plan_specs/v1/e07-discovery-adapters/t06-gdelt-adapter.yaml) `v1-e07-t06-gdelt-adapter` | Pending | 2 | 4.0 |
 | [Government and policy source adapters](plan_specs/v1/e07-discovery-adapters/t07-government-adapters.yaml) `v1-e07-t07-government-adapters` | Pending | 2 | 8.0 |
 | [One Retry-After reader for every HTTP adapter, on an injected clock](plan_specs/v1/e07-discovery-adapters/t08-shared-retry-after.yaml) `v1-e07-t08-shared-retry-after` | Pending | 2 | 1.0 |

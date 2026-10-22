@@ -19,6 +19,9 @@
 #             out because it needs the evaluation corpus, which by policy never reaches a runner, so
 #             here it could only skip, and a skip fails a tier. It runs on the operator's Mac before
 #             any promotion containing a parser change (v1-e31-t05);
+#             The tier includes the search pages' browser suite (packages/debate_api/tests/browser,
+#             v1-e39-t06), so the job installs Playwright's Chromium first: without it every browser
+#             test errors, and the tier fails (PM ruling 2026-10-21, v1-e39-t06 Q1);
 #   conclude  posts `success` on the commit the installed build reported, only when every job
 #             passed and that commit, and both test trees, are the one requested. Anything else posts
 #             `failure` (`error` if the run was cancelled) on the requested commit.
@@ -202,6 +205,11 @@ jobs:
         run: uv python install
       - name: Install the locked workspace
         run: uv sync --locked --all-packages
+      # The search pages' browser tests (v1-e39-t06) drive Chromium through Playwright. This installs
+      # the build the locked Playwright names, and the system libraries it needs on the runner; the
+      # tests then run offline, every page served in-process (PM ruling 2026-10-21, v1-e39-t06 Q1).
+      - name: Install Playwright's Chromium for the browser tests
+        run: uv run --locked playwright install --with-deps chromium
       - name: Run pytest -m "slow and not live and not eval", offline
         id: slow
         run: python3 scripts/validate_dev.py slow --sha "$REQUESTED_SHA" --work-dir "$RUNNER_TEMP/validate-dev-slow"

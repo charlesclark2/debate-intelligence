@@ -55,6 +55,9 @@ spec:
       - packages/debate_core/tests
       - pyproject.toml
       - uv.lock
+      # PM ruling 2026-10-21 (v1-e39-t06 Q1): the task that adds a suite leaves its tier green, so this
+      # task adds the Chromium install to validate-dev's slow job, which runs the browser tests.
+      - .github/workflows/validate-dev.yml
     forbidden:
       - A third-party script, font, analytics or tracking
       - Inline script or a CSP exception for one

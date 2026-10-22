@@ -40,6 +40,7 @@ from debate_core.application.caselist.parsed_publish_only import (
     ParsedVersionDirectoryMissing,
     PublishOnlyRefused,
 )
+from debate_core.application.caselist.publish_plan import InvalidPublishTarget
 from debate_core.application.caselist.publish_service import SourceResult
 from debate_core.application.errors import error_code_of
 from debate_core.application.ports.parsed_store import AGGREGATE_NAMES, source_object_key
@@ -423,5 +424,5 @@ async def test_a_per_source_record_a_newer_build_stamped_is_refused(
 
 
 async def test_a_caselist_that_is_not_a_slug_is_refused_before_anything_is_read(world: World) -> None:
-    with pytest.raises(ValueError, match="slug"):
+    with pytest.raises(InvalidPublishTarget, match="slug"):
         await world.service().publishable_version("Maple Grove")

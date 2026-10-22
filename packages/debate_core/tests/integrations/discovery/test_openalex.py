@@ -806,6 +806,21 @@ async def test_no_secret_reaches_a_log_line_an_error_a_repr_or_a_health_snapshot
     assert not leaked
 
 
+@pytest.mark.usefixtures("bare_protected_loggers")
+@pytest.mark.parametrize("logger_name", PROTECTED_LOGGERS)
+def test_the_adapter_alone_protects_the_logs_from_its_key(
+    logger_name: str, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Unwrapped, as the kit runs it: the constructor registers the key, so no log line carries it."""
+    caplog.set_level(logging.DEBUG)
+    key = "openalex-unwrapped-key-7d41"
+    build_over(httpx.MockTransport(lambda request: httpx.Response(200)), api_key=key)
+
+    logging.getLogger(logger_name).warning("Authorization: Bearer %s", key)
+
+    assert [record.getMessage() for record in caplog.records] == ["Authorization: Bearer ***"]
+
+
 def test_the_repr_says_whether_a_key_is_configured_and_nothing_more() -> None:
     transport = httpx.MockTransport(lambda request: httpx.Response(200))
     assert repr(build_over(transport)) == "OpenAlexProvider(api_key=configured)"

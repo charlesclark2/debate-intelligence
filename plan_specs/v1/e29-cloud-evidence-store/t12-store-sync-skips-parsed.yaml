@@ -1,0 +1,82 @@
+# TASK v1-e29-t12-store-sync-skips-parsed - store sync stops moving the parsed store, which caselist parse --publish publishes
+# Epic: E29 Cloud Evidence Store (S3) | Release: v1.1 (Caselist evidence store) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e29-t12-store-sync-skips-parsed
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e29-cloud-evidence-store
+  annotations:
+    debate/title: "store sync stops moving the parsed store, which caselist parse --publish publishes"
+spec:
+  # Filed by the PM, 2026-10-21, from v1-e34-t29's Follow-ups 1 and 2 and its PM review.
+  description: >-
+    `store sync` treats the bucket's `parsed/` as named objects in its `objects` keyspace, so a
+    pull copies it into `<data_dir>/objects/parsed/`, which no reader opens, and a push from a
+    machine that pulled earlier can overwrite a per-source file, the index or the failures file
+    that changed since. v1-e34-t29 guarded only the occurrence table. `caselist parse --publish`
+    is the parsed store's only publisher, so `store sync` skips `parsed/` in both directions and
+    says so in its summary. The stale `objects/parsed/` copy on a machine is reported by `store
+    sync --dry-run` with the command that removes it, never deleted silently.
+    `docs/data/parsed-card-store.md` gains one line on the per-source records' own fingerprint
+    stamp: two machines at different fingerprint versions write different per-source files for
+    the same bytes, and their publishes meet as `CHECKSUM_MISMATCH`.
+  priority: 2
+  constraints:
+    packages: [debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/data, docs/runbooks]
+    forbidden:
+      - Deleting a local file without the operator's command
+      - A path, school, team code or file name in a record or a log
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e34-t29-newer-fingerprint-table-guard
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        `store sync --push` and `--pull` move nothing under `parsed/`, and say so in the
+        summary, by tests shown failing first; every other keyspace moves as before.
+    - id: ac2
+      description: >-
+        A stale `objects/parsed/` copy is reported by `--dry-run` with the command that
+        removes it, and the per-source stamp line is in docs/data/parsed-card-store.md.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e29-t12-store-sync-skips-parsed-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e29-cloud-evidence-store
+spec:
+  description: >-
+    Skip parsed/ in store sync, report a stale local copy, and document the per-source stamp.
+  goalRef:
+    name: v1-e29-t12-store-sync-skips-parsed
+  graph:
+    nodes:
+      - id: skip-parsed
+        kind: Task
+        name: store sync skips parsed/
+        description: >-
+          Skip parsed/ in store sync, report a stale local copy, and document the
+          per-source stamp.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Store sync tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application, -k, sync]
+status:
+  phase: Pending

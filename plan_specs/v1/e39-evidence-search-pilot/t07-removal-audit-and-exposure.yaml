@@ -34,6 +34,19 @@ spec:
     index versions needs delete on `reports/tub/search/`. That prefix alone is added to the
     removal credential's delete side, in docs/architecture/evidence-store-layout.md and the
     evidence bucket's IAM policy; nothing else under `reports/` gains a delete.
+    (PM amendment 2026-10-21, from the v1-e39-t03, t06 and t09 reviews.) The removal side builds
+    on what is merged. v1-e39-t03's search and card lookup take `is_suppressed(source_sha256,
+    disclosure_digest)`; this task wires it to the live suppression list, re-read inside
+    v1-e39-t06's index holder refresh (`_refresh`, the same at-most-five-minutes loop that
+    rechecks `current.json`), so an environment frozen past five minutes rechecks the list
+    before it answers. A card whose representative is suppressed is hidden until the next build
+    (v1-e39-t03's behaviour, kept), and the team count after a partial suppression stays
+    `surviving_counts`'s rule. The card page view (`/cards/<caselist>/<cluster id>`) and Copy
+    card (`/cards/<caselist>/<cluster id>/copy`) are the two requests that write the view and
+    copy records, in v1-e39-t05's audit shape (subjects, never names).
+    `docs/runbooks/evidence-search.md` gains what the function fetches and when (ADR-0019 (c) 3
+    and 5) and what an index refusal looks like in the app log. Superseded local index
+    directories are already pruned by v1-e39-t09; this task prunes the bucket's.
   priority: 1
   constraints:
     packages: [debate_api, debate_core.application, packages/debate_api/tests, docs/runbooks, docs/data, docs/architecture, infrastructure]
@@ -71,6 +84,15 @@ spec:
         (PM amendment 2026-10-19) The removal credential can delete under
         `reports/tub/search/` and nowhere else under `reports/`, by the existing grant-scope
         test extended, and the layout document says so.
+    - id: ac7
+      description: >-
+        (PM amendment 2026-10-21) The suppression list is re-read in the index holder's
+        refresh, at most five minutes apart, and an environment frozen longer rechecks
+        before answering, by test with an injected clock, shown failing first.
+    - id: ac8
+      description: >-
+        (PM amendment 2026-10-21) The evidence-search runbook says what the function
+        fetches, when, and what an index refusal looks like, and the docs checks pass.
 status:
   phase: Pending
 ---

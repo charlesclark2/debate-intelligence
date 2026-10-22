@@ -26,6 +26,21 @@ spec:
     agency/committee as publisher, official document URL (HTML or PDF) and identifiers (bill number, FR
     document number, GovInfo package id). Boundaries: no full-text download or PDF parsing here (E04 does
     that), no court or state sources in V1.
+    (PM amendment 2026-10-21, from v1-e07-t01's and v1-e04-t02's PM reviews and v1-e07-t01's CI
+    notes.) The adapter lives in `debate_core.integrations.discovery` and its tests in
+    `packages/debate_core/tests/integrations/discovery/` (the PM's naming ruling of 2026-10-20:
+    "search" in module names means the student pilot's index); the paths below say so. It
+    imports the discovery values from `debate_core.domain.discovery`, is wrapped in
+    `ResilientProvider`, maps HTTP failures and `Retry-After` with
+    `debate_core.integrations.discovery.http_failures`, calls `protect_logs` in its constructor
+    and logs on the package's one protected logger. It passes the contract kit,
+    `debate_core.testing.contracts.search_provider`, on its own recorded fixtures, served
+    through a copy of the FakeProvider binding's `replay_with_respx`. httpx comes from
+    debate-core's `http` extra (v1-e04-t02); no new extra. Any test that asserts on httpx or
+    httpcore log records starts from bare loggers and restores them, and before the report the
+    adapter's tests run once in one process after the OpenCaselist client and discovery suites
+    (`-n 0 -p no:randomly`), since logger filters are shared by the whole process (working
+    agreement 10).
   priority: 2
   constraints:
     packages: [debate_core.integrations, config/feeds]
@@ -36,6 +51,9 @@ spec:
   context:
     - kind: TaskRef
       name: v1-e07-t01-search-provider-contract
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e04-t02-http-fetcher
       relation: dependsOn
   acceptanceCriteria:
     - id: ac1
@@ -53,6 +71,12 @@ spec:
     - id: ac4
       description: >-
         Topic config controls which government providers run for a search, verified by a registry test.
+    - id: ac5
+      description: >-
+        (PM amendment 2026-10-21) The adapter, in `debate_core.integrations.discovery`,
+        passes `debate_core.testing.contracts.search_provider` on its recorded fixtures, its
+        secrets never reach a log line, and its tests pass in one process after the
+        OpenCaselist and discovery suites.
 status:
   phase: Pending
 ---
@@ -81,7 +105,7 @@ spec:
           Record fixtures and implement documents search with conditions[term], publication_date range and
           type filters.
         outputs:
-          - packages/debate_core/src/debate_core/integrations/search/federal_register.py
+          - packages/debate_core/src/debate_core/integrations/discovery/federal_register.py
           - tests/fixtures/providers/federal_register/
         estimatedEffort: 2h
         acceptanceCriteria:
@@ -91,7 +115,7 @@ spec:
             args:
               - run
               - pytest
-              - packages/debate_core/tests/integrations/search/test_government.py
+              - packages/debate_core/tests/integrations/discovery/test_government.py
               - -k
               - federal_register
       - id: data-gov-key
@@ -99,20 +123,20 @@ spec:
         name: api.data.gov key handling
         description: >-
           Shared key settings with redaction and NOT_CONFIGURED health status when absent.
-        outputs: [packages/debate_core/src/debate_core/integrations/search/data_gov.py]
+        outputs: [packages/debate_core/src/debate_core/integrations/discovery/data_gov.py]
         estimatedEffort: 1h
         acceptanceCriteria:
           - type: test_passes
             name: Key handling tests pass
             command: uv
-            args: [run, pytest, packages/debate_core/tests/integrations/search/test_government.py, -k, key]
+            args: [run, pytest, packages/debate_core/tests/integrations/discovery/test_government.py, -k, key]
       - id: congress-gov
         kind: Task
         name: Congress.gov adapter
         description: >-
           Record fixtures and implement bill search with congress and update-date filters.
         dependsOn: [data-gov-key]
-        outputs: [packages/debate_core/src/debate_core/integrations/search/congress_gov.py]
+        outputs: [packages/debate_core/src/debate_core/integrations/discovery/congress_gov.py]
         estimatedEffort: 2h
         acceptanceCriteria:
           - type: test_passes
@@ -121,7 +145,7 @@ spec:
             args:
               - run
               - pytest
-              - packages/debate_core/tests/integrations/search/test_government.py
+              - packages/debate_core/tests/integrations/discovery/test_government.py
               - -k
               - congress
       - id: govinfo
@@ -131,7 +155,7 @@ spec:
           Record fixtures and implement search over CRPT, CHRG and GAOREPORTS-style collections with date
           filters.
         dependsOn: [data-gov-key]
-        outputs: [packages/debate_core/src/debate_core/integrations/search/govinfo.py]
+        outputs: [packages/debate_core/src/debate_core/integrations/discovery/govinfo.py]
         estimatedEffort: 2h
         acceptanceCriteria:
           - type: test_passes
@@ -140,7 +164,7 @@ spec:
             args:
               - run
               - pytest
-              - packages/debate_core/tests/integrations/search/test_government.py
+              - packages/debate_core/tests/integrations/discovery/test_government.py
               - -k
               - govinfo
       - id: topic-enablement
@@ -155,6 +179,6 @@ spec:
           - type: test_passes
             name: Full government adapter tests pass
             command: uv
-            args: [run, pytest, packages/debate_core/tests/integrations/search/test_government.py]
+            args: [run, pytest, packages/debate_core/tests/integrations/discovery/test_government.py]
 status:
   phase: Pending

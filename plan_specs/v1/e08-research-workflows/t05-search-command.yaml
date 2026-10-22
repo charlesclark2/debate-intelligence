@@ -25,6 +25,11 @@ spec:
     configured) so partial results are never silent. Exit codes: 0 results returned, 6 partial results, 7
     no results or all providers failed, 2 usage error. Boundaries: no cutting (t06), no digests (t07); the
     CLI contains no ranking or dedupe logic.
+    (PM amendment 2026-10-21, from v1-e08-t01's PM review.) The container builds
+    `FederatedSearchService` from `ProviderRegistry.from_settings` through the
+    `DiscoveryProviders` port. The overall deadline is a new setting,
+    `providers.search_deadline_seconds`, default 15, beside `timeout_seconds`; the status footer
+    reads the outcome's `provider_health`.
   priority: 1
   constraints:
     packages: [debate_cli]

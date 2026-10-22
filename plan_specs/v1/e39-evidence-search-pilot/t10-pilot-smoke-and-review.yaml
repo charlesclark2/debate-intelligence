@@ -26,9 +26,29 @@ spec:
     beta on prod (a checklist in the runbook), and a student pilot with three to five debaters
     for at least a week. docs/data/evidence-search-pilot.md records tallies and themes, never
     names, and the go or no-go for the whole team.
+    (PM amendment 2026-10-21, superseding the signed-in cloud smoke above, from the PM's rulings
+    on v1-e39-t02, t03, t05 and t06.) No TOTP seed is stored for CI, and validate-dev runs no
+    signed-in check. Its smoke checks need no account: `/healthz`, the `302` to managed login
+    for a request without a session, the content-hashed `app.js` and `app.css` with their
+    immutable cache header, and the CSP on every response. The signed-in journey (sign in,
+    search, open a card, Copy card, download, a removed synthetic source gone) is an
+    operator-run script against dev, where the operator types the code when asked; nothing holds
+    a seed. The synthetic seed goes in through the dev store as a synthetic caselist, and the
+    dev index is built and published by the normal path (v1-e39-t09's stage or `tub index`); no
+    script publishes a separate index over dev's `current.json`. The app configures logging so
+    the index holder's `INFO` lines (index loaded, its size and load time; no query, card or
+    user) reach the function's app log, and the query time (p50, p95) and the cold-start index
+    load are measured on the Lambda function from that log and recorded in
+    docs/data/evidence-search-pilot.md. The coach's beta checklist also covers: a real
+    Chromebook (sign in, search, open a card, Copy card into Google Docs, formatting kept),
+    moved here from v1-e39-t06 because no Chromebook was available on 2026-10-21; each tester's
+    first sign-in with screenshots, saying which factors managed login offered, which was chosen
+    and whether the app's enrolment page then appeared (v1-e39-t05's open finding); and one
+    paste into Word, yes or no.
   priority: 1
   constraints:
-    packages: [tests/smoke, scripts, docs/runbooks, docs/data, packages/debate_api]
+    # PM amendment 2026-10-21: validate-dev's wiring and its test.
+    packages: [tests/smoke, scripts, docs/runbooks, docs/data, packages/debate_api, .github/workflows, tests/scripts]
     forbidden:
       - A real student's name, username or feedback quoted with an identity
       - Real disclosed files in the dev seed
@@ -52,6 +72,21 @@ spec:
       description: >-
         The student pilot has run for at least a week; docs/data/evidence-search-pilot.md
         records its tallies, themes and the go or no-go.
+    - id: ac4
+      description: >-
+        (PM amendment 2026-10-21) validate-dev's pilot smoke checks need no account and no
+        stored secret, by the workflow's own test; the signed-in journey is an operator-run
+        script whose run is recorded in the report.
+    - id: ac5
+      description: >-
+        (PM amendment 2026-10-21) The index holder's load lines reach the function's app
+        log, and the Lambda query time (p50, p95) and cold-start index load are recorded in
+        docs/data/evidence-search-pilot.md.
+    - id: ac6
+      description: >-
+        (PM amendment 2026-10-21) The coach's beta records the Chromebook check, the first
+        sign-in screenshots' answers and the Word paste, as yes or no and counts, never
+        names.
 status:
   phase: Pending
 ---

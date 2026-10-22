@@ -365,9 +365,9 @@ no live managed login session behind it.
    new temporary password (`AdminSetUserPassword` with `Permanent` false), shown once. It removes
    the authenticator (`AdminDeleteSoftwareToken`, which the TOTP documentation names for a lost or
    reset phone) and signs the user out everywhere (`AdminUserGlobalSignOut`). At the next sign-in
-   the student sets a password and enrols an authenticator again. A student with a verified backup
-   email can instead sign in with an emailed code and replace the authenticator from the account
-   page, without the coach.
+   the student sets a password and enrols an authenticator again. A student with a new phone also
+   goes to the coach for a reset: the account page offers no self-service replacement (corrected
+   by the PM, 2026-10-21; see Consequences).
 7. **Removing a student who leaves.** `tub users remove <username>` signs them out everywhere and
    calls `AdminDeleteUser`, which deletes the account and every attribute on it, the email
    included (gate item 9). Any session still open ends at its next revalidation, within five
@@ -585,6 +585,17 @@ publish a real-corpus index to dev for validation, because only operators have a
   credential deliberately holds none on `reports/`, because a report holds no evidence. The pilot's
   index does hold card text. `v1-e39-t07` adds that one prefix to the removal side, in the store
   layout document and its IAM policy.
+- **No self-service replacement of an authenticator in the pilot** (PM ruling, 2026-10-21, from
+  `v1-e39-t05`'s dev runs). A new phone goes to the coach for a reset. On dev, Cognito's
+  `AssociateSoftwareToken` behaved two ways. For an account whose authenticator was set up on the
+  managed login page alone, starting a new association removed the old one at once
+  (`AdminGetUser` listed no MFA setting before any confirm). For an account whose authenticator was
+  registered through the app's page with `SetUserMFAPreference`, the old one was still listed six
+  minutes later. The first is the common case. A replacement begun and not finished would leave
+  enrolment open to anyone holding the student's password, and a reset's temporary password comes
+  from the coach, so enrolment after a reset is never open to a password alone. A test holds that
+  no route a full session can reach calls `AssociateSoftwareToken`. Re-allowing self-service
+  replacement means measuring Cognito's behaviour first.
 - **SES production access is an AWS decision on AWS's clock.** Until it is granted, the email
   fallback reaches no student. TOTP sign-in and the coach's reset do not depend on it.
 

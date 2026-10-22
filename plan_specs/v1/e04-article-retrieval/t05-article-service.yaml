@@ -33,6 +33,9 @@ spec:
     identity key, never a fetch target: the service fetches the URL as given (or a wrapper's
     literal destination), never a host it guessed (such as an AMP page's www host), and stores
     both the fetched URL and the canonical one.
+    (PM amendment 2026-10-21, from v1-e04-t02's PM review.) `FakeArticleFetcher` answers an
+    unknown URL as the real fetcher does: `HttpStatusError(404)` with `access_status` `UNKNOWN`,
+    rather than `NOT_FOUND` with no error.
   priority: 1
   constraints:
     packages: [debate_core.application]

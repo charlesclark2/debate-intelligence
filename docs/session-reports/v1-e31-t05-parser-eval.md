@@ -960,3 +960,20 @@ section: the blind file's share of rows changed from its pre-label beside the re
 files went round (Numbers, `check --repair`, import), in the guide's last working-reference
 section. The page refuses a file whose worksheet was changed in a spreadsheet or whose `.numbers`
 file is in the folder, so the two routes never write over each other.
+
+## PM record, 2026-10-21
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+* **ac4, the baseline:** written on 2026-10-20 on `2026.10.18-docx-5` and merged (#364), with its
+  report at `docs/data/parser-eval-2026-10.md`. The pr-subset gate holds every unit's F1 within
+  0.01 of it from then on.
+* **ac3, targets met or ticketed:** the baseline missed several targets (Verbatim TAG 0.950,
+  CITE 0.751 with recall 0.623, EVIDENCE 0.934, span F1 0.971; non-Verbatim CITE 0.796;
+  wiki-converted files; Public Forum highlight F1 0.759). They are ticketed by
+  [`v1-e31-t31-labelled-evaluation-gaps`](../../plan_specs/v1/e31-debate-file-parsing/t31-labelled-evaluation-gaps.yaml),
+  filed by the PM on 2026-10-21. With that ticket, ac3's "met or ticketed" is met.
+* **Still open:** ac5 (the corpus health report under docs/data) and ac6 (deleting the
+  hand-unpacked archives once the evaluation no longer needs them) are the operator's, as before.
+  The Goal stays `InProgress` until they are recorded.
+

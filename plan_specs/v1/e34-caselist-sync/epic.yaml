@@ -769,5 +769,22 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e34-t29-newer-fingerprint-table-guard
+    - id: t30
+      kind: Task
+      name: 'doctor says when a store the weekly run will index has never been parsed'
+      description: >-
+        doctor says when a store the weekly run will index has never been parsed.
+      inputs:
+        specRef: plan_specs/v1/e34-caselist-sync/t30-doctor-unparsed-store.yaml
+        goalRef: v1-e34-t30-doctor-unparsed-store
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e34-t30-doctor-unparsed-store reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e34-t30-doctor-unparsed-store
 status:
   phase: Pending

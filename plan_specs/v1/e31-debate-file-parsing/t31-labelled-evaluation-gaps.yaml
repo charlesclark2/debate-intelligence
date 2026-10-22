@@ -1,0 +1,97 @@
+# TASK v1-e31-t31-labelled-evaluation-gaps - Where the labelled evaluation's missed cites, tags and highlights go, counted before any rule
+# Epic: E31 Debate File Parsing | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e31-t31-labelled-evaluation-gaps
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e31-debate-file-parsing
+  annotations:
+    debate/title: "Where the labelled evaluation's missed cites, tags and highlights go, counted before any rule"
+spec:
+  # Filed by the PM, 2026-10-21, from the parser evaluation baseline of 2026-10-20 (#364) and v1-e31-t05's ac3.
+  description: >-
+    The first labelled baseline (2026-10-20, on `2026.10.18-docx-5`) missed several of
+    v1-e31-t05's targets: Verbatim TAG F1 0.950, CITE 0.751 (precision 0.985, recall 0.623),
+    EVIDENCE 0.934 and span F1 0.971; non-Verbatim CITE 0.796; wiki-converted files weak; Public
+    Forum highlight F1 0.759. This task is the ticket ac3 of v1-e31-t05 asks for. Cite recall is
+    the largest gap and the one students see: a missed cite leaves a card without its source.
+    First the operator re-measures the baseline's tiers on the `docx-6` store (v1-e31-t24), with
+    no `--write-baseline`. Then, counts first: for every labelled row whose gold unit is CITE,
+    TAG or a highlight span and that the parser read otherwise, what it was read as, by
+    caselist, template family and format, as tallies only. The session proposes rules to the PM
+    from the tallies and waits for a ruling before changing any rule, as v1-e31-t19, t22 and t24
+    did. Each ruled rule is a synthetic fixture shown failing first, the pr-subset gate must
+    hold, tag and cite precision must not fall, and `parser_version` is bumped once for the
+    whole task, with the operator's re-parse written out in full.
+  priority: 2
+  constraints:
+    packages: [debate_core.evidence, debate_core.integrations.docx_parser, packages/debate_core/tests, scripts, tests/scripts, tests/evals, docs/data]
+    forbidden:
+      - Any rule change before the PM rules on the tallies
+      - Card text, a school, team code, file name or person's name in any fixture, log, report or commit (synthetic values only)
+      - Changing a label file, or `--write-baseline`, unless the PM rules it
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e31-t24-bold-tag-above-bracketed-cite
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The baseline's tiers re-measured on the `docx-6` store, recorded beside the
+        2026-10-20 figures in docs/data, without writing a baseline (operator).
+    - id: ac2
+      description: >-
+        Tallies of where missed CITE, TAG and highlight rows go, by caselist, template
+        family and format, counts only, sent to the PM before any rule.
+    - id: ac3
+      description: >-
+        Each rule the PM rules is a synthetic fixture shown failing first; the pr-subset
+        gate holds; tag and cite precision do not fall; the before and after figures are in
+        the report.
+    - id: ac4
+      description: >-
+        `parser_version` is bumped once, and the operator's re-parse (dev, the second run,
+        prod with a sign-in before each caselist, the cluster rebuild) is written out in
+        full.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e31-t31-labelled-evaluation-gaps-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e31-debate-file-parsing
+spec:
+  description: >-
+    Re-measure on docx-6, tally the misses, take the PM's ruling, then build the ruled rules
+    failing first.
+  goalRef:
+    name: v1-e31-t31-labelled-evaluation-gaps
+  graph:
+    nodes:
+      - id: missed-units
+        kind: Task
+        name: Missed units, counted then ruled
+        description: >-
+          Re-measure on docx-6, tally the misses, take the PM's ruling, then build the
+          ruled rules failing first.
+        estimatedEffort: 5h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Parser tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations/docx_parser]
+status:
+  phase: Pending

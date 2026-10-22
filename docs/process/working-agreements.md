@@ -230,6 +230,15 @@ gate, and it runs once per push rather than once per idea. (Added by the PM, 202
     what it changed and the always-run list (the PM's ruling of 2026-10-19, written in 2026-10-20);
   * `ruff format --check`, `ruff check`, `pyright packages/<changed packages>`, `lint-imports`,
     `scripts/validate_specs.py`, and the docs checks when docs changed. These take seconds.
+* **A time limit goes on the interpreter, not on `uv`.** `perl -e 'alarm 115; exec @ARGV' uv run
+  pytest ...` stops `uv` and leaves its pytest child running to the end. Put the alarm on
+  `.venv/bin/python -m pytest ...` directly (`v1-e39-t09`, written in by the PM, 2026-10-21).
+* **Tests that share process-wide state are checked in one process.** A logging filter, a logger's
+  handlers or any module-level registry is shared by every test in an xdist worker, so a test can
+  pass or fail, or a leak can be hidden, by which other suite ran first. When a task's tests assert
+  on such state, they start from it bare and restore it, and before the report they run once with
+  `-n 0 -p no:randomly` after the neighbouring suites that touch the same state. The httpx and
+  httpcore loggers are the known case (`v1-e07-t01`'s CI, written in by the PM, 2026-10-21).
 * **After a sync or rebase**, run the affected set again, never the whole selection.
 * **When CI fails** on the pull request, the operator pastes the failing part's output into the
   session, which fixes it, runs the affected set and the failing tests, and commits; the operator

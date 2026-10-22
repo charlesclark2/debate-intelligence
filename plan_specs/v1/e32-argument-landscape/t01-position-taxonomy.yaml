@@ -31,6 +31,15 @@ spec:
     normalizes pocket/hat/block headings from the E31 parsed card store, clusters them and emits a
     candidate list the coach curates. Boundaries: matching headings to positions at classification time
     and any model use are t02; counting and reports are t03/t04; the landscape CLI is t05.
+    (PM amendment 2026-10-21, superseding the Sept-Oct 2026 LD and PF topics above.) Those
+    topics end on 2026-10-31, before this task could be curated. The initial files cover the
+    Policy 2026-27 topic and the LD and PF topics current when the task starts
+    (November-December 2026 or later). The coach gives each resolution's wording and its date
+    range in `config/landscape/topics.yaml`; the session never writes a resolution from memory.
+    The Sept-Oct topics stay in `topics.yaml` as date ranges with no taxonomy, so earlier
+    snapshots resolve. Seeding counts first how many disclosed files the store holds on each new
+    topic, and seeds only from headings it holds; a topic with too few files to seed waits, and
+    the report says so. Start this task no earlier than mid-November 2026.
   priority: 1
   constraints:
     packages:

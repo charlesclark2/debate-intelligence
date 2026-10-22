@@ -1423,7 +1423,9 @@ def test_one_key_answers_and_a_key_pressed_before_the_question_is_discarded(
     """
     import os
     import pty
+    import select
     import threading
+    import tty
 
     controller, terminal = pty.openpty()
 
@@ -1442,7 +1444,13 @@ def test_one_key_answers_and_a_key_pressed_before_the_question_is_discarded(
     try:
         with open(terminal, encoding="utf-8", closefd=False) as stream:  # noqa: PTH123 - a descriptor, not a path
             monkeypatch.setattr(sys, "stdin", stream)
+            # One key at a time already, so the early key is readable the moment it lands. On Linux
+            # a byte written to the controller reaches the terminal's input queue asynchronously;
+            # without this wait, read_key's TCSAFLUSH could run before the "s" arrives, and the "s"
+            # would then answer (seen in CI on 2026-10-20 and in PR #380).
+            tty.setcbreak(terminal)
             os.write(controller, b"s")  # pressed while the pair was being drawn
+            assert select.select([terminal], [], [], 1.0)[0], "the early key never reached the terminal"
             for key in keys:
                 key.start()
             answer = script.read_key("> ")

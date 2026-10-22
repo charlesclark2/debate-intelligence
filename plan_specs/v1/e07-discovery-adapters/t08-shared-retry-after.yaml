@@ -1,0 +1,81 @@
+# TASK v1-e07-t08-shared-retry-after - One Retry-After reader for every HTTP adapter, on an injected clock
+# Epic: E07 Discovery Provider Adapters | Release: v1.4 (Federated research from the CLI) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e07-t08-shared-retry-after
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e07-discovery-adapters
+  annotations:
+    debate/title: "One Retry-After reader for every HTTP adapter, on an injected clock"
+spec:
+  # Filed by the PM, 2026-10-21, from v1-e04-t02's Follow-up work and its PM review.
+  description: >-
+    Three adapters read `Retry-After`: `debate_core.integrations.discovery.http_failures`
+    (`retry_after_seconds`, v1-e07-t01), the article fetcher, which imports it (v1-e04-t02), and
+    OpenCaselist's transport (`_retry_after`), which reads the wall clock. Move
+    `retry_after_seconds` to a shared module under `debate_core.integrations`, read the current
+    time from an injected clock, and use it in all three; OpenCaselist's behaviour is unchanged
+    except that its date form reads the injected clock.
+  priority: 3
+  constraints:
+    packages: [debate_core.integrations, packages/debate_core/tests]
+    forbidden:
+      - Any change to which statuses are retried or how long an adapter waits, beyond reading the clock it is given
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e07-t01-search-provider-contract
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e04-t02-http-fetcher
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        One `retry_after_seconds`, in a shared integrations module, is used by the discovery
+        mapping, the article fetcher and the OpenCaselist transport, and an import-linter or
+        architecture test fails on a second copy.
+    - id: ac2
+      description: >-
+        Its date form reads an injected clock, by test, and the three adapters' existing
+        Retry-After tests pass unchanged.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e07-t08-shared-retry-after-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.4
+    debate/epic: v1-e07-discovery-adapters
+spec:
+  description: >-
+    Move the reader to a shared module, inject the clock, and point the three adapters at it.
+  goalRef:
+    name: v1-e07-t08-shared-retry-after
+  graph:
+    nodes:
+      - id: retry-after
+        kind: Task
+        name: Shared Retry-After
+        description: >-
+          Move the reader to a shared module, inject the clock, and point the three
+          adapters at it.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Integration tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/integrations]
+status:
+  phase: Pending

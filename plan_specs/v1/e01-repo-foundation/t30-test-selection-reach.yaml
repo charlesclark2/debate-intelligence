@@ -1,0 +1,91 @@
+# TASK v1-e01-t30-test-selection-reach - Tests stop reaching code they do not use: fakes by port, no port re-exports, and a graph option
+# Epic: E01 Repository & Delivery Foundation | Release: v1.0 (Foundation & verified evidence core) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e01-t30-test-selection-reach
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+  annotations:
+    debate/title: "Tests stop reaching code they do not use: fakes by port, no port re-exports, and a graph option"
+spec:
+  # Filed by the PM, 2026-10-21, from v1-e01-t29's Follow-up work and the PM's ruling 3 on it.
+  description: >-
+    v1-e01-t29 cut the median affected share from 79.4% to 65.8%, but without the four
+    whole-selection commits only from 59.4% to 57.7%. What still carries the selection:
+    `debate_core/testing/fakes.py` imports every port, so a test needing one fake reaches
+    caselist suppression and the parsed store; `application/ports/__init__.py` re-exports every
+    port, and `ports/providers.py` re-exports the discovery values and `FetchResult` it no
+    longer defines; `application/settings.py` imports `debate_core.evidence.near_duplicates`;
+    and `packages/debate_core/tests/conftest.py` names `tests/smoke/stand_ins/s3.py`. Split the
+    fakes by port or area, remove the port re-exports once no caller uses them, drop the
+    settings import, and narrow the conftest's reach. Add `--graph REV` to
+    `scripts/affected_tests.py`, so a change can be measured over another tree's import graph,
+    and measure this task over v1-e01-t28's 20 commits with it. No behaviour changes: the
+    collected test count is the same before and after.
+  priority: 2
+  constraints:
+    packages: [debate_core.testing, debate_core.application, debate_core, debate_cli, debate_api, packages, tests, scripts, conftest.py]
+    forbidden:
+      - Any change of behaviour, output or stored data
+      - Moving a test off the PR path or marking it slow
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e01-t29-slim-package-reexports
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        `fakes.py` is split so that importing one fake imports only its port's modules; the
+        port re-exports are gone and every caller imports from the defining module;
+        `settings.py` no longer imports `near_duplicates`; pyright and lint-imports pass.
+    - id: ac2
+      description: >-
+        `scripts/affected_tests.py --diff REV --graph REV2` selects REV's changes over
+        REV2's import graph, by test.
+    - id: ac3
+      description: >-
+        Over v1-e01-t28's 20 commits, the median and largest selected share with this
+        branch's graph, against v1-e01-t29's 65.8% and 100%, recorded in the report; the
+        collected test count is unchanged.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e01-t30-test-selection-reach-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+spec:
+  description: >-
+    Split the fakes, remove the port re-exports and the settings import, add --graph, then
+    re-measure.
+  goalRef:
+    name: v1-e01-t30-test-selection-reach
+  graph:
+    nodes:
+      - id: reach
+        kind: Task
+        name: Test-selection reach
+        description: >-
+          Split the fakes, remove the port re-exports and the settings import, add
+          --graph, then re-measure.
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Selection tests pass
+            command: uv
+            args: [run, pytest, tests/scripts, -k, affected]
+status:
+  phase: Pending

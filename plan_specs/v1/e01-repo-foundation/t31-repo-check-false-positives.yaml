@@ -1,0 +1,81 @@
+# TASK v1-e01-t31-repo-check-false-positives - Repository checks stop flagging true values, and the smoke tests type-check
+# Epic: E01 Repository & Delivery Foundation | Release: v1.0 (Foundation & verified evidence core) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e01-t31-repo-check-false-positives
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+  annotations:
+    debate/title: "Repository checks stop flagging true values, and the smoke tests type-check"
+spec:
+  # Filed by the PM, 2026-10-21, from the PM reviews of v1-e39-t03, v1-e39-t09 and v1-e01-t29.
+  description: >-
+    `tests/architecture/test_single_interpreter_source.py` reads any `3.9` or `3.11.0` outside a
+    session report as a Python version, so it flagged a measured 3.9 ms and SQLite's 3.11.0 in
+    v1-e39-t03, and the session reworded true figures to pass. Narrow it to Python-version
+    contexts (a `python` word, `requires-python`, a classifier, a `pyenv`/`uv python` line) and
+    keep it catching a real second declaration. `tests/smoke/test_caselist_pull_in_process.py`
+    and `tests/smoke/test_caselist_runs.py` have pyright errors about boto3's optional TypedDict
+    keys (since 2026-10-12 and 2026-10-14); fix them so `pyright tests/smoke` is clean.
+    `docs/evidence/snapshot-text-format.md` still names
+    `debate_core.testing.InMemoryCardEditLog`, which is
+    `debate_core.testing.fakes.InMemoryCardEditLog` since v1-e01-t29.
+  priority: 3
+  constraints:
+    packages: [tests/architecture, tests/smoke, docs/evidence]
+    forbidden:
+      - Weakening the interpreter check so that a second Python version declaration passes
+      - Any change of behaviour
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e01-t29-slim-package-reexports
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The interpreter check passes on a measured time and a SQLite version, and still
+        fails on a second Python version declaration, by tests shown failing first.
+    - id: ac2
+      description: >-
+        `uv run pyright tests/smoke` reports no errors, and the stale name in docs/evidence
+        is fixed.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e01-t31-repo-check-false-positives-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+spec:
+  description: >-
+    Narrow the interpreter check, fix the smoke tests' types and the stale name.
+  goalRef:
+    name: v1-e01-t31-repo-check-false-positives
+  graph:
+    nodes:
+      - id: checks
+        kind: Task
+        name: Check false positives
+        description: >-
+          Narrow the interpreter check, fix the smoke tests' types and the stale name.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Architecture tests pass
+            command: uv
+            args: [run, pytest, tests/architecture]
+status:
+  phase: Pending

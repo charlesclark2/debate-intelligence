@@ -112,6 +112,21 @@ catches (`111 passed`).
 The installation tests were run red first: with the extras changed and the tests not yet updated,
 3 failed (the pinned extras, and the two drop cases that left out `http`).
 
+### After the pull request's first CI run
+
+PR #382's `ci` failed on two tests in `tests/scripts/test_stamp_build.py`, which read the CLI's real
+`debate-core[aws,docx,opencaselist,tub]` requirement: `test_stamp_sets_both_versions_and_pins_debate_core`
+(part 2: `1 failed, 2265 passed`) and `test_stamp_refuses_a_pyproject_it_cannot_edit_unambiguously`
+(part 5: `1 failed, 2257 passed`, "DID NOT RAISE StampError"). Parts 1, 3 and 4, lint, typecheck,
+import boundaries and spec validation passed. My sweep for the old extras string had skipped
+`tests/scripts`. Both literals now name `http`, and the refusal test asserts that its edit changed
+the file, so a future rename fails there with a message instead of not raising. The CLI README's
+sentence on what an installed build contains named the old extras too, and now lists all five.
+
+* `.venv/bin/python -m pytest -q -n 0 -p no:randomly tests/scripts/test_stamp_build.py` → `22 passed`
+* The same file at the previous commit, against the new pyproject → `2 failed, 20 passed`: the two
+  CI failures, reproduced.
+
 ### Mutation run
 
 23 mutants on the retry rule, the backoff bound, Retry-After, the robots refusal and the size limit

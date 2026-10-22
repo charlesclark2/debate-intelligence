@@ -61,7 +61,7 @@ API_KEY: Final = "openalex-test-key-5f2c9e81"
 CONTACT_EMAIL: Final = "openalex-coach@example.org"
 VERSION: Final = "0.0.0-test"
 SELECT: Final = (
-    "id,doi,display_name,publication_date,type,open_access,best_oa_location,primary_location,"
+    "id,doi,display_name,publication_date,type,cited_by_count,open_access,best_oa_location,primary_location,"
     "authorships,abstract_inverted_index"
 )
 
@@ -420,6 +420,60 @@ def test_the_venue_is_the_primary_locations_source_and_absent_without_one() -> N
     assert unnamed is not None and unnamed.publication is None
 
 
+@pytest.mark.parametrize(
+    ("cited_by_count", "expected"),
+    [(42, 42), (0, 0), (-1, None), ("12", None), (3.0, None), (True, None), (None, None)],
+    ids=["a count", "zero", "negative", "a string", "a float", "a bool", "null"],
+)
+def test_the_citation_count_is_a_non_negative_integer_or_none(
+    cited_by_count: object, expected: int | None
+) -> None:
+    candidate = candidate_from_work(a_work(cited_by_count=cited_by_count))
+    assert candidate is not None
+    assert candidate.citation_count == expected
+
+
+def test_a_work_without_a_citation_count_has_none() -> None:
+    candidate = candidate_from_work(a_work())
+    assert candidate is not None
+    assert candidate.citation_count is None
+
+
+@pytest.mark.parametrize(
+    ("open_access", "expected"),
+    [
+        ({"is_oa": True, "oa_url": None}, True),
+        ({"is_oa": False}, False),
+        ({"is_oa": None}, None),
+        ({"is_oa": "true"}, None),
+        ({"is_oa": 1}, None),
+        ({}, None),
+        (None, None),
+        (True, None),
+    ],
+    ids=[
+        "open without a link",
+        "closed",
+        "null",
+        "a string",
+        "an int",
+        "no is_oa",
+        "null object",
+        "not an object",
+    ],
+)
+def test_open_access_is_openalexs_is_oa_or_none(open_access: object, expected: bool | None) -> None:
+    candidate = candidate_from_work(a_work(open_access=open_access))
+    assert candidate is not None
+    assert candidate.open_access is expected
+
+
+def test_a_work_without_open_access_has_none() -> None:
+    candidate = candidate_from_work(a_work())
+    assert candidate is not None
+    assert candidate.open_access is None
+
+
 # --------------------------------------------------------------------------------------------
 # The request
 # --------------------------------------------------------------------------------------------
@@ -470,7 +524,8 @@ async def test_a_request_with_since_and_until_carries_the_date_filters_and_the_k
     assert str(seen[0].url) == (
         "https://api.openalex.org/works?search=health+insurance"
         "&filter=from_publication_date%3A2020-01-01%2Cto_publication_date%3A2024-12-31&per_page=3"
-        "&select=id%2Cdoi%2Cdisplay_name%2Cpublication_date%2Ctype%2Copen_access%2Cbest_oa_location"
+        "&select=id%2Cdoi%2Cdisplay_name%2Cpublication_date%2Ctype%2Ccited_by_count%2Copen_access"
+        "%2Cbest_oa_location"
         "%2Cprimary_location%2Cauthorships%2Cabstract_inverted_index"
     )
 

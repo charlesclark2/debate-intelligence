@@ -4,7 +4,7 @@
     {
       "request": {
         "method": "GET",
-        "url": "https://api.openalex.org/works?search=health+insurance&filter=from_publication_date%3A2020-01-01%2Cto_publication_date%3A2024-12-31&per_page=3&select=id%2Cdoi%2Cdisplay_name%2Cpublication_date%2Ctype%2Copen_access%2Cbest_oa_location%2Cprimary_location%2Cauthorships%2Cabstract_inverted_index"
+        "url": "https://api.openalex.org/works?search=health+insurance&filter=from_publication_date%3A2020-01-01%2Cto_publication_date%3A2024-12-31&per_page=3&select=id%2Cdoi%2Cdisplay_name%2Cpublication_date%2Ctype%2Ccited_by_count%2Copen_access%2Cbest_oa_location%2Cprimary_location%2Cauthorships%2Cabstract_inverted_index"
       },
       "response": {"status": 200, "headers": {"content-type": "application/json"}, "body": "{\"meta\": {\"count\": 1287, \"per_page\": 3}, \"results\": [{\"id\": \"https://openalex.org/W4390000001\", \"display_name\": \"Premium sub"}
     }

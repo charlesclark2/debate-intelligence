@@ -2,6 +2,8 @@
   {
     "provider": "openalex",
     "provider_record_id": "W4390000001",
+    "citation_count": 42,
+    "open_access": true,
     "title": "Premium subsidies and enrollment in invented state marketplaces",
     "url": "https://doi.org/10.5555/hip.2023.0142",
     "identifiers": {"doi": "10.5555/hip.2023.0142", "openalex_id": "W4390000001"},
@@ -15,6 +17,8 @@
   {
     "provider": "openalex",
     "provider_record_id": "W4390000002",
+    "citation_count": 3,
+    "open_access": false,
     "title": "Coverage gaps among invented gig workers",
     "url": "https://reports.example.org/coverage-gaps-2021",
     "identifiers": {"openalex_id": "W4390000002"},
@@ -25,6 +29,8 @@
   {
     "provider": "openalex",
     "provider_record_id": "W4390000003",
+    "citation_count": 0,
+    "open_access": true,
     "title": "Risk pools in a made-up insurance market",
     "url": "https://doi.org/10.5555/handbook.ch7",
     "identifiers": {"doi": "10.5555/handbook.ch7", "openalex_id": "W4390000003"},

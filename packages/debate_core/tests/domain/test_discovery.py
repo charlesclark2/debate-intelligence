@@ -6,6 +6,7 @@ Every expected value here is written out by hand from the input beside it (worki
 from __future__ import annotations
 
 import inspect
+import json
 from datetime import UTC, datetime, timedelta, timezone
 
 import pytest
@@ -110,6 +111,33 @@ def test_raw_ref_is_an_opaque_reference_to_a_stored_record() -> None:
 # --------------------------------------------------------------------------------------------
 # Publication time
 # --------------------------------------------------------------------------------------------
+
+
+def test_citation_count_and_open_access_default_to_none() -> None:
+    candidate = make_candidate()
+
+    assert candidate.citation_count is None
+    assert candidate.open_access is None
+
+
+def test_a_record_stored_before_citation_count_and_open_access_loads_with_none() -> None:
+    stored = {"provider": "openalex", "title": "Methane leakage", "url": "https://example.org/methane"}
+
+    candidate = CandidateResult.model_validate_json(json.dumps(stored))
+
+    assert (candidate.citation_count, candidate.open_access) == (None, None)
+
+
+def test_a_candidate_refuses_a_negative_citation_count() -> None:
+    with pytest.raises(ValidationError, match="citation_count"):
+        make_candidate(citation_count=-1)
+
+
+def test_a_candidate_keeps_a_citation_count_and_whether_it_is_open() -> None:
+    candidate = make_candidate(citation_count=0, open_access=False)
+
+    assert (candidate.citation_count, candidate.open_access) == (0, False)
+    assert CandidateResult.model_validate_json(candidate.model_dump_json()) == candidate
 
 
 def test_a_candidate_refuses_a_naive_publication_time() -> None:
@@ -264,7 +292,11 @@ def test_the_breaker_states_have_stable_values() -> None:
 
 def test_an_answered_call_keeps_the_query_and_the_response_as_returned() -> None:
     query = ProviderQuery(query="methane leakage")
-    response = ProviderResponse(provider="openalex", results=(make_candidate(),), elapsed_ms=212.0)
+    response = ProviderResponse(
+        provider="openalex",
+        results=(make_candidate(), make_candidate(citation_count=42, open_access=True)),
+        elapsed_ms=212.0,
+    )
 
     status = ProviderStatus(
         provider="openalex", query=query, outcome=ProviderOutcome.OK, elapsed_ms=215.0, response=response

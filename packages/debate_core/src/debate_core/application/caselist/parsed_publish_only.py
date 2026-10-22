@@ -57,10 +57,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import Final
 
-from debate_core.application.caselist.occurrence_table_guard import (
-    is_newer_fingerprint_version,
-    newer_stamp,
-)
+from debate_core.application.caselist.occurrence_table_guard import newer_stamp
 from debate_core.application.errors import DomainError
 from debate_core.application.ports.parsed_store import ParsedStore, skip_key
 from debate_core.evidence.fingerprints import FINGERPRINT_VERSION
@@ -188,20 +185,15 @@ async def refuse_unpublishable(
             version=version,
             hint=_hint_for_stamps(caselist, stale),
         )
-    newer = sorted(
-        {
-            entry.fingerprint_version
-            for entry in entries
-            if is_newer_fingerprint_version(entry.fingerprint_version, FINGERPRINT_VERSION)
-        }
-    )
-    if newer:
+    # The guard's own comparison, as every newer-than question about a stamp is (`v1-e34-t29`).
+    newer = newer_stamp(entry.fingerprint_version for entry in entries)
+    if newer is not None:
         raise ParsedFingerprintVersionMismatch(
-            f"per-source records of {caselist} {version} are stamped {_listed(newer)}, newer than this "
+            f"per-source records of {caselist} {version} are stamped {newer}, newer than this "
             f"build's {FINGERPRINT_VERSION}",
             caselist=caselist,
             version=version,
-            hint=_hint_for_stamps(caselist, newer),
+            hint=_hint_for_stamps(caselist, [newer]),
         )
     return version
 

@@ -6,7 +6,7 @@
 | Spec | [`plan_specs/v1/e07-discovery-adapters/t02-openalex-adapter.yaml`](../../plan_specs/v1/e07-discovery-adapters/t02-openalex-adapter.yaml) |
 | Epic / release | `v1-e07-discovery-adapters` / `v1.4` |
 | Branch | `task/v1-e07-t02-openalex-adapter` |
-| Session status | PARTIAL <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | COMPLETE <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
@@ -14,7 +14,8 @@
 search sends one `GET` with `search=`, the date window as `from_publication_date`/`to_publication_date`
 filters, `per_page` capped at 100, and a `select=` of the fields it maps. It maps works to
 `CandidateResult`s: DOI, OpenAlex id, title, author display names, venue, date, a source type from a
-one-place table, the rebuilt abstract and the best open-access URL. It passes the contract kit with a
+one-place table, the rebuilt abstract, the best open-access URL, whether OpenAlex says the work is
+open, and its citation count. It passes the contract kit with a
 key, without one, and on an empty result. `openalex_factory` builds it for the registry, which wraps it
 in `ResilientProvider`.
 
@@ -23,10 +24,11 @@ in `ResilientProvider`.
 `Authorization: Bearer`, and OpenAlex no longer receives the contact email. The spec was amended to
 match.
 
-**Why the Goal stays InProgress:** ac2 asks for `cited_by_count`, but `CandidateResult` has no field for
-it. My second question to the PM (add `citation_count` to `CandidateResult` now, or drop it from ac2)
-has had no ruling, so that part of ac2 is not done. Everything else passes. The question is repeated
-under Deviations, ready to relay.
+**The PM's acceptance condition (2026-10-22) is closed.** `CandidateResult` gained `citation_count`
+(an integer, at least 0) and `open_access` (a boolean), both defaulting to `None`. OpenAlex maps
+`cited_by_count` and `open_access.is_oa` onto them. The tests were shown failing first, and the
+FakeProvider kit bindings and the stored `ProviderStatus` round trip still pass. ac2 now passes and the
+Goal is `Succeeded`.
 
 ## Plan nodes
 
@@ -34,19 +36,19 @@ under Deviations, ready to relay.
 |---|---|---|
 | `record-fixtures` (Record OpenAlex fixtures) | Done | Hand-written from the documented Work object, not captured. They live at the path the PM's ruling set, `packages/debate_core/tests/fixtures/discovery/openalex/`, beside the fake provider's. |
 | `request-builder` (Query and filter request builder) | Done | Built after the PM's authentication ruling, as asked: no request code existed before it. |
-| `result-mapping` (Work to CandidateResult mapping) | Done except `cited_by_count` | The mapping was written first, while the ruling was pending, because the ruling could not change it. |
+| `result-mapping` (Work to CandidateResult mapping) | Done | The mapping was written first, while the authentication ruling was pending, because that ruling could not change it. `citation_count` and `open_access` were added under the PM's condition of 2026-10-22. |
 
 ## Acceptance criteria
 
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
 | ac1 (as amended): a query with since/until sends the date filters, and the API key in the Authorization header when configured, verified by respx route assertions | PASS | `test_a_request_with_since_and_until_carries_the_date_filters_and_the_key_header`: a respx route matching `search`, `filter=from_publication_date:2020-01-01,to_publication_date:2024-12-31`, `per_page`, `select` and `Authorization: Bearer <key>` is called exactly once. Keyless: `test_a_request_without_a_key_has_no_authorization_header_and_no_mailto`. A blank key counts as none: `test_a_request_with_a_blank_key_is_sent_keyless`. |
-| ac2: recorded fixtures map to CandidateResults with DOI, OpenAlex id, authors, venue, published_at, cited_by_count and best OA URL; abstracts rebuilt in word order | FAIL (cited_by_count only) | Everything but `cited_by_count` passes: `test_the_recorded_works_map_to_the_hand_written_candidates`, the kit's `test_the_recording_maps_to_the_expected_results` and `test_the_abstract_is_rebuilt_in_word_order` (11 cases). `cited_by_count` is not mapped, because `CandidateResult` defines no field for it and the PM's brief says to store only what it defines. The PM's ruling on that is pending (Deviations). |
+| ac2: recorded fixtures map to CandidateResults with DOI, OpenAlex id, authors, venue, published_at, cited_by_count and best OA URL; abstracts rebuilt in word order | PASS | `test_the_recorded_works_map_to_the_hand_written_candidates` and the kit's `test_the_recording_maps_to_the_expected_results`, against hand-written expectations that include `citation_count` (42, 3, 0) and `open_access` (open, closed, open). `cited_by_count` maps to `citation_count` under the PM's ruling of 2026-10-22; a missing, non-integer, boolean or negative count is `None` (`test_the_citation_count_is_a_non_negative_integer_or_none`, 7 cases). Abstracts: `test_the_abstract_is_rebuilt_in_word_order` (11 cases). |
 | ac3: 429 and 5xx map to typed ProviderErrors consumed by the circuit breaker; the kit passes | PASS | 429 with `Retry-After: 30` → `ProviderRateLimited(30)`. A spent daily budget (429, no `Retry-After`) → `ProviderRateLimited(None)`. A date `Retry-After` is read against the injected clock (90 s). 503 with `Retry-After` → `ProviderUnavailable`. Through the registry: two 503s open the breaker and the third call sends nothing (`ProviderCircuitOpen`). A 429 holds the provider for 30 s, a spent budget for the cool-down. Kit: 3 bindings × 8 checks, all pass. |
-| ac4 (PM amendment): passes the kit in `debate_core.integrations.discovery` on its recordings; secrets never reach a log line; tests pass in one process after the OpenCaselist and discovery suites | PASS | Kit bindings in `test_openalex.py`. The kit's `test_no_secret_surfaces` runs with `(API_KEY, CONTACT_EMAIL)` in its secrets. `test_no_secret_reaches_a_log_line_an_error_a_repr_or_a_health_snapshot` and `test_the_adapter_alone_protects_the_logs_from_its_key` (7 loggers) cover the rest. One process: `.venv/bin/python -m pytest packages/debate_core/tests/integrations/opencaselist packages/debate_core/tests/integrations/test_http_fetcher.py packages/debate_core/tests/integrations/discovery/test_redaction.py packages/debate_core/tests/integrations/discovery/test_resilience.py packages/debate_core/tests/integrations/discovery/test_registry.py packages/debate_core/tests/integrations/discovery/test_http_failures.py packages/debate_core/tests/integrations/discovery/test_fake_provider.py packages/debate_core/tests/integrations/discovery/test_openalex.py -n 0 -p no:randomly -q` → `507 passed`. Collection confirmed every file ran in that order, OpenAlex's 137 last (139 after the blank-key test was added). |
+| ac4 (PM amendment): passes the kit in `debate_core.integrations.discovery` on its recordings; secrets never reach a log line; tests pass in one process after the OpenCaselist and discovery suites | PASS | Kit bindings in `test_openalex.py`. The kit's `test_no_secret_surfaces` runs with `(API_KEY, CONTACT_EMAIL)` in its secrets. `test_no_secret_reaches_a_log_line_an_error_a_repr_or_a_health_snapshot` and `test_the_adapter_alone_protects_the_logs_from_its_key` (7 loggers) cover the rest. One process: `.venv/bin/python -m pytest packages/debate_core/tests/integrations/opencaselist packages/debate_core/tests/integrations/test_http_fetcher.py packages/debate_core/tests/integrations/discovery/test_redaction.py packages/debate_core/tests/integrations/discovery/test_resilience.py packages/debate_core/tests/integrations/discovery/test_registry.py packages/debate_core/tests/integrations/discovery/test_http_failures.py packages/debate_core/tests/integrations/discovery/test_fake_provider.py packages/debate_core/tests/integrations/discovery/test_openalex.py -n 0 -p no:randomly -q` → `507 passed`. Collection confirmed every file ran in that order, with OpenAlex's 137 last. Re-run after the PM's condition: `526 passed`. |
 | Node `record-fixtures`: artifact `packages/debate_core/tests/fixtures/discovery/openalex/works_search.json` exists (path as amended) | PASS | `ls -l` → 717 bytes. |
-| Node `request-builder`: `uv run pytest packages/debate_core/tests/integrations/discovery/test_openalex.py -k request` | PASS | `15 passed in 2.23s` |
-| Node `result-mapping`: `uv run pytest packages/debate_core/tests/integrations/discovery/test_openalex.py` | PASS | `139 passed in 2.39s`. It passes as a command, but ac2's `cited_by_count` is not in what it checks. |
+| Node `request-builder`: `uv run pytest packages/debate_core/tests/integrations/discovery/test_openalex.py -k request` | PASS | `15 passed in 2.10s` (after the PM's condition) |
+| Node `result-mapping`: `uv run pytest packages/debate_core/tests/integrations/discovery/test_openalex.py` | PASS | `156 passed in 1.96s` (after the PM's condition) |
 
 ### Red run, mutation and checks
 
@@ -93,6 +95,46 @@ under Deviations, ready to relay.
   kit's secrets check on an adapter that sends the documented `api_key=` parameter. The check fails it
   with `log record on httpx: HTTP Request: GET`.
 
+### The PM's condition, 2026-10-22: `citation_count` and `open_access`
+
+* **Red first.** I wrote the tests and hand-written expectations first and committed them as `bc276e8`,
+  then ran them against the unchanged source:
+  `.venv/bin/python -m pytest packages/debate_core/tests/domain/test_discovery.py packages/debate_core/tests/integrations/discovery/test_openalex.py -q -n 0 -p no:randomly`
+  → `52 failed, 140 passed, 16 errors`. The changed tests were:
+  * the expected candidates, which gained both values;
+  * `select=` in every recorded URL, which gained `cited_by_count`;
+  * the domain tests: a negative count is refused, both fields default to `None`, a record stored
+    before this change loads with `None`, and a `ProviderStatus` round trip now carries a candidate
+    that has both values;
+  * the count and `is_oa` mapping cases.
+
+  The errors are the kit bindings' recording fixture, whose expected file no longer loaded. Most
+  failure lines were `Extra inputs are not permitted` on the two fields, the rest
+  `AllMockedAssertionError` from the changed `select=`.
+* **One test passed in the red for the wrong reason.** "A candidate refuses a negative citation
+  count" saw a ValidationError naming `citation_count` because the field did not exist yet. After the
+  change, a mutant that drops `ge=0` is killed by exactly that test.
+* **Green:** the same command → `208 passed`.
+* **Mutants**, 8, all killed, each on a scratch copy with a fresh `HYPOTHESIS_STORAGE_DIRECTORY`:
+
+  | Mutant | Killed by |
+  |---|---|
+  | `ge=0` dropped from `citation_count` | `test_a_candidate_refuses_a_negative_citation_count` |
+  | `open_access` defaults to `False` | `test_citation_count_and_open_access_default_to_none` |
+  | a boolean count accepted | `test_the_citation_count_is_a_non_negative_integer_or_none[a bool]` |
+  | a negative count accepted | `…[negative]` |
+  | a zero count refused | `test_the_recorded_works_map_to_the_hand_written_candidates` (W3 has 0) |
+  | `is_oa` read by truthiness | `test_open_access_is_openalexs_is_oa_or_none[a string]` |
+  | `open_access` derived from the OA URL | `…[open without a link]` |
+  | `cited_by_count` not selected | the respx route test and 43 others |
+* **Still passing:** the FakeProvider's kit bindings, v1-e08-t01's stored `ProviderStatus` round
+  trip (the repository contract on in-memory and SQLite), `test_sqlite_db.py`,
+  `test_federated_search.py` and `test_discovery.py`:
+  `.venv/bin/python -m pytest -n auto -q packages/debate_core/tests/integrations/discovery/test_fake_provider.py packages/debate_core/tests/contracts/test_search_repository_contract.py packages/debate_core/tests/integrations/local/test_sqlite_db.py packages/debate_core/tests/application/test_federated_search.py packages/debate_core/tests/domain/test_discovery.py`
+  → `216 passed`. The provider-status contract cases alone: `4 passed`.
+* `federated_dedupe.py` was not touched; it exists on neither this branch nor `origin/dev` as of
+  2026-10-22.
+
 ### Before the report (working agreement 10)
 
 * `uv run scripts/affected_tests.py` → 310 test files. `settings.py` changed and the root
@@ -109,6 +151,11 @@ under Deviations, ready to relay.
 * `.venv/bin/pyright packages/debate_core` → `0 errors` (13.9 s).
 * `uv run lint-imports` → `Contracts: 13 kept, 0 broken.`
 * `uv run scripts/validate_specs.py` → `OK: 404 files, 39 epics, 344 tasks, 21 releases`
+* **After the PM's condition:** the affected set is still 310 files, so it is again left to CI.
+  The changed directories and the always-run list:
+  `perl -e 'alarm 115; exec @ARGV' .venv/bin/python -m pytest -n auto -m "not slow and not live" packages/debate_core/tests/domain packages/debate_core/tests/integrations/discovery packages/debate_core/tests/contracts/test_search_repository_contract.py packages/debate_core/tests/integrations/local/test_sqlite_db.py packages/debate_core/tests/application/test_federated_search.py tests/architecture tests/specs packages/debate_cli/tests/test_app.py packages/debate_cli/tests/test_help_rendering.py -q`
+  → `1405 passed in 15.40s`. ruff format, ruff check, pyright on `packages/debate_core` (0 errors),
+  lint-imports (13 kept) and `validate_specs.py` are all clean again.
 
 ## Files changed
 
@@ -116,6 +163,9 @@ under Deviations, ready to relay.
   request parameters, the type table, the abstract rebuild, the mapping and `openalex_factory`.
 * `packages/debate_core/src/debate_core/integrations/discovery/__init__.py` and `redaction.py`:
   docstrings now name the adapter and say OpenAlex's key goes in a header.
+* `packages/debate_core/src/debate_core/domain/discovery.py` and
+  `packages/debate_core/tests/domain/test_discovery.py`: `CandidateResult.citation_count` and
+  `open_access` (PM ruling 2026-10-22), with their tests.
 * `packages/debate_core/src/debate_core/application/settings.py`: `providers.openalex_api_key`
   (`SecretStr | None`). `contact_email`'s description now says Crossref only.
 * `.env.example`, `packages/debate_core/tests/application/test_settings.py` and
@@ -151,30 +201,9 @@ under Deviations, ready to relay.
   queries; empty result; 429". The fixtures follow the PM's brief instead: one search body with the
   listed features, an empty result, a 429 with `Retry-After`, a spent-budget 429, a 503 with
   `Retry-After`, and a malformed body.
-* **`cited_by_count` (ac2) — awaiting the PM.** I sent the question below while the authentication
-  ruling was pending; it was not answered. Paste-ready:
-
-  ```text
-  PM: v1-e07-t02, one open item before the Goal can be Succeeded.
-
-  ac2 says works map to CandidateResults "with ... cited_by_count". CandidateResult has no citation
-  field, and your brief says "store only what CandidateResult defines", so ac2 can't pass as worded.
-  v1-e08-t02 (normalize-dedupe) expects "OpenAlex/S2 for citation counts" in its merge precedence, and
-  v1-e08-t03 ranks on "log-scaled citation count".
-
-  A. (Recommended) Add `citation_count: int | None = Field(default=None, ge=0)` to CandidateResult in
-     debate_core/domain/discovery.py, add debate_core.domain to this task's packages, select
-     cited_by_count and map it. The default is None, so the FakeProvider, its fixtures and
-     v1-e08-t01's stored ProviderStatus records are unaffected. About 15 minutes of work, including
-     the hand-written expectation.
-  B. Drop cited_by_count from ac2, and let v1-e08-t02 or t03 add the field and back-fill the OpenAlex
-     mapping later.
-
-  Why A: the adapter already has the number in hand, and E08 needs it. With B, t02 and t04 (Semantic
-  Scholar) both drop it now and get reopened later.
-
-  Reply A or B.
-  ```
+* **`cited_by_count` (ac2): resolved by the PM's ruling of 2026-10-22,** "A, widened by one field".
+  `CandidateResult` gained `citation_count` and `open_access` in `debate_core.domain.discovery`, and
+  `debate_core.domain` was added to the spec's packages with the ruling's comment.
 
 ## Decisions and assumptions
 
@@ -318,7 +347,6 @@ under Deviations, ready to relay.
 * **`SearchFilters.source_types` and `language`** are applied by neither the adapters nor
   `FederatedSearchService`. OpenAlex supports a `language` filter. Which layer applies them is for E08
   (t01's owner, or t02/t03) to decide.
-* **`citation_count`** (Deviations), if the PM chooses B.
 * `.venv/bin/pyright tests/smoke/test_cli_smoke.py` reports 7 errors at lines 257 to 265
   (`"__getitem__" method not defined`). They predate this branch; its only change to that file is
   line 151. CI's pyright step covers `packages/`.

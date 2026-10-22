@@ -64,7 +64,7 @@ spec:
         SearchService exposes an ordered stage pipeline (expand → fan_out → normalize → rank) with no-op
         defaults for stages delivered by sibling tasks.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

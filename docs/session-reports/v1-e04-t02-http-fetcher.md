@@ -21,9 +21,16 @@ own `http` extra, and its import contract is split from keyring's, as the PM rul
 criteria and every node criterion pass, and the Goal is `Succeeded`. Look first at
 `retrieval/robots_rules.py`, rewritten to the PM's ruling (e).
 
-Commits are relative to `dev` at `b85babc` (the ROADMAP refresh after v1-e07-t01, #380 and #381),
-synced with `scripts/task sync`. The checks below ran on `1b999dc`; the last sync brought in only
-`ROADMAP.md` and `docs/README.md`.
+Commits are relative to `dev` at `261f118` (v1-e08-t01, #383), synced with `scripts/task sync`. The
+checks below ran on `1b999dc`. The sync onto `261f118` had one conflict, in
+`application/ports/providers.py`'s imports: #383 added `ProviderHealth` to the discovery import and
+this branch added the `FetchResult` import, and both were kept. After it: ruff, pyright on
+`debate_core` and `debate_cli` (0 errors), `lint-imports` (13 kept), and the tests nearest both
+changes (`tests/retrieval`, `test_http_fetcher.py`, `integrations/discovery`, `test_federated_search.py`,
+`test_settings.py`, `test_fakes.py`, `test_port_conformance.py`, `domain/test_discovery.py`,
+`tests/testing`, `tests/architecture`, `tests/specs`, `tests/scripts/test_stamp_build.py` and the CLI's
+`test_app.py`, `test_help_rendering.py`, `test_installation.py`, `test_doctor.py`,
+`test_config_command.py`) → `1371 passed in 22.45s`.
 
 ## PM rulings applied (2026-10-21)
 

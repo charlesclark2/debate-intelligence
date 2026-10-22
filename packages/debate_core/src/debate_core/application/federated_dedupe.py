@@ -650,12 +650,16 @@ def _dates_and_sites_agree(left: CandidateResult, right: CandidateResult) -> boo
 
 
 def _join_on_titles(groups: _Groups, candidates: Sequence[CandidateResult]) -> None:
-    """Link records whose titles agree, within blocks of one first-author surname and one year."""
-    blocks: dict[tuple[str, int], list[int]] = defaultdict(list)
+    """Link records whose titles and dates agree, within blocks of one first-author surname.
+
+    The block is the author gate; `_dates_and_sites_agree` is the date gate. Each gate is applied in
+    one place only, so neither hides a fault in the other.
+    """
+    blocks: dict[str, list[int]] = defaultdict(list)
     for index, candidate in enumerate(candidates):
         surname = _first_author_surname(candidate)
-        if surname is not None and candidate.published_at is not None:
-            blocks[(surname, candidate.published_at.year)].append(index)
+        if surname is not None:
+            blocks[surname].append(index)
     forms = {index: _title_forms(candidates[index].title) for block in blocks.values() for index in block}
     for block in blocks.values():
         for position, left in enumerate(block):

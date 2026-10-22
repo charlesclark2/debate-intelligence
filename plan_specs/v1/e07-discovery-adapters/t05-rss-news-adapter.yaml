@@ -50,6 +50,9 @@ spec:
       - debate_core.integrations
       # PM ruling 2026-10-22 (v1-e07-t05: Google News gets its own provider name).
       - debate_core.application.settings
+      # PM ruling 2026-10-22 (v1-e07-t05: a new provider name needs its precedence place).
+      - debate_core.application.federated_dedupe
+      - packages/debate_core/tests/application/test_federated_dedupe.py
       - config/feeds
       - packages/debate_core/pyproject.toml
       - pyproject.toml

@@ -116,9 +116,11 @@ __all__ = [
     "DedupeStage",
     "MatchRule",
     "MergedCandidate",
+    "american_spelling",
     "candidate_canonical_url",
     "merge_candidates",
     "merge_group",
+    "plain_text",
     "surname_key",
     "title_tokens",
     "titles_agree",
@@ -505,7 +507,8 @@ not in it (poured and pored, pouring and poring)."""
 _MIN_REWRITTEN_LENGTH: Final = 6
 
 
-def _american(word: str) -> str:
+def american_spelling(word: str) -> str:
+    """The American spelling of one normalized word, by the tables above; other words unchanged."""
     if word in _AMERICAN_WORDS:
         return _AMERICAN_WORDS[word]
     if len(word) < _MIN_REWRITTEN_LENGTH:
@@ -516,7 +519,7 @@ def _american(word: str) -> str:
     return word
 
 
-def _plain(text: str) -> str:
+def plain_text(text: str) -> str:
     """Entities decoded, markup removed, accents dropped and case folded."""
     decoded = _MARKUP.sub("", html.unescape(text))
     decomposed = unicodedata.normalize("NFKD", decoded)
@@ -529,7 +532,7 @@ def _words(plain: str) -> tuple[str, ...]:
 
 def title_tokens(title: str) -> tuple[str, ...]:
     """A title's words after every normalization two providers' copies of one title can differ by."""
-    return tuple(_american(word) for word in _words(_plain(title)))
+    return tuple(american_spelling(word) for word in _words(plain_text(title)))
 
 
 def _title_forms(title: str) -> tuple[tuple[str, ...], tuple[str, ...] | None]:
@@ -581,7 +584,7 @@ def surname_key(name: str) -> str | None:
     keys = [
         "".join(_WORD.findall(_JOINED_INSIDE_WORDS.sub("", piece)))
         for word in words
-        for piece in _plain(word).replace("-", " ").split()
+        for piece in plain_text(word).replace("-", " ").split()
     ]
     keys = [key for key in keys if len(key) > 1 and key not in _NAME_SUFFIXES]
     return keys[-1] if keys else None

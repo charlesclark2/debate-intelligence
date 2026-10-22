@@ -61,7 +61,7 @@ v2.3's extension work.
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 44 | 42 | 228 |
-| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 101 | 76 | 484 |
+| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 101 | 77 | 484 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 22 | 7 | 191 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 13 | 2 | 108 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 15 | 6 | 96 |
@@ -167,7 +167,7 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [Loose ends in how store errors are classified, worded and wrapped](plan_specs/v1/e29-cloud-evidence-store/t09-store-error-loose-ends.yaml) `v1-e29-t09-store-error-loose-ends` | Succeeded | 1 | 2.0 |
 | [The retirement rule reaches empty objects, the tagging grant names its one tag, and the module's failures print](plan_specs/v1/e29-cloud-evidence-store/t10-retention-rule-and-grant-loose-ends.yaml) `v1-e29-t10-retention-rule-and-grant-loose-ends` | Pending | 1 | 3.0 |
 | [store sync says why it skipped what it skipped](plan_specs/v1/e29-cloud-evidence-store/t11-store-sync-skip-reasons.yaml) `v1-e29-t11-store-sync-skip-reasons` | Succeeded | 1 | 2.0 |
-| [store sync stops moving the parsed store, which caselist parse --publish publishes](plan_specs/v1/e29-cloud-evidence-store/t12-store-sync-skips-parsed.yaml) `v1-e29-t12-store-sync-skips-parsed` | Pending | 1 | 2.0 |
+| [store sync stops moving the parsed store, which caselist parse --publish publishes](plan_specs/v1/e29-cloud-evidence-store/t12-store-sync-skips-parsed.yaml) `v1-e29-t12-store-sync-skips-parsed` | Succeeded | 1 | 2.0 |
 
 #### [E30 — Caselist Evidence Ingestion](plan_specs/v1/e30-caselist-ingestion/epic.yaml)
 

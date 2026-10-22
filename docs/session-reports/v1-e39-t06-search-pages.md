@@ -598,3 +598,53 @@ and ask for another review rather than opening the pull request.
   its Lambda measurements need the cold-start index load time. That means logging configuration
   only, with no query, card or user in any line.
 * **5 (no previous-page link):** no change for the pilot.
+
+## PM review, second
+
+**Verdict:** ACCEPTED
+<!-- ACCEPTED / CHANGES_REQUESTED -->
+
+**Reviewed by / date:** PM, 2026-10-21
+
+**Notes:**
+
+Accepted. ac4 passes with four yes on the synced code, `ece0ac1`, which is the code in the pull
+request. Make the one layout change below, then set the Goal `Succeeded` and open the pull request
+with no `--partial`.
+
+**What I checked:**
+
+* **The migration stop was handled the right way:** stopped, reported, synced, the whole check set
+  re-run, and ac4 restarted on the code that merges.
+* **ac4's record is complete:** the build (46,653 documents, five fewer than `docx-5`'s, which are
+  v1-e31-t24's five vanished cards), the publish order, the deploy sha and image digest, the
+  account made and removed, and each answer.
+* **Follow-up 7's finding is useful:** `MigrationError` reaches the operator as `INTERNAL_ERROR`
+  with "this is a bug", and the proposed hint is right. The PM files it.
+
+**Rulings:**
+
+1. **The provenance line in Copy card: (a), keep it in this task.** The spec, ADR-0019's gate item 6
+   and the data-use policy's Attribution rule 2 require it, and only the coach can change the policy.
+   The coach is weighing a policy amendment that would decide Copy card and v1-e39-t08's download
+   together. If it changes, it is a follow-up task, not a change here.
+2. **The Copy card button: (c), in a bar directly above the card's text.**
+   * The bar holds Copy card now, and v1-e39-t08's Download later, so the card's actions sit in one
+     place.
+   * The status message ("Copied" and errors) sits on the same line as the button, in the existing
+     live region.
+   * The help line becomes one short line in the bar, or the button's accessible description, not a
+     paragraph under it.
+   * Template and stylesheet only. Re-run the page tests and the browser suite (axe, keyboard order,
+     and no horizontal scroll at all three sizes).
+   * ac4 does not need repeating: no behaviour it asked about changes. Instead, save a screenshot of
+     the synthetic card page at 1366x768 from the browser suite to a path outside the repository,
+     and give the operator that path, so the coach can see the new layout without signing in again.
+     Do not commit it.
+
+**Observations 3 to 5:**
+
+* **3 (no short cite):** the data, not the page. v1-e31-t31 (cite recall) is where it improves.
+* **4 (4 to 5 s to open a card):** v1-e39-t10's Lambda timings and its logging amendment cover it.
+* **5 (about 160 console errors after a copy):** consistent with Decision 7's reports, one per
+  inline style. v1-e39-t10's beta notes whether the console text confirms it. No change here.

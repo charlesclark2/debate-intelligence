@@ -277,6 +277,42 @@ agreement 10, with no hand-off.
 * **The CLI provider status footer** reads `ProviderRegistry.health()`. Wiring the registry into
   `debate_cli.container` belongs to that task and to E08's fan-out.
 
+## CI fix after review (PR #380)
+
+Parts 1 and 3 of `test` failed three tests: two in `test_redaction.py`, which saw `?[REDACTED]`
+where they expected `api_key=***`, and the kit's `SkipsLogProtection` case (`DID NOT RAISE`). The
+three failures had one cause: test order. OpenCaselist's `install_redaction` attaches its own
+filter to the same `httpx` logger, and that filter strips every query string. When an opencaselist
+test had run earlier in the same process, its filter rewrote the records first. It also hid the
+unprotected fake's leak, so **the kit's check 7 could pass an adapter that never calls
+`protect_logs`, depending on what had run before it.** I had not run the two directories in one
+process before the PR. I reproduced the failures locally with
+`.venv/bin/python -m pytest -n 0 -p no:randomly` over
+`tests/integrations/opencaselist/test_client.py` followed by the two discovery files: the same
+3 failed.
+
+The fix:
+
+* The kit's log capture clears the httpx and httpcore loggers' filters while check 7 runs and
+  restores them afterwards (`HTTP_CLIENT_LOGGERS`). The adapter is built inside that window, so its
+  own `protect_logs` is what is measured.
+* `test_redaction.py` gets an autouse fixture that gives each test the protected loggers with no
+  other package's filter on them.
+
+Evidence:
+
+* Opencaselist first, then the discovery files: `108 passed`.
+* `tests/integrations/discovery` and `tests/integrations/opencaselist`, in both orders: `266 passed`
+  each time.
+* `packages/debate_core/tests/integrations` and `tests/architecture`, run as CI runs them with
+  `-n auto`: `2483 passed, 2 xfailed`.
+* With `protect_logs` made a no-op and opencaselist's tests first, the correct fake's
+  `test_no_secret_surfaces` fails twice (GET, and the GET retried once), so the check now bites
+  whatever ran first.
+* `ruff format --check`, `ruff check`, `pyright packages/debate_core` (0 errors) and `lint-imports`
+  (12 kept) are all clean.
+* The affected set is still past two minutes and is left to the pull request's `ci`.
+
 ## PM review
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in

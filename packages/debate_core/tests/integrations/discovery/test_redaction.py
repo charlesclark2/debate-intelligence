@@ -1,12 +1,15 @@
 """The log filter that keeps discovery credentials out of httpx's request lines and this package's logs.
 
 Each test registers values no other test uses, because the filter is one per process, like the
-loggers it sits on.
+loggers it sits on. Each test also starts with no other package's filter on those loggers
+(:func:`only_this_packages_filter`): OpenCaselist attaches one to httpx's logger too, and which of
+the two rewrote a record would otherwise depend on which tests ran first in the process.
 """
 
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -20,6 +23,17 @@ from debate_core.integrations.discovery.redaction import (
 )
 from debate_core.integrations.discovery.resilience import ResiliencePolicy, ResilientProvider
 from debate_core.testing.fakes import FakeSearchProvider, FixedClock
+
+
+@pytest.fixture(autouse=True)
+def only_this_packages_filter() -> Iterator[None]:
+    """Each protected logger starts bare, so `protect_logs` attaches the one filter under test."""
+    saved = {name: list(logging.getLogger(name).filters) for name in PROTECTED_LOGGERS}
+    for name in PROTECTED_LOGGERS:
+        logging.getLogger(name).filters.clear()
+    yield
+    for name, filters in saved.items():
+        logging.getLogger(name).filters[:] = filters
 
 
 def test_protected_loggers_drop_a_registered_value_from_a_rendered_message(

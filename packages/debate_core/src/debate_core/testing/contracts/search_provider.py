@@ -91,6 +91,7 @@ from debate_core.domain.discovery import CandidateResult, ProviderQuery, Provide
 from debate_core.testing.contracts.harness import AdapterContract
 
 __all__ = [
+    "HTTP_CLIENT_LOGGERS",
     "IDEMPOTENT_METHODS",
     "RATE_LIMIT_RETRY_AFTER_SECONDS",
     "RecordedExchange",
@@ -115,6 +116,16 @@ IDEMPOTENT_METHODS: Final = frozenset({"GET", "HEAD", "OPTIONS"})
 
 RATE_LIMIT_RETRY_AFTER_SECONDS: Final = 120
 """The `Retry-After` the rate-limit check sends, and the wait it expects the error to carry."""
+
+HTTP_CLIENT_LOGGERS: Final = (
+    "httpx",
+    "httpcore",
+    "httpcore.connection",
+    "httpcore.http11",
+    "httpcore.http2",
+    "httpcore.proxy",
+)
+"""The loggers httpx and httpcore write request details to; check 7 clears their filters while it runs."""
 
 UNREADABLE_BODY: Final = b"\x00<<not what this provider sends>>\xff"
 """The body of the unreadable-answer check: valid as nothing an adapter parses."""
@@ -424,7 +435,14 @@ def _assert_not_resent(replayed: ReplayedProvider, recording: Recording, max_att
 
 @contextmanager
 def _every_log_record() -> Generator[list[logging.LogRecord]]:
-    """Capture every record, at every level, from every logger that propagates to the root."""
+    """Capture every record, at every level, from every logger that propagates to the root.
+
+    For the duration, the httpx and httpcore loggers carry no filter but the ones the adapter under
+    test attaches. Another package's filter on those loggers (OpenCaselist's strips every query
+    string) would otherwise hide an adapter's leak whenever its tests happened to run first in the
+    same process, so the check would pass or fail by test order. The adapter is built inside this
+    block, so the filter its constructor attaches is in place.
+    """
     records: list[logging.LogRecord] = []
 
     class _Keep(logging.Handler):
@@ -434,6 +452,9 @@ def _every_log_record() -> Generator[list[logging.LogRecord]]:
     root = logging.getLogger()
     handler = _Keep(level=logging.DEBUG)
     previous = root.level
+    saved_filters = {name: list(logging.getLogger(name).filters) for name in HTTP_CLIENT_LOGGERS}
+    for name in HTTP_CLIENT_LOGGERS:
+        logging.getLogger(name).filters.clear()
     root.addHandler(handler)
     root.setLevel(logging.DEBUG)
     try:
@@ -441,6 +462,8 @@ def _every_log_record() -> Generator[list[logging.LogRecord]]:
     finally:
         root.removeHandler(handler)
         root.setLevel(previous)
+        for name, filters in saved_filters.items():
+            logging.getLogger(name).filters[:] = filters
 
 
 # --------------------------------------------------------------------------------------------

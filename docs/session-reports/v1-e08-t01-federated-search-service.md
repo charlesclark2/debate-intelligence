@@ -248,9 +248,50 @@ None. The affected set covers effectively the whole selection and is left to the
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-21
 
 **Notes:**
+
+Accepted, with nothing more to do before the pull request. Every criterion passes, the Goal is
+`Succeeded`, and the pull request opens with no `--partial`. Its `ci` check runs the whole selection;
+paste any failure back here.
+
+**What is good:**
+
+* **ac1 goes through the real `ProviderRegistry` and `ResilientProvider`,** so "sleeps past its
+  timeout" is the real timeout, not a fake's say-so.
+* **ac2 is exact and fast.** The virtual-time loop moves the loop's own clock, so `asyncio.timeout`,
+  `sleep` and `call_later` fire at their virtual instants with the scheduler unchanged:
+  * 3, 4 and 5 s providers finish at 5 s, not 12;
+  * the 8 s deadline cuts the 60 s call at 8 s and keeps the 3 s answer;
+  * each test runs in under 100 ms of real time.
+
+  `VirtualTimeDeadlock` instead of a hang is a good touch, and no dependency was added.
+* **The status rule is stated and mutated:** 21 of 21 caught, plus the two SQLite mutants. A
+  requested but unenabled provider stays in `provider_set` as `not_configured`, rather than
+  silently shrinking the search. That is the honest choice.
+* **Extending the port meant extending every adapter:** the contract, the fake, SQLite and
+  migration `0003`, red first on SQLite. That is exactly the rule.
+
+**Rulings:**
+
+1. **Deviation 1: domain placement confirmed.** `ProviderStatus` is a stored record built from
+   domain values, and every other stored record lives in `debate_core.domain`.
+   `debate_core.integrations.local` follows from the contract rule. Both are accepted.
+2. **Deviation 2 (`rate_limited`): accepted.** Backing off is not the same as being down.
+3. **Deviations 3 and 4: accepted.** If another `0003` migration merges first,
+   `load_migrations` refuses the clash and the second to merge renumbers.
+
+**Follow-ups, placed by the PM in the next batch:**
+
+* **v1-e08-t05:** wire `FederatedSearchService` in the container from
+  `ProviderRegistry.from_settings`, and add `providers.search_deadline_seconds` beside
+  `timeout_seconds`, default 15.
+* **v1-e08-t04:** the expanded queries are already recoverable from each `ProviderStatus.query`. t04
+  decides whether `Search` needs a field.
+* **v1-e08-t02:** `MergedCandidate`s are a new `SearchState` field, in the `normalize` slot.
+* **E07, "held" versus "refused" rate limits:** no task now. If the CLI ever needs the
+  difference, `ResilientProvider` gains a distinct error.

@@ -15,8 +15,11 @@ The value objects the ports exchange are defined here too, because a port whose 
 `httpx.Response`, a `botocore` payload or an OpenAlex work record would defeat the point: swapping
 the adapter would change the use case.
 
-**Later tasks finalize two of these contracts.** v1-e07-t01-search-provider-contract fills out
-:class:`CandidateResult` and the provider registry; v1-e04-t02-http-fetcher and
+**Later tasks finalize two of these contracts.** v1-e07-t01-search-provider-contract finalized
+:class:`SearchProvider`: its values (:class:`ProviderQuery`, :class:`CandidateResult`,
+:class:`ProviderResponse`) now live in :mod:`debate_core.domain.discovery` and are re-exported
+here, and the timeout, circuit breaker and registry every adapter is wrapped in live in
+:mod:`debate_core.integrations.discovery`. v1-e04-t02-http-fetcher and
 v1-e04-t04-content-extraction fill out :class:`FetchResult` and :class:`ExtractedContent`. What is
 here is the shape the application layer codes against in the meantime, and those tasks extend it
 rather than replace it. The model router began here too and now has its own module,
@@ -31,21 +34,19 @@ would force every caller to await.
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Protocol, Self, runtime_checkable
+from typing import Protocol, runtime_checkable
 
-from pydantic import Field, model_validator
+from pydantic import Field
 
 from debate_core.domain import (
     AccessStatus,
-    ArticleIdentifiers,
     DomainModel,
     HttpUrlStr,
     NonEmptyText,
-    SearchFilters,
-    SourceType,
     Ulid,
     UtcDatetime,
 )
+from debate_core.domain.discovery import CandidateResult, ProviderQuery, ProviderResponse
 
 __all__ = [
     "ArticleFetcher",
@@ -68,100 +69,25 @@ __all__ = [
 # --------------------------------------------------------------------------------------------
 
 
-class ProviderQuery(DomainModel):
-    """What one provider is asked for.
-
-    Reuses :class:`~debate_core.domain.SearchFilters` rather than restating a date window and a
-    result cap, so the constraints a user set on a search are the same object every provider sees.
-    Provider-specific syntax (an OpenAlex filter expression, an RSS feed URL) is the adapter's
-    business and is built from these fields, never passed through them.
-    """
-
-    query: NonEmptyText = Field(description="The query text, as entered by the user.")
-    filters: SearchFilters = Field(
-        default_factory=SearchFilters, description="Date window, source types, language and result cap."
-    )
-
-
-class CandidateResult(DomainModel):
-    """One result from one provider, normalized into the platform's vocabulary.
-
-    "Candidate" because it is not yet an :class:`~debate_core.domain.Article`: the same paper
-    found by three providers is three candidates that deduplication (E08) merges into one article
-    by DOI, canonical URL and title/author similarity.
-
-    Provider-specific payloads do not belong in these fields. An adapter that needs to keep its
-    raw record stores it itself and references it by `provider_record_id`.
-    """
-
-    provider: NonEmptyText = Field(description="Provider name, as it appears in settings.")
-    provider_record_id: NonEmptyText | None = Field(
-        default=None, description="The provider's own id for this record, for auditing and re-fetching."
-    )
-    title: NonEmptyText = Field(description="Title as the provider reports it.")
-    url: HttpUrlStr = Field(description="The URL the provider gave, before canonicalization.")
-    canonical_url: HttpUrlStr | None = Field(
-        default=None, description="Canonical URL, once E04-t01 has canonicalized `url`."
-    )
-    identifiers: ArticleIdentifiers = Field(
-        default_factory=ArticleIdentifiers, description="External identifiers used to deduplicate."
-    )
-    source_type: SourceType = Field(
-        default=SourceType.OTHER, description="Descriptive category, never a quality score."
-    )
-    authors: tuple[NonEmptyText, ...] = Field(default=(), description="Author names, in published order.")
-    publication: NonEmptyText | None = Field(default=None, description="Journal, outlet or issuing body.")
-    published_at: UtcDatetime | None = Field(default=None, description="Publication timestamp, in UTC.")
-    snippet: str | None = Field(
-        default=None,
-        description=(
-            "Abstract or snippet as supplied by the provider. Discovery context only: it is never "
-            "quoted on a card, because card evidence only ever comes out of a stored snapshot."
-        ),
-    )
-    open_access_url: HttpUrlStr | None = Field(
-        default=None, description="Publisher-declared open-access copy, when the provider exposes one."
-    )
-
-
-class ProviderResponse(DomainModel):
-    """What one provider returned for one query, including how it failed.
-
-    A provider that times out or errors degrades the federated search to
-    :attr:`~debate_core.domain.SearchStatus.PARTIAL`; it never fails the search. That is only
-    possible if a partial answer is representable, which is what `partial` and `error` are for.
-    """
-
-    provider: NonEmptyText = Field(description="Provider name, as it appears in settings.")
-    results: tuple[CandidateResult, ...] = Field(default=(), description="Results in provider order.")
-    elapsed_ms: float = Field(ge=0, description="Wall-clock time the call took, in milliseconds.")
-    partial: bool = Field(
-        default=False, description="True when this provider did not fully answer the query."
-    )
-    error: str | None = Field(
-        default=None, description="Human-readable reason the provider fell short, when it did."
-    )
-
-    @model_validator(mode="after")
-    def _check_partial_is_reported(self) -> Self:
-        if self.error is not None and not self.partial:
-            raise ValueError("a ProviderResponse carrying an error must be marked partial")
-        return self
-
-
 @runtime_checkable
 class SearchProvider(Protocol):
     """One discovery source in the federated search.
 
-    Every provider — scholarly, news, government — is reached through this one method, which is
-    what lets a provider be enabled, disabled or added in configuration instead of in code
-    (architecture proposal §9).
+    The only discovery port. Every provider — scholarly, news, government — is reached through
+    this one method, which is what lets a provider be enabled, disabled or added in configuration
+    instead of in code (architecture proposal §9).
 
     An adapter answers a query as well as it can and says so when it cannot: a partial answer
     comes back as a :class:`ProviderResponse` with `partial=True`. It raises
     :class:`~debate_core.application.errors.ProviderUnavailable` or
     :class:`~debate_core.application.errors.ProviderRateLimited` only when it returned nothing at
     all, and never raises a transport library's own exception.
+
+    An adapter does not time itself out, count its own failures or retry a refused call: the
+    registry wraps every adapter in
+    :class:`~debate_core.integrations.discovery.resilience.ResilientProvider`, which does all three
+    the same way for every provider and is itself a `SearchProvider`. The shared contract kit,
+    :mod:`debate_core.testing.contracts.search_provider`, is what an adapter is held to.
     """
 
     @property

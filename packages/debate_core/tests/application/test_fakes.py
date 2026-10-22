@@ -476,13 +476,14 @@ def test_searches_are_fetched_by_id_and_listed_newest_first_per_owner() -> None:
 # --------------------------------------------------------------------------------------------
 
 
-def candidate(title: str) -> CandidateResult:
-    return CandidateResult(provider="fake-provider", title=title, url=f"https://example.org/{title}")
+def candidate(title: str, provider: str = "fake-provider") -> CandidateResult:
+    return CandidateResult(provider=provider, title=title, url=f"https://example.org/{title}")
 
 
 def test_the_fake_provider_answers_from_its_script_and_records_the_query() -> None:
     provider = FakeSearchProvider(
-        "openalex-fake", results_by_query={"methane": [candidate("a"), candidate("b")]}
+        "openalex-fake",
+        results_by_query={"methane": [candidate("a", "openalex-fake"), candidate("b", "openalex-fake")]},
     )
     response = run(provider.search(ProviderQuery(query="methane")))
     assert provider.name == "openalex-fake"

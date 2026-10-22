@@ -667,7 +667,9 @@ class TestTheParsedStoreIsNotSynced:
         assert (dev_data_dir / "objects" / MANIFEST_KEY).read_bytes() == MANIFEST_BODY
         assert not (dev_data_dir / "objects" / "parsed").exists()
 
-    def test_the_json_counts_parsed_as_its_own_kind_of_skip(self, buckets: S3Client, dev_data_dir: Path) -> None:
+    def test_the_json_counts_parsed_as_its_own_kind_of_skip(
+        self, buckets: S3Client, dev_data_dir: Path
+    ) -> None:
         a_stale_copy(dev_data_dir)
         put_remote_object(buckets, DEV_BUCKET, "parsed/hsld26/2099.01.01-docx-9/failures.jsonl", b"{}\n")
 

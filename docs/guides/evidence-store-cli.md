@@ -130,7 +130,7 @@ debate-research store sync --prefix manifests/hsld26/
 |---|---|
 | `new` | Not in the bucket. Will be uploaded. |
 | `changed` | In the bucket with different bytes. Will be overwritten. **Named objects only** — a manifest that gained rows is the normal case. |
-| `skipped` | Already there and identical, or outside the documented prefixes. Also, either way: anything under `manifests/_suppression/` (the suppression list and removal log, which only `caselist remove` and `unsuppress` append to) and a blob whose sha256 is on the removal suppression list (`v1-e30-t07`). On a push only: a blob named only by manifest rows at a path a removal holds (`v1-e30-t22`), and a manifest `caselist publish` withholds, because a row of it names a removed file or sits at a path a removal holds (`v1-e30-t25`). Its reason is the publisher's own message, which names the rows by digest or by the request holding the path, and its fix is the publisher's too: run the same removal again on this machine. A manifest the publisher cannot read is skipped too, with the key and line number it refuses. **Which of these each skip was** is in `skipped_reasons` in `--json`, and a withheld or unreadable manifest gets a line under the table: see [Why something was skipped](#why-something-was-skipped). |
+| `skipped` | Already there and identical, or outside the documented prefixes. Also, either way: anything under `manifests/_suppression/` (the suppression list and removal log, which only `caselist remove` and `unsuppress` append to), a blob whose sha256 is on the removal suppression list (`v1-e30-t07`), and anything under `parsed/`, on either side, which only `caselist parse --publish` publishes (`v1-e29-t12`). On a push only: a blob named only by manifest rows at a path a removal holds (`v1-e30-t22`), and a manifest `caselist publish` withholds, because a row of it names a removed file or sits at a path a removal holds (`v1-e30-t25`). Its reason is the publisher's own message, which names the rows by digest or by the request holding the path, and its fix is the publisher's too: run the same removal again on this machine. A manifest the publisher cannot read is skipped too, with the key and line number it refuses. **Which of these each skip was** is in `skipped_reasons` in `--json`, and a withheld or unreadable manifest gets a line under the table: see [Why something was skipped](#why-something-was-skipped). |
 | `would_delete` | In the bucket and not on your machine. **Reported and left alone.** |
 | `mismatched` | A content-addressed key whose two sides differ. Never written over, and it fails the run — see below. |
 
@@ -155,6 +155,7 @@ characters can be anything, a school's name included. A kind the run has none of
 | `unreadable_manifest` | Push only: a manifest `caselist publish` cannot read |
 | `suppressed_source` | A blob whose sha256 is on the removal suppression list |
 | `suppression_record` | The suppression list and removal log under `manifests/_suppression/` |
+| `parsed_store` | Anything under `parsed/`, either way and on either side: `caselist parse --publish` publishes the parsed store |
 | `another_keyspace` | A key the other local tree owns: a file under `objects/raw/…` |
 | `undocumented_prefix` | A key under none of the documented prefixes |
 
@@ -170,7 +171,25 @@ manifest on your machine, the table says so on a line of its own:
 
 Run that removal again as the [removal runbook](../runbooks/caselist-removal.md) writes it, then
 push again. A manifest the publisher cannot read gets an `UNREADABLE MANIFESTS` line instead; its
-message in `--json` names the key and the line number. Every other kind stays a count in the table.
+message in `--json` names the key and the line number. A run that skipped anything under `parsed/`
+says so on a `PARSED STORE` line: `store sync` never moves the parsed store, and
+`caselist parse --publish` is what publishes it. Every other kind stays a count in the table.
+
+### A stale parsed copy
+
+Before `v1-e29-t12` a pull copied the bucket's `parsed/` into `<data_dir>/objects/parsed/`, which
+nothing reads; the parsed store is `<data_dir>/parsed/`. A dry run, either way, says so on stderr
+when that copy exists, with its file count and the command that removes it, both with your
+data directory's real path:
+
+```
+STALE PARSED COPY: <data_dir>/objects/parsed holds <n> file(s) an earlier store sync --pull copied
+from the bucket. Nothing reads them, and store sync no longer moves them. Remove them with: rm -r
+<data_dir>/objects/parsed
+```
+
+Nothing deletes it for you. Run the command it prints once; the line is not in `--json`'s payload
+or the journal.
 
 ```bash
 debate-research --json store sync | jq '.data.skipped_reasons'

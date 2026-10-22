@@ -379,7 +379,10 @@ each version and what it changed).
   it is the version that was in force when the source was parsed, and nothing in the record depends
   on it. A parsed document holds cards as the parser read them: no fingerprint, no cluster id.
   These records are never rewritten, so after a version change they go on saying the old one,
-  beside sources parsed since that say the new one. That is not staleness.
+  beside sources parsed since that say the new one. That is not staleness. The stamp is part of a
+  per-source file's bytes, though, so two machines at different fingerprint versions write different
+  per-source files for the same source bytes, and when both publish, the second meets the first's
+  file in the bucket as `CHECKSUM_MISMATCH` and leaves it untouched (`v1-e29-t12`).
 
 **Every build reads every version.** No code compares a row's `fingerprint_version` with its own:
 the field is free text to the models, and the tools that read the table, such as

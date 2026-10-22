@@ -1542,7 +1542,10 @@ parsed store for want of an AWS session. See
   `caselist parse --caselist <slug> --publish`, or leave it to the next run that imports into that
   caselist.
 * `CHECKSUM_MISMATCH`: the bucket holds a file of the parsed store with other bytes, which the
-  same parser never produces twice. It needs a person; nothing was overwritten.
+  same parser never produces twice at one fingerprint version. A Mac at another fingerprint version
+  does: its per-source files carry their own stamp
+  ([`parsed-card-store.md`](../data/parsed-card-store.md#fingerprint-versions)), so check which
+  build each machine that publishes runs. It needs a person; nothing was overwritten.
 * `NEWER_FINGERPRINT_TABLE` (`v1-e34-t29`): the caselist's occurrence table, on this Mac or in the
   bucket, is stamped with a newer fingerprint version than the build that ran, which is usually the
   installed agent's after the checkout moved ahead. The older build would have put its own
@@ -1551,9 +1554,10 @@ parsed store for want of an AWS session. See
   the newer version for the agent ([Reinstalling the agent](#reinstalling-the-agent)), then run
   `caselist parse --caselist <slug> --publish` from it to parse what the refused runs imported.
   Until then every pull that imports into the caselist fails its parse stage the same way, and still
-  imports and publishes. `caselist parse` by hand, its `--publish`, and `store sync` over a
-  `parsed/` occurrence table are refused by the same rule, with exit `1` or a failed object, and an
-  equal or older stamp is rebuilt and published as before. Never delete the table to get past it.
+  imports and publishes. `caselist parse` by hand and its `--publish` are refused by the same
+  rule, with exit `1`, and an equal or older stamp is rebuilt and published as before. `store sync`
+  moves nothing under `parsed/` either way (`v1-e29-t12`), so it is no way round the refusal and
+  no way to publish the parsed store. Never delete the table to get past it.
 * `INTERNAL_ERROR`: the parse crashed. Run `caselist parse --caselist <slug>` by hand to see it,
   and report it.
 

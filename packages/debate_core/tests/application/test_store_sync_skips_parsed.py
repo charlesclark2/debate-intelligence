@@ -31,7 +31,6 @@ from debate_core.application.caselist import occurrence_table_guard
 from debate_core.application.evidence_sync import (
     EvidenceSyncService,
     PlannedObject,
-    SyncAction,
     SyncDirection,
     SyncJournal,
     SyncKeyspace,
@@ -422,16 +421,19 @@ async def test_a_push_and_a_pull_leave_both_sides_of_parsed_as_they_were(
     service: EvidenceSyncService, data_dir: Path, s3_client: S3Client, evidence_bucket: str
 ) -> None:
     a_store_with_every_keyspace(data_dir, s3_client, evidence_bucket, with_parsed=True)
-    local_before = sorted(path.relative_to(data_dir).as_posix() for path in (data_dir / "objects/parsed").rglob("*"))
+    local_before = sorted(
+        path.relative_to(data_dir).as_posix() for path in (data_dir / "objects/parsed").rglob("*")
+    )
 
     await sync(service, SyncDirection.PUSH)
     await sync(service, SyncDirection.PULL)
 
     assert remote_keys(s3_client, evidence_bucket, "parsed/") == [FAILURES, TABLE]
     assert read_remote(s3_client, evidence_bucket, TABLE) == table(OLDER, rows=3)
-    assert sorted(
-        path.relative_to(data_dir).as_posix() for path in (data_dir / "objects/parsed").rglob("*")
-    ) == local_before
+    assert (
+        sorted(path.relative_to(data_dir).as_posix() for path in (data_dir / "objects/parsed").rglob("*"))
+        == local_before
+    )
     assert read_local(data_dir, TABLE) == table(BUILD)
 
 

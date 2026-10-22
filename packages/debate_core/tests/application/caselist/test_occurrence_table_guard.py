@@ -6,8 +6,10 @@ and a test that named `card-fingerprint-v5` as "newer" would turn into one about
 day v5 ships. One test reads the real versions, to hold the order to the real list.
 
 The paths that ask this rule, and the tests that fail if one of them bypasses it, are in
-`test_caselist_parse_newer_fingerprint_table.py`, `test_pull_refuses_a_newer_fingerprint_table.py`,
-`test_store_sync_newer_fingerprint_table.py` and the CLI's `test_caselist_parse_newer_fingerprint_table.py`.
+`test_caselist_parse_newer_fingerprint_table.py`, `test_pull_refuses_a_newer_fingerprint_table.py`
+and the CLI's `test_caselist_parse_newer_fingerprint_table.py`. `store sync` asked it too until
+`v1-e29-t12`, which stopped it moving `parsed/`: `test_store_sync_skips_parsed.py` shows it asks
+nothing now.
 """
 
 from __future__ import annotations
@@ -180,7 +182,8 @@ def test_the_only_rebuild_of_an_occurrence_table_is_the_parse_pipelines_and_it_a
 
 
 def test_every_path_that_moves_an_occurrence_table_asks_the_one_rule() -> None:
-    """The parse pipeline, the parsed store's publisher and `store sync`, and no rule of their own.
+    """The parse pipeline and the parsed store's publisher, and no rule of their own. `store sync`
+    left this set in `v1-e29-t12`, when it stopped moving `parsed/`.
 
     Each of their tests that patches the rule's comparison shows the path takes the rule's answer:
     `test_*_takes_the_rules_answer*` in the test files this module's docstring names.
@@ -188,7 +191,6 @@ def test_every_path_that_moves_an_occurrence_table_asks_the_one_rule() -> None:
     assert calls_in_source("refuse_newer_table") == {
         "debate_core/application/caselist_parse.py",
         "debate_core/application/caselist/parsed_publish.py",
-        "debate_core/application/evidence_sync.py",
     }
     assert calls_in_source("is_newer_fingerprint_version") == {
         "debate_core/application/caselist/occurrence_table_guard.py"

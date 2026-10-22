@@ -21,9 +21,11 @@ path goes on as it always did. The paths, each asking before it writes anything:
 * **The parsed store's publish** (:class:`~debate_core.application.caselist.parsed_publish.
   ParsedStorePublisher`), behind `caselist parse --publish` and the parse stage's publish. It asks
   of the table it would send and of the bucket's, when the bucket holds other bytes.
-* **`store sync`** (:class:`~debate_core.application.evidence_sync.EvidenceSyncService`), whose
-  named objects include `parsed/`. A push asks of the table it would send and of the bucket's it
-  would overwrite; a pull, of this machine's copy it would overwrite.
+
+`store sync` asked too, from `v1-e34-t29`, while it moved `parsed/` as named objects. Since
+`v1-e29-t12` it moves nothing under `parsed/` either way
+(:class:`~debate_core.application.evidence_sync.EvidenceSyncService`), so it has no table to ask
+about.
 
 A refusal is raised before the path writes anything, so the table is left as it was: never a
 partial rewrite.
@@ -56,7 +58,6 @@ from debate_core.evidence.fingerprints import FINGERPRINT_VERSION
 __all__ = [
     "THE_BUCKET",
     "THIS_MACHINES_PARSED_STORE",
-    "THIS_MACHINES_SYNCED_COPY",
     "NewerFingerprintTable",
     "fingerprint_stamps",
     "fingerprint_stamps_of_file",
@@ -68,8 +69,6 @@ __all__ = [
 
 THIS_MACHINES_PARSED_STORE: Final = "this machine's parsed store"
 THE_BUCKET: Final = "the bucket"
-THIS_MACHINES_SYNCED_COPY: Final = "this machine's store sync copy"
-"""`<data_dir>/objects/parsed/`: where `store sync` keeps what it pulled of the bucket's `parsed/`."""
 
 _NUMBERED: Final = re.compile(r"(?P<family>.+)-v(?P<number>[1-9][0-9]*)")
 

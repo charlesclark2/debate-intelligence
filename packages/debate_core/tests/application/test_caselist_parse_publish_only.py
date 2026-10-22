@@ -194,10 +194,10 @@ async def test_publish_only_after_a_partial_publish_sends_what_the_rebuilds_publ
 
     assert await contents(second) == await contents(first)
     assert outcomes(published) == outcomes(rebuilt)
+    # The new source's file, and the two aggregates it changes: the failures file is unchanged, as
+    # `test_publish_after_a_new_snapshot_uploads_only_the_new_source_and_the_aggregates` says.
     assert published.count(SourceResult.SKIPPED) == rebuilt.count(SourceResult.SKIPPED) > 0
-    assert published.count(SourceResult.UPLOADED) == rebuilt.count(SourceResult.UPLOADED) == 1 + len(
-        AGGREGATE_NAMES
-    )
+    assert published.count(SourceResult.UPLOADED) == rebuilt.count(SourceResult.UPLOADED) == 3
 
 
 async def test_publish_only_over_an_unchanged_bucket_uploads_nothing(world: World, tmp_path: Path) -> None:

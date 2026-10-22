@@ -422,7 +422,17 @@ promotion list. **A discrepancy, noted at the PM's request:** `v1-e39-t06`'s ac4
 `No changes` for `v1-e39-t02`'s grant on 2026-10-21, most likely because the `dev-preview`
 worktree it planned from was not current. It changes nothing now.
 
-Apply result: APPLY_RESULT_PENDING.
+Before applying, `terraform show` of the saved plan listed exactly those five resources and
+`Plan: 1 to add, 4 to change, 0 to destroy.` Apply result: **`Apply complete! Resources: 1 added,
+4 changed, 0 destroyed.`** The outputs name `evidence_removal_permission_set_name =
+"DebateDevEvidenceRemoval"` and `evidence_bucket_name = "debate-dev-evidence-a7508de8"`.
+
+### Block 2 — the dev deploy (2026-10-22)
+
+`scripts/tub_deploy.sh dev` pushed `debate-dev-tub@sha256:b43d7462bbdf…`, pointed the function at it
+by digest, and `/healthz` through CloudFront answered `{"status":"ok"}`. `Deployed
+f8545cc7cc650841ba055982a2a22504b5f7bde3 to dev`, the branch's head at the time; the commits after it
+change this report only.
 
 ## Follow-up work
 

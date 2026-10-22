@@ -6,7 +6,7 @@
 | Spec | [`plan_specs/v1/e39-evidence-search-pilot/t06-search-pages.yaml`](../../plan_specs/v1/e39-evidence-search-pilot/t06-search-pages.yaml) |
 | Epic / release | `v1-e39-evidence-search-pilot` / `v1.7` |
 | Branch | `task/v1-e39-t06-search-pages` |
-| Session status | IN PROGRESS <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | COMPLETE <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
@@ -24,10 +24,10 @@ and swaps the published index.
 ac1, ac2, ac3 and ac5 pass: 107 page and copy tests in the default selection, 12 Chromium tests
 marked `slow`, and 33 holder and adapter tests, each set shown red first, with 22 of 22 mutants killed.
 
-**The Goal stays InProgress.** ac4, the operator's Chromebook check on dev, needs the docx-6 store,
-which the local stores do not have yet (the re-parse runs on 2026-10-21). Its operator block is
-below. The PM should look first at **PM question 1**: validate-dev's slow tier will run the new
-Chromium tests on a runner with no Chromium.
+**The Goal is Succeeded (2026-10-21).** ac4 ran on dev in desktop Chrome at 1366x768, as the PM's
+ruling of 2026-10-21 amended it, on the branch synced onto `dev`: four yes. Both PM reviews are
+ACCEPTED. Their conditions are closed: validate-dev's slow job installs Chromium, and Copy card sits
+in a bar above the card's text. The sections after the first review give the detail.
 
 ## Plan nodes
 
@@ -43,7 +43,7 @@ Chromium tests on a runner with no Chromium.
 | ac1 — Playwright against the app served locally with a synthetic index: search, filter, page, open a card and copy it at 1366x768 and 390x844; axe no serious or critical | PASS | `uv run pytest -m slow packages/debate_api/tests/browser -n 0 -v` → `12 passed in 7.55s`. `test_search_filter_page_open_and_copy_a_card_by_keyboard` runs at **1366x768, 1280x800 and 390x844** (phone: mobile, touch, scale 3), all by keyboard. It tabs to the box and searches, gets 20 results, tabs to *Next results* and gets 5, then filters to Public Forum by typing into the select and gets the one PF card. It searches again, opens a card, and presses *Copy card*: the clipboard holds `text/html` and `text/plain`, equal to the copy route's. On every page there is no CSP violation, no horizontal scroll, and axe-core 4.12.1 finds no serious or critical violation |
 | ac2 — copied HTML pasted into a fixture editable region keeps every formatting span, compared as coverage, with the provenance line below the cite | PASS | Chromium, `test_a_pasted_copy_keeps_every_formatting_span_with_the_provenance_line_below_the_cite`: a keyboard paste into an editable region that reads the clipboard's `text/html` in its paste event, as Google Docs does. Read back, the paragraphs are the tag, the cite, then `[Disclosed: hsld26 2026-09-15 — Maple Grove QX, Neg vs. Invented Invitational Round 4]`, then the card. The card's span coverage gives the stored spans' `formatting_sha256` exactly: ten emphasis spans, two highlight colours (one across the line break) and three sizes. `test_the_browsers_own_paste_keeps_how_every_character_of_the_copy_looks`: Chrome's own paste looks the same, character by character, by computed style (Decision 6). In Python, `test_copy_card.py` → the same `formatting_sha256` equality, a negative control that differs, and the table pinned by hand |
 | ac3 — no page requests another origin or carries inline script, by a test over every response and its CSP; the page-weight budget holds | PASS | Chromium, `test_no_page_requests_another_origin_or_runs_inline_script_under_the_edges_csp`. Every response carries the CSP `distribution.tf` writes, read from the file. Every request is to the pilot's origin, over 8 pages and a copy, with no other origin recorded. There are no inline scripts and no CSP violations, and the only script is `app.js`. `test_an_inline_script_would_be_refused_by_the_edges_csp` shows that CSP refusing one. HTTP level (`test_search_pages.py`, 12 pages including account and coach): no `style`, `on*=` or `javascript:` in any tag; every `src`, `href`, `action` and `data-tub-copy` is a path or `#main`; each page under 150 KB with `app.js` and `app.css` counted and the card body left out |
-| ac4 — on dev, in desktop Chrome with the window at 1366x768 (DevTools device toolbar): search, open a card, Copy card into Google Docs, formatting kept; yes or no each (amended, PM ruling 2026-10-21) | NOT RUN | It needs the docx-6 store, which this Mac does not have yet: `ls ~/.debate-research/dev/parsed/*` lists only `2026.10.18-docx-5` (read 2026-10-20). Operator follow-up 1 is the whole sequence, in order |
+| ac4 — on dev, in desktop Chrome with the window at 1366x768 (DevTools device toolbar): search, open a card, Copy card into Google Docs, formatting kept; yes or no each (amended, PM ruling 2026-10-21) | PASS | The operator's run of Operator follow-up 1, 2026-10-21, on the synced branch (`ece0ac1` deployed): results yes, the card opens yes, Copy card into Google Docs yes, formatting kept yes. Every step's output is recorded under "ac4's second attempt" |
 | ac5 — a card over 3,000 words shows its read-aloud text first and the rest on request; its result's snippet stays within the page-weight budget | PASS | HTTP: the 3,200-word card's body is *Read aloud* and `Zephyr read aloud stretch`, then `<details class="card-whole">` holding the whole card; a 3,000-word-or-shorter card is shown whole; the results page for a word only that card holds has a snippet of 24 words or fewer, under 150 KB. Chromium, at all three sizes: the read-aloud text is visible and the whole card hidden; Tab to *Show the whole card* and Enter opens it |
 
 ### Shown failing first, and the mutants
@@ -527,6 +527,36 @@ results go here.
      likely Decision 7's reports: Chrome reports each inline style of the copied HTML against the
      page's CSP while it sanitises the write, and this card has many spans. The paste was whole. Not
      confirmed from the console's text.
+
+## After the second PM review, 2026-10-21
+
+* **Ruling 1, (a):** the provenance line stays in Copy card; nothing changed.
+* **Ruling 2, (c): done, template and stylesheet only.** `card.html` puts Copy card in one bar,
+  `.card-actions`, directly above the card's text. In it are the button, one short help line
+  ("Keeps its formatting and source line.", which is also the button's `aria-describedby`) and the
+  existing live region, on the button's line. `app.css` gives the bar its look and drops the old
+  `.copy` rules. `app.js` is unchanged: it still finds the status beside the button.
+  * The first help line I wrote, "With its formatting and source line, for Google Docs or Word.",
+    pushed "Copied. Paste it into Google Docs or Word." onto a second line at 1366x768, and the new
+    browser check caught it. The shorter line fits. On a phone the bar wraps.
+* **The tests:**
+  * `.venv/bin/python -m pytest -q packages/debate_api/tests` → `491 passed`. The card page's test
+    now checks the bar: the button with its description, the help, then the status, as the bar's
+    last child.
+  * `.venv/bin/python -m pytest -m slow packages/debate_api/tests/browser -n 0` → `12 passed`: axe at
+    every page and size, the keyboard order (Tab to *Copy card*), and no horizontal scroll at
+    1366x768, 1280x800 and 390x844.
+  * `test_copy_card_writes_the_clipboard_inside_the_click_before_the_fetch_answers` now also holds,
+    at 1366x768, that the status is on the button's line and to its right, and the card's text
+    begins under the bar.
+  * ruff format and check, and pyright on `debate_api`: clean.
+* **The screenshot,** for the coach: the synthetic featured card at 1366x768 after *Copy card*, taken
+  through the browser suite's own harness. It is outside the repository and not committed:
+  `/private/tmp/claude-501/-Users-charlesclark-Documents-debate-debate-intelligence-tool-debate-intelligence-worktrees-v1-e39-t06-search-pages/5685497a-81e7-47ab-804f-34ee6228f9de/scratchpad/card-page-1366x768.png`.
+* **The Goal:** `uv run scripts/task_helper.py set-phase v1-e39-t06-search-pages Succeeded`.
+  `uv run scripts/validate_specs.py` → `OK: 404 files, 39 epics, 344 tasks, 21 releases`;
+  `uv run scripts/validate_specs.py --require-succeeded v1-e39-t06-search-pages` →
+  `v1-e39-t06-search-pages: Succeeded`.
 
 ## PM review
 

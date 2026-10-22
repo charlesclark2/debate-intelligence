@@ -301,10 +301,11 @@ class OpenAlexProvider:
 
     def __init__(self, client: httpx.AsyncClient, *, api_key: SecretStr | None, clock: Clock) -> None:
         self._client = client
-        self._api_key = api_key
+        self._api_key = api_key if api_key is not None and api_key.get_secret_value().strip() else None
+        """The key, or `None` when none is set: an empty `DEBATE_PROVIDERS__OPENALEX_API_KEY=` is no key."""
         self._clock = clock
-        if api_key is not None:
-            protect_logs((api_key.get_secret_value(),))
+        if self._api_key is not None:
+            protect_logs((self._api_key.get_secret_value(),))
 
     @property
     def name(self) -> str:

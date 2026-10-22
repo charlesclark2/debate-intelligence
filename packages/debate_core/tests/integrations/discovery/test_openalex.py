@@ -495,6 +495,16 @@ async def test_a_request_without_a_key_has_no_authorization_header_and_no_mailto
     assert "mailto" not in str(request.url)
 
 
+@pytest.mark.parametrize("blank", ["", "   "], ids=["empty", "spaces"])
+async def test_a_request_with_a_blank_key_is_sent_keyless(blank: str) -> None:
+    router, _, seen = routed()
+    provider = build_over(transport_for(router, seen), api_key=blank)
+    await provider.search(HEALTH_INSURANCE)
+
+    assert "authorization" not in seen[0].headers
+    assert repr(provider) == "OpenAlexProvider(api_key=none)"
+
+
 async def test_a_request_never_carries_the_contact_email_anywhere() -> None:
     router, _, seen = routed()
     await build_over(transport_for(router, seen)).search(HEALTH_INSURANCE)

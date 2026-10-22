@@ -338,8 +338,10 @@ ops/launchd/install.sh --check-launchd
 It loads a one-off copy of the installed plist as `com.debate-intelligence.caselist-sync.check`,
 with no schedule, running the copied wrapper's `--check`. That prints the path
 `DEBATE_RESEARCH_BIN` resolves to and the build's `debate-research --version`, then runs
-`debate-research doctor --evidence-profiles` (`v1-e34-t22`), and nothing else: no `caselist pull`,
-no listing call to OpenCaselist, no download. The installer kickstarts it, waits for it, prints
+`debate-research doctor --evidence-profiles --search-index` (`v1-e34-t22`, `v1-e34-t30`), and
+nothing else: no `caselist pull`, no listing call to OpenCaselist, no download. The agent's
+caselists reach the store check as `DEBATE_CASELIST__SYNC_CASELISTS` in the check's environment,
+because `--check` takes no argument; the agent's own plist is not changed. The installer kickstarts it, waits for it, prints
 its log (`~/Library/Logs/debate-research/caselist-sync-check.log`) and exit code, and boots it out.
 It reads the agent's `runs` count before and after and fails if it changed. It refuses to run
 against an agent whose wrapper is not this checkout's copied out, so reinstall first. That
@@ -356,8 +358,12 @@ agent and said nothing about Thursday. To change a setting, reinstall with its o
 The log is `doctor`'s report as launchd runs the build: with the plist's `HOME`, `PATH` and
 `DEBATE_ENV`, and nothing of a shell's. Its `Evidence profile` row is the one
 [Checking the evidence profiles](#checking-the-evidence-profiles) describes, for the profile the
-weekly run will use. Success is `exit code 0`, the version you installed, that row saying
-`defined`, and the same `runs` before and after.
+weekly run will use. Its `Search index store` rows name each store the run's search index stage
+will index, and say whether the build has parsed it
+([The search index stage](#the-search-index-stage)). Success is `exit code 0`, the version you
+installed, that row saying `defined`, every store `parsed by` the build's parser version (or
+`Search index stores: does not apply`), and the same `runs` before and after. A build installed
+before `v1-e34-t30` answers with exit code `2`, and the check says it lacks the search index check.
 
 | Exit code | Means |
 |---|---|
@@ -1226,6 +1232,23 @@ What each outcome means:
 | `skipped`, `the parsed store is not this build's version` | The parsed store was parsed by another parser or fingerprint version than the agent's build, for example after a by-hand re-parse with a newer build. | The reason names both versions. A newer store: reinstall the agent with the build that parsed it ([Reinstalling the agent](#reinstalling-the-agent)). An older one: re-parse it with the agent's build ([After a release that bumps the parser version](#after-a-release-that-bumps-the-parser-version)). |
 | `skipped`, `the parse stage failed in this run` | An index of what a failed parse left is not built. | See [The parse stage](#the-parse-stage). |
 | `failed` | The build or an upload failed. The previous index is still on this Mac and `current.json` still names the previous index; the reason names both. | The stage's hint and the notification say what to fix. The next run tries again. |
+| `failed`, `no version directory of parser …; run debate-research caselist parse --caselist <slug>` | A store the run indexes has never been parsed by the agent's build: on a fresh installation, every store until its first parse. | Run the `caselist parse` it names. Before the first Wednesday, `doctor --search-index` finds every such store at once (below). |
+
+**Before the first Wednesday, check that every store is parsed.** The stage indexes the agent's
+caselists and `openev`, each from the agent's build's parser version, and a store with no version
+directory of it leaves the run without a current index (`v1-e39-t09`, PM ruling Q3). `doctor
+--search-index` (`v1-e34-t30`) names each such store with the command that parses it and exits `1`;
+it exits `0` when every store is parsed, and says `does not apply` when the run has no stage
+(`caselist.refresh_search_index` off, or no bucket). `ops/launchd/install.sh --check-launchd` runs
+it as the agent will, with the agent's caselists ([Step 3](#step-3--enable-it)). By hand, the
+caselists are `caselist.sync_caselists`, the ones a pull without `--caselist` follows:
+
+```bash
+DEBATE_ENV=dev DEBATE_CASELIST__SYNC_CASELISTS='["hsld26","hspolicy26"]' debate-research doctor --search-index
+```
+
+A store parsed only by another parser version counts as not parsed: the run skips the stage on it
+rather than failing, but builds no index either.
 
 Every build's summary reports the SQLite file's size and its bytes per document (`search_index` in
 the run summary, and in the reason). An index directory is about a gigabyte, so after a successful

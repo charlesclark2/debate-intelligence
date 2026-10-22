@@ -159,7 +159,11 @@ from debate_core.application.caselist.version_retention import VersionDirectoryR
 from debate_core.application.caselist_card_stats import CaselistCardStatsService
 from debate_core.application.caselist_parse import CaselistParseService
 from debate_core.application.caselist_pull_parse import PullParseStage
-from debate_core.application.caselist_sync import CaselistSyncService, FullArchiveRotation
+from debate_core.application.caselist_sync import (
+    CaselistSyncService,
+    FullArchiveRotation,
+    why_no_search_index_stage,
+)
 from debate_core.application.evidence_profiles import ConfiguredProfile, EvidenceProfileCheck
 from debate_core.application.evidence_sync import (
     EvidenceSyncService,
@@ -175,6 +179,7 @@ from debate_core.application.ports.suppression import SuppressionList
 from debate_core.application.search_index_build import SearchIndexBuildService
 from debate_core.application.search_index_publish import SearchIndexPublishService
 from debate_core.application.search_index_refresh import SEARCH_INDEX_DIRECTORY, SearchIndexRefresh
+from debate_core.application.search_index_store_check import SearchIndexStoreCheck
 from debate_core.application.settings import ConfigurationError, Environment, Settings, SyncNotifierKind
 from debate_core.application.snapshot_service import SnapshotService
 from debate_core.application.sync_runs import (
@@ -237,6 +242,7 @@ SERVICE_NAMES: Final[tuple[str, ...]] = (
     "opencaselist_client",
     "search_index_build",
     "search_index_publish",
+    "search_index_store_check",
     "tub_account_administration",
     "verify_manifest",
 )
@@ -1135,7 +1141,11 @@ class ServiceContainer:
             if caselist.parse_imported_sources
             else None,
             search_index=self._pull_search_index(event_for_caselist)
-            if settings.storage.s3.bucket and caselist.refresh_search_index
+            if why_no_search_index_stage(
+                bucket_named=bool(settings.storage.s3.bucket),
+                refresh_search_index=caselist.refresh_search_index,
+            )
+            is None
             else None,
             search_index_turned_off=not caselist.refresh_search_index,
             openev_event=caselist.openev_event,
@@ -1149,6 +1159,29 @@ class ServiceContainer:
             if caselist.full_archive_rotation
             else None,
             read_full_archive=self.read_full_archive,
+        )
+
+    def search_index_store_check(self) -> SearchIndexStoreCheck:
+        """Build the check of every store the weekly run's search index stage would index (`v1-e34-t30`).
+
+        The stores of `caselist.sync_caselists`, the caselists a `caselist pull` with no
+        `--caselist` follows, against this machine's parsed store and the parser version this build
+        runs. Whether the check applies is decided by the rule `caselist_sync` wires the stage by.
+        Building it reads nothing.
+        """
+        return self.singleton("search_index_store_check", self._build_search_index_store_check)
+
+    def _build_search_index_store_check(self) -> SearchIndexStoreCheck:
+        # Imported here, not at module scope: lxml is loaded only by a command that needs the parser.
+        from debate_core.integrations.docx_parser import DebateDocxParser
+
+        settings = self.settings
+        return SearchIndexStoreCheck(
+            caselists=settings.caselist.sync_caselists,
+            bucket_named=bool(settings.storage.s3.bucket),
+            refresh_search_index=settings.caselist.refresh_search_index,
+            parsed_store=LocalParsedStore(settings.storage.data_dir),
+            parser_version=DebateDocxParser().parser_version,
         )
 
     def _pull_search_index(self, event_for_caselist: Callable[[str], Event | None]) -> SearchIndexRefresh:

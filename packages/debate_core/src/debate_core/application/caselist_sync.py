@@ -643,8 +643,10 @@ __all__ = [
     "openev_id_of_inbox_name",
     "remove_state_file",
     "run_pull",
+    "search_index_stores",
     "snapshots_still_owed",
     "weekly_archive_of_inbox_name",
+    "why_no_search_index_stage",
     "within_daily_budget",
     "write_state_file",
 ]
@@ -4014,7 +4016,7 @@ class CaselistSyncService:
             ),
             None,
         )
-        stores = (*dict.fromkeys(plan.caselists), OPENEV_STORE)
+        stores = search_index_stores(plan.caselists)
         try:
             report = await self._search_index.refresh(stores, no_session=no_session)
         except Exception as failed:
@@ -4707,6 +4709,30 @@ def caselists_to_parse(imported: Iterable[PendingSnapshot]) -> tuple[str, ...]:
     rebuild every aggregate to change none.
     """
     return tuple(dict.fromkeys(one.caselist for one in imported if full_archive_date(one.snapshot) is None))
+
+
+def search_index_stores(caselists: Sequence[str]) -> tuple[str, ...]:
+    """The stores the search index stage indexes for a run of `caselists`: each once, then `openev`.
+
+    The one list of them. The stage hands it to the refresh, and `doctor --search-index`
+    (`v1-e34-t30`) checks the same stores before a run meets them.
+    """
+    return (*dict.fromkeys(caselists), OPENEV_STORE)
+
+
+def why_no_search_index_stage(*, bucket_named: bool, refresh_search_index: bool) -> str | None:
+    """Why a run has no search index stage, in the words its summary records; `None` when it has one.
+
+    The stage is wired in only where the environment names a bucket and
+    `caselist.refresh_search_index` is on. The setting is said first, as the run says it. The
+    composition root wires the stage by this rule, and `doctor --search-index` says by it whether
+    its check applies.
+    """
+    if not refresh_search_index:
+        return _SEARCH_INDEX_TURNED_OFF
+    if not bucket_named:
+        return _NO_SEARCH_INDEX
+    return None
 
 
 def _parse_stage_sentence(counts: ParseStageCounts, *, publishing: bool) -> str:

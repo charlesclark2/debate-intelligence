@@ -44,6 +44,17 @@ that *is* defined is `packages/debate_cli/tests/commands/test_doctor_evidence_pr
 The launchd half, the check's log, its failing exit code and the label booted out, was skipped off
 macOS until `v1-e34-t24` gave it the `plutil` stand-in.
 
+## The search index check (`v1-e34-t30`)
+
+The wrapper's `--check` runs `doctor --evidence-profiles --search-index`, which also fails on a store
+the weekly run's search index stage would index that this build has never parsed. Which stores
+depends on the agent's caselists, and `--check` still takes no argument, so `--check-launchd` puts
+them in the check's environment as `DEBATE_CASELIST__SYNC_CASELISTS`, the setting a pull without
+`--caselist` follows. What `doctor` does with them is
+`packages/debate_cli/tests/commands/test_doctor_search_index.py`; here it is that the installer hands
+them over, and the real command's verdict through the wrapper. The installer's own check before an
+install stays `doctor --evidence-profiles`: a first install comes before the first parse.
+
 ## A reinstall keeps what is installed (`v1-e34-t24`)
 
 Over an installed agent the installer reads the installed plist: its `DEBATE_ENV` and its caselists
@@ -275,7 +286,10 @@ CONFIG_SHOW = json.dumps({
 
 
 PROFILE_CHECK = "doctor --evidence-profiles"
-"""What the wrapper's `--check` runs after `--version`, written out as the runbook gives it."""
+"""What the installer runs before it installs, written out as the runbook gives it."""
+
+AGENTS_CHECKS = "doctor --evidence-profiles --search-index"
+"""What the wrapper's `--check` runs after `--version`: the profile check and the search index check."""
 
 
 def fake_console_script(directory: Path, *, data_directory: str | None = None) -> Path:
@@ -286,8 +300,9 @@ def fake_console_script(directory: Path, *, data_directory: str | None = None) -
     reads it, otherwise the profile default `$HOME/.debate-research/$DEBATE_ENV`, so that the
     installer's check of the agent's data directory can be driven from a test.
 
-    `doctor --evidence-profiles` prints one line and exits `0`, or with the number in the file
-    `profile-check-exit` beside the script when a test has written one (:func:`profile_check_exits`).
+    `doctor --evidence-profiles`, with or without `--search-index`, prints one line and exits `0`,
+    or with the number in the file `profile-check-exit` beside the script when a test has written one
+    (:func:`profile_check_exits`).
 
     Each call's environment is kept beside it, numbered as the call is (:func:`environment_of_call`).
     """
@@ -304,7 +319,7 @@ def fake_console_script(directory: Path, *, data_directory: str | None = None) -
         "    '--json config show')\n"
         f"        printf '{CONFIG_SHOW}\\n' \"{reported}\" ;;\n"
         "    '--version') echo 'debate-research 0.0.0+fake' ;;\n"
-        f"    '{PROFILE_CHECK}')\n"
+        f"    '{PROFILE_CHECK}'|'{AGENTS_CHECKS}')\n"
         "        echo 'stand-in doctor: the evidence profiles were checked'\n"
         f"        if [ -f '{profile_check_exit}' ]; then\n"
         '            echo "stand-in doctor: debate-${DEBATE_ENV}-evidence'
@@ -320,7 +335,8 @@ def fake_console_script(directory: Path, *, data_directory: str | None = None) -
 
 
 def profile_check_exits(console_script: Path, exit_code: int) -> None:
-    """Have the fake build's `doctor --evidence-profiles` end with `exit_code` from now on."""
+    """Have the fake build's `doctor --evidence-profiles` end with `exit_code` from now on, with or
+    without `--search-index`."""
     (console_script.parent / "profile-check-exit").write_text(f"{exit_code}\n", encoding="utf-8")
 
 
@@ -474,6 +490,8 @@ def test_the_plutil_stand_in_answers_as_plutil_does(home: Path, tmp_path: Path, 
         ("-replace", "StartCalendarInterval.Hour", "-string", "7"),
         ("-extract", "StartCalendarInterval.Hour", "raw", "-expect", "integer", "-o", "-"),
         ("-replace", "Label", "-string", "renamed"),
+        ("-replace", "EnvironmentVariables.NOT_SET", "-string", '["testcl26"]'),
+        ("-extract", "EnvironmentVariables.NOT_SET", "raw", "-o", "-"),
         ("-remove", "ProgramArguments.1"),
         ("-insert", "ProgramArguments.1", "-string", "--check"),
         ("-insert", "ProgramArguments.9", "-string", "too-far"),
@@ -847,15 +865,16 @@ def run_wrapper(
 def test_the_wrapper_check_mode_prints_the_version_then_checks_the_profiles_and_never_pulls(
     home: Path, console_script: Path
 ) -> None:
-    """ac5 of `v1-e34-t10`, and ac3 of `v1-e34-t22`. `--check` resolves DEBATE_RESEARCH_BIN, runs
-    `--version` and then the profile check, in that order, and nothing else: it can spend nothing."""
+    """ac5 of `v1-e34-t10`, ac3 of `v1-e34-t22`, and `v1-e34-t30`. `--check` resolves
+    DEBATE_RESEARCH_BIN, runs `--version` and then the profile and search index checks, in that
+    order, and nothing else: it can spend nothing."""
     checked = run_wrapper("--check", console_script=console_script, home=home)
 
     assert checked.returncode == 0, checked.stderr
     assert str(console_script) in checked.stdout
     assert "debate-research 0.0.0+fake" in checked.stdout
     assert "stand-in doctor: the evidence profiles were checked" in checked.stdout
-    assert calls_to(console_script) == ["--version", "doctor --evidence-profiles"]
+    assert calls_to(console_script) == ["--version", AGENTS_CHECKS]
 
 
 @pytest.mark.parametrize("exit_code", [1, 2, 70])
@@ -871,7 +890,7 @@ def test_the_wrapper_check_mode_ends_with_the_profile_checks_exit_code(
 
     assert checked.returncode == exit_code
     assert "stand-in doctor: the evidence profiles were checked" in checked.stdout, "what it said is kept"
-    assert calls_to(console_script) == ["--version", "doctor --evidence-profiles"]
+    assert calls_to(console_script) == ["--version", AGENTS_CHECKS]
 
 
 def test_the_wrapper_check_mode_takes_no_other_arguments(home: Path, console_script: Path) -> None:
@@ -932,6 +951,10 @@ def an_installation_whose_profile_setting_names(profile: str, directory: Path) -
     return {
         "DEBATE_ENV": "dev",
         "DEBATE_PROFILE_DIR": str(profiles),
+        # Nothing is parsed here, and the wrapper's `--check` also checks the stores the search
+        # index stage would index (`v1-e34-t30`). Off, that check does not apply, and what the
+        # wrapper reports is the profile check's alone.
+        "DEBATE_CASELIST__REFRESH_SEARCH_INDEX": "false",
         "AWS_CONFIG_FILE": str(config),
         "AWS_SHARED_CREDENTIALS_FILE": str(directory / "no-credentials"),
         "AWS_EC2_METADATA_DISABLED": "true",
@@ -981,7 +1004,43 @@ def test_over_the_real_command_the_check_passes_where_no_evidence_profile_is_con
     )
 
     assert checked.returncode == 0, checked.stdout + checked.stderr
-    assert "none configured for this environment" in " ".join(checked.stdout.split())
+    said = " ".join(re.sub(r"[│╭╮╰╯─┌┐└┘├┤┬┴┼]", " ", checked.stdout).split())
+    assert "none configured for this environment" in said
+    assert "Search index stores does not apply: no search index stage is wired in" in said
+
+
+def test_over_the_real_command_the_check_fails_on_a_store_never_parsed_and_names_its_parse_command(
+    home: Path, tmp_path: Path
+) -> None:
+    """`v1-e34-t30`, as `install.sh --check-launchd` runs it: the wrapper's `--check` over this
+    checkout's `debate-research`, with the agent's caselist given as the launchd check gives it and
+    nothing parsed. The installation is `test`'s, which configures no evidence profile, with a
+    bucket named so that the run has the stage. No profile is asked about and the store check lists
+    directories, so no network is reached."""
+    command = this_checkouts_command(tmp_path / "bin")
+    data = tmp_path / "installation" / "data"
+
+    checked = run_wrapper(
+        "--check",
+        console_script=command,
+        home=home,
+        DEBATE_ENV="test",
+        DEBATE_STORAGE__DATA_DIR=str(data),
+        DEBATE_STORAGE__S3__BUCKET="debate-test-evidence-not-a-bucket",
+        DEBATE_CASELIST__SYNC_CASELISTS='["testcl26"]',
+        AWS_CONFIG_FILE=os.devnull,
+        AWS_SHARED_CREDENTIALS_FILE=os.devnull,
+        AWS_EC2_METADATA_DISABLED="true",
+        AWS_ENDPOINT_URL="http://127.0.0.1:9",
+    )
+
+    said = " ".join(re.sub(r"[│╭╮╰╯─┌┐└┘├┤┬┴┼]", " ", checked.stdout + checked.stderr).split())
+    assert checked.returncode == 1, said
+    assert "SEARCH_INDEX_STORE_NOT_READY" in said
+    assert "testcl26: not parsed by this build's parser" in said
+    assert "debate-research caselist parse --caselist testcl26" in said
+    assert "debate-research caselist parse --caselist openev" in said
+    assert str(data) not in checked.stdout + checked.stderr
 
 
 # --- The installer's launchd check (ac5), against the fake launchctl and the plutil stand-in ----
@@ -1035,7 +1094,7 @@ def test_the_launchd_check_runs_the_installed_wrapper_under_its_own_label_and_ne
     assert "stand-in doctor: the evidence profiles were checked" in checked.stdout
     assert "exit code 0" in checked.stdout
     assert f"{LABEL} runs: 7 before, 7 after" in checked.stdout
-    assert calls_to(console_script) == ["--version", "doctor --evidence-profiles"], (
+    assert calls_to(console_script) == ["--version", AGENTS_CHECKS], (
         "the check ran something other than --version and the profile check"
     )
     commands = calls.read_text(encoding="utf-8").splitlines()
@@ -1053,6 +1112,33 @@ def test_the_launchd_check_runs_the_installed_wrapper_under_its_own_label_and_ne
     )
     check_plist = next(line.split()[-1] for line in commands if line.startswith("bootstrap"))
     assert not Path(check_plist).exists(), "the check's plist was left behind"
+
+
+def test_the_launchd_check_hands_the_agents_caselists_to_the_check_as_the_setting_a_pull_follows(
+    home: Path, console_script: Path, fake_launchctl: tuple[Path, Path, Path]
+) -> None:
+    """`v1-e34-t30`. The installed agent names its caselists as `--caselist` arguments, and the
+    check's `--check` takes none, so they reach `doctor --search-index` as `caselist.sync_caselists`
+    in the check's environment: the stores the agent's run will index. The agent's plist is not
+    changed."""
+    launchctl_directory, state, _calls = fake_launchctl
+    installed = install(
+        "--caselist", "testcl26", "--caselist", "othercl26",
+        "--debate-research", str(console_script), home=home,
+    )  # fmt: skip
+    assert installed.returncode == 0, installed.stderr
+    state.write_text(json.dumps({LABEL: {"runs": 7, "last_exit_code": 0}}), encoding="utf-8")
+    console_script.parent.joinpath("calls.log").unlink()
+    agent_before = installed_plist_bytes(home)
+
+    checked = check_launchd(home, launchctl_directory)
+
+    assert checked.returncode == 0, checked.stdout + checked.stderr
+    assert calls_to(console_script) == ["--version", AGENTS_CHECKS]
+    environment = environment_of_call(console_script, AGENTS_CHECKS)
+    assert environment["DEBATE_CASELIST__SYNC_CASELISTS"] == '["testcl26","othercl26"]'
+    assert installed_plist_bytes(home) == agent_before, "the check changed the agent's plist"
+    assert "DEBATE_CASELIST__SYNC_CASELISTS" not in environment_of(installed_plist(home))
 
 
 def test_the_launchd_check_reports_a_failing_wrapper_and_still_boots_out(
@@ -1086,7 +1172,7 @@ def test_the_launchd_check_fails_when_a_profile_is_not_defined_prints_what_was_s
     assert f"{LABEL}.check exit code 1" in checked.stdout
     assert f"{LABEL} runs: 7 before, 7 after" in checked.stdout
     assert LABEL + ".check" not in json.loads(state.read_text(encoding="utf-8"))
-    assert calls_to(console_script) == ["--version", "doctor --evidence-profiles"]
+    assert calls_to(console_script) == ["--version", AGENTS_CHECKS]
 
 
 def test_the_launchd_check_says_a_build_without_the_profile_check_needs_replacing(
@@ -1103,7 +1189,8 @@ def test_the_launchd_check_says_a_build_without_the_profile_check_needs_replacin
 
     assert checked.returncode == 1
     assert f"{LABEL}.check exit code 2" in checked.stdout
-    assert "does not have the profile check" in checked.stderr
+    assert "does not have the profile check or the search index check" in checked.stderr
+    assert "doctor --evidence-profiles --search-index" in checked.stderr
     assert "scripts/install_channel.sh" in checked.stderr
 
 

@@ -17,13 +17,16 @@
 #     run-caselist-sync.sh --caselist hsld26 --caselist hspolicy26
 #
 # The one exception is `--check`, alone: it shows which console script DEBATE_RESEARCH_BIN
-# resolves to, runs its `--version`, and then runs `doctor --evidence-profiles`, and nothing else.
-# `install.sh --check-launchd` runs it under launchd to prove the agent can be executed, and that
-# the AWS profile the weekly run will use is one this machine's AWS config defines, without a sync
-# and without a download (v1-e34-t22). It ends with doctor's exit code: 1 when a configured
-# evidence profile is not defined, which is the setting that would make the scheduled run refuse
-# to start. What that check asks, and what does not fail it, is the command's to say, not this
-# file's.
+# resolves to, runs its `--version`, and then runs `doctor --evidence-profiles --search-index`, and
+# nothing else. `install.sh --check-launchd` runs it under launchd to prove the agent can be
+# executed, that the AWS profile the weekly run will use is one this machine's AWS config defines
+# (v1-e34-t22), and that every store the run's search index stage will index has been parsed by
+# this build (v1-e34-t30), without a sync and without a download. The installer hands the agent's
+# caselists to that check as caselist.sync_caselists, in the check's environment, so `--check`
+# still takes no argument. It ends with doctor's exit code: 1 when a configured evidence profile is
+# not defined, which is the setting that would make the scheduled run refuse to start, or when a
+# store has never been parsed, which would leave the run without a current search index. What
+# those checks ask, and what does not fail them, is the command's to say, not this file's.
 #
 # Environment, all optional when this file is run by hand. install.sh writes these two into the
 # plist, beside HOME and PATH:
@@ -60,10 +63,11 @@ if [ "${1:-}" = "--check" ]; then
     fi
     echo "run-caselist-sync: check: DEBATE_RESEARCH_BIN is $(command -v "${DEBATE_RESEARCH_BIN}")"
     "${DEBATE_RESEARCH_BIN}" --version
-    # The build's own checks, and each configured evidence profile: defined or not, and which
-    # permission set it is signed in as. Run here because this is the environment the scheduled
-    # run has: launchd's, with the plist's HOME, PATH and DEBATE_ENV, and nothing of a shell's.
-    exec "${DEBATE_RESEARCH_BIN}" doctor --evidence-profiles
+    # The build's own checks, each configured evidence profile (defined or not, and which
+    # permission set it is signed in as), and each store the run's search index stage will index
+    # (parsed by this build or not). Run here because this is the environment the scheduled run
+    # has: launchd's, with the plist's HOME, PATH and DEBATE_ENV, and nothing of a shell's.
+    exec "${DEBATE_RESEARCH_BIN}" doctor --evidence-profiles --search-index
 fi
 
 # --json so that stdout is one object per run, which is what the plist's StandardOutPath collects

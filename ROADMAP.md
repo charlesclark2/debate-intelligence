@@ -63,8 +63,8 @@ v2.3's extension work.
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 42 | 42 | 224 |
 | [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 97 | 76 | 473 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 21 | 7 | 190 |
-| [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 13 | 1 | 108 |
-| [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 14 | 1 | 96 |
+| [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 13 | 2 | 108 |
+| [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 14 | 2 | 96 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 0 | 66 |
 | [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 19 | 12 | 146 |
 | [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 10 | 5 | 46 |
@@ -318,7 +318,7 @@ A student can run `debate-research cut <URL>` and receive a verified, tagged, ci
 | Task | Status | Prereqs | Est. hours |
 |---|---|---|---|
 | [URL canonicalization and identifier detection](plan_specs/v1/e04-article-retrieval/t01-url-canonicalization.yaml) `v1-e04-t01-url-canonicalization` | Succeeded | 1 | 7.0 |
-| [Polite HTTP fetcher](plan_specs/v1/e04-article-retrieval/t02-http-fetcher.yaml) `v1-e04-t02-http-fetcher` | Pending | 4 | 10.0 |
+| [Polite HTTP fetcher](plan_specs/v1/e04-article-retrieval/t02-http-fetcher.yaml) `v1-e04-t02-http-fetcher` | Succeeded | 4 | 10.0 |
 | [Access-status and paywall detection](plan_specs/v1/e04-article-retrieval/t03-access-status.yaml) `v1-e04-t03-access-status` | Pending | 2 | 6.0 |
 | [Readable-text extraction (HTML + PDF)](plan_specs/v1/e04-article-retrieval/t04-content-extraction.yaml) `v1-e04-t04-content-extraction` | Pending | 2 | 8.5 |
 | [ArticleService orchestration](plan_specs/v1/e04-article-retrieval/t05-article-service.yaml) `v1-e04-t05-article-service` | Pending | 3 | 8.5 |
@@ -357,7 +357,7 @@ A student can run `debate-research cut <URL>` and receive a verified, tagged, ci
 
 | Task | Status | Prereqs | Est. hours |
 |---|---|---|---|
-| [SearchService fan-out](plan_specs/v1/e08-research-workflows/t01-federated-search-service.yaml) `v1-e08-t01-federated-search-service` | Pending | 1 | 7.0 |
+| [SearchService fan-out](plan_specs/v1/e08-research-workflows/t01-federated-search-service.yaml) `v1-e08-t01-federated-search-service` | Succeeded | 1 | 7.0 |
 | [Normalization and deduplication](plan_specs/v1/e08-research-workflows/t02-normalize-dedupe.yaml) `v1-e08-t02-normalize-dedupe` | Pending | 2 | 8.0 |
 | [Explainable feature ranking](plan_specs/v1/e08-research-workflows/t03-feature-ranking.yaml) `v1-e08-t03-feature-ranking` | Pending | 1 | 8.0 |
 | [Argument/need query expansion](plan_specs/v1/e08-research-workflows/t04-argument-need-expansion.yaml) `v1-e08-t04-argument-need-expansion` | Pending | 3 | 7.5 |

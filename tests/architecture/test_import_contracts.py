@@ -34,8 +34,9 @@ LINT_IMPORTS = Path(sys.executable).parent / "lint-imports"
 BROKEN_VERDICT = re.compile(r"^(?P<name>.+) BROKEN(?: \(\d+ ignored imports?\))?$", re.MULTILINE)
 
 AWS_SDK = "The AWS SDK never reaches the domain, the application layer or the other adapters"
-HTTP_CLIENT = "The HTTP client and the keychain library stay inside debate_core.integrations.opencaselist"
-CLI_HTTP_CLIENT = "The CLI reaches httpx and keyring only through debate_core.integrations.opencaselist"
+HTTP_CLIENT = "The HTTP client stays inside the adapters that talk HTTP"
+KEYCHAIN = "The keychain library stays inside debate_core.integrations.opencaselist"
+CLI_HTTP_CLIENT = "The CLI reaches httpx and keyring only through debate_core.integrations"
 DELIVERY_AWS_SDK = "The CLI and the API reach the AWS SDK only through debate_core.integrations"
 DOCUMENT_LIBRARIES = "Document libraries stay inside debate_core.integrations.docx_parser"
 CLI_DOCUMENT_LIBRARIES = "The CLI reaches lxml only through debate_core.integrations.docx_parser"
@@ -71,7 +72,10 @@ VIOLATIONS = [
     Violation("debate_api.boundary_probe", "import boto3", DELIVERY_AWS_SDK),
     Violation("debate_api.routes_probe", "from botocore.exceptions import ClientError", DELIVERY_AWS_SDK),
     Violation("debate_core.domain.boundary_probe", "import httpx", HTTP_CLIENT),
-    Violation("debate_core.testing.boundary_probe", "import keyring", HTTP_CLIENT),
+    Violation("debate_core.testing.boundary_probe", "import keyring", KEYCHAIN),
+    # httpx and keyring are separate extras since v1-e04-t02 (PM ruling 2026-10-21): an HTTP adapter
+    # other than OpenCaselist's may use httpx but not the keychain.
+    Violation("debate_core.integrations.discovery.boundary_probe", "import keyring", KEYCHAIN),
     Violation("debate_cli.commands.boundary_probe", "import httpx", CLI_HTTP_CLIENT),
     Violation("debate_cli.commands.boundary_probe", "import boto3", DELIVERY_AWS_SDK),
     Violation("debate_core.application.boundary_probe", "import lxml", DOCUMENT_LIBRARIES),

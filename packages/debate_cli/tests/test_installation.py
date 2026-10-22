@@ -161,7 +161,7 @@ def test_this_checkout_is_a_complete_installation() -> None:
     report = check_installation()
 
     assert report.complete, report.as_dict()
-    assert report.declared_extras == ("aws", "docx", "opencaselist", "tub")
+    assert report.declared_extras == ("aws", "docx", "http", "opencaselist", "tub")
 
 
 def test_an_integration_that_does_not_import_makes_the_installation_incomplete() -> None:
@@ -308,7 +308,7 @@ def test_debate_cli_declares_every_distribution_its_wired_integrations_import() 
 
 
 def test_dropping_the_aws_extra_leaves_the_s3_adapter_without_boto3() -> None:
-    gaps = undeclared_imports(_with_core_extras("docx,opencaselist,tub"), wired_integrations())
+    gaps = undeclared_imports(_with_core_extras("docx,http,opencaselist,tub"), wired_integrations())
 
     # The pilot's two adapters (v1-e39-t05) take boto3 from the same extra.
     assert gaps == {
@@ -320,25 +320,32 @@ def test_dropping_the_aws_extra_leaves_the_s3_adapter_without_boto3() -> None:
 
 def test_dropping_the_tub_extra_leaves_the_cognito_adapter_without_cryptography() -> None:
     """`opencaselist` goes too: on Linux, its `keyring` brings `cryptography` through `SecretStorage`."""
-    gaps = undeclared_imports(_with_core_extras("aws,docx"), wired_integrations())
+    gaps = undeclared_imports(_with_core_extras("aws,docx,http"), wired_integrations())
 
     assert gaps == {
         "debate_core.integrations.cognito": {"cryptography"},
-        "debate_core.integrations.opencaselist": {"httpx", "keyring"},
+        "debate_core.integrations.opencaselist": {"keyring"},
     }
 
 
-def test_dropping_the_opencaselist_extra_leaves_the_client_without_httpx_and_keyring() -> None:
-    gaps = undeclared_imports(_with_core_extras("aws,docx,tub"), wired_integrations())
+def test_dropping_the_opencaselist_extra_leaves_the_client_without_keyring() -> None:
+    gaps = undeclared_imports(_with_core_extras("aws,docx,http,tub"), wired_integrations())
 
-    assert gaps == {"debate_core.integrations.opencaselist": {"httpx", "keyring"}}
+    assert gaps == {"debate_core.integrations.opencaselist": {"keyring"}}
+
+
+def test_dropping_the_http_extra_leaves_the_client_without_httpx() -> None:
+    """httpx has its own extra since v1-e04-t02 (PM ruling 2026-10-21), shared by every HTTP adapter."""
+    gaps = undeclared_imports(_with_core_extras("aws,docx,opencaselist,tub"), wired_integrations())
+
+    assert gaps == {"debate_core.integrations.opencaselist": {"httpx"}}
 
 
 def test_once_the_docx_parser_is_wired_dropping_the_docx_extra_is_caught() -> None:
     """The container does not wire the parser yet (v1-e31-t06 will); when it does, this applies."""
     wired = (*wired_integrations(), "debate_core.integrations.docx_parser")
 
-    assert undeclared_imports(_with_core_extras("aws,opencaselist,tub"), wired) == {
+    assert undeclared_imports(_with_core_extras("aws,http,opencaselist,tub"), wired) == {
         "debate_core.integrations.docx_parser": {"lxml"}
     }
     assert undeclared_imports(_cli_dependencies(), wired) == {}

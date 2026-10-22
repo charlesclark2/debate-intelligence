@@ -48,7 +48,10 @@ is never used. It sends one header of its own, the identifying User-Agent from s
 drives backoff and spacing with a fake clock and never really sleeps.
 
 **What it says about a URL.** Log lines and error messages name the host, never the path or query,
-which can carry a signed token or an email address.
+which can carry a signed token or an email address. httpx logs every request's full URL at INFO on
+its own logger, so :class:`RequestUrlLogFilter` cuts the fetcher's records there down to the
+origin. It acts only while the fetcher is sending (a context variable says so), so another
+adapter's httpx lines, and whatever filters it installs, are left exactly as they were.
 """
 
 from __future__ import annotations
@@ -57,8 +60,10 @@ import asyncio
 import ipaddress
 import logging
 import random
+import re
 import socket
 from collections.abc import Awaitable, Callable
+from contextvars import ContextVar
 from dataclasses import dataclass, replace
 from datetime import datetime
 from http.cookiejar import CookieJar, DefaultCookiePolicy
@@ -71,7 +76,7 @@ import httpx
 from debate_core.application.ports.providers import Clock
 from debate_core.application.settings import HttpSettings
 from debate_core.domain import AccessStatus
-from debate_core.integrations.retry_after import retry_after_seconds
+from debate_core.integrations.discovery.http_failures import retry_after_seconds
 from debate_core.retrieval.content_sniffing import sniff_content_type
 from debate_core.retrieval.fetch_types import (
     FetchError,
@@ -90,15 +95,35 @@ from debate_core.retrieval.fetch_types import (
 from debate_core.retrieval.robots_rules import ROBOTS_MAX_BYTES, RobotsRules
 
 __all__ = [
+    "HTTP_CLIENT_LOGGERS",
     "REDIRECT_STATUSES",
     "RETRYABLE_STATUSES",
     "RETRY_AFTER_STATUSES",
     "HostRateLimiter",
     "HttpArticleFetcher",
+    "RequestUrlLogFilter",
     "Sleep",
+    "install_request_url_filter",
 ]
 
 logger = logging.getLogger(__name__)
+
+HTTP_CLIENT_LOGGERS: Final = (
+    "httpx",
+    "httpcore",
+    "httpcore.connection",
+    "httpcore.http11",
+    "httpcore.http2",
+    "httpcore.proxy",
+)
+"""The loggers httpx and httpcore write request details to. A filter sees only records logged on its
+own logger, not its children's, so httpcore's are named one by one."""
+
+_SENDING: ContextVar[bool] = ContextVar("debate_core_http_fetcher_sending", default=False)
+"""True inside the fetcher's own request, so the log filter touches nothing else."""
+
+_URL_TAIL: Final = re.compile(r"(https?://[^/\s\"'?#]+)[^\s\"']*")
+"""A URL, with its origin as group 1 and everything after it (path, query, fragment) matched."""
 
 type Sleep = Callable[[float], Awaitable[None]]
 """Waits the given number of seconds. `asyncio.sleep` in production; a clock-advancing fake in tests."""
@@ -116,6 +141,31 @@ _HTTP_SCHEMES: Final = frozenset({"http", "https"})
 
 _SET_ASIDE_LOCATION: Final = "debate_core.redirect_location"
 """Response extension the redirect `Location` is moved to; see :func:`_set_location_aside`."""
+
+
+class RequestUrlLogFilter(logging.Filter):
+    """Cuts every URL in a record logged during the fetcher's own request down to its origin.
+
+    Outside a request it passes records through untouched. One shared instance is attached to the
+    httpx and httpcore loggers by :func:`install_request_url_filter`.
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if _SENDING.get():
+            record.msg = _URL_TAIL.sub(r"\1", record.getMessage())
+            record.args = ()
+        return True
+
+
+_REQUEST_URL_FILTER: Final = RequestUrlLogFilter()
+
+
+def install_request_url_filter() -> None:
+    """Attach the shared :class:`RequestUrlLogFilter` to each httpx and httpcore logger, once."""
+    for name in HTTP_CLIENT_LOGGERS:
+        target = logging.getLogger(name)
+        if not any(isinstance(existing, RequestUrlLogFilter) for existing in target.filters):
+            target.addFilter(_REQUEST_URL_FILTER)
 
 
 class HostRateLimiter:
@@ -190,6 +240,7 @@ class HttpArticleFetcher:
         self._limiter = HostRateLimiter(settings.per_host_interval_seconds, clock=clock, sleep=sleep)
         self._robots: dict[tuple[str, str, int], RobotsRules] = {}
         self._robots_locks: dict[tuple[str, str, int], asyncio.Lock] = {}
+        install_request_url_filter()
         self._client = httpx.AsyncClient(
             headers={"User-Agent": self._user_agent},
             timeout=httpx.Timeout(settings.request_timeout_seconds, connect=settings.connect_timeout_seconds),
@@ -409,6 +460,15 @@ class HttpArticleFetcher:
         self, url: str, *, body_limit: int, cut_at_limit: bool
     ) -> _Answer | _ConnectFailed | FetchError:
         """One request and, unless it is a redirect, its body: translated, never raising httpx's errors."""
+        sending = _SENDING.set(True)
+        try:
+            return await self._attempt_marked(url, body_limit=body_limit, cut_at_limit=cut_at_limit)
+        finally:
+            _SENDING.reset(sending)
+
+    async def _attempt_marked(
+        self, url: str, *, body_limit: int, cut_at_limit: bool
+    ) -> _Answer | _ConnectFailed | FetchError:
         started = self._clock.now()
         host = _host(url)
         logger.debug("GET %s", host)

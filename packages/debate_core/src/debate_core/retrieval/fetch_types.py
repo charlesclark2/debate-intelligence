@@ -73,7 +73,7 @@ class TimeoutPhase(StrEnum):
     """The server went quiet for longer than `http.request_timeout_seconds` between two chunks."""
 
     TOTAL = "total"
-    """The whole request, redirects included, took longer than `http.request_timeout_seconds`."""
+    """One request took longer than `http.request_timeout_seconds` from sending to its body's last byte."""
 
 
 class Timeout(FetchErrorBase):

@@ -20,7 +20,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import secrets
-from collections.abc import AsyncIterator, Callable
+from collections.abc import AsyncIterator, Callable, Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -32,7 +32,12 @@ import respx
 from debate_core.application.ports.providers import ArticleFetcher
 from debate_core.application.settings import HttpSettings
 from debate_core.domain import AccessStatus
-from debate_core.integrations.http_fetcher import HostRateLimiter, HttpArticleFetcher
+from debate_core.integrations.http_fetcher import (
+    HTTP_CLIENT_LOGGERS,
+    HostRateLimiter,
+    HttpArticleFetcher,
+    RequestUrlLogFilter,
+)
 from debate_core.retrieval.canonical_url import canonicalize_url
 from debate_core.retrieval.fetch_types import (
     FetchResult,
@@ -1107,6 +1112,23 @@ async def test_requests_carry_no_cookie_and_no_credentials_even_after_a_set_cook
         assert "authorization" not in request.headers
 
 
+@pytest.fixture
+def bare_http_client_loggers() -> Iterator[None]:
+    """httpx's and httpcore's loggers start with no filters, and get theirs back afterwards.
+
+    Their filters are shared by the whole process: OpenCaselist's `install_redaction` adds one that
+    strips every query string, and if a test that ran earlier in this worker left it there, it
+    would hide a leak from the test below (PM note, 2026-10-21, from v1-e07-t01's CI).
+    """
+    saved = {name: list(logging.getLogger(name).filters) for name in HTTP_CLIENT_LOGGERS}
+    for name in HTTP_CLIENT_LOGGERS:
+        logging.getLogger(name).filters.clear()
+    yield
+    for name, filters in saved.items():
+        logging.getLogger(name).filters[:] = filters
+
+
+@pytest.mark.usefixtures("bare_http_client_loggers")
 async def test_no_url_path_or_query_reaches_a_log_an_error_or_the_repr(
     build: Callable[..., HttpArticleFetcher], web: Web, caplog: pytest.LogCaptureFixture
 ) -> None:
@@ -1131,9 +1153,23 @@ async def test_no_url_path_or_query_reaches_a_log_an_error_or_the_repr(
 
     messages = [result.error.message for result in results if result.error is not None]
     assert len(messages) == 3
+    assert "HTTP Request: GET https://news.example.org " in caplog.text  # httpx's line, cut to the origin
     for text in [*messages, caplog.text, shown]:
         assert token not in text
         assert path_secret not in text
+
+
+@pytest.mark.usefixtures("bare_http_client_loggers")
+async def test_the_log_filter_leaves_other_clients_httpx_lines_alone(
+    fetcher: HttpArticleFetcher, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level(logging.INFO, logger="httpx")
+    assert sum(isinstance(found, RequestUrlLogFilter) for found in logging.getLogger("httpx").filters) == 1
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(lambda _: httpx.Response(200))) as other:
+        await other.get("https://api.example.org/v1/works?page=2")
+
+    assert "https://api.example.org/v1/works?page=2" in caplog.text
 
 
 async def test_the_fetcher_never_raises_for_a_url_it_cannot_reach(

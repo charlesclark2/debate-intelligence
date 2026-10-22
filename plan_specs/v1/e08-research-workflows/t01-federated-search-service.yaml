@@ -28,7 +28,16 @@ spec:
     dedupe, ranking, expansion or CLI here.
   priority: 1
   constraints:
-    packages: [debate_core.application]
+    # PM ruling 2026-10-21: the SearchRepository port and its contract had no place for raw
+    # per-provider results, so both are extended (debate_core.testing), the stored per-provider
+    # record lives beside ProviderResponse (debate_core.domain), and every existing adapter of the
+    # port keeps passing the contract (the in-memory fake, and SQLite in debate_core.integrations.local).
+    # The registry conformance test lives with the discovery integration's tests.
+    packages:
+      - debate_core.application
+      - debate_core.domain
+      - debate_core.testing
+      - debate_core.integrations.local
     forbidden:
       - One provider's failure failing the whole search when others succeed
       - Importing httpx or provider adapters directly in debate_core.application (use the registry port)
@@ -79,12 +88,14 @@ spec:
         name: SearchRequest, SearchOutcome and stage pipeline
         description: >-
           Define request/outcome types, ProviderStatus, and a SearchStage protocol with no-op defaults.
-        outputs: [packages/debate_core/src/debate_core/application/search_types.py]
+        # PM ruling 2026-10-21: "search" in module names now also means the student pilot
+        # (evidence_search, search_index_*); E08's modules say "federated".
+        outputs: [packages/debate_core/src/debate_core/application/federated_search_types.py]
         estimatedEffort: 2h
         acceptanceCriteria:
           - type: artifact_exists
             name: Search types exist
-            path: packages/debate_core/src/debate_core/application/search_types.py
+            path: packages/debate_core/src/debate_core/application/federated_search_types.py
             contentMatch: "class SearchStage"
       - id: fan-out
         kind: Task
@@ -93,13 +104,15 @@ spec:
           asyncio.TaskGroup-based fan-out with per-provider timeouts, overall deadline, and status
           classification (ok, timeout, error, breaker_open, not_configured).
         dependsOn: [search-types]
-        outputs: [packages/debate_core/src/debate_core/application/search_service.py]
+        # PM ruling 2026-10-21: module federated_search.py, service FederatedSearchService.
+        outputs: [packages/debate_core/src/debate_core/application/federated_search.py]
         estimatedEffort: 3h
         acceptanceCriteria:
           - type: test_passes
             name: Fan-out and partial-result tests pass
             command: uv
-            args: [run, pytest, packages/debate_core/tests/application/test_search_service.py, -k, fan_out]
+            # PM ruling 2026-10-21: tests renamed with the module.
+            args: [run, pytest, packages/debate_core/tests/application/test_federated_search.py, -k, fan_out]
       - id: persistence
         kind: Task
         name: Persist Search and raw results
@@ -111,7 +124,8 @@ spec:
           - type: test_passes
             name: Full SearchService tests pass
             command: uv
-            args: [run, pytest, packages/debate_core/tests/application/test_search_service.py]
+            # PM ruling 2026-10-21: tests renamed with the module.
+            args: [run, pytest, packages/debate_core/tests/application/test_federated_search.py]
           - type: command_succeeds
             name: Import boundaries hold
             command: uv

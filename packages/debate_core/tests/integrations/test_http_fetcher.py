@@ -840,6 +840,44 @@ async def test_robots_is_read_once_per_origin_and_cached(fetcher: HttpArticleFet
     assert other_robots.call_count == 1
 
 
+async def test_robots_rules_are_read_again_once_they_are_24_hours_old(
+    fetcher: HttpArticleFetcher, web: Web, time: SimulatedTime
+) -> None:
+    robots = web.router.get(ROBOTS).mock(
+        side_effect=[
+            httpx.Response(404),
+            httpx.Response(200, content=b"User-agent: *\nDisallow: /2026/\n"),
+        ]
+    )
+    target = web.router.get(ARTICLE).respond(200)
+
+    first = await fetcher.fetch(ARTICLE)
+    time.clock.advance(timedelta(hours=23, minutes=59, seconds=59))
+    still_cached = await fetcher.fetch(ARTICLE)
+    time.clock.advance(timedelta(seconds=1))
+    read_again = await fetcher.fetch(ARTICLE)
+
+    assert (first.error, still_cached.error) == (None, None)
+    assert isinstance(read_again.error, RobotsDisallowed)
+    assert robots.call_count == 2
+    assert target.call_count == 2
+
+
+async def test_robots_an_allow_list_written_disallow_first_lets_the_allowed_page_through(
+    fetcher: HttpArticleFetcher, web: Web
+) -> None:
+    web.router.get(ROBOTS).respond(200, content=b"User-agent: *\nDisallow: /\nAllow: /2026/\n")
+    web.router.get(ARTICLE).respond(200)
+    other = web.router.get(f"{SITE}/drafts/x").respond(200)
+
+    allowed = await fetcher.fetch(ARTICLE)
+    refused = await fetcher.fetch(f"{SITE}/drafts/x")
+
+    assert allowed.error is None
+    assert isinstance(refused.error, RobotsDisallowed)
+    assert not other.called
+
+
 async def test_robots_concurrent_fetches_on_one_host_share_one_robots_request(
     fetcher: HttpArticleFetcher, web: Web
 ) -> None:

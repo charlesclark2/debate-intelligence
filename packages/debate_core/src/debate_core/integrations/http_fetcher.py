@@ -16,10 +16,10 @@ canonicalizes, upgrades http to https, or adds `www.`.
    or `localhost`, is refused with `NonPublicAddress` before anything is sent. Without this a public
    page could redirect the fetcher to `http://169.254.169.254/` or a router's admin page and have
    the answer stored as a source.
-2. *robots.txt.* The rules for the hop's origin are read once and cached for the fetcher's lifetime
-   (:class:`~debate_core.retrieval.robots_rules.RobotsRules` documents what each answer means). A
-   refusal is `RobotsDisallowed`, recorded as `ROBOTS_DISALLOWED`, and nothing is requested from the
-   URL it refused.
+2. *robots.txt.* The rules for the hop's origin are read once and used for up to 24 hours by the
+   injected clock, as RFC 9309 §2.4 sets out; :mod:`~debate_core.retrieval.robots_rules` documents
+   what each answer means. A refusal is `RobotsDisallowed`, recorded as `ROBOTS_DISALLOWED`, and
+   nothing is requested from the URL it refused.
 3. *The per-host interval.* :class:`HostRateLimiter` spaces the starts of any two requests to one
    host by `http.per_host_interval_seconds`, robots.txt requests and retries included.
 4. *Bounded retries.* A failed connection and a 429, 502, 503 or 504 are retried, up to
@@ -92,7 +92,7 @@ from debate_core.retrieval.fetch_types import (
     TransportError,
     UnsupportedScheme,
 )
-from debate_core.retrieval.robots_rules import ROBOTS_MAX_BYTES, RobotsRules
+from debate_core.retrieval.robots_rules import ROBOTS_MAX_BYTES, RobotsRules, robots_rules_expired
 
 __all__ = [
     "HTTP_CLIENT_LOGGERS",
@@ -238,7 +238,8 @@ class HttpArticleFetcher:
         self._sleep = sleep
         self._jitter = jitter
         self._limiter = HostRateLimiter(settings.per_host_interval_seconds, clock=clock, sleep=sleep)
-        self._robots: dict[tuple[str, str, int], RobotsRules] = {}
+        self._robots: dict[tuple[str, str, int], tuple[datetime, RobotsRules]] = {}
+        """Each origin's rules, with when they were read."""
         self._robots_locks: dict[tuple[str, str, int], asyncio.Lock] = {}
         install_request_url_filter()
         self._client = httpx.AsyncClient(
@@ -386,13 +387,12 @@ class HttpArticleFetcher:
             httpx.URL(scheme=parsed.scheme, host=parsed.host, port=parsed.port, path="/robots.txt")
         )
         async with self._robots_locks.setdefault(key, asyncio.Lock()):
-            rules = self._robots.get(key)
-            if rules is None:
-                rules = await self._read_robots(robots_url)
-                self._robots[key] = rules
-        reason = rules.refusal_for(
-            url, user_agent=self._user_agent, product_token=self._settings.user_agent_product
-        )
+            cached = self._robots.get(key)
+            if cached is None or robots_rules_expired(cached[0], now=self._clock.now()):
+                read_at = self._clock.now()
+                cached = (read_at, await self._read_robots(robots_url))
+                self._robots[key] = cached
+        reason = cached[1].refusal_for(url, product_token=self._settings.user_agent_product)
         if reason is None:
             return None
         logger.info("robots.txt on %s refuses a URL (%s)", parsed.host, reason.value)

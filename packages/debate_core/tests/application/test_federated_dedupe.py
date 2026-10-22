@@ -226,6 +226,19 @@ def test_exact_canonical_url_with_a_path_below_the_front_page_is_a_key() -> None
     assert groups((section, same_section)) == [[0, 1]]
 
 
+def test_exact_a_url_with_no_canonical_form_is_not_a_key_and_gives_no_canonical_url() -> None:
+    """The model accepts a port out of range; the canonicalizer does not, so there is nothing to match on."""
+    broken = story(url="https://www.example-news.com:99999/2026/10/14/senate-stopgap", authors=())
+    same_broken = story(
+        provider="gdelt", url="https://www.example-news.com:99999/2026/10/14/senate-stopgap", authors=()
+    )
+
+    assert groups((broken, same_broken)) == [[0], [1]]
+    alone = merge_group((broken,))
+    assert alone.canonical_url is None
+    assert "canonical_url" not in alone.field_sources
+
+
 def test_exact_provider_ids_link_records_by_pmid() -> None:
     openalex = paper(provider="openalex", identifiers=ArticleIdentifiers(pmid="34567890", openalex_id="W1"))
     semantic_scholar = paper(
@@ -950,6 +963,18 @@ def test_merged_candidate_refuses_a_value_its_named_source_did_not_supply() -> N
         merged.evolve(field_sources={**merged.field_sources, "title": "gdelt"})
 
 
+def test_merged_candidate_refuses_a_source_for_a_field_it_does_not_have() -> None:
+    merged = merge_group((story(),))
+
+    with pytest.raises(ValidationError, match="citation_count"):
+        merged.evolve(field_sources={**merged.field_sources, "citation_count": "rss"})
+
+
+def test_merge_group_needs_at_least_one_record() -> None:
+    with pytest.raises(ValueError, match="at least one record"):
+        merge_group(())
+
+
 def test_merged_candidate_refuses_providers_that_do_not_match_its_members() -> None:
     merged = merge_group((story(), story(provider="gdelt")))
 
@@ -1036,6 +1061,7 @@ def test_the_dedupe_stage_leaves_provider_statuses_candidates_and_results_alone(
     assert after.results is state.results
     assert after.queries is state.queries
     assert len(after.merged_candidates) == 1
+    assert repr(DedupeStage()) == "DedupeStage()"
 
 
 def test_deduplication_makes_no_network_call(monkeypatch: pytest.MonkeyPatch) -> None:

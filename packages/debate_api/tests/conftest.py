@@ -42,6 +42,7 @@ import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives.asymmetric.padding import PKCS1v15
 from cryptography.hazmat.primitives.hashes import SHA256
+from jsonschema import Draft202012Validator
 from starlette.testclient import TestClient
 
 from debate_api.app import create_app
@@ -380,8 +381,23 @@ class FakeSelfService(AccountSelfService):
         return [operation for operation, _, _ in self.calls]
 
 
+AUDIT_RECORD_SCHEMA: Final = Path(__file__).resolve().parents[3] / "docs" / "data" / "tub-audit-record.schema.json"
+
+
+@cache
+def audit_record_validator() -> Draft202012Validator:
+    """The committed schema every audit record must meet (`v1-e39-t07`)."""
+    schema = json.loads(AUDIT_RECORD_SCHEMA.read_text(encoding="utf-8"))
+    Draft202012Validator.check_schema(schema)
+    return Draft202012Validator(schema)
+
+
 class FakeAuditSink:
-    """The audit log in memory. With `failing` set, every write raises as an unreachable log group would."""
+    """The audit log in memory. With `failing` set, every write raises as an unreachable log group would.
+
+    Every record is checked against the committed schema as it is written, so every test that makes
+    the app write one, the account changes' included, checks the schema against a real record.
+    """
 
     def __init__(self) -> None:
         self.records: list[AuditRecord] = []
@@ -390,6 +406,7 @@ class FakeAuditSink:
     def record(self, record: AuditRecord) -> None:
         if self.failing:
             raise StoreUnavailable("PutLogEvents", "debate-dev-tub-audit", "synthetic outage")
+        audit_record_validator().validate(json.loads(record.to_json()))
         self.records.append(record)
 
 

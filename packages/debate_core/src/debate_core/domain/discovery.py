@@ -10,6 +10,9 @@ that cross that boundary, in the platform's vocabulary rather than any provider'
   fell short.
 * :class:`ProviderHealth` and :class:`BreakerState` — a provider's recent record, for the CLI's
   provider status footer.
+* :class:`ProviderStatus` and :class:`ProviderOutcome` — how one call in a federated search ended,
+  and what it returned. Stored with the search (v1-e08-t01-federated-search-service), so a search
+  can be audited and replayed.
 
 The port they travel through is :class:`~debate_core.application.ports.providers.SearchProvider`,
 which re-exports the first three so that code written against the port keeps one import. They
@@ -34,8 +37,10 @@ __all__ = [
     "BreakerState",
     "CandidateResult",
     "ProviderHealth",
+    "ProviderOutcome",
     "ProviderQuery",
     "ProviderResponse",
+    "ProviderStatus",
 ]
 
 
@@ -193,4 +198,68 @@ class ProviderHealth(DomainModel):
     def _check_open_has_an_end(self) -> Self:
         if (self.state is BreakerState.OPEN) != (self.open_until is not None):
             raise ValueError("open_until is set exactly when the breaker is open")
+        return self
+
+
+class ProviderOutcome(StrEnum):
+    """How one call to one provider ended, in a federated search.
+
+    Only :attr:`OK` means the provider answered. Every other value is a different reason it did
+    not, and the CLI says which, because "OpenAlex timed out" and "OpenAlex is benched after three
+    failures" call for different things from the person reading the results.
+    """
+
+    OK = "ok"
+    """The provider answered. Its answer may itself be partial (`ProviderResponse.partial`)."""
+
+    TIMEOUT = "timeout"
+    """No answer in time: the provider's own timeout, or the search's overall deadline."""
+
+    ERROR = "error"
+    """The provider was reached and failed: a server error, an unreadable answer, a refused connection."""
+
+    RATE_LIMITED = "rate_limited"
+    """The provider asked the platform to back off, on this call or on an earlier one still in force."""
+
+    BREAKER_OPEN = "breaker_open"
+    """Skipped without reaching the provider: its circuit breaker is open after repeated failures."""
+
+    NOT_CONFIGURED = "not_configured"
+    """The search asked for a provider that settings do not enable, so there was nothing to call."""
+
+
+class ProviderStatus(DomainModel):
+    """One provider's answer to one query in a federated search, or the reason there was none.
+
+    The record a search keeps per call: the exact query asked, how the call ended and, when the
+    provider answered, everything it returned as it returned it. That is what makes a search
+    auditable after the fact ("why is this PARTIAL?") and its raw results replayable through later
+    stages (deduplication, ranking) without asking the providers again.
+
+    `error` is the message the platform recorded, which for a wrapped provider has every configured
+    credential and the contact email already removed; it is never a provider's raw exception text.
+    """
+
+    provider: NonEmptyText = Field(description="Provider name, as it appears in settings.")
+    query: ProviderQuery = Field(description="Exactly what the provider was asked.")
+    outcome: ProviderOutcome = Field(description="How the call ended.")
+    elapsed_ms: float = Field(ge=0, description="Time from the call starting to it ending, in milliseconds.")
+    response: ProviderResponse | None = Field(
+        default=None, description="What the provider returned; present exactly when the outcome is ok."
+    )
+    error: str | None = Field(
+        default=None, description="Why there is no answer; present exactly when the outcome is not ok."
+    )
+
+    @model_validator(mode="after")
+    def _check_answer_matches_outcome(self) -> Self:
+        answered = self.outcome is ProviderOutcome.OK
+        if answered != (self.response is not None):
+            raise ValueError("a ProviderStatus carries a response exactly when its outcome is ok")
+        if answered == (self.error is not None):
+            raise ValueError("a ProviderStatus carries an error exactly when its outcome is not ok")
+        if self.response is not None and self.response.provider != self.provider:
+            raise ValueError(
+                f"a ProviderStatus for {self.provider!r} carries a response from {self.response.provider!r}"
+            )
         return self

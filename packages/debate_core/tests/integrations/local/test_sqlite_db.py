@@ -41,6 +41,8 @@ EXPECTED_TABLES = {
     "caselist_sources",
     "caselist_disclosures",
     "caselist_camp_files",
+    # Migration 3, what each provider returned for a federated search (v1-e08-t01).
+    "search_provider_statuses",
     SCHEMA_VERSION_TABLE,
 }
 
@@ -245,6 +247,33 @@ def test_a_ranking_may_not_reference_an_unknown_search(tmp_path: Path) -> None:
         database.connection.execute(
             'INSERT INTO search_results (search_id, article_id, "rank", document) '
             "VALUES ('01J000000000000000000001', '01J00000000000000000000A', 1, '{}')"
+        )
+
+
+def test_deleting_a_search_takes_its_provider_record_with_it(tmp_path: Path) -> None:
+    with SqliteDatabase.open(tmp_path) as database:
+        database.connection.execute(
+            "INSERT INTO searches (search_id, created_at, revision, document) "
+            "VALUES ('01J000000000000000000001', '2024-01-01', 1, '{}')"
+        )
+        database.connection.execute(
+            "INSERT INTO search_provider_statuses (search_id, position, document) "
+            "VALUES ('01J000000000000000000001', 0, '{}')"
+        )
+
+        database.connection.execute("DELETE FROM searches")
+
+        orphaned = database.connection.execute(
+            "SELECT COUNT(*) AS total FROM search_provider_statuses"
+        ).fetchone()
+        assert orphaned["total"] == 0
+
+
+def test_a_provider_record_may_not_reference_an_unknown_search(tmp_path: Path) -> None:
+    with SqliteDatabase.open(tmp_path) as database, pytest.raises(sqlite3.IntegrityError):
+        database.connection.execute(
+            "INSERT INTO search_provider_statuses (search_id, position, document) "
+            "VALUES ('01J000000000000000000001', 0, '{}')"
         )
 
 

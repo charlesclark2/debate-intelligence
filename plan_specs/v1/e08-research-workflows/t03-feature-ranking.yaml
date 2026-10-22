@@ -37,10 +37,25 @@ spec:
     explanation says nothing about it; it is never inferred from source_type, since a preprint is
     scholarly and not peer-reviewed. The stage applies the user filter SearchFilters.source_types;
     ties fall back from canonical_url to url when a candidate has no canonical form.
+    (PM ruling 2026-10-22, v1-e08-t03 storage, option A.) The rank stage writes
+    SearchState.ranked_candidates (default ()) of RankedCandidate values in the application layer:
+    the merged candidate, rank, total score, the seven named features (a value, or None for
+    unknown), each feature's contribution and the explanation. A pure search_result_for(ranked, *,
+    search_id, article_id) builds the SearchResult, with lexical_score as raw BM25 and every feature
+    and the explanation carried over; SearchResult.source_quality_features becomes
+    dict[str, float | None], None meaning unknown, and an unknown feature is silent in the
+    explanation. state.results stays () in this task: turning ranked candidates into stored
+    results (an Article per candidate, never fetched) is v1-e08-t05's.
   priority: 1
   constraints:
     # PM ruling 2026-10-22: config/federated_ranking.yaml, not config/ranking.yaml.
-    packages: [debate_core.application, config/federated_ranking.yaml]
+    # PM ruling 2026-10-22 (v1-e08-t03 storage, option A): debate_core.domain and
+    # debate_core.testing, for SearchResult.source_quality_features as dict[str, float | None].
+    packages:
+      - debate_core.application
+      - debate_core.domain
+      - debate_core.testing
+      - config/federated_ranking.yaml
     forbidden:
       - Opaque or politically-weighted source "truth" scores
       - Model calls in the V1 ranking stage
@@ -131,7 +146,8 @@ spec:
         description: >-
           Charlie labels relevance for 3 queries on current topics; test computes nDCG@10 vs provider order.
         dependsOn: [scorer-explainer]
-        outputs: [tests/fixtures/ranking/labeled_queries.json]
+        # PM ruling 2026-10-22: tests/fixtures/federated_ranking/, not tests/fixtures/ranking/.
+        outputs: [tests/fixtures/federated_ranking/labeled_queries.json]
         estimatedEffort: 2h
         acceptanceCriteria:
           - type: test_passes

@@ -245,9 +245,11 @@ its input; corrected 2026-10-22.)
 Where: the task worktree
 ```bash
 cd /Users/charlesclark/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e39-t07-removal-audit-and-exposure
-TUB_SESSION=$(pbpaste)
+RAW=$(pbpaste)
+TUB_SESSION=$(printf '%s' "$RAW" | tr -d '[:space:]')
 pbcopy < /dev/null
-echo "cookie length: ${#TUB_SESSION}"
+echo "cookie length: ${#RAW} copied, ${#TUB_SESSION} without whitespace"
+unset RAW
 for P in / '/search?q=reserve' /account /signed-out /healthz; do
   curl -sS -o /dev/null -H "Cookie: __Host-tub_session=${TUB_SESSION}" \
     -w "%{http_code} ${P} cache-control=%header{cache-control} x-cache=%header{x-cache}\n" "https://tub.dev.wfbdebate.com${P}"

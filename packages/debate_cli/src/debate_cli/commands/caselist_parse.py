@@ -6,6 +6,7 @@
     debate-research caselist parse --caselist hsld26 --snapshot 2026-09-15
     debate-research caselist parse --caselist hsld26 --dry-run
     debate-research caselist parse --caselist hsld26 --publish
+    debate-research caselist parse --caselist hsld26 --publish-only
     debate-research caselist parse --caselist openev --reparse
     debate-research caselist parse --caselist hsld26 --failures
 
@@ -17,8 +18,8 @@ Every decision is :class:`~debate_core.application.caselist_parse.CaselistParseS
 ## Exit code
 
 0 unless the share of the sources this run tried to read that failed is above
-`parse.failure_rate_threshold` (`PARSE_FAILURE_RATE_EXCEEDED`, exit `1`), or a `--publish` left
-something unconfirmed in the bucket (`PARSED_PUBLISH_INCOMPLETE`). A PDF or a legacy `.doc` is an
+`parse.failure_rate_threshold` (`PARSE_FAILURE_RATE_EXCEEDED`, exit `1`), or a `--publish` or
+`--publish-only` left something unconfirmed in the bucket (`PARSED_PUBLISH_INCOMPLETE`). A PDF or a legacy `.doc` is an
 outcome, not a failure, and counts on neither side of the rate.
 
 The rate is judged only in a run that tried at least `parse.failure_rate_minimum_sources` sources
@@ -36,7 +37,21 @@ carries the codes.
 The same guards as `caselist publish`: dev or prod only, and prod only with `--confirm-prod`. The
 store is parsed first, here, then the current version directory is copied to the bucket.
 
-## `--failures`
+## `--publish-only`
+
+Publishes the current version directory as the last rebuild left it, parsing and rebuilding
+nothing (`v1-e31-t30`): for a publish that failed after its rebuild had finished, and for the same
+store sent to a second environment's bucket. The directory is the one `--publish` would publish,
+the newest generation of the running parser version, and the publisher is the same one, so what is
+withheld, what goes last and what is skipped are the same too
+(:mod:`debate_core.application.caselist.parsed_publish_only`). Before anything is uploaded the
+directory is checked whole and written by this build's parser and fingerprint versions; when it is
+not, the command is refused with the reason's code, exit `1`, and a hint naming `--publish`.
+
+It is refused, exit `2`, beside `--publish` or any option that only shapes a rebuild (`--reparse`,
+`--snapshot`, `--dry-run`), and beside `--failures`, which publishes nothing. The guards are
+`--publish`'s.
+
 
 Lists the sources of the current version directory that did not parse, by SHA-256 prefix and the
 path the manifests disclose them at. Those paths name schools and team codes: the listing is for the
@@ -57,7 +72,7 @@ from debate_cli.commands.caselist import (
     _unconfirmed_production_write,  # pyright: ignore[reportPrivateUsage]
 )
 from debate_cli.commands.store import CONFIRM_PROD_FLAG
-from debate_cli.context import cli_context, command_name
+from debate_cli.context import CliContext, cli_context, command_name
 from debate_cli.exit_codes import ExitCode, exit_code_for_failure_codes
 from debate_cli.output import CliOutput, CommandFailure, JsonValue, OutputMode, TableSpec
 from debate_core.application.caselist.parsed_publish import ParsedPublishReport
@@ -71,7 +86,7 @@ from debate_core.application.caselist_parse import (
 from debate_core.application.settings import Settings
 from debate_core.evidence.fingerprints import FINGERPRINT_VERSION
 
-__all__ = ["failures_summary", "parse", "parse_summary"]
+__all__ = ["ConflictingPublishOnly", "failures_summary", "parse", "parse_summary", "publish_only_summary"]
 
 FAILURES_NOTICE: Final = (
     "Contains disclosure paths, which name schools and team codes. For this terminal only: never "
@@ -90,6 +105,16 @@ def parse(
     ] = None,
     publish: Annotated[
         bool, typer.Option("--publish", help="Then copy the store to this environment's evidence bucket.")
+    ] = False,
+    publish_only: Annotated[
+        bool,
+        typer.Option(
+            "--publish-only",
+            help=(
+                "Copy the current version directory to this environment's evidence bucket as the "
+                "last rebuild left it, parsing and rebuilding nothing."
+            ),
+        ),
     ] = False,
     reparse: Annotated[
         bool, typer.Option("--reparse", help="Parse everything again, into a new version directory.")
@@ -111,12 +136,19 @@ def parse(
     cli = cli_context(ctx)
     if json_output and not cli.output.is_json:
         cli.output = CliOutput(OutputMode.JSON, verbose=cli.output.verbose)
+    if publish_only:
+        _refuse_beside_publish_only(
+            publish=publish, reparse=reparse, snapshot=snapshot, dry_run=dry_run, failures=failures
+        )
     validate_publish_target(caselist, snapshot)
     if failures:
         listing = asyncio.run(cli.services.caselist_parse(with_bucket=False).failures(caselist))
         cli.output.success(command_name(ctx), failures_summary(listing), display=_failures_table(listing))
         return
     settings = cli.services.settings
+    if publish_only:
+        _publish_only(cli, ctx, caselist, settings, confirmed=confirm_prod)
+        return
     writing = publish and not dry_run
     _refuse(
         cli,
@@ -134,6 +166,53 @@ def parse(
     failure = _failure(report, published, payload)
     if failure is None or not cli.output.is_json:
         cli.output.success(command_name(ctx), payload, display=_parse_table(report, published, settings))
+    if failure is not None:
+        cli.output.failure(failure, command=command_name(ctx))
+        raise typer.Exit(code=failure.exit_code)
+
+
+class ConflictingPublishOnly(typer.BadParameter):
+    """`--publish-only` beside an option it has no use for: one that rebuilds, or that publishes nothing."""
+
+    def __init__(self, option: str, why: str) -> None:
+        super().__init__(
+            f"--publish-only publishes the directory the last rebuild left, so it cannot be combined "
+            f"with {option}: {why}; pass one or the other",
+            param_hint=option,
+        )
+
+
+def _refuse_beside_publish_only(
+    *, publish: bool, reparse: bool, snapshot: str | None, dry_run: bool, failures: bool
+) -> None:
+    """Raise :class:`ConflictingPublishOnly` for the first option given that `--publish-only` refuses."""
+    for given, option, why in (
+        (publish, "--publish", "--publish rebuilds the directory first"),
+        (reparse, "--reparse", "--reparse rebuilds into a new directory"),
+        (snapshot is not None, "--snapshot", "--snapshot chooses what a rebuild parses"),
+        (dry_run, "--dry-run", "--dry-run counts what a rebuild would parse"),
+        (failures, "--failures", "--failures lists the directory's failures and publishes nothing"),
+    ):
+        if given:
+            raise ConflictingPublishOnly(option, why)
+
+
+def _publish_only(
+    cli: CliContext, ctx: typer.Context, caselist: str, settings: Settings, *, confirmed: bool
+) -> None:
+    """`--publish-only`: `--publish`'s guards, the directory's check, then `--publish`'s publisher."""
+    _refuse(
+        cli,
+        ctx,
+        _no_bucket(settings, writing=True)
+        or _unconfirmed_production_write(settings, writing=True, confirmed=confirmed),
+    )
+    version = asyncio.run(cli.services.caselist_parse(with_bucket=False).publishable_version(caselist))
+    published = asyncio.run(cli.services.parsed_publisher().publish(caselist, version))
+    payload = publish_only_summary(published, settings)
+    failure = _publish_failure(published, payload)
+    if failure is None or not cli.output.is_json:
+        cli.output.success(command_name(ctx), payload, display=_publish_only_table(published, settings))
     if failure is not None:
         cli.output.failure(failure, command=command_name(ctx))
         raise typer.Exit(code=failure.exit_code)
@@ -192,6 +271,18 @@ def parse_summary(
     }
 
 
+def publish_only_summary(published: ParsedPublishReport, settings: Settings) -> dict[str, JsonValue]:
+    """`--publish-only --json`'s `data`: `publish` is the object `--publish` reports, key for key."""
+    return {
+        "environment": settings.environment.value,
+        "caselist": published.caselist,
+        "version": published.version,
+        "publish_only": True,
+        "fingerprint_version": FINGERPRINT_VERSION,
+        "publish": _publish_summary(published, settings),
+    }
+
+
 def _publish_summary(published: ParsedPublishReport, settings: Settings) -> dict[str, JsonValue]:
     return {
         "bucket": settings.storage.s3.bucket,
@@ -241,18 +332,30 @@ def _failure(
             details=payload,
             hint="`caselist parse --failures` lists them; parse.failure_rate_threshold sets the threshold.",
         )
-    if published is not None and not published.succeeded:
-        return CommandFailure(
-            code="PARSED_PUBLISH_INCOMPLETE",
-            message=(
-                f"{len(published.failed_keys)} object(s) not confirmed in the bucket"
-                + ("; the aggregates were withheld" if published.aggregates_withheld else "")
-            ),
-            exit_code=exit_code_for_failure_codes(published.failure_codes),
-            details=payload,
-            hint="Run it again to retry; a checksum mismatch needs a person.",
-        )
-    return None
+    return None if published is None else _publish_failure(published, payload)
+
+
+def _publish_failure(published: ParsedPublishReport, payload: dict[str, JsonValue]) -> CommandFailure | None:
+    """`PARSED_PUBLISH_INCOMPLETE`, whichever of `--publish` and `--publish-only` published.
+
+    Either way the directory is whole by now, so the hint is the publish alone: `--publish` again
+    would rebuild it for nothing.
+    """
+    if published.succeeded:
+        return None
+    return CommandFailure(
+        code="PARSED_PUBLISH_INCOMPLETE",
+        message=(
+            f"{len(published.failed_keys)} object(s) not confirmed in the bucket"
+            + ("; the aggregates were withheld" if published.aggregates_withheld else "")
+        ),
+        exit_code=exit_code_for_failure_codes(published.failure_codes),
+        details=payload,
+        hint=(
+            f"`debate-research caselist parse --caselist {published.caselist} --publish-only` retries "
+            "the publish without rebuilding; a checksum mismatch needs a person."
+        ),
+    )
 
 
 def _parse_table(
@@ -291,6 +394,15 @@ def _parse_table(
     )
     return TableSpec(
         columns=("", plan.caselist), rows=rows, title=f"caselist parse {plan.caselist}", caption=caption
+    )
+
+
+def _publish_only_table(published: ParsedPublishReport, settings: Settings) -> TableSpec:
+    return TableSpec(
+        columns=("", published.caselist),
+        rows=[["Version", published.version], ["Published", _published(published, settings)]],
+        title=f"caselist parse {published.caselist} --publish-only",
+        caption="Nothing was parsed or rebuilt: the directory was published as the last rebuild left it.",
     )
 
 

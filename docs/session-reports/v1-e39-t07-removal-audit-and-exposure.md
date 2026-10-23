@@ -361,16 +361,19 @@ window's scratch data directory is not used; keep the 4a window open for 4e and 
 Where: a new window, the task worktree
 ```bash
 cd /Users/charlesclark/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e39-t07-removal-audit-and-exposure
-echo "data dir override: ${DEBATE_STORAGE__DATA_DIR:-none}"
-pgrep -fl 'caselist pull'
-aws sso login --profile debate-dev-evidence
-for SLUG in hsld26 hspf26 hspolicy26 openev; do
-  DEBATE_ENV=dev debate-research caselist parse --caselist "$SLUG" --publish
-done
+if [[ -n "${DEBATE_STORAGE__DATA_DIR:-}" ]] || pgrep -f 'caselist pull' > /dev/null; then
+  echo "STOP: a data directory override is set, or a pull is running. Open a new window, or wait."
+else
+  aws sso login --profile debate-dev-evidence
+  for SLUG in hsld26 hspf26 hspolicy26 openev; do
+    env -u DEBATE_STORAGE__DATA_DIR DEBATE_ENV=dev debate-research caselist parse --caselist "$SLUG" --publish
+  done
+fi
 ```
-Success looks like `data dir override: none`, nothing from `pgrep`, and for each of the four a table
-with **0 sources parsed** and **3 aggregates uploaded**. Anything else (a source parsed, a
-different upload count, a refusal), stop and paste it back. Only the current version directory's
+Success looks like, for each of the four, **Sources** and **Skipped (already parsed)** equal to
+the store's full count and not zero, **Parsed 0**, and **Published 3 uploaded**. A `STOP` line means
+nothing ran. Anything else (`Sources 0`, a source parsed, another upload count, a refusal): stop
+and paste it back. (Corrected after the first run; see "R, the rebuild" in the operator's record.) Only the current version directory's
 aggregates come back; the superseded version directories the removal also emptied stay without
 them, as superseded directories do once retired.
 
@@ -596,7 +599,17 @@ and the signed-in reading came from the HAR instead.
   ruling's wording: the weekly run rebuilds a caselist's aggregates only when it imported something
   into it that week ("a run that imported nothing parses nothing and rebuilds nothing", scheduled
   sync runbook), so P1b says not to wait for it.
-- **R, the rebuild:** REBUILD_RESULTS_PENDING.
+- **R, the rebuild, first run (wrong).** It ran in the 4a window, where `DEBATE_STORAGE__DATA_DIR`
+  still named the scratch store. My block printed the override (`data dir override:
+  /var/folders/…/tmp.ixRPE59ohe/evidence`) but did not refuse it. Each of the four parses read the
+  scratch store, which holds none of those caselists (`Sources 0`, `Store 0 sources, 0 cards, 0
+  clusters`, version `2026.10.20-docx-6 (new)`), and published **empty aggregates**: `3 uploaded`
+  to `parsed/<caselist>/2026.10.20-docx-6/` for `hsld26`, `hspf26`, `hspolicy26` and `openev`. The
+  operator's local dev store was not touched. The block now refuses to run when an override is set
+  or a pull is running, and strips any override from the command (`env -u`); success is now
+  `Sources` equal to `Skipped` and not zero, rather than "0 parsed". The runbook's P1b has the same
+  correction. Waiting on the PM before the corrected run.
+- **R, the rebuild, corrected run:** REBUILD_RESULTS_PENDING.
 
 ## Follow-up work
 

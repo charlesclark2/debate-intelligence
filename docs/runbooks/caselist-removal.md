@@ -570,16 +570,20 @@ profile.
 **Operator command** (expected runtime a few minutes per caselist; nothing is parsed again)
 Where: a new terminal window, so no `DEBATE_STORAGE__DATA_DIR` from another step is set
 ```bash
-echo "data dir override: ${DEBATE_STORAGE__DATA_DIR:-none}"
-pgrep -fl 'caselist pull'
-aws sso login --profile debate-dev-evidence
-for SLUG in hsld26 hspf26 hspolicy26 openev; do
-  DEBATE_ENV=dev debate-research caselist parse --caselist "$SLUG" --publish
-done
+if [[ -n "${DEBATE_STORAGE__DATA_DIR:-}" ]] || pgrep -f 'caselist pull' > /dev/null; then
+  echo "STOP: a data directory override is set, or a pull is running. Open a new window, or wait."
+else
+  aws sso login --profile debate-dev-evidence
+  for SLUG in hsld26 hspf26 hspolicy26 openev; do
+    env -u DEBATE_STORAGE__DATA_DIR DEBATE_ENV=dev debate-research caselist parse --caselist "$SLUG" --publish
+  done
+fi
 ```
-Success looks like `data dir override: none`, nothing from `pgrep`, and for each caselist a table
-with 0 sources parsed and its three aggregates uploaded. Name only the caselists the plan listed.
-A `pgrep` line means a pull is running: wait for it to finish first.
+Success looks like, for each caselist, a table whose **Sources** and **Skipped (already parsed)**
+are the store's full count, equal and not zero, with **Parsed 0** and **Published 3 uploaded**. A
+`Sources 0` means the parse read a store that does not hold the caselist, such as a scratch one:
+stop, because what it uploaded is empty aggregates. Name only the caselists the plan listed. A
+`STOP` line means a data directory override is set or a pull is running; nothing ran.
 
 ### P2 — Five minutes after `DONE`: the card is gone
 

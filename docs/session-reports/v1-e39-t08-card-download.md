@@ -521,3 +521,40 @@ failure outside the files this branch touches (your Follow-up 5), stop and bring
   repository's own checks.
 
 If anything comes out differently, stop and ask for another review.
+
+## PM review, second
+
+**Verdict:** ACCEPTED, with one condition closed in-session
+<!-- ACCEPTED / CHANGES_REQUESTED -->
+
+**Reviewed by / date:** PM, 2026-10-22
+
+**Notes:**
+
+1. **Option (a) is built as ruled.**
+   * The budget counts the declared `document.xml` bytes, read by `docx_parser` through the
+     composition root.
+   * The fetch ceiling comes from the real p99 and maximum file sizes.
+   * No real source is refused on its own under either.
+   * The tests were red first, and 7 of 7 new mutants were caught.
+
+   The first review's ruling 1 ("8 cards plus 2,000,000 bytes") is superseded by this one: 8 cards,
+   20,000,000 bytes of `document.xml`, and a 52,000,000-byte fetch ceiling.
+2. **Decisions 9 is accepted, and is exactly the evidence asked for.** `zipfile` stops at the
+   declared size and checks the CRC. The forged-CRC case is refused as malformed XML. The 64 MiB
+   and 128 MiB limits sit above both. The synthetic test shows such a file refused, not built.
+3. **Memory.** 634 MB measured at both limits, and about 1,314 MB at twice with the app, is under
+   the 1,400 MB line, but the margin is thin. Step 4's cart of eight mean-size cards does not come
+   near the ceilings, so it cannot check that margin.
+4. **Condition, closed in-session (documents only).** Add a second cart to Operator follow-up 4
+   and to the runbook's timing section:
+   * eight camp cards from eight different OpenEv files, choosing the largest files the dev index
+     offers;
+   * record its `REPORT` line beside the first;
+   * the same lines apply: over 20,000 ms or 1,400 MB `Max Memory Used`, bring both lines to the
+     PM before the pilot opens.
+
+   No re-review is needed for that.
+
+**The PR:** open it with `--partial`, as in the first review. The operator order there stands.
+If anything comes out differently, stop and ask for another review.

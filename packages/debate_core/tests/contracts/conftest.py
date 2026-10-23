@@ -5,8 +5,8 @@ The SQLite database the three local repository bindings hand out handles onto. I
 
 And the moto evidence bucket the S3 binding of the evidence object store runs against, defined in
 `tests/fixtures/moto_evidence_bucket.py` and imported here rather than at the package root, so only
-the tests beneath this directory are beneath them (`v1-e01-t30`). `__all__` lists them because
-pytest finds a fixture by its name in this module: they are imported to be found here.
+the tests beneath this directory are beneath them (`v1-e01-t30`). Each is imported as itself,
+the explicit re-export: pytest finds a fixture by its name in this module.
 """
 
 from __future__ import annotations
@@ -15,24 +15,13 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
-from tests.fixtures.moto_evidence_bucket import (
-    aws_region,
-    evidence_bucket,
-    evidence_bucket_name,
-    fake_aws_credentials,
-    s3_client,
-)
+from tests.fixtures.moto_evidence_bucket import aws_region as aws_region
+from tests.fixtures.moto_evidence_bucket import evidence_bucket as evidence_bucket
+from tests.fixtures.moto_evidence_bucket import evidence_bucket_name as evidence_bucket_name
+from tests.fixtures.moto_evidence_bucket import fake_aws_credentials as fake_aws_credentials
+from tests.fixtures.moto_evidence_bucket import s3_client as s3_client
 
 from debate_core.integrations.local import SqliteDatabase
-
-__all__ = [
-    "aws_region",
-    "evidence_bucket",
-    "evidence_bucket_name",
-    "fake_aws_credentials",
-    "s3_client",
-    "sqlite_database",
-]
 
 
 @pytest.fixture

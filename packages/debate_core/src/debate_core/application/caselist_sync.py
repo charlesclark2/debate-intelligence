@@ -1563,6 +1563,20 @@ class SearchIndexStageCounts:
     bytes_freed: int = 0
     """What removing them freed."""
 
+    previous_index_id: str | None = None
+    """The index `current.json` named when the stage read it, when that was another index: what the
+    growth below is measured against (`v1-e39-t14`). `None` when the stage did not read it, nothing
+    was published yet, or it already named this index."""
+
+    documents_growth: int | None = None
+    """Documents in this index less those in the previous one; negative for a shrink."""
+
+    sqlite_bytes_growth: int | None = None
+    """SQLite bytes, likewise."""
+
+    gzip_bytes_growth: int | None = None
+    """Gzip object bytes, likewise."""
+
     def as_json(self) -> dict[str, object]:
         return {
             "index_id": self.index_id,
@@ -1575,6 +1589,10 @@ class SearchIndexStageCounts:
             "warnings": list(self.warnings),
             "removed": self.removed,
             "bytes_freed": self.bytes_freed,
+            "previous_index_id": self.previous_index_id,
+            "documents_growth": self.documents_growth,
+            "sqlite_bytes_growth": self.sqlite_bytes_growth,
+            "gzip_bytes_growth": self.gzip_bytes_growth,
         }
 
 

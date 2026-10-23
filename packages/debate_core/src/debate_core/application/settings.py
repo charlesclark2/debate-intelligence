@@ -756,6 +756,19 @@ class CaselistSettings(SettingsGroup):
             "reason; `tub index build` and `tub index publish` do the same work by hand."
         ),
     )
+    search_index_minimum_share_percent: int = Field(
+        default=90,
+        ge=0,
+        le=100,
+        description=(
+            "The share of each store's documents in the published search index that a new index "
+            "must keep, in percent, for `tub index publish` and the weekly run to publish it "
+            "(v1-e39-t14). Below it, or at 0 documents for a store the current index holds, the "
+            "publish is refused and current.json stays; `tub index publish --allow-shrink "
+            '"<reason>"` publishes a real shrink by hand. An index built from a store whose '
+            "aggregates hold no rows is refused whatever this says."
+        ),
+    )
 
     # --- Monitoring the weekly sync (v1-e34-t03-sync-monitoring) ------------------------------
 

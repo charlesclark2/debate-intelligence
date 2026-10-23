@@ -565,7 +565,9 @@ class ServiceContainer:
         """Build the publish of a built index to this environment's bucket (`v1-e39-t02`).
 
         Signed with the everyday evidence profile, which may write `reports/`. Raises
-        :class:`EvidenceStoreNotConfigured` when this environment names no bucket.
+        :class:`EvidenceStoreNotConfigured` when this environment names no bucket. Its shrink guard's
+        share is `caselist.search_index_minimum_share_percent`, for `tub index publish` and the weekly
+        stage alike, which publishes through this same service (`v1-e39-t14`).
         """
         return self.singleton("search_index_publish", self._build_search_index_publish)
 
@@ -574,7 +576,9 @@ class ServiceContainer:
         from debate_core.integrations.docx_parser import DebateDocxParser
 
         return SearchIndexPublishService(
-            bucket=self._evidence_bucket(), parser_version=DebateDocxParser().parser_version
+            bucket=self._evidence_bucket(),
+            parser_version=DebateDocxParser().parser_version,
+            minimum_share_percent=self.settings.caselist.search_index_minimum_share_percent,
         )
 
     def version_retention(self, *, bucket: bool) -> VersionDirectoryRetention:

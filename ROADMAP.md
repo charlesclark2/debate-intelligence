@@ -67,7 +67,7 @@ v2.3's extension work.
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 16 | 6 | 98 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 0 | 66 |
 | [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 19 | 12 | 146 |
-| [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 14 | 7 | 61 |
+| [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 14 | 8 | 61 |
 | [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 1 | 6 | 0 | 20 |
 | [v2.0](plan_specs/releases/v2.0.yaml) | Cloud platform foundation | 3 | 17 | 0 | 164 |
 | [v2.1](plan_specs/releases/v2.1.yaml) | Web app, debate tub & async jobs | 3 | 18 | 0 | 198 |
@@ -449,7 +449,7 @@ Debaters search the team's evidence store from a school Chromebook or at home: a
 | [Pilot infrastructure: the function, CloudFront, the user pool and the audit log, in dev and prod](plan_specs/v1/e39-evidence-search-pilot/t04-pilot-infrastructure.yaml) `v1-e39-t04-pilot-infrastructure` | Succeeded | 1 | 6.0 |
 | [Accounts and sign-in: the session flow, roles, and the coach's tub users commands](plan_specs/v1/e39-evidence-search-pilot/t05-accounts-and-sign-in.yaml) `v1-e39-t05-accounts-and-sign-in` | Succeeded | 1 | 5.0 |
 | [Search pages: search, results, the card page and Copy card, on a Chromebook](plan_specs/v1/e39-evidence-search-pilot/t06-search-pages.yaml) `v1-e39-t06-search-pages` | Succeeded | 2 | 6.0 |
-| [Removal, access audit and exposure: the pilot meets the policy's E39 gate](plan_specs/v1/e39-evidence-search-pilot/t07-removal-audit-and-exposure.yaml) `v1-e39-t07-removal-audit-and-exposure` | Pending | 1 | 5.0 |
+| [Removal, access audit and exposure: the pilot meets the policy's E39 gate](plan_specs/v1/e39-evidence-search-pilot/t07-removal-audit-and-exposure.yaml) `v1-e39-t07-removal-audit-and-exposure` | Succeeded | 1 | 5.0 |
 | [Download a card or a small file as Verbatim .docx through the E33 writer](plan_specs/v1/e39-evidence-search-pilot/t08-card-download.yaml) `v1-e39-t08-card-download` | Pending | 3 | 4.0 |
 | [The weekly agent run rebuilds and publishes the search index when the parsed store changed](plan_specs/v1/e39-evidence-search-pilot/t09-weekly-index-refresh.yaml) `v1-e39-t09-weekly-index-refresh` | Succeeded | 1 | 3.0 |
 | [Dev smoke checks, the coach's beta and the student pilot](plan_specs/v1/e39-evidence-search-pilot/t10-pilot-smoke-and-review.yaml) `v1-e39-t10-pilot-smoke-and-review` | Pending | 2 | 3.0 |

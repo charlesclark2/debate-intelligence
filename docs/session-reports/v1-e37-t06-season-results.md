@@ -387,9 +387,24 @@ None new.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-23
 
 **Notes:**
+
+1. **The coach's three copy changes are accepted as made.** They are the new opening paragraph, the
+   correction line removed, and `seasonIntro` removed from the content, the schema and the page.
+   The red run and the single new test are proportionate.
+2. **Removing the correction line is within the policy.** The policy's route for a removal request
+   is the Contact page (Removal on request), which every page's footer links to, and a takedown is
+   still a content edit. The coach guide keeps the takedown steps.
+3. **The consent reference in the first review's example.** It is opaque without the coach's own
+   records, which is the policy's design, so nothing about the student is exposed by it. A review
+   is never edited, and no change is needed.
+
+**The PR:** open it with `scripts/task pr --partial`, as before. ac5's prod half still follows the
+next promotion, and the PM records it from the `curl` count of 2. After this merge, the operator
+runs the first session's follow-up 1 (dev preview) and follow-up 2 (the browser QA run, now on the
+final copy), and pastes the QA table to the PM.

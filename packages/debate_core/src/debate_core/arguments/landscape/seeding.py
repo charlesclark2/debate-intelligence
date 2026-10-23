@@ -454,6 +454,9 @@ def review_sheet(rows: Sequence[CandidateRow], taxonomy: Taxonomy, *, unplaced_l
         "each alias in the candidates file. Then the headings most teams use that no position claims.",
         "For each: keep, merge, rename, drop, or add a position.",
         "",
+        "`aff` and `neg` count the side each team disclosed the file on, not the side that reads the",
+        "position: an aff file's block answering a DA is titled with the DA and counts as aff.",
+        "",
         "## Positions",
         "",
     ]

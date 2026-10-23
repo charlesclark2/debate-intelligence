@@ -62,13 +62,13 @@ v2.3's extension work.
 |---|---|---|---|---|---|
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 47 | 43 | 236 |
 | [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 103 | 81 | 487 |
-| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 24 | 9 | 196 |
+| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 26 | 10 | 204 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 13 | 2 | 108 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 16 | 7 | 98 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 0 | 66 |
 | [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 21 | 12 | 153 |
 | [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 16 | 11 | 66 |
-| [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 1 | 6 | 0 | 20 |
+| [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 1 | 6 | 1 | 20 |
 | [v2.0](plan_specs/releases/v2.0.yaml) | Cloud platform foundation | 3 | 17 | 0 | 164 |
 | [v2.1](plan_specs/releases/v2.1.yaml) | Web app, debate tub & async jobs | 3 | 18 | 0 | 198 |
 | [v2.2](plan_specs/releases/v2.2.yaml) | Research workspace | 2 | 12 | 0 | 117 |
@@ -302,13 +302,15 @@ Weekly argument-landscape reports show which positions are being read and with w
 
 | Task | Status | Prereqs | Est. hours |
 |---|---|---|---|
-| [Topic position taxonomies](plan_specs/v1/e32-argument-landscape/t01-position-taxonomy.yaml) `v1-e32-t01-position-taxonomy` | Pending | 1 | 14.0 |
+| [Topic position taxonomies](plan_specs/v1/e32-argument-landscape/t01-position-taxonomy.yaml) `v1-e32-t01-position-taxonomy` | Succeeded | 1 | 14.0 |
 | [Position classification](plan_specs/v1/e32-argument-landscape/t02-position-classification.yaml) `v1-e32-t02-position-classification` | Pending | 2 | 8.5 |
 | [Weekly landscape report](plan_specs/v1/e32-argument-landscape/t03-landscape-report.yaml) `v1-e32-t03-landscape-report` | Pending | 4 | 12.0 |
 | [Trends and per-school views](plan_specs/v1/e32-argument-landscape/t04-trend-and-school-views.yaml) `v1-e32-t04-trend-and-school-views` | Pending | 1 | 9.0 |
 | [`debate-research landscape` command](plan_specs/v1/e32-argument-landscape/t05-landscape-cli.yaml) `v1-e32-t05-landscape-cli` | Pending | 2 | 10.0 |
 | [LD de-extinction position taxonomy](plan_specs/v1/e32-argument-landscape/t06-ld-de-extinction-taxonomy.yaml) `v1-e32-t06-ld-de-extinction-taxonomy` | Pending | 1 | 3.0 |
 | [Model classification of what headings cannot place](plan_specs/v1/e32-argument-landscape/t07-model-classification-stage.yaml) `v1-e32-t07-model-classification-stage` | Pending | 3 | 8.0 |
+| [A released position id is never deleted or reused](plan_specs/v1/e32-argument-landscape/t08-released-position-ids.yaml) `v1-e32-t08-released-position-ids` | Pending | 1 | 3.0 |
+| [Each Policy team's plan text, counted first, so single payer splits by mechanism](plan_specs/v1/e32-argument-landscape/t09-policy-plan-texts.yaml) `v1-e32-t09-policy-plan-texts` | Pending | 1 | 5.0 |
 
 #### [E33 — Evidence File Builder](plan_specs/v1/e33-file-builder/epic.yaml)
 
@@ -475,7 +477,7 @@ The weekly caselist run (pull, import, publish, parse, search index) runs in the
 
 | Task | Status | Prereqs | Est. hours |
 |---|---|---|---|
-| [ADR-0020: the weekly caselist run in the cloud, its credentials and its state](plan_specs/v1/e40-cloud-caselist-run/t01-cloud-run-adr.yaml) `v1-e40-t01-cloud-run-adr` | Pending | 2 | 3.0 |
+| [ADR-0020: the weekly caselist run in the cloud, its credentials and its state](plan_specs/v1/e40-cloud-caselist-run/t01-cloud-run-adr.yaml) `v1-e40-t01-cloud-run-adr` | Succeeded | 2 | 3.0 |
 | [The caselist token in Secrets Manager, and a scheduled login that renews it](plan_specs/v1/e40-cloud-caselist-run/t02-secrets-token-store-and-login.yaml) `v1-e40-t02-secrets-token-store-and-login` | Pending | 1 | 4.0 |
 | [The weekly run as a container on a schedule](plan_specs/v1/e40-cloud-caselist-run/t03-run-image-and-schedule.yaml) `v1-e40-t03-run-image-and-schedule` | Pending | 1 | 4.0 |
 | [A cloud run keeps its state in the evidence bucket](plan_specs/v1/e40-cloud-caselist-run/t04-run-state-on-s3.yaml) `v1-e40-t04-run-state-on-s3` | Pending | 1 | 5.0 |

@@ -271,9 +271,54 @@ the new mechanism working. Paste the failed job's log into the session.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-22
 
 **Notes:**
+
+Accepted. Sync first (below), then open the pull request **with `--partial`**. ac3's green run can
+only happen after the merge, and no task depends on this one. The PM records the run in a close-out.
+
+**What the PM checked.**
+* The branch is clean on origin/dev at `37bdaba`, and the diff is the 16 files listed.
+* No other spec depends on `v1-e01-t34`.
+* dev has since gained v1-e39-t14 and PM batch c. This branch edits `pyproject.toml`,
+  which is shared test ground, so sync before the pull request: run `scripts/task sync`, then
+  `tests/scripts`, the always-run list and the slow planted-break file once more, and record the
+  results.
+
+**What is good.**
+* **ac1 is answered with a timeline, not a guess.** #359's module-level import made the `debate_api`
+  break a collection error. #366, #371, #368 and #375 then each added a failure or a skip, and the
+  skips were always counted (#160). You also caught that `gh run list`'s `headSha` is dev's head at
+  dispatch, not the validated commit, which explains the confusing run list the PM read.
+* **The check stays honest.** "Caught" is defined from measured pytest exits: exit 4 counts only
+  with the conftest message, and 0, 3, 5 and an interrupt never count. A permanent unreached break
+  proves on every slow tier that the check can still say "not caught".
+* **The skip rule is untouched.** The two Lambda checks now run under QEMU, and the operator test is
+  left out by a marker named for what it needs, `operator_data`, not by a skip.
+* **A red result is now seen.** It reaches `scripts/task ready` and `list`, and a `validate-dev`
+  issue opens on failure and closes on success, with a token sentinel proving no secret reaches the
+  text.
+
+**Rulings.**
+
+1. **Deviation 1 is accepted: follow the real rule, not my wording.** The base image follows
+   `requires-python` by tag, by ADR-0019 (a) 1, so the slow job pulls exactly what the deploy builds
+   on and logs the digest it got.
+   * **The digest-pin follow-up is declined.** A pin would contradict that ADR's decision, and the
+     slow tier testing what the deploy builds on the same day is the property we want.
+   * If an unannounced base-image change ever breaks a deploy, the PM revisits it then.
+2. **Deviations 2 and 3 are accepted:** the smoke README's tier table, and `--print-base-image` as
+   the one call-nothing mode a runner uses, with the header saying so.
+3. **Decisions are accepted:** QEMU over a runner change, the `RepoDigests` guard, and the issue's
+   scope (dev only, cancelled runs ignored, out-of-order runs explained in the text).
+4. **Follow-ups.** The hotfix-head note and the self-selection edge are recorded. The self-selection
+   edge belongs with v1-e01-t32 (quoted-word and path edges); the PM adds it to that task's brief.
+
+**Operator follow-up: accepted as written.** After the merge, the auto-dispatched validate-dev run on
+dev's next pre-release, or a dispatched one, must come back green, with `pulled linux/arm64`, the
+slow tier passing and **no** `skipped`. That run unblocks the prod promotion. Paste its id and the
+pytest line to the PM, who records them in this report's close-out.

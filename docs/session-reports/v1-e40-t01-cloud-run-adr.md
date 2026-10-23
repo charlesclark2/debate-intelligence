@@ -6,12 +6,12 @@
 | Spec | [`plan_specs/v1/e40-cloud-caselist-run/t01-cloud-run-adr.yaml`](../../plan_specs/v1/e40-cloud-caselist-run/t01-cloud-run-adr.yaml) |
 | Epic / release | `v1-e40-cloud-caselist-run` / `v1.8` |
 | Branch | `task/v1-e40-t01-cloud-run-adr` |
-| Session status | COMPLETE. The Goal stays `InProgress`: ac1 closes on the PM's acceptance and ac2 on the coach's merge <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | COMPLETE. The Goal is `Succeeded`: the PM accepted ADR-0020 on 2026-10-23 (ac1), and ac2 completes on the merge, as for every earlier policy version <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
 [ADR-0020](../adr/0020-weekly-caselist-run-in-the-cloud.md) is written, measured first, and
-`Proposed`. It decides the eight questions:
+`Accepted` (2026-10-23, by the PM). It decides the eight questions:
 
 1. **Runtime.** One on-demand `arm64` Fargate task, 8 vCPU, 16 GB and 100 GiB, started by an
    EventBridge Scheduler schedule. Not Batch, not Spot, not Lambda.
@@ -27,16 +27,18 @@
 8. **Cost and V2.** About $4.90 a month. The ADR also says what V2's E10 adopts and what E40 must
    not build.
 
-The data-use policy is amended to version 1.12 in the same commit.
+The data-use policy is amended to version 1.12, for the coach's approval on the merge.
 
-Three things to look at first:
+After the PM's review the session closed its five conditions:
+- **The amendments to `t02` to `t06`** are made, marked `PM amendment 2026-10-23 (ADR-0020)`, with
+  the PM's follow-up ruling on `t04`'s deletion rule and `t06`'s wait for the purge.
+- **ADR-0020 is `Accepted`.**
+- **Policy 1.12 now says** that an administrator can reach the password only by a recorded,
+  emailed change. Clause 12 records that the maintainer was told on 2026-10-23.
+- **The Goal is `Succeeded`.**
 
-- **Two of the brief's figures did not hold when measured.** A full re-parse takes 33 to 40 minutes
-  on the Mac, not hours. The "14 GB" was the parsed store while it held two version directories.
-- **The policy amendment goes beyond item 3.** The cloud run is otherwise still forbidden, by gate
-  item 8 and by the list of places personal data may live.
-- **The ADR proposes changes to the specs of `t02` to `t06`.** Question 2 and question 3 in the PM
-  block below cover the two that matter most.
+Two of the brief's figures did not hold when measured: a full re-parse takes 33 to 40 minutes on the
+Mac, not hours, and the "14 GB" was the parsed store while it held two version directories.
 
 ## Plan nodes
 
@@ -49,10 +51,9 @@ Three things to look at first:
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
 | Node `adr`: "Docs checks pass" (`uv run pytest tests/docs`) | PASS | `uv run pytest -q tests/docs tests/architecture/test_single_interpreter_source.py` → `74 passed in 3.16s` |
-| ac1 — ADR-0020 decides the eight questions, each with its measured figure or the reason none applies, and is accepted by the PM | NOT RUN | The eight questions are decided in the ADR's sections (1) to (8). Each figure is measured, read from a dated price page, or marked *estimate* with its reason. **Acceptance is the PM's.** The ADR is `Proposed` until then (ADR README, step 5) |
-| ac2 — the data-use policy's access rule is amended for the cloud run and approved by the coach in the same pull request | NOT RUN | Policy version 1.12: E34 gate items 3 and 8, the places personal data may live, Prohibited use 10, the dev exception's locations, Retention and Removal, and the Approval section's note and table. **The coach's approval is the merge of this pull request**, per the brief |
-
-Both open criteria are sign-offs no session can give, so the Goal is left `InProgress`.
+| ac1 — ADR-0020 decides the eight questions, each with its measured figure or the reason none applies, and is accepted by the PM | PASS | The eight questions are decided in the ADR's sections (1) to (8). Each figure is measured, read from a dated price page, or marked *estimate* with its reason. The PM accepted it on 2026-10-23 (PM review below); its status and README row say `Accepted 2026-10-23` |
+| ac2 — the data-use policy's access rule is amended for the cloud run and approved by the coach in the same pull request | PASS on merge | Policy version 1.12 amends E34 gate items 3 (with the administrator sentence) and 8, the places personal data may live, Prohibited use 10, the dev exception's locations, Retention, Removal and clause 12, plus the Approval section's note and table. The coach approves it by merging this pull request, as for every earlier version (PM review, condition 5) |
+| `uv run scripts/validate_specs.py --require-succeeded v1-e40-t01-cloud-run-adr` | PASS | `v1-e40-t01-cloud-run-adr: Succeeded` |
 
 ## What was measured, and how
 
@@ -77,12 +78,14 @@ the ADR lists each page.
 
 ## Files changed
 
-- `docs/adr/0020-weekly-caselist-run-in-the-cloud.md`: the new record.
-- `docs/adr/README.md`: its index row (`Proposed 2026-10-22`); the next free number is now 0021.
-- `docs/policies/caselist-data-use.md`: version 1.12 (see Deviation 2).
+- `docs/adr/0020-weekly-caselist-run-in-the-cloud.md`: the new record, `Accepted` 2026-10-23.
+- `docs/adr/README.md`: its index row (`Accepted 2026-10-23`); the next free number is now 0021.
+- `docs/policies/caselist-data-use.md`: version 1.12 (see Deviation 2), with the PM's conditions 3
+  and 4.
+- `plan_specs/v1/e40-cloud-caselist-run/t02-…` to `t06-…`: the PM's amendments of 2026-10-23
+  (condition 1, and the ruling on `t04` and `t06`).
+- `plan_specs/v1/e40-cloud-caselist-run/t01-cloud-run-adr.yaml`: the Goal set to `Succeeded`.
 - `docs/session-reports/v1-e40-t01-cloud-run-adr.md`: this report.
-- `plan_specs/v1/e40-cloud-caselist-run/t01-cloud-run-adr.yaml`: unchanged by this session beyond
-  the `InProgress` the start commit set.
 
 ## Deviations from the spec
 
@@ -109,11 +112,20 @@ the ADR lists each page.
      Prohibited use 10 and in the dev exception's "Two locations".
 
    So 1.12 also amends those, adds the run-state bundle to Retention and to what a removal rewrites,
-   and says plainly in its version note that it loosens. Nothing else changes. Question 1 below.
-3. **The ADR proposes changes to `t02` to `t06`.** The epic allows it ("the tasks after it may be
-   amended by that ADR"). The changes are listed in the ADR's [What each E40 task builds](../adr/0020-weekly-caselist-run-in-the-cloud.md#what-each-e40-task-builds).
-   No spec was edited here: they are the PM's to make. The two with scope consequences are questions
-   2 and 3 below.
+   and says plainly in its version note that it loosens. Nothing else changes. The PM ruled (a),
+   as written (question 1).
+3. **This task edited `t02` to `t06`.** The epic allows the ADR to amend them, and the PM's
+   condition 1 asked for it here; each change is marked `PM amendment 2026-10-23 (ADR-0020)` or
+   `PM ruling 2026-10-23`.
+   - **A conflict found while making them.** `t04` forbade "Deleting anything in the bucket",
+     while the accepted ADR had it make `caselist remove` purge the bundle's old versions. The PM
+     ruled (a) with its own wording: the forbidden entry and description now allow that purge
+     alone, the run's role has no delete permission, ac4 tests both red first, and `t06`'s
+     cutover waits for the purge.
+   - **One mechanical addition.** The ruling's Terraform test needs a home, so `t04`'s packages
+     gain `infrastructure/modules/caselist_run/tests`. The run's role and its module are `t03`'s
+     Terraform, and `t04` depends only on `t01`, so that half of ac4 needs `t03`'s module first;
+     see the FYI under Follow-up work.
 4. **AWS documentation and price pages were read from this session.** They are public pages, not
    the account or any system the task works on. Every price carries its date, and two tables that
    did not load (SNS, S3) were taken from AWS's own FAQ and guides, as the ADR says. No AWS call was
@@ -142,16 +154,21 @@ the ADR lists each page.
 7. **Charlie's two answers (2026-10-23) are recorded in the ADR, not the policy.** Tabroom's login
    never asks for more than the password, so the unattended login stands and the hand login is a
    contingency only. The maintainer has been told the downloads are likely to move to the cloud and
-   is fine with it. Clause 12's terms do not depend on where the job runs, so policy 1.12 gains no
-   line for it; the PM block offers one.
+   is fine with it; the PM's condition 4 put a dated line for it in clause 12.
 8. **The ADR does not edit the store layout document.** It names the new keys
    (`reports/sync/run-lock.json`, `reports/sync/state/`, `manifests/_run-state/`), all under
-   existing prefixes, so no Terraform listing grant changes. `t04` writes them into the layout, as
-   its packages allow.
+   existing prefixes, so no Terraform listing grant changes. `t04`'s amended description has it
+   write them into the layout.
 
-## Questions for the PM
+## Questions for the PM, and the rulings
 
-One block, to paste to the PM. Each question has a recommendation.
+**Ruled by the PM, 2026-10-23:**
+- **Question 1:** (a).
+- **Questions 2, 3 and 4:** as recommended.
+- **The FYIs:** accepted.
+- **The later question on `t04`'s deletion rule:** (a), with the PM's wording (Deviation 3).
+
+The block as sent:
 
 ````text
 PM questions from v1-e40-t01-cloud-run-adr (ADR-0020, Proposed). Please rule on 1-4; the FYIs need
@@ -220,8 +237,10 @@ Reply with a ruling on 1-4 (a letter or "as recommended").
 
 ## Operator follow-ups
 
-Nothing has to run for this task. The merge is the coach's approval of policy 1.12 (ac2), after the
-PM's review. One optional read helps `t02`: the stored token's lifetime. It reads the keychain on
+Nothing has to run for this task. The operator opens the pull request with `scripts/task pr`,
+without `--partial`, and the coach's merge approves policy 1.12 (ac2). The PM tells the coach before
+the merge that it approves a loosening. One optional read helps `t02` (welcome before it starts, not
+needed for this merge): the stored token's lifetime. It reads the keychain on
 the Mac, makes no network call and prints no token.
 
 Where: your Mac, any directory. Expected runtime: about a second.
@@ -236,22 +255,26 @@ was chosen for.
 
 ## Follow-up work
 
-- **Stage start and end times in the run's details** (E34, or `t03`). Without them the next sizing
-  question is again answered from file times.
-- **The parsed-store publish's 1 h 53 min** from the Mac on 2026-10-22 (E31 or E34). Worth one look
-  at its per-object pattern if the cloud run's figure is also large.
-- **A V2 home for the caselist records** (V2 E11). No task names the `CaselistRepository`; when one
-  does, the run-state bundle holds manifests only.
-- **The store layout document** gains `reports/sync/run-lock.json`, `reports/sync/state/` and
-  `manifests/_run-state/` in `t04`, and `store sync` should skip `manifests/_run-state/` as it skips
-  `_suppression/`.
+- **Stage start and end times** are now `t03`'s (its ac3).
+- **The parsed-store publish's 1 h 53 min** from the Mac on 2026-10-22 is recorded, and is looked at
+  once `t03`'s stage times show the cloud figure (PM review).
+- **A V2 home for the caselist records** is recorded for V2 E11. No task names the
+  `CaselistRepository`; when one does, the run-state bundle holds manifests only.
+- **The store layout keys and `store sync`'s skip** are now `t04`'s (its amended description).
+- **FYI on `t04` ac4's Terraform half.** The run's role is created by `t03`'s module, and the epic
+  has `t03` and `t04` both depending only on `t01`. Whichever starts first, ac4's policy-document
+  test needs `t03`'s module to exist; a `t04` that starts first may need `t03` as a prerequisite,
+  or the test may land with `t03`. I did not change the epic's graph.
 
 ## Checks run before the report
 
-- **The affected set.** `uv run scripts/affected_tests.py` chose 21 of 407 test files (5.2%) from 5
-  changed files. They were run as `perl -e 'alarm 115; exec @ARGV' .venv/bin/python -m pytest -q -n
-  auto -m "not slow and not live" <the 21 files>` → `1079 passed, 1 warning in 35.48s`. The warning
-  is the test harness's blocked-socket notice.
+- **The affected set, after the spec amendments.** `uv run scripts/affected_tests.py` chose 21 of
+  407 test files (5.2%) from 10 changed files. They were run as `perl -e 'alarm 115; exec @ARGV'
+  .venv/bin/python -m pytest -q -n auto -m "not slow and not live" <the 21 files>` → `1081 passed,
+  1 warning in 33.98s`. The warning is the test harness's blocked-socket notice. Before the
+  amendments the same set gave `1079 passed`.
+- `uv run scripts/validate_specs.py --require-succeeded v1-e40-t01-cloud-run-adr` →
+  `v1-e40-t01-cloud-run-adr: Succeeded`.
 - `uv run pytest -q tests/docs tests/architecture/test_single_interpreter_source.py` → `74 passed`.
 - `uv run scripts/check_links.py` → `OK: 2072 relative links and anchors in 310 Markdown files`.
 - `uv run scripts/check_command_blocks.py` → `OK: no # comments in 352 shell code blocks`.

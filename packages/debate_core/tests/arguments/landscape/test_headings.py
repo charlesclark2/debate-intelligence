@@ -73,6 +73,17 @@ CASES: list[tuple[str, str, str, bool]] = [
     ("a round and opponent segment", "Courts CP | Octas v. Sample Squad", "courts cp", READ),
     ("a tournament on its own", "Harbor Classic Round 3", "", READ),
     ("a tournament segment with no round", "Spending DA - Lakeside Invitational", "spending da", READ),
+    ("trailing punctuation before a suffix", "Spending DA Shell.", "spending da", READ),
+    ("off with a period", "Off.", "", READ),
+    ("a leading round label", "Round 5 Spending DA", "spending da", READ),
+    ("a leading short round label", "R2 Courts CP", "courts cp", READ),
+    ("a version marker", "Single Payer v1.0", "single payer", READ),
+    ("a version number", "Single Payer 2.0", "single payer", READ),
+    ("a version after a round name", "Single Payer 1AC v3.2", "single payer", READ),
+    ("top level", "Midterms DA T/L", "midterms da", READ),
+    ("top level in words", "Midterms DA Top Level", "midterms da", READ),
+    ("an answer marker inside a heading ends it", "Midterms DA AT Dome", "midterms da", READ),
+    ("an answer segment after a position ends it", "Spending DA - AT: Golden Dome", "spending da", READ),
 ]
 
 KEPT: list[tuple[str, str, str]] = [
@@ -84,6 +95,8 @@ KEPT: list[tuple[str, str, str]] = [
     ("a segment that is not a label", "Spending DA - Hospitals Link", "spending da hospitals link"),
     ("an acronym beginning with a round's letters", "ACA Expansion Aff", "aca expansion aff"),
     ("an offset is not off", "Offsets CP", "offsets cp"),
+    ("a final that is not a round", "Final Rule CP", "final rule cp"),
+    ("a number that is not a version", "Section 1332 Waiver CP", "section 1332 waiver cp"),
 ]
 
 

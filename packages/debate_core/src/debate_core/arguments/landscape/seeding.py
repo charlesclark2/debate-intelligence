@@ -26,9 +26,9 @@ rows in the same order for the same sources.
 
 * **Any heading fewer than `minimum_teams` teams use**, two by default. Such a heading can point
   at the one team that wrote it; the counts say how many were left out.
-* **A team's own names.** A disclosure's school and team code are taken out of the headings of the
-  files that team disclosed before anything is counted (`Maple Grove Neg` is `neg`, which is a side
-  label and no heading at all).
+* **A team's own names.** A disclosure's school, team code and tournament are taken out of the
+  headings of the file before anything is counted (`Maple Grove Neg` is `neg`, which is a side label
+  and no heading at all).
 * **A card's tag.** A card the file gave no tag carries the tag still open above it in its path,
   which is a claim and not a heading; it is left out, as is anything past the block level.
 

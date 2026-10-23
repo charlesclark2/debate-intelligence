@@ -14,8 +14,9 @@ module builds them from this machine's stores:
   team code is a disclosure by no known team. Teams are never read from the store, which holds no
   path, and never from heading text.
 
-Names stay in memory. A team's school and code go to the seeding function only to be taken out of
-that team's headings; nothing here writes, logs or returns them in a `repr`.
+Names stay in memory. A team's school and code, and the tournament the file was disclosed at, go to
+the seeding function only to be taken out of that file's headings (a pocket named for a tournament
+is not a position); nothing here writes, logs or returns them in a `repr`.
 """
 
 from __future__ import annotations
@@ -116,9 +117,9 @@ async def read_seed_sources(
 
 def _team(path: str, topic: Topic) -> SeedTeam:
     read = parse_disclosure_path(path, event=topic.event)
-    names = tuple(
-        name for name in (read.school, read.team_code) if name not in (UNKNOWN_SCHOOL, UNKNOWN_TEAM_CODE)
-    )
+    own = (read.school, read.team_code)
+    names = tuple(name for name in own if name not in (UNKNOWN_SCHOOL, UNKNOWN_TEAM_CODE))
+    names += (read.tournament,) if read.tournament else ()
     known = read.school != UNKNOWN_SCHOOL and read.team_code != UNKNOWN_TEAM_CODE
     identity = f"{read.school.casefold()}/{read.team_code.casefold()}" if known else ""
     return SeedTeam(identity=identity, side=read.side, names=names)

@@ -369,3 +369,18 @@ def test_the_review_sheet_lists_each_position_with_its_counts_and_the_top_unplac
     assert "Unseen CP" in sheet
     assert "no alias yet" in sheet
     assert "| `courts cp` | 2 | 2 | hat | courts-cp |" in sheet
+
+
+def test_the_tournament_a_team_disclosed_at_is_taken_out_of_its_headings() -> None:
+    at_a_tournament = SeedTeam(
+        identity="team-one", side=Side.AFF, names=("School One", "Team One", "Harbor Classic")
+    )
+    seeding = seed_candidates(
+        [
+            source(
+                "a", (at_a_tournament,), card("Single Payer - Harbor Classic"), card("Round 5 Harbor Classic")
+            ),
+            source("b", (TEAM_THREE,), card("Single Payer")),
+        ]
+    )
+    assert [row.normalized_heading for row in seeding.rows] == ["single payer"]

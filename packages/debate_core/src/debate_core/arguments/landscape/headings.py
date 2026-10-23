@@ -9,17 +9,21 @@ model, no I/O, the same text every time (`v1-e32-t01-position-taxonomy` ac4).
 
 1. **Characters.** Unicode compatibility forms (NFKC), every dash to `-`, apostrophes dropped,
    `&` read as `and`.
-2. **Prefixes of the whole heading**, repeatedly: numbering (`1.`, `2)`, `IV.`, `b)`, `#3`), round
-   names (`1NC`, `2AR`), and answer markers (`AT:`, `A2`, `A/T`, `Answers to`). `AT` without a colon
-   counts only in capitals, so `At the Margin DA` stays a heading.
+2. **Prefixes of the whole heading**, repeatedly: punctuation, numbering (`1.`, `2)`, `IV.`, `b)`,
+   `#3`), round names (`1NC`, `2AR`), a preliminary round (`Round 5`, `R2`; never an elimination
+   word, so `Final Rule CP` stays), and answer markers (`AT:`, `A2`, `A/T`, `Answers to`). `AT`
+   without a colon counts only in capitals, so `At the Margin DA` stays a heading.
 3. **Segments.** The rest is split at spaced dashes, pipes, colons and brackets. A segment that is
    only a number, a round name or an answer marker goes. A segment after the first that names a
    round (`Harbor Classic R3`, `Octas v. Sample Squad`) or ends in a tournament word
    (`Invitational`, `Classic`) goes whole, since what is left of it is a tournament or an opponent.
-4. **Suffixes of each segment**, repeatedly: an opponent (`vs Sample Squad`, `v. Sample Squad`; a
-   bare `v` is left alone for `Brown v Board`), a round (`R2`, `Round 4`, `Octas`, read by
-   :func:`~debate_core.domain.caselist.normalize_round_token`), a round name (`1AC`), and `Shell`,
-   `Block`, `Frontlines`, `Extensions`, `Off`.
+   An answer marker after a position has been read ends the heading: `Midterms DA AT Dome` and
+   `Spending DA - AT: Golden Dome` are blocks of the DA, not answers to it.
+4. **Suffixes of each segment**, repeatedly: punctuation, an opponent (`vs Sample Squad`,
+   `v. Sample Squad`; a bare `v` is left alone for `Brown v Board`), a round (`R2`, `Round 4`,
+   `Octas`, read by :func:`~debate_core.domain.caselist.normalize_round_token`), a round name
+   (`1AC`), a version (`v1.0`, `2.0`), and `Shell`, `Block`, `Frontlines`, `Extensions`, `Off`,
+   `T/L` and `Top Level`.
 5. **Words.** Case-folded; every character that is not a letter or a digit is a space. A segment
    that is then only a side, `case` or `on case` goes, and so does a heading that is a count of
    off-case positions.
@@ -64,17 +68,21 @@ _NUMBERING: Final = re.compile(
     r"^\s*(?:#\s*\d{1,3}\b|(?:\d{1,3}|[ivx]{1,5}|[a-h])[.)\]](?=\s|$))\s*", re.IGNORECASE
 )
 _ROUND_PREFIX: Final = re.compile(rf"^\s*{_ROUND_NAME}\b[\s/:-]*", re.IGNORECASE)
+_LEADING_ROUND: Final = re.compile(r"^\s*(?:round|rd|r)\s*[1-9]\b[\s/:.-]*", re.IGNORECASE)
 _ANSWER_PREFIX: Final = re.compile(r"^\s*(?:a2|a/t|answers?\s+to)\b\s*[:-]?\s*", re.IGNORECASE)
 _CAPITAL_AT_PREFIX: Final = re.compile(r"^\s*AT\b\s*[:-]?\s*")
 _ANY_AT_WITH_COLON: Final = re.compile(r"^\s*at\s*:\s*", re.IGNORECASE)
 _ANSWER_WORDS: Final = frozenset({"at", "a2", "a/t", "answers to", "answer to"})
+_INNER_ANSWER: Final = re.compile(r"\s(?:AT|[Aa]2|[Aa]/[Tt])\b\s*:?\s+\S|\s[Aa][Tt]\s*:\s*\S")
+_EDGE_PUNCTUATION: Final = " \t.,;!?*_~\"'"
 
 _SEPARATORS: Final = re.compile(r"\s+[-|]\s+|\s*[|:()\[\]]\s*")
 _OPPONENT: Final = re.compile(r"\s+(?:vs\.?|v\.)\s+.*$", re.IGNORECASE)
 _ROUND_SUFFIX: Final = re.compile(rf"\s*\b{_ROUND_NAME}\s*$", re.IGNORECASE)
 _STRUCTURE_SUFFIX: Final = re.compile(
-    r"\s*\b(?:shells?|blocks?|frontlines?|ext(?:ension)?s?|off)\s*$", re.IGNORECASE
+    r"\s*\b(?:shells?|blocks?|frontlines?|ext(?:ension)?s?|off|t/l|top\s+level)\s*$", re.IGNORECASE
 )
+_VERSION_SUFFIX: Final = re.compile(r"\s*\b(?:v\s?\d+(?:\.\d+)*|\d+\.\d+(?:\.\d+)*)\s*$", re.IGNORECASE)
 _LONGEST_ROUND_PHRASE: Final = 3
 _TOURNAMENT_WORDS: Final = frozenset(
     {"invitational", "invite", "classic", "tournament", "swing", "championship", "championships", "rr"}
@@ -92,23 +100,36 @@ def normalize_heading(raw: str) -> NormalizedHeading:
     text = _APOSTROPHES.sub("", unicodedata.normalize("NFKC", raw).translate(_DASHES)).replace("&", " and ")
     text, answer = _strip_prefixes(text)
     kept: list[str] = []
-    for index, segment in enumerate(part for part in _SEPARATORS.split(text) if part.strip()):
-        if segment.strip().casefold() in _ANSWER_WORDS:
+    for index, part in enumerate(part for part in _SEPARATORS.split(text) if part.strip(_EDGE_PUNCTUATION)):
+        segment = part.strip(_EDGE_PUNCTUATION)
+        marked = segment.casefold() in _ANSWER_WORDS or _strip_prefixes(segment)[1]
+        if marked and kept:
+            break
+        if segment.casefold() in _ANSWER_WORDS:
             answer = True
             continue
         segment, segment_answer = _strip_prefixes(segment)
         answer = answer or segment_answer
+        inner = _INNER_ANSWER.search(segment)
+        if inner is not None:
+            segment = segment[: inner.start()]
         segment, labelled = _strip_suffixes(segment)
         words = _words(segment)
-        if not words or words.isdigit() or words in _STRUCTURAL:
-            continue
-        if (labelled and index > 0) or words.rsplit(" ", 1)[-1] in _TOURNAMENT_WORDS:
-            continue
-        kept.append(words)
+        if _names_a_position(words, labelled=labelled, first=index == 0):
+            kept.append(words)
+        if inner is not None:
+            break
     joined = " ".join(kept)
     if joined in _STRUCTURAL or _OFF_COUNT.match(joined):
         joined = ""
     return NormalizedHeading(text=joined, answer=answer)
+
+
+def _names_a_position(words: str, *, labelled: bool, first: bool) -> bool:
+    """False for a segment that is empty, a number, a side, or a round or tournament after the first."""
+    if not words or words.isdigit() or words in _STRUCTURAL:
+        return False
+    return not (labelled and not first) and words.rsplit(" ", 1)[-1] not in _TOURNAMENT_WORDS
 
 
 def _strip_prefixes(text: str) -> tuple[str, bool]:
@@ -116,8 +137,9 @@ def _strip_prefixes(text: str) -> tuple[str, bool]:
     answer = False
     while True:
         before = text
-        text = _NUMBERING.sub("", text, count=1)
+        text = _NUMBERING.sub("", text.lstrip(_EDGE_PUNCTUATION), count=1)
         text = _ROUND_PREFIX.sub("", text, count=1)
+        text = _LEADING_ROUND.sub("", text, count=1)
         for marker in (_ANSWER_PREFIX, _CAPITAL_AT_PREFIX, _ANY_AT_WITH_COLON):
             text, found = marker.subn("", text, count=1)
             answer = answer or bool(found)
@@ -130,11 +152,13 @@ def _strip_suffixes(text: str) -> tuple[str, bool]:
     labelled = False
     while True:
         before = text
+        text = text.rstrip(_EDGE_PUNCTUATION)
         text, opponents = _OPPONENT.subn("", text, count=1)
         text, round_found = _without_trailing_round(text)
         labelled = labelled or bool(opponents) or round_found
         text = _ROUND_SUFFIX.sub("", text, count=1)
         text = _STRUCTURE_SUFFIX.sub("", text, count=1)
+        text = _VERSION_SUFFIX.sub("", text, count=1)
         if text == before:
             return text, labelled
 

@@ -81,7 +81,7 @@ async def test_teams_and_sides_come_from_the_disclosures(planted: PlantedCaselis
     assert (team_one.identity, team_one.side, team_one.names) == (
         "school one/codeone",
         Side.NEG,
-        ("School One", "CodeOne"),
+        ("School One", "CodeOne", "Sample Invitational"),
     )
     assert {team.identity for team in by_digest[two].teams} == {"school two/codetwo"}
     assert {team.side for team in by_digest[two].teams} == {Side.AFF}

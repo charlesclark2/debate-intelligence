@@ -241,9 +241,75 @@ sidecar, or to a built file beyond removing the provenance-line paragraphs", whi
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-22
 
 **Notes:**
+
+Accepted, on three conditions closed in this session before the pull request. They answer your
+three PM questions here rather than in a follow-up task. Record them under "PM conditions", keep
+the phase `Succeeded`, and open the pull request with no `--partial`; v1-e39-t08 depends on this
+task. If anything comes out differently from what is written here, stop and ask for another review.
+
+**What the PM checked.**
+* The branch is clean on origin/dev at `c3b9dee`, and the diff is the 27 files listed.
+* Since then dev has gained v1-e07-t08 (#411) and two PM batches (#405 and #413). None touches
+  this task's files, but sync anyway (condition 4) so the pull request's base is current.
+
+**What is good.**
+* **The recorded fixtures are the strongest evidence this task could give.** They are four files
+  and sidecars from the start commit's writer. Every built file equals the recording with exactly
+  its counted line paragraphs removed, and every sidecar is identical byte for byte, bar its own
+  file's hash.
+* **The sidecar's line now comes from the one domain function the card page uses,** so the
+  duplicate this task was first filed to remove is gone.
+* **The check's evidence holds up.** It was turned round, red first. Matching by position rather
+  than fingerprint keeps it from repeating alignment's finding. Two survivors were handled honestly:
+  a test added for the camp year, and the unreachable `]` clause deleted.
+
+**Rulings on the PM questions. The forbidden entry protected the sidecar and the removal path, not
+untrue words.** It was never meant to keep a sentence the change made false. So add above the
+forbidden entry:
+
+`# PM ruling 2026-10-22: the header analytic's last sentence, FILE_BUILDER_VERSION and the schema's description of provenance_line change with the rule; every other byte of a sidecar is unchanged.`
+
+**Conditions, all closed in this session:**
+
+1. **Question 1: drop the sentence (option b), not reword it.**
+   * `header_line` loses "Who disclosed each card is below its cite." and "Where each card came
+     from is below its cite."
+   * The other option pointed the reader to a sidecar a student never receives: v1-e39-t08's
+     downloads stream the .docx alone.
+   * Update the two goldens that pin it by hand. Extend ac1's comparison so the header paragraph
+     differs by exactly that sentence.
+2. **Question 2: bump `FILE_BUILDER_VERSION` to `2026.10.22-file-writer-3` (option a).** The
+   identity test then excludes `builder_version` as well as `docx_sha256`, and asserts the old
+   value's single occurrence before the swap, as it does for the hash.
+3. **Question 3: reword the schema description (option a).**
+   * `FileProvenanceEntry.provenance_line` becomes, in words like these, "The card's provenance
+     line, as the pilot's card page shows it (Attribution rules 2 and 3); a built file's text
+     carries none."
+   * Re-export `docs/data/file-provenance.schema.json` with the repository's export script, and
+     add `docs/data` to `constraints.packages`.
+   * No sidecar byte changes. Show the schema diff is that one description.
+4. **Sync** (`scripts/task sync`), then re-run:
+   * the changed test directories, the always-run list and the docs checks;
+   * pyright, `lint-imports`, ruff and `validate_specs.py`.
+
+   Record the results. Re-run the mutation rows touching the header or the version if they move.
+
+**Accepted as written.**
+* `CHECKER_VERSION` bumped, the code name left as it was, and the docs grep.
+* The camp tests now building files.
+* `run_copier` left alone.
+* **Removing `HIGHLIGHTED_CITE_CAUSE` and `_explain`.** With no line written, the two builds they
+  compared are identical. v1-e33-t03's spec still asks that refusal to be "kept as a safeguard";
+  the PM amends that paragraph in the next batch. Do not edit that spec here.
+
+**Follow-ups:**
+* Files built by `file-writer-2` failing the new check goes to v1-e33-t03's brief, where `files
+  build` first runs. None exists outside the tests today.
+* A disclosed card holding an old line is recorded. It is the policy's outcome; the PM revisits it
+  only if a coach meets it.

@@ -19,8 +19,8 @@ defaults to a real value, so `None` always means "this entity genuinely has no s
 never "give me the default".
 
 **Everything is deterministic.** Ids come from :func:`readable_id` rather than from a real ULID,
-timestamps default to :data:`~debate_core.testing.fakes.clock_and_ids.FAKE_EPOCH`, and digests are computed from
-the fixed text the builder itself supplies. Two runs produce byte-identical entities, which is
+timestamps default to :data:`~debate_core.testing.fakes.clock_and_ids.FAKE_EPOCH`, and digests are
+computed from the fixed text the builder itself supplies. Two runs produce byte-identical entities, which is
 what lets the repository contract suite assert on listing order and on stored documents.
 """
 

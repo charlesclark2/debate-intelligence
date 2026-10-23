@@ -59,6 +59,7 @@ from debate_core.application.card_download import (
     DEFAULT_DOWNLOAD_CARD_CAP,
     DEFAULT_DOWNLOAD_SOURCE_BYTES,
     CardDownloadService,
+    WriterFactory,
 )
 from debate_core.application.errors import BlobIntegrityError, NotFound, StoreUnavailable
 from debate_core.application.evidence_search import EvidenceSearchService
@@ -612,6 +613,7 @@ def _body(lead: str, read: str, tail: str, *, inside: str = "") -> str:
     return paragraph_xml(
         run_xml(lead, half_points=16)
         + run_xml(read, character_style="StyleUnderline", highlight="cyan")
+        + run_xml(" ", half_points=16)
         + run_xml("a stressed warrant", character_style="Emphasis", bold=True, highlight="green")
         + (f"<w:r>{inside}</w:r>" if inside else "")
         + run_xml(tail, half_points=16)
@@ -949,6 +951,22 @@ class PilotWorld:
 
     cards = CARDS
     corpus = CORPUS
+    caselist_store = CASELIST_STORE
+    camp_store = CAMP_STORE
+
+    @staticmethod
+    def sources() -> Mapping[str, DownloadSource]:
+        """The download's synthetic sources, by name (`v1-e39-t08`)."""
+        return download_sources()
+
+    @staticmethod
+    def parser() -> DebateDocxParser:
+        return download_parser()
+
+    @staticmethod
+    def source_card(name: str) -> ParsedCard:
+        """The parsed card one of the download's cards is copied from."""
+        return download_card(name)
 
     def __init__(
         self,
@@ -956,6 +974,7 @@ class PilotWorld:
         count_cap: int | None = None,
         download_card_cap: int = DEFAULT_DOWNLOAD_CARD_CAP,
         download_source_bytes: int = DEFAULT_DOWNLOAD_SOURCE_BYTES,
+        download_writer: WriterFactory | None = None,
     ) -> None:
         self.clock = MutableClock()
         self.index = corpus_index()
@@ -1021,8 +1040,11 @@ class PilotWorld:
             access_audit=access_audit,
             card_download=CardDownloadService(
                 search_index=search_index,
-                writer=lambda sources: _RecordingWriter(
-                    DocxEvidenceFileWriter(snapshots=sources, parser=parser), self.built
+                writer=download_writer
+                or (
+                    lambda sources: _RecordingWriter(
+                        DocxEvidenceFileWriter(snapshots=sources, parser=parser), self.built
+                    )
                 ),
                 source_stores=lambda prefix: self.source_stores.get(prefix) or RecordingSourceStore(prefix),
                 access_audit=access_audit,

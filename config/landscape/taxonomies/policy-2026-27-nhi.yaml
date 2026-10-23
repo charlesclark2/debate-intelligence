@@ -22,57 +22,57 @@ positions:
     label: Costs advantage
     kind: advantage
     side: aff
-    aliases: [adv costs, costs adv, advantage costs, costs advantage, adv cost, cost advantage, cost adv]
+    aliases: [adv costs, costs adv, advantage costs, costs advantage, adv cost, cost advantage, cost adv, costs]
   - id: coverage-advantage
     label: Coverage advantage
     kind: advantage
     side: aff
-    aliases: [adv coverage, coverage adv, coverage advantage, advantage coverage]
+    aliases: [adv coverage, coverage adv, coverage advantage, advantage coverage, coverage]
   - id: disease-advantage
     label: Disease advantage
     kind: advantage
     side: aff
-    aliases: [adv disease, disease advantage, advantage disease, disease adv]
+    aliases: [adv disease, disease advantage, advantage disease, disease adv, disease]
   - id: inequality-advantage
     label: Inequality advantage
     kind: advantage
     side: aff
-    aliases: [adv inequality, inequality adv, advantage inequality, inequality advantage]
+    aliases: [adv inequality, inequality adv, advantage inequality, inequality advantage, inequality]
   - id: economy-advantage
     label: Economy advantage
     kind: advantage
     side: aff
-    aliases: [adv economy, advantage economy, economy advantage, economy adv, adv econ, econ adv, econ advantage]
+    aliases: [adv economy, advantage economy, economy advantage, economy adv, adv econ, econ adv, econ advantage, economy, econ]
   - id: growth-advantage
     label: Growth advantage
     kind: advantage
     side: aff
-    aliases: [adv growth, growth adv, growth advantage, advantage growth]
+    aliases: [adv growth, growth adv, growth advantage, advantage growth, growth]
   - id: bioterror-advantage
     label: Bioterror advantage
     kind: advantage
     side: aff
-    aliases: [adv bioterror, bioterror advantage, bioterror adv, advantage bioterror]
+    aliases: [adv bioterror, bioterror advantage, bioterror adv, advantage bioterror, bioterror]
   - id: budgets-advantage
     label: Budgets advantage
     kind: advantage
     side: aff
-    aliases: [adv budgets, advantage budgets, budgets adv, budgets advantage]
+    aliases: [adv budgets, advantage budgets, budgets adv, budgets advantage, budgets]
   - id: stagnation-advantage
     label: Stagnation advantage
     kind: advantage
     side: aff
-    aliases: [adv stagnation, stagnation adv, advantage stagnation]
+    aliases: [adv stagnation, stagnation adv, advantage stagnation, stagnation]
   - id: access-advantage
     label: Access advantage
     kind: advantage
     side: aff
-    aliases: [adv access, access adv, advantage access, access advantage]
+    aliases: [adv access, access adv, advantage access, access advantage, access]
   - id: innovation-advantage
     label: Innovation advantage
     kind: advantage
     side: aff
-    aliases: [adv innovation, advantage innovation, innovation adv, innovation advantage]
+    aliases: [adv innovation, advantage innovation, innovation adv, innovation advantage, innovation]
   - id: data-advantage
     label: Data advantage
     kind: advantage
@@ -82,7 +82,7 @@ positions:
     label: Pandemics advantage
     kind: advantage
     side: aff
-    aliases: [adv pandemics, pandemics adv, pandemics advantage]
+    aliases: [adv pandemics, pandemics adv, pandemics advantage, pandemics]
   - id: pharma-advantage
     label: Pharma advantage
     kind: advantage
@@ -94,7 +94,7 @@ positions:
     label: Midterms DA
     kind: da
     side: neg
-    aliases: [midterms da, da midterms, midterms disad]
+    aliases: [midterms da, da midterms, midterms disad, midterms]
   - id: pharma-da
     label: Pharma DA
     kind: da
@@ -176,7 +176,7 @@ positions:
     label: States CP
     kind: cp
     side: neg
-    aliases: [states cp, cp states, states counterplan]
+    aliases: [states cp, cp states, states counterplan, states]
   - id: nhs-cp
     label: NHS CP
     kind: cp

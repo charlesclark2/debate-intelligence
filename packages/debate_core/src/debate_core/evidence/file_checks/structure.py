@@ -18,8 +18,8 @@ policy needs, and a card under a suppression.
 Data-use policy version 1.11 (Attribution rules 2, 3 and 5): a built file carries no provenance line,
 and a card's provenance is its sidecar entry. So the provenance check fails a document card with no
 sidecar entry at its position (whether the entry is that card is the alignment check's question), and
-a file whose text holds a provenance line: a paragraph in the policy's form
-(`[Disclosed: …]`, `[OpenEv: …]`) or holding a sidecar entry's line anywhere in it. A line inside a
+a file whose text holds a provenance line: a paragraph opening in the policy's form (`[Disclosed: `,
+`[OpenEv: `) or holding a sidecar entry's line anywhere in it. A line inside a
 card is reported on that card; one outside every card by its paragraph index. The report names the
 paragraph, never the line, which names a school and a team code.
 
@@ -396,11 +396,8 @@ _LINE_OPENINGS: Final = ("[Disclosed: ", "[OpenEv: ")
 
 
 def _holds_a_provenance_line(text: str, lines: frozenset[str]) -> bool:
-    """Whether a paragraph is a provenance line in the policy's form, or holds a sidecar entry's line."""
-    stripped = text.strip()
-    if stripped.startswith(_LINE_OPENINGS) and stripped.endswith("]"):
-        return True
-    return any(line in text for line in lines)
+    """Whether a paragraph opens in the policy's form of a provenance line, or holds a sidecar line."""
+    return text.lstrip().startswith(_LINE_OPENINGS) or any(line in text for line in lines)
 
 
 def _camp_provenance(entry: FileProvenanceEntry) -> tuple[list[str], list[str]]:

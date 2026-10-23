@@ -1030,8 +1030,9 @@ def test_camp_a_sidecar_written_before_camp_cards_still_validates(standard: Buil
             f"[OpenEv: {CAMP} 2030 — PF, {CAMP_TITLE}]",
         ),
         (RELEASE, None, f"[OpenEv: {CAMP} 2031 — Policy]"),
+        (RELEASE, _camp_file("0" * 64, year=2030), f"[OpenEv: {CAMP} 2030 — Policy, {CAMP_TITLE}]"),
     ],
-    ids=["policy", "ld", "pf", "no-release-record"],
+    ids=["policy", "ld", "pf", "no-release-record", "the-records-year-over-the-releases-name"],
 )
 def test_camp_the_sidecars_line_is_composed_from_the_records_alone(
     parser: DebateDocxParser, built_at: datetime, release: str, record: CampFile | None, line: str

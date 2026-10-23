@@ -259,7 +259,8 @@ counted here.
 
 The 11.6% of the week to 2026-10-22 is new documents: index `767b9c7c056b80cb` holds 52,059 of
 them, 11.6% more than the 46,658 of 2026-10-20, at the same 16,125 SQLite bytes a document. At that
-rate every week, the SQLite file passes `v1-e39-t09`'s 900,000,000-byte warning within the week,
+rate every week, the SQLite file passes `v1-e39-t09`'s 900,000,000-byte warning within the week (the
+PM moved that warning to 1,700,000,000 on 2026-10-22, from this working),
 ADR-0019's 1 GB allowance in about two, and fills `/tmp` at a swap in about eight. The gzip object,
 314,054,035 bytes, passes the 400,000,000-byte revisit trigger in about three. Each weekly run's
 growth is in its summary from `v1-e39-t14` on (`documents_growth`, `sqlite_bytes_growth`,

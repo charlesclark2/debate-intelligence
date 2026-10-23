@@ -57,8 +57,10 @@ A run that built nothing removes nothing. The bucket's copies are not this stage
 ## Size
 
 Every build's SQLite bytes and bytes per document are reported, with a warning past either of
-ADR-0019's lines: 900,000,000 SQLite bytes, under its 1 GB uncompressed ceiling, and 400,000,000
-gzip bytes, its trigger for asking for a higher bandwidth quota (PM ruling 2026-10-20, question 5).
+ADR-0019's lines: 1,700,000,000 SQLite bytes, where a same-size swap would fill 79% of the function's
+4,096 MB of temporary storage (moved from 900,000,000 by the PM's ruling of 2026-10-22, `v1-e39-t14`),
+and 400,000,000 gzip bytes, its trigger for asking for a higher bandwidth quota (PM ruling
+2026-10-20, question 5).
 
 ## What is logged and reported
 
@@ -127,8 +129,9 @@ SEARCH_INDEX_DIRECTORY: Final = "tub-index"
 """Where built indexes live under the data directory, `<data_dir>/tub-index/<index id>/`: where
 `tub index build` writes by default, and where this stage builds and looks for the newest."""
 
-SQLITE_BYTES_WARNING: Final = 900_000_000
-"""SQLite bytes past which a build is warned of: under ADR-0019's 1 GB uncompressed ceiling."""
+SQLITE_BYTES_WARNING: Final = 1_700_000_000
+"""SQLite bytes past which a build is warned of: ADR-0019 (c) 6's storage line. A swap holds the old file
+and the new one, so two of this size are 79% of the function's 4,096 MB (`v1-e39-t14`)."""
 
 GZIP_BYTES_WARNING: Final = 400_000_000
 """Gzip bytes past which a build is warned of: ADR-0019's trigger for a higher bandwidth quota."""
@@ -269,7 +272,8 @@ def size_warnings(manifest: SearchIndexManifest) -> tuple[str, ...]:
     if manifest.sqlite_file.bytes > SQLITE_BYTES_WARNING:
         warnings.append(
             f"the SQLite file is {manifest.sqlite_file.bytes:,} bytes, past {SQLITE_BYTES_WARNING:,}: "
-            "ADR-0019 plans for 1 GB uncompressed at most, so revisit its sizing"
+            "a swap holds two copies of it in the function's 4,096 MB of ephemeral storage, so revisit "
+            "ADR-0019's storage line"
         )
     if manifest.gzip_object.bytes > GZIP_BYTES_WARNING:
         warnings.append(

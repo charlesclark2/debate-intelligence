@@ -80,6 +80,35 @@ It refuses, before uploading anything:
   decompress to the SQLite file the manifest records. Rebuild it.
 * `ENVIRONMENT_MISMATCH`: `--env` is not the environment `DEBATE_ENV` selects.
 * `CONFIRMATION_REQUIRED`: prod without `--confirm-prod`.
+* `SEARCH_INDEX_WOULD_SHRINK`: the shrink guard (`v1-e39-t14`). The new index holds none of a
+  store's documents that the published index holds, or fewer than 90% of them
+  (`caselist.search_index_minimum_share_percent`), store by store. The message names the store,
+  both counts and the index `current.json` still names. See below.
+* `SEARCH_INDEX_STORE_EMPTY`: a store the index was built from has no occurrence rows in its
+  aggregates, published index or not. Rebuild that store's aggregates
+  (`debate-research caselist parse --caselist <slug> --publish`), or build without it. No flag
+  passes this one.
+* `CURRENT_SEARCH_INDEX_UNREADABLE`: `current.json`, or the manifest it names, cannot be read, so
+  there is nothing to compare the new index with.
+
+### Publishing a real shrink: `--allow-shrink`
+
+Some shrinks are meant: a removal from a small store, the card-only rule of `v1-e39-t12`, or a store
+you chose to stop indexing. First account for the counts the refusal printed. A store suddenly at 0
+is a store that lost something, and the fix is the store. Then publish the same directory again with
+one line saying why. Use the removal's request id where there is one; never card text, a school, a
+team code or a file name:
+
+```bash
+DEBATE_ENV=dev debate-research tub index publish --env dev --index ~/.debate-research/dev/tub-index/INDEX_ID --allow-shrink "RM-put-the-request-id-here, whole-file removal"
+```
+
+It prints `published past the shrink guard with --allow-shrink:`, the counts it passed and your
+reason, and the `--json` result carries them as `allowed_shrink`. The reason is not stored in the
+manifest or the pointer, which the pilot's function reads strictly. It passes the second and third
+refusals above, never `SEARCH_INDEX_STORE_EMPTY`. The weekly run never uses it: it fails its stage
+instead, and the [scheduled sync runbook](../runbooks/caselist-scheduled-sync.md#the-shrink-guard)
+says what to do next.
 
 ## After a removal
 

@@ -202,6 +202,17 @@ This record covers release v1.7 and its two environments. It decides the pilot o
    12 KB a document, so about 280 to 550 MB**, or roughly 110 to 220 MB gzipped. The plan allows
    for growth to **1 GB uncompressed** during the season. Ephemeral storage of 4,096 MB holds the
    live copy, the incoming copy at a weekly swap, and headroom.
+
+   **Amended 2026-10-22 (PM ruling, `v1-e39-t14`): storage, not 1 GB, is the size line.** A swap
+   holds the live SQLite file and the incoming one, and nothing else: the gzip object streams
+   through `gunzip` into the new file and never lands on disk, and the old file is deleted at the
+   swap. So the 4,096 MB allows **about 2 GB of SQLite at a same-size swap**. The weekly stage
+   warns at **1,700,000,000 SQLite bytes**, where two copies fill 79% and leave headroom for a
+   week's growth. The 1 GB figure stood in for the cold start, and the **400 MB gzip trigger** in 8
+   below, which measures that directly, is unchanged. The storage stays at 4,096 MB. On
+   2026-10-22 the index was 839,438,336 SQLite bytes, a peak of 1,678,876,672 at a swap (39.1%).
+   The working is in [the search index data model](../data/search-index.md#the-functions-temporary-storage-while-one-index-replaces-another)
+   and [the task's session report](../session-reports/v1-e39-t14-index-shrink-guard.md#the-storage-measurement).
 7. **Expected cold start.** Lambda caps one execution environment at 625 Mbps, about 78 MB/s.
    - **A request to a new environment:** about 1 to 2 s to start Python, FastAPI and the adapter.
    - **The first search on that environment:** a further 2 to 4 s to download 110 to 220 MB at

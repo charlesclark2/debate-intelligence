@@ -1255,6 +1255,11 @@ What each outcome means:
 | `failed`, `would shrink the published search index: <store> has N documents against M in index <id>` (`SEARCH_INDEX_WOULD_SHRINK`) | The new index holds under 90% of a store's documents in the published one, or none. Nothing was uploaded; `current.json` and both local indexes stay. | Read [The shrink guard](#the-shrink-guard). The run never publishes past it, and refuses again every week until the store is restored or you publish the shrink by hand. |
 | `failed`, `whose aggregates hold no occurrence rows` (`SEARCH_INDEX_STORE_EMPTY`), or the build's `occurrence table holds no rows` (`SEARCH_INDEX_STORE_NOT_READY`) | A store's parsed aggregates are empty, as after a whole-file removal that was not followed by its rebuild. | Rebuild that store's aggregates ([the removal runbook's P1b](caselist-removal.md#p1b--right-after-done-rebuild-the-parsed-stores-aggregates)). Never overridden. |
 | `failed`, `cannot be compared with the current index's` (`CURRENT_SEARCH_INDEX_UNREADABLE`) | `current.json` or the manifest it names cannot be read, so the guard has nothing to compare with. | Find out why first (the evidence-search runbook's app log table); then publish by hand with `--allow-shrink`, below. |
+
+**A rule this replaced** (PM ruling 2026-10-22, `v1-e39-t14`). Until then, the stage treated a
+`current.json` it could not read as behind, and published over it. It now fails on one, the last
+row above, because with nothing to compare the guard cannot tell what the publish would replace,
+and the old rule let an agent running an older build overwrite a pointer a newer build wrote.
 | `failed`, `no version directory of parser …; run debate-research caselist parse --caselist <slug>` | A store the run indexes has never been parsed by the agent's build: on a fresh installation, every store until its first parse. | Run the `caselist parse` it names. Before the first Wednesday, `doctor --search-index` finds every such store at once (below). |
 
 **Before the first Wednesday, check that every store is parsed.** The stage indexes the agent's
@@ -1279,8 +1284,10 @@ build the stage removes superseded ones from this Mac and says how many and the 
 (`removed`, `bytes_freed`). It never removes the two newest, the one `current.json` named when the
 run read it, a directory without a readable manifest, or a dot-directory, and a run that built
 nothing removes nothing. The copies in the bucket are not touched. A warning in the reason means the index has passed one of
-ADR-0019's lines: 900,000,000 SQLite bytes, under its 1 GB uncompressed ceiling, or 400,000,000
-gzip bytes, at which `v1-e39-t04` asks for a higher bandwidth quota. Bring either to the PM.
+ADR-0019's lines: 1,700,000,000 SQLite bytes, where a swap's two copies fill 79% of the function's
+4,096 MB of temporary storage (moved from 900,000,000 by the PM's ruling of 2026-10-22,
+`v1-e39-t14`), or 400,000,000 gzip bytes, at which `v1-e39-t04` asks for a higher bandwidth quota.
+Bring either to the PM.
 
 **Each run's growth** (`v1-e39-t14`): when `current.json` named another index, the reason ends with
 `growth against <id>: +N documents, +B SQLite bytes, +G gzip bytes`, and the run summary's

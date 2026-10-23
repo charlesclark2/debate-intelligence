@@ -666,15 +666,17 @@ def test_index_stage_reports_the_sqlite_bytes_and_bytes_per_document_of_every_bu
     ("sqlite_bytes", "gzip_bytes", "lines"),
     [
         (SQLITE_BYTES_WARNING, GZIP_BYTES_WARNING, ()),
-        (SQLITE_BYTES_WARNING + 1, GZIP_BYTES_WARNING, ("1 GB uncompressed",)),
+        (900_000_001, GZIP_BYTES_WARNING, ()),
+        (SQLITE_BYTES_WARNING + 1, GZIP_BYTES_WARNING, ("ephemeral storage",)),
         (SQLITE_BYTES_WARNING, GZIP_BYTES_WARNING + 1, ("revisit trigger",)),
-        (SQLITE_BYTES_WARNING + 1, GZIP_BYTES_WARNING + 1, ("1 GB uncompressed", "revisit trigger")),
+        (SQLITE_BYTES_WARNING + 1, GZIP_BYTES_WARNING + 1, ("ephemeral storage", "revisit trigger")),
     ],
 )
 def test_index_stage_warns_past_each_of_adr_0019s_lines(
     world: World, sqlite_bytes: int, gzip_bytes: int, lines: tuple[str, ...]
 ) -> None:
-    assert (SQLITE_BYTES_WARNING, GZIP_BYTES_WARNING) == (900_000_000, 400_000_000)
+    # The SQLite line moved from 900,000,000 to 1,700,000,000 by the PM's ruling of 2026-10-22 (v1-e39-t14).
+    assert (SQLITE_BYTES_WARNING, GZIP_BYTES_WARNING) == (1_700_000_000, 400_000_000)
     world.refresh()
     newest = newest_local_index(world.out)
     assert newest is not None

@@ -71,7 +71,7 @@ PYTHON_WORD = re.compile(r"python|pyenv|(?<![A-Za-z0-9.])py(?![A-Za-z0-9])", re.
 # What is never a Python version, python word or not: a figure, which is a number followed by `%` or
 # a unit, and another product's version, with any versions listed after it ("SQLite 3.9.0 and 3.8.3").
 NUMBER = r"\d+(?:\.\d+)+"
-UNITS = ["ms", "s", "sec", "seconds", "min", "minutes", "KB", "kB", "MB", "GB", "TB", "KiB", "MiB", "GiB"]
+UNITS = ["ms", "s", "sec", "seconds", "minutes", "KB", "kB", "MB", "GB", "TB", "KiB", "MiB", "GiB"]
 FIGURE = re.compile(rf"(?<![\d.]){NUMBER}\s?(?:%|(?:{'|'.join(UNITS)})(?![\w-]))")
 OTHER_PRODUCTS = ["SQLite3", "SQLite", "Node.js", "Node", "Next.js", "Lighthouse", "axe-core"]
 OTHER_PRODUCT_VERSION = re.compile(

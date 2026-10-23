@@ -608,7 +608,11 @@ and the signed-in reading came from the HAR instead.
   operator's local dev store was not touched. The block now refuses to run when an override is set
   or a pull is running, and strips any override from the command (`env -u`); success is now
   `Sources` equal to `Skipped` and not zero, rather than "0 parsed". The runbook's P1b has the same
-  correction. Waiting on the PM before the corrected run.
+  correction. **PM ruling, 2026-10-22:** the corrected R runs from a new window and each caselist
+  is judged by that test; until all four pass, no `tub index build` or `tub index publish` runs in
+  dev (4e and block 5 contain both), since an index built over the empty aggregates would publish
+  an empty index to the live pilot. The PM adds an index shrink guard and a working agreement on
+  ambient overrides and empty-store success checks in the next batch.
 - **R, the rebuild, corrected run:** REBUILD_RESULTS_PENDING.
 
 ## Follow-up work

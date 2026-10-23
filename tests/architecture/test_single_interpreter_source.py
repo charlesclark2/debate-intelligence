@@ -6,8 +6,14 @@ ship it (`docs/evidence/normalization.md`). The installer reads the bound from t
 Python version either derives from the declaration or points at it. A second copy is a constant that
 nobody will remember to update, which is how `install_channel.sh`'s old `PYTHON_VERSION` came about.
 
-This test reads every tracked file and fails on a Python version anywhere else. What may still
-name one:
+This test reads every tracked file and fails on a Python version anywhere else. A `3.9` to `3.19`
+is a Python version only in a Python context: a python word on its line or on the line that opens
+its block (`Python`, `python3.13`, `requires-python`, a trove classifier, `uv python`, `--python`,
+`FROM python:`, `pyenv`, a `PY_` variable), or anywhere in a `.python-version` file. A figure (a
+number followed by `%` or a unit such as `ms` or `MB`) and another product's version (`SQLite 3.11.0`,
+`axe-core 3.10`) never are; until `v1-e01-t31` sessions reworded measured times, percentages and
+SQLite versions to get past this test. A `py312`/`cp313` tag is a Python version wherever it is.
+What may still name one:
 
 * `debate_core`'s declaration, and every other workspace pyproject's `requires-python` when it
   **equals** it exactly. A TOML file cannot point at another file, so the copies are held equal
@@ -57,6 +63,22 @@ PERMITTED_DIRECTORIES = {
 OTHER_ECOSYSTEM_LOCKFILES = {"pnpm-lock.yaml", "package-lock.json", "yarn.lock"}
 # A file whose every version is a Python version: an interpreter pin, wherever it is.
 PYTHON_VERSION_FILES = {".python-version"}
+# What makes a `3.x` a Python version: `python` in any word (python3.13, CPython, requires-python,
+# PYTHON_VERSION, setup-python, `uv python`, `FROM python:`), `pyenv`, or `py` standing alone (a
+# `PY_VERSION` variable, the Windows launcher's `py -3.13`), but not a `.py` file name.
+PYTHON_WORD = re.compile(r"python|pyenv|(?<![A-Za-z0-9.])py(?![A-Za-z0-9])", re.IGNORECASE)
+
+# What is never a Python version, python word or not: a figure, which is a number followed by `%` or
+# a unit, and another product's version, with any versions listed after it ("SQLite 3.9.0 and 3.8.3").
+NUMBER = r"\d+(?:\.\d+)+"
+UNITS = ["ms", "s", "sec", "seconds", "min", "minutes", "KB", "kB", "MB", "GB", "TB", "KiB", "MiB", "GiB"]
+FIGURE = re.compile(rf"(?<![\d.]){NUMBER}\s?(?:%|(?:{'|'.join(UNITS)})(?![\w-]))")
+OTHER_PRODUCTS = ["SQLite3", "SQLite", "Node.js", "Node", "Next.js", "Lighthouse", "axe-core"]
+OTHER_PRODUCT_VERSION = re.compile(
+    rf"(?<![\w.-])(?:{'|'.join(map(re.escape, OTHER_PRODUCTS))})(?:'s)?\s+(?:version\s+|v)?{NUMBER}"
+    rf"(?:\s*(?:,|and|or|to)\s*{NUMBER})*"
+)
+
 CI_MATRIX = re.compile(r"^\s*(?:-\s*)?python-version\s*:")
 
 EXEMPT_LINES: dict[tuple[str, str], str] = {
@@ -87,10 +109,6 @@ EXEMPT_LINES: dict[tuple[str, str], str] = {
     (
         "packages/debate_cli/tests/test_output.py",
         'captured.output.success("doctor", {"python_version": "3.12.7"}, display=DOCTOR_ROWS)',
-    ): "sample data for a rendering test",
-    (
-        "packages/debate_cli/tests/test_output.py",
-        'assert "3.12.7" in captured.out',
     ): "sample data for a rendering test",
     (
         "packages/debate_cli/tests/test_output.py",
@@ -160,8 +178,18 @@ def is_derived(path: str, line: str, declared: str, pyprojects: set[str]) -> boo
 
 
 def python_versions_named(line: str, block_opener: str = "", *, in_version_file: bool = False) -> list[str]:
-    """The Python versions `line` names."""
-    return [found.group() for found in PYTHON_VERSION.finditer(line)]
+    """The Python versions `line` names, reading `block_opener` (the line its block hangs from) as context."""
+    if not PYTHON_VERSION.search(line):
+        return []
+    text = f"{block_opener}\n{line}"
+    not_python = [found.span() for rule in (FIGURE, OTHER_PRODUCT_VERSION) for found in rule.finditer(text)]
+    in_context = in_version_file or PYTHON_WORD.search(text) is not None
+    return [
+        found.group()
+        for found in PYTHON_VERSION.finditer(text, len(block_opener) + 1)
+        if not any(start <= found.start() < end for start, end in not_python)
+        and (in_context or not found.group()[0].isdigit())
+    ]
 
 
 def lines_with_block_openers(text: str) -> Iterator[tuple[int, str, str]]:

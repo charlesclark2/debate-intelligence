@@ -630,6 +630,16 @@ and the signed-in reading came from the HAR instead.
   Each uploaded to `parsed/<caselist>/2026.10.20-docx-6/`, so the dev bucket's current aggregates
   are the real ones again; the empty uploads of the first run are now noncurrent versions.
 
+- **4d, the card gone.** At 01:24 UTC (8:24 Central), about 49 minutes after `DONE`, because R
+  ran first, a search for `reserve margin` in the dev pilot returned nothing: the card, whose
+  representative was the removed file, is hidden. The card page was not checked separately at this
+  point. The five-minute bound itself is the tests' (ac1, ac7).
+- **4e, rebuild and publish.** The scratch store's own aggregates were rebuilt first (`testcl26`: 6
+  sources, 6 skipped, 0 parsed; 4 cards, 2 clusters, 6 occurrences). Index **`a0c928bebd03f8aa`**:
+  2 documents from 6 occurrences, 0 suppressed, SQLite 45,056 bytes, gzip 3,257 bytes; published,
+  `current.json` naming it, at about 01:25 UTC. The rebuilt index holds **`0`** occurrences of
+  `058e2b1ce922…` (`select count(*) from occurrences where source_sha256 = …`).
+
 ## Follow-up work
 
 1. **`tub index prune` (p3).** The PM's ruling names it: a CLI command that does the runbook's P4

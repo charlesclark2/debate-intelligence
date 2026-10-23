@@ -322,3 +322,22 @@ only happen after the merge, and no task depends on this one. The PM records the
 dev's next pre-release, or a dispatched one, must come back green, with `pulled linux/arm64`, the
 slow tier passing and **no** `skipped`. That run unblocks the prod promotion. Paste its id and the
 pytest line to the PM, who records them in this report's close-out.
+
+## After the PM review: synced onto origin/dev
+
+`scripts/task sync v1-e01-t34-validate-dev-green-again` rebased the nine commits cleanly onto
+`41820ab` (PM batch 2026-10-22c, after v1-e39-t14). Between `37bdaba` and `41820ab`, dev changed
+none of the files this task touches: `git diff --stat 37bdaba origin/dev` over `pyproject.toml`,
+`uv.lock`, `scripts`, `.github`, `tests/scripts`, the smoke README, the timing test, `docs/process`
+and the E01 specs printed nothing. Then `uv sync --all-packages`, and each run below under
+`perl -e 'alarm 115; exec @ARGV'` on the interpreter:
+
+| Command | Result |
+|---|---|
+| `.venv/bin/python -m pytest tests/scripts -q` | `1262 passed in 55.20s` (1256 before the sync; dev added six) |
+| `.venv/bin/python -m pytest -q tests/architecture tests/specs packages/debate_cli/tests/test_app.py packages/debate_cli/tests/test_help_rendering.py` | `279 passed, 3 warnings in 15.52s` |
+| `.venv/bin/python -m pytest -m slow -p no:randomly -n 0 -s -q tests/scripts/test_affected_tests_planted_breaks.py` | `8 passed, 11 deselected in 86.13s` at load 12.7. Five breaks are `caught: a selected test failed`. The file builder's is `caught: a selected test errored`, `debate_api`'s is `exit 4, caught: a conftest the selected tests load failed to import`, and the unreached break is `exit 0, caught: no`. |
+| `ruff check .`, `ruff format --check .`, `lint-imports`, `scripts/validate_specs.py` | `All checks passed!`, `1124 files already formatted`, `Contracts: 15 kept, 0 broken.`, `OK` |
+
+ac3's post-merge run is still `NOT RUN` and the Goal stays `InProgress`. The pull request goes in
+with `--partial`, as the PM ruled.

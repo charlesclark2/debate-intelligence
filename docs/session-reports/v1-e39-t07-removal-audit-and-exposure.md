@@ -193,6 +193,12 @@ three Terraform mutants were run again to read which `run` failed, and each fail
      2026-10-22).
    - The PM adds an index shrink guard and a working agreement on ambient overrides and empty-store
      success checks in the next batch.
+   - After the PM's second review (2026-10-22), P1b, R and 4-pre match the CLI only,
+     `pgrep -fl 'debate-research( --json)? caselist pull'`. They print the matched process line and
+     whether an override is set, so a `STOP` names its cause. Tested against stand-in processes: the
+     new pattern matched `…/bin/debate-research --json caselist pull …` and `debate-research
+     caselist pull …`, not a `python -m pytest … caselist pull` line. The old `pgrep -f 'caselist
+     pull'` matched all three, consistent with the PM's reading of the unexplained `STOP` in R.
 
 ## Decisions and assumptions
 
@@ -342,10 +348,12 @@ may publish a dev index, which would replace the synthetic one in the middle of 
 
 Where: the task worktree
 ```bash
-pgrep -fl 'caselist pull'
+PULL=$(pgrep -fl 'debate-research( --json)? caselist pull')
+echo "running pull: ${PULL:-none}"
 ```
-Success looks like nothing printed. If it prints a process, wait until it has finished and run
-the check again before 4a. (P4's delete block also refuses if `current.json` changed after its dry
+Success looks like `running pull: none`. If it names a process, wait until it has finished and
+run the check again before 4a. The pattern matches the CLI only, so a test run or an editor whose
+command line holds the words `caselist pull` does not stop it (PM's second review, 2026-10-22). (P4's delete block also refuses if `current.json` changed after its dry
 run.)
 
 4a. Build and publish the synthetic index.
@@ -401,8 +409,11 @@ window's scratch data directory is not used; keep the 4a window open for 4e and 
 Where: a new window, the task worktree
 ```bash
 cd /Users/charlesclark/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e39-t07-removal-audit-and-exposure
-if [[ -n "${DEBATE_STORAGE__DATA_DIR:-}" ]] || pgrep -f 'caselist pull' > /dev/null; then
-  echo "STOP: a data directory override is set, or a pull is running. Open a new window, or wait."
+PULL=$(pgrep -fl 'debate-research( --json)? caselist pull')
+echo "running pull: ${PULL:-none}"
+echo "data dir override: ${DEBATE_STORAGE__DATA_DIR:-none}"
+if [[ -n "$PULL" || -n "${DEBATE_STORAGE__DATA_DIR:-}" ]]; then
+  echo "STOP: the line above that is not none says why. Wait for the pull to finish, or open a new window."
 else
   aws sso login --profile debate-dev-evidence
   for SLUG in hsld26 hspf26 hspolicy26 openev; do
@@ -411,7 +422,8 @@ else
 fi
 ```
 Success looks like, for each of the four, **Sources** and **Skipped (already parsed)** equal to
-the store's full count and not zero, **Parsed 0**, and **Published 3 uploaded**. A `STOP` line means
+the store's full count and not zero, **Parsed 0**, and **Published 3 uploaded**. The first two
+lines name any running pull and any override; a `STOP` line means one of them is not `none`, and
 nothing ran. Anything else (`Sources 0`, a source parsed, another upload count, a refusal): stop
 and paste it back. (Corrected after the first run; see "R, the rebuild" in the operator's record.) Only the current version directory's
 aggregates come back; the superseded version directories the removal also emptied stay without
@@ -808,3 +820,51 @@ anything comes out differently from what you expect, stop and ask for another re
 * **Gate item 6 changes with policy 1.11.** The coach has ruled that copies, downloads and built
   files carry no provenance line. The PM's next batch amends the policy, ADR-0019 and the gate
   table's item 6 together. Nothing changes in this task.
+
+## PM review, second
+
+**Verdict:** ACCEPTED
+<!-- ACCEPTED / CHANGES_REQUESTED -->
+
+**Reviewed by / date:** PM, 2026-10-22
+
+**Notes:**
+
+Accepted. The first review's condition, the operator's dev run, is met and recorded. One small
+runbook fix is made in this session before the pull request (below). Then open the pull request
+with no `--partial`; v1-e39-t08 depends on this task.
+
+**What the PM checked.**
+* The branch is clean on origin/dev at `649fc66`. The only dev commit since is a docs refresh.
+* The spec's phase is `Succeeded`, with ac4's amendment commented.
+* The dev run's figures agree with what the PM saw from the operator directly:
+  * R's four tables match the operator's paste;
+  * the 52,059 documents republished equal the four cluster counts' sum;
+  * the prune's 9 versions of 7 keys were listed before they were deleted.
+
+**The dev run is good evidence for gate item 1 in dev.** The card was found, removed, hidden, and
+brought back from its five surviving occurrences without the removed team's line. The rebuilt
+index holds 0 occurrences of the removed source. The prune left only the current index, and the
+log scan found nothing identifying. Recording both mistakes plainly, with their repairs and the
+runbook changes, is what the PM wanted.
+
+**The condition: name what a guard matched.** The corrected R block printed `STOP` in a new window,
+and the report says why was not established. The likeliest cause is that `pgrep -f 'caselist
+pull'` matched something other than the CLI. On 2026-10-22 the same pattern matched a parallel
+session's pytest process, whose command line held those words. In `caselist-removal.md`'s P1b,
+and in every other block this task wrote that refuses on a running pull (4-pre's check included):
+* match the CLI itself, for example `pgrep -fl 'debate-research( --json)? caselist pull'`;
+* print the matched process line and whether an override is set, so a `STOP` says which of the
+  two stopped it.
+
+Docs only; re-run `check_command_blocks.py` and the runbook prune test.
+
+**Noted, no action in this task.**
+* **Dev served the synthetic index to its users for about an hour** (4a to 4e, then until block 5),
+  and two debaters now have dev accounts. A future exercise that swaps dev's index is announced to
+  the coach first. The PM raises the dev accounts with the coach separately.
+* **Gate item 6's row reads as policy 1.10 had it.** Policy 1.11 (the PM batch of 2026-10-22,
+  open as a pull request) takes the provenance line out of copies and downloads. This report is a
+  record of its day and stays as written.
+* **`tub index prune`** was not in the PM batch of 2026-10-22 as the first review said it would
+  be. The PM files it in the next batch.

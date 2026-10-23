@@ -570,8 +570,11 @@ profile.
 **Operator command** (expected runtime a few minutes per caselist; nothing is parsed again)
 Where: a new terminal window, so no `DEBATE_STORAGE__DATA_DIR` from another step is set
 ```bash
-if [[ -n "${DEBATE_STORAGE__DATA_DIR:-}" ]] || pgrep -f 'caselist pull' > /dev/null; then
-  echo "STOP: a data directory override is set, or a pull is running. Open a new window, or wait."
+PULL=$(pgrep -fl 'debate-research( --json)? caselist pull')
+echo "running pull: ${PULL:-none}"
+echo "data dir override: ${DEBATE_STORAGE__DATA_DIR:-none}"
+if [[ -n "$PULL" || -n "${DEBATE_STORAGE__DATA_DIR:-}" ]]; then
+  echo "STOP: the line above that is not none says why. Wait for the pull to finish, or open a new window."
 else
   aws sso login --profile debate-dev-evidence
   for SLUG in hsld26 hspf26 hspolicy26 openev; do
@@ -582,8 +585,10 @@ fi
 Success looks like, for each caselist, a table whose **Sources** and **Skipped (already parsed)**
 are the store's full count, equal and not zero, with **Parsed 0** and **Published 3 uploaded**. A
 `Sources 0` means the parse read a store that does not hold the caselist, such as a scratch one:
-stop, because what it uploaded is empty aggregates. Name only the caselists the plan listed. A
-`STOP` line means a data directory override is set or a pull is running; nothing ran.
+stop, because what it uploaded is empty aggregates. Name only the caselists the plan listed. The
+first two lines name any running `debate-research caselist pull` (the CLI only, not a test or an
+editor whose command line holds those words) and any data directory override; a `STOP` line means
+one of them is not `none`, and nothing ran.
 
 ### P2 — Five minutes after `DONE`: the card is gone
 

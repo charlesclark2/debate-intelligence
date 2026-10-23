@@ -132,6 +132,14 @@ label { display: block; font-weight: 600; margin-bottom: 0.25rem; }
 
 .provenance { color: #385623; font-size: 0.9rem; }
 
+.result-count { font-weight: 600; margin: 0.25rem 0 0.5rem; }
+
+.back-link { margin: 1rem 0 0; }
+
+.source-link { margin: 0.25rem 0; font-size: 0.9rem; }
+
+.new-tab { color: var(--muted); }
+
 .pages ul { display: flex; flex-wrap: wrap; gap: 1rem; margin: 1rem 0; padding: 0; list-style: none; }
 
 .card-label {

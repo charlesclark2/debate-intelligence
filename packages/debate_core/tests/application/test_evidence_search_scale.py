@@ -12,8 +12,10 @@ Both tests are marked slow and stay off the PR's path (working agreement 1).
   timings and result counts and nothing else: no tag, cite, text or provenance. It skips when the
   variable is not set.
 
-Times are the service's whole call: parsing, the ranked statement, the snippets and the result
-objects, with no suppression predicate.
+Times are the service's whole call: parsing, the ranked statement, the snippets, the result
+objects and, since `v1-e39-t11`, the result count up to its default cap of 1,000, with no
+suppression predicate. The synthetic test also times every query with a cap of 1, which reads two
+rows, as the nearest thing to a search with no count, and prints each query's count.
 """
 
 from __future__ import annotations
@@ -199,9 +201,13 @@ OPERATOR_QUERIES: Final = (
 
 
 def time_queries(
-    searched: EvidenceSearchService, queries: tuple[tuple[str, SearchFilters], ...]
+    searched: EvidenceSearchService,
+    queries: tuple[tuple[str, SearchFilters], ...],
+    counted: list[str] | None = None,
 ) -> tuple[list[float], list[float], list[int]]:
-    """Cold times (the first pass), warm times (the timed passes), and each query's first-page size."""
+    """Cold times (the first pass), warm times (the timed passes), and each query's first-page size.
+
+    Each query's result count, as the page writes it, is appended to `counted` when it is given."""
     cold: list[float] = []
     sizes: list[int] = []
     for query, filters in queries:
@@ -210,6 +216,9 @@ def time_queries(
         cold.append(time.perf_counter() - started)
         sizes.append(len(page.hits))
         assert not page.partial
+        assert page.count is not None
+        if counted is not None:
+            counted.append(f"{page.count.matches}{'+' if page.count.capped else ''}")
     warm: list[float] = []
     for _ in range(TIMED_PASSES):
         for query, filters in queries:
@@ -249,14 +258,21 @@ def test_search_p95_on_a_synthetic_index_of_250000_documents(tmp_path: Path) -> 
     searched = EvidenceSearchService(
         SqliteSearchIndexReader(path, index_id="0" * 16), time_budget_seconds=600.0
     )
-    cold, warm, sizes = time_queries(searched, SYNTHETIC_QUERIES)
+    shown: list[str] = []
+    cold, warm, sizes = time_queries(searched, SYNTHETIC_QUERIES, shown)
+    barely = EvidenceSearchService(
+        SqliteSearchIndexReader(path, index_id="0" * 16), time_budget_seconds=600.0, count_cap=1
+    )
+    _, warm_barely, _ = time_queries(barely, SYNTHETIC_QUERIES)
     counts = match_counts(path, SYNTHETIC_QUERIES)
     print(
         f"\nsynthetic index: {count} documents, {path.stat().st_size} bytes, built in {built:.1f} s, "
         f"SQLite {sqlite3.sqlite_version}"
-        f"\nwarm, {len(warm)} timed searches: {percentiles(warm)}"
-        f"\ncold, first pass: {percentiles(cold)}"
+        f"\nwarm, {len(warm)} timed searches, counting to 1,000: {percentiles(warm)}"
+        f"\ncold, first pass, counting to 1,000: {percentiles(cold)}"
+        f"\nwarm, {len(warm_barely)} timed searches, counting to 1: {percentiles(warm_barely)}"
         f"\nmatches per query: {counts}"
+        f"\ncount shown per query: {shown}"
         f"\nfirst-page results per query: {sizes}"
     )
     assert count == SYNTHETIC_DOCUMENTS or "DEBATE_SEARCH_SCALE_DOCUMENTS" in os.environ

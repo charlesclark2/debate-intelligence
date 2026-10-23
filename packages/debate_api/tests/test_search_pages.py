@@ -29,6 +29,7 @@ from debate_core.domain.search_index import SEARCH_INDEX_POINTER_KEY
 PAGE_BUDGET = 150 * 1024
 """ADR-0019 (b) 1: a page weighs under 150 KB before the card body, its script and stylesheet included."""
 
+WORLD_LINKED_PATH = f"/cards/hsld26/{26:064x}"
 FEATURED_LINE = "[Disclosed: hsld26 2026-09-15 — Maple Grove QX, Neg vs. Invented Invitational Round 4]"
 OTHER_LINE = "[Disclosed: hsld26 2026-09-15 — Riverbend ZT, Aff vs. Invented Invitational Round 4]"
 CAMP_LINE = "[OpenEv: Cascade Institute 2026 — Policy, Invented Adv CP]"
@@ -41,8 +42,11 @@ def student(world: Any) -> Any:
 
 
 def results_of(page: str) -> list[str]:
-    """The card paths a results page links to, in order."""
-    return re.findall(r'<h3 class="result-tag"><a href="([^"]+)">', page)
+    """The card paths a results page links to, in order.
+
+    Each link carries its search as a query string since `v1-e39-t11` (for the card page's way back),
+    which is left off here: `test_search_pages_follow_ups.py` checks it."""
+    return [href.split("?", 1)[0] for href in re.findall(r'<h3 class="result-tag"><a href="([^"]+)">', page)]
 
 
 def card_path(world: Any, doc_id: int, caselist: str = "hsld26") -> str:
@@ -179,7 +183,8 @@ def test_a_result_shows_its_tag_short_cite_snippet_counts_and_provenance_line(st
     page = student.browser.get("/search?q=granite+costs").text
 
     [result] = re.findall(r'<li class="result">(.*?)</li>', page, re.DOTALL)
-    assert f'<a href="{card_path(student, 1)}">Zephyr winds raise granite costs</a>' in result
+    # Since v1-e39-t11 the link carries its search, for the card page's way back.
+    assert f'<a href="{card_path(student, 1)}?q=granite+costs">Zephyr winds raise granite costs</a>' in result
     assert '<p class="result-cite">Lindqvist 26</p>' in result
     assert "<mark>granite</mark>" in result and "<mark>costs</mark>" in result
     assert '<p class="result-counts">In 3 files from 2 teams.</p>' in result
@@ -456,6 +461,7 @@ EVERY_PAGE = [
     "<card long>",
     "<card hostile>",
     "<card camp>",
+    "<card linked>",
     f"/cards/hsld26/{999:064x}",
     "/account",
     "/coach",
@@ -498,12 +504,25 @@ def test_every_search_page_loads_only_the_first_party_script_and_stylesheet_and_
             assert "javascript:" not in tag.lower(), (path, tag)
 
 
+OPENCASELIST_LINK = re.compile(
+    r'<a href="https://opencaselist\.com/[a-z]+[0-9]{2}/[A-Za-z0-9-]+/[A-Za-z0-9]+" '
+    r'target="_blank" rel="noopener noreferrer">'
+)
+"""Since `v1-e39-t11`, the one other origin a page may name: a link out to a disclosing team's page,
+opened in a new tab with no opener and no referrer. It loads nothing."""
+
+
 def test_no_search_page_names_another_origin(every_page: dict[str, str]) -> None:
+    links_out: list[str] = []
     for path, page in every_page.items():
         for tag in tags_of(page):
+            if OPENCASELIST_LINK.fullmatch(tag):
+                links_out.append(path)
+                continue
             for attribute in re.findall(r'\s(?:src|href|action|data-tub-copy)="([^"]*)"', tag):
                 own = attribute.startswith("/") and not attribute.startswith("//")
                 assert own or attribute.startswith("#"), (path, attribute)
+    assert links_out == [WORLD_LINKED_PATH], "only the linked card's page links out"
 
 
 def test_every_search_page_keeps_the_weight_budget_before_its_card_body(

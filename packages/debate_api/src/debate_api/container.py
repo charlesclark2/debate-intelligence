@@ -25,10 +25,12 @@ import tempfile
 import uuid
 from collections.abc import Mapping
 from datetime import UTC, datetime
+from functools import partial
 from pathlib import Path
 
 from debate_api.configuration import PilotConfiguration, parse_cookie_keys
 from debate_api.state import PilotServices
+from debate_core.application.evidence_search import EvidenceSearchService
 from debate_core.application.search_index_holder import SearchIndexHolder
 from debate_core.application.tub.access_audit import AccessAuditService
 from debate_core.application.tub.account_page import AccountPageService
@@ -107,6 +109,7 @@ def build_pilot_services(environ: Mapping[str, str]) -> PilotServices:
             directory=Path(tempfile.gettempdir()) / INDEX_DIRECTORY_NAME,
             open_reader=_open_index,
             clock=_now,
+            build_service=partial(EvidenceSearchService, count_cap=configuration.result_count_cap),
             suppression_list=evidence,
         ),
         access_audit=AccessAuditService(audit=audit, clock=_now),

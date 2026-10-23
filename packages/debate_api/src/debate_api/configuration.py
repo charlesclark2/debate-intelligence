@@ -11,6 +11,7 @@ v1-e39-t04's Terraform sets these on the function (`infrastructure/modules/evide
 | `TUB_CLIENT_SECRET_PARAMETER`, `TUB_COOKIE_KEYS_PARAMETER` | the two SecureString parameters |
 | `TUB_AUDIT_LOG_GROUP` | where the account page's audit records go |
 | `TUB_EVIDENCE_BUCKET` | the evidence bucket the search index is fetched from (`v1-e39-t06`) |
+| `TUB_RESULT_COUNT_CAP` | optional: how far a search counts its results, 1,000 when unset (`v1-e39-t11`) |
 
 The app never reads its origin from a `Host` or `X-Forwarded-*` header: CloudFront's origin request
 policy drops the viewer's `Host`, and a forwarded one is the viewer's to choose.
@@ -32,6 +33,8 @@ from dataclasses import dataclass, field
 from typing import Final
 from urllib.parse import urlsplit
 
+from debate_core.domain.evidence_search import DEFAULT_RESULT_COUNT_CAP, MAX_CURSOR_OFFSET
+
 __all__ = [
     "COOKIE_KEY_BYTES",
     "ConfigurationMissing",
@@ -43,6 +46,7 @@ __all__ = [
 
 COOKIE_KEY_BYTES: Final = 32
 _DEFAULT_REGION: Final = "us-east-1"
+_COUNT_CAP_VARIABLE: Final = "TUB_RESULT_COUNT_CAP"
 
 
 class ConfigurationMissing(RuntimeError):
@@ -112,6 +116,7 @@ class PilotConfiguration:
     audit_log_group: str
     evidence_bucket: str
     region: str = _DEFAULT_REGION
+    result_count_cap: int = DEFAULT_RESULT_COUNT_CAP
 
     @classmethod
     def from_environment(cls, environ: Mapping[str, str]) -> PilotConfiguration:
@@ -132,6 +137,7 @@ class PilotConfiguration:
             audit_log_group=required("TUB_AUDIT_LOG_GROUP"),
             evidence_bucket=required("TUB_EVIDENCE_BUCKET"),
             region=environ.get("AWS_REGION", "").strip() or _DEFAULT_REGION,
+            result_count_cap=_count_cap(environ.get(_COUNT_CAP_VARIABLE, "").strip()),
         )
         return configuration
 
@@ -143,6 +149,17 @@ class PilotConfiguration:
             if self.environment == "prod"
             else f"Team evidence search ({self.environment})"
         )
+
+
+def _count_cap(value: str) -> int:
+    """`TUB_RESULT_COUNT_CAP` as a whole number from 1 to the cursor limit; the default when unset."""
+    if not value:
+        return DEFAULT_RESULT_COUNT_CAP
+    if not value.isascii() or not value.isdigit() or not 1 <= int(value) <= MAX_CURSOR_OFFSET:
+        raise ConfigurationMissing(
+            _COUNT_CAP_VARIABLE, f"is not a whole number from 1 to {MAX_CURSOR_OFFSET}"
+        )
+    return int(value)
 
 
 def _origin(value: str, variable: str) -> str:

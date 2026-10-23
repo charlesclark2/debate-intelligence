@@ -6,7 +6,8 @@
 * **The 3.40.0 ceiling, in every run** (`test_search_index_reader_runs_only_statements_sqlite_3_40_has`):
   every statement the reader sends is traced, with its parameters as SQLite expands them, and must
   match one of the shapes this file writes out by hand, each a feature SQLite 3.40.0 has: the URI
-  open's checks, FTS5 `MATCH` with a per-query `rank MATCH 'bm25(...)'`, `snippet()` and `instr()`.
+  open's checks, FTS5 `MATCH` with a per-query `rank MATCH 'bm25(...)'`, `snippet()` and `instr()`,
+  and since `v1-e39-t11` the result count's `MATCH` with a rowid range in rowid order.
   The time budget is the progress handler, which is a C API call and no statement; it is in SQLite
   since 3.0. The machine running this has a newer SQLite, so this checks what the reader asks for.
 * **Marked slow** (`test_search_index_reader_statements_run_in_the_lambda_image_sqlite`): the traced
@@ -65,6 +66,13 @@ ALLOWED_STATEMENTS: Final = (
     "AND ({} IS NULL OR d.event = {}) AND ({} IS NULL OR d.caselist = {}) AND ({} IS NULL OR d.camp = {}) "
     "AND ({} IS NULL OR instr(d.sides, {}) > 0) AND ({} IS NULL OR d.first_seen >= {}) "
     "ORDER BY rank LIMIT {} OFFSET {}",
+    "SELECT d.doc_id, o.source_sha256, o.disclosure "
+    "FROM search JOIN documents AS d ON d.doc_id = search.rowid "
+    "JOIN occurrences AS o ON o.doc_id = d.doc_id AND o.ordinal = 0 "
+    "WHERE search MATCH {} AND search.rowid > {} "
+    "AND ({} IS NULL OR d.event = {}) AND ({} IS NULL OR d.caselist = {}) AND ({} IS NULL OR d.camp = {}) "
+    "AND ({} IS NULL OR instr(d.sides, {}) > 0) AND ({} IS NULL OR d.first_seen >= {}) "
+    "ORDER BY search.rowid LIMIT {}",
     "SELECT doc_id, caselist, cluster_id, event, camp, tag, cite, short_cite, read_aloud, text, "
     "completeness, formatting_spans, font_size_spans, sides, first_seen, last_seen, file_count, "
     "team_count FROM documents WHERE caselist = {} AND cluster_id = {}",
@@ -233,6 +241,24 @@ def test_search_index_reader_plan_ranks_inside_fts5_and_joins_by_key(index_path:
             .replace(
                 "search MATCH NULL AND rank MATCH NULL",
                 "search MATCH 'growth' AND rank MATCH 'bm25(8.0, 3.0, 2.0, 1.0)'",
+            )
+        ).fetchall()
+    details = [row[3] for row in plan]
+    assert details[0].startswith("SCAN search VIRTUAL TABLE INDEX"), details
+    assert all("TEMP B-TREE" not in detail for detail in details), details
+    assert any(detail.startswith("SEARCH d USING INTEGER PRIMARY KEY") for detail in details), details
+    assert any(detail.startswith("SEARCH o USING PRIMARY KEY") for detail in details), details
+
+
+def test_search_index_reader_count_walks_fts5_in_rowid_order_and_joins_by_key(index_path: Path) -> None:
+    """The count asks for no rank, so FTS5 neither scores nor sorts: no temporary sort (`v1-e39-t11`)."""
+    with sqlite3.connect(index_path) as connection:
+        plan = connection.execute(
+            "EXPLAIN QUERY PLAN "
+            + ALLOWED_STATEMENTS[3]
+            .replace("{}", "NULL")
+            .replace(
+                "search MATCH NULL AND search.rowid > NULL", "search MATCH 'growth' AND search.rowid > 0"
             )
         ).fetchall()
     details = [row[3] for row in plan]

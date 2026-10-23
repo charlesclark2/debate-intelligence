@@ -54,13 +54,13 @@ def student(world: Any) -> Any:
 
 
 def results(world: Any, query: str = "zephyr") -> list[str]:
-    """Every card path the search's two pages link to."""
+    """Every card path the search's two pages link to, without the search each link carries (`v1-e39-t11`)."""
     page = world.browser.get(f"/search?q={query}").text
-    paths = re.findall(r'<h3 class="result-tag"><a href="([^"]+)">', page)
+    paths = re.findall(r'<h3 class="result-tag"><a href="([^"?]+)[^"]*">', page)
     following = re.search(r'<a href="([^"]+)" rel="next">', page)
     if following is not None:
         later = world.browser.get(following.group(1).replace("&amp;", "&")).text
-        paths += re.findall(r'<h3 class="result-tag"><a href="([^"]+)">', later)
+        paths += re.findall(r'<h3 class="result-tag"><a href="([^"?]+)[^"]*">', later)
     return paths
 
 

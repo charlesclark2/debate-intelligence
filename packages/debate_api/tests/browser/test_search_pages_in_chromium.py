@@ -358,6 +358,7 @@ def test_search_filter_page_open_and_copy_a_card_by_keyboard(pilot: Pilot) -> No
     page.keyboard.press("Enter")
     expect(page.locator("#results-heading")).to_be_visible()
     expect(page.locator(".result")).to_have_count(20)
+    expect(page.locator(".result-count")).to_have_text("25 cards matched.")
     pilot.check_page()
 
     pilot.tab_to("a[rel=next]")
@@ -408,17 +409,28 @@ def test_search_filter_page_open_and_copy_a_card_by_keyboard(pilot: Pilot) -> No
     page.evaluate("window.__violations = []")
     pilot.check_page()
 
+    # v1-e39-t11: back to the same results by keyboard, with their count above them.
+    pilot.tab_to("nav.back-link a", backwards=True)
+    page.keyboard.press("Enter")
+    expect(page.locator(".result")).to_have_count(1)
+    expect(page.locator(".result-count")).to_have_text("1 card matched.")
+    expect(page.locator("#q")).to_have_value("granite costs")
+    pilot.check_page()
+
 
 # ------------------------------------------------------------------------------------------------
-# ac2: the copy pasted into an editable region keeps every span, the line below the cite
+# ac2: the copy pasted into an editable region keeps every span, and since policy 1.11 no line
 # ------------------------------------------------------------------------------------------------
 
 
-def test_a_pasted_copy_keeps_every_formatting_span_with_the_provenance_line_below_the_cite(
+def test_a_pasted_copy_keeps_every_formatting_span_and_has_no_provenance_line(
     chromebook: Pilot, read_back: Any
 ) -> None:
     """ac2. Pasted as Google Docs and Word take a paste, the clipboard's HTML read in the paste event,
-    every span reads back: the stored spans' `formatting_sha256` coverage, exactly."""
+    every span reads back: the stored spans' `formatting_sha256` coverage, exactly.
+
+    Changed in `v1-e39-t11`: the paste was four paragraphs, the provenance line third. Data-use policy
+    version 1.11 (Attribution rule 2, gate item 6) takes the line out of a copy: tag, cite and text."""
     stored = next(one for one in chromebook.world.corpus if one.doc_id == chromebook.world.cards["featured"])
     page = chromebook.page
     page.goto(chromebook.origin + chromebook.world.card_path("featured"))
@@ -429,16 +441,18 @@ def test_a_pasted_copy_keeps_every_formatting_span_with_the_provenance_line_belo
     editor.goto(EDITOR_ORIGIN + "/")
     editor.focus("#docs-paste")
     editor.keyboard.press("ControlOrMeta+V")
-    expect(editor.locator("#docs-paste p")).to_have_count(4)
+    expect(editor.locator("#docs-paste p")).to_have_count(3)
 
     read = editor.evaluate(READ_REGION, "#docs-paste")
     characters = read["characters"]
-    tag, cite, line, body = (
+    tag, cite, body = (
         "".join(character for character, _ in characters[one["start"] : one["end"]])
         for one in read["paragraphs"]
     )
-    assert (tag, cite, line, body) == (stored.tag, stored.cite, FEATURED_LINE, stored.text)
-    last = read["paragraphs"][3]
+    assert (tag, cite, body) == (stored.tag, stored.cite, stored.text)
+    pasted = "".join(character for character, _ in characters)
+    assert FEATURED_LINE not in pasted and "[Disclosed:" not in pasted
+    last = read["paragraphs"][2]
     spans, sizes = read_back([styles for _, styles in characters[last["start"] : last["end"]]])
     assert formatting_sha256(spans, sizes) == formatting_sha256(
         stored.formatting_spans, stored.font_size_spans
@@ -459,7 +473,7 @@ def test_the_browsers_own_paste_keeps_how_every_character_of_the_copy_looks(chro
     editor.goto(EDITOR_ORIGIN + "/")
     editor.focus("#browser-paste")
     editor.keyboard.press("ControlOrMeta+V")
-    expect(editor.locator("#browser-paste p")).to_have_count(4)
+    expect(editor.locator("#browser-paste p")).to_have_count(3)
     editor.evaluate("(html) => { document.getElementById('as-copied').innerHTML = html; }", copied)
 
     pasted = editor.evaluate(LOOK_OF_REGION, "#browser-paste")
@@ -470,7 +484,9 @@ def test_the_browsers_own_paste_keeps_how_every_character_of_the_copy_looks(chro
     lines = editor.evaluate(
         "Array.from(document.querySelectorAll('#browser-paste p'), (one) => one.textContent)"
     )
-    assert lines[2] == FEATURED_LINE
+    # Changed in v1-e39-t11: the third paragraph was the provenance line; policy 1.11 leaves it out.
+    assert lines[:2] == ["Zephyr winds raise granite costs", "Lindqvist 26, Invented Quarterly, 2026"]
+    assert not any("[Disclosed:" in line for line in lines)
 
 
 def copied_card_text(pilot: Pilot) -> str:
@@ -531,6 +547,8 @@ def test_no_page_requests_another_origin_or_runs_inline_script_under_the_edges_c
         world.card_path("long"),
         world.card_path("hostile"),
         world.card_path("camp"),
+        world.card_path("linked"),
+        world.card_path("featured") + "?q=zephyr&cursor=junk",
         "/account",
     ]
     for path in paths:
@@ -557,6 +575,19 @@ def test_no_page_requests_another_origin_or_runs_inline_script_under_the_edges_c
         world.app.state.pilot.app_stylesheet.path,
         world.card_path("featured") + "/copy",
     }
+
+
+def test_the_link_out_to_opencaselist_opens_a_new_tab_with_no_opener_or_referrer(pilot: Pilot) -> None:
+    """`v1-e39-t11`. The link is read, never followed: following it would leave the test's network."""
+    page = pilot.page
+    page.goto(pilot.origin + pilot.world.card_path("linked"))
+
+    link = page.get_by_role("link", name="Open on openCaselist (opens in a new tab)")
+    expect(link).to_have_attribute("href", "https://opencaselist.com/hsld26/Cedarbrook/LM")
+    expect(link).to_have_attribute("target", "_blank")
+    expect(link).to_have_attribute("rel", "noopener noreferrer")
+    pilot.check_page()
+    assert pilot.foreign == []
 
 
 def test_an_inline_script_would_be_refused_by_the_edges_csp(chromebook: Pilot) -> None:
@@ -690,9 +721,10 @@ JOURNEY_QUERY: Final = "zephyr Maple Grove QX"
 def test_exposure_a_whole_journey_logs_no_query_school_team_code_or_card_text(
     world: Any, browser: Browser
 ) -> None:
-    """Sign in through the app's callback, search with the school and team code, filter, page, open,
-    copy, visit the account page and sign out through managed login's `/logout`; the app's log records
-    hold none of what was seen or typed.
+    """Sign in through the app's callback, search with the school and team code, filter, page, open a
+    card from the second page and go back to it, copy, visit the account page and sign out through
+    managed login's `/logout`; the app's log records and audit records hold none of what was seen or
+    typed, and the copy holds no provenance line (`v1-e39-t11`).
 
     Playwright routes only the first request of a redirect chain, so the sign-in's redirects run
     in-process: the real `/` redirect, managed login's answer from `FakeManagedLogin` and the real
@@ -737,11 +769,21 @@ def test_exposure_a_whole_journey_logs_no_query_school_team_code_or_card_text(
             page.locator("#q").press("Enter")
             page.get_by_role("link", name="Next results").click()
             expect(page.get_by_role("link", name="First page")).to_be_visible()
+            second_page = page.url
+            expect(page.locator(".result")).to_have_count(3)
+            expect(page.locator(".result-count")).to_have_text("23 cards matched.")
+            page.locator(".result-tag a").first.click()
+            expect(page.locator(".card-label")).to_have_text("Disclosed evidence, not platform-verified")
+            page.get_by_role("link", name="Back to results").click()
+            page.wait_for_url(second_page)
+            expect(page.locator(".result")).to_have_count(3)
             page.goto(pilot.origin + world.card_path("featured"))
+            expect(page.locator(".provenance").first).to_have_text(FEATURED_LINE)
             page.get_by_role("button", name="Copy card").click()
             expect(page.locator("[data-tub-copy-message]")).to_have_text(
                 "Copied. Paste it into Google Docs or Word."
             )
+            copied = pilot.read_clipboard()
             page.goto(pilot.origin + "/account")
             page.get_by_role("button", name="Sign out").click()
             page.wait_for_url(pilot.origin + "/signed-out")
@@ -750,7 +792,14 @@ def test_exposure_a_whole_journey_logs_no_query_school_team_code_or_card_text(
 
     assert pilot.foreign == []
     actions = [record.action.value for record in world.audit.records]
-    assert actions == ["searched", "searched", "card-viewed", "card-copied"], actions
+    assert actions == ["searched", "searched", "card-viewed", "card-viewed", "card-copied"], actions
+    assert copied["types"] == ["text/html", "text/plain"]
+    for part in (copied["html"], copied["text"]):
+        assert FEATURED_LINE not in part and "Maple Grove" not in part and "[Disclosed:" not in part
+    for record in world.audit.records:
+        written = record.to_json()
+        for word in ("zephyr", "Maple Grove", "QX", "Riverbend", "Invented Invitational", "Round 4", "q="):
+            assert word not in written, (word, written)
     assert world.login.revoked, "the sign-out revoked the refresh token"
     # httpx's records are the test's in-process client's requests: the app cannot log through httpx,
     # which an import contract keeps out of debate_api.

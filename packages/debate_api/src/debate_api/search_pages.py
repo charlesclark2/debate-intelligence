@@ -10,7 +10,7 @@ and renders. What a query means, which cards a student sees and how a card is ma
 |---|---|---|
 | `GET /` and `GET /search` with no words | the empty search page | no: it never waits for one |
 | `GET /search?q=...` | a page of results | yes |
-| `GET /cards/<caselist>/<cluster id>` | the card's page | yes |
+| `GET /cards/<caselist>/<cluster id>` | the card's page; with its search's query string, the way back | yes |
 | `GET /cards/<caselist>/<cluster id>/copy` | the card as Copy card puts it on the clipboard, as JSON | yes |
 
 Every one is a `GET` and none changes anything, so none needs a CSRF token (ADR-0019 (d), CSRF).
@@ -28,11 +28,29 @@ Every lease applies the suppression list the holder last read, so a removed card
 results, its page and its copy within five minutes (:class:`~debate_core.application.
 search_index_holder.ScreenedSearch`).
 
+## The count, the way back and the link out (`v1-e39-t11`)
+
+* **The count.** Above the results, how many cards matched: the page's
+  :class:`~debate_core.domain.evidence_search.ResultCount`, which the service counts for the same
+  query, filters and suppression list in the same lease. Exact up to the cap (`TUB_RESULT_COUNT_CAP`,
+  1,000 by default), written `1,000+ cards matched.` past it, and left out when nothing matched or
+  the time budget stopped the count. The `searched` record's count is still the first page's results.
+* **Back to results.** Each result links to its card with the search's words, filters and cursor as
+  the query string. The card page validates them as the search page does, its cursor against the
+  index in the card's own lease (:func:`_back_link`), and builds the link from the validated values.
+  A tampered, stale or missing search gives "New search", a link to the empty search page. The
+  browser's own back button is untouched: nothing here rewrites history.
+* **Open on openCaselist.** Below the provenance line, a disclosed card's link to its team's page,
+  from :func:`~debate_core.domain.search_source_links.source_link`, in a new tab with no opener and
+  no referrer. A card whose link cannot be built shows none. It leaves the platform, so it writes
+  no record.
+
 ## Nothing here is logged
 
-A search is a `GET`, so its words are in the URL. No handler logs, and nothing here passes the
-query, a card id or card text to anything that does: the access log is off in the image, and the
-index holder logs only index ids. A test reads every log record a search and a card view make.
+A search is a `GET`, so its words are in the URL, and since `v1-e39-t11` in a card page's URL too.
+No handler logs, and nothing here passes the query, a card id or card text to anything that does:
+the access log is off in the image, the edge keeps no log, and the index holder logs only index ids.
+A test reads every log record a search and a card view make.
 """
 
 from __future__ import annotations
@@ -50,7 +68,7 @@ from starlette.datastructures import QueryParams
 
 from debate_api.copy_card import copied_card
 from debate_api.state import PilotState, pilot_state
-from debate_core.application.search_index_holder import SearchIndexUnavailable
+from debate_core.application.search_index_holder import ScreenedSearch, SearchIndexUnavailable
 from debate_core.application.tub.access_audit import AccessNotRecorded
 from debate_core.application.tub.sessions import Session
 from debate_core.domain.caselist import Event, Side
@@ -58,6 +76,7 @@ from debate_core.domain.evidence_search import (
     MAX_QUERY_CHARACTERS,
     Card,
     InvalidSearchCursor,
+    ResultCount,
     SearchFilters,
     SearchHit,
     SearchNotice,
@@ -65,6 +84,7 @@ from debate_core.domain.evidence_search import (
 )
 from debate_core.domain.file_recipe import CAMP_STORE, RECIPE_STORE_PATTERN
 from debate_core.domain.search_card_html import render_card_html, render_snippet_html, render_text_html
+from debate_core.domain.search_source_links import source_link
 
 __all__ = [
     "CAMP_LABEL",
@@ -92,6 +112,9 @@ _UNAVAILABLE_HEADING: Final = "Search is not available right now"
 _UNAVAILABLE: Final = "The search could not be loaded. Try again in a minute."
 _NOT_FOUND_HEADING: Final = "That card is not in the search"
 _NOT_FOUND: Final = "It may have been removed, or the link may be wrong. Search for it again."
+_FRESH_SEARCH: Final = "/search"
+_BACK_TO_RESULTS: Final = "Back to results"
+_NEW_SEARCH: Final = "New search"
 
 
 class SearchFormInvalid(ValueError):
@@ -151,6 +174,10 @@ class SearchForm:
 
     def page_link(self, cursor: str | None) -> str:
         """This search's URL, at `cursor` (the first page when `None`)."""
+        return "/search?" + self.query_string(cursor)
+
+    def query_string(self, cursor: str | None) -> str:
+        """This search's words, filters and `cursor` as a query string, leaving out what is empty."""
         fields = {
             "q": self.query,
             "event": self.event,
@@ -160,7 +187,7 @@ class SearchForm:
         }
         if cursor is not None:
             fields["cursor"] = cursor
-        return "/search?" + urlencode({name: value for name, value in fields.items() if value})
+        return urlencode({name: value for name, value in fields.items() if value})
 
 
 @dataclass(frozen=True, slots=True)
@@ -185,13 +212,22 @@ def _counts(files: int, teams: int | None) -> str:
     return f"In {file_words} from {'1 team' if teams == 1 else f'{teams} teams'}."
 
 
+def _count_words(count: ResultCount | None) -> str | None:
+    """`25 cards matched.`, `1,000+ cards matched.` past the cap; nothing for no count or no match."""
+    if count is None or count.matches == 0:
+        return None
+    if count.capped:
+        return f"{count.matches:,}+ cards matched."
+    return "1 card matched." if count.matches == 1 else f"{count.matches:,} cards matched."
+
+
 def _card_href(caselist: str, cluster_id: str) -> str:
     return f"/cards/{caselist}/{cluster_id}"
 
 
-def _result(hit: SearchHit) -> ResultView:
+def _result(hit: SearchHit, form: SearchForm) -> ResultView:
     return ResultView(
-        href=_card_href(hit.caselist, hit.cluster_id),
+        href=_card_href(hit.caselist, hit.cluster_id) + "?" + form.query_string(form.cursor),
         tag=hit.tag,
         short_cite=hit.short_cite,
         snippet_html=render_snippet_html(hit.snippet),
@@ -227,7 +263,8 @@ def _render_search(
         side_choices=[(side.value, label) for side, label in SIDE_CHOICES],
         caselist_choices=_caselist_choices(state, form.caselist),
         searched=page is not None,
-        results=[_result(hit) for hit in page.hits] if page is not None else [],
+        count_words=_count_words(page.count) if page is not None else None,
+        results=[_result(hit, form) for hit in page.hits] if page is not None else [],
         next_link=form.page_link(page.next_cursor) if page is not None and page.next_cursor else None,
         first_link=form.page_link(None) if form.cursor else None,
         partial=page.partial if page is not None else False,
@@ -294,10 +331,42 @@ def _card(request: Request, caselist: str, cluster_id: str) -> Card | None:
         return search.card(caselist, cluster_id)
 
 
-def card_page(caselist: str, cluster_id: str, request: Request) -> HTMLResponse:
-    """A card: its label, tag, cite and provenance, Copy card, its text, and every occurrence's line."""
+def _back_link(params: QueryParams, search: ScreenedSearch) -> str | None:
+    """The results page the card was opened from, rebuilt from validated values, or `None`.
+
+    The card page reads its query string as the search page does: :meth:`SearchForm.from_query`, its
+    filters, and the cursor checked against the query, the filters and the index being searched, in
+    the card's own lease. Anything the search page would refuse, or a search with no words, gives
+    `None`, and the page offers a new search instead. The link is always this pilot's own `/search`,
+    written by :meth:`SearchForm.page_link`: no value of the request is ever echoed as it came.
+    """
     try:
-        card = _card(request, caselist, cluster_id)
+        form = SearchForm.from_query(params)
+        filters = form.filters()
+    except SearchFormInvalid:
+        return None
+    if not form.has_words:
+        return None
+    if form.cursor is not None:
+        try:
+            search.check_cursor(form.query, filters, form.cursor)
+        except InvalidSearchCursor:
+            return None
+    return form.page_link(form.cursor)
+
+
+def card_page(caselist: str, cluster_id: str, request: Request) -> HTMLResponse:
+    """A card: the way back, its label, tag, cite, provenance and link out, Copy card, its text, and
+    every occurrence's line."""
+    back: str | None = None
+    try:
+        if _STORE.match(caselist) is None or _CLUSTER_ID.match(cluster_id) is None:
+            card = None
+        else:
+            with pilot_state(request).services.search_index.lease() as search:
+                card = search.card(caselist, cluster_id)
+                if card is not None:
+                    back = _back_link(request.query_params, search)
     except SearchIndexUnavailable:
         return _refused(request, 503, _UNAVAILABLE_HEADING, _UNAVAILABLE)
     if card is None:
@@ -310,11 +379,15 @@ def card_page(caselist: str, cluster_id: str, request: Request) -> HTMLResponse:
         return _refused(request, 503, _UNAVAILABLE_HEADING, _UNAVAILABLE)
     words = len(card.text.split())
     unattributed = sum(1 for one in card.occurrences if one.provenance_line is None)
+    representative = card.occurrences[0] if card.occurrences else None
     return pilot_state(request).renderer.render(
         "card.html",
         holder=_session(request),
         card=card,
-        provenance_line=card.occurrences[0].provenance_line if card.occurrences else None,
+        back_href=back or _FRESH_SEARCH,
+        back_words=_BACK_TO_RESULTS if back else _NEW_SEARCH,
+        provenance_line=representative.provenance_line if representative is not None else None,
+        source_link=source_link(representative) if representative is not None else None,
         counts=_counts(card.file_count, card.team_count),
         copy_href=_card_href(card.caselist, card.cluster_id) + "/copy",
         long_card=words > LONG_CARD_WORDS,

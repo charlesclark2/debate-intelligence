@@ -55,18 +55,19 @@ spec:
         A card page links back to its results with the same query, filters and page from
         validated parameters; a tampered or stale parameter lands on a fresh search page, by
         tests shown failing first.
+    # PM ruling 2026-10-22 (option A): a camp card shows no OpenEv link until the index stores an OpenEv address; v1-e39-t16 carries it from the import through CampFile into the index, after v1-e39-t13's format move.
     - id: ac3
       description: >-
-        A disclosed card links to its file's page on openCaselist and a camp card to its
-        OpenEv file, in a new tab with no referrer; a card whose link cannot be built shows
-        none, by test.
+        A disclosed card links to its file's page on openCaselist, in a new tab with no
+        referrer; a camp card shows no link until the index stores an OpenEv address; a card
+        whose link cannot be built shows none, by test.
     - id: ac4
       description: >-
         Copy card's HTML and plain text hold the tag, cite and text and no provenance line,
         the card page still shows the line, and the copy writes the same audit record as
         before, by tests shown failing first.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

@@ -215,6 +215,11 @@ class ScreenedSearch:
     def card(self, caselist: str, cluster_id: str) -> Card | None:
         return self._service.card(caselist, cluster_id, is_suppressed=self._is_suppressed)
 
+    def check_cursor(self, query: str, filters: SearchFilters | None, cursor: str) -> None:
+        """Refuse, with :class:`~debate_core.domain.evidence_search.InvalidSearchCursor`, a cursor that is
+        not this query's, these filters' and this index's: what :meth:`search` would refuse."""
+        self._service.check_cursor(query, filters, cursor)
+
 
 class ClosableSearchIndexReader(SearchIndexReader, Protocol):
     """A reader the holder can close when its index is swapped out."""

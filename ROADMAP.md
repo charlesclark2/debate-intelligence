@@ -66,8 +66,8 @@ v2.3's extension work.
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 13 | 2 | 108 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 16 | 7 | 98 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 0 | 66 |
-| [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 19 | 12 | 146 |
-| [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 16 | 10 | 66 |
+| [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 21 | 12 | 153 |
+| [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 16 | 11 | 66 |
 | [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 1 | 6 | 0 | 20 |
 | [v2.0](plan_specs/releases/v2.0.yaml) | Cloud platform foundation | 3 | 17 | 0 | 164 |
 | [v2.1](plan_specs/releases/v2.1.yaml) | Web app, debate tub & async jobs | 3 | 18 | 0 | 198 |
@@ -429,6 +429,8 @@ Whitefish Bay Debate has a public, mobile-friendly team website: team informatio
 | [Announcements and news](plan_specs/v1/e37-calendar-and-announcements/t03-announcements.yaml) `v1-e37-t03-announcements` | Pending | 2 | 10.0 |
 | [Automatic republish on content changes](plan_specs/v1/e37-calendar-and-announcements/t04-auto-republish.yaml) `v1-e37-t04-auto-republish` | Cancelled | 3 | 11.0 |
 | [Parent email updates](plan_specs/v1/e37-calendar-and-announcements/t05-parent-email-signup.yaml) `v1-e37-t05-parent-email-signup` | InProgress | 2 | 6.0 |
+| [Season results: how the team's students placed at each tournament](plan_specs/v1/e37-calendar-and-announcements/t06-season-results.yaml) `v1-e37-t06-season-results` | Pending | 2 | 6.0 |
+| [A link to the team's Instagram account, never an embed](plan_specs/v1/e37-calendar-and-announcements/t07-instagram-link.yaml) `v1-e37-t07-instagram-link` | Pending | 1 | 1.0 |
 
 #### [E38 — Team Donations](plan_specs/v1/e38-donations/epic.yaml)
 
@@ -458,7 +460,7 @@ Debaters search the team's evidence store from a school Chromebook or at home: a
 | [The weekly agent run rebuilds and publishes the search index when the parsed store changed](plan_specs/v1/e39-evidence-search-pilot/t09-weekly-index-refresh.yaml) `v1-e39-t09-weekly-index-refresh` | Succeeded | 1 | 3.0 |
 | [Dev smoke checks, the coach's beta and the student pilot](plan_specs/v1/e39-evidence-search-pilot/t10-pilot-smoke-and-review.yaml) `v1-e39-t10-pilot-smoke-and-review` | Pending | 2 | 3.0 |
 | [Search pages: a result count, a way back to the results, a link to the disclosed file, and Copy card without the provenance line](plan_specs/v1/e39-evidence-search-pilot/t11-search-pages-follow-ups.yaml) `v1-e39-t11-search-pages-follow-ups` | Succeeded | 1 | 4.0 |
-| [Only real cards come back: entries with no cite or a few words of text, counted before any rule](plan_specs/v1/e39-evidence-search-pilot/t12-card-only-results.yaml) `v1-e39-t12-card-only-results` | InProgress | 1 | 3.0 |
+| [Only real cards come back: entries with no cite or a few words of text, counted before any rule](plan_specs/v1/e39-evidence-search-pilot/t12-card-only-results.yaml) `v1-e39-t12-card-only-results` | Succeeded | 1 | 3.0 |
 | [Find a card that says something: passage search, word stems and prefixes](plan_specs/v1/e39-evidence-search-pilot/t13-passage-search.yaml) `v1-e39-t13-passage-search` | Pending | 2 | 5.0 |
 | [An index that would drop most of the cards is never published](plan_specs/v1/e39-evidence-search-pilot/t14-index-shrink-guard.yaml) `v1-e39-t14-index-shrink-guard` | Succeeded | 1 | 3.0 |
 | [tub index prune: the runbook's prune of superseded index versions as one command](plan_specs/v1/e39-evidence-search-pilot/t15-tub-index-prune.yaml) `v1-e39-t15-tub-index-prune` | Pending | 1 | 2.0 |

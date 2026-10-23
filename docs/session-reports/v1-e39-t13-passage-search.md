@@ -370,9 +370,50 @@ v1-e39-t13 (passage search): questions for the PM, 2026-10-23
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED, with one condition closed in-session
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-23
 
 **Notes:**
+
+Excellent work.
+* The measurement method checked itself: the format 1 rebuild came back byte for byte, and the
+  text scaling was validated against the measured format 2 to within 0.03%.
+* Both red runs are recorded, and 20 of 20 mutants were caught.
+* The Hypothesis statistics led to boundary pieces before a passing property was counted.
+* The image's SQLite 3.40.0 was checked for porter and trigram.
+* The passage plan was fixed from 1.2 s to 35 ms and pinned by a plan test.
+
+**Rulings**
+
+1. **(a), trigram is not adopted.** Passage mode, stems and prefixes answer the coach's request.
+   A tag-and-cite trigram is measured only if the coach asks for substring search.
+2. **(a).** Amend the spec's `constraints.packages` to add `debate_core.testing` and
+   `docs/runbooks`, with a PM-ruling comment. This is the one condition, and no re-review is
+   needed for it.
+3. **(a), keep it.** Pointer, manifest and file agreeing on the format is the check two readable
+   formats need.
+4. **(a), keep the line.** It lasts one weekly update and tells a student why `grow` missed
+   `growing`.
+
+**Deviations 1 to 3 and the Decisions are accepted.** The refusal of a whole query for a short
+prefix, the passage read as punctuation, and the 66% share rounded up are the right calls for
+students.
+
+**The PR:** opened without `--partial`. Every criterion is met, and the follow-ups below are not
+criteria.
+
+**Operator follow-ups, after the merge, in this order:**
+* Run steps 1 to 4 from this worktree before `scripts/task finish`. Step 1's dev deploy also puts
+  v1-e39-t08's download on dev, since the branch carries it.
+* v1-e39-t08's ac4 (Word with Verbatim, Google Docs) and its three timed carts can follow on the
+  same deploy, in one sitting with step 4's three searches.
+* Step 5, the agent reinstall before Wednesday 2026-10-28, uses this build. It covers
+  v1-e39-t12's rule as well, so one reinstall does both.
+* Bring the three `REPORT` durations, and t08's, to the PM, who records them.
+
+**Follow-up work:** the tag-and-cite trigram is held, per ruling 1. The guide line waits for the
+next guide change. The query-time table takes step 4's durations in a PM batch.
+
+If anything comes out differently, stop and ask for another review.

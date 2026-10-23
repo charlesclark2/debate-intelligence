@@ -27,9 +27,9 @@ that only shapes a rebuild are refused beside it, exit 2. The guide is
 
 1. **Deviation 1.** A per-source record stamped with an *older* fingerprint version is published, not
    refused. Refusing it would refuse directories that `--publish` publishes today.
-2. **The PM question below.** Aggregates rebuilt against one environment's suppression list can be
-   published to an environment whose list holds a removal the first lacks. The guide tells the
-   operator to rebuild after any removal. No code guard was added, because adding one is a scope call.
+2. **The PM question below**, since ruled (option B) and closed in "PM conditions": aggregates
+   naming what the target environment's suppression list now stops are refused
+   (`PARSED_AGGREGATES_NAME_WHAT_THE_LIST_STOPS`, ac4).
 
 ## Plan nodes
 
@@ -41,8 +41,8 @@ that only shapes a rebuild are refused beside it, exit 2. The guide is
 
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
-| ac1: publishing an existing complete version directory uploads the same objects the rebuild's publish would, without rebuilding, by test shown failing first | PASS | **Red, core, no publish-only path** (`publishable_version` raising `NotImplementedError`): `.venv/bin/python -m pytest packages/debate_core/tests/application/test_caselist_parse_publish_only.py -q -p no:randomly` → `19 failed`. **Red, CLI, the command as of `d5dccd5`:** `.venv/bin/python -m pytest packages/debate_cli/tests/test_caselist_parse_publish_only.py -q -p no:randomly` → `14 failed`, each `No such option: --publish-only` (exit 2). **Green:** the same two files → `19 passed` and `14 passed`. The ac1 tests compare the second bucket with the first, key for key and byte for byte. They compare every object's outcome with the rebuild's publish, and the CLI's `publish` object with `--publish`'s, `bucket` aside. They also check every parsed-store file's bytes and mtime are unchanged, and that the parser was asked for nothing: `test_publish_only_sends_exactly_what_the_rebuilds_publish_sends_and_reports_it_alike`, `..._after_a_partial_publish_...`, `test_publish_only_to_prod_sends_what_publish_sent_to_dev_and_reports_it_alike` |
-| ac2: an incomplete directory, or one written by another parser or fingerprint version, is refused with its reason, by test | PASS (see Deviation 1) | **Red against a refuse-nothing skeleton** (`refuse_unpublishable` returning the directory unchecked): core file → `13 failed, 6 passed`. All 12 refusal tests failed with `DID NOT RAISE PublishOnlyRefused`. The 13th was `test_publish_only_after_a_partial_publish_...`, which failed on its own wrong count (3 uploads, not 4). That count was fixed in `baa76fe` to the one `test_caselist_parse.py` derives. The 6 that passed need no refusal. **Green:** `19 passed` (core), `14 passed` (CLI). Each refusal test asserts the class, the code (`error_code_of`), the exact message, an empty bucket, nothing parsed, and no fictional school or team in the message or hint |
+| ac1: publishing an existing complete version directory uploads the same objects the rebuild's publish would, without rebuilding, by test shown failing first | PASS | **Red, core, no publish-only path** (`publishable_version` raising `NotImplementedError`): `.venv/bin/python -m pytest packages/debate_core/tests/application/test_caselist_parse_publish_only.py -q -p no:randomly` → `19 failed`. **Red, CLI, the command as of `ff963a9`:** `.venv/bin/python -m pytest packages/debate_cli/tests/test_caselist_parse_publish_only.py -q -p no:randomly` → `14 failed`, each `No such option: --publish-only` (exit 2). **Green:** the same two files → `19 passed` and `14 passed`. The ac1 tests compare the second bucket with the first, key for key and byte for byte. They compare every object's outcome with the rebuild's publish, and the CLI's `publish` object with `--publish`'s, `bucket` aside. They also check every parsed-store file's bytes and mtime are unchanged, and that the parser was asked for nothing: `test_publish_only_sends_exactly_what_the_rebuilds_publish_sends_and_reports_it_alike`, `..._after_a_partial_publish_...`, `test_publish_only_to_prod_sends_what_publish_sent_to_dev_and_reports_it_alike` |
+| ac2: an incomplete directory, or one written by another parser or fingerprint version, is refused with its reason, by test | PASS (see Deviation 1) | **Red against a refuse-nothing skeleton** (`refuse_unpublishable` returning the directory unchecked): core file → `13 failed, 6 passed`. All 12 refusal tests failed with `DID NOT RAISE PublishOnlyRefused`. The 13th was `test_publish_only_after_a_partial_publish_...`, which failed on its own wrong count (3 uploads, not 4). That count was fixed in `f1838e3` to the one `test_caselist_parse.py` derives. The 6 that passed need no refusal. **Green:** `19 passed` (core), `14 passed` (CLI). Each refusal test asserts the class, the code (`error_code_of`), the exact message, an empty bucket, nothing parsed, and no fictional school or team in the message or hint |
 | ac3: the guide gives the command and when to use it; `scripts/check_command_blocks.py` passes | PASS | `docs/guides/parsed-store-publish-only.md`. `uv run scripts/check_command_blocks.py` → `OK: no # comments in 338 shell code blocks in 137 Markdown files`. `uv run --frozen python scripts/docs_index.py --check-descriptions` → `All 42 indexed documents under docs/ have a description`. `uv run scripts/check_links.py` → `OK: 1942 relative links and anchors in 296 Markdown files` |
 | Node `publish-only`: Parse publish tests pass (`uv run pytest packages/debate_core/tests/application -k "parsed_publish or publish"`) | PASS | Run as `.venv/bin/python -m pytest packages/debate_core/tests/application -k "parsed_publish or publish" -q` under `perl -e 'alarm 115'` → `376 passed in 17.43s` |
 
@@ -70,7 +70,7 @@ file with `-x`, restored from the original bytes afterwards. Worktree clean afte
 | 20 | No prod confirmation | killed (1 failed) |
 | 21 | The CLI skips the directory check (`_current_version` instead of `publishable_version`) | killed (2 failed) |
 
-Mutants 7, 9 and 10 were re-run after `a67d7ac` changed the lines they target: all killed.
+Mutants 7, 9 and 10 were re-run after `f6b63d1` changed the lines they target: all killed.
 
 ### Affected set and whole-repo checks
 
@@ -81,7 +81,7 @@ Mutants 7, 9 and 10 were re-run after `a67d7ac` changed the lines they target: a
 * That cut run found **one failure**:
   `test_occurrence_table_guard.py::test_every_path_that_moves_an_occurrence_table_asks_the_one_rule`.
   That test allows only the guard to call `is_newer_fingerprint_version`, and my per-source check
-  called it directly. Fixed in `a67d7ac`, which uses the guard's `newer_stamp` instead. The guard
+  called it directly. Fixed in `f6b63d1`, which uses the guard's `newer_stamp` instead. The guard
   test passes again, and the test is unchanged.
 * Then, inside two minutes, the changed modules' test directories plus the always-run list:
   * `tests/architecture tests/specs tests/docs tests/scripts/test_check_command_blocks.py tests/scripts/test_docs_index.py packages/debate_cli/tests/*.py packages/debate_cli/tests/commands/test_caselist_pull.py packages/debate_core/tests/application/*.py`
@@ -204,30 +204,158 @@ publishes them).
 
 ## Operator follow-ups
 
-1. **The affected set: nothing to run.** It is past two minutes here (76% at 115 s), so the pull
-   request's `ci` check runs it (agreement 10). If `ci` fails, paste the failing part's output into
-   the session.
+1. **The affected set: nothing to run.** It is past two minutes here (76% at 115 s; 205 files
+   again after the sync), so the pull request's `ci` check runs it (agreement 10). If `ci` fails,
+   paste the failing part's output into the session.
 2. **After this merges: one dev run of `--publish-only` over the current version** (PM context).
    Where: a checkout of `dev` at or after the merge, set up as the runbooks say, on your Mac, with a
    dev SSO session. Expected runtime: under a minute (it heads every object and uploads nothing).
    Success looks like exit `0` and a `Published` row reading `0 uploaded, <n> skipped, 0 failed`.
    Any upload means dev's bucket was behind this Mac's store, and the run will have caught it up.
 
+   Run it from the main checkout, after pulling the merge (PM review: the installed
+   `debate-research` and the checkout's `.env` disagree on the OpenAlex key until the agent is
+   upgraded, which is why it is `uv run`):
+
    ```bash
+   cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence
    aws sso login --profile debate-dev-evidence
    DEBATE_ENV=dev uv run debate-research caselist parse --caselist hsld26 --publish-only
    ```
+
+   It now also reads dev's bucket copy of the suppression list (PM condition 2). With dev's lists
+   in step, as they are on the one operator machine, that changes nothing: still `0 uploaded`.
+   A `PARSED_AGGREGATES_NAME_WHAT_THE_LIST_STOPS` instead means dev's bucket list holds a removal
+   the last rebuild did not read; run its hint, `--publish`.
 
 ## Follow-up work
 
 1. **The weekly pull's parse-stage fix could name `--publish-only` per caselist (E34).** Only when
    the publish itself failed after a rebuild that read every copy of the list. Its text is persisted
-   in run records and pinned by banner tests, so it is a task of its own. See Decisions.
-2. **A smoke check for `--publish-only` (E31).** `plan_specs/README.md` asks for one when a CLI
-   surface changes. This spec had no smoke node, and `tests/smoke` is outside its packages. The
-   offline check that fits is the option-conflict refusal (exit 2, nothing written), which needs no
-   bucket.
-3. **The PM question above (option B)**, if the PM wants the refusal.
+   in run records and pinned by banner tests, so it is a task of its own. See Decisions. (The PM
+   files it for E34.)
+2. ~~A smoke check for `--publish-only`~~: done, PM condition 3.
+3. ~~The PM question, option B~~: done, PM condition 2.
+
+## PM conditions
+
+Recorded after the PM review of 2026-10-22 (ACCEPTED on four conditions). Commit ids are on
+`origin/dev` at `87920c3` (#399), after `scripts/task sync`.
+
+### 1. Deviation 1 accepted: the ac2 comment
+
+The comment is above `- id: ac2` in the spec, so it stays a YAML comment; the parsed node's
+`description` is unchanged (printed with `yaml.safe_load_all`).
+
+### 2. The list refusal (option B), with ac4
+
+* **Shared predicates first, as a refactor alone** (`0473ceb`). The rebuild filtered its index and
+  failures rows inline (`held.get(...) is not None and live_disclosures(...)`) and keyed its
+  occurrence rows inline in `_disclosure_spans`. Both are now functions in `parse_sources.py`:
+  `is_aggregated(source, state)` and `disclosure_key(source, disclosed)`, with
+  `live_disclosure_keys` (the keys of `live_disclosures`) and `occurrence_row_key` (a written row's
+  key) beside them. `caselist_parse._index_rows`, `_failure_rows` and `_disclosure_spans` call them.
+  On that commit the rebuild's tests were unchanged: `test_caselist_parse.py`,
+  `..._held_uploads.py`, `..._newer_fingerprint_table.py` and the publish-only file → `91 passed`;
+  `test_parsed_store_removal.py`, `test_status_names_a_held_uploads_parsed_file.py`,
+  `test_held_rows_publish_nothing.py` → `29 passed`.
+* **The check** (`f942916a`): `refuse_what_the_list_stops` in `parsed_publish_only.py`, asked by
+  `CaselistParseService.publishable_version` after the earlier refusals. It loads the state with
+  `load_suppression_state(self._suppression)`, over `enumerate_sources(self._local, caselist)`. The
+  CLI now builds the service with `caselist_parse(with_bucket=True)`, whose list is the container's
+  `suppression_list()`, the same object `parsed_publisher()` is given: this environment's local and
+  bucket copies. Every source the index names must be `is_aggregated`, and every occurrence row's
+  key must be among `live_disclosure_keys` of its source. Both answer through `live_disclosures`,
+  so a suppressed source, a withdrawn disclosure, a held path and a source the manifests no longer
+  name are all caught. `held_only_sources` counts how many of the refused sources are held.
+* **The refusal** is `ParsedAggregatesNameWhatTheListStops`, code
+  `PARSED_AGGREGATES_NAME_WHAT_THE_LIST_STOPS` (the PM allowed a clearer name than
+  `PUBLISH_ONLY_SUPPRESSION_CHANGED`; this one matches the ruling's own words). Its message gives
+  counts and up to three SHA-256 prefixes: `the aggregates of <caselist> <version> name N source(s)
+  and M disclosure(s) this environment's suppression list now stops or holds (H of the sources only
+  at a path a removal holds); they were rebuilt before it did (sha256 …)`. Its hint is `--publish`,
+  which rebuilds from this environment's list.
+* **One earlier test changed meaning, as the ruling requires.**
+  `test_a_suppressed_source_is_withheld_by_publish_only_as_by_the_rebuilds_publish` used to suppress
+  a source after the rebuild and publish anyway. That is now the refused case, so the test
+  suppresses, rebuilds and publishes: the equal-lists case.
+* **Red first** (`22ecdab`, tests before the check): `.venv/bin/python -m pytest
+  packages/debate_core/tests/application/test_caselist_parse_publish_only.py
+  packages/debate_cli/tests/test_caselist_parse_publish_only.py -q -p no:randomly` → `5 failed,
+  34 passed`. The five were the new refusal tests: three core `DID NOT RAISE PublishOnlyRefused`,
+  and both CLI tests published to prod and exited `0`. The two equal-list tests passed, as they
+  need no refusal. **Green:** `39 passed`.
+* **The tests the PM listed:** dev-built aggregates with a prod list holding one extra removal,
+  refused with nothing in prod's `parsed/` (core
+  `test_a_removal_the_rebuild_never_read_is_refused_and_nothing_is_uploaded`, CLI
+  `test_a_removal_only_prods_list_holds_is_refused_and_prod_gets_nothing`, which plants the entry in
+  the prod bucket's `manifests/_suppression/suppression-list.jsonl`); a prod list holding one extra
+  path hold (core `test_a_path_hold_the_rebuild_never_read_is_refused`, CLI
+  `test_a_path_hold_only_prods_list_holds_is_refused_and_prod_gets_nothing`); equal lists publish
+  exactly as before (the ac1 tests, `test_a_suppressed_source_is_withheld_…` and
+  `test_a_path_hold_the_rebuild_read_is_published_as_the_rebuilds_publish_does`); no fictional
+  school or team in the message or hint (the core `refused` helper and both CLI tests). Plus a
+  withdrawn disclosure of a source another path still discloses (`0 source(s) and 1
+  disclosure(s)`).
+* **Mutation check, 9 mutants of the new refusal** (mutants 22 to 30 of the same scratch script):
+  8 killed at once. **Mutant 23 survived**: with the index half removed, every test still refused,
+  because a suppressed source's occurrence rows are withdrawn too. The gap was a source with no
+  cards, which only the index names. Added
+  `test_a_removal_of_a_source_with_no_cards_is_refused_by_its_index_row` (`0ba8bba`, a PDF: `1
+  source(s) and 0 disclosure(s)`); it passes on the code and fails on the mutant, so **9 of 9 are
+  killed** and 30 of 30 overall.
+
+  | # | Mutant | Result |
+  |---|---|---|
+  | 22 | The list check never refuses | killed (2 failed) |
+  | 23 | The index not asked (occurrence rows only) | survived, then killed (1 failed) by the no-cards test |
+  | 24 | The occurrence rows not asked | killed (1 failed) |
+  | 25 | The index asked of the manifests alone, not the list | killed (2 failed) |
+  | 26 | The occurrence rows asked of an empty list | killed (1 failed) |
+  | 27 | The held count dropped | killed (1 failed) |
+  | 28 | A row's key confuses camp and caselist rows | killed (5 failed) |
+  | 29 | The service never awaits the check | killed (2 failed) |
+  | 30 | The CLI asks this machine's list copy alone (`with_bucket=False`) | killed (2 failed) |
+* **Spec:** ac4 added, with the PM's comment above it. **Guide:** the removal advice stays, and says
+  the command now refuses that case; the refusals table has the new row.
+
+### 3. The smoke check
+
+`tests/smoke` is in `constraints.packages` with the PM's comment. `tests/smoke/test_caselist_parse.py`
+gains `test_publish_only_beside_an_option_it_has_no_use_for_is_refused_and_writes_nothing`: after a
+parse, each of `--publish`, `--reparse`, `--snapshot`, `--dry-run` and `--failures` beside
+`--publish-only` exits `2` with `USAGE_ERROR`, and no file of the store is rewritten (mtimes).
+Offline: the smoke profile names no bucket. The README's row for the file says so. **Red** with
+`caselist_parse.py` as of `ff963a9`: `1 failed`, `'so it cannot be combined with --publish' in 'No
+such option: --publish-only'`. **Green:** the whole file → `4 passed`.
+
+### 4. Sync and re-runs
+
+`scripts/task sync v1-e31-t30-parsed-store-publish-only` rebased the branch onto `origin/dev`
+(`87920c3`, which carries v1-e29-t12's guard change, #397) with no conflicts, then `uv sync
+--all-packages`. `git ls-remote` shows `dev` has not moved since. The re-runs, all after the last
+code change:
+
+| Command | Result |
+|---|---|
+| `.venv/bin/python -m pytest packages/debate_core/tests/application/caselist/test_occurrence_table_guard.py` | `24 passed` |
+| Both new test files | `40 passed` |
+| Both new test files, `-n 0 -p no:randomly` | `40 passed` |
+| Closing run 1: `tests/architecture tests/specs tests/docs tests/scripts/test_check_command_blocks.py tests/scripts/test_docs_index.py packages/debate_cli/tests/*.py packages/debate_cli/tests/commands/test_caselist_pull.py packages/debate_core/tests/application/*.py tests/smoke/test_caselist_parse.py`, `-n auto -m "not slow and not live"`, under `alarm 115` | `2314 passed, 4 skipped in 63.60s` |
+| Closing run 2: `packages/debate_core/tests/application/caselist`, the same way | `1534 passed in 80.48s` |
+| The node's command, `-k "parsed_publish or publish"` over `packages/debate_core/tests/application` | `381 passed in 28.06s` |
+| `uv run ruff format --check packages/debate_core packages/debate_cli tests/smoke` | `645 files already formatted` |
+| `uv run ruff check packages/debate_core packages/debate_cli tests/smoke` | `All checks passed!` |
+| `uv run pyright packages/debate_core packages/debate_cli` | `0 errors, 0 warnings, 0 informations` |
+| `uv run lint-imports` | `Contracts: 15 kept, 0 broken.` |
+| `uv run scripts/validate_specs.py` | `OK: 404 files, 39 epics, 344 tasks, 21 releases` |
+| `uv run scripts/check_command_blocks.py --base origin/dev` | `OK: no # comments in 339 shell code blocks in 138 Markdown files (1 session reports changed since origin/dev)` |
+| `uv run scripts/check_links.py` | `OK: 1945 relative links and anchors in 297 Markdown files` |
+| `uv run --frozen python scripts/docs_index.py --check-descriptions` | `All 42 indexed documents under docs/ have a description` |
+| `uv run scripts/affected_tests.py` | 205 files: past two minutes, left to the PR's `ci` |
+
+Nothing came out differently from the review's notes, except that the mutation check found the one
+survivor above, closed in this session with a test. The phase stays `Succeeded`.
 
 ## PM review
 

@@ -32,6 +32,7 @@ New records use the template in [0000-template.md](0000-template.md).
 | [0017](0017-caselist-corpus-is-retrievable.md) | The caselist corpus is retrievable, and the sync stays weekly | Accepted 2026-09-21 | Supersedes [0016](0016-caselist-corpus-is-accumulated.md): the site publishes a complete archive and retains a weekly back-catalogue, so the backfill starts from the full archive and the sync stays at the policy's weekly cadence. |
 | [0018](0018-card-evidence-omissions.md) | A card quotes one passage and records what it omitted | Accepted 2026-10-01 | `Card` names an envelope in the snapshot plus canonical `omitted_ranges`; `evidence_text` stays verbatim with no joiner, the ellipsis is a rendering concern, and `CardSpan` offsets stay relative to `evidence_text`. |
 | [0019](0019-student-search-pilot-stack-sign-in-and-hosting.md) | The student search pilot — one function behind CloudFront, a weekly SQLite index, and coach-created Cognito accounts | Accepted 2026-10-19 | The v1.7 pilot (E39): a container-image Lambda behind CloudFront and origin access control at `tub.wfbdebate.com`, server-rendered FastAPI through the Lambda Web Adapter, a SQLite FTS5 index fetched from `reports/tub/search/` at cold start, a Cognito Essentials pool with managed login, admin-created username accounts and required TOTP, an encrypted session cookie, a 400-day append-only audit log group, operator-run deploys, about $0.40 a month. Scoped to the pilot; [0004](0004-opensearch-is-derived-not-authoritative.md) still governs V2's search, and V2 keeps the pool. |
+| [0020](0020-weekly-caselist-run-in-the-cloud.md) | The weekly caselist run in the cloud — one scheduled Fargate task, the Tabroom password in Secrets Manager, and the run's state in the evidence bucket | Accepted 2026-10-23 | The v1.8 move off the coach's Mac (E40): an on-demand `arm64` Fargate task (8 vCPU, 16 GB, 100 GiB) on an EventBridge Scheduler schedule, a weekly login task that alone reads the password, both secrets under their own KMS key with every read in CloudTrail, a working copy restored from the bucket with the run's state saved back to it, a leased lock object written with S3 conditional writes that every bucket-writing command takes, email alerts through SNS, one home environment at a time, about $4.90 a month. `v2-e10-t04` and `t05` adopt or replace its pieces. |
 
 ## Reserved numbers
 
@@ -45,7 +46,7 @@ decision lands. A reservation moves into the index above when its record is writ
 |---|---|---|
 | 0011 | VPC egress design | [`v2-e10-t05-container-platform`](../../plan_specs/v2/e10-aws-foundation/t05-container-platform.yaml) |
 
-New ADRs take the next free number after the highest written or reserved one: **0020** is the
+New ADRs take the next free number after the highest written or reserved one: **0021** is the
 next free number. Do not skip numbers; if a reservation is dropped, note it here rather than silently
 reusing the number.
 

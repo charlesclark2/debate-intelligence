@@ -55,7 +55,7 @@ spec:
         The data-use policy's access rule is amended for the cloud run and approved by the
         coach in the same pull request.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

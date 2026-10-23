@@ -22,6 +22,13 @@ spec:
     unchanged. The run takes its caselists from settings (ADR-0020), writes its record as a Mac
     run does, and refuses to start while the lock is held. Terraform in dev then prod. ADR-0020
     may amend this task.
+    (PM amendment 2026-10-23 (ADR-0020).) The task is on-demand Fargate, `arm64`, 8 vCPU, 16 GB
+    and 100 GiB of ephemeral storage, with `parse.workers` 8, in the run's own VPC (public
+    subnets, no inbound rule, outbound HTTPS, an S3 gateway endpoint), under a 6-hour deadline
+    in the container, with ECS Exec off. The run's details carry each stage's start and end
+    time, and the run warns when its ephemeral volume passes 70% used. The deploy script runs
+    under `Debate<Env>CaselistRunDeployer` and may register run task definitions passing the run
+    role, never the login role.
   priority: 1
   constraints:
     packages: [infrastructure, ops, debate_cli, debate_core.application, packages/debate_cli/tests, packages/debate_core/tests, docs/runbooks]
@@ -42,6 +49,12 @@ spec:
       description: >-
         The operator applies dev and starts one run by hand; its record matches a Mac run's
         shape (operator).
+    # PM amendment 2026-10-23 (ADR-0020)
+    - id: ac3
+      description: >-
+        The run's details record each stage's start and end time, and a run whose ephemeral
+        volume passes 70% used says so in its summary, by test with a stubbed volume; the
+        record's own fields are unchanged.
 status:
   phase: Pending
 ---

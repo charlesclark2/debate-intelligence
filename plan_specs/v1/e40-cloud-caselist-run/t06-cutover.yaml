@@ -21,6 +21,21 @@ spec:
     exactly one runner able to publish, and repeat in prod at its promotion. The runbooks say
     which machine runs the week and how to fall back to the Mac for a week if the cloud run is
     down.
+    (PM amendment 2026-10-23 (ADR-0020).) The comparison is not a second run of the same week,
+    which would download its archives and publish twice: after a dev cloud run, the Mac restores
+    the working copy under the lock and re-parses and rebuilds the index offline into a scratch
+    data directory, downloading and publishing nothing. The cutover follows ADR-0020 (4): the
+    Mac's last scheduled run completes, its agent is unloaded and its `--caselist` arguments
+    removed in favour of `caselist.sync_caselists`, a build with the bucket lock is installed and
+    the Mac's state seeded, one cloud run is started by hand, then the cloud schedule and the
+    late-run alarm's actions are enabled. Until the pilot's promotion, prod is published by hand
+    from a working copy restored from the dev bucket under the lock. At the promotion the run's
+    home moves to prod (ADR-0020 (7)): under the dev lock the run-state bundle and state files
+    are copied to the prod bucket, the prod lock object is seeded, the dev lock object is held
+    for good by a `moved` holder, the dev schedule is deleted and the prod one enabled.
+    (PM ruling 2026-10-23.) The cutover waits until `t04`'s purge of the run-state bundle's
+    noncurrent versions by `caselist remove` is merged, since policy 1.12 promises it from its
+    merge.
   priority: 1
   constraints:
     packages: [docs/runbooks, docs/data, ops, tests/smoke]
@@ -41,10 +56,13 @@ spec:
       name: v1-e40-t05-run-alerts
       relation: dependsOn
   acceptanceCriteria:
+    # PM amendment 2026-10-23 (ADR-0020): the Mac reproduces the cloud run's derivations offline,
+    # instead of running the same week a second time.
     - id: ac1
       description: >-
-        A dev cloud run and a Mac run of the same week agree on records, parse counts and
-        index document count, recorded in docs/data (operator).
+        A dev cloud run and the Mac's offline reproduction of its parse and index from the
+        same inputs agree on records, parse counts and index document count, recorded in
+        docs/data (operator).
     - id: ac2
       description: >-
         The Mac's schedule is off, a second runner is refused by the lock, and the runbooks

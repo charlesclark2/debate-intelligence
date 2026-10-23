@@ -20,6 +20,17 @@ spec:
     run. A failed run, a run that did not start on schedule, and a login that failed each email
     the coach through the account's existing mail path, naming the run id and the stage, and
     nothing about a school, team or file. ADR-0020 may amend this task.
+    (PM amendment 2026-10-23 (ADR-0020).) The mail path is one SNS topic per environment,
+    `debate-<env>-caselist-run-alerts`, with the coach's address as its one email
+    subscription: the account has no general mail path. The run publishes through a new `sns`
+    kind of `caselist.notifier`, sending what the Mac's banners say; an EventBridge rule on ECS
+    task state changes catches a run or login that stopped non-zero; a CloudWatch alarm on a
+    `RunsRecorded` metric (one-day period, 7 of 7, missing data breaching, actions enabled after
+    the first recorded run) catches a late run; an alarm on the schedules' dead-letter queue
+    catches a task that never started. EventBridge rules on the CloudTrail events ADR-0020 (2)
+    names email the coach when who may read the password changes (state `ENABLED`), and on any
+    `GetSecretValue` of the password by a principal other than the login role, refused attempts
+    included (state `ENABLED_WITH_ALL_CLOUDTRAIL_MANAGEMENT_EVENTS`).
   priority: 2
   constraints:
     packages: [infrastructure, debate_core.application, packages/debate_core/tests, docs/runbooks]
@@ -36,6 +47,12 @@ spec:
         A failed run, a missed schedule and a failed login each produce an alert, by
         Terraform tests and a stubbed run; the operator triggers one in dev and receives it
         (operator).
+    # PM amendment 2026-10-23 (ADR-0020)
+    - id: ac2
+      description: >-
+        Terraform's tests show the CloudTrail rules match a change to the credentials' key or
+        resource policies, the login role or its task definition, and a read or refused read
+        of the password by any principal but the login role, each with the topic as target.
 status:
   phase: Pending
 ---

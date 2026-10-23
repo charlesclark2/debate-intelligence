@@ -24,9 +24,20 @@
 
 season: '2026-27'
 
-# Students the site may name, in the form it may name them. Empty: the team has not had its first
-# practice of the season, and no page names a student.
-students: []
+# Students the site may name, in the form it may name them.
+#
+# The first entry is the student named in the season's first result (content/results.yaml).
+# Charlie confirmed with the activities office on 2026-10-01 that every rostered student's 2026-27
+# form is on file. The form's reference has not been supplied yet, so it is a [[TBD]] marker: a dev
+# preview builds and shows the name for review, and a prod build fails until the reference is
+# written in (src/lib/media-consent.ts, consentPlaceholders).
+students:
+  - publishedName: Anya Prakash
+    publishedForm: full-name-and-class-year
+    graduationYear: 2027
+    consentReference: "[[TBD: the 2026-27 form's reference, from the activities office]]"
+    season: '2026-27'
+    dateChecked: 2026-10-01
 # Example of the shape, for when the first entry is added:
 #   - publishedName: Jordan Rivera
 #     publishedForm: full-name-and-class-year

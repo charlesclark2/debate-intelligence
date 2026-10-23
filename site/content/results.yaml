@@ -61,4 +61,18 @@ labels:
     junior-varsity: Junior Varsity
     novice: Novice
 
-results: []
+results:
+  # Fort Atkinson, from Charlie on 2026-10-22. Off the schedule since that day.
+  - tournament: Fort Atkinson
+    date: 2026-10-17
+    event: lincoln-douglas
+    division: varsity
+    placing: first place
+    students: [Anya Prakash]
+
+  - tournament: Fort Atkinson
+    date: 2026-10-17
+    event: lincoln-douglas
+    division: varsity
+    placing: top speaker
+    students: [Anya Prakash]

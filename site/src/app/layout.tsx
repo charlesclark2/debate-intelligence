@@ -9,7 +9,7 @@ import {
   loadSiteSettings,
 } from '@/lib/content'
 import { debaterLoginNavigationItem } from '@/lib/feature-flags'
-import { loadMediaConsent } from '@/lib/media-consent'
+import { consentGuardedContent, loadMediaConsent } from '@/lib/media-consent'
 import { enforcePublishingPolicy } from '@/lib/publishing-policy'
 import { resultsGuardedContent } from '@/lib/results'
 import { scheduleGuardedContent } from '@/lib/tournaments'
@@ -48,12 +48,18 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   // or a name is not checked. loadGuardedContent() is that list, scheduleGuardedContent() adds
   // content/schedule.yaml and every text field in content/tournaments.yaml, and
   // resultsGuardedContent() every result in content/results.yaml, in the words the page prints.
+  // consentGuardedContent() carries no copy, only any consent reference still written as [[TBD]].
   // announcementFields() is the facts an announcement promises (none since the October 1 panel
   // was replaced; v1-e37-t03 adds them). They go through the guard as fields rather than as copy
   // because a fact nobody has supplied leaves no trace in the copy. A prod build fails while one
   // is unset.
   enforcePublishingPolicy({
-    pages: [...loadGuardedContent(), ...scheduleGuardedContent(), ...resultsGuardedContent()],
+    pages: [
+      ...loadGuardedContent(),
+      ...scheduleGuardedContent(),
+      ...resultsGuardedContent(),
+      ...consentGuardedContent(),
+    ],
     settings,
     consent: loadMediaConsent(),
     announcements: announcementFields(),

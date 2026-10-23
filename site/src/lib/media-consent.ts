@@ -4,7 +4,14 @@ import { join } from 'node:path'
 import matter from 'gray-matter'
 import { z } from 'zod'
 
-import { ContentValidationError, defaultContentDirectory, quoteBareDates } from './content'
+import {
+  ContentValidationError,
+  PLACEHOLDER_PATTERN,
+  defaultContentDirectory,
+  findPlaceholders,
+  quoteBareDates,
+} from './content'
+import type { ContentPage } from './content'
 
 /**
  * The media-consent manifest: who the site may name, and which images it may publish.
@@ -110,4 +117,51 @@ export function loadMediaConsent(contentDirectory: string = defaultContentDirect
     throw new ContentValidationError(MEDIA_CONSENT_FILE, `invalid manifest (${detail})`)
   }
   return result.data
+}
+
+/**
+ * The facts the manifest is still waiting for: a consent reference written as a `[[TBD: ...]]`
+ * marker because the activities office has not supplied it yet. Each is named by its position
+ * in the list, never by the student's name, because the guard prints these in every build
+ * (docs/policies/website-publishing.md, Students 10).
+ */
+export function consentPlaceholders(consent: MediaConsent): string[] {
+  const unfilled = (reference: string) => new RegExp(PLACEHOLDER_PATTERN.source).test(reference)
+  return [
+    ...consent.students.flatMap((student, index) =>
+      unfilled(student.consentReference)
+        ? [`${findPlaceholders(student.consentReference)[0] || 'TBD'} (consentReference of student entry ${index + 1})`]
+        : [],
+    ),
+    ...consent.images.flatMap((image) =>
+      unfilled(image.consentReference)
+        ? [`${findPlaceholders(image.consentReference)[0] || 'TBD'} (consentReference of image ${image.path})`]
+        : [],
+    ),
+  ]
+}
+
+/**
+ * content/media-consent.yaml as the publishing-policy guard sees it: no copy, only the gaps. An
+ * unfilled consent reference is then reported like any other [[TBD]] marker: printed by a dev
+ * build, so the preview still comes up for review, and fatal to a prod build, so nothing reaches
+ * the public site on a consent nobody can point to (v1-e37-t06). src/app/layout.tsx passes it.
+ */
+export function consentGuardedContent(contentDirectory: string = defaultContentDirectory()): ContentPage[] {
+  return [
+    {
+      slug: 'media-consent',
+      route: '/',
+      filePath: MEDIA_CONSENT_FILE,
+      title: MEDIA_CONSENT_FILE,
+      description: MEDIA_CONSENT_FILE,
+      navLabel: MEDIA_CONSENT_FILE,
+      navOrder: Number.MAX_SAFE_INTEGER,
+      excludeFromNavigation: true,
+      draft: false,
+      html: '',
+      guardedHtml: '',
+      placeholders: consentPlaceholders(loadMediaConsent(contentDirectory)),
+    },
+  ]
 }

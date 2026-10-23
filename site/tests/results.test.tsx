@@ -365,9 +365,11 @@ describe('the shape of an entry', () => {
   it('refuses an acronym the page does not spell out', () => {
     const directory = resultsContent('', [], {
       'results.yaml': (source) =>
-        replaceOnce('    Newest tournament first.', '    Newest LD tournament first.')(source),
+        replaceOnce('    Newest tournament first.', '    Newest NSDA tournament first.')(
+          source.replace(/^results:[\s\S]*$/m, 'results: []\n'),
+        ),
     })
-    expect(() => loadResultsView(directory)).toThrow(/uses "LD" without spelling it out/)
+    expect(() => loadResultsView(directory)).toThrow(/uses "NSDA" without spelling it out/)
   })
 
   it('publishes only placings at a single tournament', () => {

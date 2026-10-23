@@ -9,7 +9,14 @@ import {
   parsePage,
 } from '@/lib/content'
 import type { MediaConsent } from '@/lib/media-consent'
-import { consentedStudentSchema, isStale, loadMediaConsent, seasonStart } from '@/lib/media-consent'
+import {
+  consentGuardedContent,
+  consentPlaceholders,
+  consentedStudentSchema,
+  isStale,
+  loadMediaConsent,
+  seasonStart,
+} from '@/lib/media-consent'
 import {
   PublishingPolicyError,
   checkPublishingPolicy,
@@ -367,6 +374,37 @@ describe('dates in the media-consent manifest', () => {
   })
 })
 
+/**
+ * A consent reference the activities office has not supplied yet is written as a [[TBD]] marker,
+ * like any other fact still owed (v1-e37-t06). A dev build prints it so the preview can be
+ * reviewed with the name on it; a prod build fails until the reference is filled in. The finding
+ * names the entry by position, never the student, because it prints in every build log.
+ */
+describe('a consent reference still to come', () => {
+  const owed = { ...STUDENTS.jordan, consentReference: "'[[TBD: form reference from the office]]'" }
+
+  it('is reported by its position and the note beside it, with no name', () => {
+    const directory = contentWith({ 'media-consent.yaml': withConsent([owed]) })
+    const notes = consentPlaceholders(loadMediaConsent(directory))
+    expect(notes).toEqual(['form reference from the office (consentReference of student entry 1)'])
+    expect(notes.join('\n')).not.toMatch(/Jordan|Rivera/)
+  })
+
+  it('fails a prod build and lets a dev preview come up', () => {
+    const directory = contentWith({ 'media-consent.yaml': withConsent([owed]) })
+    const input = { pages: consentGuardedContent(directory), settings, consent: loadMediaConsent(directory) }
+    expect(() => enforcePublishingPolicy(input, PROD)).toThrow(
+      /content\/media-consent\.yaml: still has an unfilled placeholder: form reference from the office \(consentReference of student entry 1\)/,
+    )
+    expect(enforcePublishingPolicy(input, DEV).errors).toHaveLength(1)
+  })
+
+  it('is quiet once the reference is filled in', () => {
+    const directory = contentWith({ 'media-consent.yaml': withConsent([STUDENTS.jordan]) })
+    expect(consentPlaceholders(loadMediaConsent(directory))).toEqual([])
+  })
+})
+
 describe('placeholder markers', () => {
   it('reports every unfilled placeholder with the note beside it', () => {
     expect(messages('The room is [[TBD: room for the information session]].')).toMatch(
@@ -490,7 +528,24 @@ describe('the content this site actually ships', () => {
   // copy in it", so a new YAML content file cannot be added and quietly left unguarded. The
   // schedule's files join it through scheduleGuardedContent(), and the results through
   // resultsGuardedContent(), which the layout passes too.
-  const pages = [...loadGuardedContent(), ...scheduleGuardedContent(), ...resultsGuardedContent()]
+  const pages = [
+    ...loadGuardedContent(),
+    ...scheduleGuardedContent(),
+    ...resultsGuardedContent(),
+    ...consentGuardedContent(),
+  ]
+
+  /**
+   * The facts still waiting on Charlie, written out so that each one is a decision to change this
+   * test rather than a gap that goes quiet. On 2026-10-23 that is one: the consent reference for
+   * the first student named on the site, which the activities office has not supplied. Charlie
+   * confirmed the form itself is on file (2026-10-01). Until the reference is filled in, a dev
+   * preview builds and a prod build fails, which is the gate this list documents.
+   */
+  const STILL_WAITING_ON_CHARLIE = [
+    'content/media-consent.yaml: still has an unfilled placeholder: ' +
+      "the 2026-27 form's reference, from the activities office (consentReference of student entry 1)",
+  ]
 
   it('breaks no rule except the facts still waiting on Charlie', () => {
     const { errors } = checkPublishingPolicy({
@@ -499,7 +554,9 @@ describe('the content this site actually ships', () => {
       consent,
       announcements: announcementFields(),
     })
-    expect(errors).toEqual([])
+    expect(errors.map((error) => `${error.location}: ${error.message}`)).toEqual(
+      STILL_WAITING_ON_CHARLIE,
+    )
   })
 
   /**

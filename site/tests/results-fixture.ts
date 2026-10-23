@@ -52,14 +52,18 @@ function consentEntry(student: FixtureStudent): string {
   ].join('\n')
 }
 
-/** Adds the students to the front of the manifest's list, whether it is empty or not. */
+/**
+ * Replaces the manifest's student list with these students, whatever it held, so a fixture never
+ * depends on (or prints) a real entry.
+ */
 export function withConsent(students: readonly FixtureStudent[]): (source: string) => string {
   return (source) => {
-    const opened = source.replace(/^students: \[\]$/m, 'students:')
-    if (!/^students:\n/m.test(opened)) {
+    const list = /^students:(?: \[\])?\n(?:(?: {2}.*)?\n)*/m
+    if (!list.test(source)) {
       throw new Error('withConsent: no `students:` list in content/media-consent.yaml')
     }
-    return opened.replace(/^students:\n/m, `students:\n${students.map(consentEntry).join('')}`)
+    const entries = students.length === 0 ? 'students: []\n' : `students:\n${students.map(consentEntry).join('')}`
+    return source.replace(list, `${entries}# Fixture students from tests/results-fixture.ts.\n`)
   }
 }
 
@@ -76,15 +80,12 @@ export function withResults(yaml: string): (source: string) => string {
   }
 }
 
-/** The edits for one fixture: the results always, the consent manifest when there is anyone to add. */
+/** The edits for one fixture: the results, and the consent manifest's students replaced. */
 function fixtureEdits(
   yaml: string,
   students: readonly FixtureStudent[],
 ): Record<string, (source: string) => string> {
-  return {
-    'results.yaml': withResults(yaml),
-    ...(students.length > 0 ? { 'media-consent.yaml': withConsent(students) } : {}),
-  }
+  return { 'results.yaml': withResults(yaml), 'media-consent.yaml': withConsent(students) }
 }
 
 /** A content directory with these results and the fixture students' consent. */

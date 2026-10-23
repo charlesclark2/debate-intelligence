@@ -137,7 +137,10 @@ async def _cart(request: Request) -> str | None:
     body = await request.body()
     if len(body) > _BODY_LIMIT:
         return None
-    fields = parse_qs(body.decode("utf-8", "replace"), max_num_fields=2)
+    try:
+        fields = parse_qs(body.decode("utf-8", "replace"), max_num_fields=2)
+    except ValueError:
+        return None
     values = fields.get("cards", [""])
     return values[0] if len(values) == 1 else None
 

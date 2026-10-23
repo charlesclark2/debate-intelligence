@@ -654,3 +654,115 @@ def test_download_logs_no_card_reference_tag_or_cite(student: Any, caplog: pytes
     for word in ("gabbro", "andesite", "tuff", "thorvaldsen", "maple grove", f"{27:064x}"):
         assert word not in logged.lower(), word
     assert not re.search(r"[0-9a-f]{64}", logged)
+
+
+# ------------------------------------------------------------------------------------------------
+# The body as sent, and the two download settings
+# ------------------------------------------------------------------------------------------------
+
+
+def _post_body(world: Any, body: str) -> Any:
+    session = world.session_cookie()
+    return world.browser.post(
+        "/download",
+        content=body.encode(),
+        headers={
+            "Content-Type": "application/x-www-form-urlencoded",
+            "X-CSRF-Token": session.csrf_token,
+            "Origin": world.public_origin,
+            "Sec-Fetch-Site": "same-origin",
+        },
+    )
+
+
+def test_download_body_longer_than_any_cart_is_refused_unread(student: Any) -> None:
+    body = f"cards={student.card_reference('download')}&padding={'p' * 4096}"
+
+    response = _post_body(student, body)
+
+    assert response.status_code == 400
+    assert source_reads(student) == {CASELIST_STORE: [], CAMP_STORE: []}
+
+
+def test_download_body_with_more_fields_than_a_download_sends_is_refused_not_failed(student: Any) -> None:
+    response = _post_body(student, f"cards={student.card_reference('download')}&a=1&b=2")
+
+    assert (response.status_code, response.json()["message"]) == (
+        400,
+        "That cart could not be read. Empty the cart and add the cards again.",
+    )
+
+
+def test_download_cart_whose_sources_are_exactly_the_source_budget_downloads(make_world: Any) -> None:
+    probe = make_world()
+    sources = probe.sources()
+    probe.services.search_index.close()
+    world = make_world(
+        download_source_bytes=len(sources["disclosed"].content) + len(sources["other"].content)
+    )
+    world.signed_in_student()
+    try:
+        response = world.download("download", "download other")
+    finally:
+        world.services.search_index.close()
+
+    assert response.status_code == 200
+
+
+REQUIRED_ENVIRONMENT: Final = {
+    "TUB_ENVIRONMENT": "dev",
+    "TUB_PUBLIC_ORIGIN": "https://tub.example.test",
+    "TUB_LOGIN_ORIGIN": "https://auth.tub.example.test",
+    "TUB_USER_POOL_ID": "us-east-1_SyntheticPool",
+    "TUB_CLIENT_ID": "synthetic-client-id",
+    "TUB_CLIENT_SECRET_PARAMETER": "/debate-dev-tub/client-secret",
+    "TUB_COOKIE_KEYS_PARAMETER": "/debate-dev-tub/cookie-keys",
+    "TUB_AUDIT_LOG_GROUP": "debate-dev-tub-audit",
+    "TUB_EVIDENCE_BUCKET": "debate-dev-evidence-synthetic",
+}
+
+
+@pytest.mark.parametrize(
+    ("variable", "value", "expected"),
+    [
+        ("TUB_DOWNLOAD_CARD_CAP", None, 8),
+        ("TUB_DOWNLOAD_CARD_CAP", "", 8),
+        ("TUB_DOWNLOAD_CARD_CAP", "1", 1),
+        ("TUB_DOWNLOAD_CARD_CAP", " 30 ", 30),
+        ("TUB_DOWNLOAD_SOURCE_BYTES", None, 2_000_000),
+        ("TUB_DOWNLOAD_SOURCE_BYTES", "3500000", 3_500_000),
+    ],
+)
+def test_download_caps_are_read_from_the_environment(variable: str, value: str | None, expected: int) -> None:
+    from debate_api.configuration import PilotConfiguration
+
+    environ = dict(REQUIRED_ENVIRONMENT)
+    if value is not None:
+        environ[variable] = value
+    configuration = PilotConfiguration.from_environment(environ)
+
+    read = {
+        "TUB_DOWNLOAD_CARD_CAP": configuration.download_card_cap,
+        "TUB_DOWNLOAD_SOURCE_BYTES": configuration.download_source_bytes,
+    }
+    assert read[variable] == expected
+
+
+@pytest.mark.parametrize(
+    ("variable", "value"),
+    [
+        ("TUB_DOWNLOAD_CARD_CAP", "0"),
+        ("TUB_DOWNLOAD_CARD_CAP", "31"),
+        ("TUB_DOWNLOAD_CARD_CAP", "eight"),
+        ("TUB_DOWNLOAD_CARD_CAP", "-1"),
+        ("TUB_DOWNLOAD_SOURCE_BYTES", "0"),
+        ("TUB_DOWNLOAD_SOURCE_BYTES", "2e6"),
+        ("TUB_DOWNLOAD_SOURCE_BYTES", "2,000,000"),
+        ("TUB_DOWNLOAD_SOURCE_BYTES", "100000001"),
+    ],
+)
+def test_download_cap_that_is_not_a_whole_number_in_range_is_refused(variable: str, value: str) -> None:
+    from debate_api.configuration import ConfigurationMissing, PilotConfiguration
+
+    with pytest.raises(ConfigurationMissing, match=variable):
+        PilotConfiguration.from_environment({**REQUIRED_ENVIRONMENT, variable: value})

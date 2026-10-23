@@ -37,7 +37,16 @@ from debate_core.application.caselist_sync import (
     SyncRunInProgress,
     SyncStage,
 )
-from debate_core.application.sync_runs import record_for_summary
+from debate_core.application.sync_runs import (
+    PublishedSnapshot,
+    StageDetails,
+    StageEntry,
+    SyncRunDetails,
+    SyncRunOutcome,
+    SyncRunRecord,
+    comparisons_owed_by_the_newest_run,
+    record_for_summary,
+)
 from debate_core.integrations.s3 import S3EvidenceObjectStore
 from debate_core.testing.fakes import empty_suppression_list
 
@@ -473,3 +482,76 @@ def test_the_outcome_of_a_run_by_how_its_stages_ended(
     )
 
     assert str(record_for_summary(summary, environment="dev", mode="run").outcome) == outcome
+
+
+# ------------------------------------------------------------------------------------------------
+# (1) The newest run's list, read from records and details written by hand
+# ------------------------------------------------------------------------------------------------
+
+
+def a_run(run_id: str, *, stages: bool = True) -> SyncRunRecord:
+    moment = datetime.strptime(run_id, "%Y%m%dT%H%M%SZ").replace(tzinfo=UTC)
+    return SyncRunRecord(
+        run_id=run_id,
+        environment="dev",
+        mode="run",
+        started_at=moment,
+        finished_at=moment,
+        outcome=SyncRunOutcome.PUBLISH_PENDING if stages else SyncRunOutcome.FAILED,
+        stages=(StageEntry(stage="report", outcome="pending"),) if stages else (),
+    )
+
+
+def not_compared(run_id: str, *names: tuple[str, str]) -> SyncRunDetails:
+    return SyncRunDetails(
+        run_id=run_id,
+        stages=(
+            StageDetails(
+                stage="report",
+                not_compared=tuple(PublishedSnapshot(caselist=one, snapshot=two) for one, two in names),
+            ),
+        ),
+    )
+
+
+def test_a_name_with_no_place_in_the_store_is_passed_over_and_the_rest_are_owed(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The details are a file on this machine: a name a publish would refuse is compared with nothing."""
+    details = not_compared(
+        FIRST_RUN_ID,
+        ("testcl26", "2026-09-01"),
+        ("testcl26", "../../elsewhere"),
+        ("Not A Slug", "2026-09-08"),
+        ("testcl26", "full/2026-09-15"),
+        ("openev", "2026-policy"),
+        ("testcl26", "2026-09-01"),
+    )
+
+    owed = comparisons_owed_by_the_newest_run([a_run(FIRST_RUN_ID)], {FIRST_RUN_ID: details})
+
+    assert [f"{one.caselist} {one.snapshot}" for one in owed] == [
+        "testcl26 2026-09-01",
+        "testcl26 full/2026-09-15",
+        "openev 2026-policy",
+    ], "each once, in the order written"
+    assert [one.getMessage() for one in caplog.records].count(
+        "caselist run details: a snapshot owed a comparison has no place in the store; skipped"
+    ) == 2
+
+
+def test_no_run_and_a_run_with_no_details_owe_nothing() -> None:
+    assert comparisons_owed_by_the_newest_run([], {}) == ()
+    assert comparisons_owed_by_the_newest_run([a_run(FIRST_RUN_ID)], {}) == ()
+
+
+def test_the_newest_run_with_stages_is_the_one_read() -> None:
+    records = [a_run(FIRST_RUN_ID), a_run(SECOND_RUN_ID), a_run("20260916T120000Z", stages=False)]
+    details = {
+        FIRST_RUN_ID: not_compared(FIRST_RUN_ID, ("testcl26", "2026-09-01")),
+        SECOND_RUN_ID: not_compared(SECOND_RUN_ID, ("testcl26", "2026-09-08")),
+    }
+
+    owed = comparisons_owed_by_the_newest_run(records, details)
+
+    assert [f"{one.caselist} {one.snapshot}" for one in owed] == ["testcl26 2026-09-08"]

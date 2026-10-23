@@ -1,0 +1,133 @@
+# Format-level positions any topic of an event can be read under: generic Ks, framework, theory.
+# Each names the events it applies to; a topic's taxonomy takes the ones for its event. The same
+# rules as a topic file hold (docs/guides/landscape-taxonomy.md). LD-only positions are added with
+# the LD taxonomy (v1-e32-t06), not before.
+schema_version: 1
+topic_id: generic
+taxonomy_version: 1.0.0
+event: null
+positions:
+
+  # Kritiks
+  - id: cap-k
+    label: Cap K
+    kind: k
+    side: neg
+    events: [POLICY]
+    aliases: [cap k, k cap, capitalism k, k capitalism]
+  - id: racial-capitalism-k
+    label: Racial capitalism K
+    kind: k
+    side: neg
+    events: [POLICY]
+    aliases: [racial cap k]
+  - id: security-k
+    label: Security K
+    kind: k
+    side: neg
+    events: [POLICY]
+    aliases: [security k, k security]
+  - id: biopolitics-k
+    label: Biopolitics K
+    kind: k
+    side: neg
+    events: [POLICY]
+    aliases: [biopolitics k, k biopolitics]
+  - id: settler-colonialism-k
+    label: Settler colonialism K
+    kind: k
+    side: neg
+    events: [POLICY]
+    aliases: [settler colonialism k, settler colonialism kritik, set col k, k set col]
+  - id: colonialism-k
+    label: Colonialism K
+    kind: k
+    side: neg
+    events: [POLICY]
+    aliases: [colonialism k]
+  - id: antiblackness-k
+    label: Antiblackness K
+    kind: k
+    side: neg
+    events: [POLICY]
+    aliases: [antiblackness k, k antiblackness]
+  - id: psychoanalysis-k
+    label: Psychoanalysis K
+    kind: k
+    side: neg
+    events: [POLICY]
+    aliases: [psychoanalysis k, k psychoanalysis]
+  - id: queer-k
+    label: Queer K
+    kind: k
+    side: neg
+    events: [POLICY]
+    aliases: [queer k, queer intelligibility k]
+  - id: buddhism-k
+    label: Buddhism K
+    kind: k
+    side: neg
+    events: [POLICY]
+    aliases: [buddhism k, k buddhism]
+
+  # Topicality
+  - id: framework-t
+    label: T-USFG / framework
+    kind: t
+    side: neg
+    events: [POLICY]
+    aliases: [t usfg, t framework]
+
+  # Disadvantages
+  - id: politics-da
+    label: Politics DA
+    kind: da
+    side: neg
+    events: [POLICY]
+    aliases: [politics da, da politics]
+
+  # Counterplans and PICs
+  - id: process-cp
+    label: Process CP
+    kind: cp
+    side: neg
+    events: [POLICY]
+    aliases: [process cp]
+
+  # Theory
+  - id: condo-bad
+    label: Conditionality bad
+    kind: theory
+    side: aff
+    events: [POLICY]
+    aliases: [condo, theory conditionality]
+  - id: fifty-state-fiat-bad
+    label: 50-state fiat bad
+    kind: theory
+    side: aff
+    events: [POLICY]
+    aliases: [50 state fiat, fifty state fiat, theory 50 state fiat, theory at 50 state fiat bad, theory at 50 state fiat]
+  - id: process-cps-bad
+    label: Process CPs bad
+    kind: theory
+    side: aff
+    events: [POLICY]
+    aliases: [theory at process cps]
+  - id: aspec
+    label: ASPEC
+    kind: theory
+    side: neg
+    events: [POLICY]
+    aliases: [aspec, t aspec]
+  - id: fspec
+    label: FSPEC
+    kind: theory
+    side: neg
+    events: [POLICY]
+    aliases: [fspec, f spec]
+  - id: vagueness
+    label: Vagueness
+    kind: theory
+    side: neg
+    events: [POLICY]
+    aliases: [vagueness]

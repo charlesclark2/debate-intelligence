@@ -1,0 +1,293 @@
+# The positions a Policy landscape report counts on the 2026-27 national health insurance topic.
+# docs/guides/landscape-taxonomy.md says how to add a position or an alias, retire or merge one, and
+# bump taxonomy_version. Every alias is a heading as the normalizer writes it, and came from the
+# seeded candidates (headings at least two teams used) or from the coach. Never delete or reuse an
+# id once released: retire it with deprecated: true, and merged_into when it was renamed or merged.
+# generic.yaml's Policy positions are merged in when a report reads this file.
+schema_version: 1
+topic_id: policy-2026-27-nhi
+taxonomy_version: 1.0.0
+event: POLICY
+positions:
+
+  # Affirmative plans, by mechanism
+  - id: single-payer-aff
+    label: Single payer
+    kind: aff
+    side: aff
+    aliases: [single payer, aff single payer, single payer aff, singlepayer]
+
+  # Advantages: standalone until the headings show which aff each belongs to
+  - id: costs-advantage
+    label: Costs advantage
+    kind: advantage
+    side: aff
+    aliases: [adv costs, costs adv, advantage costs, costs advantage, adv cost, cost advantage, cost adv]
+  - id: coverage-advantage
+    label: Coverage advantage
+    kind: advantage
+    side: aff
+    aliases: [adv coverage, coverage adv, coverage advantage, advantage coverage]
+  - id: disease-advantage
+    label: Disease advantage
+    kind: advantage
+    side: aff
+    aliases: [adv disease, disease advantage, advantage disease, disease adv]
+  - id: inequality-advantage
+    label: Inequality advantage
+    kind: advantage
+    side: aff
+    aliases: [adv inequality, inequality adv, advantage inequality, inequality advantage]
+  - id: economy-advantage
+    label: Economy advantage
+    kind: advantage
+    side: aff
+    aliases: [adv economy, advantage economy, economy advantage, economy adv, adv econ, econ adv, econ advantage]
+  - id: growth-advantage
+    label: Growth advantage
+    kind: advantage
+    side: aff
+    aliases: [adv growth, growth adv, growth advantage, advantage growth]
+  - id: bioterror-advantage
+    label: Bioterror advantage
+    kind: advantage
+    side: aff
+    aliases: [adv bioterror, bioterror advantage, bioterror adv, advantage bioterror]
+  - id: budgets-advantage
+    label: Budgets advantage
+    kind: advantage
+    side: aff
+    aliases: [adv budgets, advantage budgets, budgets adv, budgets advantage]
+  - id: stagnation-advantage
+    label: Stagnation advantage
+    kind: advantage
+    side: aff
+    aliases: [adv stagnation, stagnation adv, advantage stagnation]
+  - id: access-advantage
+    label: Access advantage
+    kind: advantage
+    side: aff
+    aliases: [adv access, access adv, advantage access, access advantage]
+  - id: innovation-advantage
+    label: Innovation advantage
+    kind: advantage
+    side: aff
+    aliases: [adv innovation, advantage innovation, innovation adv, innovation advantage]
+  - id: data-advantage
+    label: Data advantage
+    kind: advantage
+    side: aff
+    aliases: [adv data, advantage data, data advantage, data adv]
+  - id: pandemics-advantage
+    label: Pandemics advantage
+    kind: advantage
+    side: aff
+    aliases: [adv pandemics, pandemics adv, pandemics advantage]
+  - id: pharma-advantage
+    label: Pharma advantage
+    kind: advantage
+    side: aff
+    aliases: [adv pharma, pharma adv, advantage pharma]
+
+  # Disadvantages
+  - id: midterms-da
+    label: Midterms DA
+    kind: da
+    side: neg
+    aliases: [midterms da, da midterms, midterms disad]
+  - id: pharma-da
+    label: Pharma DA
+    kind: da
+    side: neg
+    aliases: [pharma da, da pharma]
+  - id: economy-da
+    label: Economy DA
+    kind: da
+    side: neg
+    aliases: [econ da, da econ, economy da, da economy]
+  - id: irs-da
+    label: IRS DA
+    kind: da
+    side: neg
+    aliases: [irs da, da irs, irs tradeoff da, da irs tradeoff]
+  - id: stocks-da
+    label: Stocks DA
+    kind: da
+    side: neg
+    aliases: [stocks da, da stocks, stock market da, da stock market]
+  - id: rates-da
+    label: Rates DA
+    kind: da
+    side: neg
+    aliases: [rates da, da rates, interest rates da]
+  - id: capital-flight-da
+    label: Capital flight DA
+    kind: da
+    side: neg
+    aliases: [capital flight da, da capital flight]
+  - id: federalism-da
+    label: Federalism DA
+    kind: da
+    side: neg
+    aliases: [federalism da, da federalism]
+  - id: hhs-da
+    label: HHS DA
+    kind: da
+    side: neg
+    aliases: [hhs da, da hhs]
+  - id: court-clog-da
+    label: Court clog DA
+    kind: da
+    side: neg
+    aliases: [court clog da, da court clog, clog da, da clog]
+  - id: taxes-da
+    label: Taxes DA
+    kind: da
+    side: neg
+    aliases: [taxes da, da taxes]
+  - id: permitting-reform-da
+    label: Permitting reform DA
+    kind: da
+    side: neg
+    aliases: [permitting reform da, da permitting reform]
+  - id: unions-da
+    label: Unions DA
+    kind: da
+    side: neg
+    aliases: [unions da, da unions]
+  - id: doctors-da
+    label: Doctors DA
+    kind: da
+    side: neg
+    aliases: [doctors da, da doctors]
+  - id: medical-devices-da
+    label: Medical devices DA
+    kind: da
+    side: neg
+    aliases: [medical devices da, da medical devices, da devices, devices da]
+  - id: innovation-da
+    label: Innovation DA
+    kind: da
+    side: neg
+    aliases: [innovation da, da innovation]
+
+  # Counterplans and PICs
+  - id: states-cp
+    label: States CP
+    kind: cp
+    side: neg
+    aliases: [states cp, cp states, states counterplan]
+  - id: nhs-cp
+    label: NHS CP
+    kind: cp
+    side: neg
+    aliases: [nhs cp, cp nhs]
+  - id: advantage-cp
+    label: Advantage CP
+    kind: cp
+    side: neg
+    aliases: [adv cp, advantage cp]
+  - id: courts-cp
+    label: Courts CP
+    kind: cp
+    side: neg
+    aliases: [courts cp, cp courts]
+  - id: public-option-cp
+    label: Public option CP
+    kind: cp
+    side: neg
+    aliases: [public option cp, cp public option]
+  - id: smokers-pic
+    label: Smokers PIC
+    kind: cp
+    side: neg
+    aliases: [smokers pic, pic smokers, cp smokers, cp smokers pic]
+  - id: taxes-pic
+    label: Taxes PIC
+    kind: cp
+    side: neg
+    aliases: [taxes pic, pic taxes]
+  - id: sex-offenders-pic
+    label: Sex offenders PIC
+    kind: cp
+    side: neg
+    aliases: [sex offenders pic, pic sex offenders]
+  - id: vouchers-cp
+    label: Vouchers CP
+    kind: cp
+    side: neg
+    aliases: [vouchers cp, cp vouchers]
+  - id: delay-cp
+    label: Delay CP
+    kind: cp
+    side: neg
+    aliases: [delay cp, cp delay]
+  - id: optional-legislation-cp
+    label: Optional legislation CP
+    kind: cp
+    side: neg
+    aliases: [optional legislation cp, cp optional legislation]
+  - id: religious-freedom-cp
+    label: Religious freedom CP
+    kind: cp
+    side: neg
+    aliases: [religious freedom cp, cp religious freedom]
+  - id: ucf-cp
+    label: UCF CP
+    kind: cp
+    side: neg
+    aliases: [ucf cp, cp ucf]
+
+  # Kritiks
+  - id: disability-k
+    label: Disability K
+    kind: k
+    side: neg
+    aliases: [disability k, k disability]
+  - id: debility-k
+    label: Debility K
+    kind: k
+    side: neg
+    aliases: [debility k, k debility]
+  - id: trump-k
+    label: Trump K
+    kind: k
+    side: neg
+    aliases: [trump k]
+
+  # Topicality
+  - id: nhi-t
+    label: T-NHI
+    kind: t
+    side: neg
+    aliases: [t nhi, topicality nhi]
+  - id: multipayer-t
+    label: T-multi-payer
+    kind: t
+    side: neg
+    aliases: [t multipayer, t multi payer]
+  - id: single-payer-t
+    label: T-single payer
+    kind: t
+    side: neg
+    aliases: [t single payer]
+  - id: no-single-payer-t
+    label: T-no single payer
+    kind: t
+    side: neg
+    aliases: [t no single payer, t no singlepayer]
+  - id: establish-t
+    label: T-establish
+    kind: t
+    side: neg
+    aliases: [t establish]
+  - id: should-t
+    label: T-should
+    kind: t
+    side: neg
+    aliases: [t should]
+  - id: comprehensive-t
+    label: T-comprehensive
+    kind: t
+    side: neg
+    aliases: [t comprehensive]

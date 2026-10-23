@@ -16,6 +16,8 @@ metadata:
     debate/title: Weekly landscape report
     debate/architecture-refs: §8, §10, §13, §14, §16
 spec:
+  # PM ruling 2026-10-23 (v1-e32-t03 brief, item 2): the sentence about the staleness hook had been
+  # spliced into the middle of "...S3 publishing are t05"; it now follows the boundaries, as written.
   description: >-
     Implement LandscapeReportService, a pure aggregation over classified items (t02), E30 Disclosures
     (school, team code, side, tournament, round) and E31 card fingerprints/occurrences, producing one
@@ -29,9 +31,10 @@ spec:
     Output is a Markdown report plus positions.csv and top_cards.csv with a header block recording
     caselist, snapshot, topic id, taxonomy_version, parser_version, prompt version and classification
     coverage. Every card is labeled FILE_IMPORT (disclosed, not platform-verified). Boundaries:
-    week-over-week trends and per-school views are t04; the CLI, local output paths and S3 publishing are Every generated report calls the staleness hook v1-e34-t03 exposes and carries its banner and
-    its `stale` metadata flag; a report that cannot say how old its newest snapshot is does not ship.
-    t05; "files suggest" drafting from top cards is v1-e33-t03.
+    week-over-week trends and per-school views are t04; the CLI, local output paths and S3 publishing are
+    t05; "files suggest" drafting from top cards is v1-e33-t03. Every generated report calls the
+    staleness hook v1-e34-t03 exposes, carries its banner and its stale metadata flag, and a report
+    that cannot say how old its newest snapshot is does not ship.
     (PM amendment 2026-10-22, from the coach's priorities of 2026-10-22.) The first reports are
     built from deterministic classifications only (v1-e32-t02); the header's prompt version
     reads `none` and the Unclassified line carries what the matcher could not place. The Policy

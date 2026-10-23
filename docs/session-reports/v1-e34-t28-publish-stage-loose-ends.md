@@ -285,6 +285,115 @@ already planned brings this in.
    The new paragraph "A check cut short is made again" says where its owed work is kept. The old
    sentence could be reworded when that docstring is next edited.
 
+## PM conditions
+
+The PM's verdict of 2026-10-22 accepted the work on three conditions, closed in this session. The
+phase stays `Succeeded`.
+
+**Commit ids after the sync.** `scripts/task sync` rebased the branch onto `origin/dev` at
+`d645744`, which includes v1-e01-t30 (#403) and the PM batch (#405). The rebase was clean. The ids
+quoted above are from before it; they now read:
+
+| Before the sync | After it |
+|---|---|
+| `41c375e` | `1120bb5` |
+| `1856dd2` | `c8002a5` |
+| `fbbed33` | `958b0bb` |
+| `5c21b24` | `964729c` |
+| `aab01f3` | `f19b6a8` |
+| `d6edba6` | `044ce3b` |
+
+Their source trees are unchanged; `41c375e` stays reachable through `ffbfb2c`, the `dev` commit it
+started from.
+
+### Condition 1: every pull is handed the owed list
+
+`run_pull` now reads the newest run's list once, and gives it to `run()` as well as to
+`publish_pending()` (`e9acaef`). A dry run is handed nothing. In `run()`:
+
+* the list goes into the run's tally, so `_report_stage` compares it after what the pull
+  published, through the same code;
+* the select stage's reason ends with the same sentence the drain's uses;
+* a pull cut short again names what it did not reach in its own details, so the next run owes
+  exactly that.
+
+The cases this condition supersedes:
+
+* Decision 3's "a scheduled pull settles the list without comparing it" no longer happens.
+* Decision 6's banner is now `… was cut short; the next pull, or caselist pull --publish-pending
+  after the login, makes it again.` The runbook quotes it, and says the scheduled pull makes the
+  check.
+* Follow-up 1 is done.
+
+**Tests, red first** (`f82e7b4`, run against the synced source before the change): `3 failed, 27
+passed`.
+
+| Test | Red | Green |
+|---|---|---|
+| `test_a_pull_after_a_cut_short_check_compares_the_weeks_it_did_not` | `assert [('testcl26', None)] == [('testcl26', '2026-09-01'), ('testcl26', '2026-09-08')]`: only retention asked, caselist-wide | The pull asks for both weeks; its report reads `2 snapshot(s) confirmed in the bucket`; its select reason ends with the owed sentence. A drain after it compares nothing |
+| `test_a_pull_that_publishes_compares_what_it_published_and_then_what_was_owed` | `'1 snapshot(s) confirmed in the bucket' == '2 snapshot(s) …'` | Week two is published and compared first, then week one, which was owed |
+| `test_a_pull_cut_short_again_owes_what_it_did_not_reach` | `assert None == [{'caselist': 'testcl26', 'snapshot': '2026-09-08'}]` | The second pull, cut short at its second comparison, owes week two and is `publish_pending`; the drain then compares week two alone |
+
+In the second test the list of comparisons matched even when red, because retention asks about
+week one's inbox copy itself. The report stage's own count is what catches it, and the test says
+so.
+
+`test_only_the_newest_run_owes_a_comparison` kept its assertions; its docstring now says the pull
+makes the check.
+
+**Mutants.** I added three for a run that ignores the list, and re-anchored mutant 9, whose line
+condition 1 rewrote. Then I re-ran all 22 against the synced source, each with a fresh Hypothesis
+directory and a byte-checked restore. Every one was caught, and `git status` was empty afterwards.
+The new ones:
+
+| Mutant | Caught by |
+|---|---|
+| `run_pull` does not hand a pull the owed comparisons | `test_a_pull_after_a_cut_short_check_compares_the_weeks_it_did_not` |
+| `run()` does not put them in the tally | the same |
+| `run()`'s select stage does not say what is owed | the same |
+| `run_pull` does not hand the drain the owed comparisons (mutant 9, re-anchored) | `test_publish_pending_compares_exactly_the_weeks_the_cut_short_check_did_not` |
+
+Mutants 1 to 8 and 10 to 19 were caught by the same tests as in the table above.
+
+**Agent compatibility.** No written key changed. I re-ran the writer on the synced build (`4
+passed`) and read its files with three builds: this one, dev85, and `d645744` exported as the new
+base. All three exited 0 with `refused or skipped: 0`. Past the first line, dev85's output and
+the base's are identical, and this build's output is identical to its first read. The set of keys
+in the run logs and details is the same as before the condition.
+
+### Condition 2: the docstring
+
+The sentence in "Credentials, and stages that come back later" now says where each stage's owed
+work is kept: the publish's in the pending-work file, and the report stage's in the run's details.
+"A check cut short is made again" says the next pull, scheduled or by hand, or `--publish-pending`
+makes the check. Follow-up 2 is done.
+
+### Condition 3: sync, the fakes import, and the checks again
+
+`0e561be` rewrites the one import, by v1-e01-t30's mapping:
+`from debate_core.testing.fakes.suppression import empty_suppression_list`. After the sync,
+`git grep` finds no other `from debate_core.testing.fakes import` and no `from
+debate_core.application.ports import <name>` in this branch's files. The remaining hits are a
+module import in `test_discovery.py` and strings inside t30's own guard tests.
+
+Each pytest run used `.venv/bin/python -m pytest -n auto -m "not slow and not live"` under a
+115 s hard stop. All of these were run after the last change:
+
+* The new test file and the every-build compatibility test: `97 passed in 5.08s`.
+* `packages/debate_core/tests/application/caselist`, `test_caselist_sync.py`,
+  `tests/smoke/test_caselist_pull.py` and `tests/smoke/test_caselist_runs.py`: `1651 passed` in
+  91 s.
+* `packages/debate_cli/tests`, `tests/architecture` and `tests/specs` (the always-run list):
+  `1120 passed` in 40 s.
+* `ruff format --check .`: `1101 files already formatted`. `ruff check .`: all passed.
+* `uv run --frozen pyright` (project-wide): `0 errors, 0 warnings, 0 informations`.
+* `lint-imports`: `15 kept, 0 broken`. `check_thin_handlers.py`: 46 handlers within 25 statements.
+* `validate_specs.py`: `OK: 420 files, 40 epics, 358 tasks, 22 releases`.
+* `docs_index.py --check-descriptions`: 43 described. `check_command_blocks.py --base origin/dev`:
+  341 blocks, no `#`. `check_links.py`: 1978 links OK.
+
+Nothing came out differently from the notes.
+
 ## PM review
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in

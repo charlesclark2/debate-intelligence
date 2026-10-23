@@ -169,6 +169,24 @@ def test_aggregate_one_file_two_teams_disclosed_counts_in_both_rounds() -> None:
     assert (states.rounds, states.teams) == (3, 3)
 
 
+def test_aggregate_a_disclosure_by_no_readable_team_reads_its_round_but_is_no_team() -> None:
+    inputs = read_synthetic_caselist(FIXTURE)
+    # a4, KK's affirmative round, filed where the path parser could read no school or team code.
+    unfiled = tuple(
+        one.evolve(school="UNKNOWN", team_code="UNKNOWN") if one.source_sha256 == "a4" * 32 else one
+        for one in inputs.disclosures
+    )
+    report = _report(dataclasses.replace(inputs, disclosures=unfiled))
+    innovation = _position(report, "innovation-advantage")
+    assert (innovation.rounds, innovation.teams, innovation.share_of_teams) == (3, 2, (2, 5))
+    # KK still disclosed b8 on the negative.
+    assert (report.header.aff_rounds, report.header.aff_teams, report.header.teams) == (7, 5, 8)
+    assert (
+        next(card for card in report.top_cards if card.position_id == "innovation-advantage").teams_reading
+        == 2
+    )
+
+
 def test_aggregate_rounds_and_teams_by_side_are_the_denominators() -> None:
     header = _report().header
     assert (header.rounds, header.aff_rounds, header.neg_rounds) == (16, 7, 8)

@@ -766,3 +766,64 @@ def test_download_cap_that_is_not_a_whole_number_in_range_is_refused(variable: s
 
     with pytest.raises(ConfigurationMissing, match=variable):
         PilotConfiguration.from_environment({**REQUIRED_ENVIRONMENT, variable: value})
+
+
+# ------------------------------------------------------------------------------------------------
+# The PM's review, condition 2: a card whose own source is over the budget is a refused card
+# ------------------------------------------------------------------------------------------------
+
+TOO_LARGE_ALONE: Final = "Its file is too large to download. Copy card still works."
+
+
+@pytest.fixture
+def tight(make_world: Any) -> Any:
+    """A source budget of exactly the `other` source: `disclosed` is over it alone, `camp` is not."""
+    probe = make_world()
+    budget = len(probe.sources()["other"].content)
+    assert len(probe.sources()["disclosed"].content) > budget >= len(probe.sources()["camp"].content)
+    probe.services.search_index.close()
+    made = make_world(download_source_bytes=budget)
+    made.signed_in_student()
+    yield made
+    made.services.search_index.close()
+
+
+def test_cart_with_a_card_whose_own_file_is_over_the_source_budget_names_it(tight: Any) -> None:
+    response = tight.download("camp download", "download")
+
+    assert response.status_code == 409
+    assert response.json() == {
+        "message": "Some cards cannot be downloaded.",
+        "refused": [
+            {
+                "card": tight.card_reference("download"),
+                "position": 2,
+                "name": "Gabbro ridges slow upland erosion",
+                "reason": TOO_LARGE_ALONE,
+            }
+        ],
+    }
+    assert tight.built == [] and downloads(tight) == []
+
+
+def test_cart_without_the_card_whose_own_file_is_too_large_builds_the_rest(tight: Any) -> None:
+    refused = tight.download("camp download", "download", "download second").json()["refused"]
+
+    assert [card["position"] for card in refused] == [2, 3]
+    assert {card["reason"] for card in refused} == {TOO_LARGE_ALONE}
+    response = tight.download("camp download")
+    assert response.status_code == 200
+    assert paragraphs(response.content)[3:] == CAMP_PARAGRAPHS
+
+
+def test_cart_whose_sources_only_add_up_past_the_budget_keeps_the_sources_message(tight: Any) -> None:
+    response = tight.download("camp download", "download other")
+
+    assert response.status_code == 409
+    assert response.json() == {
+        "message": (
+            "These cards come from files too large to read in one download. Download fewer cards at a time, "
+            "or a card from a large file on its own."
+        )
+    }
+    assert tight.built == []

@@ -29,9 +29,11 @@ read. A card on a page rendered before a removal is refused at the download and 
 4. **The file's size, estimated** from the text the index holds (:func:`estimated_file_bytes`):
    over :data:`DOWNLOAD_FILE_MAX_BYTES`, refused before anything is read.
 5. **The sources**, read once each through `source_stores` (`raw/caselist/<slug>`, or a camp
-   file's `raw/openev/<year>`). Their bytes together over the source budget are refused before the
-   build (:attr:`DownloadRefusal.SOURCES_TOO_LARGE`); a source that is missing or no longer hashes to
-   its name refuses its cards.
+   file's `raw/openev/<year>`). A card whose own source is over the source budget is refused and
+   named (:attr:`RefusedCardReason.SOURCE_TOO_LARGE`), so it can be dropped like any other; sources
+   that only add up past the budget refuse the cart before the build
+   (:attr:`DownloadRefusal.SOURCES_TOO_LARGE`). A source that is missing or no longer hashes to its
+   name refuses its cards.
 6. **The build.** The writer's own refusals (UNSUPPORTED_CONTENT, READBACK_MISMATCH and the rest)
    name their cards. A built file over the size limit is refused, never failed at the response.
 7. **The audit record**, written before the file is returned. One that cannot be written raises
@@ -227,6 +229,11 @@ class RefusedCardReason(StrEnum):
     READBACK_MISMATCH = "READBACK_MISMATCH"
     """The built file did not read back as its source card."""
 
+    SOURCE_TOO_LARGE = "SOURCE_TOO_LARGE"
+    """Its own source is over the source budget, so no download can hold it (the PM's review of
+    2026-10-22). A cart whose sources only add up past the budget is :attr:`DownloadRefusal.
+    SOURCES_TOO_LARGE` instead."""
+
 
 _WRITER_REASONS: Final[Mapping[CardRefusalCode, RefusedCardReason]] = {
     CardRefusalCode.UNSUPPORTED_CONTENT: RefusedCardReason.UNSUPPORTED_CONTENT,
@@ -380,8 +387,14 @@ class CardDownloadService:
         sources = tuple(source for source in screened.sources if source is not None)
         if estimated_file_bytes(sources) > self._file_bytes:
             return DownloadRefused(DownloadRefusal.FILE_TOO_LARGE)
-        fetched = await self._fetch(sources)
-        if fetched is None:
+        fetched, too_large = await self._fetch(sources)
+        alone = _refused_too_large(keys, sources, too_large)
+        if alone:
+            return DownloadRefused(DownloadRefusal.CARDS_REFUSED, alone)
+        if (
+            sum(len(content) for content in fetched.values() if isinstance(content, bytes))
+            > self._source_bytes
+        ):
             return DownloadRefused(DownloadRefusal.SOURCES_TOO_LARGE)
         built = await self._build(keys, sources, fetched)
         if isinstance(built, DownloadRefused):
@@ -409,12 +422,16 @@ class CardDownloadService:
 
     async def _fetch(
         self, sources: Sequence[CardSource]
-    ) -> dict[str, bytes | NotFound | BlobIntegrityError] | None:
-        """Each distinct source's bytes, or the error its store gave; `None` past the source budget."""
+    ) -> tuple[dict[str, bytes | NotFound | BlobIntegrityError], frozenset[str]]:
+        """Each distinct source's bytes, or the error its store gave, and the sources over the budget alone.
+
+        Every distinct source is read, at most one per card in the cart, so that each card whose own
+        source is too large is named. A source over the budget is not kept.
+        """
         fetched: dict[str, bytes | NotFound | BlobIntegrityError] = {}
-        total = 0
+        too_large: set[str] = set()
         for source in sources:
-            if source.source_sha256 in fetched:
+            if source.source_sha256 in fetched or source.source_sha256 in too_large:
                 continue
             store = self._source_stores(source_prefix(source.caselist, source.snapshot))
             try:
@@ -422,11 +439,11 @@ class CardDownloadService:
             except (NotFound, BlobIntegrityError) as problem:
                 fetched[source.source_sha256] = problem
                 continue
-            total += len(content)
-            if total > self._source_bytes:
-                return None
+            if len(content) > self._source_bytes:
+                too_large.add(source.source_sha256)
+                continue
             fetched[source.source_sha256] = content
-        return fetched
+        return fetched, frozenset(too_large)
 
     # The build ------------------------------------------------------------------------------
 
@@ -531,6 +548,17 @@ def _fingerprint(source: CardSource) -> str:
     """The exact fingerprint of the card the page shows: its evidence text's (E31's rule for a FULL or
     ABBREVIATED card). The writer refuses a source whose card at those paragraphs has another."""
     return fingerprint_text(source.text)
+
+
+def _refused_too_large(
+    keys: Sequence[CardKey], sources: Sequence[CardSource], too_large: frozenset[str]
+) -> tuple[RefusedCard, ...]:
+    """The cards whose own source is over the source budget: no cart that holds them can be built."""
+    return tuple(
+        RefusedCard(position, key, RefusedCardReason.SOURCE_TOO_LARGE, source.tag, source.short_cite)
+        for position, (key, source) in enumerate(zip(keys, sources, strict=True), start=1)
+        if source.source_sha256 in too_large
+    )
 
 
 def _refused_by_lookup(

@@ -87,6 +87,7 @@ _CARD_REASONS: Final[Mapping[RefusedCardReason, str]] = {
         "It holds a picture, a table, a text box or a footnote that cannot be copied exactly. "
         "Copy card copies its text."
     ),
+    RefusedCardReason.SOURCE_TOO_LARGE: "Its file is too large to download. Copy card still works.",
     RefusedCardReason.READBACK_MISMATCH: (
         "It did not come out exactly as it is in its file, so it was left out. Copy card copies its text."
     ),

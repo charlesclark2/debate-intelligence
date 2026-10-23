@@ -12,6 +12,10 @@ Both tests are marked slow and stay off the PR's path (working agreement 1).
   timings and result counts and nothing else: no tag, cite, text or provenance. It skips when the
   variable is not set, and is marked `operator_data`, so validate-dev's slow tier leaves it out
   rather than counting that skip as a failure (`v1-e01-t34`).
+* The operator's passage and prefix check (`test_passage_and_prefix_timings_on_the_operators_index`,
+  `v1-e39-t13`): :data:`OPERATOR_PASSAGES`, eleven invented sentences of generic debate words up to
+  the forty-word limit, searched as passages, and :data:`OPERATOR_PREFIXES`, twelve prefixes down to
+  three letters, on the same index and under the same rules: timings and counts only.
 
 Times are the service's whole call: parsing, the ranked statement, the snippets, the result
 objects and, since `v1-e39-t11`, the result count up to its default cap of 1,000, with no
@@ -36,7 +40,7 @@ import pytest
 from debate_core.application.evidence_search import EvidenceSearchService
 from debate_core.application.ports.search_index import IndexedOccurrence, SearchDocument
 from debate_core.domain.caselist import Event, Side
-from debate_core.domain.evidence_search import SearchFilters, parse_query
+from debate_core.domain.evidence_search import SearchFilters, parse_passage, parse_query
 from debate_core.integrations.local.search_index import SqliteSearchIndexWriter
 from debate_core.integrations.local.search_index_reader import SqliteSearchIndexReader
 
@@ -200,11 +204,52 @@ OPERATOR_QUERIES: Final = (
 )
 """Twenty generic queries: common words, phrases, both prefixes, exclusions and every filter."""
 
+OPERATOR_PASSAGES: Final = (
+    ("Nuclear war between great powers would cause human extinction", SearchFilters()),
+    ("Economic growth increases carbon emissions and accelerates climate change", SearchFilters()),
+    ("Artificial intelligence threatens jobs and democracy around the world", SearchFilters()),
+    ("Deterrence prevents conflict because leaders fear escalation", SearchFilters()),
+    ("A rising China challenges American hegemony in Asia", SearchFilters()),
+    ("Pandemics spread faster when global health systems collapse", SearchFilters(event=Event.PF)),
+    ("Space militarization risks an arms race with Russia", SearchFilters(side=Side.AFF)),
+    ("Warming oceans destroy coral reefs and the fisheries that feed millions", SearchFilters()),
+    ("Sanctions fail to change authoritarian regime behavior", SearchFilters(caselist="openev")),
+    ("Renewable energy transitions reduce dependence on oil imports", SearchFilters()),
+    (
+        "Nuclear war between great powers would cause human extinction, and economic growth increases "
+        "carbon emissions that accelerate climate change, while artificial intelligence threatens jobs and "
+        "democracy; deterrence prevents conflict because leaders fear escalation, a rising China challenges "
+        "American hegemony, pandemics spread when health systems collapse, and sanctions fail regimes "
+        "everywhere today",
+        SearchFilters(),
+    ),
+)
+"""Eleven invented passages of generic words, the last at the forty-content-word limit."""
+
+OPERATOR_PREFIXES: Final = (
+    ("econom*", SearchFilters()),
+    ("nucl* war", SearchFilters()),
+    ("climat*", SearchFilters()),
+    ("deter*", SearchFilters()),
+    ("extinct*", SearchFilters()),
+    ("democra*", SearchFilters()),
+    ("hegemon*", SearchFilters(caselist="openev")),
+    ("pandem*", SearchFilters(event=Event.PF)),
+    ("milit* -china", SearchFilters()),
+    ("tag:sanction*", SearchFilters()),
+    ("pro*", SearchFilters()),
+    ("con*", SearchFilters()),
+)
+"""Twelve prefixes: common stems, a prefix with a word, a filter, an exclusion, a column, and the two
+widest three-letter prefixes, `pro*` and `con*`."""
+
 
 def time_queries(
     searched: EvidenceSearchService,
     queries: tuple[tuple[str, SearchFilters], ...],
     counted: list[str] | None = None,
+    *,
+    passage: bool = False,
 ) -> tuple[list[float], list[float], list[int]]:
     """Cold times (the first pass), warm times (the timed passes), and each query's first-page size.
 
@@ -213,7 +258,7 @@ def time_queries(
     sizes: list[int] = []
     for query, filters in queries:
         started = time.perf_counter()
-        page = searched.search(query, filters)
+        page = searched.search(query, filters, passage=passage)
         cold.append(time.perf_counter() - started)
         sizes.append(len(page.hits))
         assert not page.partial
@@ -224,7 +269,7 @@ def time_queries(
     for _ in range(TIMED_PASSES):
         for query, filters in queries:
             started = time.perf_counter()
-            searched.search(query, filters)
+            searched.search(query, filters, passage=passage)
             warm.append(time.perf_counter() - started)
     return cold, warm, sizes
 
@@ -234,12 +279,16 @@ def percentiles(times: list[float]) -> str:
     return f"p50 {cuts[49] * 1000:.1f} ms, p95 {cuts[94] * 1000:.1f} ms, max {max(times) * 1000:.1f} ms"
 
 
-def match_counts(path: Path, queries: tuple[tuple[str, SearchFilters], ...]) -> list[int]:
-    """How many documents each query's words match, before filters: counts only."""
+def match_counts(
+    path: Path, queries: tuple[tuple[str, SearchFilters], ...], *, passage: bool = False
+) -> list[int]:
+    """How many documents each query's words match, before filters: counts only. For a passage, any
+    of its words: the OR the passage's minimum then narrows."""
+    parse = parse_passage if passage else parse_query
     with sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro&immutable=1", uri=True) as connection:
         return [
             connection.execute(
-                "SELECT count(*) FROM search WHERE search MATCH ?", (parse_query(query).fts5_expression(),)
+                "SELECT count(*) FROM search WHERE search MATCH ?", (parse(query).fts5_expression(),)
             ).fetchone()[0]
             for query, _ in queries
         ]
@@ -302,3 +351,42 @@ def test_search_timings_on_the_operators_index() -> None:
         f"\nmatches per query: {counts}"
         f"\nfirst-page results per query: {sizes}"
     )
+
+
+@pytest.mark.slow
+@pytest.mark.operator_data
+def test_passage_and_prefix_timings_on_the_operators_index() -> None:
+    """The operator's read-only check of `v1-e39-t13`'s queries: timings and counts only."""
+    named = os.environ.get("DEBATE_TUB_SEARCH_INDEX")
+    if not named:
+        pytest.skip("DEBATE_TUB_SEARCH_INDEX names no index")
+    path = Path(named).expanduser()
+    searched = EvidenceSearchService(
+        SqliteSearchIndexReader(path, index_id=path.parent.name), time_budget_seconds=600.0
+    )
+    words = [len(parse_passage(query).terms) for query, _ in OPERATOR_PASSAGES]
+    passage_counts: list[str] = []
+    cold, warm, sizes = time_queries(searched, OPERATOR_PASSAGES, passage_counts, passage=True)
+    prefix_counts: list[str] = []
+    prefix_cold, prefix_warm, prefix_sizes = time_queries(searched, OPERATOR_PREFIXES, prefix_counts)
+    print(
+        f"\noperator's index: {path.stat().st_size} bytes, format {searched_format(path)}, "
+        f"SQLite {sqlite3.sqlite_version}"
+        f"\npassages, warm, {len(warm)} timed searches: {percentiles(warm)}"
+        f"\npassages, cold, first pass: {percentiles(cold)}"
+        f"\npassage content words: {words}"
+        f"\npassage OR matches: {match_counts(path, OPERATOR_PASSAGES, passage=True)}"
+        f"\npassage results counted: {passage_counts}"
+        f"\nslowest warm passage: number {1 + warm.index(max(warm)) % len(OPERATOR_PASSAGES)}"
+        f"\nprefixes, warm, {len(prefix_warm)} timed searches: {percentiles(prefix_warm)}"
+        f"\nprefixes, cold, first pass: {percentiles(prefix_cold)}"
+        f"\nprefix results counted: {prefix_counts}"
+        f"\nslowest warm prefix: number {1 + prefix_warm.index(max(prefix_warm)) % len(OPERATOR_PREFIXES)}"
+        f"\nfirst-page results: passages {sizes}, prefixes {prefix_sizes}"
+    )
+    assert words[-1] == 40, "the last passage is at the forty-word limit"
+
+
+def searched_format(path: Path) -> int:
+    with sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro&immutable=1", uri=True) as connection:
+        return connection.execute("PRAGMA user_version").fetchone()[0]

@@ -151,7 +151,7 @@ class SearchIndexRefusal(StrEnum):
     """The manifest's bytes are not the ones the pointer's digest names."""
 
     MANIFEST_DISAGREES = "MANIFEST_DISAGREES"
-    """The manifest names another index, or other digests, than the pointer."""
+    """The manifest names another index, format version or other digests than the pointer."""
 
     UNREADABLE_OBJECT = "UNREADABLE_OBJECT"
     """The object is not one whole gzip stream: damaged, cut short, or followed by other bytes."""
@@ -163,7 +163,7 @@ class SearchIndexRefusal(StrEnum):
     """The file the object inflates to, or its size, is not the one the pointer and the manifest name."""
 
     UNREADABLE_INDEX = "UNREADABLE_INDEX"
-    """The file checks out, and the reader still refuses it: not a search index of this format."""
+    """The file checks out, and the reader still refuses it, or it is another format than its manifest's."""
 
 
 _REFUSAL_SENTENCES: Final = {
@@ -174,11 +174,13 @@ _REFUSAL_SENTENCES: Final = {
     ),
     SearchIndexRefusal.UNREADABLE_MANIFEST: "its manifest is not a search index manifest",
     SearchIndexRefusal.MANIFEST_DIGEST_MISMATCH: "its manifest is not the one the pointer names",
-    SearchIndexRefusal.MANIFEST_DISAGREES: "its manifest and the pointer name different files",
+    SearchIndexRefusal.MANIFEST_DISAGREES: "its manifest and the pointer name different files or formats",
     SearchIndexRefusal.UNREADABLE_OBJECT: "its object is not one whole gzip stream",
     SearchIndexRefusal.OBJECT_DIGEST_MISMATCH: "its object is not the one the pointer names",
     SearchIndexRefusal.INDEX_DIGEST_MISMATCH: "its object does not inflate to the file the pointer names",
-    SearchIndexRefusal.UNREADABLE_INDEX: "the reader refuses the file it inflates to",
+    SearchIndexRefusal.UNREADABLE_INDEX: (
+        "the reader refuses the file it inflates to, or it is not the format its manifest names"
+    ),
 }
 
 
@@ -446,6 +448,10 @@ class SearchIndexHolder:
         except UnreadableSearchIndex:
             path.unlink(missing_ok=True)
             raise SearchIndexRefused(SearchIndexRefusal.UNREADABLE_INDEX, index_id) from None
+        if reader.format_version != manifest.format_version:
+            reader.close()
+            path.unlink(missing_ok=True)
+            raise SearchIndexRefused(SearchIndexRefusal.UNREADABLE_INDEX, index_id)
         logger.info("search index %s loaded", index_id)
         return _LoadedIndex(
             index_id=index_id,
@@ -471,11 +477,12 @@ class SearchIndexHolder:
             raise SearchIndexRefused(SearchIndexRefusal.UNREADABLE_MANIFEST, index_id) from None
         if manifest.format_version not in READABLE_SEARCH_INDEX_FORMAT_VERSIONS:
             raise SearchIndexRefused(SearchIndexRefusal.UNKNOWN_FORMAT_VERSION, index_id)
-        if (manifest.index_id, manifest.gzip_object.sha256, manifest.sqlite_file.sha256) != (
-            index_id,
-            pointer.object_sha256,
-            pointer.sqlite_sha256,
-        ):
+        if (
+            manifest.index_id,
+            manifest.format_version,
+            manifest.gzip_object.sha256,
+            manifest.sqlite_file.sha256,
+        ) != (index_id, pointer.format_version, pointer.object_sha256, pointer.sqlite_sha256):
             raise SearchIndexRefused(SearchIndexRefusal.MANIFEST_DISAGREES, index_id)
         return manifest
 

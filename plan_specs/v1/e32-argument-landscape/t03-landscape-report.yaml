@@ -96,7 +96,7 @@ spec:
         The coach reviews the fixture report and confirms the sections and column names are usable for
         weekly prep meetings.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

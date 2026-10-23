@@ -262,3 +262,85 @@ If anything comes out differently from what is written here, stop and ask for an
 * pyright, `lint-imports`, ruff and `validate_specs.py`.
 
 Record the results. No operator follow-up.
+
+## PM conditions
+
+The three conditions of the 2026-10-22 review, closed in this session on top of `origin/dev` at
+`8eb149a`. Nothing came out differently from the review's notes, so the verdict above stands and the
+phase stays `Succeeded`. Commit ids are the ones after the sync; the task's code commits before it
+were `a218857`, `6bd4175`, `e8c7a3a` and `1b64a8b` on `649fc66`.
+
+### Condition 1: OpenCaselist reads the seconds form as digits only (question 1, ruling (b))
+
+* `any_number` is gone from `retry_after_seconds` and from the transport's call. Every adapter now
+  reads `delay-seconds` as ASCII digits, and a non-integer header gives `None`, so the transport
+  takes its doubling backoff.
+* The forbidden entry in the spec carries the PM's comment, above the entry so YAML keeps it as a
+  comment. The parsed `forbidden` list is unchanged, checked by loading the spec.
+* **Red first** (`.venv/bin/python -m pytest packages/debate_core/tests/integrations/opencaselist/test_client.py -k "falls_back or does_not_hang" -n 0 -p no:randomly`,
+  against the code before the fix) → `6 failed, 3 passed`:
+  * `test_a_retry_after_that_is_not_digits_or_a_date_falls_back_to_the_backoff`, each run bounded by
+    `asyncio.wait_for(..., timeout=5)`: `nan`, `inf`, `1.5`, `-5` and `1e2` failed. `nan` recorded a
+    `nan` sleep, `inf` gave up with "asked for infs", and `1.5`, `-5` and `1e2` waited 1.5 s, 0 s and
+    100 s. Words, an integer (`37` → `[37.0]`) and a date (`[120.0]` from a fixed 2030 clock)
+    passed, as before.
+  * `test_a_retry_after_of_nan_does_not_hang_the_transport`, on the real event loop with a 0.01 s
+    backoff: failed with `TimeoutError` after 5 s. That is the hang.
+  * The first red run also failed the date case. That was a fault in the test, not the code: it used
+    the `client` fixture, which is built before the test sets its 2030 clock. It now builds its
+    client after setting the clock.
+* **Green:** both tests pass. The real-loop `nan` test finishes in about half a second (the pacer's
+  minimum interval).
+* **The three existing transport tests are unchanged.** An AST comparison of every function in
+  `test_client.py`, `test_http_failures.py` and `test_http_fetcher.py` against `649fc66` reports one
+  changed function, `build_client` (accepted in the review). Nothing was removed; only the new tests
+  were added. The earlier test pinning the `float()` reading, which this session wrote, is replaced.
+
+### Condition 2: non-ASCII digits give `None`, never a `ValueError` (question 2, ruling (a))
+
+* The seconds form needs `text.isascii() and text.isdigit()`. So `²` gives `None`, where it raised
+  `ValueError`. So do Arabic-Indic `١٢٠` and full-width `１２０`, which `float()` used to read as
+  120: the ruling says any non-ASCII digits.
+* **Red first**, against the code before the fix:
+  * `test_429_with_digits_that_are_not_ascii_is_rate_limited_with_no_stated_wait` (through
+    `provider_error_for_status`) → both cases failed. `²` raised `ValueError`, and `١٢٠` gave 120.
+  * `test_retry_after_in_digits_that_are_not_ascii_falls_back_to_the_backoff` (through the fetcher,
+    the header sent as UTF-8 bytes) → both failed. `²` raised `ValueError` out of `fetch`, and `١٢٠`
+    waited 120 s.
+  * `test_anything_but_ascii_digits_or_a_date_is_unreadable` failed for `²`, Arabic-Indic and
+    full-width digits.
+  * Altogether, that first red run of the new tests gave `14 failed, 13 passed`. Green after the fix.
+
+### Condition 3: `tests/smoke` in the packages, then the sync
+
+* The spec's `constraints.packages` gains `tests/smoke`, under the PM's comment.
+* `scripts/task sync v1-e07-t08-shared-retry-after` rebased the six task commits onto `origin/dev`
+  `8eb149a` (#405, #406, #407, #408) with no conflicts. The branch was not on origin, so nothing was
+  pushed. Dev touched none of this task's files and added no `Retry-After` reader. `uv sync
+  --all-packages` was run after it. `git ls-remote origin refs/heads/dev` still gave `8eb149a` before
+  this report was committed.
+
+### Checks after the sync and the conditions
+
+| Check | Result |
+|---|---|
+| `.venv/bin/python -m pytest packages/debate_core/tests/integrations tests/architecture tests/specs packages/debate_cli/tests/test_app.py packages/debate_cli/tests/test_help_rendering.py -n auto -m "not slow and not live"` | exit 0, `3120 passed, 2 xfailed in 19.04s` |
+| The guard: `.venv/bin/python -m pytest packages/debate_core/tests/integrations/test_one_retry_after_reader.py -n 0 -p no:randomly` | exit 0, `11 passed` |
+| `tests/smoke/test_caselist_auth.py` with the CLI's `test_caselist_auth.py` and `test_caselist_pull.py` | exit 0, `84 passed` |
+| `uv run pytest packages/debate_core/tests/integrations` (the node's criterion, through the interpreter) | `2841 passed, 2 xfailed` |
+| `uv run --frozen ruff check .` / `ruff format --check .` | exit 0 / exit 0 |
+| `.venv/bin/pyright` (the whole repository) | exit 0, `0 errors, 0 warnings, 0 informations` |
+| `uv run --frozen lint-imports` / `scripts/check_thin_handlers.py` | exit 0 / exit 0 |
+| `uv run scripts/validate_specs.py` / `--require-succeeded v1-e07-t08-shared-retry-after` | `OK: 420 files, 40 epics, 358 tasks, 22 releases` / `Succeeded` |
+
+* **Mutants, re-run on the new code:** 19, of which 18 were killed. New ones killed: digits not
+  required to be ASCII; the `float()` reading put back; a negative number read as no wait. The
+  survivor is the guard's "and calls it" assertion, which the review accepted.
+* **Two slips, both caught and corrected before this report:**
+  * The mutation harness restores each file with `git checkout`, and its first run started before
+    this round was committed. Its byte check stopped it after one mutant. Only `retry_after.py` had
+    been reverted; it was re-applied and the integrations directory re-run (`2841 passed`), then
+    everything was committed before the harness ran again.
+  * One commit was made while pyright reported an error: a `| tail` before `&&` hid it. The error was
+    a `dict[str, bytes]` header in the new fetcher test, which now uses a bytes key. The commit was
+    amended (it is `02e2d3a`), and every check above was run with its exit code shown.

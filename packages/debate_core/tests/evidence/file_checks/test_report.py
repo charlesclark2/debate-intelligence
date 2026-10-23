@@ -197,7 +197,7 @@ def test_the_markdown_gives_pass_or_fail_per_check_and_card_and_names_cards_by_p
 | Overall | **FAIL** |
 | Built file (SHA-256) | `c3c3c3c3c3c3c3c3` |
 | Cards in the file / in the sidecar | 2 / 2 |
-| Checker | `2026.10.19-file-checks-1` |
+| Checker | `2026.10.22-file-checks-2` |
 | Parser | `2026.10.18-docx-5` |
 | Style profile | `2026.10.18-verbatim-4` |
 | Fingerprints | `card-fingerprint-v4` |

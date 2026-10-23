@@ -47,7 +47,7 @@ __all__ = [
     "render_markdown",
 ]
 
-CHECKER_VERSION: Final = "2026.10.19-file-checks-1"
+CHECKER_VERSION: Final = "2026.10.22-file-checks-2"
 """Version of these checks, recorded in every report. Bumped whenever a check's verdict can change."""
 
 FILE_QUALITY_SCHEMA_FILENAME: Final = "file-quality-report.schema.json"
@@ -104,7 +104,7 @@ CHECK_DESCRIPTIONS: Final[dict[QualityCheck, str]] = {
     ),
     QualityCheck.MANIFEST_ALIGNMENT: "The sidecar and the document agree card for card, in order.",
     QualityCheck.PROVENANCE_COMPLETE: (
-        "Each card's provenance is complete, and its provenance line is below its cite, in Undertag."
+        "Each card's provenance is complete in the sidecar, and the file's text holds no provenance line."
     ),
     QualityCheck.SUPPRESSION: "No card comes from a source or disclosure on the suppression list.",
 }

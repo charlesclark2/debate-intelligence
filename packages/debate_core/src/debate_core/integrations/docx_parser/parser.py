@@ -1137,9 +1137,9 @@ def _reread_as_body(section: _ReadSection, reason: str) -> _ReadSection:
 
 
 #: What the look-ahead for a body steps over: page furniture, blank lines and lines read as nothing,
-#: and an Undertag line, which belongs to the card above it. A built file writes its provenance line
-#: as an Undertag below every cite (`v1-e33-t02`), and a highlighted cite with that line between it
-#: and its body was read as body until `v1-e31-t24`.
+#: and an Undertag line, which belongs to the card above it. A built file wrote its provenance line
+#: as an Undertag below every cite (`v1-e33-t02`, until `v1-e33-t08`), and a highlighted cite with
+#: that line between it and its body was read as body until `v1-e31-t24`.
 _UNITS_A_BODY_IS_LOOKED_FOR_PAST: Final = (StructuralUnit.OTHER, StructuralUnit.UNDERTAG)
 
 

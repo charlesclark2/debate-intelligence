@@ -180,12 +180,17 @@ Camp files from OpenEv are kept in a store of their own, named `openev`, one cop
 A camp pin can sit in any recipe, beside cards from a caselist. For a file of camp cards alone, set
 the recipe's own `caselist` to `openev`, and unpinned cards are chosen among camp releases by the
 same four steps, where the latest release is the one of the latest year, then the first by name
-(`2031-ld`, `2031-pf`, `2031-policy`). In the built file a camp card's line below its cite names the
-camp, year, event and file title, as the data-use policy sets out:
+(`2031-ld`, `2031-pf`, `2031-policy`). A camp card's provenance line names the camp, year, event and
+file title, as the data-use policy sets out:
 
 ```text
 [OpenEv: Cascade Institute 2026 — Policy, Climate Adv CP]
 ```
+
+The line is in the file's sidecar, `<file>.docx.provenance.json`, for disclosed and camp cards alike,
+and not in the built file: since version 1.11 of the data-use policy a built file carries no
+provenance line below its cites. The sidecar keeps every card's provenance, and a removal request is
+matched against it.
 
 **A pin names a team.** A school and team code are personal data about students, and the data-use
 policy allows them only in a few places, the evidence workspace among them. That is where your

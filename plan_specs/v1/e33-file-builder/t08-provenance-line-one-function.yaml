@@ -32,7 +32,8 @@ spec:
   priority: 1
   constraints:
     # PM amendment 2026-10-22: the quality check lives in debate_core.application; the guide and policy references in docs.
-    packages: [debate_core.domain, debate_core.integrations, debate_core.application, packages/debate_core/tests, docs/guides, docs/evidence]
+    # PM ruling 2026-10-22: v1-e33-t04's provenance check lives in debate_core.evidence.file_checks.
+    packages: [debate_core.domain, debate_core.integrations, debate_core.application, debate_core.evidence, packages/debate_core/tests, docs/guides, docs/evidence]
     forbidden:
       - Any change to the sidecar, or to a built file beyond removing the provenance-line paragraphs
       - Card text, a school, team code or file name in any fixture, log, report or commit (synthetic values only)

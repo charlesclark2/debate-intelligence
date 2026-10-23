@@ -301,9 +301,83 @@ Reply: "1a" or "1b", and "2a" or "2b".
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-22
 
 **Notes:**
+
+Accepted, on conditions closed in this session before the pull request. Record them under "PM
+conditions", set the Goal `Succeeded` once condition 1 is in, and open the pull request with no
+`--partial`. If anything comes out differently from what is written here, stop and ask for another
+review.
+
+**What the PM checked.**
+* The branch is clean, on origin/dev at `aa6d4b9`, and the diff is the 17 files listed.
+* Since then dev has gained v1-e39-t11 (#415), which changes the search reader, the pages and
+  `domain/evidence_search.py`, and v1-e33-t08 may land before you. So sync (condition 5).
+* The command and the weekly stage reach one `check_index_size` through one service. The stage
+  never passes the override, by test and by mutant 15.
+
+**What is good.**
+* **The premise correction (Deviation 2) is exactly right.** The build already refused empty
+  aggregates, and the real exposure was 4e's 2-document index replacing 52,059. The per-store rule
+  is what closes it.
+* **The rule is precise.** Integer comparison, exactly 90% passes, and a store held at 0 is not
+  compared. Running the mutants against the stage's tests alone shows the stage reaches the same
+  function, with each survivor explained as equivalent on that path.
+* **The storage working is careful.** The gzip streams through zlib and never lands, the swap
+  deletes A at once, and Lambda's one request per environment means no second old index. The peak
+  is A plus B: 39% today.
+
+**Rulings on the PM questions.**
+
+1. **1a: amend ac3 to "worked out from the holder's code".** The code fully determines which files
+   exist when. The log line with bytes on `/tmp` (Follow-up 2) is already v1-e39-t10's ac5 (the
+   holder's load lines in the app log, with the index's size); the PM adds the `/tmp` total to
+   that brief. Add above ac3: `# PM ruling 2026-10-22: the peak is worked out from the holder's
+   code (A's SQLite plus B's, the gzip streamed); the bytes on /tmp reach the app log with
+   v1-e39-t10's ac5.`
+2. **2a: keep the refusal,** overridable with `--allow-shrink`. With nothing to compare, the guard
+   cannot know what it replaces, and t09's rule let an older agent overwrite a newer build's
+   pointer. Record the replaced t09 rule in `docs/runbooks/caselist-scheduled-sync.md`, where the
+   weekly stage's outcomes are listed.
+
+**The FYIs are accepted.** That covers the empty-store rule, never overridden, and Deviation 3's
+four adjusted t09 tests.
+
+**On ADR-0019's lines, the recommendation is accepted.**
+* **The storage stays at 4,096 MB.**
+* **The 900,000,000 SQLite warning moves to 1,700,000,000.** A warning that fires every week stops
+  being read, and storage binds at about 2 GB at a swap.
+* **The 400,000,000 gzip trigger stays,** since that is the one students feel.
+
+**Conditions, all closed in this session:**
+
+1. **ac3** amended as in ruling 1.
+2. **`SQLITE_BYTES_WARNING` = 1,700,000,000,** with the test that pins it changed by hand.
+   * Amend ADR-0019 (c) 6's "1 GB uncompressed" to say storage allows about 2 GB at a same-size
+     swap, the 1.7 GB warning leaving headroom, and the 400 MB gzip trigger unchanged. Cite this
+     report's working.
+   * Update the scheduled sync runbook's warning line.
+   * Add `docs/adr` to `constraints.packages` with `# PM ruling 2026-10-22: ADR-0019 (c) 6's size
+     line moves with the warning.`
+3. **Follow-up 1 now:** add the shrink guard and `--allow-shrink` to `docs/guides/search-index.md`
+   beside its publish commands, and add `docs/guides` to the packages under the same comment.
+4. **The spec's prose (Deviation 4).** Leave the description and ac2's "manifest" wording to the
+   PM's next batch; the ruling comment above ac2 stands.
+5. **Sync** (`scripts/task sync`), then re-run:
+   * the shrink-guard, stage and publish tests, and the changed directories with the always-run
+     list;
+   * pyright, `lint-imports`, ruff, `validate_specs.py` and the docs checks.
+
+   Record the results.
+
+**Placed by the PM.**
+* `v1-e39-t04`'s bandwidth-quota request, about three weeks before the gzip object passes 400 MB,
+  goes on the promotion list as an operator step with a date.
+* The `/tmp` log line goes to v1-e39-t10.
+
+**Operator follow-up:** none beyond the next weekly run. Its summary's `search_index` now carries
+the growth keys, which the PM reads after Wednesday.

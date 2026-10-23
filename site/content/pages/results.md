@@ -7,10 +7,5 @@ navLabel: Results
 navOrder: 27
 ---
 
-Where our debaters placed at each tournament this season, newest tournament first. Each result
-gives the event and the division it was won in. What the events are is explained on
-[Debate Events Offered](/events/), and the tournaments still to come are on the
-[Tournament Schedule](/schedule/).
-
-To correct a result, or to have one taken down, email Coach Clark at
-[charles.clark@wfbschools.com](mailto:charles.clark@wfbschools.com).
+Our debaters compete all season long, and we're proud of every result they bring home. Here's
+where we share their success as the year goes on.

@@ -355,8 +355,8 @@ describe('the shape of an entry', () => {
     const directory = resultsContent(SEASON_FIXTURE, Object.values(STUDENTS), {
       'results.yaml': (source) =>
         replaceOnce(
-          '    Newest tournament first.',
-          '    Newest tournament first — always.',
+          '  empty: No results have been posted for this season yet.',
+          '  empty: No results yet — check back soon.',
         )(source.replace(/^results:[\s\S]*$/m, 'results: []\n')),
     })
     expect(loadError(directory)).toMatch(/the labels use an em dash/)
@@ -365,7 +365,10 @@ describe('the shape of an entry', () => {
   it('refuses an acronym the page does not spell out', () => {
     const directory = resultsContent('', [], {
       'results.yaml': (source) =>
-        replaceOnce('    Newest tournament first.', '    Newest NSDA tournament first.')(
+        replaceOnce(
+          '  empty: No results have been posted for this season yet.',
+          '  empty: No NSDA results have been posted for this season yet.',
+        )(
           source.replace(/^results:[\s\S]*$/m, 'results: []\n'),
         ),
     })
@@ -411,6 +414,13 @@ describe('the /results/ page', () => {
     renderResults()
     const placings = [...document.querySelectorAll('.result-line__placing')].map((node) => node.textContent)
     expect(placings).toEqual(['Second speaker', 'Quarterfinalist', 'First place', 'Top speaker', 'Semifinalist'])
+  })
+
+  it('opens the season band straight into the results, with no intro paragraph under its title', () => {
+    renderResults()
+    const band = document.getElementById('season-results') as HTMLElement
+    expect(band.querySelector('.section__title')?.textContent).toBe(loadResultsView().seasonTitle)
+    expect(band.querySelector('.section__intro')).toBeNull()
   })
 
   it('anchors each tournament, by schedule id or by name and date', () => {
@@ -533,7 +543,6 @@ describe('the results page holds no copy of its own', () => {
   const copy = [
     loadPage(RESULTS_SLUG).title,
     labels.seasonTitle,
-    labels.seasonIntro,
     labels.revised,
     labels.empty,
     labels.individual,

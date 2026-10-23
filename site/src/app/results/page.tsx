@@ -71,7 +71,6 @@ export default function ResultsPage() {
         contentWidth="wide"
         headerAlign="wide"
         id={SEASON_RESULTS_ID}
-        intro={labels.seasonIntro}
         title={view.seasonTitle}
         tone="tinted"
       >

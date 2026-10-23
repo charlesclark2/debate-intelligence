@@ -15,18 +15,27 @@ alike, as data-use policy version 1.11 requires. The old `without_line` path is 
 and the read-back no longer expects a line. The writer's own `provenance_line` is deleted. Each
 sidecar entry's `provenance_line` is now composed by
 `debate_core.domain.evidence_search.occurrence_provenance_line`, the function the pilot's card page
-uses, with the writer's records converted at the boundary. Four files and their sidecars were
-recorded from the start commit's writer. Against them, every sidecar is byte for byte the same apart
-from `docx_sha256`, and every file has lost exactly its line paragraphs (9 in all) and nothing else.
-The provenance quality check now runs the other way: a file whose text holds a provenance line fails,
-and a card with no sidecar entry still fails. Every behaviour was shown red against the start
-commit's source first, and 19 of 19 mutants were caught.
+uses, with the writer's records converted at the boundary. The provenance quality check now runs the
+other way: a file whose text holds a provenance line fails, and a card with no sidecar entry still
+fails.
 
-**The PM should look first at the three items under Deviations.** All three come from the forbidden
-entry "no change to a built file beyond removing the provenance-line paragraphs". The built file's
-header analytic still ends "Who disclosed each card is below its cite.", which is now untrue. Neither
-`FILE_BUILDER_VERSION` nor the sidecar schema's description of `provenance_line` was changed. A
-paste-ready question for each is in Follow-up work.
+Four files and their sidecars were recorded from the writer at `dev`'s `c3b9dee`, where the task
+started. Against them:
+
+* every file has lost exactly its line paragraphs (9 in all) and its header's last sentence, which
+  pointed to them, and nothing else;
+* every sidecar is byte for byte the same apart from `docx_sha256`, the file's own hash, and
+  `builder_version`, now `2026.10.22-file-writer-3`.
+
+Every behaviour was shown red against the start commit's source first. In the code as merged, 22 of
+22 mutants are caught. A 23rd, on the line form's closing `]`, survived; its clause was deleted.
+
+**The PM's rulings of 2026-10-22 answered the session's three questions, and the code follows
+them.** The header analytic's last sentence is dropped, in both forms, because a download carries
+no sidecar to point to. `FILE_BUILDER_VERSION` is bumped to `-3`. The schema's description of
+`provenance_line` is reworded, a one-line diff in `docs/data/file-provenance.schema.json`. The
+spec records the ruling above its forbidden entry. Details and the evidence are under
+[PM conditions](#pm-conditions).
 
 ## Plan nodes
 
@@ -125,26 +134,23 @@ after the rewrite in mutant 20's row and were caught. Each batch's run time was 
 
 ## Deviations from the spec
 
-All three come from one forbidden entry: "Any change to the sidecar, or to a built file beyond
-removing the provenance-line paragraphs". I followed it each time, which left something now untrue
-in place. The PM decides each one; the questions are in [Follow-up work](#follow-up-work).
+None remaining.
 
-1. **The header analytic says something untrue.** `header_line` still ends "Who disclosed each
-   card is below its cite." (disclosed-only files), or "Where each card came from is below its
-   cite." (files with a camp card). No built file has anything below its cites now. Rewording the
-   header would change a paragraph that is not a line paragraph, and would fail ac1 as written.
-2. **`FILE_BUILDER_VERSION` is still `2026.10.19-file-writer-2`.** Its own comment says it is
-   "bumped whenever the bytes a recipe builds to change", and they have changed. Bumping it changes
-   the sidecar's `builder_version` field, so I left it. Nothing reads the version except the
-   quality report's "Writer (from the sidecar)" row, so the cost of not bumping is that files with
-   and without lines share one version.
-3. **The sidecar's schema still describes `provenance_line` as "The line written below the cite
-   (data-use policy, Attribution rule 2)."** This is in `FileProvenanceEntry` and the committed
-   `docs/data/file-provenance.schema.json`. Changing it changes the sidecar's published schema, and
-   `docs/data` is outside the task's packages.
+The first review raised three gaps, each from the forbidden entry "Any change to the sidecar, or to
+a built file beyond removing the provenance-line paragraphs": the header's last sentence, now
+untrue; `FILE_BUILDER_VERSION`, whose own rule asked for a bump; and the schema's description of
+`provenance_line`. The PM ruled on 2026-10-22 that all three change with the rule, and that every
+other byte of a sidecar is unchanged. That ruling is now a comment above the spec's forbidden entry,
+and `docs/data` is in `constraints.packages`. The code as merged:
 
-The sidecar's `docx_sha256` necessarily changes, because it is the new file's own hash. The identity
-test proves every other byte.
+1. **The header analytic's last sentence is dropped.** "Who disclosed each card is below its cite."
+   and "Where each card came from is below its cite." are gone. ac1's comparison allows exactly
+   that sentence to differ.
+2. **`FILE_BUILDER_VERSION` is `2026.10.22-file-writer-3`.** The sidecar identity test swaps the
+   old value, asserted to occur once, as it does the hash.
+3. **The schema describes `provenance_line` as "The card's provenance line, as the pilot's card
+   page shows it (data-use policy, Attribution rules 2 and 3); a built file's text carries none."**
+   The re-exported schema differs from `dev` by that one description, and no sidecar byte moves.
 
 ## Decisions and assumptions
 
@@ -198,43 +204,18 @@ None. Opening a built file in Word belongs to `v1-e33-t03` and `v1-e39-t08`.
 
 ## Follow-up work
 
-* **Built files made before this task fail the new check.** Any file in the evidence workspace built
-  by `2026.10.19-file-writer-2` holds lines and now fails `provenance-complete`. Rebuilding it fixes
-  that. This belongs with `v1-e33-t03`'s `files` commands, if such files exist.
+* **Built files made before this task fail the new check.** A file built by
+  `2026.10.19-file-writer-2` holds lines and now fails `provenance-complete`; rebuilding it fixes
+  that. As the PM ruled, this goes to v1-e33-t03's brief, where `files build` first runs. No such
+  file exists outside the tests today.
 * **A disclosed card copied from a team's own built file.** A team that disclosed a file built by
   the old writer has lines in its cards' undertags. The writer copies a card losslessly, so a file
-  built from such a card fails the check. That is the policy's outcome, but it may surprise a coach.
-  For E33, if it is ever seen.
-* **Questions for the PM**, as one relay block:
-
-```text
-PM questions from v1-e33-t08 (2026-10-22). Each comes from the forbidden entry "Any change to the
-sidecar, or to a built file beyond removing the provenance-line paragraphs", which I followed.
-
-1. The built file's header analytic still ends "Who disclosed each card is below its cite."
-   (or "Where each card came from is below its cite." with a camp card), which is now untrue.
-   a) Amend the forbidden entry and ac1 to allow rewording the header's last sentence, e.g.
-      "Where each card came from is in the file's sidecar.", in a follow-up task.
-   b) Drop the sentence instead.
-   c) Leave it.
-   Recommendation: (a), soon. It is the one untrue sentence a student reads in the file, and the
-   change is two strings in header_line plus the two goldens that pin them.
-
-2. FILE_BUILDER_VERSION is still 2026.10.19-file-writer-2, though its own rule says to bump it
-   whenever a recipe's bytes change, and they have.
-   a) Bump it to 2026.10.22-file-writer-3 with (1), accepting one changed sidecar field
-      (builder_version); the identity test would then exclude that field too.
-   b) Leave it.
-   Recommendation: (a), together with (1), so one version names "files without the line".
-
-3. The sidecar schema's description of provenance_line still says "The line written below the
-   cite" (FileProvenanceEntry and docs/data/file-provenance.schema.json).
-   a) Reword it to "The card's provenance line, as the pilot's card page shows it (Attribution
-      rules 2 and 3); a built file's text carries none" and re-export the schema, in the same
-      follow-up, with docs/data added to its packages.
-   b) Leave it.
-   Recommendation: (a). It changes the schema's text only, not one byte of any sidecar.
-```
+  built from such a card fails the check. The PM recorded this as the policy's outcome, to revisit
+  only if a coach meets it.
+* **v1-e33-t03's read-back paragraph.** Its spec still asks for the highlighted-cite refusal to be
+  "kept as a safeguard". The PM amends it in the next batch; this task does not edit that spec.
+* The session's three PM questions are answered by the PM's conditions (above, under Deviations),
+  and none is left open.
 
 ## PM review
 

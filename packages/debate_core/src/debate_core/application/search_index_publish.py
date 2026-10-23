@@ -279,7 +279,30 @@ def check_index_size(
     `manifest` holds none of, or fewer than `minimum_share_percent` of. With `allow_shrink`, the
     second is returned as what the reason allowed instead of raised.
     """
-    return None
+    held = current.manifest.counts.documents_by_store if current is not None else {}
+    current_index_id = current.index_id if current is not None else None
+    for store in manifest.stores:
+        if store.occurrence_rows == 0:
+            raise SearchIndexStoreEmpty(
+                manifest.index_id, store.caselist, held.get(store.caselist), current_index_id
+            )
+    if current is None:
+        return None
+    documents = manifest.counts.documents_by_store
+    shrinks: list[StoreShrink] = []
+    for store, current_documents in sorted(held.items()):
+        if current_documents == 0:
+            continue
+        kept = documents.get(store, 0)
+        if kept == 0 or kept * 100 < minimum_share_percent * current_documents:
+            shrinks.append(StoreShrink(store, kept, current_documents))
+    if not shrinks:
+        return None
+    if allow_shrink is None:
+        raise SearchIndexWouldShrink(
+            manifest.index_id, current.index_id, tuple(shrinks), minimum_share_percent
+        )
+    return AllowedShrink(reason=allow_shrink, shrinks=tuple(shrinks))
 
 
 def _shrink_reason(allow_shrink: str | None) -> str | None:
@@ -420,13 +443,18 @@ class SearchIndexPublishService:
         """
         reason = _shrink_reason(allow_shrink)
         manifest = self.check(directory)
+        unreadable: CurrentSearchIndexUnreadable | None = None
         try:
             current = await self.current(for_index=manifest.index_id)
-        except CurrentSearchIndexUnreadable:
-            current = None
+        except CurrentSearchIndexUnreadable as refused:
+            if reason is None:
+                raise
+            current, unreadable = None, refused
         allowed = check_index_size(
             manifest, current, minimum_share_percent=self._minimum_share_percent, allow_shrink=reason
         )
+        if unreadable is not None and reason is not None:
+            allowed = AllowedShrink(reason=reason, current_unreadable=unreadable.reason)
         manifest_path = directory / SEARCH_INDEX_MANIFEST_NAME
         manifest_sha256 = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
         object_key = index_object_key(manifest.index_id, SEARCH_INDEX_GZIP_NAME)
@@ -463,7 +491,13 @@ class SearchIndexPublishService:
                 await self._bucket.put_file(SEARCH_INDEX_POINTER_KEY, pointer_path),
                 hashlib.sha256(pointer.to_json_bytes()).hexdigest(),
             )
-        replaced = current.index_id if current is not None else None
+        replaced = (
+            current.index_id
+            if current is not None
+            else unreadable.current_index_id
+            if unreadable is not None
+            else None
+        )
         if allowed is not None:
             logger.warning(
                 "search index published past the shrink guard with %s",

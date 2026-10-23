@@ -70,20 +70,17 @@ from __future__ import annotations
 
 import logging
 import shutil
-import tempfile
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Final
-
-from pydantic import ValidationError
 
 from debate_core.application.caselist_sync import (
     SearchIndexStageCounts,
     SearchIndexStageReport,
     StageOutcome,
 )
-from debate_core.application.errors import NotFound, StoreCredentialsExpired, StoreError
+from debate_core.application.errors import StoreCredentialsExpired, StoreError
 from debate_core.application.ports.evidence_store import EvidenceObjectStore
 from debate_core.application.search_index_build import (
     SearchIndexBuildService,
@@ -91,9 +88,12 @@ from debate_core.application.search_index_build import (
     SearchIndexStoreVersionMismatch,
 )
 from debate_core.application.search_index_publish import (
+    ALLOW_SHRINK_FLAG,
+    CurrentSearchIndexUnreadable,
     SearchIndexFilesDamaged,
     SearchIndexPublishService,
     SearchIndexVersionMismatch,
+    SearchIndexWouldShrink,
     UnreadableSearchIndexManifest,
     read_search_index_manifest,
 )
@@ -101,7 +101,6 @@ from debate_core.domain.search_index import (
     DEFAULT_PROVENANCE_LIMIT,
     SEARCH_INDEX_FORMAT_VERSION,
     SEARCH_INDEX_MANIFEST_NAME,
-    SEARCH_INDEX_POINTER_KEY,
     SearchIndexManifest,
     SearchIndexPointer,
 )
@@ -280,7 +279,14 @@ def size_warnings(manifest: SearchIndexManifest) -> tuple[str, ...]:
     return tuple(warnings)
 
 
-def _counts(index: LocalSearchIndex, *, built: bool, published: bool) -> SearchIndexStageCounts:
+def _counts(
+    index: LocalSearchIndex,
+    *,
+    built: bool,
+    published: bool,
+    previous: SearchIndexManifest | None = None,
+) -> SearchIndexStageCounts:
+    """The stage's counts of `index`, and its growth against `previous`, the index it would replace."""
     manifest = index.manifest
     documents = manifest.counts.documents
     return SearchIndexStageCounts(
@@ -292,6 +298,24 @@ def _counts(index: LocalSearchIndex, *, built: bool, published: bool) -> SearchI
         gzip_bytes=manifest.gzip_object.bytes,
         bytes_per_document=manifest.sqlite_file.bytes // documents if documents else None,
         warnings=size_warnings(manifest),
+        previous_index_id=previous.index_id if previous is not None else None,
+        documents_growth=documents - previous.counts.documents if previous is not None else None,
+        sqlite_bytes_growth=manifest.sqlite_file.bytes - previous.sqlite_file.bytes
+        if previous is not None
+        else None,
+        gzip_bytes_growth=manifest.gzip_object.bytes - previous.gzip_object.bytes
+        if previous is not None
+        else None,
+    )
+
+
+def _growth_sentence(counts: SearchIndexStageCounts) -> str:
+    """`growth against <id>: +3 documents, ...`, or nothing when no other index was current."""
+    if counts.previous_index_id is None:
+        return ""
+    return (
+        f"; growth against {counts.previous_index_id}: {counts.documents_growth:+,} documents, "
+        f"{counts.sqlite_bytes_growth:+,} SQLite bytes, {counts.gzip_bytes_growth:+,} gzip bytes"
     )
 
 
@@ -440,11 +464,17 @@ class SearchIndexRefresh:
         if local_only is not None:
             said += f"; built from this machine's copy of the suppression list alone: {local_only}"
 
+        previous: SearchIndexManifest | None = None
+        """The index current.json named, once read, when it is another: what growth is against."""
+
+        def counts(*, published: bool = False) -> SearchIndexStageCounts:
+            return _counts(current, built=built_now, published=published, previous=previous)
+
         def report(outcome: StageOutcome, reason: str, *, published: bool = False) -> SearchIndexStageReport:
             return SearchIndexStageReport(
                 outcome=outcome,
                 reason=reason,
-                counts=_counts(current, built=built_now, published=published),
+                counts=counts(published=published),
                 local_copy_only=login_only,
             )
 
@@ -460,12 +490,12 @@ class SearchIndexRefresh:
                 unreachable,
                 current,
                 login_only,
-                counts=_counts(current, built=built_now, published=False),
+                counts=counts(),
             )
         if no_session is not None:
             return report(StageOutcome.PENDING, self._pending(said, no_session))
         try:
-            pointer = await self._published_pointer()
+            published = await self._publisher.current(for_index=current.index_id)
         except StoreCredentialsExpired as expired:
             return report(
                 StageOutcome.PENDING, self._pending(said, str(expired) or "the AWS session has expired")
@@ -476,9 +506,13 @@ class SearchIndexRefresh:
                 failed,
                 current,
                 login_only,
-                counts=_counts(current, built=built_now, published=False),
+                counts=counts(),
             )
+        pointer = published.pointer if published is not None else None
         seen.pointer_read, seen.pointer = True, pointer
+        if published is not None and published.index_id != current.index_id:
+            previous = published.manifest
+            said += _growth_sentence(counts())
         if pointer is not None and pointer.index_id == current.index_id:
             if built_now:
                 return report(StageOutcome.COMPLETED, f"{said}; current.json already names it")
@@ -486,6 +520,7 @@ class SearchIndexRefresh:
                 StageOutcome.SKIPPED, f"{said}, which current.json names: nothing to build or publish"
             )
         try:
+            # Never with `allow_shrink`: a shrink the guard refuses is published by hand (v1-e39-t14).
             await self._publisher.publish(current.directory)
         except StoreCredentialsExpired as expired:
             return report(
@@ -500,7 +535,7 @@ class SearchIndexRefresh:
                 failed,
                 current,
                 login_only,
-                counts=_counts(current, built=built_now, published=False),
+                counts=counts(),
             )
         logger.info(
             "search index published",
@@ -539,21 +574,6 @@ class SearchIndexRefresh:
             return False
         return True
 
-    async def _published_pointer(self) -> SearchIndexPointer | None:
-        """What `current.json` names, or `None` when nothing has been published to this bucket."""
-        assert self._bucket is not None
-        with tempfile.TemporaryDirectory(prefix="tub-index-current-") as scratch:
-            landed = Path(scratch) / "current.json"
-            try:
-                await self._bucket.get_file(SEARCH_INDEX_POINTER_KEY, landed)
-            except NotFound:
-                return None
-            try:
-                return SearchIndexPointer.model_validate_json(landed.read_bytes())
-            except ValidationError:
-                # A pointer this build cannot read is behind by definition: publishing replaces it.
-                return None
-
     def _pending(self, said: str, why: str) -> str:
         return (
             f"{said}; built, publish pending, for want of an AWS login ({why}): the next run with a "
@@ -569,13 +589,21 @@ class SearchIndexRefresh:
         *,
         counts: SearchIndexStageCounts | None = None,
     ) -> SearchIndexStageReport:
-        hint = (
-            f"`DEBATE_ENV={self._environment} debate-research tub index publish --env {self._environment} "
-            f"--newest` publishes the newest index, {still.index_id}, by hand once the cause is fixed; the "
-            "next weekly run tries again either way."
-            if counts is not None and still is not None
-            else None
-        )
+        environment = self._environment
+        by_hand = f"DEBATE_ENV={environment} debate-research tub index publish --env {environment} --newest"
+        if counts is None or still is None:
+            hint = None
+        elif isinstance(failed, SearchIndexWouldShrink | CurrentSearchIndexUnreadable):
+            hint = (
+                f"If the shrink is real (a removal, the card-only rule), `{by_hand} {ALLOW_SHRINK_FLAG} "
+                f'"<reason>"` publishes {still.index_id} by hand; otherwise restore the store whose '
+                "documents went missing. The weekly run never publishes past the shrink guard."
+            )
+        else:
+            hint = (
+                f"`{by_hand}` publishes the newest index, {still.index_id}, by hand once the cause is "
+                "fixed; the next weekly run tries again either way."
+            )
         return SearchIndexStageReport(
             outcome=StageOutcome.FAILED,
             reason=reason,

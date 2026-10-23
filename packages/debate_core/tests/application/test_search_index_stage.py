@@ -83,6 +83,20 @@ PROFILE: Final = "2026.01.01-synthetic-profile"
 RELEASE: Final = "2026-ld"
 NO_SESSION: Final = "the publish stage found no AWS session"
 
+GROWN_CASELIST_TEXTS: Final = [
+    "Invented growth evidence",
+    "Invented trade evidence",
+    "Invented tariff evidence",
+]
+"""The caselist store with a card added: a change the shrink guard lets through (`v1-e39-t14`)."""
+
+TEN_CASELIST_TEXTS: Final = [
+    "Invented growth evidence",
+    "Invented trade evidence",
+    *(f"Invented filler evidence number {number}" for number in range(8)),
+]
+"""The caselist store at ten cards, where one suppressed is 90% kept."""
+
 
 def sha(name: str) -> str:
     return hashlib.sha256(name.encode()).hexdigest()
@@ -202,12 +216,17 @@ def suppression_of(source_text: str, *, store: str = CASELIST) -> SuppressionEnt
 
 
 class SwitchableBucket:
-    """A directory standing for the bucket, which can lose its session or refuse one key's upload."""
+    """A directory standing for the bucket, which can lose its session, refuse one key, or one key's upload.
+
+    `refuse` refuses every call naming a key that ends with it, reads included; `refuse_upload` only its
+    upload, since the publish reads the current index's manifest before it uploads (`v1-e39-t14`).
+    """
 
     def __init__(self, root: Path) -> None:
         self.inner = FsEvidenceObjectStore(root)
         self.session = True
         self.refuse: str | None = None
+        self.refuse_upload: str | None = None
         self.expire_on_upload: str | None = None
         self.puts: list[str] = []
 
@@ -227,6 +246,8 @@ class SwitchableBucket:
 
     async def put_file(self, key: str, source: Path) -> ObjectInfo:
         self._check(key)
+        if self.refuse_upload is not None and key.endswith(self.refuse_upload):
+            raise StoreUnavailable("PutObject", key, "connection reset")
         if self.expire_on_upload is not None and key.endswith(self.expire_on_upload):
             raise StoreCredentialsExpired(hint="aws sso login --profile debate-dev-evidence")
         self.puts.append(key)
@@ -388,13 +409,16 @@ def test_index_stage_rebuilds_and_publishes_when_a_stores_rows_changed(world: Wo
 
 
 def test_index_stage_rebuilds_when_only_the_suppression_list_changed(world: World) -> None:
+    """Nine invented cards more, so that suppressing one of ten keeps 90% and passes the shrink guard."""
+    write_store(world.parsed, CASELIST, TEN_CASELIST_TEXTS)
     first = world.refresh()
     asyncio.run(world.local.append([suppression_of("Invented trade evidence")]))
 
     second = world.refresh()
 
     assert first.counts is not None and second.counts is not None
-    assert second.counts.built and second.counts.documents == 2
+    assert (first.counts.documents, second.counts.documents) == (11, 10)
+    assert second.counts.built
     assert published_with(world, second) != first.counts.index_id
 
 
@@ -549,8 +573,8 @@ def test_index_stage_a_failed_build_leaves_the_previous_index_and_pointer_and_na
 def test_index_stage_a_failed_upload_leaves_the_previous_pointer_and_names_it(world: World) -> None:
     first = world.refresh()
     assert first.counts is not None
-    write_store(world.parsed, CASELIST, ["Invented growth evidence"])
-    world.bucket.refuse = SEARCH_INDEX_MANIFEST_NAME
+    write_store(world.parsed, CASELIST, GROWN_CASELIST_TEXTS)
+    world.bucket.refuse_upload = SEARCH_INDEX_MANIFEST_NAME
 
     report = world.refresh()
 
@@ -567,7 +591,7 @@ def test_index_stage_a_failed_upload_leaves_the_previous_pointer_and_names_it(wo
 def test_index_stage_a_session_that_expires_mid_publish_pends_and_leaves_the_pointer(world: World) -> None:
     first = world.refresh()
     assert first.counts is not None
-    write_store(world.parsed, CASELIST, ["Invented growth evidence"])
+    write_store(world.parsed, CASELIST, GROWN_CASELIST_TEXTS)
     world.bucket.expire_on_upload = SEARCH_INDEX_POINTER_KEY
 
     report = world.refresh()
@@ -785,7 +809,7 @@ def test_index_stage_never_removes_the_index_current_json_names(world: World) ->
     """Published once; the next two builds' uploads fail, so current.json, read each time, names the first."""
     first = world.refresh()
     assert first.counts is not None
-    world.bucket.refuse = SEARCH_INDEX_MANIFEST_NAME
+    world.bucket.refuse_upload = SEARCH_INDEX_MANIFEST_NAME
     reports: list[SearchIndexStageReport] = []
     for week in CAMP_WEEKS:
         write_store(world.parsed, OPENEV_STORE, week)

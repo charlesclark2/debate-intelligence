@@ -18,7 +18,7 @@ import re
 import string
 
 import pytest
-from hypothesis import given, settings
+from hypothesis import event, given, settings
 from hypothesis import strategies as st
 
 from debate_core.domain.evidence_search import (
@@ -300,6 +300,14 @@ def _outside_strings(expression: str) -> str:
 def test_search_passage_expression_is_only_strings_joined_by_or(raw: str) -> None:
     parsed = parse_passage(raw)
     expression = parsed.fts5_expression()
+    words = len(parsed.terms)
+    event(
+        "no content word"
+        if not words
+        else "1 to 9 content words"
+        if words < 10
+        else "10 or more content words"
+    )
     if expression is None:
         assert parsed.terms == ()
         return
@@ -321,7 +329,14 @@ def test_search_query_prefix_never_shorter_than_three_reaches_fts5(raw: str) -> 
 
     ASCII only, so a word is a run of letters and digits and nothing else.
     """
-    expression = parse_query(raw).fts5_expression()
+    parsed = parse_query(raw)
+    expression = parsed.fts5_expression()
+    if parsed.prefix_too_short:
+        event("a prefix under three characters: refused")
+    elif any(term.prefix for term in parsed.terms):
+        event("a prefix of three or more: searched")
+    else:
+        event("no prefix")
     if expression is None:
         return
     for phrase in re.findall(r'"((?:[^"]|"")*)" \*', expression):

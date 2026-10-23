@@ -545,6 +545,32 @@ async def test_review_decisions_become_overrides_that_place_the_heading_next_run
     assert second.review_queue.counts.queued_items == 3
 
 
+@pytest.mark.anyio
+async def test_review_a_heading_the_coach_ruled_on_is_not_queued_again(tmp_path: Path) -> None:
+    ruled = OverrideRules.model_validate(
+        {"topic_id": TOPIC, "overrides": [{"heading": "link", "position_id": None}]}
+    )
+    files = (
+        source(7, ONE, (("Fed Key", "Link"), "Plan spends")),
+        source(8, TWO, (("Fed Key", "Link"), "Plan spends")),
+    )
+    before = await PositionClassificationService(
+        taxonomies=repository(taxonomy()),
+        store=LocalClassificationStore(tmp_path / "before"),
+        minimum_review_teams=1,
+    ).classify(reading(*files))
+    after = await PositionClassificationService(
+        taxonomies=repository(taxonomy(), overrides=[ruled]),
+        store=LocalClassificationStore(tmp_path / "after"),
+        minimum_review_teams=1,
+    ).classify(reading(*files))
+    assert [(row.normalized_heading, row.teams) for row in before.review_queue.rows] == [
+        ("fed key", 2),
+        ("link", 2),
+    ]
+    assert [(row.normalized_heading, row.teams) for row in after.review_queue.rows] == [("fed key", 2)]
+
+
 def test_review_a_decision_naming_no_position_is_refused() -> None:
     repo = repository(taxonomy())
     decisions = read_decisions_csv(io.StringIO("normalized_heading,decision\nfed key,medicaid-da\n"))

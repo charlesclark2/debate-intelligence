@@ -394,6 +394,29 @@ Each pytest run used `.venv/bin/python -m pytest -n auto -m "not slow and not li
 
 Nothing came out differently from the notes.
 
+### CI on #409: one smoke pin of the details' keys
+
+`ci`'s `test (4)` failed on the pull request. `scripts/task pr` had re-synced the branch onto
+`8eb149a` (v1-e39-t07, #407). Before the operator pasted the output, I ran the files of the
+affected set I had left to CI:
+
+* the 19 under `tests/scripts` and 14 others: `1551 passed`;
+* the 18 under `tests/smoke`, in two halves: 1 failed, 91 passed, then 53 passed.
+
+The failure was
+`tests/smoke/test_caselist_pull_in_process.py::test_a_mismatch_and_then_an_expired_session_exits_zero_and_says_a_person_is_needed_too`.
+It holds a run's details stage entry to its keys, and this task adds `not_compared`, so it needed
+the same hand edit as the four tests above. With the edit it passes, and the test was what I
+expected it to be: the publish stage's entry, with `not_compared` empty.
+
+After the edit, on the re-synced tree:
+
+* the caselist directory, `test_caselist_sync.py` and `tests/smoke/test_caselist_pull.py`:
+  `1649 passed`;
+* `packages/debate_cli/tests`, `tests/architecture` and `tests/specs`: `1120 passed`;
+* ruff format and check: clean. pyright: `0 errors`. lint-imports: `15 kept, 0 broken`.
+  `validate_specs.py`: OK.
+
 ## PM review
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in

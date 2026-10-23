@@ -1005,6 +1005,7 @@ def test_a_mismatch_and_then_an_expired_session_exits_zero_and_says_a_person_is_
             "hint": None,
             "earlier_findings": ["CHECKSUM_MISMATCH"],
             "drift": [],
+            "not_compared": [],
         }
     ]
     [notification] = notified.sent

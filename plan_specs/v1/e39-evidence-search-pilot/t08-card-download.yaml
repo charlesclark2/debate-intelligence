@@ -16,6 +16,7 @@ metadata:
 spec:
   # Filed by the PM, 2026-10-19, from Charlie's direction of 2026-10-19 (a student search pilot before the
   # semester ends, on Chromebooks, signing in with a username, password and 2FA, outside the school's systems).
+  # PM ruling 2026-10-22: the cart is held in the browser and re-checked on the server; the session cookie holds no cart.
   description: >-
     Download .docx on a card page and for a selection (a cart of up to 30 cards held in the
     session) builds a Verbatim file through the E33 `EvidenceFileWriter` port, reading sources

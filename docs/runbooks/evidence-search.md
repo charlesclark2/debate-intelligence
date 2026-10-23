@@ -1023,6 +1023,71 @@ Success looks like an `ETag` and `"ServerSideEncryption": "aws:kms"`. `--if-none
 S3 refuse the write with `PreconditionFailed` if a list appeared in the meantime, so an existing
 list is never replaced.
 
+## Download .docx and the cart
+
+`v1-e39-t08`. A card page's **Download .docx** and the cart's **Download cart** build one Verbatim
+file with the E33 writer, inside the function, and send it as an attachment. The cart is a list of
+card references kept in the browser tab (`sessionStorage`), never in the session cookie; the
+function checks every reference again (the PM's ruling of 2026-10-22).
+
+- **What it reads.** Each card's source, by its sha256, from the current objects under
+  `raw/caselist/<slug>/` or, for a camp card, `raw/openev/<year>/`: the role's `raw/*` read. It reads
+  nothing else, writes nothing to the bucket, and writes nothing to `/tmp`: the sources and the file
+  stay in memory. The file carries no provenance line (data-use policy 1.11); its sidecar is built
+  and dropped, and the `cards-downloaded` audit record names the cards.
+- **Download is off** on every card page, with *Download is off until the search's next weekly
+  update*, when the function's parser version is not the one the loaded index's manifest names. A
+  card's place in its source is the paragraphs that parser found it in, so another parser could copy
+  the wrong paragraphs. It happens after a deploy that changes the parser and before the next index is
+  published: rebuild and publish the index with the deployed build (`tub index build` and `publish`,
+  [search index guide](../guides/search-index.md)), and download comes back within five minutes.
+- **Failing closed.** A card the suppression list stops when the download is asked for is refused
+  and named, whatever page it was added from. A download whose audit record cannot be written is not
+  sent (`503`, and the `cards-downloaded` line in the table below).
+
+### The two caps, and timing a download on dev
+
+The writer parses each source it copies from, whole, and holds every source until the file is read
+back, so a download costs time and memory per distinct source, in proportion to its size. Measured
+on 2026-10-22 on the operator's Mac (Apple M3 Pro, under other load), with synthetic sources the
+size of the mean disclosed file (236 KB, 3.6 MB of document XML):
+
+| Cart | Build time | File |
+|---|---|---|
+| 1 card | 0.70 s | 7.2 KB |
+| 10 cards from 10 sources | 10.0 s | 41.5 KB |
+| 30 cards from 30 sources | 29.1 s | 117.9 KB |
+| 30 cards from 1 source | 2.5 s | 118.1 KB |
+| 1 card from a camp-sized source (1,004 KB) | 4.5 s | |
+
+Each mean-size source held about 80 MB while the file was built. CloudFront and the function both
+stop a request at 30 s, and the function has 2,048 MB, so the function's environment takes two
+caps, each with a default set from these numbers:
+
+| Variable | Default | What it bounds |
+|---|---|---|
+| `TUB_DOWNLOAD_CARD_CAP` | 8 (1 to 30) | Cards in one download. Eight from eight mean-size sources is about 8 s on the Mac |
+| `TUB_DOWNLOAD_SOURCE_BYTES` | 2,000,000 | Bytes of sources one download reads: 9 s on the Mac at the slowest rate measured |
+
+A cart over either is refused before anything is built, with a sentence saying so, as is a cart whose
+file would pass 3 MB: a function URL buffers at most 6 MB of response, and the Lambda Web Adapter
+sends a binary body base64-encoded. Neither variable is set by Terraform; the defaults hold until
+the dev timing below says otherwise, and changing one is a change to the module's environment block.
+
+**Time a download on dev** after the deploy that ships it. Sign in on dev, download one card, then a
+cart of eight cards from eight different teams' files, then read the function's last durations:
+
+**Operator command** (expected runtime seconds)
+Where: your Mac, anywhere
+```bash
+aws logs filter-log-events --profile debate-admin --region us-east-1 --log-group-name debate-dev-tub-app \
+  --filter-pattern '"REPORT RequestId"' --query 'events[-5:].message' --output text
+```
+Success looks like `REPORT` lines whose `Duration` for the cart's request is under 20,000 ms and whose
+`Max Memory Used` is under 1,400 MB. Record both in [What to record](#what-to-record). A cart's
+duration over 20,000 ms means the Mac-to-Lambda allowance was too small: lower
+`TUB_DOWNLOAD_CARD_CAP` and `TUB_DOWNLOAD_SOURCE_BYTES` in proportion before the pilot opens.
+
 ## What a refusal looks like in the app log
 
 The function logs to `debate-<env>-tub-app` (30 days). It never logs a query, a card id, a card's
@@ -1080,6 +1145,7 @@ for.
 | 8: through CloudFront (code, cache-control) | `200 private, no-store`; all six headers as expected | |
 | 8: direct function URL (code, body) | `403` `{"Message":"Forbidden"}`, for `/healthz` and `/` | |
 | 8: init durations from `REPORT` lines | 4,115 ms (first environment after the deploy), 1,848 ms; 81–82 MB used | |
+| Download: one card, and a cart of eight cards from eight files (`Duration`, `Max Memory Used`) | | |
 | 10: managed login rendered; asset hosts recorded | Rendered; both sign-ins reached the callback; hosts in the table above | n/a |
 | 12: IT request sent; confirmed and date | n/a | |
 

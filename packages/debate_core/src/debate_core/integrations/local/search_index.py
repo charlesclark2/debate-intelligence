@@ -74,7 +74,7 @@ SEARCHABLE_COLUMNS: Final = ("tag", "cite", "read_aloud", "text")
 
 FTS5_TOKENIZER: Final = "porter unicode61 remove_diacritics 2"
 """Case- and accent-folding word tokens, each stemmed: `growing`, `grows` and `grow` are one token.
-`porter` is in FTS5 since it was added (SQLite 3.9.0); `remove_diacritics 2` since 3.27.0. Format 2
+`porter` is in FTS5 since FTS5 was added, in 2015; `remove_diacritics 2` since 3.27.0. Format 2
 (`v1-e39-t13`); format 1 had `unicode61 remove_diacritics 2` alone."""
 
 GZIP_LEVEL: Final = 6

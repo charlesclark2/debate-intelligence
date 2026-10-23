@@ -15,7 +15,7 @@ The function's Lambda image runs SQLite 3.40.0 (ADR-0019 (c) 1), so the reader u
 version has: a read-only, immutable URI open (`mode=ro&immutable=1`, years older than 3.40.0),
 `PRAGMA application_id` and `user_version` reads, FTS5's `MATCH`, its per-query
 `rank MATCH 'bm25(...)'` with column weights, `snippet()`, and `instr()`; for a passage, a recursive
-common table expression (3.8.3) with `substr()`, `GROUP BY` and `HAVING`. No JSON function: a
+common table expression (in SQLite since 2014) with `substr()`, `GROUP BY` and `HAVING`. No JSON function: a
 document's sides are decoded in Python. The time budget is `sqlite3_progress_handler`, in SQLite
 since 3.0: the handler asks the search whether its budget is
 spent every :data:`PROGRESS_INSTRUCTIONS` virtual-machine instructions and stops the statement when it

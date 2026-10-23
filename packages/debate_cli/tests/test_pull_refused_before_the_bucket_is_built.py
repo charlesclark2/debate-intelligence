@@ -248,6 +248,7 @@ def test_its_details_name_the_code_and_the_setting(
             "parse": None,
             "search_index": None,
             "held_by_request": {},
+            "manifests_published": 0,
         }
     ]
     assert PROFILE_SETTING in THE_FIX

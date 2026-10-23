@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from collections.abc import Mapping
 from datetime import datetime
 from pathlib import Path
@@ -105,10 +106,14 @@ NO_DETAILS_TO_SPEAK_OF: dict[str, Any] = {
     "parse": None,
     "search_index": None,
     "held_by_request": {},
+    "manifests_published": 0,
 }
 
+WEEK_ONE_PUBLISHED: dict[str, Any] = {**NO_DETAILS_TO_SPEAK_OF, "manifests_published": 1}
+"""A run that published week one: one manifest, beside its sources (`v1-e34-t28`)."""
+
 EXPECTED_DETAILS: dict[str, list[dict[str, Any]]] = {
-    "a_week_imported_and_published": [{"run_id": FIRST_RUN_ID, **NO_DETAILS_TO_SPEAK_OF}],
+    "a_week_imported_and_published": [{"run_id": FIRST_RUN_ID, **WEEK_ONE_PUBLISHED}],
     "a_publish_the_bucket_did_not_take": [
         {
             "run_id": FIRST_RUN_ID,
@@ -119,6 +124,7 @@ EXPECTED_DETAILS: dict[str, list[dict[str, Any]]] = {
                     "hint": None,
                     "earlier_findings": [],
                     "drift": [],
+                    "not_compared": [],
                 }
             ],
             "failure_codes": ["STORE_UNAVAILABLE"],
@@ -126,6 +132,7 @@ EXPECTED_DETAILS: dict[str, list[dict[str, Any]]] = {
             "parse": None,
             "search_index": None,
             "held_by_request": {},
+            "manifests_published": 0,
         }
     ],
     "a_publish_the_bucket_refused": [
@@ -138,6 +145,7 @@ EXPECTED_DETAILS: dict[str, list[dict[str, Any]]] = {
                     "hint": None,
                     "earlier_findings": [],
                     "drift": [],
+                    "not_compared": [],
                 }
             ],
             "failure_codes": ["STORE_ACCESS_DENIED"],
@@ -145,6 +153,7 @@ EXPECTED_DETAILS: dict[str, list[dict[str, Any]]] = {
             "parse": None,
             "search_index": None,
             "held_by_request": {},
+            "manifests_published": 0,
         }
     ],
     "a_week_that_cannot_be_read": [
@@ -157,6 +166,7 @@ EXPECTED_DETAILS: dict[str, list[dict[str, Any]]] = {
                     "hint": None,
                     "earlier_findings": [],
                     "drift": [],
+                    "not_compared": [],
                 }
             ],
             "failure_codes": ["UNREADABLE_ARCHIVE"],
@@ -164,11 +174,12 @@ EXPECTED_DETAILS: dict[str, list[dict[str, Any]]] = {
             "parse": None,
             "search_index": None,
             "held_by_request": {},
+            "manifests_published": 0,
         }
     ],
     "a_publish_left_for_a_login_and_then_drained": [
         {"run_id": FIRST_RUN_ID, **NO_DETAILS_TO_SPEAK_OF},
-        {"run_id": SECOND_RUN_ID, **NO_DETAILS_TO_SPEAK_OF},
+        {"run_id": SECOND_RUN_ID, **WEEK_ONE_PUBLISHED},
     ],
     "a_mismatch_and_then_an_expiry": [
         {
@@ -180,6 +191,7 @@ EXPECTED_DETAILS: dict[str, list[dict[str, Any]]] = {
                     "hint": None,
                     "earlier_findings": ["CHECKSUM_MISMATCH"],
                     "drift": [],
+                    "not_compared": [],
                 }
             ],
             "failure_codes": [],
@@ -187,6 +199,7 @@ EXPECTED_DETAILS: dict[str, list[dict[str, Any]]] = {
             "parse": None,
             "search_index": None,
             "held_by_request": {},
+            "manifests_published": 0,
         }
     ],
     "a_run_stopped_by_an_expired_token": [
@@ -198,6 +211,7 @@ EXPECTED_DETAILS: dict[str, list[dict[str, Any]]] = {
             "parse": None,
             "search_index": None,
             "held_by_request": {},
+            "manifests_published": 0,
         }
     ],
     "a_run_stopped_by_an_error_nobody_modelled": [
@@ -209,6 +223,7 @@ EXPECTED_DETAILS: dict[str, list[dict[str, Any]]] = {
             "parse": None,
             "search_index": None,
             "held_by_request": {},
+            "manifests_published": 0,
         }
     ],
     "two_weeks_imported_and_parsed": [
@@ -231,6 +246,8 @@ EXPECTED_DETAILS: dict[str, list[dict[str, Any]]] = {
             },
             "search_index": None,
             "held_by_request": {},
+            # Both weeks' manifests (`v1-e34-t28`).
+            "manifests_published": 2,
         }
     ],
     # `v1-e34-t22`: the run the want of a bucket refused, then the run that published its record.
@@ -243,8 +260,9 @@ EXPECTED_DETAILS: dict[str, list[dict[str, Any]]] = {
             "parse": None,
             "search_index": None,
             "held_by_request": {},
+            "manifests_published": 0,
         },
-        {"run_id": SECOND_RUN_ID, **NO_DETAILS_TO_SPEAK_OF},
+        {"run_id": SECOND_RUN_ID, **WEEK_ONE_PUBLISHED},
     ],
 }
 """What each scenario's runs leave beside their records, written by hand from what the scenario
@@ -324,11 +342,40 @@ search index stage. A stage entry is a name, an outcome and a reason, all string
 reads it: :func:`read_as_an_older_build_reads` holds every written record to that."""
 
 
+A_COMPLETED_PUBLISH_AS_THE_START_COMMIT_COUNTED_IT: Final = re.compile(
+    r"(?P<sources>\d+) object\(s\) uploaded across (?P<snapshots>\d+) snapshot\(s\)"
+)
+"""A completed publish stage's reason as the start commit wrote it: its sources alone (`v1-e34-t28`).
+
+This build counts each snapshot's manifest too, in `objects_published` and in the reason, which
+says how many of each. In every stored scenario a completed publish uploaded every snapshot's
+manifest, into a bucket that held none, so this build's numbers are the start commit's plus one
+manifest a snapshot. The reason is a string and `objects_published` an integer, so the record's
+shape is unchanged: :func:`read_as_an_older_build_reads` holds every written record to that."""
+
+
+def as_this_build_counts_it(record: dict[str, Any]) -> None:
+    """A completed publish's count, and the record's `objects_published`, with the manifests in them."""
+    for one in record.get("stages", []):
+        found = A_COMPLETED_PUBLISH_AS_THE_START_COMMIT_COUNTED_IT.fullmatch(one.get("reason") or "")
+        if one["stage"] != "publish" or one["outcome"] != "completed" or found is None:
+            continue
+        sources, manifests = int(found["sources"]), int(found["snapshots"])
+        assert record["objects_published"] == sources, "the stored record counts its sources alone"
+        one["reason"] = (
+            f"{sources + manifests} object(s) uploaded across {manifests} snapshot(s): {sources} source(s) "
+            f"and {manifests} manifest(s)"
+        )
+        record["objects_published"] = sources + manifests
+
+
 def as_this_build_records_it(text: str) -> str:
-    """A stored record as this build writes it: :func:`as_this_build_words_it`, and the search index
-    stage's entry after the parse stage's, where the start commit's has a parse stage and no search
-    index stage. Nothing else changes."""
+    """A stored record as this build writes it: :func:`as_this_build_words_it`, a completed publish
+    counted with its manifests (:func:`as_this_build_counts_it`), and the search index stage's entry
+    after the parse stage's, where the start commit's has a parse stage and no search index stage.
+    Nothing else changes."""
     record = json.loads(as_this_build_words_it(text))
+    as_this_build_counts_it(record)
     stages = record.get("stages", [])
     names = [one["stage"] for one in stages]
     if "parse" in names and "search_index" not in names:

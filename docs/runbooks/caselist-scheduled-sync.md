@@ -532,7 +532,10 @@ DEBATE_ENV=dev debate-research caselist status --caselist hsld26
 **The 06:00 run and the AWS session.** An SSO session lasts hours, not a week, so the Wednesday
 06:00 run usually finds it expired. That is not a failure: the run downloads and imports
 everything, records the publish as `pending` (outcome `publish_pending`), and the next run, or this,
-publishes it. The first scheduled run, on 2026-10-14, did exactly that
+publishes it. A run whose publish finished and whose report stage then lost the session while it
+compared is `publish_pending` too, since `v1-e34-t28`: the check waits for the same login, and the
+next run, or `--publish-pending`, makes it ([What waits for the login](#what-a-notification-says)). Before, that
+run was `completed`. Every installed build reads the value. The first scheduled run, on 2026-10-14, did exactly that
 ([docs/data/caselist-sync-runs.md](../data/caselist-sync-runs.md)). To have the run publish by
 itself, sign in on Tuesday evening; otherwise run the second line after it:
 
@@ -548,7 +551,7 @@ A run is written down in two places (`v1-e34-t19`):
 | | On this Mac | In the bucket | Holds |
 |---|---|---|---|
 | The **record** | `<data_dir>/caselist-sync-runs.jsonl` | `reports/sync-runs/<yyyy>/<run-id>.json` | What it always has: the outcome, the counts, each stage's outcome and reason |
-| The run's **details** | `<data_dir>/caselist-sync-run-details.jsonl` | `reports/sync-run-details/<yyyy>/<run-id>.json` | Each failed stage's `error_codes` and `hint`, a pending stage's `earlier_findings`, the report stage's `drift` (each snapshot found out of sync, with what differs), the codes the exit code was decided from, the parse stage's nine counts, and `held_by_request`, the uploads a removal's hold refused (`v1-e34-t23`) |
+| The run's **details** | `<data_dir>/caselist-sync-run-details.jsonl` | `reports/sync-run-details/<yyyy>/<run-id>.json` | Each failed stage's `error_codes` and `hint`, a pending stage's `earlier_findings`, the report stage's `drift` (each snapshot found out of sync, with what differs), the codes the exit code was decided from, the parse stage's nine counts, `held_by_request`, the uploads a removal's hold refused (`v1-e34-t23`), the report stage's `not_compared`, what a check cut short by an expired session did not reach, by caselist and snapshot, and `manifests_published`, how many of the objects published were manifests (`v1-e34-t28`) |
 
 They are two files because the record cannot change. Every build refuses a record with a field
 it does not know, and the agent goes on running the build it was installed with: a record with
@@ -585,13 +588,14 @@ One JSON object per run on stdout. The fields to read first:
 | `bulk_download_window_start`, `bulk_downloads_spent_in_window` | The 24 hours the run counted its downloads against, and what had already been spent in them |
 | `openev_downloaded` | Camp files fetched |
 | `files_imported`, `blobs_stored` | What the importers filed, and how much of it was new |
-| `objects_published` | What reached the bucket from the raw store: sources and manifests |
+| `objects_published` | What reached the bucket from the raw store: sources and manifests. A build before `v1-e34-t28` counted the sources alone, so a republish of a manifest alone said `0 object(s) uploaded`; the publish stage's reason now says how many of each, `1 object(s) uploaded across 1 snapshot(s): 0 source(s) and 1 manifest(s)` |
+| `manifests_published` | Of those, the manifests (`v1-e34-t28`). Also in the run's details |
 | `parse` | The parse stage's counts and nothing else: `caselists`, `full_parses`, `attempted`, `skipped`, `unsupported`, `failed`, `cards`, `uploaded`, `not_published`. `null` when the stage parsed nothing. See [The parse stage](#the-parse-stage) |
 | `pending_publish` | What [the pending-work file](#the-pending-work-file) holds after the run: every snapshot this Mac has imported that the bucket had not confirmed complete when the publish stage ended, and any the report stage then owed again because the bucket's manifest drifted (`v1-e34-t26`). Whether that waits for a login or for something else is the `publish` stage's outcome, not this list |
 | `inbox_retention` | What left the inbox and the bytes freed, and what stayed and why. See [The download inbox](#the-download-inbox) |
 | `full_archive` | What the complete-archive rotation decided and why (`reason`), what the weeklies left of the day's allowance, and for a complete archive imported, its `bytes` and its `withdrawn` and `superseded` counts. See [The complete archive](#the-complete-archive) |
 | `openev_selections[]` | Each camp file OpenEv listed: its `openev_id`, the run's `decision`, and `inbox_file`, the first twelve hex digits of the download's sha256 once the run had its bytes (the name `inbox_retention` gives the same file) |
-| `stages[]` | One entry per stage, each with the sentence saying why it ended that way (`reason`). A failed stage also carries `error_codes`, the code of each failure behind it, and, when a store refused it, `hint`, the fix that applies (`v1-e34-t13`). A `pending` stage carries `earlier_findings`, the codes of what it had already found when the session expired (`v1-e34-t19`); they never change the exit code. The report stage's `drift` names each snapshot it found out of sync, failed or before an expiry, with its `kinds`: `manifest`, `source`, `missing`, `suppressed_rows` (`v1-e34-t23`). See [What the exit code says](#what-the-exit-code-says) |
+| `stages[]` | One entry per stage, each with the sentence saying why it ended that way (`reason`). A failed stage also carries `error_codes`, the code of each failure behind it, and, when a store refused it, `hint`, the fix that applies (`v1-e34-t13`). A `pending` stage carries `earlier_findings`, the codes of what it had already found when the session expired (`v1-e34-t19`); they never change the exit code. The report stage's `drift` names each snapshot it found out of sync, failed or before an expiry, with its `kinds`: `manifest`, `source`, `missing`, `suppressed_rows` (`v1-e34-t23`). A `pending` report stage's `not_compared` names what it had not compared when the session expired, for the next pull or `--publish-pending` to compare (`v1-e34-t28`). See [What the exit code says](#what-the-exit-code-says) |
 | `held_by_request` | Uploads the imports refused because a removal holds their path, by the removal's request id (`v1-e34-t23`). `{}` when none was |
 | `run_record`, `run_details` | What the run log keeps of this run, and what is kept beside it. See [The record, and the details beside it](#the-record-and-the-details-beside-it) |
 | `schema_version` | `5` since `v1-e34-t17`, which replaced `cards_parsed` and `parse_failures` (always `0`; no stage filled them) with `parse`. `4` since `v1-e34-t13`, which added `error_codes` and `hint` to every stage; a summary written before that says `3` and has neither. `v1-e34-t19` added `earlier_findings` to every stage and left the version at `5`, because nothing is decided from it. Nothing reads a summary back; `caselist runs` reads the run log, which builds of every kind read and write alike |
@@ -887,7 +891,8 @@ cure, a `503` say, adds no sentence: the drain publishes it.
 The report stage keeps what it found the same way (`v1-e34-t23`). When the session expires while
 it compares, a snapshot it had already found out of sync is kept as an earlier finding,
 `CASELIST_DRIFT`, with its kind, and the banner says so. The drain does not find it again: it
-compares only what it publishes, and that snapshot was published. If the only finding was a
+compares what it publishes and what the check had not reached yet, and that snapshot was published
+and compared. If the only finding was a
 manifest that differs, it is owed again, and the banner says instead that the publish after the
 login uploads this Mac's copy (`v1-e34-t26`); or, for one that drifted again, that a person should
 look.
@@ -895,12 +900,27 @@ look.
 **What waits for the login** (`v1-e34-t26`). The banner counts the snapshots owed and names the run
 record, which waits too. When nothing is owed it says so: a run whose only pending stage is the
 report stage published everything and then lost its session while it compared, and its banner
-used to say `0 snapshot(s) and the run record wait to be published`. It now says what waits, and
-what does not come back by itself:
+used to say `0 snapshot(s) and the run record wait to be published`. It now says what waits:
 
-> Run 20261014T100000Z (prod) kept everything it fetched; no snapshot waits to be published, only the run record. The report stage's check that the bucket holds what this run published was cut short; caselist pull --publish-pending does not make it again, and debate-research caselist status does, after the login.
+> Run 20261014T100000Z (prod) kept everything it fetched; no snapshot waits to be published, only the run record. The report stage's check that the bucket holds what this run published was cut short; the next pull, or caselist pull --publish-pending after the login, makes it again.
 
-The drain publishes the record. Run `caselist status` for each caselist to make the check.
+**The next run makes the check again** (`v1-e34-t28`, the PM's ruling and condition of
+2026-10-22). The run's details name what the report stage had not compared when the session
+expired, as `not_compared` on the report stage. The next `caselist pull`, the scheduled one or one
+by hand, and `caselist pull --publish-pending` each read them from the newest run's details, and the
+report stage compares exactly those, after whatever that run publishes, with the same comparison
+and the same rules: a manifest that differs and nothing else is owed again, anything else is a
+failed report stage for a person. That run's select stage says how many it owes, and its report
+stage's reason counts them among the snapshots confirmed. The same holds when the publish itself
+waited for the login: what it confirmed before the session expired is compared by the next run too.
+A run whose session has expired again is cut short again, and owes what it did not reach, so the
+check waits until a run has a session. A dry run compares nothing.
+
+Only the newest run's list counts, and the next run is always handed it. A run the lock refused,
+or one that stopped before any stage, is passed over. A run recorded by a build from before `v1-e34-t28` has no list,
+and owes no check: its banner said so, and named `caselist status`. The list is in the details and
+nowhere else: not in the record, which no build may change, and not in
+[the pending-work file](#the-pending-work-file), which holds publishes.
 
 Notification Centre shows the first lines of a body and the rest when the banner is opened. The
 whole of it is also in the run's details:
@@ -1525,6 +1545,11 @@ its reason ends `owed again, for the next run to publish:` and names it. Nothing
 is `incomplete`, not `publish_pending`, because no login waits: the next scheduled run publishes it,
 or drain it now with the same command. If the reason says instead that it `drifted again`, see
 [A manifest that drifted again](#what-a-notification-says).
+
+**`report` is `pending`, and `publish` is not.** The publish finished and the session expired while
+the report stage compared it with the bucket; the run is `publish_pending` (`v1-e34-t28`). Log in
+and drain it as above, or leave it to the next scheduled run: either compares what the stage had
+not reached ([What waits for the login](#what-a-notification-says)).
 
 **`publish` is `pending`, and its `earlier_findings` is not empty.** The session expired, and
 before it did a snapshot ended incomplete on the code shown. Log in and drain it as above. If the

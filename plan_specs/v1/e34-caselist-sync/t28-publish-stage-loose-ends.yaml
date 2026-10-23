@@ -38,7 +38,7 @@ spec:
         (1) to (3) each by a test shown failing first; the agent's build at the time reads
         every record this build writes.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

@@ -61,7 +61,12 @@ What a newer build knows beyond the record is kept **beside** it, keyed by run i
 * the parse stage's nine counts, or nothing when the stage did not run;
 * the search index stage's index id, sizes and warnings (`v1-e39-t09`), or nothing when it reached
   no index. The stage itself is a :class:`StageEntry` like any other, by its name, which every
-  build reads: `stage` is a string, never a list of the names a build knew.
+  build reads: `stage` is a string, never a list of the names a build knew;
+* how many of the objects the publish stage uploaded were manifests (`v1-e34-t28`);
+* what a report stage cut short by an expired session had not compared yet, by caselist and
+  snapshot (`v1-e34-t28`), which the next pull or `caselist pull --publish-pending` compares
+  (:func:`comparisons_owed_by_the_newest_run`). Details an older build wrote have no such list,
+  and owe no comparison.
 
 One line a run in :data:`SYNC_RUN_DETAILS_FILENAME`, next to the run log, and one object a run
 under :data:`SYNC_RUN_DETAILS_KEY_PREFIX`, next to the records' prefix and not under it: an older
@@ -123,6 +128,7 @@ from typing import Final, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from debate_core.application.caselist.publish_plan import InvalidPublishTarget, validate_publish_target
 from debate_core.application.caselist.status_service import CASELIST_DRIFT
 from debate_core.application.caselist_sync import (
     REQUIRED_STAGES,
@@ -175,6 +181,7 @@ __all__ = [
     "MonitoredRun",
     "NoRemoteRunLog",
     "ParseCounts",
+    "PublishedSnapshot",
     "RecordedRun",
     "RetryRule",
     "RunMode",
@@ -189,6 +196,7 @@ __all__ = [
     "SyncRunOutcome",
     "SyncRunRecord",
     "banner_words",
+    "comparisons_owed_by_the_newest_run",
     "details_for_failure",
     "details_for_summary",
     "hint_for_a_record",
@@ -269,7 +277,8 @@ class SyncRunOutcome(StrEnum):
     """Succeeded, and the daily bulk-download cap left archives for a later run (ac5)."""
 
     PUBLISH_PENDING = "publish_pending"
-    """Captured locally; publishing waits for an AWS login."""
+    """Captured locally; publishing, or the report stage's check of what was published, waits for an
+    AWS login."""
 
     INCOMPLETE = "incomplete"
     """Captured and published; a later stage (parse, landscape, the bucket check) failed."""
@@ -384,6 +393,15 @@ class DriftFinding(BaseModel):
     kinds: tuple[str, ...] = ()
 
 
+class PublishedSnapshot(BaseModel):
+    """A snapshot a run published, by caselist slug and snapshot name: nothing a record may not hold."""
+
+    model_config = ConfigDict(frozen=True, extra="ignore")
+
+    caselist: str
+    snapshot: str
+
+
 class StageDetails(BaseModel):
     """What one stage has to say that its :class:`StageEntry` has no field for."""
 
@@ -405,6 +423,12 @@ class StageDetails(BaseModel):
     """The report stage's findings, each snapshot with what differs, failed or pending
     (:attr:`~debate_core.application.caselist_sync.StageRecord.drift`, `v1-e34-t23`). A key a
     build from before it passes over."""
+
+    not_compared: tuple[PublishedSnapshot, ...] = ()
+    """What a report stage pending on an expired session had not compared yet
+    (:attr:`~debate_core.application.caselist_sync.StageRecord.not_compared`, `v1-e34-t28`): what
+    the next pull or `caselist pull --publish-pending` compares. A key a build from before it passes over,
+    and its absence, in details such a build wrote, owes nothing."""
 
 
 class ParseCounts(BaseModel):
@@ -480,6 +504,11 @@ class SyncRunDetails(BaseModel):
     """Uploads the run's imports refused because a removal holds their path, by request id
     (:attr:`~debate_core.application.caselist_sync.RunSummary.held_by_request`, `v1-e34-t23`).
     Request ids and counts, never a path. A key a build from before it passes over."""
+
+    manifests_published: int = Field(default=0, ge=0)
+    """Of the record's `objects_published`, the manifests
+    (:attr:`~debate_core.application.caselist_sync.RunSummary.manifests_published`, `v1-e34-t28`).
+    A key a build from before it passes over."""
 
     def stage(self, name: str) -> StageDetails | None:
         return next((one for one in self.stages if one.stage == name), None)
@@ -693,9 +722,17 @@ def details_for_summary(summary: RunSummary, *, secrets: Sequence[str] = ()) -> 
                     )
                     for one in record.drift
                 ),
+                not_compared=tuple(
+                    PublishedSnapshot(caselist=one.caselist, snapshot=one.snapshot)
+                    for one in record.not_compared
+                ),
             )
             for record in summary.stages
-            if record.error_codes or record.hint or record.earlier_findings or record.drift
+            if record.error_codes
+            or record.hint
+            or record.earlier_findings
+            or record.drift
+            or record.not_compared
         ),
         failure_codes=summary.failure_codes,
         parse=ParseCounts(**summary.parse.as_json()) if summary.parse is not None else None,
@@ -703,6 +740,7 @@ def details_for_summary(summary: RunSummary, *, secrets: Sequence[str] = ()) -> 
         if summary.search_index is not None
         else None,
         held_by_request=dict(summary.held_by_request),
+        manifests_published=summary.manifests_published,
     )
 
 
@@ -729,11 +767,14 @@ def _outcome_of(summary: RunSummary) -> SyncRunOutcome:
     # tests were the same, so no run's outcome moves.
     if _stage_is(summary, SyncStage.PUBLISH, StageOutcome.PENDING):
         return SyncRunOutcome.PUBLISH_PENDING
-    if _stage_is(summary, SyncStage.PARSE, StageOutcome.PENDING) or _stage_is(
-        summary, SyncStage.SEARCH_INDEX, StageOutcome.PENDING
+    if any(
+        _stage_is(summary, stage, StageOutcome.PENDING)
+        for stage in (SyncStage.PARSE, SyncStage.SEARCH_INDEX, SyncStage.REPORT)
     ):
         # The parsed store's publish is a publish, and it waits for the same login (`v1-e34-t17`);
-        # so does the search index's (`v1-e39-t09`).
+        # so does the search index's (`v1-e39-t09`), and so does the report stage's check of what was
+        # published, which the next pull or `--publish-pending` makes (`v1-e34-t28`). Every installed build
+        # reads this value; a run whose only pending stage was the report was `completed` before.
         return SyncRunOutcome.PUBLISH_PENDING
     if any(record.outcome is StageOutcome.FAILED for record in summary.stages):
         return SyncRunOutcome.INCOMPLETE
@@ -915,13 +956,15 @@ made (`v1-e34-t26`): the run :data:`RETRIED_AFTER_ITS_FIX_TITLE` is the title of
 
 THE_CHECK_WAS_CUT_SHORT: Final = (
     " The report stage's check that the bucket holds what this run published was cut short; "
-    f"caselist pull --publish-pending does not make it again, and {STATUS_COMMAND} does, after the login."
+    "the next pull, or caselist pull --publish-pending after the login, makes it again."
 )
 """What the login banner adds when the report stage is pending and the publish is not (`v1-e34-t26`).
 
 The publish confirmed what it published, and the session then expired while the report stage
-compared it with the bucket. `--publish-pending` compares only what it publishes itself, and
-nothing of this run is owed, so it never makes that check: `caselist status` does."""
+compared it with the bucket. Since `v1-e34-t28` the run's details name what the stage did not
+compare, and the next pull, scheduled or by hand, or `--publish-pending` compares exactly that
+(:func:`comparisons_owed_by_the_newest_run`). Before, nothing made the check but `caselist status`
+by hand, and this sentence said so."""
 
 type RetryRule = Callable[[Sequence[str]], bool]
 """Whether a run that failed on exactly these error codes may succeed on a retry.
@@ -977,7 +1020,7 @@ def notifications_for(
 
     **The login banner names what waits** (`v1-e34-t26`): the snapshots owed, when there are any,
     and the run record; and, when the report stage was cut short with the publish already done, the
-    check `--publish-pending` will not make (:data:`THE_CHECK_WAS_CUT_SHORT`).
+    check the next pull or `--publish-pending` makes again (:data:`THE_CHECK_WAS_CUT_SHORT`, `v1-e34-t28`).
 
     **A manifest owed again, and one that drifted again** (`v1-e34-t26`). A report stage's manifest
     mismatch alone is announced as published again by the next run when the record lists it as
@@ -1105,7 +1148,8 @@ def notifications_for(
             for code in one.earlier_findings
             if not may_succeed_on_retry([code])
         )
-        # The report stage cut short after a publish that was not: nothing redoes its check.
+        # The report stage cut short after a publish that was not: the next pull or
+        # `--publish-pending` redoes its check, from this run's details (`v1-e34-t28`).
         report_alone = _stage_outcome(record, SyncStage.REPORT) == str(StageOutcome.PENDING) and (
             _stage_outcome(record, SyncStage.PUBLISH) != str(StageOutcome.PENDING)
         )
@@ -1383,6 +1427,46 @@ def snapshots_owed_again_for_drift(
         if not chain:
             break
     return frozenset(PendingSnapshot(*one.split(" ", 1)) for one in sorted(found))
+
+
+def comparisons_owed_by_the_newest_run(
+    records: Sequence[SyncRunRecord], details: Mapping[str, SyncRunDetails]
+) -> tuple[PendingSnapshot, ...]:
+    """What the newest run published and its report stage did not compare: what the next run compares.
+
+    The PM's ruling of 2026-10-22 (`v1-e34-t28`). A report stage that an expired session cut short
+    names, in the run's details, what it had not compared yet (:attr:`StageDetails.not_compared`);
+    the next pull, scheduled or by hand, or `--publish-pending` compares exactly those, through the
+    report stage, and a run cut short again names what it did not reach. Only the newest run's:
+
+    * **A run with no stages is passed over**, as :func:`snapshots_owed_again_for_drift` passes it
+      over. It stopped before any stage (the lock, a refused start, an error that escaped the run),
+      so it compared nothing and settled nothing. The run before it is the newest that ran.
+    * **Any other run settles it**: it was handed the list, and compared it or named again what it
+      did not reach. One that ran without a bucket compares nothing and settles it all the same.
+    * **Details without the list** owe nothing: an older build wrote them, or they are missing.
+
+    An entry that is not a target a publish would accept is passed over with a warning: the details
+    are a file on this machine, and a name that has no place in the store is compared with nothing.
+
+    Args:
+        records: The run log, oldest first (:meth:`SyncRunLog.read`).
+        details: Each run's details, by run id (:meth:`SyncRunDetailsLog.read`).
+    """
+    newest = next((record for record in reversed(records) if record.stages), None)
+    beside = details.get(newest.run_id) if newest is not None else None
+    said = beside.stage(str(SyncStage.REPORT)) if beside is not None else None
+    owed: list[PendingSnapshot] = []
+    for one in said.not_compared if said is not None else ():
+        try:
+            validate_publish_target(one.caselist, one.snapshot)
+        except InvalidPublishTarget:
+            logger.warning(
+                "caselist run details: a snapshot owed a comparison has no place in the store; skipped"
+            )
+            continue
+        owed.append(PendingSnapshot(caselist=one.caselist, snapshot=one.snapshot))
+    return tuple(dict.fromkeys(owed))
 
 
 # ------------------------------------------------------------------------------------------------
@@ -1716,6 +1800,19 @@ class SyncRunMonitor:
             logger.warning("caselist run log: could not be read (%s)", type(unreadable).__name__)
             return frozenset()
         return snapshots_owed_again_for_drift(records, self.details.read())
+
+    def comparisons_owed(self) -> tuple[PendingSnapshot, ...]:
+        """:func:`comparisons_owed_by_the_newest_run` over this machine's run log and details.
+
+        A log this user cannot read owes nothing, rather than stopping the run, as for
+        :meth:`snapshots_owed_again_for_drift` (`v1-e34-t28`).
+        """
+        try:
+            records = self.log.read()
+        except (OSError, UnicodeDecodeError) as unreadable:
+            logger.warning("caselist run log: could not be read (%s)", type(unreadable).__name__)
+            return ()
+        return comparisons_owed_by_the_newest_run(records, self.details.read())
 
     async def _finish(
         self, record: SyncRunRecord, details: SyncRunDetails, *, publish_pending_stage: bool

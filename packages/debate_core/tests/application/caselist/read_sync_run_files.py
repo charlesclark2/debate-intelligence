@@ -10,14 +10,23 @@ or object the build skips or refuses is counted and printed, and makes the exit 
 reads what `write_drift_owed_again_files.py` and `write_newer_fingerprint_table_files.py` write,
 printing a refused parse stage's reason and its details' hint (`v1-e34-t29`).
 
+For files that carry the keys `v1-e34-t28` added to the details (`not_compared` on a stage,
+`manifests_published`), and only for those, so that what it prints of earlier tasks' files is as
+those tasks recorded it, it also prints each key as written and as the build's model kept it, a
+publish stage's reason, and what the build's own readers of a whole history make of the scenario:
+the snapshots owed again for drift, and `caselist runs`' runs with their banner words, when the
+build has them.
+
     python read_sync_run_files.py <directory written> <label of the reader>
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import sys
+import tempfile
 from pathlib import Path
 
 from pydantic import ValidationError
@@ -69,6 +78,7 @@ def main(directory: Path, reader: str) -> int:
             missing = sorted({record.run_id for record in records} - set(details))
             if missing:
                 print(f"  details missing for: {missing}")
+            _print_what_t28_added(scenario, records, details)
         owed_file = scenario / sync_runs.PENDING_RECORDS_FILENAME
         if owed_file.is_file():
             owed = sync_runs._PendingRecords(owed_file).read()  # pyright: ignore[reportPrivateUsage]
@@ -107,6 +117,52 @@ def main(directory: Path, reader: str) -> int:
         print(f"WARNING: {warning}")
     print(f"refused or skipped: {refused}")
     return 1 if refused else 0
+
+
+def _print_what_t28_added(
+    scenario: Path, records: list[sync_runs.SyncRunRecord], details: dict[str, sync_runs.SyncRunDetails]
+) -> None:
+    """The keys `v1-e34-t28` added, as written and as this build kept them; nothing for older files."""
+    path = scenario / sync_runs.SYNC_RUN_DETAILS_FILENAME
+    written = [json.loads(line) for line in path.read_text("utf-8").splitlines() if line.strip()]
+    if not any("manifests_published" in one for one in written):
+        return
+    for raw in written:
+        kept = details.get(raw["run_id"])
+        kept_count = getattr(kept, "manifests_published", "unknown here")
+        print(f"  details {raw['run_id']} as written: manifests_published {raw.get('manifests_published')}")
+        print(f"    kept by this build: manifests_published {kept_count}")
+        report = next((one for one in raw["stages"] if one["stage"] == "report"), None)
+        if report is not None:
+            kept_report = kept.stage("report") if kept is not None else None
+            print(f"    report not_compared as written: {report.get('not_compared')}")
+            print(f"    kept by this build: {getattr(kept_report, 'not_compared', 'unknown here')}")
+    for record in records:
+        for one in record.stages:
+            if one.stage == "publish":
+                print(f"  record {record.run_id} publish reason: {one.reason}")
+                print(f"    objects_published {record.objects_published}")
+    owed_again = getattr(sync_runs, "snapshots_owed_again_for_drift", None)
+    if owed_again is not None:
+        found = sorted(f"{one.caselist} {one.snapshot}" for one in owed_again(records, details))
+        print(f"  owed again for drift, by this build's reader: {found}")
+    history = getattr(sync_runs, "SyncRunHistory", None)
+    words = getattr(sync_runs, "banner_words", None)
+    if history is None:
+        return
+    with tempfile.TemporaryDirectory() as scratch:
+        runs = asyncio.run(
+            history(
+                log=sync_runs.SyncRunLog(scenario / sync_runs.SYNC_RUN_LOG_FILENAME),
+                remote=None,
+                scratch_dir=Path(scratch),
+                overdue_after_days=8,
+            ).recent_runs(10)
+        )
+    for one in runs:
+        banner = words(one.record, one.details) if words is not None else "no banner words in this build"
+        read = "read" if one.details is not None else "none"
+        print(f"  caselist runs: {one.record.run_id} {one.record.outcome}, details {read}, banner {banner}")
 
 
 if __name__ == "__main__":

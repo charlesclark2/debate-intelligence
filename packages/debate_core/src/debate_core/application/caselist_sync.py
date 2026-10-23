@@ -348,9 +348,10 @@ the newest local one, which the next run with a session works out again.
 
 The local stages need no AWS session. If the operator's SSO session has expired, the S3 adapter
 raises :class:`~debate_core.application.errors.StoreCredentialsExpired`; the publish and report
-stages are then recorded as **pending** in a small local file, and the next run — or
-`caselist pull --publish-pending` — completes them. Nothing that was captured is lost by a login
-that timed out overnight.
+stages are then recorded as **pending**, and the next run — or `caselist pull --publish-pending` —
+completes them. What the publish owes is in a small local file, the pending-work file; what the
+report stage did not compare is in the run's details (`v1-e34-t28`). Nothing that was captured is
+lost by a login that timed out overnight.
 
 **Only an expired session is pending** (`v1-e34-t13`). A refusal is not a login that timed out, and
 logging in again fixes neither kind: a :class:`~debate_core.application.errors.LocalStoreAccessDenied`
@@ -382,6 +383,20 @@ run goes on to its summary, its record and its notification.
 on a code and the session then expires, the stage is pending and carries no error code, as ever.
 The code is kept on the stage as an *earlier finding* (:attr:`StageRecord.earlier_findings`),
 which the exit status never reads, so that the run can say a login alone will not finish the job.
+
+**A check cut short is made again** (`v1-e34-t28`, the PM's ruling of 2026-10-22). The report stage
+compares what the publish confirmed, snapshot by snapshot, and the pending-work file holds only
+publishes. So when the session expired part-way through the comparison, or before it, because the
+publish itself pended, what was published and not compared was owed by nothing: the next run
+compared only what it published. The stage now names those snapshots
+(:attr:`StageRecord.not_compared`), the run's details keep them, and the next `caselist pull`,
+scheduled or by hand, or `caselist pull --publish-pending` hands the newest run's list back to the
+report stage. It compares them after what that run publishes, by the same code and the same rules,
+and a run cut short again owes what it did not reach. Slugs and snapshot names, nothing else.
+Details an older build wrote have no list and owe nothing; only the newest run's list is read
+(:func:`~debate_core.application.sync_runs.comparisons_owed_by_the_newest_run`), and a dry run
+compares nothing. The run's record outcome is `publish_pending` for a report stage pending alone,
+as for any stage waiting on the login.
 
 ## What the pending-work file holds
 
@@ -534,6 +549,7 @@ from debate_core.application.caselist.publish_plan import (
 )
 from debate_core.application.caselist.publish_service import (
     CaselistPublishService,
+    ManifestOutcome,
     NothingToPublish,
     SourceResult,
 )
@@ -898,6 +914,12 @@ class StageRecord:
     (`v1-e34-t23`). On a failed stage, and on one pending on an expired session for what it found
     before the session expired. Empty for every other stage."""
 
+    not_compared: tuple[PendingSnapshot, ...] = ()
+    """What a pending report stage was to compare and did not, because the session had expired
+    (`v1-e34-t28`): what the run published, and what an earlier run's check owed, that it never
+    reached. The run's details keep it, and the next pull or `caselist pull --publish-pending`
+    compares exactly these. Empty for every other stage and outcome."""
+
     def as_json(self) -> dict[str, object]:
         return {
             "stage": str(self.stage),
@@ -907,6 +929,8 @@ class StageRecord:
             "hint": self.hint,
             "earlier_findings": list(self.earlier_findings),
             "drift": [one.as_json() for one in self.drift],
+            # Additive (`v1-e34-t28`): the version stays.
+            "not_compared": [one.as_json() for one in self.not_compared],
         }
 
 
@@ -2256,6 +2280,11 @@ class RunSummary:
     """The index the search index stage left current, or `None` when the stage reached none."""
 
     objects_published: int = 0
+    """Objects the publish stage uploaded from the raw store: sources and manifests (`v1-e34-t28`)."""
+
+    manifests_published: int = 0
+    """Of those, the manifests (`v1-e34-t28`): every one of a republish that uploaded a manifest alone."""
+
     reports_written: int = 0
     snapshots_imported: tuple[str, ...] = ()
     pending_publish: tuple[str, ...] = ()
@@ -2397,6 +2426,8 @@ class RunSummary:
             # Additive (`v1-e39-t09`): the version stays.
             "search_index": self.search_index.as_json() if self.search_index is not None else None,
             "objects_published": self.objects_published,
+            # Additive (`v1-e34-t28`): the version stays.
+            "manifests_published": self.manifests_published,
             "reports_written": self.reports_written,
             "snapshots_imported": list(self.snapshots_imported),
             "pending_publish": list(self.pending_publish),
@@ -2461,6 +2492,7 @@ class _RunTally:
     parse: ParseStageCounts | None = None
     search_index: SearchIndexStageCounts | None = None
     objects_published: int = 0
+    manifests_published: int = 0
     reports_written: int = 0
     snapshots_imported: list[str] = field(default_factory=lambda: list[str]())
     publish_targets: list[PendingSnapshot] = field(default_factory=lambda: list[PendingSnapshot]())
@@ -2487,6 +2519,10 @@ class _RunTally:
     """What an earlier run owed again because its manifest drifted, and every run since has still
     owed (`v1-e34-t26`): the report stage owes none of these a third time. From the caller, which
     reads the run log (:func:`~debate_core.application.sync_runs.snapshots_owed_again_for_drift`)."""
+    comparisons_owed: tuple[PendingSnapshot, ...] = ()
+    """What the newest run's report stage was cut short before comparing, for this run's report stage
+    to compare (`v1-e34-t28`). From the caller, which reads the run's details
+    (:func:`~debate_core.application.sync_runs.comparisons_owed_by_the_newest_run`)."""
 
     def count_held(self, held_by_request: Mapping[str, int]) -> None:
         for request_id, count in held_by_request.items():
@@ -2502,12 +2538,13 @@ class _RunTally:
         found_first: Sequence[_StageFailure] = (),
         *,
         drift: Sequence[SnapshotDrift] = (),
+        not_compared: Sequence[PendingSnapshot] = (),
     ) -> None:
         """Record `stage` as pending on a login, with what it had already found as earlier findings.
 
         Their codes go to :attr:`StageRecord.earlier_findings` and never to its `error_codes`: a
         pending stage decides nothing about the exit (`v1-e34-t13`). The report stage's `drift`
-        goes with them (`v1-e34-t23`).
+        goes with them (`v1-e34-t23`), and what it did not reach (`not_compared`, `v1-e34-t28`).
         """
         self.stages.append(
             StageRecord(
@@ -2516,6 +2553,7 @@ class _RunTally:
                 reason=reason,
                 earlier_findings=tuple(dict.fromkeys(code for one in found_first for code in one.codes)),
                 drift=tuple(drift),
+                not_compared=tuple(not_compared),
             )
         )
 
@@ -2769,12 +2807,17 @@ class CaselistSyncService:
         dry_run: bool = False,
         full_archive: str | None = None,
         owed_for_drift: Collection[PendingSnapshot] = (),
+        comparisons_owed: Sequence[PendingSnapshot] = (),
     ) -> RunSummary:
         """One whole pull. Holds the run lock for its duration.
 
         `owed_for_drift` is what earlier runs owed again because the bucket's manifest drifted from
         this machine's, and every run since has still owed; see "What the pending-work file holds"
         in the module docstring (`v1-e34-t26`). :func:`run_pull` reads it from the run log.
+
+        `comparisons_owed` is what the newest run published and its report stage did not compare,
+        as for :meth:`publish_pending`: the report stage compares them after what this run
+        publishes (`v1-e34-t28`, the PM's condition of 2026-10-22). A dry run is handed none.
 
         Raises :class:`SyncRunInProgress` at once if another run holds the lock, and
         :class:`NoCaselistsConfigured` if asked to pull nothing. Everything else is an outcome in
@@ -2794,10 +2837,14 @@ class CaselistSyncService:
             raise NoCaselistsConfigured
         started = self._clock()
         with RunLock(self._state_dir / LOCK_FILENAME):
-            tally = _RunTally(owed_for_drift=frozenset(owed_for_drift))
+            tally = _RunTally(
+                owed_for_drift=frozenset(owed_for_drift), comparisons_owed=tuple(comparisons_owed)
+            )
             fallbacks = self._suppression_fallbacks()
             plan = await self._selection_stage(caselists, tally, full_archive=full_archive)
             self._note_local_copy_only(tally, SyncStage.SELECT, since=fallbacks)
+            if tally.comparisons_owed:
+                tally.add_to_reason(SyncStage.SELECT, _check_owed(tally.comparisons_owed))
             if full_archive is not None and not dry_run:
                 _refuse_unless_fetchable(plan, full_archive)
             if dry_run:
@@ -2811,8 +2858,13 @@ class CaselistSyncService:
         _log_summary(summary)
         return summary
 
-    async def publish_pending(self, *, owed_for_drift: Collection[PendingSnapshot] = ()) -> RunSummary:
-        """Complete the publishes an earlier run deferred, and nothing else.
+    async def publish_pending(
+        self,
+        *,
+        owed_for_drift: Collection[PendingSnapshot] = (),
+        comparisons_owed: Sequence[PendingSnapshot] = (),
+    ) -> RunSummary:
+        """Complete the publishes an earlier run deferred, and the check it was cut short on.
 
         What `caselist pull --publish-pending` runs after `aws sso login`. It takes the same lock,
         so it cannot overlap a scheduled run, and it drains the pending-work file: each snapshot
@@ -2820,15 +2872,25 @@ class CaselistSyncService:
         ended the stage (:func:`snapshots_still_owed`). A file that cannot be read is left as it
         is, and the publish stage fails on it (:class:`PendingWorkUnreadable`). `owed_for_drift` is
         :meth:`run`'s.
+
+        `comparisons_owed` is what the newest run published and its report stage did not compare,
+        because the session expired first (`v1-e34-t28`, the PM's ruling of 2026-10-22). The report
+        stage compares exactly those, after what this run publishes, as it compares anything:
+        :func:`run_pull` reads them from that run's details, for :meth:`run` as for this. Nothing
+        else is compared again.
         """
         started = self._clock()
         with RunLock(self._state_dir / LOCK_FILENAME):
-            tally = _RunTally(owed_for_drift=frozenset(owed_for_drift))
+            tally = _RunTally(
+                owed_for_drift=frozenset(owed_for_drift), comparisons_owed=tuple(comparisons_owed)
+            )
             try:
                 selected = f"{len(self._pending.read())} snapshot(s) owed"
             except PendingWorkUnreadable:
                 # The publish stage reads it again and is the one that fails on it, with the fix.
                 selected = "what is owed could not be read"
+            if tally.comparisons_owed:
+                selected += f"; {_check_owed(tally.comparisons_owed)}"
             tally.record(SyncStage.SELECT, StageOutcome.COMPLETED, selected)
             for stage in (SyncStage.DOWNLOAD, SyncStage.IMPORT):
                 tally.record(stage, StageOutcome.SKIPPED, "publish-pending does no fetching or importing")
@@ -3791,7 +3853,7 @@ class CaselistSyncService:
         # Owed before it is attempted: a run killed part-way never reaches the line that follows
         # the loop, and what it imported would otherwise be written down nowhere.
         record_what_is_owed()
-        published = 0
+        sources = manifests = 0
         incomplete: list[_StageFailure] = []
         stopped: _StageFailure | None = None
         expired: StoreCredentialsExpired | None = None
@@ -3821,14 +3883,18 @@ class CaselistSyncService:
                 # stays owed, and the ones after it are still published.
                 incomplete.append(self._failure(failed, about=named))
                 continue
-            published += report.count(SourceResult.UPLOADED)
+            # A manifest is an object it uploads too (`v1-e34-t28`): a republish of a manifest alone
+            # used to say `0 object(s) uploaded`.
+            sources += report.count(SourceResult.UPLOADED)
+            manifests += sum(one.manifest is ManifestOutcome.UPLOADED for one in report.snapshots)
             if report.succeeded:
                 tally.published.append(target)
                 continue
             incomplete.append(
                 _StageFailure(f"{named}: " + ", ".join(report.failed_sha256), report.failure_codes)
             )
-        tally.objects_published = published
+        published = sources + manifests
+        tally.objects_published, tally.manifests_published = published, manifests
         owed = record_what_is_owed()
 
         reason = f"{published} object(s) published"
@@ -3868,7 +3934,8 @@ class CaselistSyncService:
         tally.record(
             SyncStage.PUBLISH,
             StageOutcome.COMPLETED,
-            f"{published} object(s) uploaded across {len(targets)} snapshot(s)",
+            f"{published} object(s) uploaded across {len(targets)} snapshot(s): {sources} source(s) and "
+            f"{manifests} manifest(s)",
         )
 
     async def _parse_stage(self, tally: _RunTally) -> None:
@@ -4064,14 +4131,22 @@ class CaselistSyncService:
         A snapshot it finds with a manifest mismatch and nothing else is owed again, however the
         stage ends, unless it was owed again for that already (:meth:`_owe_drifted_manifests_again`,
         `v1-e34-t26`).
+
+        **What it compares**: what this run published, and then what the newest run's check was
+        cut short before comparing (:attr:`_RunTally.comparisons_owed`, which every pull and
+        `--publish-pending` is handed). **When the session expires** first, what it had not compared
+        yet is :attr:`StageRecord.not_compared`, and the run's details keep it for the next pull or
+        `--publish-pending` (`v1-e34-t28`). A snapshot it did compare is not in it, whatever the
+        comparison found: that finding is the stage's drift and earlier findings, as before.
         """
         if self._status is None:
             tally.record(SyncStage.REPORT, StageOutcome.SKIPPED, _NO_BUCKET)
             return
+        to_compare = list(dict.fromkeys((*tally.published, *tally.comparisons_owed)))
         if tally.outcome_of(SyncStage.PUBLISH) is StageOutcome.PENDING:
-            tally.record(SyncStage.REPORT, StageOutcome.PENDING, "the publish it would confirm is pending")
+            tally.pend(SyncStage.REPORT, "the publish it would confirm is pending", not_compared=to_compare)
             return
-        if not tally.published:
+        if not to_compare:
             tally.record(
                 SyncStage.REPORT,
                 StageOutcome.SKIPPED,
@@ -4083,18 +4158,19 @@ class CaselistSyncService:
         confirmed = 0
         drifted: list[_StageFailure] = []
         found: list[SnapshotDrift] = []
-        # Snapshot by snapshot, and only the ones this run published. A caselist-wide check would
-        # report an older snapshot somebody imported by hand and never published as drift of this
-        # run, which it is not: completing that one is `caselist publish`'s job.
-        for target in tally.published:
+        # Snapshot by snapshot, and only the ones this run published or a cut-short check owed. A
+        # caselist-wide check would report an older snapshot somebody imported by hand and never
+        # published as drift of this run, which it is not: completing that one is `caselist publish`'s.
+        for index, target in enumerate(to_compare):
             named = f"{target.caselist} {target.snapshot}"
             try:
                 report = await self._status.status(target.caselist, target.snapshot)
             except StoreCredentialsExpired as expired:
-                # What was found before the expiry is kept (`v1-e34-t23`): the retry after the login
-                # compares only what it publishes, and these were published already.
+                # What was found before the expiry is kept (`v1-e34-t23`), and what was not reached
+                # is named, for the next pull or `--publish-pending` to compare (`v1-e34-t28`).
+                not_compared = to_compare[index:]
                 if not drifted:
-                    tally.record(SyncStage.REPORT, StageOutcome.PENDING, str(expired))
+                    tally.pend(SyncStage.REPORT, str(expired), not_compared=not_compared)
                     return
                 tally.pend(
                     SyncStage.REPORT,
@@ -4104,6 +4180,7 @@ class CaselistSyncService:
                     + f"; {expired}",
                     found_first=drifted,
                     drift=found,
+                    not_compared=not_compared,
                 )
                 return
             except StoreAccessDenied as refused:
@@ -4542,6 +4619,7 @@ class CaselistSyncService:
             parse=tally.parse,
             search_index=tally.search_index,
             objects_published=tally.objects_published,
+            manifests_published=tally.manifests_published,
             reports_written=tally.reports_written,
             snapshots_imported=tuple(tally.snapshots_imported),
             pending_publish=tuple(f"{one.caselist} {one.snapshot}" for one in tally.pending_publish),
@@ -4630,14 +4708,22 @@ async def run_pull(
             # expired token, another run holding the lock — is recorded and announced too.
             # What earlier runs owed again for drift is read from their records (`v1-e34-t26`).
             owed_for_drift = watching.snapshots_owed_again_for_drift()
+            # And the check the newest run's report stage was cut short on, which a pull makes as a
+            # drain does (`v1-e34-t28`).
+            comparisons_owed = watching.comparisons_owed()
             if publish_pending:
                 progress("completing the publishes an earlier run deferred")
-                return await sync_service().publish_pending(owed_for_drift=owed_for_drift)
+                return await sync_service().publish_pending(
+                    owed_for_drift=owed_for_drift, comparisons_owed=comparisons_owed
+                )
             if not caselists:
                 raise NoCaselistsConfigured
             progress(f"pulling {', '.join(caselists)}")
             return await sync_service().run(
-                caselists, full_archive=full_archive, owed_for_drift=owed_for_drift
+                caselists,
+                full_archive=full_archive,
+                owed_for_drift=owed_for_drift,
+                comparisons_owed=comparisons_owed,
             )
 
         monitored = await watching.watch(
@@ -4697,6 +4783,14 @@ _PARSE_FAILED_SO_NO_INDEX: Final = (
     "the parse stage failed in this run, so the index is not rebuilt from what it left; "
     "the previous index stays current"
 )
+
+
+def _check_owed(comparisons_owed: Sequence[PendingSnapshot]) -> str:
+    """What the select stage says of the comparisons this run owes (`v1-e34-t28`)."""
+    return (
+        f"the report stage's check of {len(comparisons_owed)} snapshot(s) an earlier run published "
+        "was cut short, and is owed to this run"
+    )
 
 
 def caselists_to_parse(imported: Iterable[PendingSnapshot]) -> tuple[str, ...]:

@@ -226,8 +226,12 @@ async def test_a_manifest_that_drifted_is_owed_again_and_the_next_run_publishes_
     second = await a_pull(bucket)
 
     assert publish(second)["outcome"] == "completed"
-    # The count is of sources; the manifest it uploads again is not one of them (Follow-up work).
-    assert publish(second)["reason"] == "0 object(s) uploaded across 1 snapshot(s)"
+    # The manifest is the one object it uploads again, and the count says so since `v1-e34-t28`; it
+    # used to say `0 object(s) uploaded across 1 snapshot(s)`.
+    assert (
+        publish(second)["reason"]
+        == "1 object(s) uploaded across 1 snapshot(s): 0 source(s) and 1 manifest(s)"
+    )
     assert report(second)["outcome"] == "completed"
     assert report(second)["reason"] == "1 snapshot(s) confirmed in the bucket"
     assert bucket.manifest(WEEK_1) == bucket.local_manifest(WEEK_1), "the bucket's copy follows"

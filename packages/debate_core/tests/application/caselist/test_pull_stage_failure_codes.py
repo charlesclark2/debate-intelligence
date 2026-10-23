@@ -981,8 +981,9 @@ async def test_from_summary_schema_version_4_every_stage_carries_the_new_fields(
     """`error_codes` and `hint` were new on every stage in version 4, so the version moved (PM
     decision). `v1-e34-t17` moved it again, to 5, for the parse stage's counts; the stages kept
     both fields. `v1-e34-t19` added `earlier_findings` beside them, which decides nothing, so by
-    `v1-e34-t07`'s rule the version stayed; and `v1-e34-t23` added `drift`, the report stage's
-    findings with their kind, by the same rule."""
+    `v1-e34-t07`'s rule the version stayed; `v1-e34-t23` added `drift`, the report stage's
+    findings with their kind, by the same rule; and `v1-e34-t28` added `not_compared`, what a
+    report stage cut short did not reach, by it again."""
     source = FakeSource(installation.archives, weeks=[WEEK_1])
 
     summary = await installation.sync(source).run([CASELIST])
@@ -995,6 +996,7 @@ async def test_from_summary_schema_version_4_every_stage_carries_the_new_fields(
             "earlier_findings",
             "error_codes",
             "hint",
+            "not_compared",
             "outcome",
             "reason",
             "stage",

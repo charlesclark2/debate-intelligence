@@ -64,7 +64,7 @@ spec:
         `scripts/task ready` and `scripts/task list` show dev's latest validate-dev result,
         and a failure opens or updates a GitHub issue, by test.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

@@ -10,7 +10,7 @@ every test here and prove nothing.
 the SDK signs requests on. That is how "a dry run performs no PutObject or GetObject" and "a blob
 diff heads nothing" are asserted: on the wire, not on a counter this code keeps about itself.
 
-Nothing here reaches AWS. `packages/debate_core/tests/conftest.py` builds the bucket in moto with
+Nothing here reaches AWS. `tests/fixtures/moto_evidence_bucket.py` builds the bucket in moto with
 fake credentials, and the workspace's pytest options disable sockets.
 """
 

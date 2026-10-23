@@ -14,7 +14,7 @@ wrapper that passes every call through to the real S3 adapter and raises when to
 Ctrl-C or a killed job produces: the service does not catch it, so the run stops where it stands,
 and what the bucket holds afterwards is exactly what a real interruption would leave.
 
-Nothing here reaches AWS; `packages/debate_core/tests/conftest.py` builds the bucket in moto.
+Nothing here reaches AWS; `tests/fixtures/moto_evidence_bucket.py` builds the bucket in moto.
 """
 
 from __future__ import annotations

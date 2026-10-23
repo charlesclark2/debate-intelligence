@@ -198,7 +198,7 @@ Things worth knowing before you use or extend these:
   compared with a blob key.
 * **Blocking calls run in a worker thread** (`asyncio.to_thread`), unlike the local adapters, because
   here the I/O really is a network round trip.
-* **Tests use `moto`, never an account.** The fixtures are in `packages/debate_core/tests/conftest.py`
+* **Tests use `moto`, never an account.** The fixtures are in `tests/fixtures/moto_evidence_bucket.py`
   and the suite runs with `--disable-socket`.
 ### `integrations/models/` — model routing (v1-e05-t01-model-router-port)
 

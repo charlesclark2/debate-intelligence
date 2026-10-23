@@ -25,7 +25,7 @@ its walkthrough. Import it from `debate_core.testing.contracts.search_provider`;
 
 The last one in the table arrived with the S3 adapters (`v1-e29-t04-s3-blob-store`) and is the first contract
 whose two bindings are a cloud service and a local directory rather than two local implementations.
-Its S3 binding runs against `moto`, through the fixtures in `packages/debate_core/tests/conftest.py`:
+Its S3 binding runs against `moto`, through the fixtures in `tests/fixtures/moto_evidence_bucket.py`:
 a contract binding for a cloud adapter opts in against a mock or an emulator, never an account.
 
 ## Opting a new adapter in

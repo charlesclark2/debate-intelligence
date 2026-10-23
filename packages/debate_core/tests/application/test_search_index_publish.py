@@ -1,7 +1,7 @@
 """`tub index publish` against the S3 test double: the pointer last, and nothing on a version mismatch (ac5).
 
 The bucket is moto's, through the real `S3EvidenceObjectStore` (the `evidence_bucket` fixture in
-`packages/debate_core/tests/conftest.py`), wrapped so a test can see the order of the writes and make one
+`tests/fixtures/moto_evidence_bucket.py`), wrapped so a test can see the order of the writes and make one
 fail. The index is a real one, built by `SearchIndexBuildService` from a one-card synthetic store.
 Nothing here reaches AWS: moto answers botocore in-process and sockets are disabled.
 """

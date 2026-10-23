@@ -106,13 +106,13 @@ positions:
     kind: theory
     side: aff
     events: [POLICY]
-    aliases: [50 state fiat, fifty state fiat, theory 50 state fiat, theory at 50 state fiat bad, theory at 50 state fiat]
+    aliases: [50 state fiat, fifty state fiat, theory 50 state fiat, theory 50 state fiat bad]
   - id: process-cps-bad
     label: Process CPs bad
     kind: theory
     side: aff
     events: [POLICY]
-    aliases: [theory at process cps]
+    aliases: [theory process cps]
   - id: aspec
     label: ASPEC
     kind: theory

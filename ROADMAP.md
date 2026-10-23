@@ -60,14 +60,15 @@ v2.3's extension work.
 
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
-| [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 44 | 43 | 228 |
-| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 101 | 79 | 484 |
+| [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 46 | 43 | 234 |
+| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 102 | 80 | 486 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 22 | 7 | 191 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 13 | 2 | 108 |
-| [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 15 | 6 | 96 |
+| [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 16 | 6 | 98 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 0 | 66 |
 | [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 19 | 12 | 146 |
-| [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 10 | 6 | 46 |
+| [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 14 | 7 | 61 |
+| [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 1 | 6 | 0 | 20 |
 | [v2.0](plan_specs/releases/v2.0.yaml) | Cloud platform foundation | 3 | 17 | 0 | 164 |
 | [v2.1](plan_specs/releases/v2.1.yaml) | Web app, debate tub & async jobs | 3 | 18 | 0 | 198 |
 | [v2.2](plan_specs/releases/v2.2.yaml) | Research workspace | 2 | 12 | 0 | 117 |
@@ -123,6 +124,8 @@ Repo, tooling, CI, promotion flow, task tooling, domain core, and deterministic 
 | [debate_core.testing and debate_core.evidence stop importing more than a caller asks for](plan_specs/v1/e01-repo-foundation/t29-slim-package-reexports.yaml) `v1-e01-t29-slim-package-reexports` | Succeeded | 1 | 3.0 |
 | [Tests stop reaching code they do not use: fakes by port, no port re-exports, and a graph option](plan_specs/v1/e01-repo-foundation/t30-test-selection-reach.yaml) `v1-e01-t30-test-selection-reach` | Succeeded | 1 | 4.0 |
 | [Repository checks stop flagging true values, and the smoke tests type-check](plan_specs/v1/e01-repo-foundation/t31-repo-check-false-positives.yaml) `v1-e01-t31-repo-check-false-positives` | Pending | 1 | 1.0 |
+| [Test selection, round three: command registration, quoted words, the root pyproject and the contract suites](plan_specs/v1/e01-repo-foundation/t32-test-selection-reach-round-three.yaml) `v1-e01-t32-test-selection-reach-round-three` | Pending | 1 | 3.0 |
+| [When a newer build wrote the database or added a setting, the error says so](plan_specs/v1/e01-repo-foundation/t33-newer-build-messages.yaml) `v1-e01-t33-newer-build-messages` | Pending | 0 | 2.0 |
 
 #### [E02 — Domain Core: Entities, Ports & Local Persistence](plan_specs/v1/e02-domain-core/epic.yaml)
 
@@ -228,7 +231,7 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [Measure cluster shapes, and ask a person only about the pairs a rule cannot decide](plan_specs/v1/e31-debate-file-parsing/t21-cluster-shapes-and-sampler.yaml) `v1-e31-t21-cluster-shapes-and-sampler` | Succeeded | 1 | 4.0 |
 | [Bodies too long to be one card, and two cards stored as one](plan_specs/v1/e31-debate-file-parsing/t22-card-boundaries.yaml) `v1-e31-t22-card-boundaries` | Succeeded | 2 | 6.0 |
 | [In-round markers kept in a card's evidence text](plan_specs/v1/e31-debate-file-parsing/t23-in-round-markers.yaml) `v1-e31-t23-in-round-markers` | Pending | 2 | 3.0 |
-| [A bold tag above a cite is read as the card's tag](plan_specs/v1/e31-debate-file-parsing/t24-bold-tag-above-bracketed-cite.yaml) `v1-e31-t24-bold-tag-above-bracketed-cite` | InProgress | 1 | 3.0 |
+| [A bold tag above a cite is read as the card's tag](plan_specs/v1/e31-debate-file-parsing/t24-bold-tag-above-bracketed-cite.yaml) `v1-e31-t24-bold-tag-above-bracketed-cite` | Succeeded | 1 | 3.0 |
 | [The labeller warns before a card is lost, and import refuses a file already corrected](plan_specs/v1/e31-debate-file-parsing/t25-labeller-safeguards.yaml) `v1-e31-t25-labeller-safeguards` | Pending | 1 | 3.0 |
 | [parse --publish sends nothing of a held upload](plan_specs/v1/e31-debate-file-parsing/t26-held-upload-parsed-publish.yaml) `v1-e31-t26-held-upload-parsed-publish` | Succeeded | 1 | 2.0 |
 | [The parse time-limit test does not depend on the machine's load](plan_specs/v1/e31-debate-file-parsing/t27-parse-time-limit-test.yaml) `v1-e31-t27-parse-time-limit-test` | Pending | 1 | 1.0 |
@@ -272,6 +275,7 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [Publish-stage loose ends: a cut-short report check, the manifest count, and a report-only outcome](plan_specs/v1/e34-caselist-sync/t28-publish-stage-loose-ends.yaml) `v1-e34-t28-publish-stage-loose-ends` | Pending | 1 | 2.0 |
 | [An older build never rewrites or publishes an occurrence table stamped with a newer fingerprint version](plan_specs/v1/e34-caselist-sync/t29-newer-fingerprint-table-guard.yaml) `v1-e34-t29-newer-fingerprint-table-guard` | Succeeded | 1 | 2.0 |
 | [doctor says when a store the weekly run will index has never been parsed](plan_specs/v1/e34-caselist-sync/t30-doctor-unparsed-store.yaml) `v1-e34-t30-doctor-unparsed-store` | Succeeded | 0 | 1.0 |
+| [The weekly run names caselist parse --publish-only where a publish-only finishes the stage](plan_specs/v1/e34-caselist-sync/t31-pull-fix-text-publish-only.yaml) `v1-e34-t31-pull-fix-text-publish-only` | Pending | 2 | 2.0 |
 
 
 ### v1.2 — Argument landscape & file building
@@ -308,12 +312,12 @@ Weekly argument-landscape reports show which positions are being read and with w
 |---|---|---|---|
 | [File recipe format](plan_specs/v1/e33-file-builder/t01-file-recipe-format.yaml) `v1-e33-t01-file-recipe-format` | Succeeded | 1 | 11.0 |
 | [Lossless card writer](plan_specs/v1/e33-file-builder/t02-lossless-card-writer.yaml) `v1-e33-t02-lossless-card-writer` | Succeeded | 3 | 15.0 |
-| [`debate-research files` commands](plan_specs/v1/e33-file-builder/t03-file-build-cli.yaml) `v1-e33-t03-file-build-cli` | Pending | 3 | 10.0 |
+| [`debate-research files` commands](plan_specs/v1/e33-file-builder/t03-file-build-cli.yaml) `v1-e33-t03-file-build-cli` | Pending | 4 | 10.0 |
 | [Built-file quality checks](plan_specs/v1/e33-file-builder/t04-file-quality-checks.yaml) `v1-e33-t04-file-quality-checks` | Succeeded | 2 | 11.0 |
 | [Publish built files to S3](plan_specs/v1/e33-file-builder/t05-file-publish.yaml) `v1-e33-t05-file-publish` | Pending | 3 | 9.0 |
 | [A recipe can name a camp (OpenEv) card](plan_specs/v1/e33-file-builder/t06-camp-pins.yaml) `v1-e33-t06-camp-pins` | Succeeded | 1 | 2.0 |
 | [A camp occurrence row carries its camp path's digest, so a camp-path withdrawal stops it before a rebuild](plan_specs/v1/e33-file-builder/t07-camp-path-on-occurrence-rows.yaml) `v1-e33-t07-camp-path-on-occurrence-rows` | Pending | 1 | 2.0 |
-| [The file writer and the search pilot compose a provenance line with one function](plan_specs/v1/e33-file-builder/t08-provenance-line-one-function.yaml) `v1-e33-t08-provenance-line-one-function` | Pending | 0 | 1.0 |
+| [Built files carry no provenance line; the sidecar keeps the provenance](plan_specs/v1/e33-file-builder/t08-provenance-line-one-function.yaml) `v1-e33-t08-provenance-line-one-function` | Pending | 0 | 1.0 |
 
 
 ### v1.3 — URL → verified card
@@ -360,6 +364,7 @@ A student can run `debate-research cut <URL>` and receive a verified, tagged, ci
 | [GDELT news adapter](plan_specs/v1/e07-discovery-adapters/t06-gdelt-adapter.yaml) `v1-e07-t06-gdelt-adapter` | Pending | 2 | 4.0 |
 | [Government and policy source adapters](plan_specs/v1/e07-discovery-adapters/t07-government-adapters.yaml) `v1-e07-t07-government-adapters` | Pending | 2 | 8.0 |
 | [One Retry-After reader for every HTTP adapter, on an injected clock](plan_specs/v1/e07-discovery-adapters/t08-shared-retry-after.yaml) `v1-e07-t08-shared-retry-after` | Pending | 2 | 1.0 |
+| [A Google News item resolved by its headline in a configured publisher's own feed](plan_specs/v1/e07-discovery-adapters/t09-google-news-title-match.yaml) `v1-e07-t09-google-news-title-match` | Pending | 1 | 2.0 |
 
 #### [E08 — Federated Research Workflows](plan_specs/v1/e08-research-workflows/epic.yaml)
 
@@ -432,7 +437,7 @@ Whitefish Bay Debate has a public, mobile-friendly team website: team informatio
 
 ### v1.7 — Team evidence search pilot
 
-Debaters search the team's evidence store from a school Chromebook or at home: a signed-in, team-only web page over every disclosed and camp card, one result per card, each card copied into Google Docs or Word with its formatting and provenance, or downloaded as a Verbatim .docx. A pilot for the end of the 2026 fall semester. Independent of v1.2-v1.6: it needs v1.1's parsed store and fingerprints, and the E33 writer from v1.2.
+Debaters search the team's evidence store from a school Chromebook or at home: a signed-in, team-only web page over every disclosed and camp card, one result per card, each card copied into Google Docs or Word with its formatting, its provenance shown on the card page, or downloaded as a Verbatim .docx. A pilot for the end of the 2026 fall semester. Independent of v1.2-v1.6: it needs v1.1's parsed store and fingerprints, and the E33 writer from v1.2.
 
 #### [E39 — Team Evidence Search (Student Pilot)](plan_specs/v1/e39-evidence-search-pilot/epic.yaml)
 
@@ -445,9 +450,29 @@ Debaters search the team's evidence store from a school Chromebook or at home: a
 | [Accounts and sign-in: the session flow, roles, and the coach's tub users commands](plan_specs/v1/e39-evidence-search-pilot/t05-accounts-and-sign-in.yaml) `v1-e39-t05-accounts-and-sign-in` | Succeeded | 1 | 5.0 |
 | [Search pages: search, results, the card page and Copy card, on a Chromebook](plan_specs/v1/e39-evidence-search-pilot/t06-search-pages.yaml) `v1-e39-t06-search-pages` | Succeeded | 2 | 6.0 |
 | [Removal, access audit and exposure: the pilot meets the policy's E39 gate](plan_specs/v1/e39-evidence-search-pilot/t07-removal-audit-and-exposure.yaml) `v1-e39-t07-removal-audit-and-exposure` | Pending | 1 | 5.0 |
-| [Download a card or a small file as Verbatim .docx through the E33 writer](plan_specs/v1/e39-evidence-search-pilot/t08-card-download.yaml) `v1-e39-t08-card-download` | Pending | 2 | 4.0 |
-| [The weekly agent run rebuilds and publishes the search index when the parsed store changed](plan_specs/v1/e39-evidence-search-pilot/t09-weekly-index-refresh.yaml) `v1-e39-t09-weekly-index-refresh` | InProgress | 1 | 3.0 |
+| [Download a card or a small file as Verbatim .docx through the E33 writer](plan_specs/v1/e39-evidence-search-pilot/t08-card-download.yaml) `v1-e39-t08-card-download` | Pending | 3 | 4.0 |
+| [The weekly agent run rebuilds and publishes the search index when the parsed store changed](plan_specs/v1/e39-evidence-search-pilot/t09-weekly-index-refresh.yaml) `v1-e39-t09-weekly-index-refresh` | Succeeded | 1 | 3.0 |
 | [Dev smoke checks, the coach's beta and the student pilot](plan_specs/v1/e39-evidence-search-pilot/t10-pilot-smoke-and-review.yaml) `v1-e39-t10-pilot-smoke-and-review` | Pending | 2 | 3.0 |
+| [Search pages: a result count, a way back to the results, a link to the disclosed file, and Copy card without the provenance line](plan_specs/v1/e39-evidence-search-pilot/t11-search-pages-follow-ups.yaml) `v1-e39-t11-search-pages-follow-ups` | Pending | 1 | 4.0 |
+| [Only real cards come back: entries with no cite or a few words of text, counted before any rule](plan_specs/v1/e39-evidence-search-pilot/t12-card-only-results.yaml) `v1-e39-t12-card-only-results` | Pending | 1 | 3.0 |
+| [Find a card that says something: passage search, word stems and prefixes](plan_specs/v1/e39-evidence-search-pilot/t13-passage-search.yaml) `v1-e39-t13-passage-search` | Pending | 2 | 5.0 |
+| [An index that would drop most of the cards is never published](plan_specs/v1/e39-evidence-search-pilot/t14-index-shrink-guard.yaml) `v1-e39-t14-index-shrink-guard` | Pending | 1 | 3.0 |
+
+
+### v1.8 — Weekly caselist run in the cloud
+
+The weekly caselist run (pull, import, publish, parse, search index) runs in the team's AWS account on a schedule, logging in to OpenCaselist by itself with credentials held in Secrets Manager, keeping its state in the evidence bucket, and telling the coach when a run fails or is late. The coach's Mac stops being the server the debaters' fresh evidence depends on. Needs v1.1's sync and parsed store and v1.7's search index stage.
+
+#### [E40 — Weekly Caselist Run in the Cloud](plan_specs/v1/e40-cloud-caselist-run/epic.yaml)
+
+| Task | Status | Prereqs | Est. hours |
+|---|---|---|---|
+| [ADR-0020: the weekly caselist run in the cloud, its credentials and its state](plan_specs/v1/e40-cloud-caselist-run/t01-cloud-run-adr.yaml) `v1-e40-t01-cloud-run-adr` | Pending | 2 | 3.0 |
+| [The caselist token in Secrets Manager, and a scheduled login that renews it](plan_specs/v1/e40-cloud-caselist-run/t02-secrets-token-store-and-login.yaml) `v1-e40-t02-secrets-token-store-and-login` | Pending | 1 | 4.0 |
+| [The weekly run as a container on a schedule](plan_specs/v1/e40-cloud-caselist-run/t03-run-image-and-schedule.yaml) `v1-e40-t03-run-image-and-schedule` | Pending | 1 | 4.0 |
+| [A cloud run keeps its state in the evidence bucket](plan_specs/v1/e40-cloud-caselist-run/t04-run-state-on-s3.yaml) `v1-e40-t04-run-state-on-s3` | Pending | 1 | 5.0 |
+| [A failed or late cloud run emails the coach](plan_specs/v1/e40-cloud-caselist-run/t05-run-alerts.yaml) `v1-e40-t05-run-alerts` | Pending | 1 | 2.0 |
+| [Cut over: the cloud run takes the schedule and the Mac stops](plan_specs/v1/e40-cloud-caselist-run/t06-cutover.yaml) `v1-e40-t06-cutover` | Pending | 4 | 2.0 |
 
 
 ## V2

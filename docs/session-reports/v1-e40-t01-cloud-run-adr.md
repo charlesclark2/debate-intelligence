@@ -267,9 +267,64 @@ was chosen for.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED, with conditions closed in-session
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-23
 
 **Notes:**
+
+A strong record. It was measured first, and two of my own figures were corrected by it: the re-parse
+is 33 to 40 minutes on the Mac, not hours, and the 14 GB was two parsed versions at once. Every
+price carries its date, and the estimates are labelled. The credential design meets the forbidden
+entry as the coach set it. The lock that fences every named-object write, not only the run's
+start, is the right reading of "two runners able to publish at once". **ADR-0020 is accepted**
+(ac1).
+
+**Rulings**
+
+1. **(a).** Version 1.12 amends item 3, item 8 and the three place lists, adds the run-state bundle
+   to Retention and Removal, and says plainly that it loosens. It is one decision, and the merge
+   records one approval. The PM will tell the coach, before he merges, that this merge approves a
+   loosening.
+2. **As recommended.** Every command that writes to an evidence bucket takes the bucket lock in
+   bucket mode, renewing it before every named-object write. Add the forbidden entry with it.
+3. **As recommended.** t06 ac1 becomes the Mac's offline reproduction of a dev cloud run's parse
+   and index from the same inputs.
+4. **As recommended:** ADR-0020 (7).
+
+The FYIs are accepted as written, including the administrator reading of the forbidden entry, on
+the condition below.
+
+**Conditions, to close in this session before the PR:**
+
+1. **Make the ADR's changes to the t02 to t06 specs here,** each marked `PM amendment 2026-10-23
+   (ADR-0020)`, from its table "What each E40 task builds":
+   * t02: the writer permission set, `set-password`, and the weekly login three hours before the
+     run.
+   * t03: each stage's start and end in the run's details, and the 70% storage warning.
+   * t04: ruling 2's wording in its description and the new forbidden entry, plus the store layout
+     document's three new keys, and `store sync` skipping `manifests/_run-state/`.
+   * t05: the CloudTrail rules on the credentials, and SNS as the mail path.
+   * t06: ruling 3's ac1, and the move of the home at promotion.
+
+   The epic allows the ADR to amend them, and you hold the detail. Run `validate_specs.py` after.
+2. **Set ADR-0020 to `Accepted`, 2026-10-23, by the PM,** with its README index row.
+3. **Say the administrator caveat in the policy itself,** in one sentence under item 3, so the
+   coach approves knowingly: an administrator of the account can reach the password only by a
+   change that CloudTrail records and that emails the coach, and a separate prod account would end
+   that.
+4. **Add one dated line to clause 12 of the clause register:** the coach told the maintainer on
+   2026-10-23 that the downloads are likely to move to the cloud, and the maintainer is fine with
+   it. It loosens nothing and sits inside 1.12.
+5. **Set the Goal to `Succeeded`.** ac2 completes on the merge, as for every earlier policy
+   version. Update the stale parts of this report. No re-review is needed.
+
+**The PR:** opened without `--partial`. The optional token-lifetime read is welcome before t02
+starts, and is not needed for this merge.
+
+**Follow-up work:** stage times are now t03's (condition 1). The parsed-store publish's 1 h 53 min
+is recorded, and is looked at once t03's stage times show the cloud figure. The V2 home for the
+caselist records is recorded for V2 E11. The store layout's keys are t04's (condition 1).
+
+If anything comes out differently, stop and ask for another review.

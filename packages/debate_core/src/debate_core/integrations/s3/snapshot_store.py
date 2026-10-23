@@ -62,8 +62,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final
 
 from debate_core.application.errors import BlobIntegrityError, NotFound
-from debate_core.application.ports import BlobKey
 from debate_core.application.ports.evidence_store import validate_object_key
+from debate_core.application.ports.persistence import BlobKey
 from debate_core.domain import SHA256_HEX_PATTERN
 from debate_core.integrations.file_streaming import atomic_replacement, sha256_of_file
 from debate_core.integrations.s3.client import (

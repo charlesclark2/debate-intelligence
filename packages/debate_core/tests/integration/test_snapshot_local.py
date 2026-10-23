@@ -28,7 +28,7 @@ from debate_core.application.errors import (
 from debate_core.application.snapshot_service import SnapshotService
 from debate_core.domain import AccessStatus, ProvenanceMode, SourceSnapshot
 from debate_core.integrations.local import BLOB_FILE_MODE, FsSnapshotStore
-from debate_core.testing.fakes import FixedClock, SequentialIdGenerator
+from debate_core.testing.fakes.clock_and_ids import FixedClock, SequentialIdGenerator
 
 RAW = b"<html><body><p>Glacier retreat doubled.</p>\r\n<p>Sea ice\xc2\xa0thinned.</p></body></html>"
 EXTRACTED = "Glacier retreat doubled.\r\n\r\nSea ice\u00a0thinned."

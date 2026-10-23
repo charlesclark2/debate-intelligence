@@ -48,7 +48,7 @@ from debate_core.application.sync_runs import record_for_summary
 from debate_core.domain.caselist import Event
 from debate_core.integrations.local import FsSnapshotStore
 from debate_core.integrations.local.archive_reader import archive_digest, read_archive
-from debate_core.testing.fakes import empty_suppression_list
+from debate_core.testing.fakes.suppression import empty_suppression_list
 
 from .conftest import RemovalWorld
 from .test_sync_skips_suppressed_downloads import (

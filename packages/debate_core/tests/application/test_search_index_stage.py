@@ -68,7 +68,8 @@ from debate_core.evidence.fingerprints import FINGERPRINT_VERSION, card_fingerpr
 from debate_core.integrations.local import FsEvidenceObjectStore
 from debate_core.integrations.local.search_index import SqliteSearchIndexWriter
 from debate_core.integrations.local.suppression_list import local_suppression_list_file
-from debate_core.testing.fakes import InMemoryCaselistRepository, InMemoryParsedStore
+from debate_core.testing.fakes.caselist import InMemoryCaselistRepository
+from debate_core.testing.fakes.parsed_store import InMemoryParsedStore
 
 CASELIST: Final = "hsld26"
 STORES: Final = (CASELIST, OPENEV_STORE)

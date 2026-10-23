@@ -67,7 +67,7 @@ from debate_core.integrations.local.suppression_list import (
     local_path_holds_file,
     local_suppression_list_file,
 )
-from debate_core.testing.fakes import InMemoryAppendOnlyRecord
+from debate_core.testing.fakes.suppression import InMemoryAppendOnlyRecord
 
 from .conftest import REQUEST, RemovalWorld
 from .test_removal_covers_inbox_revisions import put_the_arriving_archives_in_the_inbox

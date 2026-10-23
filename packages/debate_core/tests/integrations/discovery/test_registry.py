@@ -12,7 +12,7 @@ import pytest
 from pydantic import SecretStr, ValidationError
 
 from debate_core.application.errors import NotFound, ProviderUnavailable
-from debate_core.application.ports import DiscoveryProviders
+from debate_core.application.ports.providers import DiscoveryProviders
 from debate_core.application.settings import ConfigurationError, ProviderSettings, SearchProviderName
 from debate_core.domain.discovery import BreakerState, ProviderQuery, ProviderResponse
 from debate_core.integrations.discovery.registry import (
@@ -22,7 +22,7 @@ from debate_core.integrations.discovery.registry import (
     policy_from_settings,
 )
 from debate_core.integrations.discovery.resilience import ResiliencePolicy, ResilientProvider
-from debate_core.testing.fakes import FixedClock
+from debate_core.testing.fakes.clock_and_ids import FixedClock
 
 QUERY = ProviderQuery(query="data center water use")
 API_KEY = "s2-key-registry-7a6b5c"

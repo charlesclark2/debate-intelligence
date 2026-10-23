@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from debate_core.application.ports import DebateFileParser
+from debate_core.application.ports.debate_files import DebateFileParser
 from debate_core.domain.caselist import SourceDocument, SourceFormat, SourceOrigin
 from debate_core.domain.debate_files import (
     CardCompleteness,
@@ -21,7 +21,7 @@ from debate_core.domain.debate_files import (
     ParseFailureReason,
 )
 from debate_core.domain.style_profile import StyleMatchSource
-from debate_core.testing.fakes import FakeDebateFileParser, build_fake_debate_file_parser
+from debate_core.testing.fakes.debate_files import FakeDebateFileParser, build_fake_debate_file_parser
 
 SOURCE_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
 SNAPSHOT = date(2026, 9, 12)

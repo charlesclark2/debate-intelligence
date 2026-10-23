@@ -28,7 +28,7 @@ from collections.abc import Coroutine
 from datetime import datetime, timedelta
 from typing import Any
 
-from debate_core.testing.fakes import FAKE_EPOCH
+from debate_core.testing.fakes.clock_and_ids import FAKE_EPOCH
 
 __all__ = [
     "EventLoopClock",

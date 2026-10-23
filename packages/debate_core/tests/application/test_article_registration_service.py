@@ -13,7 +13,8 @@ from typing import Any, cast
 
 from debate_core.application.services import ArticleRegistrationService
 from debate_core.domain import SourceType
-from debate_core.testing.fakes import FAKE_EPOCH, FixedClock, InMemoryArticleRepository, SequentialIdGenerator
+from debate_core.testing.fakes.clock_and_ids import FAKE_EPOCH, FixedClock, SequentialIdGenerator
+from debate_core.testing.fakes.persistence import InMemoryArticleRepository
 
 OWNER_ID = "0STD0000000000000000000001"  # the ULID alphabet has no O, I, L or U
 

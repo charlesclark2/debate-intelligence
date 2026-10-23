@@ -10,7 +10,7 @@ every test here and prove nothing.
 the SDK signs requests on. That is how "a dry run performs no PutObject or GetObject" and "a blob
 diff heads nothing" are asserted: on the wire, not on a counter this code keeps about itself.
 
-Nothing here reaches AWS. `packages/debate_core/tests/conftest.py` builds the bucket in moto with
+Nothing here reaches AWS. `tests/fixtures/moto_evidence_bucket.py` builds the bucket in moto with
 fake credentials, and the workspace's pytest options disable sockets.
 """
 
@@ -46,7 +46,8 @@ from debate_core.application.ports.evidence_store import ObjectInfo
 from debate_core.application.ports.suppression import ReasonCode, SuppressionAction, SuppressionEntry
 from debate_core.integrations.local import BLOB_DIRECTORY, FsEvidenceObjectStore, FsSnapshotStore
 from debate_core.integrations.s3 import SHA256_METADATA_NAME, S3EvidenceObjectStore
-from debate_core.testing.fakes import FixedClock, InMemoryAppendOnlyRecord, empty_suppression_list
+from debate_core.testing.fakes.clock_and_ids import FixedClock
+from debate_core.testing.fakes.suppression import InMemoryAppendOnlyRecord, empty_suppression_list
 
 if TYPE_CHECKING:  # pragma: no cover - import for the type checker only
     from mypy_boto3_s3.client import S3Client

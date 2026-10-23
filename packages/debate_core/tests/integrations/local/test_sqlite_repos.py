@@ -25,7 +25,7 @@ from debate_core.application.errors import (
     NotFound,
     RevisionMismatch,
 )
-from debate_core.application.ports import ArticleRepository, CardRepository, SearchRepository
+from debate_core.application.ports.persistence import ArticleRepository, CardRepository, SearchRepository
 from debate_core.domain import (
     AccessStatus,
     Article,

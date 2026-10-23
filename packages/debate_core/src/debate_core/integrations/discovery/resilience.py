@@ -31,8 +31,8 @@ values are filtered out of httpx's and this package's log records
 
 The breaker reads time only from the injected
 :class:`~debate_core.application.ports.providers.Clock`, so every transition can be driven by hand
-in a test with :class:`~debate_core.testing.fakes.FixedClock`. The timeout is the event loop's own,
-because cancelling a call that is still running is the event loop's job.
+in a test with :class:`~debate_core.testing.fakes.clock_and_ids.FixedClock`. The timeout is the event
+loop's own, because cancelling a call that is still running is the event loop's job.
 """
 
 from __future__ import annotations
@@ -51,13 +51,8 @@ from debate_core.application.errors import (
     ProviderTimedOut,
     ProviderUnavailable,
 )
-from debate_core.application.ports.providers import (
-    Clock,
-    ProviderQuery,
-    ProviderResponse,
-    SearchProvider,
-)
-from debate_core.domain.discovery import BreakerState, ProviderHealth
+from debate_core.application.ports.providers import Clock, SearchProvider
+from debate_core.domain.discovery import BreakerState, ProviderHealth, ProviderQuery, ProviderResponse
 from debate_core.integrations.discovery.redaction import logger, protect_logs, redact_exception_chain
 
 __all__ = [

@@ -53,7 +53,7 @@ from debate_core.application.ports.suppression import (
 from debate_core.domain.debate_files import ParsedCard
 from debate_core.integrations.docx_parser import DOCX_PARSER_VERSION
 from debate_core.integrations.s3 import S3EvidenceObjectStore
-from debate_core.testing.fakes import build_fake_caselist_repository
+from debate_core.testing.fakes.caselist import build_fake_caselist_repository
 
 from .test_caselist_parse import THROUGH_0908, CountingParser, World, publisher, put_requests
 

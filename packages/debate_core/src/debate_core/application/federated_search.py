@@ -68,13 +68,8 @@ from debate_core.application.federated_search_types import (
     SearchStage,
     SearchState,
 )
-from debate_core.application.ports import (
-    Clock,
-    DiscoveryProviders,
-    IdGenerator,
-    SearchProvider,
-    SearchRepository,
-)
+from debate_core.application.ports.persistence import SearchRepository
+from debate_core.application.ports.providers import Clock, DiscoveryProviders, IdGenerator, SearchProvider
 from debate_core.domain import Search, SearchStatus
 from debate_core.domain.discovery import ProviderOutcome, ProviderQuery, ProviderStatus
 

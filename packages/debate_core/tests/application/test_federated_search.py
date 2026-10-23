@@ -43,7 +43,8 @@ from debate_core.application.federated_search_types import (
     SearchState,
     StageName,
 )
-from debate_core.application.ports import SearchProvider, SearchRepository
+from debate_core.application.ports.persistence import SearchRepository
+from debate_core.application.ports.providers import SearchProvider
 from debate_core.domain import Search, SearchFilters, SearchResult, SearchStatus
 from debate_core.domain.discovery import (
     CandidateResult,
@@ -61,12 +62,9 @@ from debate_core.testing.builders import (
     build_provider_status,
     build_search_result,
 )
-from debate_core.testing.fakes import (
-    FAKE_EPOCH,
-    FakeSearchProvider,
-    InMemorySearchRepository,
-    SequentialIdGenerator,
-)
+from debate_core.testing.fakes.clock_and_ids import FAKE_EPOCH, SequentialIdGenerator
+from debate_core.testing.fakes.persistence import InMemorySearchRepository
+from debate_core.testing.fakes.providers import FakeSearchProvider
 from debate_core.testing.virtual_time import EventLoopClock, run_in_virtual_time
 
 #: The most wall-clock time a test about seconds of provider latency may take.

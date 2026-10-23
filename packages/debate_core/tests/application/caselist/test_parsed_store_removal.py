@@ -50,7 +50,8 @@ from debate_core.application.ports.suppression import (
 from debate_core.integrations.docx_parser import DOCX_PARSER_VERSION, DebateDocxParser
 from debate_core.integrations.local import FsEvidenceObjectStore
 from debate_core.integrations.local.parsed_store import LocalParsedStore
-from debate_core.testing.fakes import build_fake_caselist_repository, empty_suppression_list
+from debate_core.testing.fakes.caselist import build_fake_caselist_repository
+from debate_core.testing.fakes.suppression import empty_suppression_list
 
 from .conftest import REMOVAL_TIME, RemovalWorld
 

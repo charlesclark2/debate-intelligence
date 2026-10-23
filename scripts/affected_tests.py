@@ -59,12 +59,19 @@ runs: the graph is built from the files each time, in a few seconds.
 a branch tip against its merge base with `--base`, both read from git without checking anything
 out: the import graph is built from that commit's files, copied into a temporary directory.
 
+`--graph REV2` builds the graph from REV2's files instead, whichever way the changes were named
+(v1-e01-t30). It answers "what would this change select over that tree", which is how a task that
+narrows imports is measured: t28's commits, each selected over the task's own graph. The test files
+are REV2's, so a changed file REV2 does not have is reached only by name, and the script lists such
+files. It cannot be combined with `--run`, which runs the working tree's tests.
+
 Usage:
   uv run scripts/affected_tests.py                     # this branch against origin/dev, as printed paths
   uv run scripts/affected_tests.py --explain           # with the reason each file was selected
   uv run scripts/affected_tests.py --run               # and run pytest over them with CI's markers
   uv run scripts/affected_tests.py --diff REV          # what commit REV changed
   uv run scripts/affected_tests.py --base A --head B   # B against its merge base with A
+  uv run scripts/affected_tests.py --diff REV --graph REV2   # REV's changes over REV2's imports
 """
 
 from __future__ import annotations
@@ -1018,6 +1025,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--diff", metavar="REV", help="describe what commit REV changed against its first parent"
     )
+    parser.add_argument(
+        "--graph", metavar="REV", help="build the import graph from REV's files rather than the changes' own"
+    )
     parser.add_argument("--explain", action="store_true", help="print why each test file was selected")
     parser.add_argument("--run", action="store_true", help="run pytest over the selection with CI's markers")
     arguments = parser.parse_args(argv)
@@ -1025,12 +1035,22 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--run runs the working tree's tests, so it cannot be combined with --head or --diff")
     if arguments.head and arguments.diff:
         parser.error("--head and --diff are two ways to name a commit; give one")
+    if arguments.run and arguments.graph:
+        parser.error("--run runs the working tree's tests, so it cannot be combined with --graph")
 
     root = repository_root()
     started = time.monotonic()
     changes = changed_files(root, arguments.base, arguments.head, arguments.diff)
-    revision = arguments.diff or arguments.head
+    revision = arguments.graph or arguments.diff or arguments.head
     tree = Tree.at(root, revision) if revision else Tree.working(root)
+    if arguments.graph:
+        absent = [change.path for change in changes if not change.deleted and change.path not in tree.paths]
+        if absent:
+            print(
+                f"{len(absent)} changed files are not in {arguments.graph}'s tree, so only a file naming "
+                f"them reaches them: {', '.join(absent)}",
+                file=sys.stderr,
+            )
     selection = select(tree, changes)
     elapsed = time.monotonic() - started
 

@@ -69,7 +69,7 @@ from debate_core.integrations.local.archive_reader import archive_digest, read_a
 from debate_core.integrations.local.fs_blob_store import BLOB_DIRECTORY, FsSnapshotStore
 from debate_core.integrations.local.sqlite_caselist_repository import SqliteCaselistRepository
 from debate_core.integrations.local.sqlite_db import SqliteDatabase
-from debate_core.testing.fakes import InMemoryAppendOnlyRecord, empty_suppression_list
+from debate_core.testing.fakes.suppression import InMemoryAppendOnlyRecord, empty_suppression_list
 
 EXPECTED = expected()
 YEAR = EXPECTED["year"]

@@ -63,7 +63,7 @@ from debate_core.application.ports.caselist_source import OpenEvFile
 from debate_core.application.ports.suppression import ReasonCode, RemovalLogEntry, WithdrawalEntry
 from debate_core.domain.caselist import Event
 from debate_core.integrations.local import FsEvidenceObjectStore, FsSnapshotStore
-from debate_core.testing.fakes import empty_suppression_list
+from debate_core.testing.fakes.suppression import empty_suppression_list
 
 from .conftest import REQUEST, RemovalWorld
 from .test_removal_covers_later_camp_uploads import (

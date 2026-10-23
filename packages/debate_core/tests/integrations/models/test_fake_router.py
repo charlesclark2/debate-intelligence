@@ -39,7 +39,7 @@ from debate_core.testing.contracts import (
     StructuredAnswer,
 )
 from debate_core.testing.contracts.model_router import ContractPassage
-from debate_core.testing.fakes import FixedClock
+from debate_core.testing.fakes.clock_and_ids import FixedClock
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[5]
 COMMITTED_FIXTURES = REPOSITORY_ROOT / "tests" / "fixtures" / "model_outputs"

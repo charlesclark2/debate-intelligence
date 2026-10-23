@@ -1,7 +1,7 @@
 """`tub index publish` against the S3 test double: the pointer last, and nothing on a version mismatch (ac5).
 
 The bucket is moto's, through the real `S3EvidenceObjectStore` (the `evidence_bucket` fixture in
-`packages/debate_core/tests/conftest.py`), wrapped so a test can see the order of the writes and make one
+`tests/fixtures/moto_evidence_bucket.py`), wrapped so a test can see the order of the writes and make one
 fail. The index is a real one, built by `SearchIndexBuildService` from a one-card synthetic store.
 Nothing here reaches AWS: moto answers botocore in-process and sockets are disabled.
 """
@@ -49,7 +49,8 @@ from debate_core.evidence.fingerprints import FINGERPRINT_VERSION, card_fingerpr
 from debate_core.integrations.local.search_index import SqliteSearchIndexWriter
 from debate_core.integrations.local.suppression_list import local_suppression_list_file
 from debate_core.integrations.s3 import S3EvidenceObjectStore
-from debate_core.testing.fakes import InMemoryCaselistRepository, InMemoryParsedStore
+from debate_core.testing.fakes.caselist import InMemoryCaselistRepository
+from debate_core.testing.fakes.parsed_store import InMemoryParsedStore
 
 if TYPE_CHECKING:  # pragma: no cover - import for the type checker only
     from mypy_boto3_s3.client import S3Client

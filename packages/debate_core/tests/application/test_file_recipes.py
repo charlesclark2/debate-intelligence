@@ -44,11 +44,9 @@ from debate_core.domain.caselist import CampFile, Disclosure, Event, RoundLabel,
 from debate_core.domain.debate_files import CardCompleteness
 from debate_core.domain.file_recipe import FileRecipe
 from debate_core.evidence import fingerprints
-from debate_core.testing.fakes import (
-    InMemoryAppendOnlyRecord,
-    InMemoryCaselistRepository,
-    InMemoryParsedStore,
-)
+from debate_core.testing.fakes.caselist import InMemoryCaselistRepository
+from debate_core.testing.fakes.parsed_store import InMemoryParsedStore
+from debate_core.testing.fakes.suppression import InMemoryAppendOnlyRecord
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 EXAMPLES = REPO_ROOT / "tests" / "fixtures" / "file_builder" / "recipes"

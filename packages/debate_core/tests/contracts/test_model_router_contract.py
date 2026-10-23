@@ -46,7 +46,8 @@ from debate_core.testing.contracts import (
     RouteExpectation,
     StructuredAnswer,
 )
-from debate_core.testing.fakes import FAKE_EPOCH, ScriptedModelResponse, ScriptedModelRouter
+from debate_core.testing.fakes.clock_and_ids import FAKE_EPOCH
+from debate_core.testing.fakes.model_router import ScriptedModelResponse, ScriptedModelRouter
 
 
 def _route(task_class: TaskClass) -> ModelRoute:

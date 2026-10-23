@@ -67,7 +67,7 @@ from debate_core.evidence.near_duplicates import (
     matching_words,
     shingles,
 )
-from debate_core.testing.fakes import build_fake_caselist_repository
+from debate_core.testing.fakes.caselist import build_fake_caselist_repository
 
 from .test_near_duplicates import PairCounts, Variant, load_variants
 

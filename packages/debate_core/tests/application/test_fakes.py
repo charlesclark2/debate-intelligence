@@ -28,10 +28,6 @@ from debate_core.application.errors import (
     ProviderUnavailable,
     RevisionMismatch,
 )
-from debate_core.application.ports import (
-    CandidateResult,
-    ProviderQuery,
-)
 from debate_core.domain import (
     ULID_PATTERN,
     AccessStatus,
@@ -45,21 +41,18 @@ from debate_core.domain import (
     SourceSnapshot,
     new_id,
 )
+from debate_core.domain.discovery import CandidateResult, ProviderQuery
 from debate_core.domain.model_contracts import ModelParams, ModelPrompt, ModelProvider, TaskClass
-from debate_core.testing.fakes import (
-    FAKE_EPOCH,
-    FakeArticleFetcher,
-    FakeContentExtractor,
-    FakeSearchProvider,
-    FixedClock,
+from debate_core.testing.fakes.all_ports import build_fake_ports
+from debate_core.testing.fakes.clock_and_ids import FAKE_EPOCH, FixedClock, SequentialIdGenerator
+from debate_core.testing.fakes.model_router import ScriptedModelRouter
+from debate_core.testing.fakes.persistence import (
     InMemoryArticleRepository,
     InMemoryCardRepository,
     InMemorySearchRepository,
     InMemorySnapshotStore,
-    ScriptedModelRouter,
-    SequentialIdGenerator,
-    build_fake_ports,
 )
+from debate_core.testing.fakes.providers import FakeArticleFetcher, FakeContentExtractor, FakeSearchProvider
 
 
 def run[ResultT](coroutine: Coroutine[Any, Any, ResultT]) -> ResultT:

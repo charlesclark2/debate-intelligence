@@ -33,7 +33,7 @@ from debate_core.application.errors import (
     NotFound,
     RevisionMismatch,
 )
-from debate_core.application.ports import ArticleRepository, CardRepository, SearchRepository
+from debate_core.application.ports.persistence import ArticleRepository, CardRepository, SearchRepository
 from debate_core.domain import Article, Card, Search, SearchStatus, Ulid
 from debate_core.domain.discovery import ProviderOutcome, ProviderStatus
 from debate_core.testing.builders import (
@@ -56,7 +56,7 @@ from debate_core.testing.contracts.harness import (
     SearchRepositoryFactory,
     walk_all_pages,
 )
-from debate_core.testing.fakes import FAKE_EPOCH
+from debate_core.testing.fakes.clock_and_ids import FAKE_EPOCH
 
 __all__ = [
     "ArticleRepositoryContract",

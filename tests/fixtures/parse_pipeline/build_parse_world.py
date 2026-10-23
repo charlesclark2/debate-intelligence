@@ -155,7 +155,7 @@ async def import_weeks(data_dir: Path, zips_dir: Path, *, through: date, after: 
     from debate_core.integrations.local import FsEvidenceObjectStore, FsSnapshotStore, SqliteDatabase
     from debate_core.integrations.local.archive_reader import archive_digest, read_archive
     from debate_core.integrations.local.sqlite_caselist_repository import SqliteCaselistRepository
-    from debate_core.testing.fakes import empty_suppression_list
+    from debate_core.testing.fakes.suppression import empty_suppression_list
 
     service = CaselistImportService(
         caselists=SqliteCaselistRepository(SqliteDatabase.open(data_dir)),

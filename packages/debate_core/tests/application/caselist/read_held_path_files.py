@@ -34,7 +34,7 @@ from debate_core.integrations.local.suppression_list import (
     local_removal_log_file,
     local_suppression_list_file,
 )
-from debate_core.testing.fakes import empty_suppression_list
+from debate_core.testing.fakes.suppression import empty_suppression_list
 
 LIMITS = {"max_archive_bytes": 64 * 1024 * 1024, "max_unpacked_bytes": 64 * 1024 * 1024}
 

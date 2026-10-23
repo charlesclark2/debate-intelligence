@@ -55,7 +55,7 @@ spec:
         branch's graph, against v1-e01-t29's 65.8% and 100%, recorded in the report; the
         collected test count is unchanged.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

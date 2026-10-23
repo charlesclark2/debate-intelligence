@@ -468,6 +468,69 @@ def test_head_describes_a_branch_tip_against_its_merge_base(workspace: Workspace
     assert_selected(workspace.run("--head", "tip"), {f"{CORE_TESTS}/test_builder.py"} | ALWAYS | READS_SOURCE)
 
 
+def test_graph_selects_one_commits_changes_over_another_trees_imports(workspace: Workspace) -> None:
+    # The described commit changes debate_core.domain. By the graph commit, test_domain.py no longer
+    # imports it and test_graph_only.py, which does not exist at the described commit, does.
+    workspace.commit(changed(f"{CORE}/domain.py"), "described")
+    described = workspace.git("rev-parse", "HEAD").strip()
+    workspace.commit(
+        {
+            f"{CORE_TESTS}/test_domain.py": "import debate_core.unrelated\n",
+            f"{CORE_TESTS}/test_graph_only.py": "from debate_core.domain import VALUE\n",
+        },
+        "graph",
+    )
+    graph = workspace.git("rev-parse", "HEAD").strip()
+    workspace.commit(changed(f"{CORE}/testing/file_builder.py"), "later")  # in neither: HEAD is not read
+    importers_in_the_graph = {
+        f"{CORE_TESTS}/test_service.py",
+        f"{CORE_TESTS}/test_graph_only.py",
+        "tests/runs_the_cli/test_installed_cli.py",
+    }
+    result = workspace.run("--diff", described, "--graph", graph)
+    assert_selected(result, importers_in_the_graph | ALWAYS | READS_SOURCE)
+    # BASE has 30 test files (13 in debate_core's tests, 3 in debate_cli's, 14 under tests/); the
+    # graph commit adds one, and the share is out of the graph's 31.
+    assert "8 of 31 test files" in result.stderr
+    # Without --graph the same commit is read over its own files, where test_domain.py imports it.
+    own_tree = workspace.run("--diff", described)
+    assert_selected(
+        own_tree,
+        {
+            f"{CORE_TESTS}/test_domain.py",
+            f"{CORE_TESTS}/test_service.py",
+            "tests/runs_the_cli/test_installed_cli.py",
+        }
+        | ALWAYS
+        | READS_SOURCE,
+    )
+
+
+def test_graph_names_the_changed_files_its_tree_does_not_have(workspace: Workspace) -> None:
+    workspace.commit(
+        {
+            f"{CORE}/brand_new.py": "NEW = 1\n",
+            f"{CORE_TESTS}/test_brand_new.py": "from debate_core.brand_new import NEW\n",
+        },
+        "described",
+    )
+    described = workspace.git("rev-parse", "HEAD").strip()
+    result = workspace.run("--diff", described, "--graph", "dev")
+    # Over BASE neither file exists, so nothing imports the module and the new test is not a test file
+    # of that tree; only the rules that do not need the files remain.
+    assert_selected(result, ALWAYS | READS_SOURCE)
+    assert (
+        f"2 changed files are not in dev's tree, so only a file naming them reaches them: "
+        f"{CORE}/brand_new.py, {CORE_TESTS}/test_brand_new.py"
+    ) in result.stderr
+
+
+def test_graph_cannot_be_combined_with_run(workspace: Workspace) -> None:
+    result = workspace.run("--run", "--graph", "dev")
+    assert result.status == 2
+    assert "--run runs the working tree's tests, so it cannot be combined with --graph" in result.stderr
+
+
 def test_explain_gives_the_chain_from_each_test_to_the_change(workspace: Workspace) -> None:
     workspace.commit(changed(f"{CORE}/domain.py"))
     lines = workspace.run("--explain").stdout.splitlines()

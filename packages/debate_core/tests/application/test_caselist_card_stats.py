@@ -19,6 +19,7 @@ from debate_core.application.caselist_card_stats import (
     CaselistCardReport,
     CaselistCardStatsService,
     UnreadableParsedCards,
+    fingerprint_thresholds,
     read_parsed_cards,
 )
 from debate_core.application.settings import CardFingerprintSettings
@@ -33,7 +34,7 @@ from debate_core.domain.debate_files import (
 from debate_core.domain.style_profile import StyleMatchSource
 from debate_core.evidence.fingerprints import FINGERPRINT_VERSION, card_fingerprint
 from debate_core.evidence.near_duplicates import NearDuplicateThresholds
-from debate_core.testing.fakes import InMemoryCaselistRepository
+from debate_core.testing.fakes.caselist import InMemoryCaselistRepository
 
 CASELIST = "testcl26"
 WEEK_ONE, WEEK_TWO, WEEK_THREE = date(2026, 9, 1), date(2026, 9, 8), date(2026, 9, 15)
@@ -586,6 +587,8 @@ def test_an_unreadable_line_names_the_file_and_line_but_not_its_content(tmp_path
 
 
 def test_thresholds_come_from_settings() -> None:
-    assert CardFingerprintSettings().thresholds() == NearDuplicateThresholds(jaccard=0.8, containment=0.9)
+    assert fingerprint_thresholds(CardFingerprintSettings()) == NearDuplicateThresholds(
+        jaccard=0.8, containment=0.9
+    )
     tuned = CardFingerprintSettings(near_duplicate_jaccard=0.7, near_duplicate_containment=0.95)
-    assert tuned.thresholds() == NearDuplicateThresholds(jaccard=0.7, containment=0.95)
+    assert fingerprint_thresholds(tuned) == NearDuplicateThresholds(jaccard=0.7, containment=0.95)

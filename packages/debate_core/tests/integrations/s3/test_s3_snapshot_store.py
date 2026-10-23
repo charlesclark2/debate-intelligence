@@ -10,7 +10,7 @@ Everything after it is the part the contract deliberately does not cover, becaus
 adapter's business and nobody else's: where an object lands in the bucket, that a repeat `put` issues
 no `PutObject` and leaves one version, what the upload tells S3, and that botocore's failures arrive
 as `debate_core.application.errors` types. The bucket itself comes from the moto fixtures in
-`packages/debate_core/tests/conftest.py`.
+`tests/fixtures/moto_evidence_bucket.py`.
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from debate_core.application.errors import BlobIntegrityError, NotFound
-from debate_core.application.ports import BlobKey, SnapshotStore
+from debate_core.application.ports.persistence import BlobKey, SnapshotStore
 from debate_core.integrations.s3 import SHA256_METADATA_NAME, S3SnapshotStore
 from debate_core.testing.contracts import (
     ASYNC_BACKEND,

@@ -18,7 +18,8 @@ if it is not.
 
 from __future__ import annotations
 
-from debate_core.application.ports import ArticleRepository, Clock, IdGenerator
+from debate_core.application.ports.persistence import ArticleRepository
+from debate_core.application.ports.providers import Clock, IdGenerator
 from debate_core.domain import Article, SourceType
 
 __all__ = ["ArticleRegistrationService"]

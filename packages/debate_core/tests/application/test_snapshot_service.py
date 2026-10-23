@@ -31,12 +31,13 @@ from debate_core.application.errors import (
     SnapshotIntegrityCheck,
     SnapshotIntegrityError,
 )
-from debate_core.application.ports import BlobKey
+from debate_core.application.ports.persistence import BlobKey
 from debate_core.application.snapshot_service import SnapshotService
 from debate_core.domain import AccessStatus, ProvenanceMode, SourceSnapshot
 from debate_core.evidence.normalization import InvalidTextError, NormalizedText, Paragraph, normalize
 from debate_core.evidence.snapshot_text import SnapshotText, decode_snapshot_text, encode_snapshot_text
-from debate_core.testing.fakes import FAKE_EPOCH, FixedClock, InMemorySnapshotStore, SequentialIdGenerator
+from debate_core.testing.fakes.clock_and_ids import FAKE_EPOCH, FixedClock, SequentialIdGenerator
+from debate_core.testing.fakes.persistence import InMemorySnapshotStore
 
 PROPERTY_SETTINGS = settings(
     max_examples=int(os.environ.get("SNAPSHOT_PROPERTY_EXAMPLES", "200")),

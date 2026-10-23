@@ -120,7 +120,7 @@ from debate_core.integrations.local.archive_reader import archive_digest, read_a
 from debate_core.integrations.local.macos_notifier import MacOsNotifier
 from debate_core.integrations.local.sqlite_caselist_repository import SqliteCaselistRepository
 from debate_core.integrations.s3 import S3EvidenceObjectStore
-from debate_core.testing.fakes import empty_suppression_list
+from debate_core.testing.fakes.suppression import empty_suppression_list
 
 from .caselist.retry_rule import the_commands_retry_rule
 

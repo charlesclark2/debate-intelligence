@@ -14,7 +14,7 @@ wrapper that passes every call through to the real S3 adapter and raises when to
 Ctrl-C or a killed job produces: the service does not catch it, so the run stops where it stands,
 and what the bucket holds afterwards is exactly what a real interruption would leave.
 
-Nothing here reaches AWS; `packages/debate_core/tests/conftest.py` builds the bucket in moto.
+Nothing here reaches AWS; `tests/fixtures/moto_evidence_bucket.py` builds the bucket in moto.
 """
 
 from __future__ import annotations
@@ -57,7 +57,7 @@ from debate_core.application.ports.suppression import (
     SuppressionList,
 )
 from debate_core.integrations.s3 import SHA256_METADATA_NAME, S3EvidenceObjectStore
-from debate_core.testing.fakes import InMemoryAppendOnlyRecord, empty_suppression_list
+from debate_core.testing.fakes.suppression import InMemoryAppendOnlyRecord, empty_suppression_list
 
 if TYPE_CHECKING:  # pragma: no cover - import for the type checker only
     from mypy_boto3_s3.client import S3Client

@@ -25,7 +25,7 @@ from tests.fixtures.verification.verification_world import VerificationWorld, ru
 
 from debate_core.application.errors import StoreUnavailable
 from debate_core.application.evidence_verifier import EvidenceVerifier
-from debate_core.application.ports import BlobKey
+from debate_core.application.ports.persistence import BlobKey
 from debate_core.application.snapshot_service import LoadedSnapshot, SnapshotService
 from debate_core.domain import (
     Card,
@@ -49,7 +49,8 @@ from debate_core.evidence.verification_types import (
 )
 from debate_core.evidence.verifier import first_difference
 from debate_core.testing.builders import build_citation
-from debate_core.testing.fakes import FAKE_EPOCH, InMemorySnapshotStore, SequentialIdGenerator
+from debate_core.testing.fakes.clock_and_ids import FAKE_EPOCH, SequentialIdGenerator
+from debate_core.testing.fakes.persistence import InMemorySnapshotStore
 
 #: Raw extracted text: CRLF breaks and a trailing newline, which normalization tidies.
 EXTRACTED = (

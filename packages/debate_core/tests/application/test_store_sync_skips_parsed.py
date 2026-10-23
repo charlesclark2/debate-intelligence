@@ -39,7 +39,8 @@ from debate_core.application.evidence_sync import (
 )
 from debate_core.integrations.local import BLOB_DIRECTORY, FsEvidenceObjectStore
 from debate_core.integrations.s3 import SHA256_METADATA_NAME, S3EvidenceObjectStore
-from debate_core.testing.fakes import FixedClock, empty_suppression_list
+from debate_core.testing.fakes.clock_and_ids import FixedClock
+from debate_core.testing.fakes.suppression import empty_suppression_list
 
 if TYPE_CHECKING:  # pragma: no cover - import for the type checker only
     from mypy_boto3_s3.client import S3Client

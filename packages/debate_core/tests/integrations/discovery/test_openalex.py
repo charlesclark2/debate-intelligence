@@ -52,7 +52,7 @@ from debate_core.testing.contracts.search_provider import (
     assert_no_secret_surfaces,
     load_recording,
 )
-from debate_core.testing.fakes import FixedClock
+from debate_core.testing.fakes.clock_and_ids import FixedClock
 
 pytestmark = pytest.mark.anyio
 

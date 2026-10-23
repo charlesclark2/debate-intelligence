@@ -41,7 +41,7 @@ from debate_core.domain.debate_files import CardCompleteness, ParsedDocument, Pa
 from debate_core.integrations.docx_parser import DOCX_PARSER_VERSION, DebateDocxParser
 from debate_core.integrations.local.parsed_store import LocalParsedStore, UnreadableParsedStore
 from debate_core.testing.docx_builder import build_docx, paragraph_xml, run_xml
-from debate_core.testing.fakes import InMemoryParsedStore
+from debate_core.testing.fakes.parsed_store import InMemoryParsedStore
 
 FIXTURE: Final = (
     Path(__file__).resolve().parents[4]

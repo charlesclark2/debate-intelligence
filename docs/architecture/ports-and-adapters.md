@@ -42,9 +42,10 @@ dependency of its own back across the boundary, and a third-party object can sat
 without being wrapped.
 
 Conformance is checked statically. In
-[`debate_core.testing.fakes`](../../packages/debate_core/src/debate_core/testing/fakes.py),
+[`debate_core.testing.fakes.all_ports`](../../packages/debate_core/src/debate_core/testing/fakes/all_ports.py),
 `build_fake_ports()` assigns each fake to a field of `FakePorts` that is annotated with the
-Protocol, so pyright strict fails right there if a fake drifts from its port. Adapters get the
+Protocol, so pyright strict fails right there if a fake drifts from its port. The fakes outside
+the ten get the same check from a `build_fake_*` function typed as the port, beside the fake. Adapters get the
 same treatment through the contract suites (`v1-e02-t04-repo-contract-tests`).
 
 ## Constructor injection, and nothing else

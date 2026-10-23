@@ -1,10 +1,11 @@
-"""One moto-backed evidence bucket per test, for every test in this package that needs one.
+"""One moto-backed evidence bucket per test, for the test directories in debate_core that need one.
 
-These fixtures are at the root of `packages/debate_core/tests/` rather than beside the S3 adapter's
-own tests because two directories ask for the same bucket: the adapter tests in
-`tests/integrations/s3/`, and the shared-contract bindings in `tests/contracts/`, where the S3 and
-filesystem implementations of one port are held to one suite. Defining them twice would be two
-chances to make one of them reach something real.
+The fixtures are defined once, here, and each directory whose tests use them imports them into its
+own `conftest.py`: `application/`, `contracts/`, `integrations/s3/` and `integrations/bedrock/` under
+`packages/debate_core/tests/`. Until `v1-e01-t30` they were in that package's root conftest, which
+put every test of the package beneath them, so a change to anything they name selected all of them
+(`scripts/affected_tests.py`). One definition still means one chance, not four, to make one of them
+reach something real.
 
 **Nothing here opens a socket, and nothing here can.** `moto` answers botocore in-process, and the
 workspace's pytest configuration passes `--disable-socket`, so a test that somehow escaped moto fails

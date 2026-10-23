@@ -79,11 +79,9 @@ from debate_core.integrations.docx_parser import DOCX_PARSER_VERSION, DebateDocx
 from debate_core.integrations.local import FsEvidenceObjectStore
 from debate_core.integrations.local.parsed_store import LocalParsedStore
 from debate_core.integrations.s3 import S3EvidenceObjectStore
-from debate_core.testing.fakes import (
-    MisbehavingDebateFileParser,
-    build_fake_caselist_repository,
-    empty_suppression_list,
-)
+from debate_core.testing.fakes.caselist import build_fake_caselist_repository
+from debate_core.testing.fakes.debate_files import MisbehavingDebateFileParser
+from debate_core.testing.fakes.suppression import empty_suppression_list
 
 from .test_inbox_retention import (
     CASELIST,

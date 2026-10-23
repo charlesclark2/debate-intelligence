@@ -8,7 +8,7 @@ from datetime import timedelta
 
 import pytest
 
-from debate_core.testing.fakes import FAKE_EPOCH
+from debate_core.testing.fakes.clock_and_ids import FAKE_EPOCH
 from debate_core.testing.virtual_time import (
     EventLoopClock,
     VirtualTimeDeadlock,

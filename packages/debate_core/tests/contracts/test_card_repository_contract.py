@@ -17,7 +17,7 @@ import pytest
 
 from debate_core.integrations.local import SqliteCardRepository, SqliteDatabase
 from debate_core.testing.contracts import CardRepositoryContract, CardRepositoryFactory
-from debate_core.testing.fakes import InMemoryCardRepository
+from debate_core.testing.fakes.persistence import InMemoryCardRepository
 
 
 class TestInMemoryCardRepository(CardRepositoryContract):

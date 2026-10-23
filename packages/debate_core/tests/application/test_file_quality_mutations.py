@@ -64,7 +64,8 @@ from debate_core.integrations.docx_file_writer.writer import DocxEvidenceFileWri
 from debate_core.integrations.docx_parser.package import W_NAMESPACE
 from debate_core.integrations.docx_parser.parser import DebateDocxParser
 from debate_core.testing.docx_builder import build_docx, paragraph_xml, run_xml
-from debate_core.testing.fakes import InMemoryAppendOnlyRecord, InMemorySnapshotStore, empty_suppression_list
+from debate_core.testing.fakes.persistence import InMemorySnapshotStore
+from debate_core.testing.fakes.suppression import InMemoryAppendOnlyRecord, empty_suppression_list
 from debate_core.testing.file_builder import FileBuilderWorld, SourceCard, SyntheticDisclosure
 
 REPOSITORY = Path(__file__).resolve().parents[4]

@@ -7,7 +7,7 @@ this module's own transport function rather than a respx side effect, because re
 an error that quotes the route.
 
 Time never really passes. The fetcher's clock is a
-:class:`~debate_core.testing.fakes.FixedClock` that moves only when the fetcher sleeps (through
+:class:`~debate_core.testing.fakes.clock_and_ids.FixedClock` that moves only when the fetcher sleeps (through
 :class:`SimulatedTime`) or when a test's transport says a request took a while, so every interval
 and backoff below is asserted exactly.
 
@@ -52,7 +52,7 @@ from debate_core.retrieval.fetch_types import (
     TransportError,
     UnsupportedScheme,
 )
-from debate_core.testing.fakes import FixedClock
+from debate_core.testing.fakes.clock_and_ids import FixedClock
 
 pytestmark = pytest.mark.anyio
 

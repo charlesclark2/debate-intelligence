@@ -17,7 +17,7 @@ from typing import Any, cast
 import pytest
 
 from debate_core.application.errors import Conflict, InvalidCursor, NotFound
-from debate_core.application.ports import CaselistRepository
+from debate_core.application.ports.caselist import CaselistRepository
 from debate_core.domain.caselist import (
     Acquisition,
     ArchiveSnapshot,
@@ -30,7 +30,7 @@ from debate_core.domain.caselist import (
     SourceFormat,
     SourceOrigin,
 )
-from debate_core.testing.fakes import InMemoryCaselistRepository, build_fake_caselist_repository
+from debate_core.testing.fakes.caselist import InMemoryCaselistRepository, build_fake_caselist_repository
 
 SEPTEMBER_FIRST = date(2026, 9, 1)
 SEPTEMBER_EIGHTH = date(2026, 9, 8)

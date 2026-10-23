@@ -48,7 +48,8 @@ from debate_core.application.errors import (
     SnapshotIntegrityCheck,
     SnapshotIntegrityError,
 )
-from debate_core.application.ports import Clock, IdGenerator, SnapshotStore
+from debate_core.application.ports.persistence import SnapshotStore
+from debate_core.application.ports.providers import Clock, IdGenerator
 from debate_core.domain import AccessStatus, ProvenanceMode, SourceSnapshot
 from debate_core.evidence.hashing import sha256_bytes, sha256_text
 from debate_core.evidence.normalization import (

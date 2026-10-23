@@ -120,7 +120,7 @@ from debate_core.application.ports.parsed_store import (
 )
 from debate_core.domain.debate_files import CardCompleteness, ParsedCard
 from debate_core.integrations.local.parsed_store import LocalParsedStore
-from debate_core.testing.fakes import build_fake_caselist_repository
+from debate_core.testing.fakes.caselist import build_fake_caselist_repository
 
 if TYPE_CHECKING:
     from debate_core.evidence.cluster_diagnosis import CutFinding

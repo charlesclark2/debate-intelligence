@@ -93,7 +93,7 @@ from debate_core.integrations.local.suppression_list import (
     local_removal_log_file,
     local_suppression_list_file,
 )
-from debate_core.testing.fakes import InMemoryAppendOnlyRecord
+from debate_core.testing.fakes.suppression import InMemoryAppendOnlyRecord
 
 from .conftest import REQUEST, TEAM, RemovalWorld
 

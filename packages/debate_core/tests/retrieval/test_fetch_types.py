@@ -8,7 +8,6 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
-from debate_core.application.ports import FetchResult as PortFetchResult
 from debate_core.domain import AccessStatus
 from debate_core.retrieval.fetch_types import (
     FetchResult,
@@ -19,6 +18,7 @@ from debate_core.retrieval.fetch_types import (
     TimeoutPhase,
     TooLarge,
 )
+from debate_core.retrieval.fetch_types import FetchResult as PortFetchResult
 
 URL = "https://news.example.org/a"
 WHEN = datetime(2026, 10, 21, 9, 0, tzinfo=UTC)

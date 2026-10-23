@@ -574,3 +574,18 @@ If anything comes out differently, stop and ask for another review.
 
 **The PR:** open it with `--partial`, as in the first review. The operator order there stands.
 If anything comes out differently, stop and ask for another review.
+
+## Criteria open at the partial merge (2026-10-22)
+
+Recorded after the PM's second review so that `scripts/task pr --partial` reads it, which reads open
+items only after the last-but-one review. Nothing here changes either review or the criteria table
+above.
+
+| Criterion | Status | Why it is open |
+|---|---|---|
+| **ac4** — the operator opens a downloaded single card and a cart file in Word with Verbatim and imports one into Google Docs; yes or no | **NOT RUN** | Needs the dev deploy (Operator follow-ups 1 and 2), Word with Verbatim and a Google account; the PM records it after the merge |
+
+Every other criterion is PASS (the table above). The Goal stays `InProgress`. Since the second
+review, the only commit is `15a7b92`: documents only, the three timing carts and the refusal check in
+Operator follow-up 4 and the runbook, as the PM's ruling of 2026-10-22 asked, with no re-review
+needed. Step 4's timing (three carts and the refusal check) is also still to run, after the merge.

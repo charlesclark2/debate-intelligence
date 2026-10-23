@@ -27,7 +27,7 @@ import hashlib
 import logging
 import traceback
 from collections.abc import AsyncIterator, Callable, Coroutine, Iterator
-from datetime import date
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -58,11 +58,13 @@ from debate_core.application.ports.caselist_source import (
     OpenEvFile,
     UnsafeDownloadName,
 )
+from debate_core.application.ports.providers import Clock
 from debate_core.application.settings import Settings
 from debate_core.integrations.opencaselist import NetworkDisallowed, OpenCaselistClient
 from debate_core.integrations.opencaselist.inbox_writer import PARTIAL_DIRECTORY
 from debate_core.integrations.opencaselist.pacing import DOWNLOAD_WINDOW_SECONDS
 from debate_core.integrations.opencaselist.token_store import CaselistTokenStore, FileTokenBackend
+from debate_core.testing.fakes.clock_and_ids import FixedClock
 
 from .conftest import load_fixture
 
@@ -70,6 +72,7 @@ API = "https://api.opencaselist.example.invalid/v1"
 FILES = "https://caselist-files.example.invalid"
 CASELIST = "testcl26"
 ARCHIVE_BYTES = b"PK\x03\x04 synthetic weekly archive bytes " * 64
+IN_2030 = datetime(2030, 1, 1, tzinfo=UTC)
 
 
 # ------------------------------------------------------------------------------------------------
@@ -78,11 +81,17 @@ ARCHIVE_BYTES = b"PK\x03\x04 synthetic weekly archive bytes " * 64
 
 
 class SimulatedTime:
-    """A monotonic clock that only moves when the client sleeps."""
+    """A monotonic clock that only moves when the client sleeps, and the wall clock beside it.
+
+    The wall clock is what a `Retry-After` date is measured from (`v1-e07-t08`). It starts at the
+    real now, because `test_retry_after_as_an_http_date_is_honoured` writes its date from the real
+    now; a test that wants an exact wait replaces it before building the client.
+    """
 
     def __init__(self) -> None:
         self.now = 10_000.0
         self.sleeps: list[float] = []
+        self.wall_clock: Clock = FixedClock(datetime.now(UTC))
 
     def clock(self) -> float:
         return self.now
@@ -136,6 +145,7 @@ def build_client(
         make_settings(tmp_path, **caselist),
         token_store=token_store,
         user_agent_version="0.0.0-test",
+        wall_clock=simulated.wall_clock,
         clock=simulated.clock,
         sleep=simulated.sleep,
     )
@@ -839,6 +849,60 @@ def test_retry_after_as_an_http_date_is_honoured(
     run(client.list_caselists())
 
     assert any(100 <= s <= 121 for s in simulated.sleeps)
+
+
+@pytest.mark.parametrize(
+    ("retry_after", "sleeps"),
+    [
+        pytest.param("Tue, 01 Jan 2030 00:02:00 GMT", [120.0], id="a-date-two-minutes-ahead"),
+        pytest.param("Mon, 31 Dec 2029 23:00:00 GMT", [0.0, 1.0], id="a-date-already-past"),
+    ],
+)
+def test_a_retry_after_date_is_measured_from_the_injected_wall_clock(
+    tmp_path: Path,
+    token_store: CaselistTokenStore,
+    simulated: SimulatedTime,
+    api: respx.MockRouter,
+    retry_after: str,
+    sleeps: list[float],
+) -> None:
+    """`v1-e07-t08`: the wall clock is injected, so the wait is exact. Both dates are years ahead of
+    the real now, so a transport that read the real clock would give up on them instead. A past date
+    is no wait at all; the 1s after it is the pacer spacing the retry from the refused request."""
+    simulated.wall_clock = FixedClock(IN_2030)
+    client = build_client(tmp_path, token_store, simulated)
+    api.get(f"{API}/caselists").mock(
+        side_effect=[httpx.Response(503, headers={"Retry-After": retry_after}), httpx.Response(200, json=[])]
+    )
+
+    run(client.list_caselists())
+
+    assert simulated.sleeps == sleeps
+
+
+@pytest.mark.parametrize(
+    ("retry_after", "sleeps"),
+    [
+        pytest.param("1.5", [1.5], id="a-fraction-is-waited-out"),
+        pytest.param("-5", [0.0, 1.0], id="a-negative-number-is-no-wait"),
+        pytest.param("soon", [2.0], id="an-unreadable-header-falls-back-to-backoff"),
+    ],
+)
+def test_a_retry_after_the_rfc_does_not_allow_is_read_as_the_transport_always_read_it(
+    client: OpenCaselistClient,
+    api: respx.MockRouter,
+    simulated: SimulatedTime,
+    retry_after: str,
+    sleeps: list[float],
+) -> None:
+    """The transport reads the seconds form with `float()`, as it did before the reader was shared."""
+    api.get(f"{API}/caselists").mock(
+        side_effect=[httpx.Response(429, headers={"Retry-After": retry_after}), httpx.Response(200, json=[])]
+    )
+
+    run(client.list_caselists())
+
+    assert simulated.sleeps == sleeps
 
 
 def test_a_retry_after_longer_than_the_ceiling_fails_at_once_instead_of_sleeping(

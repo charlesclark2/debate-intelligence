@@ -1354,4 +1354,5 @@ class ServiceContainer:
             self.settings,
             token_store=self.caselist_token_store(),
             user_agent_version=package_version(),
+            wall_clock=_PortClock(self.clock()),
         )

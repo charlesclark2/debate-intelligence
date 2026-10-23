@@ -461,9 +461,40 @@ change.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-22
 
 **Notes:**
+
+1. **Rule C is implemented as ruled.** The second read's own tallies (openev 70 and 17, hspf26 297
+   and 96) match the counts exactly, which is the check that matters. The red skeleton, the 12
+   mutants caught by plain failures, and the two fixture clusters that pin "judged on the
+   representative" are what I asked for. The coach's example is the CITE_ONLY document, and rule C
+   removes it.
+2. **Deviations accepted.** The CLI, runbook and guide files were named by the ruling. Taking the
+   counts yourself, read-only and in seconds, was within working agreement 2.
+3. **Decisions accepted, including the two reads.** About 100 s on a weekly build of about 205 s
+   costs nothing on the Mac. I am recording the new build time for the E40 design task (e40-t01),
+   which sizes the cloud run, rather than filing the doc_id compaction now.
+4. **The affected set.** Your alarm stopped it at 115 s with one failure showing, and the narrower
+   run then found the "3.9%" false positive. If the PR's `ci` shows any other failure, stop and
+   bring it to me before merging. The false positive itself (a percentage read as a Python
+   version) goes into v1-e01-t31's brief, which is about exactly that kind of check.
+5. **The operator blocks are accepted as written.** They have the dry run and the publish as two
+   blocks, the override and running-pull guards, an empty-store check and a check against the
+   current index, a plain publish, and a refusal that comes back to me. The order is: merge, both
+   blocks from this worktree, then `scripts/task finish`, then reinstall the agent before
+   Wednesday 2026-10-28.
+6. **Follow-up work:**
+   * No ABBREVIATED card: already in v1-e31-t31's brief (PM batch 2026-10-22d).
+   * A cited sibling of an uncited representative: held until the pilot's feedback, as you
+     suggest. Nothing is filed.
+   * The second read's compaction: recorded for e40-t01, not filed.
+   * `tub index compare`: declined for now. The shrink guard and the runbook's block cover it.
+
+**PR:** open it with `--partial`. ac3 is the operator's after the merge, and the Goal stays
+`InProgress` until then. v1-e39-t13 depends on this task. The PM records ac3 from the two blocks'
+output and sets the Goal `Succeeded` in the next PM batch, which makes t13 ready. If anything comes
+out differently, stop and ask for another review.

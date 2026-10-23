@@ -133,23 +133,30 @@ searchable, the school, team code, side, tournament and round of each disclosure
 (data-use policy, "Where personal data is allowed to live"). Its key holds none of them: an index id
 is a digest. It is written by the everyday `EvidenceOperator` profile and read by the pilot's
 function. The operator's listing grant names `reports/tub/search/` beside the documented prefixes, so
-the listing that `v1-e39-t07`'s pruning depends on survives a narrower `reports/` grant. Deleting a
-superseded build needs the one delete grant under `reports/` that `v1-e39-t07` adds, on this prefix
-alone.
+the listing that `v1-e39-t07`'s pruning depends on survives a narrower `reports/` grant.
+
+After a removal the index is rebuilt and published, and every superseded build is deleted,
+noncurrent versions included ([removal runbook](../runbooks/caselist-removal.md), the pilot's
+steps). So `reports/tub/search/` is the one prefix under `reports/` where the `EvidenceRemoval`
+credential may list versions and delete objects and their versions (`v1-e39-t07`, the PM's amendment
+of 2026-10-19). Nothing else under `reports/` gains a delete, and the everyday credential's grant is
+unchanged. `infrastructure/modules/evidence_bucket/operator_access.tf` keeps the prefix in a local of
+its own, `removable_index_prefix`, apart from the five prefixes of disclosed material.
 
 ## Who may touch what
 
 | | `EvidenceOperator` | `EvidenceRemoval` |
 |---|---|---|
-| List | Every prefix in the table above, one prefix at a time, and `reports/tub/search/` by name | `raw/`, `parsed/`, `files/`, `manifests/`, `quarantine/`, with versions |
-| Read | Any object, any version | Versions under those five prefixes; current objects under `manifests/_suppression/` |
+| List | Every prefix in the table above, one prefix at a time, and `reports/tub/search/` by name | `raw/`, `parsed/`, `files/`, `manifests/`, `quarantine/`, and `reports/tub/search/`, with versions |
+| Read | Any object, any version | Versions under those six prefixes; current objects under `manifests/_suppression/` |
 | Write | Any object | `manifests/_suppression/` only |
-| Delete | **Nothing** | Objects and noncurrent versions under those five prefixes |
+| Delete | **Nothing** | Objects and noncurrent versions under those six prefixes |
 
-`reports/` is deliberately absent from the removal column. A report is derived and cites evidence
-rather than holding it, so a takedown regenerates it rather than deleting it — and leaving
-`reports/` out is what makes "this credential deletes disclosed material and nothing else" a
-sentence IAM can enforce.
+The rest of `reports/` is deliberately absent from the removal column. A report is derived and
+cites evidence rather than holding it, so a takedown regenerates it rather than deleting it — and
+leaving it out is what makes "this credential deletes disclosed material and nothing else" a
+sentence IAM can enforce. The pilot's index is the exception because it holds card text: it is
+disclosed material in another form, and a superseded build of it is deleted like any other copy.
 
 Listing is scoped to the prefixes above, which means listing the bucket *root* is denied: `aws s3
 ls s3://<bucket>/raw/` works, `aws s3 ls s3://<bucket>` does not.

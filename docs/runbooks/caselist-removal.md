@@ -441,6 +441,10 @@ DEBATE_ENV=prod DEBATE_STORAGE__DATA_DIR="$HOME/.debate-research/dev" uv run deb
       there is, note it in the register as an incident.
 - [ ] **V2 only:** mark the matching tub files `REMOVED` so they stop listing and presigning
       (v2-e35-t05). The tub takedown flow uses this same suppression list.
+- [ ] **The student search pilot (E39), in each environment whose pilot is deployed:** the card
+      gone within five minutes, the index rebuilt and published, and every superseded index version
+      deleted, noncurrent versions included ([The student search pilot](#the-student-search-pilot-e39)).
+      A removal that appended only path holds is followed by the rebuild and publish straight away.
 - [ ] **The download inbox: what the command did.** `caselist pull` downloads into an inbox —
       `caselist.inbox_dir` in the environment's profile, or `<data_dir>/inbox` when it is not set —
       and never clears it. `caselist remove --execute` purges it in the environment it runs in
@@ -522,6 +526,206 @@ DEBATE_ENV=prod DEBATE_STORAGE__DATA_DIR="$HOME/.debate-research/dev" uv run deb
         (its ac6). Until then, check them too. After that, they are no longer on this list.
       Any other copy you find is an incident under the policy: delete it in the same run and record it
       in the register.
+
+## The student search pilot (E39)
+
+The pilot's index (`reports/tub/search/`) is a copy of disclosed cards, with the school and team code
+of each disclosure in it. A removal reaches it three ways: the running function hides the removed
+occurrences within five minutes, a rebuilt and published index no longer holds them, and every
+superseded index version is deleted, noncurrent versions included (data-use policy, E39 gate items 1
+and 5; `v1-e39-t07`). Do this in each environment whose pilot is deployed, after `--execute` has
+printed `DONE` there. The blocks are dev's; prod's are the same with prod's names and profiles, and
+`--confirm-prod` on the publish.
+
+**What the function does by itself.** It re-reads `manifests/_suppression/suppression-list.jsonl`
+at most five minutes apart and hides every occurrence the list stops, from results, card pages,
+copies and downloads ([evidence-search runbook](evidence-search.md#what-the-function-fetches-and-when)).
+A card whose representative occurrence was removed answers as not found until the rebuilt index
+chooses another; a card that only lost another team's copy stays, without that team's line.
+
+**A removal that only holds a path.** The function does not read `path-holds.jsonl`, and the index
+keeps no paths, so a removal that appended path holds and **no suppression entry** hides nothing by
+itself. Rebuild and publish straight away (P3 below), so the card is gone in minutes, not at next
+week's build. The plan's *SUPPRESSION* section says whether the removal appended entries.
+
+### P1 — Before `--execute`: find the card in the pilot
+
+Signed in to the pilot (in dev, as your own synthetic account), search for words from the removed
+card's tag, open it, and write down its path, `/cards/<caselist>/<cluster id>`, and the sha256 the
+dry run names. Nothing here is copied into the register: a cluster id and a sha256 are digests.
+
+### P1b — Right after `DONE`: rebuild the parsed store's aggregates
+
+Step 5's rebuild, and not optional here. A whole-file removal deletes every caselist's
+`index.jsonl`, `failures.jsonl` and `occurrences.jsonl` in the bucket, every version directory, and
+until they are rebuilt anything that reads the bucket's parsed store finds none. That holds for any
+removal or exercise that touches dev, a synthetic one included, and the same in prod: a prod removal
+leaves prod's aggregates gone until they are rebuilt. Do not wait for the weekly run: it rebuilds a
+caselist's aggregates only when it imported something into that caselist that week, and a run that
+imported nothing rebuilds nothing ([scheduled sync, the parse stage](caselist-scheduled-sync.md#the-parse-stage)).
+Rebuild each caselist whose `parsed/<caselist>/<version>/index.jsonl` the plan listed, `openev`
+included, from this Mac's own store for the environment (not a scratch store), with the everyday
+profile.
+
+**Operator command** (expected runtime a few minutes per caselist; nothing is parsed again)
+Where: a new terminal window, so no `DEBATE_STORAGE__DATA_DIR` from another step is set
+```bash
+PULL=$(pgrep -fl 'debate-research( --json)? caselist pull')
+echo "running pull: ${PULL:-none}"
+echo "data dir override: ${DEBATE_STORAGE__DATA_DIR:-none}"
+if [[ -n "$PULL" || -n "${DEBATE_STORAGE__DATA_DIR:-}" ]]; then
+  echo "STOP: the line above that is not none says why. Wait for the pull to finish, or open a new window."
+else
+  aws sso login --profile debate-dev-evidence
+  for SLUG in hsld26 hspf26 hspolicy26 openev; do
+    env -u DEBATE_STORAGE__DATA_DIR DEBATE_ENV=dev debate-research caselist parse --caselist "$SLUG" --publish
+  done
+fi
+```
+Success looks like, for each caselist, a table whose **Sources** and **Skipped (already parsed)**
+are the store's full count, equal and not zero, with **Parsed 0** and **Published 3 uploaded**. A
+`Sources 0` means the parse read a store that does not hold the caselist, such as a scratch one:
+stop, because what it uploaded is empty aggregates. Name only the caselists the plan listed. The
+first two lines name any running `debate-research caselist pull` (the CLI only, not a test or an
+editor whose command line holds those words) and any data directory override; a `STOP` line means
+one of them is not `none`, and nothing ran.
+
+### P2 — Five minutes after `DONE`: the card is gone
+
+Note the time `--execute` printed `DONE`. Five minutes later, open the card's path: **That card is
+not in the search** (or, for one team's copy of a shared card, the card without that team's line).
+Search the same words: the card is not among the results. Write down both times.
+
+### P3 — Rebuild and publish the index
+
+The build reads this Mac's copy of the suppression list, which `caselist remove` wrote with the
+bucket's. It indexes the stores the current index was built from, which the first lines read from its
+manifest.
+
+**Operator command** (expected runtime: a rebuild of the stores the index holds, minutes for the full
+corpus; seconds for a synthetic store)
+Where: your Mac, a checkout of this repository whose build matches the weekly agent's (the
+bucket's name is read from `config/profiles/dev.toml`: the everyday profile may not list buckets)
+```bash
+aws sso login --profile debate-dev-evidence
+export AWS_PROFILE=debate-dev-evidence
+BUCKET=$(python3 -c 'import tomllib; print(tomllib.load(open("config/profiles/dev.toml", "rb"))["storage"]["s3"]["bucket"])')
+echo "bucket: $BUCKET"
+MANIFEST_KEY=$(aws s3 cp "s3://${BUCKET}/reports/tub/search/current.json" - | python3 -c 'import json, sys; print(json.load(sys.stdin)["manifest_key"])')
+STORES=$(aws s3 cp "s3://${BUCKET}/${MANIFEST_KEY}" - | python3 -c 'import json, sys; print(" ".join("--caselist " + one["caselist"] for one in json.load(sys.stdin)["stores"]))')
+echo "rebuilding: $STORES"
+DEBATE_ENV=dev debate-research tub index build ${=STORES}
+DEBATE_ENV=dev debate-research tub index publish --env dev --newest
+unset AWS_PROFILE
+```
+Success looks like the build's new index id, and the publish's table ending in
+`reports/tub/search/current.json` naming that id.
+
+**Then confirm the rebuilt index no longer holds the removed source.** Set `REMOVED` to the sha256
+the dry run named. The index is the newest directory under the data directory's `tub-index`.
+
+**Operator command** (expected runtime seconds)
+Where: your Mac, anywhere
+```bash
+REMOVED=put-the-removed-sha256-here
+INDEX_DIR=$(ls -td "${HOME}/.debate-research/dev/tub-index"/*/ | head -1)
+echo "$INDEX_DIR"
+sqlite3 -readonly "${INDEX_DIR}search-index.sqlite" "select count(*) from occurrences where source_sha256 = '${REMOVED}'"
+```
+Success looks like `0`. Five minutes after the publish, open the card's path again. If the removed
+file was the card's only occurrence, it is still not in the search. If other teams' or camps' copies
+survive, the card is back, chosen from them, with no line for the removed file. That is the
+rebuilt index doing what the build always does.
+
+### P4 — Delete the superseded index versions, noncurrent versions included
+
+Under the takedown profile, which since `v1-e39-t07` may list versions and delete under
+`reports/tub/search/` and nowhere else under `reports/`. First a dry run that lists what it would
+delete and writes the delete requests to files; nothing is deleted until the second block. It reads
+`current.json` first, and **keeps the current index's directory and the current version of
+`current.json` out of the delete set**: the script refuses to write a request that names either, and
+refuses to go on if the listing does not hold the current index at all. Older versions of
+`current.json` are deleted; they name superseded indexes and hold no card.
+
+**Operator command** (expected runtime seconds; reads only)
+Where: your Mac, a checkout of this repository (the bucket's name is read from
+`config/profiles/dev.toml`: the everyday profile may not list buckets)
+```bash
+aws sso login --profile debate-dev-evidence
+aws sso login --profile debate-dev-evidence-removal
+BUCKET=$(python3 -c 'import tomllib; print(tomllib.load(open("config/profiles/dev.toml", "rb"))["storage"]["s3"]["bucket"])')
+echo "bucket: $BUCKET"
+PRUNE="${TMPDIR:-/tmp}/tub-index-prune"
+rm -rf "$PRUNE" && mkdir -p "$PRUNE"
+aws s3 cp "s3://${BUCKET}/reports/tub/search/current.json" "$PRUNE/current.json" --profile debate-dev-evidence
+aws s3api list-object-versions --profile debate-dev-evidence-removal --bucket "$BUCKET" \
+  --prefix reports/tub/search/ --output json > "$PRUNE/versions.json"
+python3 - "$PRUNE" <<'PY'
+import json, sys
+from pathlib import Path
+
+prune = Path(sys.argv[1])
+pointer_key = "reports/tub/search/current.json"
+current = json.loads((prune / "current.json").read_text())["index_id"]
+keep_dir = f"reports/tub/search/{current}/"
+listing = json.loads((prune / "versions.json").read_text())
+versions = listing.get("Versions", [])
+markers = listing.get("DeleteMarkers", [])
+kept = [one for one in versions if one["Key"].startswith(keep_dir) and one["IsLatest"]]
+if len(kept) < 2:
+    sys.exit(f"STOP: the listing holds {len(kept)} current object(s) under {keep_dir}; the pointer names an index that is not there")
+doomed = []
+for one in versions + markers:
+    if one["Key"].startswith(keep_dir):
+        continue
+    if one["Key"] == pointer_key and one.get("IsLatest"):
+        continue
+    doomed.append({"Key": one["Key"], "VersionId": one["VersionId"]})
+current_pointer = {(one["Key"], one["VersionId"]) for one in versions if one["Key"] == pointer_key and one["IsLatest"]}
+for one in doomed:
+    if one["Key"].startswith(keep_dir):
+        sys.exit("STOP: a delete request names the current index")
+    if (one["Key"], one["VersionId"]) in current_pointer:
+        sys.exit("STOP: a delete request names the current current.json")
+keys = sorted({one["Key"] for one in doomed})
+for key in keys:
+    print(f"would delete {sum(1 for one in doomed if one['Key'] == key)} version(s) of {key}")
+for number, start in enumerate(range(0, len(doomed), 1000), 1):
+    batch = {"Objects": doomed[start:start + 1000], "Quiet": True}
+    (prune / f"delete-{number}.json").write_text(json.dumps(batch))
+(prune / "index_id").write_text(current)
+print(f"{len(doomed)} version(s) of {len(keys)} key(s) to delete; keeps {keep_dir} ({len(kept)} objects) and the current {pointer_key}")
+PY
+```
+Success looks like one `would delete` line per key, all under superseded index directories or
+`current.json`, then the count and the `keeps` line naming the index id the publish in P3 named. A
+`STOP` line means nothing was written: do not go on. `0 version(s)` means there is nothing to delete.
+
+**Then delete.** The block reads `current.json` again and deletes only if it still names the index
+the dry run kept, so a publish between the two blocks cannot lose its index.
+
+**Operator command** (expected runtime seconds; deletes, and cannot be undone)
+Where: your Mac, the same shell as the dry run
+```bash
+NOW=$(aws s3 cp "s3://${BUCKET}/reports/tub/search/current.json" - --profile debate-dev-evidence | python3 -c 'import json, sys; print(json.load(sys.stdin)["index_id"])')
+if [[ "$NOW" == "$(cat "$PRUNE/index_id")" ]]; then
+  for REQUEST in "$PRUNE"/delete-*.json(N); do
+    aws s3api delete-objects --profile debate-dev-evidence-removal --bucket "$BUCKET" \
+      --delete "file://${REQUEST}" --query 'length(Errors || `[]`)' --output text
+  done
+  echo "pruned; kept reports/tub/search/${NOW}/ and the current reports/tub/search/current.json"
+else
+  echo "STOP: current.json now names ${NOW}, not the index the dry run kept; run the dry run again"
+fi
+```
+Success looks like a `0` for each request file (no errors) and the `pruned; kept` line naming the
+current index. Then run the dry run again: it prints `0 version(s) of 0 key(s) to delete` and the
+same `keeps` line.
+
+### P5 — Record it
+
+In the register's entry for the request: the time of `DONE`, the time P2 found the card gone, the
+index id P3 published, and P4's counts. No cluster id, path, tag or card text goes in the register.
 
 ## Step 9 — Check nothing re-imports it
 

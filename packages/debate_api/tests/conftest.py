@@ -42,15 +42,18 @@ import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives.asymmetric.padding import PKCS1v15
 from cryptography.hazmat.primitives.hashes import SHA256
+from jsonschema import Draft202012Validator
 from starlette.testclient import TestClient
 
 from debate_api.app import create_app
 from debate_api.configuration import CookieKeys, PilotConfiguration
 from debate_api.cookies import SESSION_COOKIE, CookieSealer, session_payload
 from debate_api.state import PilotServices
+from debate_core.application.errors import StoreUnavailable
 from debate_core.application.ports.search_index import IndexedOccurrence, SearchDocument
 from debate_core.application.ports.tub import AccountSelfService, AccountStanding, CodeRefused, TokenRefused
 from debate_core.application.search_index_holder import SearchIndexHolder
+from debate_core.application.tub.access_audit import AccessAuditService
 from debate_core.application.tub.account_page import AccountPageService
 from debate_core.application.tub.audit import AuditRecord
 from debate_core.application.tub.identity import AuthenticatorSecret, Role
@@ -378,11 +381,34 @@ class FakeSelfService(AccountSelfService):
         return [operation for operation, _, _ in self.calls]
 
 
+AUDIT_RECORD_SCHEMA: Final = (
+    Path(__file__).resolve().parents[3] / "docs" / "data" / "tub-audit-record.schema.json"
+)
+
+
+@cache
+def audit_record_validator() -> Draft202012Validator:
+    """The committed schema every audit record must meet (`v1-e39-t07`)."""
+    schema = json.loads(AUDIT_RECORD_SCHEMA.read_text(encoding="utf-8"))
+    Draft202012Validator.check_schema(schema)
+    return Draft202012Validator(schema)
+
+
 class FakeAuditSink:
+    """The audit log in memory. With `failing` set, every write raises as an unreachable log group would.
+
+    Every record is checked against the committed schema as it is written, so every test that makes
+    the app write one, the account changes' included, checks the schema against a real record.
+    """
+
     def __init__(self) -> None:
         self.records: list[AuditRecord] = []
+        self.failing = False
 
     def record(self, record: AuditRecord) -> None:
+        if self.failing:
+            raise StoreUnavailable("PutLogEvents", "debate-dev-tub-audit", "synthetic outage")
+        audit_record_validator().validate(json.loads(record.to_json()))
         self.records.append(record)
 
 
@@ -685,7 +711,9 @@ class PilotWorld:
                 directory=self.index_directory,
                 open_reader=lambda path, index_id: SqliteSearchIndexReader(path, index_id=index_id),
                 clock=self.clock,
+                suppression_list=self.index_source,
             ),
+            access_audit=AccessAuditService(audit=self.audit, clock=self.clock),
             clock=self.clock,
         )
         self.app = create_app(self.services)

@@ -9,6 +9,9 @@ these, through a :class:`SearchIndexSource`:
 * **the manifest** the pointer names, a few kilobytes (:meth:`SearchIndexSource.read_object`);
 * **the gzip object**, streamed in chunks and never held whole (:meth:`SearchIndexSource.stream_object`).
 
+Beside them it reads the removal suppression list, through a :class:`SuppressionListSource`, the same
+way it reads the pointer (`v1-e39-t07`).
+
 What is done with them (the digests, the format version, where the file lands) is
 :class:`~debate_core.application.search_index_holder.SearchIndexHolder`'s. An adapter only fetches.
 :class:`~debate_core.integrations.s3.search_index_source.S3SearchIndexSource` is the one the function
@@ -26,9 +29,13 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from dataclasses import dataclass, field
-from typing import Protocol, runtime_checkable
+from typing import Final, Protocol, runtime_checkable
 
-__all__ = ["PointerRead", "SearchIndexSource"]
+__all__ = ["SUPPRESSION_LIST_MAX_BYTES", "PointerRead", "SearchIndexSource", "SuppressionListSource"]
+
+SUPPRESSION_LIST_MAX_BYTES: Final = 16 * 1024 * 1024
+"""A suppression line is a few hundred bytes, so this is tens of thousands of removals; a list past
+it is refused rather than read without a bound."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,4 +75,21 @@ class SearchIndexSource(Protocol):
 
     def stream_object(self, key: str) -> Iterator[bytes]:
         """An object's bytes in order, in chunks. Closing the iterator releases the connection."""
+        ...
+
+
+@runtime_checkable
+class SuppressionListSource(Protocol):
+    """Reads the removal suppression list, `manifests/_suppression/suppression-list.jsonl` (`v1-e39-t07`).
+
+    The fourth thing the function reads, and the only one outside `reports/tub/search/`. Read the way
+    the pointer is, by conditional GET, so the five-minute re-read of an unchanged list costs a `304`.
+    """
+
+    def read_suppression_list(self, *, if_none_match: str | None) -> PointerRead:
+        """The list's bytes, unless its entity tag is still `if_none_match`.
+
+        A list that does not exist has no lines, and comes back as an empty body. Raises
+        :class:`ValueError` for a list longer than :data:`SUPPRESSION_LIST_MAX_BYTES`.
+        """
         ...

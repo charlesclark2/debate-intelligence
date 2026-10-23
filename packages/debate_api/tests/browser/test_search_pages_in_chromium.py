@@ -23,12 +23,14 @@ Marked `slow`: browser suites run outside the PR path (working agreement 1). Run
 from __future__ import annotations
 
 import json
+import logging
 import re
 from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Final
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from axe_playwright_python.sync_playwright import Axe
@@ -236,6 +238,11 @@ class Pilot:
             return
         self.client.cookies.clear()
         headers = {name: value for name, value in request.headers.items() if name.lower() != "host"}
+        # Chrome's network stack adds Sec-Fetch-Site after Playwright intercepts the request, so it is
+        # never here. Chrome sends `same-origin` for a request whose Origin is the page's own, and the
+        # gate checks it on every POST (v1-e39-t07's sign-out); a request from another origin gets none.
+        if headers.get("origin") == self.origin:
+            headers["sec-fetch-site"] = "same-origin"
         answer = self.client.request(
             request.method,
             parts.path + (f"?{parts.query}" if parts.query else ""),
@@ -594,3 +601,178 @@ def test_a_long_card_shows_its_read_aloud_text_first_and_the_rest_on_request_by_
     expect(whole).to_contain_text("feldspar mica gneiss")
     assert page.evaluate("document.querySelector('details.card-whole').open") is True
     pilot.check_page()
+
+
+# ------------------------------------------------------------------------------------------------
+# v1-e39-t07: Copy card when the audit record cannot be written, and what the app logs
+# ------------------------------------------------------------------------------------------------
+
+EARLIER_CLIPBOARD: Final = "Synthetic text the student copied before"
+
+
+def clipboard_now(pilot: Pilot) -> dict[str, Any]:
+    """The clipboard's types and plain text, read with read permission granted."""
+    pilot.context.grant_permissions(["clipboard-read", "clipboard-write"], origin=pilot.origin)
+    return pilot.page.evaluate(
+        """async () => {
+            const [item] = await navigator.clipboard.read();
+            return { types: item.types.slice().sort(), text: await navigator.clipboard.readText() };
+        }"""
+    )
+
+
+def test_audit_copy_card_whose_record_cannot_be_written_leaves_the_clipboard_alone_and_says_so(
+    chromebook: Pilot,
+) -> None:
+    """The copy route's 503 rejects the ClipboardItem's promises, so nothing half-written is copied."""
+    page = chromebook.page
+    page.goto(chromebook.origin + chromebook.world.card_path("featured"))
+    chromebook.context.grant_permissions(["clipboard-read", "clipboard-write"], origin=chromebook.origin)
+    page.evaluate(f"navigator.clipboard.writeText({json.dumps(EARLIER_CLIPBOARD)})")
+    chromebook.context.clear_permissions()
+    chromebook.world.audit.failing = True
+
+    page.get_by_role("button", name="Copy card").click()
+
+    expect(page.locator("[data-tub-copy-message]")).to_have_text(
+        "The search could not be loaded. Try again in a minute."
+    )
+    copy = [one for one in chromebook.exchanges if one.url.endswith("/copy")]
+    assert [one.status for one in copy] == [503]
+    assert any(event.startswith("write refused") for event in page.evaluate("window.__copyEvents"))
+    assert clipboard_now(chromebook) == {"types": ["text/plain"], "text": EARLIER_CLIPBOARD}
+    assert [record.action.value for record in chromebook.world.audit.records] == ["card-viewed"]
+
+
+class _Captured(logging.Handler):
+    def __init__(self) -> None:
+        super().__init__(logging.DEBUG)
+        self.records: list[logging.LogRecord] = []
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.records.append(record)
+
+
+@contextmanager
+def bare_loggers() -> Iterator[_Captured]:
+    """Every logger stripped to nothing and sent to one handler at DEBUG; all of it restored after.
+
+    A logger's own handlers, filters, level or `propagate` could hide a record from a test that
+    reads the root's (working agreement 10, shared process-wide state).
+    """
+    loggers = [logging.getLogger()] + [
+        one for one in logging.Logger.manager.loggerDict.values() if isinstance(one, logging.Logger)
+    ]
+    saved = [
+        (one, one.level, one.handlers[:], one.filters[:], one.propagate, one.disabled) for one in loggers
+    ]
+    captured = _Captured()
+    try:
+        for one in loggers:
+            one.handlers, one.filters, one.disabled = [], [], False
+            one.setLevel(logging.NOTSET)
+            one.propagate = True
+        logging.getLogger().setLevel(logging.DEBUG)
+        logging.getLogger().addHandler(captured)
+        yield captured
+    finally:
+        for one, level, handlers, filters, propagate, disabled in saved:
+            one.setLevel(level)
+            one.handlers, one.filters, one.propagate, one.disabled = handlers, filters, propagate, disabled
+
+
+_STANDARD_RECORD_FIELDS: Final = set(vars(logging.LogRecord("", 0, "", 0, "", None, None)))
+
+JOURNEY_QUERY: Final = "zephyr Maple Grove QX"
+"""The fixture school and team code, typed into the search box beside a word that finds cards."""
+
+
+def test_exposure_a_whole_journey_logs_no_query_school_team_code_or_card_text(
+    world: Any, browser: Browser
+) -> None:
+    """Sign in through the app's callback, search with the school and team code, filter, page, open,
+    copy, visit the account page and sign out through managed login's `/logout`; the app's log records
+    hold none of what was seen or typed.
+
+    Playwright routes only the first request of a redirect chain, so the sign-in's redirects run
+    in-process: the real `/` redirect, managed login's answer from `FakeManagedLogin` and the real
+    `/auth/callback`, whose session cookie the browser is then given. Sign-out is the browser's own:
+    `app.js` posts it and goes to `/logout`, which the stand-in answers with a refresh to the
+    pilot's `/signed-out`.
+    """
+    world.login.add_account("debater.journey", "student")
+    pilot = Pilot(world, browser, VIEWPORTS["chromebook 1366x768"])
+
+    def managed_login_logout(route: Route) -> None:
+        target = parse_qs(urlsplit(route.request.url).query)["logout_uri"][0]
+        page_body = (
+            f'<!doctype html><meta http-equiv="refresh" content="0;url={target}"><title>Signed out</title>'
+        )
+        route.fulfill(status=200, content_type="text/html; charset=utf-8", body=page_body)
+
+    pilot.context.route(lambda url: url.startswith(world.login_origin + "/logout"), managed_login_logout)
+    page = pilot.page
+    try:
+        with bare_loggers() as captured:
+            signing_in = world.new_browser()
+            assert world.sign_in("debater.journey", browser=signing_in).status_code == 303
+            pilot.context.add_cookies(
+                [
+                    {
+                        "name": SESSION_COOKIE,
+                        "value": signing_in.cookies.get(SESSION_COOKIE),
+                        "url": pilot.origin + "/",
+                        "httpOnly": True,
+                        "secure": True,
+                        "sameSite": "Lax",
+                    }
+                ]
+            )
+            page.goto(pilot.origin + "/")
+            page.locator("#q").fill(JOURNEY_QUERY)
+            page.locator("#q").press("Enter")
+            expect(page.locator("main")).to_contain_text("No cards matched.")
+            page.locator("#q").fill("zephyr")
+            page.locator("#event").select_option("LD")
+            page.locator("#q").press("Enter")
+            page.get_by_role("link", name="Next results").click()
+            expect(page.get_by_role("link", name="First page")).to_be_visible()
+            page.goto(pilot.origin + world.card_path("featured"))
+            page.get_by_role("button", name="Copy card").click()
+            expect(page.locator("[data-tub-copy-message]")).to_have_text(
+                "Copied. Paste it into Google Docs or Word."
+            )
+            page.goto(pilot.origin + "/account")
+            page.get_by_role("button", name="Sign out").click()
+            page.wait_for_url(pilot.origin + "/signed-out")
+    finally:
+        pilot.close()
+
+    assert pilot.foreign == []
+    actions = [record.action.value for record in world.audit.records]
+    assert actions == ["searched", "searched", "card-viewed", "card-copied"], actions
+    assert world.login.revoked, "the sign-out revoked the refresh token"
+    # httpx's records are the test's in-process client's requests: the app cannot log through httpx,
+    # which an import contract keeps out of debate_api.
+    logged = [
+        " ".join(
+            [record.name, record.getMessage(), record.exc_text or ""]
+            + [f"{key}={value}" for key, value in vars(record).items() if key not in _STANDARD_RECORD_FIELDS]
+        )
+        for record in captured.records
+        if not record.name.startswith(("httpx", "httpcore"))
+    ]
+    assert any(f"search index {world.index.index_id} loaded" in line for line in logged), logged
+    for line in logged:
+        for word in (
+            "zephyr",
+            "maple grove",
+            "riverbend",
+            "granite",
+            "lindqvist",
+            "invented",
+            "debater.journey",
+        ):
+            assert word not in line.lower(), (word, line)
+        for exact in ("QX", "ZT", "q=", f"{1:064x}"):
+            assert exact not in line, (exact, line)

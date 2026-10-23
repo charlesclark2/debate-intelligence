@@ -104,8 +104,9 @@ variables {
   # and the student search pilot's reports/tub/search/ by name (v1-e39-t02). A prefix missing here is
   # a prefix the CLI cannot see.
   #
-  # ListBucketVersions: the prefixes a takedown may delete from, and no others. reports/ is not
-  # one of them (operator_access.tf).
+  # ListBucketVersions: the prefixes of disclosed material a takedown may delete from, and no
+  # others. reports/ is not one of them (operator_access.tf). This is the everyday credential's
+  # table; the takedown run below gives its own, which adds reports/tub/search/ (v1-e39-t07).
   list_prefixes_of_action = {
     "s3:ListBucket" = [
       "raw/", "raw/*",
@@ -568,6 +569,19 @@ run "operator_permission_set_reads_and_publishes_but_cannot_delete" {
     error_message = "The everyday evidence credential may do exactly ten things. s3:ListBucketVersions is read-only, so a removal's dry run can count versions (v1-e29-t06); the two tagging actions retire a superseded parsed/ directory for the lifecycle rule (v1-e31-t16). s3:DeleteObject, s3:DeleteObjectVersion, s3:PutBucketPolicy and kms:* are forbidden by the task spec; a delete is a takedown, and takedowns use the other permission set."
   }
 
+  # v1-e39-t07: the takedown credential gained delete and version listing under reports/tub/search/;
+  # this credential gained nothing. Its version listing still reaches no part of reports/.
+  assert {
+    condition = alltrue([
+      for statement in jsondecode(aws_ssoadmin_permission_set_inline_policy.evidence_operator[0].inline_policy).Statement :
+      alltrue([
+        for prefix in try(statement.Condition.StringLike["s3:prefix"], []) : !startswith(prefix, "reports/")
+      ])
+      if contains(flatten([statement.Action]), "s3:ListBucketVersions")
+    ])
+    error_message = "The everyday credential lists no versions under reports/: the index prefix is the takedown credential's alone (v1-e39-t07)."
+  }
+
   assert {
     condition = alltrue([
       for statement in jsondecode(aws_ssoadmin_permission_set_inline_policy.evidence_operator[0].inline_policy).Statement :
@@ -667,6 +681,19 @@ run "removal_permission_set_deletes_disclosed_material_and_nothing_else" {
     identity_center_instance_arn = "arn:aws:sso:::instance/ssoins-mock"
     identity_store_id            = "d-mock000000"
     evidence_removal_user_names  = ["maintainer"]
+
+    # The takedown's own listing: the everyday table's ListBucketVersions prefixes, and the student
+    # search pilot's index versions, so a removal can find their noncurrent versions (v1-e39-t07).
+    list_prefixes_of_action = {
+      "s3:ListBucketVersions" = [
+        "raw/", "raw/*",
+        "parsed/", "parsed/*",
+        "files/", "files/*",
+        "manifests/", "manifests/*",
+        "quarantine/", "quarantine/*",
+        "reports/tub/search/", "reports/tub/search/*",
+      ]
+    }
   }
 
   assert {
@@ -697,13 +724,49 @@ run "removal_permission_set_deletes_disclosed_material_and_nothing_else" {
       alltrue([
         for resource in tolist(flatten([statement.Resource])) :
         anytrue([
-          for prefix in ["raw/", "parsed/", "files/", "manifests/", "quarantine/"] :
+          for prefix in ["raw/", "parsed/", "files/", "manifests/", "quarantine/", "reports/tub/search/"] :
           startswith(resource, "${aws_s3_bucket.evidence.arn}/${prefix}")
         ])
       ])
       if anytrue([for action in tolist(flatten([statement.Action])) : startswith(action, "s3:Delete")])
     ])
-    error_message = "Delete rights must be scoped to raw/, parsed/, files/, manifests/ and quarantine/. A delete under reports/ must be denied (task spec: forbidden)."
+    error_message = "Delete rights must be scoped to raw/, parsed/, files/, manifests/, quarantine/ and reports/tub/search/ (v1-e39-t07). A delete anywhere else under reports/ must be denied (task spec: forbidden)."
+  }
+
+  # v1-e39-t07 (PM amendment 2026-10-19): the takedown credential may delete the student search
+  # pilot's superseded index versions, under reports/tub/search/ and nowhere else under reports/.
+  # Every object a delete statement names, exactly: the five prefixes of disclosed material and the
+  # index's one, so a widened prefix (reports/*, reports/tub/*) fails here by name.
+  assert {
+    condition = toset(flatten([
+      for statement in jsondecode(aws_ssoadmin_permission_set_inline_policy.evidence_removal[0].inline_policy).Statement :
+      flatten([statement.Resource])
+      if anytrue([for action in tolist(flatten([statement.Action])) : startswith(action, "s3:Delete")])
+      ])) == toset([
+      "${aws_s3_bucket.evidence.arn}/raw/*",
+      "${aws_s3_bucket.evidence.arn}/parsed/*",
+      "${aws_s3_bucket.evidence.arn}/files/*",
+      "${aws_s3_bucket.evidence.arn}/manifests/*",
+      "${aws_s3_bucket.evidence.arn}/quarantine/*",
+      "${aws_s3_bucket.evidence.arn}/reports/tub/search/*",
+    ])
+    error_message = "A takedown deletes under the five prefixes of disclosed material and reports/tub/search/, exactly. Nothing else under reports/ gains a delete (v1-e39-t07)."
+  }
+
+  assert {
+    condition = alltrue([
+      for statement in jsondecode(aws_ssoadmin_permission_set_inline_policy.evidence_removal[0].inline_policy).Statement :
+      alltrue([
+        for resource in tolist(flatten([statement.Resource])) :
+        !startswith(resource, "${aws_s3_bucket.evidence.arn}/reports/") || startswith(resource, "${aws_s3_bucket.evidence.arn}/reports/tub/search/")
+      ])
+    ])
+    error_message = "Under reports/, the takedown credential reaches reports/tub/search/ and nothing else."
+  }
+
+  assert {
+    condition     = output.removable_index_prefix == "reports/tub/search/" && !contains(output.removable_prefixes, "reports/tub/search/")
+    error_message = "The index prefix is the takedown's alone: kept out of removable_prefixes, which the everyday credential's version listing reads."
   }
 
   assert {

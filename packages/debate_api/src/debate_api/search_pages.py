@@ -14,7 +14,19 @@ and renders. What a query means, which cards a student sees and how a card is ma
 | `GET /cards/<caselist>/<cluster id>/copy` | the card as Copy card puts it on the clipboard, as JSON | yes |
 
 Every one is a `GET` and none changes anything, so none needs a CSRF token (ADR-0019 (d), CSRF).
-Card page views and copies are `v1-e39-t07`'s to audit.
+
+## What is audited (`v1-e39-t07`)
+
+* A card page and a copy write their `card-viewed` and `card-copied` records before the card is
+  sent. A record that cannot be written answers 503 with no card (the PM's ruling of 2026-10-22);
+  Copy card's script then shows its error and leaves the clipboard alone.
+* A search's first page writes one `searched` record with the number of results on it. A next
+  page, a refused form, a search with no search terms and an unavailable index write nothing, and a
+  failed write leaves the search answering.
+
+Every lease applies the suppression list the holder last read, so a removed card is gone from
+results, its page and its copy within five minutes (:class:`~debate_core.application.
+search_index_holder.ScreenedSearch`).
 
 ## Nothing here is logged
 
@@ -39,6 +51,7 @@ from starlette.datastructures import QueryParams
 from debate_api.copy_card import copied_card
 from debate_api.state import PilotState, pilot_state
 from debate_core.application.search_index_holder import SearchIndexUnavailable
+from debate_core.application.tub.access_audit import AccessNotRecorded
 from debate_core.application.tub.sessions import Session
 from debate_core.domain.caselist import Event, Side
 from debate_core.domain.evidence_search import (
@@ -268,6 +281,8 @@ def search_page(request: Request) -> HTMLResponse:
             status_code=400,
             problem="That page of results is out of date. Search again from the first page.",
         )
+    if form.cursor is None and SearchNotice.NO_SEARCH_TERMS not in page.notices:
+        state.services.access_audit.searched(_session(request), len(page.hits))
     return _render_search(request, form, page=page)
 
 
@@ -287,6 +302,12 @@ def card_page(caselist: str, cluster_id: str, request: Request) -> HTMLResponse:
         return _refused(request, 503, _UNAVAILABLE_HEADING, _UNAVAILABLE)
     if card is None:
         return _refused(request, 404, _NOT_FOUND_HEADING, _NOT_FOUND)
+    try:
+        pilot_state(request).services.access_audit.card_viewed(
+            _session(request), card.caselist, card.cluster_id
+        )
+    except AccessNotRecorded:
+        return _refused(request, 503, _UNAVAILABLE_HEADING, _UNAVAILABLE)
     words = len(card.text.split())
     unattributed = sum(1 for one in card.occurrences if one.provenance_line is None)
     return pilot_state(request).renderer.render(
@@ -313,5 +334,11 @@ def card_copy(caselist: str, cluster_id: str, request: Request) -> Response:
         return JSONResponse({"message": _UNAVAILABLE}, status_code=503)
     if card is None:
         return JSONResponse({"message": "That card is not in the search any more."}, status_code=404)
+    try:
+        pilot_state(request).services.access_audit.card_copied(
+            _session(request), card.caselist, card.cluster_id
+        )
+    except AccessNotRecorded:
+        return JSONResponse({"message": _UNAVAILABLE}, status_code=503)
     copied = copied_card(card)
     return JSONResponse({"html": copied.html, "text": copied.text})

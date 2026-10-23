@@ -36,8 +36,27 @@ refused pointer is not fetched again until the pointer changes. With no index lo
 request tries again, and is refused with :class:`SearchIndexUnavailable` until one loads.
 
 **One refresh loop.** :meth:`SearchIndexHolder._refresh` is the one place a request's freshness is
-decided. `v1-e39-t07` adds the suppression list's re-read to it, under the same interval, and wires
-the search's `is_suppressed`; until then nothing is passed and nothing is hidden.
+decided, for the pointer and for the suppression list alike.
+
+## The suppression list (`v1-e39-t07`)
+
+The removal suppression list, `manifests/_suppression/suppression-list.jsonl`, is re-read in the same
+pass as the pointer, first, by conditional GET, under the same interval. Every lease hands the
+request a :class:`ScreenedSearch`, which passes the list read for that request to the search and the
+card lookup as ``is_suppressed(source_sha256, disclosure_digest)``. So an occurrence suppressed after
+the index was built is hidden from the first request that rechecks after the removal: within five
+minutes, and on a thawed environment before it answers (data-use policy, E39 gate item 5). What a
+hidden occurrence does to its card is :class:`~debate_core.application.evidence_search.
+EvidenceSearchService`'s: a card whose representative is suppressed is not found until the next build.
+
+The list is not allowed to go stale the way an index may. A pointer that cannot be read leaves the
+current index serving; a list that cannot be read, or holds a line this build cannot read, refuses
+the request with :class:`SearchIndexUnavailable` and leaves the check due, so the next request tries
+again. ADR-0019 (c) 5: an environment "never serves a stale list". The log line names the failure's
+type, never the list's contents.
+
+A holder built without a list source hides nothing: the tests of `v1-e39-t06` that predate the list.
+The function's composition root always gives it one.
 
 ## What never waits
 
@@ -65,9 +84,11 @@ from typing import Final, Protocol
 from pydantic import ValidationError
 
 from debate_core.application.errors import DomainError
-from debate_core.application.evidence_search import EvidenceSearchService
+from debate_core.application.evidence_search import EvidenceSearchService, SuppressionPredicate
 from debate_core.application.ports.search_index_reader import SearchIndexReader, UnreadableSearchIndex
-from debate_core.application.ports.search_index_source import SearchIndexSource
+from debate_core.application.ports.search_index_source import SearchIndexSource, SuppressionListSource
+from debate_core.application.ports.suppression import SuppressionEntry, SuppressionState
+from debate_core.domain.evidence_search import Card, SearchFilters, SearchPage
 from debate_core.domain.search_index import (
     INDEX_ID_LENGTH,
     SEARCH_INDEX_FORMAT_VERSION,
@@ -80,6 +101,8 @@ from debate_core.domain.search_index import (
 
 __all__ = [
     "MANIFEST_MAX_BYTES",
+    "ScreenedSearch",
+    "SuppressionListUnavailable",
     "POINTER_RECHECK_INTERVAL",
     "ClosableSearchIndexReader",
     "SearchIndexHolder",
@@ -164,6 +187,35 @@ class SearchIndexUnavailable(DomainError):
         super().__init__("no search index is loaded")
 
 
+class SuppressionListUnavailable(DomainError):
+    """The suppression list could not be read, or holds a line this build cannot read."""
+
+    def __init__(self) -> None:
+        super().__init__("the suppression list could not be read, so nothing is searched until it is")
+
+
+class ScreenedSearch:
+    """One request's search: the loaded index, with the suppression list read for this request applied.
+
+    The only way a route reaches the index, so a results page, a card page, a copy and `v1-e39-t08`'s
+    download all go through the same list. It offers no search without it.
+    """
+
+    __slots__ = ("_is_suppressed", "_service")
+
+    def __init__(self, service: EvidenceSearchService, is_suppressed: SuppressionPredicate | None) -> None:
+        self._service = service
+        self._is_suppressed = is_suppressed
+
+    def search(
+        self, query: str, filters: SearchFilters | None = None, cursor: str | None = None
+    ) -> SearchPage:
+        return self._service.search(query, filters, cursor, is_suppressed=self._is_suppressed)
+
+    def card(self, caselist: str, cluster_id: str) -> Card | None:
+        return self._service.card(caselist, cluster_id, is_suppressed=self._is_suppressed)
+
+
 class ClosableSearchIndexReader(SearchIndexReader, Protocol):
     """A reader the holder can close when its index is swapped out."""
 
@@ -204,8 +256,12 @@ class SearchIndexHolder:
         clock: Callable[[], datetime],
         recheck_interval: timedelta = POINTER_RECHECK_INTERVAL,
         build_service: Callable[[SearchIndexReader], EvidenceSearchService] = EvidenceSearchService,
+        suppression_list: SuppressionListSource | None = None,
     ) -> None:
         self._source = source
+        self._suppression_source = suppression_list
+        self._suppressed: SuppressionPredicate | None = None
+        self._suppression_etag: str | None = None
         self._directory = directory
         self._open_reader = open_reader
         self._clock = clock
@@ -222,20 +278,22 @@ class SearchIndexHolder:
     # What a request asks for ----------------------------------------------------------------
 
     @contextmanager
-    def lease(self) -> Generator[EvidenceSearchService]:
-        """The search over the current index, checked fresh, for the length of one request.
+    def lease(self) -> Generator[ScreenedSearch]:
+        """The search over the current index and the suppression list, checked fresh, for one request.
 
-        Raises :class:`SearchIndexUnavailable` when no index can be loaded. An index swapped out
-        while a request holds it is deleted when that request lets it go.
+        Raises :class:`SearchIndexUnavailable` when no index can be loaded, or the suppression list
+        cannot be read. An index swapped out while a request holds it is deleted when that request
+        lets it go.
         """
         with self._lock:
             self._refresh_if_due()
             loaded = self._current
             if loaded is None:
                 raise SearchIndexUnavailable() from self._refused
+            screened = ScreenedSearch(loaded.service, self._suppressed)
             loaded.leases += 1
         try:
-            yield loaded.service
+            yield screened
         finally:
             with self._lock:
                 loaded.leases -= 1
@@ -259,6 +317,7 @@ class SearchIndexHolder:
             if self._current is not None:
                 self._discard(self._current)
             self._current, self._checked_at, self._etag, self._refused = None, None, None, None
+            self._suppressed, self._suppression_etag = None, None
 
     # The refresh loop -----------------------------------------------------------------------
 
@@ -269,6 +328,9 @@ class SearchIndexHolder:
             return
         try:
             self._refresh()
+        except SuppressionListUnavailable as problem:
+            # The check stays due: the next request reads the list again before it answers.
+            raise SearchIndexUnavailable() from problem
         except DomainError as problem:
             if self._current is None:
                 self._checked_at = now
@@ -281,8 +343,29 @@ class SearchIndexHolder:
         self._checked_at = now
 
     def _refresh(self) -> None:
-        """One pass of the refresh loop: the pointer now; `v1-e39-t07` adds the suppression list."""
+        """One pass of the refresh loop: the suppression list, then the pointer."""
+        self._refresh_suppression_list()
         self._refresh_pointer()
+
+    def _refresh_suppression_list(self) -> None:
+        source = self._suppression_source
+        if source is None:
+            return
+        try:
+            read = source.read_suppression_list(if_none_match=self._suppression_etag)
+            if read.body is None:
+                if self._suppressed is not None:
+                    return
+                raise ValueError("the list answered unchanged to a holder that never read it")
+            state = _suppression_state(read.body)
+        except (DomainError, ValueError) as problem:
+            logger.warning(
+                "the suppression list was not read, so no search is answered until it is: %s",
+                type(problem).__name__,
+            )
+            raise SuppressionListUnavailable() from None
+        self._suppressed = _predicate(state)
+        self._suppression_etag = read.etag
 
     def _refresh_pointer(self) -> None:
         read = self._source.read_pointer(if_none_match=self._etag)
@@ -417,6 +500,36 @@ class SearchIndexHolder:
         for leftover in self._directory.iterdir():
             if leftover.is_file() and leftover.suffix in (_INDEX_FILE_SUFFIX, _PARTIAL_FILE_SUFFIX):
                 leftover.unlink(missing_ok=True)
+
+
+def _suppression_state(raw: bytes) -> SuppressionState:
+    """The list in `raw`, every line read, or :class:`ValueError` at the first line this build cannot read.
+
+    A list whose last line has no newline was cut off in the middle of an append, and is refused
+    whole, as every reader of the list refuses it.
+    """
+    if raw and not raw.endswith(b"\n"):
+        raise ValueError("the suppression list's last line is unfinished")
+    try:
+        lines = raw.decode("utf-8").splitlines()
+        return SuppressionState.from_entries(
+            SuppressionEntry.from_line(line) for line in lines if line.strip()
+        )
+    except (UnicodeDecodeError, ValidationError):
+        raise ValueError("the suppression list holds a line this build cannot read") from None
+
+
+def _predicate(state: SuppressionState) -> SuppressionPredicate:
+    """``is_suppressed(source_sha256, disclosure_digest)`` over one reading of the list.
+
+    The question the index build asked of every row: the whole source, or this one disclosure. A
+    camp occurrence has no disclosure digest, so only a whole-source entry stops it.
+    """
+
+    def is_suppressed(source_sha256: str, disclosure: str | None) -> bool:
+        return state.suppresses(source_sha256, disclosure=disclosure)
+
+    return is_suppressed
 
 
 def _parse_pointer(raw: bytes) -> SearchIndexPointer:

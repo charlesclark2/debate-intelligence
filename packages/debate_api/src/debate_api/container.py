@@ -5,14 +5,16 @@ client secret and the cookie keys from Parameter Store once (a cold start), refu
 placeholder keys, and wires the Cognito, audit and parameter adapters from
 `debate_core.integrations` into the two use cases. It also builds the search index holder over the
 evidence bucket (`v1-e39-t06`), which fetches nothing until the first search: a cold start reads
-only the two parameters. Routes ask `app.state.pilot` for the use cases
-and never import an adapter (the import contracts and `scripts/check_thin_handlers.py` hold them
-to that).
+only the two parameters. The holder re-reads the suppression list through the same bucket adapter,
+and the access audit writes to the same audit stream as the account page (`v1-e39-t07`). Routes
+ask `app.state.pilot` for the use cases and never import an adapter (the import contracts and
+`scripts/check_thin_handlers.py` hold them to that).
 
 The function's role allows exactly what is built here and nothing more (ADR-0019, The function's
 role): `ssm:GetParameter` on the two parameters, `logs:CreateLogStream` and `logs:PutLogEvents` on
-its audit group, and `s3:GetObject` under `reports/tub/search/` for the index, which the holder
-reads to a directory of its own in the function's ephemeral storage, `/tmp/tub-index`. The Cognito
+its audit group, `s3:GetObject` under `reports/tub/search/` for the index, which the holder
+reads to a directory of its own in the function's ephemeral storage, `/tmp/tub-index`, and
+`s3:GetObject` on `manifests/_suppression/suppression-list.jsonl`. The Cognito
 calls need no IAM grant: the token-authorized ones send the student's access token through an
 unsigned client, and the OAuth endpoints take the client secret.
 """
@@ -28,6 +30,7 @@ from pathlib import Path
 from debate_api.configuration import PilotConfiguration, parse_cookie_keys
 from debate_api.state import PilotServices
 from debate_core.application.search_index_holder import SearchIndexHolder
+from debate_core.application.tub.access_audit import AccessAuditService
 from debate_core.application.tub.account_page import AccountPageService
 from debate_core.application.tub.sign_in import SignInService
 from debate_core.integrations.cloudwatch_audit import CloudWatchAuditSink, build_logs_client
@@ -85,6 +88,7 @@ def build_pilot_services(environ: Mapping[str, str]) -> PilotServices:
         log_stream=f"tub-app-{_now():%Y-%m-%d}-{uuid.uuid4().hex}",
         create_stream=True,
     )
+    evidence = S3SearchIndexSource(bucket=configuration.evidence_bucket, region=configuration.region)
     return PilotServices(
         configuration=configuration,
         cookie_keys=cookie_keys,
@@ -99,11 +103,13 @@ def build_pilot_services(environ: Mapping[str, str]) -> PilotServices:
             authenticator_issuer=configuration.authenticator_issuer,
         ),
         search_index=SearchIndexHolder(
-            S3SearchIndexSource(bucket=configuration.evidence_bucket, region=configuration.region),
+            evidence,
             directory=Path(tempfile.gettempdir()) / INDEX_DIRECTORY_NAME,
             open_reader=_open_index,
             clock=_now,
+            suppression_list=evidence,
         ),
+        access_audit=AccessAuditService(audit=audit, clock=_now),
         clock=_now,
     )
 

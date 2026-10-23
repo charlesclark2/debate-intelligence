@@ -1,0 +1,200 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Student search pilot audit record",
+  "description": "One event in debate-<env>-tub-audit (ADR-0019 (e) 3; data-use policy E39 gate item 4). The format version, the time, the action, the actor's role and pool subject, and the account it changed, the cards it reached or a count. Nothing else: additionalProperties is false, so a query, URL, token, name, team code, school, evidence text or IP address has no field to go in. Held to debate_core.application.tub.audit by packages/debate_api/tests/test_audit_record_schema.py.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "format_version",
+    "time",
+    "action",
+    "actor_role"
+  ],
+  "properties": {
+    "format_version": {
+      "const": 1
+    },
+    "time": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$",
+      "description": "UTC, to the second."
+    },
+    "action": {
+      "enum": [
+        "account-added",
+        "accounts-listed",
+        "account-reset",
+        "account-disabled",
+        "account-enabled",
+        "account-removed",
+        "email-second-factor-allowed",
+        "email-second-factor-withdrawn",
+        "backup-email-added",
+        "backup-email-removed",
+        "authenticator-registered",
+        "session-ended-no-second-factor",
+        "searched",
+        "card-viewed",
+        "card-copied",
+        "cards-downloaded"
+      ]
+    },
+    "actor_role": {
+      "enum": [
+        "student",
+        "coach"
+      ]
+    },
+    "actor_subject": {
+      "type": "string",
+      "pattern": "^[0-9A-Za-z-]{1,128}$",
+      "description": "Who acted. Absent for the coach's command line."
+    },
+    "account_subject": {
+      "type": "string",
+      "pattern": "^[0-9A-Za-z-]{1,128}$",
+      "description": "The account an account change changed."
+    },
+    "count": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Accounts in a listing, or results on a search's first page."
+    },
+    "cards": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 30,
+      "items": {
+        "type": "string",
+        "pattern": "^(?:[a-z]+[0-9]{2}|openev)/[0-9a-f]{64}$"
+      },
+      "description": "The cards an access reached, as <caselist>/<cluster id>."
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "enum": [
+              "card-viewed",
+              "card-copied"
+            ]
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "actor_subject",
+          "cards"
+        ],
+        "properties": {
+          "cards": {
+            "maxItems": 1
+          }
+        },
+        "not": {
+          "anyOf": [
+            {
+              "required": [
+                "count"
+              ]
+            },
+            {
+              "required": [
+                "account_subject"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "cards-downloaded"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "actor_subject",
+          "cards"
+        ],
+        "not": {
+          "anyOf": [
+            {
+              "required": [
+                "count"
+              ]
+            },
+            {
+              "required": [
+                "account_subject"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "searched"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "actor_subject",
+          "count"
+        ],
+        "not": {
+          "anyOf": [
+            {
+              "required": [
+                "cards"
+              ]
+            },
+            {
+              "required": [
+                "account_subject"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "enum": [
+              "account-added",
+              "accounts-listed",
+              "account-reset",
+              "account-disabled",
+              "account-enabled",
+              "account-removed",
+              "email-second-factor-allowed",
+              "email-second-factor-withdrawn",
+              "backup-email-added",
+              "backup-email-removed",
+              "authenticator-registered",
+              "session-ended-no-second-factor"
+            ]
+          }
+        }
+      },
+      "then": {
+        "not": {
+          "required": [
+            "cards"
+          ]
+        }
+      }
+    }
+  ]
+}

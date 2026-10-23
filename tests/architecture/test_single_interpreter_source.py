@@ -27,7 +27,7 @@ from __future__ import annotations
 import re
 import subprocess
 import tomllib
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -55,6 +55,8 @@ PERMITTED_DIRECTORIES = {
     "plan_specs/": "the specs, which quote what they change",
 }
 OTHER_ECOSYSTEM_LOCKFILES = {"pnpm-lock.yaml", "package-lock.json", "yarn.lock"}
+# A file whose every version is a Python version: an interpreter pin, wherever it is.
+PYTHON_VERSION_FILES = {".python-version"}
 CI_MATRIX = re.compile(r"^\s*(?:-\s*)?python-version\s*:")
 
 EXEMPT_LINES: dict[tuple[str, str], str] = {
@@ -157,6 +159,26 @@ def is_derived(path: str, line: str, declared: str, pyprojects: set[str]) -> boo
     return path.startswith(".github/workflows/") and CI_MATRIX.match(line) is not None
 
 
+def python_versions_named(line: str, block_opener: str = "", *, in_version_file: bool = False) -> list[str]:
+    """The Python versions `line` names."""
+    return [found.group() for found in PYTHON_VERSION.finditer(line)]
+
+
+def lines_with_block_openers(text: str) -> Iterator[tuple[int, str, str]]:
+    """Each line's number, the line, and the nearest less-indented line above it ("" at the margin)."""
+    openers: list[tuple[int, str]] = []
+    for number, raw in enumerate(text.splitlines(), start=1):
+        line = raw.strip()
+        if not line:
+            yield number, line, ""
+            continue
+        indent = len(raw) - len(raw.lstrip())
+        while openers and openers[-1][0] >= indent:
+            openers.pop()
+        yield number, line, openers[-1][1] if openers else ""
+        openers.append((indent, line))
+
+
 def mentions(root: Path, paths: Iterable[str]) -> list[Mention]:
     """Every line in `paths` naming a Python version that is neither permitted nor derived."""
     declared = declared_requires_python(root)
@@ -169,9 +191,10 @@ def mentions(root: Path, paths: Iterable[str]) -> list[Mention]:
             text = (root / path).read_text(encoding="utf-8")
         except (UnicodeDecodeError, IsADirectoryError, FileNotFoundError):
             continue
-        for number, raw in enumerate(text.splitlines(), start=1):
-            line = raw.strip()
-            if PYTHON_VERSION.search(line) and not is_derived(path, line, declared, pyprojects):
+        in_version_file = Path(path).name in PYTHON_VERSION_FILES
+        for number, line, opener in lines_with_block_openers(text):
+            named = python_versions_named(line, opener, in_version_file=in_version_file)
+            if named and not is_derived(path, line, declared, pyprojects):
                 found.append(Mention(path, number, line))
     return found
 
@@ -244,7 +267,7 @@ NEXT = MINOR + 1
     ],
 )
 def test_the_scanner_finds_a_python_version(line: str) -> None:
-    assert PYTHON_VERSION.search(line)
+    assert python_versions_named(line)
 
 
 @pytest.mark.parametrize(
@@ -259,7 +282,7 @@ def test_the_scanner_finds_a_python_version(line: str) -> None:
     ],
 )
 def test_the_scanner_ignores_other_versions(line: str) -> None:
-    assert not PYTHON_VERSION.search(line)
+    assert python_versions_named(line) == []
 
 
 def plant(tmp_path: Path, files: dict[str, str]) -> Path:

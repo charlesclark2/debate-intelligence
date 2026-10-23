@@ -1,0 +1,563 @@
+"""LandscapeReportService: one caselist's argument landscape through one snapshot (`v1-e32-t03`).
+
+A pure aggregation: it reads nothing, writes nothing and calls no model. Its inputs are the
+classifications `v1-e32-t02` wrote for the caselist's cards, the E30 disclosures that say who read
+each file on which side in which round, the E31 fingerprints that say which cards are one card, the
+topic's taxonomy and the coach's overrides, and, from `v1-e32-t09` when it lands, an aff per
+affirmative round. Its output is a :class:`~debate_core.domain.landscape_report.LandscapeReport`
+and that report's three files, rendered by :mod:`debate_core.arguments.landscape.render` and passed
+through `v1-e34-t03`'s staleness hook.
+
+## What is counted
+
+* **A round** is one disclosed round: a team, a side, a tournament and a round as the filename
+  gave them (the round's normalized form when it has one). A team that disclosed one file twice
+  for one round, or whose file was carried from one weekly window into the next, read one round. A
+  file whose name gave no tournament or no round is a round of its own, so two such files are never
+  merged into one round.
+* **A round reads a position** when one of its files holds a card `v1-e32-t02` placed under that
+  position, READS role, at or above the review threshold. A card that ANSWERS a position (under an
+  `AT:` heading) never counts as reading it. An item below the threshold or nothing placed is
+  Unclassified; one the coach ruled names no position is neither counted nor Unclassified.
+* **An affirmative round's aff** comes from `v1-e32-t09`'s assignment when there is one: the
+  assigned aff is the round's aff, and an aff a card in that round was placed under does not count
+  for it. Otherwise it comes from the round's placed cards (:data:`PLACED_CARD_METHOD`), and a round
+  with neither is an affirmative round with no identified aff. Advantages and negative positions are
+  counted as placed.
+* **A team** is a school and team code, compared without case, never shown. A disclosure whose path
+  named no school or team code reads a round but is no team.
+* **Sides.** PF's pro and con count as aff and neg. A round on no readable side counts in a
+  position's rounds and in neither split.
+* **share_of_teams** is the teams that read a position on its own side over the teams that
+  disclosed on that side in the report's range; for a position either side reads, over every team.
+* **First seen and new.** A round is first seen in the earliest snapshot that lists it; a position in
+  the earliest first-seen of the rounds reading it. A weekly archive is a window of about a week's
+  changes (`v1-e30-t17`), so the earliest listing is when the round was first disclosed. A position
+  is new when that is after the previous snapshot; in a caselist's first snapshot nothing is new.
+* **The range** is every disclosure dated on or before `through`. The report's snapshot is the newest
+  of those, the previous snapshot the one before it.
+
+## Most-read cards
+
+Per position, the cards counted for it are grouped by E31 cluster, so near-duplicate copies are one
+card, and each cluster's teams are the distinct teams of the rounds holding one of its cards. Clusters
+rank by teams, then by cluster id. A row shows one card of the cluster: the tag and short cite most
+of the cluster's cards under the position carry (ties to the first in text order), from the first
+such card by source digest and paragraph, with its file's content-addressed `raw/` key and the
+snapshot that file was first disclosed in.
+
+## What never leaves this module
+
+School, team code, tournament and round are read to tell rounds and teams apart, and are not in the
+report: a round is a count, a team is a count. :func:`round_id` names a round by a digest of them.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+from collections import Counter, defaultdict
+from collections.abc import Iterable, Sequence
+from dataclasses import dataclass, field
+from datetime import date
+from typing import Final
+
+from debate_core.application.caselist.path_parser import UNKNOWN_SCHOOL, UNKNOWN_TEAM_CODE
+from debate_core.application.caselist.publish_plan import source_key
+from debate_core.application.errors import DomainError
+from debate_core.application.landscape_staleness import (
+    LandscapeStaleness,
+    with_stale_banner,
+    with_staleness_metadata,
+)
+from debate_core.application.ports.parsed_store import OccurrenceRecord
+from debate_core.arguments.landscape.render import (
+    header_metadata,
+    render_markdown,
+    render_positions_csv,
+    render_top_cards_csv,
+)
+from debate_core.arguments.landscape.review_queue import DEFAULT_REVIEW_THRESHOLD, needs_review
+from debate_core.arguments.landscape.seeding import SeedSource
+from debate_core.domain.caselist import Disclosure, Side
+from debate_core.domain.landscape import Position, PositionKind, PositionSide, Taxonomy
+from debate_core.domain.landscape_classification import (
+    DETERMINISTIC_PROMPT_VERSION,
+    ItemKind,
+    OverrideRules,
+    PositionClassification,
+    PositionRole,
+)
+from debate_core.domain.landscape_report import (
+    DEFAULT_TOP_CARDS,
+    PLACED_CARD_METHOD,
+    AffAssignment,
+    AffIdentification,
+    LandscapeCard,
+    LandscapeReport,
+    PositionStats,
+    ReportHeader,
+    TopCard,
+    UnclassifiedSummary,
+)
+
+__all__ = [
+    "LandscapeReportBundle",
+    "LandscapeReportInputs",
+    "LandscapeReportService",
+    "ReportCannotShip",
+    "landscape_cards",
+    "overrides_digest",
+    "round_id",
+]
+
+_ROUND_ID_DIGITS: Final = 16
+_SIDE_ORDER: Final = {PositionSide.AFF: 0, PositionSide.NEG: 1, PositionSide.BOTH: 2}
+_KIND_ORDER: Final = {kind: index for index, kind in enumerate(PositionKind)}
+_AFF: Final = "aff"
+_NEG: Final = "neg"
+_LANDSCAPE_SIDE: Final = {Side.AFF: _AFF, Side.PRO: _AFF, Side.NEG: _NEG, Side.CON: _NEG}
+
+
+class ReportCannotShip(DomainError):
+    """The report cannot say how old its data is, or its inputs contradict each other."""
+
+
+def overrides_digest(rules: OverrideRules) -> str:
+    """The digest of every decision in the coach's overrides file, or `none` when it holds none.
+
+    The same digest t02's cache keys an item by, taken over every heading the file decides, so two
+    reports with the same digest counted under the same decisions.
+    """
+    return rules.digest_for(one.heading for one in rules.overrides)
+
+
+def _team(disclosure: Disclosure) -> tuple[str, str] | None:
+    if disclosure.school == UNKNOWN_SCHOOL or disclosure.team_code == UNKNOWN_TEAM_CODE:
+        return None
+    return (disclosure.school.casefold(), disclosure.team_code.casefold())
+
+
+def _round_identity(disclosure: Disclosure) -> tuple[str, ...]:
+    team = _team(disclosure)
+    tournament = disclosure.tournament.casefold() if disclosure.tournament else ""
+    label = disclosure.round_label
+    played = (label.normalized or label.raw.casefold()) if label is not None else ""
+    labelled = team is not None and bool(tournament) and bool(played)
+    return (
+        disclosure.caselist,
+        *(team or ("", "")),
+        _LANDSCAPE_SIDE.get(disclosure.side, ""),
+        tournament,
+        played,
+        "" if labelled else disclosure.source_sha256,
+    )
+
+
+def round_id(disclosure: Disclosure) -> str:
+    """The round a disclosure belongs to, as 16 hex digits that show none of its fields.
+
+    `v1-e32-t09` names a round by this when it assigns the round its aff.
+    """
+    identity = json.dumps(_round_identity(disclosure), ensure_ascii=False)
+    return hashlib.sha256(identity.encode()).hexdigest()[:_ROUND_ID_DIGITS]
+
+
+def landscape_cards(
+    sources: Iterable[SeedSource], occurrences: Iterable[OccurrenceRecord]
+) -> tuple[LandscapeCard, ...]:
+    """Each card of `sources` with the cluster E31's occurrence table placed it in.
+
+    The occurrence table has a row per card per disclosure; a card's fingerprint and cluster are the
+    same in each. A card with no row, or no first paragraph, has no cluster to rank and is left out.
+    """
+    clusters: dict[tuple[str, int], tuple[str, str]] = {}
+    for row in occurrences:
+        clusters.setdefault(
+            (row.source_sha256, row.first_element_index), (row.exact_fingerprint, row.cluster_id)
+        )
+    cards: list[LandscapeCard] = []
+    for source in sources:
+        for card in source.cards:
+            if card.first_element_index is None:
+                continue
+            found = clusters.get((source.sha256, card.first_element_index))
+            if found is None:
+                continue
+            cards.append(
+                LandscapeCard(
+                    source_sha256=source.sha256,
+                    element_index=card.first_element_index,
+                    exact_fingerprint=found[0],
+                    cluster_id=found[1],
+                    tag=card.tag,
+                    short_cite=card.short_cite,
+                )
+            )
+    return tuple(cards)
+
+
+@dataclass(frozen=True, slots=True)
+class LandscapeReportInputs:
+    """Everything one report is built from."""
+
+    caselist: str
+    through: date
+    """Disclosures dated after this are out of range."""
+    taxonomy: Taxonomy
+    """The topic's merged taxonomy, as the classifications were placed under."""
+    overrides: OverrideRules
+    parser_version: str
+    classifications: Sequence[PositionClassification] = field(repr=False)
+    disclosures: Sequence[Disclosure] = field(repr=False)
+    cards: Sequence[LandscapeCard] = field(repr=False)
+    aff_assignments: Sequence[AffAssignment] = field(default=(), repr=False)
+    """`v1-e32-t09`'s per-round affs; empty until it lands."""
+
+
+@dataclass(frozen=True, slots=True)
+class LandscapeReportBundle:
+    """A report and its three files, the staleness banner and flag already in them."""
+
+    report: LandscapeReport
+    files: dict[str, str] = field(repr=False)
+    """`report.md`, `positions.csv` and `top_cards.csv`, by name."""
+
+
+@dataclass(slots=True)
+class _Round:
+    side: str
+    team: tuple[str, str] | None
+    first_seen: date
+
+
+@dataclass(frozen=True, slots=True)
+class _Assigned:
+    position_id: str
+    method: str
+
+
+@dataclass(frozen=True, slots=True)
+class _Range:
+    """The disclosures in range, read into rounds."""
+
+    rounds: dict[str, _Round]
+    by_source: dict[str, set[str]]
+    """Source digest to the rounds disclosing it."""
+    source_first_seen: dict[str, date]
+    snapshots: list[date]
+
+
+class LandscapeReportService:
+    """Builds a caselist's landscape report from its classifications, disclosures and fingerprints."""
+
+    def __init__(
+        self, *, review_threshold: float = DEFAULT_REVIEW_THRESHOLD, top_cards: int = DEFAULT_TOP_CARDS
+    ) -> None:
+        if not 0.0 <= review_threshold <= 1.0:
+            raise ValueError(f"the review threshold is between 0 and 1; got {review_threshold}")
+        if top_cards < 1:
+            raise ValueError(f"a report lists at least one card per position; got {top_cards}")
+        self._threshold = review_threshold
+        self._top = top_cards
+
+    def bundle(self, inputs: LandscapeReportInputs, staleness: LandscapeStaleness) -> LandscapeReportBundle:
+        """The report and its files, with the hook's banner and `stale` flag in them."""
+        report = self.build(inputs, staleness)
+        metadata = with_staleness_metadata(header_metadata(report), staleness)
+        return LandscapeReportBundle(
+            report=report,
+            files={
+                "report.md": with_stale_banner(render_markdown(report), staleness),
+                "positions.csv": render_positions_csv(report, metadata),
+                "top_cards.csv": render_top_cards_csv(report, metadata),
+            },
+        )
+
+    def build(self, inputs: LandscapeReportInputs, staleness: LandscapeStaleness) -> LandscapeReport:
+        """The report alone. :meth:`bundle` is what writes it out."""
+        if staleness.newest_snapshot is None or staleness.age_days is None:
+            raise ReportCannotShip(
+                f"the staleness check found no snapshot of {inputs.caselist}, so the report cannot say "
+                "how old its data is"
+            )
+        if staleness.caselist != inputs.caselist:
+            raise ReportCannotShip(f"the staleness check is of {staleness.caselist}, not {inputs.caselist}")
+        taxonomy = inputs.taxonomy
+        in_range = _read_range(inputs)
+        rounds = in_range.rounds
+        assigned = _assignments(inputs.aff_assignments, rounds, taxonomy)
+
+        reads: defaultdict[str, set[str]] = defaultdict(set)
+        """Position id to the rounds reading it."""
+        card_reads: defaultdict[str, dict[tuple[str, int], set[str]]] = defaultdict(dict)
+        """Position id to each card counted for it, with the rounds it was counted in."""
+        cards = unplaced = below = decided = placed = 0
+        prompt_versions: set[str] = set()
+        for item in inputs.classifications:
+            if item.item_kind is not ItemKind.CARD or item.first_element_index is None:
+                continue
+            in_rounds = in_range.by_source.get(item.source_sha256)
+            if not in_rounds:
+                continue
+            if item.taxonomy_version != taxonomy.taxonomy_version:
+                raise ReportCannotShip(
+                    f"{item.item_id} was placed under taxonomy {item.taxonomy_version}, not "
+                    f"{taxonomy.taxonomy_version}"
+                )
+            cards += 1
+            prompt_versions.add(item.prompt_version)
+            if needs_review(item, self._threshold):
+                unplaced += item.method is None
+                below += item.method is not None
+                continue
+            if item.position_id is None:
+                decided += 1
+                continue
+            placed += 1
+            if item.role is not PositionRole.READS:
+                continue
+            position = _counted_position(taxonomy, item.position_id)
+            counted = {
+                one for one in in_rounds if position.kind is not PositionKind.AFF or one not in assigned
+            }
+            if not counted:
+                continue
+            reads[position.id] |= counted
+            card_reads[position.id].setdefault((item.source_sha256, item.first_element_index), set()).update(
+                counted
+            )
+        for one, assignment in assigned.items():
+            reads[assignment.position_id].add(one)
+
+        teams = {side: _teams(rounds, side) for side in (_AFF, _NEG, None)}
+        previous = in_range.snapshots[-2] if len(in_range.snapshots) > 1 else None
+        positions = sorted(
+            (
+                _stats(taxonomy.position(position_id), read, rounds, teams, previous)
+                for position_id, read in reads.items()
+            ),
+            key=_report_order,
+        )
+        cards_by_key = {(card.source_sha256, card.element_index): card for card in inputs.cards}
+        top_cards = [
+            card
+            for stats in positions
+            for card in self._top_cards(
+                stats.position_id, card_reads[stats.position_id], cards_by_key, in_range, inputs.caselist
+            )
+        ]
+
+        aff_positions = {one.id for one in taxonomy.positions if one.kind is PositionKind.AFF}
+        neg_positions = {
+            one.id for one in taxonomy.positions if one.side in (PositionSide.NEG, PositionSide.BOTH)
+        }
+        aff_rounds = sorted(one for one, stated in rounds.items() if stated.side == _AFF)
+        neg_rounds = sorted(one for one, stated in rounds.items() if stated.side == _NEG)
+        identified: Counter[str] = Counter()
+        for one in aff_rounds:
+            if one in assigned:
+                identified[assigned[one].method] += 1
+            elif any(one in reads[position_id] for position_id in aff_positions if position_id in reads):
+                identified[PLACED_CARD_METHOD] += 1
+        read_rounds = {one for read in reads.values() for one in read}
+        neg_placed = {one for position_id in neg_positions for one in reads.get(position_id, ())}
+        return LandscapeReport(
+            header=ReportHeader(
+                caselist=inputs.caselist,
+                snapshot=in_range.snapshots[-1],
+                previous_snapshot=previous,
+                topic_id=taxonomy.topic_id,
+                taxonomy_version=taxonomy.taxonomy_version,
+                overrides_digest=overrides_digest(inputs.overrides),
+                parser_version=inputs.parser_version,
+                prompt_version=", ".join(sorted(prompt_versions)) or DETERMINISTIC_PROMPT_VERSION,
+                review_threshold=self._threshold,
+                top_cards_per_position=self._top,
+                cards=cards,
+                cards_placed=placed,
+                rounds=len(rounds),
+                rounds_with_a_read=len(read_rounds),
+                aff_rounds=len(aff_rounds),
+                neg_rounds=len(neg_rounds),
+                teams=len(teams[None]),
+                aff_teams=len(teams[_AFF]),
+                neg_teams=len(teams[_NEG]),
+                stale=staleness.stale,
+                newest_snapshot=staleness.newest_snapshot,
+                snapshot_age_days=staleness.age_days,
+                archives_awaiting_download=staleness.archives_awaiting_download,
+            ),
+            positions=tuple(positions),
+            top_cards=tuple(top_cards),
+            unclassified=UnclassifiedSummary(
+                cards=cards,
+                unplaced_cards=unplaced,
+                below_threshold_cards=below,
+                decided_no_position_cards=decided,
+                aff_rounds=len(aff_rounds),
+                aff_rounds_unidentified=len(aff_rounds) - sum(identified.values()),
+                neg_rounds=len(neg_rounds),
+                neg_rounds_unplaced=sum(one not in neg_placed for one in neg_rounds),
+            ),
+            aff_identification=tuple(
+                AffIdentification(method=method, rounds=count) for method, count in sorted(identified.items())
+            ),
+        )
+
+    def _top_cards(
+        self,
+        position_id: str,
+        reads: dict[tuple[str, int], set[str]],
+        cards: dict[tuple[str, int], LandscapeCard],
+        in_range: _Range,
+        caselist: str,
+    ) -> list[TopCard]:
+        members: defaultdict[str, list[LandscapeCard]] = defaultdict(list)
+        teams: defaultdict[str, set[tuple[str, str]]] = defaultdict(set)
+        for key, read in reads.items():
+            card = cards.get(key)
+            if card is None:
+                continue
+            members[card.cluster_id].append(card)
+            teams[card.cluster_id] |= {
+                team for one in read if (team := in_range.rounds[one].team) is not None
+            }
+        ranked = sorted(members, key=lambda cluster: (-len(teams[cluster]), cluster))[: self._top]
+        rows: list[TopCard] = []
+        for rank, cluster in enumerate(ranked, start=1):
+            shown = _shown_card(members[cluster])
+            first_seen = in_range.source_first_seen[shown.source_sha256]
+            rows.append(
+                TopCard(
+                    position_id=position_id,
+                    rank=rank,
+                    fingerprint=cluster,
+                    teams_reading=len(teams[cluster]),
+                    tag=shown.tag,
+                    short_cite=shown.short_cite,
+                    source_object_key=source_key(caselist, first_seen.isoformat(), shown.source_sha256),
+                    element_index=shown.element_index,
+                    source_snapshot=first_seen,
+                )
+            )
+        return rows
+
+
+def _read_range(inputs: LandscapeReportInputs) -> _Range:
+    rounds: dict[str, _Round] = {}
+    by_source: defaultdict[str, set[str]] = defaultdict(set)
+    first_seen: dict[str, date] = {}
+    for disclosure in inputs.disclosures:
+        if disclosure.caselist != inputs.caselist:
+            raise ReportCannotShip(f"a disclosure of {disclosure.caselist} is not one of {inputs.caselist}")
+        if disclosure.snapshot > inputs.through:
+            continue
+        one = round_id(disclosure)
+        found = rounds.get(one)
+        if found is None:
+            found = rounds[one] = _Round(
+                side=_LANDSCAPE_SIDE.get(disclosure.side, ""),
+                team=_team(disclosure),
+                first_seen=disclosure.snapshot,
+            )
+        found.first_seen = min(found.first_seen, disclosure.snapshot)
+        by_source[disclosure.source_sha256].add(one)
+        sha = disclosure.source_sha256
+        first_seen[sha] = min(first_seen.get(sha, disclosure.snapshot), disclosure.snapshot)
+    if not rounds:
+        raise ReportCannotShip(f"no disclosure of {inputs.caselist} is dated on or before {inputs.through}")
+    snapshots = sorted(
+        {disclosure.snapshot for disclosure in inputs.disclosures if disclosure.snapshot <= inputs.through}
+    )
+    return _Range(rounds=rounds, by_source=dict(by_source), source_first_seen=first_seen, snapshots=snapshots)
+
+
+def _assignments(
+    assignments: Sequence[AffAssignment], rounds: dict[str, _Round], taxonomy: Taxonomy
+) -> dict[str, _Assigned]:
+    """Round id to the aff `v1-e32-t09` assigned it, for the rounds in range."""
+    assigned: dict[str, _Assigned] = {}
+    seen: set[str] = set()
+    for one in assignments:
+        if one.round_id in seen:
+            raise ReportCannotShip(f"round {one.round_id} is assigned an aff twice")
+        seen.add(one.round_id)
+        position = _counted_position(taxonomy, one.position_id)
+        if position.kind is not PositionKind.AFF:
+            raise ReportCannotShip(f"round {one.round_id} is assigned {one.position_id}, which is not an aff")
+        stated = rounds.get(one.round_id)
+        if stated is None:
+            continue
+        if stated.side != _AFF:
+            raise ReportCannotShip(f"round {one.round_id} is assigned an aff but is not an affirmative round")
+        assigned[one.round_id] = _Assigned(position.id, one.method)
+    return assigned
+
+
+def _counted_position(taxonomy: Taxonomy, position_id: str) -> Position:
+    """The active position `position_id` counts under; refused when the taxonomy has none."""
+    try:
+        position = taxonomy.resolve(position_id)
+    except KeyError:
+        raise ReportCannotShip(
+            f"{position_id} is not a position of {taxonomy.topic_id} {taxonomy.taxonomy_version}"
+        ) from None
+    if position.deprecated:
+        raise ReportCannotShip(f"{position_id} is retired with no position to count under")
+    return position
+
+
+def _stats(
+    position: Position,
+    read: set[str],
+    rounds: dict[str, _Round],
+    teams: dict[str | None, set[tuple[str, str]]],
+    previous: date | None,
+) -> PositionStats:
+    own_side = None if position.side is PositionSide.BOTH else position.side.value
+    first_seen = min(rounds[one].first_seen for one in read)
+    return PositionStats(
+        position_id=position.id,
+        label=position.label,
+        kind=position.kind,
+        side=position.side,
+        rounds=len(read),
+        teams=len({team for one in read if (team := rounds[one].team) is not None}),
+        aff_rounds=sum(rounds[one].side == _AFF for one in read),
+        neg_rounds=sum(rounds[one].side == _NEG for one in read),
+        first_seen_snapshot=first_seen,
+        is_new=previous is not None and first_seen > previous,
+        side_teams_reading=len(
+            {
+                team
+                for one in read
+                if (team := rounds[one].team) is not None
+                and (own_side is None or rounds[one].side == own_side)
+            }
+        ),
+        side_teams_disclosing=len(teams[own_side]),
+    )
+
+
+def _teams(rounds: dict[str, _Round], side: str | None) -> set[tuple[str, str]]:
+    """The distinct teams disclosing on `side`, or on any side for None."""
+    return {
+        stated.team
+        for stated in rounds.values()
+        if stated.team is not None and (side is None or stated.side == side)
+    }
+
+
+def _report_order(stats: PositionStats) -> tuple[int, int, int, int, str]:
+    return (_SIDE_ORDER[stats.side], _KIND_ORDER[stats.kind], -stats.teams, -stats.rounds, stats.position_id)
+
+
+def _shown_card(members: list[LandscapeCard]) -> LandscapeCard:
+    """The card a top-card row shows: the commonest tag and short cite, then the first such card."""
+    pairs = Counter((card.tag or "", card.short_cite or "") for card in members)
+    commonest = min(pairs, key=lambda pair: (-pairs[pair], pair))
+    return min(
+        (card for card in members if (card.tag or "", card.short_cite or "") == commonest),
+        key=lambda card: (card.source_sha256, card.element_index),
+    )

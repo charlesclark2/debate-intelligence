@@ -1,0 +1,31 @@
+# report=positions
+# caselist=synthpolicy26
+# snapshot=2026-09-15
+# previous_snapshot=2026-09-08
+# topic_id=synthetic-policy-topic
+# taxonomy_version=1.2.0
+# overrides_digest=1789afec01f8e1417460965e050263e11df2d4128ca0ed9604d1643f430639a0
+# parser_version=2026.10.20-docx-6
+# prompt_version=none
+# review_threshold=0.6
+# coverage_cards=31/42
+# coverage_rounds=15/16
+# share_of_teams_over=teams disclosing on the position's side: aff 6, neg 6, either side 8
+# provenance_mode=FILE_IMPORT
+# stale=false
+# newest_snapshot=2026-09-15
+# snapshot_age_days=2
+# archives_awaiting_download=0
+position_id,label,kind,rounds,teams,aff_rounds,neg_rounds,first_seen_snapshot,is_new,share_of_teams
+single-payer-aff,Single payer,aff,3,2,3,0,2026-09-08,false,0.333
+public-option-aff,Public option,aff,1,1,1,0,2026-09-08,false,0.167
+costs-advantage,Costs advantage,advantage,6,5,6,0,2026-09-08,false,0.833
+innovation-advantage,Innovation advantage,advantage,3,3,3,0,2026-09-08,false,0.500
+condo-bad,Condo bad,theory,1,1,1,0,2026-09-15,true,0.167
+spending-da,Spending DA,da,4,4,0,4,2026-09-08,false,0.667
+election-da,Midterms DA,da,2,2,0,2,2026-09-08,false,0.333
+hospital-closures-da,Hospital closures DA,da,1,1,0,1,2026-09-15,true,0.167
+provider-strikes-da,Provider strikes DA,da,1,1,0,1,2026-09-15,true,0.167
+states-cp,States CP,cp,3,3,0,3,2026-09-08,false,0.500
+cap-k,Capitalism K,k,3,3,0,2,2026-09-08,false,0.333
+nhi-t,T: national health insurance,t,2,1,0,2,2026-09-08,false,0.167

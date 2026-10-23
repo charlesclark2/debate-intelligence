@@ -113,6 +113,8 @@ class SeedCard:
     section_path: tuple[str, ...] = field(repr=False)
     first_element_index: int | None = None
     """The card's first paragraph in its document, as its provenance and the occurrence table give it."""
+    short_cite: str | None = field(default=None, repr=False)
+    """The card's short cite as parsed: the landscape report (`v1-e32-t03`) shows it beside the tag."""
 
 
 @dataclass(frozen=True, slots=True)

@@ -1,0 +1,34 @@
+# report=top_cards
+# caselist=synthpolicy26
+# snapshot=2026-09-15
+# previous_snapshot=2026-09-08
+# topic_id=synthetic-policy-topic
+# taxonomy_version=1.2.0
+# overrides_digest=1789afec01f8e1417460965e050263e11df2d4128ca0ed9604d1643f430639a0
+# parser_version=2026.10.20-docx-6
+# prompt_version=none
+# review_threshold=0.6
+# coverage_cards=31/42
+# coverage_rounds=15/16
+# share_of_teams_over=teams disclosing on the position's side: aff 6, neg 6, either side 8
+# provenance_mode=FILE_IMPORT
+# stale=false
+# newest_snapshot=2026-09-15
+# snapshot_age_days=2
+# archives_awaiting_download=0
+position_id,rank,fingerprint,teams_reading,tag,short_cite,source_object_key,element_index,source_snapshot,provenance_mode
+single-payer-aff,1,0101010101010101010101010101010101010101010101010101010101010101,2,Single payer is the only path to universal coverage,Brandt 24,raw/caselist/synthpolicy26/sha256/a1/a1/a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1,0,2026-09-08,FILE_IMPORT
+public-option-aff,1,0909090909090909090909090909090909090909090909090909090909090909,1,A public option competes prices down,Liang 26,raw/caselist/synthpolicy26/sha256/a3/a3/a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3,0,2026-09-08,FILE_IMPORT
+costs-advantage,1,0202020202020202020202020202020202020202020202020202020202020202,4,Single payer cuts administrative costs,Okafor 25,raw/caselist/synthpolicy26/sha256/a1/a1/a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1,3,2026-09-08,FILE_IMPORT
+costs-advantage,2,0303030303030303030303030303030303030303030303030303030303030303,1,Bulk purchasing lowers drug prices,Haddad 23,raw/caselist/synthpolicy26/sha256/a4/a4/a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4,3,2026-09-15,FILE_IMPORT
+innovation-advantage,1,0606060606060606060606060606060606060606060606060606060606060606,3,Single payer frees capital for research,Moreau 25,raw/caselist/synthpolicy26/sha256/a2/a2/a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2,3,2026-09-08,FILE_IMPORT
+condo-bad,1,2727272727272727272727272727272727272727272727272727272727272727,1,Conditionality is a voting issue,Feldman 22,raw/caselist/synthpolicy26/sha256/a5/a5/a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5,3,2026-09-15,FILE_IMPORT
+spending-da,1,1414141414141414141414141414141414141414141414141414141414141414,4,Spending triggers a debt spiral,Ito 26,raw/caselist/synthpolicy26/sha256/b1/b1/b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1,0,2026-09-08,FILE_IMPORT
+spending-da,2,1515151515151515151515151515151515151515151515151515151515151515,2,Debt ceiling fights are near,Ruiz 26,raw/caselist/synthpolicy26/sha256/b1/b1/b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1,3,2026-09-08,FILE_IMPORT
+election-da,1,2020202020202020202020202020202020202020202020202020202020202020,2,Health reform costs the incumbents the midterms,Abara 26,raw/caselist/synthpolicy26/sha256/b3/b3/b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3,0,2026-09-08,FILE_IMPORT
+hospital-closures-da,1,2323232323232323232323232323232323232323232323232323232323232323,1,Rural hospitals close under single payer,Duarte 26,raw/caselist/synthpolicy26/sha256/b4/b4/b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4,6,2026-09-15,FILE_IMPORT
+provider-strikes-da,1,2424242424242424242424242424242424242424242424242424242424242424,1,Nurses strike over reimbursement cuts,Dube 25,raw/caselist/synthpolicy26/sha256/b6/b6/b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6,3,2026-09-15,FILE_IMPORT
+states-cp,1,1616161616161616161616161616161616161616161616161616161616161616,3,States can implement single payer,Kowal 24,raw/caselist/synthpolicy26/sha256/b1/b1/b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1,6,2026-09-08,FILE_IMPORT
+cap-k,1,1818181818181818181818181818181818181818181818181818181818181818,3,Healthcare markets commodify care,Nadler 21,raw/caselist/synthpolicy26/sha256/b2/b2/b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2,3,2026-09-08,FILE_IMPORT
+nhi-t,1,2121212121212121212121212121212121212121212121212121212121212121,1,National health insurance means a single government insurer,Ostrova 20,raw/caselist/synthpolicy26/sha256/b3/b3/b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3,3,2026-09-08,FILE_IMPORT
+nhi-t,2,2929292929292929292929292929292929292929292929292929292929292929,1,Insurance means private carriers too,Lund 21,raw/caselist/synthpolicy26/sha256/b6/b6/b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6,0,2026-09-15,FILE_IMPORT

@@ -28,7 +28,7 @@ from dataclasses import dataclass, field
 from datetime import date
 
 from debate_core.application.caselist.evidence_listing import LocalEvidence
-from debate_core.application.caselist.parse_sources import enumerate_sources, live_disclosures
+from debate_core.application.caselist.parse_sources import Disclosed, enumerate_sources, live_disclosures
 from debate_core.application.caselist.path_parser import (
     UNKNOWN_SCHOOL,
     UNKNOWN_TEAM_CODE,
@@ -39,6 +39,7 @@ from debate_core.application.errors import DomainError
 from debate_core.application.ports.parsed_store import DocumentRecord, ParsedStore, SourceOutcome
 from debate_core.application.ports.suppression import SuppressionList
 from debate_core.arguments.landscape.seeding import SeedCard, SeedSource, SeedTeam
+from debate_core.domain.caselist import Disclosure
 from debate_core.domain.landscape import Topic
 
 __all__ = ["SeedReading", "SeedingCannotStart", "read_seed_sources"]
@@ -69,6 +70,8 @@ class SeedReading:
     """Every school a disclosure of the caselist names, with its team codes, for seeding to strip."""
     newest_disclosure: date | None = None
     """The latest date among the on-topic disclosures read; None when no source was read."""
+    disclosures: tuple[Disclosure, ...] = field(default=(), repr=False)
+    """Every on-topic live disclosure of the sources read, as E30 records one, for the landscape report."""
 
 
 async def read_seed_sources(
@@ -109,6 +112,7 @@ async def read_seed_sources(
     entries = await store.read_entries(caselist, version)
     parsed = [entry for entry in entries if entry.outcome is SourceOutcome.PARSED]
     sources: list[SeedSource] = []
+    disclosures: list[Disclosure] = []
     newest: date | None = None
     for entry in parsed:
         enumerated = disclosed.get(entry.source_sha256)
@@ -128,6 +132,7 @@ async def read_seed_sources(
         if record is None:
             continue
         teams = tuple(_team(disclosure.path, topic) for disclosure in on_topic)
+        disclosures.extend(_disclosure(caselist, entry.source_sha256, one, topic) for one in on_topic)
         latest = max(disclosure.provenance_date for disclosure in on_topic)
         newest = latest if newest is None else max(newest, latest)
         sources.append(SeedSource(sha256=entry.source_sha256, teams=teams, cards=_cards(record)))
@@ -141,6 +146,7 @@ async def read_seed_sources(
         sources=tuple(sources),
         caselist_names={school: tuple(sorted(codes)) for school, codes in sorted(names.items())},
         newest_disclosure=newest,
+        disclosures=tuple(disclosures),
     )
 
 
@@ -154,14 +160,32 @@ def _team(path: str, topic: Topic) -> SeedTeam:
     return SeedTeam(identity=identity, side=read.side, names=names)
 
 
+def _disclosure(caselist: str, sha256: str, disclosed: Disclosed, topic: Topic) -> Disclosure:
+    read = parse_disclosure_path(disclosed.path, event=topic.event)
+    return Disclosure(
+        source_sha256=sha256,
+        caselist=caselist,
+        snapshot=disclosed.provenance_date,
+        event=topic.event,
+        school=read.school,
+        team_code=read.team_code,
+        side=read.side,
+        tournament=read.tournament,
+        round_label=read.round_label,
+        source_path=disclosed.path,
+        parse_warnings=read.warnings,
+    )
+
+
 def _cards(record: DocumentRecord) -> tuple[SeedCard, ...]:
-    """Each stored card's tag, section path and first paragraph, as the store holds them (version 1 or 2)."""
+    """Each stored card's tag, path, first paragraph and short cite, as stored (version 1 or 2)."""
     stored = record.document.get("cards")
     cards: list[SeedCard] = []
     for card in stored if isinstance(stored, list) else []:
         if not isinstance(card, dict):
             continue
         tag = card.get("tag")
+        short_cite = card.get("short_cite")
         path = card.get("section_path")
         provenance = card.get("provenance")
         first = provenance.get("first_element_index") if isinstance(provenance, dict) else None
@@ -172,6 +196,7 @@ def _cards(record: DocumentRecord) -> tuple[SeedCard, ...]:
                 if isinstance(path, list)
                 else (),
                 first_element_index=first if isinstance(first, int) and not isinstance(first, bool) else None,
+                short_cite=short_cite if isinstance(short_cite, str) and short_cite else None,
             )
         )
     return tuple(cards)

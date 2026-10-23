@@ -1,0 +1,61 @@
+topic_id: synthetic-policy-topic
+taxonomy_version: 1.2.0
+event: POLICY
+positions:
+- id: single-payer-aff
+  label: Single payer
+  kind: aff
+  side: aff
+- id: public-option-aff
+  label: Public option
+  kind: aff
+  side: aff
+- id: costs-advantage
+  label: Costs advantage
+  kind: advantage
+  side: aff
+  parent: single-payer-aff
+- id: innovation-advantage
+  label: Innovation advantage
+  kind: advantage
+  side: aff
+- id: spending-da
+  label: Spending DA
+  kind: da
+  side: neg
+- id: election-da
+  label: Midterms DA
+  kind: da
+  side: neg
+- id: hospital-closures-da
+  label: Hospital closures DA
+  kind: da
+  side: neg
+- id: provider-strikes-da
+  label: Provider strikes DA
+  kind: da
+  side: neg
+- id: states-cp
+  label: States CP
+  kind: cp
+  side: neg
+- id: courts-cp
+  label: Courts CP
+  kind: cp
+  side: neg
+- id: cap-k
+  label: Capitalism K
+  kind: k
+  side: neg
+- id: nhi-t
+  label: 'T: national health insurance'
+  kind: t
+  side: neg
+- id: condo-bad
+  label: Condo bad
+  kind: theory
+  side: aff
+- id: pics-bad
+  label: PICs bad
+  kind: theory
+  side: aff

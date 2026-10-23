@@ -47,7 +47,7 @@ spec:
         Its date form reads an injected clock, by test, and the three adapters' existing
         Retry-After tests pass unchanged.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

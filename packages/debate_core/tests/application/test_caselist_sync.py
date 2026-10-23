@@ -1431,6 +1431,9 @@ async def test_a_run_publishes_the_snapshots_it_imported(
 
     11 + 2 + 1 = 14. `2026-09-01` is not published by this run: it was imported before it, and a
     run publishes what it imported plus whatever an earlier run left owed.
+
+    And three manifests, which the count includes since `v1-e34-t28`: the two weeks' and the camp
+    release's. 14 + 3 = 17.
     """
     await import_first_week(data_dir, archives)
     local = local_evidence(data_dir)
@@ -1444,7 +1447,8 @@ async def test_a_run_publishes_the_snapshots_it_imported(
 
     summary = await service.run([SYNTHETIC_CASELIST])
 
-    assert summary.objects_published == 14
+    assert summary.objects_published == 17
+    assert summary.manifests_published == 3
     assert summary.stage(SyncStage.PUBLISH).outcome is StageOutcome.COMPLETED  # type: ignore[union-attr]
     assert (await bucket.head(manifest_key(SYNTHETIC_CASELIST, date(2026, 9, 15)))).size > 0
     assert summary.stage(SyncStage.REPORT).outcome is StageOutcome.COMPLETED  # type: ignore[union-attr]
@@ -1490,7 +1494,8 @@ async def test_publish_pending_completes_what_the_expired_run_left(
     archives: dict[date, Path],
     bucket: S3EvidenceObjectStore,
 ) -> None:
-    """ac3's second half: after `aws sso login`, the same fourteen objects go up and nothing else."""
+    """ac3's second half: after `aws sso login`, the same fourteen sources and three manifests go up
+    and nothing else (`v1-e34-t28` counts the manifests)."""
     await import_first_week(data_dir, archives)
     expired = build_service(
         source=source,
@@ -1512,7 +1517,8 @@ async def test_publish_pending_completes_what_the_expired_run_left(
     )
     drained = await logged_in.publish_pending()
 
-    assert drained.objects_published == 14
+    assert drained.objects_published == 17
+    assert drained.manifests_published == 3
     assert drained.stage(SyncStage.PUBLISH).outcome is StageOutcome.COMPLETED  # type: ignore[union-attr]
     assert drained.stage(SyncStage.DOWNLOAD).outcome is StageOutcome.SKIPPED  # type: ignore[union-attr]
     assert source.archive_fetches == [weekly_name(date(2026, 9, 8)), weekly_name(date(2026, 9, 15))]
@@ -1637,6 +1643,7 @@ async def test_each_run_writes_a_json_summary_with_no_school_team_code_or_token(
         "stage",
         "outcome",
         "reason",
+        "not_compared",
         "error_codes",
         "hint",
         "earlier_findings",

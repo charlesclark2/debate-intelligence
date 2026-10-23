@@ -2,9 +2,10 @@
 
 * **Item 1.** A run whose only pending stage is the report published what it imported and then lost
   its session while it compared. Its login banner said `0 snapshot(s) and the run record wait to be
-  published`. What is outstanding is the run record, and the report stage's check, which
-  `--publish-pending` does not make again: it compares only what it publishes itself, and nothing is
-  owed. The banner now says so, and where the check is made after the login.
+  published`. What is outstanding is the run record, and the report stage's check. The banner now
+  says so. It said `--publish-pending` did not make the check again, and named `caselist status`;
+  since `v1-e34-t28` the run's details name what the check did not reach, `--publish-pending`
+  compares it, and the banner says that instead.
 * **Item 3.** `caselist runs` shows the words a banner put beside its verdict: `skipped` for a run
   the lock refused, and `retry once fixed` for a refusal the retry gets past only once its fix is
   made. They are decided where the banner's title is, by :func:`sync_runs.banner_words`, so the two
@@ -55,8 +56,7 @@ NO_SNAPSHOT_WAITS = (
 )
 THE_CHECK_WAS_CUT_SHORT = (
     " The report stage's check that the bucket holds what this run published was cut short; "
-    "caselist pull --publish-pending does not make it again, and debate-research caselist status "
-    "does, after the login."
+    "caselist pull --publish-pending makes it again after the login, if no other pull runs first."
 )
 PARSE_WAITS = (
     " The parsed store waits too; after the login: debate-research caselist parse --caselist <slug> --publish"

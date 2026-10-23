@@ -267,7 +267,9 @@ def test_a_weekly_pull_downloads_imports_publishes_and_then_finds_nothing_new(
     three synthetic weeks come to 14 distinct source objects — plus one for the camp file, whose
     bytes no archive holds. The complete archive the rotation fetches after the weeklies
     (`v1-e34-t04`, on by default) holds the 09-15 week's bytes, every one of which the weeklies
-    already uploaded, so it adds a manifest and no source.
+    already uploaded, so it adds a manifest and no source. The count includes the manifests since
+    `v1-e34-t28`: one for each of the five snapshots imported, the three weeks, the camp release and
+    the complete archive.
     """
     expected = expected_publish()
 
@@ -282,7 +284,8 @@ def test_a_weekly_pull_downloads_imports_publishes_and_then_finds_nothing_new(
     data = pulled["data"]
     assert data["archives_downloaded"] == 3 + 1
     assert data["openev_downloaded"] == 1
-    assert data["objects_published"] == expected["totals"]["source_objects"] + 1
+    assert data["objects_published"] == expected["totals"]["source_objects"] + 1 + 5
+    assert data["manifests_published"] == 5
     assert data["snapshots_imported"] == [
         *(f"{SYNTHETIC_CASELIST} {week.snapshot.isoformat()}" for week in SNAPSHOTS),
         "openev 2026-policy",

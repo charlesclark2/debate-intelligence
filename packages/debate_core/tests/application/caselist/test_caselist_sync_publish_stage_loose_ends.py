@@ -229,7 +229,7 @@ async def test_publish_pending_compares_exactly_the_weeks_the_cut_short_check_di
     assert report["not_compared"] == []
     assert stage(drained.summary, SyncStage.SELECT)["reason"] == (
         "0 snapshot(s) owed; the report stage's check of 1 snapshot(s) an earlier run published "
-        "was cut short, and is made again"
+        "was cut short, and is owed to this run"
     )
 
 
@@ -274,7 +274,7 @@ async def test_a_details_file_an_older_build_wrote_owes_no_comparison(
 ) -> None:
     """The cut-short run, as a build from before this task records it: its details have no list."""
     await two_weeks_with_the_check_cut_short(installation, expires_at=1)
-    older = []
+    older: list[str] = []
     for line in details_lines(installation):
         for one in line["stages"]:
             one.pop("not_compared", None)

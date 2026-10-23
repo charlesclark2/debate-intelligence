@@ -16,38 +16,21 @@ read, and raises what comes back:
 Plain values in, so this module has no HTTP library of its own: `response.status_code` and
 `response.headers` from httpx are what an adapter passes. The messages carry the status and
 nothing from the request, because a request URL can carry a key or a contact email.
+
+The `Retry-After` itself is read by :func:`~debate_core.integrations.retry_after.retry_after_seconds`,
+the one reader every HTTP adapter shares (`v1-e07-t08`). This module still answers to the name,
+because the discovery tests have always imported it from here.
 """
 
 from __future__ import annotations
 
 from collections.abc import Mapping
-from datetime import UTC, datetime
-from email.utils import parsedate_to_datetime
+from datetime import datetime
 
 from debate_core.application.errors import ProviderError, ProviderRateLimited, ProviderUnavailable
+from debate_core.integrations.retry_after import retry_after_seconds
 
 __all__ = ["provider_error_for_status", "retry_after_seconds"]
-
-
-def retry_after_seconds(value: str | None, *, now: datetime) -> float | None:
-    """The wait a `Retry-After` header asks for, in seconds; `None` when absent or unreadable.
-
-    The header is either a number of seconds (`120`) or an HTTP date
-    (`Wed, 21 Oct 2026 07:28:00 GMT`), RFC 9110 §10.2.3. A date in the past means "now", so it is
-    `0.0`, never negative.
-    """
-    if value is None:
-        return None
-    text = value.strip()
-    if text.isdigit():
-        return float(text)
-    try:
-        moment = parsedate_to_datetime(text)
-    except (TypeError, ValueError, IndexError):
-        return None
-    if moment.tzinfo is None:
-        moment = moment.replace(tzinfo=UTC)
-    return max((moment - now).total_seconds(), 0.0)
 
 
 def provider_error_for_status(
@@ -61,10 +44,8 @@ def provider_error_for_status(
     if status < 400:
         return None
     if status == 429:
-        retry_after = _header(headers, "retry-after")
-        return ProviderRateLimited(
-            provider, "HTTP 429", retry_after_seconds=retry_after_seconds(retry_after, now=now)
-        )
+        wait = retry_after_seconds(_header(headers, "retry-after"), now=now)
+        return ProviderRateLimited(provider, "HTTP 429", retry_after_seconds=wait)
     if status == 408 or status >= 500:
         return ProviderUnavailable(provider, f"HTTP {status}")
     return ProviderUnavailable(provider, f"HTTP {status}: the provider refused the request")

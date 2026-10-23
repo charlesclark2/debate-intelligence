@@ -25,6 +25,7 @@ import json
 import os
 import secrets
 from collections.abc import Iterator
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -47,6 +48,13 @@ from debate_core.integrations.opencaselist.token_store import FileTokenBackend
 runner = CliRunner()
 
 LIVE_SLUG = os.environ.get("CASELIST_LIVE_SLUG", "").strip()
+
+
+class WallClock:
+    """The real time, for the live check: what a live `Retry-After` date is measured from."""
+
+    def now(self) -> datetime:
+        return datetime.now(UTC)
 
 
 @pytest.fixture
@@ -147,6 +155,7 @@ def test_live_the_stored_token_works_and_the_archives_list() -> None:
                 secret_file=settings.caselist.secret_file or default_secret_file(settings.storage.data_dir),
             ),
             user_agent_version=package_version(),
+            wall_clock=WallClock(),
         ) as client:
             return [archive.name for archive in await client.list_archives(LIVE_SLUG)]
 

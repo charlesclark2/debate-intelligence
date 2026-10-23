@@ -684,6 +684,28 @@ async def test_retry_after_in_seconds_is_waited_out_exactly(
     assert time.sleeps == [37.0]
 
 
+@pytest.mark.parametrize(
+    "header", ["\u00b2".encode(), "\u0661\u0662\u0660".encode()], ids=["superscript-two", "arabic-indic-120"]
+)
+async def test_retry_after_in_digits_that_are_not_ascii_falls_back_to_the_backoff(
+    fetcher: HttpArticleFetcher, web: Web, time: SimulatedTime, header: bytes
+) -> None:
+    """UTF-8 on the wire, which httpx decodes. `float("²")` raised a ValueError out of the fetch
+    (`v1-e07-t08`); neither is a `Retry-After` the RFC allows, so the fetcher's own backoff applies."""
+    web.allow_everything()
+    web.router.get(ARTICLE).mock(
+        side_effect=[
+            httpx.Response(429, headers={b"Retry-After": header}),
+            httpx.Response(200, content=b"ok"),
+        ]
+    )
+
+    result = await fetcher.fetch(ARTICLE)
+
+    assert result.error is None
+    assert time.sleeps == [1.0]
+
+
 async def test_retry_after_as_an_http_date_is_read_against_the_injected_clock(
     fetcher: HttpArticleFetcher, web: Web, time: SimulatedTime
 ) -> None:

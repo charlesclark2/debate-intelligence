@@ -76,7 +76,7 @@ import httpx
 from debate_core.application.ports.providers import Clock
 from debate_core.application.settings import HttpSettings
 from debate_core.domain import AccessStatus
-from debate_core.integrations.discovery.http_failures import retry_after_seconds
+from debate_core.integrations.retry_after import retry_after_seconds
 from debate_core.retrieval.content_sniffing import sniff_content_type
 from debate_core.retrieval.fetch_types import (
     FetchError,

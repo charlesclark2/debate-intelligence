@@ -15,7 +15,9 @@ all of them, so a new endpoint cannot forget a rule:
   not followed, so a cookie cannot be carried to wherever a redirect points.
 * **Bounded backoff.** 429, 502, 503 and 504, and connection-level failures, are retried up to
   `caselist.max_attempts` attempts in total. A `Retry-After` is honoured exactly; without one the
-  wait doubles from `caselist.backoff_base_seconds`. A `Retry-After` longer than
+  wait doubles from `caselist.backoff_base_seconds`. It is read by
+  :func:`~debate_core.integrations.retry_after.retry_after_seconds`, and its date form is measured
+  from the injected `wall_clock` (`v1-e07-t08`). A `Retry-After` longer than
   `caselist.max_retry_wait_seconds` is not slept on: it is reported at once, because a client that
   sits silent for a day is indistinguishable from one that has hung.
 * **401 and 403 stop everything.** From the API host they are
@@ -30,11 +32,9 @@ all of them, so a new endpoint cannot forget a rule:
 from __future__ import annotations
 
 import asyncio
-import email.utils
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Final, NoReturn
 from urllib.parse import urlsplit
@@ -57,9 +57,11 @@ from debate_core.application.ports.caselist_source import (
     DownloadIntegrityError,
     UnexpectedCaselistResponse,
 )
+from debate_core.application.ports.providers import Clock
 from debate_core.integrations.opencaselist.inbox_writer import write_into_inbox
 from debate_core.integrations.opencaselist.pacing import RequestPacer
 from debate_core.integrations.opencaselist.redaction import install_redaction, logger
+from debate_core.integrations.retry_after import retry_after_seconds
 
 __all__ = [
     "RETRYABLE_STATUS_CODES",
@@ -130,6 +132,7 @@ class OpenCaselistTransport:
         policy: TransportPolicy,
         token_source: TokenSource,
         timeout: httpx.Timeout,
+        wall_clock: Clock,
         on_authenticated_success: Callable[[], None] | None = None,
         http_client: httpx.AsyncClient | None = None,
         clock: Callable[[], float] = time.monotonic,
@@ -142,6 +145,7 @@ class OpenCaselistTransport:
         self._token_source = token_source
         self._on_authenticated_success = on_authenticated_success
         self._validated = False
+        self._wall_clock = wall_clock
         self._sleep = sleep
         self._pacer = RequestPacer(
             min_interval_seconds=policy.min_interval_seconds,
@@ -395,7 +399,8 @@ class OpenCaselistTransport:
                     self._on_authenticated_success()
             return
         if status in RETRYABLE_STATUS_CODES:
-            raise _Retryable(status, _retry_after(response), f"HTTP {status}")
+            wait = retry_after_seconds(response.headers.get("Retry-After"), now=self._wall_clock.now())
+            raise _Retryable(status, wait, f"HTTP {status}")
         if from_api and status in _AUTH_REFUSALS:
             logger.error("OpenCaselist: %s refused with HTTP %d; not retried", operation, status)
             if on_auth_refusal is not None:
@@ -445,25 +450,6 @@ async def _raw_chunks(response: httpx.Response) -> AsyncIterator[bytes]:
         raise _Retryable(
             None, None, f"the connection failed mid-download ({type(failure).__name__})"
         ) from None
-
-
-def _retry_after(response: httpx.Response) -> float | None:
-    """`Retry-After` as seconds, from either of its two forms; `None` when absent or unreadable."""
-    raw = response.headers.get("Retry-After")
-    if raw is None:
-        return None
-    raw = raw.strip()
-    try:
-        return max(float(raw), 0.0)
-    except ValueError:
-        pass
-    try:
-        when = email.utils.parsedate_to_datetime(raw)
-    except (TypeError, ValueError):
-        return None
-    if when.tzinfo is None:
-        when = when.replace(tzinfo=UTC)
-    return max((when - datetime.now(UTC)).total_seconds(), 0.0)
 
 
 async def _log_request(request: httpx.Request) -> None:

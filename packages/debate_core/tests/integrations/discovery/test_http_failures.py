@@ -65,3 +65,11 @@ def test_any_other_client_error_is_unavailable_and_says_the_request_was_refused(
 )
 def test_retry_after_reads_seconds_or_an_http_date(header: str | None, seconds: float | None) -> None:
     assert retry_after_seconds(header, now=NOW) == seconds
+
+
+@pytest.mark.parametrize("header", ["²", "١٢٠"], ids=["superscript-two", "arabic-indic-120"])
+def test_429_with_digits_that_are_not_ascii_is_rate_limited_with_no_stated_wait(header: str) -> None:
+    """`str.isdigit()` accepts both; `float("²")` raised a ValueError out of here (`v1-e07-t08`)."""
+    error = provider_error_for_status("crossref", 429, {"Retry-After": header}, now=NOW)
+    assert isinstance(error, ProviderRateLimited)
+    assert error.retry_after_seconds is None

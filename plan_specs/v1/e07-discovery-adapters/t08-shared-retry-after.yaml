@@ -24,8 +24,12 @@ spec:
     except that its date form reads the injected clock.
   priority: 3
   constraints:
-    packages: [debate_core.integrations, packages/debate_core/tests]
+    # PM ruling 2026-10-22: the composition root passes the transport its clock.
+    # PM ruling 2026-10-22: the live smoke test builds the client and passes its required clock.
+    packages: [debate_core.integrations, packages/debate_core/tests, debate_cli, tests/smoke]
     forbidden:
+      # PM ruling 2026-10-22: OpenCaselist's float() reading of Retry-After is dropped for the
+      # digits-only form; "nan" hung the transport, and no recorded answer sends a non-integer.
       - Any change to which statuses are retried or how long an adapter waits, beyond reading the clock it is given
       - Network or AWS access in any test
   context:
@@ -46,7 +50,7 @@ spec:
         Its date form reads an injected clock, by test, and the three adapters' existing
         Retry-After tests pass unchanged.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

@@ -36,6 +36,12 @@ spec:
     classification is deterministic only and `--model-mode` accepts only `none` (the default),
     so the first runs make no model call and need no Bedrock access. The first real run is
     hspolicy26's newest snapshot in dev, before 2026-11-07.
+    (PM ruling 2026-10-23, from v1-e32-t02's review.) Before the first dev run, apply the
+    coach's first pass over the review queue
+    (`~/Documents/debate/landscape-seed/policy-2026-27-nhi-queue-top-50.csv`, with v1-e32-t02's
+    `apply-decisions`) and commit the resulting overrides file, with the config tests passing;
+    the two rows marked to leave blank stay blank. Record in the first-run note the round-level
+    coverage by side and kind, as v1-e32-t02 measured it, before and after his pass.
   priority: 1
   constraints:
     packages: [debate_cli, debate_core.application, debate_core.integrations, tests/smoke]

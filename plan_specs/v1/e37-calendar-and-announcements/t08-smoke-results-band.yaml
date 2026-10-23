@@ -1,0 +1,77 @@
+# TASK v1-e37-t08-smoke-results-band - The site smoke check reads the home page's results band and the results page
+# Epic: E37 Calendar & Announcements | Release: v1.6 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e37-t08-smoke-results-band
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.6
+    debate/epic: v1-e37-calendar-and-announcements
+  annotations:
+    debate/title: "The site smoke check reads the home page's results band and the results page"
+spec:
+  # Filed by the PM, 2026-10-23, from v1-e37-t06's follow-up work.
+  description: >-
+    scripts/site_smoke.py checks the home page's schedule panel but not the newest-results band
+    v1-e37-t06 added, and checks /results/ only as one more page at 200. Add two checks: when
+    site/content/results.yaml holds a result, the home page shows the results band with as many
+    result lines as the content's three newest, and /results/ shows one result line per placing
+    in the content; when it holds none, the band is absent. The checks count markup by class
+    (`results-group__result` and the band's), never read or print a student's name, and run
+    against dev and prod as the existing checks do.
+  priority: 3
+  constraints:
+    packages: [scripts, tests/scripts]
+    forbidden:
+      - A student name in a test, fixture, log or commit (website publishing policy, Students 10 and 11)
+      - Network access in any test (the smoke check's tests use recorded pages)
+  context:
+    - kind: TaskRef
+      name: v1-e37-t06-season-results
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        With recorded pages, the smoke check passes when the band and the page show the
+        content's counts, fails naming the check when either count is off, and passes with
+        no band when the content holds no result; tests shown failing first.
+    - id: ac2
+      description: >-
+        The checks print counts only, never a name.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e37-t08-smoke-results-band-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.6
+    debate/epic: v1-e37-calendar-and-announcements
+spec:
+  description: >-
+    Add the two checks to scripts/site_smoke.py with recorded-page tests.
+  goalRef:
+    name: v1-e37-t08-smoke-results-band
+  graph:
+    nodes:
+      - id: smoke-results
+        kind: Task
+        name: Smoke check for results
+        description: >-
+          Add the two checks to scripts/site_smoke.py with recorded-page tests.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Smoke script tests pass
+            command: uv
+            args: [run, pytest, tests/scripts/test_site_smoke.py]
+status:
+  phase: Pending

@@ -12,7 +12,7 @@ metadata:
     debate/release: v1.2
     debate/epic: v1-e32-argument-landscape
   annotations:
-    debate/title: "Each Policy team's plan text, counted first, so single payer splits by mechanism"
+    debate/title: "Each Policy affirmative round's plan, counted first, so the landscape names what affs read"
 spec:
   # Filed by the PM, 2026-10-23, from the coach's request of 2026-10-23, recorded in v1-e32-t01's follow-up work.
   description: >-
@@ -34,7 +34,24 @@ spec:
     supplies (the PM's ruling for a Medicare for All split, 2026-10-23); this task applies his
     answers to policy-2026-27-nhi.yaml with a version bump. Plan text never enters a committed
     file: only the coach's mechanism names and keywords do.
-  priority: 2
+    (PM amendment 2026-10-23, from v1-e32-t02's round-level coverage.) Widened and raised to
+    priority 1. Headings name the plan in only 17.3% of hspolicy26's affirmative documents, and
+    9.0% of them place an aff, so a heading rule cannot say what affs teams read. This task
+    identifies each affirmative round's plan from the signals headings do not carry, counted
+    first and each counted separately before any rule: the plan text in the round's own file (as
+    above); the same team's other affirmative rounds (a team's aff carried across its rounds
+    only when its own files agree); and the caselist's own record of the round and its cite
+    entries (their titles, matched against the taxonomy's aff aliases, counts only, never a team
+    code or file name in any output). The counts go to the PM with the share of affirmative
+    rounds and teams each signal would identify, alone and together, and nothing is built until
+    the PM rules. The result is a per-round aff assignment the report counts (method recorded,
+    never a guess: a round no signal identifies stays unidentified). The coach's mechanism split
+    of single payer (above) follows on the same plan texts. Also from v1-e32-t02: two heading
+    forms miss the costs-advantage aliases (`adv 1 costs`, `advantage one costs`); fix them in
+    t01's normalizer here, with synthetic cases shown failing first, since this task works on
+    the same headings. Aim to merge before v1-e32-t05's first dev run; the first report does not
+    wait for it.
+  priority: 1
   constraints:
     packages: [debate_core.arguments, debate_core.application, debate_core.integrations, scripts, config/landscape, packages/debate_core/tests, tests/scripts, docs/guides]
     forbidden:
@@ -63,6 +80,14 @@ spec:
         The coach's mechanisms are child affs of single payer in policy-2026-27-nhi.yaml,
         with his tag keywords, the taxonomy_version bumped, and the config tests passing;
         the counts of his decisions are in the report.
+    # PM amendment 2026-10-23: the round-level aff identification.
+    - id: ac4
+      description: >-
+        Counts, before any rule, of the affirmative rounds and teams each signal identifies (plan
+        text, the team's other rounds, the caselist's round and cite titles), alone and together, sent
+        to the PM; after the ruling, each identified round carries its aff and the signal that named
+        it, and an unidentified round stays unidentified, by tests on synthetic sources shown failing
+        first.
 status:
   phase: Pending
 ---

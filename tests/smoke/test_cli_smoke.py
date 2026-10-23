@@ -142,6 +142,40 @@ def test_doctor_checks_the_evidence_profiles_only_when_asked_and_fails_on_one_th
     assert str(installed_cli.home) not in about_the_profile and "/.aws" not in asked.stdout
 
 
+def test_doctor_checks_the_search_index_stores_only_when_asked_and_fails_on_one_never_parsed(
+    installed_cli: InstalledCli,
+) -> None:
+    """`v1-e34-t30`. `dev` names a bucket and keeps `caselist.refresh_search_index` on, so its weekly
+    run has the search index stage, and nothing is parsed in this harness's data directory. Plain
+    `doctor` passes and says nothing of it. With `--search-index` the build fails on `openev`, the
+    one store the stage indexes when no caselist is configured, naming the command that parses it
+    and no path. With the setting off the check does not apply and passes."""
+    plain = data_of(installed_cli.run("--json", "doctor"))
+    assert "search_index" not in plain
+
+    asked = installed_cli.run("--json", "doctor", "--search-index")
+
+    assert asked.exit_code == 1, asked.output
+    error = asked.envelope()["error"]
+    assert isinstance(error, dict)
+    assert error["code"] == "SEARCH_INDEX_STORE_NOT_READY"
+    assert (
+        error["hint"] == "Run `debate-research caselist parse --caselist openev` before the next weekly run."
+    )
+    found = error["details"]["search_index"]
+    assert (found["applies"], found["caselists"], found["unparsed"]) == (True, [], ["openev"])
+    assert str(installed_cli.home) not in f"{error['message']} {error['hint']} {found}"
+
+    turned_off = installed_cli.run(
+        "--json", "doctor", "--search-index", env={"DEBATE_CASELIST__REFRESH_SEARCH_INDEX": "false"}
+    )
+
+    assert turned_off.exit_code == 0, turned_off.output
+    data = turned_off.envelope()["data"]
+    assert isinstance(data, dict)
+    assert data["search_index"]["applies"] is False
+
+
 # ------------------------------------------------------------------------------------------------
 # config show: secrets never leave, and the environment decides the rest
 # ------------------------------------------------------------------------------------------------

@@ -62,16 +62,19 @@
 #   --dry-run            Make every check an install makes, the profile check included, render the
 #                        plist to stdout and write nothing at all. What is kept or changed over an
 #                        installed agent is said on stderr.
-#   --check-launchd      Prove launchd can run the installed agent's wrapper, and that the AWS
-#                        profile the weekly run uses is defined, without a sync: load a one-off
-#                        copy of the installed plist as <label>.check, running the wrapper's
-#                        `--check` (which prints the console script's version and then runs
-#                        `debate-research doctor --evidence-profiles`), kickstart it, print its
+#   --check-launchd      Prove launchd can run the installed agent's wrapper, that the AWS
+#                        profile the weekly run uses is defined, and that every store its search
+#                        index stage will index is parsed, without a sync: load a one-off copy of
+#                        the installed plist as <label>.check, running the wrapper's `--check`
+#                        (which prints the console script's version and then runs
+#                        `debate-research doctor --evidence-profiles --search-index`, with the
+#                        agent's caselists as caselist.sync_caselists), kickstart it, print its
 #                        log and exit code, and boot it out. The log names each configured
 #                        evidence profile, whether this machine's AWS config defines it and which
-#                        permission set it is signed in as; the check fails (exit 1) on a profile
-#                        that is not defined, and not on an expired session. The agent itself is
-#                        only read, and its run count is shown before and after. It takes no
+#                        permission set it is signed in as, and each store and whether this build
+#                        has parsed it; the check fails (exit 1) on a profile that is not defined
+#                        or a store never parsed, and not on an expired session. The agent itself
+#                        is only read, and its run count is shown before and after. It takes no
 #                        option but --label, and refuses any other by name: each would be ignored.
 #   -h, --help           This text.
 set -eu
@@ -387,13 +390,26 @@ if [ "${CHECK_LAUNCHD}" -eq 1 ]; then
     trap 'exit 130' HUP INT TERM
 
     # The installed plist, less its schedule and its caselists: same wrapper, same environment,
-    # same working directory, and a log of its own.
+    # same working directory, and a log of its own. The caselists, `--caselist <slug>` after the
+    # wrapper as this script writes them, go into the check's environment as the setting a pull
+    # without --caselist follows, caselist.sync_caselists (JSON, as every list setting takes in the
+    # environment), so that `doctor --search-index` checks the stores the agent's run will index
+    # while the wrapper's `--check` still takes no argument (v1-e34-t30).
     cp "${INSTALLED}" "${CHECK_PLIST}"
     plutil -replace Label -string "${CHECK_LABEL}" "${CHECK_PLIST}"
-    while plutil -extract ProgramArguments.1 raw -o - "${CHECK_PLIST}" >/dev/null 2>&1; do
+    AGENT_CASELISTS_JSON=""
+    previous_argument=""
+    while argument=$(plutil -extract ProgramArguments.1 raw -o - "${CHECK_PLIST}" 2>/dev/null); do
+        if [ "${previous_argument}" = "--caselist" ]; then
+            AGENT_CASELISTS_JSON="${AGENT_CASELISTS_JSON:+${AGENT_CASELISTS_JSON},}\"${argument}\""
+            previous_argument=""
+        else
+            previous_argument=${argument}
+        fi
         plutil -remove ProgramArguments.1 "${CHECK_PLIST}"
     done
     plutil -insert ProgramArguments.1 -string --check "${CHECK_PLIST}"
+    plutil -replace EnvironmentVariables.DEBATE_CASELIST__SYNC_CASELISTS -string "[${AGENT_CASELISTS_JSON}]" "${CHECK_PLIST}"
     plutil -remove StartCalendarInterval "${CHECK_PLIST}" >/dev/null 2>&1 || true
     plutil -replace RunAtLoad -bool false "${CHECK_PLIST}"
     plutil -replace StandardOutPath -string "${CHECK_LOG}" "${CHECK_PLIST}"
@@ -442,9 +458,10 @@ if [ "${CHECK_LAUNCHD}" -eq 1 ]; then
         exit 1
     fi
     # 2 is the command refusing an option it does not know. A build from before the profile check
-    # answers `doctor --evidence-profiles` that way, and that is not a verdict on any profile.
+    # or the search index check answers `doctor --evidence-profiles --search-index` that way, and
+    # that is not a verdict on any profile or store.
     if [ "${EXIT_CODE}" = "2" ]; then
-        echo "install.sh: exit code 2 means the installed build does not have the profile check (doctor --evidence-profiles); install a newer build with scripts/install_channel.sh, then run this again" >&2
+        echo "install.sh: exit code 2 means the installed build does not have the profile check or the search index check (doctor --evidence-profiles --search-index); install a newer build with scripts/install_channel.sh, then run this again" >&2
     fi
     [ "${EXIT_CODE}" = "0" ] || exit 1
     exit 0

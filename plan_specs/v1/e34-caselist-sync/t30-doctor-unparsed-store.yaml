@@ -24,7 +24,11 @@ spec:
     it does not apply.
   priority: 3
   constraints:
-    packages: [debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/runbooks]
+    # PM ruling 2026-10-22: the launchd check runs doctor as the agent will (ops/launchd, and its
+    # tests in tests/integration, where install.sh's tests live).
+    # tests/smoke: working agreement 5, a changed CLI surface updates its smoke checks (session
+    # report, Deviations).
+    packages: [debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/runbooks, ops/launchd, tests/integration, tests/smoke]
     forbidden:
       - A path, school, team code or file name in doctor's output
       - Network or AWS access in any test
@@ -35,7 +39,7 @@ spec:
         passes when every store is parsed or the setting is off, by tests shown failing
         first.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

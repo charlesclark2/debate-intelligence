@@ -32,9 +32,30 @@ each profile that is defined (`GetCallerIdentity`, which needs no grant and chan
 It names a profile, the setting that holds its name and a permission set. Never an account, a
 role's full identifier, the address a session is started at, or where the AWS config is.
 
+## The search index stores, when asked (`v1-e34-t30`)
+
+`doctor --search-index` adds a check for the weekly run's search index stage (`v1-e39-t09`): each
+store the stage would index, the caselists in `caselist.sync_caselists` and `openev`, and whether
+this build's parser has parsed it, which is whether `<data_dir>/parsed/<store>/` holds a version
+directory of the parser version this build runs. A store that has none fails it, named with the
+command that parses it, `debate-research caselist parse --caselist <store>`: without it the run
+ends without a current index, and on a fresh installation that is the first Wednesday. Where the
+run has no such stage, because `caselist.refresh_search_index` is off or the environment names no
+bucket, the check says it does not apply and why, reads nothing, and passes. The check is
+:class:`~debate_core.application.search_index_store_check.SearchIndexStoreCheck`; this module only
+renders it.
+
+Like `--evidence-profiles` it is an option, for the same reason: with it `doctor` loads settings,
+and plain `doctor` must not. It reads this machine's directories and reaches no network. The two
+options can be given together, and `ops/launchd/install.sh --check-launchd` gives both, with the
+agent's caselists as `caselist.sync_caselists`, so the check runs as the agent will.
+
+It names a store, which is a caselist slug or `openev`, and the parser version. Never a path, a
+school, a team code or a file name.
+
 ## Exit codes
 
-`doctor` fails on two checks only, the ones it can state precisely, and on a third when asked:
+`doctor` fails on two checks only, the ones it can state precisely, and on two more when asked:
 
 * **The Unicode database** (`v1-e01-t14`). Under any database but the one the current evidence
   normalizer is pinned to, `normalize` refuses to run (`UnicodeDatabaseMismatchError`), so every
@@ -47,11 +68,16 @@ role's full identifier, the address a session is started at, or where the AWS co
 
 * **The evidence profiles**, with `--evidence-profiles` only: every configured profile must be
   defined in this machine's AWS config. One that is not is named, with its setting.
+* **The search index stores**, with `--search-index` only, where the weekly run has the stage:
+  every store it would index must have been parsed by this build's parser. One that has not is
+  named, with the command that parses it. It is a precise prediction that the next weekly run ends
+  without a current index.
 
 * `0`: the report was produced, and every check that was made passed.
 * `1` (`DOMAIN_FAILURE`): a check failed. One failure has its own code, `UNICODE_DATABASE_MISMATCH`,
-  `INTEGRATIONS_DO_NOT_IMPORT` or `STORE_PROFILE_NOT_CONFIGURED` (the code a command stopped by the
-  same setting reports); more than one are `INSTALLATION_CHECKS_FAILED`, with every message.
+  `INTEGRATIONS_DO_NOT_IMPORT`, `STORE_PROFILE_NOT_CONFIGURED` (the code a command stopped by the
+  same setting reports) or `SEARCH_INDEX_STORE_NOT_READY` (the code the search index stage fails
+  with); more than one are `INSTALLATION_CHECKS_FAILED`, with every message.
   `--json` carries the whole report in `error.details`. `scripts/install_channel.sh` runs `doctor`
   before it replaces an install, so a build that fails either check is refused there.
 * `70` (`INTERNAL_ERROR`): `doctor` could not establish a check at all: the normalizer's pinned
@@ -103,6 +129,7 @@ from debate_cli.context import cli_context, command_name
 from debate_cli.exit_codes import ExitCode
 from debate_cli.output import CommandFailure, JsonValue, TableSpec
 from debate_core.application.errors import StoreProfileNotConfigured, error_code_of_class
+from debate_core.application.search_index_build import SearchIndexStoreNotReady
 from debate_core.evidence.normalization import NORMALIZER_VERSION, pinned_unicode_version
 
 __all__ = ["doctor"]
@@ -116,6 +143,10 @@ NORMALIZATION_POLICY_PAGE = "docs/evidence/normalization.md"
 _MISMATCH_FACTS = ("normalizer_version", "normalizer_unicode_version", "python_unicode_version")
 EVIDENCE_PROFILES = "evidence_profiles"
 """The report's key for the profile check's findings. Absent unless `--evidence-profiles` was given."""
+SEARCH_INDEX = "search_index"
+"""The report's key for the search index store check's findings. Absent unless `--search-index` was given."""
+STORE_NOT_PARSED_CODE = error_code_of_class(SearchIndexStoreNotReady)
+"""`SEARCH_INDEX_STORE_NOT_READY`: the code the search index stage fails with on a store never parsed."""
 
 
 def doctor(
@@ -133,6 +164,20 @@ def doctor(
             ),
         ),
     ] = False,
+    search_index: Annotated[
+        bool,
+        typer.Option(
+            "--search-index",
+            help=(
+                "Also check each store the weekly run's search index stage would index, the "
+                "caselists in caselist.sync_caselists and openev: whether this build's parser has "
+                "parsed it. Fails on one that has not, naming the caselist parse command that "
+                "parses it; does not apply, and passes, where the run has no such stage. Loads "
+                "settings and reads the parsed store's directories; without this option doctor "
+                "does neither."
+            ),
+        ),
+    ] = False,
 ) -> None:
     """Report the versions, interpreter and wiring this installation is running with.
 
@@ -143,7 +188,10 @@ def doctor(
         would refuse to run (the error names both versions and docs/evidence/normalization.md),
         or a wired integration does not import (the error names each one, with why), or, with
         --evidence-profiles, a configured evidence profile is not defined in this machine's AWS
-        config (the error names the profile and the setting that holds its name)
+        config (the error names the profile and the setting that holds its name), or, with
+        --search-index, a store the weekly run's search index stage would index has not been
+        parsed by this build's parser (the error names each, and the hint the command that
+        parses it)
     70  a check could not be made at all (the pinned version is unknown, or the CLI wires an
         integration in a way that cannot be followed), which is a bug in the build
     Every other fact is reported for information and never fails the command, including a
@@ -155,6 +203,9 @@ def doctor(
     if evidence_profiles:
         cli.output.detail("asking AWS which permission set each configured evidence profile is signed in as")
         report[EVIDENCE_PROFILES] = evidence_profile_findings(cli.services)
+    if search_index:
+        cli.output.detail("checking which stores the weekly search index stage would find unparsed")
+        report[SEARCH_INDEX] = search_index_store_findings(cli.services)
     failure = doctor_failure(report)
     # A program gets one envelope: the report under `data`, or under `error.details` on a failure.
     # A person gets the table either way, then the failure's panel.
@@ -210,6 +261,12 @@ def evidence_profile_findings(services: ServiceContainer) -> list[JsonValue]:
     return [cast("JsonValue", one.as_json()) for one in found]
 
 
+def search_index_store_findings(services: ServiceContainer) -> JsonValue:
+    """What the search index store check found: why it does not apply, or each store in the stage's order."""
+    found = asyncio.run(services.search_index_store_check().run())
+    return cast("JsonValue", found.as_json())
+
+
 def uv_python_directory(environ: Mapping[str, str], *, windows: bool = os.name == "nt") -> Path:
     """The directory where uv keeps the Pythons it manages, found the way `uv python dir` finds it.
 
@@ -244,6 +301,7 @@ def doctor_failure(report: Mapping[str, JsonValue]) -> CommandFailure | None:
             unicode_database_failure(report),
             integration_failure(report),
             evidence_profile_failure(report),
+            search_index_failure(report),
         )
         if failure is not None
     ]
@@ -254,8 +312,13 @@ def doctor_failure(report: Mapping[str, JsonValue]) -> CommandFailure | None:
         message=" ".join(failure.message for failure in failures),
         exit_code=ExitCode.DOMAIN_FAILURE,
         details=dict(report),
-        hint=" ".join(failure.hint for failure in failures if failure.hint),
+        hint=" ".join(_as_sentence(failure.hint) for failure in failures if failure.hint),
     )
+
+
+def _as_sentence(text: str) -> str:
+    """`text`, ending with a full stop, so that hints run together read as sentences."""
+    return text if text.endswith((".", "!", "?")) else f"{text}."
 
 
 def unicode_database_failure(report: Mapping[str, JsonValue]) -> CommandFailure | None:
@@ -332,6 +395,43 @@ def evidence_profile_failure(report: Mapping[str, JsonValue]) -> CommandFailure 
     )
 
 
+def search_index_failure(report: Mapping[str, JsonValue]) -> CommandFailure | None:
+    """The stores the weekly run's search index stage would index that this build has not parsed, or None.
+
+    None too when the stores were not checked, and when the check does not apply.
+    """
+    found = _search_index(report)
+    unparsed = [str(one["store"]) for one in _search_index_stores(found) if one["parsed"] is False]
+    if not unparsed:
+        return None
+    one_or_more = "store has" if len(unparsed) == 1 else "stores have"
+    fixes = " and ".join(f"`{one['fix']}`" for one in _search_index_stores(found) if one["parsed"] is False)
+    return CommandFailure(
+        code=STORE_NOT_PARSED_CODE,
+        message=(
+            f"{len(unparsed)} {one_or_more} not been parsed by this build's parser, "
+            f"{found['parser_version']}: {', '.join(unparsed)}. The weekly run's search index stage "
+            "indexes them, so the next run will end without a current search index."
+        ),
+        exit_code=ExitCode.DOMAIN_FAILURE,
+        details=dict(report),
+        hint=f"Run {fixes} before the next weekly run.",
+    )
+
+
+def _search_index(report: Mapping[str, JsonValue]) -> Mapping[str, JsonValue]:
+    """The search index store check's findings in `report`: empty when the check was not asked for."""
+    found = report.get(SEARCH_INDEX)
+    return found if isinstance(found, Mapping) else {}
+
+
+def _search_index_stores(found: Mapping[str, JsonValue]) -> list[Mapping[str, JsonValue]]:
+    stores = found.get("stores")
+    if not isinstance(stores, list):
+        return []
+    return [one for one in stores if isinstance(one, Mapping)]
+
+
 def _evidence_profiles(report: Mapping[str, JsonValue]) -> list[Mapping[str, JsonValue]]:
     """The profile check's findings in `report`: none when the check was not asked for."""
     found = report.get(EVIDENCE_PROFILES)
@@ -387,9 +487,11 @@ def _rows(report: dict[str, JsonValue]) -> list[list[str]]:
         "extras_missing_distributions": "Extras' packages missing",
     }
     rows = [
-        [labels.get(key, key), _as_text(value)] for key, value in report.items() if key != EVIDENCE_PROFILES
+        [labels.get(key, key), _as_text(value)]
+        for key, value in report.items()
+        if key not in (EVIDENCE_PROFILES, SEARCH_INDEX)
     ]
-    return rows + _profile_rows(report)
+    return rows + _profile_rows(report) + _search_index_rows(report)
 
 
 def _profile_rows(report: Mapping[str, JsonValue]) -> list[list[str]]:
@@ -410,6 +512,35 @@ def _profile_rows(report: Mapping[str, JsonValue]) -> list[list[str]]:
             + (f" ({one['hint']})" if one["hint"] and one["defined"] else ""),
         ]
         for one in found
+    ]
+
+
+def _search_index_rows(report: Mapping[str, JsonValue]) -> list[list[str]]:
+    """The caselists, then one row for each store; one row saying why when the check does not apply.
+
+    The command that parses a store that is not parsed does not follow its row: it is the failure's
+    own hint, in the panel under the table.
+    """
+    if SEARCH_INDEX not in report:
+        return []
+    found = _search_index(report)
+    if found.get("does_not_apply") is not None:
+        return [["Search index stores", f"does not apply: {found['does_not_apply']}"]]
+    caselists = found.get("caselists")
+    configured = (
+        _as_text(caselists)
+        if isinstance(caselists, list) and caselists
+        else "none configured (caselist.sync_caselists), so openev alone is checked"
+    )
+    version = found["parser_version"]
+    return [["Search index caselists", configured]] + [
+        [
+            "Search index store",
+            f"{one['store']}: parsed by {version}"
+            if one["parsed"]
+            else f"{one['store']}: not parsed by this build's parser, {version}",
+        ]
+        for one in _search_index_stores(found)
     ]
 
 

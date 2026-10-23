@@ -9,6 +9,8 @@ module builds them from this machine's stores:
 * **a source is on the topic** when one of its live disclosures (the suppression list neither stops
   nor holds it, :func:`~debate_core.application.caselist.parse_sources.live_disclosures`) is dated
   inside one of the topic's ranges for this caselist in `topics.yaml`;
+* **the caselist's names** are every school a disclosure's path names, with its team codes, whatever
+  the date, so that seeding can take another school's name out of a heading;
 * **its teams** come from those disclosures' paths, read by the importer's own path parser: the
   school and team code directories, and the side in the filename. A path with no readable school or
   team code is a disclosure by no known team. Teams are never read from the store, which holds no
@@ -59,6 +61,10 @@ class SeedReading:
     """Parsed sources with no live disclosure dated inside the topic's ranges."""
     sources: tuple[SeedSource, ...] = field(repr=False)
     """The parsed sources on the topic, in digest order."""
+    caselist_names: dict[str, tuple[str, ...]] = field(
+        default_factory=lambda: dict[str, tuple[str, ...]](), repr=False
+    )
+    """Every school a disclosure of the caselist names, with its team codes, for seeding to strip."""
 
 
 async def read_seed_sources(
@@ -82,6 +88,14 @@ async def read_seed_sources(
     elif version not in versions:
         raise SeedingCannotStart(f"the parsed store holds no version {version} of {caselist}")
     disclosed = {source.sha256: source for source in await enumerate_sources(local, caselist)}
+    names: dict[str, set[str]] = {}
+    for enumerated in disclosed.values():
+        for disclosure in enumerated.disclosures:
+            read = parse_disclosure_path(disclosure.path, event=topic.event)
+            if read.school != UNKNOWN_SCHOOL:
+                codes = names.setdefault(read.school, set())
+                if read.team_code != UNKNOWN_TEAM_CODE:
+                    codes.add(read.team_code)
     state = await load_suppression_state(suppression)
     entries = await store.read_entries(caselist, version)
     parsed = [entry for entry in entries if entry.outcome is SourceOutcome.PARSED]
@@ -112,6 +126,7 @@ async def read_seed_sources(
         parsed=len(parsed),
         parsed_off_topic=len(parsed) - len(sources),
         sources=tuple(sources),
+        caselist_names={school: tuple(sorted(codes)) for school, codes in sorted(names.items())},
     )
 
 

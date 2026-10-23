@@ -384,3 +384,47 @@ def test_the_tournament_a_team_disclosed_at_is_taken_out_of_its_headings() -> No
         ]
     )
     assert [row.normalized_heading for row in seeding.rows] == ["single payer"]
+
+
+CASELIST_NAMES = {"School Nine": ("CodeNine", "Code9"), "Lakeside Prep": ("LP",)}
+
+
+def test_another_schools_name_and_its_codes_beside_it_are_taken_out() -> None:
+    seeding = seed_candidates(
+        [
+            source(
+                "a",
+                (TEAM_ONE,),
+                card("School Nine Code9 - Spending DA"),
+                card("Racial Death 1AC School Nine"),
+            ),
+            source(
+                "b",
+                (TEAM_TWO,),
+                card("Spending DA - Lakeside Prep LP"),
+                card("Racial Death 1AC Lakeside Prep"),
+            ),
+        ],
+        caselist_names=CASELIST_NAMES,
+    )
+    assert sorted(row.normalized_heading for row in seeding.rows) == ["racial death", "spending da"]
+
+
+def test_a_team_code_away_from_its_school_is_left_as_written() -> None:
+    seeding = seed_candidates(
+        [source("a", (TEAM_ONE,), card("LP Spending DA")), source("b", (TEAM_TWO,), card("LP Spending DA"))],
+        caselist_names=CASELIST_NAMES,
+    )
+    assert [row.normalized_heading for row in seeding.rows] == ["lp spending da"]
+
+
+def test_a_heading_that_is_only_another_schools_name_is_no_heading() -> None:
+    seeding = seed_candidates(
+        [
+            source("a", (TEAM_ONE,), card("School Nine", "Spending DA")),
+            source("b", (TEAM_TWO,), card("School Nine")),
+        ],
+        caselist_names=CASELIST_NAMES,
+        minimum_teams=1,
+    )
+    assert [row.normalized_heading for row in seeding.rows] == ["spending da"]

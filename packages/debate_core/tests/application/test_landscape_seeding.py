@@ -86,6 +86,7 @@ async def test_teams_and_sides_come_from_the_disclosures(planted: PlantedCaselis
     assert {team.identity for team in by_digest[two].teams} == {"school two/codetwo"}
     assert {team.side for team in by_digest[two].teams} == {Side.AFF}
     assert by_digest[one].cards[0].section_path == ("1NC", "Spending DA")
+    assert reading.caselist_names == {"School One": ("CodeOne",), "School Two": ("CodeTwo",)}
 
 
 @pytest.mark.anyio

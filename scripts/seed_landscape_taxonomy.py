@@ -96,7 +96,9 @@ async def _candidates(arguments: argparse.Namespace) -> int:
         caselist=caselist,
         version=arguments.version,
     )
-    seeding = seed_candidates(reading.sources, minimum_teams=arguments.minimum_teams)
+    seeding = seed_candidates(
+        reading.sources, minimum_teams=arguments.minimum_teams, caselist_names=reading.caselist_names
+    )
     counts = seeding.counts
     print(f"Read {caselist} {reading.version}: {reading.entries} source entries, {reading.parsed} parsed.")
     print(

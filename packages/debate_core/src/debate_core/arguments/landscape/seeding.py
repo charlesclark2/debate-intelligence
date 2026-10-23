@@ -29,6 +29,9 @@ rows in the same order for the same sources.
 * **A team's own names.** A disclosure's school, team code and tournament are taken out of the
   headings of the file before anything is counted (`Maple Grove Neg` is `neg`, which is a side label
   and no heading at all).
+* **Another school's name**, with that school's team codes where they stand in the same heading: a
+  pocket naming where a case was copied from. A code on its own is left as written, since a short
+  code is also an ordinary word, and the two-team rule is what keeps it out of the file.
 * **A card's tag.** A card the file gave no tag carries the tag still open above it in its path,
   which is a claim and not a heading; it is left out, as is anything past the block level.
 
@@ -40,7 +43,7 @@ from __future__ import annotations
 import csv
 import re
 from collections import Counter, defaultdict
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Final, TextIO
@@ -174,10 +177,20 @@ class _Tally:
     levels: Counter[HeadingLevel] = field(default_factory=lambda: Counter[HeadingLevel]())
 
 
-def seed_candidates(sources: Iterable[SeedSource], *, minimum_teams: int = DEFAULT_MINIMUM_TEAMS) -> Seeding:
-    """Every normalized heading over `sources`' cards, counted, with the ones too few teams use left out."""
+def seed_candidates(
+    sources: Iterable[SeedSource],
+    *,
+    minimum_teams: int = DEFAULT_MINIMUM_TEAMS,
+    caselist_names: Mapping[str, Sequence[str]] | None = None,
+) -> Seeding:
+    """Every normalized heading over `sources`' cards, counted, with the ones too few teams use left out.
+
+    `caselist_names` maps every school of the caselist to its team codes, for taking another school's
+    name, and its codes beside it, out of a heading.
+    """
     if minimum_teams < 1:
         raise ValueError(f"the minimum number of teams is at least 1; got {minimum_teams}")
+    scrub = _CaselistNames(caselist_names or {})
     tallies: dict[tuple[str, bool], _Tally] = defaultdict(_Tally)
     source_count = without_team = card_count = occurrences = 0
     for one in sources:
@@ -186,7 +199,7 @@ def seed_candidates(sources: Iterable[SeedSource], *, minimum_teams: int = DEFAU
         known = [team for team in one.teams if team.identity]
         if not known:
             without_team += 1
-        seen = _headings_of(one)
+        seen = _headings_of(one, scrub)
         occurrences += len({heading for heading, _ in seen})
         for heading, level in seen:
             tally = tallies[heading]
@@ -242,7 +255,41 @@ def seed_candidates(sources: Iterable[SeedSource], *, minimum_teams: int = DEFAU
     )
 
 
-def _headings_of(source: SeedSource) -> set[tuple[tuple[str, bool], HeadingLevel]]:
+class _CaselistNames:
+    """Every school of the caselist, and its codes, taken out of a normalized heading; cached by text."""
+
+    def __init__(self, names: Mapping[str, Sequence[str]]) -> None:
+        self._schools: list[tuple[str, tuple[str, ...]]] = []
+        for name, codes in sorted(names.items()):
+            school = _plain_words(name)
+            if school:
+                self._schools.append((school, tuple(code for code in map(_plain_words, codes) if code)))
+        self._done: dict[str, str] = {}
+
+    def __call__(self, text: str) -> str:
+        found = self._done.get(text)
+        if found is None:
+            found = text
+            for school, codes in self._schools:
+                if f" {school} " in f" {found} ":
+                    found = _without_words(found, (school, *codes))
+            if found != text:
+                found = normalize_heading(found).text
+            self._done[text] = found
+        return found
+
+
+def _plain_words(name: str) -> str:
+    return " ".join(re.sub(r"[^0-9a-z]+", " ", name.casefold()).split())
+
+
+def _without_words(text: str, phrases: Sequence[str]) -> str:
+    for phrase in phrases:
+        text = re.sub(rf"(?<!\S){re.escape(phrase)}(?!\S)", " ", text)
+    return " ".join(text.split())
+
+
+def _headings_of(source: SeedSource, scrub: _CaselistNames) -> set[tuple[tuple[str, bool], HeadingLevel]]:
     """Each (normalized heading, answer) over the source's cards, once per level it is seen at."""
     names = [name for team in source.teams for name in team.names if name.strip()]
     tags = {card.tag for card in source.cards if card.tag is not None}
@@ -255,11 +302,9 @@ def _headings_of(source: SeedSource) -> set[tuple[tuple[str, bool], HeadingLevel
         complete = len(path) == len(_LEVELS)
         for index, raw in enumerate(path):
             normalized = _normalized_without_names(raw, names)
-            if normalized.is_empty:
-                continue
-            seen.add(
-                ((normalized.text, normalized.answer), _LEVELS[index] if complete else HeadingLevel.UNKNOWN)
-            )
+            text = scrub(normalized.text) if normalized.text else ""
+            if text:
+                seen.add(((text, normalized.answer), _LEVELS[index] if complete else HeadingLevel.UNKNOWN))
     return seen
 
 

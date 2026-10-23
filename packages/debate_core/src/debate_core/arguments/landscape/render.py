@@ -19,7 +19,8 @@ id; cards by rank). Nothing here computes a count; the service did.
 A card's tag and short cite are written exactly as parsed in the CSV. In Markdown, where a `|` would
 split a table cell and a `*` start emphasis, those characters are escaped with a backslash and runs
 of whitespace become one space, so the cell shows the same text. Shares are fractions to three
-places in the CSV and percentages to one place in Markdown, both rounded half up.
+places in the CSV and percentages to one place in Markdown, both rounded half up; Markdown writes
+counts with thousands separators, the CSV without.
 """
 
 from __future__ import annotations
@@ -232,9 +233,9 @@ def _header_section(report: LandscapeReport) -> list[str]:
         f"| Classification coverage | {_of(header.cards_placed, header.cards, 'cards')}; "
         f"{_of(header.rounds_with_a_read, header.rounds, 'rounds')} |",
         f"| Review threshold | {header.review_threshold:g} |",
-        f"| Disclosures counted | {header.rounds} rounds by {header.teams} teams: "
-        f"{header.aff_rounds} aff rounds by {header.aff_teams} teams, "
-        f"{header.neg_rounds} neg rounds by {header.neg_teams} teams |",
+        f"| Disclosures counted | {header.rounds:,} rounds by {header.teams:,} teams: "
+        f"{header.aff_rounds:,} aff rounds by {header.aff_teams:,} teams, "
+        f"{header.neg_rounds:,} neg rounds by {header.neg_teams:,} teams |",
         f"| Data freshness | {freshness} |",
         "",
         "How to read the numbers:",
@@ -243,8 +244,8 @@ def _header_section(report: LandscapeReport) -> list[str]:
         "position when one of its cards is placed under it at or above the review threshold.",
         "* **Teams** are distinct teams, on any side.",
         "* **Share of teams** is the teams that read a position on its own side, over the teams that "
-        f"disclosed on that side through {header.snapshot.isoformat()}: {header.aff_teams} on the "
-        f"affirmative, {header.neg_teams} on the negative, and all {header.teams} for a position either "
+        f"disclosed on that side through {header.snapshot.isoformat()}: {header.aff_teams:,} on the "
+        f"affirmative, {header.neg_teams:,} on the negative, and all {header.teams:,} for a position either "
         "side reads.",
         "* **New** means first disclosed after the previous snapshot."
         if header.previous_snapshot
@@ -272,8 +273,8 @@ def _positions_section(positions: Sequence[PositionStats]) -> list[str]:
                 "|---|---|---|---|---|---|---|---|",
             ]
             lines += [
-                f"| {_cell(stats.label)} (`{stats.position_id}`) | {stats.rounds} | {stats.teams} | "
-                f"{stats.aff_rounds} | {stats.neg_rounds} | {_percent(*stats.share_of_teams)} | "
+                f"| {_cell(stats.label)} (`{stats.position_id}`) | {stats.rounds:,} | {stats.teams:,} | "
+                f"{stats.aff_rounds:,} | {stats.neg_rounds:,} | {_percent(*stats.share_of_teams)} | "
                 f"{stats.first_seen_snapshot.isoformat()} | {'yes' if stats.is_new else ''} |"
                 for stats in of_kind
             ]
@@ -302,7 +303,7 @@ def _top_cards_section(report: LandscapeReport) -> list[str]:
     lines = [
         "## Most-read cards",
         "",
-        f"Up to {report.header.top_cards_per_position} cards per position, ranked by the distinct teams "
+        f"Up to {report.header.top_cards_per_position:,} cards per position, ranked by the distinct teams "
         "reading them under it. Each is a disclosed card (FILE_IMPORT), shown by its tag and short cite "
         "as parsed and by where to find it: its file's content-addressed key and its first paragraph "
         "in that file.",
@@ -322,7 +323,7 @@ def _top_cards_section(report: LandscapeReport) -> list[str]:
             "|---|---|---|---|---|---|---|",
         ]
         lines += [
-            f"| {card.rank} | {card.teams_reading} | {_cell(card.tag) if card.tag else '(no tag)'} | "
+            f"| {card.rank} | {card.teams_reading:,} | {_cell(card.tag) if card.tag else '(no tag)'} | "
             f"{_cell(card.short_cite or '')} | `{card.source_object_key}` | {card.element_index} | "
             f"{card.source_snapshot.isoformat()} |"
             for card in cards
@@ -340,7 +341,7 @@ def _unclassified_section(report: LandscapeReport) -> list[str]:
         "What this report could not count:",
         "",
         f"* **Cards:** {_of(summary.unclassified_cards, summary.cards)}: "
-        f"{summary.unplaced_cards} waiting in the review queue, {summary.below_threshold_cards} placed "
+        f"{summary.unplaced_cards:,} waiting in the review queue, {summary.below_threshold_cards:,} placed "
         f"below the review threshold ({threshold}).",
         f"* **Aff rounds with no identified aff:** "
         f"{_of(summary.aff_rounds_unidentified, summary.aff_rounds)}.",
@@ -365,10 +366,10 @@ def _unclassified_section(report: LandscapeReport) -> list[str]:
         "|---|---|",
     ]
     lines += [
-        f"| {_METHOD_LABELS.get(one.method, one.method)} (`{one.method}`) | {one.rounds} |"
+        f"| {_METHOD_LABELS.get(one.method, one.method)} (`{one.method}`) | {one.rounds:,} |"
         for one in report.aff_identification
     ]
-    lines += [f"| Not identified | {summary.aff_rounds_unidentified} |", ""]
+    lines += [f"| Not identified | {summary.aff_rounds_unidentified:,} |", ""]
     return lines
 
 
@@ -381,13 +382,13 @@ def _one_line(text: str) -> str:
 
 
 def _count(number: int, noun: str) -> str:
-    return f"{number} {noun}" if number == 1 else f"{number} {noun}s"
+    return f"{number} {noun}" if number == 1 else f"{number:,} {noun}s"
 
 
 def _of(part: int, whole: int, noun: str = "") -> str:
     """`31 of 42 cards (73.8%)`, or without a noun `10 of 42 (23.8%)`."""
-    counted = f"{whole} {noun}" if noun else str(whole)
-    return f"{part} of {counted} ({_percent(part, whole)})"
+    counted = f"{whole:,} {noun}" if noun else f"{whole:,}"
+    return f"{part:,} of {counted} ({_percent(part, whole)})"
 
 
 def _percent(part: int, whole: int) -> str:

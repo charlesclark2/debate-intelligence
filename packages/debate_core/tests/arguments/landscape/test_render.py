@@ -21,6 +21,7 @@ from debate_core.application.landscape_staleness import STALE_BANNER_HEADING
 from debate_core.arguments.landscape.render import (
     POSITION_COLUMNS,
     TOP_CARD_COLUMNS,
+    header_metadata,
     render_markdown,
     render_top_cards_csv,
 )
@@ -158,3 +159,12 @@ def test_a_card_with_no_tag_says_so_in_markdown_and_is_empty_in_the_csv() -> Non
     first = report.top_cards[0].model_copy(update={"tag": None, "short_cite": None})
     report = report.model_copy(update={"top_cards": (first, *report.top_cards[1:])})
     assert "| 1 | 2 | (no tag) |  |" in render_markdown(report)
+
+
+def test_markdown_counts_carry_thousands_separators_and_the_csv_does_not() -> None:
+    report = _bundle().report
+    large = report.model_copy(
+        update={"header": report.header.model_copy(update={"cards": 126681, "cards_placed": 60987})}
+    )
+    assert "| Classification coverage | 60,987 of 126,681 cards (48.1%);" in render_markdown(large)
+    assert "# coverage_cards=60987/126681\n" in render_top_cards_csv(large, header_metadata(large))

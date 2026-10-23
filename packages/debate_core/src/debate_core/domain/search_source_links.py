@@ -24,8 +24,9 @@ disclosure is not on record, and one whose school or team code the parser could 
 
 The index stores a camp card's camp, year, event and file title, and no OpenEv path or file id. The
 title is the importer's, with the camp, year and lab initials taken off the file name, so it names no
-OpenEv address either. A camp card has no link until the index stores one (the index's format
-version 2 is `v1-e39-t13`'s).
+OpenEv address either. A camp card has no link until the index stores one (PM ruling 2026-10-22,
+option A: `v1-e39-t16` carries the address from the import through `CampFile` into the index, after
+`v1-e39-t13`'s format move).
 
 ## Nothing here is the request's
 

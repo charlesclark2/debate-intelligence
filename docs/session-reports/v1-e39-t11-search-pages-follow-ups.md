@@ -6,7 +6,7 @@
 | Spec | [`plan_specs/v1/e39-evidence-search-pilot/t11-search-pages-follow-ups.yaml`](../../plan_specs/v1/e39-evidence-search-pilot/t11-search-pages-follow-ups.yaml) |
 | Epic / release | `v1-e39-evidence-search-pilot` / `v1.7` |
 | Branch | `task/v1-e39-t11-search-pages-follow-ups` |
-| Session status | PARTIAL <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | COMPLETE <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
@@ -26,11 +26,12 @@ All four of the coach's follow-ups are built and tested.
 4. **Copy card.** It now copies the tag, the cite and the text, with no provenance line
    (policy 1.11).
 
-**The phase stays `InProgress`, for one ruling.** ac3 also asks for "a camp card to its OpenEv
-file". The index stores no OpenEv path or id, and neither does the parsed store's `CampFile`. A
-correct link therefore needs a new stored column, so I stopped and asked, as the PM's brief said to.
-For now, camp cards show no link. The question is under [PM questions](#pm-questions). Look first at
-two things: the link-out rule
+**ac3 is amended by the PM's ruling of 2026-10-22 (option A).** As first written, ac3 also asked
+for "a camp card to its OpenEv file". The index stores no OpenEv path or id, and neither does the
+parsed store's `CampFile`, so I stopped and asked, as the brief said to. The ruling: a camp card
+shows no link until the index stores an OpenEv address, and `v1-e39-t16` carries that address from
+the import into the index, after `v1-e39-t13`'s format move. Every criterion passes as amended, and
+the Goal is `Succeeded`. Look first at two things: the link-out rule
 ([`search_source_links.py`](../../packages/debate_core/src/debate_core/domain/search_source_links.py)),
 and the count's budget handling in `EvidenceSearchService._count`.
 
@@ -38,7 +39,7 @@ and the count's budget handling in `EvidenceSearchService._count`.
 
 | Node | Status | Notes |
 |---|---|---|
-| `pages` — Search page follow-ups | Done except ac3's camp half | Red run first (commit `bbcf9e1`), then the behaviour (`16241b3`), the Chromium tests (`9f1a6de`), and the measurement (`ab3eb16`) |
+| `pages` — Search page follow-ups | Done (ac3 as amended) | Red run first (commit `bbcf9e1`), then the behaviour (`16241b3`), the Chromium tests (`9f1a6de`), and the measurement (`ab3eb16`) |
 
 ## Acceptance criteria
 
@@ -46,7 +47,7 @@ and the count's budget handling in `EvidenceSearchService._count`.
 |---|---|---|
 | **ac1** — a count for the query and filters, exact up to a cap and marked approximate above it; p95 on the measurement index within t03's budget with the count, by test and a recorded figure | PASS | Tests: `test_evidence_search_result_count.py` (exact per filter, the parsed query, the cap at 1/20/44/45/46, suppression, count equal to every result paged through, the budget), and `test_search_pages_follow_ups.py` (shown above the results on both pages, per filter, `10+` with a cap of 10, `1,000+`/`1,234` wording, none for no match). **Figure:** `.venv/bin/python -m pytest -n0 -s -q -m slow packages/debate_core/tests/application/test_evidence_search_scale.py -k synthetic` → `1 passed in 32.52s`. On 250,000 synthetic documents, warm p95 is **198.2 ms** counting to 1,000 and 194.3 ms counting to 1 in the same run. The budget is 2 s. See [Measurements](#measurements) |
 | **ac2** — the card page links back with the same query, filters and page from validated parameters; tampered or stale lands on a fresh search page, by tests shown failing first | PASS | Red against the skeleton (the back link echoed the raw query string; `check_cursor` accepted everything; result links carried no search). 36 of these test cases failed (24 back-link, 12 cursor-check), among them all 15 tampered or missing cases, the stale cursors from another search and from a replaced index, and two of the six "outside the pilot" cases; see [Red run](#red-run). Green: `.venv/bin/python -m pytest packages/debate_api/tests` → `645 passed in 8.42s`. Mutants: 14 of 14 caught |
-| **ac3** — a disclosed card links to its file's page on openCaselist and a camp card to its OpenEv file, in a new tab with no referrer; a card whose link cannot be built shows none, by test | **FAIL as written (camp half); PASS for the disclosed half and the "shows none" half** | Disclosed: `test_search_source_links.py` (31 cases) and `test_search_pages_follow_ups.py` (the link, `target="_blank" rel="noopener noreferrer"`, below the line; none for `Maple Grove`, whose space marks a display name; none for a camp card; no audit record). Chromium: `test_the_link_out_to_opencaselist_opens_a_new_tab_with_no_opener_or_referrer` at all three sizes. **Camp:** no link can be built from stored values (Deviation 1), so it waits for the PM's ruling. Whether the openCaselist address is right on real data is the coach's post-deploy check |
+| **ac3**, as amended by the PM's ruling of 2026-10-22 (option A) — a disclosed card links to its file's page on openCaselist, in a new tab with no referrer; a camp card shows no link until the index stores an OpenEv address; a card whose link cannot be built shows none, by test | **PASS as amended** (as first written, "a camp card to its OpenEv file": FAIL, see Deviation 1) | Disclosed: `test_search_source_links.py` (31 cases) and `test_search_pages_follow_ups.py` (the link, `target="_blank" rel="noopener noreferrer"`, below the line; none for `Maple Grove`, whose space marks a display name; none for a camp card; no audit record). Chromium: `test_the_link_out_to_opencaselist_opens_a_new_tab_with_no_opener_or_referrer` at all three sizes. **Camp, as amended:** `test_a_camp_card_has_no_link_because_the_index_stores_no_openev_file_address` and `test_a_camp_card_shows_no_link_because_the_index_has_no_openev_address` (no link, no "Open on" on the page). Whether the openCaselist address is right on real data is the coach's post-deploy check, an operator follow-up, not this criterion |
 | **ac4** — Copy card's HTML and text hold the tag, cite and text and no provenance line; the card page still shows the line; the copy writes the same audit record, by tests shown failing first | PASS | Red: 11 Copy card test cases failed against the old copy, because the line was still there (5 amended tests, and 6 cases of the new one). Green: `test_copy_card.py`, including `test_no_copy_holds_any_of_its_cards_provenance_lines_or_names` over six cards. The page still shows the line: t06's `test_the_card_page_shows_the_label_tag_cite_line_counts_copy_card_and_every_occurrence`, unchanged and passing. Audit record: `test_the_copy_writes_the_same_card_copied_record_as_before_policy_1_11` passed red **and** green, as it should, because the record did not change. Its proof is the "no audit record" mutant, which it caught. Chromium paste tests: 3 paragraphs, no line. Mutants: 8 of 8 caught |
 | Node criterion — `uv run pytest packages/debate_api/tests` | PASS | `.venv/bin/python -m pytest packages/debate_api/tests` → `645 passed in 8.42s` (the alarm goes on the interpreter, per agreement 10) |
 
@@ -238,17 +239,21 @@ the 2 s budget, and a count the budget stops is shown as no count.
    - The PM's brief: "If a correct link needs a new stored column, stop and ask before changing the
      index format."
    - So camp cards show no link, which the brief also allows: "where a link can't be built, show
-     none". The ruling is asked for below. The criterion is FAIL as written; it is PASS if amended
-     to "a camp card shows no link until the index stores an OpenEv address".
+     none".
+   - **Resolved by the PM's ruling of 2026-10-22, option A:** "a camp card shows no OpenEv link until
+     the index stores an OpenEv address; v1-e39-t16 carries it from the import through CampFile
+     into the index, after v1-e39-t13's format move." I amended ac3 in the spec as instructed, with
+     that comment above the item; the parsed criterion was printed to check that the comment is
+     not part of its text. The criterion is FAIL as first written, PASS as amended.
 2. **"Links to its file's page on openCaselist" is the team's page.** As the PM's brief has it,
    "Open on openCaselist" goes to the disclosing team's page. openCaselist gives no file its own
    page; the team page lists each round with its file.
 
 ## Decisions and assumptions
 
-- **Count wording.** `25 cards matched.` and `1 card matched.`; past the cap,
-  `1,000+ cards matched.` with a thousands separator. I used "1,000+" rather than "About 1,000"
-  because there is no estimate, only a floor. No line is shown when nothing matched (the page
+- **Count wording** (accepted by the PM, 2026-10-22). `25 cards matched.` and `1 card matched.`;
+  past the cap, `1,000+ cards matched.` with a thousands separator. I used "1,000+" rather than
+  "About 1,000" because there is no estimate, only a floor. No line is shown when nothing matched (the page
   already says "No cards matched."). No line is shown when the budget stopped the search or the
   count: a part-count is never shown.
 - **The count shares the search's budget.** It is checked before each batch and inside SQLite. A
@@ -258,7 +263,7 @@ the 2 s budget, and a count the budget stops is shown as no count.
   no infrastructure change was needed.
 - **Every page shows the count.** Page 2 shows the same total as page 1. The `searched` audit
   record is unchanged: the first page's results, 20, not 25 (tested).
-- **Words of the back link.** "Back to results" when the search validates; otherwise "New search",
+- **Words of the back link** (accepted by the PM, 2026-10-22). "Back to results" when the search validates; otherwise "New search",
   linking to `/search`. A link that says "Back to results" and lands on an empty page would
   mislead. Both sit in a `<nav class="back-link">` above the card. Nothing rewrites history, so the
   browser's back button is untouched.
@@ -282,49 +287,25 @@ the 2 s budget, and a count the budget stops is shown as no count.
   (`distribution.tf`, no `logging_config`), the image's access log is off, and every test of logs
   and audit records passes, the extended journey's among them.
 - **Copy card's help text** changed from "Keeps its formatting and source line." to "Keeps its
-  formatting.".
+  formatting." (accepted by the PM, 2026-10-22).
 - **A pre-existing behaviour, left alone:** a cursor's binding keeps the query's case, so `WOMBAT`
   and `wombat` bind differently. The search and the check refuse it alike (tested).
 
 ## PM questions
 
-One question, as a block to paste to the PM:
+One question was asked: ac3's camp half, "Open on OpenEv". The options were these:
 
-```text
-PM ruling needed — v1-e39-t11 (search page follow-ups), ac3's camp half ("Open on OpenEv")
+- **A.** Amend ac3, and carry the OpenEv address into the index later.
+- **B.** Link a camp card to OpenEv's listing for its year.
+- **C.** Add the column in this task.
 
-Facts:
-- The index stores a camp card's camp, year, event and file title (camp_file_title is the importer's
-  title with camp, year and lab initials stripped). It stores no OpenEv path or file id.
-- The parsed store's CampFile has no OpenEv id or path either; openev_id survives only in the sync's
-  run records and inbox file names. So a correct "camp file" link needs a new column in the index AND
-  the importer to carry the id/path through CampFile — not just an index-format change.
-- Per your brief I stopped before changing anything; camp cards show no link ("where a link can't be
-  built, show none"). Everything else in t11 is done and tested; the disclosed-card link works.
+I recommended A.
 
-Options:
-A. Amend ac3: "a camp card shows no link until the index stores an OpenEv address"; add "Open on OpenEv"
-   (the OpenEv id/path through CampFile and the index) to v1-e39-t13's format-2 work or a new task.
-   -> t11 ac3 PASS as amended; t11 can go Succeeded.
-B. Link camp cards to OpenEv's listing for the camp's year instead of the file. Needs the operator to
-   confirm the listing's address (a live fetch), and it is not "the camp file".
-   -> ac3 still FAIL as written; a weaker link that may confuse.
-C. Do the column now in t11: importer + CampFile + index format 1 -> 2. Collides with t13, which owns
-   the format move, and widens t11 into the importer (outside its packages).
-   -> ac3 PASS, at the cost of scope and a t13 conflict.
-
-Recommendation: A. It follows your brief (no format change without asking; t13 owns 1 -> 2), keeps t11
-inside its packages, and shows nothing rather than a wrong link. The id/path is cheap to add when
-t13 rewrites the format anyway.
-
-FYI, proceeding unless told otherwise:
-- Count wording: "25 cards matched." / "1,000+ cards matched." (a floor, not an estimate, so not "About").
-- A tampered/stale/missing search on a card page shows "New search" (to /search) instead of
-  "Back to results".
-- Copy card's help text is now "Keeps its formatting." (was "...and source line.").
-
-Reply with: A, B or C (and any wording changes).
-```
+**PM ruling, 2026-10-22: A.** The ruling's words: "a camp card shows no OpenEv link until the index
+stores an OpenEv address; v1-e39-t16 carries it from the import through CampFile into the index,
+after v1-e39-t13's format move." The disclosed-card link stands as built. The three wordings were
+all accepted: the count's, "New search", and the help text. The ruling is applied in the spec's
+ac3, in the acceptance criteria table, in Deviation 1, and in `search_source_links.py`'s docstring.
 
 ## Operator follow-ups
 
@@ -404,8 +385,9 @@ Record yes or no for each, with the date.
 
 ## Follow-up work
 
-- **"Open on OpenEv"** waits for the ruling above. If it is option A, it belongs with `v1-e39-t13`'s
-  format 2, plus the importer carrying the OpenEv id or path through `CampFile` (E34/E30).
+- **"Open on OpenEv"** is `v1-e39-t16`'s, by the PM's ruling. That task carries the OpenEv address
+  from the import through `CampFile` into the index, after `v1-e39-t13`'s format move. Once it is
+  stored, `source_link` gains the camp case.
 - **`docs/data/search-index.md`'s "How the index is read"** could name the count statement and this
   report's figures. `docs/data` is not in this task's packages, so I left it.
 - **Dev smoke checks** for the pilot belong to `v1-e39-t10`. This task adds no `tests/smoke` check.

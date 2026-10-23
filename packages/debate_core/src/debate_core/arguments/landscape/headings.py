@@ -28,7 +28,9 @@ model, no I/O, the same text every time (`v1-e32-t01-position-taxonomy` ac4).
    `T/L` and `Top Level`.
 5. **Words.** Case-folded; every character that is not a letter or a digit is a space. A segment
    that is then only a side, `case` or `on case` goes, and so does a heading that is a count of
-   off-case positions.
+   off-case positions. An advantage's number between the word and its name goes from the front of
+   the heading (`Adv 1 Costs`, `Advantage One: Costs`, `Advantage II Disease`), since it numbers
+   the advantage in one team's 1AC and names nothing (`v1-e32-t09`).
 
 The result is a fixed point (normalizing it again changes nothing) and matches
 :data:`~debate_core.domain.landscape.ALIAS_PATTERN`, so an alias copied from it is one the domain
@@ -99,6 +101,11 @@ _CATEGORY_WORDS: Final = frozenset(
     {"theory", "t", "topicality", "k", "kritik", "da", "disad", "cp", "counterplan", "framework"}
 )
 """Words that name a kind of argument and no position, so an answer marker after one does not end it."""
+_ADVANTAGE_NUMBER: Final = re.compile(
+    r"^(adv|advantage) "
+    r"(?:\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten|i{1,3}|iv|vi{0,3}|ix|x) (?=\S)"
+)
+"""A number between an advantage's word and its name, at the front of a normalized heading."""
 
 
 def normalize_heading(raw: str) -> NormalizedHeading:
@@ -125,7 +132,7 @@ def normalize_heading(raw: str) -> NormalizedHeading:
             kept.append(words)
         if inner is not None:
             break
-    joined = " ".join(kept)
+    joined = _ADVANTAGE_NUMBER.sub(r"\1 ", " ".join(kept), count=1)
     if joined in _STRUCTURAL or _OFF_COUNT.match(joined):
         joined = ""
     return NormalizedHeading(text=joined, answer=answer)

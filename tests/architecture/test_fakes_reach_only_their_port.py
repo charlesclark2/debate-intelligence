@@ -89,14 +89,22 @@ def modules_in(directory: Path) -> list[str]:
     return sorted(path.stem for path in directory.glob("*.py") if path.name != "__init__.py")
 
 
+THE_PORTS_PACKAGE = "the ports package's own names"
+
+
 def ports_imported_by(source: str, importer: str) -> dict[str, int]:
-    """The port modules `source` imports directly, each with the first line that imports it."""
+    """The port modules `source` imports directly, each with the first line that imports it.
+
+    A name imported from the package itself that is not one of its modules
+    (`from debate_core.application.ports import Clock`) counts as :data:`THE_PORTS_PACKAGE`, which
+    no fakes module may reach: it is what the package's re-exports used to answer, every port at once.
+    """
     found: dict[str, int] = {}
     port_modules = set(modules_in(PORTS_DIRECTORY))
     for line, dotted in imported_modules(source, importer):
         port = submodule_of(dotted, PORTS)
-        if port in port_modules:
-            found.setdefault(port, line)
+        if port is not None:
+            found.setdefault(port if port in port_modules else THE_PORTS_PACKAGE, line)
     return found
 
 
@@ -241,6 +249,13 @@ def test_the_check_finds_a_foreign_port_imported_by_a_fakes_module(line: str) ->
     added_at = sources["card_edit_log"].count("\n") + 1 + line.count("\n") - 1
     sources["card_edit_log"] += line
     assert ports_out_of_place("card_edit_log", sources) == [f"suppression (line {added_at})"]
+
+
+def test_the_check_finds_a_name_imported_from_the_ports_package_itself() -> None:
+    sources = fake_sources()
+    added_at = sources["card_edit_log"].count("\n") + 1
+    sources["card_edit_log"] += "from debate_core.application.ports import CardEditLog\n"
+    assert ports_out_of_place("card_edit_log", sources) == [f"{THE_PORTS_PACKAGE} (line {added_at})"]
 
 
 def test_the_check_finds_a_foreign_port_reached_through_another_fakes_module() -> None:

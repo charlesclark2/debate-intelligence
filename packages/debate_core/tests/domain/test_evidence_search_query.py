@@ -121,7 +121,10 @@ QUERIES = st.one_of(
         ("school:Riverbend", [QueryTerm("school:Riverbend")]),
         ("text:growth", [QueryTerm("text:growth")]),
         ("NEAR(growth bad)", [QueryTerm("NEAR(growth"), QueryTerm("bad)")]),
-        ("grow* AND bad OR", [QueryTerm("grow*"), QueryTerm("AND"), QueryTerm("bad"), QueryTerm("OR")]),
+        (
+            "grow* AND bad OR",
+            [QueryTerm("grow", prefix=True), QueryTerm("AND"), QueryTerm("bad"), QueryTerm("OR")],
+        ),
         ('say"what', [QueryTerm('say"what')]),
         ("- * ^ () growth", [QueryTerm("growth")]),
         ("--growth", [QueryTerm("-growth", excluded=True)]),
@@ -185,7 +188,7 @@ def test_search_query_prefix_names_the_only_column_a_term_searches(raw: str) -> 
     parsed = parse_query(raw)
     expression = parsed.fts5_expression()
     if expression is None:
-        assert not parsed.included
+        assert not parsed.included or parsed.prefix_too_short
         return
     named = [term.field.value for term in (*parsed.included, *parsed.excluded) if term.field is not None]
     assert _COLUMN_FILTER.findall(_outside_strings(expression)) == named
@@ -195,13 +198,15 @@ def test_search_query_prefix_names_the_only_column_a_term_searches(raw: str) -> 
 @settings(max_examples=400, deadline=None)
 @given(QUERIES)
 def test_search_query_lets_no_typed_operator_through(raw: str) -> None:
-    """Outside its strings, the expression is only the AND, NOT, brackets and filters this module writes."""
+    """Outside its strings, the expression is only the AND, NOT, brackets, filters and prefix stars this
+    module writes."""
     expression = parse_query(raw).fts5_expression()
     if expression is None:
         return
     syntax = _outside_strings(expression)
     assert re.fullmatch(
-        r'(\()?((tag|cite) : )?""( AND ((tag|cite) : )?"")*(\))?( NOT ((tag|cite) : )?"")*', syntax
+        r'(\()?((tag|cite) : )?""( \*)?( AND ((tag|cite) : )?""( \*)?)*(\))?( NOT ((tag|cite) : )?""( \*)?)*',
+        syntax,
     )
     assert "\x00" not in expression
 

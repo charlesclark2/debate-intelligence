@@ -80,6 +80,33 @@ ALLOWED_STATEMENTS: Final = (
     "attributed, provenance, side, school, team_code, tournament, round, camp, camp_year, camp_event, "
     "camp_file_title, first_element_index, last_element_index FROM occurrences WHERE doc_id = {} "
     "ORDER BY ordinal",
+    # v1-e39-t13: a passage's ranking and its count, each kept to the documents sharing enough words.
+    "WITH RECURSIVE words (word, rest) AS (SELECT NULL, {} UNION ALL "
+    "SELECT substr(rest, 1, instr(rest, {}) - 1), substr(rest, instr(rest, {}) + 1) FROM words "
+    "WHERE rest <> ''), shared (doc_id) AS (SELECT search.rowid FROM words JOIN search "
+    "ON search MATCH words.word WHERE words.word IS NOT NULL GROUP BY search.rowid HAVING count(*) >= {}) "
+    "SELECT d.doc_id, d.caselist, d.cluster_id, d.event, d.camp, d.tag, d.short_cite, "
+    "snippet(search, 3, {}, {}, {}, {}), d.file_count, d.team_count, "
+    "o.doc_id, o.ordinal, o.caselist, o.source_sha256, o.disclosure, o.snapshot, o.last_snapshot, "
+    "o.completeness, o.attributed, o.provenance, o.side, o.school, o.team_code, o.tournament, o.round, "
+    "o.camp, o.camp_year, o.camp_event, o.camp_file_title "
+    "FROM search JOIN documents AS d ON d.doc_id = search.rowid "
+    "JOIN occurrences AS o ON o.doc_id = d.doc_id AND o.ordinal = 0 "
+    "WHERE search MATCH {} AND rank MATCH {} AND +d.doc_id IN shared "
+    "AND ({} IS NULL OR d.event = {}) AND ({} IS NULL OR d.caselist = {}) AND ({} IS NULL OR d.camp = {}) "
+    "AND ({} IS NULL OR instr(d.sides, {}) > 0) AND ({} IS NULL OR d.first_seen >= {}) "
+    "ORDER BY rank LIMIT {} OFFSET {}",
+    "WITH RECURSIVE words (word, rest) AS (SELECT NULL, {} UNION ALL "
+    "SELECT substr(rest, 1, instr(rest, {}) - 1), substr(rest, instr(rest, {}) + 1) FROM words "
+    "WHERE rest <> ''), shared (doc_id) AS (SELECT search.rowid FROM words JOIN search "
+    "ON search MATCH words.word WHERE words.word IS NOT NULL GROUP BY search.rowid HAVING count(*) >= {}) "
+    "SELECT d.doc_id, o.source_sha256, o.disclosure "
+    "FROM search JOIN documents AS d ON d.doc_id = search.rowid "
+    "JOIN occurrences AS o ON o.doc_id = d.doc_id AND o.ordinal = 0 "
+    "WHERE search MATCH {} AND search.rowid > {} AND +d.doc_id IN shared "
+    "AND ({} IS NULL OR d.event = {}) AND ({} IS NULL OR d.caselist = {}) AND ({} IS NULL OR d.camp = {}) "
+    "AND ({} IS NULL OR instr(d.sides, {}) > 0) AND ({} IS NULL OR d.first_seen >= {}) "
+    "ORDER BY search.rowid LIMIT {}",
 )
 
 #: What FTS5 itself prepares outside a statement's step, so SQLite traces it unnested: its config read
@@ -180,6 +207,13 @@ CORE_QUERIES: Final = (
     ("growth", SearchFilters(event=Event.LD, side=Side.AFF, first_seen_on_or_after=date(2026, 9, 10))),
     ("growth", SearchFilters(caselist="openev", camp="Cascade Institute")),
     ('NEAR(growth "badly) * ^ AND OR', SearchFilters()),
+    ("grow* tag:recess*", SearchFilters()),
+)
+
+#: Passages, after the core queries: each a path through the passage statements (`v1-e39-t13`).
+PASSAGE_QUERIES: Final = (
+    ("Invented growth always ends badly, near the boom", SearchFilters()),
+    ("growth ends near the recession, case 7", SearchFilters(event=Event.LD, side=Side.AFF)),
 )
 
 
@@ -187,11 +221,15 @@ def run_core_queries(path: Path) -> list[Any]:
     """Every core query's first page, and one card with its occurrences, as plain values."""
     searched = EvidenceSearchService(SqliteSearchIndexReader(path, index_id=INDEX_ID), page_size=5)
     results: list[Any] = []
-    for query, filters in CORE_QUERIES:
-        page = searched.search(query, filters)
+    for query, filters, passage in [
+        *((query, filters, False) for query, filters in CORE_QUERIES),
+        *((query, filters, True) for query, filters in PASSAGE_QUERIES),
+    ]:
+        page = searched.search(query, filters, passage=passage)
         results.append(
             [[hit.cluster_id, hit.provenance_line, [s.text for s in hit.snippet]] for hit in page.hits]
         )
+        results.append([page.count.matches if page.count else None, [str(one) for one in page.notices]])
     card = searched.card("hsld26", f"{1:064x}")
     assert card is not None
     results.append([card.cite, [one.provenance_line for one in card.occurrences]])
@@ -249,6 +287,41 @@ def test_search_index_reader_plan_ranks_inside_fts5_and_joins_by_key(index_path:
     assert all("TEMP B-TREE" not in detail for detail in details), details
     assert any(detail.startswith("SEARCH d USING INTEGER PRIMARY KEY") for detail in details), details
     assert any(detail.startswith("SEARCH o USING PRIMARY KEY") for detail in details), details
+
+
+_PASSAGE_WORDS: Final = (
+    '\'"growth"\x1f"badly"\x1f"boom"\x1f\'',
+    "'\x1f'",
+    "'\x1f'",
+    "2",
+)
+
+
+def _passage_plan(path: Path, statement: str) -> list[str]:
+    """`EXPLAIN QUERY PLAN` of a passage statement, its words and filters bound as in a search."""
+    for value in _PASSAGE_WORDS:
+        statement = statement.replace("{}", value, 1)
+    statement = (
+        statement.replace("search MATCH {}", "search MATCH '\"growth\" OR \"badly\" OR \"boom\"'", 1)
+        .replace("rank MATCH {}", "rank MATCH 'bm25(10.0, 6.0, 3.0, 1.0)'", 1)
+        .replace("search.rowid > {}", "search.rowid > 0", 1)
+        .replace("{}", "NULL")
+    )
+    with sqlite3.connect(path) as connection:
+        return [row[3] for row in connection.execute("EXPLAIN QUERY PLAN " + statement).fetchall()]
+
+
+def test_search_index_reader_passage_lets_fts5_sort_and_filters_after(index_path: Path) -> None:
+    """The passage's ranking is FTS5's own sort over the OR, kept to `shared` afterwards: no temporary
+    sort of the results, and FTS5 is not driven one candidate rowid at a time (`v1-e39-t13`)."""
+    details = _passage_plan(index_path, ALLOWED_STATEMENTS[6])
+    assert details[0].startswith("SCAN search VIRTUAL TABLE INDEX"), details
+    assert ":=" not in details[0] and "=r" not in details[0], "no rowid lookup into FTS5"
+    assert all("TEMP B-TREE FOR ORDER BY" not in detail for detail in details), details
+    assert any(detail.startswith("SEARCH d USING INTEGER PRIMARY KEY") for detail in details), details
+    count = _passage_plan(index_path, ALLOWED_STATEMENTS[7])
+    assert count[0].startswith("SCAN search VIRTUAL TABLE INDEX"), count
+    assert all("TEMP B-TREE FOR ORDER BY" not in detail for detail in count), count
 
 
 def test_search_index_reader_count_walks_fts5_in_rowid_order_and_joins_by_key(index_path: Path) -> None:
@@ -322,6 +395,7 @@ def test_search_index_reader_never_raises_a_syntax_error_on_any_query(index_path
     searched = EvidenceSearchService(SqliteSearchIndexReader(index_path, index_id=INDEX_ID))
     page = searched.search(raw)
     assert len(page.hits) <= 20
+    assert len(searched.search(raw, passage=True).hits) <= 20
     expression = parse_query(raw).fts5_expression()
     if expression is not None:
         with sqlite3.connect(index_path) as connection:
@@ -420,7 +494,7 @@ def test_search_index_reader_statements_run_in_the_lambda_image_sqlite(
         pytest.skip(f"{image} is not on this machine; `scripts/tub_deploy.sh dev --dry-run` pulls it")
     traced, _ = traced_statements(index_path, monkeypatch)
     statements = [
-        one for one in traced if one.startswith("SELECT d.doc_id") or one.startswith("SELECT doc_id")
+        one for one in traced if one.startswith(("SELECT d.doc_id", "SELECT doc_id", "WITH RECURSIVE words"))
     ]
     with sqlite3.connect(f"{index_path.resolve().as_uri()}?mode=ro&immutable=1", uri=True) as local:
         expected = [[list(row) for row in local.execute(statement).fetchall()] for statement in statements]

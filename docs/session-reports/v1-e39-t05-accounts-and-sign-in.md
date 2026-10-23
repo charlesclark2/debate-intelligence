@@ -1403,3 +1403,12 @@ depend on `cryptography`.
 `cognito` without `cryptography`, and `opencaselist` without `httpx` and `keyring`. Nothing else the
 CLI depends on brings `cryptography` on either platform. Locally: `27 passed` in
 `test_installation.py`. On Linux, the PR's next CI run is the check; it cannot be run from this Mac.
+
+## PM record, 2026-10-22
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+* **Operator follow-up C, the email-second-factor group and `AdminRemoveUserFromGroup` on
+  TubAccounts:** applied in dev on 2026-10-22, by `v1-e39-t07`'s block 1 (1 to add, 4 to change, 0
+  to destroy). Prod follows at the promotion
+  ([evidence-search runbook](../runbooks/evidence-search.md#promoting-the-pilot-to-prod), item 3).

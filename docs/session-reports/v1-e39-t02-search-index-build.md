@@ -489,3 +489,13 @@ an ADR-0019 revisit once the file passes 0.9 GB.
   re-parse.
 * **The merge note in the first review stands:** whichever of this task and v1-e39-t05 merges second
   keeps both sides.
+
+## PM record, 2026-10-22
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+* **Operator follow-up 2, the operator's listing grant on `reports/tub/search/`:** applied in dev on
+  2026-10-22, by `v1-e39-t07`'s block 1, whose plan (1 to add, 4 to change, 0 to destroy) included
+  it. `v1-e39-t06`'s ac4 step 1 had reported `No changes` for it on 2026-10-21, most likely because
+  the worktree that planned was not current. Prod follows at the promotion
+  ([evidence-search runbook](../runbooks/evidence-search.md#promoting-the-pilot-to-prod), item 3).

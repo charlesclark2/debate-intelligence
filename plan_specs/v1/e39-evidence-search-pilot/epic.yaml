@@ -34,11 +34,13 @@ spec:
     release: v1.7
     rule: Every task in this epic ships in this release; no task crosses major versions.
   acceptanceCriteria:
+  # PM amendment 2026-10-22: data-use policy version 1.11 takes the provenance line out of copied and
+  # downloaded cards; the card page still shows it.
   - id: ac1
     description: >-
       A signed-in debater on a school Chromebook finds a card by words in its tag, author or
       text, filtered by event, caselist and side, and copies it into Google Docs with its
-      formatting and provenance line, in prod.
+      formatting, its provenance shown on the card page, in prod.
   - id: ac2
     description: >-
       Every item of the data-use policy's E39 gate is met and each is proven by a named test
@@ -263,5 +265,85 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e39-t10-pilot-smoke-and-review
+    - id: t11
+      kind: Task
+      name: 'Search pages: a result count, a way back to the results, a link to the disclosed file, and Copy card without the provenance line'
+      description: >-
+        Search pages: a result count, a way back to the results, a link to the disclosed
+        file, and Copy card without the provenance line.
+      inputs:
+        specRef: plan_specs/v1/e39-evidence-search-pilot/t11-search-pages-follow-ups.yaml
+        goalRef: v1-e39-t11-search-pages-follow-ups
+      dependsOn:
+      - t06
+      - t07
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e39-t11-search-pages-follow-ups reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e39-t11-search-pages-follow-ups
+    - id: t12
+      kind: Task
+      name: 'Only real cards come back: entries with no cite or a few words of text, counted before any rule'
+      description: >-
+        Only real cards come back: entries with no cite or a few words of text, counted
+        before any rule.
+      inputs:
+        specRef: plan_specs/v1/e39-evidence-search-pilot/t12-card-only-results.yaml
+        goalRef: v1-e39-t12-card-only-results
+      dependsOn:
+      - t09
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e39-t12-card-only-results reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e39-t12-card-only-results
+    - id: t13
+      kind: Task
+      name: 'Find a card that says something: passage search, word stems and prefixes'
+      description: >-
+        Find a card that says something: passage search, word stems and prefixes.
+      inputs:
+        specRef: plan_specs/v1/e39-evidence-search-pilot/t13-passage-search.yaml
+        goalRef: v1-e39-t13-passage-search
+      dependsOn:
+      - t11
+      - t12
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e39-t13-passage-search reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e39-t13-passage-search
+    - id: t14
+      kind: Task
+      name: 'An index that would drop most of the cards is never published'
+      description: >-
+        An index that would drop most of the cards is never published.
+      inputs:
+        specRef: plan_specs/v1/e39-evidence-search-pilot/t14-index-shrink-guard.yaml
+        goalRef: v1-e39-t14-index-shrink-guard
+      dependsOn:
+      - t09
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e39-t14-index-shrink-guard reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e39-t14-index-shrink-guard
 status:
   phase: Pending

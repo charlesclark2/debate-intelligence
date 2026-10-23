@@ -61,6 +61,7 @@ login domain's minimum TLS version. Each has a read-back check.
 | [10](#step-10--sign-in-on-dev-and-record-the-managed-logins-asset-hosts) | Sign in on dev and record the managed login's asset hosts | Chrome on your Mac |
 | [11](#step-11--prod) | Prod: the same sequence, the deploys from a `main` worktree | `$WT`, then a `main` worktree |
 | [12](#step-12--the-web-filter-request-to-school-it) | The web-filter request to school IT | email |
+| [Promotion](#promoting-the-pilot-to-prod) | Everything prod needs before the coach's beta, in order, across the pilot's tasks | your Mac, `$WT` and the `main` worktree |
 
 ## Before you start
 
@@ -165,15 +166,24 @@ terraform fmt infrastructure/envs/dev infrastructure/envs/prod
 grep -c evidence_search infrastructure/envs/dev/owner.auto.tfvars infrastructure/envs/prod/owner.auto.tfvars
 ```
 Success looks like: no `MISSING` line, and `3` for each file. A `6` means the block was run twice:
-delete the repeated lines. `git status` still reports a clean tree; these files are gitignored.
+delete the repeated lines. The budget line is optional (the root falls back to the owner's address
+without it), so a file that has only the deployer and accounts lines prints `2` and is also correct;
+dev's file was written that way. `git status` still reports a clean tree; these files are gitignored.
 
 **Every later apply needs the same lines, from whichever worktree it runs.** A task's follow-up
 that applies another module (the evidence store's listing grant, for example) from a worktree whose
 `owner.auto.tfvars` lacks the pilot's lines plans to destroy the `TubDeployer` and `TubAccounts`
-assignments. Before any `terraform apply` in `dev` or `prod`, `grep -c evidence_search` on that
-root's file must print `3`. A plan that destroys an account assignment means the file is missing
-or stale: stop and fix the file, never apply (seen on dev on 2026-10-20; added by the PM,
-2026-10-21).
+assignments. Before any `terraform apply` in `dev` or `prod`, that root's file must hold both the
+`evidence_search_deployer_user_names` and the `evidence_search_accounts_user_names` lines (the
+budget line is optional), which this prints as `2`:
+
+```bash
+grep -c -E 'evidence_search_(deployer|accounts)_user_names' infrastructure/envs/dev/owner.auto.tfvars infrastructure/envs/prod/owner.auto.tfvars
+```
+
+A plan that destroys an account assignment means the file is missing or stale: stop and fix the
+file, never apply (seen on dev on 2026-10-20; added by the PM, 2026-10-21; the count corrected by
+the PM, 2026-10-22, since dev's file has no budget line).
 
 **Lambda's concurrency allowance.** Each environment reserves 10 concurrent executions for the
 pilot, and Lambda refuses a reservation that would leave fewer than 100 unreserved. A new account's
@@ -877,6 +887,43 @@ Thank you,
 
 Success looks like: IT's confirmation, and a Chromebook on the school network that opens
 `https://tub.wfbdebate.com/` and shows the sign-in page at `auth.tub.wfbdebate.com`. Record the date.
+
+## Promoting the pilot to prod
+
+The prod work is spread over several tasks' operator follow-ups. This is the one list, in order,
+written in by the PM on 2026-10-22. Each item names where its commands are; none is repeated here.
+Tick each in `docs/data/evidence-search-pilot.md` as yes or no with its date, before the coach's
+beta (`v1-e39-t10`). Agreement 11 applies to every block: a dry run or plan first, read, then the
+real run, in a window with no leftover `DEBATE_*` override.
+
+1. **Promote `dev` to `main`** as [branching and environments](../process/branching-and-environments.md)
+   says, then set up or update the `main` worktree ([step 11b](#step-11--prod)).
+2. **Prod's `owner.auto.tfvars`** holds the deployer and accounts lines, checked with
+   [Before you start](#before-you-start)'s `grep -c -E` command, before any prod plan.
+3. **Step 11, in full.** Prod's plan applies everything merged since the last prod apply. Besides the
+   pilot itself that includes `v1-e39-t05`'s email-second-factor group and the accounts role's
+   `AdminRemoveUserFromGroup`, `v1-e39-t02`'s listing grant on `reports/tub/search/`,
+   `v1-e39-t07`'s removal grant, and `v1-e31-t16`'s tagging grants on `parsed/`. Read the plan as
+   dev's was read on 2026-10-22: every resource named, nothing destroyed, no account assignment
+   touched.
+4. **`v1-e29-t08`'s prod plan**, as its report's operator follow-ups say, if step 3 did not already
+   cover it.
+5. **Prod's suppression list exists** in the prod bucket, by the check `v1-e39-t07`'s runbook
+   section gives. If it does not, create it as that section says before anything is published.
+6. **Prod's parsed store is current.** From the dev data directory, `caselist parse --publish-only`
+   to prod for each store ([the guide](../guides/parsed-store-publish-only.md)); it refuses if
+   prod's suppression list stops anything the aggregates name, and then the store is rebuilt with
+   `--publish` instead.
+7. **Prod's first index**, built and published by `tub index` against prod, and its `current.json`
+   read back.
+8. **`v1-e39-t07`'s prod removal exercise**, with a synthetic source, then the aggregate rebuild its
+   runbook section gives, judged by `Sources` equal to `Skipped` and above zero.
+9. **Retire the superseded parsed directories in prod** (`2026.09.20-docx-1`, `2026.10.10-docx-2`,
+   `2026.10.12-docx-3`, `2026.10.18-docx-5`) by [the retention runbook](parsed-store-retention.md)'s
+   step 3, and record the counts in `docs/data/parsed-card-store.md`.
+10. **Step 12**, the request to school IT, with prod's hostnames only.
+11. **The coach creates the beta's prod accounts.** The two debaters who used dev on 2026-10-22 get
+    new prod accounts; dev accounts are never carried over.
 
 ## The managed login's asset hosts
 

@@ -536,8 +536,8 @@ it.
 | 3. No public reachability; only the function reads `raw/`, writing nothing; private, uncached responses | The role above; Block Public Access untouched; OAC; `private, no-store` | `v1-e39-t04`'s mocked plan test; `v1-e39-t07`'s exposure check |
 | 4. Every access audited, nothing identifying, 400 days | (e); `uvicorn` access log off | `v1-e39-t07`'s audit tests and log scan |
 | 5. Suppression governs the pilot | (c) 5; the index build drops suppressed occurrences | `v1-e39-t02` ac3; `v1-e39-t07` |
-| 6. No sharing surface | No public links or share-by-link; copy and download carry the provenance line | `v1-e39-t06`, `v1-e39-t08` |
-| 7. Attribution and the "Disclosed evidence, not platform-verified" label | Rendered by `debate_core`, shown on every card page | `v1-e39-t06` |
+| 6. No sharing surface | No public links or share-by-link; since policy version 1.11, copy and download carry no provenance line and their audit record names the card | `v1-e39-t06`, `v1-e39-t08`, `v1-e39-t11` |
+| 7. Attribution and the "Disclosed evidence, not platform-verified" label | Rendered by `debate_core`, the provenance line and the label shown on every card page | `v1-e39-t06` |
 | 8. Nothing beyond school plus team code; never searchable | Provenance in stored, unindexed columns; the query parser has no field for them | `v1-e39-t02` ac2; `v1-e39-t03` ac1 |
 | 9. Least personal data; removal deletes the account | (d): username, group, optional email; `AdminDeleteUser` | `v1-e39-t04` ac3; `v1-e39-t05` |
 | 10. School review | Answered (open question 6) | The policy |
@@ -596,6 +596,12 @@ publish a real-corpus index to dev for validation, because only operators have a
   from the coach, so enrolment after a reset is never open to a password alone. A test holds that
   no route a full session can reach calls `AssociateSoftwareToken`. Re-allowing self-service
   replacement means measuring Cognito's behaviour first.
+- **A copied or downloaded card carries no provenance line** (data-use policy version 1.11,
+  Charlie's decision of 2026-10-22). The card page still shows it below the cite, and the copy's or
+  download's audit record names the card cluster, so removal and attribution are unchanged. Copy
+  card (`v1-e39-t11`), download (`v1-e39-t08`) and E33's built files (`v1-e33-t08`) follow the
+  rule; `occurrence_provenance_line` stays in `debate_core` for the card page (added by the PM,
+  2026-10-22).
 - **SES production access is an AWS decision on AWS's clock.** Until it is granted, the email
   fallback reaches no student. TOTP sign-in and the coach's reset do not depend on it.
 

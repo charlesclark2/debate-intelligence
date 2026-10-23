@@ -1,0 +1,86 @@
+# TASK v1-e01-t32-test-selection-reach-round-three - Test selection, round three: command registration, quoted words, the root pyproject and the contract suites
+# Epic: E01 Repository & Delivery Foundation | Release: v1.0 (Foundation & verified evidence core) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e01-t32-test-selection-reach-round-three
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+  annotations:
+    debate/title: "Test selection, round three: command registration, quoted words, the root pyproject and the contract suites"
+spec:
+  # Filed by the PM, 2026-10-22, from v1-e01-t30's Follow-up work and its PM review.
+  description: >-
+    Four things still widen the affected set. `debate_cli/commands/__init__.py` imports every
+    command module to register it, so a test of one command reaches all of them; move the
+    registration where a test of one command does not import the rest.
+    `scripts/affected_tests.py` reads a short quoted word as a path part (`"s3"` named the S3
+    stand-in, `"evidence_bucket"` an infrastructure folder); require a slash or a minimum
+    length. A change to the root `pyproject.toml` is the whole selection even when it only edits
+    an import-linter contract; read which table changed, selecting `tests/architecture` for
+    import-linter alone and the whole selection for `[tool.pytest]` or dependencies. And
+    `debate_core/testing/contracts/__init__.py` re-exports every contract suite; remove the
+    re-exports and extend v1-e01-t30's guard to cover them. No behaviour changes; the collected
+    test count is unchanged; re-measure over v1-e01-t28's 20 commits with `--graph`.
+  priority: 3
+  constraints:
+    packages: [debate_cli, debate_core.testing, packages, tests, scripts]
+    forbidden:
+      - Any change of behaviour, output or stored data
+      - Moving a test off the PR path or marking it slow
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e01-t30-test-selection-reach
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A test of one command imports no other command module, the contract re-exports are
+        gone, and the guard fails on each re-added, by tests shown failing first.
+    - id: ac2
+      description: >-
+        Quoted words without a slash below the minimum length name no file, and an
+        import-linter-only root pyproject change selects tests/architecture alone, by tests.
+    - id: ac3
+      description: >-
+        The 20 commits re-measured with --graph against v1-e01-t30's figures, and the
+        collected count unchanged, recorded in the report.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e01-t32-test-selection-reach-round-three-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+spec:
+  description: >-
+    Cut the four remaining reaches and re-measure.
+  goalRef:
+    name: v1-e01-t32-test-selection-reach-round-three
+  graph:
+    nodes:
+      - id: reach-three
+        kind: Task
+        name: Selection reach, round three
+        description: >-
+          Cut the four remaining reaches and re-measure.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Selection tests pass
+            command: uv
+            args: [run, pytest, tests/scripts, -k, affected]
+status:
+  phase: Pending

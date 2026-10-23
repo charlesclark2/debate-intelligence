@@ -1,4 +1,4 @@
-# TASK v1-e33-t08-provenance-line-one-function - The file writer and the search pilot compose a provenance line with one function
+# TASK v1-e33-t08-provenance-line-one-function - Built files carry no provenance line; the sidecar keeps the provenance
 # Epic: E33 Evidence File Builder | Release: v1.2 (Argument landscape & file building) | Major: V1
 ---
 apiVersion: planspec.io/v1alpha1
@@ -12,26 +12,43 @@ metadata:
     debate/release: v1.2
     debate/epic: v1-e33-file-builder
   annotations:
-    debate/title: "The file writer and the search pilot compose a provenance line with one function"
+    debate/title: "Built files carry no provenance line; the sidecar keeps the provenance"
 spec:
   # Filed by the PM, 2026-10-21, from v1-e39-t03's Follow-up work.
+  # PM amendment 2026-10-22: repurposed by data-use policy version 1.11. The task id and file name are kept.
   description: >-
-    The E33 writer's `provenance_line` and
-    `debate_core.domain.evidence_search.occurrence_provenance_line` compose the same line from
-    different records, held together only by tests. The writer calls the domain function,
-    converting its record at the boundary, and the duplicate is removed. A built file's bytes do
-    not change.
-  priority: 3
+    Under data-use policy version 1.11 (Charlie, 2026-10-22: the team's own files are disclosed
+    on the caselist, and republishing other schools' names and team codes in them is clutter), a
+    built file carries no provenance line. The E33 writer stops writing the line below each
+    cite, for disclosed and camp cards alike, and its `provenance_line` is deleted, so the
+    duplicate this task was filed to remove goes with it;
+    `debate_core.domain.evidence_search.occurrence_provenance_line` stays, for the pilot's card
+    page. The sidecar is unchanged: it keeps every occurrence's provenance, and removal still
+    matches against it. v1-e33-t04's provenance check changes with the rule: a built card whose
+    sidecar entry is missing fails, as before, and a built file whose text holds a provenance
+    line now fails too. The writer's golden files lose exactly the provenance-line paragraphs
+    and nothing else, shown by a paragraph-level comparison.
+  # PM amendment 2026-10-22: priority 1, since v1-e39-t08's download now depends on it.
+  priority: 1
   constraints:
-    packages: [debate_core.domain, debate_core.integrations, packages/debate_core/tests]
+    # PM amendment 2026-10-22: the quality check lives in debate_core.application; the guide and policy references in docs.
+    packages: [debate_core.domain, debate_core.integrations, debate_core.application, packages/debate_core/tests, docs/guides, docs/evidence]
     forbidden:
-      - Any change to a built file's bytes or a provenance line's wording
+      - Any change to the sidecar, or to a built file beyond removing the provenance-line paragraphs
+      - Card text, a school, team code or file name in any fixture, log, report or commit (synthetic values only)
       - Network or AWS access in any test
   acceptanceCriteria:
+    # PM amendment 2026-10-22: replaces the original ac1.
     - id: ac1
       description: >-
-        One function composes the provenance line for both, and the writer's golden files
-        are byte for byte unchanged.
+        A built file, disclosed and camp cards alike, holds no provenance line, its sidecar is
+        unchanged, and the golden files differ only by the removed paragraphs, by tests shown
+        failing first.
+    - id: ac2
+      description: >-
+        The quality check fails a built file whose text holds a provenance line and still fails
+        a card with no sidecar entry, by tests shown failing first; the writer's
+        `provenance_line` is gone and the domain function remains for the card page.
 status:
   phase: Pending
 ---
@@ -47,16 +64,16 @@ metadata:
     debate/epic: v1-e33-file-builder
 spec:
   description: >-
-    Point the writer at the domain's provenance-line function and remove the copy.
+    Stop writing the provenance line in built files, keep the sidecar, and turn the quality check round.
   goalRef:
     name: v1-e33-t08-provenance-line-one-function
   graph:
     nodes:
       - id: one-line
         kind: Task
-        name: One provenance line
+        name: No provenance line in built files
         description: >-
-          Point the writer at the domain's provenance-line function and remove the copy.
+          Stop writing the provenance line in built files, keep the sidecar, and turn the quality check round.
         estimatedEffort: 1h
         acceptanceCriteria:
           - type: test_passes

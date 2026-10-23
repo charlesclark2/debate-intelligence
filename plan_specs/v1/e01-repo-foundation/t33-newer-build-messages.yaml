@@ -1,0 +1,78 @@
+# TASK v1-e01-t33-newer-build-messages - When a newer build wrote the database or added a setting, the error says so
+# Epic: E01 Repository & Delivery Foundation | Release: v1.0 (Foundation & verified evidence core) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e01-t33-newer-build-messages
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+  annotations:
+    debate/title: "When a newer build wrote the database or added a setting, the error says so"
+spec:
+  # Filed by the PM, 2026-10-22, from v1-e39-t06's Follow-up 7 and the agent check of 2026-10-22.
+  description: >-
+    Two errors puzzle an operator whose installed build is older than the checkout. A database
+    migrated by a newer build raises `MigrationError` with no code and no way forward; it gains
+    its own code and a hint naming both schema versions and the fix (sync the worktree, or
+    install the newer build). A setting this build does not know, read from a `.env` in the
+    working directory, fails as `Extra inputs are not permitted`; when the name matches a
+    settings pattern this build reserves (for example `providers.*_api_key`), the hint says a
+    newer build may define it, and that running from another folder or upgrading fixes it. The
+    typo protection stays: an unknown name is still refused.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, debate_core.integrations, debate_cli, packages/debate_core/tests, packages/debate_cli/tests]
+    forbidden:
+      - Accepting an unknown setting
+      - A secret's value in an error or a hint
+      - Network or AWS access in any test
+  context:
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A database at a newer schema version is refused with its own code and a hint naming
+        both versions, by test shown failing first.
+    - id: ac2
+      description: >-
+        An unknown setting is still refused, and one in a reserved pattern gets the
+        newer-build hint, by tests shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e01-t33-newer-build-messages-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+spec:
+  description: >-
+    Give the newer-schema refusal a code and hint, and the unknown-setting refusal a newer-build
+    hint.
+  goalRef:
+    name: v1-e01-t33-newer-build-messages
+  graph:
+    nodes:
+      - id: messages
+        kind: Task
+        name: Newer-build messages
+        description: >-
+          Give the newer-schema refusal a code and hint, and the unknown-setting refusal a
+          newer-build hint.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: CLI tests pass
+            command: uv
+            args: [run, pytest, packages/debate_cli/tests, -k, config or migration or doctor]
+status:
+  phase: Pending

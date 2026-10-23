@@ -1,0 +1,94 @@
+# TASK v1-e39-t14-index-shrink-guard - An index that would drop most of the cards is never published
+# Epic: E39 — Team Evidence Search (Student Pilot) | Release: v1.7 (Team evidence search pilot) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e39-t14-index-shrink-guard
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.7
+    debate/epic: v1-e39-evidence-search-pilot
+  annotations:
+    debate/title: "An index that would drop most of the cards is never published"
+spec:
+  # Filed by the PM, 2026-10-22, from v1-e39-t07's dev removal exercise of 2026-10-22, which published empty aggregates to the dev bucket, and the agent run of 2026-10-22.
+  description: >-
+    On 2026-10-22 a rebuild run against an empty scratch store published empty aggregates for
+    all four stores to the dev bucket. Nothing built an index from them, but the next build
+    would have published an empty index over the one two debaters were using. `tub index build`
+    and `tub index publish`, and the weekly run's search index stage, refuse to publish an index
+    whose document count is below a configured share of the current index's (default 90%), or
+    built from a store whose aggregates hold no rows, naming both counts and the index left
+    current. An explicit `--allow-shrink` with a reason, recorded in the manifest, lets an
+    operator publish a real shrink (a removal, or v1-e39-t12's card-only rule); the weekly stage
+    never passes it. Also: the index grew 11.6% in the week to 2026-10-22 (839,438,336 SQLite
+    bytes, 314,054,035 gzip bytes, against v1-e39-t09's warning at 900,000,000 and 400,000,000).
+    Re-measure the replacement's peak use of the function's 4,096 MB of temporary storage and
+    report to the PM whether ADR-0019's lines, or the storage, should move, with the weekly
+    growth recorded per run.
+  priority: 1
+  constraints:
+    packages: [debate_core.application, debate_core.domain, debate_cli, debate_api, packages/debate_core/tests, packages/debate_cli/tests, docs/runbooks, docs/data]
+    forbidden:
+      - The weekly stage publishing with --allow-shrink
+      - A refusal that leaves the current pointer changed
+      - Card text, a school, team code, file name, student name, username or email in any fixture, log, report or commit (synthetic values only)
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e39-t09-weekly-index-refresh
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A build with fewer documents than the configured share of the current index, or from
+        a store with empty aggregates, is refused before publishing and leaves the current
+        pointer as it was, by tests shown failing first, in both the command and the weekly
+        stage.
+    - id: ac2
+      description: >-
+        --allow-shrink with a reason publishes and records the reason in the manifest; the
+        weekly stage never passes it, by test.
+    - id: ac3
+      description: >-
+        The replacement's peak temporary storage is measured on the function from its app
+        log and reported to the PM with a recommendation on ADR-0019's lines; each run's
+        growth is in its record.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e39-t14-index-shrink-guard-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.7
+    debate/epic: v1-e39-evidence-search-pilot
+spec:
+  description: >-
+    Refuse to publish a shrunken or empty index without an explicit override, and measure the
+    storage headroom.
+  goalRef:
+    name: v1-e39-t14-index-shrink-guard
+  graph:
+    nodes:
+      - id: shrink-guard
+        kind: Task
+        name: Index shrink guard
+        description: >-
+          Refuse to publish a shrunken or empty index without an explicit override, and
+          measure the storage headroom.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Index tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application, -k, search_index]
+status:
+  phase: Pending

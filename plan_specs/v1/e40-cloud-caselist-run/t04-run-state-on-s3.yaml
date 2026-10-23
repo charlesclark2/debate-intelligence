@@ -1,0 +1,76 @@
+# TASK v1-e40-t04-run-state-on-s3 - A cloud run keeps its state in the evidence bucket
+# Epic: E40 — Weekly Caselist Run in the Cloud | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e40-t04-run-state-on-s3
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+  annotations:
+    debate/title: "A cloud run keeps its state in the evidence bucket"
+spec:
+  # Filed by the PM, 2026-10-22, from ADR-0020.
+  description: >-
+    Everything a run reads from a data directory today comes from the evidence bucket at the
+    start of a cloud run, and everything it must keep goes back at the end: the run log and
+    details, the suppression list's local copy, the parsed store's current version (by the
+    restore route ADR-0020 chooses, since store sync skips `parsed/`), and whatever the SQLite
+    database holds that a later run needs. A run that dies halfway leaves the bucket as a Mac
+    run would. ADR-0020 may amend this task.
+  priority: 1
+  constraints:
+    packages: [debate_core.application, debate_core.integrations, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/runbooks, docs/architecture]
+    forbidden:
+      - A second copy of the publisher's suppression or withholding rules
+      - Deleting anything in the bucket
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e40-t01-cloud-run-adr
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A run started on an empty data directory restores what it needs from a stubbed
+        bucket and produces the same parse and index as a run on a full directory, by test.
+    - id: ac2
+      description: >-
+        A run killed at each stage leaves the bucket readable by the next run, by test.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e40-t04-run-state-on-s3-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+spec:
+  description: >-
+    Restore a run's state from the bucket at its start and save it at its end.
+  goalRef:
+    name: v1-e40-t04-run-state-on-s3
+  graph:
+    nodes:
+      - id: state
+        kind: Task
+        name: Run state on S3
+        description: >-
+          Restore a run's state from the bucket at its start and save it at its end.
+        estimatedEffort: 5h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Sync tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application, -k, caselist_sync]
+status:
+  phase: Pending

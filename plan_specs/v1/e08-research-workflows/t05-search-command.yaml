@@ -30,9 +30,27 @@ spec:
     `DiscoveryProviders` port. The overall deadline is a new setting,
     `providers.search_deadline_seconds`, default 15, beside `timeout_seconds`; the status footer
     reads the outcome's `provider_health`.
+    (PM amendment 2026-10-22, from the PM reviews of v1-e07-t02, v1-e07-t05, v1-e08-t02 and
+    v1-e08-t03.) The container registers `openalex_factory`, `feed_factory` and
+    `google_news_factory` (the feed providers over `load_feed_directory(config/feeds)`, with a
+    `FileFeedCache` on `<storage.data_dir>/feeds/`), and closes every provider when the search
+    ends (`aclose` through the registry or `ResilientProvider`). debate-cli requires
+    `debate-core[http,feeds]`, so `debate_cli.installation` reports a missing extra. The service
+    is built with `normalize=DedupeStage()` and
+    `rank=FederatedRankStage(load_federated_ranking_config( FEDERATED_RANKING_CONFIG_PATH),
+    clock=...)`. Ranked candidates become stored results here: each is matched to an Article by
+    `find_by_canonical_url`, or saved as a discovery-only Article with access `UNKNOWN`, never
+    fetched; the session decides whether a canonical URL is unique per owner and records it.
+    `state.results` then holds `search_result_for(...)` for each, and `SearchOutcome` exposes
+    `ranked_candidates` for the table and the JSON output (identifiers, provider sources, the
+    seven features and the explanation). Once the command runs on real providers, the coach
+    labels the results of one query per format on the topics current then, and the report
+    records nDCG@10 ranked against provider order; a lower ranked figure opens a weight-tuning
+    ticket and does not block this task (v1-e08-t03's PM review).
   priority: 1
   constraints:
-    packages: [debate_cli]
+    # PM amendment 2026-10-22: registration, Article matching and the outcome live in debate_core.
+    packages: [debate_cli, debate_core.application, debate_core.integrations.discovery, packages/debate_cli/tests, packages/debate_core/tests, packages/debate_cli/pyproject.toml, uv.lock]
     forbidden:
       - Business logic (ranking, dedupe, expansion) in debate_cli
       - Hiding provider failures when results are partial
@@ -67,6 +85,18 @@ spec:
       description: >-
         Invalid --argument/--need values or since > until exit 2 with the list of valid choices, and
         `search --help` documents every flag.
+    # PM amendment 2026-10-22
+    - id: ac5
+      description: >-
+        The container registers the OpenAlex, feed and Google News providers and closes
+        them, ranked candidates become stored results through Article matching without a
+        fetch, and the JSON output carries each result's features and explanation, by tests
+        on recorded fixtures.
+    # PM amendment 2026-10-22
+    - id: ac6
+      description: >-
+        The coach's labels on one real query per format are recorded with nDCG@10 ranked
+        against provider order (operator); a lower ranked figure is ticketed, not a failure.
 status:
   phase: Pending
 ---

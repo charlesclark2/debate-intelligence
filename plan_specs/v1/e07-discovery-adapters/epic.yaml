@@ -229,5 +229,24 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e07-t08-shared-retry-after
+    - id: t09
+      kind: Task
+      name: 'A Google News item resolved by its headline in a configured publisher''s own feed'
+      description: >-
+        A Google News item resolved by its headline in a configured publisher's own feed.
+      inputs:
+        specRef: plan_specs/v1/e07-discovery-adapters/t09-google-news-title-match.yaml
+        goalRef: v1-e07-t09-google-news-title-match
+      dependsOn:
+      - t05
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e07-t09-google-news-title-match reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e07-t09-google-news-title-match
 status:
   phase: Pending

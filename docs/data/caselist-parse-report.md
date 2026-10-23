@@ -2030,5 +2030,49 @@ recall 0.705. The six labelled files hold none of the shape.
 
 ### The re-parse to `docx-6` (operator-run, after the merge)
 
-Not run yet. The steps are in `docs/session-reports/v1-e31-t24-bold-tag-above-bracketed-cite.md`,
-Operator follow-ups; the counts go here when they are in.
+Run on 2026-10-21 by the steps in
+`docs/session-reports/v1-e31-t24-bold-tag-above-bracketed-cite.md`, Operator follow-ups, and read by
+the PM before the prod publish. Recorded by the PM, 2026-10-22.
+
+**The dev parse and publish (step 3) and its counts (step 4)** matched the session's expected figures
+exactly, so nothing had been imported since 2026-10-19:
+
+| Caselist | Cards | Tagged by the new rule (`bold-tag`) | No tag |
+|---|---|---|---|
+| hsld26 | 75,399 | 101 | 1,462 |
+| hspf26 | 50,241 | 760 | 2,278 |
+| hspolicy26 | 101,826 | 14 | 1,079 |
+| openev | 8,081 | 0 | 78 |
+
+Each caselist uploaded its sources plus its 3 aggregates, with 0 failed, and the parsed store held
+14 GB on this machine with both version directories present.
+
+**The second run (step 5)** attempted 0 sources and uploaded 0 objects for every caselist.
+
+**The clusters against `docx-5` (step 6):**
+
+| Caselist | Clusters before | Clusters after | Exact fingerprints changed |
+|---|---|---|---|
+| hsld26 | 11,650 | 11,650 | 18 |
+| hspf26 | 10,144 | 10,142 (2 merged into another) | 55 |
+| hspolicy26 | 18,767 | 18,767 | 4 |
+| openev | 5,846 | 5,846 | 0 |
+
+The largest cluster of each caselist was unchanged. The changed fingerprints are the cards above a
+newly tagged card that lost a stray last paragraph, and hspf26's 5 entries that became analytics.
+
+**The prod publish (step 7)**, from the dev data directory: 0 parsed, and 4,973 (hsld26), 3,193
+(hspolicy26), 4,440 (hspf26) and 107 (openev) objects uploaded, 0 failed.
+
+**The agent (step 8)** was reinstalled at `1.1.0.dev85` (`31782a8ad1b5`). `doctor` exited 0, the
+installer kept the settings, and `--check-launchd` exited 0. Its keychain dry run listed 17 archives
+(hsld26, 1 to fetch) and exited 0. An agent run on the morning of 2026-10-22 had failed with
+`KeyringError` reading the caselist token after the earlier reinstall; after the `dev85` reinstall
+the keychain read under the agent's environment succeeded (the dry run above), and the
+kickstarted run of 2026-10-22 (`20261022T052044Z`) completed: 4 archives downloaded, 2,628 sources
+parsed and 12,597 skipped, 0 failed, 51,998 cards, 2,637 parsed-store objects uploaded, and the
+search index `767b9c7c056b80cb` (52,059 documents) published
+([caselist-sync-runs.md](caselist-sync-runs.md)).
+
+`2026.10.18-docx-5` was retired in the dev bucket and on this machine on 2026-10-22
+([parsed-card-store.md](parsed-card-store.md#retired-so-far)).

@@ -1,0 +1,91 @@
+# TASK v1-e40-t01-cloud-run-adr - ADR-0020: the weekly caselist run in the cloud, its credentials and its state
+# Epic: E40 — Weekly Caselist Run in the Cloud | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e40-t01-cloud-run-adr
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+  annotations:
+    debate/title: "ADR-0020: the weekly caselist run in the cloud, its credentials and its state"
+spec:
+  # Filed by the PM, 2026-10-22, from Charlie's decision of 2026-10-22 to move the weekly run off the coach's Mac.
+  description: >-
+    Write ADR-0020, measured first (working agreement 7), deciding: (1) where the run runs: a
+    scheduled Fargate task or an AWS Batch job, sized from the 2026-10-22 run (about 2 hours 40
+    minutes, a 14 GB local store, a multi-hour parse); Lambda is ruled out by its 15-minute
+    limit; (2) credentials: the coach's Tabroom password and the caselist token in Secrets
+    Manager under their own KMS key, only the login job's role able to read the password, every
+    read in CloudTrail, the token refreshed on a schedule and the coach emailed when a login
+    fails (Charlie, 2026-10-22); (3) state: what a run reads from and writes to the evidence
+    bucket instead of a data directory, including the run log, the parsed store's restore route
+    (store sync no longer moves `parsed/`, v1-e29-t12) and the SQLite database; (4) one runner:
+    a lock in the bucket, and the cutover that turns the Mac's schedule off; (5) where the run's
+    caselists are configured, a setting rather than launchd arguments (v1-e34-t30's PM review);
+    (6) alerts for a failed or late run; (7) the monthly cost; (8) what V2's E10 later replaces.
+    The same pull request amends the data-use policy's access rule (Access item 3: the token
+    and, now, the password, where they live and who can read them), as a version the coach
+    approves.
+  priority: 1
+  constraints:
+    packages: [docs/adr, docs/policies, docs/architecture]
+    forbidden:
+      - Any infrastructure or code change
+      - A design in which any role but the login job's can read the password
+      - Two runners able to publish at once
+  context:
+    - kind: TaskRef
+      name: v1-e39-t09-weekly-index-refresh
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e34-t30-doctor-unparsed-store
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        ADR-0020 decides the eight questions, each with its measured figure or the reason
+        none applies, and is accepted by the PM.
+    - id: ac2
+      description: >-
+        The data-use policy's access rule is amended for the cloud run and approved by the
+        coach in the same pull request.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e40-t01-cloud-run-adr-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+spec:
+  description: >-
+    Measure, then decide the cloud run's runtime, credentials, state, lock, configuration,
+    alerts and cost in ADR-0020, and amend the policy.
+  goalRef:
+    name: v1-e40-t01-cloud-run-adr
+  graph:
+    nodes:
+      - id: adr
+        kind: Task
+        name: ADR-0020
+        description: >-
+          Measure, then decide the cloud run's runtime, credentials, state, lock,
+          configuration, alerts and cost in ADR-0020, and amend the policy.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Docs checks pass
+            command: uv
+            args: [run, pytest, tests/docs]
+status:
+  phase: Pending

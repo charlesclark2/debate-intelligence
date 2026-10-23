@@ -55,7 +55,7 @@ spec:
         `uv run pyright tests/smoke` reports no errors, and the stale name in docs/evidence
         is fixed.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

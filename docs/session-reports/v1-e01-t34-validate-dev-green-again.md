@@ -337,7 +337,7 @@ and the E01 specs printed nothing. Then `uv sync --all-packages`, and each run b
 | `.venv/bin/python -m pytest tests/scripts -q` | `1262 passed in 55.20s` (1256 before the sync; dev added six) |
 | `.venv/bin/python -m pytest -q tests/architecture tests/specs packages/debate_cli/tests/test_app.py packages/debate_cli/tests/test_help_rendering.py` | `279 passed, 3 warnings in 15.52s` |
 | `.venv/bin/python -m pytest -m slow -p no:randomly -n 0 -s -q tests/scripts/test_affected_tests_planted_breaks.py` | `8 passed, 11 deselected in 86.13s` at load 12.7. Five breaks are `caught: a selected test failed`. The file builder's is `caught: a selected test errored`, `debate_api`'s is `exit 4, caught: a conftest the selected tests load failed to import`, and the unreached break is `exit 0, caught: no`. |
-| `ruff check .`, `ruff format --check .`, `lint-imports`, `scripts/validate_specs.py` | `All checks passed!`, `1124 files already formatted`, `Contracts: 15 kept, 0 broken.`, `OK` |
+| `ruff check .`, `ruff format --check .`, `lint-imports`, `scripts/validate_specs.py` | `All checks passed!`, `1127 files already formatted`, `Contracts: 15 kept, 0 broken.`, `OK` |
 
 ac3's post-merge run is still `NOT RUN` and the Goal stays `InProgress`. The pull request goes in
 with `--partial`, as the PM ruled.

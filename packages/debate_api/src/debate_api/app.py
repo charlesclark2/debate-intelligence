@@ -64,7 +64,9 @@ def create_app(services: PilotServices | None = None) -> FastAPI:
     app.state.pilot = PilotState(
         services=services,
         sealer=CookieSealer(services.cookie_keys),
-        renderer=PageRenderer(app_script=script, app_stylesheet=stylesheet),
+        renderer=PageRenderer(
+            app_script=script, app_stylesheet=stylesheet, cart_cap=services.card_download.card_cap
+        ),
         app_script=script,
         app_stylesheet=stylesheet,
     )

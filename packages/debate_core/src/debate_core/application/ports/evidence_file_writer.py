@@ -3,8 +3,9 @@
 `v1-e33-t01` resolves each card of a recipe to one occurrence in the E31 occurrence store. This port
 turns that resolution into a file (`v1-e33-t02`): every card's tag, cite and evidence paragraphs are
 copied as OOXML runs from the source file's own bytes, and the only text the writer adds is the
-coach's (headings, tag overrides, analytics), one header line saying the cards are disclosed and
-unverified, and the data-use policy's provenance line below each cite (PM amendment 2026-10-19).
+coach's (headings, tag overrides, analytics) and one header line saying the cards are disclosed and
+unverified. A built file carries no provenance line (data-use policy version 1.11, `v1-e33-t08`);
+each card's provenance is in the sidecar.
 
 ## No card text goes in
 

@@ -39,7 +39,12 @@ class UnreadableSearchIndex(Exception):
 
 @dataclass(frozen=True, slots=True)
 class StoredOccurrence:
-    """One row of the index's `occurrences` table. `ordinal` 0 is the document's representative."""
+    """One row of the index's `occurrences` table. `ordinal` 0 is the document's representative.
+
+    `first_element_index` and `last_element_index`, where the card is in its source, are read by a
+    card's lookup and not by a search, whose rows leave them `None`: a download builds the card from
+    its source through them (`v1-e39-t08`).
+    """
 
     doc_id: int
     ordinal: int
@@ -60,6 +65,8 @@ class StoredOccurrence:
     camp_year: int | None = None
     camp_event: str | None = None
     camp_file_title: str | None = None
+    first_element_index: int | None = None
+    last_element_index: int | None = None
 
 
 @dataclass(frozen=True, slots=True)

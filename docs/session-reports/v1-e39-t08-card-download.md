@@ -1,0 +1,591 @@
+# Session report: v1-e39-t08-card-download
+
+| | |
+|---|---|
+| Task | `v1-e39-t08-card-download` — Download a card or a small file as Verbatim .docx through the E33 writer |
+| Spec | [`plan_specs/v1/e39-evidence-search-pilot/t08-card-download.yaml`](../../plan_specs/v1/e39-evidence-search-pilot/t08-card-download.yaml) |
+| Epic / release | `v1-e39-evidence-search-pilot` / `v1.7` |
+| Branch | `task/v1-e39-t08-card-download` |
+| Session status | COMPLETE <!-- COMPLETE / PARTIAL / BLOCKED --> |
+
+## Summary
+
+A card page now offers **Download .docx** and **Add to cart**, and every signed-in page shows the
+cart bar when the cart holds a card. Both send `POST /download`, which builds one Verbatim file with
+the E33 `DocxEvidenceFileWriter`, as `files build` calls it after `v1-e33-t08`: no provenance line,
+the header without its old sentence, and the sidecar built and dropped. The logic is
+`debate_core.application.card_download`. It parses, deduplicates and caps the cart, then looks every
+card up again through the lease's `ScreenedSearch`. Next it estimates the file's size and reads the
+sources through `source_stores` within a byte budget. Only then does it build, and it writes the
+`cards-downloaded` record before the file goes out. The cart lives in the browser's `sessionStorage`
+(the PM's ruling), and download switches off when the index's parser is not the function's.
+
+**The Goal stays `InProgress`.** ac4 (opening the files in Word with Verbatim and importing one
+into Google Docs) is the operator's, after a dev deploy. Everything else passes.
+
+**After the PM's review and ruling (2026-10-22): ready for the short re-review.** Condition 1's
+measurement stopped the PR: a 2,000,000-byte file budget would have refused 4.72% of hspf26's and
+23.01% of openev's documents. The PM ruled option (a). The budget is now the cart's `word/document.xml`
+bytes as each fetched file's zip directory declares them (`TUB_DOWNLOAD_SOURCE_XML_BYTES`,
+20,000,000), read without a parse by `docx_parser.package.declared_document_bytes`, which the
+composition root passes in. A constant 52,000,000-byte ceiling bounds the files held before the build.
+No real source is refused on its own under either, and a cart at both measured a 634 MB peak (Decisions 1).
+A card whose own document part is over the budget is a named, droppable refusal. A file that
+understates its document part passes the budget on the claim and is refused by the parser, never
+built (Decisions 9). Tests were shown failing first, and 7 of 7 new mutants were caught.
+
+**Look at first:**
+1. **The cap is 8 cards, not 30, with a 20 MB budget of `document.xml` and a 52 MB ceiling on files.**
+   The build time grows with the number of distinct sources and the XML they hold, not the number of
+   cards. 30 cards from 30 mean-size sources took 29 s on the Mac, which is CloudFront's whole
+   timeout (Decisions 1).
+2. **Two packaging changes the spec did not name, without which the writer cannot run in the
+   function.** The image gains debate-core's `docx` extra (lxml), and `debate_api` moves from the
+   indirect lxml contract to a direct one of its own (Deviation 2).
+3. **The index keeps no exact fingerprint.** The download derives it from the text the index shows,
+   so the writer's own check holds the copied card to the page. A cite-only card is refused
+   (Deviation 4).
+
+## Plan nodes
+
+| Node | Status | Notes |
+|---|---|---|
+| `download` — Card download | Done (criterion PASS) | Built red first against two skeletons, then 21 of 21 mutants caught; ac4 is the operator's |
+
+## Acceptance criteria
+
+| Criterion | Status | Evidence (command → result) |
+|---|---|---|
+| **ac1** — a single card downloaded through the app route re-parses as its source, stubbed store | **PASS** | `test_download_of_one_card_through_the_route_re_parses_as_its_source`: `POST /download` → `200`, the `.docx` media type, `attachment; filename="team-evidence-cards-2026-11-02.docx"`, `private, no-store`. Re-parsed by the E31 parser: one card whose tag, cite, evidence text (hand-written: `Upland soils hold behind gabbro ridges a stressed warrant for decades.`) and `formatting_sha256` equal the source card's. Red against the absent skeleton. |
+| **ac2** — the cart cap, a refused card's message, and dropping it to build the rest, tests shown failing first | **PASS** | `test_cart_over_the_cap_is_refused_before_a_card_is_looked_up_or_a_source_read` (cap 2, three cards → `409` "A download holds up to 2 cards…", no source read, nothing built, no record), `test_cart_at_the_cap_downloads`. `test_cart_with_a_refused_card_names_it_with_a_plain_reason_and_builds_nothing` names the card with a picture by place, tag and sentence (UNSUPPORTED_CONTENT). `test_download_refused_by_the_writers_read_back_names_the_card` (READBACK_MISMATCH), `test_cart_with_a_card_whose_source_is_lost_names_it`, and `test_cart_without_its_refused_card_builds_the_rest`. After the PM's review (condition 2): `test_cart_with_a_card_whose_own_file_is_over_the_source_budget_names_it` (card 2, by tag, "Its file is too large to download. Copy card still works.") and `test_cart_without_the_card_whose_own_file_is_too_large_builds_the_rest`, both shown failing first (they got `SOURCES_TOO_LARGE`), while `test_cart_whose_sources_only_add_up_past_the_budget_keeps_the_sources_message` pins the message that stays. In Chromium, `test_download_one_card_and_a_cart_by_keyboard_dropping_a_refused_card` clicks *Remove these from the cart and download the rest* and the file arrives. Red in both skeleton runs (below). |
+| **ac3** — a parser-version mismatch switches download off with a message; each download writes one audit record | **PASS** | `test_download_is_switched_off_with_a_message_when_the_index_was_built_by_another_parser`: an index whose manifest names `2026.10.18-docx-5` → `503` "Download is off until the search's next weekly update. Copy card still works.", nothing read or built; the card page shows that sentence and no download button, and Copy card stays. `test_download_comes_back_on_when_an_index_of_the_functions_parser_is_published`. `test_download_writes_one_cards_downloaded_record_naming_every_card_in_order`: one record, both cards in cart order, the student's subject, schema-checked by the sink; `test_download_refused_for_any_reason_writes_no_record`. |
+| **ac4** — the operator opens a downloaded single card and a cart file in Word with Verbatim and imports one into Google Docs; yes or no | **NOT RUN** | Needs a dev deploy, Word with Verbatim and a Google account: [Operator follow-ups](#operator-follow-ups) 1 to 3. |
+| **ac5** — a cart whose built file would pass the buffered-response limit is refused before building, synthetic cart near the limit | **PASS** | `test_download_cart_two_bytes_past_the_buffered_limit_is_refused_before_building`: eight index cards of 185,447 characters estimate to exactly 3,000,000 bytes and go on to the build; the cart with one card a character longer → `FILE_TOO_LARGE`, no source read, writer never called. `test_download_estimate_is_above_every_file_the_writer_builds_from_the_worst_formatting`: every word its own fully formatted run, 1 and 30 cards; the estimate is above the real file each time. `test_download_file_built_past_the_buffered_limit_is_refused_and_never_sent` covers a file past the limit after the build. The source limits (the PM's ruling): `test_download_cart_whose_document_parts_are_exactly_the_budget_downloads` (at the budget 200, one byte under `SOURCES_TOO_LARGE`), `test_download_budget_counts_document_parts_not_file_bytes`, `test_download_cart_whose_files_pass_the_fetch_ceiling_is_refused_before_building`, `…_are_exactly_the_fetch_ceiling_downloads` and `test_download_of_one_file_past_the_fetch_ceiling_gets_the_files_message_not_a_named_card`. |
+| **ac6** — (2026-10-20) a camp card downloads with its OpenEv line from `raw/openev/<year>` | **PASS, as amended** | "With its OpenEv line" is superseded by ac7 (spec, PM amendment 2026-10-22). `test_download_cart_with_a_camp_card_reads_it_from_raw_openev_2026_with_no_provenance_line`: the camp card's source is read from the `raw/openev/2026` store and the caselist card's from `raw/caselist/hsld26`, nothing else (`RecordingSourceStore` refuses every write). The file's paragraphs, written out by hand: the mixed header, the two headings, both cards. |
+| **ac7** — a single card and a cart file hold no provenance line, and a camp card downloads from its `raw/openev/<year>` store, tests shown failing first | **PASS** | `test_download_of_one_card_holds_no_provenance_line_and_the_header_without_its_old_sentence` gives the file's every paragraph, written by hand: header, `Team evidence search`, `Downloaded cards`, tag, cite, evidence. No `[Disclosed`, `[OpenEv`, school, team code, tournament, round, camp or camp title appears, and nor does "below its cite". The cart test above shows the same for a cart. `test_download_sends_the_docx_alone_and_never_its_sidecar`: the response is the built `.docx` byte for byte, with the writer's seven parts and no sidecar keys. The Chromium journey checks the file the browser saved. Red against the absent skeleton. |
+| **ac8** — a card suppressed after its page was rendered is refused at download and named; a download whose audit write fails is refused, tests shown failing first | **PASS** | `test_download_of_a_card_suppressed_after_its_page_was_rendered_is_refused_and_named[its-source]` and `[its-disclosure]`: the card page offers download, then a removal is appended and the five-minute recheck passes. The cart is refused `409`, naming card 2 by its place alone ("It is no longer in the search."). Nothing is read or built, and no record is written. `test_download_without_the_suppressed_card_builds_the_rest`. `test_download_whose_audit_record_cannot_be_written_is_refused_and_sends_no_file`: the file was built and not sent (`503`, JSON). `test_download_while_the_suppression_list_cannot_be_read_is_refused`. `test_download_without_the_sessions_csrf_token_is_refused_by_the_gate`: the gate refuses `/download` without the session's CSRF token (`403`), nothing built. Red in both skeleton runs. |
+| Node `download` — `uv run pytest packages/debate_api/tests -k "download or cart"` | **PASS** | `91 passed in 6.67s`; after the PM's ruling, `103 passed in 6.79s` |
+
+**Red first, recorded.** The tests ran against two skeletons of
+`CardDownloadService.download`, each written over a saved copy of the file and restored by
+sha256 (`2b5e353d…` before and after):
+
+| Skeleton | Result | What failed |
+|---|---|---|
+| Feature absent: every download refused as an empty cart | `31 failed, 24 passed` | Every criterion: re-parse (ac1), cap and naming (ac2), switch-off and record (ac3), the size limits (ac5), the camp store and no line (ac6, ac7), suppression and the unwritten record (ac8) |
+| Refuse nothing: no cap, no validation, no suppression, no parser check, no limits, audit failures swallowed, writer refusals unnamed | `21 failed, 34 passed` | Cart validation (6), cap, naming and dropping (5), switch-off (2), limits (3), suppression (2), the unwritten record (1), reading a source once (1), the duplicate (1) |
+
+Two later tests were shown red against the code before their fixes:
+`test_download_body_with_more_fields_than_a_download_sends_is_refused_not_failed` raised
+`ValueError: Max number of fields exceeded`, which would have been a 500 (a bug, fixed in
+`b74b43d`). `test_download_image_installs_debate_cores_docx_extra_and_lxml_with_it` failed with
+`assert 'docx' in ['aws', 'tub']` before the packaging change.
+
+**Mutation.** 21 mutants of the PM's four rules and the limits, each run against
+`test_card_download.py` and `test_card_download_limits.py` with a new empty
+`HYPOTHESIS_STORAGE_DIRECTORY` (these files use no Hypothesis), each restored and checked by sha256
+after: **21 caught, 0 survived, 0 errored.**
+
+| Rule | Mutants (each caught) |
+|---|---|
+| Cart validation | no length limit; skip a bad part instead of refusing; looser reference pattern; no deduplication; a doubled `cards` field taken; no body limit |
+| Suppression at download | `card_source` ignores the predicate; the lease passes no predicate; a card not found dropped, not refused; the screen reads the unscreened service |
+| Audit before the file | a failed write swallowed; the record written before the build (so refused builds were recorded); the route lets `AccessNotRecorded` reach the app's error handler; no check of the built file's size |
+| The cap | `>=` for `>`; no cap; checked after the sources are read; the setting without its upper bound of 30 |
+| The other limits | source budget `>=` (the file-byte rule, since replaced); estimate `>=`; parser check always on |
+| The `document.xml` budget and the fetch ceiling (after the PM's ruling, 7 more, all caught) | sum `>=`; one source's part `>=`; measured on file bytes; size ignored; a too-large card never named; fetch ceiling `>=`; no fetch ceiling |
+
+**Before the report.** These are the results of the runs this report rests on:
+
+| Command | Result |
+|---|---|
+| `uv run scripts/affected_tests.py` (before the `pyproject.toml` change) | 106 test files |
+| `perl -e 'alarm 115; exec @ARGV' .venv/bin/python -m pytest -n auto -m "not slow and not live" -q <the 106>` | **Stopped by the alarm at 96%** (load average 4 to 12 from other sessions). Two `F`s in the progress lines and no summary. Rerun in groups: the architecture, spec, script, local-reader and evidence-search files gave `1 failed, 1201 passed`, the failure being `test_the_unmodified_copy_keeps_every_contract`, the lxml contract that `31ed3e7` fixes. The other 32 files gave `1186 passed`, the 25 caselist files `474 passed` and `debate_api` `731 passed`. **The second failure did not reproduce**, and its test is not known. |
+| `uv run scripts/affected_tests.py` (after it) | "The whole selection is affected: packages/debate_api/pyproject.toml is shared test ground." So nothing more was run, and the pull request's `ci` runs the whole selection (working agreement 10; the PM's ruling of 2026-10-19) |
+| Changed test directories plus the always-run list and the docs checks, `-n auto -m "not slow and not live"` | `1567 passed in 24.48s`; after the PM's ruling, with the docx parser, docx writer and local integration directories added, `2556 passed, 2 xfailed in 26.64s` |
+| `packages/debate_api/tests`, `-n 0 -p no:randomly` (the log test reads process-wide logging state) | `733 passed, 20 deselected`; after the ruling `745 passed, 20 deselected` |
+| `packages/debate_api/tests/browser -m slow` (outside the PR path) | `20 passed`, before and after the ruling |
+| `uv run ruff format --check .`; `uv run ruff check .` | `1128 files already formatted`; `All checks passed!` |
+| `uv run --frozen pyright` (CI's scope) | `0 errors` |
+| `uv run lint-imports` | `Contracts: 16 kept, 0 broken.` |
+| `uv lock --check`; `uv export --package debate-api --frozen --no-dev --no-emit-workspace` | lock consistent; the export holds `lxml==6.1.3` |
+| `uv run scripts/check_thin_handlers.py` | `OK: 47 … handlers within 25 statements` (`card_download` 10, `card_page` 20) |
+| `uv run scripts/validate_specs.py`; `check_command_blocks.py`; `check_links.py` | all `OK` |
+
+## Files changed
+
+- **`packages/debate_core/src/debate_core/application/card_download.py`** (new): the use case, its
+  refusals, the size estimate and the caps.
+- **`packages/debate_core/src/debate_core/application/evidence_search.py`,
+  `search_index_holder.py`, `ports/search_index_reader.py`**: `card_source` (the representative and
+  where it was read from, under the same predicate as `card`), the manifest's parser version on
+  every lease, and element indices on a card lookup's occurrences.
+- **`packages/debate_core/src/debate_core/integrations/local/search_index_reader.py`** and its
+  statement-shape test: the occurrences statement reads the two index columns that were already
+  stored (Deviation 1).
+- **`packages/debate_core/src/debate_core/testing/search_index.py`**: `published_index` takes the
+  manifest's parser version.
+- **`packages/debate_core/src/debate_core/integrations/docx_parser/package.py`**:
+  `declared_document_bytes`, the main document part's declared size for the budget (the PM's ruling).
+- **`packages/debate_core/src/debate_core/application/ports/evidence_file_writer.py`**: the stale
+  provenance-line sentence (condition 3).
+- **`packages/debate_api`**: `download.py` (the route), configuration (the two settings), the
+  container (writer, parser, `S3SnapshotStore` per prefix on one client), state, pages, routes, the
+  card page and the cart bar, `app.js` (cart and download) and `app.css`. `pyproject.toml` adds the
+  `docx` extra.
+- **`packages/debate_api/tests`**: the test world's synthetic sources and recording stores
+  (`conftest.py`); `test_card_download.py`, `test_card_download_limits.py` and
+  `test_card_download_image.py`. The Chromium journey and a cart test. The route lists of the
+  authorization matrix, the exposure check and the script check gained `/download`, and the card
+  page's bar test gained the new row.
+- **`pyproject.toml`, `uv.lock`, `tests/architecture/test_import_contracts.py`**: the API's direct
+  lxml contract and its probes (Deviation 2).
+- **`docs/runbooks/evidence-search.md`**: download, the caps with the measurements, timing on dev,
+  and a row in What to record.
+- **`plan_specs/.../t08-card-download.yaml`**: the PM's cart-ruling comment, above the folded
+  description (checked: not in the parsed description).
+
+## Deviations from the spec
+
+1. **Files outside `constraints.packages`.** All are needed for the download the spec describes,
+   and none changes the index format (v1-e39-t13's):
+   - `debate_core.integrations.local.search_index_reader` reads the occurrences'
+     `first_element_index` and `last_element_index`, which the index stores but no reader read. The
+     writer finds a card by them. The search statement is unchanged. The hand-written statement list
+     in `test_search_index_reader_sqlite_features.py` gained the two columns, and its slow replay
+     against the Lambda image's SQLite is the next `validate-dev`'s.
+   - `debate_core.testing.search_index.published_index(parser_version=...)`, defaulting to the
+     version it always wrote.
+   - `debate_core.integrations.docx_parser.package.declared_document_bytes`, the zip-directory read
+     the PM's ruling asked for "from docx_parser", and the port docstring's one sentence (condition 3).
+   - The packaging and contracts in Deviation 2.
+   - The runbook section, and the spec comment the PM asked for.
+2. **The function's image and the import contracts.** `debate_api` depends on
+   `debate-core[aws,docx,tub]` (it was `[aws,tub]`), because the writer and its parser need lxml and
+   the image installs exactly what `uv.lock` records for `debate-api`. Without the extra the function
+   would start and fail on its first download, as `v1-e01-t17` found for the CLI.
+   `test_card_download_image.py` holds the container's wiring and the lock together. In the root
+   `pyproject.toml`, `debate_api` leaves the indirect "Document libraries stay inside
+   debate_core.integrations.docx_parser" list for a new direct contract, "The API reaches lxml only
+   through debate_core.integrations". This copies the CLI (`v1-e31-t06`) and the API's own AWS SDK
+   contract (`v1-e39-t05`). Two planted probes in `tests/architecture` prove it breaks on a route
+   importing lxml or python-docx.
+3. **"A cart of up to 30 cards held in the session" is now 8 cards, held in the browser, with a
+   source budget and a fetch ceiling.** The browser part and the budget are the PM's rulings of
+   2026-10-22. The 8 is the measured number the PM's notes foresaw ("if that's below 30, say so … as
+   a setting"). Neither byte limit is in the spec:
+   - `TUB_DOWNLOAD_SOURCE_XML_BYTES` (20,000,000) counts the cart's `document.xml` bytes, as their
+     zip directories declare them.
+   - The constant fetch ceiling (52,000,000) bounds the files held.
+
+   A card whose own document part is over the budget is a refused card of its own
+   (`SOURCE_TOO_LARGE`, named by its place). A cart whose parts only add up past the budget, or whose
+   files pass the ceiling, gets the cart-wide `SOURCES_TOO_LARGE`. The setting replaced
+   `TUB_DOWNLOAD_SOURCE_BYTES`, which was never deployed (a test holds that the old name is not
+   read).
+4. **The fingerprint, and cite-only cards.** The writer refuses a card whose source paragraphs do
+   not have the recipe's exact fingerprint. The index keeps no exact fingerprint, so the download
+   takes it from the evidence text the index holds (`fingerprint_text`, E31's rule for a FULL or
+   ABBREVIATED card). The writer's check then holds the copied card to the text the page showed. A
+   CITE_ONLY card's fingerprint is over its full cite, which the index stores without its cutter
+   mark. So a cite-only card is refused, named, with "It is a cite with no card text … Copy card
+   copies the cite."
+5. **How `source_stores` is used.** The use case reads each source through
+   `source_stores(source_prefix(caselist, snapshot))`, the same stores and prefixes ac6 names, before
+   the build. That lets it refuse a cart over the source limits before building. It then gives the
+   writer one in-memory store of exactly those bytes, rather than the writer's own `source_stores`
+   argument. The writer's checks are unchanged, and a missing or damaged source still comes back as
+   its SOURCE_UNAVAILABLE.
+6. **"Nothing outside the function's /tmp (clean it after each build)":** a download writes no file
+   anywhere. Sources and the built file stay in memory, and the writer and parser use no temporary
+   files (`grep` for `tempfile` in both: none). So there is nothing to clean.
+7. **The card page's action bar has a second row.** Copy card's row is unchanged. Download .docx
+   and Add to cart are on a row below it, because both rows do not fit 1366 px once Copy card's
+   status reads "Copied. Paste it into Google Docs or Word." The t06 test that put the card text
+   within 40 px of the Copy button now measures from the bar's bottom, and still asserts that the
+   status shares the Copy button's line.
+
+## Decisions and assumptions
+
+1. **The caps, from measurement** (2026-10-22, operator's Mac, Apple M3 Pro, load average 6 to 10
+   from other sessions). Synthetic sources built with Word-like run markup until their size matched
+   the mean disclosed file: 236 KB, 3.6 MB of `document.xml`, 35 cards of about 1,400 words. The
+   script is not committed: `measure_download.py` in the session's scratchpad.
+
+   | Cart | Build | File |
+   |---|---|---|
+   | 1 card | 0.70 s | 7.2 KB |
+   | 10 cards from 10 sources | 10.04 s | 41.5 KB |
+   | 30 cards from 30 sources | 29.06 s | 117.9 KB |
+   | 30 cards from 1 source | 2.51 s | 118.1 KB |
+   | 1 card from a camp-sized source (1,004 KB, 150 cards) | 4.51 s | |
+   | Worst formatting (one fully formatted run per word), 30 cards | | 245,404 bytes: 0.95 bytes per character |
+
+   Peak memory: 10 mean-size sources held about 830 MB during the build (about 80 MB each), so 30
+   would pass the function's 2,048 MB. The function's core is assumed to be **half** the Mac's speed
+   (Graviton2 at 2,048 MB, one full core). That assumption is untested until Operator follow-up 4.
+   Under it, 8 mean-size sources are about 16 s. Both are under two thirds of the 30 s that
+   CloudFront's default origin timeout (no `origin_read_timeout` in `distribution.tf`) and the
+   function's timeout set. The settings (`TUB_DOWNLOAD_CARD_CAP` 1 to 30,
+   `TUB_DOWNLOAD_SOURCE_XML_BYTES`) are unset by Terraform.
+
+   **Real source sizes** (the PM's condition 1; 2026-10-22; read-only on the operator's dev store,
+   aggregates only). The sources named by index `f29b81c276dd67c5`'s occurrences, the newest local
+   index (v1-e39-t12's rebuild), with sizes read from `blobs/sha256`; **runtime 3.1 s**. Index
+   `767b9c7c056b80cb`, published to dev, gave the same picture to within 0.1 point (2.9 s).
+
+   | Caselist | Sources | p50 bytes | p95 bytes | Largest | Documents whose source alone is over 2,000,000 |
+   |---|---|---|---|---|---|
+   | hsld26 | 5,965 | 69,708 | 353,223 | 7,133,832 | 93 of 12,714 (0.73%) |
+   | hspf26 | 3,524 | 72,419 | 1,431,736 | 7,823,779 | 519 of 11,000 (**4.72%**) |
+   | hspolicy26 | 3,799 | 157,358 | 884,755 | 7,679,194 | 193 of 20,961 (0.92%) |
+   | openev | 102 | 204,500 | 2,238,723 | 6,854,554 | 1,325 of 5,759 (**23.01%**) |
+
+   The same share at other file-byte budgets (0.7 s): over 3 MB 0.32 / 4.16 / 0.24 / 17.40%; over
+   4 MB 0.24 / 2.93 / 0.18 / 10.12%; over 5 MB 0.03 / 2.63 / 0.08 / 1.28%; over 6 MB 0.02 / 2.41 /
+   0.05 / 1.28%; over 8 MB 0% everywhere (hsld26 / hspf26 / hspolicy26 / openev).
+
+   **Bytes on disk are not what costs time.** The writer parses each source's `word/document.xml`.
+   Read from the zip directories alone (no content; 5.2 s), the sources over 2 MB have a
+   `document.xml` of, at the median, 269 KB (hsld26, 30 sources), 469 KB (hspf26, 160), 701 KB
+   (hspolicy26, 30; 92% of their compressed bytes are media) and 2.0 MB (openev, 6). The largest
+   `document.xml` of any source is 6,412 KB, 3,754 KB, 6,584 KB and 10,577 KB. The synthetic measurements
+   above cost about 0.2 to 0.3 s per MB of `document.xml` on the Mac and about 22 MB of memory per
+   MB, so even the largest real source is about 3 s and 240 MB alone.
+
+   **The limits the PM ruled (option (a)), on data.** Per caselist, from the same store (5.1 s):
+
+   | Caselist | File p99 | Largest file | `document.xml` p99 | Largest `document.xml` |
+   |---|---|---|---|---|
+   | hsld26 | 1,323,225 | 7,133,832 | 965,762 | 6,412,100 |
+   | hspf26 | 6,404,597 | 7,823,779 | 1,573,448 | 3,754,072 |
+   | hspolicy26 | 1,803,342 | 7,679,194 | 2,016,564 | 6,583,540 |
+   | openev | 4,820,010 | 6,854,554 | 7,721,413 | 10,576,664 |
+
+   - **The `document.xml` budget** is 20,000,000. The largest real part, 10,576,664 bytes, is under
+     it, so no source is refused for its part alone.
+   - **The fetch ceiling** is 52,000,000. That is above the largest file (7,823,779), so none is
+     refused alone, and above eight files of the largest p99 (8 × 6,404,597 = 51,236,776).
+
+   **Memory at both limits, measured.** The cart: eight synthetic sources with 20,647,502 bytes of
+   `document.xml` and 51,216,200 bytes of files (padded with random media). Built in a fresh process
+   twice: **3.7 s**, 52 MB with the modules loaded, 101 MB holding the files, and a **634 MB peak**
+   (533 MB for the build). With 150 MB allowed for the app and its index reader (the dev `REPORT`
+   after init showed 82 MB), that is about **732 MB at the measured rate** and **1,314 MB at twice
+   it**, so the files and the build double. That is under the PM's 1,400 MB line, but the margin at
+   twice is 86 MB: the dev timing's `Max Memory Used` (Operator follow-up 4) is the check that
+   matters. The script is `measure_ceilings.py` in the session's scratchpad.
+2. **The file-size limit is 3 MB**, a constant, not a setting. A function URL buffers 6 MB, and the
+   Lambda Web Adapter base64-encodes a binary body, so 4.5 MB of file fills it, and 3 MB leaves a
+   third. The estimate is 16,384 bytes, plus 2,048 per card, plus 2 per character of tag, cite and
+   text: about twice the worst measured. A built file is checked again after the build.
+3. **Which occurrence is copied: the card's representative**, the one whose text the page shows.
+   A card whose representative is suppressed is "no longer in the search", as its page is.
+4. **The recipe a cart becomes.** One pocket, *Team evidence search*, and one block, *Downloaded
+   cards*, holding the cards in cart order. A recipe needs one format, caselist and side, which a
+   mixed cart does not have. Those go into the sidecar alone, which is never sent, so the first
+   card's event and store stand in, with the format's first side. The occurrence's `membership`
+   (not kept in the index, read by no writer) is `UNLINKED`. Its disclosure is `None`, since the
+   provenance goes nowhere.
+5. **Statuses.** `409` for a cart that cannot be built as sent; `400` for one that cannot be read;
+   `503` for download switched off, an unreadable index or list, or an unwritten record. Each
+   refused card carries its place in the cart. A card still in the search carries its tag or short
+   cite, cut at 80 characters. A removed card carries neither, so its words are never repeated.
+6. **The file name** is `team-evidence-cards-<UTC date>.docx`: nothing about the cards.
+7. **The cart in the browser.** `sessionStorage` key `tub-download-cart` holds a list of
+   references matching the server's pattern. The browser's cap mirrors the server's, from
+   `data-tub-cart-cap`, but the server enforces it. The cart is emptied on sign-out and on any page
+   without a session. Cards already in the cart show *Remove from cart*.
+8. **Smoke checks.** `validate-dev` runs no signed-in check (t10's PM amendment of 2026-10-21), and
+   a download needs a session, so no smoke check is added here. The unsigned answer (`401` for a
+   POST without a session) is in the authorization matrix, which now lists `/download`.
+
+9. **What stops a file that declares less than it holds** (the PM's ruling: confirm and name it).
+   The budget reads the zip directory's claim, and the parser never inflates a part past that claim.
+   `zipfile`'s `ZipExtFile` stops at the declared size and checks the CRC there. Checked on a
+   synthetic file whose directory claims 1,000 bytes for a 104,939-byte `word/document.xml`:
+   - with the file's real CRC, the short read fails it, and the parser refuses the file as
+     `MALFORMED_PACKAGE` ("word/document.xml could not be read from the package");
+   - with a CRC forged to match the 1,000-byte prefix, the XML is cut short, and the parser refuses
+     it as `MALFORMED_XML`.
+
+   Above that, the parser's own limits still apply to anything declared large: `_read_part` reads at
+   most `maximum_part_bytes` (64 MiB) + 1 of any part, and `_check_directory` refuses a package
+   declaring over `maximum_total_uncompressed_bytes` (128 MiB) in all. So the declared size bounds
+   what is parsed, and a lie about it refuses the file.
+   `test_download_of_a_file_that_understates_its_document_part_passes_the_budget_and_is_refused_by_the_parser`
+   builds such a file (declared 1,000, budget 1,000): the budget lets it through, the writer's parser
+   refuses it, the card is named "Its file no longer matches the search…", and nothing is built.
+   `declared_document_bytes` reads the main document part through the package relationships, as the
+   parser does (nearly always `word/document.xml`), under the same directory guards, and gives
+   `None` for bytes that are not such a package (the writer then refuses them).
+
+## Operator follow-ups
+
+Set `WT` once, in a new terminal window:
+
+```bash
+WT=/Users/charlesclark/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e39-t08-card-download
+```
+
+**1. Rehearse the dev deploy** (expected runtime ~4 min: a sync, then an image build; changes
+nothing outside the worktree). The block stops if a `DEBATE_*` override is set or a `caselist pull`
+is running (working agreement 11). Docker Desktop must be running.
+
+**Operator command** (expected runtime ~4 min)
+Where: `${WT}`
+```bash
+cd "${WT}"
+PULL=$(pgrep -fl 'debate-research( --json)? caselist pull')
+OVERRIDES=$(env | grep '^DEBATE_' | cut -d= -f1 | tr '\n' ' ')
+echo "running pull: ${PULL:-none}"
+echo "DEBATE_ overrides: ${OVERRIDES:-none}"
+if [[ -n "$PULL" || -n "$OVERRIDES" ]]; then
+  echo "STOP: the line above that is not none says why. Wait for the pull to finish, or open a new window."
+else
+  uv sync --all-packages
+  uv export --package debate-api --frozen --no-dev --no-emit-workspace | grep -c '^lxml=='
+  scripts/tub_deploy.sh dev --dry-run
+fi
+```
+Read before going on: two `none` lines; then `1` from the export (lxml is in the image's
+requirements; `0` means the lock lost the extra, so stop); then the script's dry-run end, an image
+built and no push. A `STOP` line, a `0` or a build error stops here; paste it back.
+
+**2. Deploy dev** (expected runtime ~3 min; changes the dev function), only after block 1 read
+cleanly:
+
+**Operator command** (expected runtime ~3 min)
+Where: `${WT}`
+```bash
+cd "${WT}"
+PULL=$(pgrep -fl 'debate-research( --json)? caselist pull')
+OVERRIDES=$(env | grep '^DEBATE_' | cut -d= -f1 | tr '\n' ' ')
+echo "running pull: ${PULL:-none}"
+echo "DEBATE_ overrides: ${OVERRIDES:-none}"
+if [[ -n "$PULL" || -n "$OVERRIDES" ]]; then
+  echo "STOP: the line above that is not none says why. Wait for the pull to finish, or open a new window."
+else
+  scripts/tub_deploy.sh dev
+fi
+```
+Success looks like the runbook's step 8: `{"status":"ok"}` through CloudFront, then `Deployed <sha>
+to dev` and the digest the function runs.
+
+**3. ac4: the coach's check in Word, with Verbatim, and in Google Docs** (expected ~15 min, by
+hand). Sign in on `https://tub.dev.wfbdebate.com/`. On a card page, check that **Download .docx**
+and **Add to cart** show; if *Download is off* shows instead, the dev index was built by another
+parser: rebuild and publish it with this build first (runbook, "Download .docx and the cart"). Then:
+
+- download one card, and open it in Word with the Verbatim template;
+- add three or four cards from different files to the cart (a camp card among them if the dev
+  index has one), choose **Download cart**, and open that file too;
+- upload one of the two to Google Drive and open it with Google Docs.
+
+Record **yes or no** for each of the three: *the single card opens in Word with Verbatim, its tag,
+cite, underlining, highlighting and sizes as on the card page*, *the cart file does the same for
+every card*, *Google Docs keeps the formatting*. Also note that no file shows a `[Disclosed: …]` or
+`[OpenEv: …]` line.
+
+**4. Time a download on dev: three carts and a refusal check** (the PM's rulings of 2026-10-22),
+right after step 3. Follow the runbook's
+[timing section](../runbooks/evidence-search.md#the-downloads-limits-and-timing-a-download-on-dev).
+
+- **List the carts' card pages first.** Run the runbook's read-only listing block (seconds; it stops
+  on a `DEBATE_*` override or a running `caselist pull`). For index `f29b81c276dd67c5` it prints
+  exactly these four lines, each followed by eight card-page URLs, and nothing else:
+
+  ```text
+  first (mean-size): 8 cards, 1,886,141 file bytes, 8,338,181 document.xml bytes
+  (a) XML budget: 8 cards, 7,345,762 file bytes, 19,997,074 document.xml bytes
+  (b) fetch ceiling: 8 cards, 44,855,560 file bytes, 2,491,293 document.xml bytes
+  (c) refusal check: 8 cards, 26,309,272 file bytes, 44,031,336 document.xml bytes
+  ```
+
+  Other totals mean another store or index: stop and send the four lines to the PM. The block was
+  run as written, in zsh, on this store on 2026-10-22, and printed exactly that, with 32 URLs. Its
+  guard was checked too: with `DEBATE_STORAGE__DATA_DIR` set, it printed the `STOP` line.
+- **Then each cart in turn:** *Empty the cart*, add its eight cards, *Download cart*, and read the
+  latest `REPORT` line with the runbook's command before the next cart.
+  - The first cart, (a) and (b) download a file, with `Duration` under 20,000 ms and
+    `Max Memory Used` under 1,400 MB. A card refused by name (one holding a picture, say) still had
+    its file read. Record that line, drop the card with *Remove these from the cart and download the
+    rest*, and record the next line too.
+  - (c) answers *These cards come from files too large to read in one download* within a few
+    seconds and builds nothing. Record its `Duration`.
+- **Paste every line back.** Any line over 20,000 ms or 1,400 MB, or (c) building a file or taking
+  more than a few seconds, goes to the PM with all the lines before the pilot opens.
+
+## Follow-up work
+
+1. **ADR-0019 says otherwise in two places** (the PM's to amend; not edited here). Its (d) puts the
+   cart in a `__Host-tub_cart` cookie, which the PM's ruling of 2026-10-22 replaces with the
+   browser's `sessionStorage`. Its (a) 2 says a 30-card download "is far below the 6 MB response
+   limit". That is true of the file's size (118 KB measured), but the build time is per source, and
+   the cap is 8 (Decisions 1).
+2. **The two download settings are not in Terraform's environment block** for the function
+   (`infrastructure/modules/evidence_search/main.tf`). If the dev timing says change, it is a code
+   default or that block: an E39 infrastructure follow-up, `v1-e39-t04`'s module.
+3. **Real source sizes: measured** (the PM's condition 1; Decisions 1). The PM ruled option (a)
+   on them, and it is built.
+4. **The port's docstring: fixed** (condition 3, `f6dcae9`).
+5. **The second failure in the cut-short affected run** did not reproduce in any group. If the
+   pull request's `ci` shows a failure outside the files this branch touches, paste it into this
+   session.
+6. **`pyright` named on two `tests/architecture` files** (`test_fakes_reach_only_their_port.py:144`,
+   `test_thin_handlers.py:21`) reports two errors. They exist on `origin/dev` too and are outside
+   CI's pyright scope, so they were left alone.
+
+**For the PM's short re-review**, one paste-ready block:
+
+```text
+v1-e39-t08 (card download): option (a) is built; ready for the short re-review.
+
+- Budget: TUB_DOWNLOAD_SOURCE_XML_BYTES = 20,000,000 bytes of the cart's word/document.xml, as each
+  fetched file's zip directory declares it, read without a parse by
+  docx_parser.package.declared_document_bytes, which the composition root passes in. It replaces
+  TUB_DOWNLOAD_SOURCE_BYTES (never deployed; a test holds that the old name is not read).
+- Fetch ceiling: 52,000,000 bytes (constant), over it the cart gets "files too large to read in one
+  download". Largest real file 7,823,779; largest p99 6,404,597 (hspf26), x8 = 51,236,776.
+- No real source is refused on its own: the largest document.xml is 10,576,664 (openev).
+- Memory at both limits, measured (8 sources, 20.6 MB XML, 51.2 MB files): 634 MB peak in a bare
+  process, 3.7 s. With 150 MB for the app: ~732 MB measured, ~1,314 MB at twice. Under 1,400, with an
+  86 MB margin at twice; the dev timing's Max Memory Used is the real check.
+- Understated files: zipfile never inflates past the declared size, so the parser refuses such a
+  file as MALFORMED_PACKAGE (CRC) or MALFORMED_XML (forged CRC, cut-short XML); the 64 MiB part and
+  128 MiB package limits stand above. A synthetic test shows it refused, not built.
+- Tests shown failing first (5 failed against the old rule); 7 of 7 new mutants caught.
+- The spec carries the ruling as a comment beside the cart ruling; the runbook and Decisions 1 carry
+  the numbers.
+```
+## PM review
+
+<!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
+this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
+
+**Verdict:** ACCEPTED, with conditions closed in-session
+<!-- ACCEPTED / CHANGES_REQUESTED -->
+
+**Reviewed by / date:** PM, 2026-10-22
+
+**Notes:**
+
+The download is what the spec and the 2026-10-22 rulings asked for:
+* fail-closed on suppression, the parser check and the audit write;
+* no provenance line and no sidecar sent;
+* both skeletons red, and 21 of 21 mutants caught.
+
+The CSRF gate covers `/download` like every other unsafe method, and
+`test_download_without_the_sessions_csrf_token_is_refused_by_the_gate` pins it. Name that test in
+the ac8 row.
+
+**Rulings on your four questions**
+
+1. **Caps: (a).** 8 cards plus 2,000,000 bytes of sources until the dev timing (Operator
+   follow-up 4) says otherwise. Predictable beats more.
+2. **Packaging: accepted**, with the `docx` extra in the image and the API's own direct lxml
+   contract, as the CLI's was in v1-e31-t06.
+3. **A cite-only card is refused: accepted.** v1-e39-t12's rule C drops those documents from the
+   index, so the case should become rare.
+4. **ADR-0019 (d) and (a) 2:** the PM amends both in the next PM batch. Don't edit the ADR here.
+
+**Deviations 1 to 7 and Decisions 1 to 8 are accepted.**
+
+**Conditions, to close in this session before the PR**
+
+1. **Measure real source sizes before the budget ships.** This is your Follow-up 3, done now.
+   * Read-only on the operator's store, aggregates only, in seconds (working agreement 2).
+   * Per caselist (hsld26, hspf26, hspolicy26, openev): the p50, p95 and maximum source bytes,
+     and the count and share of index documents whose representative's source alone is over
+     2,000,000 bytes. Those cards can never be downloaded under the budget.
+   * Record the numbers in the runbook beside the caps and in Decisions 1. Report the runtime.
+   * **If that share is over 2% in any caselist, stop and bring the numbers to the PM before
+     the PR.** The budget would then be set on data, not left as written.
+2. **A card whose own source is over the budget is refused as that card, with a message that
+   fits it.**
+   * Today it gets `SOURCES_TOO_LARGE`, whose message says to download "a card from a large file
+     on its own". For that card, that cannot work.
+   * Make it a refused-card reason, named by its place like the others, so that *Remove these
+     from the cart and download the rest* still works. The message: "Its file is too large to
+     download. Copy card still works."
+   * A cart refused only because its sources add up past the budget keeps today's message.
+   * Write the tests first and show them failing.
+3. **Fix the stale docstring** in `debate_core.application.ports.evidence_file_writer` (your
+   Follow-up 4). It is one sentence, accepted outside `constraints.packages`.
+4. **Then update the stale parts of this report** (Summary, Deviations, Decisions 1, the ac2 and
+   ac8 rows, Follow-up work). No new review is needed for that.
+
+**The PR.** Open it with `--partial`. ac4 is the operator's after a dev deploy, so the Goal stays
+`InProgress`. v1-e39-t10 depends on this task but waits for the prod promotion anyway. The PM
+records ac4 and the timing and sets the Goal `Succeeded` in a PM batch. If the PR's `ci` shows a
+failure outside the files this branch touches (your Follow-up 5), stop and bring it to the PM.
+
+**Operator follow-ups, after the merge, in this order:**
+* v1-e39-t12's two blocks (its rebuilt index publishes first).
+* Then blocks 1 and 2 here, from this worktree before `scripts/task finish`. The branch already
+  carries v1-e39-t11.
+* Then, in one sitting on dev: v1-e39-t11's four-point check, ac4 here, and step 4's timing.
+  Over 20,000 ms or 1,400 MB, bring the `REPORT` lines to the PM before the pilot opens.
+
+**Follow-up work:**
+* 1 (ADR-0019): the PM batch.
+* 2 (Terraform settings): only if the timing says so.
+* 3: condition 1.
+* 4: condition 3.
+* 5: the PR's `ci`.
+* 6 (pyright on two `tests/architecture` files): added to v1-e01-t31's brief, which is about the
+  repository's own checks.
+
+If anything comes out differently, stop and ask for another review.
+
+## PM review, second
+
+**Verdict:** ACCEPTED, with one condition closed in-session
+<!-- ACCEPTED / CHANGES_REQUESTED -->
+
+**Reviewed by / date:** PM, 2026-10-22
+
+**Notes:**
+
+1. **Option (a) is built as ruled.**
+   * The budget counts the declared `document.xml` bytes, read by `docx_parser` through the
+     composition root.
+   * The fetch ceiling comes from the real p99 and maximum file sizes.
+   * No real source is refused on its own under either.
+   * The tests were red first, and 7 of 7 new mutants were caught.
+
+   The first review's ruling 1 ("8 cards plus 2,000,000 bytes") is superseded by this one: 8 cards,
+   20,000,000 bytes of `document.xml`, and a 52,000,000-byte fetch ceiling.
+2. **Decisions 9 is accepted, and is exactly the evidence asked for.** `zipfile` stops at the
+   declared size and checks the CRC. The forged-CRC case is refused as malformed XML. The 64 MiB
+   and 128 MiB limits sit above both. The synthetic test shows such a file refused, not built.
+3. **Memory.** 634 MB measured at both limits, and about 1,314 MB at twice with the app, is under
+   the 1,400 MB line, but the margin is thin. Step 4's cart of eight mean-size cards does not come
+   near the ceilings, so it cannot check that margin.
+4. **Condition, closed in-session (documents only).** Add a second cart to Operator follow-up 4
+   and to the runbook's timing section:
+   * eight camp cards from eight different OpenEv files, choosing the largest files the dev index
+     offers;
+   * record its `REPORT` line beside the first;
+   * the same lines apply: over 20,000 ms or 1,400 MB `Max Memory Used`, bring both lines to the
+     PM before the pilot opens.
+
+   No re-review is needed for that.
+
+**The PR:** open it with `--partial`, as in the first review. The operator order there stands.
+If anything comes out differently, stop and ask for another review.
+
+## Criteria open at the partial merge (2026-10-22)
+
+Recorded after the PM's second review so that `scripts/task pr --partial` reads it, which reads open
+items only after the last-but-one review. Nothing here changes either review or the criteria table
+above.
+
+| Criterion | Status | Why it is open |
+|---|---|---|
+| **ac4** — the operator opens a downloaded single card and a cart file in Word with Verbatim and imports one into Google Docs; yes or no | **NOT RUN** | Needs the dev deploy (Operator follow-ups 1 and 2), Word with Verbatim and a Google account; the PM records it after the merge |
+
+Every other criterion is PASS (the table above). The Goal stays `InProgress`. Since the second
+review, the only commit is `15a7b92`: documents only, the three timing carts and the refusal check in
+Operator follow-up 4 and the runbook, as the PM's ruling of 2026-10-22 asked, with no re-review
+needed. Step 4's timing (three carts and the refusal check) is also still to run, after the merge.

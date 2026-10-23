@@ -1023,6 +1023,192 @@ Success looks like an `ETag` and `"ServerSideEncryption": "aws:kms"`. `--if-none
 S3 refuse the write with `PreconditionFailed` if a list appeared in the meantime, so an existing
 list is never replaced.
 
+## Download .docx and the cart
+
+`v1-e39-t08`. A card page's **Download .docx** and the cart's **Download cart** build one Verbatim
+file with the E33 writer, inside the function, and send it as an attachment. The cart is a list of
+card references kept in the browser tab (`sessionStorage`), never in the session cookie; the
+function checks every reference again (the PM's ruling of 2026-10-22).
+
+- **What it reads.** Each card's source, by its sha256, from the current objects under
+  `raw/caselist/<slug>/` or, for a camp card, `raw/openev/<year>/`: the role's `raw/*` read. It reads
+  nothing else, writes nothing to the bucket, and writes nothing to `/tmp`: the sources and the file
+  stay in memory. The file carries no provenance line (data-use policy 1.11); its sidecar is built
+  and dropped, and the `cards-downloaded` audit record names the cards.
+- **Download is off** on every card page, with *Download is off until the search's next weekly
+  update*, when the function's parser version is not the one the loaded index's manifest names. A
+  card's place in its source is the paragraphs that parser found it in, so another parser could copy
+  the wrong paragraphs. It happens after a deploy that changes the parser and before the next index is
+  published: rebuild and publish the index with the deployed build (`tub index build` and `publish`,
+  [search index guide](../guides/search-index.md)), and download comes back within five minutes.
+- **Failing closed.** A card the suppression list stops when the download is asked for is refused
+  and named, whatever page it was added from. A download whose audit record cannot be written is not
+  sent (`503`, and the `cards-downloaded` line in the table below).
+
+### The download's limits, and timing a download on dev
+
+The writer parses each source it copies from, whole, and holds every source until the file is read
+back, so a download costs time and memory per distinct source, in proportion to its main document
+part (`word/document.xml`). Measured on 2026-10-22 on the operator's Mac (Apple M3 Pro, under other
+load), with synthetic sources the size of the mean disclosed file (236 KB, 3.6 MB of document XML):
+
+| Cart | Build time | File |
+|---|---|---|
+| 1 card | 0.70 s | 7.2 KB |
+| 10 cards from 10 sources | 10.0 s | 41.5 KB |
+| 30 cards from 30 sources | 29.1 s | 117.9 KB |
+| 30 cards from 1 source | 2.5 s | 118.1 KB |
+| 1 card from a camp-sized source (1,004 KB) | 4.5 s | |
+| 8 cards from 8 sources at both byte limits (20.6 MB of document XML, 51.2 MB of files) | 3.7 s | |
+
+CloudFront and the function both stop a request at 30 s, and the function has 2,048 MB, so a
+download has three limits (the PM's ruling of 2026-10-22):
+
+| Limit | Value | What it bounds |
+|---|---|---|
+| `TUB_DOWNLOAD_CARD_CAP` (setting) | 8 (1 to 30) | Cards in one download, so sources in one build |
+| `TUB_DOWNLOAD_SOURCE_XML_BYTES` (setting) | 20,000,000 | The cart's `document.xml` bytes, summed as each fetched file's zip directory declares them, read without a parse |
+| The fetch ceiling (constant) | 52,000,000 | Bytes of files held before the build: a file is held whole, whatever its XML |
+
+**Real source sizes** (2026-10-22, the operator's dev store, read-only, aggregates only; the sources
+the occurrences of index `f29b81c276dd67c5` name; 3.1 s, and 5.1 s for the p99 and the zip
+directories):
+
+| Caselist | Sources | File p50 | File p95 | File p99 | Largest file | `document.xml` p99 | Largest `document.xml` |
+|---|---|---|---|---|---|---|---|
+| hsld26 | 5,965 | 69,708 | 353,223 | 1,323,225 | 7,133,832 | 965,762 | 6,412,100 |
+| hspf26 | 3,524 | 72,419 | 1,431,736 | 6,404,597 | 7,823,779 | 1,573,448 | 3,754,072 |
+| hspolicy26 | 3,799 | 157,358 | 884,755 | 1,803,342 | 7,679,194 | 2,016,564 | 6,583,540 |
+| openev | 102 | 204,500 | 2,238,723 | 4,820,010 | 6,854,554 | 7,721,413 | 10,576,664 |
+
+So no real source is refused on its own: its `document.xml` is at most 10,576,664 bytes, under the
+20,000,000 budget, and its file at most 7,823,779 bytes, under the 52,000,000 ceiling, which also
+holds eight files of the largest p99 (6,404,597). A file budget of 2,000,000 bytes, as first set, would
+have refused 4.72% of hspf26's documents and 23.01% of openev's: big files are big for images and
+other parts, and the ones over 2 MB have a median `document.xml` of 269 KB to 2.0 MB.
+
+**Memory at both limits.** The 8-source cart above, built in a bare process: 52 MB with the modules
+loaded, 101 MB holding the 51.2 MB of files, a 634 MB peak during the build. With 150 MB allowed for
+the app and its index reader, that is about 732 MB at the measured rate and 1,314 MB at twice it.
+
+**The declared size is a claim.** A file whose zip directory declares a smaller `document.xml` than
+it holds passes the budget on the claim, and is then refused by the parser, never built: `zipfile`
+never inflates a part past its declared size, so its CRC fails (*MALFORMED_PACKAGE*), or with a CRC
+forged to match, its XML is cut short (*MALFORMED_XML*). Above that, the parser never reads more than
+64 MiB of any part, or opens a package declaring more than 128 MiB in all.
+
+A card whose own `document.xml` is over the budget is refused by name, *Its file is too large to
+download. Copy card still works.*, and can be dropped from the cart like any refused card. A cart
+whose parts only add up past the budget, or whose files pass the fetch ceiling, is refused with
+*These cards come from files too large to read in one download*, as is a cart whose file would pass
+3 MB with its own sentence: a function URL buffers at most 6 MB of response, and the Lambda Web Adapter
+sends a binary body base64-encoded. Neither setting is set by Terraform; the defaults hold until
+the dev timing below says otherwise, and changing one is a change to the module's environment block.
+
+**Time a download on dev** after the deploy that ships it, with three carts and one refusal check
+(the PM's rulings of 2026-10-22). Real carts cannot reach both byte limits at once: camp files are
+heavy in XML, and the largest caselist files are heavy in images. So each cart tests one limit:
+
+| Cart | What it tests | From the index `f29b81c276dd67c5` |
+|---|---|---|
+| First: eight mean-size cards | An ordinary cart: eight hspolicy26 files nearest 236 KB | 1,886,141 file bytes, 8,338,181 `document.xml` bytes |
+| (a) The XML budget | Eight camp files, the two largest `document.xml` parts among them | 7,345,762 file bytes, 19,997,074 `document.xml` bytes |
+| (b) The fetch ceiling | The eight largest hspolicy26 files | 44,855,560 file bytes, 2,491,293 `document.xml` bytes |
+| (c) The refusal check | The eight largest camp files, over the budget | 26,309,272 file bytes, 44,031,336 `document.xml` bytes |
+
+**List the carts' card pages.** A read-only block on the operator's store: it opens the index
+read-only and reads only file sizes and zip directories. It prints, for each cart, its byte totals
+and its eight card-page URLs, and nothing else: no file name, team code, school or card text. Set
+`INDEX_ID` to the index dev serves (the id the latest `tub index publish` printed, or the app log's
+`search index <id> loaded`). It stops if a `DEBATE_*` override is set or a `caselist pull` is running.
+
+**Operator command** (expected runtime seconds)
+Where: your Mac, anywhere
+```bash
+PULL=$(pgrep -fl 'debate-research( --json)? caselist pull')
+OVERRIDES=$(env | grep '^DEBATE_' | cut -d= -f1 | tr '\n' ' ')
+echo "running pull: ${PULL:-none}"
+echo "DEBATE_ overrides: ${OVERRIDES:-none}"
+if [[ -n "$PULL" || -n "$OVERRIDES" ]]; then
+  echo "STOP: the line above that is not none says why. Wait for the pull to finish, or open a new window."
+else
+  INDEX_ID=f29b81c276dd67c5
+  python3 -I - "$INDEX_ID" <<'PY'
+import sqlite3, sys, zipfile
+from pathlib import Path
+data = Path.home() / ".debate-research" / "dev"
+index_id = sys.argv[1]
+budget, ceiling = 20_000_000, 52_000_000
+db = sqlite3.connect(f"{(data / 'tub-index' / index_id / 'search-index.sqlite').as_uri()}?mode=ro&immutable=1", uri=True)
+blobs = data / "blobs" / "sha256"
+def sources(caselist):
+    found = {}
+    rows = db.execute(
+        "SELECT o.source_sha256, d.cluster_id FROM documents d JOIN occurrences o ON o.doc_id = d.doc_id "
+        "AND o.ordinal = 0 WHERE d.caselist = ? AND d.completeness != 'CITE_ONLY' ORDER BY d.doc_id",
+        (caselist,),
+    )
+    for sha, cluster in rows:
+        if sha not in found:
+            path = blobs / sha[0:2] / sha[2:4] / sha
+            with zipfile.ZipFile(path) as archive:
+                xml = archive.getinfo("word/document.xml").file_size
+            found[sha] = (path.stat().st_size, xml, cluster)
+    return [(size, xml, cluster) for size, xml, cluster in found.values()]
+def show(name, caselist, cart):
+    print(f"{name}: {len(cart)} cards, {sum(c[0] for c in cart):,} file bytes, {sum(c[1] for c in cart):,} document.xml bytes")
+    for _, _, cluster in cart:
+        print(f"  https://tub.dev.wfbdebate.com/cards/{caselist}/{cluster}")
+policy, camp = sources("hspolicy26"), sources("openev")
+show("first (mean-size)", "hspolicy26", sorted(policy, key=lambda c: (abs(c[0] - 236_000), c[2]))[:8])
+by_xml = sorted(camp, key=lambda c: (-c[1], c[2]))
+chosen, xml_total, file_total = [], 0, 0
+for i, card in enumerate(by_xml):
+    rest = sorted(c[1] for j, c in enumerate(by_xml) if j > i)[: 8 - len(chosen) - 1]
+    if len(chosen) < 8 and xml_total + card[1] + sum(rest) <= budget and file_total + card[0] <= ceiling:
+        chosen.append(card); xml_total += card[1]; file_total += card[0]
+show("(a) XML budget", "openev", chosen)
+show("(b) fetch ceiling", "hspolicy26", sorted(policy, key=lambda c: (-c[0], c[2]))[:8])
+show("(c) refusal check", "openev", sorted(camp, key=lambda c: (-c[0], c[2]))[:8])
+PY
+fi
+```
+Success looks like two `none` lines and then, for index `f29b81c276dd67c5`, exactly these four
+heading lines, each followed by eight `https://tub.dev.wfbdebate.com/cards/...` lines:
+
+```text
+first (mean-size): 8 cards, 1,886,141 file bytes, 8,338,181 document.xml bytes
+(a) XML budget: 8 cards, 7,345,762 file bytes, 19,997,074 document.xml bytes
+(b) fetch ceiling: 8 cards, 44,855,560 file bytes, 2,491,293 document.xml bytes
+(c) refusal check: 8 cards, 26,309,272 file bytes, 44,031,336 document.xml bytes
+```
+Other totals mean the store or the index is not the one these were measured on. Stop and send the
+four lines to the PM before timing anything.
+
+**Time each cart.** Sign in on dev. For each cart in turn: choose **Empty the cart**, open its eight
+URLs and choose **Add to cart** on each, then **Download cart**, then read the function's latest
+`REPORT` line before the next cart:
+
+**Operator command** (expected runtime seconds)
+Where: your Mac, anywhere
+```bash
+aws logs filter-log-events --profile debate-admin --region us-east-1 --log-group-name debate-dev-tub-app \
+  --filter-pattern '"REPORT RequestId"' --query 'events[-1:].message' --output text
+```
+Success looks like:
+
+- **The first cart, (a) and (b):** the file downloads, and the `REPORT` line has `Duration` under
+  20,000 ms and `Max Memory Used` under 1,400 MB. A card the download refuses by name (a picture
+  inside it, say) has still had its file read and parsed. Record that line, choose *Remove these from
+  the cart and download the rest*, and record the next line too.
+- **(c):** the cart bar says *These cards come from files too large to read in one download*,
+  within a few seconds, and no file downloads. Record its `Duration`.
+
+Record every line in [What to record](#what-to-record). A line over 20,000 ms or 1,400 MB, or (c)
+building a file or taking more than a few seconds: send all the lines to the PM before the pilot
+opens. The fix would be lowering `TUB_DOWNLOAD_CARD_CAP` or `TUB_DOWNLOAD_SOURCE_XML_BYTES`, or the
+fetch ceiling, in proportion.
+
 ## What a refusal looks like in the app log
 
 The function logs to `debate-<env>-tub-app` (30 days). It never logs a query, a card id, a card's
@@ -1080,6 +1266,11 @@ for.
 | 8: through CloudFront (code, cache-control) | `200 private, no-store`; all six headers as expected | |
 | 8: direct function URL (code, body) | `403` `{"Message":"Forbidden"}`, for `/healthz` and `/` | |
 | 8: init durations from `REPORT` lines | 4,115 ms (first environment after the deploy), 1,848 ms; 81–82 MB used | |
+| Download: the four carts' totals from the listing block | | |
+| Download: the first cart, eight mean-size cards (`Duration`, `Max Memory Used`) | | |
+| Download: cart (a), the XML budget (`Duration`, `Max Memory Used`) | | |
+| Download: cart (b), the fetch ceiling (`Duration`, `Max Memory Used`) | | |
+| Download: cart (c), the refusal check (`Duration`; the message; no file) | | |
 | 10: managed login rendered; asset hosts recorded | Rendered; both sign-ins reached the callback; hosts in the table above | n/a |
 | 12: IT request sent; confirmed and date | n/a | |
 

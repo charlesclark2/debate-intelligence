@@ -58,6 +58,13 @@ type, never the list's contents.
 A holder built without a list source hides nothing: the tests of `v1-e39-t06` that predate the list.
 The function's composition root always gives it one.
 
+## The parser version, for a download (`v1-e39-t08`)
+
+Each loaded index keeps the parser version its manifest names, and every lease hands it on as
+:attr:`ScreenedSearch.parser_version`. An occurrence's element indices are the paragraphs that
+parser found the card in, so a download is built only when the function's own parser is the same
+one: the card page and the download route ask, and switch download off when it is not.
+
 ## What never waits
 
 Only a request that searches or shows a card leases the index. Sign-in, the callback, the health
@@ -84,7 +91,7 @@ from typing import Final, Protocol
 from pydantic import ValidationError
 
 from debate_core.application.errors import DomainError
-from debate_core.application.evidence_search import EvidenceSearchService, SuppressionPredicate
+from debate_core.application.evidence_search import CardSource, EvidenceSearchService, SuppressionPredicate
 from debate_core.application.ports.search_index_reader import SearchIndexReader, UnreadableSearchIndex
 from debate_core.application.ports.search_index_source import SearchIndexSource, SuppressionListSource
 from debate_core.application.ports.suppression import SuppressionEntry, SuppressionState
@@ -201,11 +208,23 @@ class ScreenedSearch:
     download all go through the same list. It offers no search without it.
     """
 
-    __slots__ = ("_is_suppressed", "_service")
+    __slots__ = ("_is_suppressed", "_parser_version", "_service")
 
-    def __init__(self, service: EvidenceSearchService, is_suppressed: SuppressionPredicate | None) -> None:
+    def __init__(
+        self,
+        service: EvidenceSearchService,
+        is_suppressed: SuppressionPredicate | None,
+        *,
+        parser_version: str,
+    ) -> None:
         self._service = service
         self._is_suppressed = is_suppressed
+        self._parser_version = parser_version
+
+    @property
+    def parser_version(self) -> str:
+        """The parser version the index's manifest says every store it read was parsed by."""
+        return self._parser_version
 
     def search(
         self, query: str, filters: SearchFilters | None = None, cursor: str | None = None
@@ -214,6 +233,10 @@ class ScreenedSearch:
 
     def card(self, caselist: str, cluster_id: str) -> Card | None:
         return self._service.card(caselist, cluster_id, is_suppressed=self._is_suppressed)
+
+    def card_source(self, caselist: str, cluster_id: str) -> CardSource | None:
+        """Where the card's representative was read from, under this request's list (`v1-e39-t08`)."""
+        return self._service.card_source(caselist, cluster_id, is_suppressed=self._is_suppressed)
 
     def check_cursor(self, query: str, filters: SearchFilters | None, cursor: str) -> None:
         """Refuse, with :class:`~debate_core.domain.evidence_search.InvalidSearchCursor`, a cursor that is
@@ -237,6 +260,7 @@ class _LoadedIndex:
 
     index_id: str
     sqlite_sha256: str
+    parser_version: str
     caselists: tuple[str, ...]
     path: Path
     reader: ClosableSearchIndexReader = field(repr=False)
@@ -295,7 +319,7 @@ class SearchIndexHolder:
             loaded = self._current
             if loaded is None:
                 raise SearchIndexUnavailable() from self._refused
-            screened = ScreenedSearch(loaded.service, self._suppressed)
+            screened = ScreenedSearch(loaded.service, self._suppressed, parser_version=loaded.parser_version)
             loaded.leases += 1
         try:
             yield screened
@@ -412,6 +436,7 @@ class SearchIndexHolder:
         return _LoadedIndex(
             index_id=index_id,
             sqlite_sha256=pointer.sqlite_sha256,
+            parser_version=manifest.parser_version,
             caselists=tuple(store.caselist for store in manifest.stores),
             path=path,
             reader=reader,

@@ -78,7 +78,8 @@ ALLOWED_STATEMENTS: Final = (
     "team_count FROM documents WHERE caselist = {} AND cluster_id = {}",
     "SELECT doc_id, ordinal, caselist, source_sha256, disclosure, snapshot, last_snapshot, completeness, "
     "attributed, provenance, side, school, team_code, tournament, round, camp, camp_year, camp_event, "
-    "camp_file_title FROM occurrences WHERE doc_id = {} ORDER BY ordinal",
+    "camp_file_title, first_element_index, last_element_index FROM occurrences WHERE doc_id = {} "
+    "ORDER BY ordinal",
 )
 
 #: What FTS5 itself prepares outside a statement's step, so SQLite traces it unnested: its config read

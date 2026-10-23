@@ -71,9 +71,10 @@ def qr_code_svg(uri: str) -> str:
 
 
 class PageRenderer:
-    """Renders a template with what every page needs: the script and stylesheet, and who is signed in."""
+    """Renders a template with what every page needs: the script and stylesheet, who is signed in, and
+    how many cards the download cart holds (`v1-e39-t08`)."""
 
-    def __init__(self, *, app_script: StaticAsset, app_stylesheet: StaticAsset) -> None:
+    def __init__(self, *, app_script: StaticAsset, app_stylesheet: StaticAsset, cart_cap: int) -> None:
         self._environment = jinja2.Environment(
             loader=jinja2.PackageLoader("debate_api", "templates"),
             autoescape=jinja2.select_autoescape(["html"]),
@@ -81,6 +82,7 @@ class PageRenderer:
         )
         self._app_script = app_script
         self._app_stylesheet = app_stylesheet
+        self._cart_cap = cart_cap
 
     def render(
         self,
@@ -97,6 +99,7 @@ class PageRenderer:
             username=holder.username if holder is not None else None,
             role=holder.role.value if holder is not None else None,
             signed_in=isinstance(holder, Session),
+            cart_cap=self._cart_cap,
             **context,
         )
         return HTMLResponse(page, status_code=status_code)

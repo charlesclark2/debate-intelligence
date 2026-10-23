@@ -27,7 +27,13 @@
 </nav>
 {% endif %}
 </header>
-<main id="main">
+{% if signed_in %}<section class="cart" data-tub-cart data-tub-cart-cap="{{ cart_cap }}" aria-label="Download cart" hidden>
+<p><span data-tub-cart-count>No cards</span> in your download cart, up to {{ cart_cap }}.</p>
+<button type="button" data-tub-cart-download>Download cart</button>
+<button type="button" class="secondary" data-tub-cart-empty>Empty the cart</button>
+<div class="download-status" data-tub-cart-message role="status"></div>
+</section>
+{% endif %}<main id="main">
 {% block main %}{% endblock %}
 </main>
 </body>

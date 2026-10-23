@@ -98,6 +98,7 @@ type XmlElement = etree._Element  # pyright: ignore[reportPrivateUsage]
 
 __all__ = [
     "DEFAULT_PACKAGE_LIMITS",
+    "declared_document_bytes",
     "W_NAMESPACE",
     "DocxPackage",
     "DocxPackageError",
@@ -678,6 +679,27 @@ def _read_run_defaults(root: XmlElement) -> InheritedRunProperties:
     return _read_inherited_run_properties(
         None if run_default is None else run_default.find(qualified_name("rPr"))
     )
+
+
+def declared_document_bytes(content: bytes, *, limits: PackageLimits = DEFAULT_PACKAGE_LIMITS) -> int | None:
+    """The uncompressed size the zip directory declares for the main document part, or `None` when
+    the bytes are not a package this reader would open that far (`v1-e39-t08`).
+
+    Read from the directory and the package relationships alone, under the same guards as
+    :func:`open_debate_docx`: nothing of the document part is inflated. The size is the package's
+    claim, not a measurement. A part that holds more than it declares is never read past the
+    declared size: `zipfile` stops inflating there, and the part is refused as `MALFORMED_PACKAGE`
+    when its CRC does not match, or as `MALFORMED_XML` when a CRC forged to match leaves its XML
+    cut short. Above that, :func:`_read_part` never reads more than `maximum_part_bytes` of a part.
+    """
+    try:
+        _refuse_non_zip_formats(content)
+        with zipfile.ZipFile(BytesIO(content)) as archive:
+            _check_directory(archive, limits)
+            document_part, _ = _main_document_part(archive, limits)
+            return archive.getinfo(document_part).file_size
+    except (DocxPackageError, zipfile.BadZipFile, KeyError):
+        return None
 
 
 def open_debate_docx(

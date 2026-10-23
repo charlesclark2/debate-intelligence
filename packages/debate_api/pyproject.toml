@@ -14,9 +14,13 @@ requires-python = ">=3.12,<3.13"
 # adapters its composition root builds; cryptography for the AES-GCM session cookie; jinja2 for the pages;
 # and segno, pure Python with no dependencies, which draws the authenticator QR code as SVG on the
 # server so the secret never leaves the page as an image request.
+#
+# v1-e39-t08 adds debate-core's `docx` extra: the download builds Verbatim files with the E33 writer
+# and its parser, which read WordprocessingML with lxml. The image installs what uv.lock records here,
+# so without it the function would fail on its first download (as v1-e01-t17 found for the CLI).
 dependencies = [
     "cryptography>=44",
-    "debate-core[aws,tub]",
+    "debate-core[aws,docx,tub]",
     "fastapi>=0.115",
     "jinja2>=3.1",
     "segno>=1.6",

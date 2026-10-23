@@ -97,6 +97,14 @@ label { display: block; font-weight: 600; margin-bottom: 0.25rem; }
 
 .search-box input { flex: 1 1 14rem; min-width: 0; }
 
+.search-mode { display: flex; align-items: flex-start; gap: 0.5rem; margin: 0.75rem 0 0; }
+
+.search-mode input { flex: none; width: 1.5rem; height: 1.5rem; margin: 0; }
+
+.search-mode label { margin-bottom: 0; }
+
+.search-mode .help { margin: 0; }
+
 .filters {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));

@@ -1023,6 +1023,157 @@ Success looks like an `ETag` and `"ServerSideEncryption": "aws:kms"`. `--if-none
 S3 refuse the write with `PreconditionFailed` if a list appeared in the meantime, so an existing
 list is never replaced.
 
+## Moving the index to format 2
+
+`v1-e39-t13` changed the index's format from 1 to 2: its words are stemmed, so `grow` finds
+`growing`, and search by passage needs it ([the index's data model](../data/search-index.md#the-schema-format-version-2)).
+A function from `v1-e39-t13` on reads both formats; an older one reads format 1 only and refuses a
+format 2 index. So the function goes first and the index second, in this order, once in dev after
+the task merges and once in prod at its promotion. Agreement 11 applies to every block: a dry run or
+a comparison first, read, then the real run, in a window with no leftover `DEBATE_*` override.
+
+**1. Deploy dev's function**, from `$WT` on `dev` after the merge, with its environment synced
+([Before you start](#before-you-start)). First the rehearsal, which builds the image and calls no AWS:
+
+**Operator command** (expected runtime ~3 min)
+Where: `$WT`
+```bash
+cd "$WT"
+git pull --ff-only
+uv sync --all-packages
+scripts/tub_deploy.sh dev --dry-run
+```
+Success looks like the image built and the script stopping before the push. Then the deploy:
+
+**Operator command** (expected runtime ~3 min; changes dev's function)
+Where: `$WT`
+```bash
+cd "$WT"
+scripts/tub_deploy.sh dev
+```
+Success looks like [step 8](#step-8--deploy-dev-as-tubdeployer-and-check-it-through-cloudfront)'s
+`{"status":"ok"}` and `Deployed <sha> to dev`. Then sign in on dev and search for `zephyr`, or any
+word: the results carry a count above zero and the line *Until the next weekly update of the
+search, words are matched exactly as typed*. That line says the new function is serving the format
+1 index; a count above zero says it is serving one at all.
+
+**2. Build format 2 and compare it with the published index.** This builds every store the
+published index holds, reads both manifests, and publishes nothing. A build of the whole dev store
+took about 305 s on 2026-10-22.
+
+**Operator command** (expected runtime ~6 min)
+Where: `$WT`
+```bash
+cd "$WT"
+OVERRIDES=$(env | grep '^DEBATE_' | cut -d= -f1 | tr '\n' ' ')
+PULL=$(pgrep -fl 'debate-research( --json)? caselist pull')
+echo "running pull: ${PULL:-none}"
+echo "DEBATE_ overrides: ${OVERRIDES:-none}"
+if [[ -n "$PULL" || -n "$OVERRIDES" ]]; then
+  echo "STOP: the line above that is not none says why. Wait for the pull to finish, or open a new window."
+else
+  aws sso login --profile debate-dev-evidence
+  BUCKET=$(python3 -c 'import tomllib; print(tomllib.load(open("config/profiles/dev.toml", "rb"))["storage"]["s3"]["bucket"])')
+  FORMAT_TWO=$(mktemp -d)
+  aws s3 cp "s3://${BUCKET}/reports/tub/search/current.json" "${FORMAT_TWO}/current.json" --profile debate-dev-evidence
+  MANIFEST_KEY=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["manifest_key"])' "${FORMAT_TWO}/current.json")
+  aws s3 cp "s3://${BUCKET}/${MANIFEST_KEY}" "${FORMAT_TWO}/current-manifest.json" --profile debate-dev-evidence
+  STORES=$(python3 -c 'import json, sys; print(" ".join("--caselist " + one["caselist"] for one in json.load(open(sys.argv[1]))["stores"]))' "${FORMAT_TWO}/current-manifest.json")
+  echo "building: ${STORES}"
+  DEBATE_ENV=dev uv run debate-research --json tub index build ${=STORES} > "${FORMAT_TWO}/build.json"
+  python3 - "${FORMAT_TWO}/current-manifest.json" "${FORMAT_TWO}/build.json" <<'EOF'
+import json, sys
+current = json.load(open(sys.argv[1]))
+envelope = json.load(open(sys.argv[2]))
+if not envelope.get("data"):
+    print("STOP: the build failed:", (envelope.get("error") or {}).get("code"))
+    raise SystemExit(1)
+built = envelope["data"]["manifest"]
+print("current index", current["index_id"], "format", current["format_version"], current["counts"]["documents"], "documents")
+print("new index", built["index_id"], "format", built["format_version"], built["counts"]["documents"], "documents")
+same_rows = {one["caselist"]: one["occurrences_sha256"] for one in current["stores"]} == {
+    one["caselist"]: one["occurrences_sha256"] for one in built["stores"]
+}
+print("same stores and rows as the current index:", "yes" if same_rows else "no, the store changed since it was built")
+before, after = current["counts"]["documents_by_store"], built["counts"]["documents_by_store"]
+stop = built["format_version"] != 2
+for store in sorted(set(before) | set(after)):
+    was, now = before.get(store, 0), after.get(store, 0)
+    print(f"{store}: {was:,} -> {now:,} documents")
+    stop = stop or now == 0 or now < 0.9 * was or (same_rows and now != was)
+print("STOP: not format 2, a store is empty or shrank, or the same rows gave other counts" if stop else "OK: format 2, every store kept")
+print("INDEX_ID=" + built["index_id"])
+EOF
+fi
+```
+Success looks like `current index f29b81c276dd67c5 format 1` (or a later id), `new index <id>
+format 2`, one line per store with the same number on both sides, and `OK: format 2, every store
+kept`, then `INDEX_ID=<id>`. When the `same stores and rows` line says `yes`, the counts must be
+equal: the format changes how words are matched and nothing else, and the block stops if they
+differ. When it says `no`, a pull changed the store since the published index was built, and each
+store may only have grown. **Stop, and take the output to the PM**, on a `STOP` line or a failed
+build. Nothing has been published.
+
+**3. Publish it, with no `--allow-shrink`.** Set `INDEX_ID` to the id the second block printed.
+
+**Operator command** (expected runtime under a minute; changes dev's published index)
+Where: `$WT`
+```bash
+cd "$WT"
+INDEX_ID=put-the-id-from-the-block-above
+OVERRIDES=$(env | grep '^DEBATE_' | cut -d= -f1 | tr '\n' ' ')
+PULL=$(pgrep -fl 'debate-research( --json)? caselist pull')
+echo "running pull: ${PULL:-none}"
+echo "DEBATE_ overrides: ${OVERRIDES:-none}"
+if [[ -n "$PULL" || -n "$OVERRIDES" ]]; then
+  echo "STOP: the line above that is not none says why. Wait for the pull to finish, or open a new window."
+else
+  aws sso login --profile debate-dev-evidence
+  DEBATE_ENV=dev uv run debate-research tub index publish --env dev --index "$HOME/.debate-research/dev/tub-index/${INDEX_ID}"
+fi
+```
+Success looks like a table titled with `INDEX_ID`, whose last row is `reports/tub/search/current.json`,
+and no `published past the shrink guard` line. **If it is refused** with `would shrink the published
+search index`, stop and take the refusal to the PM: do not publish past the guard. Within five
+minutes the function swaps to it: a search on dev no longer carries the *matched exactly as typed*
+line, and *Search by passage* finds cards.
+
+**4. Time three searches on dev**, from the function's `REPORT` lines. The function logs no query
+text, so the lines are told apart by their order. Sign in on dev and search once for anything, so
+the new index is fetched and the page's files are in the browser's cache. Then note the time:
+
+**Operator command** (expected runtime seconds)
+Where: the terminal you will read the lines from
+```bash
+START_MS=$(( $(date +%s) * 1000 ))
+echo "$START_MS"
+```
+Then, about ten seconds apart, in this order: search `nuclear war`; tick *Search by passage* and
+search `Nuclear war between great powers would cause human extinction`; untick it and search
+`deter*`. Then read the lines:
+
+**Operator command** (expected runtime seconds)
+Where: the same terminal
+```bash
+aws logs filter-log-events --profile debate-admin --region us-east-1 --log-group-name debate-dev-tub-app \
+  --start-time "$START_MS" --filter-pattern '"REPORT RequestId"' --query 'events[].message' --output text
+```
+Success looks like three `REPORT RequestId: ...` lines, each with a `Duration: <n> ms`: the plain
+search, the passage and the prefix, in that order, each of whose pages showed a count above zero.
+More than three lines means another request reached the function, such as a second tab: repeat from
+the note of the time. Paste the three durations back to the PM; they go in the query-time table of
+[the index's data model](../data/search-index.md#how-the-index-is-read).
+
+**5. Reinstall the agent with this build before its next Wednesday run**, as
+[Reinstalling the agent](caselist-scheduled-sync.md#reinstalling-the-agent) says. Until it is
+reinstalled the agent runs a build that writes format 1: its weekly stage finds the format 2 index
+is not one it would build, builds format 1 and publishes it, and dev's search is back to words
+matched exactly as typed until format 2 is published again. Nothing breaks, because the function
+reads both, but the move is undone.
+
+**In prod** the order is the same, at the promotion: the prod function (step 11's deploy) before
+prod's first format 2 index ([Promoting the pilot to prod](#promoting-the-pilot-to-prod), item 7).
+
 ## Download .docx and the cart
 
 `v1-e39-t08`. A card page's **Download .docx** and the cart's **Download cart** build one Verbatim
@@ -1296,6 +1447,24 @@ aws lambda wait function-updated --profile debate-dev-tub-deployer --region us-e
 curl -sS https://tub.dev.wfbdebate.com/healthz
 ```
 Success looks like `InProgress`, then `{"status":"ok"}`. For prod, the same with prod's names.
+
+**A format 2 index rolls back only to a function that reads format 2** (`v1-e39-t13`). An image
+built before that task reads format 1 alone. Pointed at it while `current.json` names a format 2
+index, a new environment refuses the index and answers every search with *Search is not available
+right now* until a format 1 index is published, and only a build from before `v1-e39-t13` writes
+one. So before you roll back, check that the digest's image reads format 2: its tag is the commit it
+was built from, and that commit's `search_index.py` names the formats it reads.
+
+```bash
+cd "$WT"
+git fetch origin
+ROLLBACK_COMMIT='the-tag-from-the-list'
+git show "${ROLLBACK_COMMIT%%-uncommitted-*}:packages/debate_core/src/debate_core/domain/search_index.py" \
+  | grep -c 'READABLE_SEARCH_INDEX_FORMAT_VERSIONS: Final = frozenset({1, SEARCH_INDEX_FORMAT_VERSION})'
+```
+Success looks like `1`: that image reads formats 1 and 2, and the rollback is safe. `0`, or `fatal:`
+for a commit git does not have, means it reads format 1 only: do not roll back to it while the
+published index is format 2; take it to the PM.
 
 ## What this runbook deliberately does not do
 

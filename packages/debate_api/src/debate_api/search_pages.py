@@ -45,6 +45,16 @@ search_index_holder.ScreenedSearch`).
   no referrer. A card whose link cannot be built shows none. It leaves the platform, so it writes
   no record.
 
+## Passage search, stems and prefixes (`v1-e39-t13`)
+
+The form's *Search by passage* checkbox sends `mode=passage`, and the search reads the words as a
+passage: the cards holding most of its content words, in any order
+(:meth:`~debate_core.application.evidence_search.EvidenceSearchService.search`). It is off by default,
+so a search is today's search unless the student ticks it. The mode is part of the search's query
+string, so the next page, the count and Back to results keep it, and a cursor from one mode is
+refused in the other. The page says plainly what was not searched: a prefix under three characters,
+and on a format 1 index a passage, and that words are matched as written there.
+
 ## Download .docx and the cart (`v1-e39-t08`)
 
 A card page offers *Download .docx* and *Add to cart* while the index's parser is the function's
@@ -122,6 +132,11 @@ _NOT_FOUND: Final = "It may have been removed, or the link may be wrong. Search 
 _FRESH_SEARCH: Final = "/search"
 _BACK_TO_RESULTS: Final = "Back to results"
 _NEW_SEARCH: Final = "New search"
+_PASSAGE_MODE: Final = "passage"
+_NOT_SEARCHED: Final = frozenset(
+    {SearchNotice.NO_SEARCH_TERMS, SearchNotice.PREFIX_TOO_SHORT, SearchNotice.PASSAGE_UNAVAILABLE}
+)
+"""A page carrying one of these ran no search, so it writes no `searched` record and matched nothing."""
 
 
 class SearchFormInvalid(ValueError):
@@ -138,6 +153,7 @@ class SearchForm:
     side: str = ""
     since: str = ""
     cursor: str | None = None
+    passage: bool = False
 
     @classmethod
     def from_query(cls, params: QueryParams) -> SearchForm:
@@ -148,7 +164,10 @@ class SearchForm:
             side=params.get("side", ""),
             since=params.get("since", ""),
             cursor=params.get("cursor") or None,
+            passage=params.get("mode", "") == _PASSAGE_MODE,
         )
+        if params.get("mode", "") not in ("", _PASSAGE_MODE):
+            raise SearchFormInvalid("mode")
         if form.event and form.event not in {event.value for event, _ in EVENT_CHOICES}:
             raise SearchFormInvalid("event")
         if form.side and form.side not in {side.value for side, _ in SIDE_CHOICES}:
@@ -191,6 +210,7 @@ class SearchForm:
             "caselist": self.caselist,
             "side": self.side,
             "since": self.since,
+            "mode": _PASSAGE_MODE if self.passage else "",
         }
         if cursor is not None:
             fields["cursor"] = cursor
@@ -277,6 +297,10 @@ def _render_search(
         partial=page.partial if page is not None else False,
         query_shortened=SearchNotice.QUERY_SHORTENED in notices,
         no_search_terms=SearchNotice.NO_SEARCH_TERMS in notices,
+        prefix_too_short=SearchNotice.PREFIX_TOO_SHORT in notices,
+        passage_unavailable=SearchNotice.PASSAGE_UNAVAILABLE in notices,
+        word_forms_unavailable=SearchNotice.WORD_FORMS_UNAVAILABLE in notices,
+        not_searched=bool(notices & _NOT_SEARCHED),
         side_caselist_only=SearchNotice.SIDE_CASELIST_CARDS_ONLY in notices,
         since_caselist_only=SearchNotice.FIRST_SEEN_CASELIST_CARDS_ONLY in notices,
         problem=problem,
@@ -315,17 +339,17 @@ def search_page(request: Request) -> HTMLResponse:
     state = pilot_state(request)
     try:
         with state.services.search_index.lease() as search:
-            page = search.search(form.query, filters, form.cursor)
+            page = search.search(form.query, filters, form.cursor, passage=form.passage)
     except SearchIndexUnavailable:
         return _refused(request, 503, _UNAVAILABLE_HEADING, _UNAVAILABLE)
     except InvalidSearchCursor:
         return _render_search(
             request,
-            SearchForm(form.query, form.event, form.caselist, form.side, form.since),
+            SearchForm(form.query, form.event, form.caselist, form.side, form.since, passage=form.passage),
             status_code=400,
             problem="That page of results is out of date. Search again from the first page.",
         )
-    if form.cursor is None and SearchNotice.NO_SEARCH_TERMS not in page.notices:
+    if form.cursor is None and _NOT_SEARCHED.isdisjoint(page.notices):
         state.services.access_audit.searched(_session(request), len(page.hits))
     return _render_search(request, form, page=page)
 
@@ -356,7 +380,7 @@ def _back_link(params: QueryParams, search: ScreenedSearch) -> str | None:
         return None
     if form.cursor is not None:
         try:
-            search.check_cursor(form.query, filters, form.cursor)
+            search.check_cursor(form.query, filters, form.cursor, passage=form.passage)
         except InvalidSearchCursor:
             return None
     return form.page_link(form.cursor)

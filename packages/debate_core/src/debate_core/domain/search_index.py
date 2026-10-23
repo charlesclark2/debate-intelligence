@@ -17,8 +17,9 @@ is the index id, which is the start of the SQLite file's digest.
 ## What a reader may rely on
 
 :data:`SEARCH_INDEX_FORMAT_VERSION` names the SQLite schema the writer creates
-(`docs/data/search-index.md`). A reader refuses an index whose format version it does not know,
-and the publisher refuses one whose parser or fingerprint version is not the running build's.
+(`docs/data/search-index.md`). A reader refuses an index whose format version is not one of
+:data:`READABLE_SEARCH_INDEX_FORMAT_VERSIONS`, and the publisher refuses one whose parser, fingerprint
+or format version is not the running build's.
 The index uses no SQLite or FTS5 feature newer than :data:`SQLITE_FEATURE_CEILING`, the version
 the function's Lambda image is built against; the manifest says which SQLite built it.
 
@@ -50,9 +51,11 @@ __all__ = [
     "SEARCH_INDEX_MANIFEST_NAME",
     "SEARCH_INDEX_MANIFEST_SCHEMA_FILENAME",
     "SEARCH_INDEX_POINTER_KEY",
+    "READABLE_SEARCH_INDEX_FORMAT_VERSIONS",
     "SEARCH_INDEX_PREFIX",
     "SEARCH_INDEX_SQLITE_NAME",
     "SQLITE_FEATURE_CEILING",
+    "STEMMED_FORMAT_VERSION",
     "IndexCounts",
     "IndexFile",
     "IndexedFontSizeSpan",
@@ -70,8 +73,19 @@ __all__ = [
     "render_search_index_manifest_schema",
 ]
 
-SEARCH_INDEX_FORMAT_VERSION: Final = 1
-"""The SQLite schema the writer creates. Bumped by any change a reader would break on."""
+SEARCH_INDEX_FORMAT_VERSION: Final = 2
+"""The SQLite schema the writer creates. Bumped by any change a reader would break on.
+
+2 since `v1-e39-t13`: the full-text table's tokenizer puts FTS5's `porter` stemmer in front of
+`unicode61`, so a word matches its other forms. Nothing else in the file changed."""
+
+STEMMED_FORMAT_VERSION: Final = 2
+"""The first format whose words are stemmed, and so the first passage search runs on."""
+
+READABLE_SEARCH_INDEX_FORMAT_VERSIONS: Final = frozenset({1, SEARCH_INDEX_FORMAT_VERSION})
+"""The formats this build reads: the one it writes, and format 1, which the function serves while the
+first weekly update after `v1-e39-t13` builds format 2. On format 1 a search matches words as written
+and passage search is off, and the page says both (the PM's ruling of 2026-10-23)."""
 
 SQLITE_FEATURE_CEILING: Final = "3.40.0"
 """The newest SQLite whose features the index may use: the Lambda image's (ADR-0019 (c) 1)."""

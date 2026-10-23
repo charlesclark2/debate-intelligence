@@ -40,6 +40,24 @@ element indices) and the text the card page shows, which the E33 writer's finger
 copied card to. It is found exactly as :meth:`EvidenceSearchService.card` finds a card, under the same
 predicate: a card whose representative is suppressed has no source to download.
 
+## Passages, stems and prefixes (`v1-e39-t13`)
+
+`search(..., passage=True)` reads the query as a passage
+(:func:`~debate_core.domain.evidence_search.parse_passage`): its content words, ORed, kept to the
+cards holding at least the service's share of them (:data:`~debate_core.domain.evidence_search.
+DEFAULT_PASSAGE_SHARE_PERCENT`, about two thirds, rounded up), and ranked by the same weighted BM25.
+The count counts the same cards. Stems are the index's: format 2's tokenizer stems every word, so a
+search for `grow` finds `growing` in either mode. A prefix (`grow*`) is the parser's, and a query with
+one under three characters is not searched: the page carries
+:attr:`~debate_core.domain.evidence_search.SearchNotice.PREFIX_TOO_SHORT`.
+
+**On a format 1 index** (the one the function serves until the first weekly update after this task
+builds format 2) a plain search runs as it always did and says its words are matched as written
+(:attr:`~debate_core.domain.evidence_search.SearchNotice.WORD_FORMS_UNAVAILABLE`), and a passage
+search is not run and says it is not available until that update
+(:attr:`~debate_core.domain.evidence_search.SearchNotice.PASSAGE_UNAVAILABLE`). Nothing fails (the
+PM's ruling of 2026-10-23).
+
 ## The time budget
 
 A search that runs past its budget stops where it is and returns what it has fetched, with
@@ -63,12 +81,14 @@ from debate_core.application.ports.search_index_reader import (
     StoredOccurrence,
 )
 from debate_core.domain.evidence_search import (
+    DEFAULT_PASSAGE_SHARE_PERCENT,
     DEFAULT_RESULT_COUNT_CAP,
     MAX_CURSOR_OFFSET,
     RANKING_WEIGHTS,
     SEARCH_PAGE_SIZE,
     Card,
     OccurrenceProvenance,
+    ParsedQuery,
     RankingWeights,
     ResultCount,
     SearchFilters,
@@ -79,10 +99,13 @@ from debate_core.domain.evidence_search import (
     decode_search_cursor,
     encode_search_cursor,
     occurrence_provenance_line,
+    parse_passage,
     parse_query,
+    passage_minimum,
     search_binding,
     snippet_segments,
 )
+from debate_core.domain.search_index import STEMMED_FORMAT_VERSION
 
 __all__ = [
     "DEFAULT_SEARCH_TIME_BUDGET_SECONDS",
@@ -181,9 +204,11 @@ class EvidenceSearchService:
         page_size: int = SEARCH_PAGE_SIZE,
         weights: RankingWeights = RANKING_WEIGHTS,
         count_cap: int = DEFAULT_RESULT_COUNT_CAP,
+        passage_share_percent: int = DEFAULT_PASSAGE_SHARE_PERCENT,
     ) -> None:
         if page_size < 1:
             raise ValueError("a page holds at least one result")
+        passage_minimum(1, passage_share_percent)
         if not 1 <= count_cap <= MAX_CURSOR_OFFSET:
             raise ValueError(f"a search counts up to between 1 and {MAX_CURSOR_OFFSET} results")
         self._reader = reader
@@ -192,6 +217,7 @@ class EvidenceSearchService:
         self._clock = clock
         self._page_size = page_size
         self._rank = weights.bm25()
+        self._passage_share = passage_share_percent
 
     def search(
         self,
@@ -199,9 +225,12 @@ class EvidenceSearchService:
         filters: SearchFilters | None = None,
         cursor: str | None = None,
         *,
+        passage: bool = False,
         is_suppressed: SuppressionPredicate | None = None,
     ) -> SearchPage:
         """One page of results for `query` under `filters`, from `cursor` or the first.
+
+        `passage` reads `query` as a passage rather than as words, phrases and prefixes.
 
         Raises :class:`~debate_core.domain.evidence_search.InvalidSearchCursor` for a cursor that is
         not this query's, these filters' and this index's.
@@ -217,7 +246,7 @@ class EvidenceSearchService:
         itself.
         """
         filters = filters if filters is not None else SearchFilters()
-        parsed = parse_query(query)
+        parsed = self._parse(query, passage=passage)
         notices: list[SearchNotice] = []
         if parsed.shortened:
             notices.append(SearchNotice.QUERY_SHORTENED)
@@ -227,6 +256,14 @@ class EvidenceSearchService:
             notices.append(SearchNotice.SIDE_CASELIST_CARDS_ONLY)
         binding = search_binding(self._reader.index_id, parsed, filters)
         offset = decode_search_cursor(cursor, binding) if cursor is not None else 0
+        if self._reader.format_version < STEMMED_FORMAT_VERSION:
+            if passage:
+                notices.append(SearchNotice.PASSAGE_UNAVAILABLE)
+                return SearchPage(hits=(), next_cursor=None, notices=tuple(notices))
+            notices.append(SearchNotice.WORD_FORMS_UNAVAILABLE)
+        if parsed.prefix_too_short:
+            notices.append(SearchNotice.PREFIX_TOO_SHORT)
+            return SearchPage(hits=(), next_cursor=None, notices=tuple(notices))
         expression = parsed.fts5_expression()
         if expression is None:
             notices.append(SearchNotice.NO_SEARCH_TERMS)
@@ -249,6 +286,8 @@ class EvidenceSearchService:
                     offset=offset,
                     limit=self._page_size + 1,
                     expired=expired,
+                    passage_words=parsed.passage_words(),
+                    minimum_shared=parsed.minimum_shared,
                 )
             )
             for hit in batch.hits:
@@ -273,11 +312,15 @@ class EvidenceSearchService:
             ),
             partial=partial,
             notices=tuple(notices),
-            count=None if partial else self._count(expression, filters, is_suppressed, expired),
+            count=None if partial else self._count(parsed, expression, filters, is_suppressed, expired),
         )
+
+    def _parse(self, query: str, *, passage: bool) -> ParsedQuery:
+        return parse_passage(query, share_percent=self._passage_share) if passage else parse_query(query)
 
     def _count(
         self,
+        parsed: ParsedQuery,
         expression: str,
         filters: SearchFilters,
         is_suppressed: SuppressionPredicate | None,
@@ -299,6 +342,8 @@ class EvidenceSearchService:
                     after=after,
                     limit=self._count_cap + 1 - counted,
                     expired=expired,
+                    passage_words=parsed.passage_words(),
+                    minimum_shared=parsed.minimum_shared,
                 )
             )
             if batch.interrupted:
@@ -314,7 +359,9 @@ class EvidenceSearchService:
                 return ResultCount(counted)
             after = batch.rows[-1].doc_id
 
-    def check_cursor(self, query: str, filters: SearchFilters | None, cursor: str) -> None:
+    def check_cursor(
+        self, query: str, filters: SearchFilters | None, cursor: str, *, passage: bool = False
+    ) -> None:
         """Refuse a cursor :meth:`search` would refuse for this query and these filters, as it would.
 
         Raises :class:`~debate_core.domain.evidence_search.InvalidSearchCursor`. The card page asks this
@@ -322,7 +369,8 @@ class EvidenceSearchService:
         the search would refuse.
         """
         filters = filters if filters is not None else SearchFilters()
-        decode_search_cursor(cursor, search_binding(self._reader.index_id, parse_query(query), filters))
+        parsed = self._parse(query, passage=passage)
+        decode_search_cursor(cursor, search_binding(self._reader.index_id, parsed, filters))
 
     def _hit(self, hit: StoredHit, is_suppressed: SuppressionPredicate | None) -> SearchHit:
         files, teams = hit.file_count, hit.team_count

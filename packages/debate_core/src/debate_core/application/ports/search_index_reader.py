@@ -34,7 +34,7 @@ __all__ = [
 
 
 class UnreadableSearchIndex(Exception):
-    """An index file this build cannot read: not an index, or another format version."""
+    """An index file this build cannot read: not an index, or a format version it does not read."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -120,6 +120,10 @@ class MatchRequest:
 
     `expired` says whether the search's time budget is spent; the reader asks it while a statement
     runs, and stops the statement when it says so.
+
+    A passage search (`v1-e39-t13`) also names its words, each an FTS5 phrase, and how many of them a
+    document must match: the ranking is then of the documents matching at least `minimum_shared`.
+    `passage_words` is empty for every other search.
     """
 
     expression: str
@@ -128,6 +132,8 @@ class MatchRequest:
     offset: int
     limit: int
     expired: Callable[[], bool] = field(repr=False)
+    passage_words: tuple[str, ...] = field(default=(), repr=False)
+    minimum_shared: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -147,8 +153,8 @@ class MatchBatch:
 class CountRequest:
     """One batch of a count: the documents the expression matches under the filters, after a doc id.
 
-    The same expression and filters as a :class:`MatchRequest`, in doc id order rather than ranked,
-    because a count needs no ranking and FTS5 gives rowid order without sorting.
+    The same expression, filters and passage words as a :class:`MatchRequest`, in doc id order rather
+    than ranked, because a count needs no ranking and FTS5 gives rowid order without sorting.
     """
 
     expression: str
@@ -156,6 +162,8 @@ class CountRequest:
     after: int
     limit: int
     expired: Callable[[], bool] = field(repr=False)
+    passage_words: tuple[str, ...] = field(default=(), repr=False)
+    minimum_shared: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -183,6 +191,11 @@ class SearchIndexReader(Protocol):
     @property
     def index_id(self) -> str:
         """The index's id, as its manifest and pointer name it: cursors are bound to it."""
+        ...
+
+    @property
+    def format_version(self) -> int:
+        """The index file's format version: one of `READABLE_SEARCH_INDEX_FORMAT_VERSIONS`."""
         ...
 
     def match(self, request: MatchRequest) -> MatchBatch:

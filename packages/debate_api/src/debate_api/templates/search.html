@@ -8,7 +8,14 @@
 <input id="q" name="q" type="search" value="{{ form.query }}" maxlength="1024" autocomplete="off" spellcheck="false" aria-describedby="q-help">
 <button type="submit">Search</button>
 </div>
-<p id="q-help" class="help">Put a phrase in "quotes". Start a word with - to leave it out. author: or tag: searches only the cite or the tag.</p>
+<p id="q-help" class="help">Put a phrase in "quotes". Start a word with - to leave it out. End one with * to find every word it starts: grow* finds growth and growing. author: or tag: searches only the cite or the tag.</p>
+<div class="search-mode">
+<input id="mode" name="mode" type="checkbox" value="passage"{% if form.passage %} checked{% endif %} aria-describedby="mode-help">
+<div>
+<label for="mode">Search by passage</label>
+<p id="mode-help" class="help">Paste a sentence or two: finds cards that share most of its words, in any order. Quotes, - and * are read as plain words.</p>
+</div>
+</div>
 <fieldset class="filters">
 <legend>Filters</legend>
 <div class="filter">
@@ -47,8 +54,11 @@
 {% if count_words %}<p class="result-count">{{ count_words }}</p>{% endif %}
 {% if query_shortened %}<p class="notice" role="status">Your search was long, so only its first part was used.</p>{% endif %}
 {% if no_search_terms %}<p class="notice" role="status">There is no word to search for. A search of only left-out words (-word) finds nothing.</p>{% endif %}
+{% if prefix_too_short %}<p class="notice" role="status">A word ending in * needs at least 3 letters before the *, like gro*. Nothing was searched.</p>{% endif %}
+{% if passage_unavailable %}<p class="notice" role="status">Search by passage is not available until the next weekly update of the search. Untick it to search these words.</p>{% endif %}
+{% if word_forms_unavailable %}<p class="notice" role="status">Until the next weekly update of the search, words are matched exactly as typed: grow does not find growing.</p>{% endif %}
 {% if partial %}<p class="notice" role="status">The search took a long time, so these are the results found so far. The next page carries on from here.</p>{% endif %}
-{% if not results and not no_search_terms %}<p>No cards matched.{% if form.cursor %} There are no more results.{% endif %}</p>{% endif %}
+{% if not results and not not_searched %}<p>No cards matched.{% if form.cursor %} There are no more results.{% endif %}</p>{% endif %}
 {% if results %}<ol class="result-list">
 {% for result in results %}<li class="result">
 <h3 class="result-tag"><a href="{{ result.href }}">{{ result.tag or "A card with no tag" }}</a></h3>

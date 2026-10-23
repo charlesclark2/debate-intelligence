@@ -36,7 +36,10 @@ spec:
     index is read".
   priority: 2
   constraints:
-    packages: [debate_core.domain, debate_core.application, debate_core.integrations, debate_api, packages/debate_core/tests, packages/debate_api/tests, docs/data]
+    # PM ruling 2026-10-23 (v1-e39-t13 review, ruling 2): debate_core.testing holds format_one_index,
+    # the format 1 test file both test packages need, and docs/runbooks the format 2 order and the
+    # rollback rule the PM asked for.
+    packages: [debate_core.domain, debate_core.application, debate_core.integrations, debate_core.testing, debate_api, packages/debate_core/tests, packages/debate_api/tests, docs/data, docs/runbooks]
     forbidden:
       - Query text in any log, audit record or metric
       - Input reaching SQL other than through the query parser
@@ -69,7 +72,7 @@ spec:
         The format version is 2; a holder given an index of another format refuses it with a
         message, by test; the p95 query time on the measurement index is recorded.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

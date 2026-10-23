@@ -260,7 +260,7 @@ def test_search_index_publish_refuses_another_parser_version_and_uploads_nothing
     ("field", "edited"),
     [
         ("fingerprint version", {"fingerprint_version": "card-fingerprint-v3"}),
-        ("format version", {"format_version": 2}),
+        ("format version", {"format_version": 1}),
     ],
 )
 def test_search_index_publish_refuses_another_fingerprint_or_format_version(

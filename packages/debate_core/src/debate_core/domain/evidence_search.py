@@ -81,10 +81,14 @@ from debate_core.domain.search_index import IndexedFontSizeSpan, IndexedFormatti
 from debate_core.domain.style_profile import RunEmphasis
 
 __all__ = [
+    "DEFAULT_PASSAGE_SHARE_PERCENT",
     "DEFAULT_RESULT_COUNT_CAP",
     "MAX_CURSOR_OFFSET",
+    "MAX_PASSAGE_WORDS",
     "MAX_QUERY_CHARACTERS",
     "MAX_QUERY_TERMS",
+    "MIN_PREFIX_CHARACTERS",
+    "PASSAGE_STOP_WORDS",
     "RANKING_WEIGHTS",
     "SEARCH_PAGE_SIZE",
     "SNIPPET_CLOSE",
@@ -109,7 +113,9 @@ __all__ = [
     "decode_search_cursor",
     "encode_search_cursor",
     "occurrence_provenance_line",
+    "parse_passage",
     "parse_query",
+    "passage_minimum",
     "search_binding",
     "snippet_segments",
 ]
@@ -122,6 +128,36 @@ MAX_QUERY_CHARACTERS: Final = 512
 
 MAX_QUERY_TERMS: Final = 32
 """A query keeps this many words and phrases; the rest are ignored, and the page says so."""
+
+MIN_PREFIX_CHARACTERS: Final = 3
+"""Letters or digits a prefix term needs before its `*`: `gro*` is a prefix, `gr*` refuses the query."""
+
+MAX_PASSAGE_WORDS: Final = 40
+"""A passage keeps this many content words; the rest are ignored, and the page says so."""
+
+DEFAULT_PASSAGE_SHARE_PERCENT: Final = 66
+"""The share of a passage's content words a card must hold, rounded up: about two thirds."""
+
+_STOP_WORD_GROUPS: Final = (
+    # Articles, conjunctions and prepositions.
+    """the an and or but nor so yet if then than as of to in on at by for from with without into onto
+    upon about above below over under between among through during before after since until while
+    because though although unless whether against within via per off out up down""",
+    # Pronouns and determiners.
+    """he she it we they me him her us them my your his its our their mine yours hers ours theirs
+    myself yourself himself herself itself ourselves themselves this that these those who whom whose
+    which what there here where when why how all any both each few more most other some such own same
+    very too also just only even not no""",
+    # Forms of be, have and do, and the modal verbs.
+    """is are was were be been being am has have had having do does did doing can could will would
+    shall should may might must""",
+    # What the tokenizer leaves of a contraction (`doesn't` is `doesn` and `t`). Not `won`: it is a word.
+    "don doesn didn isn aren wasn weren hasn haven hadn couldn wouldn shouldn mustn ll re ve",
+)
+
+PASSAGE_STOP_WORDS: Final = frozenset(word for group in _STOP_WORD_GROUPS for word in group.split())
+"""The words a passage leaves out, matched in any case: they say nothing about what a card says. A word
+of one character is left out too, so `a`, `I` and a contraction's `s` or `t` need no entry."""
 
 MAX_CURSOR_OFFSET: Final = 100_000
 """The furthest a cursor may point into a ranking: five thousand pages."""
@@ -161,10 +197,14 @@ class QueryTerm:
     phrase: bool = False
     excluded: bool = False
     field: SearchField | None = None
+    prefix: bool = False
 
     def fts5(self) -> str:
-        """This term as an FTS5 phrase, its double quotes doubled, behind its column filter if any."""
-        quoted = '"' + self.text.replace('"', '""') + '"'
+        """This term as an FTS5 phrase, its double quotes doubled, behind its column filter if any.
+
+        A prefix term is the phrase and FTS5's `*` after it: `"grow" *`, every word `grow` starts.
+        """
+        quoted = '"' + self.text.replace('"', '""') + '"' + (" *" if self.prefix else "")
         return f"{self.field.value} : {quoted}" if self.field is not None else quoted
 
 
@@ -174,6 +214,19 @@ class ParsedQuery:
 
     terms: tuple[QueryTerm, ...]
     shortened: bool = False
+    passage: bool = False
+    minimum_shared: int = 0
+
+    @property
+    def prefix_too_short(self) -> bool:
+        """Whether a prefix term has fewer than :data:`MIN_PREFIX_CHARACTERS` before its `*`.
+
+        Counted in the term's last word, which is the one FTS5 reads as a prefix: `a-bc*` is the
+        phrase `a bc*`, and `bc` is two characters.
+        """
+        return any(
+            term.prefix and _last_word_characters(term.text) < MIN_PREFIX_CHARACTERS for term in self.terms
+        )
 
     @property
     def included(self) -> tuple[QueryTerm, ...]:
@@ -187,23 +240,39 @@ class ParsedQuery:
         """The FTS5 expression: every included term, AND, then NOT each excluded one.
 
         `None` when nothing is included: FTS5's `NOT` takes two sides, and a query of exclusions
-        alone asks for every card but some, which is not a search.
+        alone asks for every card but some, which is not a search. `None` too when a prefix is too
+        short (:attr:`prefix_too_short`): the query is refused, never searched without that term.
+
+        A passage's expression is its words joined by OR: every card holding any of them, which
+        :meth:`passage_words` and :attr:`minimum_shared` narrow to the cards holding enough.
         """
+        if self.prefix_too_short:
+            return None
         included = [term.fts5() for term in self.included]
         if not included:
             return None
+        if self.passage:
+            return " OR ".join(included)
         expression = " AND ".join(included)
         excluded = [term.fts5() for term in self.excluded]
         if excluded:
             expression = f"({expression})" + "".join(f" NOT {term}" for term in excluded)
         return expression
 
-    def canonical(self) -> list[list[object]]:
-        """The terms as plain values, for :func:`search_binding`: two spellings of one query match."""
-        return [
-            [term.text, term.phrase, term.excluded, term.field.value if term.field else None]
-            for term in self.terms
-        ]
+    def passage_words(self) -> tuple[str, ...]:
+        """A passage's words, each the FTS5 phrase of one: what a card is counted as sharing."""
+        return tuple(term.fts5() for term in self.terms) if self.passage else ()
+
+    def canonical(self) -> dict[str, object]:
+        """The query as plain values, for :func:`search_binding`: two spellings of one query match."""
+        return {
+            "terms": [
+                [term.text, term.phrase, term.excluded, term.field.value if term.field else None, term.prefix]
+                for term in self.terms
+            ],
+            "passage": self.passage,
+            "minimum_shared": self.minimum_shared,
+        }
 
 
 def _cleaned(raw: str) -> str:
@@ -211,9 +280,30 @@ def _cleaned(raw: str) -> str:
     return "".join(" " if unicodedata.category(char) in ("Cc", "Cs") else char for char in raw)
 
 
+def _is_word_character(char: str) -> bool:
+    """A letter, digit or private-use character: what the `unicode61` tokenizer makes a token of."""
+    category = unicodedata.category(char)
+    return category[0] in "LN" or category == "Co"
+
+
+def _is_in_word(char: str) -> bool:
+    """A word character or a combining mark, which `remove_diacritics` folds into the word it is on."""
+    return _is_word_character(char) or unicodedata.category(char)[0] == "M"
+
+
 def _has_word(text: str) -> bool:
     """Whether `text` has a character the `unicode61` tokenizer can make a token of."""
-    return any(unicodedata.category(char)[0] in "LN" or unicodedata.category(char) == "Co" for char in text)
+    return any(_is_word_character(char) for char in text)
+
+
+def _last_word_characters(text: str) -> int:
+    """How many word characters the last word of `text` has: the prefix a trailing `*` asks for."""
+    count = 0
+    for char in reversed(text):
+        if not _is_in_word(char):
+            break
+        count += _is_word_character(char)
+    return count
 
 
 def parse_query(raw: str) -> ParsedQuery:
@@ -245,11 +335,45 @@ def parse_query(raw: str) -> ParsedQuery:
             while stop < end and not text[stop].isspace():
                 stop += 1
             words, phrase, position = text[position:stop], False, stop
+        prefix = not phrase and words.endswith("*") and _has_word(words)
+        if prefix:
+            words = words.rstrip("*")
         if _has_word(words):
-            terms.append(QueryTerm(words, phrase=phrase, excluded=excluded, field=field_named))
+            terms.append(QueryTerm(words, phrase=phrase, excluded=excluded, field=field_named, prefix=prefix))
     if len(terms) > MAX_QUERY_TERMS:
         terms, shortened = terms[:MAX_QUERY_TERMS], True
     return ParsedQuery(tuple(terms), shortened=shortened)
+
+
+def passage_minimum(words: int, share_percent: int) -> int:
+    """How many of a passage's `words` a card must hold: `share_percent` of them, rounded up."""
+    if not 1 <= share_percent <= 100:
+        raise ValueError(f"a passage's share is a percent from 1 to 100; got {share_percent}")
+    return -(-words * share_percent // 100)
+
+
+def parse_passage(raw: str, *, share_percent: int = DEFAULT_PASSAGE_SHARE_PERCENT) -> ParsedQuery:
+    """Read a passage into its content words. Never raises for any `raw`, maybe an empty passage."""
+    cleaned = _cleaned(raw)
+    shortened = len(cleaned) > MAX_QUERY_CHARACTERS
+    words = "".join(char if _is_in_word(char) else " " for char in cleaned[:MAX_QUERY_CHARACTERS]).split()
+    seen: set[str] = set()
+    terms: list[QueryTerm] = []
+    for word in words:
+        folded = word.casefold()
+        if folded in seen or folded in PASSAGE_STOP_WORDS or sum(map(_is_word_character, word)) < 2:
+            continue
+        if len(terms) == MAX_PASSAGE_WORDS:
+            shortened = True
+            break
+        seen.add(folded)
+        terms.append(QueryTerm(word))
+    return ParsedQuery(
+        tuple(terms),
+        shortened=shortened,
+        passage=True,
+        minimum_shared=passage_minimum(len(terms), share_percent),
+    )
 
 
 class SearchFilters(DomainModel):
@@ -311,7 +435,7 @@ def search_binding(index_id: str, query: ParsedQuery, filters: SearchFilters) ->
     """SHA-256 of what a ranking depends on: the index, the parsed query and the filters."""
     canonical = {
         "index_id": index_id,
-        "terms": query.canonical(),
+        "query": query.canonical(),
         "filters": filters.model_dump(mode="json"),
     }
     text = json.dumps(canonical, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
@@ -359,6 +483,17 @@ class SearchNotice(StrEnum):
 
     SIDE_CASELIST_CARDS_ONLY = "SIDE_CASELIST_CARDS_ONLY"
     """A side filter applies to caselist cards only: camp cards have no side, and are left out."""
+
+    PREFIX_TOO_SHORT = "PREFIX_TOO_SHORT"
+    """A prefix term had fewer than :data:`MIN_PREFIX_CHARACTERS` before its `*`: nothing was searched."""
+
+    PASSAGE_UNAVAILABLE = "PASSAGE_UNAVAILABLE"
+    """Passage search was asked of a format 1 index, which predates it: nothing was searched. The next
+    weekly update builds format 2 (`v1-e39-t13`)."""
+
+    WORD_FORMS_UNAVAILABLE = "WORD_FORMS_UNAVAILABLE"
+    """The index is format 1, whose words are matched as written (`grow` finds no `growing`) until the
+    next weekly update builds format 2."""
 
 
 @dataclass(frozen=True, slots=True)

@@ -12,9 +12,11 @@ v1-e39-t04's Terraform sets these on the function (`infrastructure/modules/evide
 | `TUB_AUDIT_LOG_GROUP` | where the account page's audit records go |
 | `TUB_EVIDENCE_BUCKET` | the evidence bucket the search index is fetched from (`v1-e39-t06`) |
 | `TUB_RESULT_COUNT_CAP` | optional: how far a search counts its results, 1,000 when unset (`v1-e39-t11`) |
+| `TUB_PASSAGE_SHARE_PERCENT` | optional: percent of a passage's words a card holds, 66 unset (`v1-e39-t13`) |
 | `TUB_DOWNLOAD_CARD_CAP` | optional: the most cards a download holds, 1 to 30, 8 unset (`v1-e39-t08`) |
 | `TUB_DOWNLOAD_SOURCE_XML_BYTES` | optional: the most `document.xml` bytes one download parses, 20,000,000 |
 
+The passage share is the PM's "about two thirds" (`v1-e39-t13`), and is not set by Terraform either.
 The two download caps were set from measurements (:mod:`debate_core.application.card_download`
 says which); neither variable is set by Terraform, so changing one is an environment override on the
 function, and the defaults hold until someone measures otherwise.
@@ -41,7 +43,11 @@ from urllib.parse import urlsplit
 
 from debate_core.application.card_download import DEFAULT_DOWNLOAD_CARD_CAP, DEFAULT_DOWNLOAD_SOURCE_XML_BYTES
 from debate_core.application.tub.audit import MAX_DOWNLOAD_CARDS
-from debate_core.domain.evidence_search import DEFAULT_RESULT_COUNT_CAP, MAX_CURSOR_OFFSET
+from debate_core.domain.evidence_search import (
+    DEFAULT_PASSAGE_SHARE_PERCENT,
+    DEFAULT_RESULT_COUNT_CAP,
+    MAX_CURSOR_OFFSET,
+)
 
 __all__ = [
     "COOKIE_KEY_BYTES",
@@ -55,6 +61,7 @@ __all__ = [
 COOKIE_KEY_BYTES: Final = 32
 _DEFAULT_REGION: Final = "us-east-1"
 _COUNT_CAP_VARIABLE: Final = "TUB_RESULT_COUNT_CAP"
+_PASSAGE_SHARE_VARIABLE: Final = "TUB_PASSAGE_SHARE_PERCENT"
 _DOWNLOAD_CARD_CAP_VARIABLE: Final = "TUB_DOWNLOAD_CARD_CAP"
 _DOWNLOAD_SOURCE_XML_BYTES_VARIABLE: Final = "TUB_DOWNLOAD_SOURCE_XML_BYTES"
 _MOST_SOURCE_XML_BYTES: Final = 100_000_000
@@ -129,6 +136,7 @@ class PilotConfiguration:
     evidence_bucket: str
     region: str = _DEFAULT_REGION
     result_count_cap: int = DEFAULT_RESULT_COUNT_CAP
+    passage_share_percent: int = DEFAULT_PASSAGE_SHARE_PERCENT
     download_card_cap: int = DEFAULT_DOWNLOAD_CARD_CAP
     download_source_xml_bytes: int = DEFAULT_DOWNLOAD_SOURCE_XML_BYTES
 
@@ -152,6 +160,9 @@ class PilotConfiguration:
             evidence_bucket=required("TUB_EVIDENCE_BUCKET"),
             region=environ.get("AWS_REGION", "").strip() or _DEFAULT_REGION,
             result_count_cap=_count_cap(environ.get(_COUNT_CAP_VARIABLE, "").strip()),
+            passage_share_percent=_whole_number(
+                environ, _PASSAGE_SHARE_VARIABLE, DEFAULT_PASSAGE_SHARE_PERCENT, 100
+            ),
             download_card_cap=_whole_number(
                 environ, _DOWNLOAD_CARD_CAP_VARIABLE, DEFAULT_DOWNLOAD_CARD_CAP, MAX_DOWNLOAD_CARDS
             ),

@@ -79,10 +79,14 @@ kept, numbered among themselves. Timed read-only on the operator's Mac on 2026-1
 sources), about 2.1 ms a document, so roughly 100 s more for the whole dev store's 52,059. The full
 build is not re-timed here.
 
-## The schema, format version 1
+## The schema, format version 2
 
 `PRAGMA user_version` is the format version, and `PRAGMA application_id` is `0x54554253`
-(`TUBS`). The file uses no SQLite or FTS5 feature newer than **3.40.0**, the version the function's
+(`TUBS`). **Format 2** (`v1-e39-t13`) differs from format 1 in one thing: the `search` table's
+tokenizer puts FTS5's `porter` stemmer in front of `unicode61`, so `grow`, `grows` and `growing` are
+one token. Every other table, column and pragma is format 1's. A format 2 file is about 1.3% smaller
+than the format 1 file of the same rows, because stemming leaves fewer distinct tokens
+([format 2's measurement](#format-2-the-measurement-before-it)). The file uses no SQLite or FTS5 feature newer than **3.40.0**, the version the function's
 Lambda image runs. Its journal mode is the rollback journal, never WAL. The writer builds it with no
 journal and finishes with `VACUUM`, so it has no free pages.
 
@@ -91,7 +95,7 @@ journal and finishes with `VACUUM`, so it has no free pages.
 | Column | |
 |---|---|
 | `key` | `format_version`, `sqlite_feature_ceiling` |
-| `value` | `1`, `3.40.0` |
+| `value` | `2`, `3.40.0` |
 
 ### `documents`: one row per cluster
 
@@ -142,8 +146,13 @@ newer suppression list stops (`v1-e39-t07`). Only the first `provenance_limit` k
 
 ```sql
 CREATE VIRTUAL TABLE search USING fts5(tag, cite, read_aloud, text,
-  content='documents', content_rowid='doc_id', tokenize='unicode61 remove_diacritics 2')
+  content='documents', content_rowid='doc_id', tokenize='porter unicode61 remove_diacritics 2')
 ```
+
+Format 1's was the same with `tokenize='unicode61 remove_diacritics 2'`. `porter` has been in FTS5
+since FTS5 was added, and the Lambda image's SQLite 3.40.0 runs it: the slow replay of
+`test_search_index_reader_sqlite_features.py` and the image check of
+`test_search_index_sqlite_features.py` both build a format 2 index and query it in the image.
 
 An external-content FTS5 table over the four searchable columns, so the text is stored once, in
 `documents`. Its rowid is `doc_id`. Column weights for `bm25()` are the query's, not the index's
@@ -153,10 +162,50 @@ FTS5's own.
 ## How the index is read
 
 `EvidenceSearchService` in `debate_core.application.evidence_search` reads the index read-only and
-immutable, through `SqliteSearchIndexReader` (`v1-e39-t03`). A student's query is parsed into quoted
-FTS5 phrases and never handed to `MATCH` as typed. It is ranked by `bm25()` with the weights in
-`RANKING_WEIGHTS` (tag 10, cite 6, read-aloud text 3, text 1), filtered on `documents`' stored
-columns, and paged 20 at a time. `occurrences` is read only by `doc_id`.
+immutable, through `SqliteSearchIndexReader` (`v1-e39-t03`). `occurrences` is read only by `doc_id`.
+
+**A query is parsed, never handed to `MATCH` as typed.** `parse_query` in
+`debate_core.domain.evidence_search` reads words, `"quoted phrases"`, a leading `-` that leaves a
+word out, the `author:` and `tag:` prefixes, and since `v1-e39-t13` a trailing `*`, which makes a
+**prefix term** (`grow*`, every word `grow` starts). Each becomes a quoted FTS5 phrase, and the only
+operators in the expression are the ones the parser writes. A prefix needs at least three letters or
+digits before its `*` (`MIN_PREFIX_CHARACTERS`), counted in its last word, since `a-bc*` is the phrase
+`a bc*`: a query with a shorter one is not searched at all, and the page says so. A two-letter
+prefix would read most of the index's terms.
+
+**A passage** (`v1-e39-t13`) is the search form's *Search by passage*. `parse_passage` reads the
+words as plain text, with no operators: the content words, each once, leaving out the stop words in
+`PASSAGE_STOP_WORDS` and any word of one character, up to 40 (`MAX_PASSAGE_WORDS`; the page says when
+more were dropped). A card must hold at least `DEFAULT_PASSAGE_SHARE_PERCENT`, 66 percent, of them,
+rounded up: 2 of 3, 4 of 6, 27 of 40. The function's `TUB_PASSAGE_SHARE_PERCENT` changes the share.
+Both limits and the stop words are constants in the parser, with their tests.
+
+**The statements** are `SqliteSearchIndexReader`'s, and every value a student typed reaches them as a
+bound parameter:
+
+| Statement | What it asks |
+|---|---|
+| `MATCH_STATEMENT` | One window of a query's ranking: `search MATCH` the expression, ranked by `bm25()` with the weights in `RANKING_WEIGHTS` (tag 10, cite 6, read-aloud text 3, text 1), filtered on `documents`' stored columns, 20 to a page |
+| `COUNT_STATEMENT` | How many documents the same expression matches under the same filters, by doc id with no rank, so FTS5 neither scores nor sorts (`v1-e39-t11`). It shares `_FILTERS`, the filters' SQL, with `MATCH_STATEMENT`, so a count can never filter differently from the results it counts |
+| `PASSAGE_MATCH_STATEMENT` | A passage's window: its words ORed and ranked as above, kept to the documents matching at least the minimum of them (`v1-e39-t13`) |
+| `PASSAGE_COUNT_STATEMENT` | A passage's count: `COUNT_STATEMENT` kept to the same documents |
+| `DOCUMENT_STATEMENT`, `OCCURRENCES_STATEMENT` | One card, and its occurrences, by key |
+
+FTS5 has no "at least so many of these words", so both passage statements begin with the same
+recursive common table expression, `_SHARED_WORDS`. It splits the passage's words (each an FTS5
+phrase the parser wrote) into rows, matches each against `search`, and keeps the doc ids found by
+enough of them. The ranked statement then lets FTS5 sort every match of the OR itself and keeps
+those ids afterwards, with `+d.doc_id IN shared`: without the `+`, SQLite drives FTS5 one candidate
+rowid at a time and BM25's statistics are worked out again for each, 1.2 s against 35 ms for one
+eight-word passage on the measurement index. Two words with one stem (`grow`, `growing`) each count.
+
+**Formats 1 and 2 are both read** (the PM's ruling of 2026-10-23), so the function can be deployed
+before the first format 2 index is published, and search never goes down for it. On a format 1
+index a plain search runs as it always did and the page says words are matched exactly as typed
+until the next weekly update; a passage search is not run and the page says it is not available
+until then; a prefix works. The holder refuses any other format, and a pointer, manifest and file
+that disagree about the format, with a message: an index already loaded goes on serving, and with
+none the page says search is not available. It never fails a query for it.
 
 **The time budget has a known limit** (accepted by the PM, 2026-10-20). A search that runs past its
 budget, 2 s by default, returns what it has fetched, flagged partial. SQLite's progress handler checks
@@ -171,6 +220,14 @@ query time on the Lambda function itself.
 |---|---|---|---|---|
 | The dev index `b9fd48d280ab1c71`, 46,658 documents | Twenty generic queries, 60 timed runs | under 4 ms | 12.1 ms | 207 ms (`the`, 45,948 matches) |
 | Synthetic, 250,000 documents | Twenty queries over a skewed invented vocabulary, 60 timed runs | 69.1 ms | 341 ms | 421 ms |
+| The dev index `f29b81c276dd67c5`, format 1, 50,434 documents (2026-10-23) | The same twenty generic queries, 60 timed runs | 15.3 ms | 66.7 ms | 117.1 ms |
+| Its format 2 measurement copy (2026-10-23) | The same twenty generic queries, 60 timed runs | 10.9 ms | 67.5 ms | 157.7 ms (`the`, 50,163 matches) |
+| The same | Eleven generic passages, the last at 40 content words, 33 timed runs | 86.9 ms | 335.0 ms | 448.3 ms (the 40-word passage) |
+| The same | Twelve prefixes, down to `pro*` and `con*`, 36 timed runs | 10.6 ms | 146.8 ms | 157.0 ms (`con*`) |
+
+The 2026-10-23 rows were taken while other work loaded the Mac (load average about 5), so they are
+upper bounds; the format 1 and format 2 rows were taken minutes apart under the same load. They come
+from `test_evidence_search_scale.py`'s two operator checks, which print timings and counts only.
 
 ## Never searchable, never stored
 
@@ -259,6 +316,49 @@ and the columns' byte lengths, read-only):
 
 The `documents` table is 509.9 MB in all, 67.8%; the rest of it is page and record overhead.
 `v1-e39-t09` can track growth against the 1 GB allowance by bytes per document.
+
+## Format 2: the measurement before it
+
+Taken by `v1-e39-t13` on 2026-10-23, on the operator's Mac, before format 2 was adopted, as the PM
+asked: counts and sizes only, every file in a scratch directory and none under
+`~/.debate-research/<env>/tub-index/`. A trigram index for substring search was measured too, and is
+**not adopted**: the forbidden list holds it for the PM's ruling on these numbers.
+
+**How.** `tub index build --caselist hspf26 --caselist openev --out <scratch>` built a sample of
+16,759 documents (11,000 and 5,759) in 80 s. Each variant was then made from a copy of that file by
+dropping `search`, creating it with the variant's tokenizer, `rebuild`, `optimize` and `VACUUM`, as
+the writer finishes, and gzipped at level 6. Made the same way with format 1's own tokenizer, the
+copy came back at exactly the build's 243,744,768 bytes (gzip within 9 bytes), so the method costs
+nothing. The trigram variant adds a second external-content FTS5 table, `tokenize='trigram'`, over
+the same four columns. The format 2 variant was also made from a copy of the whole dev index,
+`f29b81c276dd67c5`, which needs no extrapolation.
+
+| Variant | Documents | SQLite bytes | gzip bytes | Bytes per document (SQLite, gzip) | FTS5 rebuild, optimize and `VACUUM` | gzip |
+|---|---|---|---|---|---|---|
+| Format 1, as built, sample | 16,759 | 243,744,768 | 91,532,520 | 14,544 and 5,462 | 80 s for the whole build | |
+| Format 2 (`porter`), sample | 16,759 | 240,345,088 | 89,503,957 | 14,341 and 5,341 | 3.0 s | 7.1 s |
+| Format 2 and a trigram table, sample | 16,759 | 546,205,696 | 309,378,714 | 32,592 and 18,460 | 16.8 s | 22.8 s |
+| Format 1, the dev index `f29b81c276dd67c5` | 50,434 | 834,973,696 | 311,899,269 | 16,556 and 6,184 | 305 s for the whole build | |
+| Format 2, made from it | 50,434 | 823,955,456 | 305,559,662 | 16,337 and 6,059 | 11.8 s | 20.9 s |
+
+**The trigram table at the dev index's size.** The sample's documents are lighter than the whole
+store's: the dev index holds 3.01 times the sample's documents and 3.30 times its indexed text (the
+four searchable columns). Scaled by text, the sample's format 1 to format 2 change predicts the whole
+format 2 file within 0.03% of what was measured; scaled by documents it misses format 1's own size by
+12%. So the trigram table is scaled by text: its 305,860,608 bytes (219,874,757 gzipped) in the
+sample become about 1,008 MB (725 MB gzipped), on top of format 2.
+
+| At 50,434 documents | SQLite bytes | gzip bytes | Against 1,700,000,000 SQLite | Against 400,000,000 gzip | Two copies at a swap, of 4,294,967,296 |
+|---|---|---|---|---|---|
+| Format 1 today | 834,973,696 | 311,899,269 | 49% | 78% | 1,669,947,392 (38.9%) |
+| Format 2, measured | 823,955,456 | 305,559,662 | 48% | 76% | 1,647,910,912 (38.4%) |
+| Format 2 and trigram, scaled by text | about 1,832,000,000 | about 1,030,000,000 | **past it**, 108% | **past it, 2.6 times** | about 3,664,000,000 (85.3%) |
+| The same, scaled by documents | about 1,644,000,000 | about 931,000,000 | 97% | **past it, 2.3 times** | about 3,287,000,000 (76.5%) |
+
+Either way the trigram table puts the gzip object far past ADR-0019's 400,000,000-byte revisit
+trigger, which would bring the promotion list's item 12, the Lambda bandwidth quota, forward at
+once: about 13 s of download at the 625 Mbps cap instead of about 4 s. Format 2 itself is a little
+smaller than format 1 on every count.
 
 ## The function's temporary storage while one index replaces another
 

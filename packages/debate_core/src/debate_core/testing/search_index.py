@@ -8,6 +8,9 @@ that an unchanged pointer cost no body and that nothing but the three keys was a
 serves the suppression list beside them, the fourth key the function reads (`v1-e39-t07`), from
 :meth:`InMemorySearchIndexSource.write_suppression_list`.
 
+:func:`format_one_index` turns an index the running writer wrote into the format 1 file the writer
+wrote before `v1-e39-t13`, so a test can show what the function does while it serves one.
+
 Every value here is synthetic: invented caselist slugs, versions and counts.
 """
 
@@ -15,6 +18,7 @@ from __future__ import annotations
 
 import gzip
 import hashlib
+import sqlite3
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field, replace
 from typing import Final
@@ -40,7 +44,16 @@ from debate_core.domain.search_index import (
     index_object_key,
 )
 
-__all__ = ["InMemorySearchIndexSource", "PublishedIndex", "published_index"]
+__all__ = [
+    "FORMAT_ONE_TOKENIZER",
+    "InMemorySearchIndexSource",
+    "PublishedIndex",
+    "format_one_index",
+    "published_index",
+]
+
+FORMAT_ONE_TOKENIZER: Final = "unicode61 remove_diacritics 2"
+"""Format 1's full-text tokenizer: format 2's without the `porter` stemmer in front."""
 
 _ZERO_DIGEST: Final = "0" * 64
 _CHUNK: Final = 4096
@@ -149,6 +162,33 @@ def published_index(
             index_object_key(index_id, SEARCH_INDEX_GZIP_NAME): compressed,
         },
     )
+
+
+def format_one_index(sqlite: bytes) -> bytes:
+    """The format 1 file of the same rows as `sqlite`: its full-text table unstemmed, its version 1.
+
+    In memory, from bytes to bytes. The writer of `v1-e39-t02` to `v1-e39-t12` wrote the same
+    `documents` and `occurrences`, so only the `search` table, `index_info` and `user_version` differ.
+    """
+    connection = sqlite3.connect(":memory:", isolation_level=None)
+    try:
+        connection.deserialize(sqlite)
+        for statement in (
+            "BEGIN",
+            "DROP TABLE search",
+            "CREATE VIRTUAL TABLE search USING fts5(tag, cite, read_aloud, text, content='documents', "
+            f"content_rowid='doc_id', tokenize='{FORMAT_ONE_TOKENIZER}')",
+            "INSERT INTO search (search) VALUES ('rebuild')",
+            "INSERT INTO search (search) VALUES ('optimize')",
+            "UPDATE index_info SET value = '1' WHERE key = 'format_version'",
+            "PRAGMA user_version = 1",
+            "COMMIT",
+            "VACUUM",
+        ):
+            connection.execute(statement)
+        return connection.serialize()
+    finally:
+        connection.close()
 
 
 class InMemorySearchIndexSource:

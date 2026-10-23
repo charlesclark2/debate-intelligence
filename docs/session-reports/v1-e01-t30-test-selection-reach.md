@@ -358,9 +358,54 @@ failing part's output comes back to this session (working agreement 10).
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-22
 
 **Notes:**
+
+Accepted with no conditions. Open the pull request with no `--partial`. If `ci`'s whole selection
+fails, the failing part comes back to this session (working agreement 10).
+
+**What the PM checked.**
+* The branch is clean, 11 commits on origin/dev at `ffbfb2c`. The only dev commit since is a docs
+  refresh.
+* The diff is 149 files.
+* `testing/fakes/` holds the ten modules and a package `__init__`, and `fakes.py` is gone.
+
+**The measurement is reported honestly, and that is what the PM wanted most.**
+* The headline median (63.9% to 57.7% over the synced base) rests on two rows near the boundary,
+  and the median of the 16 does not move. The report says so instead of leaning on the headline.
+* The real gain is the mean of the 16 (58.2% to 52.0%) and the 20- to 25-point drops on the
+  suppression, removal and parsed-store commits. Those were the commits whose tests reached
+  everything through `fakes.py`.
+* The collected-count proof at both bases, with the new cases separated out, is exactly the
+  evidence asked for.
+
+**Rulings.**
+
+1. **Deviations 1 and 2 are accepted.** The two doc fixes were forced by the deletion, and one was
+   already ruled on t29. Measuring over the synced base keeps the columns like for like.
+2. **Decisions 1 to 10 are accepted.**
+   * `all_ports` as the guard's one named exception.
+   * The reach rule through a port's own imports and through neighbouring fakes.
+   * `ScriptedModelRouter` taking a `FixedClock`.
+   * One definition of the moto fixtures, imported by four conftests.
+   * The third guard rule on `__all__`.
+   * The visible socket warning.
+
+   Catching your own `__all__` false edge by measuring it (Decision 5) is the method working as
+   intended.
+3. **Merge order.** v1-e34-t28 is running in parallel and v1-e39-t07 is still open. Whichever of
+   them merges after this branch rewrites its imports at its sync, by the mechanical name-to-module
+   mapping in Decision 10. The PM tells both sessions.
+4. **Follow-up work.** The PM files one p3 task in the next batch for the four items:
+   * move command registration out of `debate_cli/commands/__init__.py`;
+   * a minimum length, or a slash, before a quoted word counts as a path part in
+     `affected_tests.py`;
+   * a table-aware rule for the root `pyproject.toml`. An import-linter-only change selects
+     `tests/architecture`; a change to `[tool.pytest]` or to dependencies stays the whole
+     selection;
+   * remove `debate_core/testing/contracts/__init__.py`'s re-exports, with the guard extended to
+     cover them.

@@ -421,6 +421,65 @@ def test_search_filter_page_open_and_copy_a_card_by_keyboard(pilot: Pilot) -> No
 
 
 # ------------------------------------------------------------------------------------------------
+# v1-e39-t13: search by passage, the student's choice, by keyboard, at each size, axe clean
+# ------------------------------------------------------------------------------------------------
+
+FEATURED_PASSAGE: Final = "The basalt holds when zephyr winds raise granite costs, and then prices tumble"
+"""Nine content words, so a card must hold six: the featured card holds seven, no other card two."""
+
+
+def test_search_by_passage_by_keyboard_pages_opens_a_card_and_comes_back(pilot: Pilot) -> None:
+    page = pilot.page
+    page.goto(pilot.origin + "/")
+    expect(page.locator("#mode")).not_to_be_checked()
+
+    pilot.tab_to("#q")
+    page.keyboard.type(FEATURED_PASSAGE)
+    pilot.tab_to("#mode")
+    page.keyboard.press("Space")
+    expect(page.locator("#mode")).to_be_checked()
+    pilot.tab_to("button[type=submit]:not(form[action='/auth/sign-out'] button)", backwards=True)
+    page.keyboard.press("Enter")
+    expect(page.locator(".result")).to_have_count(1)
+    expect(page.locator(".result-count")).to_have_text("1 card matched.")
+    expect(page.locator(".result-tag a")).to_have_text("Zephyr winds raise granite costs")
+    expect(page.locator("#mode")).to_be_checked()
+    pilot.check_page()
+
+    pilot.tab_to("#q", backwards=True)
+    page.keyboard.press("ControlOrMeta+A")
+    page.keyboard.type("zephyr")
+    page.keyboard.press("Enter")
+    expect(page.locator(".result")).to_have_count(20)
+    expect(page.locator(".result-count")).to_have_text("25 cards matched.")
+    expect(page.locator("#mode")).to_be_checked()
+
+    pilot.tab_to("a[rel=next]")
+    page.keyboard.press("Enter")
+    expect(page.locator(".result")).to_have_count(5)
+    expect(page.locator(".result-count")).to_have_text("25 cards matched.")
+    pilot.check_page()
+
+    pilot.tab_to(".result-tag a", backwards=True)
+    page.keyboard.press("Enter")
+    expect(page.locator(".card-label")).to_be_visible()
+    pilot.tab_to("nav.back-link a", backwards=True)
+    page.keyboard.press("Enter")
+    expect(page.locator(".result")).to_have_count(5)
+    expect(page.locator(".result-count")).to_have_text("25 cards matched.")
+    expect(page.locator("#mode")).to_be_checked()
+    pilot.check_page()
+
+    pilot.tab_to("#mode", backwards=True)
+    page.keyboard.press("Space")
+    pilot.tab_to("button[type=submit]:not(form[action='/auth/sign-out'] button)", backwards=True)
+    page.keyboard.press("Enter")
+    expect(page.locator(".result")).to_have_count(20)
+    expect(page.locator("#mode")).not_to_be_checked()
+    assert "mode=" not in page.url, "unticked, the search is today's search again"
+
+
+# ------------------------------------------------------------------------------------------------
 # ac2: the copy pasted into an editable region keeps every span, and since policy 1.11 no line
 # ------------------------------------------------------------------------------------------------
 

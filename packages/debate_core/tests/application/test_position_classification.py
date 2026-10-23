@@ -571,6 +571,19 @@ async def test_review_a_heading_the_coach_ruled_on_is_not_queued_again(tmp_path:
     assert [(row.normalized_heading, row.teams) for row in after.review_queue.rows] == [("fed key", 2)]
 
 
+@pytest.mark.anyio
+async def test_review_a_rows_candidates_are_its_own_headings_not_its_neighbours(tmp_path: Path) -> None:
+    files = (
+        source(5, ONE, (("Spending Tradeoff", "Fed Key"), "Plan spends")),
+        source(6, TWO, (("Spending Tradeoff", "Fed Key"), "Plan spends")),
+    )
+    found = await run(tmp_path, repository(taxonomy()), *files)
+    assert [(row.normalized_heading, row.candidate_positions) for row in found.review_queue.rows] == [
+        ("fed key", ()),
+        ("spending tradeoff", ("spending-da",)),
+    ]
+
+
 def test_review_a_decision_naming_no_position_is_refused() -> None:
     repo = repository(taxonomy())
     decisions = read_decisions_csv(io.StringIO("normalized_heading,decision\nfed key,medicaid-da\n"))

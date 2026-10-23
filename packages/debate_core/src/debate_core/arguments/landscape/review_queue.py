@@ -4,7 +4,9 @@ An item goes to the queue when nothing placed it, or when what placed it is less
 review threshold (0.6 by default, so only a card placed by its tag alone, at 0.5). The queue is not a
 list of items. It is a list of **headings**: each normalized heading an unplaced item sits under that
 no alias or override decides, with how many documents, teams and cards are under it and up to three
-candidate positions, because a decision on a heading is what places every item under it next run.
+candidate positions, because a decision on a heading is what places every item under it next run. A
+row's candidates are its own heading's (positions an alias of which shares a word with it), then the
+positions whose tag keywords the cards under it carry; never another heading's on the same path.
 
 ## What the queue's CSV holds
 
@@ -30,7 +32,7 @@ from __future__ import annotations
 
 import csv
 from collections import Counter, defaultdict
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from datetime import date
 from typing import Final, TextIO
@@ -109,7 +111,8 @@ class QueuedItem:
     teams: tuple[SeedTeam, ...] = field(repr=False)
     headings: tuple[NormalizedHeading, ...] = field(repr=False)
     """The headings over the item that no alias or override decides."""
-    candidates: tuple[str, ...] = ()
+    tag_candidates: tuple[str, ...] = ()
+    """Positions whose tag keywords the card's tag holds."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -155,9 +158,15 @@ class _Tally:
 
 
 def build_review_queue(
-    items: Iterable[QueuedItem], *, minimum_teams: int = DEFAULT_MINIMUM_REVIEW_TEAMS
+    items: Iterable[QueuedItem],
+    *,
+    heading_candidates: Callable[[str], Sequence[str]] | None = None,
+    minimum_teams: int = DEFAULT_MINIMUM_REVIEW_TEAMS,
 ) -> ReviewQueue:
-    """The queued items counted by heading, most teams first, with the rare headings left out."""
+    """The queued items counted by heading, most teams first, with the rare headings left out.
+
+    `heading_candidates` gives a heading's own candidate positions, best first.
+    """
     if minimum_teams < 1:
         raise ValueError(f"the minimum number of teams is at least 1; got {minimum_teams}")
     tallies: dict[tuple[str, bool], _Tally] = defaultdict(_Tally)
@@ -174,7 +183,7 @@ def build_review_queue(
             tally = tallies[heading]
             tally.documents.add(item.source_sha256)
             tally.cards += card
-            tally.candidates.update(item.candidates)
+            tally.candidates.update(item.tag_candidates)
             for team in known:
                 tally.teams.add(team.identity)
                 if team.side in (Side.AFF, Side.PRO):
@@ -190,8 +199,8 @@ def build_review_queue(
             aff_teams=len(tally.aff),
             neg_teams=len(tally.neg),
             cards=tally.cards,
-            candidate_positions=tuple(
-                sorted(tally.candidates, key=lambda one: (-tally.candidates[one], one))[:_CANDIDATE_LIMIT]
+            candidate_positions=_candidates(
+                heading_candidates(heading) if heading_candidates is not None else (), tally.candidates
             ),
         )
         for (heading, answer), tally in tallies.items()
@@ -209,6 +218,11 @@ def build_review_queue(
             left_out_below_minimum_teams=len(tallies) - len(rows),
         ),
     )
+
+
+def _candidates(own: Sequence[str], from_tags: Counter[str]) -> tuple[str, ...]:
+    ranked = [*own, *sorted(from_tags, key=lambda one: (-from_tags[one], one))]
+    return tuple(dict.fromkeys(ranked))[:_CANDIDATE_LIMIT]
 
 
 def write_review_queue_csv(rows: Iterable[ReviewRow], stream: TextIO) -> None:

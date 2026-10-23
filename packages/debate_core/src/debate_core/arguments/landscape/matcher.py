@@ -49,7 +49,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from collections import defaultdict
+from collections import Counter, defaultdict
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from typing import Final
@@ -242,6 +242,7 @@ class PositionMatcher:
             if position.parent is not None and position.id in self._keywords:
                 self._children[taxonomy.resolve(position.parent).id].append(position.id)
         self._parents = {position.id: position.parent for position in active}
+        self._heading_candidates: dict[str, tuple[str, ...]] = {}
         self._by_word: dict[str, set[str]] = defaultdict(set)
         for alias, position_id in self._aliases.items():
             if position_id is not None:
@@ -293,24 +294,25 @@ class PositionMatcher:
             rationale += "; an answer heading makes the role ANSWERS"
         return self._result(placement.position_id, role, placement.method, confidence, rationale)
 
-    def candidates(self, item: MatchItem) -> tuple[str, ...]:
-        """Positions the review queue offers for an item nothing placed: up to three, best first.
+    def heading_candidates(self, heading: str) -> tuple[str, ...]:
+        """Positions the review queue offers for an undecided heading: up to three, best first.
 
-        A position is a candidate when one of its aliases shares a word with a heading over the item
-        that is not a kind word (`da`, `cp`, `adv`...), or when its tag keywords are in the card's tag.
-        Ranked by shared words, then id. Only a suggestion for the coach; nothing is placed by it.
+        A position is a candidate when one of its aliases shares a word with the heading that is not a
+        kind word (`da`, `cp`, `adv`...). Ranked by shared words, then id. Only a suggestion for the
+        coach; nothing is placed by it.
         """
-        shared: dict[str, int] = defaultdict(int)
-        for heading in item.headings:
-            if heading.text in self._overrides:
-                continue
-            for word in set(heading.text.split()) - _GENERIC_WORDS:
-                for position_id in self._by_word.get(word, ()):
-                    shared[position_id] += 1
-        for position_id, _ in self._keyword_matches(item.tag):
-            shared[position_id] += 1
-        ranked = sorted(shared, key=lambda position_id: (-shared[position_id], position_id))
-        return tuple(ranked[:_CANDIDATE_LIMIT])
+        found = self._heading_candidates.get(heading)
+        if found is None:
+            shared: Counter[str] = Counter()
+            for word in set(heading.split()) - _GENERIC_WORDS:
+                shared.update(self._by_word.get(word, ()))
+            ranked = sorted(shared, key=lambda position_id: (-shared[position_id], position_id))
+            found = self._heading_candidates[heading] = tuple(ranked[:_CANDIDATE_LIMIT])
+        return found
+
+    def tag_candidates(self, item: MatchItem) -> tuple[str, ...]:
+        """Every position whose tag keywords are in the card's tag, by id: the queue's other suggestion."""
+        return tuple(sorted(position_id for position_id, _ in self._keyword_matches(item.tag)))
 
     def undecided_headings(self, item: MatchItem) -> tuple[NormalizedHeading, ...]:
         """The headings over `item` that place nothing and carry no decision: what the coach can decide."""

@@ -185,7 +185,7 @@ class PositionClassificationService:
                             kind=item.kind,
                             teams=source.teams,
                             headings=matcher.undecided_headings(item),
-                            candidates=matcher.candidates(item),
+                            tag_candidates=matcher.tag_candidates(item),
                         )
                     )
         kept = {
@@ -199,7 +199,9 @@ class PositionClassificationService:
         changed = bool(written) or len(kept) != len(cached)
         if changed:
             await self._store.replace(reading.caselist, [*kept.values(), *written.values()])
-        queue = build_review_queue(queued, minimum_teams=self._minimum_review_teams)
+        queue = build_review_queue(
+            queued, heading_candidates=matcher.heading_candidates, minimum_teams=self._minimum_review_teams
+        )
         location = await self._store.write_review_queue(reading.caselist, reading.topic_id, queue.rows)
         return ClassificationRun(
             caselist=reading.caselist,

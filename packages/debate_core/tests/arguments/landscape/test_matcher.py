@@ -382,7 +382,9 @@ def test_tag_keywords_of_two_unrelated_positions_place_nothing() -> None:
     )
     result = matcher(on=two).place(one_card(("Fiscal Cliff DA",), "The deficit swings the midterm"))
     assert (result.position_id, result.method) == (None, None)
-    assert matcher(on=two).candidates(one_card(("Fiscal Cliff DA",), "The deficit swings the midterm")) == (
+    assert matcher(on=two).tag_candidates(
+        one_card(("Fiscal Cliff DA",), "The deficit swings the midterm")
+    ) == (
         "one-da",
         "two-da",
     )
@@ -505,8 +507,14 @@ def test_no_rationale_repeats_a_teams_heading_tag_or_name(one: Format) -> None:
 
 
 def test_candidates_share_a_word_that_is_not_a_kind_word() -> None:
-    assert matcher().candidates(one_card(("Spending Tradeoff",))) == ("spending-da",)
-    assert matcher().candidates(one_card(("Fiscal DA",))) == ()
+    assert matcher().heading_candidates("spending tradeoff") == ("spending-da",)
+    assert matcher().heading_candidates("fiscal da") == ()
+    assert matcher().heading_candidates("sample spending politics") == (
+        "politics-da",
+        "sample-aff",
+        "spending-da",
+    )
+    assert matcher().tag_candidates(one_card(("Fiscal DA",), "No keyword")) == ()
 
 
 def test_the_override_digest_names_only_the_items_headings() -> None:

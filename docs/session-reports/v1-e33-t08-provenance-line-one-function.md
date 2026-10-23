@@ -317,10 +317,10 @@ forbidden entry:
 ## PM conditions
 
 Closed in this session, as the PM's review of 2026-10-22 rules. The phase stays `Succeeded`, and
-the branch is ready for `scripts/task pr` with no `--partial`. Commit ids below are after the sync,
-on top of `origin/dev` at `37bdaba`. The sync rewrote every earlier id in this report (`aa0d699` is
-now `b612290`, `b1e8624` is `cf98985`, `fba0b8b` is `9b80c3d`), and the PM's verdict is `d601490`.
-The conditions are in `96c3cd5`.
+the branch is ready for `scripts/task pr` with no `--partial`. Commit ids below are after the last
+sync, on top of `origin/dev` at `bcf6972`. The syncs rewrote every earlier id in this report
+(`aa0d699` is now `67a0d76`, `b1e8624` is `83e76b9`, `fba0b8b` is `c44fb9f`), and the PM's verdict
+is `d8492e4`. The conditions are in `019052f`.
 
 **The forbidden-entry ruling.** The PM's comment is written above the forbidden entry, as given. Its
 parsed `forbidden` list is unchanged (the comment is not part of any value).
@@ -375,7 +375,9 @@ Three new mutants, run the same way, show the new assertions bite:
 | The version left at `-2` | CAUGHT (4 failed) | `test_the_sidecar_is_the_recorded_one_byte_for_byte_but_the_files_own_hash_and_the_version` |
 
 **Condition 4: sync and checks.** `scripts/task sync v1-e33-t08-provenance-line-one-function` rebased
-the branch's seven commits onto `origin/dev` without a conflict. **`dev` had moved one merge further
+the branch's seven commits onto `origin/dev` (`37bdaba`) without a conflict. A second sync, onto
+`bcf6972`, followed the generated refresh #416, which changes `ROADMAP.md` alone; it rebased cleanly
+and changed no file of this task, so the checks below stand for it. **`dev` had moved one merge further
 than the PM's notes list:** after #413 it gained v1-e39-t11 (#415, search pages and Copy card) and a
 refresh (#414). #415 is the one change on `dev` that touches a file of this task,
 `domain/evidence_search.py`. It adds `ResultCount` and `DEFAULT_RESULT_COUNT_CAP` in other hunks;

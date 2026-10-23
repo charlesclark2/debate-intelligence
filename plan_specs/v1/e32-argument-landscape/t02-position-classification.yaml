@@ -31,6 +31,13 @@ spec:
     brings them (weekly archives are windows, not cumulative: v1-e30-t17), and low-confidence or unmatched items go to a
     review queue whose coach decisions become deterministic overrides. Boundaries: taxonomy content is
     t01; aggregation and reports are t03/t04; the CLI entry point and the first full-corpus run are t05.
+    (PM amendment 2026-10-22, from the coach's priorities of 2026-10-22.) This task ships stage
+    one alone: the deterministic matcher, the cache and the review queue, with no model call, so
+    a first Policy report does not wait on E05 or the policy's E32 gate. Stage two (the model
+    prompt, StructuredOutputGuard, max_model_items and the labeled replay evaluation) moves to
+    v1-e32-t07. Items the matcher cannot place go to the review queue and are reported as
+    Unclassified by t03; the coach's decisions CSV becomes deterministic overrides, as written.
+    The cache key's prompt version is `none` for deterministic results.
   priority: 1
   constraints:
     packages:
@@ -53,9 +60,6 @@ spec:
       name: v1-e32-t01-position-taxonomy
       relation: dependsOn
     - kind: TaskRef
-      name: v1-e05-t05-structured-output-validation
-      relation: dependsOn
-    - kind: TaskRef
       name: v1-e30-t01-caselist-data-use-policy
       relation: dependsOn
   acceptanceCriteria:
@@ -64,14 +68,16 @@ spec:
         On the synthetic labeled fixture set (at least 20 items per format) the deterministic stage alone
         reaches 100% accuracy on items that carry a taxonomy alias, AT:/A2 headings yield role ANSWERS,
         and the fake router records zero model calls for those items.
+    # PM amendment 2026-10-22: MODEL stays in the contract for v1-e32-t07; this task writes no MODEL result.
     - id: ac2
       description: >-
         Each PositionClassification records item id, position_id or null, role, confidence (0-1),
         rationale (<= 280 chars), method (ALIAS, TAG_KEYWORD, INHERITED, OVERRIDE, MODEL), taxonomy_version,
         and for MODEL results prompt_id, prompt_version and model_id.
+    # PM amendment 2026-10-22: ac3 and ac6 are v1-e32-t07's criteria; this task does not build them.
     - id: ac3
       description: >-
-        A post-validation check rejects a model result whose rationale repeats 12 or more consecutive words
+        (Moved to v1-e32-t07.) A post-validation check rejects a model result whose rationale repeats 12 or more consecutive words
         of the card's evidence text or whose position_id is unknown, and the item goes to the review queue
         instead of being accepted.
     - id: ac4
@@ -81,11 +87,12 @@ spec:
         an OVERRIDE rule so the same normalized heading is classified deterministically next run.
     - id: ac5
       description: >-
-        A second run over an unchanged snapshot makes zero model calls (cache hit rate 100%), and a
-        taxonomy_version or prompt version bump invalidates only the affected cached results.
+        A second run over an unchanged snapshot reclassifies nothing (cache hit rate 100%), and a
+        taxonomy_version bump (or, from v1-e32-t07, a prompt version bump) invalidates only the affected
+        cached results.
     - id: ac6
       description: >-
-        Replay-mode evaluation against a coach-labeled 60-item set (20 per format, cassettes recorded once
+        (Moved to v1-e32-t07.) Replay-mode evaluation against a coach-labeled 60-item set (20 per format, cassettes recorded once
         by the operator) reports per-format accuracy of at least 85% for classified items.
 status:
   phase: Pending
@@ -102,8 +109,8 @@ metadata:
     debate/epic: v1-e32-argument-landscape
 spec:
   description: >-
-    Build the output contract, the deterministic matcher, the model stage with its prompt and guard, then
-    the cache and review queue, and finish with a replay-backed labeled evaluation.
+    Build the output contract, the deterministic matcher, then the cache and review queue (PM amendment
+    2026-10-22: the model stage and its evaluation are v1-e32-t07).
   goalRef:
     name: v1-e32-t02-position-classification
   graph:
@@ -143,32 +150,6 @@ spec:
             name: Deterministic matcher tests pass
             command: uv
             args: [run, pytest, packages/debate_core/tests/arguments/landscape/test_matcher.py]
-      - id: model-stage
-        kind: Task
-        name: Model classification stage and prompt
-        description: >-
-          Register prompts/landscape/classify_position.md (v1.0.0, classification task class) and call it
-          through StructuredOutputGuard for unmatched items in batches; post-validate unknown ids and
-          evidence n-gram echoes in the rationale; enforce a per-run max_model_items setting.
-        dependsOn: [deterministic-matcher]
-        outputs:
-          - prompts/landscape/classify_position.md
-          - packages/debate_core/src/debate_core/application/position_classification.py
-        estimatedEffort: 4h
-        acceptanceCriteria:
-          - type: artifact_exists
-            name: Classification prompt is registered with an id and version
-            path: prompts/landscape/classify_position.md
-            contentMatch: "prompt_id: landscape.classify_position"
-          - type: test_passes
-            name: Model stage tests pass with the fake router
-            command: uv
-            args:
-              - run
-              - pytest
-              - packages/debate_core/tests/application/test_position_classification.py
-              - -k
-              - model
       - id: cache-and-review-queue
         kind: Task
         name: Result cache and review queue
@@ -176,7 +157,7 @@ spec:
           Persist classifications per caselist in the local data dir keyed by item fingerprint,
           taxonomy_version and prompt version; write review-queue items as CSV and ingest a coach decisions
           CSV into config/landscape/overrides/<topic_id>.yaml.
-        dependsOn: [model-stage]
+        dependsOn: [deterministic-matcher]
         outputs:
           - packages/debate_core/src/debate_core/integrations/landscape/classification_store.py
           - packages/debate_core/src/debate_core/arguments/landscape/review_queue.py
@@ -191,28 +172,15 @@ spec:
               - packages/debate_core/tests/application/test_position_classification.py
               - -k
               - "cache or review"
-      - id: labeled-eval
+      # PM amendment 2026-10-22: the model stage and the labeled replay evaluation move to v1-e32-t07.
+      - id: quality-gates
         kind: Task
-        name: Labeled replay evaluation and quality gates
+        name: Quality gates
         description: >-
-          Coach labels 60 scrubbed items (headings, tags, short cites only); the operator records cassettes
-          once in record mode against dev Bedrock and commits them; a replay eval test reports per-format
-          accuracy and runs offline in CI.
+          Type check and import boundaries over the deterministic classification.
         dependsOn: [cache-and-review-queue]
-        outputs:
-          - tests/fixtures/landscape/eval_labeled_60.yaml
-          - tests/fixtures/model_cassettes/landscape/
-        estimatedEffort: 3h
+        estimatedEffort: 0.5h
         acceptanceCriteria:
-          - type: test_passes
-            name: Replay evaluation meets the accuracy threshold offline
-            command: uv
-            args: [run, pytest, packages/debate_core/tests/arguments/landscape/test_classification_eval.py]
-          - type: custom
-            name: Coach confirms the labeled set
-            description: >-
-              Coach confirms the 60 labels reflect how the team would name each position and that the set
-              contains no team codes, school names or debater names.
           - type: command_succeeds
             name: Type check passes for debate_core
             command: uv

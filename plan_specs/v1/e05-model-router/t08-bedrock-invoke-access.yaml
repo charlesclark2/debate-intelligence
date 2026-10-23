@@ -28,6 +28,10 @@ spec:
     are not Terraform: the Anthropic use-case form and any Marketplace subscription the first
     call asks for. Then the operator runs t02's probe with the new profile, and t02's ac7 is
     recorded.
+    (PM ruling 2026-10-22.) v1-e05-t02's ac7, the first real call on each Claude route, is this
+    task's own criterion now: t02 waited on this task's grant, and this task waited on t02, so
+    neither could finish. t02 is set Succeeded on its other criteria, and the probe's answers
+    are recorded in this task's report and pinned by t02's Stubber tests.
   priority: 2
   constraints:
     packages: [infrastructure, debate_core.application, debate_core.integrations, packages/debate_core/tests, config, docs/runbooks]
@@ -60,6 +64,13 @@ spec:
         Operator-run: the dev and prod plans are read by the PM before apply; after the dev
         apply, t02's probe runs with the new profile and its tables are recorded in t02's
         report.
+    # PM ruling 2026-10-22: v1-e05-t02's ac7, moved here.
+    - id: ac5
+      description: >-
+        Operator-run with the new profile, the first real call on each Claude route, recorded in this
+        report: which toolChoice types and structured-output options the model accepts, whether a
+        non-default temperature is refused, and that each model id and inference profile in the
+        routing files resolves; v1-e05-t02's Stubber tests pin each answer.
 status:
   phase: Pending
 ---

@@ -299,3 +299,14 @@ working agreement still asks for red first, and the next task should show it.
 * **The exit code for `ModelAccessDenied` and `ModelRequestRejected`** goes into the spec of the
   first CLI command that calls a model. They must not exit 3, the retryable code.
 * **t04 wires its renderer,** and **t07 takes the token and latency notes.**
+
+## PM record, 2026-10-22
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+* **ac7 moves to `v1-e05-t08`.** ac7 needs the permission set that `v1-e05-t08` creates, and
+  `v1-e05-t08` depends on this task, so neither could finish. The first real call on each Claude
+  route is now `v1-e05-t08`'s ac5, recorded in that task's report and pinned by this task's
+  Stubber tests.
+* Every other criterion was met and accepted in the review above, so the Goal is set to
+  `Succeeded` in the PM batch of 2026-10-22 (d).

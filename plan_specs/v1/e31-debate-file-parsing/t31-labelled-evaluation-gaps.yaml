@@ -29,6 +29,12 @@ spec:
     did. Each ruled rule is a synthetic fixture shown failing first, the pr-subset gate must
     hold, tag and cite precision must not fall, and `parser_version` is bumped once for the
     whole task, with the operator's re-parse written out in full.
+    (PM note 2026-10-22, from v1-e39-t12's counts on the dev index of 2026-10-22.) Of the
+    index's documents, 6,214 have no cite, and 4,805 of those have 100 or more words: most are
+    likely cards whose cite the parser missed, which is the cite-recall gap this task measures.
+    The same counts found no document flagged ABBREVIATED. Use both as context for the tallies
+    (counts only); the index's card-only rule (v1-e39-t12) hides the short no-cite items but not
+    these.
   priority: 2
   constraints:
     packages: [debate_core.evidence, debate_core.integrations.docx_parser, packages/debate_core/tests, scripts, tests/scripts, tests/evals, docs/data]

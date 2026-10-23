@@ -20,7 +20,17 @@ spec:
   description: >-
     Classify parsed blocks and cards into the positions being read on each topic and publish weekly landscape
     reports: what is read, by how many teams, on which side, what is new, and the most-read cards.
-  priority: 3
+    (PM amendment 2026-10-22, from the coach's priorities of 2026-10-22.) The first target is
+    Policy, whose 2026-27 national health insurance topic runs all season and whose team starts
+    competing on 2026-11-07: the plans affirmatives read and the DAs, CPs and Ks negatives read,
+    from the hspolicy26 store, before that date. LD comes second, on the November-December
+    de-extinction topic once teams have disclosed on it; the two remaining space colonization
+    tournaments are not worth a taxonomy. The team has no PF debaters, so PF is out of scope
+    until it does. Classification ships deterministic first (headings, tags and coach overrides,
+    v1-e32-t02); the model stage for what headings cannot place is v1-e32-t07, which waits on
+    E05 and the data-use policy's E32 gate. The first reports show the unclassified share
+    honestly rather than waiting for the model.
+  priority: 1
   constraints:
     majorVersion: v1
     release: v1.2
@@ -28,8 +38,8 @@ spec:
   acceptanceCriteria:
   - id: ac1
     description: >-
-      Per-topic position taxonomies exist for the current Policy, LD and PF topics and are editable by
-      coaches.
+      Per-topic position taxonomies exist for the Policy 2026-27 topic and the LD de-extinction topic and
+      are editable by coaches (PM amendment 2026-10-22: no PF taxonomy while the team has no PF debaters).
   - id: ac2
     description: >-
       Blocks and cards are classified into positions with confidence and rationale; unknowns are queued
@@ -120,10 +130,9 @@ spec:
       kind: Task
       name: Topic position taxonomies
       description: >-
-        Per-topic taxonomies of positions (Policy national health insurance: affs, DAs, CPs, Ks, T, theory;
-        LD space colonization: values, criteria, contention types; PF data-center moratorium: contentions
-        and responses), seeded from pocket/hat/block headings in the parsed cards, stored as editable
-        YAML.
+        The Policy national health insurance taxonomy (plans, advantages, DAs, CPs, Ks, T, theory) and
+        generic.yaml, seeded from pocket/hat/block headings in the parsed cards, stored as editable YAML
+        (PM amendment 2026-10-22: Policy first; LD is t06, no PF).
       inputs:
         specRef: plan_specs/v1/e32-argument-landscape/t01-position-taxonomy.yaml
         goalRef: v1-e32-t01-position-taxonomy
@@ -150,7 +159,6 @@ spec:
         goalRef: v1-e32-t02-position-classification
       dependsOn:
       - t01
-      - ext-v1-e05-t05-structured-output-validation
       - ext-v1-e30-t01-caselist-data-use-policy
       acceptanceCriteria:
       - type: command_succeeds
@@ -216,7 +224,6 @@ spec:
       dependsOn:
       - t03
       - ext-v1-e29-t05-evidence-sync-cli
-      - t04
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e32-t05-landscape-cli reports phase Succeeded
@@ -226,5 +233,45 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e32-t05-landscape-cli
+    - id: t06
+      kind: Task
+      name: 'LD de-extinction position taxonomy'
+      description: >-
+        LD de-extinction position taxonomy.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t06-ld-de-extinction-taxonomy.yaml
+        goalRef: v1-e32-t06-ld-de-extinction-taxonomy
+      dependsOn:
+      - t01
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t06-ld-de-extinction-taxonomy reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t06-ld-de-extinction-taxonomy
+    - id: t07
+      kind: Task
+      name: 'Model classification of what headings cannot place'
+      description: >-
+        Model classification of what headings cannot place.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t07-model-classification-stage.yaml
+        goalRef: v1-e32-t07-model-classification-stage
+      dependsOn:
+      - t02
+      - ext-v1-e05-t05-structured-output-validation
+      - t05
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t07-model-classification-stage reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t07-model-classification-stage
 status:
   phase: Pending

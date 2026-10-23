@@ -32,6 +32,11 @@ spec:
     week-over-week trends and per-school views are t04; the CLI, local output paths and S3 publishing are Every generated report calls the staleness hook v1-e34-t03 exposes and carries its banner and
     its `stale` metadata flag; a report that cannot say how old its newest snapshot is does not ship.
     t05; "files suggest" drafting from top cards is v1-e33-t03.
+    (PM amendment 2026-10-22, from the coach's priorities of 2026-10-22.) The first reports are
+    built from deterministic classifications only (v1-e32-t02); the header's prompt version
+    reads `none` and the Unclassified line carries what the matcher could not place. The Policy
+    report shows plans as affirmative positions and DAs, CPs, Ks, T and theory as negative ones,
+    each with rounds, teams and the aff/neg split.
   priority: 1
   constraints:
     packages: [debate_core.application, debate_core.arguments, debate_core.domain, tests/fixtures/landscape]

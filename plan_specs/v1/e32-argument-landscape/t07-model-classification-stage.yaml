@@ -1,0 +1,124 @@
+# TASK v1-e32-t07-model-classification-stage - Model classification of what headings cannot place
+# Epic: E32 Argument Landscape Reports | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e32-t07-model-classification-stage
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+  annotations:
+    debate/title: "Model classification of what headings cannot place"
+spec:
+  # Filed by the PM, 2026-10-22, from the coach's priorities of 2026-10-22 (v1-e32-t02 split: deterministic first, the model stage after).
+  description: >-
+    Stage two of position classification, split from v1-e32-t02 so the first Policy report did
+    not wait on E05: items the deterministic matcher could not place, or placed below the
+    confidence threshold, go to the model. Register prompts/landscape/classify_position.md
+    (v1.0.0, classification task class) and call it through the ModelRouter's
+    StructuredOutputGuard in batches; each item carries a heading path, tag, short cite and a
+    bounded excerpt, never a whole document. Post-validate unknown position ids and rationales
+    that echo 12 or more consecutive words of the evidence (v1-e32-t02 ac3), and send failures
+    to the review queue. Enforce max_model_items per run. Results are written with method MODEL,
+    prompt_id, prompt_version and model_id into t02's cache, and a prompt version bump
+    invalidates only MODEL results. `landscape report --model-mode` gains `replay` and `live`.
+    The coach-labeled 60-item replay evaluation (v1-e32-t02 ac6) is this task's; its labels come
+    from Policy and LD de-extinction items, not the retired topics. Data-use policy: model
+    classification of the real corpus waits on the E32 gate (open question 4, the provider's
+    no-training and no-retention terms recorded in writing); until then this task runs on
+    synthetic fixtures and replay cassettes only, and the live first run (ac5) waits. The policy
+    cites v1-e32-t02 for model-use rule 3 and E32 gate item 3; this task owns both now and
+    corrects those two citations as a no-loosening correction.
+  priority: 2
+  constraints:
+    packages: [debate_core.application, debate_core.arguments, debate_core.integrations, prompts/landscape, tests/fixtures/landscape, packages/debate_cli, docs/policies, docs/data]
+    forbidden:
+      - Model output that contains or replaces tag, cite or evidence text (ids, confidence, rationale only)
+      - Sending documents to the model whole; only unmatched items with a bounded excerpt are sent
+      - Calling the model for items the deterministic stage already matched
+      - Accepting a position_id that is not in the resolved taxonomy version
+      - Live model calls in CI (fake/replay ModelRouter and committed cassettes only)
+      - Team codes, school names or debater names in the prompt input or in cassettes
+      - A live run over the real corpus before the data-use policy records open question 4 as answered
+      - Importing boto3/botocore, fastapi or typer in debate_core domain/, application/ or arguments/
+  context:
+    - kind: TaskRef
+      name: v1-e32-t02-position-classification
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e05-t05-structured-output-validation
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e32-t05-landscape-cli
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Only items the deterministic stage left unmatched or below threshold reach the
+        model; with the fake router, a run over a fixture where every item carries an alias
+        makes zero model calls.
+    - id: ac2
+      description: >-
+        A post-validation check rejects a model result whose rationale repeats 12 or more
+        consecutive words of the card's evidence text or whose position_id is unknown, and
+        the item goes to the review queue.
+    - id: ac3
+      description: >-
+        MODEL results record prompt_id, prompt_version and model_id; a second run over an
+        unchanged snapshot makes zero model calls, and a prompt version bump re-runs only
+        MODEL results; exceeding max_model_items exits 1 after writing what it has.
+    - id: ac4
+      description: >-
+        Replay-mode evaluation against a coach-labeled 60-item set (Policy and LD
+        de-extinction items, cassettes recorded once by the operator) reports per-format
+        accuracy of at least 85% for classified items, and a scan of the prompt inputs and
+        cassettes finds no school name, team code or debater name.
+    - id: ac5
+      description: >-
+        Operator-run in dev, after the policy records open question 4 as answered: a live
+        run over the newest hspolicy26 snapshot, with model calls, cost and the
+        classification coverage before and after the model stage recorded in
+        docs/data/landscape/first-run-policy.md, and the coach has reviewed the newly
+        classified positions.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e32-t07-model-classification-stage-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+spec:
+  description: >-
+    Prompt and guard first, with the fake router; then post-validation, the cache's MODEL
+    entries and max_model_items; then `--model-mode replay|live`; then the labeled set,
+    cassettes and the replay evaluation; the live run last, behind the policy gate.
+  goalRef:
+    name: v1-e32-t07-model-classification-stage
+  graph:
+    nodes:
+      - id: model-stage
+        kind: Task
+        name: Model stage, cache entries and replay evaluation
+        description: >-
+          Prompt and guard first, with the fake router; then post-validation, the cache's
+          MODEL entries and max_model_items; then `--model-mode replay|live`; then the
+          labeled set, cassettes and the replay evaluation; the live run last, behind the
+          policy gate.
+        estimatedEffort: 8h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Model stage tests pass with the fake router
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_position_classification.py, -k, model]
+status:
+  phase: Pending

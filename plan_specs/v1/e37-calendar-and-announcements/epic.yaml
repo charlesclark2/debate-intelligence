@@ -244,5 +244,24 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e37-t07-instagram-link
+    - id: t08
+      kind: Task
+      name: 'The site smoke check reads the home page''s results band and the results page'
+      description: >-
+        The site smoke check reads the home page's results band and the results page.
+      inputs:
+        specRef: plan_specs/v1/e37-calendar-and-announcements/t08-smoke-results-band.yaml
+        goalRef: v1-e37-t08-smoke-results-band
+      dependsOn:
+      - t06
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e37-t08-smoke-results-band reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e37-t08-smoke-results-band
 status:
   phase: Pending

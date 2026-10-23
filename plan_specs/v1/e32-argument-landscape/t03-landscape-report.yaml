@@ -37,6 +37,12 @@ spec:
     reads `none` and the Unclassified line carries what the matcher could not place. The Policy
     report shows plans as affirmative positions and DAs, CPs, Ks, T and theory as negative ones,
     each with rounds, teams and the aff/neg split.
+    (PM ruling 2026-10-23, from v1-e32-t02's question 3.) The coach's review-queue decisions
+    move counts without a taxonomy_version bump, so the header also names the overrides digest
+    (the digest of config/landscape/overrides/<topic id>.yaml, or `none`) beside
+    taxonomy_version. When v1-e32-t09 assigns affirmative rounds their aff, the report counts
+    that assignment and names its method; until then the affirmative side shows its unidentified
+    share plainly, and the advantages and negative positions are counted as placed.
   priority: 1
   constraints:
     packages: [debate_core.application, debate_core.arguments, debate_core.domain, tests/fixtures/landscape]

@@ -1,0 +1,91 @@
+# TASK v1-e37-t07-instagram-link - A link to the team's Instagram account, never an embed
+# Epic: E37 Calendar & Announcements | Release: v1.6 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e37-t07-instagram-link
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.6
+    debate/epic: v1-e37-calendar-and-announcements
+  annotations:
+    debate/title: "A link to the team's Instagram account, never an embed"
+spec:
+  # Filed by the PM, 2026-10-22, from Charlie's request of 2026-10-22 to add or embed the team's Instagram.
+  description: >-
+    Charlie asked to add or embed the team's Instagram. The website publishing policy (Third
+    parties, item 4) forbids embedded social widgets and feeds, Instagram's by name, and allows
+    a plain link out to a social account; the site's accessibility page says it loads no social
+    media widgets. So: a plain link to the team's Instagram account, its address in
+    site/content/site.yaml (Charlie gives the handle), shown in the footer of every page and on
+    the contact page, labelled so a visitor knows it opens Instagram's site, with no Instagram
+    script, image, icon fetched from Instagram, iframe or tracker. An icon, if any, is a local
+    SVG. The export checks that already refuse third-party requests must still pass, and a test
+    pins that the link is an ordinary anchor to instagram.com and nothing else from Instagram is
+    on any page. If Charlie later wants posts shown on the site, that is a policy change for him
+    to approve first, not this task.
+  priority: 3
+  constraints:
+    packages: [site/content, site/src, site/tests]
+    forbidden:
+      - A student name in a file name, a path, a commit message, a spec or anywhere outside site/content/ (website publishing policy, Students 10 and 11)
+      - A result Charlie did not supply from the tournament's own published results; never invented, estimated or reconstructed
+      - Any record, ranking, points total, win-loss line or leaderboard of a student over time (Results and awards 3)
+      - A third-party script, iframe, embed, widget, pixel or tracker on the site (Third parties)
+      - Network calls at build time, in tests, or from a visitor's browser
+  context:
+    - kind: TaskRef
+      name: v1-e36-t04-core-pages
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The footer of every page and the contact page carry a link to the team's Instagram
+        account, whose address comes from site/content/site.yaml, labelled as opening
+        Instagram's site.
+    - id: ac2
+      description: >-
+        No page loads anything from Instagram or Meta: a test over the built export finds no
+        script, iframe, image or stylesheet from instagram.com, cdninstagram.com,
+        facebook.com or fbcdn.net, and the existing third-party and cookie checks pass.
+    - id: ac3
+      description: >-
+        `pnpm --dir site lint`, `typecheck`, `test` and `build` pass offline.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e37-t07-instagram-link-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.6
+    debate/epic: v1-e37-calendar-and-announcements
+spec:
+  description: >-
+    Add the handle to site settings, the link to the footer and contact page, and the export
+    test.
+  goalRef:
+    name: v1-e37-t07-instagram-link
+  graph:
+    nodes:
+      - id: instagram-link
+        kind: Task
+        name: Instagram link
+        description: >-
+          Add the handle to site settings, the link to the footer and contact page, and
+          the export test.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: The site tests pass
+            command: pnpm
+            args: [--dir, site, test]
+status:
+  phase: Pending

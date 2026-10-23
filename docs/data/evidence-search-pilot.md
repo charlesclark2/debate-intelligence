@@ -26,9 +26,16 @@ operator's (`v1-e39-t12` ac3).
 |---|---|---|---:|---:|---:|---:|---:|
 | Counted, before the rule | `767b9c7c056b80cb` | 2026-10-22 | 13,225 | 11,393 | 21,595 | 5,846 | 52,059 |
 | Expected after it | | | 12,714 | 11,000 | 20,961 | 5,759 | 50,434 |
-| Before, measured | | | | | | | |
-| After, measured | | | | | | | |
-| Left out as no card, measured | | | | | | | |
+| Before, measured | `767b9c7c056b80cb` | 2026-10-22 | 13,225 | 11,393 | 21,595 | 5,846 | 52,059 |
+| After, measured | `f29b81c276dd67c5` | 2026-10-22 | 12,714 | 11,000 | 20,961 | 5,759 | 50,434 |
+| Left out as no card, measured | | | 511 | 393 | 634 | 87 | 1,625 |
+| of which cite only | | | 366 | 297 | 558 | 70 | 1,291 |
+| of which no cite, under 25 words | | | 145 | 96 | 76 | 17 | 334 |
+
+Shares kept: 96.1%, 96.6%, 97.1% and 98.5%. The stores had not grown since the counts, so the
+measured rows equal the expected row. Block 1 printed `OK: every store keeps 90% or more`; block 2,
+a plain publish with no `--allow-shrink`, passed the shrink guard, and `current.json` names
+`f29b81c276dd67c5`. Recorded by the PM from the operator's run of 2026-10-22.
 
 ## The promotion to prod
 

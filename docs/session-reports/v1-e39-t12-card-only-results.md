@@ -498,3 +498,16 @@ this report is ACCEPTED. A later review is appended after this one; this one is 
 `InProgress` until then. v1-e39-t13 depends on this task. The PM records ac3 from the two blocks'
 output and sets the Goal `Succeeded` in the next PM batch, which makes t13 ready. If anything comes
 out differently, stop and ask for another review.
+
+## PM record, 2026-10-22
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+* **ac3, measured:** both operator blocks ran from this worktree after the merge. Block 1 printed
+  `OK: every store keeps 90% or more`, with the left-out counts exactly the counted ones (511, 393,
+  634 and 87). Block 2, a plain publish with no `--allow-shrink`, passed the shrink guard, and dev's
+  `current.json` names `f29b81c276dd67c5`, 50,434 documents. The table is in
+  [the pilot's record](../data/evidence-search-pilot.md#the-card-only-rule-v1-e39-t12).
+* Every criterion is met, so the Goal is set to `Succeeded` in the PM batch of 2026-10-22 (e).
+* Still owed by the operator: reinstalling the agent with a build carrying this task before its
+  Wednesday 2026-10-28 run.

@@ -205,5 +205,44 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e37-t05-parent-email-signup
+    - id: t06
+      kind: Task
+      name: 'Season results: how the team''s students placed at each tournament'
+      description: >-
+        Season results: how the team's students placed at each tournament.
+      inputs:
+        specRef: plan_specs/v1/e37-calendar-and-announcements/t06-season-results.yaml
+        goalRef: v1-e37-t06-season-results
+      dependsOn:
+      - t02
+      - ext-v1-e36-t04-core-pages
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e37-t06-season-results reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e37-t06-season-results
+    - id: t07
+      kind: Task
+      name: 'A link to the team''s Instagram account, never an embed'
+      description: >-
+        A link to the team's Instagram account, never an embed.
+      inputs:
+        specRef: plan_specs/v1/e37-calendar-and-announcements/t07-instagram-link.yaml
+        goalRef: v1-e37-t07-instagram-link
+      dependsOn:
+      - ext-v1-e36-t04-core-pages
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e37-t07-instagram-link reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e37-t07-instagram-link
 status:
   phase: Pending

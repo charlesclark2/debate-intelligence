@@ -54,7 +54,7 @@ spec:
         The dev index's document count before and after is recorded in
         docs/data/evidence-search-pilot.md (operator).
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

@@ -236,6 +236,9 @@ whose aliases share a word with it). It holds headings teams wrote, so it is kep
 holds the store, at `~/.debate-research/dev/landscape/review/<caselist>/<topic id>-review-queue.csv`,
 never in the repository. A heading fewer than two teams used is left out of it.
 
+Your first pass over the Policy queue happens before the first `debate-research landscape report`
+run (`v1-e32-t05`), which applies your decisions, so the first report counts with them.
+
 To decide, copy the CSV somewhere outside the repository, open it in a spreadsheet and fill the last
 column, `decision`, for the rows you want to settle:
 

@@ -16,6 +16,8 @@ metadata:
     debate/title: Position classification
     debate/architecture-refs: §2, §8, §10, §13, §16
 spec:
+  # PM ruling 2026-10-23 (v1-e32-t02 review, ruling 4): the cache key also names the topic id and a
+  # per-heading override digest; the last sentences of the description below say so.
   description: >-
     Implement PositionClassificationService, which assigns each parsed section (pocket/hat/block) and card
     in a disclosed round document to a taxonomy position with a role (READS the position, or ANSWERS it
@@ -45,15 +47,28 @@ spec:
     by mechanism (v1-e32-t09) or into Medicare for All (the PM's ruling of 2026-10-23), the
     child affs carry tag keywords: the TAG_KEYWORD stage places a card under a child when its
     tag holds one, and leaves it under the parent otherwise.
+    (PM ruling 2026-10-23, from this task's review.) The cache key is (topic id, taxonomy_version,
+    override digest, prompt version, item fingerprint): the topic id because two topics of one
+    caselist can share a taxonomy version, and the override digest, a digest of the coach's
+    decisions on the item's own headings, so that a decision reaches cached items and misses only
+    the items under its heading.
   priority: 1
   constraints:
+    # PM ruling 2026-10-23 (v1-e32-t02 review, ruling 6): the operator script and its test, the
+    # config test over overrides, the coach's guide, the shared synthetic store and config/landscape.
     packages:
       - debate_core.domain
       - debate_core.application
       - debate_core.arguments
       - debate_core.integrations
+      - debate_core.testing
       - prompts/landscape
       - tests/fixtures/landscape
+      - tests/config
+      - tests/scripts
+      - scripts/classify_landscape_positions.py
+      - docs/guides
+      - config/landscape
     forbidden:
       - Model output that contains or replaces tag, cite or evidence text (ids, confidence, rationale only)
       - Sending documents to the model whole; only unmatched items with a bounded excerpt are sent

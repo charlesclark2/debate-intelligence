@@ -32,6 +32,21 @@ of the [PM block](#questions-for-the-pm) asks what to do before t05's first run.
 **Then look at Deviations 1 and 2.** The zero-model-calls half of ac1 is met by construction, and
 the cache key has two more parts than the spec names.
 
+**After the PM review (2026-10-23, accepted with conditions): condition 1's line fires, so this
+needs another review before the PR.** Fewer than half of affirmative documents have a placed aff:
+159 of 1,770 (9.0%), and 77 of 552 aff teams (13.9%)
+([round-level coverage](#round-level-coverage-pm-review-condition-1)). The plan heading appears
+anywhere on a card's path in only 307 aff documents (17.3%), so the PM's planned response, a
+team-level rule, is the fix rather than more aliases. Conditions 2 and 3 do not depend on that
+result and are done:
+* the coach's sheet of the queue's top 50 rows is in `~/Documents/debate/landscape-seed/`, with
+  two rows marked to leave blank because they may name a school, team or tournament;
+* the guide says the first pass precedes t05's first run;
+* the spec's description and `constraints.packages` are amended with PM-ruling comments.
+
+The Goal stays Succeeded, since every criterion this task owns passed. The pull request waits for
+the re-review.
+
 ## Plan nodes
 
 | Node | Status | Notes |
@@ -162,6 +177,37 @@ none names a school, team or person.
 | `topicality` | 29 | 61 | 165 | nhi-t |
 | `uniqueness` | 29 | 39 | 157 | none |
 
+### Round-level coverage (PM review condition 1)
+
+Read-only, counts only, 30.3 s. It used the cache from the runs above: every card's key was looked
+up and none was missing, and nothing was written. It covers hspolicy26 through 2026-10-20.
+* A document is aff (or neg) when a live disclosure of it is on that side.
+* A document has a position kind when at least one of its cards READS a position of that kind at or
+  above the review threshold, which is what a report counts.
+* A team counts when any of its documents on that side does.
+
+| Side and kind | Documents | Share | Teams | Share |
+|---|---|---|---|---|
+| Aff: all | 1,770 | | 552 | |
+| Aff: a card placed under an **aff** | 159 | **9.0%** | 77 | **13.9%** |
+| Aff: a card placed under an **advantage** | 1,129 | 63.8% | 365 | 66.1% |
+| Aff: either | 1,168 | 66.0% | 378 | 68.5% |
+| Neg: all | 2,070 | | 392 | |
+| Neg: **da** | 562 | 27.1% | 155 | 39.5% |
+| Neg: **cp** | 322 | 15.6% | 122 | 31.1% |
+| Neg: **k** | 151 | 7.3% | 67 | 17.1% |
+| Neg: **t** | 138 | 6.7% | 65 | 16.6% |
+| Neg: **theory** | 24 | 1.2% | 17 | 4.3% |
+| Neg: any of the five | 742 | 35.8% | 183 | 46.7% |
+
+**Fewer than half of affirmative documents have a placed aff: 9.0% of documents, 13.9% of teams.**
+
+One more count, from the same pass, says why. A heading that is an aff alias, read rather than
+answered, appears anywhere on a card's path in only 307 aff documents (17.3%) and for 134 teams
+(24.3%). The nearest-heading rule brings 307 down to 159, because a card under `single payer` >
+`adv costs` counts under the advantage: advantages are standalone (t01 Decision 4). Most aff
+documents never name the plan in a heading at all, though two-thirds of them place an advantage.
+
 **Why the rest is unplaced.** A third read-only pass (30.8 s, counts only) sorted the 65,694 unplaced
 cards by cause:
 
@@ -247,7 +293,7 @@ remains needs a signal headings do not carry (question 1).
      the digest covers only the item's headings, a decision misses only the items under that heading,
      which matters for t07's MODEL entries.
 
-   The spec's text should name both. This is question 4.
+   The spec's description now names both (PM ruling 4, amended 2026-10-23).
 3. **Files outside `constraints.packages`:**
    * `scripts/classify_landscape_positions.py` and `tests/scripts/`: the operator's entry until t05,
      as t01's seeding script was;
@@ -256,7 +302,8 @@ remains needs a signal headings do not carry (question 1).
    * `debate_core.testing`: planted cards carry paragraphs;
    * `config/landscape/overrides/`: allowed, with no file committed.
 
-   No prompt is added under `prompts/landscape`, since the model stage is t07's. This is question 6.
+   No prompt is added under `prompts/landscape`, since the model stage is t07's. `constraints.packages`
+   now lists them all (PM ruling 6, amended 2026-10-23).
 4. **t01's code changed:** the heading reading moved to `source_headings.py`, `SeedCard` gained a
    field, and the reader gained `through`. Seeding's behaviour is unchanged, and the refactor is its
    own commit. The matcher reuses t01's `SeedSource`/`SeedCard`/`SeedTeam` names rather than renaming
@@ -313,7 +360,14 @@ remains needs a signal headings do not carry (question 1).
 ## Operator follow-ups
 
 Nothing is handed over. The before-report set ran within the limit, and the pull request's `ci` check
-runs the whole selection. When the PM accepts, open the pull request without `--partial`:
+runs the whole selection.
+
+1. **The coach's first pass** (before t05's first dev run; t05's session applies it). The sheet is
+   `~/Documents/debate/landscape-seed/policy-2026-27-nhi-queue-top-50.md`, and he fills the
+   `decision` column of `policy-2026-27-nhi-queue-top-50.csv` beside it. That CSV has the queue's
+   columns, so `apply-decisions` reads it as it is; it parses today with no decisions.
+2. **The pull request**, once the re-review that condition 1's line calls for accepts it. Open it
+   without `--partial`:
 
 ```bash
 cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e32-t02-position-classification
@@ -345,7 +399,8 @@ scripts/task pr v1-e32-t02-position-classification
 
 ## Questions for the PM
 
-One block, paste-ready:
+Answered in the PM review of 2026-10-23: (1) a, after condition 1; (2) keep two; (3) a, through t03;
+(4) to (7) yes. Kept as asked:
 
 ```text
 v1-e32-t02 questions (session, 2026-10-23)

@@ -148,7 +148,8 @@ def test_the_deterministic_stage_places_every_labeled_item_as_labeled(one: Forma
     placed = placed_cards(one)
     assert set(placed) == set(one.labels)
     wrong = [
-        f"{label.document} card {label.index} {label.path}: expected {label.expected}, got {as_label(placed[item_id][1])}"
+        f"{label.document} card {label.index} {label.path}: "
+        f"expected {label.expected}, got {as_label(placed[item_id][1])}"
         for item_id, label in one.labels.items()
         if as_label(placed[item_id][1]) != label.expected
     ]

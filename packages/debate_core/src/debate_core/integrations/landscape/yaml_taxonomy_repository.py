@@ -131,10 +131,18 @@ _OVERRIDE_HEADER: Final = """\
 """
 
 
+class _IndentedListDumper(yaml.SafeDumper):
+    """YAML's safe dumper, with list items indented under their key as the coach's files write them."""
+
+    def increase_indent(self, flow: bool = False, indentless: bool = False) -> None:
+        super().increase_indent(flow, False)
+
+
 def render_override_file(rules: OverrideRules) -> str:
     """The YAML an overrides file holds for `rules`, header comment first; what `load_override_file` reads."""
     document = rules.model_dump(mode="json")
-    return _OVERRIDE_HEADER + yaml.safe_dump(document, sort_keys=False, allow_unicode=True, width=100)
+    body = yaml.dump(document, Dumper=_IndentedListDumper, sort_keys=False, allow_unicode=True, width=100)
+    return _OVERRIDE_HEADER + body
 
 
 class YamlTaxonomyRepository:

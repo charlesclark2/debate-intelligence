@@ -95,7 +95,7 @@ spec:
         merges a position and bumps taxonomy_version, and the coach has reviewed the seeded Policy file
         and generic.yaml (PM amendment 2026-10-22).
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

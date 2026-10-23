@@ -22,6 +22,21 @@ spec:
     restore route ADR-0020 chooses, since store sync skips `parsed/`), and whatever the SQLite
     database holds that a later run needs. A run that dies halfway leaves the bucket as a Mac
     run would. ADR-0020 may amend this task.
+    (PM amendment 2026-10-23 (ADR-0020).) Bucket mode, `caselist.run_state = "bucket"`: a run
+    restores a working copy (the run-state bundle, the state files, the published index's
+    manifest, and each configured caselist's and `openev`'s current parsed version directory
+    by a one-way restore route checked against the publisher's recorded SHA-256), fetches raw
+    sources only as its parse needs them, and saves state as ADR-0020 (3) sets out: the state
+    files under `reports/sync/state/`, the download ledger before each download, and the
+    run-state bundle (manifests and database) under `manifests/_run-state/` only when every
+    snapshot it records is confirmed, never while a local manifest is one the publisher
+    withholds. Every command that writes to an evidence bucket takes the bucket lock
+    (`reports/sync/run-lock.json`, S3 conditional writes, a 30-minute lease renewed every 5
+    minutes) in bucket mode, renewing it before every named-object write, and a run never
+    starts on a bucket with no lock object. A seed command creates the lock object and uploads
+    the Mac's state. The store layout document gains `reports/sync/run-lock.json`,
+    `reports/sync/state/` and `manifests/_run-state/`, and `store sync` skips
+    `manifests/_run-state/` as it skips `manifests/_suppression/`.
   priority: 1
   constraints:
     packages: [debate_core.application, debate_core.integrations, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/runbooks, docs/architecture]
@@ -29,6 +44,8 @@ spec:
       - A second copy of the publisher's suppression or withholding rules
       - Deleting anything in the bucket
       - Network or AWS access in any test
+      # PM amendment 2026-10-23 (ADR-0020)
+      - A command that writes to an evidence bucket without the bucket lock in bucket mode
   context:
     - kind: TaskRef
       name: v1-e40-t01-cloud-run-adr
@@ -41,6 +58,13 @@ spec:
     - id: ac2
       description: >-
         A run killed at each stage leaves the bucket readable by the next run, by test.
+    # PM amendment 2026-10-23 (ADR-0020)
+    - id: ac3
+      description: >-
+        Against a stubbed bucket, a second runner is refused while the lease is live, takes
+        over an expired one and says so, and a runner whose lease was taken writes nothing
+        more and ends `RUN_LOCK_LOST`; every bucket-writing command takes the lock in bucket
+        mode, by test.
 status:
   phase: Pending
 ---

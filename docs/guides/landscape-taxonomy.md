@@ -14,11 +14,13 @@ Where things are:
 | Which topic each caselist snapshot is on | [`config/landscape/topics.yaml`](../../config/landscape/topics.yaml) |
 | A topic's positions | `config/landscape/taxonomies/<topic id>.yaml`, e.g. [`policy-2026-27-nhi.yaml`](../../config/landscape/taxonomies/policy-2026-27-nhi.yaml) |
 | Positions every topic of an event shares: generic Ks, framework, theory | [`config/landscape/taxonomies/generic.yaml`](../../config/landscape/taxonomies/generic.yaml) |
+| Your decisions on headings the matcher could not place | `config/landscape/overrides/<topic id>.yaml`, written for you from the review queue ([below](#the-review-queue-and-your-decisions)) |
 | The check every edit must pass | [`tests/config/test_landscape_taxonomies.py`](../../tests/config/test_landscape_taxonomies.py) |
 | The models, the source of truth if this page and they disagree | `debate_core.domain.landscape` and `debate_core.integrations.landscape.yaml_taxonomy_repository` |
 
 Matching headings to positions in a report is `v1-e32-t02`; the report itself is `v1-e32-t03`; the
-`debate-research landscape` command is `v1-e32-t05`. This page is about the files (`v1-e32-t01`).
+`debate-research landscape` command is `v1-e32-t05`. This page is about the files (`v1-e32-t01`) and
+the review queue that matching leaves for you (`v1-e32-t02`).
 
 ## A position
 
@@ -207,6 +209,53 @@ Both ends of a range are included, and two ranges of one caselist may not overla
 is on one topic or none. LD and PF change topic during a season: a new topic is a new entry with
 its own range, and the old one keeps its range so that earlier snapshots still resolve. A topic with
 no `taxonomy_version` has no taxonomy file, and a report on it says so.
+
+## How a card is placed
+
+Matching uses no model. For each card it reads the headings above it, outermost first, each reduced
+the way an alias is written, and:
+
+1. **The nearest heading that names a position places it.** Your decision on a heading (an override)
+   is read first, then the aliases. A card under `Spending DA` > `Link` counts under the Spending DA,
+   because `link` names nothing and `spending da` is the nearest heading above it that does.
+2. **Under an `AT:` or `A2` heading it answers the position** rather than reading it, and a report never
+   counts an answer as a read. That holds for everything under an answer heading too: `AT: DAs` >
+   `Spending DA` answers the Spending DA. An `AT:` block *below* the position (`Spending DA` >
+   `AT: Link Turn`) is the reading team's own block and still reads it.
+3. **Tag keywords split a position into its children.** When a position has children with
+   `tag_keywords` (an aff split by mechanism, say), a card under the parent goes to the child whose
+   keyword its tag holds, and stays with the parent when no child's does, or when two do.
+4. **A heading that matches nothing stays unplaced.** It is never guessed into the nearest-looking
+   position, and a card under nothing but such headings goes to the review queue.
+
+## The review queue and your decisions
+
+Each run writes a review queue: the headings that cards nothing placed sit under, one row each, with
+how many documents, teams and cards are under it and up to three candidate positions (positions
+whose aliases share a word with it). It holds headings teams wrote, so it is kept on the Mac that
+holds the store, at `~/.debate-research/dev/landscape/review/<caselist>/<topic id>-review-queue.csv`,
+never in the repository. A heading fewer than two teams used is left out of it.
+
+To decide, copy the CSV somewhere outside the repository, open it in a spreadsheet and fill the last
+column, `decision`, for the rows you want to settle:
+
+| Write in `decision` | When |
+|---|---|
+| A position id, e.g. `pharma-da` | The heading names that position. Every card under it counts there next run |
+| `none` | The heading names no position: a block label such as `link`, `impact` or `solvency`. It stops coming back to the queue, and cards under it still count under a heading above it |
+| Nothing | You have not decided. The row comes back next run |
+
+Then the operator applies the file, which writes `config/landscape/overrides/<topic id>.yaml` and
+refuses an id the taxonomy does not have before writing anything:
+
+```bash
+uv run python scripts/classify_landscape_positions.py apply-decisions --topic policy-2026-27-nhi --decisions ~/Documents/debate/landscape-review/policy-2026-27-nhi-decisions.csv
+```
+
+The overrides file is checked like a taxonomy file (`uv run pytest tests/config`), including for team
+codes and school names, since a decision copies a heading teams wrote into the repository. A heading
+that names a school or a team, by any form, gets no decision: leave it blank. A decision changes
+counts from the next run without a `taxonomy_version` bump.
 
 ## Seeding a new taxonomy
 

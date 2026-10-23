@@ -3,12 +3,12 @@
 
 | | |
 |---|---|
-| Policy version | 1.11 |
-| Status | **Approved**, version 1.11, on the merge of its pull request (decided 2026-10-22). See [Approval](#approval). |
+| Policy version | 1.12 |
+| Status | **Approved**, version 1.12, on the merge of its pull request (decided 2026-10-22). See [Approval](#approval). |
 | Owner | Charlie Clark (product owner and head coach) |
 | Written by | v1-e30-t01-caselist-data-use-policy implementation session, 2026-09-19 |
 | Applies to | Everything the platform collects from OpenCaselist and OpenEv, and everything derived from it, in every environment |
-| Approved by | Charlie Clark, product owner and head coach, 2026-09-19 (versions 1.0 and 1.1), 2026-10-01 (versions 1.3 and 1.4), 2026-10-10 (versions 1.5 and 1.6), 2026-10-11 (version 1.7), 2026-10-13 (version 1.8), 2026-10-15 (version 1.9), 2026-10-19 (version 1.10) and 2026-10-22 (version 1.11) |
+| Approved by | Charlie Clark, product owner and head coach, 2026-09-19 (versions 1.0 and 1.1), 2026-10-01 (versions 1.3 and 1.4), 2026-10-10 (versions 1.5 and 1.6), 2026-10-11 (version 1.7), 2026-10-13 (version 1.8), 2026-10-15 (version 1.9), 2026-10-19 (version 1.10) and 2026-10-22 (versions 1.11 and 1.12) |
 | Next review | Start of the 2027-28 season, or sooner if a source's terms change |
 
 This is the policy that governs how the Debate Intelligence Platform collects, stores, uses and
@@ -37,7 +37,8 @@ a rule here, this policy is revised and re-approved before the affected work con
   and fingerprints, position classifications, argument landscape reports, and team files built
   from disclosed or camp cards.
 - Every place that data lives: the operator's laptop, the dev evidence bucket, the prod evidence
-  bucket, the V1 CLI, and the V2 debate tub.
+  bucket, the weekly run's working copy in the team's AWS account while it runs (ADR-0020), the V1
+  CLI, and the V2 debate tub.
 - Everyone with access: the operator, coaches, and (from V2) the team's debaters.
 
 **Out of scope**
@@ -182,8 +183,9 @@ it would be:
    real school names, team codes, debater names or real disclosure paths in fixtures, tests,
    cassettes, logs, session reports or documentation.
 10. **Keeping copies outside the sanctioned stores.** The corpus lives in the operator's local
-    evidence store and the dev and prod evidence buckets. Not in email, not in a personal Drive,
-    not on a USB stick, not in a chat thread.
+    evidence store and the dev and prod evidence buckets, and, while the weekly cloud run runs, in
+    its task's ephemeral storage, which is deleted when the task stops (ADR-0020). Not in email, not
+    in a personal Drive, not on a USB stick, not in a chat thread, not in a container image.
 
 ## Model provider use
 
@@ -257,7 +259,9 @@ personal data about a minor (architecture proposal §14).
    visible only to team members.
 
 **Where personal data is allowed to live** — and only here: the local evidence store on the
-operator's machine, the `manifests/` prefix of the private dev and prod evidence buckets, the
+operator's machine, the weekly cloud run's working copy of that store on its task's ephemeral
+storage while the run runs (ADR-0020), the `manifests/` prefix of the private dev and prod evidence
+buckets (which holds the cloud run's run-state bundle, `manifests/_run-state/`), the
 provenance sidecar of a built file, the per-school landscape view, and the student search pilot's
 index (`reports/tub/search/` in the private buckets, and the copy its function holds while it runs),
 in stored provenance columns that are never searchable (v1-e39-t02).
@@ -275,7 +279,9 @@ in stored provenance columns that are never searchable (v1-e39-t02).
 
 **Access.** In V1, the operator only, with one exception: the student search pilot (E39, v1.7)
 gives the team's own debaters and coach, signed in to accounts the coach creates, the provenance
-line shown above on a card's page, audited, under [the E39 gate](#e39--student-evidence-search-pilot-v17). In V2,
+line shown above on a card's page, audited, under [the E39 gate](#e39--student-evidence-search-pilot-v17).
+The weekly cloud run (ADR-0020) acts for the operator under the
+[E34 gate](#e34--automated-caselist-download-v12) and gives no person access. In V2,
 authenticated members of the team's organization only, audited — see
 [the debate tub gate](#v2-e35--debate-tub-v21).
 
@@ -293,6 +299,8 @@ A **season** runs 1 August to 31 July and is labelled like `2026-27`.
 | Team files built from disclosed cards | Indefinitely (team work product), but subject to [Removal](#removal) flagging | — |
 | The student search pilot's index (E39) | Until the next build replaces it | Superseded index versions, noncurrent versions included, deleted within 30 days, and at once after a removal (v1-e39-t07) |
 | The student search pilot's access audit (E39) | 400 days | Log retention, automatically |
+| The weekly cloud run's working copy (ADR-0020) | The length of one run | Fargate, when the task stops |
+| The weekly cloud run's run-state bundle (`manifests/_run-state/`, ADR-0020) | Same clock as the manifests it holds | With them; a removal rewrites it and purges its noncurrent versions at once |
 | Removal log and suppression list | Indefinitely — the suppression list must outlive the data it suppresses | — |
 | S3 noncurrent object versions | Lifecycle from v1-e29-t03: Standard-IA after 30 days, expire after 365 days in prod and 30 days in dev | Automatically |
 
@@ -392,6 +400,9 @@ weighed.
 - Deletes the parsed cards derived from it.
 - Deletes or rewrites the downloaded archives and camp files in the sync's download inbox that
   hold it, so no downloaded copy keeps the removed bytes.
+- Rewrites the weekly cloud run's run-state bundle (`manifests/_run-state/`, ADR-0020), which holds
+  the run's copy of the manifests and of the records named above, without them, and purges the
+  bundle's noncurrent versions.
 - **Appends the sha256 to the suppression list**, which the importers and the publisher consult, so
   no later archive, weekly or complete, can bring the file back.
 - Flags every built file whose provenance sidecar cites that source, for rebuild or withdrawal.
@@ -463,8 +474,9 @@ published to prod.
 1. **Corpus only.** Caselist archives and OpenEv files. No student account data, no Cognito or
    user-pool data, no team-private files.
 2. **Operators only.** No student or general team access to dev, in V1 or V2.
-3. **Two locations.** The dev evidence bucket and the operator's local store. No exports, no email
-   attachments, no other buckets, no CI artefacts, no third-party tools.
+3. **Three locations.** The dev evidence bucket, the operator's local store, and, while a dev cloud
+   run runs, its task's ephemeral storage, deleted when the task stops (ADR-0020). No exports, no
+   email attachments, no other buckets, no CI artefacts, no container images, no third-party tools.
 4. **Never CI data.** CI keeps synthetic fixtures only; the real corpus never reaches a CI runner
    (working agreements §1).
 5. **Same retention clock as prod**, with dev noncurrent versions expiring after 30 days.
@@ -494,9 +506,23 @@ first automated pull:
    refuses a configuration above 10, and counts every file download (archives and OpenEv files)
    against the same limit. If the maintainer later withdraws or changes this, E34 stops until the
    policy is revised.
-3. Access uses the **operator's own** Tabroom account and `caselist_token`. The token is stored in
-   the macOS keychain, or a `0600` gitignored file; it is a `SecretStr`, redacted from logs,
-   exceptions and event hooks; the password is never stored; the token is never shared.
+3. Access uses the **operator's own** Tabroom account and `caselist_token`, and nothing else.
+   - **On the operator's Mac** the token is stored in the macOS keychain, or a `0600` gitignored
+     file, and the password is never stored.
+   - **For the weekly cloud run** (ADR-0020), the Tabroom username and password are stored in one
+     AWS Secrets Manager secret and the token in another, in the team's account, both encrypted
+     under a KMS key of their own that encrypts nothing else. They are stored nowhere else: never in
+     a container image, a task's environment, a log, a file, Terraform state or the repository.
+   - **Who can read them.** Only the scheduled login job's role can read the password, and it sends
+     it only to OpenCaselist's login. The coach writes or replaces the password and never reads it
+     back. Only the run's role reads the token, and it cannot read the password. The key policy and
+     each secret's own policy both enforce this.
+   - **Every read is logged.** The organization CloudTrail records every read of either secret
+     (`GetSecretValue` and the KMS `Decrypt` it causes) and every change to who may read them, and
+     keeps them at least a year. A change to who may read the password, and any attempt to read it
+     by anyone but the login job, is emailed to the coach.
+   - The token is a `SecretStr`, redacted from logs, exceptions and event hooks, wherever it is
+     held; the token is never shared.
 4. **Politeness is enforced in code**: a configurable minimum interval between requests, one
    download at a time, bounded backoff on 429/502/503/504 honouring `Retry-After`, and no HTML
    scraping. Weekly cadence at most — no polling faster than archives are published.
@@ -504,8 +530,10 @@ first automated pull:
 6. Every downloaded file goes through the importer, so the **suppression list is honoured** and a
    removed file can never be re-downloaded into the store.
 7. A **run log and a stale-data warning** (v1-e34-t03) make silent failure visible.
-8. The scheduled job runs on the operator's own machine, and the operator remains the accountable
-   human for it.
+8. The scheduled job runs on the operator's own machine or, from version 1.12, as one scheduled
+   task in the team's AWS account (ADR-0020), and the operator remains the accountable human for it
+   wherever it runs. Exactly one runner at a time can publish, and a failed or late run reaches the
+   coach by email.
 
 ### E32 — model classification of the corpus
 
@@ -605,7 +633,7 @@ before the thing it gates.
 
 ## Approval
 
-**Version 1.11 of this policy is approved.** Publishing caselist and OpenEv imports, loading the
+**Version 1.12 of this policy is approved.** Publishing caselist and OpenEv imports, loading the
 real corpus into dev, model classification over real disclosed text, and automated download (E34)
 are unblocked, each still subject to its own conditions in [Gates](#gates). Version 1.1 recorded
 the maintainer's confirmation of scheduled API downloads and the 10-per-minute rate limit.
@@ -690,16 +718,34 @@ names and team codes in them is clutter. It shows less identity outside the plat
 what attribution looks like, so it is recorded as approved by the coach, and merging its pull
 request records the approval below.
 
+Version 1.12 lets the weekly run move off the coach's Mac into the team's AWS account
+([ADR-0020](../adr/0020-weekly-caselist-run-in-the-cloud.md), epic E40), so that an unplugged laptop
+never stops the debaters seeing updated evidence. Charlie decided it on 2026-10-22. It changes the
+[E34 gate](#e34--automated-caselist-download-v12)'s access rule, item 3: for the cloud run the
+Tabroom password and the `caselist_token` are stored in Secrets Manager under a KMS key of their
+own, only the scheduled login job's role can read the password, only the run's role reads the token,
+and every read is in CloudTrail. It changes item 8: the job may run as one scheduled task in the
+account, one runner at a time, with the operator still accountable. Because the run holds a working
+copy of the store while it runs, it also adds that copy, deleted when the run's task stops, to
+[Scope](#scope), to the places personal data may live, to
+[Prohibited uses](#prohibited-uses) 10 and to the [dev exception](#dev-environment-exception)'s
+locations, and adds the run's run-state bundle to [Retention](#retention) and to what a
+[removal](#removal) rewrites. It loosens the policy, since the password was never stored before and
+the job ran only on the operator's machine, so under
+[Review and change control](#review-and-change-control) it needs the coach's approval, and merging
+its pull request records the approval below. Nothing else changes: the rate limit, the weekly cadence,
+the `401`/`403` rule, the suppression list and every rule on personal data stand as they were.
+
 The standing rule for every future version: until this table records an approval of that version,
 nothing this policy governs may happen under it.
 
 | Field | Value |
 |---|---|
-| Policy version | 1.11 (2026-10-22); 1.10 (2026-10-19); 1.9 (2026-10-15); 1.8 (2026-10-13); 1.7 (2026-10-11); 1.6 and 1.5 (2026-10-10); 1.4 and 1.3 approved 2026-10-01, 1.3 including version 1.2's correction to rule 3; 1.0 and 1.1 approved 2026-09-19 |
+| Policy version | 1.12 and 1.11 (2026-10-22); 1.10 (2026-10-19); 1.9 (2026-10-15); 1.8 (2026-10-13); 1.7 (2026-10-11); 1.6 and 1.5 (2026-10-10); 1.4 and 1.3 approved 2026-10-01, 1.3 including version 1.2's correction to rule 3; 1.0 and 1.1 approved 2026-09-19 |
 | Approved by | Charlie Clark |
 | Role | Product owner and head coach |
-| Approval date | 2026-10-22 (version 1.11; 1.10: 2026-10-19; 1.9: 2026-10-15; 1.8: 2026-10-13; 1.7: 2026-10-11; 1.5 and 1.6: 2026-10-10; 1.3 and 1.4: 2026-10-01; 1.0 and 1.1: 2026-09-19) |
-| Scope of approval | Sections [Scope](#scope) through [Review and change control](#review-and-change-control) of version 1.11, including the [clause register](#clause-register) read 2026-09-19 and the [community disclosure norms](#community-disclosure-norms), both confirmed by Charlie |
+| Approval date | 2026-10-22 (versions 1.12 and 1.11; 1.10: 2026-10-19; 1.9: 2026-10-15; 1.8: 2026-10-13; 1.7: 2026-10-11; 1.5 and 1.6: 2026-10-10; 1.3 and 1.4: 2026-10-01; 1.0 and 1.1: 2026-09-19) |
+| Scope of approval | Sections [Scope](#scope) through [Review and change control](#review-and-change-control) of version 1.12, including the [clause register](#clause-register) read 2026-09-19 and the [community disclosure norms](#community-disclosure-norms), both confirmed by Charlie |
 | Open questions resolved at approval | **5** — removal contact address is `ctcb57@gmail.com`. **7** — two-season retention stands. **8** — resolved by a PM spec change to v1-e29-t03 / v1-e30-t07. **2** (version 1.1) — maintainer confirmed scheduled API downloads at 10 file downloads per minute. **6** (version 1.10) — the school's activities director and IT approved the tool for students; no district review for the E39 pilot |
 | Open questions accepted as known gaps | **1** — OpenCaselist privacy page unread. **3** — OpenEv distribution and per-camp terms unread |
 | Open questions left open | **4** — Bedrock data-protection terms, an E32 gate. **6** — for the V2 tub only, if its scope goes beyond the pilot's |
@@ -717,6 +763,8 @@ the header and in [Review and change control](#review-and-change-control).
 - [ADR-0005: Bedrock behind a model router](../adr/0005-bedrock-behind-model-router.md) — the only
   path by which disclosed text may reach a model.
 - [ADR-0003: S3 as source of truth for raw artifacts](../adr/0003-s3-source-of-truth-for-raw-artifacts.md).
+- [ADR-0020: The weekly caselist run in the cloud](../adr/0020-weekly-caselist-run-in-the-cloud.md)
+  — where the cloud run's credentials and state live, and who can read them (version 1.12).
 - Architecture proposal
   [§9 Search and Retrieval](../architecture/architecture_proposal.md#9-search-and-retrieval-architecture)
   (opponent data),
@@ -728,4 +776,5 @@ the header and in [Review and change control](#review-and-change-control).
   publish, t06 backfill, t07 removal), `plan_specs/v1/e32-argument-landscape/t02-position-classification.yaml`,
   `plan_specs/v1/e33-file-builder/t02-lossless-card-writer.yaml`,
   `plan_specs/v1/e34-caselist-sync/t01-caselist-api-client.yaml`,
+  `plan_specs/v1/e40-cloud-caselist-run/` (the weekly run in the cloud),
   `plan_specs/v2/e35-debate-tub/t05-tub-access-and-removal.yaml`.

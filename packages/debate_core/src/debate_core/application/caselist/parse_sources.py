@@ -71,10 +71,15 @@ from debate_core.domain.caselist import SourceDocument, SourceFormat, SourceOrig
 
 __all__ = [
     "Disclosed",
+    "DisclosureKey",
     "EnumeratedSource",
+    "disclosure_key",
     "enumerate_sources",
     "held_only_sources",
+    "is_aggregated",
+    "live_disclosure_keys",
     "live_disclosures",
+    "occurrence_row_key",
 ]
 
 _STORED: Final = frozenset(str(classification) for classification in STORED_CLASSIFICATIONS)
@@ -185,6 +190,45 @@ def live_disclosures(source: EnumeratedSource, state: SuppressionState) -> tuple
         )
         and _hold_on(source, disclosed, state) is None
     )
+
+
+type DisclosureKey = tuple[Sha256Hex | None, str | None]
+"""What one occurrence row stands for: `(disclosure digest, None)` for a caselist disclosure, which
+is one path however many weeks list it, and `(None, release)` for a camp file, which has no
+disclosure, so each release is its own."""
+
+
+def is_aggregated(source: EnumeratedSource | None, state: SuppressionState) -> bool:
+    """Whether the parsed store's aggregates hold `source`: the manifests still name it, and one of
+    its disclosures is live.
+
+    The rebuild's rule for the index and the failures file, and the rule `caselist parse
+    --publish-only` asks of an index it did not write (`v1-e31-t30`). `None` is a source the
+    manifests no longer name.
+    """
+    return source is not None and bool(live_disclosures(source, state))
+
+
+def disclosure_key(source: EnumeratedSource, disclosed: Disclosed) -> DisclosureKey:
+    """The :data:`DisclosureKey` of one disclosure of `source`, as the rebuild writes its rows."""
+    if source.is_camp_file:
+        return (None, disclosed.snapshot)
+    return (disclosure_digest(source.caselist, disclosed.path), None)
+
+
+def live_disclosure_keys(
+    source: EnumeratedSource | None, state: SuppressionState
+) -> frozenset[DisclosureKey]:
+    """The key of every live disclosure of `source`: the occurrence rows a rebuild would write for it."""
+    if source is None:
+        return frozenset()
+    return frozenset(disclosure_key(source, disclosed) for disclosed in live_disclosures(source, state))
+
+
+def occurrence_row_key(disclosure: Sha256Hex | None, snapshot: str) -> DisclosureKey:
+    """The :data:`DisclosureKey` an occurrence row was written under, from its `disclosure` and
+    `snapshot`: a camp file's row is its release's."""
+    return (None, snapshot) if disclosure is None else (disclosure, None)
 
 
 def held_only_sources(sources: Iterable[EnumeratedSource], state: SuppressionState) -> dict[Sha256Hex, str]:

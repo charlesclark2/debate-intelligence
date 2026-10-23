@@ -80,8 +80,11 @@ from debate_core.application.caselist.occurrence_table_guard import (
     refuse_newer_table,
 )
 from debate_core.application.caselist.parse_sources import (
+    DisclosureKey,
     EnumeratedSource,
+    disclosure_key,
     enumerate_sources,
+    is_aggregated,
     live_disclosures,
 )
 from debate_core.application.caselist.parse_workers import (
@@ -91,6 +94,10 @@ from debate_core.application.caselist.parse_workers import (
     ParseRunner,
     SourceLoadError,
     WorkerFailure,
+)
+from debate_core.application.caselist.parsed_publish_only import (
+    refuse_unpublishable,
+    refuse_what_the_list_stops,
 )
 from debate_core.application.caselist.publish_plan import local_blob_key, validate_publish_target
 from debate_core.application.caselist.suppression import load_suppression_state
@@ -107,7 +114,7 @@ from debate_core.application.ports.parsed_store import (
     skip_key,
     version_directory_name,
 )
-from debate_core.application.ports.suppression import SuppressionList, SuppressionState, disclosure_digest
+from debate_core.application.ports.suppression import SuppressionList, SuppressionState
 from debate_core.domain.debate_files import ParsedCard, ParsedDocument, ParseFailure
 from debate_core.evidence.fingerprints import FINGERPRINT_VERSION
 
@@ -654,6 +661,39 @@ class CaselistParseService:
             )
         return FailureListing(caselist=caselist, version=version, present=True, rows=tuple(rows))
 
+    # -- publishing without a rebuild ---------------------------------------------------------
+
+    async def publishable_version(self, caselist: str) -> str:
+        """The current version directory, for `caselist parse --publish-only` to publish as it is.
+
+        The newest generation of the running parser version, which is what `--publish` publishes
+        once it has rebuilt (`v1-e31-t30`). Raises a
+        :class:`~debate_core.application.caselist.parsed_publish_only.PublishOnlyRefused`, having
+        written nothing, when there is none, when it is incomplete, when it is not what this
+        build's rebuild would publish
+        (:func:`~debate_core.application.caselist.parsed_publish_only.refuse_unpublishable`), or
+        when its aggregates name something this service's suppression list now stops or holds
+        (:func:`~debate_core.application.caselist.parsed_publish_only.refuse_what_the_list_stops`).
+        Build the service over the list the publisher is given, so that the list asked is the
+        target environment's.
+        """
+        validate_publish_target(caselist)
+        version = await refuse_unpublishable(
+            self._store,
+            caselist,
+            await self._current_version(caselist),
+            parser_version=self._parser.parser_version,
+            profile_version=self._parser.profile_version,
+        )
+        await refuse_what_the_list_stops(
+            self._store,
+            caselist,
+            version,
+            sources=await enumerate_sources(self._local, caselist),
+            state=await load_suppression_state(self._suppression),
+        )
+        return version
+
     async def _current_version(self, caselist: str) -> str | None:
         parser_version = self._parser.parser_version
         generations = [
@@ -676,12 +716,9 @@ def _disclosure_spans(source: EnumeratedSource, state: SuppressionState) -> list
     A caselist disclosure is a path, named by its digest: listed in fourteen weekly manifests, it
     is still one disclosure. A camp file has no disclosure, so each release is its own.
     """
-    spans: dict[tuple[str | None, str | None], tuple[str, str]] = {}
+    spans: dict[DisclosureKey, tuple[str, str]] = {}
     for disclosed in live_disclosures(source, state):
-        if source.is_camp_file:
-            key: tuple[str | None, str | None] = (None, disclosed.snapshot)
-        else:
-            key = (disclosure_digest(source.caselist, disclosed.path), None)
+        key = disclosure_key(source, disclosed)
         first, last = spans.get(key, (disclosed.snapshot, disclosed.snapshot))
         spans[key] = (min(first, disclosed.snapshot), max(last, disclosed.snapshot))
     return [(disclosure, first, last) for (disclosure, _), (first, last) in spans.items()]
@@ -691,11 +728,7 @@ def _index_rows(
     entries: Sequence[SourceEntry], held: dict[str, EnumeratedSource], state: SuppressionState
 ) -> list[SourceEntry]:
     """Every recorded source the manifests still store and the suppression list does not stop."""
-    return [
-        entry
-        for entry in entries
-        if (source := held.get(entry.source_sha256)) is not None and live_disclosures(source, state)
-    ]
+    return [entry for entry in entries if is_aggregated(held.get(entry.source_sha256), state)]
 
 
 def _failure_rows(
@@ -705,9 +738,7 @@ def _failure_rows(
     return [
         entry
         for entry in entries
-        if entry.outcome is not SourceOutcome.PARSED
-        and (source := held.get(entry.source_sha256)) is not None
-        and live_disclosures(source, state)
+        if entry.outcome is not SourceOutcome.PARSED and is_aggregated(held.get(entry.source_sha256), state)
     ]
 
 

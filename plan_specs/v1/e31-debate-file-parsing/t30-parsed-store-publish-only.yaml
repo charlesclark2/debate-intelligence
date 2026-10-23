@@ -24,7 +24,8 @@ spec:
     rules, never a second copy of them.
   priority: 3
   constraints:
-    packages: [debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/guides]
+    # PM ruling 2026-10-22: a CLI surface change carries its smoke check.
+    packages: [debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/guides, tests/smoke]
     forbidden:
       - A second implementation of the publisher's suppression or withholding rules
       - Publishing an incomplete version directory
@@ -38,6 +39,9 @@ spec:
       description: >-
         Publishing an existing complete version directory uploads the same objects the
         rebuild's publish would, without rebuilding, by test shown failing first.
+    # PM ruling 2026-10-22: "another fingerprint version" means an occurrence table not stamped by
+    # this build, or a per-source record a newer build stamped; older per-source stamps are
+    # published, as --publish publishes them.
     - id: ac2
       description: >-
         An incomplete directory, or one written by another parser or fingerprint version, is
@@ -46,8 +50,15 @@ spec:
       description: >-
         The guide gives the command and when to use it; `scripts/check_command_blocks.py`
         passes.
+    # PM ruling 2026-10-22: aggregates are refused where the target environment's list stops
+    # what they name.
+    - id: ac4
+      description: >-
+        Aggregates naming a source or a disclosure that the target environment's suppression list
+        now stops or holds are refused before any upload, asked of the list the publisher is given
+        through the rebuild's own predicates, by test shown failing first.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

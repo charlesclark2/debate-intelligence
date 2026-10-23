@@ -23,11 +23,20 @@ sources through `source_stores` within a byte budget. Only then does it build, a
 **The Goal stays `InProgress`.** ac4 (opening the files in Word with Verbatim and importing one
 into Google Docs) is the operator's, after a dev deploy. Everything else passes.
 
+**After the PM's review (2026-10-22): stopped before the PR, as condition 1 requires.** On the
+operator's store, the share of index documents whose representative's source alone is over
+2,000,000 bytes is **4.72% in hspf26 and 23.01% in openev**, both past the review's 2% line
+(hsld26 0.73%, hspolicy26 0.92%; Decisions 1). Conditions 2 to 4 are done: a card whose own source
+is over the budget is now a named, droppable refusal (tests shown failing first), the port's stale
+sentence is fixed, and this report is updated. The budget's size, and what it measures, is the PM's
+to rule on (the block at the end of Follow-up work).
+
 **Look at first:**
 1. **The cap is 8 cards, not 30, plus a second cap of 2 MB of sources.** The build time grows with
    the number of distinct sources, not the number of cards, so a card cap alone cannot bound it. 30
    cards from 30 mean-size sources took 29 s on the Mac, which is CloudFront's whole timeout
-   (Decisions 1).
+   (Decisions 1). On real sources, the 2 MB file-byte budget refuses too many cards in hspf26 and
+   openev, while the part the writer parses is far smaller than the files (Decisions 1).
 2. **Two packaging changes the spec did not name, without which the writer cannot run in the
    function.** The image gains debate-core's `docx` extra (lxml), and `debate_api` moves from the
    indirect lxml contract to a direct one of its own (Deviation 2).
@@ -46,13 +55,13 @@ into Google Docs) is the operator's, after a dev deploy. Everything else passes.
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
 | **ac1** — a single card downloaded through the app route re-parses as its source, stubbed store | **PASS** | `test_download_of_one_card_through_the_route_re_parses_as_its_source`: `POST /download` → `200`, the `.docx` media type, `attachment; filename="team-evidence-cards-2026-11-02.docx"`, `private, no-store`. Re-parsed by the E31 parser: one card whose tag, cite, evidence text (hand-written: `Upland soils hold behind gabbro ridges a stressed warrant for decades.`) and `formatting_sha256` equal the source card's. Red against the absent skeleton. |
-| **ac2** — the cart cap, a refused card's message, and dropping it to build the rest, tests shown failing first | **PASS** | `test_cart_over_the_cap_is_refused_before_a_card_is_looked_up_or_a_source_read` (cap 2, three cards → `409` "A download holds up to 2 cards…", no source read, nothing built, no record), `test_cart_at_the_cap_downloads`. `test_cart_with_a_refused_card_names_it_with_a_plain_reason_and_builds_nothing` names the card with a picture by place, tag and sentence (UNSUPPORTED_CONTENT). `test_download_refused_by_the_writers_read_back_names_the_card` (READBACK_MISMATCH), `test_cart_with_a_card_whose_source_is_lost_names_it`, and `test_cart_without_its_refused_card_builds_the_rest`. In Chromium, `test_download_one_card_and_a_cart_by_keyboard_dropping_a_refused_card` clicks *Remove these from the cart and download the rest* and the file arrives. Red in both skeleton runs (below). |
+| **ac2** — the cart cap, a refused card's message, and dropping it to build the rest, tests shown failing first | **PASS** | `test_cart_over_the_cap_is_refused_before_a_card_is_looked_up_or_a_source_read` (cap 2, three cards → `409` "A download holds up to 2 cards…", no source read, nothing built, no record), `test_cart_at_the_cap_downloads`. `test_cart_with_a_refused_card_names_it_with_a_plain_reason_and_builds_nothing` names the card with a picture by place, tag and sentence (UNSUPPORTED_CONTENT). `test_download_refused_by_the_writers_read_back_names_the_card` (READBACK_MISMATCH), `test_cart_with_a_card_whose_source_is_lost_names_it`, and `test_cart_without_its_refused_card_builds_the_rest`. After the PM's review (condition 2): `test_cart_with_a_card_whose_own_file_is_over_the_source_budget_names_it` (card 2, by tag, "Its file is too large to download. Copy card still works.") and `test_cart_without_the_card_whose_own_file_is_too_large_builds_the_rest`, both shown failing first (they got `SOURCES_TOO_LARGE`), while `test_cart_whose_sources_only_add_up_past_the_budget_keeps_the_sources_message` pins the message that stays. In Chromium, `test_download_one_card_and_a_cart_by_keyboard_dropping_a_refused_card` clicks *Remove these from the cart and download the rest* and the file arrives. Red in both skeleton runs (below). |
 | **ac3** — a parser-version mismatch switches download off with a message; each download writes one audit record | **PASS** | `test_download_is_switched_off_with_a_message_when_the_index_was_built_by_another_parser`: an index whose manifest names `2026.10.18-docx-5` → `503` "Download is off until the search's next weekly update. Copy card still works.", nothing read or built; the card page shows that sentence and no download button, and Copy card stays. `test_download_comes_back_on_when_an_index_of_the_functions_parser_is_published`. `test_download_writes_one_cards_downloaded_record_naming_every_card_in_order`: one record, both cards in cart order, the student's subject, schema-checked by the sink; `test_download_refused_for_any_reason_writes_no_record`. |
 | **ac4** — the operator opens a downloaded single card and a cart file in Word with Verbatim and imports one into Google Docs; yes or no | **NOT RUN** | Needs a dev deploy, Word with Verbatim and a Google account: [Operator follow-ups](#operator-follow-ups) 1 to 3. |
 | **ac5** — a cart whose built file would pass the buffered-response limit is refused before building, synthetic cart near the limit | **PASS** | `test_download_cart_two_bytes_past_the_buffered_limit_is_refused_before_building`: eight index cards of 185,447 characters estimate to exactly 3,000,000 bytes and go on to the build; the cart with one card a character longer → `FILE_TOO_LARGE`, no source read, writer never called. `test_download_estimate_is_above_every_file_the_writer_builds_from_the_worst_formatting`: every word its own fully formatted run, 1 and 30 cards; the estimate is above the real file each time. `test_download_file_built_past_the_buffered_limit_is_refused_and_never_sent` covers a file past the limit after the build, and `test_download_cart_whose_sources_pass_the_source_budget_is_refused_before_building` and `…_are_exactly_the_source_budget_downloads` cover the source budget. |
 | **ac6** — (2026-10-20) a camp card downloads with its OpenEv line from `raw/openev/<year>` | **PASS, as amended** | "With its OpenEv line" is superseded by ac7 (spec, PM amendment 2026-10-22). `test_download_cart_with_a_camp_card_reads_it_from_raw_openev_2026_with_no_provenance_line`: the camp card's source is read from the `raw/openev/2026` store and the caselist card's from `raw/caselist/hsld26`, nothing else (`RecordingSourceStore` refuses every write). The file's paragraphs, written out by hand: the mixed header, the two headings, both cards. |
 | **ac7** — a single card and a cart file hold no provenance line, and a camp card downloads from its `raw/openev/<year>` store, tests shown failing first | **PASS** | `test_download_of_one_card_holds_no_provenance_line_and_the_header_without_its_old_sentence` gives the file's every paragraph, written by hand: header, `Team evidence search`, `Downloaded cards`, tag, cite, evidence. No `[Disclosed`, `[OpenEv`, school, team code, tournament, round, camp or camp title appears, and nor does "below its cite". The cart test above shows the same for a cart. `test_download_sends_the_docx_alone_and_never_its_sidecar`: the response is the built `.docx` byte for byte, with the writer's seven parts and no sidecar keys. The Chromium journey checks the file the browser saved. Red against the absent skeleton. |
-| **ac8** — a card suppressed after its page was rendered is refused at download and named; a download whose audit write fails is refused, tests shown failing first | **PASS** | `test_download_of_a_card_suppressed_after_its_page_was_rendered_is_refused_and_named[its-source]` and `[its-disclosure]`: the card page offers download, then a removal is appended and the five-minute recheck passes. The cart is refused `409`, naming card 2 by its place alone ("It is no longer in the search."). Nothing is read or built, and no record is written. `test_download_without_the_suppressed_card_builds_the_rest`. `test_download_whose_audit_record_cannot_be_written_is_refused_and_sends_no_file`: the file was built and not sent (`503`, JSON). `test_download_while_the_suppression_list_cannot_be_read_is_refused`. Red in both skeleton runs. |
+| **ac8** — a card suppressed after its page was rendered is refused at download and named; a download whose audit write fails is refused, tests shown failing first | **PASS** | `test_download_of_a_card_suppressed_after_its_page_was_rendered_is_refused_and_named[its-source]` and `[its-disclosure]`: the card page offers download, then a removal is appended and the five-minute recheck passes. The cart is refused `409`, naming card 2 by its place alone ("It is no longer in the search."). Nothing is read or built, and no record is written. `test_download_without_the_suppressed_card_builds_the_rest`. `test_download_whose_audit_record_cannot_be_written_is_refused_and_sends_no_file`: the file was built and not sent (`503`, JSON). `test_download_while_the_suppression_list_cannot_be_read_is_refused`. `test_download_without_the_sessions_csrf_token_is_refused_by_the_gate`: the gate refuses `/download` without the session's CSRF token (`403`), nothing built. Red in both skeleton runs. |
 | Node `download` — `uv run pytest packages/debate_api/tests -k "download or cart"` | **PASS** | `91 passed in 6.67s` |
 
 **Red first, recorded.** The tests ran against two skeletons of
@@ -156,7 +165,10 @@ after: **21 caught, 0 survived, 0 errored.**
    the browser.** The browser part is the PM's ruling of 2026-10-22. The 8 is the measured number
    the PM's notes foresaw ("if that's below 30, say so … as a setting"). The second cap,
    `TUB_DOWNLOAD_SOURCE_BYTES`, is not in the spec. It is needed because the time is per source and
-   grows with its size: one camp-sized source took 4.5 s on its own (Decisions 1).
+   grows with its size: one camp-sized source took 4.5 s on its own (Decisions 1). Since the PM's
+   review, a card whose own source is over that budget is a refused card of its own
+   (`SOURCE_TOO_LARGE`, named by its place), and only a cart whose sources add up past it gets the
+   cart-wide `SOURCES_TOO_LARGE`.
 4. **The fingerprint, and cite-only cards.** The writer refuses a card whose source paragraphs do
    not have the recipe's exact fingerprint. The index keeps no exact fingerprint, so the download
    takes it from the evidence text the index holds (`fingerprint_text`, E31's rule for a FULL or
@@ -202,6 +214,30 @@ after: **21 caught, 0 survived, 0 errored.**
    (4.5 s per MB) about 18 s. Both are under two thirds of the 30 s that CloudFront's default origin
    timeout (no `origin_read_timeout` in `distribution.tf`) and the function's timeout set. Both are
    settings (`TUB_DOWNLOAD_CARD_CAP` 1 to 30, `TUB_DOWNLOAD_SOURCE_BYTES`), unset by Terraform.
+
+   **Real source sizes** (the PM's condition 1; 2026-10-22; read-only on the operator's dev store,
+   aggregates only). The sources named by index `f29b81c276dd67c5`'s occurrences, the newest local
+   index (v1-e39-t12's rebuild), with sizes read from `blobs/sha256`; **runtime 3.1 s**. Index
+   `767b9c7c056b80cb`, published to dev, gave the same picture to within 0.1 point (2.9 s).
+
+   | Caselist | Sources | p50 bytes | p95 bytes | Largest | Documents whose source alone is over 2,000,000 |
+   |---|---|---|---|---|---|
+   | hsld26 | 5,965 | 69,708 | 353,223 | 7,133,832 | 93 of 12,714 (0.73%) |
+   | hspf26 | 3,524 | 72,419 | 1,431,736 | 7,823,779 | 519 of 11,000 (**4.72%**) |
+   | hspolicy26 | 3,799 | 157,358 | 884,755 | 7,679,194 | 193 of 20,961 (0.92%) |
+   | openev | 102 | 204,500 | 2,238,723 | 6,854,554 | 1,325 of 5,759 (**23.01%**) |
+
+   The same share at other file-byte budgets (0.7 s): over 3 MB 0.32 / 4.16 / 0.24 / 17.40%; over
+   4 MB 0.24 / 2.93 / 0.18 / 10.12%; over 5 MB 0.03 / 2.63 / 0.08 / 1.28%; over 6 MB 0.02 / 2.41 /
+   0.05 / 1.28%; over 8 MB 0% everywhere (hsld26 / hspf26 / hspolicy26 / openev).
+
+   **Bytes on disk are not what costs time.** The writer parses each source's `word/document.xml`.
+   Read from the zip directories alone (no content; 5.2 s), the sources over 2 MB have a
+   `document.xml` of, at the median, 269 KB (hsld26, 30 sources), 469 KB (hspf26, 160), 701 KB
+   (hspolicy26, 30; 92% of their compressed bytes are media) and 2.0 MB (openev, 6). The largest
+   `document.xml` of any source is 6.4 MB, 3.8 MB, 6.6 MB and 10.6 MB. The synthetic measurements
+   above cost about 0.2 to 0.3 s per MB of `document.xml` on the Mac and about 22 MB of memory per
+   MB, so even the largest real source is about 3 s and 240 MB alone.
 2. **The file-size limit is 3 MB**, a constant, not a setting. A function URL buffers 6 MB, and the
    Lambda Web Adapter base64-encodes a binary body, so 4.5 MB of file fills it, and 3 MB leaves a
    third. The estimate is 16,384 bytes, plus 2,048 per card, plus 2 per character of tag, cite and
@@ -317,13 +353,9 @@ too small, and the two defaults need lowering before the pilot opens.
 2. **The two download settings are not in Terraform's environment block** for the function
    (`infrastructure/modules/evidence_search/main.tf`). If the dev timing says change, it is a code
    default or that block: an E39 infrastructure follow-up, `v1-e39-t04`'s module.
-3. **Real source sizes.** The source budget rests on the backfill's mean sizes and the parser's own
-   note that a 300-page camp file is about 5 MB. A per-caselist p95 and maximum of source bytes,
-   measured in place on the operator's store (aggregates only), would set it on data. That file
-   could never be downloaded under the current budget, and Copy card still works for it.
-4. **The port's docstring is stale.** `debate_core.application.ports.evidence_file_writer` still
-   says the writer adds "the data-use policy's provenance line below each cite". After `v1-e33-t08`
-   it writes none. That is E33's file, one sentence.
+3. **Real source sizes: measured** (the PM's condition 1; Decisions 1). The share over 2,000,000
+   bytes passes 2% in hspf26 and openev, so the PR waits for the PM's ruling below.
+4. **The port's docstring: fixed** (condition 3, `f6dcae9`).
 5. **The second failure in the cut-short affected run** did not reproduce in any group. If the
    pull request's `ci` shows a failure outside the files this branch touches, paste it into this
    session.
@@ -331,30 +363,37 @@ too small, and the two defaults need lowering before the pilot opens.
    `test_thin_handlers.py:21`) reports two errors. They exist on `origin/dev` too and are outside
    CI's pyright scope, so they were left alone.
 
-**Questions for the PM**, one paste-ready block:
+**For the PM: condition 1's stop**, one paste-ready block:
 
 ```text
-v1-e39-t08 (card download): four questions, each with my recommendation.
+v1-e39-t08 (card download), condition 1 stopped the PR: real source sizes.
 
-1. Caps. Measured: 30 cards from 30 mean-size sources = 29 s on the Mac; 30 from one source = 2.5 s;
-   one camp-sized source = 4.5 s. Defaults: TUB_DOWNLOAD_CARD_CAP=8 and TUB_DOWNLOAD_SOURCE_BYTES=2,000,000.
-   (a) keep 8 + 2 MB until the dev timing (recommended: predictable for students, safe under the
-       assumed 2x slower function);
-   (b) cap 30 and let the 2 MB source budget alone bound the time (more cards per download when
-       they share files, but a cart can be refused for reasons a student cannot see coming).
+Measured read-only on the operator's dev store (index f29b81c276dd67c5, 3.1 s), the documents whose
+representative's source alone is over 2,000,000 bytes: hsld26 0.73%, hspf26 4.72%, hspolicy26 0.92%,
+openev 23.01%. Over 2% in hspf26 and openev, so I stopped before the PR. Conditions 2 to 4 are done
+(a card whose own source is over the budget is now a named, droppable refusal; tests failed first).
 
-2. Packaging. The function's image now installs debate-core's docx extra (lxml), and debate_api has
-   its own direct lxml import contract. Without both the E33 writer cannot run in the function.
-   Recommend accepting, as the CLI's equivalent was in v1-e31-t06.
+What the numbers show: file bytes are the wrong measure. The writer's cost follows each file's
+word/document.xml, not its size on disk. The sources over 2 MB have a document.xml of 269 KB (hsld26),
+469 KB (hspf26), 701 KB (hspolicy26) and 2.0 MB (openev) at the median; the largest document.xml of
+any source is 10.6 MB (openev), about 3 s and 240 MB on the Mac at the measured rate. Big files are
+big for images and other parts (hspolicy26's: 92% media).
 
-3. Cite-only cards are refused for download ("a cite with no card text"), because the index stores
-   the cite without its cutter mark and the writer's fingerprint check would fail. Recommend
-   accepting; v1-e39-t12 may drop them from results anyway.
+Options:
+(a) Budget the sum of the cart's document.xml sizes instead of file bytes, read from each fetched
+    file's zip directory before the build (no parse). Recommended: 20,000,000 bytes of document.xml,
+    about 6 s and 450 MB on the Mac, 12 s at the assumed 2x slower function. No real source is over it
+    alone (0% refused for their own file in every caselist); the card cap of 8 stays. The zip
+    directory is read by a function the composition root passes in from docx_parser, so the
+    application layer still never opens a .docx itself. About an hour, tests first, then a short
+    re-review.
+(b) Keep file bytes and raise the budget to 8,000,000: 0% over in every caselist today, but a cart of
+    eight such files could hold far more XML than the timing allows, so the card cap would need to fall.
+(c) Keep 2,000,000 file bytes: 4.7% of hspf26 and 23% of camp cards can never be downloaded (Copy card
+    still works for them).
 
-4. ADR-0019 (d)'s __Host-tub_cart cookie and (a) 2's "30 cards far below 6 MB" no longer describe
-   the pilot. Recommend a PM amendment line in each.
+I recommend (a). The dev timing (Operator follow-up 4) checks it either way.
 ```
-
 ## PM review
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in

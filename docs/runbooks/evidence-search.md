@@ -1069,7 +1069,26 @@ caps, each with a default set from these numbers:
 | `TUB_DOWNLOAD_CARD_CAP` | 8 (1 to 30) | Cards in one download. Eight from eight mean-size sources is about 8 s on the Mac |
 | `TUB_DOWNLOAD_SOURCE_BYTES` | 2,000,000 | Bytes of sources one download reads: 9 s on the Mac at the slowest rate measured |
 
-A cart over either is refused before anything is built, with a sentence saying so, as is a cart whose
+**Real source sizes** (2026-10-22, the operator's dev store, read-only, aggregates only; the sources
+the occurrences of index `f29b81c276dd67c5` name; 3.1 s). "Over 2 MB" is the share of the index's
+documents whose representative's source alone is over 2,000,000 bytes:
+
+| Caselist | Sources | p50 bytes | p95 bytes | Largest | Over 2 MB |
+|---|---|---|---|---|---|
+| hsld26 | 5,965 | 69,708 | 353,223 | 7,133,832 | 93 of 12,714 (0.73%) |
+| hspf26 | 3,524 | 72,419 | 1,431,736 | 7,823,779 | 519 of 11,000 (4.72%) |
+| hspolicy26 | 3,799 | 157,358 | 884,755 | 7,679,194 | 193 of 20,961 (0.92%) |
+| openev | 102 | 204,500 | 2,238,723 | 6,854,554 | 1,325 of 5,759 (23.01%) |
+
+What the writer parses is each file's `word/document.xml`, not its bytes on disk. Read from the zip
+directories alone (5.2 s): the sources over 2 MB have a `document.xml` of 269 KB (hsld26), 469 KB
+(hspf26), 701 KB (hspolicy26) and 2.0 MB (openev) at the median, and the largest `document.xml` of any
+source is 6.4 MB, 3.8 MB, 6.6 MB and 10.6 MB. The share over 2 MB passes 2% in hspf26 and openev, so
+the budget is with the PM (`v1-e39-t08`'s review) before the pilot opens.
+
+A card whose own source is over the budget is refused by name, *Its file is too large to download.
+Copy card still works.*, and can be dropped from the cart like any refused card. A cart over either
+cap is otherwise refused before anything is built, with a sentence saying so, as is a cart whose
 file would pass 3 MB: a function URL buffers at most 6 MB of response, and the Lambda Web Adapter
 sends a binary body base64-encoded. Neither variable is set by Terraform; the defaults hold until
 the dev timing below says otherwise, and changing one is a change to the module's environment block.

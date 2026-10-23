@@ -175,9 +175,11 @@ type = "forbidden"
 source_modules = [
     "debate_core.domain",
     "debate_core.retrieval",
+    "debate_core.arguments",
     "debate_core.application",
     "debate_core.testing",
     "debate_core.integrations.local",
+    "debate_core.integrations.landscape",
     "debate_core.integrations.models",
     "debate_core.integrations.docx_parser",
     "debate_core.integrations.docx_file_writer",
@@ -202,9 +204,11 @@ type = "forbidden"
 source_modules = [
     "debate_core.domain",
     "debate_core.retrieval",
+    "debate_core.arguments",
     "debate_core.application",
     "debate_core.testing",
     "debate_core.integrations.local",
+    "debate_core.integrations.landscape",
     "debate_core.integrations.docx_file_writer",
     "debate_core.integrations.file_streaming",
     "debate_core.integrations.s3",
@@ -226,9 +230,11 @@ type = "forbidden"
 source_modules = [
     "debate_core.domain",
     "debate_core.retrieval",
+    "debate_core.arguments",
     "debate_core.application",
     "debate_core.testing",
     "debate_core.integrations.local",
+    "debate_core.integrations.landscape",
     "debate_core.integrations.docx_file_writer",
     "debate_core.integrations.file_streaming",
     "debate_core.integrations.s3",
@@ -285,9 +291,11 @@ type = "forbidden"
 source_modules = [
     "debate_core.domain",
     "debate_core.retrieval",
+    "debate_core.arguments",
     "debate_core.application",
     "debate_core.testing",
     "debate_core.integrations.local",
+    "debate_core.integrations.landscape",
     "debate_core.integrations.s3",
     "debate_core.integrations.bedrock",
     "debate_core.integrations.file_streaming",
@@ -335,9 +343,11 @@ type = "forbidden"
 source_modules = [
     "debate_core.domain",
     "debate_core.retrieval",
+    "debate_core.arguments",
     "debate_core.application",
     "debate_core.testing",
     "debate_core.integrations.local",
+    "debate_core.integrations.landscape",
     "debate_core.integrations.models",
     "debate_core.integrations.docx_parser",
     "debate_core.integrations.docx_file_writer",
@@ -384,10 +394,15 @@ type = "layers"
 # classification and extracted-content types) see only the domain, and the `|` keeps the two
 # independent of each other. ArticleService in the application layer composes both.
 containers = ["debate_core"]
+#
+# `arguments` (v1-e32-t01-position-taxonomy) sits beside them too: the argument landscape's pure
+# procedures (heading normalization, taxonomy seeding counts, and later the matcher) see only the
+# domain, and the application layer composes them. Its YAML adapter is
+# `debate_core.integrations.landscape`, on the library lists above.
 layers = [
     "integrations | testing",
     "application",
-    "evidence | retrieval",
+    "evidence | retrieval | arguments",
     "domain",
 ]
 exhaustive = true
@@ -403,6 +418,7 @@ source_modules = [
     "debate_core.domain",
     "debate_core.evidence",
     "debate_core.retrieval",
+    "debate_core.arguments",
     "debate_core.application",
 ]
 forbidden_modules = ["typer", "click", "rich", "fastapi", "starlette"]

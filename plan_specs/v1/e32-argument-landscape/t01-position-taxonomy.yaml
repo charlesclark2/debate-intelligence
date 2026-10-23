@@ -57,6 +57,14 @@ spec:
       - debate_core.integrations
       - config/landscape
       - scripts
+      # PM ruling 2026-10-22 (review of v1-e32-t01, condition 3): the store reader and the port sit in
+      # debate_core.application, the synthetic store helper in debate_core.testing; pyproject.toml is
+      # for import-linter only; docs/guides holds the coach's guide and tests/config the config test.
+      - debate_core.application
+      - debate_core.testing
+      - pyproject.toml
+      - docs/guides
+      - tests/config
     forbidden:
       - Debater names, team codes or initials anywhere in taxonomy YAML or seeding fixtures
       - Hardcoding caselist slugs or topic wording in Python code (config only)
@@ -95,7 +103,7 @@ spec:
         merges a position and bumps taxonomy_version, and the coach has reviewed the seeded Policy file
         and generic.yaml (PM amendment 2026-10-22).
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

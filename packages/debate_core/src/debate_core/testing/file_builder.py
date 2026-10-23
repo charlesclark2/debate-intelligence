@@ -37,7 +37,7 @@ from debate_core.domain.caselist import (
 from debate_core.domain.debate_files import ParsedCard, ParsedDocument
 from debate_core.domain.file_recipe import FileRecipe, render_location
 from debate_core.evidence.fingerprints import FINGERPRINT_VERSION, card_fingerprint
-from debate_core.testing.fakes import InMemorySnapshotStore
+from debate_core.testing.fakes.persistence import InMemorySnapshotStore
 
 __all__ = ["DEFAULT_DISCLOSURE", "FileBuilderWorld", "SourceCard", "SyntheticDisclosure"]
 

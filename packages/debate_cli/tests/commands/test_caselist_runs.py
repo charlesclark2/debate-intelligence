@@ -38,7 +38,7 @@ from debate_core.application.sync_runs import (
     SyncRunOutcome,
     SyncRunRecord,
 )
-from debate_core.testing.fakes import FixedClock
+from debate_core.testing.fakes.clock_and_ids import FixedClock
 
 API = "https://api.opencaselist.example.invalid/v1"
 FILE_HOST = "https://files.opencaselist.example.invalid"

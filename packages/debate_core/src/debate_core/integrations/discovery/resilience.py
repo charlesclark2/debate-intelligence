@@ -31,7 +31,7 @@ values are filtered out of httpx's and this package's log records
 
 The breaker reads time only from the injected
 :class:`~debate_core.application.ports.providers.Clock`, so every transition can be driven by hand
-in a test with :class:`~debate_core.testing.fakes.FixedClock`. The timeout is the event loop's own,
+in a test with :class:`~debate_core.testing.fakes.clock_and_ids.FixedClock`. The timeout is the event loop's own,
 because cancelling a call that is still running is the event loop's job.
 """
 

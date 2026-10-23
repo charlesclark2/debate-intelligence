@@ -30,7 +30,7 @@ from debate_core.integrations.discovery.resilience import (
     ResiliencePolicy,
     ResilientProvider,
 )
-from debate_core.testing.fakes import FAKE_EPOCH, FixedClock
+from debate_core.testing.fakes.clock_and_ids import FAKE_EPOCH, FixedClock
 
 COOLDOWN = timedelta(seconds=60)
 QUERY = ProviderQuery(query="methane leakage")

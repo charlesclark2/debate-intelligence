@@ -11,7 +11,7 @@ import pytest
 
 from debate_core.integrations.local import SqliteDatabase, SqliteSearchRepository
 from debate_core.testing.contracts import SearchRepositoryContract, SearchRepositoryFactory
-from debate_core.testing.fakes import InMemorySearchRepository
+from debate_core.testing.fakes.persistence import InMemorySearchRepository
 
 
 class TestInMemorySearchRepository(SearchRepositoryContract):

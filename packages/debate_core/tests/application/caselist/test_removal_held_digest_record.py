@@ -36,7 +36,7 @@ from debate_core.application.ports.suppression import (
 )
 from debate_core.integrations.local import FsEvidenceObjectStore
 from debate_core.integrations.local.suppression_list import local_suppression_list_file
-from debate_core.testing.fakes import InMemoryAppendOnlyRecord
+from debate_core.testing.fakes.suppression import InMemoryAppendOnlyRecord
 
 from .test_suppression_path_holds import _BucketNeedingALogin  # pyright: ignore[reportPrivateUsage]
 

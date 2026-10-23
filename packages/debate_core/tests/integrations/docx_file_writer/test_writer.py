@@ -68,7 +68,7 @@ from debate_core.testing.docx_builder import (
     paragraph_xml,
     run_xml,
 )
-from debate_core.testing.fakes import InMemorySnapshotStore
+from debate_core.testing.fakes.persistence import InMemorySnapshotStore
 from debate_core.testing.file_builder import FileBuilderWorld, SourceCard, SyntheticDisclosure
 
 W = f"{{{W_NAMESPACE}}}"

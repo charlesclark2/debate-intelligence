@@ -65,7 +65,7 @@ from debate_core.testing.contracts import (
     RouteExpectation,
     StructuredAnswer,
 )
-from debate_core.testing.fakes import FixedClock
+from debate_core.testing.fakes.clock_and_ids import FixedClock
 
 pytestmark = pytest.mark.anyio
 

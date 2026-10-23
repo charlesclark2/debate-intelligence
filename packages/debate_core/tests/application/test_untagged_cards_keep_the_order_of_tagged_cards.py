@@ -56,7 +56,7 @@ from debate_core.integrations.local.parsed_store import LocalParsedStore
 from debate_core.integrations.local.sqlite_caselist_repository import SqliteCaselistRepository
 from debate_core.integrations.local.suppression_list import local_suppression_list_file
 from debate_core.testing.docx_builder import build_docx, paragraph_xml, run_xml
-from debate_core.testing.fakes import build_fake_caselist_repository
+from debate_core.testing.fakes.caselist import build_fake_caselist_repository
 
 pytestmark = pytest.mark.anyio
 
@@ -154,7 +154,7 @@ async def import_files(data_dir: Path, zips_dir: Path) -> None:
     from debate_core.domain.caselist import Event
     from debate_core.integrations.local import FsSnapshotStore
     from debate_core.integrations.local.archive_reader import archive_digest, read_archive
-    from debate_core.testing.fakes import empty_suppression_list
+    from debate_core.testing.fakes.suppression import empty_suppression_list
 
     buffer = BytesIO()
     with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as archive:

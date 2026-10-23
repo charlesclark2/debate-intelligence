@@ -62,7 +62,7 @@ from debate_core.application.ports.suppression import (
     disclosure_digest,
 )
 from debate_core.integrations.local import FsEvidenceObjectStore
-from debate_core.testing.fakes import InMemoryAppendOnlyRecord
+from debate_core.testing.fakes.suppression import InMemoryAppendOnlyRecord
 
 from .conftest import REQUEST, RemovalWorld
 from .test_held_path_loose_ends import (

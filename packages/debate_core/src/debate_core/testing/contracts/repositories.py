@@ -56,7 +56,7 @@ from debate_core.testing.contracts.harness import (
     SearchRepositoryFactory,
     walk_all_pages,
 )
-from debate_core.testing.fakes import FAKE_EPOCH
+from debate_core.testing.fakes.clock_and_ids import FAKE_EPOCH
 
 __all__ = [
     "ArticleRepositoryContract",

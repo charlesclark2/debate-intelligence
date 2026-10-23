@@ -48,7 +48,7 @@ from debate_core.application.ports.archive import ArchiveMember
 from debate_core.domain.caselist import Event
 from debate_core.integrations.local import FsEvidenceObjectStore, FsSnapshotStore, SqliteDatabase
 from debate_core.integrations.local.sqlite_caselist_repository import SqliteCaselistRepository
-from debate_core.testing.fakes import empty_suppression_list
+from debate_core.testing.fakes.suppression import empty_suppression_list
 
 CASELIST = "testcl26"
 OTHER_CASELIST = "testcl27"

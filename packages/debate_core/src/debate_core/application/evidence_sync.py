@@ -796,7 +796,7 @@ class EvidenceSyncService:
         clock: Supplies the journal's timestamps. Optional, and the only clock in this package that
             has a default: a journal timestamp is operational bookkeeping an operator reads, not
             provenance a card depends on. A test that asserts on journal contents injects
-            :class:`~debate_core.testing.fakes.FixedClock`.
+            :class:`~debate_core.testing.fakes.clock_and_ids.FixedClock`.
     """
 
     def __init__(

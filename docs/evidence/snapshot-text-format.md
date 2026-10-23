@@ -296,7 +296,7 @@ The `RevisionMismatch` used is the one the repository already raises (`debate_co
 after, the verification status before and after, the time, and the negation flag (which omission, as
 snapshot offsets). A status is not student data. No evidence text, no
 deleted text, no tag, cite or interpolation, no payload, and no student data beyond the actor id. The
-port has an in-memory fake (`debate_core.testing.InMemoryCardEditLog`) and no production adapter yet:
+port has an in-memory fake (`debate_core.testing.fakes.card_edit_log.InMemoryCardEditLog`) and no production adapter yet:
 no V1 command edits a card. The card is saved before the entry is appended, so a failure between them
 loses an entry rather than logging an edit that never happened; the V2 adapter writes both in one
 transaction (`v2-e12-t05` ac6).

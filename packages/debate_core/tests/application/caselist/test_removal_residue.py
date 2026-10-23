@@ -49,7 +49,7 @@ from debate_core.application.ports.suppression import (
     disclosure_digest,
 )
 from debate_core.integrations.s3 import S3EvidenceObjectStore, S3EvidenceVersionStore
-from debate_core.testing.fakes import InMemoryAppendOnlyRecord, empty_suppression_list
+from debate_core.testing.fakes.suppression import InMemoryAppendOnlyRecord, empty_suppression_list
 
 from .conftest import REQUEST, TAKEDOWN_ROLE, RemovalWorld, SignedInAs
 

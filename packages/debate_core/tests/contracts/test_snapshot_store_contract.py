@@ -24,7 +24,7 @@ from debate_core.testing.contracts import (
     SnapshotStoreContract,
     SnapshotStoreFactory,
 )
-from debate_core.testing.fakes import InMemorySnapshotStore
+from debate_core.testing.fakes.persistence import InMemorySnapshotStore
 
 
 class TestInMemorySnapshotStore(SnapshotStoreContract):

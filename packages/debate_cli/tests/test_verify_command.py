@@ -34,7 +34,7 @@ from debate_cli.context import cli_context
 from debate_cli.exit_codes import ExitCode
 from debate_core.application.errors import StoreError, StoreUnavailable
 from debate_core.integrations.local import BLOB_DIRECTORY
-from debate_core.testing.fakes import InMemoryArticleRepository, InMemorySnapshotStore
+from debate_core.testing.fakes.persistence import InMemoryArticleRepository, InMemorySnapshotStore
 
 runner = CliRunner()
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]

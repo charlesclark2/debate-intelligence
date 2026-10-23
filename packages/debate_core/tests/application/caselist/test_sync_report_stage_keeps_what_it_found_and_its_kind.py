@@ -41,7 +41,7 @@ from debate_core.application.caselist.status_service import (
 from debate_core.application.caselist_sync import SyncStage
 from debate_core.application.errors import StoreCredentialsExpired
 from debate_core.integrations.s3 import S3EvidenceObjectStore
-from debate_core.testing.fakes import empty_suppression_list
+from debate_core.testing.fakes.suppression import empty_suppression_list
 
 from .test_inbox_retention import CASELIST, WEEK_1, WEEK_2, FakeSource, Installation
 from .test_pending_work_owes_every_unpublished_snapshot import ONLY_IN_WEEK_1

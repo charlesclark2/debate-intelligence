@@ -63,12 +63,8 @@ from debate_core.evidence.markup import CardMarkup, EvidenceMarkupSpan
 from debate_core.evidence.selection import EvidenceSelection
 from debate_core.integrations.local import FsSnapshotStore, SqliteArticleRepository, SqliteDatabase
 from debate_core.testing.builders import DEFAULT_OWNER_ID
-from debate_core.testing.fakes import (
-    FixedClock,
-    InMemoryArticleRepository,
-    InMemorySnapshotStore,
-    SequentialIdGenerator,
-)
+from debate_core.testing.fakes.clock_and_ids import FixedClock, SequentialIdGenerator
+from debate_core.testing.fakes.persistence import InMemoryArticleRepository, InMemorySnapshotStore
 
 FIXTURE_DIR = Path(__file__).resolve().parent
 ALL_VERIFIED = FIXTURE_DIR / "all_verified.json"

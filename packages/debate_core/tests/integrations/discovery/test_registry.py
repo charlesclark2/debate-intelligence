@@ -22,7 +22,7 @@ from debate_core.integrations.discovery.registry import (
     policy_from_settings,
 )
 from debate_core.integrations.discovery.resilience import ResiliencePolicy, ResilientProvider
-from debate_core.testing.fakes import FixedClock
+from debate_core.testing.fakes.clock_and_ids import FixedClock
 
 QUERY = ProviderQuery(query="data center water use")
 API_KEY = "s2-key-registry-7a6b5c"

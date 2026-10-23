@@ -22,7 +22,8 @@ from debate_core.integrations.discovery.redaction import (
     redact_exception_chain,
 )
 from debate_core.integrations.discovery.resilience import ResiliencePolicy, ResilientProvider
-from debate_core.testing.fakes import FakeSearchProvider, FixedClock
+from debate_core.testing.fakes.clock_and_ids import FixedClock
+from debate_core.testing.fakes.providers import FakeSearchProvider
 
 
 @pytest.fixture(autouse=True)

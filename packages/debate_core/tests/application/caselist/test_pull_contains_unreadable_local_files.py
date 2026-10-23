@@ -54,7 +54,7 @@ from debate_core.application.ports.caselist_source import (
 from debate_core.application.ports.suppression import ReasonCode
 from debate_core.domain.caselist import Event
 from debate_core.integrations.s3 import S3EvidenceObjectStore
-from debate_core.testing.fakes import empty_suppression_list
+from debate_core.testing.fakes.suppression import empty_suppression_list
 
 from .conftest import REQUEST, RemovalWorld
 from .test_inbox_retention import (

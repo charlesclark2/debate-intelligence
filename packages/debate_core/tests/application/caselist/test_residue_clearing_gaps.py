@@ -79,7 +79,7 @@ from debate_core.domain.caselist import Event
 from debate_core.integrations.local import FsEvidenceObjectStore, FsSnapshotStore
 from debate_core.integrations.local.archive_reader import archive_digest, read_archive
 from debate_core.integrations.s3 import S3EvidenceVersionStore
-from debate_core.testing.fakes import empty_suppression_list
+from debate_core.testing.fakes.suppression import empty_suppression_list
 
 from .conftest import REMOVAL_TIME, REQUEST, RemovalWorld
 from .test_manifest_and_aggregate_residue import (

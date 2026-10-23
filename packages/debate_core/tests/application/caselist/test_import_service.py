@@ -51,7 +51,7 @@ from debate_core.integrations.local.archive_reader import archive_digest, read_a
 from debate_core.integrations.local.fs_blob_store import BLOB_DIRECTORY, FsSnapshotStore
 from debate_core.integrations.local.sqlite_caselist_repository import SqliteCaselistRepository
 from debate_core.integrations.local.sqlite_db import SqliteDatabase
-from debate_core.testing.fakes import InMemoryAppendOnlyRecord
+from debate_core.testing.fakes.suppression import InMemoryAppendOnlyRecord
 
 EVENT = Event(SYNTHETIC_EVENT)
 GENEROUS_LIMITS = {"max_archive_bytes": 64 * 1024 * 1024, "max_unpacked_bytes": 64 * 1024 * 1024}

@@ -19,7 +19,7 @@ defaults to a real value, so `None` always means "this entity genuinely has no s
 never "give me the default".
 
 **Everything is deterministic.** Ids come from :func:`readable_id` rather than from a real ULID,
-timestamps default to :data:`~debate_core.testing.fakes.FAKE_EPOCH`, and digests are computed from
+timestamps default to :data:`~debate_core.testing.fakes.clock_and_ids.FAKE_EPOCH`, and digests are computed from
 the fixed text the builder itself supplies. Two runs produce byte-identical entities, which is
 what lets the repository contract suite assert on listing order and on stored documents.
 """
@@ -64,7 +64,7 @@ from debate_core.domain.discovery import (
     ProviderResponse,
     ProviderStatus,
 )
-from debate_core.testing.fakes import FAKE_EPOCH
+from debate_core.testing.fakes.clock_and_ids import FAKE_EPOCH
 
 __all__ = [
     "DEFAULT_ARTICLE_ID",
@@ -108,7 +108,7 @@ def readable_id(label: str, number: int = 1) -> Ulid:
     glance, and whose lexicographic order is the numeric order of `number`, which is what the
     listing-order contracts depend on.
 
-    Uses the same construction as :class:`~debate_core.testing.fakes.SequentialIdGenerator`, so
+    Uses the same construction as :class:`~debate_core.testing.fakes.clock_and_ids.SequentialIdGenerator`, so
     ids minted by a fake service run and ids written by hand in a test sort into one sequence.
     """
     text = label.upper()

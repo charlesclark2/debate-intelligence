@@ -29,7 +29,7 @@ from debate_core.application.ports.providers import (
     IdGenerator,
     SearchProvider,
 )
-from debate_core.testing.fakes import build_fake_ports
+from debate_core.testing.fakes.all_ports import build_fake_ports
 
 THE_TEN_PORTS = (
     ArticleRepository,

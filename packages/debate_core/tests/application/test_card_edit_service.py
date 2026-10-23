@@ -54,7 +54,8 @@ from debate_core.evidence.manifest import CardManifest
 from debate_core.evidence.markup import EvidenceMarkupSpan
 from debate_core.evidence.verification_types import ReasonCode
 from debate_core.testing.builders import DEFAULT_OWNER_ID, build_card_span
-from debate_core.testing.fakes import InMemoryCardEditLog, InMemoryCardRepository
+from debate_core.testing.fakes.card_edit_log import InMemoryCardEditLog
+from debate_core.testing.fakes.persistence import InMemoryCardRepository
 
 SOURCE = (
     "The council will not approve the new reservoir before 2030.\n\n"

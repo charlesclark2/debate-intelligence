@@ -71,12 +71,9 @@ from debate_core.domain.discovery import (
 )
 from debate_core.domain.enums import SourceType
 from debate_core.testing.builders import build_search, readable_id
-from debate_core.testing.fakes import (
-    FakeSearchProvider,
-    FixedClock,
-    InMemorySearchRepository,
-    SequentialIdGenerator,
-)
+from debate_core.testing.fakes.clock_and_ids import FixedClock, SequentialIdGenerator
+from debate_core.testing.fakes.persistence import InMemorySearchRepository
+from debate_core.testing.fakes.providers import FakeSearchProvider
 from debate_core.testing.virtual_time import EventLoopClock, run_in_virtual_time
 
 REPOSITORY = Path(__file__).resolve().parents[4]

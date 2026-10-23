@@ -44,7 +44,7 @@ from debate_core.integrations.local.suppression_list import (
     local_path_holds_file,
     local_suppression_list_file,
 )
-from debate_core.testing.fakes import InMemoryAppendOnlyRecord
+from debate_core.testing.fakes.suppression import InMemoryAppendOnlyRecord
 
 pytestmark = pytest.mark.anyio
 

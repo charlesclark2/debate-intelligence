@@ -102,13 +102,16 @@ Things worth knowing before you write a service:
 
 ### `testing/` — in-memory fakes (v1-e02-t02-ports)
 
-`debate_core.testing.fakes` has a working in-memory implementation of every port, plus `FixedClock`
-and `SequentialIdGenerator`. They enforce what their ports promise — dedupe, blob integrity,
-revision conflicts, listing order — so a test against a fake exercises the same rules as the real
-adapter. `build_fake_ports()` assembles one of each, and is where pyright checks that the fakes
-still conform to the Protocols. `InMemoryCaselistRepository` lives there too — built by
-`build_fake_caselist_repository()` rather than by `build_fake_ports()`, because a caselist
-repository is not one of the ten ports every service takes.
+`debate_core.testing.fakes` has a working in-memory implementation of every port, one module per
+port, plus `FixedClock` and `SequentialIdGenerator` in `fakes.clock_and_ids`. They enforce what
+their ports promise — dedupe, blob integrity, revision conflicts, listing order — so a test against
+a fake exercises the same rules as the real adapter. Import a fake from its own module
+(`from debate_core.testing.fakes.persistence import InMemoryCardRepository`): a fakes module imports
+only its own port, so a test reaches only the ports it uses (`v1-e01-t30`).
+`fakes.all_ports.build_fake_ports()` assembles one of each of the ten ports every service takes,
+and is where pyright checks that they still conform to the Protocols. `InMemoryCaselistRepository`
+is built by `fakes.caselist.build_fake_caselist_repository()` instead, because a caselist
+repository is not one of the ten.
 
 `debate_core.testing.virtual_time` has `VirtualTimeEventLoop`, an asyncio loop whose clock jumps to
 the next timer instead of waiting, and `EventLoopClock`, the `Clock` port read from it: a test of

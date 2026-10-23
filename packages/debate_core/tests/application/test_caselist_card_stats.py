@@ -33,7 +33,7 @@ from debate_core.domain.debate_files import (
 from debate_core.domain.style_profile import StyleMatchSource
 from debate_core.evidence.fingerprints import FINGERPRINT_VERSION, card_fingerprint
 from debate_core.evidence.near_duplicates import NearDuplicateThresholds
-from debate_core.testing.fakes import InMemoryCaselistRepository
+from debate_core.testing.fakes.caselist import InMemoryCaselistRepository
 
 CASELIST = "testcl26"
 WEEK_ONE, WEEK_TWO, WEEK_THREE = date(2026, 9, 1), date(2026, 9, 8), date(2026, 9, 15)

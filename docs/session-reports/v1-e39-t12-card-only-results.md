@@ -166,6 +166,20 @@ nothing about its siblings: of rule A's 334 documents, 193 have one occurrence a
 (17 in one file, 124 across files; hsld26 62, hspf26 35, hspolicy26 42, openev 2). Whether a sibling
 has a cite is not in the index; the occurrence table carries no cite.
 
+### Questions sent to the PM, 2026-10-22
+
+1. Which rule: A, B or C. The session recommends C.
+2. Rule A's threshold: fewer than 25 words, the spec's example, or fewer than 10.
+3. Judge a cluster by its representative alone, as the spec words it, or look for a cited sibling.
+   The session recommends the representative.
+4. The excluded count goes in the build's result, `tub index build`'s summary and the weekly run's
+   record, and not in the manifest. The PM ruled on 2026-10-22 that the manifest and pointer get no
+   new field. As a result `built_from` cannot see the rule, and the operator's hand build after the
+   merge is what replaces the index built without it.
+5. Whether the operator's publish block carries `--allow-shrink`. Under every proposed rule the shrink
+   is under 10%, and `--allow-shrink` would also pass any other shrink in the same publish. The
+   session recommends a plain publish, going back to the PM if it is refused.
+
 ## Files changed
 
 <!-- Group by package or directory; one line on why each group changed. -->

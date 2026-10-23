@@ -358,6 +358,41 @@ def test_a_declaration_allowing_two_pythons_is_refused(world: World) -> None:
     assert run.calls_starting("docker", "buildx", "build") == []
 
 
+def test_print_base_image_names_the_image_and_platform_and_calls_nothing(world: World) -> None:
+    """validate-dev's slow job pulls what this prints, on a runner (v1-e01-t34)."""
+    world.docker_installed = False
+
+    run = world.deploy("--print-base-image")
+
+    assert run.returncode == 0, run.output
+    assert run.stdout == f"public.ecr.aws/lambda/python:{declared_python_minor()} linux/arm64\n"
+    assert run.calls == []
+
+
+def test_print_base_image_refuses_a_declaration_allowing_two_pythons(world: World) -> None:
+    major, minor = declared_python_minor().split(".")
+    world.requires_python = f">={major}.{minor},<{major}.{int(minor) + 2}"
+
+    run = world.deploy("--print-base-image")
+
+    assert run.returncode != 0
+    assert run.stdout == ""
+    assert "allows more than one Python minor" in run.stderr
+
+
+def test_the_printed_base_image_is_the_one_the_dockerfile_builds_from(world: World) -> None:
+    printed, platform = world.deploy("--print-base-image").stdout.split()
+    [base] = [
+        line.removeprefix("FROM ")
+        for line in DOCKERFILE.read_text(encoding="utf-8").splitlines()
+        if line.startswith("FROM ") and " AS " not in line
+    ]
+
+    assert base == "public.ecr.aws/lambda/python:${PYTHON_VERSION}"
+    assert printed == base.replace("${PYTHON_VERSION}", declared_python_minor())
+    assert platform == "linux/arm64"
+
+
 def test_the_build_context_is_the_staged_lock_export_and_wheels(world: World) -> None:
     run = world.deploy("dev", "--dry-run")
 

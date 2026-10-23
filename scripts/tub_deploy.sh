@@ -5,6 +5,7 @@
 #     scripts/tub_deploy.sh dev
 #     scripts/tub_deploy.sh prod
 #     scripts/tub_deploy.sh dev --dry-run
+#     scripts/tub_deploy.sh --print-base-image
 #
 # Spec: plan_specs/v1/e39-evidence-search-pilot/t04-pilot-infrastructure.yaml. Decision: ADR-0019
 # (f) 3. Operator steps, including the first deploy into an environment: docs/runbooks/evidence-search.md.
@@ -38,6 +39,12 @@
 # --dry-run runs steps 1 to 5: it still runs the prod guard and still builds, because a rehearsal
 # that skipped the build would not say whether the image builds. It makes no AWS call at all.
 #
+# --print-base-image runs step 3 alone and prints the base image and its platform, as
+# `public.ecr.aws/lambda/python:X.Y linux/arm64`, then stops. It reads one file and calls nothing,
+# not even Docker. validate-dev's slow job pulls what it prints, so the SQLite checks that run in
+# the function's image find the image this script builds on (v1-e01-t34); it is the one use of
+# this script on a runner.
+#
 # Written for bash 3.2, which is what macOS ships.
 
 set -euo pipefail
@@ -49,15 +56,19 @@ PYTHON_DECLARATION="${REPO_ROOT}/packages/debate_core/pyproject.toml"
 # ADR-0010: everything is in us-east-1.
 readonly AWS_REGION_FOR_PILOT="us-east-1"
 readonly IMAGE_PLATFORM="linux/arm64"
+readonly BASE_IMAGE_REPOSITORY="public.ecr.aws/lambda/python"
 
 usage() {
   cat <<'USAGE'
 Usage: scripts/tub_deploy.sh <dev|prod> [--dry-run]
+       scripts/tub_deploy.sh --print-base-image
 
   dev        deploy the dev pilot (tub.dev.wfbdebate.com)
   prod       deploy the prod pilot (tub.wfbdebate.com); refused unless the checkout is clean,
              on main, and equal to origin/main
   --dry-run  build the image and stop: no push, no update, no AWS call
+  --print-base-image
+             print the base image and its platform, read from requires-python, and stop
 
 Environment:
   TUB_DEPLOY_PROFILE   AWS profile to push and update with (default: debate-<env>-tub-deployer)
@@ -74,10 +85,29 @@ step() {
   echo "==> $*"
 }
 
+# The image follows requires-python and states no version of its own (ADR-0019 (a) 1,
+# tests/architecture/test_single_interpreter_source.py). The declaration has to name exactly one
+# minor, as `>=X.Y,<X.Y+1`; anything wider would leave the base image's tag a guess. Sets
+# `declared` and `python_version`.
+read_python_version() {
+  declared="$(sed -n 's/^requires-python[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "${PYTHON_DECLARATION}" | head -n 1)"
+  local declared_without_spaces python_bounds
+  declared_without_spaces="$(printf '%s' "${declared}" | tr -d ' ')"
+  python_bounds='^>=([0-9]+)\.([0-9]+),<([0-9]+)\.([0-9]+)$'
+  if [[ ! "${declared_without_spaces}" =~ ${python_bounds} ]]; then
+    fail "requires-python is '${declared}', not the '>=X.Y,<X.Z' form this script reads. The base image's tag cannot be derived from it."
+  fi
+  if [ "${BASH_REMATCH[1]}" != "${BASH_REMATCH[3]}" ] || [ $((BASH_REMATCH[2] + 1)) -ne "${BASH_REMATCH[4]}" ]; then
+    fail "requires-python is '${declared}', which allows more than one Python minor. The pilot's base image has to be exactly one; narrow the declaration or change this script and ADR-0019 together."
+  fi
+  python_version="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}"
+}
+
 # --- Arguments --------------------------------------------------------------------------------
 
 environment=""
 dry_run=false
+print_base_image=false
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -86,6 +116,7 @@ while [ $# -gt 0 ]; do
       environment="$1"
       ;;
     --dry-run) dry_run=true ;;
+    --print-base-image) print_base_image=true ;;
     -h | --help)
       usage
       exit 0
@@ -97,6 +128,12 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
+
+if [ "${print_base_image}" = true ]; then
+  read_python_version
+  echo "${BASE_IMAGE_REPOSITORY}:${python_version} ${IMAGE_PLATFORM}"
+  exit 0
+fi
 
 [ -n "${environment}" ] || {
   usage >&2
@@ -175,24 +212,11 @@ if [ -n "$(git -C "${REPO_ROOT}" status --porcelain)" ]; then
 fi
 
 # --- The base image's Python ------------------------------------------------------------------
-#
-# The image follows requires-python and states no version of its own (ADR-0019 (a) 1,
-# tests/architecture/test_single_interpreter_source.py). The declaration has to name exactly one
-# minor, as `>=X.Y,<X.Y+1`; anything wider would leave the base image's tag a guess.
 
 step "Reading the Python the image is built on from ${PYTHON_DECLARATION#"${REPO_ROOT}/"}"
 
-declared="$(sed -n 's/^requires-python[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "${PYTHON_DECLARATION}" | head -n 1)"
-declared_without_spaces="$(printf '%s' "${declared}" | tr -d ' ')"
-python_bounds='^>=([0-9]+)\.([0-9]+),<([0-9]+)\.([0-9]+)$'
-if [[ ! "${declared_without_spaces}" =~ ${python_bounds} ]]; then
-  fail "requires-python is '${declared}', not the '>=X.Y,<X.Z' form this script reads. The base image's tag cannot be derived from it."
-fi
-if [ "${BASH_REMATCH[1]}" != "${BASH_REMATCH[3]}" ] || [ $((BASH_REMATCH[2] + 1)) -ne "${BASH_REMATCH[4]}" ]; then
-  fail "requires-python is '${declared}', which allows more than one Python minor. The pilot's base image has to be exactly one; narrow the declaration or change this script and ADR-0019 together."
-fi
-python_version="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}"
-echo "requires-python ${declared}: public.ecr.aws/lambda/python:${python_version}"
+read_python_version
+echo "requires-python ${declared}: ${BASE_IMAGE_REPOSITORY}:${python_version}"
 
 # --- Stage the build context ------------------------------------------------------------------
 

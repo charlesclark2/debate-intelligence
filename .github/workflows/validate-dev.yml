@@ -21,7 +21,9 @@
 #             any promotion containing a parser change (v1-e31-t05);
 #             The tier includes the search pages' browser suite (packages/debate_api/tests/browser,
 #             v1-e39-t06), so the job installs Playwright's Chromium first: without it every browser
-#             test errors, and the tier fails (PM ruling 2026-10-21, v1-e39-t06 Q1);
+#             test errors, and the tier fails (PM ruling 2026-10-21, v1-e39-t06 Q1). For the same
+#             reason it pulls the pilot function's arm64 base image, the one scripts/tub_deploy.sh
+#             --print-base-image names, for the SQLite checks that run inside it (v1-e01-t34);
 #   conclude  posts `success` on the commit the installed build reported, only when every job
 #             passed and that commit, and both test trees, are the one requested. Anything else posts
 #             `failure` (`error` if the run was cancelled) on the requested commit.
@@ -210,6 +212,22 @@ jobs:
       # tests then run offline, every page served in-process (PM ruling 2026-10-21, v1-e39-t06 Q1).
       - name: Install Playwright's Chromium for the browser tests
         run: uv run --locked playwright install --with-deps chromium
+      # Two SQLite checks run inside the pilot function's base image, for linux/arm64 as the function
+      # runs (v1-e39-t02, v1-e39-t03). Without the image on the runner they skip, and a skip fails
+      # the tier, which it did from 2026-10-20 (v1-e01-t34). scripts/tub_deploy.sh names the image
+      # it builds on, from requires-python, so this pulls exactly that, and logs the digest it got;
+      # QEMU lets this x86-64 runner run the image's python3.
+      - name: Set up QEMU, so the runner can run the arm64 Lambda image
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+      - name: Pull the Lambda base image scripts/tub_deploy.sh builds on
+        run: |
+          base="$(scripts/tub_deploy.sh --print-base-image)"
+          image="${base% *}"
+          platform="${base#* }"
+          docker pull --platform "$platform" "$image"
+          docker image inspect --format "pulled {{index .RepoDigests 0}} for $platform" "$image"
       - name: Run pytest -m "slow and not live and not eval", offline
         id: slow
         run: python3 scripts/validate_dev.py slow --sha "$REQUESTED_SHA" --work-dir "$RUNNER_TEMP/validate-dev-slow"

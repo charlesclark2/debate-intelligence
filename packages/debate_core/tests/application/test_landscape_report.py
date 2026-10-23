@@ -28,7 +28,7 @@ from debate_core.application.landscape_staleness import assess_staleness
 from debate_core.application.ports.parsed_store import OccurrenceRecord
 from debate_core.arguments.landscape.seeding import SeedCard, SeedSource
 from debate_core.domain.card_occurrence import ClusterMembership
-from debate_core.domain.caselist import Disclosure, Side
+from debate_core.domain.caselist import Disclosure, RoundLabel, Side
 from debate_core.domain.debate_files import CardCompleteness
 from debate_core.domain.landscape_classification import OverrideRules
 from debate_core.domain.landscape_report import AffAssignment, LandscapeReport, PositionStats
@@ -244,6 +244,29 @@ def test_aggregate_positions_are_ordered_by_side_kind_teams_rounds_and_id() -> N
         "states-cp",
         "cap-k",
         "nhi-t",
+    ]
+
+
+def test_aggregate_positions_rank_by_teams_before_rounds() -> None:
+    inputs = read_synthetic_caselist(FIXTURE)
+    strikes_round = next(one for one in inputs.disclosures if one.source_sha256 == "b6" * 32)
+    # WW reads b6 (provider strikes, and nhi-t) in two more rounds: 3 rounds by 1 team, against the
+    # midterms DA's 2 rounds by 2 teams.
+    more = tuple(
+        strikes_round.evolve(round_label=RoundLabel.from_raw(played), source_path=f"{played}.docx")
+        for played in ("R5", "R6")
+    )
+    report = _report(dataclasses.replace(inputs, disclosures=(*inputs.disclosures, *more)))
+    assert (
+        _position(report, "provider-strikes-da").rounds,
+        _position(report, "provider-strikes-da").teams,
+    ) == (3, 1)
+    assert (_position(report, "election-da").rounds, _position(report, "election-da").teams) == (2, 2)
+    assert [stats.position_id for stats in report.positions if stats.kind.value == "da"] == [
+        "spending-da",
+        "election-da",
+        "provider-strikes-da",
+        "hospital-closures-da",
     ]
 
 

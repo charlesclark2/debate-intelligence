@@ -77,6 +77,9 @@ def test_the_slow_job_sets_up_qemu_and_pulls_the_image_before_the_tier_runs() ->
     assert qemu["uses"].startswith("docker/setup-qemu-action@")
     assert "arm64" in qemu["with"]["platforms"]
     assert "scripts/tub_deploy.sh --print-base-image" in pull["run"]
+    # An image can have no repo digest (a local load, some image stores): indexing the list would
+    # fail the step, and with it the job, over a log line.
+    assert "index .RepoDigests" not in pull["run"]
     assert "continue-on-error" not in pull
     assert "continue-on-error" not in qemu
 

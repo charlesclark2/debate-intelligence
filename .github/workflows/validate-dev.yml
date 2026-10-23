@@ -222,8 +222,8 @@ jobs:
       # Two SQLite checks run inside the pilot function's base image, for linux/arm64 as the function
       # runs (v1-e39-t02, v1-e39-t03). Without the image on the runner they skip, and a skip fails
       # the tier, which it did from 2026-10-20 (v1-e01-t34). scripts/tub_deploy.sh names the image
-      # it builds on, from requires-python, so this pulls exactly that, and logs the digest it got;
-      # QEMU lets this x86-64 runner run the image's python3.
+      # it builds on, from requires-python, so this pulls exactly that; the pull logs the digest it
+      # got, and the inspect the platform. QEMU lets this x86-64 runner run the image's python3.
       - name: Set up QEMU, so the runner can run the arm64 Lambda image
         uses: docker/setup-qemu-action@v3
         with:
@@ -234,7 +234,7 @@ jobs:
           image="${base% *}"
           platform="${base#* }"
           docker pull --platform "$platform" "$image"
-          docker image inspect --format "pulled {{index .RepoDigests 0}} for $platform" "$image"
+          docker image inspect --format "pulled {{.Os}}/{{.Architecture}} {{.RepoDigests}}" "$image"
       - name: Run pytest -m "slow and not live and not eval and not operator_data", offline
         id: slow
         run: python3 scripts/validate_dev.py slow --sha "$REQUESTED_SHA" --work-dir "$RUNNER_TEMP/validate-dev-slow"

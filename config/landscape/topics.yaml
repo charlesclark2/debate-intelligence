@@ -1,0 +1,36 @@
+# Which topic each caselist snapshot is on, and the taxonomy version a landscape report counts it
+# under. docs/guides/landscape-taxonomy.md says how to edit this file.
+#
+# A topic's ranges are inclusive at both ends, and two ranges of one caselist may not overlap: a
+# snapshot is on exactly one topic. A topic with a taxonomy_version has a file of that version at
+# taxonomies/<id>.yaml; a topic without one has no taxonomy yet, and a report on it says so.
+#
+# A resolution is written exactly as the coach gave it, and only when the coach has given it.
+schema_version: 1
+topics:
+  - id: policy-2026-27-nhi
+    event: POLICY
+    resolution: >-
+      Resolved: The United States federal government should establish national health insurance
+      in the United States.
+    taxonomy_version: 1.0.0
+    caselists:
+      - caselist: hspolicy26
+        from: 2026-07-01
+        to: 2027-06-30
+
+  # September-October 2026 LD and PF topics: kept so earlier snapshots resolve, with no taxonomy.
+  # The LD November-December topic and its taxonomy arrive with v1-e32-t06.
+  - id: ld-2026-sep-oct-space-colonization
+    event: LD
+    caselists:
+      - caselist: hsld26
+        from: 2026-09-01
+        to: 2026-10-31
+
+  - id: pf-2026-sep-oct-data-center-moratorium
+    event: PF
+    caselists:
+      - caselist: hspf26
+        from: 2026-09-01
+        to: 2026-10-31

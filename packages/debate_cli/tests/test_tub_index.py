@@ -15,7 +15,7 @@ import json
 import os
 import sqlite3
 from collections.abc import Iterator
-from datetime import date
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final
 
@@ -27,13 +27,19 @@ from typer.testing import CliRunner, Result
 
 from debate_cli.app import create_app
 from debate_cli.exit_codes import ExitCode
+from debate_core.application.caselist.suppression import RecordedSuppressionList
 from debate_core.application.ports.parsed_store import (
     DocumentRecord,
     OccurrenceRecord,
     SourceEntry,
     SourceOutcome,
 )
-from debate_core.application.ports.suppression import disclosure_digest
+from debate_core.application.ports.suppression import (
+    ReasonCode,
+    SuppressionAction,
+    SuppressionEntry,
+    disclosure_digest,
+)
 from debate_core.domain.card_occurrence import ClusterMembership
 from debate_core.domain.caselist import SourceFormat, SourceOrigin
 from debate_core.domain.debate_files import CardCompleteness, FileImportProvenance, ParsedCard, ParsedDocument
@@ -41,6 +47,7 @@ from debate_core.domain.style_profile import StyleMatchSource
 from debate_core.evidence.fingerprints import FINGERPRINT_VERSION, card_fingerprint
 from debate_core.integrations.docx_parser import DebateDocxParser
 from debate_core.integrations.local.parsed_store import LocalParsedStore
+from debate_core.integrations.local.suppression_list import local_suppression_list_file
 
 if TYPE_CHECKING:  # pragma: no cover - import for the type checker only
     from mypy_boto3_s3.client import S3Client
@@ -355,4 +362,130 @@ def test_tub_index_publish_newest_with_nothing_built_names_the_build(parsed: Pat
     error = envelope_of(result)["error"]
     assert error["code"] == "NO_BUILT_SEARCH_INDEX"
     assert "tub index build" in error["hint"]
+    assert keys_in(buckets, DEV_BUCKET) == set()
+
+
+# ------------------------------------------------------------------------------------------------
+# The shrink guard (v1-e39-t14): refused before any upload, and `--allow-shrink` for a real shrink
+# ------------------------------------------------------------------------------------------------
+
+REMOVAL_REASON: Final = "RM-2026-99, a synthetic whole-file removal"
+
+
+def pointer_in(client: S3Client, bucket: str) -> dict[str, Any]:
+    body = client.get_object(Bucket=bucket, Key="reports/tub/search/current.json")["Body"].read()
+    parsed = json.loads(body)
+    assert isinstance(parsed, dict)
+    return parsed
+
+
+def built_after_removing_the_one_source(parsed: Path) -> Path:
+    """An index of the same store after a whole-file removal of its one source: 0 documents of hsld26."""
+    entry = SuppressionEntry(
+        action=SuppressionAction.SUPPRESS,
+        sha256=SOURCE,
+        recorded_at=datetime(2026, 10, 22, tzinfo=UTC),
+        reason=ReasonCode.REQUESTED_BY_TEAM,
+        request_id="RM-2026-99",
+    )
+    asyncio.run(RecordedSuppressionList(local_suppression_list_file(parsed)).append([entry]))
+    return built(parsed)
+
+
+def test_tub_index_publish_refuses_an_index_that_drops_a_stores_documents(
+    parsed: Path, buckets: S3Client
+) -> None:
+    first = built(parsed)
+    assert invoke("--json", "tub", "index", "publish", "--env", "dev", "--index", str(first)).exit_code == 0
+    removed = built_after_removing_the_one_source(parsed)
+
+    result = invoke("--json", "tub", "index", "publish", "--env", "dev", "--index", str(removed))
+
+    assert result.exit_code == ExitCode.DOMAIN_FAILURE
+    error = envelope_of(result)["error"]
+    assert error["code"] == "SEARCH_INDEX_WOULD_SHRINK"
+    assert {key: error["details"][key] for key in ("store", "documents", "current_documents")} == {
+        "store": CASELIST,
+        "documents": 0,
+        "current_documents": 1,
+    }
+    assert error["details"]["current_index_id"] == first.name
+    assert f"current.json still names {first.name}" in error["message"]
+    assert pointer_in(buckets, DEV_BUCKET)["index_id"] == first.name
+    assert f"reports/tub/search/{removed.name}/manifest.json" not in keys_in(buckets, DEV_BUCKET)
+
+
+def test_tub_index_publish_with_allow_shrink_publishes_and_prints_the_reason(
+    parsed: Path, buckets: S3Client
+) -> None:
+    first = built(parsed)
+    assert invoke("--json", "tub", "index", "publish", "--env", "dev", "--index", str(first)).exit_code == 0
+    removed = built_after_removing_the_one_source(parsed)
+
+    result = invoke(
+        "--json",
+        "tub",
+        "index",
+        "publish",
+        "--env",
+        "dev",
+        "--index",
+        str(removed),
+        "--allow-shrink",
+        REMOVAL_REASON,
+    )
+
+    assert result.exit_code == ExitCode.OK, result.output
+    data = envelope_of(result)["data"]
+    assert data["replaced"] == first.name
+    assert data["allowed_shrink"] == {
+        "reason": REMOVAL_REASON,
+        "stores": [{"store": CASELIST, "documents": 0, "current_documents": 1}],
+        "current_unreadable": None,
+    }
+    assert (
+        f"--allow-shrink: hsld26 has 0 documents against 1 in index {first.name}; reason: {REMOVAL_REASON}"
+        in (result.stderr)
+    )
+    assert pointer_in(buckets, DEV_BUCKET)["index_id"] == removed.name
+    stored = buckets.get_object(Bucket=DEV_BUCKET, Key=f"reports/tub/search/{removed.name}/manifest.json")
+    assert stored["Body"].read() == (removed / "manifest.json").read_bytes(), (
+        "the reason is not in the manifest"
+    )
+
+
+def test_tub_index_publish_prints_the_reason_in_its_table_too(parsed: Path, buckets: S3Client) -> None:
+    first = built(parsed)
+    assert invoke("--json", "tub", "index", "publish", "--env", "dev", "--index", str(first)).exit_code == 0
+    removed = built_after_removing_the_one_source(parsed)
+
+    result = invoke(
+        "tub", "index", "publish", "--env", "dev", "--index", str(removed), "--allow-shrink", REMOVAL_REASON
+    )
+
+    assert result.exit_code == ExitCode.OK, result.output
+    assert REMOVAL_REASON in " ".join(result.stdout.split())
+
+
+@pytest.mark.parametrize("reason", ["", "two\nlines"])
+def test_tub_index_publish_refuses_an_allow_shrink_reason_that_is_not_one_line(
+    parsed: Path, buckets: S3Client, reason: str
+) -> None:
+    directory = built(parsed)
+
+    result = invoke(
+        "--json",
+        "tub",
+        "index",
+        "publish",
+        "--env",
+        "dev",
+        "--index",
+        str(directory),
+        "--allow-shrink",
+        reason,
+    )
+
+    assert result.exit_code == ExitCode.USAGE_ERROR
+    assert "--allow-shrink" in result.output
     assert keys_in(buckets, DEV_BUCKET) == set()

@@ -15,7 +15,11 @@ no bucket and calls no model. `--out` defaults to `<data_dir>/tub-index`, outsid
 
 `publish` uploads one built directory to this environment's evidence bucket under
 `reports/tub/search/<index id>/` and writes `reports/tub/search/current.json` last. It refuses an
-index built under another parser or fingerprint version than this build's. `--newest` names the
+index built under another parser or fingerprint version than this build's, and, by the shrink guard
+the weekly stage meets too (`v1-e39-t14`), an index built from a store whose aggregates hold no rows,
+or one holding fewer of a store's documents than `caselist.search_index_minimum_share_percent` of
+the published index's (90%), or none. `--allow-shrink "<reason>"` publishes a real shrink, such as a
+removal; the reason is printed, logged and in the `--json` result, never in the manifest. `--newest` names the
 directory instead of `--index`: the newest under `<data_dir>/tub-index`, by the rule the weekly run's
 search index stage keeps current
 (:func:`~debate_core.application.search_index_refresh.newest_local_index`, `v1-e39-t09`). One of the
@@ -50,7 +54,11 @@ from debate_cli.context import CliContext, cli_context, command_name
 from debate_cli.exit_codes import ExitCode
 from debate_cli.output import CommandFailure, JsonValue, TableSpec
 from debate_core.application.search_index_build import BuiltSearchIndex
-from debate_core.application.search_index_publish import PublishedSearchIndex
+from debate_core.application.search_index_publish import (
+    ALLOW_SHRINK_FLAG,
+    SHRINK_REASON_MAX_LENGTH,
+    PublishedSearchIndex,
+)
 from debate_core.application.search_index_refresh import SEARCH_INDEX_DIRECTORY, newest_local_index
 from debate_core.application.settings import Environment, Settings
 from debate_core.domain.search_index import DEFAULT_PROVENANCE_LIMIT, SearchIndexManifest
@@ -119,8 +127,25 @@ def publish(
         bool,
         typer.Option(CONFIRM_PROD_FLAG, help="Required to write to the production evidence bucket."),
     ] = False,
+    allow_shrink: Annotated[
+        str | None,
+        typer.Option(
+            ALLOW_SHRINK_FLAG,
+            metavar="REASON",
+            help=(
+                "Publish an index the shrink guard refuses, for a real shrink such as a removal: why, "
+                "in one line (a request id; no card text or names). Printed and logged, not stored."
+            ),
+        ),
+    ] = None,
 ) -> None:
     """Publish a built index to this environment's bucket, its pointer last."""
+    if allow_shrink is not None and not _one_line(allow_shrink):
+        raise typer.BadParameter(
+            f"say why in one line of 1 to {SHRINK_REASON_MAX_LENGTH} characters, "
+            "such as a removal's request id",
+            param_hint=ALLOW_SHRINK_FLAG,
+        )
     if newest and index is not None:
         raise typer.BadParameter(
             f"{NEWEST_FLAG} picks the directory --index names; pass one or the other", param_hint=NEWEST_FLAG
@@ -133,7 +158,9 @@ def publish(
         index = _newest_built(cli, ctx)
     service = cli.services.search_index_publish()
     cli.output.detail(f"publishing {index.name} to {cli.services.settings.storage.s3.bucket}")
-    published = asyncio.run(service.publish(index))
+    published = asyncio.run(service.publish(index, allow_shrink=allow_shrink))
+    if published.allowed_shrink is not None:
+        cli.output.note(f"published past the shrink guard with {ALLOW_SHRINK_FLAG}: {_allowed(published)}")
     cli.output.success(command_name(ctx), publish_summary(published), display=_publish_table(published))
 
 
@@ -143,12 +170,47 @@ def build_summary(built: BuiltSearchIndex) -> dict[str, JsonValue]:
 
 
 def publish_summary(published: PublishedSearchIndex) -> dict[str, JsonValue]:
-    """The `--json` envelope's `data` for `publish`: the keys written, in order, and the pointer."""
+    """The `--json` envelope's `data` for `publish`: the keys written, in order, the pointer, the index
+    it replaced, and what `--allow-shrink` let through (`v1-e39-t14`), `null` when it was not needed."""
+    allowed = published.allowed_shrink
     return {
         "index_id": published.index_id,
         "written": [published.object_key, published.manifest_key, published.pointer_key],
         "pointer": published.pointer.model_dump(mode="json"),
+        "replaced": published.replaced,
+        "allowed_shrink": None
+        if allowed is None
+        else {
+            "reason": allowed.reason,
+            "stores": [
+                {"store": one.store, "documents": one.documents, "current_documents": one.current_documents}
+                for one in allowed.shrinks
+            ],
+            "current_unreadable": allowed.current_unreadable,
+        },
     }
+
+
+def _one_line(reason: str) -> bool:
+    stripped = reason.strip()
+    return (
+        bool(stripped)
+        and "\n" not in stripped
+        and "\r" not in stripped
+        and len(stripped) <= SHRINK_REASON_MAX_LENGTH
+    )
+
+
+def _allowed(published: PublishedSearchIndex) -> str:
+    """What `--allow-shrink` let through, and why, as the detail line and the table's caption say it."""
+    allowed = published.allowed_shrink
+    assert allowed is not None
+    passed = (
+        "; ".join(one.sentence for one in allowed.shrinks)
+        if allowed.shrinks
+        else allowed.current_unreadable or "nothing"
+    )
+    return f"{passed} in index {published.replaced or 'none'}; reason: {allowed.reason}"
 
 
 def _not_this_environment(settings: Settings, env: Environment, *, confirmed: bool) -> CommandFailure | None:
@@ -247,5 +309,10 @@ def _publish_table(published: PublishedSearchIndex) -> TableSpec:
         title=f"Search index {published.index_id} published",
         caption=(
             f"current.json names {published.index_id}; object sha256 {published.pointer.object_sha256[:12]}."
+            + (
+                f" Past the shrink guard with {ALLOW_SHRINK_FLAG}: {_allowed(published)}."
+                if published.allowed_shrink is not None
+                else ""
+            )
         ),
     )

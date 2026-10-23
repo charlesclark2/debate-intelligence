@@ -223,3 +223,45 @@ and the columns' byte lengths, read-only):
 
 The `documents` table is 509.9 MB in all, 67.8%; the rest of it is page and record overhead.
 `v1-e39-t09` can track growth against the 1 GB allowance by bytes per document.
+
+## The function's temporary storage while one index replaces another
+
+Worked out from `SearchIndexHolder`'s code (`debate_core.application.search_index_holder`) by
+`v1-e39-t14`, 2026-10-22. It is not a measurement taken on the function: no log line records the
+bytes on `/tmp`. Sizes are bytes; the function has 4,096 MB of ephemeral storage, 4,294,967,296
+bytes.
+
+**What exists at once.** While an environment serves index A and the pointer names index B:
+
+1. A's SQLite file stays in `/tmp/tub-index/`, open and serving, until the swap.
+2. B's gzip object is never written to disk. `S3SearchIndexSource.stream_object` reads it in 1 MiB
+   chunks, and the holder inflates each chunk as it arrives, hashing both streams, into
+   `<B>-<uuid>.part`. That file grows to B's SQLite size.
+3. Once both digests and both sizes check out, the `.part` file is made read-only and renamed to
+   `.sqlite`. That is the same file, so nothing is copied.
+4. The reader opens B, the holder swaps to it, and A's file is deleted at once, because no request
+   holds A then: the refresh runs before a request takes its lease, and Lambda gives an environment
+   one request at a time. A refused download deletes its `.part` file, and a new process deletes any
+   `.sqlite` or `.part` file an earlier one left.
+
+So the peak is **A's SQLite file plus B's**, during step 2, and the gzip object adds nothing. The
+holder never keeps more than one old index. Only a request still reading A at the swap would keep A
+until it finishes, and the function never has one. The reader opens the file `mode=ro&immutable=1`,
+so SQLite writes no journal beside it. SQLite's own temporary files for a large sort are not
+counted here.
+
+| Case | A's SQLite | B's SQLite | Peak | Share of 4,096 MB |
+|---|---|---|---|---|
+| Today, B the same size as A | 839,438,336 | 839,438,336 | 1,678,876,672 | 39.1% |
+| Next week at 2026-10-22's 11.6% | 839,438,336 | 936,813,183 | 1,776,251,519 | 41.4% |
+| ADR-0019's 1 GB allowance | 1,000,000,000 | 1,000,000,000 | 2,000,000,000 | 46.6% |
+| A SQLite file of 2,029,757,701 bytes, growing 11.6% | 2,029,757,701 | 2,265,209,594 | 4,294,967,295 | 100% |
+
+The 11.6% of the week to 2026-10-22 is new documents: index `767b9c7c056b80cb` holds 52,059 of
+them, 11.6% more than the 46,658 of 2026-10-20, at the same 16,125 SQLite bytes a document. At that
+rate every week, the SQLite file passes `v1-e39-t09`'s 900,000,000-byte warning within the week (the
+PM moved that warning to 1,700,000,000 on 2026-10-22, from this working),
+ADR-0019's 1 GB allowance in about two, and fills `/tmp` at a swap in about eight. The gzip object,
+314,054,035 bytes, passes the 400,000,000-byte revisit trigger in about three. Each weekly run's
+growth is in its summary from `v1-e39-t14` on (`documents_growth`, `sqlite_bytes_growth`,
+`gzip_bytes_growth`), so the rate can be read rather than assumed.

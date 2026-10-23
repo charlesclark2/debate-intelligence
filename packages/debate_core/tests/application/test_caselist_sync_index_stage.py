@@ -16,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 from collections.abc import Sequence
+from dataclasses import replace
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Final
@@ -53,6 +54,7 @@ from debate_core.application.ports.caselist_source import (
 from debate_core.application.ports.evidence_store import ObjectInfo
 from debate_core.application.ports.parsed_store import OPENEV_STORE
 from debate_core.application.search_index_build import SearchIndexStoreNotReady
+from debate_core.application.search_index_publish import SearchIndexWouldShrink, StoreShrink
 from debate_core.application.sync_runs import (
     SyncRunOutcome,
     details_for_summary,
@@ -265,6 +267,10 @@ def test_index_stage_runs_after_parse_and_before_landscape_even_when_nothing_was
         "warnings": [],
         "removed": 0,
         "bytes_freed": 0,
+        "previous_index_id": None,
+        "documents_growth": None,
+        "sqlite_bytes_growth": None,
+        "gzip_bytes_growth": None,
     }
 
 
@@ -392,6 +398,49 @@ def test_index_stage_failure_is_recorded_with_its_code_and_the_index_still_curre
     assert banner.title == "caselist pull finished with a failed stage"
     assert "the search_index stage failed on SEARCH_INDEX_STORE_NOT_READY" in banner.message
     assert banner.hint == "a synthetic fix"
+
+
+def test_index_stage_refused_by_the_shrink_guard_is_named_in_the_summary_details_and_notification(
+    tmp_path: Path,
+) -> None:
+    """The report the stage gives for a refused shrink (`v1-e39-t14`), as the run records and announces it."""
+    previous = "fedcba9876543210"
+    shrink = StoreShrink(OPENEV_STORE, 0, 5_846)
+    counts = replace(
+        COUNTS,
+        previous_index_id=previous,
+        documents_growth=-5_846,
+        sqlite_bytes_growth=-90_000,
+        gzip_bytes_growth=-30_000,
+    )
+    refused = SearchIndexStageReport(
+        outcome=StageOutcome.FAILED,
+        reason=f"built {INDEX_ID}; not published, current.json still names {previous}",
+        counts=counts,
+        failure=SearchIndexWouldShrink(INDEX_ID, previous, (shrink,), 90),
+        hint="a synthetic fix naming --allow-shrink",
+    )
+
+    summary = run(tmp_path, search_index=RecordingIndexStage(refused))
+    stage = search_index_record(summary)
+    record = record_for_summary(summary, environment="dev", mode="run")
+    details = details_for_summary(summary)
+    banners = notifications_for(record, details, aws_login_command=LOGIN, credentials_expired=False)
+
+    assert stage.outcome is StageOutcome.FAILED
+    assert stage.error_codes == ("SEARCH_INDEX_WOULD_SHRINK",)
+    assert stage.reason is not None
+    assert f"openev has 0 documents against 5,846 in index {previous}" in stage.reason
+    assert f"current.json still names {previous}" in stage.reason
+    assert summary.as_json()["search_index"]["documents_growth"] == -5_846  # pyright: ignore[reportIndexIssue]
+    assert details.search_index is not None
+    assert (details.search_index.previous_index_id, details.search_index.documents_growth) == (
+        previous,
+        -5_846,
+    )
+    [banner] = banners
+    assert "the search_index stage failed on SEARCH_INDEX_WOULD_SHRINK" in banner.message
+    assert banner.hint == "a synthetic fix naming --allow-shrink"
 
 
 def test_index_stage_that_raises_is_its_own_failure_and_the_run_goes_on(tmp_path: Path) -> None:

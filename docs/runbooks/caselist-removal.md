@@ -621,6 +621,17 @@ unset AWS_PROFILE
 Success looks like the build's new index id, and the publish's table ending in
 `reports/tub/search/current.json` naming that id.
 
+**If the publish is refused for shrinking the index** (`v1-e39-t14`): it says `would shrink the
+published search index: <store> has N documents against M in index <id>`, uploaded nothing, and left
+`current.json` naming the index the card is still in (the function hides the card meanwhile, from the
+suppression list). A one-file removal from a store of thousands keeps far more than 90% and passes;
+a removal from a small store, a synthetic one in dev included, may not. Compare `M - N` with the
+cards the dry run listed for that store. If they agree, publish the same index with the request id as
+the reason, by the block in [the scheduled sync runbook's shrink guard](caselist-scheduled-sync.md#the-shrink-guard).
+If they do not, stop: something besides the removal emptied the store. A refusal that a store's
+`aggregates hold no occurrence rows` means P1b has not rebuilt it: run P1b for that store, then P3
+again.
+
 **Then confirm the rebuilt index no longer holds the removed source.** Set `REMOVED` to the sha256
 the dry run named. The index is the newest directory under the data directory's `tub-index`.
 

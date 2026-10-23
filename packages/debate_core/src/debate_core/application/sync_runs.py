@@ -464,6 +464,13 @@ class SearchIndexCounts(BaseModel):
     warnings: tuple[str, ...] = ()
     removed: int = Field(default=0, ge=0)
     bytes_freed: int = Field(default=0, ge=0)
+    previous_index_id: str | None = None
+    """What the growth is against: the index `current.json` named before (`v1-e39-t14`). Added keys,
+    so details a build from before it wrote read as no growth recorded."""
+
+    documents_growth: int | None = None
+    sqlite_bytes_growth: int | None = None
+    gzip_bytes_growth: int | None = None
 
 
 class SyncRunDetails(BaseModel):

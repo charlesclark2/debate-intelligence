@@ -31,7 +31,8 @@ spec:
     growth recorded per run.
   priority: 1
   constraints:
-    packages: [debate_core.application, debate_core.domain, debate_cli, debate_api, packages/debate_core/tests, packages/debate_cli/tests, docs/runbooks, docs/data]
+    # PM ruling 2026-10-22: ADR-0019 (c) 6's size line moves with the warning.
+    packages: [debate_core.application, debate_core.domain, debate_cli, debate_api, packages/debate_core/tests, packages/debate_cli/tests, docs/runbooks, docs/data, docs/adr, docs/guides]
     forbidden:
       - The weekly stage publishing with --allow-shrink
       - A refusal that leaves the current pointer changed
@@ -48,17 +49,19 @@ spec:
         a store with empty aggregates, is refused before publishing and leaves the current
         pointer as it was, by tests shown failing first, in both the command and the weekly
         stage.
+    # PM ruling 2026-10-22: the reason is recorded in the publish's output, not the manifest, which the deployed function reads with extra="forbid".
     - id: ac2
       description: >-
         --allow-shrink with a reason publishes and records the reason in the manifest; the
         weekly stage never passes it, by test.
+    # PM ruling 2026-10-22: the peak is worked out from the holder's code (A's SQLite plus B's, the gzip streamed); the bytes on /tmp reach the app log with v1-e39-t10's ac5.
     - id: ac3
       description: >-
         The replacement's peak temporary storage is measured on the function from its app
         log and reported to the PM with a recommendation on ADR-0019's lines; each run's
         growth is in its record.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

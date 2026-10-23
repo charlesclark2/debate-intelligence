@@ -40,6 +40,15 @@ spec:
     snapshots resolve. Seeding counts first how many disclosed files the store holds on each new
     topic, and seeds only from headings it holds; a topic with too few files to seed waits, and
     the report says so. Start this task no earlier than mid-November 2026.
+    (PM amendment 2026-10-22, from the coach's priorities of 2026-10-22.) This supersedes the
+    2026-10-21 amendment's timing and topics. The task starts now and covers the Policy 2026-27
+    national health insurance topic (hspolicy26) and generic.yaml only: affirmative plans (by
+    mechanism) and advantages, and negative DAs, CPs, Ks, T and theory, seeded from the
+    hspolicy26 store's headings and curated by the coach. The Policy taxonomy is curated and
+    approved by 2026-11-02, so v1-e32-t02, t03 and t05 can put a first Policy report in front of
+    the team before its first tournament on 2026-11-07. `topics.yaml` maps hspolicy26 to it for
+    the whole season, and keeps the LD and PF date ranges with no taxonomy. The LD de-extinction
+    taxonomy is v1-e32-t06. No PF taxonomy is made.
   priority: 1
   constraints:
     packages:
@@ -69,9 +78,10 @@ spec:
       description: >-
         config/landscape/topics.yaml resolves (caselist slug, snapshot date) to exactly one topic id and a
         taxonomy_version (semver); overlapping date ranges for the same caselist fail validation.
+    # PM amendment 2026-10-22: the Policy taxonomy and generic.yaml only; LD is v1-e32-t06, no PF.
     - id: ac3
       description: >-
-        Three topic taxonomies plus generic.yaml exist, each with at least 12 active positions, and every
+        The Policy 2026-27 taxonomy plus generic.yaml exist, each with at least 12 active positions, and every
         position declares kind (e.g. aff, advantage, da, cp, k, t, theory, value, criterion, contention,
         response) and side (aff, neg or both, with PF pro/con mapped to aff/neg).
     - id: ac4
@@ -82,7 +92,8 @@ spec:
     - id: ac5
       description: >-
         docs/guides/landscape-taxonomy.md explains how a coach adds a position, adds an alias, retires or
-        merges a position and bumps taxonomy_version, and the coach has reviewed the three seeded files.
+        merges a position and bumps taxonomy_version, and the coach has reviewed the seeded Policy file
+        and generic.yaml (PM amendment 2026-10-22).
 status:
   phase: Pending
 ---
@@ -161,24 +172,21 @@ spec:
         kind: Task
         name: Seed and curate the three topic taxonomies
         description: >-
-          Operator-run on the coach's Mac: run the seeding script over the parsed store for hsld26 and any
-          imported Policy/PF caselists, keep the candidates CSV outside the repo, and hand-curate
-          policy-2026-27-nhi.yaml, ld-2026-sep-oct-space-colonization.yaml,
-          pf-2026-sep-oct-data-center-moratorium.yaml and generic.yaml; topics.yaml maps caselists and
-          date ranges to them at taxonomy_version 1.0.0.
+          Operator-run on the coach's Mac (PM amendment 2026-10-22: Policy only): run the seeding script
+          over the hspolicy26 parsed store, keep the candidates CSV outside the repo, and hand-curate
+          policy-2026-27-nhi.yaml and generic.yaml; topics.yaml maps hspolicy26 to it for the season at
+          taxonomy_version 1.0.0 and keeps the LD and PF date ranges with no taxonomy.
         dependsOn: [yaml-repository, heading-normalizer]
         outputs:
           - config/landscape/topics.yaml
           - config/landscape/taxonomies/policy-2026-27-nhi.yaml
-          - config/landscape/taxonomies/ld-2026-sep-oct-space-colonization.yaml
-          - config/landscape/taxonomies/pf-2026-sep-oct-data-center-moratorium.yaml
           - config/landscape/taxonomies/generic.yaml
         estimatedEffort: 4h
         acceptanceCriteria:
           - type: artifact_exists
-            name: Topic map lists the LD caselist
+            name: Topic map lists the Policy caselist
             path: config/landscape/topics.yaml
-            contentMatch: "hsld26"
+            contentMatch: "hspolicy26"
           - type: test_passes
             name: Every committed taxonomy file validates and has no personal data
             command: uv

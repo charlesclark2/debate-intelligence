@@ -27,6 +27,11 @@ spec:
     `debate_core/testing/contracts/__init__.py` re-exports every contract suite; remove the
     re-exports and extend v1-e01-t30's guard to cover them. No behaviour changes; the collected
     test count is unchanged; re-measure over v1-e01-t28's 20 commits with `--graph`.
+    (PM note 2026-10-22, from v1-e01-t34's follow-up.) One more false selection edge: the
+    planted-break check's own test file is among the nearest tests the script selects for a
+    break, because the file names `identifiers.py` by path, which is why its inner runs say `8
+    deselected`. It is harmless today; handle it with the quoted-word and path edges, so a test
+    file that names a path only as data does not select itself.
   priority: 3
   constraints:
     packages: [debate_cli, debate_core.testing, packages, tests, scripts]

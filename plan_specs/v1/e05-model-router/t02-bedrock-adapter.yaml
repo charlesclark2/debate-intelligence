@@ -72,6 +72,8 @@ spec:
         `effort` (Converse `output_config.effort`) is a route default and a per-call parameter, merged like
         the other overrides, validated at load, and reported on the resolved route. Added by the PM,
         2026-10-16, from v1-e05-t01's Follow-up work.
+    # PM ruling 2026-10-22: ac7 moves to v1-e05-t08, which grants the access it needs; t08 waited on
+    # this task while this task waited on t08's grant. This task is Succeeded on its other criteria.
     - id: ac7
       description: >-
         Operator-run, the first real call on each Claude route, with the operator's credentials, recorded
@@ -80,7 +82,7 @@ spec:
         and inference profile in the routing files resolves. A Stubber test pins each answer. Added by
         the PM, 2026-10-16.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

@@ -6,7 +6,7 @@
 | Spec | [`plan_specs/v1/e39-evidence-search-pilot/t14-index-shrink-guard.yaml`](../../plan_specs/v1/e39-evidence-search-pilot/t14-index-shrink-guard.yaml) |
 | Epic / release | `v1-e39-evidence-search-pilot` / `v1.7` |
 | Branch | `task/v1-e39-t14-index-shrink-guard` |
-| Session status | COMPLETE (Goal left InProgress: ac3 as written cannot be closed, see below) <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | COMPLETE (Goal Succeeded after the PM's ruling on ac3; see [PM conditions](#pm-conditions)) <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
@@ -24,8 +24,8 @@ passes the override (by test and by mutant), reports a refusal as a failed stage
 run's growth against the index it would replace.
 
 **Look first at three things.** Deviation 1: ac3 says "measured on the function from its app log",
-but the app log records no bytes, so this is worked out from the holder's code and the Goal stays
-InProgress. Decision 2: an unreadable current index now refuses the publish, which replaces one
+but the app log records no bytes, so this is worked out from the holder's code (the PM amended ac3 to match, ruling 1a, and the
+Goal is now Succeeded). Decision 2: an unreadable current index now refuses the publish, which replaces one
 `v1-e39-t09` rule. Deviation 2: the build already refused the 2026-10-22 empty aggregates. The
 exposure the guard closes is a build of fewer stores, such as 4e's index of a few documents
 replacing dev's 52,059.
@@ -34,20 +34,20 @@ replacing dev's 52,059.
 
 | Node | Status | Notes |
 |---|---|---|
-| `shrink-guard` (Index shrink guard) | Done | Red skeleton `934a6d3`, green `882a8c4`, docs and spec comment `b992dbe`, more tests `2481667`. Its criterion passes (below). |
+| `shrink-guard` (Index shrink guard) | Done | Red skeleton `e83bea0`, green `e109731`, docs and spec comment `e7b944e`, more tests `46b445a`. Its criterion passes (below). |
 
 ## Acceptance criteria
 
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
-| ac1: a build under the configured share of the current index, or from a store with empty aggregates, is refused before publishing and leaves the pointer, by tests shown failing first, in both the command and the weekly stage | PASS | Red run on the skeleton `934a6d3`: 21 failed, 12 passed ([the red run](#the-red-run)). Green: the tests named there. In the command: `test_search_index_publish_refuses_one_store_under_the_share_and_leaves_the_pointer`, `…_a_store_at_0_with_the_total_fine_and_leaves_the_pointer`, `…_a_first_index_of_empty_aggregates_and_writes_no_pointer`, `…_every_store_emptied_over_the_current_index`, and the CLI's `test_tub_index_publish_refuses_an_index_that_drops_a_stores_documents`. In the weekly stage: `test_index_stage_refuses_a_shrunken_index_and_leaves_the_pointer_and_the_local_index`, `test_index_stage_refuses_a_store_at_0_with_the_total_fine` and `test_index_stage_refuses_every_stores_aggregates_emptied_and_leaves_the_pointer`. The last one passed at red: the build already refuses an empty occurrence table (Deviation 2). The run around the stage: `test_index_stage_refused_by_the_shrink_guard_is_named_in_the_summary_details_and_notification`. |
+| ac1: a build under the configured share of the current index, or from a store with empty aggregates, is refused before publishing and leaves the pointer, by tests shown failing first, in both the command and the weekly stage | PASS | Red run on the skeleton `e83bea0`: 21 failed, 12 passed ([the red run](#the-red-run)). Green: the tests named there. In the command: `test_search_index_publish_refuses_one_store_under_the_share_and_leaves_the_pointer`, `…_a_store_at_0_with_the_total_fine_and_leaves_the_pointer`, `…_a_first_index_of_empty_aggregates_and_writes_no_pointer`, `…_every_store_emptied_over_the_current_index`, and the CLI's `test_tub_index_publish_refuses_an_index_that_drops_a_stores_documents`. In the weekly stage: `test_index_stage_refuses_a_shrunken_index_and_leaves_the_pointer_and_the_local_index`, `test_index_stage_refuses_a_store_at_0_with_the_total_fine` and `test_index_stage_refuses_every_stores_aggregates_emptied_and_leaves_the_pointer`. The last one passed at red: the build already refuses an empty occurrence table (Deviation 2). The run around the stage: `test_index_stage_refused_by_the_shrink_guard_is_named_in_the_summary_details_and_notification`. |
 | ac2: `--allow-shrink` with a reason publishes and records the reason (in the manifest, as written); the weekly stage never passes it, by test | PASS as amended | The PM's ruling, now a comment above ac2 in the spec: the reason is recorded in the publish's output, not the manifest. `test_search_index_publish_with_allow_shrink_publishes_and_records_the_reason_outside_the_manifest` checks the result, the log line's `reason`, `replaced` and `stores_shrunk`, and that the bucket's manifest is the local file byte for byte. `test_tub_index_publish_with_allow_shrink_publishes_and_prints_the_reason` checks `data.allowed_shrink` and the stderr line; `…_prints_the_reason_in_its_table_too` checks the table. The stage never passes it: `RecordingPublisher.overrides == [None, …]` in four stage tests, and mutant 15 below. |
-| ac3: the replacement's peak temporary storage, measured on the function from its app log, reported to the PM with a recommendation on ADR-0019's lines; each run's growth in its record | NOT RUN as written; PASS as the PM's brief asks | **Measured on the function from its app log: NOT RUN.** The function logs `search index <id> loaded` and `… closed and deleted` with no byte counts, and the brief says not to change the holder here. No session or hand-off can take that measurement until a log line carries the bytes (Follow-up 2). **Worked out from the holder's code, as the brief asks:** [The storage measurement](#the-storage-measurement), written into `docs/data/search-index.md`, with the recommendation. **Growth per run: PASS.** `test_index_stage_records_each_runs_growth_against_the_index_it_replaced`, `…_a_refused_runs_shrink_as_negative_growth`, `…_that_changed_nothing_records_no_growth`; the run summary and run details carry the four keys (`test_index_stage_runs_after_parse_and_before_landscape_even_when_nothing_was_imported`, and the refusal test above). |
+| ac3: the replacement's peak temporary storage, measured on the function from its app log, reported to the PM with a recommendation on ADR-0019's lines; each run's growth in its record | PASS as amended (PM ruling 2026-10-22, now a comment above ac3: worked out from the holder's code). As first written: NOT RUN | **Measured on the function from its app log: NOT RUN.** The function logs `search index <id> loaded` and `… closed and deleted` with no byte counts, and the brief says not to change the holder here. No session or hand-off can take that measurement until a log line carries the bytes (Follow-up 2). **Worked out from the holder's code, as the brief asks:** [The storage measurement](#the-storage-measurement), written into `docs/data/search-index.md`, with the recommendation. **Growth per run: PASS.** `test_index_stage_records_each_runs_growth_against_the_index_it_replaced`, `…_a_refused_runs_shrink_as_negative_growth`, `…_that_changed_nothing_records_no_growth`; the run summary and run details carry the four keys (`test_index_stage_runs_after_parse_and_before_landscape_even_when_nothing_was_imported`, and the refusal test above). |
 | Node `shrink-guard`: `uv run pytest packages/debate_core/tests/application -k search_index` | PASS | `182 passed in 8.75s` (before the last commit's 6 new tests; after it, `-k "search_index or index_stage"`: `199 passed in 7.95s`). |
 
 ## The red run
 
-The skeleton (`934a6d3`) had every new name with its real signature. `check_index_size` refused
+The skeleton (`e83bea0`) had every new name with its real signature. `check_index_size` refused
 nothing, `publish` treated an unreadable current index as none, and the stage recorded no growth.
 Command:
 `.venv/bin/python -m pytest -n 0 -p no:randomly -q -rA packages/debate_core/tests/application/test_search_index_shrink_guard.py`
@@ -192,8 +192,8 @@ week, 1 GB in about two weeks, and fills `/tmp` at a swap in about eight. The gz
 
 1. **ac3's "measured on the function from its app log" is not done.** The function's log lines
    carry no byte counts, and the PM's brief says not to change the holder in this task. The peak
-   is worked out from the code, as the brief asks. The Goal stays InProgress, and the relay prompt
-   below asks the PM to amend ac3 or say otherwise.
+   is worked out from the code, as the brief asks. The relay prompt below asked the PM to amend
+   ac3; the PM did (ruling 1a), and the Goal is Succeeded.
 2. **The spec's premise about 2026-10-22.** The description says the next build "would have
    published an empty index". A build of those stores would not have: since `v1-e39-t02` the build
    refuses a store whose `occurrences.jsonl` is missing or holds no rows (`SearchIndexStoreNotReady`).
@@ -244,9 +244,9 @@ week, 1 GB in about two weeks, and fills `/tmp` at a swap in about eight. The gz
 | Command | Result |
 |---|---|
 | `uv run scripts/affected_tests.py` | `262 of 400 test files (65.5%)`, 7,160 tests (`--collect-only`): the root conftest imports `settings.py`. Past two minutes, so not run; the PR's `ci` runs the whole selection (agreement 10). |
-| `.venv/bin/python -m pytest -n auto -m "not slow and not live" -q packages/debate_core/tests/application` (alarm 115) | `3122 passed in 88.61s` (before `2481667`'s 6 new tests and one deleted branch) |
+| `.venv/bin/python -m pytest -n auto -m "not slow and not live" -q packages/debate_core/tests/application` (alarm 115) | `3122 passed in 88.61s` (before `46b445a`'s 6 new tests and one deleted branch) |
 | `.venv/bin/python -m pytest -n auto -m "not slow and not live" -q packages/debate_cli/tests tests/architecture tests/specs tests/docs tests/scripts/test_check_command_blocks.py tests/scripts/test_docs_index.py packages/debate_api/tests/test_removal_runbook_index_prune.py` (alarm 115) | `1291 passed in 43.42s` |
-| After `2481667`: `.venv/bin/python -m pytest -n auto -q -m "not slow and not live" packages/debate_core/tests/application -k "search_index or index_stage"` | `199 passed in 7.95s` |
+| After `46b445a`: `.venv/bin/python -m pytest -n auto -q -m "not slow and not live" packages/debate_core/tests/application -k "search_index or index_stage"` | `199 passed in 7.95s` |
 | Coverage of the changed modules over their four test files | every new line covered; what is left uncovered predates this task |
 | `uv run --frozen ruff format --check .` / `ruff check .` | `1115 files already formatted` / `All checks passed!` |
 | `uv run --frozen pyright packages/debate_core packages/debate_cli` | `0 errors, 0 warnings, 0 informations` |
@@ -295,6 +295,47 @@ FYI, proceeding unless told otherwise:
 
 Reply: "1a" or "1b", and "2a" or "2b".
 ```
+
+## PM conditions
+
+The PM accepted on 2026-10-22 with five conditions, closed in this session after a sync. Commit ids
+in this report are after the sync, relative to `origin/dev` at `bcf6972` (#416); the red skeleton is
+`e83bea0`, green `e109731`.
+
+**The sync.** `scripts/task sync v1-e39-t14-index-shrink-guard` rebased the branch's seven commits
+onto `bcf6972` without a conflict. Dev had gained `v1-e39-t11` (#415), which changed
+`search_index_holder.py`. That change only adds `ScreenedSearch.check_cursor`; downloading,
+swapping and deleting are untouched, and the reader still opens `mode=ro&immutable=1`. The storage
+working stands as written.
+
+| Condition | Done |
+|---|---|
+| 1. ac3 amended as in ruling 1, then the Goal `Succeeded` | The comment is above ac3; the parsed descriptions are unchanged. `uv run scripts/task_helper.py set-phase v1-e39-t14-index-shrink-guard Succeeded` → `phase: Succeeded`. |
+| 2. `SQLITE_BYTES_WARNING` = 1,700,000,000, its pinning test by hand, ADR-0019 (c) 6, the runbook's warning line, `docs/adr` in the packages | `search_index_refresh.py`: the constant, its docstring, the module's "Size" section and the warning's sentence, which now names the function's ephemeral storage. `test_index_stage_warns_past_each_of_adr_0019s_lines`: the pin reads `(1_700_000_000, 400_000_000)`, written by hand, and a new case says 900,000,001 no longer warns. Against the old value it failed (`5 failed`, `assert (900000000, 400000000) == (1700000000, 400000000)`); against the new one `5 passed`. ADR-0019 (c) 6 is amended in place under "Amended 2026-10-22", with the original estimate kept and this report's working cited. The scheduled sync runbook's warning line moves. `docs/adr` and `docs/guides` are in `constraints.packages`, under the PM's comment. |
+| Ruling 2a: record the replaced t09 rule in the scheduled sync runbook's stage outcomes | "A rule this replaced", under the outcome table. |
+| 3. The shrink guard and `--allow-shrink` in `docs/guides/search-index.md` | Three refusals added to its "It refuses" list, and a section "Publishing a real shrink: `--allow-shrink`" beside the publish commands, with one command block. |
+| 4. The spec's prose | Left to the PM. |
+| 5. Sync, then the checks | Below. |
+
+**The checks after the sync:**
+
+| Command | Result |
+|---|---|
+| `.venv/bin/python -m pytest -n 0 -p no:randomly -q` over `test_search_index_shrink_guard.py`, `test_search_index_stage.py`, `test_search_index_publish.py`, `test_caselist_sync_index_stage.py` and the CLI's `test_tub_index.py` | `105 passed in 4.71s` |
+| `.venv/bin/python -m pytest -n auto -m "not slow and not live" -q packages/debate_core/tests/application` (alarm 115) | `3174 passed in 84.27s` |
+| The same over `packages/debate_cli/tests tests/architecture tests/specs tests/docs tests/scripts/test_check_command_blocks.py tests/scripts/test_docs_index.py packages/debate_api/tests/test_removal_runbook_index_prune.py` | `1291 passed in 39.53s` |
+| `uv run pytest packages/debate_core/tests/application -k search_index` (the node's criterion) | `188 passed in 7.06s` |
+| `uv run scripts/affected_tests.py` | `262 of 404 test files (64.9%)`, past two minutes as before; the whole selection is the PR's `ci` |
+| `ruff format --check .` / `ruff check .` | `1121 files already formatted` / `All checks passed!` |
+| `pyright packages/debate_core packages/debate_cli` | `0 errors, 0 warnings, 0 informations` |
+| `lint-imports` / `check_thin_handlers.py` | `Contracts: 15 kept, 0 broken.` / `OK: 46 … within 25 statements` |
+| `scripts/validate_specs.py` | `OK: 423 files, 40 epics, 361 tasks, 22 releases` |
+| `check_command_blocks.py --base origin/dev` / `docs_index.py --check-descriptions` | `OK: no # comments in 350 shell code blocks in 139 Markdown files (1 session reports changed since origin/dev)` / `All 43 indexed documents under docs/ have a description` |
+
+**For the PM's next batch, not changed here:** two other task specs still quote the old line.
+`t09-weekly-index-refresh.yaml` (Succeeded) says "warns above 900,000,000 SQLite bytes" in its
+description and a criterion. `t13-passage-search.yaml`'s description weighs its growth against "the
+900,000,000-byte line". Both are other tasks' specs.
 
 ## PM review
 

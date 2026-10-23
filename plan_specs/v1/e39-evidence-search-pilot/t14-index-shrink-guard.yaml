@@ -61,7 +61,7 @@ spec:
         log and reported to the PM with a recommendation on ADR-0019's lines; each run's
         growth is in its record.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

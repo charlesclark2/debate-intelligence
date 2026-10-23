@@ -456,6 +456,25 @@ def test_top_cards_show_the_commonest_tag_and_cite_from_the_first_such_card() ->
     )
 
 
+def test_top_cards_the_first_card_by_digest_shows_only_when_its_tag_and_cite_are_the_commonest() -> None:
+    inputs = read_synthetic_caselist(FIXTURE)
+    retagged = tuple(
+        card.evolve(tag="An uncommon tag")
+        if (card.source_sha256, card.element_index) == ("a1" * 32, 3)
+        else card
+        for card in inputs.cards
+    )
+    report = _report(dataclasses.replace(inputs, cards=retagged))
+    costs = next(card for card in report.top_cards if card.position_id == "costs-advantage")
+    # a2's first card and a5's first card still say the commonest pair; a2 sorts first.
+    assert (costs.tag, costs.short_cite, costs.source_object_key[-4:], costs.element_index) == (
+        "Single payer cuts administrative costs",
+        "Okafor 25",
+        "a2a2",
+        0,
+    )
+
+
 def test_top_cards_every_row_is_file_import() -> None:
     assert {card.provenance_mode.value for card in _report().top_cards} == {"FILE_IMPORT"}
 

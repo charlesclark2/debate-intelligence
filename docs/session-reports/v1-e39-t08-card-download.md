@@ -235,7 +235,7 @@ after: **21 caught, 0 survived, 0 errored.**
    Read from the zip directories alone (no content; 5.2 s), the sources over 2 MB have a
    `document.xml` of, at the median, 269 KB (hsld26, 30 sources), 469 KB (hspf26, 160), 701 KB
    (hspolicy26, 30; 92% of their compressed bytes are media) and 2.0 MB (openev, 6). The largest
-   `document.xml` of any source is 6.4 MB, 3.8 MB, 6.6 MB and 10.6 MB. The synthetic measurements
+   `document.xml` of any source is 6,412 KB, 3,754 KB, 6,584 KB and 10,577 KB. The synthetic measurements
    above cost about 0.2 to 0.3 s per MB of `document.xml` on the Mac and about 22 MB of memory per
    MB, so even the largest real source is about 3 s and 240 MB alone.
 2. **The file-size limit is 3 MB**, a constant, not a setting. A function URL buffers 6 MB, and the

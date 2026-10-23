@@ -1083,7 +1083,7 @@ documents whose representative's source alone is over 2,000,000 bytes:
 What the writer parses is each file's `word/document.xml`, not its bytes on disk. Read from the zip
 directories alone (5.2 s): the sources over 2 MB have a `document.xml` of 269 KB (hsld26), 469 KB
 (hspf26), 701 KB (hspolicy26) and 2.0 MB (openev) at the median, and the largest `document.xml` of any
-source is 6.4 MB, 3.8 MB, 6.6 MB and 10.6 MB. The share over 2 MB passes 2% in hspf26 and openev, so
+source is 6,412 KB, 3,754 KB, 6,584 KB and 10,577 KB. The share over 2 MB passes 2% in hspf26 and openev, so
 the budget is with the PM (`v1-e39-t08`'s review) before the pilot opens.
 
 A card whose own source is over the budget is refused by name, *Its file is too large to download.

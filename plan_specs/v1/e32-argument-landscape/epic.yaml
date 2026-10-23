@@ -273,5 +273,43 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e32-t07-model-classification-stage
+    - id: t08
+      kind: Task
+      name: 'A released position id is never deleted or reused'
+      description: >-
+        A released position id is never deleted or reused.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t08-released-position-ids.yaml
+        goalRef: v1-e32-t08-released-position-ids
+      dependsOn:
+      - t01
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t08-released-position-ids reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t08-released-position-ids
+    - id: t09
+      kind: Task
+      name: 'Each Policy team''s plan text, counted first, so single payer splits by mechanism'
+      description: >-
+        Each Policy team's plan text, counted first, so single payer splits by mechanism.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t09-policy-plan-texts.yaml
+        goalRef: v1-e32-t09-policy-plan-texts
+      dependsOn:
+      - t01
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t09-policy-plan-texts reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t09-policy-plan-texts
 status:
   phase: Pending

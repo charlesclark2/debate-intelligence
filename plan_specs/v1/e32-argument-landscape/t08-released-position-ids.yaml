@@ -1,0 +1,93 @@
+# TASK v1-e32-t08-released-position-ids - A released position id is never deleted or reused
+# Epic: E32 Argument Landscape Reports | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e32-t08-released-position-ids
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+  annotations:
+    debate/title: "A released position id is never deleted or reused"
+spec:
+  # Filed by the PM, 2026-10-23, from v1-e32-t01's follow-up work (the id rule is documented in the coach's guide, not enforced).
+  description: >-
+    docs/guides/landscape-taxonomy.md says a position id, once released, is never deleted or
+    reused: it is retired with `deprecated` or `merged_into`, so a report counted under an
+    earlier taxonomy_version still names real positions. Nothing enforces it. Add a check, run
+    by the config tests in CI, that compares every taxonomy file under
+    config/landscape/taxonomies/ with its released form and refuses: an id that was released and
+    is now missing; an id whose kind or side changed instead of a new id being made; a released
+    id that now names a different position (its label changed past a rename the file records);
+    and a file whose positions changed without its taxonomy_version (and topics.yaml's) being
+    bumped. "Released" is the form on `origin/dev` at the first commit that published a report
+    under that version, recorded in a committed lock file (config/landscape/released.yaml: topic
+    id, version, the ids and their kind and side), written by a small command the operator runs
+    when a report is first published, so CI never needs the network or git history beyond the
+    checkout. Must be merged before v1-e32-t05's first published report.
+  priority: 2
+  constraints:
+    packages: [debate_core.domain, debate_core.arguments, debate_core.integrations, config/landscape, scripts, tests/config, docs/guides]
+    forbidden:
+      - Card text, a school, team code, file name or person's name in any fixture, log, report or commit (synthetic values only)
+      - Network or AWS access in any test
+      - Model calls (deterministic only; model classification is v1-e32-t07's, behind the policy's E32 gate)
+  context:
+    - kind: TaskRef
+      name: v1-e32-t01-position-taxonomy
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The check refuses, naming the file, the id and the rule: a released id missing; a
+        released id's kind or side changed; positions changed with no taxonomy_version bump;
+        topics.yaml's version not equal to the file's. Each by a synthetic fixture shown
+        failing first.
+    - id: ac2
+      description: >-
+        A retirement (deprecated or merged_into into an existing id) and a new id both pass,
+        with the version bumped.
+    - id: ac3
+      description: >-
+        The lock file is written by a command the guide documents, from the committed
+        taxonomy files alone, and the guide says when the operator runs it (when a report
+        under a new version is first published).
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e32-t08-released-position-ids-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+spec:
+  description: >-
+    The lock file's schema and its writer, then the comparison and its refusals with tests shown
+    failing first, then the guide.
+  goalRef:
+    name: v1-e32-t08-released-position-ids
+  graph:
+    nodes:
+      - id: released-ids
+        kind: Task
+        name: Released position ids
+        description: >-
+          The lock file's schema and its writer, then the comparison and its refusals with
+          tests shown failing first, then the guide.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Taxonomy config tests pass
+            command: uv
+            args: [run, pytest, tests/config/test_landscape_taxonomies.py]
+status:
+  phase: Pending

@@ -193,7 +193,7 @@ async def test_a_manifest_mismatch_found_before_the_session_expired_is_kept_and_
     assert login.message == (
         f"{WHERE} kept everything it fetched; 1 snapshot(s) and the run record wait to be published. "
         "The report stage's check that the bucket holds what this run published was cut short; "
-        "caselist pull --publish-pending makes it again after the login, if no other pull runs first. "
+        "the next pull, or caselist pull --publish-pending after the login, makes it again. "
         "Before the session expired, the bucket's manifest of testcl26 "
         "2026-09-01 was found to differ from this machine's; it is owed again, and the publish after "
         "the login uploads this machine's copy."

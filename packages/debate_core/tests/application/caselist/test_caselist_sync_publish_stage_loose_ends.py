@@ -6,7 +6,9 @@
   publishes, and the publish had already confirmed them. The PM's ruling of 2026-10-22: the
   snapshots the newest run published and did not compare are saved in that run's details, beside
   the report stage, and `caselist pull --publish-pending` compares exactly those, through the report
-  stage itself. Details an older build wrote have no such list, and owe nothing.
+  stage itself. Details an older build wrote have no such list, and owe nothing. The PM's condition
+  of the same day: the next pull, scheduled or by hand, is handed the list too and compares it the
+  same way, since on a Wednesday after an expired session it is the likeliest next run.
 * **(2) The publish stage counts the manifest it uploads.** A republish that uploaded only a
   manifest said `0 object(s) uploaded across 1 snapshot(s)`. The count, the summary's
   `objects_published` and the details now include it, and the reason says how many were manifests.
@@ -304,7 +306,11 @@ async def test_a_details_file_an_older_build_wrote_owes_no_comparison(
 
 
 async def test_only_the_newest_run_owes_a_comparison(installation: Installation, clock: Any) -> None:
-    """A pull after the cut-short run, with nothing new, is the newest run, and owes nothing."""
+    """A pull after the cut-short run is the newest run, and owes nothing once it has made the check.
+
+    Since the PM's condition 1 the pull makes it
+    (`test_a_pull_after_a_cut_short_check_compares_the_weeks_it_did_not`); this one holds the drain
+    after it to the newest run's list, which is empty."""
     await two_weeks_with_the_check_cut_short(installation, expires_at=1)
     clock(SECOND_RUN)
     await pull(installation, installation.sync(FakeSource(installation.archives, weeks=[WEEK_1, WEEK_2])))

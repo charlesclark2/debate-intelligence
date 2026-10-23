@@ -64,7 +64,7 @@ What a newer build knows beyond the record is kept **beside** it, keyed by run i
   build reads: `stage` is a string, never a list of the names a build knew;
 * how many of the objects the publish stage uploaded were manifests (`v1-e34-t28`);
 * what a report stage cut short by an expired session had not compared yet, by caselist and
-  snapshot (`v1-e34-t28`), which the next `caselist pull --publish-pending` compares
+  snapshot (`v1-e34-t28`), which the next pull or `caselist pull --publish-pending` compares
   (:func:`comparisons_owed_by_the_newest_run`). Details an older build wrote have no such list,
   and owe no comparison.
 
@@ -427,7 +427,7 @@ class StageDetails(BaseModel):
     not_compared: tuple[PublishedSnapshot, ...] = ()
     """What a report stage pending on an expired session had not compared yet
     (:attr:`~debate_core.application.caselist_sync.StageRecord.not_compared`, `v1-e34-t28`): what
-    the next `caselist pull --publish-pending` compares. A key a build from before it passes over,
+    the next pull or `caselist pull --publish-pending` compares. A key a build from before it passes over,
     and its absence, in details such a build wrote, owes nothing."""
 
 
@@ -773,7 +773,7 @@ def _outcome_of(summary: RunSummary) -> SyncRunOutcome:
     ):
         # The parsed store's publish is a publish, and it waits for the same login (`v1-e34-t17`);
         # so does the search index's (`v1-e39-t09`), and so does the report stage's check of what was
-        # published, which `--publish-pending` makes again (`v1-e34-t28`). Every installed build
+        # published, which the next pull or `--publish-pending` makes (`v1-e34-t28`). Every installed build
         # reads this value; a run whose only pending stage was the report was `completed` before.
         return SyncRunOutcome.PUBLISH_PENDING
     if any(record.outcome is StageOutcome.FAILED for record in summary.stages):
@@ -956,13 +956,13 @@ made (`v1-e34-t26`): the run :data:`RETRIED_AFTER_ITS_FIX_TITLE` is the title of
 
 THE_CHECK_WAS_CUT_SHORT: Final = (
     " The report stage's check that the bucket holds what this run published was cut short; "
-    "caselist pull --publish-pending makes it again after the login, if no other pull runs first."
+    "the next pull, or caselist pull --publish-pending after the login, makes it again."
 )
 """What the login banner adds when the report stage is pending and the publish is not (`v1-e34-t26`).
 
 The publish confirmed what it published, and the session then expired while the report stage
 compared it with the bucket. Since `v1-e34-t28` the run's details name what the stage did not
-compare, and `--publish-pending` compares exactly that when this is the newest run
+compare, and the next pull, scheduled or by hand, or `--publish-pending` compares exactly that
 (:func:`comparisons_owed_by_the_newest_run`). Before, nothing made the check but `caselist status`
 by hand, and this sentence said so."""
 
@@ -1020,7 +1020,7 @@ def notifications_for(
 
     **The login banner names what waits** (`v1-e34-t26`): the snapshots owed, when there are any,
     and the run record; and, when the report stage was cut short with the publish already done, the
-    check `--publish-pending` makes again (:data:`THE_CHECK_WAS_CUT_SHORT`, `v1-e34-t28`).
+    check the next pull or `--publish-pending` makes again (:data:`THE_CHECK_WAS_CUT_SHORT`, `v1-e34-t28`).
 
     **A manifest owed again, and one that drifted again** (`v1-e34-t26`). A report stage's manifest
     mismatch alone is announced as published again by the next run when the record lists it as
@@ -1148,8 +1148,8 @@ def notifications_for(
             for code in one.earlier_findings
             if not may_succeed_on_retry([code])
         )
-        # The report stage cut short after a publish that was not: `--publish-pending` redoes its
-        # check, from this run's details (`v1-e34-t28`).
+        # The report stage cut short after a publish that was not: the next pull or
+        # `--publish-pending` redoes its check, from this run's details (`v1-e34-t28`).
         report_alone = _stage_outcome(record, SyncStage.REPORT) == str(StageOutcome.PENDING) and (
             _stage_outcome(record, SyncStage.PUBLISH) != str(StageOutcome.PENDING)
         )
@@ -1432,17 +1432,18 @@ def snapshots_owed_again_for_drift(
 def comparisons_owed_by_the_newest_run(
     records: Sequence[SyncRunRecord], details: Mapping[str, SyncRunDetails]
 ) -> tuple[PendingSnapshot, ...]:
-    """What the newest run published and its report stage did not compare: what `--publish-pending` compares.
+    """What the newest run published and its report stage did not compare: what the next run compares.
 
     The PM's ruling of 2026-10-22 (`v1-e34-t28`). A report stage that an expired session cut short
     names, in the run's details, what it had not compared yet (:attr:`StageDetails.not_compared`);
-    `--publish-pending` compares exactly those, through the report stage. Only the newest run's:
+    the next pull, scheduled or by hand, or `--publish-pending` compares exactly those, through the
+    report stage, and a run cut short again names what it did not reach. Only the newest run's:
 
     * **A run with no stages is passed over**, as :func:`snapshots_owed_again_for_drift` passes it
       over. It stopped before any stage (the lock, a refused start, an error that escaped the run),
       so it compared nothing and settled nothing. The run before it is the newest that ran.
-    * **Any other run settles it**, whatever it owes in turn: a pull that ran a report stage, or
-      one that ran without a bucket. Only `--publish-pending` is handed the list.
+    * **Any other run settles it**: it was handed the list, and compared it or named again what it
+      did not reach. One that ran without a bucket compares nothing and settles it all the same.
     * **Details without the list** owe nothing: an older build wrote them, or they are missing.
 
     An entry that is not a target a publish would accept is passed over with a warning: the details

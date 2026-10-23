@@ -56,7 +56,7 @@ NO_SNAPSHOT_WAITS = (
 )
 THE_CHECK_WAS_CUT_SHORT = (
     " The report stage's check that the bucket holds what this run published was cut short; "
-    "caselist pull --publish-pending makes it again after the login, if no other pull runs first."
+    "the next pull, or caselist pull --publish-pending after the login, makes it again."
 )
 PARSE_WAITS = (
     " The parsed store waits too; after the login: debate-research caselist parse --caselist <slug> --publish"

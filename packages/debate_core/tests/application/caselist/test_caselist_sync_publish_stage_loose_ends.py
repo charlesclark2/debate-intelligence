@@ -48,7 +48,7 @@ from debate_core.application.sync_runs import (
     record_for_summary,
 )
 from debate_core.integrations.s3 import S3EvidenceObjectStore
-from debate_core.testing.fakes import empty_suppression_list
+from debate_core.testing.fakes.suppression import empty_suppression_list
 
 from . import test_inbox_retention as inbox_retention
 from .test_caselist_sync_owes_a_drifted_manifest_again import Bucket, DriftBeforeTheComparison

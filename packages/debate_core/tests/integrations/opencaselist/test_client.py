@@ -883,26 +883,54 @@ def test_a_retry_after_date_is_measured_from_the_injected_wall_clock(
 @pytest.mark.parametrize(
     ("retry_after", "sleeps"),
     [
-        pytest.param("1.5", [1.5], id="a-fraction-is-waited-out"),
-        pytest.param("-5", [0.0, 1.0], id="a-negative-number-is-no-wait"),
-        pytest.param("soon", [2.0], id="an-unreadable-header-falls-back-to-backoff"),
+        pytest.param("nan", [2.0], id="nan-falls-back-to-backoff"),
+        pytest.param("inf", [2.0], id="inf-falls-back-to-backoff"),
+        pytest.param("1.5", [2.0], id="a-fraction-falls-back-to-backoff"),
+        pytest.param("-5", [2.0], id="a-negative-number-falls-back-to-backoff"),
+        pytest.param("1e2", [2.0], id="an-exponent-falls-back-to-backoff"),
+        pytest.param("soon", [2.0], id="words-fall-back-to-backoff"),
+        pytest.param("37", [37.0], id="an-integer-is-waited-out-as-before"),
+        pytest.param("Tue, 01 Jan 2030 00:02:00 GMT", [120.0], id="a-date-is-waited-out-as-before"),
     ],
 )
-def test_a_retry_after_the_rfc_does_not_allow_is_read_as_the_transport_always_read_it(
-    client: OpenCaselistClient,
-    api: respx.MockRouter,
+def test_a_retry_after_that_is_not_digits_or_a_date_falls_back_to_the_backoff(
+    tmp_path: Path,
+    token_store: CaselistTokenStore,
     simulated: SimulatedTime,
+    api: respx.MockRouter,
     retry_after: str,
     sleeps: list[float],
 ) -> None:
-    """The transport reads the seconds form with `float()`, as it did before the reader was shared."""
+    """RFC 9110's `delay-seconds` is digits only, so anything else that is not a date is no
+    `Retry-After` at all, and the wait doubles from `backoff_base_seconds` (PM ruling, `v1-e07-t08`)."""
+    simulated.wall_clock = FixedClock(IN_2030)
+    client = build_client(tmp_path, token_store, simulated)
     api.get(f"{API}/caselists").mock(
         side_effect=[httpx.Response(429, headers={"Retry-After": retry_after}), httpx.Response(200, json=[])]
     )
 
-    run(client.list_caselists())
+    run(asyncio.wait_for(client.list_caselists(), timeout=5))
 
     assert simulated.sleeps == sleeps
+
+
+def test_a_retry_after_of_nan_does_not_hang_the_transport(
+    tmp_path: Path, token_store: CaselistTokenStore, api: respx.MockRouter
+) -> None:
+    """On the real event loop: `asyncio.sleep(nan)` never returns, and the transport would hold its
+    lock while it did not. It takes the backoff instead, the pacer's half second included."""
+    client = OpenCaselistClient.from_settings(
+        make_settings(tmp_path, backoff_base_seconds=0.01, min_request_interval_seconds=0.5),
+        token_store=token_store,
+        user_agent_version="0.0.0-test",
+        wall_clock=FixedClock(IN_2030),
+    )
+    route = api.get(f"{API}/caselists").mock(
+        side_effect=[httpx.Response(429, headers={"Retry-After": "nan"}), httpx.Response(200, json=[])]
+    )
+
+    assert run(asyncio.wait_for(client.list_caselists(), timeout=5)) == []
+    assert route.call_count == 2
 
 
 def test_a_retry_after_longer_than_the_ceiling_fails_at_once_instead_of_sleeping(

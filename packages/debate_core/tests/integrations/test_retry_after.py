@@ -1,9 +1,10 @@
 """The one `Retry-After` reader every HTTP adapter shares, and the clock its date form reads (`v1-e07-t08`).
 
 The date form is a distance from the caller's injected clock: these read it from a
-:class:`~debate_core.testing.fakes.clock_and_ids.FixedClock`, so each wait is exact. The malformed
-headers are read as they were before the reader was shared: digits only for the discovery mapping
-and the article fetcher, anything `float()` reads for OpenCaselist's transport (`any_number`).
+:class:`~debate_core.testing.fakes.clock_and_ids.FixedClock`, so each wait is exact. The seconds form
+is ASCII digits only, for every adapter (the PM's rulings on `v1-e07-t08`): OpenCaselist's `float()`
+reading, under which `nan` hung the transport, is gone, and a digit `float()` cannot read (`²`) is
+unreadable rather than a `ValueError`.
 """
 
 from __future__ import annotations
@@ -19,7 +20,6 @@ NOW = datetime(2030, 10, 21, 7, 28, 0, tzinfo=UTC)
 """Years ahead of the real now, so a reader that looked at the wall clock would give other answers."""
 
 
-@pytest.mark.parametrize("any_number", [False, True])
 @pytest.mark.parametrize(
     ("header", "seconds"),
     [
@@ -30,8 +30,8 @@ NOW = datetime(2030, 10, 21, 7, 28, 0, tzinfo=UTC)
         pytest.param("21 Oct 2030 07:30:00", 120.0, id="no-zone-is-utc"),
     ],
 )
-def test_a_date_is_measured_from_the_clock_it_is_given(header: str, seconds: float, any_number: bool) -> None:
-    assert retry_after_seconds(header, now=FixedClock(NOW).now(), any_number=any_number) == seconds
+def test_a_date_is_measured_from_the_clock_it_is_given(header: str, seconds: float) -> None:
+    assert retry_after_seconds(header, now=FixedClock(NOW).now()) == seconds
 
 
 def test_the_same_date_asks_for_less_as_the_clock_moves_on() -> None:
@@ -47,10 +47,9 @@ def test_the_same_date_asks_for_less_as_the_clock_moves_on() -> None:
     assert (first, second, third) == (120.0, 30.0, 0.0)
 
 
-@pytest.mark.parametrize("any_number", [False, True])
-def test_a_number_of_seconds_does_not_read_the_clock(any_number: bool) -> None:
+def test_a_number_of_seconds_does_not_read_the_clock() -> None:
     moments = [NOW, NOW + timedelta(days=400), NOW - timedelta(days=400)]
-    assert {retry_after_seconds(" 120 ", now=moment, any_number=any_number) for moment in moments} == {120.0}
+    assert {retry_after_seconds(" 120 ", now=moment) for moment in moments} == {120.0}
 
 
 @pytest.mark.parametrize(
@@ -62,32 +61,17 @@ def test_a_number_of_seconds_does_not_read_the_clock(any_number: bool) -> None:
         pytest.param("-5", None, id="a-negative-number"),
         pytest.param("+5", None, id="a-signed-number"),
         pytest.param("1e2", None, id="an-exponent"),
+        pytest.param("nan", None, id="nan"),
+        pytest.param("inf", None, id="inf"),
+        pytest.param("\u00b2", None, id="a-superscript-digit"),
+        pytest.param("\u0661\u0662\u0660", None, id="arabic-indic-digits"),
+        pytest.param("\uff11\uff12\uff10", None, id="fullwidth-digits"),
         pytest.param("", None, id="empty"),
         pytest.param("   ", None, id="blank"),
         pytest.param(None, None, id="absent"),
     ],
 )
-def test_a_malformed_header_is_no_wait_to_the_discovery_mapping_and_the_fetcher(
-    header: str | None, seconds: float | None
-) -> None:
-    """RFC 9110's `delay-seconds` is digits only; anything else that is not a date is unreadable."""
+def test_anything_but_ascii_digits_or_a_date_is_unreadable(header: str | None, seconds: float | None) -> None:
+    """RFC 9110's `delay-seconds` is `1*DIGIT`, ASCII digits. `str.isdigit()` also accepts `²`, which
+    `float()` then refuses, and other scripts' digits; none of them is a wait."""
     assert retry_after_seconds(header, now=NOW) == seconds
-
-
-@pytest.mark.parametrize(
-    ("header", "seconds"),
-    [
-        pytest.param("soon", None, id="words"),
-        pytest.param("Mon, 99 Foo 2030", None, id="a-broken-date"),
-        pytest.param("1.5", 1.5, id="a-fraction"),
-        pytest.param("-5", 0.0, id="a-negative-number"),
-        pytest.param("+5", 5.0, id="a-signed-number"),
-        pytest.param("1e2", 100.0, id="an-exponent"),
-        pytest.param("", None, id="empty"),
-        pytest.param(None, None, id="absent"),
-    ],
-)
-def test_any_number_reads_the_seconds_form_as_opencaselist_always_did(
-    header: str | None, seconds: float | None
-) -> None:
-    assert retry_after_seconds(header, now=NOW, any_number=True) == seconds

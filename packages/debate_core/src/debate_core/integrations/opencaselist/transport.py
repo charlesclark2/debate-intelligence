@@ -399,9 +399,7 @@ class OpenCaselistTransport:
                     self._on_authenticated_success()
             return
         if status in RETRYABLE_STATUS_CODES:
-            wait = retry_after_seconds(
-                response.headers.get("Retry-After"), now=self._wall_clock.now(), any_number=True
-            )
+            wait = retry_after_seconds(response.headers.get("Retry-After"), now=self._wall_clock.now())
             raise _Retryable(status, wait, f"HTTP {status}")
         if from_api and status in _AUTH_REFUSALS:
             logger.error("OpenCaselist: %s refused with HTTP %d; not retried", operation, status)

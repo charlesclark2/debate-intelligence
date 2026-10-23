@@ -22,24 +22,19 @@ from email.utils import parsedate_to_datetime
 __all__ = ["retry_after_seconds"]
 
 
-def retry_after_seconds(value: str | None, *, now: datetime, any_number: bool = False) -> float | None:
+def retry_after_seconds(value: str | None, *, now: datetime) -> float | None:
     """The wait a `Retry-After` header asks for, in seconds; `None` when absent or unreadable.
 
-    The seconds form is digits only, as the RFC writes it, unless `any_number` is set: then it is
-    anything `float()` reads (`1.5`, `+5`, `1e2`), and a negative number is `0.0`. OpenCaselist's
-    transport has always read it that way, and passes `any_number=True` so that no wait it takes
-    changes. A date is measured from `now`; one in the past means "now", so it is `0.0`, never
-    negative, and a date with no zone is read as UTC.
+    The seconds form is ASCII digits only, as the RFC writes it (`1*DIGIT`): `1.5`, `-5`, `nan`, or a
+    digit `str.isdigit()` accepts from another script (`²`, `١٢٠`), is unreadable, so the adapter
+    falls back to its own backoff (the PM's rulings on `v1-e07-t08`). A date is measured from `now`;
+    one in the past means "now", so it is `0.0`, never negative, and a date with no zone is read as
+    UTC.
     """
     if value is None:
         return None
     text = value.strip()
-    if any_number:
-        try:
-            return max(float(text), 0.0)
-        except ValueError:
-            pass
-    elif text.isdigit():
+    if text.isascii() and text.isdigit():
         return float(text)
     try:
         moment = parsedate_to_datetime(text)

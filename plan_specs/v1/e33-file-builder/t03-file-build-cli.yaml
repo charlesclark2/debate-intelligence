@@ -59,6 +59,13 @@ spec:
     2026-10-22.) `files build` writes no provenance line in a built file; the writer stops
     writing it in v1-e33-t08, and the sidecar keeps the provenance. The description's references
     to a camp card's provenance line naming the camp now mean its sidecar entry.
+    (PM amendment 2026-10-22, from v1-e33-t08's PM review.) The writer's
+    `HIGHLIGHTED_CITE_CAUSE` refusal named in the 2026-10-21 amendment no longer exists: with no
+    provenance line written, the build it compared against was identical, so v1-e33-t08 removed
+    it and a read-back refusal is a plain `READBACK_MISMATCH`. That sentence of the 2026-10-21
+    amendment is superseded. A file built by `2026.10.19-file-writer-2` or earlier holds
+    provenance lines and now fails `provenance-complete`; `files check` says so, and `files
+    build` over the same recipe rebuilds it without them.
   priority: 1
   constraints:
     # PM amendment 2026-10-21: the writer's test, the container and the removal runbook's step 8.

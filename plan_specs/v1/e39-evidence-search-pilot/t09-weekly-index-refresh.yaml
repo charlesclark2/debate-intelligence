@@ -97,6 +97,7 @@ spec:
         one it builds from this machine's copy and the summary says so; an index built without a
         session is published by the next run that has one without a rebuild, unless reconciling
         changed the suppression digest. By test, both paths shown failing first.
+    # PM ruling 2026-10-22: the SQLite warning line moved to 1,700,000,000 bytes in v1-e39-t14 (ADR-0019 (c) 6 amended); the 400,000,000 gzip line is unchanged.
     - id: ac6
       description: >-
         The summary reports the SQLite bytes and bytes per document for every build, and warns

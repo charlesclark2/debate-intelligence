@@ -89,8 +89,10 @@ spec:
         script whose run is recorded in the report.
     - id: ac5
       description: >-
-        (PM amendment 2026-10-21) The index holder's load lines reach the function's app
-        log, and the Lambda query time (p50, p95) and cold-start index load are recorded in
+        (PM amendment 2026-10-21; 2026-10-22, from v1-e39-t14's PM review) The index holder's
+        load lines reach the function's app log, with the loaded index's bytes and the total
+        bytes under its `/tmp` directory, and the Lambda query time (p50, p95), the cold-start
+        index load and the peak `/tmp` use across one index replacement are recorded in
         docs/data/evidence-search-pilot.md.
     - id: ac6
       description: >-

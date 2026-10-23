@@ -924,6 +924,11 @@ real run, in a window with no leftover `DEBATE_*` override.
 10. **Step 12**, the request to school IT, with prod's hostnames only.
 11. **The coach creates the beta's prod accounts.** The two debaters who used dev on 2026-10-22 get
     new prod accounts; dev accounts are never carried over.
+12. **Ask AWS for a higher Lambda bandwidth quota** for the prod function, as ADR-0019 (c) 7's
+    revisit trigger says, before the gzipped index reaches 400,000,000 bytes (about 5 s of cold
+    start at the 625 Mbps cap). On 2026-10-22 it was 314,054,035 bytes and growing about 11.6% a
+    week, so about three weeks out. AWS takes time to answer, so the request goes in at the
+    promotion. Added by the PM, 2026-10-22, from `v1-e39-t14`'s storage working.
 
 ## The managed login's asset hosts
 

@@ -1,0 +1,118 @@
+# TASK v1-e37-t06-season-results - Season results: how the team's students placed at each tournament
+# Epic: E37 Calendar & Announcements | Release: v1.6 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e37-t06-season-results
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.6
+    debate/epic: v1-e37-calendar-and-announcements
+  annotations:
+    debate/title: "Season results: how the team's students placed at each tournament"
+spec:
+  # Filed by the PM, 2026-10-22, from Charlie's request of 2026-10-22: a section listing how students have fared at tournaments, when they placed.
+  description: >-
+    A results section for the public site, built from a new content file,
+    site/content/results.yaml: one entry per placing, each with the tournament (by its schedule
+    id where it has one, or a name and date for one no longer on the schedule, since tournaments
+    that have happened come off the schedule: Charlie's decision of 2026-10-22), the event and
+    division, and the placing or award (for example first place, top speaker, quarterfinalist).
+    Who it names follows docs/policies/website-publishing.md, Results and awards, to the letter:
+    an individual event names one student as full name and graduation year, only with an entry
+    in site/content/media-consent.yaml for the current season; a partner event names both
+    partners or neither; otherwise the result is written in team-level form, which the page
+    shows without apology. The build refuses a result naming a student with no consent entry, a
+    partner result naming one partner, and anything shaped like a record (rules 3 to 6), with a
+    message naming the entry and the rule. The section sits where a parent looks for it: its own
+    page in the primary navigation, newest first, grouped by tournament, and the three newest
+    results on the home page, linking to it. Results are facts Charlie supplies (rule 7), and
+    the first one is his from 2026-10-22, which he gives the session directly with the student's
+    consent reference; neither the student's name nor the reference is written anywhere but
+    site/content/. The coach guide gains a results section: how to add, correct and take down a
+    result, the team-level form, and the 24-hour removal rule. Out of scope: photographs with
+    results, and the email (an email names no student and links to the results page,
+    docs/guides/parent-email-updates.md).
+  priority: 2
+  constraints:
+    packages: [site/content, site/src, site/tests, docs/guides]
+    forbidden:
+      - A student name in a file name, a path, a commit message, a spec or anywhere outside site/content/ (website publishing policy, Students 10 and 11)
+      - A result Charlie did not supply from the tournament's own published results; never invented, estimated or reconstructed
+      - Any record, ranking, points total, win-loss line or leaderboard of a student over time (Results and awards 3)
+      - A third-party script, iframe, embed, widget, pixel or tracker on the site (Third parties)
+      - Network calls at build time, in tests, or from a visitor's browser
+  context:
+    - kind: TaskRef
+      name: v1-e37-t02-events-calendar
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e36-t04-core-pages
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        With fixture content, the results page lists results newest first, grouped by
+        tournament, each showing the tournament, its date, the event and division and the
+        placing; the home page shows the three newest and links to the page; the page is in
+        the primary navigation and has no WCAG 2.1 AA violation.
+    - id: ac2
+      description: >-
+        The build refuses, naming the entry and the policy rule: a named student with no
+        current-season consent entry; a partner-event result naming one partner; a placing
+        that is a loss or a record (a win-loss line, a points total, a ranking across
+        tournaments); an opponent student's name; an email address or phone number. A
+        team-level result always publishes. Tests shown failing first.
+    - id: ac3
+      description: >-
+        A result whose tournament has come off the schedule still shows its name and date,
+        and a result naming a schedule id that does not exist fails the build.
+    - id: ac4
+      description: >-
+        docs/guides/coach-website-editing.md explains how to add, correct and take down a
+        result, when to use the team-level form, and that a request to take one down is met
+        within 24 hours.
+    - id: ac5
+      description: >-
+        `pnpm --dir site lint`, `typecheck`, `test` and `build` pass offline; Charlie's
+        first result is published through dev and then prod with his consent reference in
+        the manifest, and the report records it without the student's name.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e37-t06-season-results-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.6
+    debate/epic: v1-e37-calendar-and-announcements
+spec:
+  description: >-
+    Schema and fixtures for results.yaml first, then the policy checks with tests shown failing,
+    then the page and the home-page panel, then the guide, then Charlie's first result.
+  goalRef:
+    name: v1-e37-t06-season-results
+  graph:
+    nodes:
+      - id: results
+        kind: Task
+        name: Season results page
+        description: >-
+          Schema and fixtures for results.yaml first, then the policy checks with tests
+          shown failing, then the page and the home-page panel, then the guide, then
+          Charlie's first result.
+        estimatedEffort: 6h
+        acceptanceCriteria:
+          - type: test_passes
+            name: The site tests pass
+            command: pnpm
+            args: [--dir, site, test]
+status:
+  phase: Pending

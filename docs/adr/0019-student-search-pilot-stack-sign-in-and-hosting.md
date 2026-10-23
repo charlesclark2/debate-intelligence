@@ -95,6 +95,12 @@ This record covers release v1.7 and its two environments. It decides the pilot o
    `cloudfront.amazonaws.com`, conditioned on this environment's distribution ARN. A direct request
    to the function URL is refused by Lambda's IAM check before the function runs. The invoke mode
    is `BUFFERED`, since a download of 30 cards is far below the 6 MB response limit.
+   **Amended 2026-10-22 (PM rulings, `v1-e39-t08`):** the file's size was never the limit (30
+   cards measured 118 KB); the build's time is, and it grows with the sources a cart reads, not
+   its cards. A download holds up to 8 cards, the sources' `word/document.xml` may add up to
+   20,000,000 bytes as their zip directories declare them, and the files fetched to 52,000,000
+   bytes. A built file is held under 3 MB, so the base64-encoded response stays within the
+   buffered limit.
 3. **Every POST carries the hash of its body.** The CloudFront documentation states that, through
    OAC, "if you use PUT or POST methods with your Lambda function URL, your users must compute the
    SHA256 of the body and include the payload hash value of the request body in the
@@ -304,7 +310,10 @@ does those.
   times, the time of the last revalidation, a CSRF token and the Cognito refresh token. No ID or
   access token is kept.
 - **The download cart.** `v1-e39-t08`'s cart of up to 30 cluster ids is held in a second cookie of
-  the same kind, `__Host-tub_cart`, so neither cookie nears the 4 KB limit.
+  the same kind, `__Host-tub_cart`, so neither cookie nears the 4 KB limit. **Amended 2026-10-22
+  (PM ruling, `v1-e39-t08`):** the cart is held in the browser's `sessionStorage`, not a cookie.
+  It holds only card references, the server checks every one at download, and nothing about it
+  needs to reach the server before then. It holds up to 8 cards, and is emptied on sign-out.
 - **Why the token is still on the server's side.** No token is readable in the browser. The
   refresh token inside the cookie can be redeemed only with the client secret, which only the
   function holds.

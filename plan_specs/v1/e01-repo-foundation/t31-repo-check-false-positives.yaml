@@ -26,6 +26,14 @@ spec:
     `docs/evidence/snapshot-text-format.md` still names
     `debate_core.testing.InMemoryCardEditLog`, which is
     `debate_core.testing.fakes.InMemoryCardEditLog` since v1-e01-t29.
+    (PM note 2026-10-22, from two reviews of that day.) Two more of the kind this task is about:
+    (1) `tests/architecture/test_single_interpreter_source.py` read "at most 3.9%" in two
+    documents and a docstring as a Python version, and v1-e39-t12 had to rewrite the figure as
+    3.86% to pass; a percentage, or any number followed by `%`, is not a Python version. (2)
+    `pyright`, named on `tests/architecture/test_fakes_reach_only_their_port.py` and
+    `test_thin_handlers.py`, reports two errors that exist on `dev` and sit outside CI's pyright
+    scope (v1-e39-t08's follow-up 6): fix them, or bring `tests/architecture` into CI's scope,
+    so they cannot hide a real one.
   priority: 3
   constraints:
     packages: [tests/architecture, tests/smoke, docs/evidence]

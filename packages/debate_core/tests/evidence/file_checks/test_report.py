@@ -213,7 +213,7 @@ def test_the_markdown_gives_pass_or_fail_per_check_and_card_and_names_cards_by_p
 | `duplicate-cards` | PASS | 0 | 0 | No fingerprint appears twice; near-duplicate cards are warnings. |
 | `heading-structure` | FAIL | 1 | 0 | Headings nest pocket > hat > block > tag, no level skipped, in profile styles. |
 | `manifest-alignment` | PASS | 0 | 0 | The sidecar and the document agree card for card, in order. |
-| `provenance-complete` | PASS | 0 | 0 | Each card's provenance is complete, and its provenance line is below its cite, in Undertag. |
+| `provenance-complete` | PASS | 0 | 0 | Each card's provenance is complete in the sidecar, and the file's text holds no provenance line. |
 | `suppression` | PASS | 0 | 0 | No card comes from a source or disclosure on the suppression list. |
 
 ## Cards

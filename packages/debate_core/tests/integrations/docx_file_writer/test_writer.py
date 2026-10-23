@@ -44,6 +44,7 @@ from debate_core.domain.caselist import (
 )
 from debate_core.domain.debate_files import ParsedDocument, ParseFailure
 from debate_core.domain.enums import ProvenanceMode, VerificationStatus
+from debate_core.domain.evidence_search import occurrence_provenance_line
 from debate_core.domain.file_provenance import (
     FILE_PROVENANCE_SCHEMA_FILENAME,
     FileProvenanceManifest,
@@ -53,12 +54,9 @@ from debate_core.domain.file_provenance import (
     text_sha256,
 )
 from debate_core.domain.file_recipe import TagAuthor
+from debate_core.integrations.docx_file_writer import writer as writer_module
 from debate_core.integrations.docx_file_writer.package_writer import FIXED_ZIP_TIMESTAMP
-from debate_core.integrations.docx_file_writer.writer import (
-    FILE_BUILDER_VERSION,
-    DocxEvidenceFileWriter,
-    provenance_line,
-)
+from debate_core.integrations.docx_file_writer.writer import FILE_BUILDER_VERSION, DocxEvidenceFileWriter
 from debate_core.integrations.docx_parser.package import W_NAMESPACE
 from debate_core.integrations.docx_parser.parser import DOCX_PARSER_VERSION, DebateDocxParser
 from debate_core.testing.docx_builder import (
@@ -108,6 +106,10 @@ SOURCE_TWO = build_docx(
 )
 
 ALLOWED_ANALYTIC = "The moratorium trades a small saving for a large risk."
+
+#: The sidecar's provenance line for each team of the standard file, from the policy's example form.
+MAPLE = "[Disclosed: hspolicy26 2026-09-15 — Maple Grove QX, Aff vs. Riverbend Invitational Round 4]"
+CEDAR = "[Disclosed: hspolicy26 2026-09-15 — Cedar Hollow ZaLu, Neg vs. Riverbend Invitational Semis]"
 
 
 @dataclasses.dataclass
@@ -213,8 +215,6 @@ def _reparse(parser: DebateDocxParser, docx: bytes) -> ParsedDocument:
 
 
 def test_assembly_writes_the_recipe_in_order_in_the_profiles_styles(standard: Built) -> None:
-    maple = "[Disclosed: hspolicy26 2026-09-15 — Maple Grove QX, Aff vs. Riverbend Invitational Round 4]"
-    cedar = "[Disclosed: hspolicy26 2026-09-15 — Cedar Hollow ZaLu, Neg vs. Riverbend Invitational Semis]"
     assert _paragraphs(standard.file.docx) == [
         (
             "Analytic",
@@ -226,20 +226,16 @@ def test_assembly_writes_the_recipe_in_order_in_the_profiles_styles(standard: Bu
         ("Heading3", "Prices"),
         ("Heading4", "Prices rise - the coach's own tag"),
         (None, "Lindqvist 26, Senior Fellow, Synthetic Energy Review, 2026"),
-        ("Undertag", maple),
         (None, "A moratorium freezes supply while demand rises."),
         ("Analytic", ALLOWED_ANALYTIC),
         ("Heading4", "Reliability falls first in the summer peak"),
         (None, "Okonkwo 25, Grid Analyst, Synthetic Utility Quarterly, 2025"),
-        ("Undertag", maple),
         (None, "Operators shed load when reserves run thin."),
         ("Heading3", "Revenue"),
         ("Heading4", "Data centres bring tax revenue"),
         (None, "Achterberg 26, Economist, Synthetic Fiscal Review, 2026"),
-        ("Undertag", cedar),
         ("Heading4", "The cite alone, a card disclosed without its text"),
         (None, "Marsh 24, Professor, Synthetic Law Review, 2024"),
-        ("Undertag", cedar),
     ]
 
 
@@ -257,25 +253,23 @@ def test_assembly_reads_back_as_the_recipe_structure(parser: DebateDocxParser, s
     assert analytics == [_paragraphs(standard.file.docx)[0][1], ALLOWED_ANALYTIC]
 
 
-def test_assembly_writes_the_policys_provenance_line_below_each_cite(standard: Built) -> None:
-    lines = [text for style, text in _paragraphs(standard.file.docx) if style == "Undertag"]
-    assert lines == [
-        "[Disclosed: hspolicy26 2026-09-15 — Maple Grove QX, Aff vs. Riverbend Invitational Round 4]",
-        "[Disclosed: hspolicy26 2026-09-15 — Maple Grove QX, Aff vs. Riverbend Invitational Round 4]",
-        "[Disclosed: hspolicy26 2026-09-15 — Cedar Hollow ZaLu, Neg vs. Riverbend Invitational Semis]",
-        "[Disclosed: hspolicy26 2026-09-15 — Cedar Hollow ZaLu, Neg vs. Riverbend Invitational Semis]",
-    ]
+def test_assembly_writes_no_provenance_line_below_any_cite(standard: Built) -> None:
+    """Data-use policy 1.11, Attribution rule 2: the line is in the sidecar, never in the file's text."""
+    paragraphs = _paragraphs(standard.file.docx)
+    assert [text for style, text in paragraphs if style == "Undertag"] == []
+    for _, text in paragraphs:
+        assert "[Disclosed: " not in text and "Maple Grove" not in text and "ZaLu" not in text, text
+    assert [entry.provenance_line for entry in standard.file.manifest.cards] == [MAPLE, MAPLE, CEDAR, CEDAR]
 
 
-def test_assembly_writes_the_line_without_a_team_for_a_card_with_no_disclosure_on_record(
+def test_assembly_writes_no_line_for_a_card_with_no_disclosure_on_record_and_the_sidecar_names_no_team(
     parser: DebateDocxParser, built_at: datetime
 ) -> None:
     world, cards = _sources(parser, (SOURCE_ONE, None))
     built = _build(world, cards, [("Prices", [{"fingerprint": cards[0].fingerprint}])], built_at)
-    assert [text for style, text in _paragraphs(built.file.docx) if style == "Undertag"] == [
-        "[Disclosed: hspolicy26 2026-09-15]"
-    ]
+    assert [text for style, text in _paragraphs(built.file.docx) if style == "Undertag"] == []
     entry = built.file.manifest.cards[0]
+    assert entry.provenance_line == "[Disclosed: hspolicy26 2026-09-15]"
     assert (entry.school, entry.team_code, entry.side, entry.tournament, entry.round) == (None,) * 5
     assert entry.disclosure_digest is not None
 
@@ -299,21 +293,20 @@ def test_assembly_writes_the_line_without_a_team_for_a_card_with_no_disclosure_o
     ],
     ids=["every-field", "no-tournament-or-round", "side-unknown", "no-disclosure"],
 )
-def test_assembly_composes_the_provenance_line_from_the_record_alone(
-    parser: DebateDocxParser, disclosure: SyntheticDisclosure | None, line: str
+def test_provenance_composes_the_sidecars_line_from_the_record_alone(
+    parser: DebateDocxParser, built_at: datetime, disclosure: SyntheticDisclosure | None, line: str
 ) -> None:
-    _, cards = _sources(parser, (SOURCE_ONE, disclosure))
-    assert provenance_line(cards[0].occurrence, cards[0].disclosure) == line
+    world, cards = _sources(parser, (SOURCE_ONE, disclosure))
+    built = _build(world, cards, [("Prices", [{"fingerprint": cards[0].fingerprint}])], built_at)
+    assert built.file.manifest.cards[0].provenance_line == line
+    assert line not in {text for _, text in _paragraphs(built.file.docx)}
 
 
-def test_assembly_adds_no_text_but_headings_overrides_analytics_the_header_and_provenance_lines(
-    standard: Built,
-) -> None:
+def test_assembly_adds_no_text_but_headings_overrides_analytics_and_the_header(standard: Built) -> None:
     """ac2: every paragraph is either copied from a source or one of the strings the writer may write."""
     recipe = standard.resolved.recipe
     allowed = {recipe.title, "Synthetic pocket", "Synthetic hat", "Prices", "Revenue", ALLOWED_ANALYTIC}
     allowed |= {card.tag_override.text for card in standard.resolved.cards if card.tag_override}
-    allowed |= {provenance_line(card.occurrence, card.disclosure) for card in standard.resolved.cards}
     allowed.add(_paragraphs(standard.file.docx)[0][1])
     copied = {text for content in (SOURCE_ONE, SOURCE_TWO) for _, text in _paragraphs(content)}
     for _, text in _paragraphs(standard.file.docx):
@@ -352,6 +345,13 @@ def test_assembly_takes_no_card_text_through_its_api() -> None:
     )
     for name in reachable:
         assert not any(word in name for word in ("evidence", "cite", "run", "body", "text")), name
+
+
+def test_provenance_the_sidecars_line_is_the_card_pages_and_the_writer_has_none_of_its_own() -> None:
+    """ac2 (`v1-e33-t08`): one function composes the line, the one the pilot's card page shows."""
+    assert not hasattr(writer_module, "provenance_line")
+    assert "provenance_line" not in writer_module.__all__
+    assert getattr(writer_module, "occurrence_provenance_line", None) is occurrence_provenance_line
 
 
 def test_assembly_writes_a_hyperlinks_target_into_the_built_files_relationships(
@@ -553,7 +553,7 @@ def test_provenance_records_each_cards_occurrence_and_its_source_hashes(standard
         assert entry.resolution == "AUTO"
         assert entry.provenance_mode is ProvenanceMode.FILE_IMPORT
         assert entry.verification_status is VerificationStatus.UNVERIFIED
-        assert entry.provenance_line == provenance_line(occurrence, source.disclosure)
+    assert [entry.provenance_line for entry in standard.file.manifest.cards] == [MAPLE, MAPLE, CEDAR, CEDAR]
 
 
 def test_provenance_names_who_disclosed_each_card_exactly_as_disclosed(standard: Built) -> None:
@@ -805,32 +805,6 @@ def test_refusal_messages_name_no_school_team_or_card_text(
         assert absent not in message, absent
 
 
-class _LosesTheCiteOfACardWithTheLine(DebateDocxParser):
-    """A parser that reads the cite of any card carrying a provenance line as nothing.
-
-    No shape of today's parser does this to a cite that is not highlighted; this stands in for one
-    not yet found, to show the writer names the line as the cause without knowing any parser rule.
-    """
-
-    def parse(
-        self,
-        content: bytes,
-        source: SourceDocument,
-        *,
-        source_path: str,
-        snapshot: date | None = None,
-        camp: str | None = None,
-    ) -> ParsedDocument | ParseFailure:
-        parsed = super().parse(content, source, source_path=source_path, snapshot=snapshot, camp=camp)
-        if not isinstance(parsed, ParsedDocument):
-            return parsed
-        cards = tuple(
-            card.model_copy(update={"full_cite": ""}) if "[Disclosed" in card.undertag else card
-            for card in parsed.cards
-        )
-        return parsed.model_copy(update={"cards": cards})
-
-
 class _ReadsAnExtraCardInABuiltFile(DebateDocxParser):
     """A parser that finds one card more in a built file than the writer put there."""
 
@@ -851,20 +825,6 @@ class _ReadsAnExtraCardInABuiltFile(DebateDocxParser):
             update={"provenance": last.provenance.model_copy(update={"first_element_index": 999})}
         )
         return parsed.model_copy(update={"cards": (*parsed.cards, extra)})
-
-
-def test_refusal_names_the_line_as_the_cause_of_any_change_it_makes_without_knowing_the_rule(
-    built_at: datetime,
-) -> None:
-    parser = _LosesTheCiteOfACardWithTheLine()
-    world, cards = _sources(parser, (SOURCE_ONE, SyntheticDisclosure()))
-    built = _build(
-        world, cards[:1], [("Prices", [{"fingerprint": cards[0].fingerprint}])], built_at, parser=parser
-    )
-    assert isinstance(built.result, FileBuildRefusal)
-    (refusal,) = built.result.refusals
-    assert refusal.detail.startswith("the provenance line below the cite changes how the card reads: ")
-    assert refusal.detail.endswith("; without the line the card reads as its source")
 
 
 def test_refusal_a_built_file_that_reads_as_more_cards_than_were_written(built_at: datetime) -> None:
@@ -946,10 +906,16 @@ def _camp_build(
     camp_file: bool = True,
     camp_only: bool = False,
     writer: DocxEvidenceFileWriter | None = None,
+    release: str = RELEASE,
+    camp_name: str | None = CAMP,
+    record: CampFile | None = None,
 ) -> CampBuild:
-    """A disclosed card, then a camp card pinned by its release, in one block; or the camp card alone."""
+    """A disclosed card, then a camp card pinned by its release, in one block; or the camp card alone.
+
+    The camp card's release record is `record`, or the standard one; with `camp_file=False`, none.
+    """
     world, cards = _sources(parser, (SOURCE_ONE, SyntheticDisclosure()), (CAMP_SOURCE, None))
-    disclosed, camp = cards[0], _as_camp_card(cards[2])
+    disclosed, camp = cards[0], _as_camp_card(cards[2], release=release, camp=camp_name)
     items = (
         [{"fingerprint": camp.fingerprint}]
         if camp_only
@@ -964,17 +930,16 @@ def _camp_build(
     resolved = world.resolve(
         recipe, {disclosed.fingerprint: disclosed, camp.fingerprint: camp}, pinned=[camp.fingerprint]
     )
-    record = _camp_file(camp.occurrence.source_sha256) if camp_file else None
-    resolved = _with_camp_files(resolved, {camp.fingerprint: record})
+    joined = (record or _camp_file(camp.occurrence.source_sha256)) if camp_file else None
+    resolved = _with_camp_files(resolved, {camp.fingerprint: joined})
     writer = writer or DocxEvidenceFileWriter(snapshots=world.snapshots, parser=parser)
     result = asyncio.run(writer.build(FileBuildRequest(resolved, built_at)))
     return CampBuild(disclosed, camp, resolved, result)
 
 
-def test_camp_a_recipe_pinning_a_camp_card_builds_with_the_openev_line_below_its_cite(
+def test_camp_a_recipe_pinning_a_camp_card_builds_with_no_line_below_its_cite(
     parser: DebateDocxParser, built_at: datetime
 ) -> None:
-    maple = "[Disclosed: hspolicy26 2026-09-15 — Maple Grove QX, Aff vs. Riverbend Invitational Round 4]"
     built = _camp_build(parser, built_at)
     assert _paragraphs(built.file.docx) == [
         (
@@ -987,16 +952,14 @@ def test_camp_a_recipe_pinning_a_camp_card_builds_with_the_openev_line_below_its
         ("Heading3", "Reliability"),
         ("Heading4", "Moratoria raise prices for every ratepayer"),
         (None, "Lindqvist 26, Senior Fellow, Synthetic Energy Review, 2026"),
-        ("Undertag", maple),
         (None, "A moratorium freezes supply while demand rises."),
         ("Heading4", "Grid upgrades cost less than new plants"),
         (None, "Vasquez-Hale 31, Engineer, Synthetic Transmission Journal, 2031"),
-        ("Undertag", CAMP_LINE),
         (None, "Reconductoring doubles capacity on existing corridors."),
     ]
 
 
-def test_camp_the_card_reads_back_as_its_source_with_the_line_as_undertag_in_neither_cite_nor_evidence(
+def test_camp_the_card_reads_back_as_its_source_with_no_line_in_its_undertag_cite_or_evidence(
     parser: DebateDocxParser, built_at: datetime
 ) -> None:
     built = _camp_build(parser, built_at)
@@ -1009,8 +972,8 @@ def test_camp_the_card_reads_back_as_its_source_with_the_line_as_undertag_in_nei
         source.formatting_spans, source.font_size_spans
     )
     assert camp.tag == source.tag
-    assert CAMP_LINE in camp.undertag.split("\n")
-    for text in (camp.full_cite, camp.evidence_text):
+    assert camp.undertag == source.undertag
+    for text in (camp.undertag, camp.full_cite, camp.evidence_text):
         assert "OpenEv" not in text and CAMP not in text and CAMP_TITLE not in text
 
 
@@ -1070,30 +1033,31 @@ def test_camp_a_sidecar_written_before_camp_cards_still_validates(standard: Buil
     ],
     ids=["policy", "ld", "pf", "no-release-record"],
 )
-def test_camp_the_line_is_composed_from_the_records_alone(
-    parser: DebateDocxParser, release: str, record: CampFile | None, line: str
+def test_camp_the_sidecars_line_is_composed_from_the_records_alone(
+    parser: DebateDocxParser, built_at: datetime, release: str, record: CampFile | None, line: str
 ) -> None:
-    _, cards = _sources(parser, (CAMP_SOURCE, None))
-    camp = _as_camp_card(cards[0], release=release)
-    assert provenance_line(camp.occurrence, None, camp_file=record) == line
+    built = _camp_build(parser, built_at, release=release, camp_file=record is not None, record=record)
+    assert built.file.manifest.cards[1].provenance_line == line
+    assert "OpenEv" not in " ".join(text for _, text in _paragraphs(built.file.docx)[1:])
 
 
-def test_camp_the_line_takes_the_camp_from_the_occurrence(parser: DebateDocxParser) -> None:
-    _, cards = _sources(parser, (CAMP_SOURCE, None))
-    camp = _as_camp_card(cards[0], camp="Brackenridge Debate Workshop")
-    assert provenance_line(camp.occurrence, None, camp_file=_camp_file("0" * 64)) == (
+def test_camp_the_sidecars_line_takes_the_camp_from_the_occurrence(
+    parser: DebateDocxParser, built_at: datetime
+) -> None:
+    workshop = "Brackenridge Debate Workshop"
+    built = _camp_build(parser, built_at, camp_name=workshop, record=_camp_file("0" * 64))
+    assert built.file.manifest.cards[1].provenance_line == (
         f"[OpenEv: Brackenridge Debate Workshop 2031 — Policy, {CAMP_TITLE}]"
     )
 
 
-def test_camp_a_card_with_no_release_record_builds_with_the_line_without_a_title(
+def test_camp_a_card_with_no_release_record_builds_with_no_line_and_a_sidecar_line_without_a_title(
     parser: DebateDocxParser, built_at: datetime
 ) -> None:
     built = _camp_build(parser, built_at, camp_file=False)
-    assert [text for style, text in _paragraphs(built.file.docx) if style == "Undertag"][1] == (
-        f"[OpenEv: {CAMP} 2031 — Policy]"
-    )
+    assert [text for style, text in _paragraphs(built.file.docx) if style == "Undertag"] == []
     camp = built.file.manifest.cards[1]
+    assert camp.provenance_line == f"[OpenEv: {CAMP} 2031 — Policy]"
     assert (camp.camp_year, camp.camp_event, camp.camp_file_title) == (2031, Event.POLICY, None)
 
 

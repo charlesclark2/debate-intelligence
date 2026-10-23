@@ -525,21 +525,24 @@ def test_mutation_one_card_duplicated_fails_duplicate_cards(
     ]
 
 
-def test_mutation_a_provenance_line_moved_above_its_cite_fails_provenance(
+def test_mutation_a_provenance_line_written_below_a_cite_fails_provenance(
     parser: DebateDocxParser, standard: OnDisk
 ) -> None:
-    def move_line(root: etree._Element) -> None:  # pyright: ignore[reportPrivateUsage]
-        cite_paragraph = paragraph_holding(root, "Lindqvist 26")
-        undertag = cite_paragraph.getnext()
-        assert undertag is not None and paragraph_text(undertag).startswith("[Disclosed: ")
-        cite_paragraph.addprevious(undertag)
+    """Data-use policy 1.11: a built file carries no provenance line, so one written into it fails."""
+    line = standard.built.manifest.cards[0].provenance_line
 
-    tamper(standard.path, move_line)
+    def write_line(root: etree._Element) -> None:  # pyright: ignore[reportPrivateUsage]
+        undertag = etree.fromstring(
+            f'<w:body xmlns:w="{W_NAMESPACE}">{paragraph_xml(run_xml(line), style="Undertag")}</w:body>'
+        )[0]
+        paragraph_holding(root, "Lindqvist 26").addnext(undertag)
+
+    tamper(standard.path, write_line)
     report = check(parser, standard)
     assert report.status is CheckStatus.FAIL
-    assert "the card's provenance line is not below its cite in the Undertag style" in messages(
-        report, QualityCheck.PROVENANCE_COMPLETE
-    )
+    assert messages(report, QualityCheck.PROVENANCE_COMPLETE) == [
+        "the card's text holds a provenance line, which a built file never carries"
+    ]
 
 
 def test_mutation_a_heading_restyled_as_an_alias_fails_heading_structure(
@@ -660,6 +663,15 @@ def test_a_sidecar_missing_a_card_fails_alignment(parser: DebateDocxParser, stan
     assert messages(report, QualityCheck.MANIFEST_ALIGNMENT) == [
         "the sidecar lists 3 cards and the document reads as 4",
         "the document's card is not in the sidecar",
+    ]
+
+
+def test_a_card_with_no_sidecar_entry_fails_provenance(parser: DebateDocxParser, standard: OnDisk) -> None:
+    """Attribution rule 5: with no line in the file, the sidecar entry is a card's only provenance."""
+    edit_sidecar(standard, lambda d: d.update(cards=d["cards"][:3]))
+    report = check(parser, standard)
+    assert messages(report, QualityCheck.PROVENANCE_COMPLETE) == [
+        "the document's card has no sidecar entry, so no provenance on record"
     ]
 
 

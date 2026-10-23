@@ -292,7 +292,7 @@ def test_one_file_built_from_every_structural_fixture_reads_back_as_them(parser:
 
 
 # ------------------------------------------------------------------------------------------------
-# The provenance line in every cite shape (PM amendment 2026-10-19)
+# Every cite shape, and no provenance line in any (PM amendment 2026-10-19; `v1-e33-t08`)
 # ------------------------------------------------------------------------------------------------
 
 PROSE = (
@@ -358,7 +358,7 @@ def _source_card(parser: DebateDocxParser, content: bytes) -> ParsedCard:
 
 
 @pytest.mark.parametrize("shape", CITE_SHAPES, ids=list(CITE_SHAPES))
-def test_the_provenance_line_leaves_the_cite_and_the_body_as_the_source_reads_them(
+def test_every_cite_shape_reads_back_as_its_source_with_no_provenance_line(
     parser: DebateDocxParser, shape: str
 ) -> None:
     markup, rule = CITE_SHAPES[shape]
@@ -368,10 +368,10 @@ def test_the_provenance_line_leaves_the_cite_and_the_body_as_the_source_reads_th
     cards, result = build_all(parser, content)
     assert_every_card_reads_as_its_source(parser, cards, result)
     assert isinstance(result, BuiltEvidenceFile)
-    built = reparse(parser, result.docx).cards[0]
+    read = reparse(parser, result.docx)
+    assert read.cards[0].undertag == source.undertag, "the card's undertag is its own, with no line"
     line = result.manifest.cards[0].provenance_line
-    assert line in built.undertag.split("\n"), "the line is read as the card's undertag"
-    assert line not in built.full_cite and line not in built.evidence_text
+    assert not any(line in section.text or "[Disclosed: " in section.text for section in read.sections)
 
 
 HIGHLIGHTED_CITE = paragraph(
@@ -392,13 +392,13 @@ def parser_steps_over_an_undertag(parser: DebateDocxParser) -> bool:
     return card.full_cite.startswith("Okonkwo 26")
 
 
-def test_a_highlighted_cite_builds_and_reads_back_with_the_line_below_it(parser: DebateDocxParser) -> None:
+def test_a_highlighted_cite_builds_and_reads_back_with_its_body_below_it(parser: DebateDocxParser) -> None:
     """The one shape the provenance line changed, until `v1-e31-t24`.
 
     The parser read a highlighted cite as a cite only when its body was directly below it, and the
-    line stands between them, so the read-back refused the card and named the line as the cause.
-    Now the parser steps over an Undertag line, so the card builds and reads back as its source, with
-    the line as its undertag: the writer moved with the parser and did not change.
+    line stood between them, so the read-back refused the card. `v1-e31-t24` let the parser step over
+    an Undertag line; since `v1-e33-t08` a built file writes no line, so the body is below the cite
+    again, as in the source.
     """
     content = build_docx(TAG + HIGHLIGHTED_CITE + BODY)
     source = _source_card(parser, content)
@@ -408,7 +408,7 @@ def test_a_highlighted_cite_builds_and_reads_back_with_the_line_below_it(parser:
     assert isinstance(result, BuiltEvidenceFile)
     built = reparse(parser, result.docx).cards[0]
     assert built.full_cite == source.full_cite
-    assert result.manifest.cards[0].provenance_line in built.undertag.split("\n")
+    assert built.undertag == source.undertag == ""
 
 
 def test_the_parser_steps_over_the_line(parser: DebateDocxParser) -> None:
@@ -416,17 +416,14 @@ def test_the_parser_steps_over_the_line(parser: DebateDocxParser) -> None:
     assert parser_steps_over_an_undertag(parser) is True
 
 
-def test_a_card_the_line_does_not_change_is_refused_without_blaming_the_line(
-    parser: DebateDocxParser,
-) -> None:
-    """A tagless card after a cite-only card merges into it whether or not the line is there."""
+def test_a_tagless_card_after_a_cite_only_card_is_refused_on_read_back(parser: DebateDocxParser) -> None:
+    """A tagless card after a cite-only card merges into it, so the file does not read back."""
     first = build_docx(TAG + styled_cite("Marsh 24", TAIL))
     second = build_docx(styled_cite("Okonkwo 26", TAIL) + BODY)
     _, result = build_all(parser, first, second)
     assert isinstance(result, FileBuildRefusal)
     for refusal in result.refusals:
         assert refusal.code is CardRefusalCode.READBACK_MISMATCH
-        assert "provenance line" not in refusal.detail.split(":")[0]
 
 
 # ------------------------------------------------------------------------------------------------

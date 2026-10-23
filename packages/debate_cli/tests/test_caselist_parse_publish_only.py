@@ -9,6 +9,8 @@ holds the command to:
   it uploads nothing.
 * ac2: a directory it may not publish is refused with its code and a hint naming `--publish`, and
   nothing reaches the bucket.
+* ac4: dev's store sent to prod, whose bucket's suppression list holds a removal or a path hold
+  dev's lacks, is refused, and nothing reaches prod's `parsed/`.
 * `--publish` and every option that only shapes a rebuild are refused beside it, before anything
   is read or written; so is `--failures`. `--publish`'s guards are its guards.
 * An incomplete publish, either way, says to retry with `--publish-only`.
@@ -17,9 +19,11 @@ holds the command to:
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from collections.abc import Iterator
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final
 
@@ -28,13 +32,21 @@ import pytest
 from moto import mock_aws
 from tests.fixtures.caselist.publish_expectations import FICTIONAL_IDENTIFIERS
 from tests.fixtures.model_routing import EXAMPLE_ROUTING_FILE
-from tests.fixtures.parse_pipeline.build_parse_world import CASELIST, WEEKS, build_week_zips
+from tests.fixtures.parse_pipeline.build_parse_world import CASELIST, WEEKS, build_week_zips, digest_of
 from typer.testing import CliRunner, Result
 
 from debate_cli.app import create_app
 from debate_cli.exit_codes import ExitCode
+from debate_core.application.caselist.suppression import PATH_HOLDS_KEY, SUPPRESSION_LIST_KEY
 from debate_core.application.errors import StoreUnavailable
 from debate_core.application.ports.evidence_store import ObjectInfo
+from debate_core.application.ports.suppression import (
+    PathHoldEntry,
+    ReasonCode,
+    SuppressionAction,
+    SuppressionEntry,
+    disclosure_digest,
+)
 from debate_core.integrations.docx_parser import DOCX_PARSER_VERSION
 from debate_core.integrations.s3 import S3EvidenceObjectStore
 
@@ -346,3 +358,84 @@ def test_an_incomplete_publish_only_reports_as_an_incomplete_publish_does(
     publish = error["details"]["publish"]
     assert (publish["aggregates"], publish["failure_codes"]) == ("withheld", ["STORE_UNAVAILABLE"])
     assert "Contents" not in buckets.list_objects_v2(Bucket=DEV_BUCKET)
+
+
+# ------------------------------------------------------------------------------------------------
+# ac4: prod's list holds what dev's aggregates were rebuilt without
+# ------------------------------------------------------------------------------------------------
+
+RECORDED: Final = datetime(2026, 9, 30, 18, 0, tzinfo=UTC)
+REMOVED: Final = hashlib.sha256(b"a removed file no snapshot of this store holds").hexdigest()
+
+
+def plant(client: S3Client, key: str, *lines: str) -> None:
+    """Record `lines` in prod's bucket alone, as a removal made against prod leaves them."""
+    client.put_object(Bucket=PROD_BUCKET, Key=key, Body="".join(f"{line}\n" for line in lines).encode())
+
+
+def parsed_in_prod(client: S3Client) -> list[str]:
+    listed = client.list_objects_v2(Bucket=PROD_BUCKET, Prefix="parsed/").get("Contents", [])
+    return [str(item.get("Key")) for item in listed]
+
+
+def test_a_removal_only_prods_list_holds_is_refused_and_prod_gets_nothing(
+    imported: Path, buckets: S3Client, published_to_dev: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    removal = SuppressionEntry(
+        action=SuppressionAction.SUPPRESS,
+        sha256=digest_of("wiki"),
+        recorded_at=RECORDED,
+        reason=ReasonCode.POLICY,
+        request_id="RM-2026-91",
+    )
+    plant(buckets, SUPPRESSION_LIST_KEY, removal.to_line())
+    monkeypatch.setenv("DEBATE_ENV", "prod")
+
+    result = publish_only("--confirm-prod")
+
+    assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.stdout
+    error = envelope_of(result)["error"]
+    assert error["code"] == "PARSED_AGGREGATES_NAME_WHAT_THE_LIST_STOPS"
+    assert f"(sha256 {digest_of('wiki')[:12]})" in error["message"]
+    assert error["hint"] == (
+        f"`debate-research caselist parse --caselist {CASELIST} --publish` rebuilds the aggregates "
+        "from this environment's suppression list, then publishes them."
+    )
+    assert parsed_in_prod(buckets) == []
+    for identifier in (*FICTIONAL_IDENTIFIERS, str(imported)):
+        assert identifier not in result.stdout
+
+
+def test_a_path_hold_only_prods_list_holds_is_refused_and_prod_gets_nothing(
+    imported: Path, buckets: S3Client, published_to_dev: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    held_path = next(path for path, body in WEEKS[1].members if body == "cardmirror")
+    removal = SuppressionEntry(
+        action=SuppressionAction.SUPPRESS,
+        sha256=REMOVED,
+        recorded_at=RECORDED,
+        reason=ReasonCode.REQUESTED_BY_TEAM,
+        request_id="RM-2026-72",
+    )
+    hold = PathHoldEntry(
+        caselist=CASELIST,
+        disclosure=disclosure_digest(CASELIST, held_path),
+        sha256=REMOVED,
+        after_snapshot=date(2026, 9, 1),
+        recorded_at=RECORDED,
+        reason=ReasonCode.REQUESTED_BY_TEAM,
+        request_id="RM-2026-72",
+    )
+    plant(buckets, SUPPRESSION_LIST_KEY, removal.to_line())
+    plant(buckets, PATH_HOLDS_KEY, hold.to_line())
+    monkeypatch.setenv("DEBATE_ENV", "prod")
+
+    result = publish_only("--confirm-prod")
+
+    assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.stdout
+    error = envelope_of(result)["error"]
+    assert error["code"] == "PARSED_AGGREGATES_NAME_WHAT_THE_LIST_STOPS"
+    assert "(1 of the sources only at a path a removal holds)" in error["message"]
+    assert parsed_in_prod(buckets) == []
+    for identifier in (*FICTIONAL_IDENTIFIERS, str(imported)):
+        assert identifier not in result.stdout

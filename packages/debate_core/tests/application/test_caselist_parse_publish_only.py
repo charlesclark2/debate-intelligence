@@ -13,6 +13,9 @@ of `test_caselist_parse.py`, to:
   with their own code and reason before anything is uploaded.
 * A per-source record stamped with an older fingerprint version, which is what a rebuild after a
   fingerprint bump leaves, is published as the rebuild's publish publishes it.
+* ac4: aggregates naming a source or a disclosure the target environment's suppression list now
+  stops or holds, because they were rebuilt before it did, are refused before any upload. Over a
+  list the rebuild read, it publishes as the rebuild's publish does.
 
 The two "buckets" are object stores on disk: a refusal is checked by the second being empty.
 Fingerprint versions are synthetic, as in `test_caselist_parse_newer_fingerprint_table.py`.
@@ -20,14 +23,22 @@ Fingerprint versions are synthetic, as in `test_caselist_parse_newer_fingerprint
 
 from __future__ import annotations
 
+import hashlib
 import json
 from collections.abc import Callable
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Final
 
 import pytest
 from tests.fixtures.caselist.publish_expectations import FICTIONAL_IDENTIFIERS
-from tests.fixtures.parse_pipeline.build_parse_world import CASELIST, digest_of, import_weeks
+from tests.fixtures.parse_pipeline.build_parse_world import (
+    CASELIST,
+    R1_COPY_PATH,
+    WEEKS,
+    digest_of,
+    import_weeks,
+)
 
 from debate_core.application import caselist_parse as caselist_parse_module
 from debate_core.application.caselist import occurrence_table_guard, parsed_publish_only
@@ -44,6 +55,13 @@ from debate_core.application.caselist.publish_plan import InvalidPublishTarget
 from debate_core.application.caselist.publish_service import SourceResult
 from debate_core.application.errors import error_code_of
 from debate_core.application.ports.parsed_store import AGGREGATE_NAMES, source_object_key
+from debate_core.application.ports.suppression import (
+    PathHoldEntry,
+    ReasonCode,
+    SuppressionAction,
+    SuppressionEntry,
+    disclosure_digest,
+)
 from debate_core.integrations.docx_parser import DOCX_PARSER_VERSION
 from debate_core.integrations.local import FsEvidenceObjectStore
 
@@ -55,6 +73,11 @@ BUILD: Final = "synthetic-fingerprint-v7"
 NEWER: Final = "synthetic-fingerprint-v8"
 OLDER: Final = "synthetic-fingerprint-v6"
 OTHER_PROFILE: Final = "2026.10.01-verbatim-2"
+STOPPED_BY_THE_LIST: Final = "PARSED_AGGREGATES_NAME_WHAT_THE_LIST_STOPS"
+#: A `--source` removal's file, taken from :data:`HELD_ONLY_PATH`; no week holds it any more.
+REMOVED: Final = hashlib.sha256(b"a removed file no snapshot of this store holds").hexdigest()
+#: `cardmirror`'s only path, first listed in `2026-09-08`: a hold there leaves its bytes held only.
+HELD_ONLY_PATH: Final = next(path for path, body in WEEKS[1].members if body == "cardmirror")
 
 
 @pytest.fixture
@@ -213,12 +236,12 @@ async def test_publish_only_over_an_unchanged_bucket_uploads_nothing(world: Worl
 async def test_a_suppressed_source_is_withheld_by_publish_only_as_by_the_rebuilds_publish(
     world: World, tmp_path: Path
 ) -> None:
-    """The list is the publisher's to apply: a removal recorded after the rebuild is honoured the
-    same way by both paths, from the same code."""
+    """Over the list the rebuild read, the publisher withholds the source's file for both paths,
+    from the same code, and the aggregates, rebuilt without it, are published."""
     first, second = a_bucket(tmp_path, "dev-bucket"), a_bucket(tmp_path, "prod-bucket")
     await world.run()
     await world.suppress(digest_of("wiki"))
-    rebuilt = await publisher_to(world, first).publish(CASELIST, DOCX_PARSER_VERSION)
+    rebuilt = await rebuild_and_publish(world, first)
 
     published = await publish_only(world, second)
 
@@ -428,3 +451,99 @@ async def test_a_per_source_record_a_newer_build_stamped_is_refused(
 async def test_a_caselist_that_is_not_a_slug_is_refused_before_anything_is_read(world: World) -> None:
     with pytest.raises(InvalidPublishTarget, match="slug"):
         await world.service().publishable_version("Maple Grove")
+
+
+# ------------------------------------------------------------------------------------------------
+# ac4: aggregates the target environment's list has since stopped something in
+# ------------------------------------------------------------------------------------------------
+
+
+async def hold(world: World, path: str) -> None:
+    """A `--source` removal of :data:`REMOVED` from `path`, as another environment records one."""
+    recorded = datetime(2026, 9, 30, 18, 0, tzinfo=UTC)
+    await world.suppression.append(
+        [
+            SuppressionEntry(
+                action=SuppressionAction.SUPPRESS,
+                sha256=REMOVED,
+                recorded_at=recorded,
+                reason=ReasonCode.REQUESTED_BY_TEAM,
+                request_id="RM-2026-72",
+            )
+        ]
+    )
+    await world.suppression.append_path_holds(
+        [
+            PathHoldEntry(
+                caselist=CASELIST,
+                disclosure=disclosure_digest(CASELIST, path),
+                sha256=REMOVED,
+                after_snapshot=date(2026, 9, 1),
+                recorded_at=recorded,
+                reason=ReasonCode.REQUESTED_BY_TEAM,
+                request_id="RM-2026-72",
+            )
+        ]
+    )
+
+
+async def test_a_removal_the_rebuild_never_read_is_refused_and_nothing_is_uploaded(
+    world: World, tmp_path: Path
+) -> None:
+    """Dev's aggregates, and a prod list holding one removal dev's lacks: the index still names
+    the source, and its occurrence rows its disclosures."""
+    await world.run()
+    await world.suppress(digest_of("wiki"))
+
+    refusal = await refused(world, tmp_path)
+
+    assert error_code_of(refusal) == STOPPED_BY_THE_LIST
+    message = str(refusal)
+    assert message.startswith(f"the aggregates of {CASELIST} {DOCX_PARSER_VERSION} name 1 source(s) and ")
+    assert "disclosure(s) this environment's suppression list now stops or holds (0 of the sources" in message
+    assert f"(sha256 {digest_of('wiki')[:12]})" in message
+    assert refusal.hint == (
+        f"`debate-research caselist parse --caselist {CASELIST} --publish` rebuilds the aggregates "
+        "from this environment's suppression list, then publishes them."
+    )
+
+
+async def test_a_withdrawn_disclosure_of_a_source_another_path_still_discloses_is_refused(
+    world: World, tmp_path: Path
+) -> None:
+    """The index may still name the source; one of its occurrence rows names what is withdrawn."""
+    await world.run()
+    await world.suppress(digest_of("verbatim"), path=R1_COPY_PATH)
+
+    refusal = await refused(world, tmp_path)
+
+    assert error_code_of(refusal) == STOPPED_BY_THE_LIST
+    assert str(refusal).startswith(
+        f"the aggregates of {CASELIST} {DOCX_PARSER_VERSION} name 0 source(s) and 1 disclosure(s) "
+    )
+    assert f"(sha256 {digest_of('verbatim')[:12]})" in str(refusal)
+
+
+async def test_a_path_hold_the_rebuild_never_read_is_refused(world: World, tmp_path: Path) -> None:
+    await world.run()
+    await hold(world, HELD_ONLY_PATH)
+
+    refusal = await refused(world, tmp_path)
+
+    assert error_code_of(refusal) == STOPPED_BY_THE_LIST
+    assert "name 1 source(s) and " in str(refusal)
+    assert "(1 of the sources only at a path a removal holds)" in str(refusal)
+    assert f"(sha256 {digest_of('cardmirror')[:12]})" in str(refusal)
+
+
+async def test_a_path_hold_the_rebuild_read_is_published_as_the_rebuilds_publish_does(
+    world: World, tmp_path: Path
+) -> None:
+    first, second = a_bucket(tmp_path, "dev-bucket"), a_bucket(tmp_path, "prod-bucket")
+    await hold(world, HELD_ONLY_PATH)
+    rebuilt = await rebuild_and_publish(world, first)
+
+    published = await publish_only(world, second)
+
+    assert await contents(second) == await contents(first)
+    assert outcomes(published) == outcomes(rebuilt)

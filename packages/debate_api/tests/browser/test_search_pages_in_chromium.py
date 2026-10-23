@@ -22,9 +22,11 @@ Marked `slow`: browser suites run outside the PR path (working agreement 1). Run
 
 from __future__ import annotations
 
+import io
 import json
 import logging
 import re
+import zipfile
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -511,11 +513,15 @@ def test_copy_card_writes_the_clipboard_inside_the_click_before_the_fetch_answer
 
     button = page.get_by_role("button", name="Copy card").bounding_box()
     status = page.locator("[data-tub-copy-message]").bounding_box()
+    bar = page.locator(".card-actions").bounding_box()
     text = page.locator(".card-text").bounding_box()
-    assert button is not None and status is not None and text is not None
+    assert button is not None and status is not None and bar is not None and text is not None
     assert status["y"] < button["y"] + button["height"] and button["y"] < status["y"] + status["height"]
     assert status["x"] > button["x"] + button["width"]
-    assert 0 < text["y"] - (button["y"] + button["height"]) < 40
+    # The bar holds Copy card's row and, since v1-e39-t08, the download's row below it; the card's
+    # text starts directly under the bar.
+    assert bar["y"] < button["y"] and button["y"] + button["height"] < bar["y"] + bar["height"]
+    assert 0 < text["y"] - (bar["y"] + bar["height"]) < 40
 
 
 def test_a_card_no_longer_in_the_index_is_not_copied_and_says_so(chromebook: Pilot) -> None:
@@ -722,9 +728,10 @@ def test_exposure_a_whole_journey_logs_no_query_school_team_code_or_card_text(
     world: Any, browser: Browser
 ) -> None:
     """Sign in through the app's callback, search with the school and team code, filter, page, open a
-    card from the second page and go back to it, copy, visit the account page and sign out through
-    managed login's `/logout`; the app's log records and audit records hold none of what was seen or
-    typed, and the copy holds no provenance line (`v1-e39-t11`).
+    card from the second page and go back to it, copy, add two cards to the cart and download it
+    (`v1-e39-t08`), visit the account page and sign out through managed login's `/logout`; the app's
+    log records and audit records hold none of what was seen or typed, the copy and the downloaded
+    file hold no provenance line (`v1-e39-t11`, `v1-e39-t08`), and signing out empties the cart.
 
     Playwright routes only the first request of a redirect chain, so the sign-in's redirects run
     in-process: the real `/` redirect, managed login's answer from `FakeManagedLogin` and the real
@@ -784,21 +791,58 @@ def test_exposure_a_whole_journey_logs_no_query_school_team_code_or_card_text(
                 "Copied. Paste it into Google Docs or Word."
             )
             copied = pilot.read_clipboard()
+            page.goto(pilot.origin + world.card_path("download"))
+            page.get_by_role("button", name="Add to cart").click()
+            expect(page.locator("[data-tub-cart-count]")).to_have_text("1 card")
+            page.goto(pilot.origin + world.card_path("camp download"))
+            page.get_by_role("button", name="Add to cart").click()
+            expect(page.locator("[data-tub-cart-count]")).to_have_text("2 cards")
+            with page.expect_download() as downloading:
+                page.get_by_role("button", name="Download cart").click()
+            downloaded = Path(downloading.value.path()).read_bytes()
+            assert downloading.value.suggested_filename == "team-evidence-cards-2026-11-02.docx"
+            expect(page.locator("[data-tub-cart-message]")).to_contain_text("Downloaded 2 cards.")
             page.goto(pilot.origin + "/account")
             page.get_by_role("button", name="Sign out").click()
             page.wait_for_url(pilot.origin + "/signed-out")
+            cart_after = page.evaluate("window.sessionStorage.getItem('tub-download-cart')")
     finally:
         pilot.close()
 
     assert pilot.foreign == []
     actions = [record.action.value for record in world.audit.records]
-    assert actions == ["searched", "searched", "card-viewed", "card-viewed", "card-copied"], actions
+    assert actions == [
+        "searched",
+        "searched",
+        "card-viewed",
+        "card-viewed",
+        "card-copied",
+        "card-viewed",
+        "card-viewed",
+        "cards-downloaded",
+    ], actions
+    assert cart_after is None, "signing out empties the cart"
+    assert downloaded == world.built[-1]
+    with zipfile.ZipFile(io.BytesIO(downloaded)) as archive:
+        document = archive.read("word/document.xml").decode("utf-8")
+    assert "Gabbro ridges slow upland erosion" in document and "Tuff walls shelter seedlings" in document
+    for word in ("[Disclosed", "[OpenEv", "Maple Grove", "Invented Invitational", "Cascade Institute"):
+        assert word not in document, word
     assert copied["types"] == ["text/html", "text/plain"]
     for part in (copied["html"], copied["text"]):
         assert FEATURED_LINE not in part and "Maple Grove" not in part and "[Disclosed:" not in part
     for record in world.audit.records:
         written = record.to_json()
-        for word in ("zephyr", "Maple Grove", "QX", "Riverbend", "Invented Invitational", "Round 4", "q="):
+        for word in (
+            "zephyr",
+            "Maple Grove",
+            "QX",
+            "Riverbend",
+            "Invented Invitational",
+            "Round 4",
+            "q=",
+            "Gabbro",
+        ):
             assert word not in written, (word, written)
     assert world.login.revoked, "the sign-out revoked the refresh token"
     # httpx's records are the test's in-process client's requests: the app cannot log through httpx,
@@ -821,7 +865,65 @@ def test_exposure_a_whole_journey_logs_no_query_school_team_code_or_card_text(
             "lindqvist",
             "invented",
             "debater.journey",
+            "gabbro",
+            "tuff",
+            "thorvaldsen",
+            "okafor",
+            "team-evidence-cards",
         ):
             assert word not in line.lower(), (word, line)
-        for exact in ("QX", "ZT", "q=", f"{1:064x}"):
+        for exact in ("QX", "ZT", "q=", f"{1:064x}", f"{27:064x}", f"{30:064x}"):
             assert exact not in line, (exact, line)
+
+
+# ------------------------------------------------------------------------------------------------
+# v1-e39-t08: Download .docx and the cart, by keyboard, axe clean; a refused card is dropped
+# ------------------------------------------------------------------------------------------------
+
+
+def test_download_one_card_and_a_cart_by_keyboard_dropping_a_refused_card(pilot: Pilot) -> None:
+    """A card's own download; then a cart with a card the writer refuses, named, dropped by its button,
+    and the rest downloaded. Every page stays axe clean and inside the edge's CSP."""
+    page = pilot.page
+    world = pilot.world
+    page.goto(pilot.origin + world.card_path("download"))
+    expect(page.locator("[data-tub-cart]")).to_be_hidden()
+    pilot.check_page()
+
+    pilot.tab_to("button[data-tub-download]")
+    with page.expect_download() as one:
+        page.keyboard.press("Enter")
+    assert Path(one.value.path()).read_bytes() == world.built[-1]
+    expect(page.locator("[data-tub-download-message]")).to_have_text(
+        "Downloaded 1 card. Open the file in Word."
+    )
+
+    pilot.tab_to("button[data-tub-cart-add]")
+    page.keyboard.press("Enter")
+    expect(page.locator("[data-tub-cart]")).to_be_visible()
+    expect(page.locator("button[data-tub-cart-add]")).to_have_text("Remove from cart")
+    pilot.check_page()
+    page.goto(pilot.origin + world.card_path("picture"))
+    page.get_by_role("button", name="Add to cart").click()
+    expect(page.locator("[data-tub-cart-count]")).to_have_text("2 cards")
+
+    pilot.tab_to("button[data-tub-cart-download]", backwards=True)
+    page.keyboard.press("Enter")
+    message = page.locator("[data-tub-cart-message]")
+    expect(message).to_contain_text("Some cards cannot be downloaded.")
+    expect(message.locator("li")).to_have_text(
+        "Card 2, Andesite slopes hold snow: It holds a picture, a table, a text box or a footnote that "
+        "cannot be copied exactly. Copy card copies its text."
+    )
+    pilot.check_page()
+    with page.expect_download() as rest:
+        message.get_by_role("button", name="Remove these from the cart and download the rest").click()
+    assert Path(rest.value.path()).read_bytes() == world.built[-1]
+    expect(page.locator("[data-tub-cart-count]")).to_have_text("1 card")
+    expect(message).to_have_text("Downloaded 1 card. Open the file in Word.")
+
+    page.get_by_role("button", name="Empty the cart").click()
+    expect(page.locator("[data-tub-cart]")).to_be_hidden()
+    assert pilot.foreign == []
+    actions = [record.action.value for record in world.audit.records]
+    assert actions.count("cards-downloaded") == 2, actions

@@ -343,9 +343,12 @@ def test_the_card_page_shows_the_label_tag_cite_line_counts_copy_card_and_every_
     bar = head.split('<div class="card-actions">')[1]
     assert bar.startswith("\n" + copy)
     assert '<span id="copy-help" class="copy-help">' in bar
-    assert '<span class="copy-status" data-tub-copy-message role="status"></span>\n<button' in bar
+    assert (
+        '<span class="copy-status" data-tub-copy-message role="status"></span>\n'
+        '<div class="download-actions">' in bar
+    )
     assert bar.rstrip().endswith(
-        '<div class="download-status" data-tub-download-message role="status"></div>\n</div>'
+        '<div class="download-status" data-tub-download-message role="status"></div>\n</div>\n</div>'
     ), "Copy card, then v1-e39-t08's Download .docx and Add to cart, in the one bar"
     occurrences = page.split('<ul class="occurrences">')[1].split("</ul>")[0]
     assert re.findall(r'<li class="provenance">(.*?)</li>', occurrences) == [FEATURED_LINE, OTHER_LINE]

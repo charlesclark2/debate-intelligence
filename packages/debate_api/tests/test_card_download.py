@@ -478,7 +478,7 @@ def test_download_card_page_offers_download_and_the_cart_when_the_parsers_agree(
     page = student.browser.get(student.card_path("download")).text
     reference = student.card_reference("download")
 
-    assert f'<button type="button" data-tub-download="{reference}" aria-describedby="download-help">' in page
+    assert f'<button type="button" data-tub-download="{reference}">Download .docx</button>' in page
     assert (
         f'<button type="button" class="secondary" data-tub-cart-add="{reference}">Add to cart</button>'
         in page

@@ -1,0 +1,80 @@
+# TASK v1-e39-t16-open-on-openev - Open on OpenEv: a camp card links to its camp file
+# Epic: E39 — Team Evidence Search (Student Pilot) | Release: v1.7 (Team evidence search pilot) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e39-t16-open-on-openev
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.7
+    debate/epic: v1-e39-evidence-search-pilot
+  annotations:
+    debate/title: "Open on OpenEv: a camp card links to its camp file"
+spec:
+  # Filed by the PM, 2026-10-22, from v1-e39-t11's PM ruling of 2026-10-22 (option A on ac3's camp half).
+  description: >-
+    v1-e39-t11 links a disclosed card to its team's page on openCaselist, but a camp card shows
+    no link: the index stores a camp file's camp, year, event and title, and neither it nor the
+    parsed store's CampFile holds the OpenEv id or path, which survives only in the sync's run
+    records and inbox file names. Carry the OpenEv file's id or path from the import through
+    CampFile into an unindexed column of the search index, bump the index format once (after
+    v1-e39-t13's move to format 2), and show "Open on OpenEv" on a camp card's page, in a new
+    tab with no referrer, built only from that stored value. The deploy order is the function
+    before the first index of the new format, as v1-e39-t13's is.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, debate_core.domain, debate_core.integrations, debate_api, packages/debate_core/tests, packages/debate_api/tests, docs/data]
+    forbidden:
+      - A link built from anything but the stored OpenEv value
+      - The OpenEv value made searchable
+      - Card text, a school, team code, file name or person's name in any fixture, log, report or commit (synthetic values only)
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e39-t13-passage-search
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A camp card's page links to its OpenEv file from the stored value, and a camp card
+        without one shows none, by tests shown failing first.
+    - id: ac2
+      description: >-
+        The index format is bumped once and a holder given another format refuses it with a
+        message; the deploy order is in the runbook.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e39-t16-open-on-openev-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.7
+    debate/epic: v1-e39-evidence-search-pilot
+spec:
+  description: >-
+    Carry the OpenEv address from the import to the index and link camp cards to it.
+  goalRef:
+    name: v1-e39-t16-open-on-openev
+  graph:
+    nodes:
+      - id: openev-link
+        kind: Task
+        name: Open on OpenEv
+        description: >-
+          Carry the OpenEv address from the import to the index and link camp cards to it.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Pilot page tests pass
+            command: uv
+            args: [run, pytest, packages/debate_api/tests]
+status:
+  phase: Pending

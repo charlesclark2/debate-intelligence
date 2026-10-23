@@ -791,5 +791,24 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e01-t33-newer-build-messages
+    - id: t34
+      kind: Task
+      name: 'validate-dev is green again, and a red one is seen'
+      description: >-
+        validate-dev is green again, and a red one is seen.
+      inputs:
+        specRef: plan_specs/v1/e01-repo-foundation/t34-validate-dev-green-again.yaml
+        goalRef: v1-e01-t34-validate-dev-green-again
+      dependsOn:
+      - t30
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e01-t34-validate-dev-green-again reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e01-t34-validate-dev-green-again
 status:
   phase: Pending

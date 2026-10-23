@@ -139,7 +139,12 @@ the ADR lists each page.
 6. **The run's network is interim.** It uses public subnets and a public IP, because a NAT gateway
    costs more than dev's whole budget. `v2-e10-t05` forbids that shape for V2 and replaces it. The
    ADR says this rather than pre-empting ADR-0011.
-7. **The ADR does not edit the store layout document.** It names the new keys
+7. **Charlie's two answers (2026-10-23) are recorded in the ADR, not the policy.** Tabroom's login
+   never asks for more than the password, so the unattended login stands and the hand login is a
+   contingency only. The maintainer has been told the downloads are likely to move to the cloud and
+   is fine with it. Clause 12's terms do not depend on where the job runs, so policy 1.12 gains no
+   line for it; the PM block offers one.
+8. **The ADR does not edit the store layout document.** It names the new keys
    (`reports/sync/run-lock.json`, `reports/sync/state/`, `manifests/_run-state/`), all under
    existing prefixes, so no Terraform listing grant changes. `t04` writes them into the layout, as
    its packages allow.
@@ -149,8 +154,8 @@ the ADR lists each page.
 One block, to paste to the PM. Each question has a recommendation.
 
 ````text
-PM questions from v1-e40-t01-cloud-run-adr (ADR-0020, Proposed). Please rule on 1-4; 5 and 6 are for
-Charlie; the FYIs need no answer unless you disagree.
+PM questions from v1-e40-t01-cloud-run-adr (ADR-0020, Proposed). Please rule on 1-4; the FYIs need
+no answer unless you disagree.
 
 1. Policy 1.12 is wider than "Access item 3".
    Fact: E34 gate item 8 says the job "runs on the operator's own machine", and a cloud run holds a
@@ -185,15 +190,12 @@ Charlie; the FYIs need no answer unless you disagree.
    a restored copy until promotion, then the home moves to prod and the dev bucket stops getting
    the weekly corpus. t06 already says "repeat in prod at its promotion"; its runbook names the move.
 
-5. For Charlie: does your Tabroom login ever ask for anything but the password (a code, a CAPTCHA,
-   a new-device email, new terms)? Recommendation: answer before t02. If yes, t02 needs a design
-   change. If no, the fallback in the ADR (log in by hand on the Mac, which writes only the token)
-   stays a fallback.
-
-6. For Charlie: downloads will come from an AWS address instead of your home connection.
-   Recommendation: a short courtesy note to the OpenCaselist maintainer before the cutover. Same
-   account, same rate limit, same weekly cadence, now from a scheduled job in AWS. Clause 12 does
-   not depend on where the job runs, so the policy needs no change either way.
+Answered by Charlie on 2026-10-23, and recorded in ADR-0020's Context:
+- Tabroom's login never asks for more than the password, so t02's unattended login needs no design
+  change; the hand login on the Mac stays a contingency for a future change.
+- Charlie has told the OpenCaselist maintainer that the downloads are likely to move to the cloud,
+  and the maintainer is fine with it. Clause 12 does not depend on where the job runs, so policy
+  1.12 does not record this; say if you want a line in the clause register.
 
 FYI (proceeding as written unless you say otherwise):
 - An administrator (DebateBreakGlassAdmin, or the account's own AdministratorAccess) can still reach
@@ -213,7 +215,7 @@ FYI (proceeding as written unless you say otherwise):
 - t12's "second read compaction" note: not needed for sizing. The 305 s build is about 5% of a
   cloud run (estimate).
 
-Reply with a ruling on 1-4 (a letter or "as recommended"), and pass 5 and 6 to Charlie.
+Reply with a ruling on 1-4 (a letter or "as recommended").
 ````
 
 ## Operator follow-ups

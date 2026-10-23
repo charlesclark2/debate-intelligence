@@ -27,6 +27,12 @@ and where it changes what a task's spec says it names the change for the PM in
 - The token is refreshed on a schedule, and the coach gets an email when a login fails.
 - Run state lives in S3. The Mac is never the server.
 
+**Two answers from the coach, 2026-10-23:**
+
+- **Tabroom's login never asks for more than the password.**
+- **The OpenCaselist maintainer has been told** that the downloads are likely to move to the cloud,
+  and is fine with it.
+
 **What the decision has to fit.**
 
 - **The data-use policy.** [E34 gate](../policies/caselist-data-use.md#e34--automated-caselist-download-v12)
@@ -335,18 +341,20 @@ week and cannot lock the account. If it fails, the coach is emailed, and the run
 previous token if it still works.
 
 **The unattended-login risk, plainly.** The login is a JSON call that takes a username and a
-password and returns a token. Nothing in our client answers a second step, and nothing in the
-recorded runs shows one. If Tabroom or OpenCaselist ever asks for something an unattended job cannot
-give (a one-time code, a CAPTCHA, a new-device confirmation, a forced password change, new terms),
-the login fails, the coach is emailed, and **the fallback is a login by hand**: on the Mac, signed in
+password and returns a token. Nothing in our client answers a second step, nothing in the recorded
+runs shows one, and the coach confirmed on 2026-10-23 that Tabroom's login never asks for more than
+the password. So the risk is a future change, not a present one. If Tabroom or OpenCaselist ever
+starts asking for something an unattended job cannot give (a one-time code, a CAPTCHA, a new-device
+confirmation, a forced password change, new terms), the login fails, the coach is emailed, and **the fallback is a login by hand**: on the Mac, signed in
 under the writer permission set, `debate-research caselist auth login --token-backend
 secretsmanager` (`t02`) prompts as today and writes only the token to the token secret. The weekly run
 then proceeds unchanged. A second, separate risk: **the run's requests now come from an AWS address
 instead of the coach's home connection.** The login is server-to-server from OpenCaselist to
 Tabroom, but `api.opencaselist.com` will see the downloads come from a data centre, and a site may
 treat that differently. If it refuses them, the run fails on its codes and emails the coach, and the
-fallback is the Mac for that week ((4) below). Whether to tell the maintainer is a question for the
-coach, raised in the session report.
+fallback is the Mac for that week ((4) below). The coach has told the maintainer that the downloads
+are likely to move to the cloud, and the maintainer is fine with it. Clause 12's terms (the API, 10
+downloads a minute) do not depend on where the job runs, so the policy needs nothing more for this.
 
 ### (3) State: the bucket is the record, and a run works on a restored copy
 
@@ -661,8 +669,9 @@ bundle to what a removal reaches. Nothing else changes.
   readable by one role that only a schedule starts, and every read and every change to who may read
   it is recorded and emailed. An administrator of this account can still reach it through a
   recorded, emailed change. A separate prod account (ADR-0010's revisit trigger) would end that.
-- **Downloads come from an AWS address.** OpenCaselist may treat them differently from the coach's
-  home connection. The fallback is the Mac.
+- **Downloads come from an AWS address.** The maintainer knows and is fine with it. If the site's
+  infrastructure ever treats a data-centre address differently from the coach's home connection,
+  the fallback is the Mac.
 - **The working set grows with the season,** about 0.87 GB a week at the average so far, and the
   100 GiB volume is resized before it fills, when the run warns.
 - **The stage times this record could not measure** are recorded by `t03`, so the first cloud runs

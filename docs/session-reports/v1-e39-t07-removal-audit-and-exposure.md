@@ -335,55 +335,150 @@ ending in `reports/tub/search/current.json` with that id, and `058e2b1ce922…`.
 `reserve margin`. The card **Data centre demand collapses the reserve margin** is listed. Open it
 and note its path (`/cards/testcl26/<cluster id>`).
 
-4c. **The removal**, dry run then execute.
+4c. **The removal.** Run on 2026-10-23 as one block, which put the dry run and `--execute` in one
+paste; see "Block 4c" in the operator's record below. From now on a removal hand-off is two blocks
+with a stop between (the PM's ruling of 2026-10-22). This is how 4c reads now.
 
-Where: the same window
+The dry run, in the 4a window:
 ```bash
 uv run debate-research caselist remove --source "$REMOVED" --request RM-2026-91 --reason POLICY
+```
+**Stop and read the plan before going on.** It should name one file under *WILL BE REMOVED*, its
+local copies, and every caselist's `parsed/<caselist>/<version>/index.jsonl`, `failures.jsonl` and
+`occurrences.jsonl` in the bucket: a whole-file removal deletes them all, and step R rebuilds them.
+Then one suppression entry and one path entry, and nothing under `reports/` or `raw/` beyond the
+file. Paste the plan back; the execute comes only after it has been read:
+```bash
 DEBATE_REMOVAL_PROFILE=debate-dev-evidence-removal uv run debate-research caselist remove \
   --source "$REMOVED" --request RM-2026-91 --reason POLICY --execute
 date -u
 ```
-Success looks like a plan naming one file to remove and one suppression entry, then `DONE in dev`.
 
-4d. **P2, five minutes after `DONE`.** Open the card's path: **That card is not in the search**.
-Search `reserve margin`: the card is not listed. Note both times.
+**R. Rebuild dev's parsed-store aggregates** (PM ruling 2026-10-22: before 4d; runbook P1b; expected
+runtime a few minutes per caselist, nothing parsed again). In a **new terminal window**, so the 4a
+window's scratch data directory is not used; keep the 4a window open for 4e and 4f.
 
-4e. **P3: rebuild, publish, and check the rebuilt index.**
-
-Where: the same window
+Where: a new window, the task worktree
 ```bash
+cd /Users/charlesclark/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e39-t07-removal-audit-and-exposure
+echo "data dir override: ${DEBATE_STORAGE__DATA_DIR:-none}"
+pgrep -fl 'caselist pull'
+aws sso login --profile debate-dev-evidence
+for SLUG in hsld26 hspf26 hspolicy26 openev; do
+  DEBATE_ENV=dev debate-research caselist parse --caselist "$SLUG" --publish
+done
+```
+Success looks like `data dir override: none`, nothing from `pgrep`, and for each of the four a table
+with **0 sources parsed** and **3 aggregates uploaded**. Anything else (a source parsed, a
+different upload count, a refusal), stop and paste it back. Only the current version directory's
+aggregates come back; the superseded version directories the removal also emptied stay without
+them, as superseded directories do once retired.
+
+4d. **P2: the card is gone.** Signed in at `https://tub.dev.wfbdebate.com/`, open the card's path
+from 4b: **That card is not in the search**. Search `reserve margin`: the card is not listed. Note
+the time; it is later than five minutes after `DONE` (00:35:31 UTC) because R comes first. The
+five-minute bound itself is the tests' (ac1, ac7).
+
+4e. **P3: rebuild the synthetic index, publish it, and check it.** Back in the **4a window**. The
+removal also deleted the scratch store's own `testcl26` aggregates, so they are rebuilt first,
+without `--publish`: that store was never published.
+
+Where: the 4a window
+```bash
+echo "data dir: $DEBATE_STORAGE__DATA_DIR"
+uv run debate-research caselist parse --caselist testcl26
 uv run debate-research tub index build --caselist testcl26
 uv run debate-research tub index publish --env dev --newest
 INDEX_DIR=$(ls -td "${DEBATE_STORAGE__DATA_DIR}/tub-index"/*/ | head -1)
 echo "$INDEX_DIR"
 sqlite3 -readonly "${INDEX_DIR}search-index.sqlite" "select count(*) from occurrences where source_sha256 = '${REMOVED}'"
+date -u
 ```
-Success looks like a new index id, published, and `0`. Five minutes after the publish, the card's
-path answers again, with no Westfield XY line.
+Success looks like the scratch data directory (under `/var/folders/`), a parse that parses nothing
+again, a build of **2 documents** from **6 occurrences** with a new index id, the publish table
+naming it, and `0`. Five minutes after the publish, the card's path answers again, with no
+Westfield XY line.
 
-4f. **P4: the prune**, exactly as `docs/runbooks/caselist-removal.md` gives it ("P4 — Delete the
-superseded index versions"): its dry-run block, then its delete block, then the dry run again. They
-need the grant from block 1. Success looks like `would delete` lines for the dev index versions the
-synthetic one superseded, noncurrent ones included, and the `keeps` line naming 4e's index id. Then
-`0` per request file, the `pruned; kept` line, and a second dry run printing `0 version(s) of 0
-key(s) to delete`.
+4f. **P4: the prune**, the runbook's blocks, with a stop between them. They need block 1's grant.
 
-Paste back everything from 4a's import onwards, with the times from 4b to 4d.
+The dry run, in the 4a window:
+```bash
+aws sso login --profile debate-dev-evidence
+aws sso login --profile debate-dev-evidence-removal
+BUCKET=$(aws s3api list-buckets --profile debate-dev-evidence --query 'Buckets[?starts_with(Name, `debate-dev-evidence-`)].Name' --output text)
+PRUNE="${TMPDIR:-/tmp}/tub-index-prune"
+rm -rf "$PRUNE" && mkdir -p "$PRUNE"
+aws s3 cp "s3://${BUCKET}/reports/tub/search/current.json" "$PRUNE/current.json" --profile debate-dev-evidence
+aws s3api list-object-versions --profile debate-dev-evidence-removal --bucket "$BUCKET" \
+  --prefix reports/tub/search/ --output json > "$PRUNE/versions.json"
+python3 - "$PRUNE" <<'PY'
+import json, sys
+from pathlib import Path
 
-**5. The app and audit log scan, then dev's own index back** (expected runtime ~2 min). This reads
-what 3 and 4 made the function log, for the school, team code and query words used, and the audit
-records' shape. Then it republishes dev's own newest index, which the prune left in place on your Mac
-(it deletes only bucket objects).
+prune = Path(sys.argv[1])
+pointer_key = "reports/tub/search/current.json"
+current = json.loads((prune / "current.json").read_text())["index_id"]
+keep_dir = f"reports/tub/search/{current}/"
+listing = json.loads((prune / "versions.json").read_text())
+versions = listing.get("Versions", [])
+markers = listing.get("DeleteMarkers", [])
+kept = [one for one in versions if one["Key"].startswith(keep_dir) and one["IsLatest"]]
+if len(kept) < 2:
+    sys.exit(f"STOP: the listing holds {len(kept)} current object(s) under {keep_dir}; the pointer names an index that is not there")
+doomed = []
+for one in versions + markers:
+    if one["Key"].startswith(keep_dir):
+        continue
+    if one["Key"] == pointer_key and one.get("IsLatest"):
+        continue
+    doomed.append({"Key": one["Key"], "VersionId": one["VersionId"]})
+current_pointer = {(one["Key"], one["VersionId"]) for one in versions if one["Key"] == pointer_key and one["IsLatest"]}
+for one in doomed:
+    if one["Key"].startswith(keep_dir):
+        sys.exit("STOP: a delete request names the current index")
+    if (one["Key"], one["VersionId"]) in current_pointer:
+        sys.exit("STOP: a delete request names the current current.json")
+keys = sorted({one["Key"] for one in doomed})
+for key in keys:
+    print(f"would delete {sum(1 for one in doomed if one['Key'] == key)} version(s) of {key}")
+for number, start in enumerate(range(0, len(doomed), 1000), 1):
+    batch = {"Objects": doomed[start:start + 1000], "Quiet": True}
+    (prune / f"delete-{number}.json").write_text(json.dumps(batch))
+(prune / "index_id").write_text(current)
+print(f"{len(doomed)} version(s) of {len(keys)} key(s) to delete; keeps {keep_dir} ({len(kept)} objects) and the current {pointer_key}")
+PY
+```
+**Stop and read it before going on.** Every `would delete` line is under a superseded index
+directory or is `reports/tub/search/current.json`; the `keeps` line names 4e's index id. Paste it
+back; the delete comes only after it has been read:
+```bash
+NOW=$(aws s3 cp "s3://${BUCKET}/reports/tub/search/current.json" - --profile debate-dev-evidence | python3 -c 'import json, sys; print(json.load(sys.stdin)["index_id"])')
+if [[ "$NOW" == "$(cat "$PRUNE/index_id")" ]]; then
+  for REQUEST in "$PRUNE"/delete-*.json(N); do
+    aws s3api delete-objects --profile debate-dev-evidence-removal --bucket "$BUCKET" \
+      --delete "file://${REQUEST}" --query 'length(Errors || `[]`)' --output text
+  done
+  echo "pruned; kept reports/tub/search/${NOW}/ and the current reports/tub/search/current.json"
+else
+  echo "STOP: current.json now names ${NOW}, not the index the dry run kept; run the dry run again"
+fi
+```
+Success looks like `0` for each request file and the `pruned; kept` line naming 4e's index id. Then
+run the dry-run block once more: `0 version(s) of 0 key(s) to delete` and the same `keeps` line.
 
-Where: the same window
+**5. The app and audit log scan, then dev's own index back** (expected runtime ~2 min). It reads
+what 3 and 4 made the function log since block 3 began, for the school, team code and query words
+used, and the audit records' shape. Then it republishes dev's own newest index from this Mac, which
+the prune left in place (it deletes only bucket objects).
+
+Where: the 4a window
 ```bash
 export AWS_PROFILE=debate-admin
-SINCE=$(( ($(date +%s) - 7200) * 1000 ))
+SINCE=$(( ($(date +%s) - 43200) * 1000 ))
 for WORD in Westfield XY reserve margin Okonkwo testcl26 '"q="'; do
   echo "== $WORD: $(aws logs filter-log-events --region us-east-1 --log-group-name debate-dev-tub-app --start-time "$SINCE" --filter-pattern "$WORD" --query 'length(events)' --output text)"
 done
-aws logs filter-log-events --region us-east-1 --log-group-name debate-dev-tub-audit --start-time "$SINCE" --query 'events[-6:].message' --output text
+aws logs filter-log-events --region us-east-1 --log-group-name debate-dev-tub-audit --start-time "$SINCE" --query 'events[-8:].message' --output text
 unset AWS_PROFILE DEBATE_STORAGE__DATA_DIR X REMOVED
 aws sso login --profile debate-dev-evidence
 DEBATE_ENV=dev debate-research tub index publish --env dev --newest
@@ -393,10 +488,10 @@ echo "republished: $(aws s3 cp "s3://${BUCKET}/reports/tub/search/current.json" 
 ls -td "${HOME}/.debate-research/dev/tub-index"/*/ | head -1
 ```
 Success looks like `0` after every word, and audit lines holding only `action`, `actor_role`,
-`actor_subject`, `cards` or `count`, `format_version` and `time`: `searched` with a `count`, and
-`card-viewed` with one `testcl26/<64 hex>`. Then the publish table, a `republished: <index id>` line,
-and the newest local index directory, whose name is that same index id: dev's own index is current
-again.
+`actor_subject`, `cards` or `count`, `format_version` and `time`: `searched` with a `count`,
+`card-viewed` with one `testcl26/<64 hex>` or `hspolicy26/<64 hex>`. Then the publish table, a
+`republished: <index id>` line, and the newest local index directory, whose name is that same index
+id: dev's own index is current again.
 
 **6. For the PM's promotion list (prod, after the merge).** Apply the grant to prod as
 `evidence-store.md` gives it, from a worktree whose `owner.auto.tfvars` prints `3` for
@@ -471,6 +566,37 @@ and the signed-in reading came from the HAR instead.
 | CloudFront standard logging, real-time log config, origins | `False None 1` |
 | CloudWatch log deliveries (vended logs) | none |
 | Dev suppression list | exists: 1,239 bytes, `aws:kms` |
+
+### Block 4 — the removal exercise, dev (2026-10-22 and 23)
+
+- **4-pre.** The weekly agent run's `caselist pull --caselist hsld26 --caselist hspolicy26
+  --caselist hspf26` was running; the operator waited until it finished and `pgrep` printed nothing.
+- **4a.** A scratch store of the fictional `testcl26` archives
+  (`tests/fixtures/parse_pipeline`): imports `NEW` 3, 3 and 1; a parse of 7 sources, 4 parsed,
+  5 cards in 2 clusters (DOC 1, PDF 1 unsupported; 1 `NOT_A_ZIP`). Index **`b15c530ede05b167`**: 2
+  documents from 7 occurrences, SQLite 45,056 bytes, gzip 3,401 bytes; published, `current.json`
+  naming it. `REMOVED` = `058e2b1ce922…`, the `direct` body. Read from that index: the card *Data
+  centre demand collapses the reserve margin* has 6 occurrences, and its representative is the
+  `direct` file (Westfield XY). Published at 00:26:20 UTC.
+- **4b.** After five minutes the operator found the card in the pilot, at
+  `/cards/testcl26/67d6b33daddf…`, with a Westfield XY line.
+- **4c, the removal, `RM-2026-91` (POLICY).** The dry run and `--execute` ran in one paste, so
+  the plan was not read before the execute (my block's fault). **`DONE in dev
+  (debate-dev-evidence-a7508de8): 2 record(s), 5 local file(s), 105 bucket object version(s)
+  deleted; 1 manifest(s) rewritten without 1 row(s)`**, at 00:35:31 UTC. One suppression entry
+  (whole file) and one path entry were appended here and in the bucket. **The 105 deleted versions
+  are the dev bucket's parsed-store aggregates**: `failures.jsonl`, `index.jsonl` and
+  `occurrences.jsonl` of `hsld26`, `hspf26`, `hspolicy26` and `openev`, in each of their five
+  version directories (`2026.09.20-docx-1` to `2026.10.20-docx-6`), noncurrent versions included.
+  A whole-file removal deletes every caselist's aggregates by design (runbook step 5). My blocks did
+  not say to rebuild them. The scratch store's own `testcl26` aggregates went too. The operator's
+  local dev store was not touched. **PM ruling, 2026-10-22: rebuild first (R), then 4d to 4f,
+  then block 5.** Every removal hand-off is now a dry-run block and a separate execute block. The
+  runbook's pilot section gains the rebuild (P1b), for dev and prod. One correction to the
+  ruling's wording: the weekly run rebuilds a caselist's aggregates only when it imported something
+  into it that week ("a run that imported nothing parses nothing and rebuilds nothing", scheduled
+  sync runbook), so P1b says not to wait for it.
+- **R, the rebuild:** REBUILD_RESULTS_PENDING.
 
 ## Follow-up work
 

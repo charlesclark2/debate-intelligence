@@ -554,6 +554,33 @@ Signed in to the pilot (in dev, as your own synthetic account), search for words
 card's tag, open it, and write down its path, `/cards/<caselist>/<cluster id>`, and the sha256 the
 dry run names. Nothing here is copied into the register: a cluster id and a sha256 are digests.
 
+### P1b — Right after `DONE`: rebuild the parsed store's aggregates
+
+Step 5's rebuild, and not optional here. A whole-file removal deletes every caselist's
+`index.jsonl`, `failures.jsonl` and `occurrences.jsonl` in the bucket, every version directory, and
+until they are rebuilt anything that reads the bucket's parsed store finds none. That holds for any
+removal or exercise that touches dev, a synthetic one included, and the same in prod: a prod removal
+leaves prod's aggregates gone until they are rebuilt. Do not wait for the weekly run: it rebuilds a
+caselist's aggregates only when it imported something into that caselist that week, and a run that
+imported nothing rebuilds nothing ([scheduled sync, the parse stage](caselist-scheduled-sync.md#the-parse-stage)).
+Rebuild each caselist whose `parsed/<caselist>/<version>/index.jsonl` the plan listed, `openev`
+included, from this Mac's own store for the environment (not a scratch store), with the everyday
+profile.
+
+**Operator command** (expected runtime a few minutes per caselist; nothing is parsed again)
+Where: a new terminal window, so no `DEBATE_STORAGE__DATA_DIR` from another step is set
+```bash
+echo "data dir override: ${DEBATE_STORAGE__DATA_DIR:-none}"
+pgrep -fl 'caselist pull'
+aws sso login --profile debate-dev-evidence
+for SLUG in hsld26 hspf26 hspolicy26 openev; do
+  DEBATE_ENV=dev debate-research caselist parse --caselist "$SLUG" --publish
+done
+```
+Success looks like `data dir override: none`, nothing from `pgrep`, and for each caselist a table
+with 0 sources parsed and its three aggregates uploaded. Name only the caselists the plan listed.
+A `pgrep` line means a pull is running: wait for it to finish first.
+
 ### P2 — Five minutes after `DONE`: the card is gone
 
 Note the time `--execute` printed `DONE`. Five minutes later, open the card's path: **That card is

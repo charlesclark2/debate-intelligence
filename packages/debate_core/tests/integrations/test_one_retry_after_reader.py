@@ -151,6 +151,10 @@ from email.utils import parsedate_to_datetime
 def retry_after_seconds(value, *, now):
     return (parsedate_to_datetime(value) - now).total_seconds()
 """,
+    "a reader of the value alone, with no header name and no date": """
+def _retry_after(raw):
+    return max(float(raw), 0.0)
+""",
     "a reader under another name": """
 def wait_from(headers):
     return float(headers["RETRY-AFTER"])

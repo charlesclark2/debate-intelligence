@@ -50,7 +50,7 @@ spec:
         a card with no sidecar entry, by tests shown failing first; the writer's
         `provenance_line` is gone and the domain function remains for the card page.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

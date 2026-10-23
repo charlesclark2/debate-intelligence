@@ -555,3 +555,81 @@ def test_the_newest_run_with_stages_is_the_one_read() -> None:
     owed = comparisons_owed_by_the_newest_run(records, details)
 
     assert [f"{one.caselist} {one.snapshot}" for one in owed] == ["testcl26 2026-09-08"]
+
+
+# ------------------------------------------------------------------------------------------------
+# (1) A pull makes the check too (the PM's condition 1, 2026-10-22)
+# ------------------------------------------------------------------------------------------------
+
+OWED_TO_THIS_RUN = (
+    "the report stage's check of {} snapshot(s) an earlier run published was cut short, "
+    "and is owed to this run"
+)
+
+
+async def test_a_pull_after_a_cut_short_check_compares_the_weeks_it_did_not(
+    installation: Installation, clock: Any
+) -> None:
+    """The scheduled pull after an expired session, before anyone drains: it makes the check, and the
+    drain after it has nothing left to compare."""
+    await two_weeks_with_the_check_cut_short(installation, expires_at=1)
+
+    clock(SECOND_RUN)
+    comparison = RecordingComparison(installation)
+    source = FakeSource(installation.archives, weeks=[WEEK_1, WEEK_2])
+    pulled = await pull(installation, installation.sync(source, status=comparison))
+
+    assert comparison.asked == [("testcl26", "2026-09-01"), ("testcl26", "2026-09-08")]
+    report = stage(pulled.summary, SyncStage.REPORT)
+    assert report["outcome"] == "completed"
+    assert report["reason"] == "2 snapshot(s) confirmed in the bucket"
+    assert str(stage(pulled.summary, SyncStage.SELECT)["reason"]).endswith("; " + OWED_TO_THIS_RUN.format(2))
+
+    clock(THIRD_RUN)
+    drained = RecordingComparison(installation)
+    await publish_pending(installation, drained)
+    assert drained.asked == []
+
+
+async def test_a_pull_that_publishes_compares_what_it_published_and_then_what_was_owed(
+    installation: Installation, clock: Any
+) -> None:
+    await pull(
+        installation,
+        installation.sync(
+            FakeSource(installation.archives, weeks=[WEEK_1]),
+            status=ScriptedComparison(installation, expires_at=1),
+        ),
+    )
+    assert not_compared_in_the_details(installation, FIRST_RUN_ID) == [WEEK_ONE]
+
+    clock(SECOND_RUN)
+    comparison = RecordingComparison(installation)
+    source = FakeSource(installation.archives, weeks=[WEEK_1, WEEK_2])
+    pulled = await pull(installation, installation.sync(source, status=comparison))
+
+    assert stage(pulled.summary, SyncStage.PUBLISH)["outcome"] == "completed"
+    assert comparison.asked == [("testcl26", "2026-09-08"), ("testcl26", "2026-09-01")], (
+        "what this run published, then what the cut-short check owed"
+    )
+    # Retention would ask about week one's inbox copy if the report stage had not, so the list alone
+    # cannot tell; the report stage's own count does.
+    assert stage(pulled.summary, SyncStage.REPORT)["reason"] == "2 snapshot(s) confirmed in the bucket"
+
+
+async def test_a_pull_cut_short_again_owes_what_it_did_not_reach(
+    installation: Installation, clock: Any
+) -> None:
+    await two_weeks_with_the_check_cut_short(installation, expires_at=1)
+
+    clock(SECOND_RUN)
+    source = FakeSource(installation.archives, weeks=[WEEK_1, WEEK_2])
+    await pull(installation, installation.sync(source, status=ScriptedComparison(installation, expires_at=2)))
+
+    assert not_compared_in_the_details(installation, SECOND_RUN_ID) == [WEEK_TWO]
+    assert run_log(installation)[1]["outcome"] == "publish_pending"
+
+    clock(THIRD_RUN)
+    comparison = RecordingComparison(installation)
+    await publish_pending(installation, comparison)
+    assert comparison.asked == [("testcl26", "2026-09-08")]

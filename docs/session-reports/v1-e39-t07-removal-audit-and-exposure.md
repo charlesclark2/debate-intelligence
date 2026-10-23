@@ -650,6 +650,15 @@ and the signed-in reading came from the HAR instead.
   deleted. The runbook's P3 and P4 blocks and this report's block 5 now read the bucket's name from
   `config/profiles/dev.toml` (`storage.s3.bucket`) in the checkout.
 
+- **4f, the dry run** (read before the delete, as ruled): `bucket: debate-dev-evidence-a7508de8`;
+  `would delete` 1 version each of the manifest and gzip object of `690a21db0c94f4ed` (dev's
+  previous real-corpus index), `767b9c7c056b80cb` (the index the weekly run published that day)
+  and `b15c530ede05b167` (4a's synthetic index), and 3 older versions of
+  `reports/tub/search/current.json`: **9 versions of 7 keys**. It keeps
+  `reports/tub/search/a0c928bebd03f8aa/ (2 objects)` and the current `current.json`. Nothing outside
+  superseded index directories and the pointer was named.
+- **4f, the delete:** DELETE_RESULT_PENDING.
+
 ## Follow-up work
 
 1. **`tub index prune` (p3).** The PM's ruling names it: a CLI command that does the runbook's P4

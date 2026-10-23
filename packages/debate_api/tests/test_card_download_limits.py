@@ -178,6 +178,7 @@ class Near:
             search_index=self.holder,
             writer=lambda sources: self.writer,
             source_stores=lambda prefix: self.store,
+            document_size=lambda content: 0,
             access_audit=AccessAuditService(audit=self.audit, clock=lambda: NOW),
             parser_version=PARSER_VERSION,
             profile_version="synthetic-profile",
@@ -372,9 +373,37 @@ def test_download_cart_cap_is_between_one_and_the_audit_records_thirty() -> None
                 search_index=cast(SearchIndexHolder, None),
                 writer=lambda sources: RecordingWriter(),
                 source_stores=lambda prefix: EmptyStore(),
+                document_size=lambda content: 0,
                 access_audit=AccessAuditService(audit=Sink(), clock=lambda: NOW),
                 parser_version=PARSER_VERSION,
                 profile_version="synthetic-profile",
                 clock=lambda: NOW,
                 card_cap=cap,
             )
+
+
+# ------------------------------------------------------------------------------------------------
+# The size the budget reads: the zip directory's claim for the main document part
+# ------------------------------------------------------------------------------------------------
+
+
+def test_declared_document_bytes_is_the_directorys_size_of_the_main_document_part() -> None:
+    import io
+    import zipfile
+
+    from debate_core.integrations.docx_parser.package import declared_document_bytes
+
+    content = build_docx(paragraph_xml(run_xml("Synthetic words " * 50)))
+    with zipfile.ZipFile(io.BytesIO(content)) as archive:
+        expected = archive.getinfo("word/document.xml").file_size
+
+    assert declared_document_bytes(content) == expected > 0
+
+
+@pytest.mark.parametrize(
+    "content", [b"", b"not a zip at all", b"%PDF-1.7 synthetic"], ids=["empty", "text", "pdf"]
+)
+def test_declared_document_bytes_of_bytes_that_are_no_package_is_none(content: bytes) -> None:
+    from debate_core.integrations.docx_parser.package import declared_document_bytes
+
+    assert declared_document_bytes(content) is None

@@ -53,6 +53,7 @@ from debate_core.integrations.cognito import (
 )
 from debate_core.integrations.docx_file_writer.base_template import load_base_template
 from debate_core.integrations.docx_file_writer.writer import DocxEvidenceFileWriter
+from debate_core.integrations.docx_parser.package import declared_document_bytes
 from debate_core.integrations.docx_parser.parser import DebateDocxParser
 from debate_core.integrations.local.search_index_reader import SqliteSearchIndexReader
 from debate_core.integrations.parameter_store import build_ssm_client, read_secure_parameter
@@ -145,7 +146,8 @@ def build_pilot_services(environ: Mapping[str, str]) -> PilotServices:
             profile_version=parser.profile_version,
             clock=_now,
             card_cap=configuration.download_card_cap,
-            source_bytes=configuration.download_source_bytes,
+            source_xml_bytes=configuration.download_source_xml_bytes,
+            document_size=declared_document_bytes,
         ),
         clock=_now,
     )

@@ -514,14 +514,14 @@ def test_download_refused_for_any_reason_writes_no_record(student: Any) -> None:
 # ------------------------------------------------------------------------------------------------
 
 
-def test_download_cart_whose_sources_pass_the_source_budget_is_refused_before_building(
+def test_download_cart_whose_files_pass_the_fetch_ceiling_is_refused_before_building(
     make_world: Any,
 ) -> None:
     world = make_world()
     sources = world.sources()
-    budget = len(sources["disclosed"].content) + len(sources["other"].content) - 1
+    ceiling = len(sources["disclosed"].content) + len(sources["other"].content) - 1
     world.services.search_index.close()
-    world = make_world(download_source_bytes=budget)
+    world = make_world(download_fetch_bytes=ceiling)
     world.signed_in_student()
     try:
         under = world.download("download", "download second")
@@ -693,13 +693,11 @@ def test_download_body_with_more_fields_than_a_download_sends_is_refused_not_fai
     )
 
 
-def test_download_cart_whose_sources_are_exactly_the_source_budget_downloads(make_world: Any) -> None:
+def test_download_cart_whose_files_are_exactly_the_fetch_ceiling_downloads(make_world: Any) -> None:
     probe = make_world()
     sources = probe.sources()
     probe.services.search_index.close()
-    world = make_world(
-        download_source_bytes=len(sources["disclosed"].content) + len(sources["other"].content)
-    )
+    world = make_world(download_fetch_bytes=len(sources["disclosed"].content) + len(sources["other"].content))
     world.signed_in_student()
     try:
         response = world.download("download", "download other")
@@ -729,8 +727,8 @@ REQUIRED_ENVIRONMENT: Final = {
         ("TUB_DOWNLOAD_CARD_CAP", "", 8),
         ("TUB_DOWNLOAD_CARD_CAP", "1", 1),
         ("TUB_DOWNLOAD_CARD_CAP", " 30 ", 30),
-        ("TUB_DOWNLOAD_SOURCE_BYTES", None, 2_000_000),
-        ("TUB_DOWNLOAD_SOURCE_BYTES", "3500000", 3_500_000),
+        ("TUB_DOWNLOAD_SOURCE_XML_BYTES", None, 20_000_000),
+        ("TUB_DOWNLOAD_SOURCE_XML_BYTES", "3500000", 3_500_000),
     ],
 )
 def test_download_caps_are_read_from_the_environment(variable: str, value: str | None, expected: int) -> None:
@@ -743,7 +741,7 @@ def test_download_caps_are_read_from_the_environment(variable: str, value: str |
 
     read = {
         "TUB_DOWNLOAD_CARD_CAP": configuration.download_card_cap,
-        "TUB_DOWNLOAD_SOURCE_BYTES": configuration.download_source_bytes,
+        "TUB_DOWNLOAD_SOURCE_XML_BYTES": configuration.download_source_xml_bytes,
     }
     assert read[variable] == expected
 
@@ -755,10 +753,10 @@ def test_download_caps_are_read_from_the_environment(variable: str, value: str |
         ("TUB_DOWNLOAD_CARD_CAP", "31"),
         ("TUB_DOWNLOAD_CARD_CAP", "eight"),
         ("TUB_DOWNLOAD_CARD_CAP", "-1"),
-        ("TUB_DOWNLOAD_SOURCE_BYTES", "0"),
-        ("TUB_DOWNLOAD_SOURCE_BYTES", "2e6"),
-        ("TUB_DOWNLOAD_SOURCE_BYTES", "2,000,000"),
-        ("TUB_DOWNLOAD_SOURCE_BYTES", "100000001"),
+        ("TUB_DOWNLOAD_SOURCE_XML_BYTES", "0"),
+        ("TUB_DOWNLOAD_SOURCE_XML_BYTES", "2e6"),
+        ("TUB_DOWNLOAD_SOURCE_XML_BYTES", "20,000,000"),
+        ("TUB_DOWNLOAD_SOURCE_XML_BYTES", "100000001"),
     ],
 )
 def test_download_cap_that_is_not_a_whole_number_in_range_is_refused(variable: str, value: str) -> None:
@@ -775,14 +773,27 @@ def test_download_cap_that_is_not_a_whole_number_in_range_is_refused(variable: s
 TOO_LARGE_ALONE: Final = "Its file is too large to download. Copy card still works."
 
 
+def test_download_setting_renamed_the_old_source_bytes_variable_is_not_read() -> None:
+    """`TUB_DOWNLOAD_SOURCE_BYTES` was never deployed; `TUB_DOWNLOAD_SOURCE_XML_BYTES` replaced it."""
+    from debate_api.configuration import PilotConfiguration
+
+    configuration = PilotConfiguration.from_environment(
+        {**REQUIRED_ENVIRONMENT, "TUB_DOWNLOAD_SOURCE_BYTES": "not a number"}
+    )
+
+    assert configuration.download_source_xml_bytes == 20_000_000
+    assert not hasattr(configuration, "download_source_bytes")
+
+
 @pytest.fixture
 def tight(make_world: Any) -> Any:
-    """A source budget of exactly the `other` source: `disclosed` is over it alone, `camp` is not."""
+    """A `document.xml` budget of exactly the `other` source's: `disclosed`'s is over it alone, and
+    `camp`'s and `other`'s are each at it, so together they are over (the PM's ruling of 2026-10-22)."""
     probe = make_world()
-    budget = len(probe.sources()["other"].content)
-    assert len(probe.sources()["disclosed"].content) > budget >= len(probe.sources()["camp"].content)
+    budget = probe.document_bytes("other")
+    assert probe.document_bytes("disclosed") > budget == probe.document_bytes("camp")
     probe.services.search_index.close()
-    made = make_world(download_source_bytes=budget)
+    made = make_world(download_source_xml_bytes=budget)
     made.signed_in_student()
     yield made
     made.services.search_index.close()
@@ -827,3 +838,104 @@ def test_cart_whose_sources_only_add_up_past_the_budget_keeps_the_sources_messag
         )
     }
     assert tight.built == []
+
+
+# ------------------------------------------------------------------------------------------------
+# The PM's ruling of 2026-10-22: the budget is document.xml bytes, with a ceiling on fetched bytes
+# ------------------------------------------------------------------------------------------------
+
+
+def test_download_cart_whose_document_parts_are_exactly_the_budget_downloads(make_world: Any) -> None:
+    probe = make_world()
+    budget = probe.document_bytes("camp") + probe.document_bytes("other")
+    probe.services.search_index.close()
+    at = make_world(download_source_xml_bytes=budget)
+    over = make_world(download_source_xml_bytes=budget - 1)
+    for world in (at, over):
+        world.signed_in_student()
+    try:
+        at_response = at.download("camp download", "download other")
+        over_response = over.download("camp download", "download other")
+    finally:
+        at.services.search_index.close()
+        over.services.search_index.close()
+
+    assert at_response.status_code == 200
+    assert over_response.status_code == 409
+    assert over_response.json() == {
+        "message": (
+            "These cards come from files too large to read in one download. Download fewer cards at a time, "
+            "or a card from a large file on its own."
+        )
+    }
+    assert over.built == []
+
+
+def test_download_budget_counts_document_parts_not_file_bytes(make_world: Any) -> None:
+    """A budget below both files' bytes, at their two document parts' sum: the cart downloads."""
+    probe = make_world()
+    sources = probe.sources()
+    budget = probe.document_bytes("camp") + probe.document_bytes("other")
+    assert budget < len(sources["camp"].content) + len(sources["other"].content)
+    probe.services.search_index.close()
+    world = make_world(download_source_xml_bytes=budget)
+    world.signed_in_student()
+    try:
+        response = world.download("camp download", "download other")
+    finally:
+        world.services.search_index.close()
+
+    assert response.status_code == 200
+
+
+def test_download_of_one_file_past_the_fetch_ceiling_gets_the_files_message_not_a_named_card(
+    make_world: Any,
+) -> None:
+    probe = make_world()
+    ceiling = len(probe.sources()["disclosed"].content) - 1
+    probe.services.search_index.close()
+    world = make_world(download_fetch_bytes=ceiling)
+    world.signed_in_student()
+    try:
+        response = world.download("download")
+    finally:
+        world.services.search_index.close()
+
+    assert response.status_code == 409
+    assert response.json() == {
+        "message": (
+            "These cards come from files too large to read in one download. Download fewer cards at a time, "
+            "or a card from a large file on its own."
+        )
+    }
+    assert world.built == []
+
+
+def test_download_of_a_file_that_understates_its_document_part_passes_the_budget_and_is_refused_by_the_parser(
+    make_world: Any,
+) -> None:
+    """The zip directory claims 1,000 bytes for a `word/document.xml` that holds far more. The budget
+    reads the claim and lets it through; the parser never inflates past the claim, its CRC fails, and
+    the card is refused as no longer matching the search, nothing built."""
+    probe = make_world()
+    assert probe.document_bytes("understated") == 1000
+    probe.services.search_index.close()
+    world = make_world(download_source_xml_bytes=1000)
+    world.signed_in_student()
+    try:
+        response = world.download("understated")
+    finally:
+        world.services.search_index.close()
+
+    assert response.status_code == 409
+    assert response.json()["refused"] == [
+        {
+            "card": world.card_reference("understated"),
+            "position": 1,
+            "name": "Tephra plumes travel far downwind",
+            "reason": (
+                "Its file no longer matches the search. It can be downloaded after the next weekly update."
+            ),
+        }
+    ]
+    assert world.built == [] and downloads(world) == []

@@ -57,7 +57,8 @@ from debate_api.cookies import SESSION_COOKIE, CookieSealer, session_payload
 from debate_api.state import PilotServices
 from debate_core.application.card_download import (
     DEFAULT_DOWNLOAD_CARD_CAP,
-    DEFAULT_DOWNLOAD_SOURCE_BYTES,
+    DEFAULT_DOWNLOAD_SOURCE_XML_BYTES,
+    DOWNLOAD_FETCH_MAX_BYTES,
     CardDownloadService,
     WriterFactory,
 )
@@ -88,6 +89,7 @@ from debate_core.integrations.cognito import (
     issuer_for,
 )
 from debate_core.integrations.docx_file_writer.writer import DocxEvidenceFileWriter
+from debate_core.integrations.docx_parser.package import declared_document_bytes
 from debate_core.integrations.docx_parser.parser import DebateDocxParser
 from debate_core.integrations.local.search_index import SqliteSearchIndexWriter
 from debate_core.integrations.local.search_index_reader import SqliteSearchIndexReader
@@ -636,7 +638,26 @@ class DownloadSource:
         return hashlib.sha256(self.content).hexdigest()
 
 
-def _source(content: bytes, *, caselist: str = "hsld26", stored: bool = True) -> DownloadSource:
+def understated(content: bytes, declared: int) -> bytes:
+    """`content` with its zip directory claiming `declared` bytes for `word/document.xml`, its CRC unchanged.
+
+    The claim is what a download's budget reads; the part still holds every byte it held.
+    """
+    data = bytearray(content)
+    signature = b"PK\x01\x02"
+    position = data.find(signature)
+    while position != -1:
+        length = int.from_bytes(data[position + 28 : position + 30], "little")
+        if data[position + 46 : position + 46 + length] == b"word/document.xml":
+            data[position + 24 : position + 28] = declared.to_bytes(4, "little")
+            return bytes(data)
+        position = data.find(signature, position + 4)
+    raise AssertionError("the package has no word/document.xml")
+
+
+def _source(
+    content: bytes, *, caselist: str = "hsld26", stored: bool = True, declared: int | None = None
+) -> DownloadSource:
     camp = caselist == "openev"
     sha = hashlib.sha256(content).hexdigest()
     document = SourceDocument(
@@ -653,7 +674,7 @@ def _source(content: bytes, *, caselist: str = "hsld26", stored: bool = True) ->
     return DownloadSource(
         store=CAMP_STORE if camp else CASELIST_STORE,
         caselist=caselist,
-        content=content,
+        content=content if declared is None else understated(content, declared),
         parsed=parsed,
         stored=stored,
     )
@@ -661,7 +682,8 @@ def _source(content: bytes, *, caselist: str = "hsld26", stored: bool = True) ->
 
 @cache
 def download_sources() -> Mapping[str, DownloadSource]:
-    """Five synthetic sources: two cards in one, one each in the rest."""
+    """Six synthetic sources: two cards in one, one each in the rest. `understated`'s zip directory
+    claims 1,000 bytes for a `word/document.xml` that holds far more."""
     return {
         "disclosed": _source(
             build_docx(
@@ -695,6 +717,17 @@ def download_sources() -> Mapping[str, DownloadSource]:
                 + _body("Snow ", "stays on andesite slopes", " into spring.", inside=DRAWING)
             )
         ),
+        "understated": _source(
+            build_docx(
+                _tag("Tephra plumes travel far downwind")
+                + _cite("Sigurdsson 26", ", Volcanologist, Synthetic Ash Review, 2026")
+                + "".join(
+                    _body("Fine ash ", f"drifts for hundreds of kilometres {n}", " on the wind.")
+                    for n in range(40)
+                )
+            ),
+            declared=1000,
+        ),
         "lost": _source(
             build_docx(
                 _tag("Rhyolite domes vent slowly")
@@ -713,6 +746,7 @@ DOWNLOAD_CARDS: Final = {
     "camp download": (30, "camp", 0),
     "picture": (31, "picture", 0),
     "lost source": (32, "lost", 0),
+    "understated": (33, "understated", 0),
 }
 """The downloadable cards: each one's doc id, its source in :func:`download_sources`, and which card of it."""
 
@@ -964,6 +998,13 @@ class PilotWorld:
         return download_parser()
 
     @staticmethod
+    def document_bytes(source: str) -> int:
+        """What a source's zip directory declares for its `word/document.xml`, as a download reads it."""
+        declared = declared_document_bytes(download_sources()[source].content)
+        assert declared is not None
+        return declared
+
+    @staticmethod
     def source_card(name: str) -> ParsedCard:
         """The parsed card one of the download's cards is copied from."""
         return download_card(name)
@@ -973,7 +1014,8 @@ class PilotWorld:
         *,
         count_cap: int | None = None,
         download_card_cap: int = DEFAULT_DOWNLOAD_CARD_CAP,
-        download_source_bytes: int = DEFAULT_DOWNLOAD_SOURCE_BYTES,
+        download_source_xml_bytes: int = DEFAULT_DOWNLOAD_SOURCE_XML_BYTES,
+        download_fetch_bytes: int = DOWNLOAD_FETCH_MAX_BYTES,
         download_writer: WriterFactory | None = None,
     ) -> None:
         self.clock = MutableClock()
@@ -1052,7 +1094,9 @@ class PilotWorld:
                 profile_version=parser.profile_version,
                 clock=self.clock,
                 card_cap=download_card_cap,
-                source_bytes=download_source_bytes,
+                document_size=declared_document_bytes,
+                source_xml_bytes=download_source_xml_bytes,
+                fetch_bytes=download_fetch_bytes,
             ),
             clock=self.clock,
         )

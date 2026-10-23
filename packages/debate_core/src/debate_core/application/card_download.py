@@ -29,26 +29,33 @@ read. A card on a page rendered before a removal is refused at the download and 
 4. **The file's size, estimated** from the text the index holds (:func:`estimated_file_bytes`):
    over :data:`DOWNLOAD_FILE_MAX_BYTES`, refused before anything is read.
 5. **The sources**, read once each through `source_stores` (`raw/caselist/<slug>`, or a camp
-   file's `raw/openev/<year>`). A card whose own source is over the source budget is refused and
-   named (:attr:`RefusedCardReason.SOURCE_TOO_LARGE`), so it can be dropped like any other; sources
-   that only add up past the budget refuse the cart before the build
-   (:attr:`DownloadRefusal.SOURCES_TOO_LARGE`). A source that is missing or no longer hashes to its
-   name refuses its cards.
+   file's `raw/openev/<year>`), until the files read pass :data:`DOWNLOAD_FETCH_MAX_BYTES`, which
+   refuses the cart (:attr:`DownloadRefusal.SOURCES_TOO_LARGE`). Then each source's main document
+   part, as its zip directory declares it, is counted against the budget (the PM's ruling of
+   2026-10-22): a card whose own document part is over it is refused and named
+   (:attr:`RefusedCardReason.SOURCE_TOO_LARGE`), so it can be dropped like any other, and parts that
+   only add up past it refuse the cart (:attr:`DownloadRefusal.SOURCES_TOO_LARGE`). A source that is
+   missing or no longer hashes to its name refuses its cards.
 6. **The build.** The writer's own refusals (UNSUPPORTED_CONTENT, READBACK_MISMATCH and the rest)
    name their cards. A built file over the size limit is refused, never failed at the response.
 7. **The audit record**, written before the file is returned. One that cannot be written raises
    :class:`~debate_core.application.tub.access_audit.AccessNotRecorded`, and nothing is sent.
 
-## Why there are two caps (measured 2026-10-22, `docs/session-reports/v1-e39-t08-card-download.md`)
+## Why there are three limits (measured 2026-10-22, `docs/session-reports/v1-e39-t08-card-download.md`)
 
 The writer parses every source it copies from, whole, and holds them all until the file is read
-back. So a build costs time and memory per distinct source, in proportion to its size, and next to
-nothing per card. On synthetic sources of the mean disclosed size (236 KB), 30 cards from 30
-sources took 29 s on the operator's Mac and 30 cards from one source 2.5 s; one camp-sized source
-(1 MB) took 4.5 s alone, and each mean-size source held about 80 MB. CloudFront and the function
-both stop a request at 30 s, and the function has 2,048 MB. :data:`DEFAULT_DOWNLOAD_CARD_CAP` keeps
-the worst case of mean-size sources, and :data:`DEFAULT_DOWNLOAD_SOURCE_BYTES` a cart of large ones,
-under about two thirds of that; the function's environment can set either lower or higher.
+back. So a build costs time and memory per distinct source, in proportion to its main document part,
+and next to nothing per card. On synthetic sources of the mean disclosed size (236 KB, 3.6 MB of
+`document.xml`), 30 cards from 30 sources took 29 s on the operator's Mac and 30 cards from one
+source 2.5 s. CloudFront and the function both stop a request at 30 s, and the function has
+2,048 MB. :data:`DEFAULT_DOWNLOAD_CARD_CAP` bounds a cart's sources;
+:data:`DEFAULT_DOWNLOAD_SOURCE_XML_BYTES` bounds the XML they parse, which is what costs time and
+memory (a real file's bytes are mostly images and other parts: the sources over 2 MB have a median
+`document.xml` of 269 KB to 2.0 MB); and :data:`DOWNLOAD_FETCH_MAX_BYTES` bounds the files held
+before the build, since a file is held whole whatever its XML. A cart at both byte limits measured
+3.7 s and a 634 MB peak on the Mac. The declared size is a claim: the parser never inflates a part
+past it (:func:`~debate_core.integrations.docx_parser.package.declared_document_bytes` says how a
+file that holds more is refused).
 
 ## Nothing is written
 
@@ -91,7 +98,9 @@ from debate_core.evidence.fingerprints import FINGERPRINT_VERSION, fingerprint_t
 
 __all__ = [
     "DEFAULT_DOWNLOAD_CARD_CAP",
-    "DEFAULT_DOWNLOAD_SOURCE_BYTES",
+    "DEFAULT_DOWNLOAD_SOURCE_XML_BYTES",
+    "DOWNLOAD_FETCH_MAX_BYTES",
+    "DocumentSize",
     "DOWNLOAD_FILE_MAX_BYTES",
     "CardDownloadService",
     "CardKey",
@@ -111,11 +120,17 @@ DEFAULT_DOWNLOAD_CARD_CAP: Final = 8
 Eight cards from eight mean-size sources is about 8 s on the operator's Mac, and under 20 s at twice
 that, the allowance this record makes for the function's slower core until it is timed on dev."""
 
-DEFAULT_DOWNLOAD_SOURCE_BYTES: Final = 2_000_000
-"""The most bytes of sources one build reads unless the function's environment says otherwise.
+DEFAULT_DOWNLOAD_SOURCE_XML_BYTES: Final = 20_000_000
+"""The most bytes of `word/document.xml` one build parses, summed over the cart's sources as their
+zip directories declare them, unless the function's environment says otherwise (the PM's ruling of
+2026-10-22). Measured at this budget: eight sources, 3.7 s and 533 MB for the build on the Mac."""
 
-The slowest measured rate was 4.5 s per MB of source (one camp-sized file); 2 MB is 9 s on the Mac
-and under 20 s at twice that, and holds well under 1 GB of parsed sources."""
+DOWNLOAD_FETCH_MAX_BYTES: Final = 52_000_000
+"""The most bytes of source files one download holds in memory before the build.
+
+Above the largest real source (7,823,779 bytes, hspf26), so no source is refused for its file alone,
+and room for eight files of the largest caselist p99 (6,404,597 bytes, hspf26). A big file is held
+whole before the build even when its document part is small (the PM's ruling of 2026-10-22)."""
 
 DOWNLOAD_FILE_MAX_BYTES: Final = 3_000_000
 """The largest file a download returns.
@@ -277,6 +292,12 @@ class DownloadedFile:
     cards: tuple[CardKey, ...]
 
 
+DocumentSize = Callable[[bytes], int | None]
+"""The size a source's zip directory declares for its main document part, read without a parse, or
+`None` for bytes that are not such a package (the writer then refuses them). The composition root
+passes the parser's own (:func:`~debate_core.integrations.docx_parser.package.declared_document_bytes`):
+the application layer never opens a `.docx`."""
+
 WriterFactory = Callable[[SnapshotStore], EvidenceFileWriter]
 """The E33 writer over one store: the sources this build fetched through `source_stores`, each from
 the store of its prefix in the evidence layout, held in memory for the build."""
@@ -336,13 +357,15 @@ class CardDownloadService:
         parser_version: str,
         profile_version: str,
         clock: Callable[[], datetime],
+        document_size: DocumentSize,
         card_cap: int = DEFAULT_DOWNLOAD_CARD_CAP,
-        source_bytes: int = DEFAULT_DOWNLOAD_SOURCE_BYTES,
+        source_xml_bytes: int = DEFAULT_DOWNLOAD_SOURCE_XML_BYTES,
+        fetch_bytes: int = DOWNLOAD_FETCH_MAX_BYTES,
         file_bytes: int = DOWNLOAD_FILE_MAX_BYTES,
     ) -> None:
         if not 1 <= card_cap <= MAX_DOWNLOAD_CARDS:
             raise ValueError(f"a download holds between 1 and {MAX_DOWNLOAD_CARDS} cards")
-        if source_bytes < 1 or file_bytes < 1:
+        if source_xml_bytes < 1 or fetch_bytes < 1 or file_bytes < 1:
             raise ValueError("a download's byte limits are positive")
         self._search_index = search_index
         self._writer = writer
@@ -352,7 +375,9 @@ class CardDownloadService:
         self._profile_version = profile_version
         self._clock = clock
         self._card_cap = card_cap
-        self._source_bytes = source_bytes
+        self._document_size = document_size
+        self._source_xml_bytes = source_xml_bytes
+        self._fetch_bytes = fetch_bytes
         self._file_bytes = file_bytes
 
     @property
@@ -387,14 +412,19 @@ class CardDownloadService:
         sources = tuple(source for source in screened.sources if source is not None)
         if estimated_file_bytes(sources) > self._file_bytes:
             return DownloadRefused(DownloadRefusal.FILE_TOO_LARGE)
-        fetched, too_large = await self._fetch(sources)
+        fetched = await self._fetch(sources)
+        if fetched is None:
+            return DownloadRefused(DownloadRefusal.SOURCES_TOO_LARGE)
+        declared = {
+            sha: self._document_size(content) or 0
+            for sha, content in fetched.items()
+            if isinstance(content, bytes)
+        }
+        too_large = frozenset(sha for sha, size in declared.items() if size > self._source_xml_bytes)
         alone = _refused_too_large(keys, sources, too_large)
         if alone:
             return DownloadRefused(DownloadRefusal.CARDS_REFUSED, alone)
-        if (
-            sum(len(content) for content in fetched.values() if isinstance(content, bytes))
-            > self._source_bytes
-        ):
+        if sum(declared.values()) > self._source_xml_bytes:
             return DownloadRefused(DownloadRefusal.SOURCES_TOO_LARGE)
         built = await self._build(keys, sources, fetched)
         if isinstance(built, DownloadRefused):
@@ -422,16 +452,13 @@ class CardDownloadService:
 
     async def _fetch(
         self, sources: Sequence[CardSource]
-    ) -> tuple[dict[str, bytes | NotFound | BlobIntegrityError], frozenset[str]]:
-        """Each distinct source's bytes, or the error its store gave, and the sources over the budget alone.
-
-        Every distinct source is read, at most one per card in the cart, so that each card whose own
-        source is too large is named. A source over the budget is not kept.
-        """
+    ) -> dict[str, bytes | NotFound | BlobIntegrityError] | None:
+        """Each distinct source's bytes, or the error its store gave; `None` once the files read pass the
+        fetch ceiling, which stops the reading there."""
         fetched: dict[str, bytes | NotFound | BlobIntegrityError] = {}
-        too_large: set[str] = set()
+        total = 0
         for source in sources:
-            if source.source_sha256 in fetched or source.source_sha256 in too_large:
+            if source.source_sha256 in fetched:
                 continue
             store = self._source_stores(source_prefix(source.caselist, source.snapshot))
             try:
@@ -439,11 +466,11 @@ class CardDownloadService:
             except (NotFound, BlobIntegrityError) as problem:
                 fetched[source.source_sha256] = problem
                 continue
-            if len(content) > self._source_bytes:
-                too_large.add(source.source_sha256)
-                continue
+            total += len(content)
+            if total > self._fetch_bytes:
+                return None
             fetched[source.source_sha256] = content
-        return fetched, frozenset(too_large)
+        return fetched
 
     # The build ------------------------------------------------------------------------------
 
@@ -553,7 +580,8 @@ def _fingerprint(source: CardSource) -> str:
 def _refused_too_large(
     keys: Sequence[CardKey], sources: Sequence[CardSource], too_large: frozenset[str]
 ) -> tuple[RefusedCard, ...]:
-    """The cards whose own source is over the source budget: no cart that holds them can be built."""
+    """The cards whose own source's document part is over the budget: no cart that holds them can be
+    built."""
     return tuple(
         RefusedCard(position, key, RefusedCardReason.SOURCE_TOO_LARGE, source.tag, source.short_cite)
         for position, (key, source) in enumerate(zip(keys, sources, strict=True), start=1)

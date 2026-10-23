@@ -48,10 +48,10 @@ describe('the root layout runs the publishing-policy guard over every file with 
   })
 
   it('hands the guard every text field of every tournament, named by entry and field', () => {
-    expect(guarded).toContain('content/tournaments.yaml, tournament "glenbrooks-2026" (entry 10), field notes')
+    expect(guarded).toContain('content/tournaments.yaml, tournament "glenbrooks-2026" (entry 6), field notes')
     expect(guarded).toContain(
-      'content/tournaments.yaml, tournament "whitefish-bay-home-2026" (entry 11), field condition',
+      'content/tournaments.yaml, tournament "whitefish-bay-home-2026" (entry 7), field condition',
     )
-    expect(guarded.filter((path) => path.startsWith('content/tournaments.yaml, ')).length).toBeGreaterThanOrEqual(20)
+    expect(guarded.filter((path) => path.startsWith('content/tournaments.yaml, ')).length).toBeGreaterThanOrEqual(16)
   })
 })

@@ -28,8 +28,8 @@ subscribe:
 
 seasonTitle: The {season} season
 seasonIntro: >-
-  Every tournament the team plans to attend this season, in date order, including the ones that
-  have already happened. A student does not go to all of them.
+  Every tournament the team plans to attend for the rest of this season, in date order. A student
+  does not go to all of them.
 
 nationalsTitle: Nationals
 nationalsIntro: >-

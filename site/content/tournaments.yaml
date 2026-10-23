@@ -42,41 +42,13 @@ season: '2026-27'
 
 # The day this file was last changed. Update it with every edit: the page shows it, and calendar
 # apps are given it as the time each entry was issued.
-revised: 2026-10-01
+revised: 2026-10-22
 
 tournaments:
-  - id: neenah-2026
-    name: Neenah High School
-    start: 2026-10-10
-    events: [public-forum, lincoln-douglas]
-    held: in-person
-    where: Neenah, Wisconsin
-    overnight: no
-    status: confirmed
-
-  - id: fort-atkinson-2026
-    name: Fort Atkinson
-    start: 2026-10-17
-    events: [policy, lincoln-douglas, public-forum]
-    held: in-person
-    where: Fort Atkinson, Wisconsin
-    overnight: no
-    status: confirmed
-
   - id: ronald-reagan-2026
     name: Ronald Reagan High School
     start: 2026-10-24
     events: [policy, lincoln-douglas, public-forum]
-    held: in-person
-    where: Milwaukee, Wisconsin
-    overnight: no
-    status: confirmed
-
-  - id: iowa-caucus-2026
-    name: Iowa Caucus
-    start: 2026-10-23
-    end: 2026-10-25
-    events: [policy]
     held: online-at-school
     overnight: no
     status: confirmed
@@ -97,17 +69,6 @@ tournaments:
     where: West Bend, Wisconsin
     overnight: no
     status: confirmed
-
-  - id: minneapple-2026
-    name: MinneApple
-    start: 2026-11-07
-    end: 2026-11-09
-    events: [lincoln-douglas, public-forum]
-    held: in-person
-    where: Apple Valley High School, Minnesota
-    overnight: yes
-    status: confirmed
-    notes: Varsity only.
 
   - id: badgerland-2026
     name: Badgerland
@@ -132,14 +93,10 @@ tournaments:
     name: Glenbrooks
     start: 2026-11-21
     end: 2026-11-23
-    byEvent:
-      - events: [lincoln-douglas, public-forum]
-        held: online-at-school
-        overnight: no
-      - events: [policy]
-        held: in-person
-        where: Glenview, Illinois
-        overnight: yes
+    events: [policy]
+    held: in-person
+    where: Glenview, Illinois
+    overnight: yes
     status: confirmed
     notes: Varsity only.
 

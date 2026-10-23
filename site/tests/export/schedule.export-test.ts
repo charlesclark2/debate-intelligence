@@ -8,7 +8,7 @@ import { SCHEDULE_SLUG, loadPages, loadSiteSettings } from '@/lib/content'
 import { loadMediaConsent } from '@/lib/media-consent'
 import { checkPublishingPolicy } from '@/lib/publishing-policy'
 import { readSiteUrl } from '@/lib/site-settings'
-import { CALENDAR_PATH, loadSchedule } from '@/lib/tournaments'
+import { CALENDAR_PATH, findOverlaps, loadSchedule } from '@/lib/tournaments'
 
 import { builtPageFiles, exportDirectory, exportedPagePath, readExported } from './built-export'
 
@@ -44,10 +44,16 @@ describe('the exported schedule', () => {
 
   it('lists every tournament on the page, marked as the sources say', () => {
     const html = readFileSync(exportedPagePath(SCHEDULE_SLUG), 'utf8')
-    for (const tournament of loadSchedule().tournaments) {
+    const { tournaments } = loadSchedule()
+    for (const tournament of tournaments) {
       expect(html, tournament.id).toContain(`id="${tournament.id}"`)
     }
-    expect(html.match(/class="schedule-entry__overlap"/g)).toHaveLength(8)
+    // One marker per entry that shares a day with another, as the sources say: the hand-counted
+    // pairs are pinned in tests/tournaments.test.ts, so the export follows the file rather than a
+    // number that goes stale at every schedule edit.
+    const overlapping = [...findOverlaps(tournaments).values()].filter((others) => others.length > 0)
+    expect(overlapping.length).toBeGreaterThan(0)
+    expect(html.match(/class="schedule-entry__overlap"/g)).toHaveLength(overlapping.length)
   })
 })
 

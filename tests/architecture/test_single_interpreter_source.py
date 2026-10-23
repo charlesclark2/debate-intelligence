@@ -285,6 +285,91 @@ def test_the_scanner_ignores_other_versions(line: str) -> None:
     assert python_versions_named(line) == []
 
 
+# Figures sessions had to reword to pass, each true as written. A Python word on the line does not
+# make them Python versions.
+OLDER = MINOR - 3
+OLDEST = MINOR - 4
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        pytest.param(f"a measured 3.{OLDER} ms", id="a time in ms (v1-e39-t03)"),
+        pytest.param(f"SQLite 3.{MINOR - 1}.0 ships with the runner", id="a SQLite version (v1-e39-t03)"),
+        pytest.param(f"at most 3.{OLDER}% of the cards", id="a percentage (v1-e39-t12)"),
+        pytest.param(f"needs SQLite 3.{OLDER}.0 and 3.{OLDEST}.3 for it", id="a SQLite list (v1-e39-t13)"),
+        pytest.param("SQLite 3.40.0", id="a SQLite version (v1-e39-t13's report)"),
+        pytest.param(
+            f"Python's sqlite3 module links SQLite 3.{MINOR - 1}.0", id="SQLite beside a python word"
+        ),
+        pytest.param(f"the python step took 3.{OLDER} ms, then 3.{MINOR}s", id="times beside a python word"),
+        pytest.param(f"python peaked at 3.{OLDER} MB and 3.{MINOR}GB", id="sizes beside a python word"),
+        pytest.param(f"a python run at 3.{OLDER}%", id="a percentage beside a python word"),
+        pytest.param(f"python on Node 3.{MINOR} and Node.js 3.{NEXT}", id="Node"),
+        pytest.param(f"python beside Next.js 3.{MINOR}", id="Next.js"),
+        pytest.param(f"python, Lighthouse 3.{MINOR} and axe-core 3.{NEXT}.1", id="Lighthouse and axe-core"),
+        pytest.param(f"version 3.{MINOR} of the schema", id="a bare version with no python word"),
+    ],
+)
+def test_a_figure_or_another_products_version_is_not_a_python_version(line: str) -> None:
+    assert python_versions_named(line) == []
+
+
+@pytest.mark.parametrize(
+    ("line", "named"),
+    [
+        pytest.param(f"Programming Language :: Python :: 3.{MINOR}", [f"3.{MINOR}"], id="a trove classifier"),
+        pytest.param(f"pyenv install 3.{MINOR}.7", [f"3.{MINOR}"], id="pyenv"),
+        pytest.param(f"uv python install 3.{NEXT}", [f"3.{NEXT}"], id="uv python"),
+        pytest.param(
+            f"run: uv sync --python 3.{MINOR}", [f"3.{MINOR}"], id="a pinned interpreter in a workflow"
+        ),
+        pytest.param(f'UV_PYTHON: "3.{MINOR}"', [f"3.{MINOR}"], id="uv's interpreter variable"),
+        pytest.param(
+            f"FROM public.ecr.aws/lambda/python:3.{MINOR}", [f"3.{MINOR}"], id="a Lambda base image"
+        ),
+        pytest.param(f"PY_VERSION=3.{MINOR}", [f"3.{MINOR}"], id="a py variable"),
+        pytest.param(f"py -3.{NEXT} -m venv .venv", [f"3.{NEXT}"], id="the Windows launcher"),
+        pytest.param(
+            f"tested on Python 3.{MINOR}, 3.{NEXT}", [f"3.{MINOR}", f"3.{NEXT}"], id="a list after Python"
+        ),
+        pytest.param(
+            f"Python 3.{MINOR} and SQLite 3.{MINOR - 1}.0", [f"3.{MINOR}"], id="Python before SQLite"
+        ),
+        pytest.param(f"SQLite 3.{OLDER}.0 and Python 3.{NEXT}", [f"3.{NEXT}"], id="SQLite before Python"),
+        pytest.param(f"Python 3.{MINOR} took 3.{OLDER} ms", [f"3.{MINOR}"], id="Python beside a time"),
+        pytest.param(f"--python 3.{MINOR} s3://bucket", [f"3.{MINOR}"], id="an s3 URL is not seconds"),
+        pytest.param(f"--python 3.{MINOR} min-age", [f"3.{MINOR}"], id="a hyphened word is not a unit"),
+    ],
+)
+def test_a_version_in_a_python_context_is_a_python_version(line: str, named: list[str]) -> None:
+    assert python_versions_named(line) == named
+
+
+def test_a_line_takes_the_python_word_of_the_line_that_opens_its_block() -> None:
+    assert python_versions_named(f'- "3.{MINOR}"', "python:") == [f"3.{MINOR}"]
+    assert python_versions_named(f'- "3.{MINOR}"', "schema-versions:") == []
+
+
+def test_every_version_in_an_interpreter_pin_is_a_python_version() -> None:
+    assert python_versions_named(f"3.{NEXT}", in_version_file=True) == [f"3.{NEXT}"]
+
+
+def test_each_line_is_paired_with_the_nearest_less_indented_line_above_it() -> None:
+    text = "jobs:\n  build:\n    python:\n      - one\n\n      - two\n    steps:\nnext: 1\n"
+
+    assert list(lines_with_block_openers(text)) == [
+        (1, "jobs:", ""),
+        (2, "build:", "jobs:"),
+        (3, "python:", "build:"),
+        (4, "- one", "python:"),
+        (5, "", ""),
+        (6, "- two", "python:"),
+        (7, "steps:", "build:"),
+        (8, "next: 1", ""),
+    ]
+
+
 def plant(tmp_path: Path, files: dict[str, str]) -> Path:
     declared = declared_requires_python(REPO_ROOT)
     tree = {
@@ -347,3 +432,50 @@ def test_a_requires_python_outside_the_workspace_is_not_derived(tmp_path: Path) 
     root = plant(tmp_path, {"tools/other/pyproject.toml": f'[project]\nrequires-python = "{declared}"\n'})
 
     assert [mention.path for mention in mentions(root, tracked_files(root))] == ["tools/other/pyproject.toml"]
+
+
+def test_figures_and_other_products_versions_are_not_mentions(tmp_path: Path) -> None:
+    root = plant(
+        tmp_path,
+        {
+            "docs/data/timings.md": (
+                f"A lookup took a measured 3.{OLDER} ms under Python's sqlite3, on SQLite 3.{MINOR - 1}.0.\n"
+                f"The parser missed at most 3.{OLDER}% of the cards.\n"
+            ),
+            "packages/debate_core/src/debate_core/store.py": (
+                f'"""Python\'s sqlite3 needs SQLite 3.{OLDER}.0 and 3.{OLDEST}.3 for this."""\n'
+            ),
+            "docs/runbooks/sqlite.md": "The runner ships SQLite 3.40.0.\n",
+        },
+    )
+
+    assert mentions(root, tracked_files(root)) == []
+
+
+def test_each_shape_of_a_second_declaration_is_a_mention(tmp_path: Path) -> None:
+    root = plant(
+        tmp_path,
+        {
+            "packages/debate_cli/pyproject.toml": member_pyproject(f">=3.{NEXT}"),
+            "packages/debate_cli/.python-version": f"3.{NEXT}\n",
+            "packages/debate_api/Dockerfile": f"FROM python:3.{MINOR}-slim\n",
+            ".github/workflows/release.yml": (
+                "jobs:\n"
+                "  build:\n"
+                "    strategy:\n"
+                "      matrix:\n"
+                "        python:\n"
+                f'          - "3.{NEXT}"\n'
+                "    steps:\n"
+                f"      - run: uv python install 3.{MINOR}\n"
+            ),
+        },
+    )
+
+    assert sorted(str(mention) for mention in mentions(root, tracked_files(root))) == [
+        f'.github/workflows/release.yml:6: - "3.{NEXT}"',
+        f".github/workflows/release.yml:8: - run: uv python install 3.{MINOR}",
+        f"packages/debate_api/Dockerfile:1: FROM python:3.{MINOR}-slim",
+        f"packages/debate_cli/.python-version:1: 3.{NEXT}",
+        f'packages/debate_cli/pyproject.toml:3: requires-python = ">=3.{NEXT}"',
+    ]

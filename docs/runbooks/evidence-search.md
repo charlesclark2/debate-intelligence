@@ -1105,19 +1105,109 @@ whose parts only add up past the budget, or whose files pass the fetch ceiling, 
 sends a binary body base64-encoded. Neither setting is set by Terraform; the defaults hold until
 the dev timing below says otherwise, and changing one is a change to the module's environment block.
 
-**Time a download on dev** after the deploy that ships it. Sign in on dev, download one card, then a
-cart of eight cards from eight different teams' files, then read the function's last durations:
+**Time a download on dev** after the deploy that ships it, with three carts and one refusal check
+(the PM's rulings of 2026-10-22). Real carts cannot reach both byte limits at once: camp files are
+heavy in XML, and the largest caselist files are heavy in images. So each cart tests one limit:
+
+| Cart | What it tests | From the index `f29b81c276dd67c5` |
+|---|---|---|
+| First: eight mean-size cards | An ordinary cart: eight hspolicy26 files nearest 236 KB | 1,886,141 file bytes, 8,338,181 `document.xml` bytes |
+| (a) The XML budget | Eight camp files, the two largest `document.xml` parts among them | 7,345,762 file bytes, 19,997,074 `document.xml` bytes |
+| (b) The fetch ceiling | The eight largest hspolicy26 files | 44,855,560 file bytes, 2,491,293 `document.xml` bytes |
+| (c) The refusal check | The eight largest camp files, over the budget | 26,309,272 file bytes, 44,031,336 `document.xml` bytes |
+
+**List the carts' card pages.** A read-only block on the operator's store: it opens the index
+read-only and reads only file sizes and zip directories. It prints, for each cart, its byte totals
+and its eight card-page URLs, and nothing else: no file name, team code, school or card text. Set
+`INDEX_ID` to the index dev serves (the id the latest `tub index publish` printed, or the app log's
+`search index <id> loaded`). It stops if a `DEBATE_*` override is set or a `caselist pull` is running.
+
+**Operator command** (expected runtime seconds)
+Where: your Mac, anywhere
+```bash
+PULL=$(pgrep -fl 'debate-research( --json)? caselist pull')
+OVERRIDES=$(env | grep '^DEBATE_' | cut -d= -f1 | tr '\n' ' ')
+echo "running pull: ${PULL:-none}"
+echo "DEBATE_ overrides: ${OVERRIDES:-none}"
+if [[ -n "$PULL" || -n "$OVERRIDES" ]]; then
+  echo "STOP: the line above that is not none says why. Wait for the pull to finish, or open a new window."
+else
+  INDEX_ID=f29b81c276dd67c5
+  python3 -I - "$INDEX_ID" <<'PY'
+import sqlite3, sys, zipfile
+from pathlib import Path
+data = Path.home() / ".debate-research" / "dev"
+index_id = sys.argv[1]
+budget, ceiling = 20_000_000, 52_000_000
+db = sqlite3.connect(f"{(data / 'tub-index' / index_id / 'search-index.sqlite').as_uri()}?mode=ro&immutable=1", uri=True)
+blobs = data / "blobs" / "sha256"
+def sources(caselist):
+    found = {}
+    rows = db.execute(
+        "SELECT o.source_sha256, d.cluster_id FROM documents d JOIN occurrences o ON o.doc_id = d.doc_id "
+        "AND o.ordinal = 0 WHERE d.caselist = ? AND d.completeness != 'CITE_ONLY' ORDER BY d.doc_id",
+        (caselist,),
+    )
+    for sha, cluster in rows:
+        if sha not in found:
+            path = blobs / sha[0:2] / sha[2:4] / sha
+            with zipfile.ZipFile(path) as archive:
+                xml = archive.getinfo("word/document.xml").file_size
+            found[sha] = (path.stat().st_size, xml, cluster)
+    return [(size, xml, cluster) for size, xml, cluster in found.values()]
+def show(name, caselist, cart):
+    print(f"{name}: {len(cart)} cards, {sum(c[0] for c in cart):,} file bytes, {sum(c[1] for c in cart):,} document.xml bytes")
+    for _, _, cluster in cart:
+        print(f"  https://tub.dev.wfbdebate.com/cards/{caselist}/{cluster}")
+policy, camp = sources("hspolicy26"), sources("openev")
+show("first (mean-size)", "hspolicy26", sorted(policy, key=lambda c: (abs(c[0] - 236_000), c[2]))[:8])
+by_xml = sorted(camp, key=lambda c: (-c[1], c[2]))
+chosen, xml_total, file_total = [], 0, 0
+for i, card in enumerate(by_xml):
+    rest = sorted(c[1] for j, c in enumerate(by_xml) if j > i)[: 8 - len(chosen) - 1]
+    if len(chosen) < 8 and xml_total + card[1] + sum(rest) <= budget and file_total + card[0] <= ceiling:
+        chosen.append(card); xml_total += card[1]; file_total += card[0]
+show("(a) XML budget", "openev", chosen)
+show("(b) fetch ceiling", "hspolicy26", sorted(policy, key=lambda c: (-c[0], c[2]))[:8])
+show("(c) refusal check", "openev", sorted(camp, key=lambda c: (-c[0], c[2]))[:8])
+PY
+fi
+```
+Success looks like two `none` lines and then, for index `f29b81c276dd67c5`, exactly these four
+heading lines, each followed by eight `https://tub.dev.wfbdebate.com/cards/...` lines:
+
+```text
+first (mean-size): 8 cards, 1,886,141 file bytes, 8,338,181 document.xml bytes
+(a) XML budget: 8 cards, 7,345,762 file bytes, 19,997,074 document.xml bytes
+(b) fetch ceiling: 8 cards, 44,855,560 file bytes, 2,491,293 document.xml bytes
+(c) refusal check: 8 cards, 26,309,272 file bytes, 44,031,336 document.xml bytes
+```
+Other totals mean the store or the index is not the one these were measured on. Stop and send the
+four lines to the PM before timing anything.
+
+**Time each cart.** Sign in on dev. For each cart in turn: choose **Empty the cart**, open its eight
+URLs and choose **Add to cart** on each, then **Download cart**, then read the function's latest
+`REPORT` line before the next cart:
 
 **Operator command** (expected runtime seconds)
 Where: your Mac, anywhere
 ```bash
 aws logs filter-log-events --profile debate-admin --region us-east-1 --log-group-name debate-dev-tub-app \
-  --filter-pattern '"REPORT RequestId"' --query 'events[-5:].message' --output text
+  --filter-pattern '"REPORT RequestId"' --query 'events[-1:].message' --output text
 ```
-Success looks like `REPORT` lines whose `Duration` for the cart's request is under 20,000 ms and whose
-`Max Memory Used` is under 1,400 MB. Record both in [What to record](#what-to-record). A cart's
-duration over 20,000 ms means the Mac-to-Lambda allowance was too small: lower
-`TUB_DOWNLOAD_CARD_CAP` and `TUB_DOWNLOAD_SOURCE_XML_BYTES` in proportion before the pilot opens.
+Success looks like:
+
+- **The first cart, (a) and (b):** the file downloads, and the `REPORT` line has `Duration` under
+  20,000 ms and `Max Memory Used` under 1,400 MB. A card the download refuses by name (a picture
+  inside it, say) has still had its file read and parsed. Record that line, choose *Remove these from
+  the cart and download the rest*, and record the next line too.
+- **(c):** the cart bar says *These cards come from files too large to read in one download*,
+  within a few seconds, and no file downloads. Record its `Duration`.
+
+Record every line in [What to record](#what-to-record). A line over 20,000 ms or 1,400 MB, or (c)
+building a file or taking more than a few seconds: send all the lines to the PM before the pilot
+opens. The fix would be lowering `TUB_DOWNLOAD_CARD_CAP` or `TUB_DOWNLOAD_SOURCE_XML_BYTES`, or the
+fetch ceiling, in proportion.
 
 ## What a refusal looks like in the app log
 
@@ -1176,7 +1266,11 @@ for.
 | 8: through CloudFront (code, cache-control) | `200 private, no-store`; all six headers as expected | |
 | 8: direct function URL (code, body) | `403` `{"Message":"Forbidden"}`, for `/healthz` and `/` | |
 | 8: init durations from `REPORT` lines | 4,115 ms (first environment after the deploy), 1,848 ms; 81–82 MB used | |
-| Download: one card, and a cart of eight cards from eight files (`Duration`, `Max Memory Used`) | | |
+| Download: the four carts' totals from the listing block | | |
+| Download: the first cart, eight mean-size cards (`Duration`, `Max Memory Used`) | | |
+| Download: cart (a), the XML budget (`Duration`, `Max Memory Used`) | | |
+| Download: cart (b), the fetch ceiling (`Duration`, `Max Memory Used`) | | |
+| Download: cart (c), the refusal check (`Duration`; the message; no file) | | |
 | 10: managed login rendered; asset hosts recorded | Rendered; both sign-ins reached the callback; hosts in the table above | n/a |
 | 12: IT request sent; confirmed and date | n/a | |
 

@@ -387,18 +387,34 @@ cite, underlining, highlighting and sizes as on the card page*, *the cart file d
 every card*, *Google Docs keeps the formatting*. Also note that no file shows a `[Disclosed: …]` or
 `[OpenEv: …]` line.
 
-**4. Time a download on dev**, right after step 3, with the runbook's command (seconds): download a
-cart of eight cards from eight different files, then:
+**4. Time a download on dev: three carts and a refusal check** (the PM's rulings of 2026-10-22),
+right after step 3. Follow the runbook's
+[timing section](../runbooks/evidence-search.md#the-downloads-limits-and-timing-a-download-on-dev).
 
-**Operator command** (expected runtime seconds)
-Where: your Mac, anywhere
-```bash
-aws logs filter-log-events --profile debate-admin --region us-east-1 --log-group-name debate-dev-tub-app \
-  --filter-pattern '"REPORT RequestId"' --query 'events[-5:].message' --output text
-```
-Success looks like the cart's `REPORT` line with `Duration` under 20,000 ms and `Max Memory Used`
-under 1,400 MB. Paste the lines back. Over either, the Mac-to-function allowance (Decisions 1) was
-too small, and the two defaults need lowering before the pilot opens.
+- **List the carts' card pages first.** Run the runbook's read-only listing block (seconds; it stops
+  on a `DEBATE_*` override or a running `caselist pull`). For index `f29b81c276dd67c5` it prints
+  exactly these four lines, each followed by eight card-page URLs, and nothing else:
+
+  ```text
+  first (mean-size): 8 cards, 1,886,141 file bytes, 8,338,181 document.xml bytes
+  (a) XML budget: 8 cards, 7,345,762 file bytes, 19,997,074 document.xml bytes
+  (b) fetch ceiling: 8 cards, 44,855,560 file bytes, 2,491,293 document.xml bytes
+  (c) refusal check: 8 cards, 26,309,272 file bytes, 44,031,336 document.xml bytes
+  ```
+
+  Other totals mean another store or index: stop and send the four lines to the PM. The block was
+  run as written, in zsh, on this store on 2026-10-22, and printed exactly that, with 32 URLs. Its
+  guard was checked too: with `DEBATE_STORAGE__DATA_DIR` set, it printed the `STOP` line.
+- **Then each cart in turn:** *Empty the cart*, add its eight cards, *Download cart*, and read the
+  latest `REPORT` line with the runbook's command before the next cart.
+  - The first cart, (a) and (b) download a file, with `Duration` under 20,000 ms and
+    `Max Memory Used` under 1,400 MB. A card refused by name (one holding a picture, say) still had
+    its file read. Record that line, drop the card with *Remove these from the cart and download the
+    rest*, and record the next line too.
+  - (c) answers *These cards come from files too large to read in one download* within a few
+    seconds and builds nothing. Record its `Duration`.
+- **Paste every line back.** Any line over 20,000 ms or 1,400 MB, or (c) building a file or taking
+  more than a few seconds, goes to the PM with all the lines before the pilot opens.
 
 ## Follow-up work
 

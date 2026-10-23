@@ -8,7 +8,8 @@ module builds them from this machine's stores:
   store, the newest unless one is named;
 * **a source is on the topic** when one of its live disclosures (the suppression list neither stops
   nor holds it, :func:`~debate_core.application.caselist.parse_sources.live_disclosures`) is dated
-  inside one of the topic's ranges for this caselist in `topics.yaml`;
+  inside one of the topic's ranges for this caselist in `topics.yaml`, and, when a `through` date is
+  given, on or before it: the store as it stood at that snapshot (the position classifier, `v1-e32-t02`);
 * **the caselist's names** are every school a disclosure's path names, with its team codes, whatever
   the date, so that seeding can take another school's name out of a heading;
 * **its teams** come from those disclosures' paths, read by the importer's own path parser: the
@@ -24,6 +25,7 @@ is not a position); nothing here writes, logs or returns them in a `repr`.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import date
 
 from debate_core.application.caselist.evidence_listing import LocalEvidence
 from debate_core.application.caselist.parse_sources import enumerate_sources, live_disclosures
@@ -65,6 +67,8 @@ class SeedReading:
         default_factory=lambda: dict[str, tuple[str, ...]](), repr=False
     )
     """Every school a disclosure of the caselist names, with its team codes, for seeding to strip."""
+    newest_disclosure: date | None = None
+    """The latest date among the on-topic disclosures read; None when no source was read."""
 
 
 async def read_seed_sources(
@@ -75,8 +79,13 @@ async def read_seed_sources(
     topic: Topic,
     caselist: str,
     version: str | None = None,
+    through: date | None = None,
 ) -> SeedReading:
-    """`caselist`'s parsed sources on `topic`, each with its disclosing teams and its cards' headings."""
+    """`caselist`'s parsed sources on `topic`, each with its disclosing teams and its cards' headings.
+
+    With `through`, only disclosures dated on or before it count, so a source first disclosed later is
+    left out as off the topic.
+    """
     ranges = [one for one in topic.caselists if one.caselist == caselist]
     if not ranges:
         raise SeedingCannotStart(f"topics.yaml gives {topic.id} no range of {caselist}")
@@ -100,6 +109,7 @@ async def read_seed_sources(
     entries = await store.read_entries(caselist, version)
     parsed = [entry for entry in entries if entry.outcome is SourceOutcome.PARSED]
     sources: list[SeedSource] = []
+    newest: date | None = None
     for entry in parsed:
         enumerated = disclosed.get(entry.source_sha256)
         on_topic = (
@@ -107,6 +117,7 @@ async def read_seed_sources(
                 disclosure
                 for disclosure in live_disclosures(enumerated, state)
                 if any(one.covers(caselist, disclosure.provenance_date) for one in ranges)
+                and (through is None or disclosure.provenance_date <= through)
             ]
             if enumerated is not None
             else []
@@ -117,6 +128,8 @@ async def read_seed_sources(
         if record is None:
             continue
         teams = tuple(_team(disclosure.path, topic) for disclosure in on_topic)
+        latest = max(disclosure.provenance_date for disclosure in on_topic)
+        newest = latest if newest is None else max(newest, latest)
         sources.append(SeedSource(sha256=entry.source_sha256, teams=teams, cards=_cards(record)))
     return SeedReading(
         caselist=caselist,
@@ -127,6 +140,7 @@ async def read_seed_sources(
         parsed_off_topic=len(parsed) - len(sources),
         sources=tuple(sources),
         caselist_names={school: tuple(sorted(codes)) for school, codes in sorted(names.items())},
+        newest_disclosure=newest,
     )
 
 
@@ -141,7 +155,7 @@ def _team(path: str, topic: Topic) -> SeedTeam:
 
 
 def _cards(record: DocumentRecord) -> tuple[SeedCard, ...]:
-    """Each stored card's tag and section path, as the store holds them (version 1 or 2)."""
+    """Each stored card's tag, section path and first paragraph, as the store holds them (version 1 or 2)."""
     stored = record.document.get("cards")
     cards: list[SeedCard] = []
     for card in stored if isinstance(stored, list) else []:
@@ -149,12 +163,15 @@ def _cards(record: DocumentRecord) -> tuple[SeedCard, ...]:
             continue
         tag = card.get("tag")
         path = card.get("section_path")
+        provenance = card.get("provenance")
+        first = provenance.get("first_element_index") if isinstance(provenance, dict) else None
         cards.append(
             SeedCard(
                 tag=tag if isinstance(tag, str) and tag else None,
                 section_path=tuple(part for part in path if isinstance(part, str))
                 if isinstance(path, list)
                 else (),
+                first_element_index=first if isinstance(first, int) and not isinstance(first, bool) else None,
             )
         )
     return tuple(cards)

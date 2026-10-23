@@ -4,6 +4,8 @@
 caselist snapshot on a topic, and `taxonomies/<topic id>.yaml` lists that topic's positions, with
 `generic.yaml`'s format-level positions merged in by event. The classifier (`v1-e32-t02`) and the
 report (`v1-e32-t03`) ask this port, so neither knows where the files are or how they are checked.
+The coach's review-queue decisions on a topic's headings (`overrides/<topic id>.yaml`,
+`v1-e32-t02`) are read and checked with them, against the topic's merged taxonomy.
 
 Synchronous, unlike the storage ports: the files are a few kilobytes read once when the repository
 is built, and an adapter checks every file then, so a bad edit fails before any report starts
@@ -18,6 +20,7 @@ from typing import Protocol, runtime_checkable
 
 from debate_core.application.errors import DomainError, NotFound
 from debate_core.domain.landscape import Taxonomy, Topic, TopicMap
+from debate_core.domain.landscape_classification import OverrideRules
 
 __all__ = [
     "NoTaxonomyForTopic",
@@ -72,4 +75,11 @@ class TaxonomyRepository(Protocol):
 
     def resolve(self, caselist: str, snapshot: date) -> ResolvedTopic | None:
         """The topic `caselist`'s snapshot of `snapshot` is on, or None when no range covers it."""
+        ...
+
+    def overrides(self, topic_id: str) -> OverrideRules:
+        """The coach's decisions on the topic's headings; none when the topic has no overrides file.
+
+        Raises :class:`NoTaxonomyForTopic` for a topic with no taxonomy, or no such topic.
+        """
         ...

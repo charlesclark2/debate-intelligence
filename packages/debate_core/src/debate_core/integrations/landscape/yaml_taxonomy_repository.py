@@ -5,6 +5,7 @@ The directory holds the coach's files::
     config/landscape/topics.yaml                       the topic map: topics and caselist ranges
     config/landscape/taxonomies/<topic id>.yaml        one topic's positions
     config/landscape/taxonomies/generic.yaml           format-level positions, merged in by event
+    config/landscape/overrides/<topic id>.yaml         the coach's decisions on that topic's headings
 
 :meth:`YamlTaxonomyRepository.load` reads every file at once and checks each on its own (the
 models in :mod:`debate_core.domain.landscape`) and against the others:
@@ -14,6 +15,8 @@ models in :mod:`debate_core.domain.landscape`) and against the others:
   and every file other than generic.yaml belongs to such a topic;
 * each topic's positions, with generic.yaml's for its event, pass the taxonomy rules as one list,
   so an alias the two files both claim is refused here;
+* an overrides file's `topic_id` is its file's stem, the topic has a taxonomy, and every decision
+  names a position that taxonomy counts under (`v1-e32-t02`);
 * a mapping that gives one key twice is an error rather than YAML's silent "last one wins", which
   would drop a coach's first list of aliases without a word.
 
@@ -38,18 +41,23 @@ from debate_core.application.ports.taxonomy_repository import (
     TaxonomyConfigError,
 )
 from debate_core.domain.landscape import GENERIC_TOPIC_ID, Taxonomy, TopicMap
+from debate_core.domain.landscape_classification import OverrideRules
 
 __all__ = [
     "GENERIC_FILE",
+    "OVERRIDE_DIRECTORY",
     "TAXONOMY_DIRECTORY",
     "TOPICS_FILE",
     "YamlTaxonomyRepository",
+    "load_override_file",
     "load_taxonomy_file",
     "load_topic_map",
+    "render_override_file",
 ]
 
 TOPICS_FILE: Final = "topics.yaml"
 TAXONOMY_DIRECTORY: Final = "taxonomies"
+OVERRIDE_DIRECTORY: Final = "overrides"
 GENERIC_FILE: Final = f"{GENERIC_TOPIC_ID}.yaml"
 
 
@@ -102,12 +110,45 @@ def load_taxonomy_file(path: Path) -> Taxonomy:
     return taxonomy
 
 
-class YamlTaxonomyRepository:
-    """The topic map and every topic's merged taxonomy, read from one `config/landscape/` directory."""
+def load_override_file(path: Path) -> OverrideRules:
+    """Read and check one overrides file on its own; its `topic_id` must be the file's stem."""
+    try:
+        rules = OverrideRules.model_validate(_read(path))
+    except ValidationError as error:
+        raise TaxonomyConfigError(str(path), str(error)) from error
+    if rules.topic_id != path.stem:
+        raise TaxonomyConfigError(
+            str(path), f"its topic_id is {rules.topic_id}, but the file is named for {path.stem}"
+        )
+    return rules
 
-    def __init__(self, topic_map: TopicMap, taxonomies: Mapping[str, Taxonomy]) -> None:
+
+_OVERRIDE_HEADER: Final = """\
+# The coach's decisions from the landscape review queue: each heading, as the normalizer writes it,
+# and the position it names, or null for a heading that names no position. Written by
+# scripts/classify_landscape_positions.py apply-decisions; docs/guides/landscape-taxonomy.md says how.
+# The matcher reads these before the taxonomy's aliases. No team, school or person is named here.
+"""
+
+
+def render_override_file(rules: OverrideRules) -> str:
+    """The YAML an overrides file holds for `rules`, header comment first; what `load_override_file` reads."""
+    document = rules.model_dump(mode="json")
+    return _OVERRIDE_HEADER + yaml.safe_dump(document, sort_keys=False, allow_unicode=True, width=100)
+
+
+class YamlTaxonomyRepository:
+    """The topic map, every topic's merged taxonomy and its overrides, read from one `config/landscape/`."""
+
+    def __init__(
+        self,
+        topic_map: TopicMap,
+        taxonomies: Mapping[str, Taxonomy],
+        overrides: Mapping[str, OverrideRules] | None = None,
+    ) -> None:
         self._topic_map = topic_map
         self._taxonomies = dict(taxonomies)
+        self._overrides = dict(overrides or {})
 
     @classmethod
     def load(cls, directory: Path) -> YamlTaxonomyRepository:
@@ -152,7 +193,7 @@ class YamlTaxonomyRepository:
                 merged[topic.id] = own.with_generic(generic[1]) if generic is not None else own
             except ValidationError as error:
                 raise TaxonomyConfigError(str(path), f"with {GENERIC_FILE} merged in: {error}") from error
-        return cls(topic_map, merged)
+        return cls(topic_map, merged, _load_overrides(directory / OVERRIDE_DIRECTORY, merged))
 
     def topic_map(self) -> TopicMap:
         return self._topic_map
@@ -163,6 +204,11 @@ class YamlTaxonomyRepository:
         except KeyError:
             raise NoTaxonomyForTopic(topic_id) from None
 
+    def overrides(self, topic_id: str) -> OverrideRules:
+        if topic_id not in self._taxonomies:
+            raise NoTaxonomyForTopic(topic_id)
+        return self._overrides.get(topic_id, OverrideRules(topic_id=topic_id))
+
     def resolve(self, caselist: str, snapshot: date) -> ResolvedTopic | None:
         found = self._topic_map.resolve(caselist, snapshot)
         if found is None:
@@ -170,3 +216,24 @@ class YamlTaxonomyRepository:
         return ResolvedTopic(
             topic=self._topic_map.topic(found.topic_id), taxonomy=self._taxonomies.get(found.topic_id)
         )
+
+
+def _load_overrides(directory: Path, taxonomies: Mapping[str, Taxonomy]) -> dict[str, OverrideRules]:
+    """Every overrides file, each checked against its topic's merged taxonomy."""
+    paths = sorted(directory.iterdir()) if directory.is_dir() else []
+    found: dict[str, OverrideRules] = {}
+    for path in paths:
+        if path.suffix != ".yaml":
+            raise TaxonomyConfigError(str(path), "an overrides file ends in .yaml; this one would be skipped")
+        rules = load_override_file(path)
+        taxonomy = taxonomies.get(rules.topic_id)
+        if taxonomy is None:
+            raise TaxonomyConfigError(
+                str(path), f"no topic in {TOPICS_FILE} gives {rules.topic_id} a taxonomy, so nothing reads it"
+            )
+        try:
+            rules.check_against(taxonomy)
+        except ValueError as error:
+            raise TaxonomyConfigError(str(path), str(error)) from error
+        found[rules.topic_id] = rules
+    return found

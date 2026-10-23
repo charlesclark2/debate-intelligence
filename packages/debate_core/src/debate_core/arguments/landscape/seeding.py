@@ -104,10 +104,15 @@ class SeedTeam:
 
 @dataclass(frozen=True, slots=True)
 class SeedCard:
-    """One card's place: the headings above it, and its tag only to tell an open tag from a heading."""
+    """One card's place: the headings above it, and its tag only to tell an open tag from a heading.
+
+    The position matcher (`v1-e32-t02`) reads the same cards, and names each by its first paragraph.
+    """
 
     tag: str | None = field(repr=False)
     section_path: tuple[str, ...] = field(repr=False)
+    first_element_index: int | None = None
+    """The card's first paragraph in its document, as its provenance and the occurrence table give it."""
 
 
 @dataclass(frozen=True, slots=True)

@@ -547,3 +547,19 @@ async def test_a_path_hold_the_rebuild_read_is_published_as_the_rebuilds_publish
 
     assert await contents(second) == await contents(first)
     assert outcomes(published) == outcomes(rebuilt)
+
+
+async def test_a_removal_of_a_source_with_no_cards_is_refused_by_its_index_row(
+    world: World, tmp_path: Path
+) -> None:
+    """A PDF has an index row and no occurrence row: only the index names it."""
+    await world.run()
+    await world.suppress(digest_of("pdf"))
+
+    refusal = await refused(world, tmp_path)
+
+    assert error_code_of(refusal) == STOPPED_BY_THE_LIST
+    assert str(refusal).startswith(
+        f"the aggregates of {CASELIST} {DOCX_PARSER_VERSION} name 1 source(s) and 0 disclosure(s) "
+    )
+    assert f"(sha256 {digest_of('pdf')[:12]})" in str(refusal)

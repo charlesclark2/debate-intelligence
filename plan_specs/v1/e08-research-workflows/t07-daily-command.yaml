@@ -25,6 +25,11 @@ spec:
     seen in prior digests (persisted seen-set by canonical URL/DOI), and groups new results by
     argument/need into a Markdown or JSON digest file with explanations and links. --auto-cut N delegates the
     top N new results to the t06 BatchCutService. Boundaries: no scheduling/cron (V2 EventBridge), no emailing.
+    (PM amendment 2026-10-22, from v1-e07-t05's PM review.) `ProviderQuery` has no topic: the
+    feed and Google News providers read the topics they were built with. A preset names the feed
+    topics it uses (files in `config/feeds/`), and the digest builds those providers for that
+    preset's run, so a politics digest never reads the health-insurance feeds. A topic whose
+    `review:` is still `awaiting_coach_review` runs, and the digest says so.
   priority: 2
   constraints:
     packages: [debate_core.application, debate_cli, config/daily_presets.yaml]

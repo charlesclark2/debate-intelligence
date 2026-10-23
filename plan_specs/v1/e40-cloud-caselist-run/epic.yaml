@@ -1,0 +1,192 @@
+# EPIC E40 — Weekly Caselist Run in the Cloud
+# Major version: V1 | Release: v1.8 (Weekly caselist run in the cloud)
+# Architecture refs: ADR-0020 (written by t01), ADR-0019, ADR-0017, docs/policies/caselist-data-use.md
+# Source of truth for task ordering inside this epic. Task details live in the tNN-*.yaml files beside this one.
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e40-cloud-caselist-run
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: epic
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+  annotations:
+    debate/title: E40 — Weekly Caselist Run in the Cloud
+    debate/architecture-refs: ADR-0020, ADR-0019, ADR-0017, caselist data-use policy
+spec:
+  # Filed by the PM, 2026-10-22, from Charlie's decision of 2026-10-22: the weekly run moves off the
+  # coach's Mac so that an unplugged laptop on a Wednesday night never stops the debaters seeing
+  # updated evidence.
+  description: >-
+    Run the weekly caselist run (E34's pull, import and publish, E31's parse and E39's search
+    index stage) in the team's AWS account on a schedule, so the coach's Mac is no longer the
+    server the student pilot's freshness depends on. A scheduled job logs in to OpenCaselist with
+    the coach's own Tabroom account (Charlie's decision, 2026-10-22): the password and the
+    caselist token are held in Secrets Manager under their own KMS key, only the login job's role
+    can read the password, and CloudTrail records every read. The run keeps its state in the
+    evidence bucket rather than a laptop's data directory, follows the same rate limit and weekly
+    cadence (data-use policy, E34 gate), and tells the coach when a run fails or is late. One
+    runner at a time: the Mac's schedule is switched off at the cutover and never publishes
+    alongside the cloud run. t01 decides the shape in ADR-0020 and amends the data-use policy;
+    the tasks after it may be amended by that ADR.
+  priority: 1
+  constraints:
+    majorVersion: v1
+    release: v1.8
+    rule: Every task in this epic ships in this release; no task crosses major versions.
+  acceptanceCriteria:
+  - id: ac1
+    description: >-
+      A scheduled run in the cloud logs itself in, pulls, imports, publishes, parses and refreshes
+      the search index in dev and then prod, with no laptop involved, and its record reads as a
+      Mac run's does.
+  - id: ac2
+    description: >-
+      The Tabroom password and token are in Secrets Manager under their own KMS key, only the login
+      role reads the password, every read is in CloudTrail, and the data-use policy says so.
+  - id: ac3
+    description: >-
+      A failed or late run reaches the coach by email without anyone looking, and the Mac's
+      schedule is off, with exactly one runner able to publish.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e40-cloud-caselist-run-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: epic
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+spec:
+  description: >-
+    Task graph for epic E40 (Weekly Caselist Run in the Cloud). Each Task node points at its own
+    task-level PlanSpec.
+  goalRef:
+    name: v1-e40-cloud-caselist-run
+  version: '1'
+  graph:
+    nodes:
+    - id: t01
+      kind: Task
+      name: 'ADR-0020: the weekly caselist run in the cloud, its credentials and its state'
+      description: >-
+        ADR-0020: the weekly caselist run in the cloud, its credentials and its state.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t01-cloud-run-adr.yaml
+        goalRef: v1-e40-t01-cloud-run-adr
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t01-cloud-run-adr reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t01-cloud-run-adr
+    - id: t02
+      kind: Task
+      name: 'The caselist token in Secrets Manager, and a scheduled login that renews it'
+      description: >-
+        The caselist token in Secrets Manager, and a scheduled login that renews it.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t02-secrets-token-store-and-login.yaml
+        goalRef: v1-e40-t02-secrets-token-store-and-login
+      dependsOn:
+      - t01
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t02-secrets-token-store-and-login reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t02-secrets-token-store-and-login
+    - id: t03
+      kind: Task
+      name: 'The weekly run as a container on a schedule'
+      description: >-
+        The weekly run as a container on a schedule.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t03-run-image-and-schedule.yaml
+        goalRef: v1-e40-t03-run-image-and-schedule
+      dependsOn:
+      - t01
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t03-run-image-and-schedule reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t03-run-image-and-schedule
+    - id: t04
+      kind: Task
+      name: 'A cloud run keeps its state in the evidence bucket'
+      description: >-
+        A cloud run keeps its state in the evidence bucket.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t04-run-state-on-s3.yaml
+        goalRef: v1-e40-t04-run-state-on-s3
+      dependsOn:
+      - t01
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t04-run-state-on-s3 reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t04-run-state-on-s3
+    - id: t05
+      kind: Task
+      name: 'A failed or late cloud run emails the coach'
+      description: >-
+        A failed or late cloud run emails the coach.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t05-run-alerts.yaml
+        goalRef: v1-e40-t05-run-alerts
+      dependsOn:
+      - t03
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t05-run-alerts reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t05-run-alerts
+    - id: t06
+      kind: Task
+      name: 'Cut over: the cloud run takes the schedule and the Mac stops'
+      description: >-
+        Cut over: the cloud run takes the schedule and the Mac stops.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t06-cutover.yaml
+        goalRef: v1-e40-t06-cutover
+      dependsOn:
+      - t02
+      - t03
+      - t04
+      - t05
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t06-cutover reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t06-cutover
+status:
+  phase: Pending

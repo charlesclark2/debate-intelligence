@@ -786,5 +786,25 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e34-t30-doctor-unparsed-store
+    - id: t31
+      kind: Task
+      name: 'The weekly run names caselist parse --publish-only where a publish-only finishes the stage'
+      description: >-
+        The weekly run names caselist parse --publish-only where a publish-only finishes the
+        stage.
+      inputs:
+        specRef: plan_specs/v1/e34-caselist-sync/t31-pull-fix-text-publish-only.yaml
+        goalRef: v1-e34-t31-pull-fix-text-publish-only
+      dependsOn:
+      - t28
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e34-t31-pull-fix-text-publish-only reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e34-t31-pull-fix-text-publish-only
 status:
   phase: Pending

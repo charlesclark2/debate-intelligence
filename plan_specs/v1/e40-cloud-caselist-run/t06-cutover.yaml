@@ -1,0 +1,85 @@
+# TASK v1-e40-t06-cutover - Cut over: the cloud run takes the schedule and the Mac stops
+# Epic: E40 — Weekly Caselist Run in the Cloud | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e40-t06-cutover
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+  annotations:
+    debate/title: "Cut over: the cloud run takes the schedule and the Mac stops"
+spec:
+  # Filed by the PM, 2026-10-22, from ADR-0020.
+  description: >-
+    Run the cloud job beside a Mac run once in dev and compare their records, parse counts and
+    index document counts; then turn the Mac's launchd schedule off, confirm the lock leaves
+    exactly one runner able to publish, and repeat in prod at its promotion. The runbooks say
+    which machine runs the week and how to fall back to the Mac for a week if the cloud run is
+    down.
+  priority: 1
+  constraints:
+    packages: [docs/runbooks, docs/data, ops, tests/smoke]
+    forbidden:
+      - Two runners publishing in the same week
+      - Removing the Mac's ability to run by hand
+  context:
+    - kind: TaskRef
+      name: v1-e40-t02-secrets-token-store-and-login
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e40-t03-run-image-and-schedule
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e40-t04-run-state-on-s3
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e40-t05-run-alerts
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A dev cloud run and a Mac run of the same week agree on records, parse counts and
+        index document count, recorded in docs/data (operator).
+    - id: ac2
+      description: >-
+        The Mac's schedule is off, a second runner is refused by the lock, and the runbooks
+        give the fallback; prod follows at promotion (operator).
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e40-t06-cutover-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+spec:
+  description: >-
+    Compare a cloud run with a Mac run, then move the schedule and document the fallback.
+  goalRef:
+    name: v1-e40-t06-cutover
+  graph:
+    nodes:
+      - id: cutover
+        kind: Task
+        name: Cutover
+        description: >-
+          Compare a cloud run with a Mac run, then move the schedule and document the
+          fallback.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Smoke checks collect
+            command: uv
+            args: [run, pytest, tests/smoke, --collect-only, -q]
+status:
+  phase: Pending

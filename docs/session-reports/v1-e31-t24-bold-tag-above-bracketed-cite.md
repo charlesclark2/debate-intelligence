@@ -533,3 +533,21 @@ check. Steps 4 to 6 come to the PM before step 7, as you wrote. The PM records a
 
 **The search index (v1-e39-t02):** its measurement build now can stay on `docx-5`. The first
 index that is published is built from the `docx-6` store, after step 3.
+
+## PM record, 2026-10-22
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+* **ac3, the re-parse:** run on 2026-10-21. Steps 4 to 6 came to the PM before step 7, as planned.
+  Step 4's counts matched the expected table exactly; step 5 attempted and uploaded nothing; step 6
+  found hsld26 11,650 clusters before and after, hspf26 10,144 then 10,142 (2 merged), hspolicy26
+  18,767 and openev 5,846 unchanged, with 18, 55, 4 and 0 exact fingerprints changed and every
+  largest cluster unchanged. Step 7 published to prod (4,973, 3,193, 4,440 and 107 objects, 0
+  failed). Step 8 installed `1.1.0.dev85`. The figures are in
+  [`docs/data/caselist-parse-report.md`](../data/caselist-parse-report.md#the-re-parse-to-docx-6-operator-run-after-the-merge),
+  as step 9 asks.
+* **The search index** was first published from the `docx-6` store, as the PM review asked: dev's
+  `767b9c7c056b80cb` on 2026-10-22.
+* **`2026.10.18-docx-5`** was retired in the dev bucket and on this machine on 2026-10-22; prod at
+  the promotion.
+* Every criterion is met, so the Goal is set to `Succeeded` in the PM batch of 2026-10-22.

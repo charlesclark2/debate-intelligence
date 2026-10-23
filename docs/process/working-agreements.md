@@ -255,3 +255,25 @@ gate, and it runs once per push rather than once per idea. (Added by the PM, 202
   fixtures) may deserve one whole-selection run before the pull request. The session hands it over
   as one operator command (`uv run pytest -n auto -m "not slow and not live"`, about six minutes),
   once, at the end, under agreement 2.
+
+## 11. An operator block that changes shared state cannot be pasted wrong
+
+Two hand-offs on 2026-10-22 went wrong for the same reason. A removal's dry run and its `--execute`
+were one paste, so the plan, which listed every caselist's aggregates, was never read before they
+were deleted. Then the rebuild of those aggregates ran in a window where an earlier block had left
+`DEBATE_STORAGE__DATA_DIR` naming a scratch store, and it published empty aggregates to the dev
+bucket. Its success check, "0 parsed", is also what an empty store prints. (Added by the PM,
+2026-10-22.)
+
+* **A command that deletes, removes, publishes or applies is two blocks.** The first is its dry run
+  or plan. The prose between them says what to read in that output and what stops the operator.
+  The second is the real run, with its confirmation code if it takes one. A block never holds both.
+* **A block that writes shared state refuses an environment it did not set.** It starts by
+  checking that no leftover `DEBATE_*` override is set (or clears it for that command with
+  `env -u`), and that no `caselist pull` is running, and stops with a plain message otherwise. A
+  block that sets an override for one step unsets it at the end of that step.
+* **A success check tells "nothing to do" from "nothing there".** "0 parsed" or "0 uploaded" also
+  describes an empty store, so a check names a count that must be above zero as well, for example
+  `Sources` equal to `Skipped` and above zero.
+* **The PM checks these three things** when reviewing a session's operator blocks, and a session
+  writing a runbook step follows them too.

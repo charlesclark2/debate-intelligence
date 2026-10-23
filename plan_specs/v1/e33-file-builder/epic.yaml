@@ -156,6 +156,7 @@ spec:
       - t02
       - ext-v1-e32-t03-landscape-report
       - t04
+      - t08
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e33-t03-file-build-cli reports phase Succeeded
@@ -246,9 +247,9 @@ spec:
         - v1-e33-t07-camp-path-on-occurrence-rows
     - id: t08
       kind: Task
-      name: 'The file writer and the search pilot compose a provenance line with one function'
+      name: 'Built files carry no provenance line; the sidecar keeps the provenance'
       description: >-
-        The file writer and the search pilot compose a provenance line with one function.
+        Built files carry no provenance line; the sidecar keeps the provenance.
       inputs:
         specRef: plan_specs/v1/e33-file-builder/t08-provenance-line-one-function.yaml
         goalRef: v1-e33-t08-provenance-line-one-function

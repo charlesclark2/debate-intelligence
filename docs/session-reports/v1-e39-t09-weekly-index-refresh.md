@@ -383,3 +383,19 @@ criterion's status. One criterion is still open, which is why the pull request i
 | ac4 the next agent install records one weekly run that published an index | NOT RUN | The operator's, after this merges, at the next agent install; a session never runs the agent or a publish. The commands are in Operator follow-ups above. |
 
 Every other criterion is PASS, as recorded above. The Goal stays InProgress.
+
+## PM record, 2026-10-22
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+* **ac4, one weekly run that published an index:** the agent at `1.1.0.dev85`, which carries this
+  task, was kickstarted through launchd and ran unattended as run `20261022T052044Z`. Its
+  `search_index` stage is `completed`: it built `767b9c7c056b80cb` (52,059 documents, 839,438,336
+  SQLite bytes, 16,124 bytes a document, 314,054,035 gzip bytes, under both warning lines),
+  published it, and `current.json` names it; it removed 1 superseded index on this machine. The run
+  is recorded in [`docs/data/caselist-sync-runs.md`](../data/caselist-sync-runs.md).
+* Every criterion is met, so the Goal is set to `Succeeded` in the PM batch of 2026-10-22.
+* **Size:** the index grew 11.6% in documents in about a week and its SQLite file is at 93% of the
+  900,000,000-byte warning line. `v1-e39-t14` measures the replacement's temporary-storage peak and
+  recommends whether ADR-0019's lines move; `v1-e39-t12` (card-only results) is expected to shrink
+  it.

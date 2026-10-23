@@ -1,0 +1,100 @@
+# TASK v1-e39-t13-passage-search - Find a card that says something: passage search, word stems and prefixes
+# Epic: E39 — Team Evidence Search (Student Pilot) | Release: v1.7 (Team evidence search pilot) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e39-t13-passage-search
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.7
+    debate/epic: v1-e39-evidence-search-pilot
+  annotations:
+    debate/title: "Find a card that says something: passage search, word stems and prefixes"
+spec:
+  # Filed by the PM, 2026-10-22, from the coach's testing of the dev pilot on 2026-10-22.
+  description: >-
+    The coach asked for a way to find a card that says something when the words are not in its
+    tag or not in that order. Today a query is an AND of its terms over FTS5 with the `unicode61
+    remove_diacritics 2` tokenizer. Add, through v1-e39-t03's query parser and nowhere else: a
+    passage mode, in which a sentence becomes an OR of its content words with a minimum share
+    that must match (configurable, about two thirds by default), ranked by BM25 with the text
+    column weighted as today; word stems, with FTS5's porter tokenizer in front of `unicode61`;
+    and prefix terms (`word*`). Measure, and report to the PM before adopting, an FTS5 trigram
+    index for substring search: its bytes and bytes per document against ADR-0019's
+    900,000,000-byte line and the function's 4,096 MB of temporary storage, which holds two
+    indexes and a download while one replaces the other. The index format version goes from 1 to
+    2 once for the whole task, and the index holder refuses an index of a format it does not
+    read with a message, never by failing queries. The weekly stage builds the new format after
+    the merge.
+  priority: 2
+  constraints:
+    packages: [debate_core.domain, debate_core.application, debate_core.integrations, debate_api, packages/debate_core/tests, packages/debate_api/tests, docs/data]
+    forbidden:
+      - Query text in any log, audit record or metric
+      - Input reaching SQL other than through the query parser
+      - Adopting a trigram index without the PM's ruling on its measured size
+      - Card text, a school, team code, file name, student name, username or email in any fixture, log, report or commit (synthetic values only)
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e39-t11-search-pages-follow-ups
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e39-t12-card-only-results
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Passage mode finds a synthetic card from a sentence sharing most of its content
+        words in another order, and ranks it above cards sharing fewer, by tests shown
+        failing first.
+    - id: ac2
+      description: >-
+        Stemmed and prefix terms match, by test; every existing query test passes unchanged
+        except where stemming is the point, and each such change is named in the report.
+    - id: ac3
+      description: >-
+        The trigram measurement (bytes, bytes per document, build time) on the dev store is
+        reported to the PM before any adoption.
+    - id: ac4
+      description: >-
+        The format version is 2; a holder given an index of another format refuses it with a
+        message, by test; the p95 query time on the measurement index is recorded.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e39-t13-passage-search-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.7
+    debate/epic: v1-e39-evidence-search-pilot
+spec:
+  description: >-
+    Add passage mode, stems and prefixes through the query parser, measure a trigram index, and
+    bump the index format once.
+  goalRef:
+    name: v1-e39-t13-passage-search
+  graph:
+    nodes:
+      - id: passage-search
+        kind: Task
+        name: Passage search
+        description: >-
+          Add passage mode, stems and prefixes through the query parser, measure a trigram
+          index, and bump the index format once.
+        estimatedEffort: 5h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Search tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, evidence_search or search_index]
+status:
+  phase: Pending

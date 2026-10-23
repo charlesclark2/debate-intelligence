@@ -25,6 +25,13 @@ spec:
     first through the v1.7 pilot (v1-e39), on a smaller stack (ADR-0019). This epic keeps the
     file-level tub (browse, download and upload of whole files) and builds on the pilot's user
     pool, audit log and removal wiring rather than beside them.
+    (PM amendment 2026-10-22, from the coach's testing of the pilot.) The coach asked to get a
+    whole disclosed file, not just a card. The pilot links out to the file's page on
+    openCaselist or OpenEv (v1-e39-t11); this epic's caselist-source download is the full-file
+    download, planned for after the pilot. Before it ships: the data-use policy's v2-e35 gate is
+    met; a download honours the suppression list's path holds as well as its digests, so a file
+    a removal held by path never downloads; and a downloaded caselist source is served as the
+    source itself, not rebuilt with any added line.
   priority: 9
   constraints:
     majorVersion: v2

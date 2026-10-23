@@ -1,0 +1,71 @@
+# TASK v1-e40-t05-run-alerts - A failed or late cloud run emails the coach
+# Epic: E40 — Weekly Caselist Run in the Cloud | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e40-t05-run-alerts
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+  annotations:
+    debate/title: "A failed or late cloud run emails the coach"
+spec:
+  # Filed by the PM, 2026-10-22, from ADR-0020 and E34's staleness rule.
+  description: >-
+    The Mac-side checks (launchd's record, `doctor`, the staleness banner) do not reach a cloud
+    run. A failed run, a run that did not start on schedule, and a login that failed each email
+    the coach through the account's existing mail path, naming the run id and the stage, and
+    nothing about a school, team or file. ADR-0020 may amend this task.
+  priority: 2
+  constraints:
+    packages: [infrastructure, debate_core.application, packages/debate_core/tests, docs/runbooks]
+    forbidden:
+      - A school, team code, file name or card text in an alert
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e40-t03-run-image-and-schedule
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A failed run, a missed schedule and a failed login each produce an alert, by
+        Terraform tests and a stubbed run; the operator triggers one in dev and receives it
+        (operator).
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e40-t05-run-alerts-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+spec:
+  description: >-
+    Alert the coach on a failed, missed or unauthenticated run.
+  goalRef:
+    name: v1-e40-t05-run-alerts
+  graph:
+    nodes:
+      - id: alerts
+        kind: Task
+        name: Run alerts
+        description: >-
+          Alert the coach on a failed, missed or unauthenticated run.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Terraform checks pass
+            command: bash
+            args: [scripts/terraform_checks.sh]
+status:
+  phase: Pending

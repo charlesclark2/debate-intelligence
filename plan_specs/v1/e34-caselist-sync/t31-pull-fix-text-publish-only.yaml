@@ -1,0 +1,78 @@
+# TASK v1-e34-t31-pull-fix-text-publish-only - The weekly run names caselist parse --publish-only where a publish-only finishes the stage
+# Epic: E34 Caselist Sync | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e34-t31-pull-fix-text-publish-only
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e34-caselist-sync
+  annotations:
+    debate/title: "The weekly run names caselist parse --publish-only where a publish-only finishes the stage"
+spec:
+  # Filed by the PM, 2026-10-22, from v1-e31-t30's Follow-up 1 and its PM review.
+  description: >-
+    When the weekly run's parse stage fails after a rebuild that read every copy of the
+    suppression list, only the publish is owed, and `caselist parse --publish-only` (v1-e31-t30)
+    finishes it without a rebuild. Today the run's fix text, banners and
+    `sync_runs.PARSE_COMMAND` always say `--publish`. Name `--publish-only` per caselist where
+    it is enough, and `--publish` where the aggregates may come from this Mac's copy of the list
+    alone, which must never be what is published. The record stays readable by the agent's build
+    at the time.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/runbooks]
+    forbidden:
+      - A record shape an earlier build refuses to read
+      - Naming --publish-only where the aggregates came from this machine's copy of the list alone
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e31-t30-parsed-store-publish-only
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e34-t28-publish-stage-loose-ends
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A stage whose publish alone failed names --publish-only for that caselist, and one
+        whose aggregates read only this machine's list names --publish, by tests shown
+        failing first; the agent's build reads every record this build writes, by test.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e34-t31-pull-fix-text-publish-only-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e34-caselist-sync
+spec:
+  description: >-
+    Name the right command per caselist in the weekly run's parse-stage fix text.
+  goalRef:
+    name: v1-e34-t31-pull-fix-text-publish-only
+  graph:
+    nodes:
+      - id: fix-text
+        kind: Task
+        name: Parse-stage fix text
+        description: >-
+          Name the right command per caselist in the weekly run's parse-stage fix text.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Sync tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application, -k, caselist_sync]
+status:
+  phase: Pending

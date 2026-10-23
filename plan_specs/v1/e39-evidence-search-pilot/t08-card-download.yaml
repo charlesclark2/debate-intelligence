@@ -33,6 +33,15 @@ spec:
     (PM amendment 2026-10-20, from v1-e33-t06's Follow-up 3.) The writer reading the bucket is
     given `source_stores`, one `SnapshotStore` per `raw/` prefix (`raw/caselist/<slug>` and
     `raw/openev/<year>`), so camp cards download as caselist cards do.
+    (PM amendment 2026-10-22, from data-use policy version 1.11, Charlie's decision of
+    2026-10-22.) A downloaded file carries no provenance line: the writer is called as `files
+    build` calls it after v1-e33-t08, which writes none, and the sidecar is not sent to the
+    student; the download's audit record names the cards. The description's "with the provenance
+    line and sidecar exactly as `files build` writes them" and ac6's "with its OpenEv line" are
+    superseded. Download fails closed, as card view and Copy card do (v1-e39-t07): a card whose
+    source or occurrence the suppression list stops at the moment of the download, even one
+    shown on a page rendered before the removal, is refused and named, and a download whose
+    audit record cannot be written is refused, never served unaudited.
   priority: 2
   constraints:
     packages: [debate_api, debate_core.application, packages/debate_api/tests]
@@ -47,6 +56,9 @@ spec:
       relation: dependsOn
     - kind: TaskRef
       name: v1-e33-t02-lossless-card-writer
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e33-t08-provenance-line-one-function
       relation: dependsOn
   acceptanceCriteria:
     - id: ac1
@@ -74,6 +86,16 @@ spec:
       description: >-
         (PM amendment 2026-10-20) A camp card downloads with its OpenEv line, read from its
         `raw/openev/<year>` store, by test with stubbed stores.
+    # (PM amendment 2026-10-22, from data-use policy version 1.11, Charlie's decision of 2026-10-22.)
+    - id: ac7
+      description: >-
+        A downloaded single card and a cart file hold no provenance line, and a camp card
+        downloads from its `raw/openev/<year>` store, by tests shown failing first.
+    # (PM amendment 2026-10-22, from data-use policy version 1.11, Charlie's decision of 2026-10-22.)
+    - id: ac8
+      description: >-
+        A card suppressed after its page was rendered is refused at download and named, and
+        a download whose audit write fails is refused, by tests shown failing first.
 status:
   phase: Pending
 ---

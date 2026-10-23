@@ -55,6 +55,10 @@ spec:
     The removal runbook's step 8 gains its `files check` command over built files. The writer's
     `HIGHLIGHTED_CITE_CAUSE` refusal is kept as a safeguard and reached by a writer-level test
     on a constructed card, since v1-e31-t24's step-over means no parsed card reaches it.
+    (PM amendment 2026-10-22, from data-use policy version 1.11, Charlie's decision of
+    2026-10-22.) `files build` writes no provenance line in a built file; the writer stops
+    writing it in v1-e33-t08, and the sidecar keeps the provenance. The description's references
+    to a camp card's provenance line naming the camp now mean its sidecar entry.
   priority: 1
   constraints:
     # PM amendment 2026-10-21: the writer's test, the container and the removal runbook's step 8.
@@ -73,6 +77,9 @@ spec:
       relation: dependsOn
     - kind: TaskRef
       name: v1-e33-t04-file-quality-checks
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e33-t08-provenance-line-one-function
       relation: dependsOn
   acceptanceCriteria:
     - id: ac1

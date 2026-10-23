@@ -3,12 +3,12 @@
 
 | | |
 |---|---|
-| Policy version | 1.10 |
-| Status | **Approved**, version 1.10, on the merge of its pull request (2026-10-19). See [Approval](#approval). |
+| Policy version | 1.11 |
+| Status | **Approved**, version 1.11, on the merge of its pull request (decided 2026-10-22). See [Approval](#approval). |
 | Owner | Charlie Clark (product owner and head coach) |
 | Written by | v1-e30-t01-caselist-data-use-policy implementation session, 2026-09-19 |
 | Applies to | Everything the platform collects from OpenCaselist and OpenEv, and everything derived from it, in every environment |
-| Approved by | Charlie Clark, product owner and head coach, 2026-09-19 (versions 1.0 and 1.1), 2026-10-01 (versions 1.3 and 1.4), 2026-10-10 (versions 1.5 and 1.6), 2026-10-11 (version 1.7), 2026-10-13 (version 1.8), 2026-10-15 (version 1.9) and 2026-10-19 (version 1.10) |
+| Approved by | Charlie Clark, product owner and head coach, 2026-09-19 (versions 1.0 and 1.1), 2026-10-01 (versions 1.3 and 1.4), 2026-10-10 (versions 1.5 and 1.6), 2026-10-11 (version 1.7), 2026-10-13 (version 1.8), 2026-10-15 (version 1.9), 2026-10-19 (version 1.10) and 2026-10-22 (version 1.11) |
 | Next review | Start of the 2027-28 season, or sooner if a source's terms change |
 
 This is the policy that governs how the Debate Intelligence Platform collects, stores, uses and
@@ -147,7 +147,7 @@ The corpus may be used for the following, and only these:
 |---|---|---|
 | 1 | **Team-internal research and scouting** — reading what an opponent has disclosed, before or during a tournament | Team members only. Nothing leaves the team. |
 | 2 | **Argument landscape reports** — aggregating the corpus into what positions are being read on the topic, by side, over time (E32) | Circuit-wide reports carry no team codes at all; per-school views are limited by [Personal data](#personal-data). |
-| 3 | **Building and "plussing up" team files** — assembling disclosed and camp cards into the team's own files, extending them with new evidence (E33) | Cite kept verbatim, provenance line attached, card marked `FILE_IMPORT`/unverified. Files stay inside the team. |
+| 3 | **Building and "plussing up" team files** — assembling disclosed and camp cards into the team's own files, extending them with new evidence (E33) | Cite kept verbatim, provenance in the file's sidecar (no line in the file's text since version 1.11), card marked `FILE_IMPORT`/unverified. Files stay inside the team. |
 | 4 | **Parsing, hashing, fingerprinting, deduplication and indexing** of the corpus (E30, E31) | Derived artefacts inherit every rule in this policy, including removal. |
 | 5 | **Parser and classifier evaluation** — measuring how well the platform reads real debate documents | Evaluation runs against the corpus in place; evaluation *fixtures* committed to the repository are synthetic (see [Personal data](#personal-data)). |
 | 6 | **Operator reporting** — recording import, dedupe and publish results (e.g. `docs/data/caselist-backfill-2026-09.md`) | Aggregate counts only; no school, team code, filename or name in anything committed. |
@@ -269,13 +269,13 @@ in stored provenance columns that are never searchable (v1-e39-t02).
 | Circuit-wide argument landscape (v1-e32-t03) | Nothing. No school, no team code. |
 | Per-school and trend views (v1-e32-t04) | **School plus team code, as disclosed. Never more.** |
 | Operator import/publish summaries (`docs/data/`) | Aggregate counts only. |
-| Built-file provenance line and sidecar (E33) | School, team code, side, tournament, round — inside the team only. |
-| Student search pilot (E39): result rows, card pages, copied and downloaded cards | School, team code, side, tournament, round in a card's provenance line — to signed-in team members only. Never searchable, and no search by debater. |
+| Built-file sidecar (E33) | School, team code, side, tournament, round — inside the team only. A built file's text carries none of them (version 1.11). |
+| Student search pilot (E39): result rows and card pages | School, team code, side, tournament, round in a card's provenance line — to signed-in team members only. Never searchable, and no search by debater. A copied or downloaded card carries none of them (version 1.11). |
 | Removal log and suppression list (v1-e30-t07), and the records beside them (v1-e30-t13, t14, t15, t16, t23) | sha256, date, reason code, request id; a held path's digest, the keys a removal reached, and a caselist slug. |
 
 **Access.** In V1, the operator only, with one exception: the student search pilot (E39, v1.7)
 gives the team's own debaters and coach, signed in to accounts the coach creates, the provenance
-line shown above, audited, under [the E39 gate](#e39--student-evidence-search-pilot-v17). In V2,
+line shown above on a card's page, audited, under [the E39 gate](#e39--student-evidence-search-pilot-v17). In V2,
 authenticated members of the team's organization only, audited — see
 [the debate tub gate](#v2-e35--debate-tub-v21).
 
@@ -316,7 +316,9 @@ evidence-ethics rule first and a traceability rule second: it is what makes
    cite is not permitted; if it is wrong, the card is re-cut from the original article instead.
    The one exception is a character XML 1.0 forbids, which the parser replaces one for one with
    U+FFFD (Decision, PM with Charlie, 2026-10-18, v1-e31-t15).
-2. **A provenance line is added below the cite**, as the only new text:
+2. **The provenance line is shown, not written into the card** (version 1.11). Wherever the team
+   reads a card inside the platform (the student search pilot's card page, the V1 CLI's listings),
+   its provenance line is shown below the cite:
 
    ```
    [Disclosed: hsld26 2026-09-15 — Maple Grove QX, Aff vs. Riverbend Invitational Round 4]
@@ -324,7 +326,11 @@ evidence-ethics rule first and a traceability rule second: it is what makes
    ```
 
    Disclosed cards name caselist slug, snapshot date, school, team code, side, tournament and
-   round. Camp cards name camp, year, event and file title.
+   round. Camp cards name camp, year, event and file title. A built file, a copied card and a
+   downloaded card carry **no** provenance line: the team's own files are themselves disclosed on
+   the caselist, and republishing other schools' names and team codes in them adds nothing the
+   team needs (Charlie, 2026-10-22). The provenance travels in the sidecar (rule 3) and, for a
+   copy or download from the pilot, in its audit record.
 3. **A machine-readable sidecar** accompanies every built file with the same provenance plus card
    fingerprint, source sha256 and element index, at `provenance_mode: FILE_IMPORT` (v1-e33-t02).
    The sidecar is what a removal request is matched against.
@@ -333,10 +339,11 @@ evidence-ethics rule first and a traceability rule second: it is what makes
    (ADR-0006). If the team wants a verified card, it re-cuts it from the original article, and the
    card then carries *article* provenance instead, with a note that it was found through the
    caselist.
-5. **Attribution survives every move.** Copying a card into another file, exporting it, copying or
-   downloading it from the student search pilot (E39), or opening it in the V2 debate tub carries
-   the provenance line and sidecar entry with it. A card without
-   provenance may not be added to a built file.
+5. **Attribution survives every move, in the record rather than the text.** Copying a card into
+   another built file or exporting it carries its sidecar entry with it; copying or downloading it
+   from the student search pilot (E39) writes an audit record naming its card cluster; opening it
+   in the V2 debate tub shows its provenance. A card without provenance on record may not be added
+   to a built file.
 6. This is internal credit, not publication credit. Nothing built from the corpus is published, so
    attribution here exists for the team's own ethics, for rebuttal ("this is their card"), and for
    removal.
@@ -534,9 +541,11 @@ proven by a named test or operator record (v1-e39-t07, v1-e39-t10).
 5. **The suppression list governs the pilot**: a suppressed occurrence never enters the index and is
    hidden by the running function within five minutes of its removal.
 6. **No sharing surface leaves the team**: no public links and no share-by-link. A student may copy
-   or download a card for their own preparation; it carries its provenance line.
-7. **Attribution survives into the pilot**: the provenance line is shown with every disclosed or camp
-   card, and the label "Disclosed evidence, not platform-verified" with every card page (ADR-0006).
+   or download a card for their own preparation; since version 1.11 it carries no provenance line,
+   and its audit record names the card.
+7. **Attribution survives into the pilot**: the provenance line is shown on every disclosed or camp
+   card's page, and the label "Disclosed evidence, not platform-verified" with every card page
+   (ADR-0006).
 8. **Nothing beyond school plus team code** is shown about any debater; school, team code,
    tournament and round are never searchable, and there is no search by debater.
 9. **Accounts hold the least personal data that works**: a username chosen by the coach, a role, and
@@ -596,7 +605,7 @@ before the thing it gates.
 
 ## Approval
 
-**Version 1.10 of this policy is approved.** Publishing caselist and OpenEv imports, loading the
+**Version 1.11 of this policy is approved.** Publishing caselist and OpenEv imports, loading the
 real corpus into dev, model classification over real disclosed text, and automated download (E34)
 are unblocked, each still subject to its own conditions in [Gates](#gates). Version 1.1 recorded
 the maintainer's confirmation of scheduled API downloads and the 10-per-minute rate limit.
@@ -672,16 +681,25 @@ tool for students. It loosens the policy, since V1 access was the operator's alo
 directed the pilot on 2026-10-19, and merging its pull request records the approval below. No
 student is given an account until every item of the E39 gate is met.
 
+Version 1.11 takes the provenance line out of the text of built files, copied cards and downloaded
+cards (Attribution rules 2 and 5, the E39 gate's items 6 and 7, Permitted use 3 and the report
+table). The line is still shown on the pilot's card page, and the provenance is still on record, in
+a built file's sidecar and in the pilot's audit record, so removal is unchanged. Charlie decided it
+on 2026-10-22: the team's own files are disclosed on the caselist, and republishing other schools'
+names and team codes in them is clutter. It shows less identity outside the platform and changes
+what attribution looks like, so it is recorded as approved by the coach, and merging its pull
+request records the approval below.
+
 The standing rule for every future version: until this table records an approval of that version,
 nothing this policy governs may happen under it.
 
 | Field | Value |
 |---|---|
-| Policy version | 1.10 (2026-10-19); 1.9 (2026-10-15); 1.8 (2026-10-13); 1.7 (2026-10-11); 1.6 and 1.5 (2026-10-10); 1.4 and 1.3 approved 2026-10-01, 1.3 including version 1.2's correction to rule 3; 1.0 and 1.1 approved 2026-09-19 |
+| Policy version | 1.11 (2026-10-22); 1.10 (2026-10-19); 1.9 (2026-10-15); 1.8 (2026-10-13); 1.7 (2026-10-11); 1.6 and 1.5 (2026-10-10); 1.4 and 1.3 approved 2026-10-01, 1.3 including version 1.2's correction to rule 3; 1.0 and 1.1 approved 2026-09-19 |
 | Approved by | Charlie Clark |
 | Role | Product owner and head coach |
-| Approval date | 2026-10-19 (version 1.10; 1.9: 2026-10-15; 1.8: 2026-10-13; 1.7: 2026-10-11; 1.5 and 1.6: 2026-10-10; 1.3 and 1.4: 2026-10-01; 1.0 and 1.1: 2026-09-19) |
-| Scope of approval | Sections [Scope](#scope) through [Review and change control](#review-and-change-control) of version 1.10, including the [clause register](#clause-register) read 2026-09-19 and the [community disclosure norms](#community-disclosure-norms), both confirmed by Charlie |
+| Approval date | 2026-10-22 (version 1.11; 1.10: 2026-10-19; 1.9: 2026-10-15; 1.8: 2026-10-13; 1.7: 2026-10-11; 1.5 and 1.6: 2026-10-10; 1.3 and 1.4: 2026-10-01; 1.0 and 1.1: 2026-09-19) |
+| Scope of approval | Sections [Scope](#scope) through [Review and change control](#review-and-change-control) of version 1.11, including the [clause register](#clause-register) read 2026-09-19 and the [community disclosure norms](#community-disclosure-norms), both confirmed by Charlie |
 | Open questions resolved at approval | **5** — removal contact address is `ctcb57@gmail.com`. **7** — two-season retention stands. **8** — resolved by a PM spec change to v1-e29-t03 / v1-e30-t07. **2** (version 1.1) — maintainer confirmed scheduled API downloads at 10 file downloads per minute. **6** (version 1.10) — the school's activities director and IT approved the tool for students; no district review for the E39 pilot |
 | Open questions accepted as known gaps | **1** — OpenCaselist privacy page unread. **3** — OpenEv distribution and per-camp terms unread |
 | Open questions left open | **4** — Bedrock data-protection terms, an E32 gate. **6** — for the V2 tub only, if its scope goes beyond the pilot's |

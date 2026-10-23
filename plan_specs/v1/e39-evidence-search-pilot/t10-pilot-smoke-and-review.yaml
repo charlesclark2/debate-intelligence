@@ -45,6 +45,16 @@ spec:
     first sign-in with screenshots, saying which factors managed login offered, which was chosen
     and whether the app's enrolment page then appeared (v1-e39-t05's open finding); and one
     paste into Word, yes or no.
+    (PM amendment 2026-10-22.) Early evidence, recorded as counts in
+    docs/data/evidence-search-pilot.md before the beta: on 2026-10-22 two debaters, given dev
+    accounts by the coach, signed in and searched on their own Chromebooks on the school's
+    network. Their dev accounts are not carried to prod; the coach creates prod accounts at the
+    beta. The beta starts only after the promotion checklist in docs/runbooks/evidence-search.md
+    ("Promoting the pilot to prod") is complete and recorded, including v1-e39-t07's prod
+    removal exercise and the check that prod's suppression list exists. The beta checklist also
+    covers the result count, the back link, the openCaselist link and passage search
+    (v1-e39-t11, t13), and that a copied card carries no provenance line (data-use policy
+    version 1.11).
   priority: 1
   constraints:
     # PM amendment 2026-10-21: validate-dev's wiring and its test.
@@ -87,6 +97,12 @@ spec:
         (PM amendment 2026-10-21) The coach's beta records the Chromebook check, the first
         sign-in screenshots' answers and the Word paste, as yes or no and counts, never
         names.
+    # PM amendment 2026-10-22
+    - id: ac7
+      description: >-
+        The two debaters' dev session of 2026-10-22 and the promotion checklist's completion
+        are recorded in docs/data/evidence-search-pilot.md, as counts and yes or no, before
+        the beta (operator).
 status:
   phase: Pending
 ---

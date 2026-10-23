@@ -1,0 +1,89 @@
+# TASK v1-e39-t12-card-only-results - Only real cards come back: entries with no cite or a few words of text, counted before any rule
+# Epic: E39 — Team Evidence Search (Student Pilot) | Release: v1.7 (Team evidence search pilot) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e39-t12-card-only-results
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.7
+    debate/epic: v1-e39-evidence-search-pilot
+  annotations:
+    debate/title: "Only real cards come back: entries with no cite or a few words of text, counted before any rule"
+spec:
+  # Filed by the PM, 2026-10-22, from the coach's testing of the dev pilot on 2026-10-22.
+  description: >-
+    The coach found a search result whose whole card was one line, "I negate resolved: outer
+    space colonization is a moral imperative": an analytic or a heading the parser kept as a
+    card. Counts first, as v1-e31-t19, t22 and t24 did: for every index document, whether its
+    cluster's representative has a cite, how many words its text has, and whether it has a tag,
+    tallied by caselist and by word-count band, as counts only. The session proposes a rule to
+    the PM from the tallies (for example, no cite and fewer than some number of words) and waits
+    for a ruling. The ruled rule is applied in the index build, never in the parser, so the
+    parsed store and its fingerprints do not change; the excluded count is recorded in the
+    build's summary and the run record. The index's document count before and after is recorded
+    in docs/data/evidence-search-pilot.md.
+  priority: 1
+  constraints:
+    packages: [debate_core.application, debate_core.domain, debate_core.integrations, packages/debate_core/tests, scripts, docs/data]
+    forbidden:
+      - Any rule before the PM rules on the counts
+      - A change to the parser, the parsed store or a fingerprint
+      - Card text, a school, team code, file name, student name, username or email in any fixture, log, report or commit (synthetic values only)
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e39-t09-weekly-index-refresh
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Tallies of index documents by cite present or absent, text word-count band and tag
+        present or absent, per caselist, counts only, sent to the PM before any rule.
+    - id: ac2
+      description: >-
+        The ruled rule leaves the excluded documents out of the index build, by synthetic
+        fixtures shown failing first, and the build summary and the run record give the
+        excluded count.
+    - id: ac3
+      description: >-
+        The dev index's document count before and after is recorded in
+        docs/data/evidence-search-pilot.md (operator).
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e39-t12-card-only-results-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.7
+    debate/epic: v1-e39-evidence-search-pilot
+spec:
+  description: >-
+    Count the entries that are not cards, take the PM's ruling, then leave them out of the index
+    build.
+  goalRef:
+    name: v1-e39-t12-card-only-results
+  graph:
+    nodes:
+      - id: card-only
+        kind: Task
+        name: Card-only results
+        description: >-
+          Count the entries that are not cards, take the PM's ruling, then leave them out
+          of the index build.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Index build tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application, -k, search_index]
+status:
+  phase: Pending

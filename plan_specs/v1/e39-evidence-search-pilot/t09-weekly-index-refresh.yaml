@@ -119,7 +119,7 @@ spec:
         `tub index publish --newest` publishes the directory newest_local_index picks and is
         refused together with --index, by test; both runbook sections use it.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

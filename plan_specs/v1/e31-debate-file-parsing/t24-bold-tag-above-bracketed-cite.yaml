@@ -76,7 +76,7 @@ spec:
         v1-e33-t02's pinned pair of tests is updated and a built file holding such a card
         reads back as its source.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

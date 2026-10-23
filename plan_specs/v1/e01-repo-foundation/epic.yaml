@@ -754,5 +754,42 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e01-t31-repo-check-false-positives
+    - id: t32
+      kind: Task
+      name: 'Test selection, round three: command registration, quoted words, the root pyproject and the contract suites'
+      description: >-
+        Test selection, round three: command registration, quoted words, the root pyproject
+        and the contract suites.
+      inputs:
+        specRef: plan_specs/v1/e01-repo-foundation/t32-test-selection-reach-round-three.yaml
+        goalRef: v1-e01-t32-test-selection-reach-round-three
+      dependsOn:
+      - t30
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e01-t32-test-selection-reach-round-three reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e01-t32-test-selection-reach-round-three
+    - id: t33
+      kind: Task
+      name: 'When a newer build wrote the database or added a setting, the error says so'
+      description: >-
+        When a newer build wrote the database or added a setting, the error says so.
+      inputs:
+        specRef: plan_specs/v1/e01-repo-foundation/t33-newer-build-messages.yaml
+        goalRef: v1-e01-t33-newer-build-messages
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e01-t33-newer-build-messages reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e01-t33-newer-build-messages
 status:
   phase: Pending

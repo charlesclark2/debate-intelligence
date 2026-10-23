@@ -62,6 +62,7 @@ same version the skip key below would pass that file over for good.
 | `2026.10.12-docx-3` | Written by the next `caselist parse` | Reads cites the two before it missed or misread ([caselist-parse-report.md](caselist-parse-report.md#cites-the-parser-missed-or-misread-v1-e31-t12)): a cite in the cite character style past 1,000 characters, a cite line longer than 400 characters that opens in bold or holds everything after its name and year in one bracket, and a cite written wholly inside a bracket. Does not take a line that opens with a word such as *In* and a year for a cite. Reads a guessed cite entry longer than 2,000 characters as body whatever its formatting. No field moved (`v1-e31-t12`) |
 | `2026.10.18-docx-4` | Written by the next `caselist parse` | Reads a file whose compression ratio is over the limit only in a part the reader never opens, such as a page thumbnail. Reads a file whose text holds a raw character XML 1.0 forbids, each replaced by U+FFFD and counted in the document's `warnings` ([below](#a-character-xml-forbids-replaced-by-ufffd)). Files a CardMirror `.cmir` uploaded under another extension as `UNSUPPORTED` with `source_format` `CMIR`, not as a `NOT_A_ZIP` failure. No field added; `CMIR` is a new value of `source_format` (`v1-e31-t15`) |
 | `2026.10.18-docx-5` | Written by the next `caselist parse` | Reads a cite behind a first name or a title, and a highlighted cite with a body below it, where a cite stands. Reads the cite and body rules through a paragraph style that maps to no unit (`Normal (Web)`, `List Paragraph`, …), never the heading rules. Holds a long guessed cite by its cite style only when the style marks a name and a year at its head. Reads `Okonkwo ‘26`, a left quote before the year, as a short cite, keeping the quote as written ([caselist-parse-report.md](caselist-parse-report.md#the-remaining-cite-shapes-v1-e31-t19)). No field moved (`v1-e31-t19`) |
+| `2026.10.20-docx-6` | The re-parse of 2026-10-21 ([caselist-parse-report.md](caselist-parse-report.md#the-re-parse-to-docx-6-operator-run-after-the-merge)) | Reads a line above a cite that Word shows bold throughout as the tag of a card that had none (`v1-e31-t24`, with its four guards): 875 cards gain a tag, 150 cards above them lose a stray last paragraph, and 5 entries that were never cards become analytics. Written by the PM, 2026-10-22 |
 
 ## The skip key
 
@@ -561,7 +562,10 @@ versions and the delete markers left under one caselist's `sha256/`, which shoul
 | `2026.10.10-docx-2` | prod bucket | not yet | | | |
 | `2026.10.12-docx-3` | dev bucket | 2026-10-20, tagged | 12,713 | about 7.5 GB (hsld26 4,973 objects, 2.5 GB; hspf26 4,440, 1.3 GB; hspolicy26 3,193, 3.5 GB; openev 107, 198.9 MB) | |
 | `2026.10.12-docx-3` | this machine | 2026-10-20, deleted | 12,713 | about 7.5 GB | |
-| `2026.10.12-docx-3` | prod bucket | not yet: refused (`STORE_ACCESS_DENIED` on `GetObjectTagging`) until prod has v1-e29-t16's Terraform, at the promotion | | | |
+| `2026.10.12-docx-3` | prod bucket | not yet: refused (`STORE_ACCESS_DENIED` on `GetObjectTagging`) until prod has v1-e31-t16's Terraform, at the promotion | | | |
+| `2026.10.18-docx-5` | dev bucket | 2026-10-22, tagged | 12,713 | about 7.5 GB (hsld26 4,973 objects, 2.5 GB; hspf26 4,440, 1.3 GB; hspolicy26 3,193, 3.5 GB; openev 107, 200.7 MB) | |
+| `2026.10.18-docx-5` | this machine | 2026-10-22, deleted | 12,713 | about 7.5 GB | |
+| `2026.10.18-docx-5` | prod bucket | not yet: at the promotion, with the three before it ([evidence-search runbook](../runbooks/evidence-search.md#promoting-the-pilot-to-prod), item 9) | | | |
 
 ## Reading it from a shell
 

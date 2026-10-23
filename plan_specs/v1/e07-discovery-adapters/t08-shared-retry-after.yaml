@@ -24,7 +24,8 @@ spec:
     except that its date form reads the injected clock.
   priority: 3
   constraints:
-    packages: [debate_core.integrations, packages/debate_core/tests]
+    # PM ruling 2026-10-22: the composition root passes the transport its clock.
+    packages: [debate_core.integrations, packages/debate_core/tests, debate_cli]
     forbidden:
       - Any change to which statuses are retried or how long an adapter waits, beyond reading the clock it is given
       - Network or AWS access in any test

@@ -58,6 +58,7 @@ from pydantic import ValidationError
 
 from debate_core.application.errors import DomainError
 from debate_core.application.ports.caselist import CaselistRepository
+from debate_core.application.settings import CardFingerprintSettings
 from debate_core.domain.card_occurrence import CardOccurrence, ClusterMembership, OccurrenceKey
 from debate_core.domain.caselist import Disclosure
 from debate_core.domain.debate_files import CardCompleteness, ParsedCard, ParsedDocument
@@ -84,11 +85,24 @@ __all__ = [
     "CardTotals",
     "ClusterSummary",
     "UnreadableParsedCards",
+    "fingerprint_thresholds",
     "read_parsed_cards",
 ]
 
 #: Page size for reading a caselist's disclosures.
 _DISCLOSURE_PAGE: Final = 500
+
+
+def fingerprint_thresholds(settings: CardFingerprintSettings) -> NearDuplicateThresholds:
+    """The thresholds as the clusterer takes them, from `settings.fingerprints`.
+
+    Here rather than a method on the settings group, so that `debate_core.application.settings`
+    imports nothing from `debate_core.evidence` (`v1-e01-t30`): every module that reads a setting
+    used to reach the near-duplicate clusterer through it.
+    """
+    return NearDuplicateThresholds(
+        jaccard=settings.near_duplicate_jaccard, containment=settings.near_duplicate_containment
+    )
 
 
 class UnreadableParsedCards(DomainError):

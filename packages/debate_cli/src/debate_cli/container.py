@@ -156,7 +156,7 @@ from debate_core.application.caselist.suppression import (
     RecordedSuppressionList,
 )
 from debate_core.application.caselist.version_retention import VersionDirectoryRetention
-from debate_core.application.caselist_card_stats import CaselistCardStatsService
+from debate_core.application.caselist_card_stats import CaselistCardStatsService, fingerprint_thresholds
 from debate_core.application.caselist_parse import CaselistParseService
 from debate_core.application.caselist_pull_parse import PullParseStage
 from debate_core.application.caselist_sync import (
@@ -476,7 +476,7 @@ class ServiceContainer:
         return self.singleton(
             "caselist_card_stats",
             lambda: CaselistCardStatsService(
-                SqliteCaselistRepository(self.database), self.settings.fingerprints.thresholds()
+                SqliteCaselistRepository(self.database), fingerprint_thresholds(self.settings.fingerprints)
             ),
         )
 

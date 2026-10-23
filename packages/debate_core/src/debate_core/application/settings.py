@@ -106,7 +106,6 @@ from pydantic_settings import (
 from debate_core.application.errors import DomainError
 from debate_core.domain.caselist import Event
 from debate_core.domain.model_contracts import ModelProvider
-from debate_core.evidence.near_duplicates import NearDuplicateThresholds
 
 __all__ = [
     "BUILTIN_PROFILES",
@@ -853,12 +852,6 @@ class CardFingerprintSettings(SettingsGroup):
             "card cut a paragraph shorter in its cluster."
         ),
     )
-
-    def thresholds(self) -> NearDuplicateThresholds:
-        """The thresholds as the clusterer takes them."""
-        return NearDuplicateThresholds(
-            jaccard=self.near_duplicate_jaccard, containment=self.near_duplicate_containment
-        )
 
 
 class ParseSettings(SettingsGroup):

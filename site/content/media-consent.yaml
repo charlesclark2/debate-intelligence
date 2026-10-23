@@ -28,14 +28,14 @@ season: '2026-27'
 #
 # The first entry is the student named in the season's first result (content/results.yaml).
 # Charlie confirmed with the activities office on 2026-10-01 that every rostered student's 2026-27
-# form is on file. The form's reference has not been supplied yet, so it is a [[TBD]] marker: a dev
-# preview builds and shows the name for review, and a prod build fails until the reference is
-# written in (src/lib/media-consent.ts, consentPlaceholders).
+# form is on file, and assigned the reference against that form; the mapping from a reference to a
+# student is his, kept with his records and never here. A reference written as a [[TBD]] marker
+# fails a prod build (src/lib/media-consent.ts, consentPlaceholders), so one never goes to dev.
 students:
   - publishedName: Anya Prakash
     publishedForm: full-name-and-class-year
     graduationYear: 2027
-    consentReference: "[[TBD: the 2026-27 form's reference, from the activities office]]"
+    consentReference: MC-2026-001
     season: '2026-27'
     dateChecked: 2026-10-01
 # Example of the shape, for when the first entry is added:

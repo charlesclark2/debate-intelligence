@@ -537,15 +537,12 @@ describe('the content this site actually ships', () => {
 
   /**
    * The facts still waiting on Charlie, written out so that each one is a decision to change this
-   * test rather than a gap that goes quiet. On 2026-10-23 that is one: the consent reference for
-   * the first student named on the site, which the activities office has not supplied. Charlie
-   * confirmed the form itself is on file (2026-10-01). Until the reference is filled in, a dev
-   * preview builds and a prod build fails, which is the gate this list documents.
+   * test rather than a gap that goes quiet. None: the one there was, the first named student's
+   * consent reference, was assigned by Charlie on 2026-10-23 (the PM's ruling for v1-e37-t06: the
+   * reference is opaque and its mapping is his). A [[TBD]] in the manifest fails every prod build,
+   * so the PM ruled that one never reaches dev.
    */
-  const STILL_WAITING_ON_CHARLIE = [
-    'content/media-consent.yaml: still has an unfilled placeholder: ' +
-      "the 2026-27 form's reference, from the activities office (consentReference of student entry 1)",
-  ]
+  const STILL_WAITING_ON_CHARLIE: string[] = []
 
   it('breaks no rule except the facts still waiting on Charlie', () => {
     const { errors } = checkPublishingPolicy({

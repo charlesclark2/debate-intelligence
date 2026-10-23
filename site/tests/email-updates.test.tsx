@@ -185,6 +185,23 @@ describe('the EmailUpdates section', () => {
     expect(link.querySelector('.visually-hidden, [hidden], [aria-hidden]')).toBeNull()
   })
 
+  /**
+   * A .button is inline-flex, so each child of the link is a flex item of its own, and a flex
+   * item's leading space collapses. With the note in a span of its own the button read "Sign up
+   * for email updates(opens Buttondown's site)" in a browser, while textContent above still had
+   * the space (v1-e37-t06 review, condition 3). jsdom has no layout, so this asserts the cause: the
+   * label and the note are one flex item, one run of text.
+   */
+  it('keeps the label and the note in one run of text, so the space between them is rendered', async () => {
+    const { container } = renderInFrame(<EmailUpdates content={WITH_LINK} />)
+    await flushPendingEffects()
+    const link = container.querySelector(`#${EMAIL_UPDATES_ID} a`) as HTMLAnchorElement
+    expect(link.childNodes).toHaveLength(1)
+    expect(link.childNodes[0]?.textContent).toBe(
+      `${WITH_LINK.action.label} (${WITH_LINK.action.externalLinkNote})`,
+    )
+  })
+
   it('shows the heading, intro and every point from the config', async () => {
     const { container } = renderInFrame(<EmailUpdates content={WITH_LINK} />)
     await flushPendingEffects()

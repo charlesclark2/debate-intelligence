@@ -138,22 +138,24 @@ MAX_PASSAGE_WORDS: Final = 40
 DEFAULT_PASSAGE_SHARE_PERCENT: Final = 66
 """The share of a passage's content words a card must hold, rounded up: about two thirds."""
 
-PASSAGE_STOP_WORDS: Final = frozenset(
+_STOP_WORD_GROUPS: Final = (
     # Articles, conjunctions and prepositions.
     """the an and or but nor so yet if then than as of to in on at by for from with without into onto
     upon about above below over under between among through during before after since until while
-    because though although unless whether against within via per off out up down"""
+    because though although unless whether against within via per off out up down""",
     # Pronouns and determiners.
-    """ he she it we they me him her us them my your his its our their mine yours hers ours theirs
+    """he she it we they me him her us them my your his its our their mine yours hers ours theirs
     myself yourself himself herself itself ourselves themselves this that these those who whom whose
     which what there here where when why how all any both each few more most other some such own same
-    very too also just only even not no"""
+    very too also just only even not no""",
     # Forms of be, have and do, and the modal verbs.
-    """ is are was were be been being am has have had having do does did doing can could will would
-    shall should may might must"""
+    """is are was were be been being am has have had having do does did doing can could will would
+    shall should may might must""",
     # What the tokenizer leaves of a contraction (`doesn't` is `doesn` and `t`). Not `won`: it is a word.
-    """ don doesn didn isn aren wasn weren hasn haven hadn couldn wouldn shouldn mustn ll re ve""".split()
+    "don doesn didn isn aren wasn weren hasn haven hadn couldn wouldn shouldn mustn ll re ve",
 )
+
+PASSAGE_STOP_WORDS: Final = frozenset(word for group in _STOP_WORD_GROUPS for word in group.split())
 """The words a passage leaves out, matched in any case: they say nothing about what a card says. A word
 of one character is left out too, so `a`, `I` and a contraction's `s` or `t` need no entry."""
 

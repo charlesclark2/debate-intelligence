@@ -173,7 +173,7 @@ def test_search_passage_keeps_forty_content_words_and_says_it_dropped_the_rest()
 
 
 def test_search_passage_counts_repeats_and_stop_words_toward_no_limit() -> None:
-    """Forty-one distinct content words among repeats and stop words, inside 512 characters: one is dropped."""
+    """Forty-one content words among repeats and stop words, inside 512 characters: one is dropped."""
     words = [f"w{number}" for number in range(41)]
     raw = " the ".join(words + words[:10])
     assert len(raw) <= MAX_QUERY_CHARACTERS

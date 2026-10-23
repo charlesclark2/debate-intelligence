@@ -313,3 +313,90 @@ forbidden entry:
   build` first runs. None exists outside the tests today.
 * A disclosed card holding an old line is recorded. It is the policy's outcome; the PM revisits it
   only if a coach meets it.
+
+## PM conditions
+
+Closed in this session, as the PM's review of 2026-10-22 rules. The phase stays `Succeeded`, and
+the branch is ready for `scripts/task pr` with no `--partial`. Commit ids below are after the sync,
+on top of `origin/dev` at `37bdaba`. The sync rewrote every earlier id in this report (`aa0d699` is
+now `b612290`, `b1e8624` is `cf98985`, `fba0b8b` is `9b80c3d`), and the PM's verdict is `d601490`.
+The conditions are in `96c3cd5`.
+
+**The forbidden-entry ruling.** The PM's comment is written above the forbidden entry, as given. Its
+parsed `forbidden` list is unchanged (the comment is not part of any value).
+
+**Condition 1: the header's last sentence is dropped.**
+
+* `header_line` no longer ends "Who disclosed each card is below its cite." (disclosed cards only)
+  or "Where each card came from is below its cite." (a file with a camp card). Its docstring says
+  why: a download carries no sidecar.
+* **Four tests pinned the header, not two.** Besides the two goldens
+  (`test_assembly_writes_the_recipe_in_order_in_the_profiles_styles` and
+  `test_camp_a_recipe_pinning_a_camp_card_builds_with_no_line_below_its_cite`), two tests about the
+  header itself pin it: `test_assembly_says_the_cards_are_disclosed_and_unverified_and_never_verified`
+  and `test_camp_a_file_of_camp_cards_alone_says_so_in_its_header`. In all four, only the sentence
+  was deleted, by hand.
+* ac1's comparison (`test_the_file_is_the_recorded_one_without_its_provenance_line_paragraphs`)
+  now does three things. It asserts the built header differs from the recorded one. It cuts from
+  the recorded header the sentence written by hand in `HEADER_SENTENCES`, asserting the header is
+  one run of one text that ends with that sentence and holds it once. Only then does it remove the
+  line paragraphs and compare paragraph by paragraph, the whole `word/document.xml` byte for byte,
+  and every other part.
+
+**Condition 2: `FILE_BUILDER_VERSION` is `2026.10.22-file-writer-3`.** The identity test, now
+`test_the_sidecar_is_the_recorded_one_byte_for_byte_but_the_files_own_hash_and_the_version`, asserts
+the recorded `builder_version` is `2026.10.19-file-writer-2` and occurs once in the recorded bytes.
+It swaps that for the hand-written new value, as it does the hash, and then compares byte for byte.
+Every other sidecar byte is unchanged, in all four cases. The version comment names `-3`.
+
+**Condition 3: the schema description.** `FileProvenanceEntry.provenance_line` now reads "The card's
+provenance line, as the pilot's card page shows it (data-use policy, Attribution rules 2 and 3); a
+built file's text carries none." `uv run --frozen scripts/export_file_provenance_schema.py` printed
+`wrote docs/data/file-provenance.schema.json`, and `docs/data` is in `constraints.packages` with a
+ruling comment. The schema's diff against `origin/dev` is that one description:
+
+```text
+ docs/data/file-provenance.schema.json | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+-          "description": "The line written below the cite (data-use policy, Attribution rule 2).",
++          "description": "The card's provenance line, as the pilot's card page shows it (data-use policy, Attribution rules 2 and 3); a built file's text carries none.",
+```
+
+No sidecar byte moves with it: a sidecar holds values, not descriptions, and the identity test above
+passes. `scripts/export_file_quality_schema.py` reported its own schema up to date.
+
+**Mutation rows.** None of the earlier twenty touched the header or the version, so none moved.
+Three new mutants, run the same way, show the new assertions bite:
+
+| Mutant | Result | First test to catch it |
+|---|---|---|
+| The disclosed-only sentence put back | CAUGHT (4 failed) | `test_the_file_is_the_recorded_one_without_its_provenance_line_paragraphs` |
+| The camp-card sentence put back | CAUGHT (4 failed) | same, camp case |
+| The version left at `-2` | CAUGHT (4 failed) | `test_the_sidecar_is_the_recorded_one_byte_for_byte_but_the_files_own_hash_and_the_version` |
+
+**Condition 4: sync and checks.** `scripts/task sync v1-e33-t08-provenance-line-one-function` rebased
+the branch's seven commits onto `origin/dev` without a conflict. **`dev` had moved one merge further
+than the PM's notes list:** after #413 it gained v1-e39-t11 (#415, search pages and Copy card) and a
+refresh (#414). #415 is the one change on `dev` that touches a file of this task,
+`domain/evidence_search.py`. It adds `ResultCount` and `DEFAULT_RESULT_COUNT_CAP` in other hunks;
+this task changed only `occurrence_provenance_line`'s docstring there, and the function itself is
+untouched on both sides. A grep of `packages`, `tests` and `scripts` found no use of the removed
+`provenance_line`, `HIGHLIGHTED_CITE_CAUSE` or `without_line`, and no test pinning the old header
+sentence. `2026.10.19-file-writer-2` still appears in `test_report.py`, as a hand-built report's
+sample value, tied to no writer. After the sync, at a load average of about 7 to 8:
+
+* The changed test directories, the always-run list and the docs checks:
+  `perl -e 'alarm 110; exec @ARGV' .venv/bin/python -m pytest -q -n auto -m "not slow and not live"`
+  over the files listed under "Before the report", plus #415's
+  `packages/debate_api/tests/test_search_pages_follow_ups.py` → `2148 passed, 2 xfailed in 22.27s`.
+* `uv run --frozen ruff check .` → `All checks passed!`
+* `uv run --frozen ruff format --check .` → `1122 files already formatted`
+* `uv run --frozen pyright packages/debate_core` → `0 errors, 0 warnings, 0 informations`
+* `uv run --frozen lint-imports` → `Contracts: 15 kept, 0 broken.`
+* `uv run --frozen python scripts/check_thin_handlers.py` → `OK: 46 CLI command and API route handlers within 25 statements`
+* `uv run --frozen python scripts/validate_specs.py` → `OK: 423 files, 40 epics, 361 tasks, 22 releases`
+* `uv run --frozen python scripts/docs_index.py --check-descriptions` → `All 43 indexed documents under docs/ have a description`
+* `uv run --frozen python scripts/check_command_blocks.py --base origin/dev` → ``OK: no `#` comments in 348 shell code blocks in 140 Markdown files (1 session reports changed since origin/dev)``
+* `uv run --frozen python scripts/export_file_provenance_schema.py --check` → `OK: docs/data/file-provenance.schema.json is up to date`
+
+v1-e33-t03's spec is not edited here; the PM amends its paragraph on the read-back refusal.

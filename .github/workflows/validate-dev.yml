@@ -26,7 +26,10 @@
 #             --print-base-image names, for the SQLite checks that run inside it (v1-e01-t34);
 #   conclude  posts `success` on the commit the installed build reported, only when every job
 #             passed and that commit, and both test trees, are the one requested. Anything else posts
-#             `failure` (`error` if the run was cancelled) on the requested commit.
+#             `failure` (`error` if the run was cancelled) on the requested commit. Then, for a run
+#             from dev that posted the status, a failure opens an issue labelled `validate-dev` or
+#             comments on the open one, and a success closes it: a red validate-dev went unseen for
+#             days from 2026-10-20, because nothing but the status said so (v1-e01-t34).
 #
 # In any tier a skipped test fails the tier: a check skipped for a missing fixture did not run.
 #
@@ -46,10 +49,12 @@
 # The live canary tier runs only with the dispatch input `live: true` or the repository variable
 # VALIDATE_DEV_LIVE set to `true`; it never calls OpenCaselist (tests/smoke/test_live_canary.py).
 #
-# SECURITY. Permissions are contents: read and statuses: write, and nothing else. statuses: write
-# is held only by `resolve` and `conclude`, which run this workflow's own copy of the driver; the
-# jobs that run the validated commit's tests hold contents: read alone, and the driver withholds
-# GH_TOKEN from pytest, so the code under test can neither post its own status nor read the token.
+# SECURITY. Permissions are contents: read, statuses: write and issues: write, and nothing else.
+# statuses: write is held only by `resolve` and `conclude`, and issues: write only by `conclude`,
+# which run this workflow's own copy of the driver; the jobs that run the validated commit's tests
+# hold contents: read alone, and the driver withholds GH_TOKEN from pytest, so the code under test
+# can neither post its own status nor read the token. The issue's text is the commit, the tag,
+# conclude's own description and the run's link, and nothing from the environment.
 # No job is named `validate-dev`: a check run of that name would land on the workflow's own commit,
 # which for a dispatch from dev is dev's head and not necessarily the commit validated.
 
@@ -241,6 +246,7 @@ jobs:
     permissions:
       contents: read
       statuses: write
+      issues: write
     outputs:
       state: ${{ steps.conclude.outputs.state }}
     steps:
@@ -267,6 +273,20 @@ jobs:
           if [ -n "$SLOW_COMMIT" ]; then set -- "$@" --slow-commit "$SLOW_COMMIT"; fi
           if [ "$POST_STATUS" = true ]; then set -- "$@" --post-status; fi
           python3 scripts/validate_dev.py conclude "$@"
+      # Only for dev, and only when this run posted the status: a hotfix head, a tag's release
+      # event or a caller that posts its own status is not dev's verdict. always(), because the
+      # step above exits 1 on a failure, which is exactly when this has to run.
+      - name: Open or update the validate-dev issue on a failure, close it on a success
+        if: always() && steps.conclude.outputs.state != '' && env.POST_STATUS == 'true' && github.ref == 'refs/heads/dev'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.resolve.outputs.tag }}
+          STATE: ${{ steps.conclude.outputs.state }}
+          DESCRIPTION: ${{ steps.conclude.outputs.description }}
+        run: |
+          set -- --sha "$REQUESTED_SHA" --state "$STATE" --description "$DESCRIPTION"
+          if [ -n "$TAG" ]; then set -- "$@" --tag "$TAG"; fi
+          python3 scripts/validate_dev.py issue "$@"
       - name: Summary
         if: always()
         env:

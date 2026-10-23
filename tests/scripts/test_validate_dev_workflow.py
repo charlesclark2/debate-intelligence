@@ -12,9 +12,11 @@ reaches GitHub, a registry or the network.
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -136,3 +138,143 @@ def test_the_jobs_that_run_the_validated_commits_code_hold_no_write_permission(j
         assert permissions == {"contents": "read", "statuses": "write"}
     else:
         assert permissions == {"contents": "read"}
+
+
+def test_only_conclude_may_write_issues_and_the_workflow_grants_nothing_else() -> None:
+    flow = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+
+    assert flow["permissions"] == {"contents": "read"}
+    assert jobs()["conclude"]["permissions"] == {"contents": "read", "statuses": "write", "issues": "write"}
+
+
+# --------------------------------------------------------------------------------------------
+# conclude: a red result opens or updates an issue, a green one closes it
+# --------------------------------------------------------------------------------------------
+
+SHA = "1" * 40
+TAG = "v1.1.0-dev.102"
+REPOSITORY = "charlesclark2/debate-intelligence"
+RUN_LINK = f"https://github.com/{REPOSITORY}/actions/runs/42"
+TOKEN = "ghs_SENTINELTOKEN0123456789"
+
+GH_STUB = """
+mkdir -p "$GH_CALLS"
+printf '%s\\0' "$@" > "$GH_CALLS/$(ls "$GH_CALLS" | wc -l | tr -d ' ')"
+if [ "${1:-} ${2:-}" = "issue list" ]; then printf '%s' "$GH_OPEN_ISSUES"; fi
+"""
+
+
+def test_the_issue_step_runs_after_conclude_even_when_it_failed_and_only_for_dev() -> None:
+    conclude = jobs()["conclude"]
+    conclude_at, _ = step_named(conclude, "Post success on the installed commit")
+    issue_at, issue = step_named(conclude, "Open or update the validate-dev issue")
+    summary_at, _ = step_named(conclude, "Summary")
+
+    assert conclude_at < issue_at < summary_at
+    condition = issue["if"]
+    assert condition.startswith("always()")
+    assert "steps.conclude.outputs.state != ''" in condition
+    assert "env.POST_STATUS == 'true'" in condition
+    assert "github.ref == 'refs/heads/dev'" in condition
+    assert issue["env"]["STATE"] == "${{ steps.conclude.outputs.state }}"
+    assert issue["env"]["DESCRIPTION"] == "${{ steps.conclude.outputs.description }}"
+    assert issue["env"]["GH_TOKEN"] == "${{ github.token }}"
+    assert "scripts/validate_dev.py issue" in issue["run"]
+
+
+def gh_calls(directory: Path) -> list[list[str]]:
+    files = sorted(directory.iterdir(), key=lambda path: int(path.name)) if directory.exists() else []
+    return [path.read_text(encoding="utf-8").split("\0")[:-1] for path in files]
+
+
+def run_issue_step(
+    tmp_path: Path, state: str, open_issues: str
+) -> tuple[subprocess.CompletedProcess[str], list[list[str]]]:
+    checkout, stubs = tmp_path / "checkout", tmp_path / "bin"
+    (checkout / "scripts").mkdir(parents=True)
+    shutil.copy2(REPO_ROOT / "scripts" / "validate_dev.py", checkout / "scripts" / "validate_dev.py")
+    stubs.mkdir()
+    write_stub(stubs, "gh", GH_STUB)
+    write_stub(stubs, "python3", f'exec "{sys.executable}" "$@"\n')
+    _, step = step_named(jobs()["conclude"], "Open or update the validate-dev issue")
+
+    result = run_step(
+        step["run"],
+        checkout,
+        stubs,
+        tmp_path / "stub.log",
+        {
+            "REQUESTED_SHA": SHA,
+            "TAG": TAG,
+            "STATE": state,
+            "DESCRIPTION": "validation failed: slow failure" if state == "failure" else f"{TAG} validated",
+            "GITHUB_SERVER_URL": "https://github.com",
+            "GITHUB_REPOSITORY": REPOSITORY,
+            "GITHUB_RUN_ID": "42",
+            "GH_TOKEN": TOKEN,
+            "GITHUB_TOKEN": TOKEN,
+            "GH_CALLS": str(tmp_path / "gh-calls"),
+            "GH_OPEN_ISSUES": open_issues,
+        },
+    )
+    return result, gh_calls(tmp_path / "gh-calls")
+
+
+LISTED = ["issue", "list", "--label", "validate-dev", "--state", "open", "--json", "number", "--limit", "100"]
+
+
+def test_a_failure_with_no_issue_open_creates_the_label_and_opens_one(tmp_path: Path) -> None:
+    result, calls = run_issue_step(tmp_path, "failure", "[]")
+
+    assert result.returncode == 0, result.stderr
+    [listed, labelled, opened] = calls
+    assert listed == [*LISTED, "--repo", REPOSITORY]
+    assert labelled == [
+        "label",
+        "create",
+        "validate-dev",
+        "--color",
+        "B60205",
+        "--force",
+        "--repo",
+        REPOSITORY,
+    ]
+    assert opened[:5] == ["issue", "create", "--title", "validate-dev is failing on dev", "--body"]
+    assert opened[6:] == ["--label", "validate-dev", "--repo", REPOSITORY]
+    body = opened[5]
+    assert body.startswith(
+        f"validate-dev failed on `{SHA}` ({TAG}): validation failed: slow failure\n\nRun: {RUN_LINK}"
+    )
+    assert TOKEN not in "\0".join(part for call in calls for part in call)
+
+
+def test_a_failure_with_an_issue_open_comments_on_it(tmp_path: Path) -> None:
+    result, calls = run_issue_step(tmp_path, "failure", json.dumps([{"number": 7}]))
+
+    assert result.returncode == 0, result.stderr
+    [_, commented] = calls
+    assert commented[:3] == ["issue", "comment", "7"]
+    assert commented[4].startswith(f"validate-dev failed on `{SHA}` ({TAG})")
+    assert TOKEN not in "\0".join(part for call in calls for part in call)
+
+
+def test_a_success_closes_the_open_issue(tmp_path: Path) -> None:
+    result, calls = run_issue_step(tmp_path, "success", json.dumps([{"number": 7}]))
+
+    assert result.returncode == 0, result.stderr
+    assert calls[1] == [
+        "issue",
+        "close",
+        "7",
+        "--comment",
+        f"validate-dev is green again on `{SHA}` ({TAG}): {RUN_LINK}",
+        "--repo",
+        REPOSITORY,
+    ]
+
+
+def test_a_success_with_no_issue_open_only_looks(tmp_path: Path) -> None:
+    result, calls = run_issue_step(tmp_path, "success", "[]")
+
+    assert result.returncode == 0, result.stderr
+    assert calls == [[*LISTED, "--repo", REPOSITORY]]

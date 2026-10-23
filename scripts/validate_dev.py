@@ -32,8 +32,14 @@ Subcommands, in the order .github/workflows/validate-dev.yml runs them:
     the requested commit, and both test trees were that commit; ``success`` is posted on the commit
     the installed build reported, which by then is the requested one. Anything else posts
     ``failure`` (``error`` if the run was cancelled) on the requested commit.
+``issue``
+    After ``conclude``, on dev: a ``failure`` opens an issue labelled ``validate-dev``, or comments
+    on the open one; a ``success`` closes it. A red validate-dev went unseen for days from
+    2026-10-20, because nothing but the status said so (v1-e01-t34). The text holds the commit,
+    the tag, the conclusion's own description and the run's link, and nothing from the environment.
 ``run``
-    All of the above in one process, for an operator's rehearsal or a caller with one job.
+    All of the above but ``issue`` in one process, for an operator's rehearsal or a caller with one
+    job.
 
 **A skipped test fails its tier.** A tier passes only when pytest exits 0, wrote its JUnit report,
 ran at least one test, and that report shows no failure, no error and no skip (an expected failure
@@ -69,6 +75,9 @@ CHANNEL = "dev"
 FULL_SHA = re.compile(r"[0-9a-f]{40}")
 DEV_TAG = re.compile(r"v(?P<x>0|[1-9]\d*)\.(?P<y>0|[1-9]\d*)\.(?P<z>0|[1-9]\d*)-dev\.(?P<n>[1-9]\d*)")
 DESCRIPTION_LIMIT = 140  # the statuses API refuses a longer description
+ISSUE_LABEL = "validate-dev"
+ISSUE_LABEL_COLOR = "B60205"
+ISSUE_TITLE = "validate-dev is failing on dev"
 
 PASSED, PROBLEM = 0, 1
 
@@ -112,6 +121,18 @@ class GitHub(Protocol):
     def post_status(self, sha: str, state: str, target_url: str, description: str) -> None:
         """Create a `validate-dev` commit status on `sha`."""
         ...
+
+    def open_issue(self, label: str) -> int | None:
+        """The number of the oldest open issue labelled `label`, or None when there is none."""
+        ...
+
+    def create_issue(self, title: str, body: str, label: str) -> None:
+        """Open an issue labelled `label`, creating the label if the repository lacks it."""
+        ...
+
+    def comment_on_issue(self, number: int, body: str) -> None: ...
+
+    def close_issue(self, number: int, comment: str) -> None: ...
 
 
 class GhCli:
@@ -189,6 +210,30 @@ class GhCli:
             "-f",
             f"context={STATUS_CONTEXT}",
         )
+
+    def _issue_command(self, *arguments: str) -> str:
+        completed = self._gh(*arguments, "--repo", self.repository)
+        if completed.returncode != 0:
+            raise ValidationProblem(f"gh {' '.join(arguments[:2])} failed: {completed.stderr.strip()}")
+        return completed.stdout
+
+    def open_issue(self, label: str) -> int | None:
+        listing = self._issue_command(
+            "issue", "list", "--label", label, "--state", "open", "--json", "number", "--limit", "100"
+        )
+        numbers = [int(issue["number"]) for issue in json.loads(listing or "[]")]
+        return min(numbers) if numbers else None
+
+    def create_issue(self, title: str, body: str, label: str) -> None:
+        # --force makes this idempotent: it creates the label, or updates it if it exists.
+        self._issue_command("label", "create", label, "--color", ISSUE_LABEL_COLOR, "--force")
+        self._issue_command("issue", "create", "--title", title, "--body", body, "--label", label)
+
+    def comment_on_issue(self, number: int, body: str) -> None:
+        self._issue_command("issue", "comment", str(number), "--body", body)
+
+    def close_issue(self, number: int, comment: str) -> None:
+        self._issue_command("issue", "close", str(number), "--comment", comment)
 
 
 # --------------------------------------------------------------------------------------------
@@ -617,6 +662,56 @@ def post(github: GitHub, conclusion: Conclusion, target_url: str) -> None:
 
 
 # --------------------------------------------------------------------------------------------
+# issue: a red validate-dev reaches someone
+# --------------------------------------------------------------------------------------------
+
+CONCLUDED_STATES = ("success", "failure", "error")
+
+
+def failure_text(sha: str, tag: str | None, description: str, run_link: str) -> str:
+    return (
+        f"validate-dev failed on `{sha}` ({tag or 'no pre-release found'}): {description}\n\n"
+        f"Run: {run_link}\n\n"
+        "protect-main requires validate-dev green on a promotion's head commit, so no promotion to "
+        "main can merge until dev's head validates. The run's failed job says what failed, and "
+        "`scripts/task list` shows the latest result for dev's head. This issue is closed by the "
+        "next validate-dev run on dev that succeeds."
+    )
+
+
+def success_text(sha: str, tag: str | None, run_link: str) -> str:
+    return f"validate-dev is green again on `{sha}` ({tag or 'no tag'}): {run_link}"
+
+
+def report_on_issue(
+    github: GitHub, state: str, *, sha: str, tag: str | None, description: str, run_link: str
+) -> str:
+    """Open or update the validate-dev issue on a failure, close it on a success; say what was done.
+
+    A cancelled run (`error`) is no verdict on the commit, so it leaves the issue as it is.
+    """
+    require_sha(sha)
+    if tag:
+        tag_order(tag)
+    if state not in CONCLUDED_STATES:
+        raise ValidationProblem(f"{state!r} is not a state conclude posts")
+    if state == "error":
+        return "the run was cancelled; the issue is left as it is"
+    number = github.open_issue(ISSUE_LABEL)
+    if state == "failure":
+        body = failure_text(sha, tag, description, run_link)
+        if number is None:
+            github.create_issue(ISSUE_TITLE, body, ISSUE_LABEL)
+            return f"opened an issue labelled {ISSUE_LABEL}"
+        github.comment_on_issue(number, body)
+        return f"commented on issue #{number}"
+    if number is None:
+        return f"no issue labelled {ISSUE_LABEL} is open"
+    github.close_issue(number, success_text(sha, tag, run_link))
+    return f"closed issue #{number}"
+
+
+# --------------------------------------------------------------------------------------------
 # Command line
 # --------------------------------------------------------------------------------------------
 
@@ -706,6 +801,15 @@ def build_parser() -> argparse.ArgumentParser:
     conclude_parser.add_argument("--github-output", default=os.environ.get("GITHUB_OUTPUT"))
     status_options(conclude_parser)
 
+    issue_parser = sub.add_parser(
+        "issue", help="open or update the validate-dev issue on a failure, close it on a success"
+    )
+    issue_parser.add_argument("--sha", required=True, help="the commit that was asked to be validated")
+    issue_parser.add_argument("--state", required=True, choices=CONCLUDED_STATES, help="what conclude posted")
+    issue_parser.add_argument("--description", required=True, help="conclude's description of the result")
+    issue_parser.add_argument("--tag")
+    issue_parser.add_argument("--target-url", help="the run the issue links to (default: this Actions run)")
+
     run_parser = sub.add_parser("run", help="resolve, smoke, slow and conclude in one process")
     run_parser.add_argument("--sha", required=True)
     run_parser.add_argument("--tag")
@@ -759,9 +863,28 @@ def main(argv: list[str] | None = None, *, github: GitHub | None = None) -> int:
             )
             if args.post_status:
                 post(client, conclusion, target_for(args))
-            write_outputs(args.github_output, {"state": conclusion.state, "status_sha": conclusion.sha})
+            write_outputs(
+                args.github_output,
+                {
+                    "state": conclusion.state,
+                    "status_sha": conclusion.sha,
+                    "description": conclusion.description[:DESCRIPTION_LIMIT],
+                },
+            )
             print(f"validate-dev: {conclusion.state} on {conclusion.sha}: {conclusion.description}")
             return PASSED if conclusion.state == "success" else PROBLEM
+        if args.command == "issue":
+            run_link = args.target_url or run_url(os.environ) or "(no run link)"
+            done = report_on_issue(
+                client,
+                args.state,
+                sha=args.sha,
+                tag=args.tag,
+                description=args.description[:DESCRIPTION_LIMIT],
+                run_link=run_link,
+            )
+            print(f"validate-dev issue: {done}")
+            return PASSED
         return command_run(args, client)
     except ValidationProblem as problem:
         print(f"validate-dev: {problem}", file=sys.stderr)

@@ -594,7 +594,10 @@ INDEX_DIR=$(ls -td "${HOME}/.debate-research/dev/tub-index"/*/ | head -1)
 echo "$INDEX_DIR"
 sqlite3 -readonly "${INDEX_DIR}search-index.sqlite" "select count(*) from occurrences where source_sha256 = '${REMOVED}'"
 ```
-Success looks like `0`. Five minutes after the publish, P2's checks still hold on the new index.
+Success looks like `0`. Five minutes after the publish, open the card's path again. If the removed
+file was the card's only occurrence, it is still not in the search. If other teams' or camps' copies
+survive, the card is back, chosen from them, with no line for the removed file. That is the
+rebuilt index doing what the build always does.
 
 ### P4 — Delete the superseded index versions, noncurrent versions included
 

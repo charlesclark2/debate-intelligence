@@ -290,8 +290,11 @@ Paste the output back.
 five-minute waits). `RM-2026-91` appends a **permanent synthetic entry** to the dev suppression list
 and removal log; record it in the register as the exercise. The store is a scratch one, built from
 `tests/fixtures/parse_pipeline`'s fictional `testcl26` archives, whose files parse into cards. The
-removed file is the fixture body `direct`, sha256 `058e2b1ce922…`, disclosed by one invented team
-only, so its card goes whole. The exercise replaces the dev pilot's current index with the
+removed file is the fixture body `direct`, sha256 `058e2b1ce922…`, which one invented team
+(Westfield XY) disclosed. Its card is a cluster of six occurrences whose representative is the
+`direct` file. So within five minutes the whole card is hidden, and after the rebuild it comes back
+from the other five, without Westfield XY. (Corrected 2026-10-22 from the index 4a built; the first
+version said the card went whole.) The exercise replaces the dev pilot's current index with the
 synthetic one. Block 5's last command puts dev's own index back.
 
 4-pre. **No pull is running** (PM correction 2026-10-22). The weekly agent run started 2026-10-22
@@ -356,7 +359,8 @@ INDEX_DIR=$(ls -td "${DEBATE_STORAGE__DATA_DIR}/tub-index"/*/ | head -1)
 echo "$INDEX_DIR"
 sqlite3 -readonly "${INDEX_DIR}search-index.sqlite" "select count(*) from occurrences where source_sha256 = '${REMOVED}'"
 ```
-Success looks like a new index id, published, and `0`.
+Success looks like a new index id, published, and `0`. Five minutes after the publish, the card's
+path answers again, with no Westfield XY line.
 
 4f. **P4: the prune**, exactly as `docs/runbooks/caselist-removal.md` gives it ("P4 — Delete the
 superseded index versions"): its dry-run block, then its delete block, then the dry run again. They

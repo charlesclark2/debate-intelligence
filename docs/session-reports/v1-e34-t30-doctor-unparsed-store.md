@@ -257,9 +257,43 @@ blocks in 137 Markdown files (1 session reports changed since origin/dev)`.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-22
 
 **Notes:**
+
+Accepted with no conditions. Open the pull request with no `--partial`.
+
+**What the PM checked.**
+* The branch is clean, 2 commits on origin/dev at `bbfe702`. The only dev commit since is a docs
+  refresh, so no sync is needed.
+* The diff is the 14 files listed.
+* The container wires the stage through `why_no_search_index_stage`, and the stage takes its
+  stores from `search_index_stores`, so the check and the run cannot drift apart.
+* `--check-launchd` collects only the values that follow `--caselist`, leaves the agent's plist
+  untouched, and still passes `--check` with no argument.
+* The installer's pre-install check is unchanged.
+
+**Rulings.**
+
+1. **Decision 1 is accepted:** the agent's caselists go into the check plist's environment as
+   `caselist.sync_caselists`. It keeps `--check` argument-free, as v1-e34-t10 requires.
+   * **No `doctor --caselist` follow-up.** Hand runs set the variable, as the runbook shows.
+   * **The real fix is a design question for E40.** Where the weekly run's caselists are
+     configured, a setting or plist arguments, is decided once by the E40 ADR (the cloud caselist
+     run), since a cloud run has no plist. The PM adds that question to the ADR task.
+2. **Deviations 1 to 3 are accepted:** `tests/smoke` under working agreement 5, `tests/integration`
+   with `ops/launchd`, and the pinned service list.
+3. **Decision 4 is accepted:** a first install comes before the first parse, so only
+   `--check-launchd` checks the stores.
+4. **Decisions 2, 3, 5 and 6 are accepted as written.**
+
+**Operator follow-ups: accepted, with two notes.**
+* **`openev` is parsed on `2026.10.20-docx-6`.** The dev bucket's retirement dry run of
+  2026-10-22 lists it current, 107 objects. Expect four passing store rows.
+* **One agent reinstall covers this task, v1-e29-t12 and v1-e31-t30.** The installed agent is
+  `1.1.0.dev85`, which also predates the OpenAlex setting in the checkout's `.env`. The PM will
+  give Charlie one reinstall, then `--check-launchd`, then the `doctor` line, once v1-e31-t30 has
+  merged too. They are not run separately.

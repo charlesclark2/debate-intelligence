@@ -62,7 +62,7 @@ v2.3's extension work.
 |---|---|---|---|---|---|
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 47 | 43 | 236 |
 | [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 103 | 81 | 487 |
-| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 22 | 8 | 191 |
+| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 24 | 9 | 196 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 13 | 2 | 108 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 16 | 7 | 98 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 0 | 66 |
@@ -289,7 +289,7 @@ Weekly argument-landscape reports show which positions are being read and with w
 | Task | Status | Prereqs | Est. hours |
 |---|---|---|---|
 | [ModelRouter interface and routing config](plan_specs/v1/e05-model-router/t01-model-router-port.yaml) `v1-e05-t01-model-router-port` | Succeeded | 1 | 9.0 |
-| [Amazon Bedrock adapter](plan_specs/v1/e05-model-router/t02-bedrock-adapter.yaml) `v1-e05-t02-bedrock-adapter` | InProgress | 1 | 10.0 |
+| [Amazon Bedrock adapter](plan_specs/v1/e05-model-router/t02-bedrock-adapter.yaml) `v1-e05-t02-bedrock-adapter` | Succeeded | 1 | 10.0 |
 | [Deterministic fake and record/replay models](plan_specs/v1/e05-model-router/t03-fake-replay-models.yaml) `v1-e05-t03-fake-replay-models` | Succeeded | 1 | 9.0 |
 | [Versioned prompt registry](plan_specs/v1/e05-model-router/t04-prompt-registry.yaml) `v1-e05-t04-prompt-registry` | Succeeded | 1 | 8.0 |
 | [Structured output validation and repair](plan_specs/v1/e05-model-router/t05-structured-output-validation.yaml) `v1-e05-t05-structured-output-validation` | Pending | 2 | 7.0 |
@@ -303,10 +303,12 @@ Weekly argument-landscape reports show which positions are being read and with w
 | Task | Status | Prereqs | Est. hours |
 |---|---|---|---|
 | [Topic position taxonomies](plan_specs/v1/e32-argument-landscape/t01-position-taxonomy.yaml) `v1-e32-t01-position-taxonomy` | Pending | 1 | 14.0 |
-| [Position classification](plan_specs/v1/e32-argument-landscape/t02-position-classification.yaml) `v1-e32-t02-position-classification` | Pending | 3 | 15.0 |
+| [Position classification](plan_specs/v1/e32-argument-landscape/t02-position-classification.yaml) `v1-e32-t02-position-classification` | Pending | 2 | 8.5 |
 | [Weekly landscape report](plan_specs/v1/e32-argument-landscape/t03-landscape-report.yaml) `v1-e32-t03-landscape-report` | Pending | 4 | 12.0 |
 | [Trends and per-school views](plan_specs/v1/e32-argument-landscape/t04-trend-and-school-views.yaml) `v1-e32-t04-trend-and-school-views` | Pending | 1 | 9.0 |
-| [`debate-research landscape` command](plan_specs/v1/e32-argument-landscape/t05-landscape-cli.yaml) `v1-e32-t05-landscape-cli` | Pending | 3 | 10.0 |
+| [`debate-research landscape` command](plan_specs/v1/e32-argument-landscape/t05-landscape-cli.yaml) `v1-e32-t05-landscape-cli` | Pending | 2 | 10.0 |
+| [LD de-extinction position taxonomy](plan_specs/v1/e32-argument-landscape/t06-ld-de-extinction-taxonomy.yaml) `v1-e32-t06-ld-de-extinction-taxonomy` | Pending | 1 | 3.0 |
+| [Model classification of what headings cannot place](plan_specs/v1/e32-argument-landscape/t07-model-classification-stage.yaml) `v1-e32-t07-model-classification-stage` | Pending | 3 | 8.0 |
 
 #### [E33 — Evidence File Builder](plan_specs/v1/e33-file-builder/epic.yaml)
 

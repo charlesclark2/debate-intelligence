@@ -290,9 +290,61 @@ already planned brings this in.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-22
 
 **Notes:**
+
+Accepted, on three conditions closed in this session before the pull request. Record them under
+"PM conditions", keep the phase `Succeeded`, and open the pull request with no `--partial`. If
+anything comes out differently from what is written here, stop and ask for another review.
+
+**What the PM checked.** The branch is clean, 7 commits on origin/dev at `ffbfb2c`, and the diff
+is the 20 files listed. Since then dev has gained v1-e01-t30 (#403) and the PM batch (#405), so the
+sync in condition 3 is required. `publish_pending` is an existing outcome value. The cross-build
+read uses dev85's own readers, exported from its tag, and it was shown able to fail: `report_pending`
+made dev85 exit 1.
+
+**Rulings.**
+
+1. **Items (1) to (3), and the record's unchanged shape, are accepted.** Two things are exactly
+   the evidence the spec's forbidden entry needed: dev85's readers on this build's files, and the
+   failing run with a value dev85 does not know.
+2. **Decision 4 is accepted.** `objects_published` now means what the runbook always said, and the
+   stored records are left untouched. The transformation is documented and asserts that the stored
+   count was the sources.
+3. **Deviation 1 is accepted** under working agreement 5, as for v1-e34-t30.
+4. **Decisions 1, 2, 5 and 7 are accepted.** Decision 6's banner changes with condition 1.
+5. **Follow-up 1 is brought into this task (condition 1).** As built, a scheduled pull that runs
+   before the operator drains settles the owed list without making the check. On a Wednesday after
+   an expired session, that is the likeliest order, and the owed comparisons would be lost without
+   a word. That is the very gap item (1) exists to close. The cost is one comparison per owed
+   snapshot, once.
+
+**Conditions, all closed in this session:**
+
+1. **Hand the newest run's owed list to `run()` too.** A scheduled or hand-run pull's report stage
+   compares the owed snapshots after what it published, exactly as `--publish-pending` does,
+   through the same `_report_stage`. A pull cut short again owes what it did not reach.
+   * **Tests, red first:** an expired session's run, then a scheduled pull, which compares the owed
+     week; and a scheduled pull cut short again, which owes it again.
+   * **Mutate:** a run that ignores the list.
+   * **Banner:** it then says the next pull, or `caselist pull --publish-pending` after the login,
+     makes the check again. Update the runbook to match.
+   * **Agent compatibility:** the cross-build read stays green. Re-run it if any written key
+     changes; none should.
+2. **Reword the docstring's inexact sentence now (Follow-up 2).** You are editing that docstring
+   in this task, so say that the pending-work file holds the publish's owed work and the details
+   hold the report stage's.
+3. **Sync onto origin/dev** (`scripts/task sync`). Rewrite the one fakes import by v1-e01-t30's
+   mapping (`debate_core.testing.fakes.suppression`). Then re-run:
+   * the new test file and the every-build compatibility test;
+   * the changed test directories and the always-run list;
+   * pyright, `lint-imports`, ruff, `validate_specs.py` and the docs checks.
+
+   Record the results.
+
+**Operator follow-up:** none, as you say. The agent keeps its old behaviour until the planned
+reinstall, which the PM sequences after this merges.

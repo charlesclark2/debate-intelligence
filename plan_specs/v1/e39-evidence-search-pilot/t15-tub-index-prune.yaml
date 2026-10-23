@@ -1,0 +1,79 @@
+# TASK v1-e39-t15-tub-index-prune - tub index prune: the runbook's prune of superseded index versions as one command
+# Epic: E39 — Team Evidence Search (Student Pilot) | Release: v1.7 (Team evidence search pilot) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e39-t15-tub-index-prune
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.7
+    debate/epic: v1-e39-evidence-search-pilot
+  annotations:
+    debate/title: "tub index prune: the runbook's prune of superseded index versions as one command"
+spec:
+  # Filed by the PM, 2026-10-22, from v1-e39-t07's Follow-up 1 and its PM reviews.
+  description: >-
+    v1-e39-t07's removal runbook prunes superseded search index versions in the bucket with a
+    pasted script: read `current.json`, keep the current index's directory and the current
+    pointer, list every other version and delete marker under `reports/tub/search/`, show them,
+    then delete them only if the pointer has not moved since. Make it `debate-research tub index
+    prune --env <env>`, a dry run by default and `--execute` with the confirmation code the dry
+    run prints, as `caselist retire` does, under the takedown profile. It refuses when the
+    pointer names an index the listing does not hold, never deletes the current index or
+    pointer, and re-reads the pointer before deleting. The runbook's P4 calls the command.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, debate_core.integrations, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/runbooks]
+    forbidden:
+      - Deleting the current index directory or the current pointer
+      - Deleting without a dry run's confirmation code
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e39-t07-removal-audit-and-exposure
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The dry run lists every superseded version and refuses a pointer the listing does
+        not hold; --execute with the code deletes exactly them and refuses if the pointer
+        moved, by tests shown failing first against a stubbed bucket.
+    - id: ac2
+      description: >-
+        The runbook's P4 uses the command, and one dev prune is recorded (operator).
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e39-t15-tub-index-prune-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.7
+    debate/epic: v1-e39-evidence-search-pilot
+spec:
+  description: >-
+    Turn the runbook's prune script into a guarded CLI command.
+  goalRef:
+    name: v1-e39-t15-tub-index-prune
+  graph:
+    nodes:
+      - id: prune
+        kind: Task
+        name: Index prune command
+        description: >-
+          Turn the runbook's prune script into a guarded CLI command.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: tub index tests pass
+            command: uv
+            args: [run, pytest, packages/debate_cli/tests, -k, tub_index]
+status:
+  phase: Pending

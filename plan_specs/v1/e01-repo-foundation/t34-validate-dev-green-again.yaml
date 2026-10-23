@@ -1,0 +1,100 @@
+# TASK v1-e01-t34-validate-dev-green-again - validate-dev is green again, and a red one is seen
+# Epic: E01 Repository & Delivery Foundation | Release: v1.0 (Foundation & verified evidence core) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e01-t34-validate-dev-green-again
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+  annotations:
+    debate/title: "validate-dev is green again, and a red one is seen"
+spec:
+  # Filed by the PM, 2026-10-22, from the validate-dev history of 2026-10-22: 39 failures in a row since the last success, run 39361784846 on 2026-10-20.
+  description: >-
+    validate-dev, the status protect-main requires on a promotion's head commit (v1-e01-t10),
+    has failed on every dev pre-release since 2026-10-20 around 03:00 UTC, and no one saw it:
+    the pull request checks do not include it and nothing reports it. Its install and smoke jobs
+    pass; its offline slow tier fails. On `v1.1.0-dev.102` that was two cases of
+    `tests/scripts/test_affected_tests_planted_breaks.py` and three skips the tier counts as
+    failures. (1) Find the first failing run after `39361784846` and the merge that broke it,
+    and say so. (2) The planted-break checks require a selected test to fail with exit code 1; a
+    break that surfaces as a test error (the file builder's reversed fingerprint) or as a
+    conftest import error at collection (exit 4, `debate_api` failing to import) is caught too.
+    Accept an error and a collection error as caught, and keep the check failing on a break
+    nothing catches. (3) The two SQLite-in-the-Lambda-image tests skip because
+    `public.ecr.aws/lambda/python:3.12` is not on the runner: pull it in the slow tier's job,
+    pinned by digest as the deploy script pins it, so they run. The operator-only timing test
+    (`DEBATE_TUB_SEARCH_INDEX`) is excluded from validate-dev by a marker the tier leaves out,
+    never counted as a skip, so the rule that a skip fails the tier stays. (4) A red
+    validate-dev reaches someone: the PM's and the session's view (`scripts/task ready` and
+    `scripts/task list` print the latest validate-dev result for dev's head) and a GitHub issue
+    or notification, so it cannot fail unseen for days again.
+  priority: 1
+  constraints:
+    packages: [tests/scripts, scripts, .github/workflows, packages/debate_core/tests, pyproject.toml, docs/process]
+    forbidden:
+      - Weakening the rule that a skipped check fails its tier
+      - Marking a failing check slow, live or skipped to make the tier pass
+      - Planted-break checks that pass when nothing catches the break
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e01-t30-test-selection-reach
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        The report names the first failing run and the merge that broke it.
+    - id: ac2
+      description: >-
+        The planted-break checks count an error and a collection error as caught and still
+        fail on an uncaught break, by tests shown failing first.
+    - id: ac3
+      description: >-
+        The slow tier runs the two Lambda-image tests on the runner and leaves the
+        operator-only test out by marker, by the workflow's own test; one validate-dev run
+        on dev after the merge is green (operator).
+    - id: ac4
+      description: >-
+        `scripts/task ready` and `scripts/task list` show dev's latest validate-dev result,
+        and a failure opens or updates a GitHub issue, by test.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e01-t34-validate-dev-green-again-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+spec:
+  description: >-
+    Find what broke validate-dev, fix the planted-break checks and the skips, and make a red
+    result visible.
+  goalRef:
+    name: v1-e01-t34-validate-dev-green-again
+  graph:
+    nodes:
+      - id: green
+        kind: Task
+        name: validate-dev green
+        description: >-
+          Find what broke validate-dev, fix the planted-break checks and the skips, and
+          make a red result visible.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Script tests pass
+            command: uv
+            args: [run, pytest, tests/scripts]
+status:
+  phase: Pending

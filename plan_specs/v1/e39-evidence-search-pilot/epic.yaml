@@ -345,5 +345,43 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e39-t14-index-shrink-guard
+    - id: t15
+      kind: Task
+      name: 'tub index prune: the runbook''s prune of superseded index versions as one command'
+      description: >-
+        tub index prune: the runbook's prune of superseded index versions as one command.
+      inputs:
+        specRef: plan_specs/v1/e39-evidence-search-pilot/t15-tub-index-prune.yaml
+        goalRef: v1-e39-t15-tub-index-prune
+      dependsOn:
+      - t07
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e39-t15-tub-index-prune reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e39-t15-tub-index-prune
+    - id: t16
+      kind: Task
+      name: 'Open on OpenEv: a camp card links to its camp file'
+      description: >-
+        Open on OpenEv: a camp card links to its camp file.
+      inputs:
+        specRef: plan_specs/v1/e39-evidence-search-pilot/t16-open-on-openev.yaml
+        goalRef: v1-e39-t16-open-on-openev
+      dependsOn:
+      - t13
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e39-t16-open-on-openev reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e39-t16-open-on-openev
 status:
   phase: Pending

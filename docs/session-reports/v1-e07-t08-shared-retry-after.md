@@ -204,9 +204,61 @@ v1-e07-t08 PM questions (bundled). The task is complete and every criterion pass
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-22
 
 **Notes:**
+
+Accepted, on three conditions closed in this session before the pull request. The first two
+answer your PM questions 1 and 2 by fixing them here rather than in a follow-up task. Record them
+under "PM conditions", keep the phase `Succeeded`, and open the pull request with no `--partial`.
+If anything comes out differently from what is written here, stop and ask for another review.
+
+**What the PM checked.**
+* The branch is clean, 5 commits on origin/dev at `649fc66`, and the diff is the 12 files listed.
+* There is one reader, and the guard was shown red against both re-added copies.
+* The adapters' existing Retry-After tests are unchanged, proven by `git diff` and, for
+  `test_client.py`, by an AST comparison.
+* The transport's clock is required, with no default, and the composition root passes it.
+
+**Rulings on the PM questions.**
+
+1. **Question 1: (b), now, in this session.** Drop `any_number`, so OpenCaselist reads the
+   seconds form as digits only, as RFC 9110 and the other adapters do. A non-integer header falls
+   back to the transport's doubling backoff.
+   * **Why now:** `Retry-After: nan` hanging the transport forever with its lock held is a defect,
+     not a wait the forbidden entry was protecting. Keeping it to honour "no change to waits" would
+     read the entry against its purpose.
+   * **The record:** no recorded OpenCaselist answer carries a non-integer header, and every
+     existing test sends an integer or a date, so no recorded wait changes. Add above the forbidden
+     entry: `# PM ruling 2026-10-22: OpenCaselist's float() reading of Retry-After is dropped for the
+     digits-only form; "nan" hung the transport, and no recorded answer sends a non-integer.`
+   * **Tests, red first:**
+     * `nan`, `inf`, `1.5`, `-5` and `1e2` on the transport each fall back to its backoff, with no
+       hang (`wait_for`-bounded);
+     * an integer and a date wait exactly as before.
+   * **The existing tests:** the transport's three existing Retry-After tests must still pass
+     unchanged. If one cannot, stop and ask.
+2. **Question 2: (a), now.** A header that `isdigit()` accepts but is not ASCII digits (`²`) is
+   unreadable and gives `None`, never a `ValueError`. Test it red first through
+   `provider_error_for_status` and the fetcher.
+3. **Question 3: (a).** Add `tests/smoke` to `constraints.packages`, with `# PM ruling
+   2026-10-22: the live smoke test builds the client and passes its required clock.`
+
+**Accepted as written.**
+* The reader taking `now: datetime`, read by every caller from its injected clock.
+* The guard as an AST test beside the integrations tests.
+* The pacer's monotonic clock left alone.
+* The harness change to `SimulatedTime`.
+* **The surviving "and calls it" mutant:** only a real adapter can fail that assertion, and the
+  red run showed it failing against the re-added transport copy.
+
+**Condition 3, the sync:** v1-e39-t07 (#407) and the PM batch (#405) merged after your base. Run
+`scripts/task sync`, then re-run:
+* the integrations directory and the always-run list;
+* the guard;
+* pyright, `lint-imports`, ruff and `validate_specs.py`.
+
+Record the results. No operator follow-up.

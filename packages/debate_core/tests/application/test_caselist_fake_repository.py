@@ -17,7 +17,7 @@ from typing import Any, cast
 import pytest
 
 from debate_core.application.errors import Conflict, InvalidCursor, NotFound
-from debate_core.application.ports import CaselistRepository
+from debate_core.application.ports.caselist import CaselistRepository
 from debate_core.domain.caselist import (
     Acquisition,
     ArchiveSnapshot,

@@ -61,7 +61,7 @@ from debate_core.application.errors import (
     NotFound,
     RevisionMismatch,
 )
-from debate_core.application.ports import DEFAULT_PAGE_SIZE, Page
+from debate_core.application.ports.persistence import DEFAULT_PAGE_SIZE, Page
 from debate_core.domain import (
     Article,
     Card,

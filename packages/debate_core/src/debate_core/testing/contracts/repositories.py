@@ -33,7 +33,7 @@ from debate_core.application.errors import (
     NotFound,
     RevisionMismatch,
 )
-from debate_core.application.ports import ArticleRepository, CardRepository, SearchRepository
+from debate_core.application.ports.persistence import ArticleRepository, CardRepository, SearchRepository
 from debate_core.domain import Article, Card, Search, SearchStatus, Ulid
 from debate_core.domain.discovery import ProviderOutcome, ProviderStatus
 from debate_core.testing.builders import (

@@ -51,13 +51,8 @@ from debate_core.application.errors import (
     ProviderTimedOut,
     ProviderUnavailable,
 )
-from debate_core.application.ports.providers import (
-    Clock,
-    ProviderQuery,
-    ProviderResponse,
-    SearchProvider,
-)
-from debate_core.domain.discovery import BreakerState, ProviderHealth
+from debate_core.application.ports.providers import Clock, SearchProvider
+from debate_core.domain.discovery import BreakerState, ProviderHealth, ProviderQuery, ProviderResponse
 from debate_core.integrations.discovery.redaction import logger, protect_logs, redact_exception_chain
 
 __all__ = [

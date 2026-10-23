@@ -28,10 +28,6 @@ from debate_core.application.errors import (
     ProviderUnavailable,
     RevisionMismatch,
 )
-from debate_core.application.ports import (
-    CandidateResult,
-    ProviderQuery,
-)
 from debate_core.domain import (
     ULID_PATTERN,
     AccessStatus,
@@ -45,6 +41,7 @@ from debate_core.domain import (
     SourceSnapshot,
     new_id,
 )
+from debate_core.domain.discovery import CandidateResult, ProviderQuery
 from debate_core.domain.model_contracts import ModelParams, ModelPrompt, ModelProvider, TaskClass
 from debate_core.testing.fakes import (
     FAKE_EPOCH,

@@ -19,8 +19,8 @@ the adapter would change the use case.
 
 **Later tasks finalize two of these contracts.** v1-e07-t01-search-provider-contract finalized
 :class:`SearchProvider`: its values (:class:`ProviderQuery`, :class:`CandidateResult`,
-:class:`ProviderResponse`) now live in :mod:`debate_core.domain.discovery` and are re-exported
-here, and the timeout, circuit breaker and registry every adapter is wrapped in live in
+:class:`ProviderResponse`) now live in :mod:`debate_core.domain.discovery`, which callers import
+them from, and the timeout, circuit breaker and registry every adapter is wrapped in live in
 :mod:`debate_core.integrations.discovery`. v1-e04-t02-http-fetcher and
 v1-e04-t04-content-extraction fill out :class:`FetchResult` and :class:`ExtractedContent`. What is
 here is the shape the application layer codes against in the meantime, and those tasks extend it
@@ -46,21 +46,17 @@ from debate_core.domain import (
     NonEmptyText,
     Ulid,
 )
-from debate_core.domain.discovery import CandidateResult, ProviderHealth, ProviderQuery, ProviderResponse
+from debate_core.domain.discovery import ProviderHealth, ProviderQuery, ProviderResponse
 from debate_core.retrieval.fetch_types import FetchResult
 
 __all__ = [
     "ArticleFetcher",
-    "CandidateResult",
     "Clock",
     "ContentExtractor",
     "DiscoveryProviders",
     "ExtractedContent",
     "ExtractionQuality",
-    "FetchResult",
     "IdGenerator",
-    "ProviderQuery",
-    "ProviderResponse",
     "SearchProvider",
     "SourceMetadataHints",
 ]
@@ -129,8 +125,8 @@ class DiscoveryProviders(Protocol):
 # --------------------------------------------------------------------------------------------
 
 # FetchResult and the errors it carries live in debate_core.retrieval.fetch_types since
-# v1-e04-t02-http-fetcher, beside the access classifier that reads them; FetchResult is re-exported
-# here so the port's signature still names it.
+# v1-e04-t02-http-fetcher, beside the access classifier that reads them. The port's signature names
+# it; callers import it from there (v1-e01-t30).
 
 
 @runtime_checkable

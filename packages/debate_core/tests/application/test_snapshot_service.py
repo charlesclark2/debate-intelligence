@@ -31,7 +31,7 @@ from debate_core.application.errors import (
     SnapshotIntegrityCheck,
     SnapshotIntegrityError,
 )
-from debate_core.application.ports import BlobKey
+from debate_core.application.ports.persistence import BlobKey
 from debate_core.application.snapshot_service import SnapshotService
 from debate_core.domain import AccessStatus, ProvenanceMode, SourceSnapshot
 from debate_core.evidence.normalization import InvalidTextError, NormalizedText, Paragraph, normalize

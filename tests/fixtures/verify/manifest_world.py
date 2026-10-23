@@ -52,7 +52,7 @@ from tests.fixtures.verification.verification_world import (
 )
 
 from debate_core.application.evidence_verifier import EvidenceVerifier
-from debate_core.application.ports import ArticleRepository, SnapshotStore
+from debate_core.application.ports.persistence import ArticleRepository, SnapshotStore
 from debate_core.application.snapshot_service import LoadedSnapshot, SnapshotService
 from debate_core.application.verify_manifest import ManifestVerificationReport, VerifyManifest
 from debate_core.domain import AccessStatus, Card, ProvenanceMode, SpanPurpose

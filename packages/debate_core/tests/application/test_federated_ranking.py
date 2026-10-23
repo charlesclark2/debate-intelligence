@@ -58,7 +58,7 @@ from debate_core.application.federated_ranking_features import (
 )
 from debate_core.application.federated_search import FederatedSearchService
 from debate_core.application.federated_search_types import SearchRequest, SearchState
-from debate_core.application.ports import SearchProvider
+from debate_core.application.ports.providers import SearchProvider
 from debate_core.domain import SearchFilters
 from debate_core.domain.article import ArticleIdentifiers
 from debate_core.domain.discovery import (

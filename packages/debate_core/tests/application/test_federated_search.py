@@ -43,7 +43,8 @@ from debate_core.application.federated_search_types import (
     SearchState,
     StageName,
 )
-from debate_core.application.ports import SearchProvider, SearchRepository
+from debate_core.application.ports.persistence import SearchRepository
+from debate_core.application.ports.providers import SearchProvider
 from debate_core.domain import Search, SearchFilters, SearchResult, SearchStatus
 from debate_core.domain.discovery import (
     CandidateResult,

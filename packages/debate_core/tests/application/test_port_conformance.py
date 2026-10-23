@@ -9,23 +9,25 @@ signature mentions a provider's own types.
 
 from __future__ import annotations
 
+import importlib
 import inspect
 
 import pytest
 
-from debate_core.application import ports
-from debate_core.application.ports import (
-    ArticleFetcher,
+from debate_core.application.ports.evidence_store import EvidenceObjectStore
+from debate_core.application.ports.model_router import ModelRouter
+from debate_core.application.ports.persistence import (
     ArticleRepository,
     CardRepository,
-    Clock,
-    ContentExtractor,
-    EvidenceObjectStore,
-    IdGenerator,
-    ModelRouter,
-    SearchProvider,
     SearchRepository,
     SnapshotStore,
+)
+from debate_core.application.ports.providers import (
+    ArticleFetcher,
+    Clock,
+    ContentExtractor,
+    IdGenerator,
+    SearchProvider,
 )
 from debate_core.testing.fakes import build_fake_ports
 
@@ -92,7 +94,7 @@ FORBIDDEN_IN_A_PORT_MODULE = ("boto3", "botocore", "httpx", "sqlite3", "typer", 
 @pytest.mark.parametrize("module_name", ["persistence", "providers", "caselist", "evidence_store"])
 def test_port_modules_import_nothing_from_a_provider_library(module_name: str) -> None:
     """The rule the ports exist for; v1-e02-t06-import-boundary-guard enforces it repo-wide."""
-    source = inspect.getsource(getattr(ports, module_name))
+    source = inspect.getsource(importlib.import_module(f"debate_core.application.ports.{module_name}"))
     imports = [
         line
         for line in source.splitlines()

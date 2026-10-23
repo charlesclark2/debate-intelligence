@@ -1,7 +1,7 @@
 """The boundaries debate_core talks through.
 
 Every use case in the platform reaches storage, a search provider, the web and a model through the
-Protocols re-exported here, and through nothing else. That is the rule that lets V1 run on SQLite
+Protocols in this package's modules, and through nothing else. That is the rule that lets V1 run on SQLite
 and the local filesystem while V2 runs the same use cases on DynamoDB, S3 and Bedrock
 (architecture proposal §2, §6, §17).
 
@@ -31,111 +31,16 @@ and the local filesystem while V2 runs the same use cases on DynamoDB, S3 and Be
 They are :class:`~typing.Protocol` classes on purpose. An adapter conforms structurally — it never
 subclasses, never imports this package at runtime, and therefore cannot drag a dependency of its
 own back across the boundary. Conformance is checked statically by pyright and, for the fakes in
-:mod:`debate_core.testing.fakes`, at the point where they are assembled into
-:class:`~debate_core.testing.fakes.FakePorts`.
+:mod:`debate_core.testing.fakes`, at the point where each is built as its port (the `build_fake_*`
+functions, and :class:`~debate_core.testing.fakes.all_ports.FakePorts` for the ten every service
+takes).
 
 How a service takes its ports is written up in `docs/architecture/ports-and-adapters.md`, with
 :class:`~debate_core.application.services.article_registration.ArticleRegistrationService` as the
 worked example.
+
+**This module defines and imports nothing** (`v1-e01-t30`). Import a port from the module the table
+names: `from debate_core.application.ports.persistence import CardRepository`. Importing any port
+module runs this file first, so a name re-exported here would make every caller of one port import
+all of them; `tests/architecture/test_fakes_reach_only_their_port.py` keeps it empty.
 """
-
-from debate_core.application.ports.archive import (
-    ArchiveEntry,
-    ArchiveMember,
-    SkippedMember,
-    SkipReason,
-)
-from debate_core.application.ports.card_edit_log import CardEditEntry, CardEditLog
-from debate_core.application.ports.caselist import CaselistRepository
-from debate_core.application.ports.caselist_source import (
-    ArchiveKind,
-    ArchiveListing,
-    CaselistArchiveSource,
-    CaselistInfo,
-    DownloadedFile,
-    OpenEvFile,
-)
-from debate_core.application.ports.debate_files import DebateFileParser
-from debate_core.application.ports.evidence_store import (
-    MAX_OBJECT_KEY_BYTES,
-    OBJECT_KEY_PATTERN,
-    EvidenceObjectStore,
-    ObjectInfo,
-    ObjectKey,
-    validate_object_key,
-)
-from debate_core.application.ports.model_router import ModelRouter, RoutingConfigError
-from debate_core.application.ports.notifier import Notification, Notifier
-from debate_core.application.ports.parsed_store import ParsedStore
-from debate_core.application.ports.persistence import (
-    DEFAULT_PAGE_SIZE,
-    ArticleRepository,
-    BlobKey,
-    CardRepository,
-    Page,
-    SearchRepository,
-    SnapshotStore,
-)
-from debate_core.application.ports.providers import (
-    ArticleFetcher,
-    CandidateResult,
-    Clock,
-    ContentExtractor,
-    DiscoveryProviders,
-    ExtractedContent,
-    ExtractionQuality,
-    FetchResult,
-    IdGenerator,
-    ProviderQuery,
-    ProviderResponse,
-    SearchProvider,
-    SourceMetadataHints,
-)
-
-__all__ = [
-    "DEFAULT_PAGE_SIZE",
-    "MAX_OBJECT_KEY_BYTES",
-    "OBJECT_KEY_PATTERN",
-    "ArchiveEntry",
-    "ArchiveKind",
-    "ArchiveListing",
-    "ArchiveMember",
-    "ArticleFetcher",
-    "ArticleRepository",
-    "BlobKey",
-    "CandidateResult",
-    "CardEditEntry",
-    "CardEditLog",
-    "CardRepository",
-    "CaselistArchiveSource",
-    "CaselistInfo",
-    "CaselistRepository",
-    "Clock",
-    "ContentExtractor",
-    "DebateFileParser",
-    "DiscoveryProviders",
-    "DownloadedFile",
-    "EvidenceObjectStore",
-    "ExtractedContent",
-    "ExtractionQuality",
-    "FetchResult",
-    "IdGenerator",
-    "ModelRouter",
-    "Notification",
-    "Notifier",
-    "ObjectInfo",
-    "ObjectKey",
-    "OpenEvFile",
-    "Page",
-    "ParsedStore",
-    "ProviderQuery",
-    "ProviderResponse",
-    "RoutingConfigError",
-    "SearchProvider",
-    "SearchRepository",
-    "SkipReason",
-    "SkippedMember",
-    "SnapshotStore",
-    "SourceMetadataHints",
-    "validate_object_key",
-]

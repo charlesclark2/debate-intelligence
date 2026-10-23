@@ -12,7 +12,7 @@ import pytest
 from pydantic import SecretStr, ValidationError
 
 from debate_core.application.errors import NotFound, ProviderUnavailable
-from debate_core.application.ports import DiscoveryProviders
+from debate_core.application.ports.providers import DiscoveryProviders
 from debate_core.application.settings import ConfigurationError, ProviderSettings, SearchProviderName
 from debate_core.domain.discovery import BreakerState, ProviderQuery, ProviderResponse
 from debate_core.integrations.discovery.registry import (

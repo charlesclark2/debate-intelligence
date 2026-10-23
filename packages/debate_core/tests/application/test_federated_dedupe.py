@@ -35,7 +35,7 @@ from debate_core.application.federated_dedupe import (
 )
 from debate_core.application.federated_search import FederatedSearchService
 from debate_core.application.federated_search_types import SearchRequest, SearchState
-from debate_core.application.ports import SearchProvider
+from debate_core.application.ports.providers import SearchProvider
 from debate_core.application.settings import SearchProviderName
 from debate_core.domain.article import ArticleIdentifiers
 from debate_core.domain.discovery import CandidateResult, ProviderHealth

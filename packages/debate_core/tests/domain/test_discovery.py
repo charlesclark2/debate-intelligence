@@ -5,8 +5,11 @@ Every expected value here is written out by hand from the input beside it (worki
 
 from __future__ import annotations
 
+import importlib
 import inspect
 import json
+import pkgutil
+import typing
 from datetime import UTC, datetime, timedelta, timezone
 
 import pytest
@@ -399,25 +402,42 @@ def test_the_provider_outcomes_have_stable_values() -> None:
 # --------------------------------------------------------------------------------------------
 
 
-def test_the_port_module_re_exports_the_discovery_values_rather_than_restating_them() -> None:
-    assert providers.CandidateResult is discovery.CandidateResult
-    assert providers.ProviderQuery is discovery.ProviderQuery
-    assert providers.ProviderResponse is discovery.ProviderResponse
-    assert ports.CandidateResult is discovery.CandidateResult
+def test_the_port_names_the_discovery_values_rather_than_restating_them() -> None:
+    """The port's signature is the domain's own classes, and callers import them from the domain.
+
+    Until `v1-e01-t30` the port module and `debate_core.application.ports` re-exported them; now
+    neither does, so a caller cannot reach the values through a port it does not use.
+    """
+    hints = typing.get_type_hints(providers.SearchProvider.search)
+    assert hints["query"] is discovery.ProviderQuery
+    assert hints["return"] is discovery.ProviderResponse
+    assert not {"CandidateResult", "ProviderQuery", "ProviderResponse"} & set(providers.__all__)
 
 
 def test_search_provider_is_the_only_port_that_answers_a_provider_query() -> None:
     """ac1: `SearchProvider.search(ProviderQuery) -> ProviderResponse` is the only discovery port."""
     answering: list[str] = []
-    for name in ports.__all__:
-        port = getattr(ports, name)
-        if not (inspect.isclass(port) and getattr(port, "_is_protocol", False)):
-            continue
+    for name, port in port_protocols():
         for method_name, method in inspect.getmembers(port, inspect.isfunction):
             annotations = " ".join(str(value) for value in inspect.get_annotations(method).values())
             if "ProviderQuery" in annotations or "ProviderResponse" in annotations:
                 answering.append(f"{name}.{method_name}")
     assert answering == ["SearchProvider.search"]
-    signature = inspect.signature(ports.SearchProvider.search)
+    signature = inspect.signature(providers.SearchProvider.search)
     assert list(signature.parameters) == ["self", "query"]
-    assert inspect.iscoroutinefunction(ports.SearchProvider.search)
+    assert inspect.iscoroutinefunction(providers.SearchProvider.search)
+
+
+def port_protocols() -> list[tuple[str, type]]:
+    """Every Protocol class defined in a module of `debate_core.application.ports`, by name."""
+    found: list[tuple[str, type]] = []
+    for module_info in pkgutil.iter_modules(ports.__path__):
+        module = importlib.import_module(f"{ports.__name__}.{module_info.name}")
+        for name, value in vars(module).items():
+            if (
+                inspect.isclass(value)
+                and getattr(value, "_is_protocol", False)
+                and value.__module__ == module.__name__
+            ):
+                found.append((name, value))
+    return sorted(found, key=lambda pair: pair[0])

@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from debate_core.application.errors import BlobIntegrityError, NotFound
-from debate_core.application.ports import BlobKey, SnapshotStore
+from debate_core.application.ports.persistence import BlobKey, SnapshotStore
 from debate_core.integrations.s3 import SHA256_METADATA_NAME, S3SnapshotStore
 from debate_core.testing.contracts import (
     ASYNC_BACKEND,

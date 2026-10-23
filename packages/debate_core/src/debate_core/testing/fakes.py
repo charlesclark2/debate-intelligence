@@ -38,32 +38,10 @@ from debate_core.application.errors import (
     ProviderUnavailable,
     RevisionMismatch,
 )
-from debate_core.application.ports import (
-    DEFAULT_PAGE_SIZE,
-    ArticleFetcher,
-    ArticleRepository,
-    BlobKey,
-    CandidateResult,
-    CardEditEntry,
-    CardEditLog,
-    CardRepository,
-    CaselistRepository,
-    Clock,
-    ContentExtractor,
-    DebateFileParser,
-    ExtractedContent,
-    ExtractionQuality,
-    FetchResult,
-    IdGenerator,
-    ModelRouter,
-    Page,
-    ProviderQuery,
-    ProviderResponse,
-    SearchProvider,
-    SearchRepository,
-    SnapshotStore,
-    SourceMetadataHints,
-)
+from debate_core.application.ports.card_edit_log import CardEditEntry, CardEditLog
+from debate_core.application.ports.caselist import CaselistRepository
+from debate_core.application.ports.debate_files import DebateFileParser
+from debate_core.application.ports.model_router import ModelRouter
 from debate_core.application.ports.parsed_store import (
     DocumentRecord,
     OccurrenceRecord,
@@ -71,6 +49,25 @@ from debate_core.application.ports.parsed_store import (
     ParsedStoreRefusal,
     SourceEntry,
     parse_version_directory,
+)
+from debate_core.application.ports.persistence import (
+    DEFAULT_PAGE_SIZE,
+    ArticleRepository,
+    BlobKey,
+    CardRepository,
+    Page,
+    SearchRepository,
+    SnapshotStore,
+)
+from debate_core.application.ports.providers import (
+    ArticleFetcher,
+    Clock,
+    ContentExtractor,
+    ExtractedContent,
+    ExtractionQuality,
+    IdGenerator,
+    SearchProvider,
+    SourceMetadataHints,
 )
 from debate_core.domain import (
     CROCKFORD_BASE32_ALPHABET,
@@ -91,7 +88,7 @@ from debate_core.domain.caselist import (
     SourceFormat,
 )
 from debate_core.domain.debate_files import ParsedDocument, ParseFailure, ParseFailureReason
-from debate_core.domain.discovery import ProviderStatus
+from debate_core.domain.discovery import CandidateResult, ProviderQuery, ProviderResponse, ProviderStatus
 from debate_core.domain.model_contracts import (
     EmbeddingResponse,
     ModelParams,
@@ -105,6 +102,7 @@ from debate_core.domain.model_contracts import (
     ResolvedRoute,
     TaskClass,
 )
+from debate_core.retrieval.fetch_types import FetchResult
 
 __all__ = [
     "ScriptedModelResponse",

@@ -25,7 +25,7 @@ from tests.fixtures.verification.verification_world import VerificationWorld, ru
 
 from debate_core.application.errors import StoreUnavailable
 from debate_core.application.evidence_verifier import EvidenceVerifier
-from debate_core.application.ports import BlobKey
+from debate_core.application.ports.persistence import BlobKey
 from debate_core.application.snapshot_service import LoadedSnapshot, SnapshotService
 from debate_core.domain import (
     Card,

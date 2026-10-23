@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from debate_core.application.ports import DebateFileParser
+from debate_core.application.ports.debate_files import DebateFileParser
 from debate_core.domain.caselist import SourceDocument, SourceFormat, SourceOrigin
 from debate_core.domain.debate_files import (
     CardCompleteness,

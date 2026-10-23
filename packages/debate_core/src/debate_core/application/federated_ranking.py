@@ -88,7 +88,7 @@ from debate_core.application.federated_ranking_features import (
     source_type_value,
 )
 from debate_core.application.federated_search_types import SearchState
-from debate_core.application.ports import Clock
+from debate_core.application.ports.providers import Clock
 from debate_core.application.settings import ConfigurationError
 from debate_core.domain import DomainModel, SearchFilters, SearchResult, Ulid
 from debate_core.domain.discovery import ProviderOutcome

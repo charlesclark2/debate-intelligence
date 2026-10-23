@@ -19,9 +19,11 @@ no default, and `debate_cli`'s container passes it the container's clock.
 `packages/debate_core/tests/integrations/test_one_retry_after_reader.py` parses every module in the
 package and fails on a second reader. It was shown failing against the transport's old reader and
 the old `http_failures` copy, both re-added. **What to look at first:** the two readers did not agree
-on the seconds form. To keep every wait unchanged (the forbidden entry), the shared reader takes
-`any_number=True` from the transport only. That flag keeps an existing hang on `Retry-After: nan`,
-and the PM questions below ask whether to drop it.
+on the seconds form. OpenCaselist's read it with `float()`, under which `Retry-After: nan` hung the
+transport with its lock held. Under the PM's rulings (see PM conditions), every adapter now reads it
+as ASCII digits only, as RFC 9110 writes it. A non-integer header, or digits from another script
+such as `²`, is unreadable, and the adapter falls back to its own backoff. That closes the `nan` hang
+and a `ValueError` the digits-only form raised on `²`.
 
 ## Plan nodes
 
@@ -86,26 +88,32 @@ and the PM questions below ask whether to drop it.
 
 ## Files changed
 
-* `packages/debate_core/src/debate_core/integrations/retry_after.py` (new): the one reader, with the
-  digits-only seconds form, the `any_number` seconds form, and the date form measured from `now`.
+* `packages/debate_core/src/debate_core/integrations/retry_after.py` (new): the one reader. The
+  seconds form is ASCII digits only (`text.isascii() and text.isdigit()`), and the date form is
+  measured from `now`.
 * `.../integrations/discovery/http_failures.py`: its reader is removed. It imports the shared one and
   still exports the name, because `test_http_failures.py` imports it from there. The header now goes
   straight into the reader (`retry_after_seconds(_header(headers, "retry-after"), now=now)`), which
   the guard requires.
 * `.../integrations/http_fetcher.py`: imports the shared module instead of `http_failures`.
 * `.../integrations/opencaselist/transport.py`: `_retry_after` removed; a required `wall_clock: Clock`
-  is added; the reader is called with `now=self._wall_clock.now(), any_number=True`.
+  is added; the reader is called with `now=self._wall_clock.now()`.
 * `.../integrations/opencaselist/client.py`: `from_settings` takes a required `wall_clock` and passes
   it to the transport.
 * `packages/debate_cli/src/debate_cli/container.py`: one line, `wall_clock=_PortClock(self.clock())`,
   the container's existing clock as the port.
 * Tests: `packages/debate_core/tests/integrations/test_retry_after.py` and
   `test_one_retry_after_reader.py` (new). `opencaselist/test_client.py` gets a wall clock on its
-  `SimulatedTime` harness and two new parametrised tests.
-* `tests/smoke/test_caselist_auth.py`: the live test passes a `WallClock()` (see Deviations).
-* `plan_specs/v1/e07-discovery-adapters/t08-shared-retry-after.yaml`: `debate_cli` added to
-  `constraints.packages` under the PM's `# PM ruling 2026-10-22` comment, which sits above the list so
-  YAML keeps it as a comment; the Goal is set to `Succeeded`.
+  `SimulatedTime` harness and three new tests: the date measured from the injected clock; a
+  non-integer header falling back to the backoff while an integer and a date wait as before; and
+  `nan` not hanging the transport on the real event loop. `discovery/test_http_failures.py` and
+  `test_http_fetcher.py` each gain one test: non-ASCII digits give no wait instead of a
+  `ValueError`.
+* `tests/smoke/test_caselist_auth.py`: the live test passes a `WallClock()`.
+* `plan_specs/v1/e07-discovery-adapters/t08-shared-retry-after.yaml`: `debate_cli` and `tests/smoke`
+  added to `constraints.packages`, and the forbidden entry annotated. Each change sits under the
+  PM's `# PM ruling 2026-10-22` comment, placed above what it annotates so YAML keeps it as a
+  comment. The Goal is set to `Succeeded`.
 
 ## Deviations from the spec
 
@@ -122,19 +130,21 @@ and the PM questions below ask whether to drop it.
 
 ## Decisions and assumptions
 
-* **The shared reader keeps OpenCaselist's seconds form behind `any_number`.** The two readers
-  disagreed. Measured before any change (`scratchpad/probe.py`):
+* **One grammar for the seconds form: ASCII digits only** (the PM's rulings on questions 1 and 2).
+  The two readers disagreed. Measured before any change (`scratchpad/probe.py`):
 
-  | Header | discovery and fetcher | OpenCaselist transport |
-  |---|---|---|
-  | `1.5`, `+5`, `1e2` | `None` (RFC 9110 `delay-seconds` is digits only) | `1.5`, `5.0`, `100.0` |
-  | `-5` | `None` | `0.0` |
-  | `inf` / `nan` | `None` | `inf` / `nan` |
+  | Header | discovery and fetcher | OpenCaselist transport | Now, every adapter |
+  |---|---|---|---|
+  | `1.5`, `+5`, `1e2` | `None` | `1.5`, `5.0`, `100.0` | `None`, so the backoff |
+  | `-5` | `None` | `0.0` | `None` |
+  | `inf` / `nan` | `None` | gave up / hung forever | `None` |
+  | `²` | `ValueError` | `None` | `None` |
+  | `١٢٠` (Arabic-Indic) | `120.0` | `120.0` | `None` |
 
-  Unifying either way would change some adapter's wait, which the forbidden entry and the PM's
-  "same waits" rule rule out. So there is one function with one keyword, `any_number`, which only the
-  transport passes, and its behaviour is pinned by tests on both the reader and the transport. The
-  question of dropping it is asked below.
+  The first review kept the transport's `float()` reading behind a flag, to honour the forbidden
+  entry. The PM ruled the `nan` hang a defect the entry was not protecting, and the flag is gone. No
+  recorded OpenCaselist answer sends a non-integer, and every existing test sends an integer or a
+  date, so no recorded wait changed.
 * **The reader takes `now: datetime`, not a `Clock`,** because `test_http_failures.py` calls
   `retry_after_seconds(header, now=NOW)` and must pass unchanged. Every caller reads `now` from its
   injected `Clock`. The guard's literal rule makes the header value go straight into the reader, so
@@ -161,18 +171,13 @@ None.
 
 ## Follow-up work
 
-* **`Retry-After: nan` hangs the OpenCaselist transport (existing, kept by the forbidden entry).**
-  `float("nan")` gets past the ceiling check (`nan > max` is false), and `asyncio.sleep(nan)` never
-  returns. A 3 s `wait_for` around it timed out. The transport holds its lock throughout. `inf`
-  instead gives up at once, saying the server "asked for infs". Dropping `any_number`, or rejecting
-  non-finite numbers, fixes both.
-* **The digits-only form raises on a Unicode digit `float()` cannot read (existing since
-  `v1-e07-t01`).** `"²".isdigit()` is true and `float("²")` raises `ValueError`. httpx decodes a
-  UTF-8 header to `²`, so a `Retry-After: ²` on a 429 escapes `provider_error_for_status` and the
-  fetcher as a `ValueError` instead of `None`. The fix is one line (`text.isascii() and
-  text.isdigit()`, or catch the `ValueError`). It changes behaviour, so I did not make it.
+None. The two defects this task found, `Retry-After: nan` hanging the OpenCaselist transport and the
+digits-only form raising `ValueError` on `²`, were fixed here under PM conditions 1 and 2.
 
 ### PM questions (paste-ready relay prompt)
+
+Sent with the first review. The PM review answered all three, and the PM conditions section records
+how each was closed.
 
 ```text
 v1-e07-t08 PM questions (bundled). The task is complete and every criterion passes; these decide follow-ups.

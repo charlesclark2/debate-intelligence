@@ -360,9 +360,77 @@ v1-e39-t08 (card download): four questions, each with my recommendation.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED, with conditions closed in-session
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-22
 
 **Notes:**
+
+The download is what the spec and the 2026-10-22 rulings asked for:
+* fail-closed on suppression, the parser check and the audit write;
+* no provenance line and no sidecar sent;
+* both skeletons red, and 21 of 21 mutants caught.
+
+The CSRF gate covers `/download` like every other unsafe method, and
+`test_download_without_the_sessions_csrf_token_is_refused_by_the_gate` pins it. Name that test in
+the ac8 row.
+
+**Rulings on your four questions**
+
+1. **Caps: (a).** 8 cards plus 2,000,000 bytes of sources until the dev timing (Operator
+   follow-up 4) says otherwise. Predictable beats more.
+2. **Packaging: accepted**, with the `docx` extra in the image and the API's own direct lxml
+   contract, as the CLI's was in v1-e31-t06.
+3. **A cite-only card is refused: accepted.** v1-e39-t12's rule C drops those documents from the
+   index, so the case should become rare.
+4. **ADR-0019 (d) and (a) 2:** the PM amends both in the next PM batch. Don't edit the ADR here.
+
+**Deviations 1 to 7 and Decisions 1 to 8 are accepted.**
+
+**Conditions, to close in this session before the PR**
+
+1. **Measure real source sizes before the budget ships.** This is your Follow-up 3, done now.
+   * Read-only on the operator's store, aggregates only, in seconds (working agreement 2).
+   * Per caselist (hsld26, hspf26, hspolicy26, openev): the p50, p95 and maximum source bytes,
+     and the count and share of index documents whose representative's source alone is over
+     2,000,000 bytes. Those cards can never be downloaded under the budget.
+   * Record the numbers in the runbook beside the caps and in Decisions 1. Report the runtime.
+   * **If that share is over 2% in any caselist, stop and bring the numbers to the PM before
+     the PR.** The budget would then be set on data, not left as written.
+2. **A card whose own source is over the budget is refused as that card, with a message that
+   fits it.**
+   * Today it gets `SOURCES_TOO_LARGE`, whose message says to download "a card from a large file
+     on its own". For that card, that cannot work.
+   * Make it a refused-card reason, named by its place like the others, so that *Remove these
+     from the cart and download the rest* still works. The message: "Its file is too large to
+     download. Copy card still works."
+   * A cart refused only because its sources add up past the budget keeps today's message.
+   * Write the tests first and show them failing.
+3. **Fix the stale docstring** in `debate_core.application.ports.evidence_file_writer` (your
+   Follow-up 4). It is one sentence, accepted outside `constraints.packages`.
+4. **Then update the stale parts of this report** (Summary, Deviations, Decisions 1, the ac2 and
+   ac8 rows, Follow-up work). No new review is needed for that.
+
+**The PR.** Open it with `--partial`. ac4 is the operator's after a dev deploy, so the Goal stays
+`InProgress`. v1-e39-t10 depends on this task but waits for the prod promotion anyway. The PM
+records ac4 and the timing and sets the Goal `Succeeded` in a PM batch. If the PR's `ci` shows a
+failure outside the files this branch touches (your Follow-up 5), stop and bring it to the PM.
+
+**Operator follow-ups, after the merge, in this order:**
+* v1-e39-t12's two blocks (its rebuilt index publishes first).
+* Then blocks 1 and 2 here, from this worktree before `scripts/task finish`. The branch already
+  carries v1-e39-t11.
+* Then, in one sitting on dev: v1-e39-t11's four-point check, ac4 here, and step 4's timing.
+  Over 20,000 ms or 1,400 MB, bring the `REPORT` lines to the PM before the pilot opens.
+
+**Follow-up work:**
+* 1 (ADR-0019): the PM batch.
+* 2 (Terraform settings): only if the timing says so.
+* 3: condition 1.
+* 4: condition 3.
+* 5: the PR's `ci`.
+* 6 (pyright on two `tests/architecture` files): added to v1-e01-t31's brief, which is about the
+  repository's own checks.
+
+If anything comes out differently, stop and ask for another review.

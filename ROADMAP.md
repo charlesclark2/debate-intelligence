@@ -61,7 +61,7 @@ v2.3's extension work.
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 44 | 42 | 228 |
-| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 101 | 77 | 484 |
+| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 101 | 78 | 484 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 22 | 7 | 191 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 13 | 2 | 108 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 15 | 6 | 96 |
@@ -271,7 +271,7 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [The wrapper exports no AWS_PROFILE, and --check-launchd refuses options it ignores](plan_specs/v1/e34-caselist-sync/t27-wrapper-and-check-launchd-options.yaml) `v1-e34-t27-wrapper-and-check-launchd-options` | Succeeded | 1 | 1.0 |
 | [Publish-stage loose ends: a cut-short report check, the manifest count, and a report-only outcome](plan_specs/v1/e34-caselist-sync/t28-publish-stage-loose-ends.yaml) `v1-e34-t28-publish-stage-loose-ends` | Pending | 1 | 2.0 |
 | [An older build never rewrites or publishes an occurrence table stamped with a newer fingerprint version](plan_specs/v1/e34-caselist-sync/t29-newer-fingerprint-table-guard.yaml) `v1-e34-t29-newer-fingerprint-table-guard` | Succeeded | 1 | 2.0 |
-| [doctor says when a store the weekly run will index has never been parsed](plan_specs/v1/e34-caselist-sync/t30-doctor-unparsed-store.yaml) `v1-e34-t30-doctor-unparsed-store` | Pending | 0 | 1.0 |
+| [doctor says when a store the weekly run will index has never been parsed](plan_specs/v1/e34-caselist-sync/t30-doctor-unparsed-store.yaml) `v1-e34-t30-doctor-unparsed-store` | Succeeded | 0 | 1.0 |
 
 
 ### v1.2 — Argument landscape & file building

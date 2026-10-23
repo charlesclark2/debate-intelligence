@@ -10,7 +10,8 @@ Both tests are marked slow and stay off the PR's path (working agreement 1).
 * The operator's check (`test_search_timings_on_the_operators_index`): :data:`OPERATOR_QUERIES`, twenty
   generic queries, run read-only against the index named by `DEBATE_TUB_SEARCH_INDEX`. It prints
   timings and result counts and nothing else: no tag, cite, text or provenance. It skips when the
-  variable is not set.
+  variable is not set, and is marked `operator_data`, so validate-dev's slow tier leaves it out
+  rather than counting that skip as a failure (`v1-e01-t34`).
 
 Times are the service's whole call: parsing, the ranked statement, the snippets, the result
 objects and, since `v1-e39-t11`, the result count up to its default cap of 1,000, with no
@@ -281,6 +282,7 @@ def test_search_p95_on_a_synthetic_index_of_250000_documents(tmp_path: Path) -> 
 
 
 @pytest.mark.slow
+@pytest.mark.operator_data
 def test_search_timings_on_the_operators_index() -> None:
     """The operator's read-only check: timings and counts only."""
     named = os.environ.get("DEBATE_TUB_SEARCH_INDEX")

@@ -2,7 +2,8 @@
 # Task lifecycle CLI for the Debate Intelligence Platform.
 #
 #   scripts/task ready [--all]              list tasks whose prerequisites are all Succeeded (on origin/dev),
-#                                           hiding ones already started (a task/<name> branch exists)
+#                                           hiding ones already started (a task/<name> branch exists),
+#                                           after dev's head and its latest validate-dev status
 #   scripts/task start  <task> [--launch vscode|terminal|none] [--no-launch] [--force]
 #                                           worktree + task/<task> branch off origin/dev, mark InProgress,
 #                                           create the session report, open the Claude session with the
@@ -14,7 +15,8 @@
 #                                           venv and write a resumed-task prompt, committing nothing.
 #                                           --dry-run: check and say what it would do, create nothing
 #   scripts/task prompt <task>              print the kickoff prompt again (and copy it to the clipboard)
-#   scripts/task list                       active task worktrees with phase, PM verdict and PR state
+#   scripts/task list                       active task worktrees with phase, PM verdict and PR state,
+#                                           after dev's head and its latest validate-dev status
 #   scripts/task report <task>              print the session report (and copy it to the clipboard)
 #   scripts/task review <task>              commits, diffstat and verdict vs origin/dev (for PM review)
 #   scripts/task sync   <task>              rebase the task branch onto the latest origin/dev
@@ -160,6 +162,20 @@ pr_state() { # <task> -> MERGED|OPEN|CLOSED|NONE|UNKNOWN
   fi
 }
 
+# dev's head and its latest validate-dev status, one line, or two when it is red (v1-e01-t34). It
+# is read with gh from GitHub's combined status for dev; without gh, or when gh or the helper fails,
+# it says unknown, and it never fails the command that prints it.
+print_validate_dev_status() {
+  if ! has gh; then
+    printf 'validate-dev: unknown (gh is not installed)\n'
+    return 0
+  fi
+  local status
+  status="$(cd "$REPO_ROOT" && gh api 'repos/{owner}/{repo}/commits/dev/status' 2>/dev/null)" || status=""
+  printf '%s' "$status" | helper "$REPO_ROOT" validate-dev-status 2>/dev/null \
+    || printf "validate-dev: unknown (gh could not read dev's commit status)\n"
+}
+
 # A failure part-way through start or resume removes what that run created - the worktree (with
 # its .task/ and .venv) and the branch - so a retry starts clean. Both commands refuse before
 # arming this if the worktree or branch already exists, so it never touches one it did not
@@ -228,7 +244,8 @@ cmd_ready() {
               | sed 's#^task/##' | sort -u | tr '\n' ' ' )"
   local rows; rows="$(helper "$tmp" ready)"
   rm -rf "$tmp"
-  printf 'Tasks on origin/dev whose prerequisites are all Succeeded'
+  print_validate_dev_status
+  printf '\nTasks on origin/dev whose prerequisites are all Succeeded'
   [ "$all" -eq 1 ] && printf ' (including started ones)'
   printf ':\n\n'
   printf '%s\n' "$rows" | awk -F '\t' -v started="$started" -v all="$all" '
@@ -423,7 +440,8 @@ cmd_prompt() {
 
 cmd_list() {
   local found=0 path br task
-  printf '%-48s %-11s %-18s %s\n' TASK PHASE PM_VERDICT PR
+  print_validate_dev_status
+  printf '\n%-48s %-11s %-18s %s\n' TASK PHASE PM_VERDICT PR
   while read -r key val; do
     case "$key" in
       worktree) path="$val" ;;
@@ -630,7 +648,7 @@ Refusing to delete them; commit/discard or pass --force."
   info "Done: $task closed out"
 }
 
-usage() { sed -n '2,32p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,34p' "$0" | sed 's/^# \{0,1\}//'; }
 
 cmd="${1:-help}"; [ $# -gt 0 ] && shift
 case "$cmd" in

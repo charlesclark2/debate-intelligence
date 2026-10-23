@@ -83,9 +83,11 @@ green on a commit only when all of these held for that exact commit:
    that tag, channel `dev` and environment `dev`.
 4. The recorded smoke tier in `tests/smoke/` passed against **that installed binary**, offline,
    from a checkout of the same commit, with nothing skipped.
-5. The offline slow tier, `pytest -m "slow and not live and not eval"`, passed from a checkout of
-   the same commit, with nothing skipped. The parser evaluation is left out because its corpus never
-   reaches a runner; it runs on Charlie's Mac before any promotion that changes the parser.
+5. The offline slow tier, `pytest -m "slow and not live and not eval and not operator_data"`,
+   passed from a checkout of the same commit, with nothing skipped. The parser evaluation is left
+   out because its corpus never reaches a runner; it runs on Charlie's Mac before any promotion that
+   changes the parser. A test marked `operator_data` is left out for the same reason: it needs data
+   only Charlie's Mac holds, such as the tub's own search index.
 
 Anything else posts `failure` (or `error`, if the run was cancelled) on the requested commit. The
 status's link is the run, whose log shows the installed version and commit, and its description

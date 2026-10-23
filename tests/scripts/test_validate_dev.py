@@ -35,6 +35,7 @@ class FakeGitHub:
         self.tags = tags or {}
         self.releases = releases or {}
         self.posted: list[tuple[str, str, str, str]] = []
+        self.issues: dict[int, dict[str, object]] = {}
 
     def dev_tags_at(self, sha: str) -> list[str]:
         return [tag for tag, commit in self.tags.items() if commit == sha and driver.DEV_TAG.fullmatch(tag)]
@@ -47,6 +48,29 @@ class FakeGitHub:
 
     def post_status(self, sha: str, state: str, target_url: str, description: str) -> None:
         self.posted.append((sha, state, target_url, description))
+
+    def open_issue(self, label: str) -> int | None:
+        found = [n for n, issue in self.issues.items() if issue["open"] and issue["label"] == label]
+        return min(found) if found else None
+
+    def create_issue(self, title: str, body: str, label: str) -> None:
+        number = max(self.issues, default=0) + 1
+        self.issues[number] = {"title": title, "body": body, "label": label, "open": True, "comments": []}
+
+    def comment_on_issue(self, number: int, body: str) -> None:
+        self.issues[number]["comments"].append(body)  # type: ignore[union-attr]
+
+    def close_issue(self, number: int, comment: str) -> None:
+        self.issues[number]["comments"].append(comment)  # type: ignore[union-attr]
+        self.issues[number]["open"] = False
+
+    def texts(self) -> str:
+        """Every title, body and comment this fake was given, for a test that reads them all."""
+        return "\n".join(
+            str(part)
+            for issue in self.issues.values()
+            for part in (issue["title"], issue["body"], *issue["comments"])  # type: ignore[misc]
+        )
 
 
 def prerelease(tag: str) -> driver.Release:
@@ -255,7 +279,7 @@ def test_a_tier_passes_when_every_selected_test_ran_and_passed() -> None:
     [
         (driver.RECORDED, "not live and not in_process"),
         (driver.LIVE_CANARY, "live and canary"),
-        (driver.SLOW, "slow and not live and not eval"),
+        (driver.SLOW, "slow and not live and not eval and not operator_data"),
     ],
 )
 def test_the_tiers_select_what_the_readme_says(tier: driver.Tier, expression: str) -> None:
@@ -754,4 +778,188 @@ def test_conclude_tells_a_calling_workflow_the_state_and_the_commit_it_is_for(tm
 
     driver.main(command, github=FakeGitHub())
 
-    assert outputs.read_text(encoding="utf-8") == f"state=failure\nstatus_sha={SHA}\n"
+    assert outputs.read_text(encoding="utf-8") == (
+        f"state=failure\nstatus_sha={SHA}\n"
+        f"description=the installed build reports {OTHER_SHA}, not this commit\n"
+    )
+
+
+# --------------------------------------------------------------------------------------------
+# issue: a red validate-dev opens or updates an issue, a green one closes it (v1-e01-t34)
+# --------------------------------------------------------------------------------------------
+
+TAG = "v1.1.0-dev.102"
+
+
+def issue_command(state: str, description: str = "validation failed: slow failure") -> list[str]:
+    return [
+        "issue",
+        "--sha",
+        SHA,
+        "--tag",
+        TAG,
+        "--state",
+        state,
+        "--description",
+        description,
+        "--target-url",
+        RUN_URL,
+    ]
+
+
+def test_a_failure_opens_an_issue_labelled_validate_dev_when_none_is_open() -> None:
+    github = FakeGitHub()
+
+    assert driver.main(issue_command("failure"), github=github) == driver.PASSED
+
+    assert list(github.issues) == [1]
+    issue = github.issues[1]
+    assert issue["title"] == "validate-dev is failing on dev"
+    assert issue["label"] == "validate-dev"
+    assert issue["open"] is True
+    assert str(issue["body"]).startswith(
+        f"validate-dev failed on `{SHA}` (v1.1.0-dev.102): validation failed: slow failure\n\n"
+        f"Run: {RUN_URL}\n\n"
+    )
+    assert "no promotion to main can merge until dev's head validates" in str(issue["body"])
+
+
+def test_a_failure_with_an_issue_open_comments_on_it_instead_of_opening_another() -> None:
+    github = FakeGitHub()
+    driver.main(issue_command("failure"), github=github)
+
+    assert driver.main(issue_command("failure", "validation failed: smoke failure"), github=github) == 0
+
+    assert list(github.issues) == [1]
+    [comment] = github.issues[1]["comments"]  # type: ignore[misc]
+    assert comment.startswith(
+        f"validate-dev failed on `{SHA}` (v1.1.0-dev.102): validation failed: smoke failure"
+    )
+
+
+def test_a_success_closes_the_open_issue_and_says_which_run_was_green() -> None:
+    github = FakeGitHub()
+    driver.main(issue_command("failure"), github=github)
+
+    assert driver.main(issue_command("success", "v1.1.0-dev.102 validated"), github=github) == 0
+
+    assert github.issues[1]["open"] is False
+    assert github.issues[1]["comments"] == [
+        f"validate-dev is green again on `{SHA}` (v1.1.0-dev.102): {RUN_URL}"
+    ]
+
+
+def test_a_success_with_no_issue_open_touches_nothing() -> None:
+    github = FakeGitHub()
+
+    assert driver.main(issue_command("success"), github=github) == driver.PASSED
+
+    assert github.issues == {}
+
+
+def test_a_cancelled_run_leaves_the_issue_as_it_is() -> None:
+    github = FakeGitHub()
+    driver.main(issue_command("failure"), github=github)
+
+    assert driver.main(issue_command("error"), github=github) == driver.PASSED
+
+    assert github.issues[1]["open"] is True
+    assert github.issues[1]["comments"] == []
+
+
+def test_no_token_or_secret_reaches_the_issue_text(monkeypatch: pytest.MonkeyPatch) -> None:
+    sentinel = "ghs_SENTINELSECRET0123456789"
+    for name in (*driver.WITHHELD, "AWS_SECRET_ACCESS_KEY", "DEBATE_OPENCASELIST_PASSWORD"):
+        monkeypatch.setenv(name, sentinel)
+    monkeypatch.setenv("GITHUB_SERVER_URL", "https://github.com")
+    monkeypatch.setenv("GITHUB_REPOSITORY", "charlesclark2/debate-intelligence")
+    monkeypatch.setenv("GITHUB_RUN_ID", "42")
+    github = FakeGitHub()
+    without_url = [part for part in issue_command("failure") if part not in ("--target-url", RUN_URL)]
+
+    driver.main(without_url, github=github)
+    driver.main(without_url, github=github)
+    driver.main([*without_url[:-4], "--state", "success", "--description", "validated"], github=github)
+
+    assert len(github.texts()) > 200
+    assert sentinel not in github.texts()
+    assert RUN_URL in github.texts()
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        ["--sha", "abc123", "--state", "failure", "--description", "d"],
+        ["--sha", SHA, "--tag", "main", "--state", "failure", "--description", "d"],
+    ],
+    ids=["a short sha", "a tag that is not a dev pre-release"],
+)
+def test_the_issue_names_only_a_full_commit_and_a_dev_tag(arguments: list[str]) -> None:
+    github = FakeGitHub()
+
+    assert driver.main(["issue", *arguments, "--target-url", RUN_URL], github=github) == driver.PROBLEM
+
+    assert github.issues == {}
+
+
+def test_gh_lists_open_issues_by_label_and_takes_the_oldest() -> None:
+    runner = RecordingRunner({"gh issue list": done(json.dumps([{"number": 31}, {"number": 12}]))})
+
+    assert driver.GhCli(REPO, runner).open_issue("validate-dev") == 12
+    assert runner.calls == [
+        [
+            "gh",
+            "issue",
+            "list",
+            "--label",
+            "validate-dev",
+            "--state",
+            "open",
+            "--json",
+            "number",
+            "--limit",
+            "100",
+            "--repo",
+            REPO,
+        ]
+    ]
+    assert (
+        driver.GhCli(REPO, RecordingRunner({"gh issue list": done("[]")})).open_issue("validate-dev") is None
+    )
+
+
+def test_gh_creates_the_label_then_the_issue_and_comments_and_closes_by_number() -> None:
+    runner = RecordingRunner({})
+    gh = driver.GhCli(REPO, runner)
+
+    gh.create_issue("validate-dev is failing on dev", "the body", "validate-dev")
+    gh.comment_on_issue(12, "a comment")
+    gh.close_issue(12, "green again")
+
+    assert runner.calls == [
+        ["gh", "label", "create", "validate-dev", "--color", "B60205", "--force", "--repo", REPO],
+        [
+            "gh",
+            "issue",
+            "create",
+            "--title",
+            "validate-dev is failing on dev",
+            "--body",
+            "the body",
+            "--label",
+            "validate-dev",
+            "--repo",
+            REPO,
+        ],
+        ["gh", "issue", "comment", "12", "--body", "a comment", "--repo", REPO],
+        ["gh", "issue", "close", "12", "--comment", "green again", "--repo", REPO],
+    ]
+
+
+def test_a_failing_issue_call_is_a_problem_not_a_silent_pass() -> None:
+    runner = RecordingRunner(
+        {"gh issue create": done(returncode=1, stderr="HTTP 403: Resource not accessible")}
+    )
+
+    with pytest.raises(driver.ValidationProblem, match="HTTP 403"):
+        driver.GhCli(REPO, runner).create_issue("t", "b", "validate-dev")

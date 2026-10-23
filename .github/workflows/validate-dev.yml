@@ -14,17 +14,24 @@
 #             tests/smoke's recorded tier against that installed binary, offline; with `live`, also
 #             the canary tier;
 #   slow      checks out the same commit and runs the offline slow tier from source,
-#             pytest -m "slow and not live and not eval": the suites tasks mark `slow` to keep them
-#             out of the PR `ci` check (working agreement 1). The parser evaluation (`eval`) is left
-#             out because it needs the evaluation corpus, which by policy never reaches a runner, so
-#             here it could only skip, and a skip fails a tier. It runs on the operator's Mac before
-#             any promotion containing a parser change (v1-e31-t05);
+#             pytest -m "slow and not live and not eval and not operator_data": the suites tasks
+#             mark `slow` to keep them out of the PR `ci` check (working agreement 1). The parser
+#             evaluation (`eval`) is left out because it needs the evaluation corpus, which by policy
+#             never reaches a runner, so here it could only skip, and a skip fails a tier. It runs on
+#             the operator's Mac before any promotion containing a parser change (v1-e31-t05).
+#             `operator_data` is left out for the same reason: data only the operator's machine
+#             holds, such as the tub's own search index (v1-e01-t34);
 #             The tier includes the search pages' browser suite (packages/debate_api/tests/browser,
 #             v1-e39-t06), so the job installs Playwright's Chromium first: without it every browser
-#             test errors, and the tier fails (PM ruling 2026-10-21, v1-e39-t06 Q1);
+#             test errors, and the tier fails (PM ruling 2026-10-21, v1-e39-t06 Q1). For the same
+#             reason it pulls the pilot function's arm64 base image, the one scripts/tub_deploy.sh
+#             --print-base-image names, for the SQLite checks that run inside it (v1-e01-t34);
 #   conclude  posts `success` on the commit the installed build reported, only when every job
 #             passed and that commit, and both test trees, are the one requested. Anything else posts
-#             `failure` (`error` if the run was cancelled) on the requested commit.
+#             `failure` (`error` if the run was cancelled) on the requested commit. Then, for a run
+#             from dev that posted the status, a failure opens an issue labelled `validate-dev` or
+#             comments on the open one, and a success closes it: a red validate-dev went unseen for
+#             days from 2026-10-20, because nothing but the status said so (v1-e01-t34).
 #
 # In any tier a skipped test fails the tier: a check skipped for a missing fixture did not run.
 #
@@ -44,10 +51,12 @@
 # The live canary tier runs only with the dispatch input `live: true` or the repository variable
 # VALIDATE_DEV_LIVE set to `true`; it never calls OpenCaselist (tests/smoke/test_live_canary.py).
 #
-# SECURITY. Permissions are contents: read and statuses: write, and nothing else. statuses: write
-# is held only by `resolve` and `conclude`, which run this workflow's own copy of the driver; the
-# jobs that run the validated commit's tests hold contents: read alone, and the driver withholds
-# GH_TOKEN from pytest, so the code under test can neither post its own status nor read the token.
+# SECURITY. Permissions are contents: read, statuses: write and issues: write, and nothing else.
+# statuses: write is held only by `resolve` and `conclude`, and issues: write only by `conclude`,
+# which run this workflow's own copy of the driver; the jobs that run the validated commit's tests
+# hold contents: read alone, and the driver withholds GH_TOKEN from pytest, so the code under test
+# can neither post its own status nor read the token. The issue's text is the commit, the tag,
+# conclude's own description and the run's link, and nothing from the environment.
 # No job is named `validate-dev`: a check run of that name would land on the workflow's own commit,
 # which for a dispatch from dev is dev's head and not necessarily the commit validated.
 
@@ -210,7 +219,23 @@ jobs:
       # tests then run offline, every page served in-process (PM ruling 2026-10-21, v1-e39-t06 Q1).
       - name: Install Playwright's Chromium for the browser tests
         run: uv run --locked playwright install --with-deps chromium
-      - name: Run pytest -m "slow and not live and not eval", offline
+      # Two SQLite checks run inside the pilot function's base image, for linux/arm64 as the function
+      # runs (v1-e39-t02, v1-e39-t03). Without the image on the runner they skip, and a skip fails
+      # the tier, which it did from 2026-10-20 (v1-e01-t34). scripts/tub_deploy.sh names the image
+      # it builds on, from requires-python, so this pulls exactly that; the pull logs the digest it
+      # got, and the inspect the platform. QEMU lets this x86-64 runner run the image's python3.
+      - name: Set up QEMU, so the runner can run the arm64 Lambda image
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+      - name: Pull the Lambda base image scripts/tub_deploy.sh builds on
+        run: |
+          base="$(scripts/tub_deploy.sh --print-base-image)"
+          image="${base% *}"
+          platform="${base#* }"
+          docker pull --platform "$platform" "$image"
+          docker image inspect --format "pulled {{.Os}}/{{.Architecture}} {{.RepoDigests}}" "$image"
+      - name: Run pytest -m "slow and not live and not eval and not operator_data", offline
         id: slow
         run: python3 scripts/validate_dev.py slow --sha "$REQUESTED_SHA" --work-dir "$RUNNER_TEMP/validate-dev-slow"
 
@@ -223,6 +248,7 @@ jobs:
     permissions:
       contents: read
       statuses: write
+      issues: write
     outputs:
       state: ${{ steps.conclude.outputs.state }}
     steps:
@@ -249,6 +275,20 @@ jobs:
           if [ -n "$SLOW_COMMIT" ]; then set -- "$@" --slow-commit "$SLOW_COMMIT"; fi
           if [ "$POST_STATUS" = true ]; then set -- "$@" --post-status; fi
           python3 scripts/validate_dev.py conclude "$@"
+      # Only for dev, and only when this run posted the status: a hotfix head, a tag's release
+      # event or a caller that posts its own status is not dev's verdict. always(), because the
+      # step above exits 1 on a failure, which is exactly when this has to run.
+      - name: Open or update the validate-dev issue on a failure, close it on a success
+        if: always() && steps.conclude.outputs.state != '' && env.POST_STATUS == 'true' && github.ref == 'refs/heads/dev'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.resolve.outputs.tag }}
+          STATE: ${{ steps.conclude.outputs.state }}
+          DESCRIPTION: ${{ steps.conclude.outputs.description }}
+        run: |
+          set -- --sha "$REQUESTED_SHA" --state "$STATE" --description "$DESCRIPTION"
+          if [ -n "$TAG" ]; then set -- "$@" --tag "$TAG"; fi
+          python3 scripts/validate_dev.py issue "$@"
       - name: Summary
         if: always()
         env:

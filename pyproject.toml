@@ -484,6 +484,7 @@ markers = [
     "slow: takes more than a few seconds; excluded by default, opt in with -m slow",
     "live: needs the network or a real model/provider; excluded by default, opt in with -m live",
     "eval: LLM evaluation suite, run outside the PR CI path",
+    "operator_data: needs data only the operator's machine holds; validate-dev's slow tier leaves it out",
     "dev: cloud smoke check targeting the dev environment",
     "prod: cloud smoke check targeting the prod environment",
 ]

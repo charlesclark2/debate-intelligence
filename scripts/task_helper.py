@@ -20,10 +20,13 @@ Every subcommand reads the specs of the checkout it is run from.
   open-items <task>              print the open-item markers in the current session's part of the
                                  session report; exit 1 if there are none
   pr-body <task>                 render the pull request body
+  validate-dev-status            print dev's head and its latest validate-dev status, from GitHub's
+                                 combined status for dev on stdin (`gh api .../commits/dev/status`)
 """
 
 from __future__ import annotations
 
+import json
 import re
 import sys
 from pathlib import Path
@@ -377,6 +380,41 @@ def cmd_prompt_resumed(task: str, worktree: str) -> None:
     print(render_prompt(task, worktree, RESUMED))
 
 
+# protect-main requires validate-dev green on a promotion's head commit. From 2026-10-20 it was red
+# on every dev pre-release for days and nobody saw it, so `scripts/task ready` and `list`, the two
+# views the operator and the PM read most, print it for dev's head (v1-e01-t34).
+VALIDATE_DEV = "validate-dev"
+UNREADABLE_STATUS = "validate-dev: unknown (gh could not read dev's commit status)"
+
+
+def validate_dev_status(document: str) -> str:
+    """What scripts/task prints for dev's head, from GitHub's combined status for `dev`."""
+    try:
+        combined = json.loads(document)
+        sha, statuses = combined["sha"], combined["statuses"]
+    except (ValueError, KeyError, TypeError):
+        return UNREADABLE_STATUS
+    if not isinstance(sha, str) or not isinstance(statuses, list):
+        return UNREADABLE_STATUS
+    head = f"dev {sha[:7]}"
+    found = next((s for s in statuses if isinstance(s, dict) and s.get("context") == VALIDATE_DEV), None)
+    if found is None:
+        return f"validate-dev: none yet on {head} (its pre-release may still be building)"
+    state = found.get("state")
+    if not isinstance(state, str):
+        return UNREADABLE_STATUS
+    line = f"validate-dev: {state} on {head}"
+    if found.get("target_url"):
+        line += f"  {found['target_url']}"
+    if state in ("failure", "error"):
+        line += "\n  No promotion to main can merge until dev's head validates; the run says what failed."
+    return line
+
+
+def cmd_validate_dev_status() -> None:
+    print(validate_dev_status(sys.stdin.read()))
+
+
 def main() -> None:
     a = sys.argv[1:]
     cmds = {
@@ -391,6 +429,7 @@ def main() -> None:
         "verdict-of": (cmd_verdict_of, 1),
         "open-items": (cmd_open_items, 1),
         "pr-body": (cmd_pr_body, 1),
+        "validate-dev-status": (cmd_validate_dev_status, 0),
     }
     if not a or a[0] not in cmds or len(a) - 1 != cmds[a[0]][1]:
         die(__doc__)

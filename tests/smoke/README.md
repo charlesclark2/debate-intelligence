@@ -33,7 +33,7 @@ skip.
 | Tier | Selection | Runs against | When | Network |
 |---|---|---|---|---|
 | **Recorded** | `tests/smoke -m "not live and not in_process"` | the installed pre-release (`DEBATE_SMOKE_BIN`) | every validate-dev run; must finish well inside 5 minutes | none, enforced (below) |
-| **Slow** | `-m "slow and not live and not eval"` over the whole suite | this checkout's source, at the validated commit | every validate-dev run | none: pytest-socket, as in `ci` |
+| **Slow** | `-m "slow and not live and not eval and not operator_data"` over the whole suite | this checkout's source, at the validated commit | every validate-dev run | none: pytest-socket, as in `ci` |
 | **Live canary** | `tests/smoke -m "live and canary"` | the installed pre-release | only when validate-dev is dispatched with `live: true` or the repository variable `VALIDATE_DEV_LIVE` is `true` | a handful of polite calls under the dev budget; **never OpenCaselist** |
 | **In-process** | `-m in_process` | this checkout's source, inside pytest's process | every PR, in `ci` | none |
 
@@ -45,6 +45,11 @@ The slow tier leaves out the **parser evaluation** (`eval`). It needs the evalua
 by policy never reaches a runner, so there it could only skip, and a skip fails the tier. The PM's
 decision (v1-e31-t05) is that the full evaluation runs on the operator's Mac before any promotion
 that contains a parser change.
+
+It also leaves out anything marked **`operator_data`**: a check that needs data only the operator's
+machine holds, such as the search timings over the tub's own index (`DEBATE_TUB_SEARCH_INDEX`). On
+a runner it could only skip, and a skip fails the tier, so it is left out by marker instead
+(v1-e01-t34). Mark such a check `operator_data` as well as `slow`; never leave it to skip.
 
 ## How a smoke check reaches the CLI
 

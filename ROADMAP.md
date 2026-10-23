@@ -60,7 +60,7 @@ v2.3's extension work.
 
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
-| [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 44 | 42 | 228 |
+| [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 44 | 43 | 228 |
 | [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 101 | 79 | 484 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 22 | 7 | 191 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 13 | 2 | 108 |
@@ -121,7 +121,7 @@ Repo, tooling, CI, promotion flow, task tooling, domain core, and deterministic 
 | [The CI test job finishes well inside the five-minute budget](plan_specs/v1/e01-repo-foundation/t27-ci-test-job-within-budget.yaml) `v1-e01-t27-ci-test-job-within-budget` | Succeeded | 1 | 3.0 |
 | [scripts/affected_tests.py prints the tests a branch's changes can break](plan_specs/v1/e01-repo-foundation/t28-affected-test-selection.yaml) `v1-e01-t28-affected-test-selection` | Succeeded | 1 | 4.0 |
 | [debate_core.testing and debate_core.evidence stop importing more than a caller asks for](plan_specs/v1/e01-repo-foundation/t29-slim-package-reexports.yaml) `v1-e01-t29-slim-package-reexports` | Succeeded | 1 | 3.0 |
-| [Tests stop reaching code they do not use: fakes by port, no port re-exports, and a graph option](plan_specs/v1/e01-repo-foundation/t30-test-selection-reach.yaml) `v1-e01-t30-test-selection-reach` | Pending | 1 | 4.0 |
+| [Tests stop reaching code they do not use: fakes by port, no port re-exports, and a graph option](plan_specs/v1/e01-repo-foundation/t30-test-selection-reach.yaml) `v1-e01-t30-test-selection-reach` | Succeeded | 1 | 4.0 |
 | [Repository checks stop flagging true values, and the smoke tests type-check](plan_specs/v1/e01-repo-foundation/t31-repo-check-false-positives.yaml) `v1-e01-t31-repo-check-false-positives` | Pending | 1 | 1.0 |
 
 #### [E02 — Domain Core: Entities, Ports & Local Persistence](plan_specs/v1/e02-domain-core/epic.yaml)

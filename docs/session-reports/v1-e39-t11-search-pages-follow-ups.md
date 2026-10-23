@@ -397,9 +397,52 @@ Record yes or no for each, with the date.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-22
 
 **Notes:**
+
+Accepted with no conditions. Open the pull request with no `--partial`.
+
+**What the PM checked.**
+* The branch is clean, 7 commits on origin/dev at `9949efb`, and the diff is the 27 files listed.
+* ac3 carries the ruling's comment above the item.
+* dev has since gained v1-e34-t28 (#409) and v1-e07-t08 (#411). Neither touches a file this
+  branch changes, and the pull request's `ci` runs on the merge, so no sync is required.
+
+**What is good.**
+* **The count can never disagree with the results.** It shares `_FILTERS` with `MATCH_STATEMENT`,
+  runs in the same lease and under the same budget, and never shows a part-count. Your measurement
+  includes a cap-1 column in the same run, so the count's own cost is visible, and the worst case
+  (524 ms) stays inside the 2-second budget.
+* **The back link is rebuilt from validated values only.** Tampered, stale, foreign-index and
+  outside-pointing cases are all red first, and all 14 mutants are caught. "New search" rather than
+  a misleading "Back to results" is the right call.
+* **The link-out rule is honest about what it knows.** A `fullmatch` on the address's one-word
+  form, and counts measured on the dev index (513 schools, 0 with a space). You say it is not proof
+  and hand the proof to the coach's check.
+* **Stopping on the camp half** rather than widening into the importer was exactly the brief.
+
+**Rulings.**
+
+1. **Deviations 1 and 2 are accepted.** ac3 is amended by ruling A, and the team page is the
+   file's page, since openCaselist gives no file a page of its own.
+2. **Decisions are accepted:**
+   * the cap's range;
+   * every page showing the total;
+   * the unchanged `searched` record;
+   * the card URL holding the query, with no edge log, no access log, and the log tests green;
+   * the link on the representative only.
+3. **Follow-ups.**
+   * "Open on OpenEv" is v1-e39-t16's.
+   * The `docs/data/search-index.md` note on the count statement goes to v1-e39-t13, which rewrites
+     that document for format 2. The PM adds it to that task's brief.
+   * Dev smoke checks stay v1-e39-t10's.
+
+**Operator follow-ups: accepted as written.**
+* The deploy is two blocks, with the ambient-override and running-pull guard. That is working
+  agreement 11, followed.
+* The coach's four-point check carries one stop: if "Open on openCaselist" lands on a not-found
+  page, the school's URL name needs its own column. That comes back to the PM, not to a new branch.

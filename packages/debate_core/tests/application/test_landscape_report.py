@@ -113,6 +113,20 @@ def test_aggregate_answers_never_count_as_reads() -> None:
     )
     # pics-bad is only ever answered (b8), so it is not a position read.
     assert "pics-bad" not in {stats.position_id for stats in report.positions}
+    # b7's answer to nhi-t is in a round on no readable side, where only the role keeps it out.
+    nhi_t = _position(report, "nhi-t")
+    assert (nhi_t.rounds, nhi_t.teams) == (2, 1)
+
+
+def test_aggregate_a_placement_in_a_round_on_the_other_side_answers_the_position() -> None:
+    report = _report()
+    # a6, JJ's affirmative file, has a `Spending DA` block with no AT: marker: the 2AC answering it.
+    spending = _position(report, "spending-da")
+    assert (spending.rounds, spending.aff_rounds, spending.neg_rounds, spending.teams) == (4, 0, 4, 4)
+    assert report.unclassified.other_side_position_rounds == 1
+    assert "31" not in {fingerprint for fingerprint, _ in _top(report, "spending-da")}
+    # A round on no readable side is not the other side: b7 still reads cap-k.
+    assert _position(report, "cap-k").rounds == 3
 
 
 def test_aggregate_below_threshold_and_queued_items_are_unclassified_not_counted() -> None:
@@ -123,12 +137,12 @@ def test_aggregate_below_threshold_and_queued_items_are_unclassified_not_counted
         1,
     )
     summary = report.unclassified
-    assert (summary.cards, summary.unplaced_cards, summary.below_threshold_cards) == (42, 8, 2)
+    assert (summary.cards, summary.unplaced_cards, summary.below_threshold_cards) == (44, 8, 2)
     assert (summary.unclassified_cards, summary.decided_no_position_cards) == (10, 1)
-    assert (report.header.cards, report.header.cards_placed) == (42, 31)
+    assert (report.header.cards, report.header.cards_placed) == (44, 33)
 
 
-@pytest.mark.parametrize(("threshold", "unplaced", "below", "placed"), [(0.95, 8, 10, 23), (0.4, 8, 0, 33)])
+@pytest.mark.parametrize(("threshold", "unplaced", "below", "placed"), [(0.95, 8, 10, 25), (0.4, 8, 0, 35)])
 def test_aggregate_the_report_threshold_decides_what_is_unclassified(
     threshold: float, unplaced: int, below: int, placed: int
 ) -> None:
@@ -151,9 +165,9 @@ def test_aggregate_unclassified_rounds_are_counted_by_side() -> None:
 
 def test_aggregate_disclosures_after_the_snapshot_are_out_of_range() -> None:
     report = _report()
-    # b9 (2026-09-22) reads cap-k and spending-da, and its cards would make 44.
+    # b9 (2026-09-22) reads cap-k and spending-da, and its cards would make 46.
     assert (_position(report, "cap-k").rounds, _position(report, "spending-da").rounds) == (3, 4)
-    assert (report.header.snapshot, report.header.rounds, report.unclassified.cards) == (SECOND, 16, 42)
+    assert (report.header.snapshot, report.header.rounds, report.unclassified.cards) == (SECOND, 16, 44)
 
 
 def test_aggregate_a_round_carried_into_the_next_window_is_one_round_first_seen_in_the_first() -> None:

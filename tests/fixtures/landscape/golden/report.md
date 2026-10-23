@@ -13,7 +13,7 @@ Every count comes from files teams disclosed to the caselist (FILE_IMPORT), not 
 | Coach's overrides | 1789afec01f8e1417460965e050263e11df2d4128ca0ed9604d1643f430639a0 |
 | Parser version | 2026.10.20-docx-6 |
 | Prompt version | none (deterministic classification, no model) |
-| Classification coverage | 31 of 42 cards (73.8%); 15 of 16 rounds (93.8%) |
+| Classification coverage | 33 of 44 cards (75.0%); 15 of 16 rounds (93.8%) |
 | Review threshold | 0.6 |
 | Disclosures counted | 16 rounds by 8 teams: 7 aff rounds by 6 teams, 8 neg rounds by 6 teams |
 | Data freshness | Current: the newest snapshot is 2026-09-15, 2 day(s) old |
@@ -24,7 +24,7 @@ How to read the numbers:
 * **Teams** are distinct teams, on any side.
 * **Share of teams** is the teams that read a position on its own side, over the teams that disclosed on that side through 2026-09-15: 6 on the affirmative, 6 on the negative, and all 8 for a position either side reads.
 * **New** means first disclosed after the previous snapshot.
-* A card under an `AT:` heading answers a position and never counts as reading it.
+* A card under an `AT:` heading answers a position and never counts as reading it, and so does a card placed under a position in a round on the other side: a `Midterms DA` block in an affirmative file is the 2AC answering it.
 * Near-duplicate copies of a card count as one card.
 
 ## Affirmative positions
@@ -169,9 +169,10 @@ Up to 5 cards per position, ranked by the distinct teams reading them under it. 
 
 What this report could not count:
 
-* **Cards:** 10 of 42 (23.8%): 8 waiting in the review queue, 2 placed below the review threshold (0.6).
+* **Cards:** 10 of 44 (22.7%): 8 waiting in the review queue, 2 placed below the review threshold (0.6).
 * **Aff rounds with no identified aff:** 3 of 7 (42.9%).
 * **Neg rounds with no placed negative position:** 1 of 8 (12.5%).
+* Counted as answers, not reads: 1 round that placed a card under a position of the other side, counted once per position.
 * Not counted and not queued: 1 card under headings the coach ruled name no position.
 
 How affirmative rounds were identified:

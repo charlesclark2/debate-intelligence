@@ -168,6 +168,12 @@ class UnclassifiedSummary(DomainModel):
     decided_no_position_cards: int = Field(
         ge=0, description="Cards under headings the coach ruled name no position: not counted, not queued."
     )
+    other_side_position_rounds: int = Field(
+        ge=0,
+        description=(
+            "Rounds that placed a card under a position of the other side: answering it, so not a read."
+        ),
+    )
     aff_rounds: int = Field(ge=0)
     aff_rounds_unidentified: int = Field(ge=0, description="Affirmative rounds with no identified aff.")
     neg_rounds: int = Field(ge=0)

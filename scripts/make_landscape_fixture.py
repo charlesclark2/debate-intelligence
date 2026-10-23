@@ -15,7 +15,7 @@ could not contradict it.
     uv run python scripts/make_landscape_fixture.py
 
 The fixture is small enough to count on paper: 15 sources, 18 disclosure rows, 16 rounds in range
-by 8 teams, 44 cards (42 of them in range). Its README says what each part exercises. Owned by `v1-e32-t03`.
+by 8 teams, 46 cards (44 of them in range). Its README says what each part exercises. Owned by `v1-e32-t03`.
 """
 
 from __future__ import annotations
@@ -189,6 +189,7 @@ CARDS: Final = {
         ),
         FixtureCard(6, "c", "Research funding rises", "Moreau 25", "innovation-advantage", method=_INHERITED),
         _unplaced(13, "Medical debt is rising", "Okoro 26"),
+        FixtureCard(31, "a", "Spending is already high", "Mori 25", "spending-da"),
     ),
     "b1": (
         FixtureCard(14, "a", "Spending triggers a debt spiral", "Ito 26", "spending-da"),
@@ -239,6 +240,7 @@ CARDS: Final = {
     "b7": (
         FixtureCard(18, "b", "Healthcare markets commodify care", "Nadler 21", "cap-k"),
         _unplaced(25, "Off-case overview", "Imai 26"),
+        FixtureCard(32, "a", "We meet their interpretation", "Pryor 24", "nhi-t", role=_ANSWERS),
     ),
     "b8": (
         _unplaced(30, "Case turns", "Soto 25"),

@@ -16,8 +16,11 @@ through `v1-e34-t03`'s staleness hook.
   file whose name gave no tournament or no round is a round of its own, so two such files are never
   merged into one round.
 * **A round reads a position** when one of its files holds a card `v1-e32-t02` placed under that
-  position, READS role, at or above the review threshold. A card that ANSWERS a position (under an
-  `AT:` heading) never counts as reading it. An item below the threshold or nothing placed is
+  position, READS role, at or above the review threshold, and the round is on the position's side or
+  on no readable side. A card that ANSWERS a position (under an `AT:` heading) never counts as
+  reading it, and neither does a placement in a round on the other side: a `Midterms DA` block in an
+  affirmative file is the 2AC answering the DA, whatever its heading lacks. Such rounds are counted
+  apart, as `other_side_position_rounds`. An item below the threshold or nothing placed is
   Unclassified; one the coach ruled names no position is neither counted nor Unclassified.
 * **An affirmative round's aff** comes from `v1-e32-t09`'s assignment when there is one: the
   assigned aff is the round's aff, and an aff a card in that round was placed under does not count
@@ -117,6 +120,8 @@ _KIND_ORDER: Final = {kind: index for index, kind in enumerate(PositionKind)}
 _AFF: Final = "aff"
 _NEG: Final = "neg"
 _LANDSCAPE_SIDE: Final = {Side.AFF: _AFF, Side.PRO: _AFF, Side.NEG: _NEG, Side.CON: _NEG}
+_OPPOSITE: Final = {PositionSide.AFF: _NEG, PositionSide.NEG: _AFF}
+"""The round side on which a placement under a position of this side answers it."""
 
 
 class ReportCannotShip(DomainError):
@@ -292,6 +297,8 @@ class LandscapeReportService:
         """Position id to the rounds reading it."""
         card_reads: defaultdict[str, dict[tuple[str, int], set[str]]] = defaultdict(dict)
         """Position id to each card counted for it, with the rounds it was counted in."""
+        other_side: defaultdict[str, set[str]] = defaultdict(set)
+        """Position id to the rounds on the other side that placed a card under it."""
         cards = unplaced = below = decided = placed = 0
         prompt_versions: set[str] = set()
         for item in inputs.classifications:
@@ -318,8 +325,13 @@ class LandscapeReportService:
             if item.role is not PositionRole.READS:
                 continue
             position = _counted_position(taxonomy, item.position_id)
+            opposite = _OPPOSITE.get(position.side)
+            other_side[position.id] |= {one for one in in_rounds if rounds[one].side == opposite}
             counted = {
-                one for one in in_rounds if position.kind is not PositionKind.AFF or one not in assigned
+                one
+                for one in in_rounds
+                if rounds[one].side != opposite
+                and (position.kind is not PositionKind.AFF or one not in assigned)
             }
             if not counted:
                 continue
@@ -395,6 +407,7 @@ class LandscapeReportService:
                 unplaced_cards=unplaced,
                 below_threshold_cards=below,
                 decided_no_position_cards=decided,
+                other_side_position_rounds=sum(len(found) for found in other_side.values()),
                 aff_rounds=len(aff_rounds),
                 aff_rounds_unidentified=len(aff_rounds) - sum(identified.values()),
                 neg_rounds=len(neg_rounds),

@@ -16,7 +16,7 @@ in the generator (working agreement 6), never by running the report.
 | `taxonomy.yaml` | 14 positions: 2 affs, 2 advantages, 4 DAs, 2 CPs, a K, a T and 2 theory positions read by the aff |
 | `overrides.yaml` | One coach decision: the heading `extra` names no position |
 | `disclosures.jsonl` | 18 E30 disclosure rows over three weekly snapshots, 2026-09-08, 2026-09-15 and 2026-09-22 |
-| `cards.jsonl` | 44 cards of 15 sources, each with its exact fingerprint and E31 cluster |
+| `cards.jsonl` | 46 cards of 15 sources, each with its exact fingerprint and E31 cluster |
 | `classifications.jsonl` | The `v1-e32-t02` classification of each card |
 
 Source digests read at a glance: `a1a1…` is an affirmative file, `b1b1…` a negative one. Cluster
@@ -35,9 +35,14 @@ The report is built through 2026-09-15, with 2026-09-08 as the previous snapshot
 * **Out of range.** `b9` is disclosed on 2026-09-22, after the report's date; its cards (a
   `cap-k` read and a `spending-da` read) must change nothing.
 * **ANSWERS are not reads.** `a1`'s answer to `spending-da`, `b1`'s answer to `costs-advantage`
-  and `b8`'s answer to `pics-bad`, which nobody reads, so `pics-bad` has no row.
+  and `b8`'s answer to `pics-bad`, which nobody reads, so `pics-bad` has no row. Those three are
+  also in rounds on the other side; `b7`'s answer to `nhi-t` is in a round on no readable side, so
+  only its role keeps it from counting.
+* **A placement on the other side.** `a6`, an affirmative file, has a `spending-da` block with no
+  `AT:` marker, which `v1-e32-t02` records as a read. It is the 2AC answering the DA, so the report
+  counts it apart and not as a read.
 * **Below the threshold.** `a2`'s `public-option-aff` and `b3`'s `courts-cp`, placed by tag keyword
-  at 0.5; `courts-cp` has no row. With 8 unplaced cards they make the 10 Unclassified cards.
+  at 0.5; `courts-cp` has no row. With 8 unplaced cards they make the 10 Unclassified cards of the 44 in range.
 * **The coach's decision.** `a5`'s third card is under a heading ruled to name no position: neither
   counted nor Unclassified.
 * **Near-duplicates.** Cluster 2 has four exact fingerprints; one team (`a1`) reads two copies of

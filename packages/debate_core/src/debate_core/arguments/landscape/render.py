@@ -250,7 +250,9 @@ def _header_section(report: LandscapeReport) -> list[str]:
         if header.previous_snapshot
         else "* **New** means first disclosed after the previous snapshot; this is the first, so "
         "nothing is marked new.",
-        "* A card under an `AT:` heading answers a position and never counts as reading it.",
+        "* A card under an `AT:` heading answers a position and never counts as reading it, and so does "
+        "a card placed under a position in a round on the other side: a `Midterms DA` block in an "
+        "affirmative file is the 2AC answering it.",
         "* Near-duplicate copies of a card count as one card.",
         "",
     ]
@@ -345,6 +347,11 @@ def _unclassified_section(report: LandscapeReport) -> list[str]:
         f"* **Neg rounds with no placed negative position:** "
         f"{_of(summary.neg_rounds_unplaced, summary.neg_rounds)}.",
     ]
+    if summary.other_side_position_rounds:
+        lines.append(
+            f"* Counted as answers, not reads: {_count(summary.other_side_position_rounds, 'round')} that "
+            "placed a card under a position of the other side, counted once per position."
+        )
     if summary.decided_no_position_cards:
         lines.append(
             f"* Not counted and not queued: {_count(summary.decided_no_position_cards, 'card')} under "

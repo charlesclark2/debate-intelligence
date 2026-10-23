@@ -374,7 +374,11 @@ before `v1-e34-t30` answers with exit code `2`, and the check says it lacks the 
 
 ## Reinstalling the agent
 
-For a new build, a changed wrapper, or a changed schedule. Nothing here fetches anything, and
+For a new build, a changed wrapper, or a changed schedule.
+
+**The first build carrying `v1-e39-t12`** comes after its by-hand index build and publish, and
+before the agent's next Wednesday run:
+[The first index with the card-only rule](#the-first-index-with-the-card-only-rule-v1-e39-t12-once). Nothing here fetches anything, and
 the two checks are the point of doing it in this order: the first finds a profile the AWS config
 does not define before the agent is replaced, and the second finds it as launchd will meet it.
 
@@ -1295,6 +1299,12 @@ Bring either to the PM.
 `gzip_bytes_growth`, negative for a shrink. A run that kept the index `current.json` already names
 records none. `jq '.search_index'` over the week's summaries gives the series for ADR-0019's sizing.
 
+**What a build left out as no card** (`v1-e39-t12`): a run that built adds `N left out as no card (A
+cite only, B with no cite and under 25 words)` to the reason, and the summary's `search_index` has
+`not_cards_by_store`, each store's `cite_only` and `no_cite_few_words`. A run that kept the newest
+index records `null`: the count is the build's, not the manifest's. See
+[The first index with the card-only rule](#the-first-index-with-the-card-only-rule-v1-e39-t12-once).
+
 ### The shrink guard
 
 Since `v1-e39-t14`, `tub index publish` and this stage refuse, before uploading anything and with
@@ -1339,6 +1349,104 @@ whose last row is `reports/tub/search/current.json`. A refusal that says `aggreg
 occurrence rows` is the empty-store rule, which no reason passes. In prod, the same with
 `debate-prod-evidence`, `DEBATE_ENV=prod`, `--env prod` and `--confirm-prod`, from the data
 directory of [One data directory for each bucket](#one-data-directory-for-each-bucket).
+
+### The first index with the card-only rule (`v1-e39-t12`), once
+
+From `v1-e39-t12` on, a build leaves out every entry that is no card: CITE_ONLY, or no cite and
+fewer than 25 words of text ([the rule](../data/search-index.md#only-real-cards)). The index dev
+serves was built without it. A weekly run that finds the stores unchanged keeps the newest index
+whatever rule built it, since the manifest does not record the rule. So the first index with the
+rule is built and published by hand, in two blocks, after `v1-e39-t12` merges into `dev`.
+
+**Do this before the agent is reinstalled with a build carrying `v1-e39-t12`, and reinstall it
+before its next Wednesday run.** Before: so that the first shrink is read by a person, store by
+store, rather than met by an unattended run. Reinstall soon after: until it is reinstalled, the agent
+runs its older build, and the first week the stores change it rebuilds without the rule and
+publishes the non-cards back. Reinstall as [Reinstalling the agent](#reinstalling-the-agent) says.
+
+The expected drop, from the counts over the dev index of 2026-10-22 (52,059 documents): 1,625
+documents in all, at most 3.9% of a store (hsld26 511, hspf26 393, hspolicy26 634, openev 87). The
+shrink guard refuses below 90%, so it should pass without `--allow-shrink`, and this runbook never
+gives it one here.
+
+The first block builds the index of the stores the published index holds and compares it, store by
+store, with that index. It changes nothing in the bucket. It writes one index directory under
+`~/.debate-research/dev/tub-index`, which becomes the newest there.
+
+**Operator command** (expected runtime about 5 minutes: a full build, which reads every
+representative's source twice)
+Where: your Mac, at the root of a checkout of `dev` at or after the merge of `v1-e39-t12`, after
+`uv sync --all-packages`
+```bash
+OVERRIDES=$(env | grep '^DEBATE_' | cut -d= -f1 | tr '\n' ' ')
+PULL=$(pgrep -fl 'debate-research( --json)? caselist pull')
+echo "running pull: ${PULL:-none}"
+echo "DEBATE_ overrides: ${OVERRIDES:-none}"
+if [[ -n "$PULL" || -n "$OVERRIDES" ]]; then
+  echo "STOP: the line above that is not none says why. Wait for the pull to finish, or open a new window."
+else
+  aws sso login --profile debate-dev-evidence
+  BUCKET=$(python3 -c 'import tomllib; print(tomllib.load(open("config/profiles/dev.toml", "rb"))["storage"]["s3"]["bucket"])')
+  CARD_ONLY=$(mktemp -d)
+  aws s3 cp "s3://${BUCKET}/reports/tub/search/current.json" "${CARD_ONLY}/current.json" --profile debate-dev-evidence
+  MANIFEST_KEY=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["manifest_key"])' "${CARD_ONLY}/current.json")
+  aws s3 cp "s3://${BUCKET}/${MANIFEST_KEY}" "${CARD_ONLY}/current-manifest.json" --profile debate-dev-evidence
+  STORES=$(python3 -c 'import json, sys; print(" ".join("--caselist " + one["caselist"] for one in json.load(open(sys.argv[1]))["stores"]))' "${CARD_ONLY}/current-manifest.json")
+  echo "building: ${STORES}"
+  DEBATE_ENV=dev uv run debate-research --json tub index build ${=STORES} > "${CARD_ONLY}/build.json"
+  python3 - "${CARD_ONLY}/current-manifest.json" "${CARD_ONLY}/build.json" <<'EOF'
+import json, sys
+current = json.load(open(sys.argv[1]))
+envelope = json.load(open(sys.argv[2]))
+if not envelope.get("data"):
+    print("STOP: the build failed:", (envelope.get("error") or {}).get("code"))
+    raise SystemExit(1)
+built = envelope["data"]
+before = current["counts"]["documents_by_store"]
+after = built["manifest"]["counts"]["documents_by_store"]
+left = built["not_cards_by_store"]
+print("current index", current["index_id"], current["counts"]["documents"], "documents")
+print("new index", built["manifest"]["index_id"], built["manifest"]["counts"]["documents"], "documents")
+stop = False
+for store in sorted(set(before) | set(after)):
+    was, now = before.get(store, 0), after.get(store, 0)
+    share = 100 * now / was if was else 100.0
+    out = left.get(store, {})
+    print(f"{store}: {was:,} -> {now:,} documents ({share:.1f}%); left out as no card: "
+          f"{out.get('cite_only', 0):,} cite only, {out.get('no_cite_few_words', 0):,} with no cite and under 25 words")
+    stop = stop or now == 0 or share < 90
+print("STOP: a store is empty or under 90% of the current index" if stop else "OK: every store keeps 90% or more")
+EOF
+fi
+```
+Success looks like `current index <id>`, `new index <id>`, one line per store with a share of about
+96% or more, and `OK: every store keeps 90% or more`. Each store's "left out as no card" should be
+near the counts above, a little higher if the store has grown since 2026-10-22. **Stop, and take the
+output to the PM**, on a `STOP` line, on a store whose share is under 95%, or on counts far from
+those above: the rule is not doing what was counted. Nothing has been published.
+
+The second block publishes the newest index, the one the first block built, with no `--allow-shrink`.
+
+**Operator command** (expected runtime under a minute)
+Where: the same checkout
+```bash
+OVERRIDES=$(env | grep '^DEBATE_' | cut -d= -f1 | tr '\n' ' ')
+PULL=$(pgrep -fl 'debate-research( --json)? caselist pull')
+echo "running pull: ${PULL:-none}"
+echo "DEBATE_ overrides: ${OVERRIDES:-none}"
+if [[ -n "$PULL" || -n "$OVERRIDES" ]]; then
+  echo "STOP: the line above that is not none says why. Wait for the pull to finish, or open a new window."
+else
+  aws sso login --profile debate-dev-evidence
+  DEBATE_ENV=dev uv run debate-research tub index publish --env dev --newest
+fi
+```
+Success looks like a table titled with the new index id the first block printed, whose last row is
+`reports/tub/search/current.json`. **If it is refused** with `would shrink the published search
+index`, stop and take the refusal to the PM: do not publish past the guard. Then record the current
+and new index ids and document counts, total and per store, in
+[the pilot's record](../data/evidence-search-pilot.md#the-card-only-rule-v1-e39-t12), and reinstall
+the agent.
 
 ### Publishing a pending index by hand
 

@@ -47,8 +47,6 @@ revised: 2026-10-23
 # The words around the results. House style: no em dashes, and no acronym left unexplained.
 labels:
   seasonTitle: Results from the {season} season
-  seasonIntro: >-
-    Newest tournament first. Each result says the event, the division and the placing.
   revised: Results last updated
   empty: No results have been posted for this season yet.
   # Who a team-level result names: nobody. Written as the page prints it, after the placing.

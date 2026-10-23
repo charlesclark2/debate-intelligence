@@ -301,3 +301,110 @@ the reference, is closed by condition 1.
 task. The rollover is ruling 4.
 
 If anything comes out differently, stop and ask for another review.
+
+## Resumed 2026-10-23: the coach's copy changes from the dev preview
+
+| | |
+|---|---|
+| Session status | PARTIAL: the copy changes are done and checked; ac5's publication through dev and prod is still open |
+| Resumed with | `scripts/task resume v1-e37-t06-season-results --launch none`, after `finish --partial` |
+
+### Summary
+
+The first merge was deployed to the dev preview (`bcafa7e`). The operator's dry run was clean, and
+`site_smoke.py --env dev` passed 38 of 38 checks, `/results/` at 200 among them. Reading it on a
+phone, the coach asked for three changes, all made in this session:
+
+1. **The page's opening paragraph** no longer explains the page. It now reads as he chose from
+   three drafts: "Our debaters compete all season long, and we're proud of every result they bring
+   home. Here's where we share their success as the year goes on." The links to the events and
+   schedule pages went with the old paragraph.
+2. **The correction line** ("To correct a result, or to have one taken down, email Coach
+   Clark...") is removed, at his choice.
+3. **"Newest tournament first. Each result says the event, the division and the placing."** is
+   gone from under "Results from the 2026-27 season", and its label (`seasonIntro`) is gone from
+   `site/content/results.yaml`, the schema in `site/src/lib/results.ts` and the page.
+
+The Goal stays **InProgress**: nothing in this session closes ac5's publication.
+
+### Acceptance criteria touched
+
+| Criterion | Status | Evidence (command → result) |
+|---|---|---|
+| ac1 (the page with fixture content, the home band, the navigation, no WCAG 2.1 AA violation) | PASS | `pnpm --dir site exec vitest run tests/results.test.tsx` → `67 passed`. New test: "opens the season band straight into the results, with no intro paragraph under its title". **Red run** against the previous page, schema and content (`git show HEAD~1:` of the three files): `1 failed`, `expected <p class="section__intro"></p> to be null`; the files were restored with `git checkout`. The em-dash and acronym tests now edit the `empty` label, since the one they edited is gone |
+| ac5: `lint`, `typecheck`, `test` and `build` pass offline | PASS | `site/scripts/pre-commit-checks.sh` in full (23 s, exit 0): `Test Files 25 passed (25) / Tests 905 passed (905)`, the dev build with no publishing-policy finding, export checks `Test Files 12 passed (12) / Tests 102 passed (102)`. `SITE_ENV=prod SITE_URL=https://wfbdebate.com pnpm --dir site build` → exit 0, no publishing-policy finding |
+| ac5: the coach's first result is published through dev and then prod with his consent reference in the manifest | **NOT RUN** | On the dev preview since `bcafa7e`, in the wording before this session. The reworded page reaches dev after this branch merges (follow-up 1 below), and prod after the next promotion (follow-up 4 of the first session, the `curl` count of 2) |
+
+**Repository checks:**
+
+| Command | Result |
+|---|---|
+| `uv run scripts/affected_tests.py` | 51 files, none of them changed by this session (only `site/` changed) |
+| `.venv/bin/python -m pytest -n auto -m "not slow and not live" <those 51 files>`, under `perl -e 'alarm 115'` | Stopped by the limit with load average 9; the `OSError: cannot send` at the end is xdist's teardown after the alarm, not a failure. Left to the pull request's `ci` (agreement 10). No orphaned pytest process afterwards |
+| always-run list: `pytest -n auto tests/architecture tests/specs packages/debate_cli/tests/test_app.py` | `279 passed in 5.84s` |
+| `uv run --frozen ruff check .` | `All checks passed!` |
+| `uv run --frozen lint-imports` | `Contracts: 16 kept, 0 broken.` |
+| `uv run --frozen python scripts/validate_specs.py` | `OK: 431 files, 40 epics, 369 tasks, 22 releases` |
+
+### Files changed
+
+- `site/content/pages/results.md`: the new opening paragraph, and nothing else in the body.
+- `site/content/results.yaml`, `site/src/lib/results.ts`, `site/src/app/results/page.tsx`: the
+  `seasonIntro` label removed.
+- `site/tests/results.test.tsx`: the new test, the copy list, and the two tests that edited the
+  removed label.
+
+### Deviations from the spec
+
+None.
+
+### Decisions and assumptions
+
+- **Removing the correction line leaves the removal path intact.** The policy's route for a
+  correction or a takedown is an email to Charlie, and the Contact page in every page's footer
+  carries his address. Pre-publication checklist item 15 (everything about a person can be taken
+  down by a content edit) is unaffected. The coach guide still tells coaches how to take a result
+  down.
+- **The page's description** (its search-result and link-preview text) is unchanged. It is not on
+  the page, and it describes the page to someone who has not opened it.
+
+### Operator follow-ups
+
+1. **After this branch merges, redeploy the dev preview and read `/results/` again on a phone**:
+   the first session's follow-up 1, both blocks, unchanged. The opening paragraph is the new one,
+   no correction line follows it, and "Results from the 2026-27 season" goes straight to the Fort
+   Atkinson card.
+2. **The browser QA run** on that build: the first session's follow-up 2, unchanged. It was held
+   until now so that it measures the final copy.
+3. **Prod**: the first session's follow-up 4, after the next promotion.
+
+### Follow-up work
+
+None new.
+
+## PM review
+
+<!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
+this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
+
+**Verdict:** ACCEPTED
+<!-- ACCEPTED / CHANGES_REQUESTED -->
+
+**Reviewed by / date:** PM, 2026-10-23
+
+**Notes:**
+
+1. **The coach's three copy changes are accepted as made.** They are the new opening paragraph, the
+   correction line removed, and `seasonIntro` removed from the content, the schema and the page.
+   The red run and the single new test are proportionate.
+2. **Removing the correction line is within the policy.** The policy's route for a removal request
+   is the Contact page (Removal on request), which every page's footer links to, and a takedown is
+   still a content edit. The coach guide keeps the takedown steps.
+3. **The consent reference in the first review's example.** It is opaque without the coach's own
+   records, which is the policy's design, so nothing about the student is exposed by it. A review
+   is never edited, and no change is needed.
+
+**The PR:** open it with `scripts/task pr --partial`, as before. ac5's prod half still follows the
+next promotion, and the PM records it from the `curl` count of 2. After this merge, the operator
+runs the first session's follow-up 1 (dev preview) and follow-up 2 (the browser QA run, now on the
+final copy), and pastes the QA table to the PM.

@@ -158,7 +158,6 @@ export type ResultEntry = z.infer<typeof resultEntrySchema>
 const labelsSchema = z
   .object({
     seasonTitle: text,
-    seasonIntro: text,
     revised: text,
     empty: text,
     individual: text,
@@ -585,7 +584,6 @@ export function loadResultsView(contentDirectory: string = defaultContentDirecto
 function labelStrings(labels: ResultsLabels): string[] {
   return [
     labels.seasonTitle,
-    labels.seasonIntro,
     labels.revised,
     labels.empty,
     labels.individual,

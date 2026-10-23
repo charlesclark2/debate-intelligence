@@ -46,6 +46,7 @@ from debate_core.domain.evidence_search import (
 from debate_core.domain.file_provenance import formatting_sha256
 from debate_core.domain.search_card_html import render_card_html
 from debate_core.domain.search_index import (
+    SEARCH_INDEX_FORMAT_VERSION,
     IndexedFontSizeSpan,
     IndexedFormattingSpan,
     read_aloud_text,
@@ -708,6 +709,7 @@ class InterruptedAfterAFullBatch:
     """A reader whose one batch holds a whole page and the next hit, and was stopped by the budget anyway."""
 
     index_id = INDEX_ID
+    format_version = SEARCH_INDEX_FORMAT_VERSION
 
     def __init__(self, hits: Sequence[StoredHit]) -> None:
         self.hits = tuple(hits)

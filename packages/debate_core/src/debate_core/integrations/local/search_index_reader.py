@@ -2,24 +2,38 @@
 
 :class:`SqliteSearchIndexReader` is the :class:`~debate_core.application.ports.search_index_reader.
 SearchIndexReader` the function's composition root wires (`v1-e39-t06`). It opens one `v1-e39-t02`
-index file read-only and immutable, refuses a file whose application id or format version it does not
-know, and runs four statements and nothing else: :data:`MATCH_STATEMENT`, :data:`COUNT_STATEMENT`,
-:data:`DOCUMENT_STATEMENT` and :data:`OCCURRENCES_STATEMENT`. What they mean is decided by
-:class:`~debate_core.application.evidence_search.EvidenceSearchService`; every value a student typed
-reaches them as a bound parameter.
+index file read-only and immutable, refuses a file whose application id or format version it
+does not read, and runs six statements and nothing else: :data:`MATCH_STATEMENT`,
+:data:`COUNT_STATEMENT`, their passage forms :data:`PASSAGE_MATCH_STATEMENT` and
+:data:`PASSAGE_COUNT_STATEMENT`, :data:`DOCUMENT_STATEMENT` and :data:`OCCURRENCES_STATEMENT`. What
+they mean is decided by :class:`~debate_core.application.evidence_search.EvidenceSearchService`; every
+value a student typed reaches them as a bound parameter.
 
 ## SQLite 3.40.0's features and no newer
 
 The function's Lambda image runs SQLite 3.40.0 (ADR-0019 (c) 1), so the reader uses only what that
 version has: a read-only, immutable URI open (`mode=ro&immutable=1`, years older than 3.40.0),
 `PRAGMA application_id` and `user_version` reads, FTS5's `MATCH`, its per-query
-`rank MATCH 'bm25(...)'` with column weights, `snippet()`, and `instr()`. No JSON function: a
+`rank MATCH 'bm25(...)'` with column weights, `snippet()`, and `instr()`; for a passage, a recursive
+common table expression (3.8.3) with `substr()`, `GROUP BY` and `HAVING`. No JSON function: a
 document's sides are decoded in Python. The time budget is `sqlite3_progress_handler`, in SQLite
 since 3.0: the handler asks the search whether its budget is
 spent every :data:`PROGRESS_INSTRUCTIONS` virtual-machine instructions and stops the statement when it
 is. :data:`READER_STATEMENTS` lists every statement the reader sends; a test in every run traces the
 reader against a hand-written list of their shapes, and a slow test replays the traced statements in
 the Lambda image's own SQLite.
+
+## A passage: the documents holding enough of its words (`v1-e39-t13`)
+
+A passage is an OR of its words, ranked by the same weighted BM25, kept to the documents that match
+at least :attr:`~debate_core.application.ports.search_index_reader.MatchRequest.minimum_shared` of
+them. FTS5 has no such operator, so :data:`_SHARED_WORDS` counts it: it splits the bound `:words`
+(each word an FTS5 phrase the parser wrote, each ended by :data:`_PASSAGE_WORD_SEPARATOR`) into rows,
+matches each against `search`, and keeps the doc ids found by enough of them. The ranked statement
+then lets FTS5 sort every OR match itself and keeps those ids, with `+d.doc_id IN shared`: the `+`
+stops SQLite from driving FTS5 one candidate rowid at a time, which recomputes BM25's statistics for
+each candidate and took 1.2 s against 35 ms on the dev store's measurement index (the `v1-e39-t13`
+session report has the plans and times). Two words with one stem (`grow`, `growing`) each count.
 
 ## Nothing to match a person by
 
@@ -56,7 +70,7 @@ from debate_core.domain.evidence_search import (
     SearchFilters,
 )
 from debate_core.domain.search_index import (
-    SEARCH_INDEX_FORMAT_VERSION,
+    READABLE_SEARCH_INDEX_FORMAT_VERSIONS,
     decode_font_size_spans,
     decode_formatting_spans,
 )
@@ -67,6 +81,8 @@ __all__ = [
     "DOCUMENT_STATEMENT",
     "MATCH_STATEMENT",
     "OCCURRENCES_STATEMENT",
+    "PASSAGE_COUNT_STATEMENT",
+    "PASSAGE_MATCH_STATEMENT",
     "PROGRESS_INSTRUCTIONS",
     "READER_STATEMENTS",
     "SqliteSearchIndexReader",
@@ -113,10 +129,14 @@ _REPRESENTATIVE_JOIN: Final = (
     " JOIN occurrences AS o ON o.doc_id = d.doc_id AND o.ordinal = 0"
 )
 
-MATCH_STATEMENT: Final = (
+_MATCH_COLUMNS: Final = (
     "SELECT d.doc_id, d.caselist, d.cluster_id, d.event, d.camp, d.tag, d.short_cite, "
     "snippet(search, 3, :open, :close, :ellipsis, :tokens), d.file_count, d.team_count, "
     + ", ".join(f"o.{column}" for column in _OCCURRENCE_COLUMNS)
+)
+
+MATCH_STATEMENT: Final = (
+    _MATCH_COLUMNS
     + _REPRESENTATIVE_JOIN
     + " WHERE search MATCH :expression AND rank MATCH :rank"
     + _FILTERS
@@ -141,6 +161,43 @@ representative's digests, which is all a count needs to ask the suppression list
 for, so FTS5 neither scores nor sorts: it walks its matches in rowid order and the statement stops
 at the limit."""
 
+_PASSAGE_WORD_SEPARATOR: Final = "\x1f"
+"""What ends each of a passage's words in `:words`. The parser turns every control character a student
+typed into a space, so no word holds one."""
+
+_SHARED_WORDS: Final = (
+    "WITH RECURSIVE words (word, rest) AS ("
+    "SELECT NULL, :words"
+    " UNION ALL "
+    "SELECT substr(rest, 1, instr(rest, :separator) - 1), substr(rest, instr(rest, :separator) + 1)"
+    " FROM words WHERE rest <> ''"
+    "), shared (doc_id) AS ("
+    "SELECT search.rowid FROM words JOIN search ON search MATCH words.word"
+    " WHERE words.word IS NOT NULL GROUP BY search.rowid HAVING count(*) >= :minimum"
+    ") "
+)
+"""The doc ids matched by at least `:minimum` of a passage's words, as the table `shared`."""
+
+PASSAGE_MATCH_STATEMENT: Final = (
+    _SHARED_WORDS
+    + _MATCH_COLUMNS
+    + _REPRESENTATIVE_JOIN
+    + " WHERE search MATCH :expression AND rank MATCH :rank AND +d.doc_id IN shared"
+    + _FILTERS
+    + " ORDER BY rank LIMIT :limit OFFSET :offset"
+)
+"""One window of a passage's ranking: :data:`MATCH_STATEMENT` kept to the documents in `shared`."""
+
+PASSAGE_COUNT_STATEMENT: Final = (
+    _SHARED_WORDS
+    + "SELECT d.doc_id, o.source_sha256, o.disclosure"
+    + _REPRESENTATIVE_JOIN
+    + " WHERE search MATCH :expression AND search.rowid > :after AND +d.doc_id IN shared"
+    + _FILTERS
+    + " ORDER BY search.rowid LIMIT :limit"
+)
+"""One batch of a passage's count: :data:`COUNT_STATEMENT` kept to the documents in `shared`."""
+
 DOCUMENT_STATEMENT: Final = (
     "SELECT doc_id, caselist, cluster_id, event, camp, tag, cite, short_cite, read_aloud, text, "
     "completeness, formatting_spans, font_size_spans, sides, first_seen, last_seen, file_count, "
@@ -164,6 +221,8 @@ READER_STATEMENTS: Final = (
     *_OPEN_CHECKS,
     MATCH_STATEMENT,
     COUNT_STATEMENT,
+    PASSAGE_MATCH_STATEMENT,
+    PASSAGE_COUNT_STATEMENT,
     DOCUMENT_STATEMENT,
     OCCURRENCES_STATEMENT,
 )
@@ -232,6 +291,17 @@ def _filter_parameters(filters: SearchFilters) -> dict[str, object]:
     }
 
 
+def _passage_parameters(words: tuple[str, ...], minimum: int) -> dict[str, object]:
+    """:data:`_SHARED_WORDS`' parameters: the words, each ended by the separator, and the minimum."""
+    if any(_PASSAGE_WORD_SEPARATOR in word for word in words):
+        raise ValueError("a passage's word holds the separator, which the parser never writes")
+    return {
+        "words": "".join(word + _PASSAGE_WORD_SEPARATOR for word in words),
+        "separator": _PASSAGE_WORD_SEPARATOR,
+        "minimum": minimum,
+    }
+
+
 def _sides(stored: str) -> tuple[str, ...]:
     parsed: object = json.loads(stored)
     if not isinstance(parsed, list) or not all(isinstance(one, str) for one in cast(list[object], parsed)):
@@ -256,11 +326,11 @@ class SqliteSearchIndexReader:
         if application_id != APPLICATION_ID:
             self._connection.close()
             raise UnreadableSearchIndex("not a search index: its application id is not TUBS")
-        if format_version != SEARCH_INDEX_FORMAT_VERSION:
+        if format_version not in READABLE_SEARCH_INDEX_FORMAT_VERSIONS:
             self._connection.close()
-            raise UnreadableSearchIndex(
-                f"index format version {format_version}; this build reads {SEARCH_INDEX_FORMAT_VERSION}"
-            )
+            readable = " and ".join(str(one) for one in sorted(READABLE_SEARCH_INDEX_FORMAT_VERSIONS))
+            raise UnreadableSearchIndex(f"index format version {format_version}; this build reads {readable}")
+        self._format_version: int = format_version
 
     def __enter__(self) -> Self:
         return self
@@ -275,6 +345,10 @@ class SqliteSearchIndexReader:
     def index_id(self) -> str:
         return self._index_id
 
+    @property
+    def format_version(self) -> int:
+        return self._format_version
+
     def match(self, request: MatchRequest) -> MatchBatch:
         parameters: dict[str, object] = {
             "open": SNIPPET_OPEN,
@@ -287,7 +361,11 @@ class SqliteSearchIndexReader:
             "limit": request.limit,
             "offset": request.offset,
         }
-        rows, interrupted = self._run_under_budget(MATCH_STATEMENT, parameters, request.expired)
+        statement = MATCH_STATEMENT
+        if request.passage_words:
+            statement = PASSAGE_MATCH_STATEMENT
+            parameters.update(_passage_parameters(request.passage_words, request.minimum_shared))
+        rows, interrupted = self._run_under_budget(statement, parameters, request.expired)
         hits = tuple(
             StoredHit(
                 position=request.offset + index,
@@ -316,7 +394,11 @@ class SqliteSearchIndexReader:
             **_filter_parameters(request.filters),
             "limit": request.limit,
         }
-        rows, interrupted = self._run_under_budget(COUNT_STATEMENT, parameters, request.expired)
+        statement = COUNT_STATEMENT
+        if request.passage_words:
+            statement = PASSAGE_COUNT_STATEMENT
+            parameters.update(_passage_parameters(request.passage_words, request.minimum_shared))
+        rows, interrupted = self._run_under_budget(statement, parameters, request.expired)
         counted = tuple(
             CountedRepresentative(doc_id=row[0], source_sha256=row[1], disclosure=row[2]) for row in rows
         )

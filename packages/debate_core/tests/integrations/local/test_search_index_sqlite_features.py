@@ -54,7 +54,7 @@ ALLOWED_STATEMENTS: Final = (
     r"\n  PRIMARY KEY \(doc_id, ordinal\)\n\) WITHOUT ROWID",
     r"CREATE INDEX occurrences_by_source ON occurrences \(source_sha256\)",
     r"CREATE VIRTUAL TABLE search USING fts5\(tag, cite, read_aloud, text, content='documents', "
-    r"content_rowid='doc_id', tokenize='unicode61 remove_diacritics 2'\)",
+    r"content_rowid='doc_id', tokenize='porter unicode61 remove_diacritics 2'\)",
     r"INSERT INTO index_info \(key, value\) VALUES \(.*\)",
     r"INSERT INTO documents \(doc_id, .*\) VALUES \(.*\)",
     r"INSERT INTO occurrences \(doc_id, .*\) VALUES \(.*\)",
@@ -77,7 +77,7 @@ NEWER_FEATURES: Final = (
 ALLOWED_FTS5_OPTIONS: Final = {
     "content='documents'",
     "content_rowid='doc_id'",
-    "tokenize='unicode61 remove_diacritics 2'",
+    "tokenize='porter unicode61 remove_diacritics 2'",
 }
 
 #: `sqlite_master` of a built index, written by hand from the schema in `docs/data/search-index.md`.

@@ -37,6 +37,7 @@ from debate_core.domain.evidence_search import (
     SearchFilters,
     SearchPage,
 )
+from debate_core.domain.search_index import SEARCH_INDEX_FORMAT_VERSION
 from debate_core.integrations.local.search_index import SqliteSearchIndexWriter
 from debate_core.integrations.local.search_index_reader import SqliteSearchIndexReader
 
@@ -281,6 +282,7 @@ class CountStoppedByTheBudget:
     """A reader whose ranking finishes and whose count is stopped by the budget after one row."""
 
     index_id = INDEX_ID
+    format_version = SEARCH_INDEX_FORMAT_VERSION
 
     def __init__(self, path: Path) -> None:
         self.real = SqliteSearchIndexReader(path, index_id=INDEX_ID)

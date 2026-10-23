@@ -8,7 +8,11 @@ the image; the function fetches it the first time a request needs one, and
 ## Fetching
 
 1. Read the pointer, `reports/tub/search/current.json` (:class:`~debate_core.domain.search_index.
-   SearchIndexPointer`), and refuse one whose format version this build does not read.
+   SearchIndexPointer`), and refuse one whose format version this build does not read: format 2,
+   and format 1 while the first weekly update after `v1-e39-t13` builds format 2
+   (:data:`~debate_core.domain.search_index.READABLE_SEARCH_INDEX_FORMAT_VERSIONS`). A refused index
+   is never served: the one already loaded goes on serving, and with none the search page says
+   search is not available.
 2. Read the manifest it names, check its bytes against the pointer's digest, and check it names the
    same index, format version and digests.
 3. Stream the gzip object through `gunzip` and `sha256` into a new file in the holder's directory,
@@ -98,7 +102,7 @@ from debate_core.application.ports.suppression import SuppressionEntry, Suppress
 from debate_core.domain.evidence_search import Card, SearchFilters, SearchPage
 from debate_core.domain.search_index import (
     INDEX_ID_LENGTH,
-    SEARCH_INDEX_FORMAT_VERSION,
+    READABLE_SEARCH_INDEX_FORMAT_VERSIONS,
     SEARCH_INDEX_GZIP_NAME,
     SEARCH_INDEX_MANIFEST_NAME,
     SearchIndexManifest,
@@ -165,7 +169,8 @@ class SearchIndexRefusal(StrEnum):
 _REFUSAL_SENTENCES: Final = {
     SearchIndexRefusal.UNREADABLE_POINTER: "the pointer is not a search index pointer this build reads",
     SearchIndexRefusal.UNKNOWN_FORMAT_VERSION: (
-        f"its format version is not {SEARCH_INDEX_FORMAT_VERSION}, the one this build reads"
+        "its format version is not one this build reads, "
+        + " or ".join(str(one) for one in sorted(READABLE_SEARCH_INDEX_FORMAT_VERSIONS))
     ),
     SearchIndexRefusal.UNREADABLE_MANIFEST: "its manifest is not a search index manifest",
     SearchIndexRefusal.MANIFEST_DIGEST_MISMATCH: "its manifest is not the one the pointer names",
@@ -227,9 +232,16 @@ class ScreenedSearch:
         return self._parser_version
 
     def search(
-        self, query: str, filters: SearchFilters | None = None, cursor: str | None = None
+        self,
+        query: str,
+        filters: SearchFilters | None = None,
+        cursor: str | None = None,
+        *,
+        passage: bool = False,
     ) -> SearchPage:
-        return self._service.search(query, filters, cursor, is_suppressed=self._is_suppressed)
+        return self._service.search(
+            query, filters, cursor, passage=passage, is_suppressed=self._is_suppressed
+        )
 
     def card(self, caselist: str, cluster_id: str) -> Card | None:
         return self._service.card(caselist, cluster_id, is_suppressed=self._is_suppressed)
@@ -238,10 +250,12 @@ class ScreenedSearch:
         """Where the card's representative was read from, under this request's list (`v1-e39-t08`)."""
         return self._service.card_source(caselist, cluster_id, is_suppressed=self._is_suppressed)
 
-    def check_cursor(self, query: str, filters: SearchFilters | None, cursor: str) -> None:
+    def check_cursor(
+        self, query: str, filters: SearchFilters | None, cursor: str, *, passage: bool = False
+    ) -> None:
         """Refuse, with :class:`~debate_core.domain.evidence_search.InvalidSearchCursor`, a cursor that is
         not this query's, these filters' and this index's: what :meth:`search` would refuse."""
-        self._service.check_cursor(query, filters, cursor)
+        self._service.check_cursor(query, filters, cursor, passage=passage)
 
 
 class ClosableSearchIndexReader(SearchIndexReader, Protocol):
@@ -455,7 +469,7 @@ class SearchIndexHolder:
             manifest = SearchIndexManifest.model_validate_json(raw)
         except ValidationError:
             raise SearchIndexRefused(SearchIndexRefusal.UNREADABLE_MANIFEST, index_id) from None
-        if manifest.format_version != SEARCH_INDEX_FORMAT_VERSION:
+        if manifest.format_version not in READABLE_SEARCH_INDEX_FORMAT_VERSIONS:
             raise SearchIndexRefused(SearchIndexRefusal.UNKNOWN_FORMAT_VERSION, index_id)
         if (manifest.index_id, manifest.gzip_object.sha256, manifest.sqlite_file.sha256) != (
             index_id,
@@ -569,7 +583,7 @@ def _parse_pointer(raw: bytes) -> SearchIndexPointer:
     except ValidationError:
         raise SearchIndexRefused(SearchIndexRefusal.UNREADABLE_POINTER) from None
     index_id = pointer.index_id
-    if pointer.format_version != SEARCH_INDEX_FORMAT_VERSION:
+    if pointer.format_version not in READABLE_SEARCH_INDEX_FORMAT_VERSIONS:
         raise SearchIndexRefused(SearchIndexRefusal.UNKNOWN_FORMAT_VERSION, index_id)
     try:
         expected = (

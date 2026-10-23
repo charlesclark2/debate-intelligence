@@ -341,8 +341,8 @@ def test_search_index_reader_refuses_a_file_that_is_not_this_index(tmp_path: Pat
     newer = tmp_path / "newer.sqlite"
     shutil.copy(index_path, newer)
     with sqlite3.connect(newer) as connection:
-        connection.execute("PRAGMA user_version = 2")
-    with pytest.raises(UnreadableSearchIndex, match="format version 2"):
+        connection.execute("PRAGMA user_version = 3")
+    with pytest.raises(UnreadableSearchIndex, match="format version 3; this build reads 1 and 2"):
         SqliteSearchIndexReader(newer, index_id=INDEX_ID)
 
 

@@ -484,6 +484,17 @@ class SearchNotice(StrEnum):
     SIDE_CASELIST_CARDS_ONLY = "SIDE_CASELIST_CARDS_ONLY"
     """A side filter applies to caselist cards only: camp cards have no side, and are left out."""
 
+    PREFIX_TOO_SHORT = "PREFIX_TOO_SHORT"
+    """A prefix term had fewer than :data:`MIN_PREFIX_CHARACTERS` before its `*`: nothing was searched."""
+
+    PASSAGE_UNAVAILABLE = "PASSAGE_UNAVAILABLE"
+    """Passage search was asked of a format 1 index, which predates it: nothing was searched. The next
+    weekly update builds format 2 (`v1-e39-t13`)."""
+
+    WORD_FORMS_UNAVAILABLE = "WORD_FORMS_UNAVAILABLE"
+    """The index is format 1, whose words are matched as written (`grow` finds no `growing`) until the
+    next weekly update builds format 2."""
+
 
 @dataclass(frozen=True, slots=True)
 class SnippetSegment:

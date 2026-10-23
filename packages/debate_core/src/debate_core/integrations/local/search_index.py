@@ -33,10 +33,10 @@ file name in its header, so it depends on the file and on zlib.
 
 The function's Lambda image runs SQLite 3.40.0 (ADR-0019 (c) 1), so every statement here uses only
 what 3.40.0 has: plain tables, a `WITHOUT ROWID` table (in SQLite since 2013), FTS5 with an external
-content table and the `unicode61` tokenizer with `remove_diacritics 2` (3.27.0), and the `rebuild`
-and `optimize` commands. No `STRICT` table, no JSON function, no `contentless_delete`, no `locale`, no trigram
-tokenizer. :data:`WRITER_PRAGMAS` lists every pragma the writer sets, and the tests trace every
-statement it runs against that list.
+content table, the `porter` tokenizer in front of `unicode61` with `remove_diacritics 2` (3.27.0),
+and the `rebuild` and `optimize` commands. No `STRICT` table, no JSON function, no
+`contentless_delete`, no `locale`, no trigram tokenizer. :data:`WRITER_PRAGMAS` lists every pragma the
+writer sets, and the tests trace every statement it runs against that list.
 """
 
 from __future__ import annotations
@@ -72,8 +72,10 @@ APPLICATION_ID: Final = 0x54554253
 SEARCHABLE_COLUMNS: Final = ("tag", "cite", "read_aloud", "text")
 """The FTS5 table's columns, in order: the only text a query is matched against."""
 
-FTS5_TOKENIZER: Final = "unicode61 remove_diacritics 2"
-"""Case- and accent-folding word tokens. `remove_diacritics 2` is in FTS5 since SQLite 3.27.0."""
+FTS5_TOKENIZER: Final = "porter unicode61 remove_diacritics 2"
+"""Case- and accent-folding word tokens, each stemmed: `growing`, `grows` and `grow` are one token.
+`porter` is in FTS5 since it was added (SQLite 3.9.0); `remove_diacritics 2` since 3.27.0. Format 2
+(`v1-e39-t13`); format 1 had `unicode61 remove_diacritics 2` alone."""
 
 GZIP_LEVEL: Final = 6
 """The gzip object's compression level (ADR-0019 (c) 2)."""

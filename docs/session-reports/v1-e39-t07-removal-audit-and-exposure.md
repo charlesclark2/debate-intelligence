@@ -408,7 +408,8 @@ The dry run, in the 4a window:
 ```bash
 aws sso login --profile debate-dev-evidence
 aws sso login --profile debate-dev-evidence-removal
-BUCKET=$(aws s3api list-buckets --profile debate-dev-evidence --query 'Buckets[?starts_with(Name, `debate-dev-evidence-`)].Name' --output text)
+BUCKET=$(python3 -c 'import tomllib; print(tomllib.load(open("config/profiles/dev.toml", "rb"))["storage"]["s3"]["bucket"])')
+echo "bucket: $BUCKET"
 PRUNE="${TMPDIR:-/tmp}/tub-index-prune"
 rm -rf "$PRUNE" && mkdir -p "$PRUNE"
 aws s3 cp "s3://${BUCKET}/reports/tub/search/current.json" "$PRUNE/current.json" --profile debate-dev-evidence
@@ -486,7 +487,8 @@ unset AWS_PROFILE DEBATE_STORAGE__DATA_DIR X REMOVED
 aws sso login --profile debate-dev-evidence
 DEBATE_ENV=dev debate-research tub index publish --env dev --newest
 unset DEBATE_ENV
-BUCKET=$(aws s3api list-buckets --profile debate-dev-evidence --query 'Buckets[?starts_with(Name, `debate-dev-evidence-`)].Name' --output text)
+BUCKET=$(python3 -c 'import tomllib; print(tomllib.load(open("config/profiles/dev.toml", "rb"))["storage"]["s3"]["bucket"])')
+echo "bucket: $BUCKET"
 echo "republished: $(aws s3 cp "s3://${BUCKET}/reports/tub/search/current.json" - --profile debate-dev-evidence | python3 -c 'import json, sys; print(json.load(sys.stdin)["index_id"])')"
 ls -td "${HOME}/.debate-research/dev/tub-index"/*/ | head -1
 ```
@@ -639,6 +641,14 @@ and the signed-in reading came from the HAR instead.
   2 documents from 6 occurrences, 0 suppressed, SQLite 45,056 bytes, gzip 3,257 bytes; published,
   `current.json` naming it, at about 01:25 UTC. The rebuilt index holds **`0`** occurrences of
   `058e2b1ce922…` (`select count(*) from occurrences where source_sha256 = …`).
+
+- **4e, five minutes on.** The operator opened the card's path again: the card is back, chosen from
+  its five surviving occurrences, with no Westfield XY line.
+- **4f, first dry run, refused before reading anything.** The runbook's block found the bucket with
+  `aws s3api list-buckets` under the everyday profile, which may not list buckets (`AccessDenied`
+  on `s3:ListAllMyBuckets`, as it should), so `BUCKET` was empty and nothing was read, written or
+  deleted. The runbook's P3 and P4 blocks and this report's block 5 now read the bucket's name from
+  `config/profiles/dev.toml` (`storage.s3.bucket`) in the checkout.
 
 ## Follow-up work
 

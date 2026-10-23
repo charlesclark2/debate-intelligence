@@ -599,11 +599,13 @@ manifest.
 
 **Operator command** (expected runtime: a rebuild of the stores the index holds, minutes for the full
 corpus; seconds for a synthetic store)
-Where: your Mac, the checkout whose build runs the weekly agent
+Where: your Mac, a checkout of this repository whose build matches the weekly agent's (the
+bucket's name is read from `config/profiles/dev.toml`: the everyday profile may not list buckets)
 ```bash
 aws sso login --profile debate-dev-evidence
 export AWS_PROFILE=debate-dev-evidence
-BUCKET=$(aws s3api list-buckets --query 'Buckets[?starts_with(Name, `debate-dev-evidence-`)].Name' --output text)
+BUCKET=$(python3 -c 'import tomllib; print(tomllib.load(open("config/profiles/dev.toml", "rb"))["storage"]["s3"]["bucket"])')
+echo "bucket: $BUCKET"
 MANIFEST_KEY=$(aws s3 cp "s3://${BUCKET}/reports/tub/search/current.json" - | python3 -c 'import json, sys; print(json.load(sys.stdin)["manifest_key"])')
 STORES=$(aws s3 cp "s3://${BUCKET}/${MANIFEST_KEY}" - | python3 -c 'import json, sys; print(" ".join("--caselist " + one["caselist"] for one in json.load(sys.stdin)["stores"]))')
 echo "rebuilding: $STORES"
@@ -641,11 +643,13 @@ refuses to go on if the listing does not hold the current index at all. Older ve
 `current.json` are deleted; they name superseded indexes and hold no card.
 
 **Operator command** (expected runtime seconds; reads only)
-Where: your Mac, anywhere
+Where: your Mac, a checkout of this repository (the bucket's name is read from
+`config/profiles/dev.toml`: the everyday profile may not list buckets)
 ```bash
 aws sso login --profile debate-dev-evidence
 aws sso login --profile debate-dev-evidence-removal
-BUCKET=$(aws s3api list-buckets --profile debate-dev-evidence --query 'Buckets[?starts_with(Name, `debate-dev-evidence-`)].Name' --output text)
+BUCKET=$(python3 -c 'import tomllib; print(tomllib.load(open("config/profiles/dev.toml", "rb"))["storage"]["s3"]["bucket"])')
+echo "bucket: $BUCKET"
 PRUNE="${TMPDIR:-/tmp}/tub-index-prune"
 rm -rf "$PRUNE" && mkdir -p "$PRUNE"
 aws s3 cp "s3://${BUCKET}/reports/tub/search/current.json" "$PRUNE/current.json" --profile debate-dev-evidence

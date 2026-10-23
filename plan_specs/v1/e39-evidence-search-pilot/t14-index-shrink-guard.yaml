@@ -48,6 +48,7 @@ spec:
         a store with empty aggregates, is refused before publishing and leaves the current
         pointer as it was, by tests shown failing first, in both the command and the weekly
         stage.
+    # PM ruling 2026-10-22: the reason is recorded in the publish's output, not the manifest, which the deployed function reads with extra="forbid".
     - id: ac2
       description: >-
         --allow-shrink with a reason publishes and records the reason in the manifest; the

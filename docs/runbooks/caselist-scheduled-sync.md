@@ -1252,6 +1252,9 @@ What each outcome means:
 | `skipped`, `the parsed store is not this build's version` | The parsed store was parsed by another parser or fingerprint version than the agent's build, for example after a by-hand re-parse with a newer build. | The reason names both versions. A newer store: reinstall the agent with the build that parsed it ([Reinstalling the agent](#reinstalling-the-agent)). An older one: re-parse it with the agent's build ([After a release that bumps the parser version](#after-a-release-that-bumps-the-parser-version)). |
 | `skipped`, `the parse stage failed in this run` | An index of what a failed parse left is not built. | See [The parse stage](#the-parse-stage). |
 | `failed` | The build or an upload failed. The previous index is still on this Mac and `current.json` still names the previous index; the reason names both. | The stage's hint and the notification say what to fix. The next run tries again. |
+| `failed`, `would shrink the published search index: <store> has N documents against M in index <id>` (`SEARCH_INDEX_WOULD_SHRINK`) | The new index holds under 90% of a store's documents in the published one, or none. Nothing was uploaded; `current.json` and both local indexes stay. | Read [The shrink guard](#the-shrink-guard). The run never publishes past it, and refuses again every week until the store is restored or you publish the shrink by hand. |
+| `failed`, `whose aggregates hold no occurrence rows` (`SEARCH_INDEX_STORE_EMPTY`), or the build's `occurrence table holds no rows` (`SEARCH_INDEX_STORE_NOT_READY`) | A store's parsed aggregates are empty, as after a whole-file removal that was not followed by its rebuild. | Rebuild that store's aggregates ([the removal runbook's P1b](caselist-removal.md#p1b--right-after-done-rebuild-the-parsed-stores-aggregates)). Never overridden. |
+| `failed`, `cannot be compared with the current index's` (`CURRENT_SEARCH_INDEX_UNREADABLE`) | `current.json` or the manifest it names cannot be read, so the guard has nothing to compare with. | Find out why first (the evidence-search runbook's app log table); then publish by hand with `--allow-shrink`, below. |
 | `failed`, `no version directory of parser …; run debate-research caselist parse --caselist <slug>` | A store the run indexes has never been parsed by the agent's build: on a fresh installation, every store until its first parse. | Run the `caselist parse` it names. Before the first Wednesday, `doctor --search-index` finds every such store at once (below). |
 
 **Before the first Wednesday, check that every store is parsed.** The stage indexes the agent's
@@ -1279,6 +1282,57 @@ nothing removes nothing. The copies in the bucket are not touched. A warning in 
 ADR-0019's lines: 900,000,000 SQLite bytes, under its 1 GB uncompressed ceiling, or 400,000,000
 gzip bytes, at which `v1-e39-t04` asks for a higher bandwidth quota. Bring either to the PM.
 
+**Each run's growth** (`v1-e39-t14`): when `current.json` named another index, the reason ends with
+`growth against <id>: +N documents, +B SQLite bytes, +G gzip bytes`, and the run summary's
+`search_index` has `previous_index_id`, `documents_growth`, `sqlite_bytes_growth` and
+`gzip_bytes_growth`, negative for a shrink. A run that kept the index `current.json` already names
+records none. `jq '.search_index'` over the week's summaries gives the series for ADR-0019's sizing.
+
+### The shrink guard
+
+Since `v1-e39-t14`, `tub index publish` and this stage refuse, before uploading anything and with
+`current.json` left as it was:
+
+* an index built from a store whose aggregates hold no occurrence rows, even when nothing is
+  published yet. Never overridden: rebuild that store's aggregates, or build without it;
+* an index holding none of a store's documents that the published index holds, or fewer than
+  `caselist.search_index_minimum_share_percent` of them (90 by default), per store, not just in
+  total. A store the published index does not hold is not compared;
+* any index, when `current.json` or the manifest it names cannot be read.
+
+The refusal names the store, both counts and the index left current. Read them before anything
+else. A real shrink is one you can account for: a removal (the dry run's cards for that store), the
+card-only rule of `v1-e39-t12`, or a store you meant to drop. Anything else, such as a store
+suddenly at 0, means the parsed store lost something: the guard has done its job, and the fix is
+the store, not the publish. The 2026-10-22 rebuild that published empty aggregates to dev is the
+case it was written for.
+
+For a real shrink, publish the index the refusal named by hand, with one line saying why. Use the
+removal's request id where there is one; never card text, a school, a team code or a file name. The
+reason is printed, logged and in the `--json` result, and is not stored in the manifest or the
+pointer, which the deployed function reads strictly. The refused publish was the plan; this block
+is the publish:
+
+**Operator command** (expected runtime seconds)
+Where: a new terminal window on this Mac
+```bash
+PULL=$(pgrep -fl 'debate-research( --json)? caselist pull')
+echo "running pull: ${PULL:-none}"
+echo "data dir override: ${DEBATE_STORAGE__DATA_DIR:-none}"
+if [[ -n "$PULL" || -n "${DEBATE_STORAGE__DATA_DIR:-}" ]]; then
+  echo "STOP: the line above that is not none says why. Wait for the pull to finish, or open a new window."
+else
+  aws sso login --profile debate-dev-evidence
+  env -u DEBATE_STORAGE__DATA_DIR DEBATE_ENV=dev debate-research tub index publish --env dev --newest --allow-shrink "RM-put-the-request-id-here, whole-file removal"
+fi
+```
+Success looks like a line `published past the shrink guard with --allow-shrink: <store> has N
+documents against M in index <id>; reason: ...` naming the counts the refusal named, then a table
+whose last row is `reports/tub/search/current.json`. A refusal that says `aggregates hold no
+occurrence rows` is the empty-store rule, which no reason passes. In prod, the same with
+`debate-prod-evidence`, `DEBATE_ENV=prod`, `--env prod` and `--confirm-prod`, from the data
+directory of [One data directory for each bucket](#one-data-directory-for-each-bucket).
+
 ### Publishing a pending index by hand
 
 `caselist pull --publish-pending` does not publish the index. The next weekly run with a session
@@ -1303,7 +1357,8 @@ unset DEBATE_ENV DEBATE_STORAGE__DATA_DIR
 
 Success is a table whose last row is `reports/tub/search/current.json`, naming the index id, which
 is the one the last run's `search_index` row names. A refusal names a parser or fingerprint version:
-that index was built by another build than the one on your `PATH`. `--newest` and `--index` are
+that index was built by another build than the one on your `PATH`. Or it is the shrink guard's,
+naming a store and two counts: see [The shrink guard](#the-shrink-guard). `--newest` and `--index` are
 refused together; `--index <directory>` publishes one directory you name instead.
 
 **An index built without a session read this Mac's copy of the suppression list alone.** That is safe

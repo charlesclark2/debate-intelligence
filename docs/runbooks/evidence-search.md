@@ -1030,10 +1030,10 @@ beside the button.
 |---|---|---|
 | `search index <id> loaded` (`INFO`) | An environment fetched and checked an index | Nothing |
 | `search index <id> closed and deleted` (`INFO`) | A newer index replaced it, or the environment closed it | Nothing |
-| `the published search index was refused: the pointer is not a search index pointer this build reads` | `current.json` is not a pointer, or names keys outside its own index's directory | Publish again with `tub index publish` |
+| `the published search index was refused: the pointer is not a search index pointer this build reads` | `current.json` is not a pointer, or names keys outside its own index's directory | Publish again with `tub index publish`. If it says `current.json is not a pointer this build reads ... cannot be compared`, the shrink guard cannot read the current index either: compare the newest index's counts with the last run's `search_index` row, then publish with `--allow-shrink "<reason>"` ([the shrink guard](caselist-scheduled-sync.md#the-shrink-guard)) |
 | `search index <id> was refused: its format version is not 1, the one this build reads` | The index was built by a build whose format this deploy does not read | Deploy the build that wrote it, or rebuild and publish with this one |
-| `search index <id> was refused: its manifest is not a search index manifest` | The manifest is unreadable or too large | Publish again |
-| `search index <id> was refused: its manifest is not the one the pointer names` | The manifest's sha256 is not the pointer's | Publish again; if it repeats, compare the bucket's objects with the build directory |
+| `search index <id> was refused: its manifest is not a search index manifest` | The manifest is unreadable or too large | Publish again. The shrink guard reads that manifest first and refuses with `cannot be compared`; then publish with `--allow-shrink "<reason>"` ([the shrink guard](caselist-scheduled-sync.md#the-shrink-guard)) |
+| `search index <id> was refused: its manifest is not the one the pointer names` | The manifest's sha256 is not the pointer's | Publish again, with `--allow-shrink "<reason>"` when the shrink guard says `cannot be compared`; if it repeats, compare the bucket's objects with the build directory |
 | `search index <id> was refused: its manifest and the pointer name different files` | The manifest and the pointer disagree on the index or its digests | Publish again |
 | `search index <id> was refused: its object is not one whole gzip stream` | The gzip object is cut short, damaged or followed by other bytes | Publish again |
 | `search index <id> was refused: its object is not the one the pointer names` | The gzip object's bytes or size are not the pointer's | Publish again |
@@ -1109,7 +1109,8 @@ Success looks like `InProgress`, then `{"status":"ok"}`. For prod, the same with
   profile. The weekly agent run rebuilds the index when the parsed store changed and publishes it to
   dev (`v1-e39-t09`); publishing it to prod is the operator's, with `tub index publish --newest`, as
   [Publishing a pending index by hand](caselist-scheduled-sync.md#publishing-a-pending-index-by-hand)
-  says.
+  says. Both refuse an index that would drop a store's cards, and `--allow-shrink` is the
+  operator's alone ([the shrink guard](caselist-scheduled-sync.md#the-shrink-guard), `v1-e39-t14`).
 - **Turn on access logging, a WAF or a second origin.** The pilot keeps no per-request record of a
   student's address, and CloudFront reaches nothing but the function (ADR-0019 (a) 4).
 - **Change the evidence bucket.** Its Block Public Access settings and policy are untouched; the

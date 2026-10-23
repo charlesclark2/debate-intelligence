@@ -405,9 +405,70 @@ v1-e32-t02 questions (session, 2026-10-23)
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED, with conditions closed in-session
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-23
 
 **Notes:**
+
+A thorough task.
+* Red runs for every node, and 20 mutants caught. One survived until a new test was added, which
+  is the right response.
+* The real store found a flaw the synthetic set had not (pooled candidates), and it is fixed and
+  pinned.
+* The breakdown of why cards are unplaced turns "48%" into a decision instead of a worry.
+
+**Rulings**
+
+1. **(a), with one more measurement first** (condition 1). The landscape report counts rounds and
+   teams, not cards: a round counts for a position if any of its cards is placed there. Card
+   coverage is the wrong number to judge it by. The coach's pass over the top of the queue happens
+   before v1-e32-t05's first dev run, and that session applies his decisions. It does not hold up
+   this PR.
+2. **Keep two teams.**
+3. **(a).** v1-e32-t03's header names the overrides digest beside `taxonomy_version`. The PM amends
+   t03 in the next PM batch.
+4. **Yes.** Amend this spec's description to name the topic id and the per-heading override digest
+   in the cache key, with a PM-ruling comment.
+5. **Yes,** PASS by construction. t07 asserts the fake router's call log.
+6. **Yes.** Amend `constraints.packages` as listed, with a PM-ruling comment.
+7. **Yes,** keep 0.5.
+
+**Deviations 1 to 6 and Decisions 1 to 11 are accepted.**
+
+**Conditions, to close in this session before the PR:**
+
+1. **Round-level coverage, read-only, counts only, seconds.** For hspolicy26 through 2026-10-20,
+   with the cache you have:
+   * affirmative documents with at least one card placed under an `aff` position, and with at
+     least one placed under an `advantage`;
+   * negative documents with at least one card placed under a `da`, `cp`, `k`, `t` or `theory`
+     position, each kind counted separately;
+   * the same two shares by distinct team (a team counts if any of its documents does).
+
+   Put the table in this report beside the card counts. **If fewer than half of affirmative
+   documents have a placed aff,** say so in one line. The PM then files a task for a team-level
+   rule (a team's aff across its documents) before t05's first run, rather than leaving it to t07.
+2. **Write the coach's review sheet** outside the repository, beside t01's in
+   `~/Documents/debate/landscape-seed/`:
+   * the queue's top 50 rows by team count;
+   * each row's candidates, and a blank column for his decision (`none` or a position id);
+   * one line on what `none` means.
+
+   Add a sentence to the guide's review-queue section that the first pass happens before t05's
+   first run.
+3. **Amend the spec** (rulings 4 and 6), then update the stale parts of this report. No re-review
+   is needed unless condition 1's line says fewer than half.
+
+**The PR:** opened without `--partial`, once conditions 1 to 3 are done.
+
+**Follow-up work:**
+* The header digest: ruling 3, through t03.
+* MODEL keys: recorded for t07.
+* The two normalizer variants (`adv 1 costs`, `advantage one costs`): the PM adds them to
+  v1-e32-t09's brief, which works on the same headings.
+* The document-level signal: condition 1 decides.
+* Cache size: recorded.
+
+If anything comes out differently, stop and ask for another review.

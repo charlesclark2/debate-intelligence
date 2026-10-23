@@ -86,7 +86,7 @@ Clauses are paraphrased; phrases in quotation marks are the site's own wording.
 | 9 | Acceptable Use — others' rights | No violating others' privacy or rights | The written backing for [Personal data](#personal-data). Team codes are treated as personal data about people who may be minors |
 | 10 | Termination | Access may be suspended at the site's discretion | Access is a privilege, not an entitlement. A `401`/`403` stops the run and is escalated to Charlie, never worked around ([E34 gate](#e34--automated-caselist-download-v12) 5) |
 | 11 | Modifications | The terms may change, and continued use means acceptance | The terms are re-read at the start of each season and whenever the site announces a change — see [Review and change control](#review-and-change-control) |
-| 12 | Maintainer confirmation (not part of the published terms) | Asked by Charlie through the site's Contact channel; the maintainer replied on 2026-09-19 that scheduled downloads of the archives through the API are acceptable, with a rate limit of **10 file downloads per minute** as the only limit. Charlie re-read the reply on 2026-10-10 against the complete archive (`<caselist>-all-<date>.zip`, `v1-e34-t04`): it is about programmatic retrieval of the archives through the API, not one kind of archive, so it covers the weekly and the complete archives alike | Resolves [open question 2](#open-questions) and satisfies [E34 gate](#e34--automated-caselist-download-v12) item 2. The client's default stays below the limit (8 per minute) and cannot be configured above 10. Charlie keeps the maintainer's reply on file; it is not committed |
+| 12 | Maintainer confirmation (not part of the published terms) | Asked by Charlie through the site's Contact channel; the maintainer replied on 2026-09-19 that scheduled downloads of the archives through the API are acceptable, with a rate limit of **10 file downloads per minute** as the only limit. Charlie re-read the reply on 2026-10-10 against the complete archive (`<caselist>-all-<date>.zip`, `v1-e34-t04`): it is about programmatic retrieval of the archives through the API, not one kind of archive, so it covers the weekly and the complete archives alike. On 2026-10-23 Charlie told the maintainer that the downloads are likely to move to a scheduled job in the cloud, and the maintainer is fine with it (version 1.12) | Resolves [open question 2](#open-questions) and satisfies [E34 gate](#e34--automated-caselist-download-v12) item 2. The client's default stays below the limit (8 per minute) and cannot be configured above 10. Charlie keeps the maintainer's reply on file; it is not committed |
 
 **Assessment.** No term read on 2026-09-19 is stricter than a rule in this policy; the
 [Prohibited uses](#prohibited-uses) already cover every relevant Acceptable Use item. The two
@@ -520,7 +520,9 @@ first automated pull:
    - **Every read is logged.** The organization CloudTrail records every read of either secret
      (`GetSecretValue` and the KMS `Decrypt` it causes) and every change to who may read them, and
      keeps them at least a year. A change to who may read the password, and any attempt to read it
-     by anyone but the login job, is emailed to the coach.
+     by anyone but the login job, is emailed to the coach. An administrator of the account can
+     reach the password only by first making such a change, which CloudTrail records and which
+     emails the coach; moving prod into a separate AWS account would end that.
    - The token is a `SecretStr`, redacted from logs, exceptions and event hooks, wherever it is
      held; the token is never shared.
 4. **Politeness is enforced in code**: a configurable minimum interval between requests, one
@@ -730,7 +732,8 @@ copy of the store while it runs, it also adds that copy, deleted when the run's 
 [Scope](#scope), to the places personal data may live, to
 [Prohibited uses](#prohibited-uses) 10 and to the [dev exception](#dev-environment-exception)'s
 locations, and adds the run's run-state bundle to [Retention](#retention) and to what a
-[removal](#removal) rewrites. It loosens the policy, since the password was never stored before and
+[removal](#removal) rewrites. [Clause 12](#clause-register) records that the maintainer was told
+of the move on 2026-10-23 and is fine with it. It loosens the policy, since the password was never stored before and
 the job ran only on the operator's machine, so under
 [Review and change control](#review-and-change-control) it needs the coach's approval, and merging
 its pull request records the approval below. Nothing else changes: the rate limit, the weekly cadence,

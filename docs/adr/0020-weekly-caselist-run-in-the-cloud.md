@@ -1,7 +1,7 @@
 # ADR-0020: The weekly caselist run in the cloud — one scheduled Fargate task, the Tabroom password in Secrets Manager, and the run's state in the evidence bucket
 
-- Status: Proposed
-- Date: 2026-10-22
+- Status: Accepted
+- Date: 2026-10-22; accepted 2026-10-23 by the PM
 - Deciders: Charlie Clark (coach and product owner), on the PM's review
 - Architecture references:
   - [§5 AWS Cloud Architecture](../architecture/architecture_proposal.md#5-aws-cloud-architecture)
@@ -642,6 +642,8 @@ lift its pieces out with `moved` blocks.
 | `t04` | Bucket mode: the restore, the parsed store's restore route, the state files, the run-state bundle with its save rules, the lock with its lease and fencing in every command that writes a bucket, the seed command, and the removal's handling of the bundle; the store layout document | The spec names only the run's state; (4) puts the lock in every bucket-writing command, which goes beyond "refuses to start" |
 | `t05` | The SNS topic and subscription, the notifier's `sns` kind, the task-state rules, the late-run metric and alarm, the dead-letter alarm, the CloudTrail rules on the credentials | Adds the CloudTrail rules (2). Its "existing mail path" is SNS, because the account has no general one |
 | `t06` | The cutover in (4), the fallback week, the move of the home at promotion (7) | "Beside a Mac run" becomes the Mac's reproduction of the cloud run's derivations, since a second run of a week would download and publish twice |
+
+These changes are in the five specs as `PM amendment 2026-10-23 (ADR-0020)`.
 
 ### The policy, version 1.12
 

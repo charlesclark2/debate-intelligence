@@ -24,11 +24,19 @@ size each character carried: the coverage :func:`~debate_core.domain.file_proven
 formatting_sha256` reads (ac2). A line break is a `<br>` inside the run's spans, so it keeps its
 formatting too.
 
-## As a built file has it
+## The tag, the cite and the text, and no provenance line
 
-The tag, in the template's tag style; the cite, its short cite in `Style13ptBold`; **the provenance
-line below the cite**, in the Undertag style the E33 writer puts it in (data-use policy, Attribution
-rule 2); then the card's text. The plain text is the same four parts, one to a line.
+The tag, in the template's tag style; the cite, its short cite in `Style13ptBold`; then the card's
+text. The plain text is the same three parts, one to a line.
+
+**No provenance line** (data-use policy version 1.11, Attribution rules 2 and 5 and the E39 gate's
+item 6; Charlie, 2026-10-22; `v1-e39-t11`). Until then the copy carried the line below the cite, in
+the Undertag style the E33 writer put it in. A copied card now carries no school, team code,
+tournament, round, caselist or camp: the team's own files are disclosed on the caselist, and
+republishing other schools' names and team codes in them adds nothing the team needs. The line is
+still shown on the card page, below the cite, with the "Disclosed evidence, not platform-verified"
+label, and the provenance stays on record in the copy's `card-copied` audit record, which names the
+card and is unchanged.
 """
 
 from __future__ import annotations
@@ -45,7 +53,6 @@ __all__ = [
     "CITE_STYLE",
     "EMPHASIS_STYLES",
     "HIGHLIGHT_STYLES",
-    "PROVENANCE_STYLE",
     "TAG_STYLE",
     "CopiedCard",
     "copied_card",
@@ -96,9 +103,6 @@ TAG_STYLE: Final = "font-weight:bold;font-size:13pt"
 CITE_STYLE: Final = EMPHASIS_STYLES[RunEmphasis.CITE]
 """The short cite at the start of the cite: `Style13ptBold`."""
 
-PROVENANCE_STYLE: Final = "color:#385623;font-size:12pt"
-"""The provenance line: the template's `Undertag`, where the E33 writer puts it."""
-
 _LARGEST_SIZE: Final = 9999
 """Half-points: Word's largest size is 3276, and the card page's classes stop at four digits too."""
 
@@ -120,16 +124,13 @@ class CopiedCard:
 
 
 def copied_card(card: Card) -> CopiedCard:
-    """The card as a built file has it: tag, cite, the provenance line, then the formatted text."""
-    line = card.occurrences[0].provenance_line if card.occurrences else None
+    """The card's tag, cite and formatted text, and no provenance line (policy 1.11)."""
     paragraphs: list[str] = []
     if card.tag:
         paragraphs.append(f'<p style="{TAG_STYLE}">{_escaped(card.tag)}</p>')
     paragraphs.append(f"<p>{_cite(card)}</p>")
-    if line:
-        paragraphs.append(f'<p style="{PROVENANCE_STYLE}">{_escaped(line)}</p>')
     paragraphs.append("<p>" + "".join(_run(run) for run in card.runs) + "</p>")
-    text = "\n".join(part for part in (card.tag, card.cite, line, card.text) if part)
+    text = "\n".join(part for part in (card.tag, card.cite, card.text) if part)
     return CopiedCard(html="".join(paragraphs), text=text)
 
 

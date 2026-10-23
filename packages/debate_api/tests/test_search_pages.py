@@ -183,7 +183,8 @@ def test_a_result_shows_its_tag_short_cite_snippet_counts_and_provenance_line(st
     page = student.browser.get("/search?q=granite+costs").text
 
     [result] = re.findall(r'<li class="result">(.*?)</li>', page, re.DOTALL)
-    assert f'<a href="{card_path(student, 1)}">Zephyr winds raise granite costs</a>' in result
+    # Since v1-e39-t11 the link carries its search, for the card page's way back.
+    assert f'<a href="{card_path(student, 1)}?q=granite+costs">Zephyr winds raise granite costs</a>' in result
     assert '<p class="result-cite">Lindqvist 26</p>' in result
     assert "<mark>granite</mark>" in result and "<mark>costs</mark>" in result
     assert '<p class="result-counts">In 3 files from 2 teams.</p>' in result

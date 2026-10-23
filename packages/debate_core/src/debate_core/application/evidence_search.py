@@ -22,6 +22,16 @@ wires it to the live suppression list; without one, nothing is hidden. With one:
   counts are counted again over the survivors (:func:`surviving_counts`); when the survivors cannot
   say which teams are left, the card gives no team count (the PM's ruling of 2026-10-20).
 
+## The result count (`v1-e39-t11`)
+
+Every page carries a :class:`~debate_core.domain.evidence_search.ResultCount`: how many documents the
+same FTS5 expression matches under the same filters, less those whose representative the same
+suppression predicate stops. That is the set the pages walk, so the count is the number of results a
+student can page through. It is exact up to the service's cap (:data:`~debate_core.domain.
+evidence_search.DEFAULT_RESULT_COUNT_CAP`, 1,000) and marked as more than the cap past it. The count
+reads in doc id order with no rank, and shares the search's time budget: a count the budget stops,
+or a search that was itself stopped, has no count.
+
 ## The time budget
 
 A search that runs past its budget stops where it is and returns what it has fetched, with
@@ -227,11 +237,56 @@ class EvidenceSearchService:
             ),
             partial=partial,
             notices=tuple(notices),
-            count=None,
+            count=None if partial else self._count(expression, filters, is_suppressed, expired),
         )
 
+    def _count(
+        self,
+        expression: str,
+        filters: SearchFilters,
+        is_suppressed: SuppressionPredicate | None,
+        expired: Callable[[], bool],
+    ) -> ResultCount | None:
+        """How many documents the results run to: the same expression, filters and suppression list.
+
+        Read in doc id order, a batch at a time, until one more survivor than the cap is found or the
+        matches run out. `None` when the time budget runs out first: a part-count is never shown.
+        """
+        counted, after = 0, 0
+        while True:
+            if expired():
+                return None
+            batch = self._reader.count(
+                CountRequest(
+                    expression=expression,
+                    filters=filters,
+                    after=after,
+                    limit=self._count_cap + 1 - counted,
+                    expired=expired,
+                )
+            )
+            if batch.interrupted:
+                return None
+            counted += sum(
+                1
+                for row in batch.rows
+                if is_suppressed is None or not is_suppressed(row.source_sha256, row.disclosure)
+            )
+            if counted > self._count_cap:
+                return ResultCount(self._count_cap, capped=True)
+            if batch.exhausted:
+                return ResultCount(counted)
+            after = batch.rows[-1].doc_id
+
     def check_cursor(self, query: str, filters: SearchFilters | None, cursor: str) -> None:
-        """Refuse a cursor :meth:`search` would refuse for this query and these filters, as it would."""
+        """Refuse a cursor :meth:`search` would refuse for this query and these filters, as it would.
+
+        Raises :class:`~debate_core.domain.evidence_search.InvalidSearchCursor`. The card page asks this
+        before it offers a way back to a page of results (`v1-e39-t11`), so it never links to a page
+        the search would refuse.
+        """
+        filters = filters if filters is not None else SearchFilters()
+        decode_search_cursor(cursor, search_binding(self._reader.index_id, parse_query(query), filters))
 
     def _hit(self, hit: StoredHit, is_suppressed: SuppressionPredicate | None) -> SearchHit:
         files, teams = hit.file_count, hit.team_count

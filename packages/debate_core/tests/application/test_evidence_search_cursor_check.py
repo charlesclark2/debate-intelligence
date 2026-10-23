@@ -90,7 +90,7 @@ def test_a_cursor_the_search_wrote_is_accepted_for_its_query_and_filters(
     searched = service(index_path)
 
     searched.check_cursor("wombat", SearchFilters(side=Side.AFF), cursor)
-    searched.check_cursor("  WOMBAT ", SearchFilters(side=Side.AFF), cursor)
+    searched.check_cursor("  wombat ", SearchFilters(side=Side.AFF), cursor)
     assert len(searched.search("wombat", SearchFilters(side=Side.AFF), cursor).hits) == 5
 
 
@@ -102,13 +102,22 @@ def tampered(cursor: str) -> str:
     ("query", "filters", "changed", "index_id"),
     [
         ("filler1", SearchFilters(side=Side.AFF), False, INDEX_ID),
+        ("WOMBAT", SearchFilters(side=Side.AFF), False, INDEX_ID),
         ("wombat", SearchFilters(), False, INDEX_ID),
         ("wombat", SearchFilters(side=Side.NEG), False, INDEX_ID),
         ("wombat", None, False, INDEX_ID),
         ("wombat", SearchFilters(side=Side.AFF), True, INDEX_ID),
         ("wombat", SearchFilters(side=Side.AFF), False, OTHER_INDEX_ID),
     ],
-    ids=["another query", "no filters", "other filters", "filters left out", "changed", "another index"],
+    ids=[
+        "another query",
+        "the query in another case",
+        "no filters",
+        "other filters",
+        "filters left out",
+        "changed",
+        "another index",
+    ],
 )
 def test_a_cursor_the_search_refuses_is_refused_by_the_check_too(
     index_path: Path,

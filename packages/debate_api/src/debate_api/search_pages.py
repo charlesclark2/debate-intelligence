@@ -10,7 +10,7 @@ and renders. What a query means, which cards a student sees and how a card is ma
 |---|---|---|
 | `GET /` and `GET /search` with no words | the empty search page | no: it never waits for one |
 | `GET /search?q=...` | a page of results | yes |
-| `GET /cards/<caselist>/<cluster id>` | the card's page | yes |
+| `GET /cards/<caselist>/<cluster id>` | the card's page; with its search's query string, the way back | yes |
 | `GET /cards/<caselist>/<cluster id>/copy` | the card as Copy card puts it on the clipboard, as JSON | yes |
 
 Every one is a `GET` and none changes anything, so none needs a CSRF token (ADR-0019 (d), CSRF).
@@ -28,11 +28,29 @@ Every lease applies the suppression list the holder last read, so a removed card
 results, its page and its copy within five minutes (:class:`~debate_core.application.
 search_index_holder.ScreenedSearch`).
 
+## The count, the way back and the link out (`v1-e39-t11`)
+
+* **The count.** Above the results, how many cards matched: the page's
+  :class:`~debate_core.domain.evidence_search.ResultCount`, which the service counts for the same
+  query, filters and suppression list in the same lease. Exact up to the cap (`TUB_RESULT_COUNT_CAP`,
+  1,000 by default), written `1,000+ cards matched.` past it, and left out when nothing matched or
+  the time budget stopped the count. The `searched` record's count is still the first page's results.
+* **Back to results.** Each result links to its card with the search's words, filters and cursor as
+  the query string. The card page validates them as the search page does, its cursor against the
+  index in the card's own lease (:func:`_back_link`), and builds the link from the validated values.
+  A tampered, stale or missing search gives "New search", a link to the empty search page. The
+  browser's own back button is untouched: nothing here rewrites history.
+* **Open on openCaselist.** Below the provenance line, a disclosed card's link to its team's page,
+  from :func:`~debate_core.domain.search_source_links.source_link`, in a new tab with no opener and
+  no referrer. A card whose link cannot be built shows none. It leaves the platform, so it writes
+  no record.
+
 ## Nothing here is logged
 
-A search is a `GET`, so its words are in the URL. No handler logs, and nothing here passes the
-query, a card id or card text to anything that does: the access log is off in the image, and the
-index holder logs only index ids. A test reads every log record a search and a card view make.
+A search is a `GET`, so its words are in the URL, and since `v1-e39-t11` in a card page's URL too.
+No handler logs, and nothing here passes the query, a card id or card text to anything that does:
+the access log is off in the image, the edge keeps no log, and the index holder logs only index ids.
+A test reads every log record a search and a card view make.
 """
 
 from __future__ import annotations
@@ -209,7 +227,7 @@ def _card_href(caselist: str, cluster_id: str) -> str:
 
 def _result(hit: SearchHit, form: SearchForm) -> ResultView:
     return ResultView(
-        href=_card_href(hit.caselist, hit.cluster_id),
+        href=_card_href(hit.caselist, hit.cluster_id) + "?" + form.query_string(form.cursor),
         tag=hit.tag,
         short_cite=hit.short_cite,
         snippet_html=render_snippet_html(hit.snippet),
@@ -314,8 +332,27 @@ def _card(request: Request, caselist: str, cluster_id: str) -> Card | None:
 
 
 def _back_link(params: QueryParams, search: ScreenedSearch) -> str | None:
-    """The results page the card was opened from, or `None`."""
-    return "/search?" + str(params)
+    """The results page the card was opened from, rebuilt from validated values, or `None`.
+
+    The card page reads its query string as the search page does: :meth:`SearchForm.from_query`, its
+    filters, and the cursor checked against the query, the filters and the index being searched, in
+    the card's own lease. Anything the search page would refuse, or a search with no words, gives
+    `None`, and the page offers a new search instead. The link is always this pilot's own `/search`,
+    written by :meth:`SearchForm.page_link`: no value of the request is ever echoed as it came.
+    """
+    try:
+        form = SearchForm.from_query(params)
+        filters = form.filters()
+    except SearchFormInvalid:
+        return None
+    if not form.has_words:
+        return None
+    if form.cursor is not None:
+        try:
+            search.check_cursor(form.query, filters, form.cursor)
+        except InvalidSearchCursor:
+            return None
+    return form.page_link(form.cursor)
 
 
 def card_page(caselist: str, cluster_id: str, request: Request) -> HTMLResponse:

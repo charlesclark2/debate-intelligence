@@ -33,7 +33,7 @@ from dataclasses import dataclass, field
 from typing import Final
 from urllib.parse import urlsplit
 
-from debate_core.domain.evidence_search import DEFAULT_RESULT_COUNT_CAP
+from debate_core.domain.evidence_search import DEFAULT_RESULT_COUNT_CAP, MAX_CURSOR_OFFSET
 
 __all__ = [
     "COOKIE_KEY_BYTES",
@@ -46,6 +46,7 @@ __all__ = [
 
 COOKIE_KEY_BYTES: Final = 32
 _DEFAULT_REGION: Final = "us-east-1"
+_COUNT_CAP_VARIABLE: Final = "TUB_RESULT_COUNT_CAP"
 
 
 class ConfigurationMissing(RuntimeError):
@@ -136,6 +137,7 @@ class PilotConfiguration:
             audit_log_group=required("TUB_AUDIT_LOG_GROUP"),
             evidence_bucket=required("TUB_EVIDENCE_BUCKET"),
             region=environ.get("AWS_REGION", "").strip() or _DEFAULT_REGION,
+            result_count_cap=_count_cap(environ.get(_COUNT_CAP_VARIABLE, "").strip()),
         )
         return configuration
 
@@ -147,6 +149,17 @@ class PilotConfiguration:
             if self.environment == "prod"
             else f"Team evidence search ({self.environment})"
         )
+
+
+def _count_cap(value: str) -> int:
+    """`TUB_RESULT_COUNT_CAP` as a whole number from 1 to the cursor limit; the default when unset."""
+    if not value:
+        return DEFAULT_RESULT_COUNT_CAP
+    if not value.isascii() or not value.isdigit() or not 1 <= int(value) <= MAX_CURSOR_OFFSET:
+        raise ConfigurationMissing(
+            _COUNT_CAP_VARIABLE, f"is not a whole number from 1 to {MAX_CURSOR_OFFSET}"
+        )
+    return int(value)
 
 
 def _origin(value: str, variable: str) -> str:

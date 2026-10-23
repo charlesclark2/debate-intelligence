@@ -139,18 +139,21 @@ def parse(
     if json_output and not cli.output.is_json:
         cli.output = CliOutput(OutputMode.JSON, verbose=cli.output.verbose)
     if publish_only:
-        _refuse_beside_publish_only(
-            publish=publish, reparse=reparse, snapshot=snapshot, dry_run=dry_run, failures=failures
+        _publish_only(
+            cli,
+            ctx,
+            caselist,
+            confirmed=confirm_prod,
+            beside={"publish": publish, "reparse": reparse, "dry_run": dry_run, "failures": failures},
+            snapshot=snapshot,
         )
+        return
     validate_publish_target(caselist, snapshot)
     if failures:
         listing = asyncio.run(cli.services.caselist_parse(with_bucket=False).failures(caselist))
         cli.output.success(command_name(ctx), failures_summary(listing), display=_failures_table(listing))
         return
     settings = cli.services.settings
-    if publish_only:
-        _publish_only(cli, ctx, caselist, settings, confirmed=confirm_prod)
-        return
     writing = publish and not dry_run
     _refuse(
         cli,
@@ -200,9 +203,19 @@ def _refuse_beside_publish_only(
 
 
 def _publish_only(
-    cli: CliContext, ctx: typer.Context, caselist: str, settings: Settings, *, confirmed: bool
+    cli: CliContext,
+    ctx: typer.Context,
+    caselist: str,
+    *,
+    confirmed: bool,
+    beside: dict[str, bool],
+    snapshot: str | None,
 ) -> None:
-    """`--publish-only`: `--publish`'s guards, the directory's check, then `--publish`'s publisher."""
+    """`--publish-only`: the options it refuses beside it, `--publish`'s guards, the directory's
+    check, then `--publish`'s publisher. `beside` is each flag of the command by its parameter."""
+    _refuse_beside_publish_only(snapshot=snapshot, **beside)
+    validate_publish_target(caselist)
+    settings = cli.services.settings
     _refuse(
         cli,
         ctx,

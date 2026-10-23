@@ -543,7 +543,10 @@ def test_a_session_that_expires_part_way_through_publish_owes_every_snapshot_it_
     assert {one["stage"]: one["outcome"] for one in data["stages"]}["publish"] == "completed"
     assert data["pending_publish"] == []
     assert not (installation / "data" / PENDING_WORK_FILE).exists()
-    published = {one["Key"] for one in bucket.list_objects_v2(Bucket=BUCKET, Prefix="manifests/")["Contents"]}
+    published = {
+        str(one.get("Key"))
+        for one in bucket.list_objects_v2(Bucket=BUCKET, Prefix="manifests/").get("Contents", [])
+    }
     assert f"manifests/{SYNTHETIC_CASELIST}/2026-09-01.jsonl" in published
     status = run("caselist", "status")
     assert status["exit_code"] == ExitCode.OK, status
@@ -724,7 +727,8 @@ def test_the_week_after_a_refused_run_the_pull_imports_publishes_and_publishes_t
     assert pulled["exit_code"] == ExitCode.OK, pulled
     assert run_summary(pulled)["objects_published"] > 0
     listed = [
-        str(one.get("Key")) for one in bucket.list_objects_v2(Bucket=BUCKET, Prefix="reports/")["Contents"]
+        str(one.get("Key"))
+        for one in bucket.list_objects_v2(Bucket=BUCKET, Prefix="reports/").get("Contents", [])
     ]
     assert sorted(key for key in listed if key.startswith("reports/sync-runs/")) == [
         "reports/sync-runs/2026/20260916T060000Z.json",
@@ -954,7 +958,10 @@ def test_a_manifest_the_publisher_cannot_read_fails_publish_with_one_and_the_run
     assert data["run_record"]["outcome"] == "failed"
     assert data["run_record"]["error_class"] is None
     assert stages["report"]["outcome"] == "completed"
-    published = {one["Key"] for one in bucket.list_objects_v2(Bucket=BUCKET, Prefix="manifests/")["Contents"]}
+    published = {
+        str(one.get("Key"))
+        for one in bucket.list_objects_v2(Bucket=BUCKET, Prefix="manifests/").get("Contents", [])
+    }
     assert f"manifests/{SYNTHETIC_CASELIST}/2026-09-08.jsonl" in published
     assert f"manifests/{SYNTHETIC_CASELIST}/2026-09-01.jsonl" not in published
     assert [one.title for one in notified.sent] == [PERSON_TITLE]

@@ -41,7 +41,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
-import site_smoke  # noqa: E402
+import site_smoke  # noqa: E402  # pyright: ignore[reportMissingImports]
 
 SITE_URL = os.environ.get("SITE_SMOKE_URL", "").strip()
 SITE_ENVIRONMENT = os.environ.get("SITE_SMOKE_ENV", "dev").strip() or "dev"

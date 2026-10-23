@@ -130,7 +130,7 @@ def allowed_ports(fake: str) -> frozenset[str]:
 def ports_reached(fake: str, sources: dict[str, str]) -> dict[str, str]:
     """Each port module `fake` reaches, with how: `line N` or `through <other fakes module>`."""
     reached: dict[str, str] = {}
-    pending = [(fake, None)]
+    pending: list[tuple[str, str | None]] = [(fake, None)]
     seen: set[str] = set()
     while pending:
         current, via = pending.pop()

@@ -185,8 +185,8 @@ def test_a_pull_is_listed_by_caselist_runs_locally_and_from_the_bucket(
     assert json.loads(bucket.get_object(Bucket=BUCKET, Key=beside)["Body"].read())["parse"] == counted
     stored = json.loads(bucket.get_object(Bucket=BUCKET, Key=key)["Body"].read())
     jsonschema.Draft202012Validator(json.loads(INSTALLED_BUILDS_RECORD.read_text("utf-8"))).validate(stored)  # pyright: ignore[reportUnknownMemberType]
-    under_the_records = bucket.list_objects_v2(Bucket=BUCKET, Prefix="reports/sync-runs/")["Contents"]
-    assert [one["Key"] for one in under_the_records] == [key], "an older build lists this prefix"
+    under_the_records = bucket.list_objects_v2(Bucket=BUCKET, Prefix="reports/sync-runs/").get("Contents", [])
+    assert [one.get("Key") for one in under_the_records] == [key], "an older build lists this prefix"
 
     rendered = installed_cli.run("caselist", "runs", env={"COLUMNS": "200"})
     table = " ".join(rendered.stdout.split())

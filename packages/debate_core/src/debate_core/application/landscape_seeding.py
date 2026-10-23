@@ -16,6 +16,9 @@ module builds them from this machine's stores:
   school and team code directories, and the side in the filename. A path with no readable school or
   team code is a disclosure by no known team. Teams are never read from the store, which holds no
   path, and never from heading text.
+* **its disclosures**, for the landscape report (`v1-e32-t03`), are those same on-topic live
+  disclosures as E30 records one (school, team code, side, tournament, round and snapshot), read by
+  the same parser and held only in memory.
 
 Names stay in memory. A team's school and code, and the tournament the file was disclosed at, go to
 the seeding function only to be taken out of that file's headings (a pocket named for a tournament

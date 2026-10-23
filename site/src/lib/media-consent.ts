@@ -4,7 +4,14 @@ import { join } from 'node:path'
 import matter from 'gray-matter'
 import { z } from 'zod'
 
-import { ContentValidationError, defaultContentDirectory } from './content'
+import {
+  ContentValidationError,
+  PLACEHOLDER_PATTERN,
+  defaultContentDirectory,
+  findPlaceholders,
+  quoteBareDates,
+} from './content'
+import type { ContentPage } from './content'
 
 /**
  * The media-consent manifest: who the site may name, and which images it may publish.
@@ -28,14 +35,23 @@ const isoDate = z
 
 const season = z.string().regex(SEASON_PATTERN, 'must look like 2026-27')
 
-export const consentedStudentSchema = z.object({
-  publishedName: z.string().min(1),
-  publishedForm: z.enum(['full-name-and-class-year', 'first-name-only']),
-  graduationYear: z.number().int().optional(),
-  consentReference: z.string().min(1),
-  season,
-  dateChecked: isoDate,
-})
+/**
+ * The full published form is "Jordan Rivera (2028)", so an entry that chooses it carries the year
+ * it prints; without one the build would have nothing to put in the brackets (v1-e37-t06).
+ */
+export const consentedStudentSchema = z
+  .object({
+    publishedName: z.string().min(1),
+    publishedForm: z.enum(['full-name-and-class-year', 'first-name-only']),
+    graduationYear: z.number().int().optional(),
+    consentReference: z.string().min(1),
+    season,
+    dateChecked: isoDate,
+  })
+  .refine(
+    (student) => student.publishedForm !== 'full-name-and-class-year' || student.graduationYear !== undefined,
+    { path: ['graduationYear'], message: 'is required when publishedForm is full-name-and-class-year' },
+  )
 
 export const consentedImageSchema = z.object({
   path: z.string().min(1),
@@ -88,8 +104,11 @@ export function loadMediaConsent(contentDirectory: string = defaultContentDirect
   if (!existsSync(absolutePath)) {
     throw new ContentValidationError(MEDIA_CONSENT_FILE, 'file is missing')
   }
-  // Read through gray-matter's YAML parser, the same one the pages and site.yaml use.
-  const parsed = matter(`---\n${readFileSync(absolutePath, 'utf8')}\n---\n`)
+  // Read through gray-matter's YAML parser, the same one the pages and site.yaml use, with every
+  // bare date quoted first. Without that, `dateChecked: 2026-09-18` as the comments in the file
+  // show it parsed as a Date and failed the string schema, so the first real entry written the
+  // documented way would have failed the build (found in v1-e37-t06).
+  const parsed = matter(`---\n${quoteBareDates(readFileSync(absolutePath, 'utf8'))}\n---\n`)
   const result = mediaConsentSchema.safeParse(parsed.data)
   if (!result.success) {
     const detail = result.error.issues
@@ -98,4 +117,51 @@ export function loadMediaConsent(contentDirectory: string = defaultContentDirect
     throw new ContentValidationError(MEDIA_CONSENT_FILE, `invalid manifest (${detail})`)
   }
   return result.data
+}
+
+/**
+ * The facts the manifest is still waiting for: a consent reference written as a `[[TBD: ...]]`
+ * marker because the activities office has not supplied it yet. Each is named by its position
+ * in the list, never by the student's name, because the guard prints these in every build
+ * (docs/policies/website-publishing.md, Students 10).
+ */
+export function consentPlaceholders(consent: MediaConsent): string[] {
+  const unfilled = (reference: string) => new RegExp(PLACEHOLDER_PATTERN.source).test(reference)
+  return [
+    ...consent.students.flatMap((student, index) =>
+      unfilled(student.consentReference)
+        ? [`${findPlaceholders(student.consentReference)[0] || 'TBD'} (consentReference of student entry ${index + 1})`]
+        : [],
+    ),
+    ...consent.images.flatMap((image) =>
+      unfilled(image.consentReference)
+        ? [`${findPlaceholders(image.consentReference)[0] || 'TBD'} (consentReference of image ${image.path})`]
+        : [],
+    ),
+  ]
+}
+
+/**
+ * content/media-consent.yaml as the publishing-policy guard sees it: no copy, only the gaps. An
+ * unfilled consent reference is then reported like any other [[TBD]] marker: printed by a dev
+ * build, so the preview still comes up for review, and fatal to a prod build, so nothing reaches
+ * the public site on a consent nobody can point to (v1-e37-t06). src/app/layout.tsx passes it.
+ */
+export function consentGuardedContent(contentDirectory: string = defaultContentDirectory()): ContentPage[] {
+  return [
+    {
+      slug: 'media-consent',
+      route: '/',
+      filePath: MEDIA_CONSENT_FILE,
+      title: MEDIA_CONSENT_FILE,
+      description: MEDIA_CONSENT_FILE,
+      navLabel: MEDIA_CONSENT_FILE,
+      navOrder: Number.MAX_SAFE_INTEGER,
+      excludeFromNavigation: true,
+      draft: false,
+      html: '',
+      guardedHtml: '',
+      placeholders: consentPlaceholders(loadMediaConsent(contentDirectory)),
+    },
+  ]
 }

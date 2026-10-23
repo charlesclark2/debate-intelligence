@@ -24,9 +24,20 @@
 
 season: '2026-27'
 
-# Students the site may name, in the form it may name them. Empty: the team has not had its first
-# practice of the season, and no page names a student.
-students: []
+# Students the site may name, in the form it may name them.
+#
+# The first entry is the student named in the season's first result (content/results.yaml).
+# Charlie confirmed with the activities office on 2026-10-01 that every rostered student's 2026-27
+# form is on file, and assigned the reference against that form; the mapping from a reference to a
+# student is his, kept with his records and never here. A reference written as a [[TBD]] marker
+# fails a prod build (src/lib/media-consent.ts, consentPlaceholders), so one never goes to dev.
+students:
+  - publishedName: Anya Prakash
+    publishedForm: full-name-and-class-year
+    graduationYear: 2027
+    consentReference: MC-2026-001
+    season: '2026-27'
+    dateChecked: 2026-10-01
 # Example of the shape, for when the first entry is added:
 #   - publishedName: Jordan Rivera
 #     publishedForm: full-name-and-class-year
@@ -94,6 +105,20 @@ permittedNamePhrases:
   - National Catholic Forensic League
   - Wisconsin Debate Coaches Association
   - Public Forum
+  # Divisions and events as a result line prints them ("First place, Varsity Lincoln-Douglas:"),
+  # in content/results.yaml (v1-e37-t06). The hyphen ends a run, so the guard sees "Varsity
+  # Lincoln" of "Varsity Lincoln-Douglas". Whole phrases, so Varsity, Novice and Lincoln are not
+  # permitted on their own.
+  - Junior Varsity
+  - Varsity Lincoln
+  - Junior Varsity Lincoln
+  - Novice Lincoln
+  - Varsity Public Forum
+  - Junior Varsity Public Forum
+  - Novice Public Forum
+  - Varsity Policy
+  - Junior Varsity Policy
+  - Novice Policy
   # Page headings that are written in title case, so the guard reads them as a name.
   - Debate Events Offered
   - Tournament Schedule

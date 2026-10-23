@@ -87,16 +87,40 @@ describe('the header navigation is the list in content/site.yaml', () => {
     )
   })
 
-  it('is the pages a parent goes looking for, in the order they need them', () => {
-    expect(settings.primaryNavigation).toEqual([
-      'home',
-      'about',
-      'events',
-      'schedule',
-      'join',
-      'coaches',
-      'faq',
-    ])
+  /**
+   * The order a parent needs, asserted as the relations that make it right rather than as one
+   * pinned list, which broke at every page added and had to be rewritten with the change it was
+   * meant to check (the PM's ruling for v1-e37-t06). A new page can go anywhere these leave open.
+   */
+  describe('is the pages a parent goes looking for, in the order they need them', () => {
+    const order = settings.primaryNavigation
+    const position = (slug: string) => {
+      expect(order, `${slug} is not in the header navigation`).toContain(slug)
+      return order.indexOf(slug)
+    }
+
+    it('starts at home', () => {
+      expect(order[0]).toBe('home')
+    })
+
+    it('puts the schedule straight after the events, so the two are read together', () => {
+      expect(position('schedule')).toBe(position('events') + 1)
+    })
+
+    it('puts the results straight after the schedule: what is coming, then how it went', () => {
+      expect(position('results')).toBe(position('schedule') + 1)
+    })
+
+    it('carries about, join, coaches and the parent questions', () => {
+      for (const slug of ['about', 'join', 'coaches', 'faq']) {
+        position(slug)
+      }
+    })
+
+    it('explains the team before the events, and the events before how to join', () => {
+      expect(position('about')).toBeLessThan(position('events'))
+      expect(position('results')).toBeLessThan(position('join'))
+    })
   })
 
   /**

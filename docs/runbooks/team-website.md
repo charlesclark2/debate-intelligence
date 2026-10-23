@@ -1074,6 +1074,31 @@ AWS_PROFILE=debate-prod-site aws cloudfront create-invalidation --distribution-i
 A calendar app that already fetched the file keeps its copy until it next checks, and nothing on
 the team's side can reach into it; for a student's details, contact the families directly as well.
 
+**For a result** (`v1-e37-t06`), the text is in the page folder `results/` (`results/index.html`,
+`results/index.txt` and the payloads) and, **while the result is one of the three newest**, on the
+home page too: the root `index.html`, `index.txt` and the `__next.*.txt` payloads at the top of the
+bucket (`__next.__PAGE__.txt`, `__next._full.txt`, `__next._tree.txt`). The `--exclude` and
+`--include` pair removes only those root payloads, not the folders. Removing the home page leaves
+the front page a 404 until the rebuild is deployed, which the policy accepts: a missing page is
+better than a name left up. For an older result, the first command and `'/results/*'` are enough.
+
+First the dry run, which deletes nothing: it must list exactly the three root `__next.*.txt` files
+and nothing inside a folder. Anything else, stop.
+
+```bash
+AWS_PROFILE=debate-prod-site aws s3 rm --dryrun --recursive s3://debate-prod-site-a7508de8/ --exclude '*' --include '__next.*.txt'
+```
+
+Then the removal:
+
+```bash
+AWS_PROFILE=debate-prod-site aws s3 rm --recursive s3://debate-prod-site-a7508de8/results/
+AWS_PROFILE=debate-prod-site aws s3 rm s3://debate-prod-site-a7508de8/index.html
+AWS_PROFILE=debate-prod-site aws s3 rm s3://debate-prod-site-a7508de8/index.txt
+AWS_PROFILE=debate-prod-site aws s3 rm --recursive s3://debate-prod-site-a7508de8/ --exclude '*' --include '__next.*.txt'
+AWS_PROFILE=debate-prod-site aws cloudfront create-invalidation --distribution-id <prod-distribution-id> --paths '/results/*' '/' '/index.html' '/index.txt' '/__next.*'
+```
+
 This is a stop-gap and leaves the site inconsistent with `main`: the **next deploy puts the page
 back**. Follow it with the takedown below the same day.
 

@@ -59,12 +59,17 @@ spec:
         tournament, each showing the tournament, its date, the event and division and the
         placing; the home page shows the three newest and links to the page; the page is in
         the primary navigation and has no WCAG 2.1 AA violation.
+    # PM ruling, 2026-10-23 (v1-e37-t06 review, ruling 1): a named student with no consent entry
+    # is refused; one whose entry is lapsed or first-name-only is published in team-level form by
+    # the build, so a lapsed form or a reduced-name request needs no edit to content/results.yaml.
     - id: ac2
       description: >-
         The build refuses, naming the entry and the policy rule: a named student with no
-        current-season consent entry; a partner-event result naming one partner; a placing
-        that is a loss or a record (a win-loss line, a points total, a ranking across
-        tournaments); an opponent student's name; an email address or phone number. A
+        consent entry in content/media-consent.yaml; a partner-event result naming one
+        partner; a placing that is a loss or a record (a win-loss line, a points total, a
+        ranking across tournaments); an opponent student's name; an email address or phone
+        number. A named student whose entry is not current for the season, or asks for the
+        first name only, is published in team-level form by the build, never by hand. A
         team-level result always publishes. Tests shown failing first.
     - id: ac3
       description: >-
@@ -81,7 +86,7 @@ spec:
         first result is published through dev and then prod with his consent reference in
         the manifest, and the report records it without the student's name.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

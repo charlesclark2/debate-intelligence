@@ -16,6 +16,7 @@ import {
   loadEventsContent,
   loadPage,
   loadSiteSettings,
+  quoteBareDates,
 } from './content'
 import type { ContentPage } from './content'
 
@@ -384,15 +385,6 @@ export function formatDateRange(range: DateRange): string {
 /*
  * Reading the file.
  */
-
-/**
- * The YAML parser turns an unquoted 2026-02-30 into March 2 without a word. Every bare date in
- * the file is therefore quoted before parsing, so a date reaches the schema exactly as it was
- * typed and an impossible one fails the build instead of moving.
- */
-function quoteBareDates(source: string): string {
-  return source.replace(/^(\s*(?:-\s+)?[A-Za-z]+:\s*)(\d{4}-\d{2}-\d{2})(\s*(?:#.*)?)$/gm, "$1'$2'$3")
-}
 
 /** A YAML file from content/, with its bare dates kept as typed. content/results.yaml reads through it too. */
 export function readYaml(contentDirectory: string, fileName: string, filePath: string): unknown {

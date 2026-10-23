@@ -21,6 +21,9 @@ import {
 import { resultsGuardedContent } from '@/lib/results'
 import { scheduleGuardedContent } from '@/lib/tournaments'
 
+import { STUDENTS, withConsent } from './results-fixture'
+import { contentWith } from './schedule-fixture'
+
 /**
  * The content guard (v1-e36-t04 acceptance criterion 3).
  *
@@ -310,6 +313,30 @@ describe('the start-of-season check', () => {
     expect(report.errors).toEqual([])
     expect(report.warnings.map((warning) => warning.message).join('\n')).toMatch(
       /the start-of-season check for 2026-27 has not been recorded/,
+    )
+  })
+})
+
+/**
+ * The manifest's own example writes `dateChecked: 2026-09-18` unquoted. The YAML parser reads
+ * that as a Date, which the schema refused, so the first entry written as documented would have
+ * failed the build; and it moves an impossible date such as 2026-09-31 to October 1 without a
+ * word. Bare dates are now quoted before parsing, as content/tournaments.yaml's are (v1-e37-t06).
+ */
+describe('dates in the media-consent manifest', () => {
+  it('reads an unquoted dateChecked as the date that was typed', () => {
+    const directory = contentWith({ 'media-consent.yaml': withConsent([STUDENTS.jordan]) })
+    const entry = loadMediaConsent(directory).students.find(
+      (student) => student.consentReference === STUDENTS.jordan.consentReference,
+    )
+    expect(entry?.dateChecked).toBe('2026-09-18')
+  })
+
+  it('refuses a full-name entry with no graduation year to print', () => {
+    const { graduationYear: _omitted, ...withoutYear } = STUDENTS.jordan
+    const directory = contentWith({ 'media-consent.yaml': withConsent([withoutYear]) })
+    expect(() => loadMediaConsent(directory)).toThrow(
+      /graduationYear: is required when publishedForm is full-name-and-class-year/,
     )
   })
 })

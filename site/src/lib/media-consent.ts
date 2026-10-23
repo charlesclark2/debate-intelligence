@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import matter from 'gray-matter'
 import { z } from 'zod'
 
-import { ContentValidationError, defaultContentDirectory } from './content'
+import { ContentValidationError, defaultContentDirectory, quoteBareDates } from './content'
 
 /**
  * The media-consent manifest: who the site may name, and which images it may publish.
@@ -97,8 +97,11 @@ export function loadMediaConsent(contentDirectory: string = defaultContentDirect
   if (!existsSync(absolutePath)) {
     throw new ContentValidationError(MEDIA_CONSENT_FILE, 'file is missing')
   }
-  // Read through gray-matter's YAML parser, the same one the pages and site.yaml use.
-  const parsed = matter(`---\n${readFileSync(absolutePath, 'utf8')}\n---\n`)
+  // Read through gray-matter's YAML parser, the same one the pages and site.yaml use, with every
+  // bare date quoted first. Without that, `dateChecked: 2026-09-18` as the comments in the file
+  // show it parsed as a Date and failed the string schema, so the first real entry written the
+  // documented way would have failed the build (found in v1-e37-t06).
+  const parsed = matter(`---\n${quoteBareDates(readFileSync(absolutePath, 'utf8'))}\n---\n`)
   const result = mediaConsentSchema.safeParse(parsed.data)
   if (!result.success) {
     const detail = result.error.issues

@@ -408,6 +408,16 @@ function pagesDirectory(contentDirectory: string): string {
   return join(contentDirectory, 'pages')
 }
 
+/**
+ * The YAML parser turns an unquoted 2026-02-30 into March 2 without a word. Every bare date in
+ * the file is therefore quoted before parsing, so a date reaches the schema exactly as it was
+ * typed and an impossible one fails the build instead of moving. content/tournaments.yaml,
+ * content/results.yaml and content/media-consent.yaml are all read through it.
+ */
+export function quoteBareDates(source: string): string {
+  return source.replace(/^(\s*(?:-\s+)?[A-Za-z]+:\s*)(\d{4}-\d{2}-\d{2})(\s*(?:#.*)?)$/gm, "$1'$2'$3")
+}
+
 export function formatIssues(error: z.ZodError): string {
   return error.issues
     .map((issue) => {

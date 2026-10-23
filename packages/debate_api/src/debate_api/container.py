@@ -107,7 +107,11 @@ def build_pilot_services(environ: Mapping[str, str]) -> PilotServices:
         directory=Path(tempfile.gettempdir()) / INDEX_DIRECTORY_NAME,
         open_reader=_open_index,
         clock=_now,
-        build_service=partial(EvidenceSearchService, count_cap=configuration.result_count_cap),
+        build_service=partial(
+            EvidenceSearchService,
+            count_cap=configuration.result_count_cap,
+            passage_share_percent=configuration.passage_share_percent,
+        ),
         suppression_list=evidence,
     )
     access_audit = AccessAuditService(audit=audit, clock=_now)

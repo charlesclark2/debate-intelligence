@@ -613,7 +613,22 @@ and the signed-in reading came from the HAR instead.
   dev (4e and block 5 contain both), since an index built over the empty aggregates would publish
   an empty index to the live pilot. The PM adds an index shrink guard and a working agreement on
   ambient overrides and empty-store success checks in the next batch.
-- **R, the rebuild, corrected run:** REBUILD_RESULTS_PENDING.
+- **R, the rebuild, corrected run.** The guarded block, run in a new window, printed its `STOP`
+  line and ran nothing. Why it refused there was not established: either an override or a
+  `caselist pull` process was present in that window. The operator then ran the four parses as plain
+  commands (`DEBATE_ENV=dev debate-research caselist parse --caselist <slug> --publish`) in another
+  terminal, from `~`. After them, that terminal printed `override: none` and no pull. Every
+  caselist passed the PM's test (Sources = Skipped, above zero; Parsed 0; Published 3 uploaded):
+
+  | Caselist | Sources = Skipped | Parsed | Published | Store | Time |
+  |---|---|---|---|---|---|
+  | `hsld26` | 6,122 | 0 | 3 uploaded, 6,122 skipped | 93,377 cards, 13,225 clusters, 109,110 occurrences | 410.8 s |
+  | `hspf26` | 5,234 | 0 | 3 uploaded, 5,234 skipped | 59,406 cards, 11,393 clusters, 73,632 occurrences | 224.7 s |
+  | `hspolicy26` | 3,869 | 0 | 3 uploaded, 3,869 skipped | 126,681 cards, 21,595 clusters, 144,841 occurrences | 540.4 s |
+  | `openev` | 104 | 0 | 3 uploaded, 104 skipped | 8,081 cards, 5,846 clusters, 8,081 occurrences | 53.9 s |
+
+  Each uploaded to `parsed/<caselist>/2026.10.20-docx-6/`, so the dev bucket's current aggregates
+  are the real ones again; the empty uploads of the first run are now noncurrent versions.
 
 ## Follow-up work
 

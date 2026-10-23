@@ -507,10 +507,11 @@ def occurrence_provenance_line(
 ) -> str | None:
     """The line below a card's cite, from what the index stores of an occurrence; `None` when it kept none.
 
-    The same line the E33 writer's `provenance_line` composes from the parsed store's records (data-use
-    policy, Attribution rule 2): `[Disclosed: hsld26 2026-09-15 — Maple Grove QX, Aff vs. Riverbend
-    Invitational Round 4]`, or `[Disclosed: hsld26 2026-09-15]` with no disclosure on record; a camp
-    card's `[OpenEv: Cascade Institute 2026 — Policy, Climate Adv CP]`. A test holds the two together.
+    The line the pilot's card page shows (data-use policy, Attribution rule 2), and the one a built
+    file's sidecar records: the E33 writer composes its sidecar's line with this function, from the
+    parsed store's records (`v1-e33-t08`). `[Disclosed: hsld26 2026-09-15 — Maple Grove QX, Aff vs.
+    Riverbend Invitational Round 4]`, or `[Disclosed: hsld26 2026-09-15]` with no disclosure on record;
+    a camp card's `[OpenEv: Cascade Institute 2026 — Policy, Climate Adv CP]`.
     """
     if not provenance:
         return None

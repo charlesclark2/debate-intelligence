@@ -22,10 +22,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 from pydantic import ValidationError
 
-from debate_core.application.ports.parsed_store import OccurrenceRecord
-from debate_core.domain.card_occurrence import ClusterMembership
-from debate_core.domain.caselist import CampFile, Disclosure, Event, RoundLabel, Side
-from debate_core.domain.debate_files import CardCompleteness
+from debate_core.domain.caselist import Disclosure, Event, RoundLabel, Side
 from debate_core.domain.evidence_search import (
     MAX_CURSOR_OFFSET,
     MAX_QUERY_CHARACTERS,
@@ -51,7 +48,6 @@ from debate_core.domain.evidence_search import (
 )
 from debate_core.domain.search_index import IndexedFontSizeSpan, IndexedFormattingSpan
 from debate_core.domain.style_profile import RunEmphasis
-from debate_core.integrations.docx_file_writer.writer import provenance_line
 
 TAG, CITE = SearchField.TAG, SearchField.CITE
 
@@ -438,39 +434,6 @@ def test_search_card_runs_keep_two_overlapping_colours_and_cut_a_span_at_the_tex
 # ------------------------------------------------------------------------------------------------
 
 SOURCE = "1" * 64
-DIGEST = "2" * 64
-CLUSTER = "3" * 64
-
-
-def caselist_row(snapshot: str = "2026-09-15") -> OccurrenceRecord:
-    return OccurrenceRecord(
-        caselist="hsld26",
-        snapshot=snapshot,
-        last_snapshot="2026-09-22",
-        source_sha256=SOURCE,
-        parser_version="2026.10.18-docx-5",
-        profile_version="2026.09.20-verbatim-1",
-        fingerprint_version="card-fingerprint-v4",
-        disclosure=DIGEST,
-        first_element_index=1,
-        last_element_index=3,
-        exact_fingerprint=CLUSTER,
-        cluster_id=CLUSTER,
-        membership=ClusterMembership.NEAR_DUPLICATE,
-        completeness=CardCompleteness.FULL,
-    )
-
-
-def camp_row(release: str = "2026-policy") -> OccurrenceRecord:
-    return caselist_row().model_copy(
-        update={
-            "caselist": "openev",
-            "snapshot": release,
-            "last_snapshot": release,
-            "disclosure": None,
-            "camp": "Cascade Institute",
-        }
-    )
 
 
 def disclosure(side: Side, tournament: str | None, round_raw: str | None) -> Disclosure:
@@ -507,12 +470,11 @@ def disclosure(side: Side, tournament: str | None, round_raw: str | None) -> Dis
         (Side.UNKNOWN, None, None, "[Disclosed: hsld26 2026-09-15 — Maple Grove QX]"),
     ],
 )
-def test_search_provenance_line_is_the_writers_line_for_a_disclosed_card(
+def test_search_provenance_line_is_the_policys_line_for_a_disclosed_card(
     side: Side, tournament: str | None, round_raw: str | None, line: str
 ) -> None:
     """The index's fields, mapped from the records as `search_index_build._occurrence` maps them."""
     record = disclosure(side, tournament, round_raw)
-    assert provenance_line(caselist_row(), record) == line
     assert (
         occurrence_provenance_line(
             caselist="hsld26",
@@ -529,26 +491,15 @@ def test_search_provenance_line_is_the_writers_line_for_a_disclosed_card(
 
 
 def test_search_provenance_line_without_a_disclosure_or_past_the_limit() -> None:
-    assert provenance_line(caselist_row(), None) == "[Disclosed: hsld26 2026-09-15]"
     assert occurrence_provenance_line(caselist="hsld26", snapshot="2026-09-15", provenance=True) == (
         "[Disclosed: hsld26 2026-09-15]"
     )
     assert occurrence_provenance_line(caselist="hsld26", snapshot="2026-09-15", provenance=False) is None
 
 
-def test_search_provenance_line_is_the_writers_line_for_a_camp_card() -> None:
-    camp_file = CampFile(
-        source_sha256=SOURCE,
-        camp="Cascade Institute",
-        year=2026,
-        event=Event.POLICY,
-        file_title="Invented Adv CP",
-        snapshot=date(2026, 7, 1),
-    )
+def test_search_provenance_line_is_the_policys_line_for_a_camp_card() -> None:
     recorded = "[OpenEv: Cascade Institute 2026 — Policy, Invented Adv CP]"
     unrecorded = "[OpenEv: Cascade Institute 2026 — Policy]"
-    assert provenance_line(camp_row(), None, camp_file=camp_file) == recorded
-    assert provenance_line(camp_row(), None) == unrecorded
     assert (
         occurrence_provenance_line(
             caselist="openev",

@@ -13,6 +13,16 @@ tournament or round. Everything else here is a FAIL: a fingerprint twice, a head
 out of the profile's styles, the sidecar and the document disagreeing, provenance missing what the
 policy needs, and a card under a suppression.
 
+## Provenance is in the sidecar, never in the file's text (`v1-e33-t08`)
+
+Data-use policy version 1.11 (Attribution rules 2, 3 and 5): a built file carries no provenance line,
+and a card's provenance is its sidecar entry. So the provenance check fails a document card with no
+sidecar entry at its position (whether the entry is that card is the alignment check's question), and
+a file whose text holds a provenance line: a paragraph opening in the policy's form (`[Disclosed: `,
+`[OpenEv: `) or holding a sidecar entry's line anywhere in it. A line inside a
+card is reported on that card; one outside every card by its paragraph index. The report names the
+paragraph, never the line, which names a school and a team code.
+
 ## Headings
 
 Verbatim's levels are pocket > hat > block > tag (`Heading1` to `Heading4`), and `v1-e33-t01` lets a
@@ -381,18 +391,13 @@ def check_alignment(entries: Sequence[FileProvenanceEntry], cards: Sequence[Pars
 # ------------------------------------------------------------------------------------------------
 
 
-def _line_below_cite(document: ParsedDocument, card: ParsedCard | None, line: str) -> bool:
-    """Whether `line` is an Undertag paragraph of `card`, after its last cite paragraph."""
-    if card is None:
-        return False
-    first, last = card.provenance.first_element_index, card.provenance.last_element_index
-    inside = [section for section in document.sections if first <= section.element_index <= last]
-    cites = [section.element_index for section in inside if section.unit is StructuralUnit.CITE]
-    after = max(cites, default=-1)
-    return any(
-        section.unit is StructuralUnit.UNDERTAG and section.text == line and section.element_index > after
-        for section in inside
-    )
+#: How a provenance line opens, in either of the policy's forms (Attribution rule 2).
+_LINE_OPENINGS: Final = ("[Disclosed: ", "[OpenEv: ")
+
+
+def _holds_a_provenance_line(text: str, lines: frozenset[str]) -> bool:
+    """Whether a paragraph opens in the policy's form of a provenance line, or holds a sidecar line."""
+    return text.lstrip().startswith(_LINE_OPENINGS) or any(line in text for line in lines)
 
 
 def _camp_provenance(entry: FileProvenanceEntry) -> tuple[list[str], list[str]]:
@@ -444,32 +449,65 @@ def _caselist_provenance(entry: FileProvenanceEntry) -> tuple[list[str], list[st
 
 
 def check_provenance(entries: Sequence[FileProvenanceEntry], document: ParsedDocument) -> list[CheckResult]:
-    """Each entry's provenance is complete, and its line is below its card's cite, in Undertag.
+    """Each card's provenance is its complete sidecar entry, and the file's text holds no provenance line.
 
     Complete (PM ruling, 2026-10-19): a camp card names its camp year, event and file title; a caselist
     card names its disclosure, which is either on record (school, team code and side, and a tournament
     and round where the disclosure records them, warned where it does not) or not on record at all.
     The source SHA-256, the snapshot and `provenance_mode` FILE_IMPORT the sidecar's own schema
-    requires, so a sidecar without them fails the sidecar check.
+    requires, so a sidecar without them fails the sidecar check. A document card with no sidecar entry
+    has no provenance on record and fails (Attribution rule 5); so does a provenance line in the file's
+    text (rule 2, since policy version 1.11).
     """
     check = QualityCheck.PROVENANCE_COMPLETE
     results: list[CheckResult] = []
+    lines = frozenset(entry.provenance_line for entry in entries)
+    held = [section for section in document.sections if _holds_a_provenance_line(section.text, lines)]
+    reported: set[int] = set()
     for entry in entries:
         if entry.caselist == CAMP_STORE:
             problems, warnings = _camp_provenance(entry)
         else:
             problems, warnings = _caselist_provenance(entry)
         card = document.cards[entry.position - 1] if entry.position <= len(document.cards) else None
-        if not _line_below_cite(document, card, entry.provenance_line):
-            problems.append("the card's provenance line is not below its cite in the Undertag style")
+        if card is not None:
+            first, last = card.provenance.first_element_index, card.provenance.last_element_index
+            inside = {section.element_index for section in held if first <= section.element_index <= last}
+            if inside:
+                problems.append("the card's text holds a provenance line, which a built file never carries")
+                reported |= inside
         found = [(CheckStatus.FAIL, problem) for problem in problems] + [
             (CheckStatus.WARN, warning) for warning in warnings
         ]
         if not found:
-            found = [(CheckStatus.PASS, "the card's provenance is complete and its line is below its cite")]
+            found = [
+                (CheckStatus.PASS, "the card's provenance is complete and the file's text holds no line")
+            ]
         results.extend(
             _result(check, status, message, entry.position, entry.fingerprint) for status, message in found
         )
+    covered = {entry.position for entry in entries}
+    for position, card in enumerate(document.cards, start=1):
+        if position not in covered:
+            results.append(
+                _result(
+                    check,
+                    CheckStatus.FAIL,
+                    "the document's card has no sidecar entry, so no provenance on record",
+                    position,
+                    card_fingerprint(card).exact_fingerprint,
+                )
+            )
+    results.extend(
+        _result(
+            check,
+            CheckStatus.FAIL,
+            "the file's text holds a provenance line, which a built file never carries",
+            paragraph_index=section.element_index,
+        )
+        for section in held
+        if section.element_index not in reported
+    )
     return results
 
 

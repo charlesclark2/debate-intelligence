@@ -251,11 +251,12 @@ class HyperlinkTargets:
 
 @dataclass(frozen=True, slots=True)
 class CopiedCard:
-    """A card's paragraphs, copied, split where the provenance line goes.
+    """A card's paragraphs, copied, split after its last cite paragraph.
 
     `tag` is the copied tag paragraph, or None when the card has none. `through_cite` runs from the
     paragraph after the tag to the card's last cite paragraph; `after_cite` is the rest. The
-    provenance line goes between the two (data-use policy, Attribution rule 2).
+    provenance line went between the two until data-use policy version 1.11 (`v1-e33-t08`); the
+    writer now writes one after the other, as the source has them.
     """
 
     tag: XmlElement | None

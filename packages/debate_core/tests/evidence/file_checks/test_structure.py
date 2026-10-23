@@ -7,10 +7,13 @@ checks run on a real file from `v1-e33-t02`'s writer, with its cards or sidecar 
 
 from __future__ import annotations
 
+import io
+import zipfile
 from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
 import pytest
+from lxml import etree
 
 from debate_core.application.ports.evidence_file_writer import BuiltEvidenceFile
 from debate_core.domain.caselist import Event
@@ -30,6 +33,7 @@ from debate_core.evidence.file_checks.structure import (
     check_sidecar,
     check_suppression,
 )
+from debate_core.integrations.docx_parser.package import W_NAMESPACE
 from debate_core.testing.docx_builder import build_docx, paragraph_xml, run_xml
 from debate_core.testing.file_builder import SourceCard
 
@@ -449,7 +453,7 @@ def _provenance(
     return _not_passing(check_provenance(entries, standard[1]))
 
 
-def test_every_card_of_the_standard_file_has_complete_provenance_and_its_line(standard: Checked) -> None:
+def test_every_card_of_the_standard_file_has_complete_provenance_and_no_line(standard: Checked) -> None:
     results = check_provenance(standard[0].manifest.cards, standard[1])
     assert [(result.card_position, result.status) for result in results] == [
         (1, CheckStatus.PASS),
@@ -489,18 +493,10 @@ def test_a_card_with_no_disclosure_on_record_is_complete(
     assert _not_passing(check_provenance(built.manifest.cards, document)) == []
 
 
-def test_a_provenance_line_missing_from_its_card_fails(standard: Checked) -> None:
-    line = "[Disclosed: hspolicy26 2026-09-15 — Maple Grove QX, Neg vs. Riverbend Invitational Round 4]"
-    assert _provenance(standard, 3, provenance_line=line) == [
-        (CheckStatus.FAIL, 3, "the card's provenance line is not below its cite in the Undertag style")
-    ]
-
-
 def test_a_provenance_line_not_in_the_policys_form_fails(standard: Checked) -> None:
     line = "[Disclosed: hsld26 2026-09-15 — Maple Grove QX, Aff vs. Riverbend Invitational Round 4]"
     assert _provenance(standard, 1, provenance_line=line) == [
         (CheckStatus.FAIL, 1, "the provenance line does not name the card's caselist and first snapshot"),
-        (CheckStatus.FAIL, 1, "the card's provenance line is not below its cite in the Undertag style"),
     ]
 
 
@@ -509,7 +505,75 @@ def test_a_line_that_does_not_name_the_team_on_record_fails(standard: Checked) -
     line = "[Disclosed: hspolicy26 2026-09-15 — Cedar Hollow ZaLu, Aff vs. Riverbend Invitational Round 4]"
     assert _provenance(standard, 2, provenance_line=line) == [
         (CheckStatus.FAIL, 2, "the provenance line does not name the school and team code on record"),
-        (CheckStatus.FAIL, 2, "the card's provenance line is not below its cite in the Undertag style"),
+    ]
+
+
+def _with_paragraph(docx: bytes, after: str, paragraph: str) -> bytes:
+    """The built file with `paragraph` inserted after the one paragraph whose text starts with `after`."""
+    w = f"{{{W_NAMESPACE}}}"
+    with zipfile.ZipFile(io.BytesIO(docx)) as package:
+        parts = [(info, package.read(info.filename)) for info in package.infolist()]
+    out = io.BytesIO()
+    with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as package:
+        for info, data in parts:
+            if info.filename == "word/document.xml":
+                root = etree.fromstring(data)
+                (anchor,) = [
+                    one
+                    for one in root.iter(f"{w}p")
+                    if "".join(t.text or "" for t in one.iter(f"{w}t")).startswith(after)
+                ]
+                wrapper = etree.fromstring(f'<w:body xmlns:w="{W_NAMESPACE}">{paragraph}</w:body>')
+                anchor.addnext(wrapper[0])
+                data = etree.tostring(root, xml_declaration=True, encoding="UTF-8", standalone=True)
+            package.writestr(info, data)
+    return out.getvalue()
+
+
+def test_a_built_file_whose_card_holds_its_provenance_line_fails(
+    standard: Checked, read: Callable[[bytes], ParsedDocument]
+) -> None:
+    """Data-use policy 1.11, Attribution rule 2: a built file carries no provenance line (`v1-e33-t08`)."""
+    entries = standard[0].manifest.cards
+    line = paragraph_xml(run_xml(entries[1].provenance_line), style="Undertag")
+    document = read(_with_paragraph(standard[0].docx, "Okonkwo 25", line))
+    assert [card.provenance.first_element_index for card in document.cards] == [
+        card.provenance.first_element_index + (1 if index >= 2 else 0)
+        for index, card in enumerate(standard[1].cards)
+    ], "the line joins card 2 and moves the cards after it by one paragraph"
+    assert _not_passing(check_provenance(entries, document)) == [
+        (CheckStatus.FAIL, 2, "the card's text holds a provenance line, which a built file never carries")
+    ]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "[OpenEv: Cascade Institute 2031 — Policy, Climate Adv CP]",
+        "As the card below says, [Disclosed: hspolicy26 2026-09-15 — Maple Grove QX, Aff vs. "
+        "Riverbend Invitational Round 4] is who read it.",
+    ],
+    ids=["the-policys-form", "a-sidecar-line-inside-other-text"],
+)
+def test_a_provenance_line_outside_any_card_fails_with_its_paragraph(
+    standard: Checked, read: Callable[[bytes], ParsedDocument], text: str
+) -> None:
+    analytic = paragraph_xml(run_xml(text), style="Analytic")
+    document = read(_with_paragraph(standard[0].docx, "Disclosed cards (FILE_IMPORT)", analytic))
+    results = check_provenance(standard[0].manifest.cards, document)
+    failing = [
+        (result.card_position, result.paragraph_index, result.message)
+        for result in results
+        if result.status is CheckStatus.FAIL
+    ]
+    assert failing == [(None, 1, "the file's text holds a provenance line, which a built file never carries")]
+
+
+def test_a_card_with_no_sidecar_entry_fails_provenance(standard: Checked) -> None:
+    """Attribution rule 5: a card with no provenance on record may not be in a built file."""
+    entries = [entry for entry in standard[0].manifest.cards if entry.position != 3]
+    assert _not_passing(check_provenance(entries, standard[1])) == [
+        (CheckStatus.FAIL, 3, "the document's card has no sidecar entry, so no provenance on record")
     ]
 
 

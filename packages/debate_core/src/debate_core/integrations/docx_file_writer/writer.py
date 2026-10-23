@@ -6,17 +6,25 @@
    saying the cards are disclosed or camp cards (FILE_IMPORT) and not verified by the platform.
 2. **The recipe's headings**: each pocket, hat and block in the profile's `Heading1` to `Heading3`.
 3. **Each card**, copied by :mod:`.run_copier`: its tag (or the coach's override, in the profile's tag
-   style), its cite, **the provenance line** below the cite in the Undertag style (data-use policy,
-   Attribution rule 2; PM amendment 2026-10-19), then its body.
+   style), its cite, then its body.
 4. **Each analytic**, in the profile's Analytic style.
 
-That is the only new text: headings, overrides and analytics are the coach's, the header is fixed,
-and the provenance line is built from the occurrence and its disclosure record, never from card text.
+That is the only new text: headings, overrides and analytics are the coach's, and the header is fixed.
+
+## No provenance line in the file; the provenance in the sidecar (`v1-e33-t08`)
+
+A built file carries no provenance line, for disclosed and camp cards alike (data-use policy version
+1.11, Attribution rule 2: the team's own files are disclosed on the caselist, and other schools' names
+and team codes in them are clutter). Each card's provenance is in the sidecar (rule 3), which is what a
+removal request is matched against, and its `provenance_line` is the line the pilot's card page shows:
+:func:`~debate_core.domain.evidence_search.occurrence_provenance_line` composes it, from the
+occurrence, its disclosure record and, for a camp card, its release, converted at this boundary. It is
+built from those records, never from card text.
 
 ## Camp (OpenEv) cards (`v1-e33-t06`)
 
-A camp card's line is the policy's other form, `[OpenEv: <camp> <year> — <event>, <file title>]`: the
-camp from its occurrence row, the year, event and file title from its release record
+A camp card's sidecar line is the policy's other form, `[OpenEv: <camp> <year> — <event>, <file
+title>]`: the camp from its occurrence row, the year, event and file title from its release record
 (:attr:`~debate_core.application.file_recipes.ResolvedCard.camp_file`). With no release record, the
 year and event are read from the row's release (`2031-policy`) and the title is left out. Its source is
 read by its SHA-256 like any other. A writer given `source_stores` reads each source from the store of
@@ -74,12 +82,12 @@ from debate_core.domain.caselist import (
     CampFile,
     Disclosure,
     Event,
-    Side,
     SourceDocument,
     SourceFormat,
     SourceOrigin,
 )
 from debate_core.domain.debate_files import ParsedCard, ParsedDocument, ParseFailure
+from debate_core.domain.evidence_search import occurrence_provenance_line
 from debate_core.domain.file_provenance import (
     FileProvenanceEntry,
     FileProvenanceManifest,
@@ -121,19 +129,14 @@ from debate_core.integrations.docx_parser.parser import DebateDocxParser
 
 __all__ = [
     "FILE_BUILDER_VERSION",
-    "HIGHLIGHTED_CITE_CAUSE",
     "DocxEvidenceFileWriter",
     "header_line",
-    "provenance_line",
 ]
 
-#: The reason a card is refused when the provenance line stands between its highlighted cite and its
-#: body (PM ruling, 2026-10-19; the parser moves with `v1-e31-t24`).
-HIGHLIGHTED_CITE_CAUSE: Final = "the provenance line stands between a highlighted cite and its body"
-
 #: Version recorded in every sidecar. Bumped whenever the bytes a recipe builds to change: `-2` adds
-#: camp cards and the sidecar's camp keys (`v1-e33-t06`).
-FILE_BUILDER_VERSION: Final = "2026.10.19-file-writer-2"
+#: camp cards and the sidecar's camp keys (`v1-e33-t06`); `-3` writes no provenance line and drops the
+#: header's last sentence, which pointed to it (`v1-e33-t08`).
+FILE_BUILDER_VERSION: Final = "2026.10.22-file-writer-3"
 
 _W15_NAMESPACE: Final = "http://schemas.microsoft.com/office/word/2012/wordml"
 
@@ -147,11 +150,6 @@ _DOCUMENT_NAMESPACES: Final = {
     "w15": _W15_NAMESPACE,
 }
 
-_SIDE_LABELS: Final = {Side.AFF: "Aff", Side.NEG: "Neg", Side.PRO: "Pro", Side.CON: "Con"}
-
-#: How the policy's line names an event: `[OpenEv: Cascade Institute 2026 — Policy, Climate Adv CP]`.
-_EVENT_LABELS: Final = {Event.POLICY: "Policy", Event.LD: "LD", Event.PF: "PF"}
-
 #: The path the parser is told a source sat at. It is recorded nowhere the writer keeps; a real
 #: disclosure path names a school and a team, and the writer has no use for one.
 _SOURCE_PATH_FOR_THE_PARSER: Final = "disclosed-source.docx"
@@ -162,18 +160,17 @@ _UNDATED: Final = date(2000, 1, 1)
 
 
 # ------------------------------------------------------------------------------------------------
-# The two lines the writer composes
+# The header line, and the sidecar's provenance line
 # ------------------------------------------------------------------------------------------------
 
 
 @dataclass(frozen=True, slots=True)
 class _CampRelease:
-    """What a camp card's line and sidecar entry say about where it came from."""
+    """What a camp card's sidecar entry, and the provenance line in it, say about where it came from."""
 
     camp: str | None
     year: int
     event: Event | None
-    event_label: str
     file_title: str | None
 
 
@@ -183,9 +180,9 @@ def _camp_release(occurrence: OccurrenceRecord, camp_file: CampFile | None) -> _
     Without a record, the year and event are read from the occurrence's release, `2031-policy`, which
     is the importer's own name for it (`openev_release_name`), and there is no title to give.
     """
+    event: Event | None
     if camp_file is not None:
         year, event = camp_file.year, camp_file.event
-        named = event.value.lower()
     else:
         year, named = int(occurrence.snapshot[:4]), occurrence.snapshot[5:]
         event = next((one for one in Event if one.value.lower() == named), None)
@@ -193,62 +190,57 @@ def _camp_release(occurrence: OccurrenceRecord, camp_file: CampFile | None) -> _
         camp=occurrence.camp or (camp_file.camp if camp_file is not None else None),
         year=year,
         event=event,
-        event_label=_EVENT_LABELS[event] if event is not None else named,
         file_title=camp_file.file_title if camp_file is not None else None,
     )
 
 
-def provenance_line(
-    occurrence: OccurrenceRecord, disclosure: Disclosure | None, *, camp_file: CampFile | None = None
+def _sidecar_provenance_line(
+    occurrence: OccurrenceRecord, disclosure: Disclosure | None, release: _CampRelease | None
 ) -> str:
-    """The line below a card's cite (data-use policy, Attribution rule 2), from the record alone.
+    """The sidecar's provenance line (data-use policy, Attribution rules 2 and 3), from the record alone.
 
-    `[Disclosed: hsld26 2026-09-15 — Maple Grove QX, Aff vs. Riverbend Invitational Round 4]`, the
-    policy's own example: caselist, the first snapshot that listed the disclosure, then school and team
-    code exactly as disclosed, side, tournament and round as far as the disclosure records them. With no
-    disclosure on record (t01's ruling lets AUTO fall back to one), the line names no team.
-
-    A camp card's is `[OpenEv: Cascade Institute 2026 — Policy, Climate Adv CP]`, the policy's other
-    example: camp, year, event and file title (`v1-e33-t06`), and without a release record no title.
+    Composed by the card page's own :func:`~debate_core.domain.evidence_search.occurrence_provenance_line`,
+    so the sidecar and the pilot say one line: the records are converted here into the fields the
+    search index keeps of an occurrence. `[Disclosed: hsld26 2026-09-15 — Maple Grove QX, Aff vs.
+    Riverbend Invitational Round 4]`, the policy's own example, or `[Disclosed: hsld26 2026-09-15]` with
+    no disclosure on record; a camp card's `[OpenEv: Cascade Institute 2026 — Policy, Climate Adv CP]`.
     """
-    if occurrence.caselist == OPENEV_STORE:
-        release = _camp_release(occurrence, camp_file)
-        named = " ".join(part for part in (release.camp, str(release.year)) if part)
-        title = f", {release.file_title}" if release.file_title else ""
-        return f"[OpenEv: {named} — {release.event_label}{title}]"
-    head = f"Disclosed: {occurrence.caselist} {occurrence.snapshot}"
-    if disclosure is None:
-        return f"[{head}]"
-    side = _SIDE_LABELS.get(disclosure.side)
-    event = " ".join(
-        part
-        for part in (
-            disclosure.tournament,
-            disclosure.round_label.raw if disclosure.round_label is not None else None,
-        )
-        if part
+    line = occurrence_provenance_line(
+        caselist=occurrence.caselist,
+        snapshot=occurrence.snapshot,
+        provenance=True,
+        side=disclosure.side.value if disclosure is not None else None,
+        school=disclosure.school if disclosure is not None else None,
+        team_code=disclosure.team_code if disclosure is not None else None,
+        tournament=disclosure.tournament if disclosure is not None else None,
+        round_label=(
+            disclosure.round_label.raw
+            if disclosure is not None and disclosure.round_label is not None
+            else None
+        ),
+        camp=release.camp if release is not None else None,
+        camp_year=release.year if release is not None else None,
+        camp_event=release.event.value if release is not None and release.event is not None else None,
+        camp_file_title=release.file_title if release is not None else None,
     )
-    if side and event:
-        detail = f", {side} vs. {event}"
-    elif side or event:
-        detail = f", {side or event}"
-    else:
-        detail = ""
-    return f"[{head} — {disclosure.school} {disclosure.team_code}{detail}]"
+    assert line is not None, "an occurrence with its provenance kept always has a line"
+    return line
 
 
 def header_line(recipe: ResolvedRecipe) -> str:
     """The file's one header analytic: where its cards came from, and that none of them is verified.
 
-    A file with a camp card names OpenEv beside its caselists and says where each card came from,
-    not who disclosed it (`v1-e33-t06`); a file without one says what it said before.
+    A file with a camp card names OpenEv beside its caselists and calls each card copied from its
+    source file, not from the file that disclosed it (`v1-e33-t06`). Neither says where to find who
+    disclosed a card: a built file carries no provenance line, and a download of it carries no
+    sidecar (`v1-e33-t08`, PM ruling 2026-10-22).
     """
     stores = {card.occurrence.caselist for card in recipe.cards}
     if OPENEV_STORE not in stores:
         caselists = sorted(stores | {recipe.recipe.caselist})
         return (
             f"Disclosed cards (FILE_IMPORT) from {', '.join(caselists)}, each copied from the file that "
-            "disclosed it and not verified by this platform. Who disclosed each card is below its cite."
+            "disclosed it and not verified by this platform."
         )
     caselists = ", ".join(sorted(stores - {OPENEV_STORE}))
     kinds, origins = (
@@ -256,7 +248,7 @@ def header_line(recipe: ResolvedRecipe) -> str:
     )
     return (
         f"{kinds} (FILE_IMPORT) from {origins}, each copied from its source file and not verified by this "
-        "platform. Where each card came from is below its cite."
+        "platform."
     )
 
 
@@ -439,7 +431,18 @@ class DocxEvidenceFileWriter:
         docx, placed = self._write(resolved, by_path, copies, hyperlinks)
         problems = self._read_back(docx, resolved.recipe, located, placed)
         if problems:
-            return FileBuildRefusal(self._explain(resolved, by_path, copies, hyperlinks, problems))
+            return FileBuildRefusal(
+                tuple(
+                    CardRefusal(
+                        item.resolved.path,
+                        item.resolved.fingerprint,
+                        CardRefusalCode.READBACK_MISMATCH,
+                        problems[item.resolved.path],
+                    )
+                    for item in located
+                    if item.resolved.path in problems
+                )
+            )
 
         manifest = self._manifest(request, docx, located, placed, copies)
         return BuiltEvidenceFile(
@@ -532,17 +535,10 @@ class DocxEvidenceFileWriter:
         located: Mapping[str, _Located],
         copies: Mapping[str, CopiedCard],
         hyperlinks: HyperlinkTargets,
-        *,
-        without_line: frozenset[str] = frozenset(),
     ) -> tuple[bytes, dict[str, int]]:
-        """The built file's bytes, and each card's first element index in it.
-
-        `without_line` names cards to write without their provenance line. Only :meth:`_explain`
-        asks for that, to find out whether a card that failed the read-back fails because of it;
-        such a file is never handed back.
-        """
+        """The built file's bytes, and each card's first element index in it."""
         body = _Body(self._profile)
-        placed = self._assemble(resolved, body, located, copies, without_line)
+        placed = self._assemble(resolved, body, located, copies)
         docx = write_package(
             (
                 ("[Content_Types].xml", CONTENT_TYPES),
@@ -562,12 +558,12 @@ class DocxEvidenceFileWriter:
         body: _Body,
         located: Mapping[str, _Located],
         copies: Mapping[str, CopiedCard],
-        without_line: frozenset[str],
     ) -> dict[str, int]:
         """Write the whole body; return each card's first element index in the built file.
 
-        Copied paragraphs are appended as copies of their own, so the same card can be written
-        twice (:meth:`_explain`) without one body taking it from the other.
+        A card is its tag, then its paragraphs through the cite and after it, with no provenance line
+        between them (`v1-e33-t08`). Copied paragraphs are appended as copies of their own, so writing
+        a body never takes a paragraph from a :class:`~.run_copier.CopiedCard`.
         """
         recipe = resolved.recipe
         placed: dict[str, int] = {}
@@ -586,18 +582,7 @@ class DocxEvidenceFileWriter:
                 first = body.write(StructuralUnit.TAG, card.resolved.tag_override.text)
             elif copied.tag is not None:
                 first = body.append(copy.deepcopy(copied.tag))
-            for paragraph in copied.through_cite:
-                index = body.append(copy.deepcopy(paragraph))
-                first = index if first is None else first
-            if path not in without_line:
-                line = body.write(
-                    StructuralUnit.UNDERTAG,
-                    provenance_line(
-                        card.resolved.occurrence, card.resolved.disclosure, camp_file=card.resolved.camp_file
-                    ),
-                )
-                first = line if first is None else first
-            for paragraph in copied.after_cite:
+            for paragraph in (*copied.through_cite, *copied.after_cite):
                 index = body.append(copy.deepcopy(paragraph))
                 first = index if first is None else first
             assert first is not None, "a card has a tag, a cite or a body"
@@ -612,8 +597,6 @@ class DocxEvidenceFileWriter:
         recipe: FileRecipe,
         located: list[_Located],
         placed: Mapping[str, int],
-        *,
-        without_line: frozenset[str] = frozenset(),
     ) -> dict[str, str]:
         """Each card the built file does not read back as its source, with what differs."""
         camp = recipe.caselist == OPENEV_STORE
@@ -633,51 +616,12 @@ class DocxEvidenceFileWriter:
         problems: dict[str, str] = {}
         for item in located:
             path = item.resolved.path
-            problem = _difference(item, by_first.get(placed[path]), with_line=path not in without_line)
+            problem = _difference(item, by_first.get(placed[path]))
             if problem is None and len(parsed.cards) != len(located):
                 problem = f"the built file reads as {len(parsed.cards)} cards, not {len(located)}"
             if problem is not None:
                 problems[path] = problem
         return problems
-
-    def _explain(
-        self,
-        resolved: ResolvedRecipe,
-        located: Mapping[str, _Located],
-        copies: Mapping[str, CopiedCard],
-        hyperlinks: HyperlinkTargets,
-        problems: Mapping[str, str],
-    ) -> tuple[CardRefusal, ...]:
-        """The read-back refusals, each saying whether the provenance line is what changed the card.
-
-        The writer knows none of the parser's rules. It asks the parser instead: the same file with
-        the failing cards' lines left out is read back, and a card that then reads as its source was
-        changed by its line. Where the cite above that line is highlighted, the reason says so: the
-        parser reads a highlighted cite as a cite only with its body directly below it, and the line
-        stands between them until `v1-e31-t24` lets the parser step over it (PM ruling, 2026-10-19).
-        """
-        without = frozenset(problems)
-        variant, placed = self._write(resolved, located, copies, hyperlinks, without_line=without)
-        still = self._read_back(
-            variant, resolved.recipe, list(located.values()), placed, without_line=without
-        )
-        refusals: list[CardRefusal] = []
-        for item in located.values():
-            path = item.resolved.path
-            if path not in problems:
-                continue
-            problem = problems[path]
-            if path not in still:
-                cause = (
-                    HIGHLIGHTED_CITE_CAUSE
-                    if _is_highlighted(copies[path].through_cite)
-                    else "the provenance line below the cite changes how the card reads"
-                )
-                problem = f"{cause}: {problem}; without the line the card reads as its source"
-            refusals.append(
-                CardRefusal(path, item.resolved.fingerprint, CardRefusalCode.READBACK_MISMATCH, problem)
-            )
-        return tuple(refusals)
 
     # -- the sidecar --------------------------------------------------------------------------
 
@@ -740,7 +684,7 @@ class DocxEvidenceFileWriter:
                     original_tag_sha256=(
                         text_sha256(card.tag) if override is not None and card.tag is not None else None
                     ),
-                    provenance_line=provenance_line(occurrence, disclosure, camp_file=camp_file),
+                    provenance_line=_sidecar_provenance_line(occurrence, disclosure, release),
                     forbidden_characters_replaced=copied.forbidden_characters_replaced,
                     warnings=copied.warnings,
                 )
@@ -764,25 +708,12 @@ class DocxEvidenceFileWriter:
         )
 
 
-def _is_highlighted(through_cite: tuple[XmlElement, ...]) -> bool:
-    """Whether the paragraph directly above the provenance line carries a highlight colour."""
-    if not through_cite:
-        return False
-    return any(
-        (highlight.get(qualified_name("val")) or "none") != "none"
-        for highlight in through_cite[-1].iter(qualified_name("highlight"))
-    )
-
-
-def _difference(item: _Located, built: ParsedCard | None, *, with_line: bool = True) -> str | None:
+def _difference(item: _Located, built: ParsedCard | None) -> str | None:
     """What a re-parsed card says differently from its source card, or None. Names fields, never text."""
     if built is None:
         return "no card starts where the card was written in the built file"
     source = item.card
     expected_tag = item.resolved.tag_override.text if item.resolved.tag_override is not None else source.tag
-    line = provenance_line(
-        item.resolved.occurrence, item.resolved.disclosure, camp_file=item.resolved.camp_file
-    )
     checks = (
         ("cite", built.full_cite == source.full_cite),
         ("evidence text", built.evidence_text == source.evidence_text),
@@ -792,7 +723,6 @@ def _difference(item: _Located, built: ParsedCard | None, *, with_line: bool = T
             == formatting_sha256(source.formatting_spans, source.font_size_spans),
         ),
         ("tag", built.tag == expected_tag),
-        ("provenance line", not with_line or line in built.undertag.split("\n")),
     )
     differing = [name for name, same in checks if not same]
     if not differing:

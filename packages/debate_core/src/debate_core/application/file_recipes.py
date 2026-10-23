@@ -84,9 +84,9 @@ so a camp row is stopped by its source suppressed as a whole, and not by one tea
 disclosure of the same bytes. A camp path withdrawn from one release (`v1-e30-t14`) drops the row
 from that release's manifest, and the next `caselist parse --caselist openev` leaves its cards out.
 
-**What the camp's release record says.** The provenance line of a camp card names its camp, year,
-event and file title (data-use policy, Attribution rule 2). The camp is the row's own; the year,
-event and file title are the importer's record of the release, a
+**What the camp's release record says.** The provenance line of a camp card, in the built file's
+sidecar, names its camp, year, event and file title (data-use policy, Attribution rules 2 and 3). The
+camp is the row's own; the year, event and file title are the importer's record of the release, a
 :class:`~debate_core.domain.caselist.CampFile`, listed by the source's SHA-256 in the caselist
 records and kept when its release is the row's. A row with no such record still resolves, without
 one, as a caselist row with no disclosure on record does.
@@ -600,7 +600,7 @@ class Resolution(StrEnum):
 class ResolvedCard:
     """A card reference and the occurrence its card is to be copied from.
 
-    `disclosure` is who disclosed that occurrence, for the built file's provenance line and sidecar,
+    `disclosure` is who disclosed that occurrence, for the built file's sidecar and its provenance line,
     or `None` when the caselist records hold no disclosure with the row's digest. It holds a school,
     a team code and a path, so it is kept off the `repr`. `camp_file` is the release record of a
     camp occurrence (`v1-e33-t06`), for the same line and sidecar: its year, event and file title.

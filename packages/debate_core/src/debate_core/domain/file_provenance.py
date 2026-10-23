@@ -14,14 +14,14 @@ parser reads it, and a re-parse of the built file must give the same three.
 
 ## Personal data
 
-The policy names the built file's provenance line and its sidecar as places a school and a team code
-may appear, inside the team only. They are written here exactly as disclosed, never expanded to a
-name, and kept off every `repr`.
+The policy names the sidecar as a place a school and a team code may appear, inside the team only; the
+built file's text carries neither, and no provenance line, since policy version 1.11 (`v1-e33-t08`).
+They are written here exactly as disclosed, never expanded to a name, and kept off every `repr`.
 
 ## Camp cards
 
 A camp (OpenEv) card (`v1-e33-t06`) is recorded with `caselist` `openev`, its release as `snapshot`
-(`2031-policy`), and the camp, year, event and file title its provenance line names. It has no
+(`2031-policy`), and the camp, year, event and file title the entry's provenance line names. It has no
 disclosure, so its disclosure digest, school, team code, side, tournament and round are empty, and
 only a camp card names a camp. The camp fields are additions: a sidecar written before them has
 none of their keys and still validates.
@@ -190,7 +190,11 @@ class FileProvenanceEntry(DomainModel):
         description="SHA-256 of the card's own tag when the coach replaced it; None otherwise or untagged.",
     )
     provenance_line: NonEmptyText = Field(
-        repr=False, description="The line written below the cite (data-use policy, Attribution rule 2)."
+        repr=False,
+        description=(
+            "The card's provenance line, as the pilot's card page shows it (data-use policy, Attribution "
+            "rules 2 and 3); a built file's text carries none."
+        ),
     )
     forbidden_characters_replaced: int = Field(
         ge=0, description="Characters XML 1.0 forbids in the copied markup, each written as U+FFFD."

@@ -394,7 +394,8 @@ function quoteBareDates(source: string): string {
   return source.replace(/^(\s*(?:-\s+)?[A-Za-z]+:\s*)(\d{4}-\d{2}-\d{2})(\s*(?:#.*)?)$/gm, "$1'$2'$3")
 }
 
-function readYaml(contentDirectory: string, fileName: string, filePath: string): unknown {
+/** A YAML file from content/, with its bare dates kept as typed. content/results.yaml reads through it too. */
+export function readYaml(contentDirectory: string, fileName: string, filePath: string): unknown {
   const absolutePath = join(contentDirectory, fileName)
   if (!existsSync(absolutePath)) {
     throw new ContentValidationError(filePath, 'file is missing')

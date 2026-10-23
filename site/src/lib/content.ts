@@ -31,6 +31,9 @@ export const EVENTS_SLUG = 'events'
 /** The tournament schedule, composed from content/tournaments.yaml by src/app/schedule/page.tsx. */
 export const SCHEDULE_SLUG = 'schedule'
 
+/** The season's results, composed from content/results.yaml by src/app/results/page.tsx. */
+export const RESULTS_SLUG = 'results'
+
 /**
  * Pages that are composed by a route module of their own rather than rendered as one run of
  * Markdown by src/app/[slug]/page.tsx.
@@ -43,7 +46,13 @@ export const SCHEDULE_SLUG = 'schedule'
  * The generic [slug] route must not also generate these slugs: a static segment and a dynamic one
  * claiming the same path is a build error, not a silent preference.
  */
-export const COMPOSED_SLUGS: readonly string[] = [HOME_SLUG, FAQ_SLUG, EVENTS_SLUG, SCHEDULE_SLUG]
+export const COMPOSED_SLUGS: readonly string[] = [
+  HOME_SLUG,
+  FAQ_SLUG,
+  EVENTS_SLUG,
+  SCHEDULE_SLUG,
+  RESULTS_SLUG,
+]
 
 /**
  * Acronyms a parent or a new student cannot be expected to know. If a page uses one, the page
@@ -238,6 +247,17 @@ export const homeContentSchema = z.object({
    * October 1 parent information session.)
    */
   seasonSchedule: z.object({
+    eyebrow: z.string().min(1),
+    title: z.string().min(1),
+    intro: z.string().min(1),
+    action: homeActionSchema,
+  }),
+  /**
+   * The season's three newest results, under the email-updates band, linking to /results/
+   * (v1-e37-t06). The results themselves come from content/results.yaml; this is only the words
+   * around them. The panel is left out of the page while the season has no result yet.
+   */
+  recentResults: z.object({
     eyebrow: z.string().min(1),
     title: z.string().min(1),
     intro: z.string().min(1),
@@ -669,7 +689,7 @@ export function loadNotFoundPage(
 
 /** Every string in the home content, in reading order, for the checks that scan copy. */
 function homeContentStrings(content: HomeContent): string[] {
-  const { hero, seasonSchedule, entryPoints, prose, whatDebateBuilds } = content
+  const { hero, seasonSchedule, recentResults, entryPoints, prose, whatDebateBuilds } = content
   return [
     hero.lead,
     hero.action.label,
@@ -677,6 +697,10 @@ function homeContentStrings(content: HomeContent): string[] {
     seasonSchedule.title,
     seasonSchedule.intro,
     seasonSchedule.action.label,
+    recentResults.eyebrow,
+    recentResults.title,
+    recentResults.intro,
+    recentResults.action.label,
     entryPoints.eyebrow,
     entryPoints.title,
     entryPoints.intro,

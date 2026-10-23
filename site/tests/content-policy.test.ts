@@ -9,7 +9,7 @@ import {
   parsePage,
 } from '@/lib/content'
 import type { MediaConsent } from '@/lib/media-consent'
-import { isStale, loadMediaConsent, seasonStart } from '@/lib/media-consent'
+import { consentedStudentSchema, isStale, loadMediaConsent, seasonStart } from '@/lib/media-consent'
 import {
   PublishingPolicyError,
   checkPublishingPolicy,
@@ -18,6 +18,7 @@ import {
   resetPolicyReporting,
   unreviewedNames,
 } from '@/lib/publishing-policy'
+import { resultsGuardedContent } from '@/lib/results'
 import { scheduleGuardedContent } from '@/lib/tournaments'
 
 /**
@@ -434,8 +435,9 @@ describe('the content this site actually ships', () => {
   // through the guard with the Markdown pages. src/app/layout.tsx passes exactly this list at
   // build time, which is what loadGuardedContent() is for: one definition of "everything with
   // copy in it", so a new YAML content file cannot be added and quietly left unguarded. The
-  // schedule's files join it through scheduleGuardedContent(), which the layout passes too.
-  const pages = [...loadGuardedContent(), ...scheduleGuardedContent()]
+  // schedule's files join it through scheduleGuardedContent(), and the results through
+  // resultsGuardedContent(), which the layout passes too.
+  const pages = [...loadGuardedContent(), ...scheduleGuardedContent(), ...resultsGuardedContent()]
 
   it('breaks no rule except the facts still waiting on Charlie', () => {
     const { errors } = checkPublishingPolicy({
@@ -470,6 +472,7 @@ describe('the content this site actually ships', () => {
       'content/faq.yaml',
       'content/events.yaml',
       'content/schedule.yaml',
+      'content/results.yaml, labels',
     ]) {
       expect(guarded, `${filePath} is not checked by the publishing-policy guard`).toContain(
         filePath,
@@ -479,17 +482,66 @@ describe('the content this site actually ships', () => {
     expect(guarded).toContain('content/tournaments.yaml, tournament "glenbrooks-2026" (entry 6), field notes')
   })
 
-  it('has a media-consent manifest for the current season', () => {
+  it('has a media-consent manifest for the current season, with no photograph in it yet', () => {
     expect(consent.season).toMatch(/^\d{4}-\d{2}$/)
-    expect(consent.students).toEqual([])
     expect(consent.images).toEqual([])
   })
 
-  it('names no student, so no consent entry is needed yet', () => {
+  /**
+   * Every student entry, checked for its shape and its season and never by who it is: the
+   * names live in content/ and nowhere else, so no test names a real student (the PM's ruling
+   * for v1-e37-t06, and docs/policies/website-publishing.md, Students 10 and 11). Each entry is
+   * identified below by its position, never by its name, so a failure prints no name either.
+   */
+  describe('every student entry', () => {
+    const firstDay = seasonStart(consent.season)
+    const lastDay = new Date(Date.UTC(firstDay.getUTCFullYear() + 1, 6, 31))
+
+    it.each(consent.students.map((student, index) => [index + 1, student] as const))(
+      'entry %i has the manifest shape, for the current season, checked inside it',
+      (_position, student) => {
+        expect(consentedStudentSchema.safeParse(student).success).toBe(true)
+        expect(student.season).toBe(consent.season)
+        expect(isStale(student, consent.season)).toBe(false)
+        expect(new Date(student.dateChecked) <= lastDay).toBe(true)
+      },
+    )
+
+    it.each(consent.students.map((student, index) => [index + 1, student] as const))(
+      'entry %i publishes a whole name with a plausible graduation year, and an opaque reference',
+      (_position, student) => {
+        expect(student.publishedName.trim().split(/\s+/).length).toBeGreaterThanOrEqual(
+          student.publishedForm === 'full-name-and-class-year' ? 2 : 1,
+        )
+        if (student.graduationYear !== undefined) {
+          const seasonEndYear = firstDay.getUTCFullYear() + 1
+          expect(student.graduationYear).toBeGreaterThanOrEqual(seasonEndYear)
+          expect(student.graduationYear).toBeLessThanOrEqual(seasonEndYear + 4)
+        }
+        // The reference points at a form; it must not carry any part of the name it stands for.
+        for (const word of student.publishedName.toLowerCase().split(/\s+/)) {
+          expect(student.consentReference.toLowerCase().includes(word)).toBe(false)
+        }
+      },
+    )
+
+    it('uses each consent reference once', () => {
+      const references = consent.students.map((student) => student.consentReference)
+      expect(new Set(references).size).toBe(references.length)
+    })
+  })
+
+  it('names nobody but students with a current-season consent entry', () => {
+    const consented = new Map(
+      consent.students.map((student) => [student.publishedName.toLowerCase(), student]),
+    )
     for (const page of pages) {
-      expect(unreviewedNames(page.guardedHtml, consent.permittedNamePhrases), page.filePath).toEqual(
-        [],
-      )
+      for (const name of unreviewedNames(page.guardedHtml, consent.permittedNamePhrases)) {
+        const entry = consented.get(name.toLowerCase())
+        // The message names the file, not the name, so a failure prints no student's name.
+        expect(entry, `${page.filePath} prints a name with no consent entry`).toBeDefined()
+        expect(isStale(entry!, consent.season), `${page.filePath} prints a lapsed name`).toBe(false)
+      }
     }
   })
 })

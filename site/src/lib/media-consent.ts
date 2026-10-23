@@ -28,14 +28,23 @@ const isoDate = z
 
 const season = z.string().regex(SEASON_PATTERN, 'must look like 2026-27')
 
-export const consentedStudentSchema = z.object({
-  publishedName: z.string().min(1),
-  publishedForm: z.enum(['full-name-and-class-year', 'first-name-only']),
-  graduationYear: z.number().int().optional(),
-  consentReference: z.string().min(1),
-  season,
-  dateChecked: isoDate,
-})
+/**
+ * The full published form is "Jordan Rivera (2028)", so an entry that chooses it carries the year
+ * it prints; without one the build would have nothing to put in the brackets (v1-e37-t06).
+ */
+export const consentedStudentSchema = z
+  .object({
+    publishedName: z.string().min(1),
+    publishedForm: z.enum(['full-name-and-class-year', 'first-name-only']),
+    graduationYear: z.number().int().optional(),
+    consentReference: z.string().min(1),
+    season,
+    dateChecked: isoDate,
+  })
+  .refine(
+    (student) => student.publishedForm !== 'full-name-and-class-year' || student.graduationYear !== undefined,
+    { path: ['graduationYear'], message: 'is required when publishedForm is full-name-and-class-year' },
+  )
 
 export const consentedImageSchema = z.object({
   path: z.string().min(1),

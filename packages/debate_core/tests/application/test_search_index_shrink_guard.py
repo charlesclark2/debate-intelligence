@@ -459,7 +459,7 @@ def emptied(built: BuiltSearchIndex, stores: Sequence[str]) -> BuiltSearchIndex:
         }
     )
     (built.directory / SEARCH_INDEX_MANIFEST_NAME).write_bytes(rewritten.to_json_bytes())
-    return BuiltSearchIndex(directory=built.directory, manifest=rewritten)
+    return BuiltSearchIndex(directory=built.directory, manifest=rewritten, not_cards=built.not_cards)
 
 
 # ------------------------------------------------------------------------------------------------

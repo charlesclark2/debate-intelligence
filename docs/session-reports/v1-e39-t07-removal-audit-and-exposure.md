@@ -484,19 +484,22 @@ for WORD in Westfield XY reserve margin Okonkwo testcl26 '"q="'; do
 done
 aws logs filter-log-events --region us-east-1 --log-group-name debate-dev-tub-audit --start-time "$SINCE" --query 'events[-8:].message' --output text
 unset AWS_PROFILE DEBATE_STORAGE__DATA_DIR X REMOVED
+NEWEST=$(ls -td "${HOME}/.debate-research/dev/tub-index"/*/ | head -1)
+echo "newest local index: $NEWEST"
+python3 -c 'import json, sys; m = json.load(open(sys.argv[1] + "manifest.json")); print("documents:", m["counts"]["documents"], m["counts"]["documents_by_store"])' "$NEWEST"
 aws sso login --profile debate-dev-evidence
-DEBATE_ENV=dev debate-research tub index publish --env dev --newest
-unset DEBATE_ENV
+env -u DEBATE_STORAGE__DATA_DIR DEBATE_ENV=dev debate-research tub index publish --env dev --newest
 BUCKET=$(python3 -c 'import tomllib; print(tomllib.load(open("config/profiles/dev.toml", "rb"))["storage"]["s3"]["bucket"])')
 echo "bucket: $BUCKET"
 echo "republished: $(aws s3 cp "s3://${BUCKET}/reports/tub/search/current.json" - --profile debate-dev-evidence | python3 -c 'import json, sys; print(json.load(sys.stdin)["index_id"])')"
-ls -td "${HOME}/.debate-research/dev/tub-index"/*/ | head -1
 ```
 Success looks like `0` after every word, and audit lines holding only `action`, `actor_role`,
 `actor_subject`, `cards` or `count`, `format_version` and `time`: `searched` with a `count`,
-`card-viewed` with one `testcl26/<64 hex>` or `hspolicy26/<64 hex>`. Then the publish table, a
-`republished: <index id>` line, and the newest local index directory, whose name is that same index
-id: dev's own index is current again.
+`card-viewed` with one `testcl26/<64 hex>` or `hspolicy26/<64 hex>`. Then the newest local index
+directory and its document count, which is tens of thousands across `hsld26`, `hspf26`,
+`hspolicy26` and `openev` (a count near zero means stop before the publish runs: interrupt it).
+Then the publish table, and a `republished: <index id>` line naming that directory's index: dev's
+own index is current again.
 
 **6. For the PM's promotion list (prod, after the merge).** Apply the grant to prod as
 `evidence-store.md` gives it, from a worktree whose `owner.auto.tfvars` prints `3` for
@@ -660,7 +663,10 @@ and the signed-in reading came from the HAR instead.
 - **4f, the delete.** `current.json` still named `a0c928bebd03f8aa`, so it ran: one request file,
   `0` errors, then `pruned; kept reports/tub/search/a0c928bebd03f8aa/ and the current
   reports/tub/search/current.json`. The 9 versions the dry run listed are gone.
-- **4f, the second dry run:** RECHECK_PENDING.
+- **4f, the second dry run:** `0 version(s) of 0 key(s) to delete; keeps
+  reports/tub/search/a0c928bebd03f8aa/ (2 objects) and the current reports/tub/search/current.json`.
+  Every superseded index version is gone from the dev bucket, noncurrent ones included.
+- **Block 5:** BLOCK5_PENDING.
 
 ## Follow-up work
 

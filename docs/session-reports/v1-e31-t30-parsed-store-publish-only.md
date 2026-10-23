@@ -357,6 +357,24 @@ code change:
 Nothing came out differently from the review's notes, except that the mutation check found the one
 survivor above, closed in this session with a test. The phase stays `Succeeded`.
 
+### CI on the pull request (#401)
+
+`import-boundaries` failed, and `ci` with it, on `scripts/check_thin_handlers.py`, a step of that
+job I had not run locally: `caselist_parse.parse holds 27 statements, more than the budget of 25`.
+The publish-only branch had added two. Fixed without touching the budget: `--publish-only`'s
+option conflicts and slug check now run inside `_publish_only`, called once near the top of
+`parse`, in the same order as before (conflicts, then the slug, then `--publish`'s guards).
+
+| Command | Result |
+|---|---|
+| `uv run --frozen python scripts/check_thin_handlers.py` | `OK: 46 CLI command and API route handlers within 25 statements` (was `1 thin-handler problem(s)`) |
+| `uv run --frozen lint-imports` | `Contracts: 15 kept, 0 broken.` |
+| `uv run --frozen ruff check .` / `ruff format --check .` | `All checks passed!` / `1082 files already formatted` |
+| `uv run --frozen pre-commit run check-merge-conflict --all-files` | `Passed` |
+| `uv run --frozen pyright` | `0 errors, 0 warnings, 0 informations` |
+| `packages/debate_cli/tests/test_caselist_parse_publish_only.py`, `test_caselist_parse.py`, `test_app.py`, `test_help_rendering.py`, `tests/smoke/test_caselist_parse.py` | `79 passed` |
+| Mutants 13 to 21 and 30 (the conflicts, the guards and the check, whose code moved; 18, 21 and 30 retargeted at the moved lines) | all killed |
+
 ## PM review
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in

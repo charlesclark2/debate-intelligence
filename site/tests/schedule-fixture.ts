@@ -49,3 +49,32 @@ export function editEntry(id: string, edit: (block: string) => string): (source:
     return source.slice(0, start) + edit(source.slice(start, end)) + source.slice(end)
   }
 }
+
+/**
+ * Glenbrooks as the 2026-09-30 schedule had it: Lincoln-Douglas and Public Forum online at school,
+ * Policy in person in Glenview. Since 2026-10-22 the shipped schedule has no tournament split by
+ * event (Glenbrooks is Policy only), so the byEvent tests apply this edit to the shipped content.
+ */
+export const splitGlenbrooksByEvent = editEntry('glenbrooks-2026', (block) =>
+  replaceOnce(
+    '    events: [policy]\n    held: in-person\n    where: Glenview, Illinois\n    overnight: yes\n',
+    '    byEvent:\n' +
+      '      - events: [lincoln-douglas, public-forum]\n' +
+      '        held: online-at-school\n' +
+      '        overnight: no\n' +
+      '      - events: [policy]\n' +
+      '        held: in-person\n' +
+      '        where: Glenview, Illinois\n' +
+      '        overnight: yes\n',
+  )(block),
+)
+
+/**
+ * A copy of the whole site's working directory layout with `content/` edited, for a test that
+ * renders a page reading `process.cwd()/content`: point `process.cwd()` at the returned root.
+ */
+export function siteRootWith(edits: Record<string, (source: string) => string>): string {
+  const root = mkdtempSync(join(tmpdir(), 'schedule-site-'))
+  cpSync(contentWith(edits), join(root, 'content'), { recursive: true })
+  return root
+}

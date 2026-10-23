@@ -476,7 +476,7 @@ describe('the content this site actually ships', () => {
       )
     }
     // Every tournament is guarded field by field, so a finding names the entry and the field.
-    expect(guarded).toContain('content/tournaments.yaml, tournament "glenbrooks-2026" (entry 10), field notes')
+    expect(guarded).toContain('content/tournaments.yaml, tournament "glenbrooks-2026" (entry 6), field notes')
   })
 
   it('has a media-consent manifest for the current season', () => {

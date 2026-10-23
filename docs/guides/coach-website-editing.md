@@ -5,10 +5,11 @@
 > proposal, which [ADR-0015](../adr/0015-website-content-editing.md#decision-as-accepted) did not
 > adopt; each one is marked. Announcements are becoming Markdown files in
 > `site/content/announcements/`, and `v1-e37-t03` rewrites those parts. Everything about **events
-> and the tournament schedule** is current (`v1-e37-t02`).
+> and the tournament schedule** (`v1-e37-t02`) and **the season's results** (`v1-e37-t06`) is
+> current.
 
-How the Whitefish Bay debate team website's tournament schedule and announcements are kept up to
-date, and how a change reaches parents.
+How the Whitefish Bay debate team website's tournament schedule, results and announcements are
+kept up to date, and how a change reaches parents.
 
 Decision behind this: [ADR-0015](../adr/0015-website-content-editing.md#decision-as-accepted).
 The rules about students come from the team's publishing policy,
@@ -21,6 +22,7 @@ guide and the policy ever disagree. How a deploy runs:
 | You want to | Where it is done | Who does it |
 |---|---|---|
 | Add, change or remove a tournament | `site/content/tournaments.yaml`, in the repository ([Events](#events-the-tournament-schedule-file)) | Charlie, in git. A coach who does not use git sends Charlie the change |
+| Add, correct or take down a result | `site/content/results.yaml`, in the repository ([Results](#results-the-seasons-results-file)) | Charlie, in git. A coach sends Charlie the tournament's published result |
 | Post, change or take down an announcement | *Out of date:* see [Announcements](#announcements-the-website-announcements-sheet) | |
 | Change anything else on the site (the pages about the team, the events explained, the coaches, the parent questions) | `site/content/` | Charlie. Anyone else asks Charlie |
 | Put a photograph on the site | Send it to Charlie. **Never** put a photo in a content file yourself | Charlie, after checking consent |
@@ -232,6 +234,157 @@ on the policy's 24-hour clock. If it has to be gone in minutes, the runbook's
 has to remove **both** files the text is in: `schedule/index.html` (with the page's other files in
 `schedule/`) and `schedule.ics`.
 
+## Results: the season's results file
+
+How the team's students placed is one file: **`site/content/results.yaml`**. Two things are built
+from it:
+
+- the **Season results** page, `/results/`, in the main navigation after the schedule: every
+  tournament with a result, newest first, each with its date and every placing won there;
+- the **newest results** band on the home page, which shows the three newest placings and links
+  to `/results/`. It is left off the home page until the season has a result.
+
+A tournament comes off the schedule once it is over, and its results go here. Results are the
+part of the site most likely to name a child, so the rules in the publishing policy's
+[Results and awards](../policies/website-publishing.md#results-and-awards) apply to every entry,
+and the build enforces most of them.
+
+**Results are facts, taken from the tournament's own published results** (on Tabroom or the
+tournament's site). Never from memory, and never estimated. If the published results are not up
+yet, wait for them.
+
+One entry per placing. The comment at the top of the file lists every field. In short:
+
+| Field | What to put | Example |
+|---|---|---|
+| `scheduleId` | The tournament's `id` in `site/content/tournaments.yaml`, **while it is still there** | `west-bend-2026` |
+| `tournament` | Or, once it has come off the schedule, the tournament's name | `Fort Atkinson` |
+| `date` | With `tournament`: its first day, as year-month-day | `2026-10-17` |
+| `end` | With `tournament`: its last day, only for a tournament of more than one day | `2026-11-14` |
+| `event` | `policy`, `lincoln-douglas` or `public-forum` | `lincoln-douglas` |
+| `division` | `varsity`, `junior-varsity` or `novice` | `varsity` |
+| `placing` | One of the placings the site publishes, written in lower case: `first place` to `tenth place`, `top speaker`, `second speaker` to `tenth speaker`, `champion`, `finalist`, `semifinalist`, `quarterfinalist`, `octofinalist`, `double-octofinalist`, `triple-octofinalist` | `quarterfinalist` |
+| `students` | Optional. Who placed, exactly as `site/content/media-consent.yaml` writes their name. Leave it out for the team-level form | `[Jordan Rivera]` |
+
+**Update `revised`** at the top of the file to the day you make any change. The page shows it as
+"Results last updated".
+
+### Add a result
+
+1. Add an entry to the `results:` list. If the list says `results: []`, replace the `[]` with the
+   first entry. The order in the file does not matter; the page sorts by tournament, newest first.
+
+   ```yaml
+     - tournament: Marquette University High School
+       date: 2027-02-06
+       event: lincoln-douglas
+       division: varsity
+       placing: quarterfinalist
+       students: [Jordan Rivera]
+   ```
+
+   A Public Forum or Policy result names **both partners or neither**:
+
+   ```yaml
+     - scheduleId: west-bend-2026
+       event: public-forum
+       division: novice
+       placing: semifinalist
+       students: [Jordan Rivera, Sam Okafor]
+   ```
+
+2. **Two awards at one tournament are two entries**, for example first place and top speaker. The
+   page shows both under the one tournament. Never combine them into one line, and never add up a
+   student's results across tournaments: a record is something this site does not publish.
+3. **Naming a student needs a consent entry first.** A student is named only if Charlie has
+   confirmed with the activities office that their family's media-consent form for **this season**
+   is on file, and has added them to `students` in `site/content/media-consent.yaml` with their
+   graduation year and the consent reference. The page prints the name with the graduation year,
+   "Jordan Rivera (2028)". If you are not sure, leave `students` out: see the team-level form below.
+4. Update `revised`, check it builds (as under [Check a change](#check-a-change), then open
+   <http://localhost:3000/results/>), and publish it (as under
+   [Publish a change](#publish-a-change)). **A result that names a student needs Charlie to have
+   seen the exact line before it publishes** (the policy's
+   [Pre-publication checklist](../policies/website-publishing.md#pre-publication-checklist), item
+   16).
+
+### The team-level form
+
+Leave `students` out and the result is published without a name: "Quarterfinalist, Varsity
+Lincoln-Douglas: a Whitefish Bay debater", or "a Whitefish Bay team" for a partner event. It is
+always allowed, and the page shows it exactly like a named result, never as something lesser.
+
+Use it when:
+
+- the student's media-consent form for this season is not confirmed, or you are not sure;
+- the student or their family asked for a first name only, or for no name;
+- one partner of a partnership may not be named, because then neither is;
+- anything about naming them gives you pause.
+
+**You never write a team-level line yourself.** Leaving `students` out is all it takes. The build
+also switches a named result to the team-level form **by itself** whenever a named student's
+consent entry is not current for the season (a form that lapsed at the start of the season) or
+asks for less than the full name. That is why a reduced-name request or a lapsed form is an edit to
+`site/content/media-consent.yaml` alone: every result naming that student changes with it.
+
+### Correct a result
+
+Edit the entry, update `revised`, check it builds, and publish. A correction to a name, a placing
+or a division that a family has pointed out is published as soon as it can be; one that takes a
+student's name off the site is a takedown, below.
+
+### Take a result down
+
+**A request to take down a student's name or a result is met within 24 hours.** That is the
+policy's student clock ([Removal on request](../policies/website-publishing.md#removal-on-request)),
+it starts when the request arrives, a tournament weekend does not stop it, and nobody is asked for
+a reason.
+
+1. **Change the file.**
+   - To take a student's **name** off: delete it from `students` in every entry that names them,
+     so those results show in team-level form, and delete or change their entry in
+     `site/content/media-consent.yaml` as the family asked. The team's result stays; only the name
+     goes.
+   - To take the **whole result** off, because the family asked for that: delete the entry.
+2. **Publish it on the hotfix path**, not at the next promotion: a branch from `main`, deployed to
+   dev and checked, merged into `main`, prod deployed, and `main` merged back into `dev` the same
+   day ([Publish a change](#publish-a-change), path 2). Then follow the runbook's
+   [Taking something down on request](../runbooks/team-website.md#taking-something-down-on-request)
+   to confirm it is gone.
+3. **If it has to be gone in minutes**, the runbook's
+   [emergency lever](../runbooks/team-website.md#the-emergency-lever) applies. A result is in two
+   places: the `results/` folder, and, while it is one of the three newest, **the home page**
+   (`index.html`, `index.txt` and the `__next.*.txt` files at the top of the bucket). Removing the
+   home page takes the front page down until the rebuild is deployed, which the policy accepts: a
+   missing page is better than a name left up.
+
+### What the build refuses
+
+The build checks every entry and stops, in the dev preview as well as in prod, with a message
+naming the entry, the field and the policy rule. It never repeats a student's name in the message.
+It refuses:
+
+- a student in `students` with no entry at all in `site/content/media-consent.yaml`;
+- a Public Forum or Policy result naming one partner, or a Lincoln-Douglas result naming two;
+- a placing that is not on the list, and says so when it describes a loss ("lost in
+  quarterfinals") or a record ("went 5-1", "ranked second", a points total, bids);
+- a capitalised name in `tournament` or `placing`, because the build cannot tell it from an
+  opponent's student, and no opponent student is ever named;
+- an email address or a phone number anywhere in an entry;
+- a `scheduleId` that is not in `site/content/tournaments.yaml`. A tournament that has come off
+  the schedule is written with `tournament` and `date` instead;
+- a date outside the season, a date that does not exist, or a field it does not know.
+
+If the build says a tournament's name "has not been told about", and it is a school, a tournament
+or a town, add the whole phrase to `permittedNamePhrases` in `site/content/media-consent.yaml`.
+
+### Results in an email
+
+**An email never names a student.** It cannot be taken back once it is in an inbox, so an update
+about a tournament says how the team did in team-level words and links to the results page,
+`https://wfbdebate.com/results/`, where the names live under the consent rules and can come down on
+request. How to send one: [parent-email-updates.md](parent-email-updates.md).
+
 ## Announcements: the Website announcements sheet
 
 > **Out of date.** This section describes the Google Sheet proposal, which ADR-0015 did not adopt.
@@ -297,6 +450,8 @@ families a 24-hour clock.
 | The build says a tournament "names" something | A school, tournament or place: add the whole phrase to `permittedNamePhrases` in `site/content/media-consent.yaml`. A person: take it out |
 | A parent sees a tournament twice | Its `id` was changed after it was published. Put the old `id` back. A subscribed calendar drops the extra copy the next time it checks the file; a parent who imported the file once has to delete it by hand |
 | A change is on the website but not in a parent's calendar | Their calendar app has not checked the file yet. It will; for anything urgent, contact families directly |
+| The build fails naming a result and a field | Fix that field. The message names the policy rule; [What the build refuses](#what-the-build-refuses) says what each one means |
+| A family asks for a student's name or a result to come down | Within 24 hours: [Take a result down](#take-a-result-down) |
 | A tournament is missing from the page after a deploy | Check its entry is in `site/content/tournaments.yaml` on `main`. A hotfix that was not merged back into `dev` is undone by the next promotion |
 | *Out of date:* your announcement is not on the website after an update | Check its **Status** is `Publish`, its **Publish date** is today or earlier, and **Expires on** has not passed |
 | Something about a student is on the site and should not be | **Phone or text Charlie straight away.** Then take it out of the file (or the sheet) and follow [Taking something down on request](../runbooks/team-website.md#taking-something-down-on-request) |

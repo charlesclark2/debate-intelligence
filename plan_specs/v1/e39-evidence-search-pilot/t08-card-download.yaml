@@ -17,6 +17,9 @@ spec:
   # Filed by the PM, 2026-10-19, from Charlie's direction of 2026-10-19 (a student search pilot before the
   # semester ends, on Chromebooks, signing in with a username, password and 2FA, outside the school's systems).
   # PM ruling 2026-10-22: the cart is held in the browser and re-checked on the server; the session cookie holds no cart.
+  # PM ruling 2026-10-22 (option (a)): the source budget is the sum of the cart's word/document.xml sizes as each fetched
+  # file's zip directory declares them (TUB_DOWNLOAD_SOURCE_XML_BYTES, 20,000,000), read without a parse by a function
+  # from docx_parser; a 52,000,000-byte ceiling on the files fetched; the card cap stays 8.
   description: >-
     Download .docx on a card page and for a selection (a cart of up to 30 cards held in the
     session) builds a Verbatim file through the E33 `EvidenceFileWriter` port, reading sources

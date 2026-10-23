@@ -1045,12 +1045,12 @@ function checks every reference again (the PM's ruling of 2026-10-22).
   and named, whatever page it was added from. A download whose audit record cannot be written is not
   sent (`503`, and the `cards-downloaded` line in the table below).
 
-### The two caps, and timing a download on dev
+### The download's limits, and timing a download on dev
 
 The writer parses each source it copies from, whole, and holds every source until the file is read
-back, so a download costs time and memory per distinct source, in proportion to its size. Measured
-on 2026-10-22 on the operator's Mac (Apple M3 Pro, under other load), with synthetic sources the
-size of the mean disclosed file (236 KB, 3.6 MB of document XML):
+back, so a download costs time and memory per distinct source, in proportion to its main document
+part (`word/document.xml`). Measured on 2026-10-22 on the operator's Mac (Apple M3 Pro, under other
+load), with synthetic sources the size of the mean disclosed file (236 KB, 3.6 MB of document XML):
 
 | Cart | Build time | File |
 |---|---|---|
@@ -1059,38 +1059,50 @@ size of the mean disclosed file (236 KB, 3.6 MB of document XML):
 | 30 cards from 30 sources | 29.1 s | 117.9 KB |
 | 30 cards from 1 source | 2.5 s | 118.1 KB |
 | 1 card from a camp-sized source (1,004 KB) | 4.5 s | |
+| 8 cards from 8 sources at both byte limits (20.6 MB of document XML, 51.2 MB of files) | 3.7 s | |
 
-Each mean-size source held about 80 MB while the file was built. CloudFront and the function both
-stop a request at 30 s, and the function has 2,048 MB, so the function's environment takes two
-caps, each with a default set from these numbers:
+CloudFront and the function both stop a request at 30 s, and the function has 2,048 MB, so a
+download has three limits (the PM's ruling of 2026-10-22):
 
-| Variable | Default | What it bounds |
+| Limit | Value | What it bounds |
 |---|---|---|
-| `TUB_DOWNLOAD_CARD_CAP` | 8 (1 to 30) | Cards in one download. Eight from eight mean-size sources is about 8 s on the Mac |
-| `TUB_DOWNLOAD_SOURCE_BYTES` | 2,000,000 | Bytes of sources one download reads: 9 s on the Mac at the slowest rate measured |
+| `TUB_DOWNLOAD_CARD_CAP` (setting) | 8 (1 to 30) | Cards in one download, so sources in one build |
+| `TUB_DOWNLOAD_SOURCE_XML_BYTES` (setting) | 20,000,000 | The cart's `document.xml` bytes, summed as each fetched file's zip directory declares them, read without a parse |
+| The fetch ceiling (constant) | 52,000,000 | Bytes of files held before the build: a file is held whole, whatever its XML |
 
 **Real source sizes** (2026-10-22, the operator's dev store, read-only, aggregates only; the sources
-the occurrences of index `f29b81c276dd67c5` name; 3.1 s). "Over 2 MB" is the share of the index's
-documents whose representative's source alone is over 2,000,000 bytes:
+the occurrences of index `f29b81c276dd67c5` name; 3.1 s, and 5.1 s for the p99 and the zip
+directories):
 
-| Caselist | Sources | p50 bytes | p95 bytes | Largest | Over 2 MB |
-|---|---|---|---|---|---|
-| hsld26 | 5,965 | 69,708 | 353,223 | 7,133,832 | 93 of 12,714 (0.73%) |
-| hspf26 | 3,524 | 72,419 | 1,431,736 | 7,823,779 | 519 of 11,000 (4.72%) |
-| hspolicy26 | 3,799 | 157,358 | 884,755 | 7,679,194 | 193 of 20,961 (0.92%) |
-| openev | 102 | 204,500 | 2,238,723 | 6,854,554 | 1,325 of 5,759 (23.01%) |
+| Caselist | Sources | File p50 | File p95 | File p99 | Largest file | `document.xml` p99 | Largest `document.xml` |
+|---|---|---|---|---|---|---|---|
+| hsld26 | 5,965 | 69,708 | 353,223 | 1,323,225 | 7,133,832 | 965,762 | 6,412,100 |
+| hspf26 | 3,524 | 72,419 | 1,431,736 | 6,404,597 | 7,823,779 | 1,573,448 | 3,754,072 |
+| hspolicy26 | 3,799 | 157,358 | 884,755 | 1,803,342 | 7,679,194 | 2,016,564 | 6,583,540 |
+| openev | 102 | 204,500 | 2,238,723 | 4,820,010 | 6,854,554 | 7,721,413 | 10,576,664 |
 
-What the writer parses is each file's `word/document.xml`, not its bytes on disk. Read from the zip
-directories alone (5.2 s): the sources over 2 MB have a `document.xml` of 269 KB (hsld26), 469 KB
-(hspf26), 701 KB (hspolicy26) and 2.0 MB (openev) at the median, and the largest `document.xml` of any
-source is 6,412 KB, 3,754 KB, 6,584 KB and 10,577 KB. The share over 2 MB passes 2% in hspf26 and openev, so
-the budget is with the PM (`v1-e39-t08`'s review) before the pilot opens.
+So no real source is refused on its own: its `document.xml` is at most 10,576,664 bytes, under the
+20,000,000 budget, and its file at most 7,823,779 bytes, under the 52,000,000 ceiling, which also
+holds eight files of the largest p99 (6,404,597). A file budget of 2,000,000 bytes, as first set, would
+have refused 4.72% of hspf26's documents and 23.01% of openev's: big files are big for images and
+other parts, and the ones over 2 MB have a median `document.xml` of 269 KB to 2.0 MB.
 
-A card whose own source is over the budget is refused by name, *Its file is too large to download.
-Copy card still works.*, and can be dropped from the cart like any refused card. A cart over either
-cap is otherwise refused before anything is built, with a sentence saying so, as is a cart whose
-file would pass 3 MB: a function URL buffers at most 6 MB of response, and the Lambda Web Adapter
-sends a binary body base64-encoded. Neither variable is set by Terraform; the defaults hold until
+**Memory at both limits.** The 8-source cart above, built in a bare process: 52 MB with the modules
+loaded, 101 MB holding the 51.2 MB of files, a 634 MB peak during the build. With 150 MB allowed for
+the app and its index reader, that is about 732 MB at the measured rate and 1,314 MB at twice it.
+
+**The declared size is a claim.** A file whose zip directory declares a smaller `document.xml` than
+it holds passes the budget on the claim, and is then refused by the parser, never built: `zipfile`
+never inflates a part past its declared size, so its CRC fails (*MALFORMED_PACKAGE*), or with a CRC
+forged to match, its XML is cut short (*MALFORMED_XML*). Above that, the parser never reads more than
+64 MiB of any part, or opens a package declaring more than 128 MiB in all.
+
+A card whose own `document.xml` is over the budget is refused by name, *Its file is too large to
+download. Copy card still works.*, and can be dropped from the cart like any refused card. A cart
+whose parts only add up past the budget, or whose files pass the fetch ceiling, is refused with
+*These cards come from files too large to read in one download*, as is a cart whose file would pass
+3 MB with its own sentence: a function URL buffers at most 6 MB of response, and the Lambda Web Adapter
+sends a binary body base64-encoded. Neither setting is set by Terraform; the defaults hold until
 the dev timing below says otherwise, and changing one is a change to the module's environment block.
 
 **Time a download on dev** after the deploy that ships it. Sign in on dev, download one card, then a
@@ -1105,7 +1117,7 @@ aws logs filter-log-events --profile debate-admin --region us-east-1 --log-group
 Success looks like `REPORT` lines whose `Duration` for the cart's request is under 20,000 ms and whose
 `Max Memory Used` is under 1,400 MB. Record both in [What to record](#what-to-record). A cart's
 duration over 20,000 ms means the Mac-to-Lambda allowance was too small: lower
-`TUB_DOWNLOAD_CARD_CAP` and `TUB_DOWNLOAD_SOURCE_BYTES` in proportion before the pilot opens.
+`TUB_DOWNLOAD_CARD_CAP` and `TUB_DOWNLOAD_SOURCE_XML_BYTES` in proportion before the pilot opens.
 
 ## What a refusal looks like in the app log
 

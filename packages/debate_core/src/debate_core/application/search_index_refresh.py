@@ -310,9 +310,7 @@ def _counts(
 
 
 def _growth_sentence(counts: SearchIndexStageCounts) -> str:
-    """`growth against <id>: +3 documents, ...`, or nothing when no other index was current."""
-    if counts.previous_index_id is None:
-        return ""
+    """`; growth against <id>: +3 documents, ...`, for counts measured against another index."""
     return (
         f"; growth against {counts.previous_index_id}: {counts.documents_growth:+,} documents, "
         f"{counts.sqlite_bytes_growth:+,} SQLite bytes, {counts.gzip_bytes_growth:+,} gzip bytes"

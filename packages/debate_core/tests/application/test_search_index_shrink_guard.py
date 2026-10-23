@@ -592,6 +592,57 @@ def test_search_index_publish_refuses_when_the_current_index_cannot_be_read(
     assert said in published.allowed_shrink.current_unreadable
 
 
+def put_pointer(world: World, pointer: SearchIndexPointer) -> None:
+    landed = world.root / "pointer-to-put.json"
+    landed.write_bytes(pointer.to_json_bytes())
+    asyncio.run(world.bucket.put_file(SEARCH_INDEX_POINTER_KEY, landed))
+
+
+@pytest.mark.parametrize(
+    ("damage", "said"),
+    [
+        ("missing", "the manifest current.json names is missing"),
+        ("unparseable", "the manifest current.json names is not one this build reads"),
+        ("another index's", "the manifest current.json names is another index's"),
+    ],
+)
+def test_search_index_publish_refuses_a_pointer_whose_manifest_cannot_be_used(
+    world: World, damage: str, said: str
+) -> None:
+    first = world.publish(world.build())
+    other_id = "0" * 16
+    pointer = first.pointer
+    if damage == "missing":
+        pointer = pointer.model_copy(
+            update={"manifest_key": index_object_key(other_id, SEARCH_INDEX_MANIFEST_NAME)}
+        )
+    elif damage == "unparseable":
+        unreadable = world.root / "unreadable-manifest.json"
+        unreadable.write_bytes(b'{"manifest_version": 1}\n')
+        asyncio.run(world.bucket.put_file(pointer.manifest_key, unreadable))
+        pointer = pointer.model_copy(
+            update={"manifest_sha256": hashlib.sha256(unreadable.read_bytes()).hexdigest()}
+        )
+    else:
+        pointer = pointer.model_copy(update={"index_id": other_id})
+    put_pointer(world, pointer)
+    world.suppress(LD, texts(LD, 1))
+
+    with pytest.raises(CurrentSearchIndexUnreadable, match=said) as refused:
+        world.publish(world.build())
+
+    assert refused.value.current_index_id == pointer.index_id
+    assert world.pointer() == pointer, "current.json is as it was"
+
+
+@pytest.mark.parametrize("share", [-1, 101])
+def test_search_index_publish_takes_a_share_of_0_to_100(tmp_path: Path, share: int) -> None:
+    with pytest.raises(ValueError, match="0 to 100"):
+        SearchIndexPublishService(
+            bucket=FsEvidenceObjectStore(tmp_path), parser_version=PARSER, minimum_share_percent=share
+        )
+
+
 # ------------------------------------------------------------------------------------------------
 # The weekly stage: the same guard, refused as a failed stage, never overridden
 # ------------------------------------------------------------------------------------------------

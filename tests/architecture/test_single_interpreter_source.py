@@ -72,10 +72,10 @@ PYTHON_WORD = re.compile(r"python|pyenv|(?<![A-Za-z0-9.])py(?![A-Za-z0-9])", re.
 # a unit, and another product's version, with any versions listed after it ("SQLite 3.9.0 and 3.8.3").
 NUMBER = r"\d+(?:\.\d+)+"
 UNITS = ["ms", "s", "sec", "seconds", "minutes", "KB", "kB", "MB", "GB", "TB", "KiB", "MiB", "GiB"]
-FIGURE = re.compile(rf"(?<![\d.]){NUMBER}\s?(?:%|(?:{'|'.join(UNITS)})(?![\w-]))")
+FIGURE = re.compile(rf"{NUMBER}\s?(?:%|(?:{'|'.join(UNITS)})(?![\w-]))")
 OTHER_PRODUCTS = ["SQLite3", "SQLite", "Node.js", "Node", "Next.js", "Lighthouse", "axe-core"]
 OTHER_PRODUCT_VERSION = re.compile(
-    rf"(?<![\w.-])(?:{'|'.join(map(re.escape, OTHER_PRODUCTS))})(?:'s)?\s+(?:version\s+|v)?{NUMBER}"
+    rf"(?:{'|'.join(map(re.escape, OTHER_PRODUCTS))})(?:'s)?\s+(?:version\s+|v)?{NUMBER}"
     rf"(?:\s*(?:,|and|or|to)\s*{NUMBER})*"
 )
 

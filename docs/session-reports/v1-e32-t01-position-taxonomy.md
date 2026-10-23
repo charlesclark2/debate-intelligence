@@ -6,7 +6,7 @@
 | Spec | [`plan_specs/v1/e32-argument-landscape/t01-position-taxonomy.yaml`](../../plan_specs/v1/e32-argument-landscape/t01-position-taxonomy.yaml) |
 | Epic / release | `v1-e32-argument-landscape` / `v1.2` |
 | Branch | `task/v1-e32-t01-position-taxonomy` |
-| Session status | PARTIAL <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | COMPLETE <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
@@ -31,8 +31,9 @@ on a full path) and the CSV privacy note under Decisions 6.
 
 **After the PM review (2026-10-22, accepted with conditions):** condition 1 is done (counts on the
 sheet's first page), condition 3 is done (the spec's `constraints.packages` amended), and condition
-4 is this update. Condition 2, applying the coach's answers and his approval of 1.0.0, is still
-open, so the Goal stays **InProgress**. PM ruling 2026-10-23: the sheet goes to the coach as it is.
+4 is this update. Condition 2 is done too: the coach answered on 2026-10-23 and approved 1.0.0,
+his changes were 15 aliases added to the Policy file and nothing else, and the Goal is
+**Succeeded** ([the coach's review](#the-coachs-review-pm-review-condition-2)). PM ruling 2026-10-23: the sheet goes to the coach as it is.
 If he chooses two affs, single payer stays the parent aff with the heading alias, and a child aff,
 Medicare for all, carries the tag keywords he supplies, for t02's tag-keyword stage. That is
 within condition 2. Checked in memory against today's model and config test: it validates, with
@@ -45,7 +46,7 @@ the label in sentence case ("Medicare for All" reads to the check as a name).
 | taxonomy-models | Done | `domain/landscape.py`; red run against a skeleton that refused nothing: 30 failed, 39 passed |
 | yaml-repository | Done | `application/ports/taxonomy_repository.py`, `integrations/landscape/yaml_taxonomy_repository.py`; red run: 13 failed, 9 passed |
 | heading-normalizer | Done | `arguments/landscape/headings.py` and `seeding.py`, `application/landscape_seeding.py`, `scripts/seed_landscape_taxonomy.py`. Every strip rule's case was shown failing first, across five red runs (below) |
-| seed-and-curate | Partial | Seeded (counts below); `topics.yaml`, `policy-2026-27-nhi.yaml` and `generic.yaml` drafted from the CSV; review sheet written, and given the affirmative check's counts on its first page (PM condition 1, 2026-10-23). **Coach review not yet done** |
+| seed-and-curate | Done | Seeded (counts below); `topics.yaml`, `policy-2026-27-nhi.yaml` and `generic.yaml` drafted from the CSV; review sheet written, and given the affirmative check's counts on its first page (PM condition 1, 2026-10-23). Coach reviewed and approved 1.0.0 on 2026-10-23; his changes applied |
 | coach-guide | Done | `docs/guides/landscape-taxonomy.md`; pyright and lint-imports pass |
 
 ## Acceptance criteria
@@ -56,13 +57,13 @@ the label in sentence case ("Medicare for All" reads to the check as a name).
 | ac2: topics.yaml resolves (caselist, snapshot) to one topic and a semver taxonomy_version; overlapping ranges fail | PASS | domain tests (overlap within and across topics, adjacent ranges, both ends inclusive) and `uv run pytest packages/debate_core/tests/integrations/landscape/test_yaml_taxonomy_repository.py` → 22 passed. On the committed file: hspolicy26 on 2026-11-07 → `policy-2026-27-nhi` 1.0.0; hsld26 on 2026-10-01 → the Sept–Oct LD topic, no taxonomy; hsld26 on 2026-11-07 → none |
 | ac3: the Policy taxonomy and generic.yaml exist, each with at least 12 active positions, each with kind and side | PASS | 54 and 19 active positions; `test_each_taxonomy_has_enough_active_positions_each_with_a_kind_and_a_side` passes for both |
 | ac4: deterministic seeding writes a candidates CSV (normalized heading, level, documents, distinct teams, suggested id), stripping round prefixes, numbering and AT/A2 | PASS | `uv run pytest packages/debate_core/tests/arguments/landscape/test_headings.py` → 157 passed; `test_seeding.py` 49 passed; `tests/scripts/test_seed_landscape_taxonomy.py` 6 passed, whose CSV and counts were written by hand from the planted sources (working agreement 6). Real run below |
-| ac5: guide explains add position, add alias, retire/merge, bump taxonomy_version; **and the coach has reviewed the seeded Policy file and generic.yaml** | NOT RUN (guide part PASS) | Guide: `docs/guides/landscape-taxonomy.md` covers all four, with worked examples (add alias, add position, split a DA, merge two K labels). The coach's review has not happened yet. The sheet is ready for him, with the affirmative check's counts on its first page (Operator follow-ups). Due 2026-11-02; the PM needs to hear by 2026-10-25 whether he can review, or the approval moves to v1-e32-t05 |
+| ac5: guide explains add position, add alias, retire/merge, bump taxonomy_version; **and the coach has reviewed the seeded Policy file and generic.yaml** | PASS | Guide: `docs/guides/landscape-taxonomy.md` covers all four, with worked examples (add alias, add position, split a DA, merge two K labels). The coach reviewed the sheet (both files' positions, with the affirmative check on its first page) and answered on 2026-10-23 ([below](#the-coachs-review-pm-review-condition-2)) |
 | taxonomy-models: Taxonomy model validation tests pass | PASS | 69 passed (above) |
 | yaml-repository: repository and topic-resolution tests pass | PASS | 22 passed (above) |
 | heading-normalizer: normalizer and seeding tests pass on synthetic parsed-store fixtures | PASS | 157 passed (above); every fixture is invented (`School One`/`CodeOne`, `Sample Squad`, `Harbor Classic`) |
 | seed-and-curate: topic map lists the Policy caselist | PASS | `config/landscape/topics.yaml` contains `hspolicy26` |
 | seed-and-curate: every committed taxonomy file validates and has no personal data | PASS | `uv run pytest tests/config/test_landscape_taxonomies.py` → 17 passed, including seven synthetic cases the personal-data check must refuse (a team-code-shaped alias `spending da qx`, a team-code tag keyword, `RiOs` and `QX` in labels, a name in a label, a school word in an alias and in a description) |
-| seed-and-curate: coach curates the seeded taxonomies and approves 1.0.0 | NOT RUN | Waiting on the coach's review (Operator follow-ups). Counts of keep/merge/rename/drop/add go here when he has answered |
+| seed-and-curate: coach curates the seeded taxonomies and approves 1.0.0 | PASS | Coach approved 1.0.0 on 2026-10-23: 73 positions kept, 0 renamed, 0 merged, 0 dropped, 0 added; 15 aliases added to 14 positions; season range confirmed. `tests/config` and the repository tests → 39 passed after his changes |
 | coach-guide: guide exists and contains `merged_into` | PASS | 7 lines contain it; first line is its `docs-index` comment |
 | coach-guide: `uv run pyright packages/debate_core` | PASS | 0 errors, 0 warnings |
 | coach-guide: `uv run lint-imports` | PASS | 15 kept, 0 broken |
@@ -107,7 +108,7 @@ The pytest commands above were run as `.venv/bin/python -m pytest <file>` under 
 | Runtime | 55.5 s wall (the five runs took 38.6 to 55.5 s) |
 | Drafted: topic positions / aliases | 54 / 151 |
 | Drafted: generic positions / aliases | 19 / 39 |
-| Kept, merged, renamed, dropped, added by the coach | NOT RUN: the sheet, with the affirmative check on its first page, is waiting on his review (PM condition 2) |
+| Kept, renamed, merged, dropped, added by the coach | 73 kept (54 topic, 19 generic), 0 renamed, 0 merged, 0 dropped, 0 positions added; 15 aliases added |
 
 The first run wrote 2,768 rows from 11,101 distinct headings. The four later runs followed normalizer
 fixes for shapes the real headings showed (`OFF---1NC` was the commonest heading left), so the drafts
@@ -147,6 +148,29 @@ Adding `M4A` to the match changes the all-files count by one file (882). A neg f
 for All in a card that answers it counts too, which is why the aff-side rows are the ones to read. A
 card naming Medicare for All does not prove the plan text is Medicare for All. The sheet says so,
 and asks the coach to decide between one aff named single payer, one named Medicare for All, or two.
+
+### The coach's review (PM review condition 2)
+
+His answers, 2026-10-23, as he gave them through the operator:
+
+| Question on the sheet | Answer | What changed |
+|---|---|---|
+| Single payer and Medicare for All | One aff, single payer; each plan text should be identified to know every mechanism | Nothing in the files. Identifying plans is beyond headings and the two YAML files, so it goes to the PM as new work ([Follow-up work](#follow-up-work)) |
+| Advantages' parent | Leave standalone | Nothing |
+| Season range 2026-07-01 to 2027-06-30 | Correct | Nothing |
+| Merges to split | None | Nothing |
+| Other changes | "Do all of the suggested IDs from the top unplaced headings" | Asked back, since half of those 40 are block labels (`link`, `impact`, `u`, `turn`, `da`, `k`, `t`...) and `adv` and `advantage` share one id. He chose the recommended reading: a heading that names a drafted position joins it as an alias, and block labels, `pharma` (both a DA and an advantage) and `democracy` (no position) stay out |
+| Positions to add | None | Nothing |
+| Generic and topic placement | No moves | Nothing |
+| Approve 1.0.0 | Yes, with the plan-by-plan breakdown done afterwards as separate work | Goal set `Succeeded` |
+
+The 15 aliases, each in the candidates CSV with two or more teams: `costs`, `inequality`,
+`disease`, `coverage`, `growth`, `economy` and `econ`, `bioterror`, `stagnation`, `pandemics`,
+`innovation`, `access` and `budgets` join their advantages; `midterms` joins the Midterms DA and
+`states` the States CP. A bare word also sits under other positions' blocks (a neg's on-case
+`costs`), so these aliases count somewhat more widely than the drafted ones: the coach's choice,
+recorded here so t03's first report is read with it in mind. Version stays 1.0.0, as nothing was
+released before his approval.
 
 ### Before the report (working agreement 10)
 
@@ -259,19 +283,20 @@ and asks the coach to decide between one aff named single payer, one named Medic
 
 ## Operator follow-ups
 
-1. **Hand the coach the review sheet** (about an hour, by 2026-11-02):
-   `~/Documents/debate/landscape-seed/policy-2026-27-nhi-review.md`. It opens with the affirmative
-   check (single payer is very likely the Medicare for All aff), then the decisions needed and his
-   prep set against the store's counts, then lists each drafted position with its
-   aliases and the counts behind them, then the 40 headings most teams use that no position claims.
-   It holds real headings, so share it with him directly, not through a repository or a public link.
-2. **Bring his answers back to this session** (`scripts/task resume v1-e32-t01-position-taxonomy`),
-   as keep / rename / merge / drop / add per position and whether the season range is right. I will
-   apply them to the two files, record the counts of each decision in this report, run the checks,
-   and set the Goal to Succeeded once he approves 1.0.0.
+1. **Done 2026-10-23:** the coach reviewed the sheet
+   (`~/Documents/debate/landscape-seed/policy-2026-27-nhi-review.md`, kept outside the repository),
+   and his answers were applied in this session.
+2. **Open the pull request without `--partial`**: `scripts/task pr v1-e32-t01-position-taxonomy`.
 3. No whole-selection run is handed over: the pull request's `ci` check runs it (working agreement 10).
 
 ## Follow-up work
+
+* **Every single payer plan's mechanism** (the coach, 2026-10-23; for the PM to place): identify each
+  team's plan text so the landscape can split single payer by mechanism. Headings cannot show it, and
+  a plan text is usually an analytic paragraph, which the parsed store does not keep as a card. It
+  needs either the source files read again or the store to keep plan-text paragraphs, then a coach
+  pass naming the mechanisms as child affs of single payer with tag keywords (as the PM ruled for a
+  Medicare for All split).
 
 * **Released ids, enforced** (E32, before the first report is published): a check that compares
   each taxonomy file with its version on `dev` and refuses a deleted or reused id. Today the guide

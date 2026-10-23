@@ -53,7 +53,11 @@ from debate_cli.commands.caselist import event_for_caselist
 from debate_cli.context import CliContext, cli_context, command_name
 from debate_cli.exit_codes import ExitCode
 from debate_cli.output import CommandFailure, JsonValue, TableSpec
-from debate_core.application.search_index_build import BuiltSearchIndex
+from debate_core.application.search_index_build import (
+    BuiltSearchIndex,
+    not_cards_by_store,
+    not_cards_sentence,
+)
 from debate_core.application.search_index_publish import (
     ALLOW_SHRINK_FLAG,
     SHRINK_REASON_MAX_LENGTH,
@@ -61,7 +65,7 @@ from debate_core.application.search_index_publish import (
 )
 from debate_core.application.search_index_refresh import SEARCH_INDEX_DIRECTORY, newest_local_index
 from debate_core.application.settings import Environment, Settings
-from debate_core.domain.search_index import DEFAULT_PROVENANCE_LIMIT, SearchIndexManifest
+from debate_core.domain.search_index import DEFAULT_PROVENANCE_LIMIT
 
 __all__ = ["DEFAULT_OUT_DIRECTORY", "build", "build_summary", "publish", "publish_summary"]
 
@@ -103,7 +107,7 @@ def build(
     target = out if out is not None else cli.services.settings.storage.data_dir / DEFAULT_OUT_DIRECTORY
     cli.output.detail(f"indexing {', '.join(sorted(set(caselists)))} into {target}")
     built = asyncio.run(service.build(caselists, target, provenance_limit=provenance_limit))
-    cli.output.success(command_name(ctx), build_summary(built), display=_build_table(built.manifest))
+    cli.output.success(command_name(ctx), build_summary(built), display=_build_table(built))
 
 
 def publish(
@@ -165,8 +169,13 @@ def publish(
 
 
 def build_summary(built: BuiltSearchIndex) -> dict[str, JsonValue]:
-    """The `--json` envelope's `data` for `build`: the manifest, and where the directory is."""
-    return {"directory": str(built.directory), "manifest": built.manifest.model_dump(mode="json")}
+    """The `--json` envelope's `data` for `build`: the manifest, where the directory is, and what was left
+    out as no card by store and why (`v1-e39-t12`), which the manifest does not hold."""
+    return {
+        "directory": str(built.directory),
+        "manifest": built.manifest.model_dump(mode="json"),
+        "not_cards_by_store": not_cards_by_store(built.not_cards),
+    }
 
 
 def publish_summary(published: PublishedSearchIndex) -> dict[str, JsonValue]:
@@ -280,7 +289,8 @@ def _refuse(cli: CliContext, ctx: typer.Context, refusal: CommandFailure | None)
     raise typer.Exit(code=refusal.exit_code)
 
 
-def _build_table(manifest: SearchIndexManifest) -> TableSpec:
+def _build_table(built: BuiltSearchIndex) -> TableSpec:
+    manifest = built.manifest
     counts = manifest.counts
     rows = [[name, str(documents)] for name, documents in sorted(counts.documents_by_store.items())]
     return TableSpec(
@@ -289,7 +299,8 @@ def _build_table(manifest: SearchIndexManifest) -> TableSpec:
         title=f"Search index {manifest.index_id}: {counts.documents} documents",
         caption=(
             f"{counts.occurrences} occurrences of {counts.occurrence_rows_read} rows read; "
-            f"{counts.suppressed_occurrences} suppressed, {counts.clusters_left_out} clusters left out. "
+            f"{counts.suppressed_occurrences} suppressed, {counts.clusters_left_out} clusters left out, "
+            f"{not_cards_sentence(built.not_cards)}. "
             f"SQLite file {manifest.sqlite_file.bytes:,} bytes, "
             f"gzip object {manifest.gzip_object.bytes:,} bytes. "
             f"Parser {manifest.parser_version}, {manifest.fingerprint_version}, "

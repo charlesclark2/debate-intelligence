@@ -271,6 +271,7 @@ def test_index_stage_runs_after_parse_and_before_landscape_even_when_nothing_was
         "documents_growth": None,
         "sqlite_bytes_growth": None,
         "gzip_bytes_growth": None,
+        "not_cards_by_store": None,
     }
 
 
@@ -441,6 +442,26 @@ def test_index_stage_refused_by_the_shrink_guard_is_named_in_the_summary_details
     [banner] = banners
     assert "the search_index stage failed on SEARCH_INDEX_WOULD_SHRINK" in banner.message
     assert banner.hint == "a synthetic fix naming --allow-shrink"
+
+
+def test_index_stage_what_its_build_left_out_as_no_card_is_in_the_summary_and_details(tmp_path: Path) -> None:
+    """The counts `v1-e39-t12`'s rule left out, as the run records them: the summary and the details."""
+    not_cards = {
+        SYNTHETIC_CASELIST: {"cite_only": 7, "no_cite_few_words": 2},
+        OPENEV_STORE: {"cite_only": 1, "no_cite_few_words": 0},
+    }
+    built = SearchIndexStageReport(
+        outcome=StageOutcome.COMPLETED,
+        reason=f"built {INDEX_ID}; published",
+        counts=replace(COUNTS, not_cards_by_store=not_cards),
+    )
+
+    summary = run(tmp_path, search_index=RecordingIndexStage(built))
+    details = details_for_summary(summary)
+
+    assert summary.as_json()["search_index"]["not_cards_by_store"] == not_cards  # pyright: ignore[reportIndexIssue]
+    assert details.search_index is not None
+    assert details.search_index.not_cards_by_store == not_cards
 
 
 def test_index_stage_that_raises_is_its_own_failure_and_the_run_goes_on(tmp_path: Path) -> None:

@@ -228,6 +228,21 @@ def test_tub_index_build_writes_one_directory_under_the_data_directory(parsed: P
         ]
 
 
+def test_tub_index_build_says_what_it_left_out_as_no_card_by_store(parsed: Path) -> None:
+    """`v1-e39-t12`: the count is in the envelope and the table, since the manifest does not hold it."""
+    as_json = invoke("--json", "tub", "index", "build", "--caselist", CASELIST)
+    as_table = invoke("tub", "index", "build", "--caselist", CASELIST)
+
+    assert as_json.exit_code == ExitCode.OK, as_json.stdout
+    data = envelope_of(as_json)["data"]
+    assert data["not_cards_by_store"] == {CASELIST: {"cite_only": 0, "no_cite_few_words": 0}}
+    assert "not_cards" not in json.dumps(data["manifest"])
+    assert as_table.exit_code == ExitCode.OK, as_table.output
+    assert "0 left out as no card (0 cite only, 0 with no cite and under 25 words)" in " ".join(
+        as_table.stdout.split()
+    )
+
+
 def test_tub_index_build_refuses_a_caselist_with_no_parsed_store(parsed: Path) -> None:
     result = invoke("--json", "tub", "index", "build", "--caselist", "hspf26")
 

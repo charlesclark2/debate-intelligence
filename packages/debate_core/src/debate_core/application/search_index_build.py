@@ -105,6 +105,7 @@ from collections import defaultdict
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import date
+from enum import StrEnum
 from pathlib import Path
 from typing import ClassVar, Final
 
@@ -147,12 +148,19 @@ from debate_core.domain.search_index import (
 from debate_core.evidence.fingerprints import FINGERPRINT_VERSION, card_fingerprint
 
 __all__ = [
+    "CARD_ONLY_RULE",
     "BuiltSearchIndex",
+    "CardOnlyRule",
+    "NotACard",
+    "NotCards",
     "SearchIndexBuildService",
     "SearchIndexSources",
     "SearchIndexStoreNotReady",
     "SearchIndexStoreVersionMismatch",
     "cite_without_cutter_mark",
+    "not_a_card",
+    "not_cards_by_store",
+    "not_cards_sentence",
     "representative_order",
 ]
 
@@ -213,12 +221,31 @@ class SearchIndexSources:
         return tuple(state for _, state in (self.tables[name] for name in sorted(self.tables)))
 
 
+class NotACard(StrEnum):
+    """Why a cluster is left out of the index as no card: what its representative is (`v1-e39-t12`)."""
+
+    CITE_ONLY = "cite_only"
+    """CITE_ONLY: a tag and a cite with no evidence text, so nothing to read or copy."""
+
+    NO_CITE_FEW_WORDS = "no_cite_few_words"
+    """No cite, and fewer words of evidence text than :attr:`CardOnlyRule.words_without_cite`: an
+    analytic or a heading the parser kept as a card."""
+
+
+type NotCards = Mapping[str, Mapping[NotACard, int]]
+"""Documents left out as no card, by store and then by why: every store built, every reason, zeros too."""
+
+
 @dataclass(frozen=True, slots=True)
 class BuiltSearchIndex:
     """One built index: the directory holding its three files, and its manifest."""
 
     directory: Path
     manifest: SearchIndexManifest
+    not_cards: NotCards
+    """The clusters :func:`not_a_card` left out, by store and why. Not in the manifest: the deployed
+    function reads it with `extra="forbid"`, so a new field would make it refuse the index (PM ruling
+    2026-10-22)."""
 
 
 # ------------------------------------------------------------------------------------------------
@@ -251,6 +278,51 @@ def cite_without_cutter_mark(full_cite: str) -> str:
             return full_cite
         return "".join(lines[:position]) + kept + ending
     return full_cite
+
+
+@dataclass(frozen=True, slots=True)
+class CardOnlyRule:
+    """What makes a representative no card: both thresholds, in one place (PM ruling 2026-10-22)."""
+
+    completeness: CardCompleteness
+    """A representative of this completeness is left out, whatever its cite."""
+
+    words_without_cite: int
+    """A representative with no cite is left out below this many words of evidence text, counted as
+    whitespace-separated words (`str.split()`)."""
+
+
+CARD_ONLY_RULE: Final = CardOnlyRule(completeness=CardCompleteness.CITE_ONLY, words_without_cite=25)
+"""Rule C of `v1-e39-t12` (PM ruling 2026-10-22): CITE_ONLY, or no cite and fewer than 25 words. Over the
+dev index of 2026-10-22 it left out 1,625 of 52,059 documents, at most 3.9% of a caselist."""
+
+
+def not_a_card(card: ParsedCard) -> NotACard | None:
+    """Why `card`, a cluster's representative, is no card under :data:`CARD_ONLY_RULE`; `None` for a card.
+
+    A cite is absent when the card's full cite is empty or only whitespace. Judged on the
+    representative alone: for CITE_ONLY that is every member, since completeness leads the
+    representative order.
+    """
+    return None
+
+
+def not_cards_by_store(not_cards: NotCards) -> dict[str, dict[str, int]]:
+    """`not_cards` as JSON: each store's counts by reason, keys sorted."""
+    return {
+        store: {reason.value: counts.get(reason, 0) for reason in NotACard}
+        for store, counts in sorted(not_cards.items())
+    }
+
+
+def not_cards_sentence(not_cards: NotCards) -> str:
+    """`12 left out as no card (10 cite only, 2 with no cite and under 25 words)`, for a summary."""
+    cite_only = sum(counts.get(NotACard.CITE_ONLY, 0) for counts in not_cards.values())
+    few_words = sum(counts.get(NotACard.NO_CITE_FEW_WORDS, 0) for counts in not_cards.values())
+    return (
+        f"{cite_only + few_words:,} left out as no card ({cite_only:,} cite only, {few_words:,} with no "
+        f"cite and under {CARD_ONLY_RULE.words_without_cite} words)"
+    )
 
 
 def _recency(row: OccurrenceRecord) -> tuple[int, str]:
@@ -424,7 +496,11 @@ class SearchIndexBuildService:
         except BaseException:
             shutil.rmtree(building, ignore_errors=True)
             raise
-        return BuiltSearchIndex(directory=final, manifest=manifest)
+        return BuiltSearchIndex(
+            directory=final,
+            manifest=manifest,
+            not_cards={name: dict.fromkeys(NotACard, 0) for name in names},
+        )
 
     # -- reading --------------------------------------------------------------------------------
 

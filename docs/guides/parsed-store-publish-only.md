@@ -52,7 +52,10 @@ Use `--publish`, not `--publish-only`, in these cases:
 * **After a removal, in either environment.** A removal deletes the caselist's index, failures file
   and occurrence table on the machine it runs on, so `--publish-only` refuses there anyway. On a
   data directory the removal did not touch, the aggregates were built before it. `--publish`
-  rebuilds them from the suppression list of the environment it publishes to.
+  rebuilds them from the suppression list of the environment it publishes to. `--publish-only` now
+  refuses this case too (`PARSED_AGGREGATES_NAME_WHAT_THE_LIST_STOPS`, below): before uploading
+  anything, it checks the aggregates against the suppression list of the environment it publishes
+  to. The refusal is the backstop; run `--publish` after a removal without waiting for it.
 * **After a weekly run whose parse stage was `pending` for want of a login.** That rebuild may have
   read only this Mac's copy of the suppression list, and those aggregates are never what gets
   published. The pull's summary shows `suppression_list_local_copy_only` when that happened.
@@ -72,6 +75,7 @@ nothing, and its hint names the command to run instead. Each refusal has its own
 | `PARSED_SOURCE_FILES_MISSING` | The index names a source whose per-source file is gone | `--publish` |
 | `PARSED_BY_ANOTHER_PARSER_VERSION` | The directory holds sources parsed under another parser or style profile version | `--publish`, which starts a new generation |
 | `PARSED_FINGERPRINT_VERSION_MISMATCH` | The occurrence table is not stamped with this build's fingerprint version throughout, or a per-source record was stamped by a newer build | `--publish` for an older stamp; a build at the newer version for a newer one |
+| `PARSED_AGGREGATES_NAME_WHAT_THE_LIST_STOPS` | The index names a source, or the occurrence table a disclosure, that the suppression list of the environment being published to now stops or holds: a removal recorded there after the last rebuild, for example one made in prod and not in dev | `--publish` in that environment, which rebuilds the aggregates from its list |
 
 A per-source record stamped with an *older* fingerprint version is not refused. A fingerprint
 change re-parses nothing, so such records are what a rebuild by this build leaves, and `--publish`

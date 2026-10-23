@@ -234,9 +234,91 @@ publishes them).
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-22
 
 **Notes:**
+
+Accepted, on four conditions closed in this session before the pull request. The largest is the
+refusal in ruling 2, which is now in scope. Record what you did under a "PM conditions" heading,
+keep the phase `Succeeded`, and open the pull request with no `--partial`. If anything comes out
+differently from what is written here, stop and ask for another review.
+
+**What the PM checked.** The branch is clean, 9 commits on origin/dev at `ecc2739`, and the diff
+is the 9 files listed. The publish goes through the existing `parsed_publisher()`, and the new
+module reads only through the `ParsedStore` port. The base predates v1-e29-t12 (#397), which
+changed `occurrence_table_guard.py` and its test. That is the test your per-source check now
+depends on, so the sync in condition 4 is required.
+
+**Rulings.**
+
+1. **Deviation 1 is accepted. The PM context was wrong.** The skip key keeps each per-source
+   record's stamp from the day it was parsed, so the literal rule would refuse what `--publish`
+   sends and break ac1. The implemented rule stands:
+   * occurrence table rows must equal this build's version;
+   * a per-source record is refused only when a newer build stamped it, asked of the guard's
+     `newer_stamp`.
+
+   Add a comment above ac2: `# PM ruling 2026-10-22: "another fingerprint version" means an
+   occurrence table not stamped by this build, or a per-source record a newer build stamped; older
+   per-source stamps are published, as --publish publishes them.`
+2. **The PM question: option B, in this session, not as a follow-up.** Publishing to a second
+   environment is half of what this task is for, and the next use is the prod promotion. Prod's
+   suppression list is exactly the one that may hold a removal dev's lacks: v1-e39-t07 adds prod
+   removal grants, and the promotion checks the prod list exists. A guide line is not enough
+   protection for that path. Fail closed, as the pilot's view and copy do.
+   * **The check.** Before any upload, load the *target* environment's suppression state, the
+     same `load_suppression_state` over the same list the publisher is given. Then ask the existing
+     rule, `parse_sources.live_disclosures` and `held_only_sources` over `enumerate_sources`,
+     whether every source the index names, and every disclosure an occurrence row names, is still
+     live there. If any is not, refuse with its own code (`PUBLISH_ONLY_SUPPRESSION_CHANGED`, or a
+     clearer name of your choosing). The refusal gives counts and SHA-256 prefixes only, uploads
+     nothing, and hints `--publish`.
+   * **Not a second implementation.** It writes no rule of its own: the rebuild's own predicates
+     answer it. If the rebuild filters aggregates through a predicate that is not yet one shared
+     function, extract it so both call it, and say so in the report. This supersedes the context's
+     "don't re-check in the new path" for this one question. The forbidden entry stands, because
+     nothing is re-implemented.
+   * **Tests, red first:**
+     * dev-built aggregates with a prod list holding one extra removal: refused, an empty bucket;
+     * a prod list holding one extra path hold: refused;
+     * equal lists: publishes exactly as now;
+     * the refusal message holds no fictional school or team.
+
+     Then mutation-check the new refusal.
+   * **Spec:** add an ac4 for the refusal, with
+     `# PM ruling 2026-10-22: aggregates are refused where the target environment's list stops
+     what they name`.
+   * **Guide:** keep the "after a removal, use `--publish`" advice, and add that the command now
+     refuses such a case.
+
+   Option C (recording the list's digest in the version directory) is not needed once B exists.
+3. **The smoke check, now.** `plan_specs/README.md` asks for one when a CLI surface changes, so it
+   is a standing rule, not a follow-up. Add the offline option-conflict check (exit 2, nothing
+   written) to `tests/smoke`, and add `tests/smoke` to `constraints.packages` with
+   `# PM ruling 2026-10-22: a CLI surface change carries its smoke check.`
+4. **Sync, then re-run** (`scripts/task sync`):
+   * the guard test (`test_occurrence_table_guard.py`), which v1-e29-t12 changed;
+   * both new test files, with the new refusal, plus the one-process run;
+   * the two closing pytest commands, ruff, pyright and `lint-imports`;
+   * `validate_specs.py`, `check_command_blocks.py`, `check_links.py` and `docs_index.py
+     --check-descriptions`.
+
+   Record the results.
+
+**Accepted as written.**
+
+* The profile-version check, and refusing `--failures` beside `--publish-only`.
+* Leaving the weekly pull's persisted fix text as `--publish`. Follow-up 1 is right, and the PM
+  files it for E34 in the next batch.
+* `PARSED_PUBLISH_INCOMPLETE`'s hint naming `--publish-only`, since the directory is rebuilt by
+  then. With ruling 2, a target list that has since changed is refused rather than published.
+* The affected set left to the PR's `ci` (agreement 10).
+* **The operator follow-up,** run once after merge from the main checkout. Add `cd` to the
+  checkout first: the installed `debate-research` and the checkout's `.env` disagree on the
+  OpenAlex key until the agent is upgraded, which is why it says `uv run`.
+
+**Noted.** Catching the cut affected-set run's guard failure, and fixing it by asking the guard
+rather than relaxing its test, was the right call.

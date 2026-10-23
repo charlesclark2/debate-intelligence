@@ -42,6 +42,7 @@ CONCRETE_PATHS: Final = {
     "/search": ["/search", "/search?q=zephyr", "/search?q=zephyr&event=Debate", "/search?q=zephyr&cursor=x"],
     "/cards/{caselist}/{cluster_id}": [FEATURED, f"/cards/hsld26/{999:064x}", "/cards/hsld26/not-a-cluster"],
     "/cards/{caselist}/{cluster_id}/copy": [FEATURED + "/copy", f"/cards/hsld26/{999:064x}/copy"],
+    "/download": ["/download"],
     "/account": ["/account"],
     "/account/email": ["/account/email"],
     "/account/email/verify": ["/account/email/verify"],

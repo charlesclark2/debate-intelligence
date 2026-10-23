@@ -32,6 +32,14 @@ evidence_search.DEFAULT_RESULT_COUNT_CAP`, 1,000) and marked as more than the ca
 reads in doc id order with no rank, and shares the search's time budget: a count the budget stops,
 or a search that was itself stopped, has no count.
 
+## A card's source, for a download (`v1-e39-t08`)
+
+:meth:`EvidenceSearchService.card_source` answers what a download needs: where the card's
+representative was read from (its source's SHA-256, its disclosure digest, its snapshots and its
+element indices) and the text the card page shows, which the E33 writer's fingerprint check holds the
+copied card to. It is found exactly as :meth:`EvidenceSearchService.card` finds a card, under the same
+predicate: a card whose representative is suppressed has no source to download.
+
 ## The time budget
 
 A search that runs past its budget stops where it is and returns what it has fetched, with
@@ -44,6 +52,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable, Sequence
+from dataclasses import dataclass, field
 from typing import Final
 
 from debate_core.application.ports.search_index_reader import (
@@ -77,6 +86,7 @@ from debate_core.domain.evidence_search import (
 
 __all__ = [
     "DEFAULT_SEARCH_TIME_BUDGET_SECONDS",
+    "CardSource",
     "EvidenceSearchService",
     "SuppressionPredicate",
     "surviving_counts",
@@ -87,6 +97,32 @@ DEFAULT_SEARCH_TIME_BUDGET_SECONDS: Final = 2.0
 
 SuppressionPredicate = Callable[[str, str | None], bool]
 """``is_suppressed(source_sha256, disclosure_digest)``: whether the live list stops an occurrence."""
+
+
+@dataclass(frozen=True, slots=True)
+class CardSource:
+    """Where one card's representative was read from, and what the card page shows of it.
+
+    The tag and short cite name the card in a refusal; the text and cite are what the copied card must
+    read as. Who disclosed it is not here: a downloaded file carries no provenance line (data-use
+    policy version 1.11), and its audit record names the card.
+    """
+
+    caselist: str
+    cluster_id: str
+    event: str
+    camp: str | None
+    tag: str | None
+    short_cite: str | None
+    completeness: str
+    source_sha256: str
+    disclosure: str | None
+    snapshot: str
+    last_snapshot: str
+    first_element_index: int
+    last_element_index: int
+    cite: str = field(repr=False)
+    text: str = field(repr=False)
 
 
 def _line(occurrence: StoredOccurrence) -> str | None:
@@ -305,6 +341,38 @@ class EvidenceSearchService:
             file_count=files,
             team_count=teams,
             provenance_line=_line(hit.representative),
+        )
+
+    def card_source(
+        self, caselist: str, cluster_id: str, *, is_suppressed: SuppressionPredicate | None = None
+    ) -> CardSource | None:
+        """The card's representative and where it was read from, or `None` exactly when :meth:`card` is."""
+        document = self._reader.document(caselist, cluster_id)
+        if document is None:
+            return None
+        occurrences = self._reader.occurrences(document.doc_id)
+        if not occurrences or occurrences[0].ordinal != 0 or _suppressed(occurrences[0], is_suppressed):
+            return None
+        representative = occurrences[0]
+        first, last = representative.first_element_index, representative.last_element_index
+        if first is None or last is None:
+            return None
+        return CardSource(
+            caselist=document.caselist,
+            cluster_id=document.cluster_id,
+            event=document.event,
+            camp=document.camp,
+            tag=document.tag,
+            short_cite=document.short_cite,
+            completeness=document.completeness,
+            source_sha256=representative.source_sha256,
+            disclosure=representative.disclosure,
+            snapshot=representative.snapshot,
+            last_snapshot=representative.last_snapshot,
+            first_element_index=first,
+            last_element_index=last,
+            cite=document.cite,
+            text=document.text,
         )
 
     def card(

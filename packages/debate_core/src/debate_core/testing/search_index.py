@@ -80,11 +80,14 @@ def published_index(
     documents_by_store: Mapping[str, int],
     format_version: int = SEARCH_INDEX_FORMAT_VERSION,
     manifest_format_version: int | None = None,
+    parser_version: str = "2026.10.18-docx-5",
 ) -> PublishedIndex:
     """`sqlite`, gzipped and described as `tub index publish` describes an index it uploads.
 
     `format_version` is written into the pointer and `manifest_format_version` (the same, unless
     given) into the manifest, so a test can publish an index of a format this build does not read.
+    `parser_version` is the manifest's: a download test publishes the running parser's
+    (`v1-e39-t08`).
     """
     sqlite_sha256 = hashlib.sha256(sqlite).hexdigest()
     index_id = sqlite_sha256[:INDEX_ID_LENGTH]
@@ -92,7 +95,7 @@ def published_index(
     stores = tuple(
         StoreState(
             caselist=caselist,
-            version_directory="2026.10.18-docx-5",
+            version_directory=parser_version,
             latest_snapshot="2026-policy" if caselist == "openev" else "2026-10-13",
             occurrence_rows=count,
             occurrences_sha256=_ZERO_DIGEST,
@@ -103,7 +106,7 @@ def published_index(
     manifest = SearchIndexManifest(
         format_version=manifest_format_version if manifest_format_version is not None else format_version,
         index_id=index_id,
-        parser_version="2026.10.18-docx-5",
+        parser_version=parser_version,
         fingerprint_version="card-fingerprint-v4",
         sqlite_version="3.50.4",
         sqlite_feature_ceiling=SQLITE_FEATURE_CEILING,

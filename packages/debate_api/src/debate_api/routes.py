@@ -8,7 +8,8 @@ never checks a session itself.
 A state-changing route is a POST that `app.js` sends with `fetch`, and it answers JSON: a
 `location` to go to next, or, through the app's error handlers, a `message` to show.
 
-The search pages' handlers are in :mod:`debate_api.search_pages`; every one is a `GET`.
+The search pages' handlers are in :mod:`debate_api.search_pages`; every one is a `GET`. Download
+(`v1-e39-t08`) is :mod:`debate_api.download`'s, a POST like the rest, answered with the file or JSON.
 """
 
 from __future__ import annotations
@@ -22,6 +23,7 @@ from starlette.concurrency import run_in_threadpool
 
 from debate_api.access import Access, RouteAccess
 from debate_api.cookies import ALL_COOKIES, ENROLMENT_COOKIE, SESSION_COOKIE, SIGN_IN_COOKIE
+from debate_api.download import card_download
 from debate_api.pages import IMMUTABLE, qr_code_svg
 from debate_api.search_pages import card_copy, card_page, search_page
 from debate_api.state import pilot_state
@@ -41,6 +43,7 @@ ROUTE_ACCESS: Final = {
     "/search": Access.SIGNED_IN,
     "/cards/{caselist}/{cluster_id}": Access.SIGNED_IN,
     "/cards/{caselist}/{cluster_id}/copy": Access.SIGNED_IN,
+    "/download": Access.SIGNED_IN,
     "/account": Access.SIGNED_IN,
     "/account/email": Access.SIGNED_IN,
     "/account/email/verify": Access.SIGNED_IN,
@@ -76,6 +79,7 @@ def register_routes(app: FastAPI, routes: RouteAccess) -> None:
     app.add_api_route(
         "/cards/{caselist}/{cluster_id}/copy", card_copy, methods=["GET"], include_in_schema=False
     )
+    app.add_api_route("/download", card_download, methods=["POST"], include_in_schema=False)
     app.add_api_route("/account", account, methods=["GET"], include_in_schema=False)
     app.add_api_route("/account/email", add_email, methods=["POST"], include_in_schema=False)
     app.add_api_route("/account/email/verify", confirm_email, methods=["POST"], include_in_schema=False)

@@ -2,9 +2,10 @@
 
 :class:`PilotServices` is what a composition root hands :func:`debate_api.app.create_app`: the
 configuration, the cookie keys, the two sign-in use cases, the search index holder (`v1-e39-t06`),
-the access audit (`v1-e39-t07`) and the clock. `debate_api.container` builds it
-from the function's environment; a test builds it from fakes. :class:`PilotState` adds what the
-app derives from it once, and lives on `app.state.pilot` for the gate and the routes.
+the access audit (`v1-e39-t07`), the card download (`v1-e39-t08`) and the clock.
+`debate_api.container` builds it from the function's environment; a test builds it from fakes.
+:class:`PilotState` adds what the app derives from it once, and lives on `app.state.pilot` for the
+gate and the routes.
 """
 
 from __future__ import annotations
@@ -30,6 +31,7 @@ from debate_api.cookies import (
     transaction_payload,
 )
 from debate_api.pages import PageRenderer, StaticAsset
+from debate_core.application.card_download import CardDownloadService
 from debate_core.application.search_index_holder import SearchIndexHolder
 from debate_core.application.tub.access_audit import AccessAuditService
 from debate_core.application.tub.account_page import AccountPageService
@@ -54,6 +56,7 @@ class PilotServices:
     account_page: AccountPageService
     search_index: SearchIndexHolder
     access_audit: AccessAuditService
+    card_download: CardDownloadService
     clock: Callable[[], datetime]
 
 

@@ -12,6 +12,12 @@ v1-e39-t04's Terraform sets these on the function (`infrastructure/modules/evide
 | `TUB_AUDIT_LOG_GROUP` | where the account page's audit records go |
 | `TUB_EVIDENCE_BUCKET` | the evidence bucket the search index is fetched from (`v1-e39-t06`) |
 | `TUB_RESULT_COUNT_CAP` | optional: how far a search counts its results, 1,000 when unset (`v1-e39-t11`) |
+| `TUB_DOWNLOAD_CARD_CAP` | optional: the most cards a download holds, 1 to 30, 8 unset (`v1-e39-t08`) |
+| `TUB_DOWNLOAD_SOURCE_BYTES` | optional: the most source bytes a download reads, 2,000,000 unset |
+
+The two download caps were set from measurements (:mod:`debate_core.application.card_download`
+says which); neither variable is set by Terraform, so changing one is an environment override on the
+function, and the defaults hold until someone measures otherwise.
 
 The app never reads its origin from a `Host` or `X-Forwarded-*` header: CloudFront's origin request
 policy drops the viewer's `Host`, and a forwarded one is the viewer's to choose.
@@ -33,6 +39,8 @@ from dataclasses import dataclass, field
 from typing import Final
 from urllib.parse import urlsplit
 
+from debate_core.application.card_download import DEFAULT_DOWNLOAD_CARD_CAP, DEFAULT_DOWNLOAD_SOURCE_BYTES
+from debate_core.application.tub.audit import MAX_DOWNLOAD_CARDS
 from debate_core.domain.evidence_search import DEFAULT_RESULT_COUNT_CAP, MAX_CURSOR_OFFSET
 
 __all__ = [
@@ -47,6 +55,10 @@ __all__ = [
 COOKIE_KEY_BYTES: Final = 32
 _DEFAULT_REGION: Final = "us-east-1"
 _COUNT_CAP_VARIABLE: Final = "TUB_RESULT_COUNT_CAP"
+_DOWNLOAD_CARD_CAP_VARIABLE: Final = "TUB_DOWNLOAD_CARD_CAP"
+_DOWNLOAD_SOURCE_BYTES_VARIABLE: Final = "TUB_DOWNLOAD_SOURCE_BYTES"
+_MOST_SOURCE_BYTES: Final = 100_000_000
+"""Far above anything the function could read and parse in a request: a bound on a typo, not a setting."""
 
 
 class ConfigurationMissing(RuntimeError):
@@ -117,6 +129,8 @@ class PilotConfiguration:
     evidence_bucket: str
     region: str = _DEFAULT_REGION
     result_count_cap: int = DEFAULT_RESULT_COUNT_CAP
+    download_card_cap: int = DEFAULT_DOWNLOAD_CARD_CAP
+    download_source_bytes: int = DEFAULT_DOWNLOAD_SOURCE_BYTES
 
     @classmethod
     def from_environment(cls, environ: Mapping[str, str]) -> PilotConfiguration:
@@ -138,6 +152,12 @@ class PilotConfiguration:
             evidence_bucket=required("TUB_EVIDENCE_BUCKET"),
             region=environ.get("AWS_REGION", "").strip() or _DEFAULT_REGION,
             result_count_cap=_count_cap(environ.get(_COUNT_CAP_VARIABLE, "").strip()),
+            download_card_cap=_whole_number(
+                environ, _DOWNLOAD_CARD_CAP_VARIABLE, DEFAULT_DOWNLOAD_CARD_CAP, MAX_DOWNLOAD_CARDS
+            ),
+            download_source_bytes=_whole_number(
+                environ, _DOWNLOAD_SOURCE_BYTES_VARIABLE, DEFAULT_DOWNLOAD_SOURCE_BYTES, _MOST_SOURCE_BYTES
+            ),
         )
         return configuration
 
@@ -159,6 +179,16 @@ def _count_cap(value: str) -> int:
         raise ConfigurationMissing(
             _COUNT_CAP_VARIABLE, f"is not a whole number from 1 to {MAX_CURSOR_OFFSET}"
         )
+    return int(value)
+
+
+def _whole_number(environ: Mapping[str, str], variable: str, default: int, most: int) -> int:
+    """`variable` as a whole number from 1 to `most`; `default` when it is unset."""
+    value = environ.get(variable, "").strip()
+    if not value:
+        return default
+    if not value.isascii() or not value.isdigit() or not 1 <= int(value) <= most:
+        raise ConfigurationMissing(variable, f"is not a whole number from 1 to {most}")
     return int(value)
 
 

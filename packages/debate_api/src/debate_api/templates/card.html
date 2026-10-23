@@ -13,7 +13,12 @@
 <button type="button" data-tub-copy="{{ copy_href }}" aria-describedby="copy-help">Copy card</button>
 <span id="copy-help" class="copy-help">Keeps its formatting.</span>
 <span class="copy-status" data-tub-copy-message role="status"></span>
-</div>
+{% if download_on %}<button type="button" data-tub-download="{{ card_reference }}" aria-describedby="download-help">Download .docx</button>
+<button type="button" class="secondary" data-tub-cart-add="{{ card_reference }}">Add to cart</button>
+<span id="download-help" class="copy-help">A Verbatim file for Word.</span>
+<div class="download-status" data-tub-download-message role="status"></div>
+{% else %}<p class="download-off">Download is off until the search's next weekly update. Copy card still works.</p>
+{% endif %}</div>
 <!--card-body-->
 {% if long_card %}
 <h2>Read aloud</h2>

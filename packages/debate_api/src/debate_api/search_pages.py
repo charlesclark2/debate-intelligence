@@ -45,6 +45,13 @@ search_index_holder.ScreenedSearch`).
   no referrer. A card whose link cannot be built shows none. It leaves the platform, so it writes
   no record.
 
+## Download .docx and the cart (`v1-e39-t08`)
+
+A card page offers *Download .docx* and *Add to cart* while the index's parser is the function's
+own, and says download is off when it is not (:meth:`~debate_core.application.card_download.
+CardDownloadService.is_on`, asked in the card's own lease). Both buttons are `app.js`'s: the cart is
+kept in the browser, and the download is :mod:`debate_api.download`'s POST.
+
 ## Nothing here is logged
 
 A search is a `GET`, so its words are in the URL, and since `v1-e39-t11` in a card page's URL too.
@@ -359,6 +366,7 @@ def card_page(caselist: str, cluster_id: str, request: Request) -> HTMLResponse:
     """A card: the way back, its label, tag, cite, provenance and link out, Copy card, its text, and
     every occurrence's line."""
     back: str | None = None
+    download_on = False
     try:
         if _STORE.match(caselist) is None or _CLUSTER_ID.match(cluster_id) is None:
             card = None
@@ -367,6 +375,7 @@ def card_page(caselist: str, cluster_id: str, request: Request) -> HTMLResponse:
                 card = search.card(caselist, cluster_id)
                 if card is not None:
                     back = _back_link(request.query_params, search)
+                    download_on = pilot_state(request).services.card_download.is_on(search)
     except SearchIndexUnavailable:
         return _refused(request, 503, _UNAVAILABLE_HEADING, _UNAVAILABLE)
     if card is None:
@@ -390,6 +399,8 @@ def card_page(caselist: str, cluster_id: str, request: Request) -> HTMLResponse:
         source_link=source_link(representative) if representative is not None else None,
         counts=_counts(card.file_count, card.team_count),
         copy_href=_card_href(card.caselist, card.cluster_id) + "/copy",
+        card_reference=f"{card.caselist}/{card.cluster_id}",
+        download_on=download_on,
         long_card=words > LONG_CARD_WORDS,
         words=f"{words:,}",
         read_aloud_html=render_text_html(card.read_aloud),

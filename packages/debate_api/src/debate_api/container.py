@@ -6,7 +6,10 @@ placeholder keys, and wires the Cognito, audit and parameter adapters from
 `debate_core.integrations` into the two use cases. It also builds the search index holder over the
 evidence bucket (`v1-e39-t06`), which fetches nothing until the first search: a cold start reads
 only the two parameters. The holder re-reads the suppression list through the same bucket adapter,
-and the access audit writes to the same audit stream as the account page (`v1-e39-t07`). Routes
+and the access audit writes to the same audit stream as the account page (`v1-e39-t07`). The card
+download (`v1-e39-t08`) builds files with the E33 writer and its parser, reading each source from the
+evidence bucket through an `S3SnapshotStore` per `raw/` prefix (`raw/caselist/<slug>`, or a camp
+file's `raw/openev/<year>`), on the same client; it writes nothing anywhere. Routes
 ask `app.state.pilot` for the use cases and never import an adapter (the import contracts and
 `scripts/check_thin_handlers.py` hold them to that).
 
@@ -14,7 +17,8 @@ The function's role allows exactly what is built here and nothing more (ADR-0019
 role): `ssm:GetParameter` on the two parameters, `logs:CreateLogStream` and `logs:PutLogEvents` on
 its audit group, `s3:GetObject` under `reports/tub/search/` for the index, which the holder
 reads to a directory of its own in the function's ephemeral storage, `/tmp/tub-index`, and
-`s3:GetObject` on `manifests/_suppression/suppression-list.jsonl`. The Cognito
+`s3:GetObject` on `manifests/_suppression/suppression-list.jsonl` and on current objects under `raw/`,
+for a download's sources. The Cognito
 calls need no IAM grant: the token-authorized ones send the student's access token through an
 unsigned client, and the OAuth endpoints take the client secret.
 """
@@ -30,7 +34,9 @@ from pathlib import Path
 
 from debate_api.configuration import PilotConfiguration, parse_cookie_keys
 from debate_api.state import PilotServices
+from debate_core.application.card_download import CardDownloadService
 from debate_core.application.evidence_search import EvidenceSearchService
+from debate_core.application.ports.persistence import SnapshotStore
 from debate_core.application.search_index_holder import SearchIndexHolder
 from debate_core.application.tub.access_audit import AccessAuditService
 from debate_core.application.tub.account_page import AccountPageService
@@ -45,9 +51,12 @@ from debate_core.integrations.cognito import (
     build_cognito_self_service_client,
     issuer_for,
 )
+from debate_core.integrations.docx_file_writer.base_template import load_base_template
+from debate_core.integrations.docx_file_writer.writer import DocxEvidenceFileWriter
+from debate_core.integrations.docx_parser.parser import DebateDocxParser
 from debate_core.integrations.local.search_index_reader import SqliteSearchIndexReader
 from debate_core.integrations.parameter_store import build_ssm_client, read_secure_parameter
-from debate_core.integrations.s3 import S3SearchIndexSource
+from debate_core.integrations.s3 import S3SearchIndexSource, S3SnapshotStore, build_s3_client
 
 __all__ = ["INDEX_DIRECTORY_NAME", "build_pilot_services"]
 
@@ -90,7 +99,28 @@ def build_pilot_services(environ: Mapping[str, str]) -> PilotServices:
         log_stream=f"tub-app-{_now():%Y-%m-%d}-{uuid.uuid4().hex}",
         create_stream=True,
     )
-    evidence = S3SearchIndexSource(bucket=configuration.evidence_bucket, region=configuration.region)
+    s3 = build_s3_client(region=configuration.region)
+    evidence = S3SearchIndexSource(bucket=configuration.evidence_bucket, client=s3)
+    search_index = SearchIndexHolder(
+        evidence,
+        directory=Path(tempfile.gettempdir()) / INDEX_DIRECTORY_NAME,
+        open_reader=_open_index,
+        clock=_now,
+        build_service=partial(EvidenceSearchService, count_cap=configuration.result_count_cap),
+        suppression_list=evidence,
+    )
+    access_audit = AccessAuditService(audit=audit, clock=_now)
+    parser = DebateDocxParser()
+    base = load_base_template()
+    source_stores: dict[str, SnapshotStore] = {}
+
+    def source_store(prefix: str) -> SnapshotStore:
+        if prefix not in source_stores:
+            source_stores[prefix] = S3SnapshotStore(
+                bucket=configuration.evidence_bucket, prefix=prefix, client=s3
+            )
+        return source_stores[prefix]
+
     return PilotServices(
         configuration=configuration,
         cookie_keys=cookie_keys,
@@ -104,15 +134,19 @@ def build_pilot_services(environ: Mapping[str, str]) -> PilotServices:
             clock=_now,
             authenticator_issuer=configuration.authenticator_issuer,
         ),
-        search_index=SearchIndexHolder(
-            evidence,
-            directory=Path(tempfile.gettempdir()) / INDEX_DIRECTORY_NAME,
-            open_reader=_open_index,
+        search_index=search_index,
+        access_audit=access_audit,
+        card_download=CardDownloadService(
+            search_index=search_index,
+            writer=lambda sources: DocxEvidenceFileWriter(snapshots=sources, parser=parser, base=base),
+            source_stores=source_store,
+            access_audit=access_audit,
+            parser_version=parser.parser_version,
+            profile_version=parser.profile_version,
             clock=_now,
-            build_service=partial(EvidenceSearchService, count_cap=configuration.result_count_cap),
-            suppression_list=evidence,
+            card_cap=configuration.download_card_cap,
+            source_bytes=configuration.download_source_bytes,
         ),
-        access_audit=AccessAuditService(audit=audit, clock=_now),
         clock=_now,
     )
 

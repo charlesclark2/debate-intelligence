@@ -51,6 +51,7 @@ ROUTE_REQUESTS: list[RouteRequest] = [
     RouteRequest("GET", "/search", "/search?q=zephyr&event=LD"),
     RouteRequest("GET", "/cards/{caselist}/{cluster_id}", "<card featured>"),
     RouteRequest("GET", "/cards/{caselist}/{cluster_id}/copy", "<card featured>/copy"),
+    RouteRequest("POST", "/download", "/download", {"cards": f"hsld26/{27:064x}"}),
     RouteRequest("GET", "/account", "/account"),
     RouteRequest("POST", "/account/email", "/account/email", {"email": "debater.one@example.test"}),
     RouteRequest("POST", "/account/email/verify", "/account/email/verify", {"code": "135790"}),

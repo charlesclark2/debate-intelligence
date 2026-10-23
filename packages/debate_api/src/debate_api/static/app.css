@@ -158,8 +158,8 @@ label { display: block; font-weight: 600; margin-bottom: 0.25rem; }
 
 .card-cite-line { margin: 0.25rem 0; }
 
-/* The card's actions, in one bar directly above its text: Copy card now, v1-e39-t08's download later.
-   The status shares the line with the button; on a narrow screen the bar wraps. */
+/* The card's actions, in one bar directly above its text: Copy card, then v1-e39-t08's Download .docx
+   and Add to cart. A status shares the line with its button; on a narrow screen the bar wraps. */
 .card-actions {
   display: flex;
   flex-wrap: wrap;
@@ -277,3 +277,31 @@ label { display: block; font-weight: 600; margin-bottom: 0.25rem; }
 .card-size-70{font-size:2em}
 .card-size-71{font-size:2em}
 .card-size-72{font-size:2em}
+
+/* Download .docx and the cart (v1-e39-t08). The cart bar shows only when the cart holds a card;
+   app.js keeps it in sessionStorage and fills it in. */
+
+button.secondary { background: #ffffff; color: var(--link); }
+
+.download-status { flex-basis: 100%; }
+
+.download-status ul { margin: 0.25rem 0 0; padding-left: 1.25rem; }
+
+.download-off { color: var(--muted); margin: 0; }
+
+.cart {
+  max-width: 56rem;
+  margin: 0.75rem auto 0;
+  padding: 0.5rem 1rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--panel);
+}
+
+.cart[hidden] { display: none; }
+
+.cart p { margin: 0; }

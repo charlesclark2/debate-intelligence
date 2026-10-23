@@ -86,14 +86,15 @@ def test_the_script_answers_only_with_a_place_to_go_or_a_message() -> None:
 
 
 def test_the_script_reaches_no_other_origin() -> None:
-    """Its requests go to the form's own action and to Copy card's path, which must be the pilot's own.
+    """Its requests go to the form's own action, to Copy card's path, which must be the pilot's own,
+    and to the pilot's own `/download` (`v1-e39-t08`).
 
     The one URL prefix in it checks where to go next.
     """
     code = SCRIPT.split('"use strict";', 1)[1]
     assert re.findall(r"[a-z]+://[^\s\"']*", code) == ["https://"]
     assert 'location.startsWith("https://")' in code
-    assert re.findall(r"fetch\(([^,]+),", code) == ["form.action", "path"]
+    assert re.findall(r"fetch\(([^,]+),", code) == ["form.action", "path", '"/download"']
     assert 'path.startsWith("/") && !path.startsWith("//")' in code
     assert "if (!isOwnPath(path)" in code
     assert "eval(" not in SCRIPT and "innerHTML" not in SCRIPT and "document.write" not in SCRIPT

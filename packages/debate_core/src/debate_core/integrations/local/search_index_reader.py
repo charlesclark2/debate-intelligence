@@ -148,10 +148,15 @@ DOCUMENT_STATEMENT: Final = (
 )
 """One cluster's document, by the `(caselist, cluster_id)` key the index holds unique."""
 
+_LOCATION_COLUMNS: Final = ("first_element_index", "last_element_index")
+
 OCCURRENCES_STATEMENT: Final = (
-    "SELECT " + ", ".join(_OCCURRENCE_COLUMNS) + " FROM occurrences WHERE doc_id = ? ORDER BY ordinal"
+    "SELECT "
+    + ", ".join((*_OCCURRENCE_COLUMNS, *_LOCATION_COLUMNS))
+    + " FROM occurrences WHERE doc_id = ? ORDER BY ordinal"
 )
-"""Every occurrence of one document, by its primary key."""
+"""Every occurrence of one document, by its primary key, with where each is in its source: what a
+download reads its card from (`v1-e39-t08`). A search's rows leave the location out."""
 
 _OPEN_CHECKS: Final = ("PRAGMA application_id", "PRAGMA user_version")
 
@@ -166,6 +171,10 @@ READER_STATEMENTS: Final = (
 
 
 def _occurrence(row: tuple[Any, ...]) -> StoredOccurrence:
+    """One occurrence from :data:`_OCCURRENCE_COLUMNS`, and its location when the row has
+    :data:`_LOCATION_COLUMNS` after them."""
+    location: tuple[Any, ...] = row[len(_OCCURRENCE_COLUMNS) :] or (None, None)
+    first_element_index, last_element_index = location
     (
         doc_id,
         ordinal,
@@ -186,7 +195,7 @@ def _occurrence(row: tuple[Any, ...]) -> StoredOccurrence:
         camp_year,
         camp_event,
         camp_file_title,
-    ) = row
+    ) = row[: len(_OCCURRENCE_COLUMNS)]
     return StoredOccurrence(
         doc_id=doc_id,
         ordinal=ordinal,
@@ -207,6 +216,8 @@ def _occurrence(row: tuple[Any, ...]) -> StoredOccurrence:
         camp_year=camp_year,
         camp_event=camp_event,
         camp_file_title=camp_file_title,
+        first_element_index=first_element_index,
+        last_element_index=last_element_index,
     )
 
 

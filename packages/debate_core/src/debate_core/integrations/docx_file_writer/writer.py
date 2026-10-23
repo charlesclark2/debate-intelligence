@@ -134,8 +134,9 @@ __all__ = [
 ]
 
 #: Version recorded in every sidecar. Bumped whenever the bytes a recipe builds to change: `-2` adds
-#: camp cards and the sidecar's camp keys (`v1-e33-t06`).
-FILE_BUILDER_VERSION: Final = "2026.10.19-file-writer-2"
+#: camp cards and the sidecar's camp keys (`v1-e33-t06`); `-3` writes no provenance line and drops the
+#: header's last sentence, which pointed to it (`v1-e33-t08`).
+FILE_BUILDER_VERSION: Final = "2026.10.22-file-writer-3"
 
 _W15_NAMESPACE: Final = "http://schemas.microsoft.com/office/word/2012/wordml"
 
@@ -229,15 +230,17 @@ def _sidecar_provenance_line(
 def header_line(recipe: ResolvedRecipe) -> str:
     """The file's one header analytic: where its cards came from, and that none of them is verified.
 
-    A file with a camp card names OpenEv beside its caselists and says where each card came from,
-    not who disclosed it (`v1-e33-t06`); a file without one says what it said before.
+    A file with a camp card names OpenEv beside its caselists and calls each card copied from its
+    source file, not from the file that disclosed it (`v1-e33-t06`). Neither says where to find who
+    disclosed a card: a built file carries no provenance line, and a download of it carries no
+    sidecar (`v1-e33-t08`, PM ruling 2026-10-22).
     """
     stores = {card.occurrence.caselist for card in recipe.cards}
     if OPENEV_STORE not in stores:
         caselists = sorted(stores | {recipe.recipe.caselist})
         return (
             f"Disclosed cards (FILE_IMPORT) from {', '.join(caselists)}, each copied from the file that "
-            "disclosed it and not verified by this platform. Who disclosed each card is below its cite."
+            "disclosed it and not verified by this platform."
         )
     caselists = ", ".join(sorted(stores - {OPENEV_STORE}))
     kinds, origins = (
@@ -245,7 +248,7 @@ def header_line(recipe: ResolvedRecipe) -> str:
     )
     return (
         f"{kinds} (FILE_IMPORT) from {origins}, each copied from its source file and not verified by this "
-        "platform. Where each card came from is below its cite."
+        "platform."
     )
 
 

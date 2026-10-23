@@ -311,7 +311,7 @@
           "title": "Original Tag Sha256"
         },
         "provenance_line": {
-          "description": "The line written below the cite (data-use policy, Attribution rule 2).",
+          "description": "The card's provenance line, as the pilot's card page shows it (data-use policy, Attribution rules 2 and 3); a built file's text carries none.",
           "minLength": 1,
           "title": "Provenance Line",
           "type": "string"

@@ -219,7 +219,7 @@ def test_assembly_writes_the_recipe_in_order_in_the_profiles_styles(standard: Bu
         (
             "Analytic",
             "Disclosed cards (FILE_IMPORT) from hspolicy26, each copied from the file that disclosed it "
-            "and not verified by this platform. Who disclosed each card is below its cite.",
+            "and not verified by this platform.",
         ),
         ("Heading1", "Synthetic pocket"),
         ("Heading2", "Synthetic hat"),
@@ -317,7 +317,7 @@ def test_assembly_says_the_cards_are_disclosed_and_unverified_and_never_verified
     header = _paragraphs(standard.file.docx)[0][1]
     assert header == (
         "Disclosed cards (FILE_IMPORT) from hspolicy26, each copied from the file that disclosed it and "
-        "not verified by this platform. Who disclosed each card is below its cite."
+        "not verified by this platform."
     )
     with zipfile.ZipFile(BytesIO(standard.file.docx)) as archive:
         everything = b"".join(archive.read(name) for name in archive.namelist())
@@ -945,7 +945,7 @@ def test_camp_a_recipe_pinning_a_camp_card_builds_with_no_line_below_its_cite(
         (
             "Analytic",
             "Disclosed and camp cards (FILE_IMPORT) from hspolicy26 and OpenEv, each copied from its "
-            "source file and not verified by this platform. Where each card came from is below its cite.",
+            "source file and not verified by this platform.",
         ),
         ("Heading1", "Synthetic pocket"),
         ("Heading2", "Synthetic hat"),
@@ -1069,7 +1069,7 @@ def test_camp_a_file_of_camp_cards_alone_says_so_in_its_header(
     assert _paragraphs(built.file.docx)[0] == (
         "Analytic",
         "Camp cards (FILE_IMPORT) from OpenEv, each copied from its source file and not verified by this "
-        "platform. Where each card came from is below its cite.",
+        "platform.",
     )
     assert built.file.manifest.caselist == "openev"
     assert [entry.provenance_line for entry in built.file.manifest.cards] == [CAMP_LINE]

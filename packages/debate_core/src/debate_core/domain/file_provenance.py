@@ -190,7 +190,11 @@ class FileProvenanceEntry(DomainModel):
         description="SHA-256 of the card's own tag when the coach replaced it; None otherwise or untagged.",
     )
     provenance_line: NonEmptyText = Field(
-        repr=False, description="The line written below the cite (data-use policy, Attribution rule 2)."
+        repr=False,
+        description=(
+            "The card's provenance line, as the pilot's card page shows it (data-use policy, Attribution "
+            "rules 2 and 3); a built file's text carries none."
+        ),
     )
     forbidden_characters_replaced: int = Field(
         ge=0, description="Characters XML 1.0 forbids in the copied markup, each written as U+FFFD."

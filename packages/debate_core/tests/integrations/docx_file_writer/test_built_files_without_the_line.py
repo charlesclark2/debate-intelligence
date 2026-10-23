@@ -1,4 +1,4 @@
-"""A built file loses its provenance-line paragraphs and nothing else; the sidecar stays (`v1-e33-t08`).
+"""A built file loses its provenance-line paragraphs and its header's last sentence; the sidecar stays.
 
 Data-use policy version 1.11 (Attribution rules 2, 3 and 5): a built file carries no provenance line,
 and the sidecar keeps every card's provenance, because a removal request is matched against it.
@@ -9,12 +9,17 @@ below: disclosed cards, a camp card with and without its release record, and a c
 disclosure on record. Each test builds the same request again and compares:
 
 * **the file**, paragraph by paragraph: the recorded file with the paragraphs listed by hand in
-  `LINES` taken out is the new file, every other paragraph, run and style byte for byte, and every
-  other part of the package too;
-* **the sidecar**, byte for byte, but for `docx_sha256`, which is the new file's own hash.
+  `LINES` taken out, and its header's last sentence (`HEADER_SENTENCES`) cut, is the new file, every
+  other paragraph, run and style byte for byte, and every other part of the package too;
+* **the sidecar**, byte for byte, but for `docx_sha256`, which is the new file's own hash, and
+  `builder_version`, now `2026.10.22-file-writer-3`.
 
-The recorded files are the old writer's output, not this writer's; the paragraphs to take out and
-the lines they held are written by hand from the sources (working agreement 6).
+The header's last sentence pointed the reader below each cite, to the line. It goes with the line,
+rather than pointing to the sidecar, because a download of the file carries no sidecar (PM ruling,
+2026-10-22, with the version bump).
+
+The recorded files are the old writer's output, not this writer's; the paragraphs to take out, the
+lines they held and the header sentences are written by hand from the sources (working agreement 6).
 """
 
 from __future__ import annotations
@@ -97,6 +102,21 @@ CEDAR = "[Disclosed: hspolicy26 2026-09-15 — Cedar Hollow ZaLu, Neg vs. Riverb
 CAMP_LINE = f"[OpenEv: {CAMP} 2031 — Policy, {CAMP_TITLE}]"
 CAMP_LINE_WITHOUT_A_RECORD = f"[OpenEv: {CAMP} 2031 — Policy]"
 NO_DISCLOSURE = "[Disclosed: hspolicy26 2026-09-15]"
+
+#: The writer versions before and after this task, as the sidecars record them.
+RECORDED_VERSION: Final = "2026.10.19-file-writer-2"
+BUILDER_VERSION: Final = "2026.10.22-file-writer-3"
+
+_DISCLOSED_ONLY = " Who disclosed each card is below its cite."
+_WITH_A_CAMP_CARD = " Where each card came from is below its cite."
+
+#: The sentence each recorded header ends with, which the built header no longer has.
+HEADER_SENTENCES: Final[dict[str, str]] = {
+    "disclosed-cards": _DISCLOSED_ONLY,
+    "camp-card-with-its-release-record": _WITH_A_CAMP_CARD,
+    "camp-card-without-a-release-record": _WITH_A_CAMP_CARD,
+    "no-disclosure-on-record": _DISCLOSED_ONLY,
+}
 
 #: For each recorded file, the body paragraphs that held a provenance line and the line each held,
 #: counted by hand from the recipe: the header, a pocket, a hat and a block, then each card's tag,
@@ -261,11 +281,22 @@ def test_the_recorded_files_held_the_line_where_counted(
     assert lines == LINES[name]
 
 
+def _cut_the_header_sentence(name: str, root: Any) -> None:
+    """Cut the recorded header's last sentence: its one paragraph holds one run of one text."""
+    (text,) = list(_paragraphs(root)[0].iter(f"{W}t"))
+    sentence = HEADER_SENTENCES[name]
+    assert text.text is not None and text.text.endswith(sentence) and text.text.count(sentence) == 1
+    text.text = text.text.removesuffix(sentence)
+
+
 def test_the_file_is_the_recorded_one_without_its_provenance_line_paragraphs(
     case: tuple[str, Recorded, BuiltEvidenceFile],
 ) -> None:
     name, recorded, built = case
     before = _document(recorded.docx)
+    built_header = _paragraphs(_document(built.docx))[0]
+    assert etree.tostring(built_header) != etree.tostring(_paragraphs(before)[0])
+    _cut_the_header_sentence(name, before)
     kept = [
         etree.tostring(paragraph)
         for index, paragraph in enumerate(_paragraphs(before))
@@ -281,7 +312,7 @@ def test_the_file_is_the_recorded_one_without_its_provenance_line_paragraphs(
     assert [part for part, _ in _parts(built.docx)] == [part for part, _ in _parts(recorded.docx)]
 
 
-def test_the_sidecar_is_the_recorded_one_byte_for_byte_but_the_files_own_hash(
+def test_the_sidecar_is_the_recorded_one_byte_for_byte_but_the_files_own_hash_and_the_version(
     case: tuple[str, Recorded, BuiltEvidenceFile],
 ) -> None:
     name, recorded, built = case
@@ -289,7 +320,12 @@ def test_the_sidecar_is_the_recorded_one_byte_for_byte_but_the_files_own_hash(
     new_hash = hashlib.sha256(built.docx).hexdigest()
     assert json.loads(recorded.sidecar)["docx_sha256"] == old_hash
     assert recorded.sidecar.count(old_hash.encode()) == 1
-    assert built.manifest_json == recorded.sidecar.replace(old_hash.encode(), new_hash.encode())
+    assert json.loads(recorded.sidecar)["builder_version"] == RECORDED_VERSION
+    assert recorded.sidecar.count(RECORDED_VERSION.encode()) == 1
+    expected = recorded.sidecar.replace(old_hash.encode(), new_hash.encode()).replace(
+        RECORDED_VERSION.encode(), BUILDER_VERSION.encode()
+    )
+    assert built.manifest_json == expected
     assert [entry.provenance_line for entry in built.manifest.cards] == list(LINES[name].values())
 
 

@@ -1,10 +1,12 @@
 # Files built with the provenance line
 
 Four built files and their sidecars, as the writer built them before `v1-e33-t08`
-(`2026.10.19-file-writer-2`, at the task's start commit `092cabd`), when a built file still wrote
-the provenance line below each cite. `test_built_files_without_the_line.py` builds the same four
-requests again and checks that each file has lost exactly its provenance-line paragraphs and that
-each sidecar is unchanged byte for byte, apart from `docx_sha256`, the built file's own hash.
+(`2026.10.19-file-writer-2`, at `c3b9dee` on `dev`, where the task started), when a built file still
+wrote the provenance line below each cite. `test_built_files_without_the_line.py` builds the same
+four requests again and checks that each file has lost exactly its provenance-line paragraphs and
+its header's last sentence, which pointed to them, and that each sidecar is unchanged byte for byte,
+apart from `docx_sha256`, the built file's own hash, and `builder_version`, now
+`2026.10.22-file-writer-3` (PM ruling, 2026-10-22).
 
 | File | What it holds |
 |---|---|
@@ -16,4 +18,5 @@ each sidecar is unchanged byte for byte, apart from `docx_sha256`, the built fil
 Every source is synthetic, built in memory by the test with `debate_core.testing.docx_builder`, and
 every school, team code, tournament, camp and file title is the repository's invented one. These
 files are a record of the old writer's output, not this writer's, so nothing regenerates them: the
-paragraphs a test takes out, and the lines they held, are written by hand in the test.
+paragraphs a test takes out, the lines they held and the header sentences are written by hand in
+the test.

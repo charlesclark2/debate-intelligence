@@ -84,6 +84,11 @@ CASES: list[tuple[str, str, str, bool]] = [
     ("top level in words", "Midterms DA Top Level", "midterms da", READ),
     ("an answer marker inside a heading ends it", "Midterms DA AT Dome", "midterms da", READ),
     ("an answer segment after a position ends it", "Spending DA - AT: Golden Dome", "spending da", READ),
+    ("a run of hyphens as a separator", "OFF---1NC", "", READ),
+    ("a run of hyphens after a position", "Spending DA---1NC", "spending da", READ),
+    ("an unspaced em dash as a separator", "OFF—1NC", "", READ),
+    ("hyphens around a heading", "---OFF---", "", READ),
+    ("on on its own", "ON", "", READ),
 ]
 
 KEPT: list[tuple[str, str, str]] = [

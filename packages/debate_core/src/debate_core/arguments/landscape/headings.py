@@ -7,13 +7,14 @@ model, no I/O, the same text every time (`v1-e32-t01-position-taxonomy` ac4).
 
 ## What it strips, in order
 
-1. **Characters.** Unicode compatibility forms (NFKC), every dash to `-`, apostrophes dropped,
-   `&` read as `and`.
+1. **Characters.** Unicode compatibility forms (NFKC), an em or en dash to a spaced `-` (a
+   separator), every other dash to `-`, apostrophes dropped, `&` read as `and`.
 2. **Prefixes of the whole heading**, repeatedly: punctuation, numbering (`1.`, `2)`, `IV.`, `b)`,
    `#3`), round names (`1NC`, `2AR`), a preliminary round (`Round 5`, `R2`; never an elimination
    word, so `Final Rule CP` stays), and answer markers (`AT:`, `A2`, `A/T`, `Answers to`). `AT`
    without a colon counts only in capitals, so `At the Margin DA` stays a heading.
-3. **Segments.** The rest is split at spaced dashes, pipes, colons and brackets. A segment that is
+3. **Segments.** The rest is split at spaced dashes, runs of hyphens (`OFF---1NC`), pipes, colons
+   and brackets. A segment that is
    only a number, a round name or an answer marker goes. A segment after the first that names a
    round (`Harbor Classic R3`, `Octas v. Sample Squad`) or ends in a tournament word
    (`Invitational`, `Classic`) goes whole, since what is left of it is a tournament or an opponent.
@@ -60,7 +61,7 @@ class NormalizedHeading:
         return not self.text
 
 
-_DASHES: Final = str.maketrans({"—": "-", "–": "-", "‒": "-", "−": "-", "―": "-", "‐": "-", "‑": "-"})
+_DASHES: Final = str.maketrans({"—": " - ", "–": " - ", "―": " - ", "‒": "-", "−": "-", "‐": "-", "‑": "-"})
 _APOSTROPHES: Final = re.compile(r"['’‘`´]")
 
 _ROUND_NAME: Final = r"[12](?:ac|nc|ar|nr)"
@@ -74,9 +75,9 @@ _CAPITAL_AT_PREFIX: Final = re.compile(r"^\s*AT\b\s*[:-]?\s*")
 _ANY_AT_WITH_COLON: Final = re.compile(r"^\s*at\s*:\s*", re.IGNORECASE)
 _ANSWER_WORDS: Final = frozenset({"at", "a2", "a/t", "answers to", "answer to"})
 _INNER_ANSWER: Final = re.compile(r"\s(?:AT|[Aa]2|[Aa]/[Tt])\b\s*:?\s+\S|\s[Aa][Tt]\s*:\s*\S")
-_EDGE_PUNCTUATION: Final = " \t.,;!?*_~\"'"
+_EDGE_PUNCTUATION: Final = " \t.,;!?*_~\"'-"
 
-_SEPARATORS: Final = re.compile(r"\s+[-|]\s+|\s*[|:()\[\]]\s*")
+_SEPARATORS: Final = re.compile(r"\s+[-|]\s+|\s*-{2,}\s*|\s*[|:()\[\]]\s*")
 _OPPONENT: Final = re.compile(r"\s+(?:vs\.?|v\.)\s+.*$", re.IGNORECASE)
 _ROUND_SUFFIX: Final = re.compile(rf"\s*\b{_ROUND_NAME}\s*$", re.IGNORECASE)
 _STRUCTURE_SUFFIX: Final = re.compile(
@@ -90,7 +91,7 @@ _TOURNAMENT_WORDS: Final = frozenset(
 
 _NOT_A_WORD: Final = re.compile(r"[^0-9a-z]+")
 _STRUCTURAL: Final = frozenset(
-    {"aff", "neg", "affirmative", "negative", "case", "on case", "off case", "offcase"}
+    {"aff", "neg", "affirmative", "negative", "case", "on", "on case", "off case", "offcase"}
 )
 _OFF_COUNT: Final = re.compile(r"^\d{1,2} off$")
 

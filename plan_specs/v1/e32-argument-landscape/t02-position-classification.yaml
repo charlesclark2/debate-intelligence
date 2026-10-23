@@ -102,7 +102,7 @@ spec:
         (Moved to v1-e32-t07.) Replay-mode evaluation against a coach-labeled 60-item set (20 per format, cassettes recorded once
         by the operator) reports per-format accuracy of at least 85% for classified items.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

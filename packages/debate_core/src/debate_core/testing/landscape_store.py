@@ -4,8 +4,8 @@
 the reader's tests and the seeding script's tests both need the two planted side by side under one
 data directory. :class:`PlantedCaselist` writes them in the shapes `caselist parse` and the importer
 write: one source file per parsed source (its entry, then a document record whose cards carry only
-a tag and a section path, which is all seeding reads) and one manifest per snapshot, its member rows
-naming each disclosure's path.
+a tag, a section path and the paragraphs their provenance names, which is all seeding and the
+position matcher read) and one manifest per snapshot, its member rows naming each disclosure's path.
 
 Every school, team code, tournament and heading a test plants is its own invention.
 """
@@ -33,6 +33,8 @@ __all__ = ["PARSER_VERSION", "PROFILE_VERSION", "PlantedCaselist", "PlantedCard"
 PARSER_VERSION = "2026.10.20-docx-6"
 PROFILE_VERSION = "2026.09.20-verbatim-1"
 _FINGERPRINT_VERSION = "card-fingerprint-v4"
+_PARAGRAPHS_PER_CARD = 3
+"""A planted card's tag, cite and body: card `n` starts at paragraph `3n`."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -91,7 +93,15 @@ class PlantedCaselist:
                         "parser_version": PARSER_VERSION,
                         "profile_version": PROFILE_VERSION,
                         "cards": [
-                            {"tag": card.tag, "section_path": list(card.section_path)} for card in cards
+                            {
+                                "tag": card.tag,
+                                "section_path": list(card.section_path),
+                                "provenance": {
+                                    "first_element_index": index * _PARAGRAPHS_PER_CARD,
+                                    "last_element_index": index * _PARAGRAPHS_PER_CARD + 2,
+                                },
+                            }
+                            for index, card in enumerate(cards)
                         ],
                         "warnings": [],
                     },

@@ -11,8 +11,12 @@
   token shaped like a team code (two letters that are not debate vocabulary), a label holding one
   (`AB`, `RiOs`) or a capitalized name after its first word, and any field holding a word that names
   a school (`high`, `academy`) are refused. The synthetic cases below must each fail the check.
-* **Nothing else is in the directory**, so the seeding CSV, which holds real headings, cannot be
-  committed beside the files by mistake.
+* **The coach's overrides** (`overrides/<topic id>.yaml`, `v1-e32-t02`) load with the taxonomies,
+  each heading is one the normalizer can produce, and the same personal-data check runs over their
+  headings (the PM's ruling of 2026-10-23): a decision copies a heading teams wrote into the
+  repository, so it is held to what an alias is held to.
+* **Nothing else is in the directory**, so the seeding CSV and the review queue, which hold real
+  headings, cannot be committed beside the files by mistake.
 
 No caselist slug or topic id is written here: the files are found by reading the directory.
 """
@@ -27,15 +31,19 @@ import pytest
 
 from debate_core.arguments.landscape.headings import normalize_heading
 from debate_core.domain.landscape import Taxonomy
+from debate_core.domain.landscape_classification import OverrideRules
 from debate_core.integrations.landscape.yaml_taxonomy_repository import (
+    OVERRIDE_DIRECTORY,
     TAXONOMY_DIRECTORY,
     TOPICS_FILE,
     YamlTaxonomyRepository,
+    load_override_file,
     load_taxonomy_file,
 )
 
 CONFIG = Path(__file__).resolve().parents[2] / "config" / "landscape"
 TAXONOMY_FILES = sorted((CONFIG / TAXONOMY_DIRECTORY).glob("*.yaml"))
+OVERRIDE_FILES = sorted((CONFIG / OVERRIDE_DIRECTORY).glob("*.yaml"))
 MINIMUM_ACTIVE_POSITIONS = 12
 
 SHORT_WORDS = frozenset(
@@ -50,14 +58,21 @@ _CAMEL_INITIALS = re.compile(r"^[A-Z][a-z][A-Z][a-z]$")
 _TITLE_WORD = re.compile(r"^[A-Z][a-z]+$")
 
 
+def _heading_findings(owner: str, heading: str) -> list[str]:
+    """A two-letter token that is not debate vocabulary, in an alias, keyword or override heading."""
+    return [
+        f"{owner}: {heading!r} holds {token!r}, shaped like a team code"
+        for token in heading.split()
+        if len(token) == 2 and token.isalpha() and token not in SHORT_WORDS
+    ]
+
+
 def personal_data_findings(taxonomy: Taxonomy) -> list[str]:
     """Everything in `taxonomy` shaped like a team code, a school or a person's name."""
     findings: list[str] = []
     for position in taxonomy.positions:
         for alias in (*position.aliases, *(keyword.casefold() for keyword in position.tag_keywords)):
-            for token in alias.split():
-                if len(token) == 2 and token.isalpha() and token not in SHORT_WORDS:
-                    findings.append(f"{position.id}: {alias!r} holds {token!r}, shaped like a team code")
+            findings += _heading_findings(position.id, alias)
         words = [word.strip("()[],.;:/") for word in position.label.split()]
         for index, word in enumerate(words):
             if _CAMEL_INITIALS.match(word) or (
@@ -72,6 +87,19 @@ def personal_data_findings(taxonomy: Taxonomy) -> list[str]:
         for word in re.findall(r"[a-z]+", text.casefold()):
             if word in SCHOOL_WORDS:
                 findings.append(f"{position.id}: {word!r} names a school")
+    return findings
+
+
+def override_findings(rules: OverrideRules) -> list[str]:
+    """Every override heading shaped like a team code or naming a school, as an alias would be refused."""
+    findings: list[str] = []
+    for rule in rules.overrides:
+        findings += _heading_findings(f"the override of {rule.heading!r}", rule.heading)
+        findings += [
+            f"the override of {rule.heading!r}: {word!r} names a school"
+            for word in rule.heading.split()
+            if word in SCHOOL_WORDS
+        ]
     return findings
 
 
@@ -112,9 +140,25 @@ def test_no_taxonomy_names_a_team_a_school_or_a_person(path: Path) -> None:
     assert personal_data_findings(load_taxonomy_file(path)) == []
 
 
-def test_the_directory_holds_only_the_topic_map_and_taxonomies() -> None:
+@pytest.mark.parametrize("path", OVERRIDE_FILES, ids=lambda path: path.stem)
+def test_every_override_heading_is_a_heading_the_normalizer_can_produce(path: Path) -> None:
+    for rule in load_override_file(path).overrides:
+        normalized = normalize_heading(rule.heading)
+        assert (normalized.text, normalized.answer) == (rule.heading, False), rule.heading
+
+
+@pytest.mark.parametrize("path", OVERRIDE_FILES, ids=lambda path: path.stem)
+def test_no_override_names_a_team_a_school_or_a_person(path: Path) -> None:
+    assert override_findings(load_override_file(path)) == []
+
+
+def test_the_directory_holds_only_the_topic_map_taxonomies_and_overrides() -> None:
     found = sorted(str(path.relative_to(CONFIG)) for path in CONFIG.rglob("*") if path.is_file())
-    allowed = [TOPICS_FILE, *(f"{TAXONOMY_DIRECTORY}/{path.name}" for path in TAXONOMY_FILES)]
+    allowed = [
+        TOPICS_FILE,
+        *(f"{TAXONOMY_DIRECTORY}/{path.name}" for path in TAXONOMY_FILES),
+        *(f"{OVERRIDE_DIRECTORY}/{path.name}" for path in OVERRIDE_FILES),
+    ]
     assert found == sorted(allowed)
 
 
@@ -166,3 +210,29 @@ def test_the_personal_data_check_passes_debate_vocabulary() -> None:
         aliases=["t no single payer", "adv cp", "theory at 50 state fiat bad", "irs da"],
     )
     assert personal_data_findings(taxonomy) == []
+
+
+@pytest.mark.parametrize(
+    ("heading", "expected"),
+    [("fed key qx", "team code"), ("sample high fed key", "school"), ("qx", "team code")],
+)
+def test_the_override_check_refuses(heading: str, expected: str) -> None:
+    rules = OverrideRules.model_validate(
+        {"topic_id": "policy-sample-topic", "overrides": [{"heading": heading, "position_id": None}]}
+    )
+    findings = override_findings(rules)
+    assert findings
+    assert all(expected in finding for finding in findings), findings
+
+
+def test_the_override_check_passes_debate_vocabulary() -> None:
+    rules = OverrideRules.model_validate(
+        {
+            "topic_id": "policy-sample-topic",
+            "overrides": [
+                {"heading": "fed key", "position_id": None},
+                {"heading": "da at link", "position_id": None},
+            ],
+        }
+    )
+    assert override_findings(rules) == []

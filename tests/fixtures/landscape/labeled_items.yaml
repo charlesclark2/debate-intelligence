@@ -1,0 +1,257 @@
+# Labeled items for the deterministic position matcher (v1-e32-t02-position-classification ac1).
+#
+# Synthetic throughout: every taxonomy, position, heading, tag, school and team code is invented,
+# and nothing comes from a real disclosure. Each label was written by hand from the headings and
+# the tag, never by running the matcher (working agreement 6).
+#
+# One block per format, each with its own small taxonomy, the coach's overrides and the caselist's
+# schools. A document lists its disclosing team's own names (taken out of its headings before
+# matching) and its cards: the card's section path as the store holds it, its tag (null for none),
+# whether a heading on its path is an alias of the taxonomy (carries_alias), and the expected
+# position, role and method (null for an item nothing places).
+schema_version: 1
+formats:
+
+  - event: POLICY
+    taxonomy:
+      topic_id: policy-sample-topic
+      taxonomy_version: 1.0.0
+      event: POLICY
+      positions:
+        - {id: sample-plan-aff, label: Sample plan, kind: aff, side: aff, aliases: [sample plan, plan aff]}
+        - {id: public-plan-aff, label: Public plan, kind: aff, side: aff, parent: sample-plan-aff, tag_keywords: [public plan]}
+        - {id: voucher-plan-aff, label: Voucher plan, kind: aff, side: aff, parent: sample-plan-aff, tag_keywords: [vouchers]}
+        - {id: growth-advantage, label: Growth advantage, kind: advantage, side: aff, aliases: [adv growth, growth]}
+        - {id: spending-da, label: Spending DA, kind: da, side: neg, aliases: [spending da, da spending]}
+        - {id: election-da, label: Election DA, kind: da, side: neg, tag_keywords: [midterm]}
+        - {id: states-cp, label: States CP, kind: cp, side: neg, aliases: [states cp]}
+        - {id: fed-cp, label: Fed CP, kind: cp, side: neg, aliases: [fed cp], deprecated: true, merged_into: states-cp}
+        - {id: cap-k, label: Cap K, kind: k, side: neg, aliases: [cap k, capitalism k]}
+        - {id: old-k, label: Old K, kind: k, side: neg, aliases: [old k], deprecated: true}
+        - {id: t-sample, label: T sample, kind: t, side: neg, aliases: [t sample]}
+        - {id: condo-bad, label: Condo bad, kind: theory, side: aff, aliases: [condo bad]}
+    overrides:
+      - {heading: deficit da, position_id: spending-da}
+      - {heading: link, position_id: null}
+    caselist_schools:
+      Lakeside: [LS]
+    documents:
+      - name: policy-neg-file
+        team_names: [Harbor Point, HP]
+        cards:
+          - {path: [1NC, Spending DA, Link], tag: Plan costs billions, carries_alias: true,
+             expect: {position: spending-da, role: READS, method: INHERITED}}
+          - {path: [1NC, Spending DA], tag: Deficits rise now, carries_alias: true,
+             expect: {position: spending-da, role: READS, method: ALIAS}}
+          - {path: [2NC, Spending DA, "AT: Link Turn"], tag: The turn is wrong, carries_alias: true,
+             expect: {position: spending-da, role: READS, method: INHERITED}}
+          - {path: [1NC, States CP], tag: States solve, carries_alias: true,
+             expect: {position: states-cp, role: READS, method: ALIAS}}
+          - {path: [1NC, Fed CP], tag: Federal action solves, carries_alias: true,
+             expect: {position: states-cp, role: READS, method: ALIAS}}
+          - {path: [1NC, Old K], tag: The old criticism, carries_alias: true,
+             expect: {position: null, role: null, method: null}}
+          - {path: [1NC, Cap K, Alternative], tag: Reject the market, carries_alias: true,
+             expect: {position: cap-k, role: READS, method: INHERITED}}
+          - {path: [1NC, Capitalism K], tag: Markets cause harm, carries_alias: true,
+             expect: {position: cap-k, role: READS, method: ALIAS}}
+          - {path: [T Sample], tag: Interpretation, carries_alias: true,
+             expect: {position: t-sample, role: READS, method: ALIAS}}
+          - {path: [Harbor Point Spending DA, Impact], tag: Recession follows, carries_alias: true,
+             expect: {position: spending-da, role: READS, method: INHERITED}}
+          - {path: [Lakeside States CP], tag: Fifty states act, carries_alias: true,
+             expect: {position: states-cp, role: READS, method: ALIAS}}
+          - {path: [1NC, Fiscal Cliff DA], tag: The cliff is near, carries_alias: false,
+             expect: {position: null, role: null, method: null}}
+          - {path: [1NC, Midterms DA], tag: Midterm control shifts, carries_alias: false,
+             expect: {position: election-da, role: READS, method: TAG_KEYWORD}}
+          - {path: [1NC, Deficit DA], tag: Deficits matter, carries_alias: false,
+             expect: {position: spending-da, role: READS, method: OVERRIDE}}
+          - {path: [1NC, Deficit DA, Impact], tag: Debt crisis, carries_alias: false,
+             expect: {position: spending-da, role: READS, method: INHERITED}}
+          - {path: [2NC, Link], tag: The plan spends, carries_alias: false,
+             expect: {position: null, role: null, method: OVERRIDE}}
+          - {path: [], tag: An orphan card, carries_alias: false,
+             expect: {position: null, role: null, method: null}}
+      - name: policy-aff-file
+        team_names: [Maple Ridge, MR]
+        cards:
+          - {path: [Sample Plan, Plan Text], tag: The government should adopt a public plan, carries_alias: true,
+             expect: {position: public-plan-aff, role: READS, method: TAG_KEYWORD}}
+          - {path: [Sample Plan, Solvency], tag: Vouchers expand access, carries_alias: true,
+             expect: {position: voucher-plan-aff, role: READS, method: TAG_KEYWORD}}
+          - {path: [Sample Plan, Solvency], tag: Coverage expands, carries_alias: true,
+             expect: {position: sample-plan-aff, role: READS, method: INHERITED}}
+          - {path: [Sample Plan, Solvency], tag: A public plan and vouchers both work, carries_alias: true,
+             expect: {position: sample-plan-aff, role: READS, method: INHERITED}}
+          - {path: [Sample Plan, Adv Growth, Uniqueness], tag: Growth is slow, carries_alias: true,
+             expect: {position: growth-advantage, role: READS, method: INHERITED}}
+          - {path: [Sample Plan, Growth], tag: Growth rises, carries_alias: true,
+             expect: {position: growth-advantage, role: READS, method: ALIAS}}
+          - {path: [Case, Sample Plan], tag: Plan solves, carries_alias: true,
+             expect: {position: sample-plan-aff, role: READS, method: ALIAS}}
+          - {path: [Sample Plan, Inherency], tag: Status quo fails, carries_alias: true,
+             expect: {position: sample-plan-aff, role: READS, method: INHERITED}}
+          - {path: [Sample Plan, Inherency, Status quo fails], tag: null, carries_alias: true,
+             expect: {position: sample-plan-aff, role: READS, method: INHERITED}}
+          - {path: ["AT: Spending DA"], tag: No link, carries_alias: true,
+             expect: {position: spending-da, role: ANSWERS, method: ALIAS}}
+          - {path: ["AT: Spending DA", Link Turn], tag: Plan saves money, carries_alias: true,
+             expect: {position: spending-da, role: ANSWERS, method: INHERITED}}
+          - {path: [A2 States CP], tag: Perm do both, carries_alias: true,
+             expect: {position: states-cp, role: ANSWERS, method: ALIAS}}
+          - {path: ["AT: DAs", Spending DA], tag: Deficits are fine, carries_alias: true,
+             expect: {position: spending-da, role: ANSWERS, method: ALIAS}}
+          - {path: [Condo Bad], tag: Conditionality is a voter, carries_alias: true,
+             expect: {position: condo-bad, role: READS, method: ALIAS}}
+
+  - event: LD
+    taxonomy:
+      topic_id: ld-sample-topic
+      taxonomy_version: 2.1.0
+      event: LD
+      positions:
+        - {id: justice-value, label: Justice, kind: value, side: both, aliases: [justice, value justice]}
+        - {id: morality-value, label: Morality, kind: value, side: both, aliases: [morality]}
+        - {id: util-criterion, label: Util, kind: criterion, side: both, aliases: [util, utilitarianism]}
+        - {id: rights-criterion, label: Rights, kind: criterion, side: both, aliases: [rights, protecting rights]}
+        - {id: ecosystem-contention, label: Ecosystems, kind: contention, side: aff, aliases: [ecosystems]}
+        - {id: species-revival-contention, label: Species revival, kind: contention, side: aff, parent: ecosystem-contention, tag_keywords: [mammoth]}
+        - {id: biodiversity-contention, label: Biodiversity, kind: contention, side: aff, tag_keywords: [biodiversity]}
+        - {id: hubris-contention, label: Hubris, kind: contention, side: neg, aliases: [hubris]}
+        - {id: moral-hazard-response, label: Moral hazard, kind: response, side: both, aliases: [moral hazard]}
+        - {id: cap-k, label: Cap K, kind: k, side: neg, aliases: [cap k]}
+        - {id: nibs-bad, label: Nibs bad, kind: theory, side: both, aliases: [nibs bad]}
+        - {id: disclosure-theory, label: Disclosure theory, kind: theory, side: both, aliases: [disclosure]}
+    overrides: []
+    caselist_schools: {}
+    documents:
+      - name: ld-aff-file
+        team_names: [Cedar Valley, CV]
+        cards:
+          - {path: [1AC, Framework, "Value: Justice"], tag: Justice is the highest value, carries_alias: true,
+             expect: {position: justice-value, role: READS, method: ALIAS}}
+          - {path: [1AC, Framework, Util], tag: Consequences matter, carries_alias: true,
+             expect: {position: util-criterion, role: READS, method: ALIAS}}
+          - {path: [1AC, Framework], tag: Weigh outcomes, carries_alias: false,
+             expect: {position: null, role: null, method: null}}
+          - {path: [1AC, Ecosystems], tag: Tundra collapses, carries_alias: true,
+             expect: {position: ecosystem-contention, role: READS, method: ALIAS}}
+          - {path: [1AC, Ecosystems, Keystone species], tag: Keystones hold webs together, carries_alias: true,
+             expect: {position: ecosystem-contention, role: READS, method: INHERITED}}
+          - {path: [1AC, Ecosystems, Revival], tag: Mammoth revival restores tundra, carries_alias: true,
+             expect: {position: species-revival-contention, role: READS, method: TAG_KEYWORD}}
+          - {path: [1AC, Ecosystems, Revival], tag: Revival restores tundra, carries_alias: true,
+             expect: {position: ecosystem-contention, role: READS, method: INHERITED}}
+          - {path: [1AC, Utilitarianism, "AT: Deontology"], tag: Rules fail, carries_alias: true,
+             expect: {position: util-criterion, role: READS, method: INHERITED}}
+          - {path: [1AC, Framework, "Value: Justice", Definitions], tag: Justice defined, carries_alias: true,
+             expect: {position: justice-value, role: READS, method: ALIAS}}
+          - {path: ["AT: Hubris", Turn], tag: Caution is the real hubris, carries_alias: true,
+             expect: {position: hubris-contention, role: ANSWERS, method: INHERITED}}
+          - {path: [1AR, "AT: Moral Hazard"], tag: No hazard, carries_alias: true,
+             expect: {position: moral-hazard-response, role: ANSWERS, method: ALIAS}}
+          - {path: [Theory, "AT: Disclosure"], tag: Disclosure is not a norm, carries_alias: true,
+             expect: {position: disclosure-theory, role: ANSWERS, method: ALIAS}}
+          - {path: [Morality], tag: Morality first, carries_alias: true,
+             expect: {position: morality-value, role: READS, method: ALIAS}}
+      - name: ld-neg-file
+        team_names: [Birch Hollow, BH]
+        cards:
+          - {path: [1NC, Hubris], tag: Playing god backfires, carries_alias: true,
+             expect: {position: hubris-contention, role: READS, method: ALIAS}}
+          - {path: [1NC, Hubris, Impact], tag: Backlash ends research, carries_alias: true,
+             expect: {position: hubris-contention, role: READS, method: INHERITED}}
+          - {path: [1NC, Cap K, Link], tag: Biotech is commodified, carries_alias: true,
+             expect: {position: cap-k, role: READS, method: INHERITED}}
+          - {path: ["AT: Util"], tag: Util fails, carries_alias: true,
+             expect: {position: util-criterion, role: ANSWERS, method: ALIAS}}
+          - {path: [Moral Hazard], tag: Revival breeds complacency, carries_alias: true,
+             expect: {position: moral-hazard-response, role: READS, method: ALIAS}}
+          - {path: [Theory, Nibs Bad], tag: Nibs skew time, carries_alias: true,
+             expect: {position: nibs-bad, role: READS, method: ALIAS}}
+          - {path: [1NC, Rights], tag: Rights come first, carries_alias: true,
+             expect: {position: rights-criterion, role: READS, method: ALIAS}}
+          - {path: [1NC, Protecting Rights, Evidence], tag: Rights protect the weak, carries_alias: true,
+             expect: {position: rights-criterion, role: READS, method: INHERITED}}
+          - {path: [Hubris vs Sample Squad], tag: Arrogance kills, carries_alias: true,
+             expect: {position: hubris-contention, role: READS, method: ALIAS}}
+          - {path: [1NC, Biodiversity], tag: Biodiversity loss is inevitable, carries_alias: false,
+             expect: {position: biodiversity-contention, role: READS, method: TAG_KEYWORD}}
+          - {path: [1NC, Spikes], tag: Aff must defend, carries_alias: false,
+             expect: {position: null, role: null, method: null}}
+
+  - event: PF
+    taxonomy:
+      topic_id: pf-sample-topic
+      taxonomy_version: 1.4.2
+      event: PF
+      positions:
+        - {id: jobs-contention, label: Jobs, kind: contention, side: aff, aliases: [jobs]}
+        - {id: grid-contention, label: Grid reliability, kind: contention, side: aff, aliases: [grid, grid reliability]}
+        - {id: innovation-contention, label: Innovation, kind: contention, side: aff, aliases: [innovation]}
+        - {id: ai-innovation-contention, label: AI innovation, kind: contention, side: aff, parent: innovation-contention, tag_keywords: [artificial intelligence]}
+        - {id: emissions-contention, label: Emissions, kind: contention, side: neg, aliases: [emissions]}
+        - {id: water-contention, label: Water use, kind: contention, side: neg, aliases: [water, water use]}
+        - {id: local-economy-contention, label: Local economy, kind: contention, side: neg, tag_keywords: [small business]}
+        - {id: tax-revenue-response, label: Tax revenue, kind: response, side: both, aliases: [tax revenue]}
+        - {id: cost-benefit-framing, label: Cost benefit framing, kind: criterion, side: both, aliases: [cost benefit, cbf]}
+    overrides: []
+    caselist_schools: {}
+    documents:
+      - name: pf-pro-file
+        team_names: [Willow Creek, WC]
+        cards:
+          - {path: [Pro, Jobs], tag: Construction hires locally, carries_alias: true,
+             expect: {position: jobs-contention, role: READS, method: ALIAS}}
+          - {path: [Pro, Jobs, Link], tag: Each center hires hundreds, carries_alias: true,
+             expect: {position: jobs-contention, role: READS, method: INHERITED}}
+          - {path: [Pro, Jobs, "AT: Automation"], tag: Automation is slow, carries_alias: true,
+             expect: {position: jobs-contention, role: READS, method: INHERITED}}
+          - {path: [Pro, Grid Reliability], tag: Demand response helps, carries_alias: true,
+             expect: {position: grid-contention, role: READS, method: ALIAS}}
+          - {path: [Pro, Grid, Impact], tag: Blackouts kill, carries_alias: true,
+             expect: {position: grid-contention, role: READS, method: INHERITED}}
+          - {path: [Pro, Innovation], tag: Artificial intelligence research accelerates, carries_alias: true,
+             expect: {position: ai-innovation-contention, role: READS, method: TAG_KEYWORD}}
+          - {path: [Pro, Innovation], tag: Research accelerates, carries_alias: true,
+             expect: {position: innovation-contention, role: READS, method: ALIAS}}
+          - {path: ["AT: Emissions"], tag: Renewables power centers, carries_alias: true,
+             expect: {position: emissions-contention, role: ANSWERS, method: ALIAS}}
+          - {path: [A2 Emissions], tag: Offsets work, carries_alias: true,
+             expect: {position: emissions-contention, role: ANSWERS, method: ALIAS}}
+          - {path: [Frontlines, "AT: Tax Revenue"], tag: Abatements erase revenue, carries_alias: true,
+             expect: {position: tax-revenue-response, role: ANSWERS, method: ALIAS}}
+          - {path: [Framing, Cost Benefit], tag: Weigh net benefits, carries_alias: true,
+             expect: {position: cost-benefit-framing, role: READS, method: ALIAS}}
+          - {path: [Summary, Jobs], tag: Jobs outweigh, carries_alias: true,
+             expect: {position: jobs-contention, role: READS, method: ALIAS}}
+      - name: pf-con-file
+        team_names: [Aspen Grove, AG]
+        cards:
+          - {path: [Con, Emissions], tag: Centers burn gas, carries_alias: true,
+             expect: {position: emissions-contention, role: READS, method: ALIAS}}
+          - {path: [Con, Emissions, Warrant], tag: Peaker plants run, carries_alias: true,
+             expect: {position: emissions-contention, role: READS, method: INHERITED}}
+          - {path: [Con, Emissions], tag: null, carries_alias: true,
+             expect: {position: emissions-contention, role: READS, method: ALIAS}}
+          - {path: [Con, Water Use], tag: Cooling drains aquifers, carries_alias: true,
+             expect: {position: water-contention, role: READS, method: ALIAS}}
+          - {path: [Con, Water], tag: Droughts worsen, carries_alias: true,
+             expect: {position: water-contention, role: READS, method: ALIAS}}
+          - {path: ["AT: Jobs"], tag: Jobs are temporary, carries_alias: true,
+             expect: {position: jobs-contention, role: ANSWERS, method: ALIAS}}
+          - {path: ["AT: Jobs", Automation], tag: Robots run centers, carries_alias: true,
+             expect: {position: jobs-contention, role: ANSWERS, method: INHERITED}}
+          - {path: [Tax Revenue], tag: Revenue funds schools, carries_alias: true,
+             expect: {position: tax-revenue-response, role: READS, method: ALIAS}}
+          - {path: [Con, "AT: Grid"], tag: Centers strain the grid, carries_alias: true,
+             expect: {position: grid-contention, role: ANSWERS, method: ALIAS}}
+          - {path: [Rebuttal, "AT: Grid", Backup power], tag: Backups fail, carries_alias: true,
+             expect: {position: grid-contention, role: ANSWERS, method: INHERITED}}
+          - {path: [CBF], tag: Probability first, carries_alias: true,
+             expect: {position: cost-benefit-framing, role: READS, method: ALIAS}}
+          - {path: [Con, Local Economy], tag: Small business closures follow, carries_alias: false,
+             expect: {position: local-economy-contention, role: READS, method: TAG_KEYWORD}}
+          - {path: [Con, Regulation], tag: Rules are coming, carries_alias: false,
+             expect: {position: null, role: null, method: null}}

@@ -302,7 +302,7 @@ def _passage_plan(path: Path, statement: str) -> list[str]:
     for value in _PASSAGE_WORDS:
         statement = statement.replace("{}", value, 1)
     statement = (
-        statement.replace("search MATCH {}", "search MATCH '\"growth\" OR \"badly\" OR \"boom\"'", 1)
+        statement.replace("search MATCH {}", 'search MATCH \'"growth" OR "badly" OR "boom"\'', 1)
         .replace("rank MATCH {}", "rank MATCH 'bm25(10.0, 6.0, 3.0, 1.0)'", 1)
         .replace("search.rowid > {}", "search.rowid > 0", 1)
         .replace("{}", "NULL")

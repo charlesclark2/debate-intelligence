@@ -1,15 +1,17 @@
 {% extends "base.html" %}
 {% block title %}A card · Team evidence search{% endblock %}
 {% block main %}
+<nav class="back-link" aria-label="Back"><a href="{{ back_href }}">{{ back_words }}</a></nav>
 <article class="card" aria-labelledby="card-tag">
 <p class="card-label">Disclosed evidence, not platform-verified</p>
 <h1 id="card-tag" class="card-tag">{{ card.tag or "A card with no tag" }}</h1>
 <p class="card-cite-line">{{ card.cite }}</p>
 {% if provenance_line %}<p class="provenance">{{ provenance_line }}</p>{% endif %}
+{% if source_link %}<p class="source-link"><a href="{{ source_link.url }}" target="_blank" rel="noopener noreferrer">{{ source_link.label }}<span class="new-tab"> (opens in a new tab)</span></a></p>{% endif %}
 <p class="card-counts">{{ counts }}</p>
 <div class="card-actions">
 <button type="button" data-tub-copy="{{ copy_href }}" aria-describedby="copy-help">Copy card</button>
-<span id="copy-help" class="copy-help">Keeps its formatting and source line.</span>
+<span id="copy-help" class="copy-help">Copies the tag, the cite and the card, with their formatting.</span>
 <span class="copy-status" data-tub-copy-message role="status"></span>
 </div>
 <!--card-body-->

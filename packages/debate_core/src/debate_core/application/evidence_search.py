@@ -37,18 +37,21 @@ from collections.abc import Callable, Sequence
 from typing import Final
 
 from debate_core.application.ports.search_index_reader import (
+    CountRequest,
     MatchRequest,
     SearchIndexReader,
     StoredHit,
     StoredOccurrence,
 )
 from debate_core.domain.evidence_search import (
+    DEFAULT_RESULT_COUNT_CAP,
     MAX_CURSOR_OFFSET,
     RANKING_WEIGHTS,
     SEARCH_PAGE_SIZE,
     Card,
     OccurrenceProvenance,
     RankingWeights,
+    ResultCount,
     SearchFilters,
     SearchHit,
     SearchNotice,
@@ -131,10 +134,14 @@ class EvidenceSearchService:
         clock: Callable[[], float] = time.monotonic,
         page_size: int = SEARCH_PAGE_SIZE,
         weights: RankingWeights = RANKING_WEIGHTS,
+        count_cap: int = DEFAULT_RESULT_COUNT_CAP,
     ) -> None:
         if page_size < 1:
             raise ValueError("a page holds at least one result")
+        if not 1 <= count_cap <= MAX_CURSOR_OFFSET:
+            raise ValueError(f"a search counts up to between 1 and {MAX_CURSOR_OFFSET} results")
         self._reader = reader
+        self._count_cap = count_cap
         self._budget = time_budget_seconds
         self._clock = clock
         self._page_size = page_size
@@ -220,7 +227,11 @@ class EvidenceSearchService:
             ),
             partial=partial,
             notices=tuple(notices),
+            count=None,
         )
+
+    def check_cursor(self, query: str, filters: SearchFilters | None, cursor: str) -> None:
+        """Refuse a cursor :meth:`search` would refuse for this query and these filters, as it would."""
 
     def _hit(self, hit: StoredHit, is_suppressed: SuppressionPredicate | None) -> SearchHit:
         files, teams = hit.file_count, hit.team_count

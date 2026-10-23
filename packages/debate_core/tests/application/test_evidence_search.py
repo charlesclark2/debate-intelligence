@@ -26,6 +26,8 @@ from debate_core.application.evidence_search import (
 )
 from debate_core.application.ports.search_index import IndexedOccurrence, SearchDocument
 from debate_core.application.ports.search_index_reader import (
+    CountBatch,
+    CountRequest,
     MatchBatch,
     MatchRequest,
     StoredDocument,
@@ -714,6 +716,9 @@ class InterruptedAfterAFullBatch:
         return MatchBatch(
             hits=self.hits[request.offset : request.offset + request.limit], exhausted=False, interrupted=True
         )
+
+    def count(self, request: CountRequest) -> CountBatch:
+        raise AssertionError("not asked: a search the budget stopped is not counted (v1-e39-t11)")
 
     def document(self, caselist: str, cluster_id: str) -> StoredDocument | None:
         raise AssertionError("not asked")

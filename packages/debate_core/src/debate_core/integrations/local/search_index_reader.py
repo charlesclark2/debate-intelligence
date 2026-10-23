@@ -3,8 +3,8 @@
 :class:`SqliteSearchIndexReader` is the :class:`~debate_core.application.ports.search_index_reader.
 SearchIndexReader` the function's composition root wires (`v1-e39-t06`). It opens one `v1-e39-t02`
 index file read-only and immutable, refuses a file whose application id or format version it does not
-know, and runs three statements and nothing else: :data:`MATCH_STATEMENT`, :data:`DOCUMENT_STATEMENT`
-and :data:`OCCURRENCES_STATEMENT`. What they mean is decided by
+know, and runs four statements and nothing else: :data:`MATCH_STATEMENT`, :data:`COUNT_STATEMENT`,
+:data:`DOCUMENT_STATEMENT` and :data:`OCCURRENCES_STATEMENT`. What they mean is decided by
 :class:`~debate_core.application.evidence_search.EvidenceSearchService`; every value a student typed
 reaches them as a bound parameter.
 
@@ -33,10 +33,14 @@ from __future__ import annotations
 import json
 import sqlite3
 import threading
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Final, Self, cast
 
 from debate_core.application.ports.search_index_reader import (
+    CountBatch,
+    CountedRepresentative,
+    CountRequest,
     MatchBatch,
     MatchRequest,
     StoredDocument,
@@ -49,6 +53,7 @@ from debate_core.domain.evidence_search import (
     SNIPPET_ELLIPSIS,
     SNIPPET_OPEN,
     SNIPPET_TOKENS,
+    SearchFilters,
 )
 from debate_core.domain.search_index import (
     SEARCH_INDEX_FORMAT_VERSION,
@@ -58,6 +63,7 @@ from debate_core.domain.search_index import (
 from debate_core.integrations.local.search_index import APPLICATION_ID
 
 __all__ = [
+    "COUNT_STATEMENT",
     "DOCUMENT_STATEMENT",
     "MATCH_STATEMENT",
     "OCCURRENCES_STATEMENT",
@@ -91,20 +97,30 @@ _OCCURRENCE_COLUMNS: Final = (
     "camp_file_title",
 )
 
-MATCH_STATEMENT: Final = (
-    "SELECT d.doc_id, d.caselist, d.cluster_id, d.event, d.camp, d.tag, d.short_cite, "
-    "snippet(search, 3, :open, :close, :ellipsis, :tokens), d.file_count, d.team_count, "
-    + ", ".join(f"o.{column}" for column in _OCCURRENCE_COLUMNS)
-    + " FROM search"
-    " JOIN documents AS d ON d.doc_id = search.rowid"
-    " JOIN occurrences AS o ON o.doc_id = d.doc_id AND o.ordinal = 0"
-    " WHERE search MATCH :expression AND rank MATCH :rank"
+_FILTERS: Final = (
     " AND (:event IS NULL OR d.event = :event)"
     " AND (:caselist IS NULL OR d.caselist = :caselist)"
     " AND (:camp IS NULL OR d.camp = :camp)"
     " AND (:side IS NULL OR instr(d.sides, :side) > 0)"
     " AND (:first_seen IS NULL OR d.first_seen >= :first_seen)"
-    " ORDER BY rank LIMIT :limit OFFSET :offset"
+)
+"""The filters, written once for :data:`MATCH_STATEMENT` and :data:`COUNT_STATEMENT` alike, so a count
+can never filter differently from the results it counts (`v1-e39-t11`)."""
+
+_REPRESENTATIVE_JOIN: Final = (
+    " FROM search"
+    " JOIN documents AS d ON d.doc_id = search.rowid"
+    " JOIN occurrences AS o ON o.doc_id = d.doc_id AND o.ordinal = 0"
+)
+
+MATCH_STATEMENT: Final = (
+    "SELECT d.doc_id, d.caselist, d.cluster_id, d.event, d.camp, d.tag, d.short_cite, "
+    "snippet(search, 3, :open, :close, :ellipsis, :tokens), d.file_count, d.team_count, "
+    + ", ".join(f"o.{column}" for column in _OCCURRENCE_COLUMNS)
+    + _REPRESENTATIVE_JOIN
+    + " WHERE search MATCH :expression AND rank MATCH :rank"
+    + _FILTERS
+    + " ORDER BY rank LIMIT :limit OFFSET :offset"
 )
 """One window of a query's ranking, best first: the documents, their snippets and representatives.
 
@@ -112,6 +128,18 @@ Every filter is a parameter that is either `NULL` (no filter) or the value, so t
 shape whatever is asked. A side is matched in `sides`, a JSON array of quoted side names, by `instr`
 of the quoted name: the names are a closed set, none inside another. A camp document's `first_seen`
 is `NULL`, which no date is on or after."""
+
+COUNT_STATEMENT: Final = (
+    "SELECT d.doc_id, o.source_sha256, o.disclosure"
+    + _REPRESENTATIVE_JOIN
+    + " WHERE search MATCH :expression AND search.rowid > :after"
+    + _FILTERS
+    + " ORDER BY search.rowid LIMIT :limit"
+)
+"""One batch of the documents a query matches under its filters, by doc id: each one's id and its
+representative's digests, which is all a count needs to ask the suppression list. No rank is asked
+for, so FTS5 neither scores nor sorts: it walks its matches in rowid order and the statement stops
+at the limit."""
 
 DOCUMENT_STATEMENT: Final = (
     "SELECT doc_id, caselist, cluster_id, event, camp, tag, cite, short_cite, read_aloud, text, "
@@ -127,7 +155,13 @@ OCCURRENCES_STATEMENT: Final = (
 
 _OPEN_CHECKS: Final = ("PRAGMA application_id", "PRAGMA user_version")
 
-READER_STATEMENTS: Final = (*_OPEN_CHECKS, MATCH_STATEMENT, DOCUMENT_STATEMENT, OCCURRENCES_STATEMENT)
+READER_STATEMENTS: Final = (
+    *_OPEN_CHECKS,
+    MATCH_STATEMENT,
+    COUNT_STATEMENT,
+    DOCUMENT_STATEMENT,
+    OCCURRENCES_STATEMENT,
+)
 """Every statement the reader sends."""
 
 
@@ -176,6 +210,17 @@ def _occurrence(row: tuple[Any, ...]) -> StoredOccurrence:
     )
 
 
+def _filter_parameters(filters: SearchFilters) -> dict[str, object]:
+    """The filters' parameters of :data:`_FILTERS`: each `NULL`, or the value it narrows to."""
+    return {
+        "event": filters.event.value if filters.event is not None else None,
+        "caselist": filters.caselist,
+        "camp": filters.camp,
+        "side": f'"{filters.side.value}"' if filters.side is not None else None,
+        "first_seen": filters.first_seen_on_or_after.isoformat() if filters.first_seen_on_or_after else None,
+    }
+
+
 def _sides(stored: str) -> tuple[str, ...]:
     parsed: object = json.loads(stored)
     if not isinstance(parsed, list) or not all(isinstance(one, str) for one in cast(list[object], parsed)):
@@ -220,7 +265,6 @@ class SqliteSearchIndexReader:
         return self._index_id
 
     def match(self, request: MatchRequest) -> MatchBatch:
-        filters = request.filters
         parameters: dict[str, object] = {
             "open": SNIPPET_OPEN,
             "close": SNIPPET_CLOSE,
@@ -228,37 +272,11 @@ class SqliteSearchIndexReader:
             "tokens": SNIPPET_TOKENS,
             "expression": request.expression,
             "rank": request.rank,
-            "event": filters.event.value if filters.event is not None else None,
-            "caselist": filters.caselist,
-            "camp": filters.camp,
-            "side": f'"{filters.side.value}"' if filters.side is not None else None,
-            "first_seen": (
-                filters.first_seen_on_or_after.isoformat() if filters.first_seen_on_or_after else None
-            ),
+            **_filter_parameters(request.filters),
             "limit": request.limit,
             "offset": request.offset,
         }
-        rows: list[tuple[Any, ...]] = []
-        interrupted = False
-        with self._lock:
-            self._expired = False
-
-            def progress() -> int:
-                if request.expired():
-                    self._expired = True
-                    return 1
-                return 0
-
-            self._connection.set_progress_handler(progress, PROGRESS_INSTRUCTIONS)
-            try:
-                for row in self._connection.execute(MATCH_STATEMENT, parameters):
-                    rows.append(row)
-            except sqlite3.OperationalError:
-                if not self._expired:
-                    raise
-                interrupted = True
-            finally:
-                self._connection.set_progress_handler(None, 0)
+        rows, interrupted = self._run_under_budget(MATCH_STATEMENT, parameters, request.expired)
         hits = tuple(
             StoredHit(
                 position=request.offset + index,
@@ -279,6 +297,48 @@ class SqliteSearchIndexReader:
         return MatchBatch(
             hits=hits, exhausted=not interrupted and len(hits) < request.limit, interrupted=interrupted
         )
+
+    def count(self, request: CountRequest) -> CountBatch:
+        parameters: dict[str, object] = {
+            "expression": request.expression,
+            "after": request.after,
+            **_filter_parameters(request.filters),
+            "limit": request.limit,
+        }
+        rows, interrupted = self._run_under_budget(COUNT_STATEMENT, parameters, request.expired)
+        counted = tuple(
+            CountedRepresentative(doc_id=row[0], source_sha256=row[1], disclosure=row[2]) for row in rows
+        )
+        return CountBatch(
+            rows=counted, exhausted=not interrupted and len(counted) < request.limit, interrupted=interrupted
+        )
+
+    def _run_under_budget(
+        self, statement: str, parameters: dict[str, object], expired: Callable[[], bool]
+    ) -> tuple[list[tuple[Any, ...]], bool]:
+        """The rows `statement` gives, and whether the time budget stopped it before the last."""
+        rows: list[tuple[Any, ...]] = []
+        interrupted = False
+        with self._lock:
+            self._expired = False
+
+            def progress() -> int:
+                if expired():
+                    self._expired = True
+                    return 1
+                return 0
+
+            self._connection.set_progress_handler(progress, PROGRESS_INSTRUCTIONS)
+            try:
+                for row in self._connection.execute(statement, parameters):
+                    rows.append(row)
+            except sqlite3.OperationalError:
+                if not self._expired:
+                    raise
+                interrupted = True
+            finally:
+                self._connection.set_progress_handler(None, 0)
+        return rows, interrupted
 
     def document(self, caselist: str, cluster_id: str) -> StoredDocument | None:
         with self._lock:

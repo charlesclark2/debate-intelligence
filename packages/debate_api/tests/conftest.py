@@ -33,7 +33,7 @@ import tempfile
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
-from functools import cache
+from functools import cache, partial
 from pathlib import Path
 from typing import Any, Final
 from urllib.parse import parse_qs, urlsplit
@@ -50,6 +50,7 @@ from debate_api.configuration import CookieKeys, PilotConfiguration
 from debate_api.cookies import SESSION_COOKIE, CookieSealer, session_payload
 from debate_api.state import PilotServices
 from debate_core.application.errors import StoreUnavailable
+from debate_core.application.evidence_search import EvidenceSearchService
 from debate_core.application.ports.search_index import IndexedOccurrence, SearchDocument
 from debate_core.application.ports.tub import AccountSelfService, AccountStanding, CodeRefused, TokenRefused
 from debate_core.application.search_index_holder import SearchIndexHolder
@@ -419,6 +420,9 @@ class FakeAuditSink:
 SCHOOL, TEAM, OTHER_SCHOOL, OTHER_TEAM = "Maple Grove", "QX", "Riverbend", "ZT"
 TOURNAMENT, ROUND = "Invented Invitational", "Round 4"
 CAMP = "Cascade Institute"
+LINKED_SCHOOL, LINKED_TEAM = "Cedarbrook", "LM"
+"""The linked card's school and team code, in the form an openCaselist address spells them: one word
+each (`v1-e39-t11`). `Maple Grove`, with its space, is a display name, so the featured card has no link."""
 
 FEATURED_TEXT: Final = "Zephyr winds raise granite costs.\nThe second paragraph says basalt holds."
 """The featured card's text: every kind of span lands on it, one highlight across the line break."""
@@ -608,11 +612,20 @@ def _corpus() -> tuple[SearchDocument, ...]:
             _document(doc_id, text=f"Filler card {doc_id} about zephyr.", tag=f"Zephyr filler {doc_id}")
             for doc_id in range(6, 6 + FILLER_CARDS)
         ),
+        _document(
+            LINKED_CARD,
+            text="Tundra lichens slow invented erosion.",
+            tag="Tundra lichens slow erosion",
+            occurrences=(_occurrence(0, LINKED_CARD, school=LINKED_SCHOOL, team=LINKED_TEAM),),
+        ),
     )
 
 
+LINKED_CARD: Final = 6 + FILLER_CARDS
+"""Card 26, which holds no `zephyr`: the one card whose school and team code make an openCaselist link."""
+
 CORPUS: Final = _corpus()
-CARDS: Final = {"featured": 1, "public forum": 2, "camp": 3, "long": 4, "hostile": 5}
+CARDS: Final = {"featured": 1, "public forum": 2, "camp": 3, "long": 4, "hostile": 5, "linked": LINKED_CARD}
 """The named cards of :data:`CORPUS` by doc id; the rest are fillers."""
 
 
@@ -665,7 +678,7 @@ class PilotWorld:
     cards = CARDS
     corpus = CORPUS
 
-    def __init__(self) -> None:
+    def __init__(self, *, count_cap: int | None = None) -> None:
         self.clock = MutableClock()
         self.index = corpus_index()
         self.index_source = InMemorySearchIndexSource()
@@ -711,6 +724,11 @@ class PilotWorld:
                 directory=self.index_directory,
                 open_reader=lambda path, index_id: SqliteSearchIndexReader(path, index_id=index_id),
                 clock=self.clock,
+                build_service=(
+                    EvidenceSearchService
+                    if count_cap is None
+                    else partial(EvidenceSearchService, count_cap=count_cap)
+                ),
                 suppression_list=self.index_source,
             ),
             access_audit=AccessAuditService(audit=self.audit, clock=self.clock),
@@ -890,5 +908,5 @@ def world() -> Iterator[PilotWorld]:
 
 
 @pytest.fixture
-def make_world() -> Callable[[], PilotWorld]:
+def make_world() -> Callable[..., PilotWorld]:
     return PilotWorld

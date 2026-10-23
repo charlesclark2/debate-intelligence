@@ -81,6 +81,7 @@ from debate_core.domain.search_index import IndexedFontSizeSpan, IndexedFormatti
 from debate_core.domain.style_profile import RunEmphasis
 
 __all__ = [
+    "DEFAULT_RESULT_COUNT_CAP",
     "MAX_CURSOR_OFFSET",
     "MAX_QUERY_CHARACTERS",
     "MAX_QUERY_TERMS",
@@ -97,6 +98,7 @@ __all__ = [
     "ParsedQuery",
     "QueryTerm",
     "RankingWeights",
+    "ResultCount",
     "SearchField",
     "SearchFilters",
     "SearchHit",
@@ -123,6 +125,9 @@ MAX_QUERY_TERMS: Final = 32
 
 MAX_CURSOR_OFFSET: Final = 100_000
 """The furthest a cursor may point into a ranking: five thousand pages."""
+
+DEFAULT_RESULT_COUNT_CAP: Final = 1000
+"""How far a search counts its results by default: exactly up to here, and "more than" past it."""
 
 SNIPPET_OPEN: Final = "\x02"
 SNIPPET_CLOSE: Final = "\x03"
@@ -550,13 +555,30 @@ class SearchHit:
 
 
 @dataclass(frozen=True, slots=True)
+class ResultCount:
+    """How many cards a search found, every page of it: `matches` exactly, or more than it when `capped`.
+
+    Counted for the same parsed query, filters and suppression list as the results, over the same
+    index, so the count is the number of results a student can page through (`v1-e39-t11`).
+    """
+
+    matches: int
+    capped: bool = False
+
+
+@dataclass(frozen=True, slots=True)
 class SearchPage:
-    """A page of results, the cursor to the next (`None` on the last), and what the page should say."""
+    """A page of results, the cursor to the next (`None` on the last), and what the page should say.
+
+    `count` is `None` when nothing was counted: a query with no search terms, or a search whose time
+    budget ran out before the count finished.
+    """
 
     hits: tuple[SearchHit, ...]
     next_cursor: str | None
     partial: bool = False
     notices: tuple[SearchNotice, ...] = ()
+    count: ResultCount | None = None
 
 
 @dataclass(frozen=True, slots=True)

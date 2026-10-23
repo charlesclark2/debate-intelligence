@@ -11,6 +11,7 @@ v1-e39-t04's Terraform sets these on the function (`infrastructure/modules/evide
 | `TUB_CLIENT_SECRET_PARAMETER`, `TUB_COOKIE_KEYS_PARAMETER` | the two SecureString parameters |
 | `TUB_AUDIT_LOG_GROUP` | where the account page's audit records go |
 | `TUB_EVIDENCE_BUCKET` | the evidence bucket the search index is fetched from (`v1-e39-t06`) |
+| `TUB_RESULT_COUNT_CAP` | optional: how far a search counts its results, 1,000 when unset (`v1-e39-t11`) |
 
 The app never reads its origin from a `Host` or `X-Forwarded-*` header: CloudFront's origin request
 policy drops the viewer's `Host`, and a forwarded one is the viewer's to choose.
@@ -31,6 +32,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Final
 from urllib.parse import urlsplit
+
+from debate_core.domain.evidence_search import DEFAULT_RESULT_COUNT_CAP
 
 __all__ = [
     "COOKIE_KEY_BYTES",
@@ -112,6 +115,7 @@ class PilotConfiguration:
     audit_log_group: str
     evidence_bucket: str
     region: str = _DEFAULT_REGION
+    result_count_cap: int = DEFAULT_RESULT_COUNT_CAP
 
     @classmethod
     def from_environment(cls, environ: Mapping[str, str]) -> PilotConfiguration:

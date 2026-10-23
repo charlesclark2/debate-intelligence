@@ -44,6 +44,7 @@
 {% if searched %}
 <section class="results" aria-labelledby="results-heading">
 <h2 id="results-heading">Results</h2>
+{% if count_words %}<p class="result-count">{{ count_words }}</p>{% endif %}
 {% if query_shortened %}<p class="notice" role="status">Your search was long, so only its first part was used.</p>{% endif %}
 {% if no_search_terms %}<p class="notice" role="status">There is no word to search for. A search of only left-out words (-word) finds nothing.</p>{% endif %}
 {% if partial %}<p class="notice" role="status">The search took a long time, so these are the results found so far. The next page carries on from here.</p>{% endif %}

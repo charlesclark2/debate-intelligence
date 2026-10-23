@@ -5,10 +5,17 @@ The style table is written out by hand below, from the E33 writer's template (`b
 colours (working agreement 6). The read-back here parses the copied HTML with the standard library's
 parser and inverts that table; `browser/test_search_pages_in_chromium.py` pastes the same HTML into
 an editable region in Chromium and reads that back too (ac2).
+
+**No provenance line since `v1-e39-t11`.** Data-use policy version 1.11 (Attribution rules 2 and 5,
+the E39 gate's item 6; Charlie, 2026-10-22) takes the line out of a copied card: the copy is the tag,
+the cite and the text. The tests below that asserted the line under the cite now assert its absence,
+each saying so; the card page still shows the line (`test_search_pages.py`), and the copy's audit
+record, which names the card, is unchanged (`test_access_audit.py`).
 """
 
 from __future__ import annotations
 
+import json
 import re
 from html.parser import HTMLParser
 from typing import Any
@@ -19,7 +26,6 @@ from debate_api.app import PRIVATE_NO_STORE
 from debate_api.copy_card import (
     EMPHASIS_STYLES,
     HIGHLIGHT_STYLES,
-    PROVENANCE_STYLE,
     TAG_STYLE,
     copied_card,
     font_size_style,
@@ -29,6 +35,10 @@ from debate_core.domain.search_card_html import HIGHLIGHT_COLOURS
 from debate_core.domain.style_profile import RunEmphasis
 
 FEATURED_LINE = "[Disclosed: hsld26 2026-09-15 — Maple Grove QX, Neg vs. Invented Invitational Round 4]"
+CAMP_LINE = "[OpenEv: Cascade Institute 2026 — Policy, Invented Adv CP]"
+UNDERTAG_PARAGRAPH = "color:#385623;font-size:12pt"
+"""The paragraph style the provenance line was copied in until policy 1.11: the template's `Undertag`."""
+NAMED_CARDS = ("featured", "public forum", "camp", "long", "hostile", "linked")
 
 
 @pytest.fixture
@@ -200,19 +210,23 @@ def test_a_runs_spans_nest_its_emphases_then_its_colours_then_its_sizes_innermos
     assert '<span style="background-color:#FFFF00"><br></span>' in html
 
 
-def test_the_copy_is_the_tag_the_cite_the_provenance_line_below_it_then_the_card(student: Any) -> None:
+def test_the_copy_is_the_tag_the_cite_then_the_card_with_no_provenance_line(student: Any) -> None:
+    """Changed in `v1-e39-t11`: the third paragraph was the provenance line below the cite, in the Undertag
+    style. Policy 1.11 (Attribution rule 2, gate item 6) takes it out, so the card's text follows the cite."""
     copied = copied_card(card_named(student, "featured"))
 
-    tag, cite, line, body = paragraphs_of(copied.html)
+    tag, cite, body = paragraphs_of(copied.html)
     assert (tag["style"], "".join(tag["text"])) == (TAG_STYLE, "Zephyr winds raise granite costs")
     assert "".join(cite["text"]) == "Lindqvist 26, Invented Quarterly, 2026"
     assert cite["styles"][0] == (EMPHASIS_STYLES[RunEmphasis.CITE],) and cite["styles"][-1] == ()
-    assert (line["style"], "".join(line["text"])) == (PROVENANCE_STYLE, FEATURED_LINE)
     assert body["style"] == ""
+    assert "".join(body["text"]) == document_named(student, "featured").text
     assert copied.html.startswith(f'<p style="{TAG_STYLE}">Zephyr winds raise granite costs</p><p>')
+    assert FEATURED_LINE not in copied.html and UNDERTAG_PARAGRAPH not in copied.html
 
 
-def test_the_plain_text_is_the_same_four_parts_one_to_a_line(student: Any) -> None:
+def test_the_plain_text_is_the_tag_the_cite_and_the_card_one_to_a_line(student: Any) -> None:
+    """Changed in `v1-e39-t11`: the plain text's third line was the provenance line (policy 1.11)."""
     stored = document_named(student, "featured")
 
     copied = copied_card(card_named(student, "featured"))
@@ -221,18 +235,45 @@ def test_the_plain_text_is_the_same_four_parts_one_to_a_line(student: Any) -> No
         [
             "Zephyr winds raise granite costs",
             "Lindqvist 26, Invented Quarterly, 2026",
-            FEATURED_LINE,
             stored.text,
         ]
     )
 
 
-def test_a_camp_card_copies_with_its_openev_line(student: Any) -> None:
+def test_a_camp_card_copies_without_its_openev_line(student: Any) -> None:
+    """Changed in `v1-e39-t11`: a camp card's copy carried its `[OpenEv: ...]` line (policy 1.11)."""
     copied = copied_card(card_named(student, "camp"))
 
-    assert paragraphs_of(copied.html)[2]["text"] == list(
-        "[OpenEv: Cascade Institute 2026 — Policy, Invented Adv CP]"
-    )
+    assert ["".join(one["text"]) for one in paragraphs_of(copied.html)] == [
+        "Camp zephyr card",
+        "Lindqvist 26, Invented Quarterly, 2026",
+        "A camp card about zephyr basalt.",
+    ]
+    assert CAMP_LINE not in copied.html and CAMP_LINE not in copied.text
+    assert "[OpenEv:" not in copied.html + copied.text
+
+
+@pytest.mark.parametrize("name", NAMED_CARDS)
+def test_no_copy_holds_any_of_its_cards_provenance_lines_or_names(student: Any, name: str) -> None:
+    """Policy 1.11: a copy carries the tag, the cite and the text, and nothing of where it was disclosed."""
+    card = card_named(student, name)
+    copied = copied_card(card)
+
+    lines = [one.provenance_line for one in card.occurrences if one.provenance_line]
+    assert lines, "every named card has a line on its page"
+    for line in lines:
+        assert line not in copied.html and line not in copied.text
+    for word in (
+        "[Disclosed:",
+        "[OpenEv:",
+        "Maple Grove",
+        "Riverbend",
+        "Cedarbrook",
+        "Invented Invitational",
+    ):
+        assert word not in copied.html and word not in copied.text, word
+    assert copied.text == "\n".join(part for part in (card.tag, card.cite, card.text) if part)
+    assert len(paragraphs_of(copied.html)) == (3 if card.tag else 2)
 
 
 # ------------------------------------------------------------------------------------------------
@@ -246,7 +287,7 @@ def test_hostile_card_text_is_escaped_in_the_copy_and_reads_back_as_written(stud
 
     for raw in ("<script", "<img", "<style", "<b>", "</p><style"):
         assert raw not in copied.html.replace("</p><p", "").replace("<p", "").replace("</p>", "")
-    tag, cite, _line, body = paragraphs_of(copied.html)
+    tag, cite, body = paragraphs_of(copied.html)
     assert "".join(tag["text"]) == stored.tag
     assert "".join(cite["text"]) == stored.cite
     assert "".join(body["text"]) == stored.text
@@ -262,14 +303,14 @@ def test_a_colour_outside_the_table_gets_no_colour_and_its_name_is_not_copied(st
 
 
 def test_every_style_attribute_is_one_of_the_tables_own_strings(student: Any) -> None:
+    """Changed in `v1-e39-t11`: the provenance line's paragraph style is no longer one (policy 1.11)."""
     allowed = {
         *EMPHASIS_STYLES.values(),
         *HIGHLIGHT_STYLES.values(),
         TAG_STYLE,
-        PROVENANCE_STYLE,
         *(style for half_points in range(1, 10000) if (style := font_size_style(half_points))),
     }
-    for name in ("featured", "long", "hostile", "camp", "public forum"):
+    for name in NAMED_CARDS:
         html = copied_card(card_named(student, name)).html
         styles = re.findall(r'style="([^"]*)"', html)
         assert styles and set(styles) <= allowed, name
@@ -289,6 +330,21 @@ def test_the_copy_route_answers_the_cards_html_and_text_privately(student: Any) 
     assert response.json() == {
         "html": copied_card(card_named(student, "featured")).html,
         "text": copied_card(card_named(student, "featured")).text,
+    }
+
+
+def test_the_copy_writes_the_same_card_copied_record_as_before_policy_1_11(student: Any) -> None:
+    """Policy 1.11 moves the provenance into the record alone: the record names the card, as before."""
+    assert student.browser.get(student.card_path("featured") + "/copy").status_code == 200
+
+    [record] = [json.loads(one.to_json()) for one in student.audit.records]
+    assert record == {
+        "format_version": 1,
+        "time": "2026-11-02T15:00:00Z",
+        "action": "card-copied",
+        "actor_role": "student",
+        "actor_subject": student.login.accounts["debater.one"].subject,
+        "cards": [f"hsld26/{1:064x}"],
     }
 
 

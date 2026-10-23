@@ -20,6 +20,9 @@ from debate_core.domain.evidence_search import SearchFilters
 from debate_core.domain.search_index import IndexedFontSizeSpan, IndexedFormattingSpan
 
 __all__ = [
+    "CountBatch",
+    "CountRequest",
+    "CountedRepresentative",
     "MatchBatch",
     "MatchRequest",
     "SearchIndexReader",
@@ -133,6 +136,39 @@ class MatchBatch:
     interrupted: bool = False
 
 
+@dataclass(frozen=True, slots=True)
+class CountRequest:
+    """One batch of a count: the documents the expression matches under the filters, after a doc id.
+
+    The same expression and filters as a :class:`MatchRequest`, in doc id order rather than ranked,
+    because a count needs no ranking and FTS5 gives rowid order without sorting.
+    """
+
+    expression: str
+    filters: SearchFilters
+    after: int
+    limit: int
+    expired: Callable[[], bool] = field(repr=False)
+
+
+@dataclass(frozen=True, slots=True)
+class CountedRepresentative:
+    """A matching document's id and its representative's digests: what the suppression list is asked."""
+
+    doc_id: int
+    source_sha256: str
+    disclosure: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class CountBatch:
+    """What one batch of a count fetched, in doc id order; `exhausted` and `interrupted` as for a match."""
+
+    rows: tuple[CountedRepresentative, ...]
+    exhausted: bool
+    interrupted: bool = False
+
+
 @runtime_checkable
 class SearchIndexReader(Protocol):
     """Reads one index file. Never writes it."""
@@ -144,6 +180,10 @@ class SearchIndexReader(Protocol):
 
     def match(self, request: MatchRequest) -> MatchBatch:
         """One batch of the documents the expression matches, best first, filtered."""
+        ...
+
+    def count(self, request: CountRequest) -> CountBatch:
+        """One batch of the documents the same expression and filters match, by doc id, for counting."""
         ...
 
     def document(self, caselist: str, cluster_id: str) -> StoredDocument | None:

@@ -99,7 +99,7 @@ spec:
         it, and an unidentified round stays unidentified, by tests on synthetic sources shown failing
         first.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

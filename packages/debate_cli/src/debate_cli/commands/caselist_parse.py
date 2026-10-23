@@ -45,8 +45,10 @@ store sent to a second environment's bucket. The directory is the one `--publish
 the newest generation of the running parser version, and the publisher is the same one, so what is
 withheld, what goes last and what is skipped are the same too
 (:mod:`debate_core.application.caselist.parsed_publish_only`). Before anything is uploaded the
-directory is checked whole and written by this build's parser and fingerprint versions; when it is
-not, the command is refused with the reason's code, exit `1`, and a hint naming `--publish`.
+directory is checked whole and written by this build's parser and fingerprint versions, and its
+aggregates are checked to name nothing this environment's suppression list now stops or holds,
+asked of the list the publisher is given; when it fails a check, the command is refused with the
+reason's code, exit `1`, and a hint naming `--publish`.
 
 It is refused, exit `2`, beside `--publish` or any option that only shapes a rebuild (`--reparse`,
 `--snapshot`, `--dry-run`), and beside `--failures`, which publishes nothing. The guards are
@@ -207,7 +209,8 @@ def _publish_only(
         _no_bucket(settings, writing=True)
         or _unconfirmed_production_write(settings, writing=True, confirmed=confirmed),
     )
-    version = asyncio.run(cli.services.caselist_parse(with_bucket=False).publishable_version(caselist))
+    # With the bucket: the check asks the list the publisher is given, this environment's.
+    version = asyncio.run(cli.services.caselist_parse(with_bucket=True).publishable_version(caselist))
     published = asyncio.run(cli.services.parsed_publisher().publish(caselist, version))
     payload = publish_only_summary(published, settings)
     failure = _publish_failure(published, payload)

@@ -95,7 +95,10 @@ from debate_core.application.caselist.parse_workers import (
     SourceLoadError,
     WorkerFailure,
 )
-from debate_core.application.caselist.parsed_publish_only import refuse_unpublishable
+from debate_core.application.caselist.parsed_publish_only import (
+    refuse_unpublishable,
+    refuse_what_the_list_stops,
+)
 from debate_core.application.caselist.publish_plan import local_blob_key, validate_publish_target
 from debate_core.application.caselist.suppression import load_suppression_state
 from debate_core.application.caselist_card_stats import CardPlacement
@@ -666,18 +669,30 @@ class CaselistParseService:
         The newest generation of the running parser version, which is what `--publish` publishes
         once it has rebuilt (`v1-e31-t30`). Raises a
         :class:`~debate_core.application.caselist.parsed_publish_only.PublishOnlyRefused`, having
-        read and written nothing else, when there is none, when it is incomplete, or when it is not
-        what this build's rebuild would publish
-        (:func:`~debate_core.application.caselist.parsed_publish_only.refuse_unpublishable`).
+        written nothing, when there is none, when it is incomplete, when it is not what this
+        build's rebuild would publish
+        (:func:`~debate_core.application.caselist.parsed_publish_only.refuse_unpublishable`), or
+        when its aggregates name something this service's suppression list now stops or holds
+        (:func:`~debate_core.application.caselist.parsed_publish_only.refuse_what_the_list_stops`).
+        Build the service over the list the publisher is given, so that the list asked is the
+        target environment's.
         """
         validate_publish_target(caselist)
-        return await refuse_unpublishable(
+        version = await refuse_unpublishable(
             self._store,
             caselist,
             await self._current_version(caselist),
             parser_version=self._parser.parser_version,
             profile_version=self._parser.profile_version,
         )
+        await refuse_what_the_list_stops(
+            self._store,
+            caselist,
+            version,
+            sources=await enumerate_sources(self._local, caselist),
+            state=await load_suppression_state(self._suppression),
+        )
+        return version
 
     async def _current_version(self, caselist: str) -> str | None:
         parser_version = self._parser.parser_version

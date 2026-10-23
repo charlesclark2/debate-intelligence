@@ -8,7 +8,8 @@ rebuild's publish calls it, so the suppression list, held uploads, the occurrenc
 aggregates going last and the idempotent skip all come with it and are not asked again here.
 
 What is asked here is only what a rebuild would have made true and a publish alone cannot: that
-there is a directory, that it is whole, and that it is what this build's rebuild would publish.
+there is a directory, that it is whole, that it is what this build's rebuild would publish, and
+that its aggregates name nothing the suppression list of the environment it goes to now stops.
 
 ## Which directory
 
@@ -30,6 +31,28 @@ uploaded, so a refusal leaves the bucket as it was. In the order they are asked:
   version than the running parser's. A rebuild would start a new generation and publish that.
 * :class:`ParsedFingerprintVersionMismatch`: the occurrence table holds a row stamped with any
   fingerprint version but this build's, or a per-source record is stamped with a newer one.
+* :class:`ParsedAggregatesNameWhatTheListStops`: the index names a source, or the occurrence table
+  a disclosure, that the target environment's suppression list stops or holds
+  (:func:`refuse_what_the_list_stops`).
+
+## Aggregates rebuilt before a removal (`v1-e31-t30` ac4)
+
+A rebuild writes the index, the failures file and the occurrence table without what its suppression
+list stops or holds. The publisher withholds a per-source file the target environment's list stops,
+but sends the aggregates as they are. So aggregates rebuilt under dev's list and published to prod,
+whose list holds a removal dev's lacks, would name what prod removed. `--publish` would have rebuilt
+them first. Here they are refused instead, before any upload.
+
+The question is the rebuild's own, asked of the target environment's list: the same
+:func:`~debate_core.application.caselist.suppression.load_suppression_state` over the list the
+publisher is given, and the predicates the rebuild filters its rows by,
+:func:`~debate_core.application.caselist.parse_sources.is_aggregated` for the index and
+:func:`~debate_core.application.caselist.parse_sources.live_disclosure_keys` for the occurrence
+table, over :func:`~debate_core.application.caselist.parse_sources.enumerate_sources`. Those
+answer for a suppressed source, a withdrawn disclosure and a held path alike, through
+:func:`~debate_core.application.caselist.parse_sources.live_disclosures`;
+:func:`~debate_core.application.caselist.parse_sources.held_only_sources` says how many of the
+refused sources are held. No rule of its own is written here.
 
 ## The per-source records' fingerprint stamps
 
@@ -54,22 +77,33 @@ few SHA-256 prefixes: never a path, a school, a team code or a file name.
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from typing import Final
 
 from debate_core.application.caselist.occurrence_table_guard import newer_stamp
+from debate_core.application.caselist.parse_sources import (
+    DisclosureKey,
+    EnumeratedSource,
+    held_only_sources,
+    is_aggregated,
+    live_disclosure_keys,
+    occurrence_row_key,
+)
 from debate_core.application.errors import DomainError
 from debate_core.application.ports.parsed_store import ParsedStore, skip_key
+from debate_core.application.ports.suppression import SuppressionState
 from debate_core.evidence.fingerprints import FINGERPRINT_VERSION
 
 __all__ = [
     "ParsedAggregatesMissing",
+    "ParsedAggregatesNameWhatTheListStops",
     "ParsedByAnotherParserVersion",
     "ParsedFingerprintVersionMismatch",
     "ParsedSourceFilesMissing",
     "ParsedVersionDirectoryMissing",
     "PublishOnlyRefused",
     "refuse_unpublishable",
+    "refuse_what_the_list_stops",
 ]
 
 #: How many SHA-256 prefixes a refusal names, and how long each is.
@@ -109,6 +143,11 @@ class ParsedByAnotherParserVersion(PublishOnlyRefused):
 class ParsedFingerprintVersionMismatch(PublishOnlyRefused):
     """The occurrence table is not stamped with this build's fingerprint version throughout, or a
     per-source record is stamped with a newer one."""
+
+
+class ParsedAggregatesNameWhatTheListStops(PublishOnlyRefused):
+    """The aggregates name a source or a disclosure the target environment's suppression list now
+    stops or holds: they were rebuilt before it did."""
 
 
 async def refuse_unpublishable(
@@ -221,3 +260,53 @@ def _digests(digests: list[str]) -> str:
     named = ", ".join(digest[:_DIGEST_PREFIX] for digest in digests[:_NAMED_DIGESTS])
     more = len(digests) - _NAMED_DIGESTS
     return f"sha256 {named}" + (f" and {more} more" if more > 0 else "")
+
+
+async def refuse_what_the_list_stops(
+    store: ParsedStore,
+    caselist: str,
+    version: str,
+    *,
+    sources: Sequence[EnumeratedSource],
+    state: SuppressionState,
+) -> None:
+    """Raise :class:`ParsedAggregatesNameWhatTheListStops` when the index of `version` names a
+    source, or its occurrence table a disclosure, that `state` no longer leaves live.
+
+    `sources` is what this machine's manifests name, and `state` the target environment's list.
+    Asked after :func:`refuse_unpublishable`, so the aggregates are there and this build's.
+    """
+    by_digest = {source.sha256: source for source in sources}
+    index = await store.read_index(caselist, version) or ()
+    occurrences = await store.read_occurrences(caselist, version) or ()
+    stopped = sorted(
+        {
+            entry.source_sha256
+            for entry in index
+            if not is_aggregated(by_digest.get(entry.source_sha256), state)
+        }
+    )
+    live: dict[str, frozenset[DisclosureKey]] = {}
+    withdrawn: set[tuple[str, DisclosureKey]] = set()
+    for row in occurrences:
+        if row.source_sha256 not in live:
+            live[row.source_sha256] = live_disclosure_keys(by_digest.get(row.source_sha256), state)
+        key = occurrence_row_key(row.disclosure, row.snapshot)
+        if key not in live[row.source_sha256]:
+            withdrawn.add((row.source_sha256, key))
+    if not stopped and not withdrawn:
+        return
+    held = held_only_sources(sources, state)
+    named = sorted(set(stopped) | {sha256 for sha256, _ in withdrawn})
+    raise ParsedAggregatesNameWhatTheListStops(
+        f"the aggregates of {caselist} {version} name {len(stopped)} source(s) and {len(withdrawn)} "
+        f"disclosure(s) this environment's suppression list now stops or holds "
+        f"({sum(sha256 in held for sha256 in stopped)} of the sources only at a path a removal holds); "
+        f"they were rebuilt before it did ({_digests(named)})",
+        caselist=caselist,
+        version=version,
+        hint=(
+            f"`debate-research caselist parse --caselist {caselist} --publish` rebuilds the aggregates "
+            "from this environment's suppression list, then publishes them."
+        ),
+    )

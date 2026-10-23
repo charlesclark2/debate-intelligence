@@ -283,9 +283,59 @@ v1-e37-t06-season-results: questions for the PM
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED, with conditions closed in-session
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-23
 
 **Notes:**
+
+Careful work on content that names a child.
+* The name is checked to be in the two content files only.
+* The placings are a closed list, so a record cannot be typed.
+* Results are grouped by tournament, never by student.
+* Refusals name an entry by position, and the stale-consent warning no longer prints a name.
+* The consent loader's date bug would have failed the first real entry.
+
+**Rulings**
+
+1. **(a).** ac2 becomes: no consent entry is refused; an entry that is lapsed or first-name-only is
+   published in team-level form by the build. Amend ac2's wording in the spec with a PM-ruling
+   comment.
+2. **No `[[TBD]]` reaches `dev`.** It would fail every prod build, and with it the pilot's
+   promotion. The policy makes the reference opaque, and makes the mapping from a reference to a
+   student Charlie's, kept with the activities office's records. So the coach can assign the
+   reference himself (for example `MC-2026-001`) against the form the office confirmed on file on
+   2026-10-01, and record that mapping in his own records. That is not a policy change. Condition 1
+   below.
+3. **The runbook's emergency lever** gets its results paragraph here (condition 2), accepted
+   outside `constraints.packages` as a deviation.
+4. **Graduated students at the 2027-28 rollover:** recorded. The PM files a task for before
+   August 2027, after Charlie rules on the wording.
+
+**Deviations 1 to 4 and the Decisions are accepted**, including two rows for two awards and the
+navigation padding.
+
+**Conditions, to close in this session before the PR:**
+
+1. **The coach gives you the consent reference in this session.** Write it into the manifest entry,
+   set `STILL_WAITING_ON_CHARLIE` to an empty list, and show that a prod build
+   (`SITE_ENV=prod SITE_URL=https://wfbdebate.com pnpm --dir site build`) completes with no
+   finding. **If he will not have one before the PR,** take the name off instead: delete the
+   consent entry and `students` from both placings, so they publish in team-level form, and record
+   in the guide how to put it back. Either way, nothing on `dev` blocks a prod build.
+2. **Add the results paragraph to the runbook's emergency lever.** List the files it must cover,
+   meaning `results/` and, while a result is among the newest three, the home page's root
+   `index.html`, `index.txt` and `__next.*.txt`, in the same form as the schedule's paragraph.
+3. **Fix the email-updates button's missing space** before "(opens Buttondown's site)". It is one
+   character in `site/`, accepted here.
+4. **Amend ac2 (ruling 1), then update the stale parts of this report.** No re-review is needed.
+
+**The PR:** opened with `--partial`. ac5's prod half follows the next `dev` to `main` promotion,
+and the PM records it from follow-up 4's `curl` count and sets the Goal `Succeeded`. Follow-up 3,
+the reference, is closed by condition 1.
+
+**Follow-up work:** the smoke check for the home results band is filed by the PM as a small E37
+task. The rollover is ruling 4.
+
+If anything comes out differently, stop and ask for another review.

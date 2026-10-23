@@ -19,11 +19,20 @@ normalizer and seeding function in a new `debate_core.arguments` layer, a store 
 application layer, `scripts/seed_landscape_taxonomy.py`, `config/landscape/` (topics.yaml, a
 54-position Policy NHI draft and a 19-position generic.yaml), the config test and the coach's
 guide. The seeding run was read-only and took under a minute, so I ran it myself with the PM's
-guards rather than handing it over (Deviations 3). The store disagrees with the coach's prep on
-affs: `single payer` is the only plan the headings name (137 teams), with no heading for Medicare
-for All or an ACA expansion. The review sheet says so in counts. **Look first at** Deviations 2
-(the store holds no sections, so the level is certain only on a full path) and the CSV privacy
-note under Decisions 6.
+guards rather than handing it over (Deviations 3). `single payer` is the only plan the headings
+name (137 teams), and no heading names Medicare for All or an ACA expansion. But the cards under it
+do name Medicare for All. The PM's first condition (checked 2026-10-23, [below](#the-affirmative-check-pm-review-condition-1))
+found "Medicare for All" in a card tag or cite in 253 of the 299 aff-side files carrying the
+`single payer` heading, and in files of 125 of its 137 teams. So `single payer` is very likely how
+teams write the Medicare for All aff: the store does not contradict the coach's prep on that aff,
+as this summary first said. It only names it differently. The review sheet now opens with these
+counts. **Look first at** Deviations 2 (the store holds no sections, so the level is certain only
+on a full path) and the CSV privacy note under Decisions 6.
+
+**After the PM review (2026-10-22, accepted with conditions):** condition 1 is done (counts on the
+sheet's first page), condition 3 is done (the spec's `constraints.packages` amended), and condition
+4 is this update. Condition 2, applying the coach's answers and his approval of 1.0.0, is still
+open, so the Goal stays **InProgress**.
 
 ## Plan nodes
 
@@ -32,7 +41,7 @@ note under Decisions 6.
 | taxonomy-models | Done | `domain/landscape.py`; red run against a skeleton that refused nothing: 30 failed, 39 passed |
 | yaml-repository | Done | `application/ports/taxonomy_repository.py`, `integrations/landscape/yaml_taxonomy_repository.py`; red run: 13 failed, 9 passed |
 | heading-normalizer | Done | `arguments/landscape/headings.py` and `seeding.py`, `application/landscape_seeding.py`, `scripts/seed_landscape_taxonomy.py`. Every strip rule's case was shown failing first, across five red runs (below) |
-| seed-and-curate | Partial | Seeded (counts below); `topics.yaml`, `policy-2026-27-nhi.yaml` and `generic.yaml` drafted from the CSV; review sheet written. **Coach review not yet done** |
+| seed-and-curate | Partial | Seeded (counts below); `topics.yaml`, `policy-2026-27-nhi.yaml` and `generic.yaml` drafted from the CSV; review sheet written, and given the affirmative check's counts on its first page (PM condition 1, 2026-10-23). **Coach review not yet done** |
 | coach-guide | Done | `docs/guides/landscape-taxonomy.md`; pyright and lint-imports pass |
 
 ## Acceptance criteria
@@ -43,7 +52,7 @@ note under Decisions 6.
 | ac2: topics.yaml resolves (caselist, snapshot) to one topic and a semver taxonomy_version; overlapping ranges fail | PASS | domain tests (overlap within and across topics, adjacent ranges, both ends inclusive) and `uv run pytest packages/debate_core/tests/integrations/landscape/test_yaml_taxonomy_repository.py` → 22 passed. On the committed file: hspolicy26 on 2026-11-07 → `policy-2026-27-nhi` 1.0.0; hsld26 on 2026-10-01 → the Sept–Oct LD topic, no taxonomy; hsld26 on 2026-11-07 → none |
 | ac3: the Policy taxonomy and generic.yaml exist, each with at least 12 active positions, each with kind and side | PASS | 54 and 19 active positions; `test_each_taxonomy_has_enough_active_positions_each_with_a_kind_and_a_side` passes for both |
 | ac4: deterministic seeding writes a candidates CSV (normalized heading, level, documents, distinct teams, suggested id), stripping round prefixes, numbering and AT/A2 | PASS | `uv run pytest packages/debate_core/tests/arguments/landscape/test_headings.py` → 157 passed; `test_seeding.py` 49 passed; `tests/scripts/test_seed_landscape_taxonomy.py` 6 passed, whose CSV and counts were written by hand from the planted sources (working agreement 6). Real run below |
-| ac5: guide explains add position, add alias, retire/merge, bump taxonomy_version; **and the coach has reviewed the seeded Policy file and generic.yaml** | NOT RUN (guide part PASS) | Guide: `docs/guides/landscape-taxonomy.md` covers all four, with worked examples (add alias, add position, split a DA, merge two K labels). The coach's review has not happened yet: the sheet is ready for him (Operator follow-ups) |
+| ac5: guide explains add position, add alias, retire/merge, bump taxonomy_version; **and the coach has reviewed the seeded Policy file and generic.yaml** | NOT RUN (guide part PASS) | Guide: `docs/guides/landscape-taxonomy.md` covers all four, with worked examples (add alias, add position, split a DA, merge two K labels). The coach's review has not happened yet. The sheet is ready for him, with the affirmative check's counts on its first page (Operator follow-ups). Due 2026-11-02; the PM needs to hear by 2026-10-25 whether he can review, or the approval moves to v1-e32-t05 |
 | taxonomy-models: Taxonomy model validation tests pass | PASS | 69 passed (above) |
 | yaml-repository: repository and topic-resolution tests pass | PASS | 22 passed (above) |
 | heading-normalizer: normalizer and seeding tests pass on synthetic parsed-store fixtures | PASS | 157 passed (above); every fixture is invented (`School One`/`CodeOne`, `Sample Squad`, `Harbor Classic`) |
@@ -94,12 +103,46 @@ The pytest commands above were run as `.venv/bin/python -m pytest <file>` under 
 | Runtime | 55.5 s wall (the five runs took 38.6 to 55.5 s) |
 | Drafted: topic positions / aliases | 54 / 151 |
 | Drafted: generic positions / aliases | 19 / 39 |
-| Kept, merged, renamed, dropped, added by the coach | NOT RUN: waiting on his review |
+| Kept, merged, renamed, dropped, added by the coach | NOT RUN: the sheet, with the affirmative check on its first page, is waiting on his review (PM condition 2) |
 
 The first run wrote 2,768 rows from 11,101 distinct headings. The four later runs followed normalizer
 fixes for shapes the real headings showed (`OFF---1NC` was the commonest heading left), so the drafts
 are built from the last run. Every drafted alias was checked by script against that CSV: present,
 with at least two teams.
+
+### The affirmative check (PM review condition 1)
+
+Run 2026-10-23, read-only, counts only, 70.7 s, with the same guards as the seeding runs. A scratch
+script built the same sources as the last seeding run, through the same reader and the same
+normalization, and kept every heading, those used by one team included. Its totals match the
+seeding run: 8,577 distinct (heading, answer) pairs, and 137 teams on the `single payer` reading
+row. For the card check it read each stored card's `tag` and `full_cite` and matched "Medicare for
+All" case-insensitively, allowing punctuation between the words. It printed no heading, tag or
+cite.
+
+| Words in the heading (over all 8,577) | Headings | Distinct teams |
+|---|---|---|
+| `public option` | 26 | 66 |
+| `expansion` | 5 | 21 |
+| `medicaid` | 10 | 16 |
+| `medicare` | 11 | 12 |
+| `aca` | 11 | 10 |
+| `m4a` | 4 | 5 |
+| `subsid` | 1 | 1 |
+| `mfa`, `affordable care`, `obamacare` | 0 | 0 |
+
+| The 137 `single payer` teams | Files | With "Medicare for All" in a card tag or cite |
+|---|---|---|
+| Files carrying the `single payer` heading, aff side | 299 | 253 |
+| Files carrying the `single payer` heading, any side | 317 | 267 |
+| All their files on the topic, aff side | 570 | 454 |
+| All their files on the topic, any side | 1,224 | 881 |
+| Teams with at least one such file | 137 teams | 125 |
+
+Adding `M4A` to the match changes the all-files count by one file (882). A neg file quoting Medicare
+for All in a card that answers it counts too, which is why the aff-side rows are the ones to read. A
+card naming Medicare for All does not prove the plan text is Medicare for All. The sheet says so,
+and asks the coach to decide between one aff named single payer, one named Medicare for All, or two.
 
 ### Before the report (working agreement 10)
 
@@ -167,9 +210,9 @@ with at least two teams.
    (`landscape_seeding.py`), because `arguments` must stay below `application` for t02 and t03
    to compose it, and their specs put application services over `arguments`. The synthetic store
    helper is in `debate_core.testing`, because two test trees share it and a shared suite cannot
-   live under `tests/`. `pyproject.toml` changed for import-linter only. The PM may want
-   `constraints.packages` amended to name `debate_core.application`, `debate_core.testing`,
-   `pyproject.toml`, `docs/guides` and `tests/config`.
+   live under `tests/`. `pyproject.toml` changed for import-linter only. The spec's
+   `constraints.packages` now names `debate_core.application`, `debate_core.testing`,
+   `pyproject.toml`, `docs/guides` and `tests/config` (PM ruling, condition 3, 2026-10-22).
 5. **More columns and more strip rules than ac4 lists.** The CSV also has `suggested_kind`,
    `cluster_teams` (distinct teams over every heading suggesting the same id), `answer`, `aff_teams`
    and `neg_teams`. Beyond round prefixes, numbering, AT/A2 and Off/Shell/Block, the normalizer
@@ -213,8 +256,9 @@ with at least two teams.
 ## Operator follow-ups
 
 1. **Hand the coach the review sheet** (about an hour, by 2026-11-02):
-   `~/Documents/debate/landscape-seed/policy-2026-27-nhi-review.md`. It opens with the decisions
-   needed and his prep set against the store's counts, then lists each drafted position with its
+   `~/Documents/debate/landscape-seed/policy-2026-27-nhi-review.md`. It opens with the affirmative
+   check (single payer is very likely the Medicare for All aff), then the decisions needed and his
+   prep set against the store's counts, then lists each drafted position with its
    aliases and the counts behind them, then the 40 headings most teams use that no position claims.
    It holds real headings, so share it with him directly, not through a repository or a public link.
 2. **Bring his answers back to this session** (`scripts/task resume v1-e32-t01-position-taxonomy`),

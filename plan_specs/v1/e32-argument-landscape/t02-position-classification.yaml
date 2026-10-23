@@ -38,6 +38,13 @@ spec:
     v1-e32-t07. Items the matcher cannot place go to the review queue and are reported as
     Unclassified by t03; the coach's decisions CSV becomes deterministic overrides, as written.
     The cache key's prompt version is `none` for deterministic results.
+    (PM note 2026-10-23, from v1-e32-t01's follow-up work.) A heading that names a school or a
+    tournament by a short form its directory does not use can pass the seeding's scrub. The
+    matcher treats a heading that matches no alias as unplaced, never as a position, and the
+    review queue shows it as a normalized heading with counts only. If the coach splits an aff
+    by mechanism (v1-e32-t09) or into Medicare for All (the PM's ruling of 2026-10-23), the
+    child affs carry tag keywords: the TAG_KEYWORD stage places a card under a child when its
+    tag holds one, and leaves it under the parent otherwise.
   priority: 1
   constraints:
     packages:

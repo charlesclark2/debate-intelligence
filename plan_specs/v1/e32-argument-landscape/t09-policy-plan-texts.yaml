@@ -1,0 +1,100 @@
+# TASK v1-e32-t09-policy-plan-texts - Each Policy team's plan text, counted first, so single payer splits by mechanism
+# Epic: E32 Argument Landscape Reports | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e32-t09-policy-plan-texts
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+  annotations:
+    debate/title: "Each Policy team's plan text, counted first, so single payer splits by mechanism"
+spec:
+  # Filed by the PM, 2026-10-23, from the coach's request of 2026-10-23, recorded in v1-e32-t01's follow-up work.
+  description: >-
+    The coach wants the Policy landscape to split the `single payer` aff by mechanism, which no
+    heading shows: the mechanism is in each team's plan text, usually a short analytic paragraph
+    under a heading such as "Plan" or "Plan Text", which the parsed store may not keep as a
+    card. Counts first (working agreement 7), read-only, over the hspolicy26 store: how many
+    affirmative files carry a plan-text heading (by the normalized forms v1-e32-t01's normalizer
+    gives); for how many the paragraph under it is in the parsed store, and in what unit (an
+    analytic, a card's text, or nothing); and how many distinct plan texts there are, by a
+    normalized fingerprint, counted by teams. Send the counts and one to three ways to get the
+    texts (keep the paragraphs the store already holds; a parser change in E31 to keep analytic
+    paragraphs under a plan heading, with a parser_version bump and a re-parse; or reading the
+    raw sources again in this task) to the PM, and change nothing until the PM rules. Then
+    extract, per team, its plan text's mechanism words deterministically, and write a review
+    sheet for the coach, outside the repository like v1-e32-t01's: each distinct plan text
+    cluster with its team count and the words that tell it apart, never a team code or school.
+    The coach names each mechanism as a child aff of `single payer` with tag keywords he
+    supplies (the PM's ruling for a Medicare for All split, 2026-10-23); this task applies his
+    answers to policy-2026-27-nhi.yaml with a version bump. Plan text never enters a committed
+    file: only the coach's mechanism names and keywords do.
+  priority: 2
+  constraints:
+    packages: [debate_core.arguments, debate_core.application, debate_core.integrations, scripts, config/landscape, packages/debate_core/tests, tests/scripts, docs/guides]
+    forbidden:
+      - Card text, a school, team code, file name or person's name in any fixture, log, report or commit (synthetic values only)
+      - Network or AWS access in any test
+      - Model calls (deterministic only; model classification is v1-e32-t07's, behind the policy's E32 gate)
+      - Any change to the parser, the parsed store or a fingerprint before the PM rules on the counts
+      - Plan text, or any text from a team's file, in a committed file; only the coach's names and keywords
+  context:
+    - kind: TaskRef
+      name: v1-e32-t01-position-taxonomy
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Counts, per side and by teams, of plan-text headings, of the paragraph under them as
+        held in the store (by unit), and of distinct plan texts, sent to the PM with one to
+        three options, before any change.
+    - id: ac2
+      description: >-
+        After the ruling: a deterministic extraction of each team's plan text and a review
+        sheet outside the repository grouping them into clusters with team counts, by tests
+        on synthetic sources shown failing first.
+    - id: ac3
+      description: >-
+        The coach's mechanisms are child affs of single payer in policy-2026-27-nhi.yaml,
+        with his tag keywords, the taxonomy_version bumped, and the config tests passing;
+        the counts of his decisions are in the report.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e32-t09-policy-plan-texts-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+spec:
+  description: >-
+    Counts first and the PM's ruling, then extraction and the review sheet, then the coach's
+    answers into the taxonomy.
+  goalRef:
+    name: v1-e32-t09-policy-plan-texts
+  graph:
+    nodes:
+      - id: plan-texts
+        kind: Task
+        name: Policy plan texts
+        description: >-
+          Counts first and the PM's ruling, then extraction and the review sheet, then the
+          coach's answers into the taxonomy.
+        estimatedEffort: 5h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Landscape argument tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/arguments/landscape]
+status:
+  phase: Pending

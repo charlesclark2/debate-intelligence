@@ -62,7 +62,7 @@ another rule needs no re-parse.
 
 The counts that led to it, over the dev index `767b9c7c056b80cb` (52,059 documents, 2026-10-22), are
 in the [`v1-e39-t12` session report](../session-reports/v1-e39-t12-card-only-results.md#the-counts):
-1,291 CITE_ONLY and 334 with no cite and under 25 words, 1,625 in all, at most 3.9% of a caselist.
+1,291 CITE_ONLY and 334 with no cite and under 25 words, 1,625 in all, at most 3.86% of a caselist.
 
 **Where the count is.** What a build left out, by store and reason, is in its result:
 `tub index build`'s table caption (`N left out as no card (A cite only, B with no cite and under

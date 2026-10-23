@@ -1365,7 +1365,7 @@ runs its older build, and the first week the stores change it rebuilds without t
 publishes the non-cards back. Reinstall as [Reinstalling the agent](#reinstalling-the-agent) says.
 
 The expected drop, from the counts over the dev index of 2026-10-22 (52,059 documents): 1,625
-documents in all, at most 3.9% of a store (hsld26 511, hspf26 393, hspolicy26 634, openev 87). The
+documents in all, at most 3.86% of a store (hsld26 511, hspf26 393, hspolicy26 634, openev 87). The
 shrink guard refuses below 90%, so it should pass without `--allow-shrink`, and this runbook never
 gives it one here.
 

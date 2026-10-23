@@ -309,7 +309,7 @@ class CardOnlyRule:
 
 CARD_ONLY_RULE: Final = CardOnlyRule(completeness=CardCompleteness.CITE_ONLY, words_without_cite=25)
 """Rule C of `v1-e39-t12` (PM ruling 2026-10-22): CITE_ONLY, or no cite and fewer than 25 words. Over the
-dev index of 2026-10-22 it left out 1,625 of 52,059 documents, at most 3.9% of a caselist."""
+dev index of 2026-10-22 it left out 1,625 of 52,059 documents, at most 3.86% of a caselist."""
 
 
 def not_a_card(card: ParsedCard) -> NotACard | None:

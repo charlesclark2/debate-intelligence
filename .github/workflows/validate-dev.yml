@@ -14,11 +14,13 @@
 #             tests/smoke's recorded tier against that installed binary, offline; with `live`, also
 #             the canary tier;
 #   slow      checks out the same commit and runs the offline slow tier from source,
-#             pytest -m "slow and not live and not eval": the suites tasks mark `slow` to keep them
-#             out of the PR `ci` check (working agreement 1). The parser evaluation (`eval`) is left
-#             out because it needs the evaluation corpus, which by policy never reaches a runner, so
-#             here it could only skip, and a skip fails a tier. It runs on the operator's Mac before
-#             any promotion containing a parser change (v1-e31-t05);
+#             pytest -m "slow and not live and not eval and not operator_data": the suites tasks
+#             mark `slow` to keep them out of the PR `ci` check (working agreement 1). The parser
+#             evaluation (`eval`) is left out because it needs the evaluation corpus, which by policy
+#             never reaches a runner, so here it could only skip, and a skip fails a tier. It runs on
+#             the operator's Mac before any promotion containing a parser change (v1-e31-t05).
+#             `operator_data` is left out for the same reason: data only the operator's machine
+#             holds, such as the tub's own search index (v1-e01-t34);
 #             The tier includes the search pages' browser suite (packages/debate_api/tests/browser,
 #             v1-e39-t06), so the job installs Playwright's Chromium first: without it every browser
 #             test errors, and the tier fails (PM ruling 2026-10-21, v1-e39-t06 Q1). For the same
@@ -233,7 +235,7 @@ jobs:
           platform="${base#* }"
           docker pull --platform "$platform" "$image"
           docker image inspect --format "pulled {{index .RepoDigests 0}} for $platform" "$image"
-      - name: Run pytest -m "slow and not live and not eval", offline
+      - name: Run pytest -m "slow and not live and not eval and not operator_data", offline
         id: slow
         run: python3 scripts/validate_dev.py slow --sha "$REQUESTED_SHA" --work-dir "$RUNNER_TEMP/validate-dev-slow"
 

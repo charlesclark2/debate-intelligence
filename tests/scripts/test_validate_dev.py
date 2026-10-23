@@ -279,7 +279,7 @@ def test_a_tier_passes_when_every_selected_test_ran_and_passed() -> None:
     [
         (driver.RECORDED, "not live and not in_process"),
         (driver.LIVE_CANARY, "live and canary"),
-        (driver.SLOW, "slow and not live and not eval"),
+        (driver.SLOW, "slow and not live and not eval and not operator_data"),
     ],
 )
 def test_the_tiers_select_what_the_readme_says(tier: driver.Tier, expression: str) -> None:

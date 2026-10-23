@@ -24,9 +24,11 @@ Subcommands, in the order .github/workflows/validate-dev.yml runs them:
     (``-m "live and canary"``).
 ``slow``
     From a checkout of the same commit, run the offline slow tier,
-    ``-m "slow and not live and not eval"``. The parser evaluation (``eval``) is excluded: it needs
-    the evaluation corpus, which by policy never reaches a runner, so there it could only skip. It
-    runs on the operator's Mac before any promotion that changes the parser (v1-e31-t05).
+    ``-m "slow and not live and not eval and not operator_data"``. The parser evaluation (``eval``)
+    is excluded: it needs the evaluation corpus, which by policy never reaches a runner, so there it
+    could only skip. It runs on the operator's Mac before any promotion that changes the parser
+    (v1-e31-t05). So is anything marked ``operator_data``, which needs data only the operator's
+    machine holds, such as the tub's own search index (v1-e01-t34).
 ``conclude``
     Post the final state. ``success`` only when every job succeeded, the installed build reported
     the requested commit, and both test trees were that commit; ``success`` is posted on the commit
@@ -304,7 +306,7 @@ class Tier:
 
 RECORDED = Tier("recorded", "not live and not in_process", ("tests/smoke",))
 LIVE_CANARY = Tier("live canary", "live and canary", ("tests/smoke",))
-SLOW = Tier("slow", "slow and not live and not eval")
+SLOW = Tier("slow", "slow and not live and not eval and not operator_data")
 
 
 @dataclass(frozen=True)

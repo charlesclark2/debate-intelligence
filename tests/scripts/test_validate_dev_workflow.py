@@ -278,3 +278,43 @@ def test_a_success_with_no_issue_open_only_looks(tmp_path: Path) -> None:
 
     assert result.returncode == 0, result.stderr
     assert calls == [[*LISTED, "--repo", REPOSITORY]]
+
+
+# --------------------------------------------------------------------------------------------
+# slow: the operator-only timing test is left out by marker, never skipped
+# --------------------------------------------------------------------------------------------
+
+SCALE_TESTS = (
+    REPO_ROOT / "packages" / "debate_core" / "tests" / "application" / "test_evidence_search_scale.py"
+)
+
+
+def slow_tier_expression() -> str:
+    sys.path.insert(0, str(REPO_ROOT / "scripts"))
+    try:
+        import validate_dev
+    finally:
+        sys.path.remove(str(REPO_ROOT / "scripts"))
+    return validate_dev.SLOW.marker_expression
+
+
+def test_the_slow_tier_leaves_the_operator_only_timing_test_out_by_marker() -> None:
+    """It needs the operator's own index; on a runner it could only skip, and a skip fails the tier."""
+    expression = slow_tier_expression()
+    collected = subprocess.run(
+        [sys.executable, "-m", "pytest", "--collect-only", "-q", "-n", "0", "-p", "no:randomly"]
+        + ["-p", "no:cacheprovider", "-m", expression, str(SCALE_TESTS)],
+        cwd=REPO_ROOT,
+        env={key: value for key, value in os.environ.items() if not key.startswith("DEBATE_")},
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+
+    assert collected.returncode == 0, collected.stdout + collected.stderr
+    selected = [line for line in collected.stdout.splitlines() if "::" in line]
+    assert [line.split("::")[1] for line in selected] == [
+        "test_search_p95_on_a_synthetic_index_of_250000_documents"
+    ]
+    assert expression == "slow and not live and not eval and not operator_data"

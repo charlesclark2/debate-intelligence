@@ -315,6 +315,29 @@ describe('the start-of-season check', () => {
       /the start-of-season check for 2026-27 has not been recorded/,
     )
   })
+
+  /**
+   * Warnings print in every build, so a lapsed student entry is named by its opaque consent
+   * reference: a build log carries no student name (Students 10). Until v1-e37-t06 the warning
+   * printed the name, which nothing noticed while the manifest held no student.
+   */
+  it('names a lapsed student entry by its consent reference, never by the name', () => {
+    const students = [
+      {
+        publishedName: 'Jordan Rivera',
+        publishedForm: 'full-name-and-class-year' as const,
+        graduationYear: 2028,
+        consentReference: 'MC-2025-003',
+        season: '2025-26',
+        dateChecked: '2025-09-12',
+      },
+    ]
+    const warnings = check('Nobody is named here.', { students })
+      .warnings.map((warning) => warning.message)
+      .join('\n')
+    expect(warnings).toMatch(/consent MC-2025-003 was last checked 2025-09-12 for season 2025-26/)
+    expect(warnings).not.toMatch(/Jordan|Rivera/)
+  })
 })
 
 /**
@@ -333,7 +356,10 @@ describe('dates in the media-consent manifest', () => {
   })
 
   it('refuses a full-name entry with no graduation year to print', () => {
-    const { graduationYear: _omitted, ...withoutYear } = STUDENTS.jordan
+    const withoutYear = {
+      publishedName: STUDENTS.jordan.publishedName,
+      consentReference: STUDENTS.jordan.consentReference,
+    }
     const directory = contentWith({ 'media-consent.yaml': withConsent([withoutYear]) })
     expect(() => loadMediaConsent(directory)).toThrow(
       /graduationYear: is required when publishedForm is full-name-and-class-year/,

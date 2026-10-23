@@ -9,7 +9,7 @@ Every school, team code, tournament and heading here is invented.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 import pytest
@@ -87,6 +87,43 @@ async def test_teams_and_sides_come_from_the_disclosures(planted: PlantedCaselis
     assert {team.side for team in by_digest[two].teams} == {Side.AFF}
     assert by_digest[one].cards[0].section_path == ("1NC", "Spending DA")
     assert reading.caselist_names == {"School One": ("CodeOne",), "School Two": ("CodeTwo",)}
+
+
+@pytest.mark.anyio
+async def test_each_on_topic_disclosure_is_read_as_e30_records_it_for_the_landscape_report(
+    planted: PlantedCaselist,
+) -> None:
+    cited = (PlantedCard(("1NC", "Spending DA"), short_cite="Okafor 25"), PlantedCard(("1NC", "Spending DA")))
+    one = planted.source("one", cited, disclosures=[("2026-08-25", ONE_NEG), ("2026-09-08", ONE_NEG)])
+    two = planted.source("two", SPENDING, disclosures=[("2026-09-15", TWO_AFF), ("2026-09-22", TWO_AFF)])
+    reading = await read_seed_sources(
+        store=LocalParsedStore(planted.data_dir),
+        local=local(planted.data_dir),
+        suppression=empty_suppression_list(),
+        topic=TOPIC,
+        caselist=CASELIST,
+        through=date(2026, 9, 15),
+    )
+    assert sorted(
+        (
+            one.source_sha256,
+            one.snapshot.isoformat(),
+            one.school,
+            one.team_code,
+            one.side,
+            one.tournament,
+            one.round_label.normalized if one.round_label else None,
+        )
+        for one in reading.disclosures
+    ) == sorted(
+        [
+            (one, "2026-09-08", "School One", "CodeOne", Side.NEG, "Sample Invitational", "R1"),
+            (two, "2026-09-15", "School Two", "CodeTwo", Side.AFF, "Sample Invitational", "R2"),
+        ]
+    )
+    by_digest = {source.sha256: source for source in reading.sources}
+    assert [card.short_cite for card in by_digest[one].cards] == ["Okafor 25", None]
+    assert "School" not in repr(reading)
 
 
 @pytest.mark.anyio

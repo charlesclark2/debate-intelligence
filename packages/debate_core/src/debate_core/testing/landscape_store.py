@@ -43,6 +43,8 @@ class PlantedCard:
 
     section_path: tuple[str, ...]
     tag: str | None = "An invented claim"
+    short_cite: str | None = None
+    """Written only when given, as the landscape report (`v1-e32-t03`) reads it."""
 
 
 @dataclass(slots=True)
@@ -96,6 +98,7 @@ class PlantedCaselist:
                             {
                                 "tag": card.tag,
                                 "section_path": list(card.section_path),
+                                **({"short_cite": card.short_cite} if card.short_cite else {}),
                                 "provenance": {
                                     "first_element_index": index * _PARAGRAPHS_PER_CARD,
                                     "last_element_index": index * _PARAGRAPHS_PER_CARD + 2,

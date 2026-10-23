@@ -69,7 +69,7 @@ spec:
         The format version is 2; a holder given an index of another format refuses it with a
         message, by test; the p95 query time on the measurement index is recorded.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

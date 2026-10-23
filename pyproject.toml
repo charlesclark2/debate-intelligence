@@ -298,7 +298,6 @@ source_modules = [
     # PM ruling 2026-10-22 (v1-e07-t05: feedparser falls back to a loose parser on a hostile feed).
     # The feed providers parse XML with defusedxml only, so lxml stays out of discovery too.
     "debate_core.integrations.discovery",
-    "debate_api",
     "debate_workers",
 ]
 forbidden_modules = ["lxml", "docx"]
@@ -312,6 +311,18 @@ name = "The CLI reaches lxml only through debate_core.integrations.docx_parser"
 type = "forbidden"
 allow_indirect_imports = true
 source_modules = ["debate_cli"]
+forbidden_modules = ["lxml", "docx"]
+
+# v1-e39-t08-card-download. The pilot's download builds a Verbatim file with the E33 writer inside the
+# function, so `debate_api.container` imports `debate_core.integrations.docx_file_writer` and
+# `docx_parser`, and the chain to lxml is by design. `debate_api` left the list above for the direct
+# form, as the CLI did in v1-e31-t06 and as the API did for the AWS SDK in v1-e39-t05: no route or
+# page imports lxml or python-docx itself.
+[[tool.importlinter.contracts]]
+name = "The API reaches lxml only through debate_core.integrations"
+type = "forbidden"
+allow_indirect_imports = true
+source_modules = ["debate_api"]
 forbidden_modules = ["lxml", "docx"]
 
 # PM ruling 2026-10-22 (v1-e07-t05: feedparser falls back to a loose parser on a hostile feed).

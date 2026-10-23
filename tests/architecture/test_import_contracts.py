@@ -40,6 +40,7 @@ CLI_HTTP_CLIENT = "The CLI reaches httpx and keyring only through debate_core.in
 DELIVERY_AWS_SDK = "The CLI and the API reach the AWS SDK only through debate_core.integrations"
 DOCUMENT_LIBRARIES = "Document libraries stay inside debate_core.integrations.docx_parser"
 CLI_DOCUMENT_LIBRARIES = "The CLI reaches lxml only through debate_core.integrations.docx_parser"
+API_DOCUMENT_LIBRARIES = "The API reaches lxml only through debate_core.integrations"
 SAFE_XML_PARSER = "The safe XML parser stays inside debate_core.integrations.discovery"
 CLI_SAFE_XML_PARSER = "The CLI reaches defusedxml only through debate_core.integrations.discovery"
 CORE_LAYERS = (
@@ -82,6 +83,9 @@ VIOLATIONS = [
     Violation("debate_cli.commands.boundary_probe", "import boto3", DELIVERY_AWS_SDK),
     Violation("debate_core.application.boundary_probe", "import lxml", DOCUMENT_LIBRARIES),
     Violation("debate_cli.commands.boundary_probe", "import lxml", CLI_DOCUMENT_LIBRARIES),
+    # The API's composition root builds the download's writer since v1-e39-t08; nothing else may.
+    Violation("debate_api.boundary_probe", "import lxml", API_DOCUMENT_LIBRARIES),
+    Violation("debate_api.routes_probe", "from docx import Document", API_DOCUMENT_LIBRARIES),
     # The feed providers parse with defusedxml, and only they do (PM ruling 2026-10-22, v1-e07-t05).
     Violation("debate_core.integrations.discovery.boundary_probe", "import lxml", DOCUMENT_LIBRARIES),
     Violation("debate_core.application.boundary_probe", "import defusedxml", SAFE_XML_PARSER),

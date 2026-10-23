@@ -51,6 +51,21 @@ Each key is a field of the stored row or the record it joins, so the choice does
 order the store lists rows or the records list disclosures in. Every surviving row becomes an
 occurrence of the document in the same order, the representative first.
 
+## Only real cards (`v1-e39-t12`)
+
+A cluster whose representative is no card is left out of the index, its other members with it:
+CITE_ONLY, or no cite and fewer than 25 words of evidence text (:data:`CARD_ONLY_RULE`, rule C of the
+PM's ruling of 2026-10-22). It is judged on the representative alone, as the spec words it: for
+CITE_ONLY that is every member, since completeness leads the order; for a card with no cite, looking
+at the other members would change the representative order. The parser, the parsed store and every
+fingerprint are untouched: the rule is the index build's.
+
+The card is in the source's document record, not the occurrence row, so the build reads the
+representatives' sources twice: once to judge each card, then again to write the documents kept,
+numbered by their rank among themselves. What was left out, by store and why, is in the build's
+result (:attr:`BuiltSearchIndex.not_cards`), `tub index build`'s summary and the weekly run's
+record, and not in the manifest, which the deployed function reads with `extra="forbid"`.
+
 ## What a document holds
 
 The representative card's tag and cite come from its source's document record, read through
@@ -90,7 +105,7 @@ fails on it as on any store not ready.
 
 ## The same store gives the same bytes
 
-Documents are numbered by their (caselist, cluster id) rank, the writer lays them out by number, and
+Documents kept are numbered by their (caselist, cluster id) rank, the writer lays them out by number, and
 the manifest records digests and counts and no time. So five shuffles of a store give one index,
 byte for byte, and one manifest.
 """
@@ -102,7 +117,7 @@ import re
 import shutil
 import tempfile
 from collections import defaultdict
-from collections.abc import Awaitable, Callable, Mapping, Sequence
+from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import date
 from enum import StrEnum
@@ -304,6 +319,10 @@ def not_a_card(card: ParsedCard) -> NotACard | None:
     representative alone: for CITE_ONLY that is every member, since completeness leads the
     representative order.
     """
+    if card.completeness is CARD_ONLY_RULE.completeness:
+        return NotACard.CITE_ONLY
+    if not card.full_cite.strip() and len(card.evidence_text.split()) < CARD_ONLY_RULE.words_without_cite:
+        return NotACard.NO_CITE_FEW_WORDS
     return None
 
 
@@ -372,11 +391,13 @@ class _Joined:
 
 @dataclass(frozen=True, slots=True)
 class _Cluster:
-    doc_id: int
     caselist: str
     version: str
     cluster_id: str
     members: tuple[_Joined, ...]
+    doc_id: int = 0
+    """Its rank among the documents kept, from 1, in (caselist, cluster id) order; 0 until
+    :meth:`SearchIndexBuildService._cards_only` has kept it."""
 
     @property
     def representative(self) -> _Joined:
@@ -452,8 +473,9 @@ class SearchIndexBuildService:
                 f"than the build is asked for ({', '.join(names)})"
             )
         tables = sources.tables
-        clusters, counts = await self._clusters(tables, sources.suppression)
         out.mkdir(parents=True, exist_ok=True)
+        candidates, counts = await self._clusters(tables, sources.suppression)
+        clusters, not_cards = await self._cards_only(candidates, names)
         building = Path(tempfile.mkdtemp(prefix=".building-", dir=out))
         try:
             await self._write_index(building / SEARCH_INDEX_SQLITE_NAME, clusters, provenance_limit)
@@ -499,7 +521,7 @@ class SearchIndexBuildService:
         return BuiltSearchIndex(
             directory=final,
             manifest=manifest,
-            not_cards={name: dict.fromkeys(NotACard, 0) for name in names},
+            not_cards=not_cards,
         )
 
     # -- reading --------------------------------------------------------------------------------
@@ -574,7 +596,7 @@ class SearchIndexBuildService:
     async def _clusters(
         self, tables: Mapping[str, tuple[tuple[OccurrenceRecord, ...], StoreState]], state: SuppressionState
     ) -> tuple[list[_Cluster], _Dropped]:
-        """Every cluster with a surviving row, numbered in (caselist, cluster id) order, rows in order."""
+        """Every cluster with a surviving row, in (caselist, cluster id) order, its rows in order."""
         dropped = _Dropped()
         grouped: dict[tuple[str, str], list[_Joined]] = {}
         versions: dict[str, str] = {}
@@ -600,7 +622,6 @@ class SearchIndexBuildService:
                 continue
             clusters.append(
                 _Cluster(
-                    doc_id=len(clusters) + 1,
                     caselist=caselist,
                     version=versions[caselist],
                     cluster_id=cluster_id,
@@ -609,35 +630,56 @@ class SearchIndexBuildService:
             )
         return clusters, dropped
 
+    async def _representatives(
+        self, clusters: Sequence[_Cluster]
+    ) -> AsyncIterator[tuple[_Cluster, ParsedCard]]:
+        """Each cluster with its representative's card, read from its source's record, a source at a time."""
+        by_source: dict[tuple[str, str, str], list[_Cluster]] = defaultdict(list)
+        for cluster in clusters:
+            row = cluster.representative.row
+            by_source[(cluster.caselist, cluster.version, row.source_sha256)].append(cluster)
+        for (caselist, version, sha256), waiting in sorted(by_source.items()):
+            record = await self._store.read_document(caselist, version, sha256)
+            if record is None:
+                raise SearchIndexStoreNotReady(
+                    caselist,
+                    f"an occurrence names source {sha256[:12]}, which has no document in {version}",
+                )
+            cards = {
+                (card.provenance.first_element_index, card.provenance.last_element_index): card
+                for card in record.to_parsed_document(_NO_PATH).cards
+            }
+            for cluster in waiting:
+                yield cluster, _card_of(cluster, cards)
+
+    async def _cards_only(
+        self, candidates: Sequence[_Cluster], names: Sequence[str]
+    ) -> tuple[list[_Cluster], NotCards]:
+        """The clusters whose representative is a card, numbered from 1, and what was left out, by store.
+
+        A pass over the representatives' sources before the one that writes, so the documents kept are
+        numbered by their rank among themselves and the writer is handed each card once, as it is read.
+        """
+        not_cards = {name: dict.fromkeys(NotACard, 0) for name in names}
+        left_out: set[tuple[str, str]] = set()
+        async for cluster, card in self._representatives(candidates):
+            reason = not_a_card(card)
+            if reason is not None:
+                not_cards[cluster.caselist][reason] += 1
+                left_out.add((cluster.caselist, cluster.cluster_id))
+        kept = [one for one in candidates if (one.caselist, one.cluster_id) not in left_out]
+        return [replace(one, doc_id=number) for number, one in enumerate(kept, start=1)], not_cards
+
     # -- writing --------------------------------------------------------------------------------
 
     async def _write_index(
         self, destination: Path, clusters: Sequence[_Cluster], provenance_limit: int
     ) -> None:
         """Read each representative's card from its source's record, and write every document."""
-        by_source: dict[tuple[str, str, str], list[_Cluster]] = defaultdict(list)
-        for cluster in clusters:
-            row = cluster.representative.row
-            by_source[(cluster.caselist, cluster.version, row.source_sha256)].append(cluster)
         sink = self._writer.create(destination)
         try:
-            for (caselist, version, sha256), waiting in sorted(by_source.items()):
-                record = await self._store.read_document(caselist, version, sha256)
-                if record is None:
-                    raise SearchIndexStoreNotReady(
-                        caselist,
-                        f"an occurrence names source {sha256[:12]}, which has no document in {version}",
-                    )
-                cards = {
-                    (card.provenance.first_element_index, card.provenance.last_element_index): card
-                    for card in record.to_parsed_document(_NO_PATH).cards
-                }
-                for cluster in waiting:
-                    sink.add(
-                        _document(
-                            cluster, _card_of(cluster, cards), provenance_limit, self._event_for_caselist
-                        )
-                    )
+            async for cluster, card in self._representatives(clusters):
+                sink.add(_document(cluster, card, provenance_limit, self._event_for_caselist))
         except BaseException:
             sink.abandon()
             raise

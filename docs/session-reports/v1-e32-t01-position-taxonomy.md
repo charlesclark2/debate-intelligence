@@ -239,9 +239,60 @@ with at least two teams.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED, with conditions closed in-session
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-22
 
 **Notes:**
+
+Good work on a hard input:
+* red runs for every layer, six seeding mutants caught, config plants;
+* a normalizer driven by the real headings' shapes rather than guessed ones;
+* every committed alias checked against the CSV with two or more teams.
+
+The privacy handling of the CSV and the review sheet (Decisions 6) is right: local, outside the
+repository, and refused by the script inside it.
+
+**Deviations 1 to 5 and Decisions 1 to 7 are accepted.**
+* Deviation 2 (no stored sections) is a real limit, and "certain only on a full path" is the
+  honest way to say it.
+* Deviation 3 is within the condition I set.
+* Deviation 4's placement keeps `arguments` below `application`, which t02 and t03 need.
+
+**Conditions, to close in this session before the PR:**
+
+1. **Check the affirmative finding before the coach reads it.** The store showing `single payer`
+   as the only plan, with no Medicare for All or ACA heading, is the most surprising thing here. It
+   is also exactly what the team will act on.
+   * Count, over all 8,577 distinct normalized headings including those under two teams (counts
+     only, read-only, seconds): how many headings and distinct teams contain `m4a`, `medicare`,
+     `mfa`, `aca`, `affordable care`, `obamacare`, `public option`, `subsid`, `medicaid` or
+     `expansion`.
+   * Also count how many of the 137 `single payer` teams' files hold a card-level tag or cite with
+     "Medicare for All" in it, as a count of files.
+   * Put the counts on the review sheet's first page. If teams write the Medicare for All aff as
+     "single payer", the coach needs to know before he merges or renames anything.
+2. **Apply the coach's review.** He reviews the sheet by 2026-11-02, sooner if he can.
+   * Apply his keep, rename, merge, drop and add answers, and record the counts of each in this
+     report.
+   * Confirm the season range he gives, and set the Goal `Succeeded` when he approves 1.0.0.
+   * If his answers need anything beyond edits to the two YAML files and the review sheet (a new
+     kind, a model change, a normalizer rule), stop and ask for another review.
+3. **Amend `constraints.packages` in the spec**, with a PM-ruling comment: `debate_core.application`,
+   `debate_core.testing`, `pyproject.toml` (import-linter only), `docs/guides` and `tests/config`.
+4. **Update the stale parts of this report** (Summary, the seed-and-curate row, ac5, the seeding
+   table's last row). No new review is needed unless condition 2 says so.
+
+**The PR:** opened without `--partial`, once the coach has approved and the Goal is `Succeeded`.
+v1-e32-t02 depends on this task. If the coach cannot review by Sunday 2026-10-25, tell the PM: the
+approval would then move to v1-e32-t05's first dev run, so that t02 and t03 (which use synthetic
+fixtures) are not held up.
+
+**Follow-up work:**
+* Released ids, enforced: filed by the PM as an E32 task, due before t05's first published report.
+* Heading level from sections: recorded and not filed now. It is filed if t02's matcher shows the
+  unknown levels cost it.
+* Short school forms in headings: added to v1-e32-t02's brief in the next PM batch.
+
+If anything comes out differently, stop and ask for another review.

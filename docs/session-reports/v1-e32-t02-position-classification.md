@@ -527,3 +527,32 @@ A thorough task.
 * Cache size: recorded.
 
 If anything comes out differently, stop and ask for another review.
+
+## PM review, second
+
+**Verdict:** ACCEPTED
+<!-- ACCEPTED / CHANGES_REQUESTED -->
+
+**Reviewed by / date:** PM, 2026-10-23
+
+**Notes:**
+
+1. **Condition 1 did its job.** 9.0% of affirmative documents (13.9% of teams) have a placed aff,
+   against 66% with a placed advantage and 46.7% of negative teams with a placed position.
+   * The plan heading appears anywhere on the path in only 17.3% of aff documents.
+   * So a rule that carries a team's aff across its own documents would reach at most about a
+     quarter of teams.
+   * The aff has to come from a signal headings do not carry: the plan text, and the caselist's
+     own record of each round.
+2. **What the PM does with it.** v1-e32-t09 (plan texts) is widened in the next PM batch and
+   raised to priority 1. It identifies each affirmative round's plan, counts first, from the plan
+   text, from the team's other rounds, and from the caselist's own round and cite titles. It runs
+   beside v1-e32-t03.
+3. **This task is unaffected.** The matcher does what it was asked: it places what headings show
+   and never guesses. The first Policy report can ship with advantages and negative positions
+   counted, and the affirmative share shown honestly as unidentified, if t09 is not merged by
+   t05's first run.
+4. **Conditions 2 and 3 are accepted as done.** That covers the coach's sheet (including the two
+   rows marked to leave blank), the guide's sentence, and the spec amendments.
+
+**The PR:** open it now, without `--partial`. No other change is needed.

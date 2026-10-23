@@ -6,7 +6,7 @@
 | Spec | [`plan_specs/v1/e39-evidence-search-pilot/t07-removal-audit-and-exposure.yaml`](../../plan_specs/v1/e39-evidence-search-pilot/t07-removal-audit-and-exposure.yaml) |
 | Epic / release | `v1-e39-evidence-search-pilot` / `v1.7` |
 | Branch | `task/v1-e39-t07-removal-audit-and-exposure` |
-| Session status | PARTIAL — waiting on the operator's dev run (ac4, and the deployed half of the exposure check) <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | COMPLETE <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
@@ -20,16 +20,23 @@ the card goes out, and fail closed. A first-page search writes one `searched` re
 result count and nothing else. `cards-downloaded` is defined for `v1-e39-t08`. The audit record has
 a committed JSON Schema with a drift test. The removal credential may delete under
 `reports/tub/search/` and nowhere else under `reports/`. Both runbooks gain the pilot: what the
-function fetches and how it refuses, and the removal's rebuild, publish and guarded prune. **What
-is left is the operator's dev run:** apply the grant, deploy, the deployed exposure checks, and the
-synthetic removal exercise (ac4). The phase stays `InProgress` until those results are in this
-report.
+function fetches and how it refuses, and the removal's rebuild, publish and guarded prune. **The
+operator's dev run is done** ([The operator's dev run](#the-operators-dev-run)). The grant was
+applied, and with it `v1-e39-t05`'s and `v1-e39-t02`'s pending dev applies (PM ruling A). The branch
+was deployed, and the deployed exposure checks passed. The synthetic removal `RM-2026-91` was gone
+from the pilot after the removal, came back from its surviving occurrences after the rebuild with no
+line for the removed file, and the prune left only the current index. **Read first:** two operator
+steps went wrong because of my blocks, and both are recorded and repaired. 4c ran the dry run and
+`--execute` in one paste, deleting the dev bucket's parsed-store aggregates (105 versions, by
+design) without the plan being read. The first rebuild read a scratch store and published empty
+aggregates. The corrected rebuild restored all four caselists, and Deviation 4 lists what changed
+because of them. The phase is `Succeeded`.
 
 ## Plan nodes
 
 | Node | Status | Notes |
 |---|---|---|
-| `gate` — Removal, audit and exposure | Code, tests and documents done; operator dev run outstanding | Its criterion (`pytest packages/debate_api/tests -k "suppression or audit or exposure"`) passes: 88 passed |
+| `gate` — Removal, audit and exposure | Done; operator dev run done | Its criterion (`pytest packages/debate_api/tests -k "suppression or audit or exposure"`) passes: 88 passed |
 
 ## Acceptance criteria
 
@@ -38,8 +45,8 @@ report.
 | ac1 — a suppressed occurrence is gone from results, card pages and downloads within five minutes, by test with a fake clock, shown failing first | PASS (results, card pages, copies); downloads by construction | `packages/debate_api/tests/test_suppression_in_pages.py`: at 4:59 the featured card is in the results, its page and its copy answer 200; at 5:00 it is in none of them (404 twice), and 24 results remain. Frozen for 50 minutes, the first request hides it. Red first: with `_refresh_suppression_list` returning at once, **5 failed in 2.35s**; green, 5 passed. `v1-e39-t08`'s download route does not exist yet. The only way a route reaches the index is `lease()`, which yields a `ScreenedSearch` with no unscreened search on it, so the download goes through the same list; t08's own test should show it |
 | ac2 — every audit record validates against a committed schema, and a test over every action shows none of the forbidden fields | PASS | `docs/data/tub-audit-record.schema.json` (`additionalProperties: false`, 8 fields). `test_audit_record_schema.py` (54 passed) holds the schema and `AuditRecord` together from hand-written expectations (actions, fields, card pattern, 30-card maximum). It builds a record for all 16 actions as their writers do (`AccountAdministration` and `AccessAuditService` for 12) and finds no forbidden field or value (fixture school, team code, query, URL, token, username, email, card text, IP address). The schema refuses 17 forbidden field names and 9 out-of-shape records. `conftest.FakeAuditSink` validates every record the app writes in any `debate_api` test: 566 passed with it on, t05's account records included. `test_access_audit.py` (16 passed): exact field sets, no query, filter, cursor or cluster id in a search record for a query naming the fixture school and team code, and nothing written for a next page |
 | ac3 — the full Playwright journey with a fixture school, team code and query leaves none of them in the captured app logs | PASS | `test_exposure_a_whole_journey_logs_no_query_school_team_code_or_card_text` (Chromium, `-m slow`). It signs in through the app's callback, searches `zephyr Maple Grove QX`, filters, pages, opens a card, copies it, opens the account page and signs out through `/logout`. Logs are captured from bare loggers at DEBUG, and none holds the school, team codes, query words, card text, username or cluster id. Shown failing: a planted `debug("searched %s", query)` in the search route → `1 failed (AssertionError: zephyr in debate_api.planted)`. Whole Chromium file: `14 passed in 10.42s` |
-| ac4 — the removal runbook's pilot steps exercised in dev with a synthetic source, and the operator's record in the report (amended: PM ruling 2026-10-22, prod moves to `v1-e39-t10`) | NOT RUN | Waiting on Operator follow-ups 1 to 4. The runbook's prune script is tested from the runbook itself: `test_removal_runbook_index_prune.py`, 4 passed |
-| ac5 — the report maps each item of the policy's E39 gate to the test or operator record that proves it | PASS (the operator records it cites are pending) | [The E39 gate, item by item](#the-e39-gate-item-by-item), below |
+| ac4 — the removal runbook's pilot steps exercised in dev with a synthetic source, and the operator's record in the report (amended: PM ruling 2026-10-22, prod moves to `v1-e39-t10`) | PASS | Operator record, [Block 4](#block-4--the-removal-exercise-dev-2026-10-22-and-23): synthetic index `b15c530ede05b167` published; the card (*Data centre demand collapses the reserve margin*, representative `058e2b1ce922…`, Westfield XY) found; `caselist remove --source … --request RM-2026-91 --execute` → `DONE in dev`; dev's aggregates rebuilt (R); the card gone from search; the rebuilt index `a0c928bebd03f8aa` holds `0` occurrences of the removed source, and five minutes on the card is back from its survivors with no Westfield XY line; the prune deleted 9 versions of 7 keys (three superseded indexes and three older pointers) and a second dry run found `0`. Dev's own index `767b9c7c056b80cb` (52,059 documents) republished after. The prune script is also tested from the runbook: `test_removal_runbook_index_prune.py`, 4 passed |
+| ac5 — the report maps each item of the policy's E39 gate to the test or operator record that proves it | PASS | [The E39 gate, item by item](#the-e39-gate-item-by-item), below |
 | ac6 — the removal credential can delete under `reports/tub/search/` and nowhere else under `reports/`, by the grant-scope test extended, and the layout document says so | PASS | `terraform -chdir=infrastructure/modules/evidence_bucket test` → `13 passed, 0 failed`. The removal run names every object a delete statement may reach (the five prefixes and `reports/tub/search/*`), refuses any other `reports/` resource, and checks the prefix is kept out of `removable_prefixes`. The operator run checks the everyday credential's version listing reaches nothing under `reports/`. Before the old delete-scoping assertion was updated it failed on the new statement (12 passed, 1 failed). `docs/architecture/evidence-store-layout.md` says so. The dev apply is Operator follow-up 1; prod's goes on the PM's promotion list |
 | ac7 — the suppression list is re-read in the holder's refresh, at most five minutes apart, and a frozen environment rechecks, by test with an injected clock, shown failing first | PASS | `packages/debate_core/tests/application/test_search_index_holder_suppression.py`, 16 passed: hidden at 5:00 and not at 4:59; read before the pointer; a 304 at five minutes; frozen three hours, rechecked before answering; an unreadable list refuses and the next request retries; an unfinished or unreadable line refuses the list whole. Red first, against the same skeleton: **13 failed, 3 passed in 2.85s**. The 3 that passed assert something stays visible |
 | ac8 — the evidence-search runbook says what the function fetches, when, and what an index refusal looks like, and the docs checks pass | PASS | `docs/runbooks/evidence-search.md`: "What the function fetches, and when" and "What a refusal looks like in the app log". `check_command_blocks.py --base origin/dev` → OK, 341 blocks; `check_links.py` → OK, 1942 links; `docs_index.py --check-descriptions` → all 41 described; `docs_index.py --check` → up to date |
@@ -51,10 +58,10 @@ Data-use policy, [E39 gate](../policies/caselist-data-use.md#e39--student-eviden
 
 | Gate item | Proven by |
 |---|---|
-| 1. Policy approved; the removal runbook's pilot steps exercised end to end: gone within five minutes, the rebuilt index no longer holds it | Policy 1.10, approved. **Dev:** this report's operator record (Operator follow-up 4, pending). **Prod:** `v1-e39-t10` (PM ruling 2026-10-22). Tests: `test_suppression_in_pages.py`, `test_search_index_holder_suppression.py`, `test_removal_runbook_index_prune.py` |
+| 1. Policy approved; the removal runbook's pilot steps exercised end to end: gone within five minutes, the rebuilt index no longer holds it | Policy 1.10, approved. **Dev:** this report's operator record, Block 4 (2026-10-22 and 23). **Prod:** `v1-e39-t10` (PM ruling 2026-10-22). Tests: `test_suppression_in_pages.py`, `test_search_index_holder_suppression.py`, `test_removal_runbook_index_prune.py` |
 | 2. Team-only access; coach-created accounts only; password and second factor | `v1-e39-t05`'s `test_auth_authorization_matrix.py` (every route, student and coach, signed in, ended, tampered and absent); `v1-e39-t04`'s `user_pool_admits_only_coach_created_accounts_with_totp` and `app_client_is_confidential_code_flow_only` (`evidence_search.tftest.hcl`); `v1-e39-t05`'s `test_auth_enrolment.py` (no session without an authenticator) |
-| 3. No public reachability; only the function reads `raw/` and writes nothing; signed-in responses private and never cached | Plan: `evidence_bucket_keeps_block_public_access_and_grants_cloudfront_nothing`, `cloudfront_reaches_the_function_url_and_nothing_else`, `distribution_sends_the_security_headers_and_caches_nothing` (no access log, `CachingDisabled`), `function_role_is_the_adr_role_table_entry_by_entry`, `function_role_has_no_other_grant`, `bucket_is_private_versioned_and_kms_encrypted`, `bucket_policy_requires_tls_and_this_key`. `test_exposure.py` holds those names, and checks every route's every answer is `private, no-store` for student, coach and nobody. Deployed: Operator follow-up 3 (pending) |
-| 4. Every access audited (view, copy, download, account change), with nothing identifying; 400 days | `test_access_audit.py`, `test_audit_record_schema.py`, the schema-validating `FakeAuditSink`; download defined (`cards-downloaded`), written by `v1-e39-t08`; account changes: `v1-e39-t05`. 400 days and append-only: `audit_log_keeps_four_hundred_days_and_the_app_log_thirty`, `function_role_has_no_other_grant`, and the runbook's step 5a (deletion protection). No query in the logs: `v1-e39-t06`'s `test_the_app_logs_no_query_card_id_or_card_text_for_a_search_a_card_view_and_a_copy`, this task's Chromium journey (ac3), `tests/scripts/test_tub_deploy.py` (`--no-access-log`), and Operator follow-up 5's log scan (pending) |
+| 3. No public reachability; only the function reads `raw/` and writes nothing; signed-in responses private and never cached | Plan: `evidence_bucket_keeps_block_public_access_and_grants_cloudfront_nothing`, `cloudfront_reaches_the_function_url_and_nothing_else`, `distribution_sends_the_security_headers_and_caches_nothing` (no access log, `CachingDisabled`), `function_role_is_the_adr_role_table_entry_by_entry`, `function_role_has_no_other_grant`, `bucket_is_private_versioned_and_kms_encrypted`, `bucket_policy_requires_tls_and_this_key`. `test_exposure.py` holds those names, and checks every route's every answer is `private, no-store` for student, coach and nobody. Deployed: Block 3's record (signed-in pages `private, no-store` and `Miss from cloudfront`; Block Public Access on; no public policy or ACL; anonymous reads and the bare function URL `403`; no CloudFront logging of any kind; one origin) |
+| 4. Every access audited (view, copy, download, account change), with nothing identifying; 400 days | `test_access_audit.py`, `test_audit_record_schema.py`, the schema-validating `FakeAuditSink`; download defined (`cards-downloaded`), written by `v1-e39-t08`; account changes: `v1-e39-t05`. 400 days and append-only: `audit_log_keeps_four_hundred_days_and_the_app_log_thirty`, `function_role_has_no_other_grant`, and the runbook's step 5a (deletion protection). No query in the logs: `v1-e39-t06`'s `test_the_app_logs_no_query_card_id_or_card_text_for_a_search_a_card_view_and_a_copy`, this task's Chromium journey (ac3), `tests/scripts/test_tub_deploy.py` (`--no-access-log`), and Block 5's log scan (no school, team code, query word or card id in 12 hours of dev's app log; every audit record in the shape) |
 | 5. The suppression list governs: a suppressed occurrence never enters the index, and is hidden by the running function within five minutes | Never enters: `v1-e39-t02`'s `test_search_index_leaves_out_a_suppressed_occurrence_and_an_emptied_cluster`. Hidden within five minutes: ac1 and ac7 above. **Known limit (PM ruling 2026-10-22):** the function reads the suppression list, not `path-holds.jsonl`, and the index keeps no paths. So a removal that only holds a path is followed straight away by a rebuild and publish, and the card is gone in minutes, not at next week's build (`caselist-removal.md`, the student search pilot) |
 | 6. No sharing surface leaves the team; a copy or download carries its provenance line | `v1-e39-t06` (no public link or share-by-link route: the authorization matrix lists every route; `test_copy_card.py` for the provenance line); downloads: `v1-e39-t08` |
 | 7. Attribution and the "Disclosed evidence, not platform-verified" label | `v1-e39-t06`'s `test_the_card_page_shows_the_label_tag_cite_line_counts_copy_card_and_every_occurrence` |
@@ -87,6 +94,19 @@ Data-use policy, [E39 gate](../policies/caselist-data-use.md#e39--student-eviden
   changed-directories run → **1405 passed in 23.53s**; pyright `0 errors`; `lint-imports` 13 kept;
   `validate_specs.py` OK; `check_links.py` OK (1946 links); `check_command_blocks.py --base
   origin/dev` OK (349 blocks).
+- **After the second `scripts/task sync`** (onto `origin/dev` at `649fc66`, after the dev run): it
+  brought in `v1-e01-t30` (#403), which moved `debate_core.testing.fakes` into one module per port
+  and emptied `application.ports`' re-exports. By its Decision 10, a branch merging after it rewrites
+  those imports. None of this task's files use either (`git grep` for `from
+  debate_core.testing.fakes import` and `from debate_core.application.ports import` finds only
+  `v1-e01-t30`'s own fixtures and a module import), so nothing needed rewriting. Then: affected set
+  240 of 396 files (over two minutes, left to CI); the changed-directories run → **1457 passed in
+  28.12s**, `tests/architecture` and its new guards included; the single-process log run → 626
+  passed; Chromium → 14 passed; the node criterion → 88 passed; pyright `0 errors`; `lint-imports`
+  15 kept, 0 broken; ruff clean; `check_links.py` OK (1964 links); `docs_index.py
+  --check-descriptions` OK; `terraform test` in `evidence_bucket` → 13 passed. The deployed image
+  is `f8545cc`. Since then the branch changed only documents (the runbook and this report) and was
+  rebased onto other tasks' merges. None of this task's code changed.
 
 ### Mutation run (20 mutants, agreement 8 and 10)
 
@@ -153,6 +173,26 @@ three Terraform mutants were run again to read which `run` failed, and each fail
    comment sits above the `- id: ac4` line, outside the folded block, so it stays a comment.
 3. **Downloads in ac1** are covered by construction, not by a test, because `v1-e39-t08` has not
    built the route (the PM's brief: stay out of it). See ac1.
+4. **The dev run went wrong twice through my blocks, and the runbook changed after review because of
+   it.**
+   - (a) 4c put the removal's dry run and `--execute` in one paste. It deleted the dev bucket's
+     parsed-store aggregates for four caselists (105 versions) without the plan being read. That
+     deletion is by design, but my blocks never said to rebuild.
+   - (b) The first rebuild guarded its data directory override by printing it, not refusing. It ran
+     in the window holding the scratch store and published empty aggregates to dev.
+   - Both are repaired: R corrected, all four caselists passing.
+   - The removal runbook's pilot section now has:
+     - P1b, the rebuild after any whole-file removal, in dev or prod, with a block that refuses an
+       override and strips it (`env -u`), and success judged by `Sources` = `Skipped`, above zero;
+     - P3's corrected expectation: a card whose other occurrences survive comes back after the
+       rebuild;
+     - the bucket's name read from `config/profiles/dev.toml`, because the everyday profile may not
+       list buckets.
+   - The report's block 3 reads the cookie with `pbpaste`, stripped of whitespace.
+   - Every removal hand-off is now a dry-run block and a separate execute block (PM ruling
+     2026-10-22).
+   - The PM adds an index shrink guard and a working agreement on ambient overrides and empty-store
+     success checks in the next batch.
 
 ## Decisions and assumptions
 
@@ -666,7 +706,16 @@ and the signed-in reading came from the HAR instead.
 - **4f, the second dry run:** `0 version(s) of 0 key(s) to delete; keeps
   reports/tub/search/a0c928bebd03f8aa/ (2 objects) and the current reports/tub/search/current.json`.
   Every superseded index version is gone from the dev bucket, noncurrent ones included.
-- **Block 5:** BLOCK5_PENDING.
+- **Block 5, the log scan and dev's own index back.** Over the last 12 hours of `debate-dev-tub-app`,
+  `Westfield`, `XY`, `reserve`, `margin`, `Okonkwo`, `testcl26` and `"q="` each matched **0** events,
+  on every page. The audit group's latest records hold only `action`, `actor_role`, `actor_subject`,
+  `cards` or `count`, `format_version` and `time`. They trace the run: `searched` with counts (20,
+  8, 1, and 0 five times while the card was hidden), `card-viewed testcl26/67d6b33d…` at 00:33:35
+  (4b) and again at 01:30:52 after the rebuild brought it back, and earlier a dev student's
+  `searched` and `card-viewed hsld26/…`. The newest local index, `767b9c7c056b80cb`, held **52,059
+  documents** (`hsld26` 13,225, `hspf26` 11,393, `hspolicy26` 21,595, `openev` 5,846, the corrected
+  rebuild's cluster counts), so it was not built over the empty aggregates. It was published, and
+  `republished: 767b9c7c056b80cb`: dev's own index is current again.
 
 ## Follow-up work
 

@@ -32,6 +32,7 @@ regenerates it on `dev` ([`v1-e01-t16`](../plan_specs/v1/e01-repo-foundation/t16
 | [guides/evidence-store-cli.md](guides/evidence-store-cli.md) | Using `debate-research store sync\|ls\|get`: environments, the dry-run default, the production guard, verification and resume |
 | [guides/file-recipes.md](guides/file-recipes.md) | For coaches: writing a file recipe, the YAML that names the cards and headings of an evidence file to build |
 | [guides/parent-email-updates.md](guides/parent-email-updates.md) | Parent email updates: the channel chosen and why, how a parent's address travels, who owns the list, how a coach sends an update and what may not go in one about students |
+| [guides/parsed-store-publish-only.md](guides/parsed-store-publish-only.md) | Publishing the parsed card store without rebuilding it: `caselist parse --publish-only`, when to use it and when to rebuild instead |
 | [guides/search-index.md](guides/search-index.md) | Building and publishing the student search pilot's index with `debate-research tub index build\|publish` |
 | [policies/caselist-data-use.md](policies/caselist-data-use.md) | Data-use policy for OpenCaselist disclosures and OpenEv camp files |
 | [policies/website-publishing.md](policies/website-publishing.md) | What may be published on the public team website: student names and photos, results, branding, accessibility, third parties, donations, removal on request |

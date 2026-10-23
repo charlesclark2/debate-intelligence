@@ -32,7 +32,11 @@ on a full path) and the CSV privacy note under Decisions 6.
 **After the PM review (2026-10-22, accepted with conditions):** condition 1 is done (counts on the
 sheet's first page), condition 3 is done (the spec's `constraints.packages` amended), and condition
 4 is this update. Condition 2, applying the coach's answers and his approval of 1.0.0, is still
-open, so the Goal stays **InProgress**.
+open, so the Goal stays **InProgress**. PM ruling 2026-10-23: the sheet goes to the coach as it is.
+If he chooses two affs, single payer stays the parent aff with the heading alias, and a child aff,
+Medicare for all, carries the tag keywords he supplies, for t02's tag-keyword stage. That is
+within condition 2. Checked in memory against today's model and config test: it validates, with
+the label in sentence case ("Medicare for All" reads to the check as a name).
 
 ## Plan nodes
 

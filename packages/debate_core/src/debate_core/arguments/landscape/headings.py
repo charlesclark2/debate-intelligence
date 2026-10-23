@@ -19,7 +19,8 @@ model, no I/O, the same text every time (`v1-e32-t01-position-taxonomy` ac4).
    round (`Harbor Classic R3`, `Octas v. Sample Squad`) or ends in a tournament word
    (`Invitational`, `Classic`) goes whole, since what is left of it is a tournament or an opponent.
    An answer marker after a position has been read ends the heading: `Midterms DA AT Dome` and
-   `Spending DA - AT: Golden Dome` are blocks of the DA, not answers to it.
+   `Spending DA - AT: Golden Dome` are blocks of the DA, not answers to it. After a word that only
+   names a kind of argument it does not: `Theory---AT: 50 State Fiat Bad` answers that shell.
 4. **Suffixes of each segment**, repeatedly: punctuation, an opponent (`vs Sample Squad`,
    `v. Sample Squad`; a bare `v` is left alone for `Brown v Board`), a round (`R2`, `Round 4`,
    `Octas`, read by :func:`~debate_core.domain.caselist.normalize_round_token`), a round name
@@ -94,6 +95,10 @@ _STRUCTURAL: Final = frozenset(
     {"aff", "neg", "affirmative", "negative", "case", "on", "on case", "off case", "offcase"}
 )
 _OFF_COUNT: Final = re.compile(r"^\d{1,2} off$")
+_CATEGORY_WORDS: Final = frozenset(
+    {"theory", "t", "topicality", "k", "kritik", "da", "disad", "cp", "counterplan", "framework"}
+)
+"""Words that name a kind of argument and no position, so an answer marker after one does not end it."""
 
 
 def normalize_heading(raw: str) -> NormalizedHeading:
@@ -104,7 +109,7 @@ def normalize_heading(raw: str) -> NormalizedHeading:
     for index, part in enumerate(part for part in _SEPARATORS.split(text) if part.strip(_EDGE_PUNCTUATION)):
         segment = part.strip(_EDGE_PUNCTUATION)
         marked = segment.casefold() in _ANSWER_WORDS or _strip_prefixes(segment)[1]
-        if marked and kept:
+        if marked and kept and " ".join(kept) not in _CATEGORY_WORDS:
             break
         if segment.casefold() in _ANSWER_WORDS:
             answer = True

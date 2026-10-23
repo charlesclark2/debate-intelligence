@@ -89,6 +89,12 @@ CASES: list[tuple[str, str, str, bool]] = [
     ("an unspaced em dash as a separator", "OFF—1NC", "", READ),
     ("hyphens around a heading", "---OFF---", "", READ),
     ("on on its own", "ON", "", READ),
+    (
+        "an answer after a bare category word",
+        "Theory---AT: 50 State Fiat Bad",
+        "theory 50 state fiat bad",
+        ANSWER,
+    ),
 ]
 
 KEPT: list[tuple[str, str, str]] = [

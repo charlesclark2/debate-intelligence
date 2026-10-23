@@ -158,9 +158,9 @@ Edit the fields that changed, update `revised`, check it builds, and publish.
   different event. A parent who subscribed loses any reminder they set on the old one, and a parent
   who downloaded the file once and imported it gets a second copy that never goes away. Everything
   else (dates, name, place, status, notes) can change freely: the existing event moves or updates.
-- A tournament that has happened **stays in the file and on the page** until the season ends. The
-  page shows the whole season, past and future, because the site is only as current as its last
-  deploy.
+- A tournament that has happened **comes off the page**: delete its entry at the next edit, as
+  under "Remove a tournament" (Charlie's decision of 2026-10-22). The page shows the rest of the
+  season. How the team did goes in the season's results, not the schedule.
 
 ### Remove a tournament
 

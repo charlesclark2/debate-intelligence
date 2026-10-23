@@ -11,7 +11,7 @@ import {
 } from '@/lib/icalendar'
 import { loadScheduleView } from '@/lib/tournaments'
 
-import { contentWith, editEntry } from './schedule-fixture'
+import { contentWith, editEntry, splitGlenbrooksByEvent } from './schedule-fixture'
 
 /**
  * The calendar file (v1-e37-t02 acceptance criterion 3).
@@ -73,8 +73,8 @@ const event = (id: string) => {
 describe('the calendar parses with an independent parser', () => {
   it('is one VCALENDAR with one event per tournament, nationals included', () => {
     expect(calendar.name).toBe('vcalendar')
-    expect(events).toHaveLength(20)
-    expect(new Set(events.map((entry) => entry.uid)).size).toBe(20)
+    expect(events).toHaveLength(16)
+    expect(new Set(events.map((entry) => entry.uid)).size).toBe(16)
   })
 
   it('names itself for the app that subscribes to it', () => {
@@ -96,9 +96,7 @@ describe('all-day and multi-day dates', () => {
 
   it.each([
     // [id, first day, exclusive end: the day after the last day]
-    ['neenah-2026', '2026-10-10', '2026-10-11'],
-    ['iowa-caucus-2026', '2026-10-23', '2026-10-26'],
-    ['minneapple-2026', '2026-11-07', '2026-11-10'],
+    ['west-bend-2026', '2026-11-07', '2026-11-08'],
     ['badgerland-2026', '2026-11-13', '2026-11-15'],
     ['glenbrooks-2026', '2026-11-21', '2026-11-24'],
     ['blake-2026', '2026-12-19', '2026-12-22'],
@@ -129,7 +127,7 @@ describe('identity: a UID survives an edit to everything else', () => {
           editEntry('glenbrooks-2026', (block) =>
             block.replace('notes: Varsity only.', 'notes: Varsity only. Bring a coat; it is cold.'),
           )(
-            editEntry('neenah-2026', (block) =>
+            editEntry('west-bend-2026', (block) =>
               block.replace('    status: confirmed\n', '    status: confirmed\n    notes: Bus at 6:30 AM.\n'),
             )(source),
           ),
@@ -145,8 +143,8 @@ describe('identity: a UID survives an edit to everything else', () => {
     const glenbrooks = edited.find((entry) => entry.uid === event('glenbrooks-2026').uid)!
     expect(glenbrooks.description).toContain('Bring a coat; it is cold.')
     expect(event('glenbrooks-2026').description).not.toContain('Bring a coat')
-    const neenah = edited.find((entry) => entry.uid === event('neenah-2026').uid)!
-    expect(neenah.description).toContain('Bus at 6:30 AM.')
+    const westBend = edited.find((entry) => entry.uid === event('west-bend-2026').uid)!
+    expect(westBend.description).toContain('Bus at 6:30 AM.')
   })
 
   it('keeps the UID when the dates are corrected', () => {
@@ -234,19 +232,24 @@ describe('what a parent sees in their calendar app', () => {
     expect(event('milwaukee-ncfl-qualifier-2027').status).toBe('TENTATIVE')
     expect(event('whitefish-bay-home-2026').summary).toBe('Conditional: Whitefish Bay home tournament')
     expect(event('whitefish-bay-home-2026').status).toBe('TENTATIVE')
-    expect(event('neenah-2026').summary).toBe('Neenah High School')
-    expect(event('neenah-2026').status).toBe('CONFIRMED')
+    expect(event('west-bend-2026').summary).toBe('West Bend High School')
+    expect(event('west-bend-2026').status).toBe('CONFIRMED')
   })
 
   it('gives a tournament debated from the high school the high school as its place', () => {
-    expect(event('iowa-caucus-2026').location).toBe('Whitefish Bay High School')
-    expect(event('iowa-caucus-2026').description).toContain(
+    expect(event('ronald-reagan-2026').location).toBe('Whitefish Bay High School')
+    expect(event('ronald-reagan-2026').description).toContain(
       'How it is held: Online, debated at Whitefish Bay High School',
     )
   })
 
-  it('gives Glenbrooks both places, and says which event is held where', () => {
-    const glenbrooks = event('glenbrooks-2026')
+  it('gives Glenbrooks, Policy only since 2026-10-22, its one place', () => {
+    expect(event('glenbrooks-2026').location).toBe('Glenview, Illinois')
+  })
+
+  it('gives a tournament split by event both places, and says which event is held where', () => {
+    const split = parse(calendarFrom(contentWith({ 'tournaments.yaml': splitGlenbrooksByEvent }))).events
+    const glenbrooks = split.find((entry) => entry.uid === event('glenbrooks-2026').uid)!
     expect(glenbrooks.location).toBe('Whitefish Bay High School; Glenview, Illinois')
     expect(glenbrooks.description).toContain(
       'Public Forum, Lincoln-Douglas: Online, debated at Whitefish Bay High School. Overnight: No.',
@@ -255,11 +258,11 @@ describe('what a parent sees in their calendar app', () => {
   })
 
   it('tells both entries of an overlap about the other', () => {
-    expect(event('ronald-reagan-2026').description).toContain(
-      'Same dates as: Iowa Caucus (Friday, October 23 to Sunday, October 25, 2026)',
+    expect(event('brookfield-east-2026').description).toContain(
+      'Same dates as: Glenbrooks (Saturday, November 21 to Monday, November 23, 2026)',
     )
-    expect(event('iowa-caucus-2026').description).toContain(
-      'Same dates as: Ronald Reagan High School (Saturday, October 24, 2026)',
+    expect(event('glenbrooks-2026').description).toContain(
+      'Same dates as: Brookfield East High School (Saturday, November 21, 2026)',
     )
   })
 
@@ -272,8 +275,8 @@ describe('what a parent sees in their calendar app', () => {
 describe('a rebuild of the same schedule is the same file', () => {
   it('stamps every event with the revised date, not the build time', () => {
     const stamps = [...shipped.matchAll(/^DTSTAMP:(.*)\r$/gm)].map((match) => match[1])
-    expect(stamps).toHaveLength(20)
-    expect(new Set(stamps)).toEqual(new Set(['20261001T000000Z']))
+    expect(stamps).toHaveLength(16)
+    expect(new Set(stamps)).toEqual(new Set(['20261022T000000Z']))
   })
 
   it('is byte for byte identical when built twice', () => {

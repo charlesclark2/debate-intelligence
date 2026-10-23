@@ -11,6 +11,7 @@ import { SCHEDULE_SLUG, buildNavigation, loadPage, loadSiteSettings } from '@/li
 import { loadScheduleContent, loadScheduleView } from '@/lib/tournaments'
 
 import { describeViolations, findAccessibilityViolations } from './axe'
+import { siteRootWith, splitGlenbrooksByEvent } from './schedule-fixture'
 
 /**
  * The /schedule/ page (v1-e37-t02 acceptance criterion 2), rendered through the real frame.
@@ -62,13 +63,9 @@ describe('the whole season, in date order, with nationals apart', () => {
     renderSchedule()
     const season = document.getElementById('season') as HTMLElement
     expect([...season.querySelectorAll('.schedule-entry')].map((element) => element.id)).toEqual([
-      'neenah-2026',
-      'fort-atkinson-2026',
-      'iowa-caucus-2026',
       'ronald-reagan-2026',
       'west-bend-online-2026',
       'west-bend-2026',
-      'minneapple-2026',
       'badgerland-2026',
       'brookfield-east-2026',
       'glenbrooks-2026',
@@ -99,7 +96,7 @@ describe('the whole season, in date order, with nationals apart', () => {
     renderSchedule()
     const list = document.querySelector('#season .schedule-list')
     expect(list?.tagName).toBe('OL')
-    expect(list?.querySelectorAll(':scope > li')).toHaveLength(18)
+    expect(list?.querySelectorAll(':scope > li')).toHaveLength(14)
   })
 
   it('shows a tournament that has already happened exactly as one that has not', () => {
@@ -107,8 +104,8 @@ describe('the whole season, in date order, with nationals apart', () => {
     vi.setSystemTime(new Date('2027-07-01T12:00:00Z'))
     try {
       renderSchedule()
-      expect(entry('neenah-2026').textContent).toContain('Saturday, October 10, 2026')
-      expect(document.querySelectorAll('.schedule-entry')).toHaveLength(20)
+      expect(entry('ronald-reagan-2026').textContent).toContain('Saturday, October 24, 2026')
+      expect(document.querySelectorAll('.schedule-entry')).toHaveLength(16)
     } finally {
       vi.useRealTimers()
     }
@@ -118,24 +115,24 @@ describe('the whole season, in date order, with nationals apart', () => {
 describe('each entry', () => {
   it('shows its dates, name, place, how it is held, events, overnight and status', () => {
     renderSchedule()
-    const minneapple = entry('minneapple-2026')
-    expect(within(minneapple).getByRole('heading', { level: 3 }).textContent).toBe('MinneApple')
-    expect(minneapple.querySelector('.schedule-entry__dates')?.textContent).toBe(
-      'Saturday, November 7 to Monday, November 9, 2026',
+    const blake = entry('blake-2026')
+    expect(within(blake).getByRole('heading', { level: 3 }).textContent).toBe('Blake')
+    expect(blake.querySelector('.schedule-entry__dates')?.textContent).toBe(
+      'Saturday, December 19 to Monday, December 21, 2026',
     )
-    expect(fact('minneapple-2026', content.labels.where)).toBe('Apple Valley High School, Minnesota')
-    expect(fact('minneapple-2026', content.labels.held)).toBe('In person')
-    expect(fact('minneapple-2026', content.labels.events)).toBe('Public Forum, Lincoln-Douglas')
-    expect(fact('minneapple-2026', content.labels.overnight)).toBe('Yes')
-    expect(fact('minneapple-2026', content.labels.status)).toBe('Confirmed')
-    expect(fact('minneapple-2026', content.labels.notes)).toBe('Varsity only.')
+    expect(fact('blake-2026', content.labels.where)).toBe('Minneapolis, Minnesota')
+    expect(fact('blake-2026', content.labels.held)).toBe('In person')
+    expect(fact('blake-2026', content.labels.events)).toBe('Public Forum, Lincoln-Douglas, Policy debate')
+    expect(fact('blake-2026', content.labels.overnight)).toBe('Yes')
+    expect(fact('blake-2026', content.labels.status)).toBe('Confirmed')
+    expect(fact('blake-2026', content.labels.notes)).toBe('Varsity only.')
   })
 
   it('shows a sign-up-by date where one is set, and no empty row where none is', () => {
     const view = loadScheduleView()
-    const neenah = view.seasonTournaments.find((tournament) => tournament.id === 'neenah-2026')!
-    expect(view.facts(neenah).map((row) => row.key)).not.toContain('signUpBy')
-    const facts = view.facts({ ...neenah, signUpBy: '2026-10-03' })
+    const westBend = view.seasonTournaments.find((tournament) => tournament.id === 'west-bend-2026')!
+    expect(view.facts(westBend).map((row) => row.key)).not.toContain('signUpBy')
+    const facts = view.facts({ ...westBend, signUpBy: '2026-10-03' })
     expect(facts.find((row) => row.key === 'signUpBy')).toEqual({
       key: 'signUpBy',
       label: content.labels.signUpBy,
@@ -145,15 +142,24 @@ describe('each entry', () => {
 
   it('says a tournament debated online is debated at the high school, never just "online"', () => {
     renderSchedule()
-    for (const id of ['iowa-caucus-2026', 'west-bend-online-2026']) {
+    for (const id of ['ronald-reagan-2026', 'west-bend-online-2026']) {
       expect(fact(id, content.labels.held)).toBe('Online, debated at Whitefish Bay High School')
     }
     const heldValues = [...document.querySelectorAll('.schedule-entry dd')].map((dd) => dd.textContent?.trim())
     expect(heldValues).not.toContain('Online')
   })
 
-  it('says how each event at Glenbrooks is held, because they differ', () => {
+  it('shows Glenbrooks, Policy only since 2026-10-22, as one arrangement', () => {
     renderSchedule()
+    expect(fact('glenbrooks-2026', content.labels.events)).toBe('Policy debate')
+    expect(fact('glenbrooks-2026', content.labels.held)).toBe('In person')
+    expect(fact('glenbrooks-2026', content.labels.overnight)).toBe('Yes')
+  })
+
+  it('says how each event is held when a tournament is split by event, because they differ', () => {
+    vi.spyOn(process, 'cwd').mockReturnValue(siteRootWith({ 'tournaments.yaml': splitGlenbrooksByEvent }))
+    renderSchedule()
+    vi.restoreAllMocks()
     expect(fact('glenbrooks-2026', content.labels.events)).toBe(
       'Public Forum, Lincoln-Douglas, Policy debate',
     )
@@ -183,10 +189,6 @@ describe('each entry', () => {
 
 describe('tournaments on the same dates', () => {
   const pairs: Array<[string, string, string]> = [
-    ['iowa-caucus-2026', 'ronald-reagan-2026', 'Ronald Reagan High School'],
-    ['ronald-reagan-2026', 'iowa-caucus-2026', 'Iowa Caucus'],
-    ['west-bend-2026', 'minneapple-2026', 'MinneApple'],
-    ['minneapple-2026', 'west-bend-2026', 'West Bend High School'],
     ['brookfield-east-2026', 'glenbrooks-2026', 'Glenbrooks'],
     ['glenbrooks-2026', 'brookfield-east-2026', 'Brookfield East High School'],
     ['southern-wisconsin-nsda-qualifier-2027', 'last-chance-qualifier-2027', 'Last Chance Qualifier'],
@@ -203,7 +205,7 @@ describe('tournaments on the same dates', () => {
     expect(entry(id).classList.contains('schedule-entry--overlap')).toBe(true)
   })
 
-  it('marks exactly those eight entries and no others', () => {
+  it('marks exactly those four entries and no others', () => {
     renderSchedule()
     const marked = [...document.querySelectorAll('.schedule-entry')]
       .filter((element) => element.querySelector('.schedule-entry__overlap'))
@@ -230,7 +232,7 @@ describe('subscribing', () => {
   it('says when the schedule was last updated', () => {
     renderSchedule()
     expect(document.querySelector('.schedule-revised')?.textContent).toBe(
-      `${content.labels.revised}: Thursday, October 1, 2026`,
+      `${content.labels.revised}: Thursday, October 22, 2026`,
     )
   })
 })

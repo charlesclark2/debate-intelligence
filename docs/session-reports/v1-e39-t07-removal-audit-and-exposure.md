@@ -657,7 +657,10 @@ and the signed-in reading came from the HAR instead.
   `reports/tub/search/current.json`: **9 versions of 7 keys**. It keeps
   `reports/tub/search/a0c928bebd03f8aa/ (2 objects)` and the current `current.json`. Nothing outside
   superseded index directories and the pointer was named.
-- **4f, the delete:** DELETE_RESULT_PENDING.
+- **4f, the delete.** `current.json` still named `a0c928bebd03f8aa`, so it ran: one request file,
+  `0` errors, then `pruned; kept reports/tub/search/a0c928bebd03f8aa/ and the current
+  reports/tub/search/current.json`. The 9 versions the dry run listed are gone.
+- **4f, the second dry run:** RECHECK_PENDING.
 
 ## Follow-up work
 

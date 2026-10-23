@@ -18,7 +18,7 @@ import asyncio
 import hashlib
 import os
 import shutil
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Collection, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -107,11 +107,13 @@ def sha(name: str) -> str:
 # ------------------------------------------------------------------------------------------------
 
 
-def _card(source: str, text: str, store: str) -> ParsedCard:
+def _card(
+    source: str, text: str, store: str, *, cite: str = "Okonkwo 26, Invented Journal of Growth"
+) -> ParsedCard:
     camp = store == OPENEV_STORE
     return ParsedCard(
         tag="Invented growth claim",
-        full_cite="Okonkwo 26, Invented Journal of Growth",
+        full_cite=cite,
         evidence_text=text,
         completeness=CardCompleteness.FULL,
         match_source=StyleMatchSource.HEURISTIC,
@@ -138,8 +140,11 @@ def write_store(
     *,
     version: str = PARSER,
     fingerprint: str = FINGERPRINT_VERSION,
+    uncited: Collection[str] = (),
 ) -> None:
     """A source of one card for each of `texts` in `store`'s directory `version`, and one occurrence row each.
+
+    A card whose text is in `uncited` has no cite, so the build leaves it out as no card (`v1-e39-t12`).
 
     Called again with other texts, it writes the sources it has not written and replaces the rows:
     a store's table changes, its recorded sources do not.
@@ -149,7 +154,9 @@ def write_store(
     rows: list[OccurrenceRecord] = []
     for text in texts:
         source = sha(f"{store} {text}")
-        card = _card(source, text, store)
+        card = _card(
+            source, text, store, cite="" if text in uncited else "Okonkwo 26, Invented Journal of Growth"
+        )
         entry = SourceEntry(
             caselist=store,
             snapshot=snapshot,
@@ -641,6 +648,45 @@ def test_index_stage_skips_a_store_whose_rows_carry_another_fingerprint_version(
     assert f"the newest index on this machine stays {first.counts.index_id}" in report.reason
     assert world.builder.builds == 1
     assert published_with(world, first) == first.counts.index_id
+
+
+# ------------------------------------------------------------------------------------------------
+# What a build left out as no card (v1-e39-t12): in the run's counts when it built, not when it kept
+# ------------------------------------------------------------------------------------------------
+
+
+def test_index_stage_records_what_its_build_left_out_as_no_card(world: World) -> None:
+    analytic = "Invented analytic line"
+    write_store(
+        world.parsed,
+        CASELIST,
+        ["Invented growth evidence", "Invented trade evidence", analytic],
+        uncited={analytic},
+    )
+
+    report = world.refresh()
+
+    assert report.counts is not None
+    assert (report.counts.built, report.counts.documents) == (True, 3)
+    expected = {
+        CASELIST: {"cite_only": 0, "no_cite_few_words": 1},
+        OPENEV_STORE: {"cite_only": 0, "no_cite_few_words": 0},
+    }
+    assert report.counts.not_cards_by_store == expected
+    assert report.counts.as_json()["not_cards_by_store"] == expected
+    assert "1 left out as no card (0 cite only, 1 with no cite and under 25 words)" in report.reason
+
+
+def test_index_stage_that_keeps_an_index_built_before_records_no_card_count(world: World) -> None:
+    world.refresh()
+
+    again = world.refresh()
+
+    assert again.counts is not None
+    assert again.counts.built is False
+    assert again.counts.not_cards_by_store is None, "the count is in the build's result, not the manifest"
+    assert again.counts.as_json()["not_cards_by_store"] is None
+    assert "left out as no card" not in again.reason
 
 
 # ------------------------------------------------------------------------------------------------

@@ -1577,6 +1577,11 @@ class SearchIndexStageCounts:
     gzip_bytes_growth: int | None = None
     """Gzip object bytes, likewise."""
 
+    not_cards_by_store: Mapping[str, Mapping[str, int]] | None = None
+    """Documents the build left out as no card, by store and then by why (`cite_only`,
+    `no_cite_few_words`), when the stage built this index (`v1-e39-t12`). `None` when it kept one
+    already built: the count is in the build's result, not in the manifest (PM ruling 2026-10-22)."""
+
     def as_json(self) -> dict[str, object]:
         return {
             "index_id": self.index_id,
@@ -1593,6 +1598,9 @@ class SearchIndexStageCounts:
             "documents_growth": self.documents_growth,
             "sqlite_bytes_growth": self.sqlite_bytes_growth,
             "gzip_bytes_growth": self.gzip_bytes_growth,
+            "not_cards_by_store": None
+            if self.not_cards_by_store is None
+            else {store: dict(counts) for store, counts in self.not_cards_by_store.items()},
         }
 
 

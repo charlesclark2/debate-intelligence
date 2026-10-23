@@ -14,6 +14,22 @@ whole team. It never holds a name, a username, a quotation with an identity, or 
 | 2026-10-22 | dev | The coach gave **2** debaters dev accounts. Both signed in and searched on their own school Chromebooks, on the school's network, without help. This is the first sign that the school's web filter lets the pilot's hosts through, for dev's hostnames only. Their dev accounts are not carried to prod. | PM, from the coach's report |
 | 2026-10-22 | dev | The weekly agent run `20261022T052044Z` published index `767b9c7c056b80cb`: 52,059 documents, 839,438,336 SQLite bytes, 314,054,035 gzip bytes. | PM |
 
+## The card-only rule (`v1-e39-t12`)
+
+The dev index's documents before and after the first index built with the card-only rule (CITE_ONLY,
+or no cite and fewer than 25 words: [the rule](search-index.md#only-real-cards)), published by hand
+as [the scheduled sync runbook](../runbooks/caselist-scheduled-sync.md#the-first-index-with-the-card-only-rule-v1-e39-t12-once)
+says. The expected row is from the counts over the 2026-10-22 index; the measured rows are the
+operator's (`v1-e39-t12` ac3).
+
+| | Index | Date | hsld26 | hspf26 | hspolicy26 | openev | All |
+|---|---|---|---:|---:|---:|---:|---:|
+| Counted, before the rule | `767b9c7c056b80cb` | 2026-10-22 | 13,225 | 11,393 | 21,595 | 5,846 | 52,059 |
+| Expected after it | | | 12,714 | 11,000 | 20,961 | 5,759 | 50,434 |
+| Before, measured | | | | | | | |
+| After, measured | | | | | | | |
+| Left out as no card, measured | | | | | | | |
+
 ## The promotion to prod
 
 Each item of [the runbook's promotion list](../runbooks/evidence-search.md#promoting-the-pilot-to-prod),

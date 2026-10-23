@@ -471,6 +471,9 @@ class SearchIndexCounts(BaseModel):
     documents_growth: int | None = None
     sqlite_bytes_growth: int | None = None
     gzip_bytes_growth: int | None = None
+    not_cards_by_store: dict[str, dict[str, int]] | None = None
+    """Documents the build left out as no card, by store and why, when the stage built (`v1-e39-t12`).
+    An added key, so details a build from before it wrote read as none recorded."""
 
 
 class SyncRunDetails(BaseModel):

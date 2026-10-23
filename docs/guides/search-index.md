@@ -29,6 +29,11 @@ It writes one directory, `<data_dir>/tub-index/<index id>/`, and prints the inde
 and the sizes. `--out` puts it somewhere else; `--provenance-limit` (default 5) is how many
 occurrences of each card keep who disclosed them. `--json` prints the whole manifest.
 
+It leaves out every entry that is no card: a cite with no text (CITE_ONLY), or no cite and fewer
+than 25 words of text (`v1-e39-t12`, [the rule](../data/search-index.md#only-real-cards)). The
+table's caption says how many, as `N left out as no card (...)`, and `--json` gives them by store
+in `data.not_cards_by_store`; the manifest does not hold them.
+
 A store it cannot read as it stands stops the build with `SEARCH_INDEX_STORE_NOT_READY` and says
 which and why, and nothing is written:
 

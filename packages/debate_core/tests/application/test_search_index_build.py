@@ -41,9 +41,16 @@ from debate_core.application.ports.suppression import (
     disclosure_digest,
 )
 from debate_core.application.search_index_build import (
+    CARD_ONLY_RULE,
+    CardOnlyRule,
+    NotACard,
+    NotCards,
     SearchIndexBuildService,
     SearchIndexStoreNotReady,
     cite_without_cutter_mark,
+    not_a_card,
+    not_cards_by_store,
+    not_cards_sentence,
 )
 from debate_core.domain.card_occurrence import ClusterMembership
 from debate_core.domain.caselist import (
@@ -383,13 +390,14 @@ class Ports:
 
     def build(self, out: Path, stores: Sequence[str] = (CASELIST,), **options: Any) -> Built:
         built = asyncio.run(self.service.build(stores, out, **options))
-        return Built(built.directory, built.manifest)
+        return Built(built.directory, built.manifest, built.not_cards)
 
 
 @dataclass(frozen=True)
 class Built:
     directory: Path
     manifest: SearchIndexManifest
+    not_cards: NotCards = field(default_factory=lambda: {})
 
     @property
     def sqlite(self) -> Path:
@@ -1062,3 +1070,228 @@ def test_search_index_refuses_sources_read_for_other_stores(tmp_path: Path) -> N
 
     with pytest.raises(ValueError, match="read for other stores"):
         asyncio.run(ports.service.build((CASELIST, CAMP), tmp_path / "out", sources=sources))
+
+
+# ------------------------------------------------------------------------------------------------
+# Only real cards (v1-e39-t12, PM ruling 2026-10-22): rule C, judged on the representative
+# ------------------------------------------------------------------------------------------------
+
+
+def words(count: int) -> str:
+    """`count` whitespace-separated invented words, the separators mixed: a space, a tab, a newline."""
+    separators = (" ", "\t", "\n")
+    return "".join(f"{separators[number % 3] if number else ''}invented{number}" for number in range(count))
+
+
+def test_search_index_card_only_rule_is_cite_only_or_no_cite_under_25_words() -> None:
+    rule = CardOnlyRule(completeness=CardCompleteness.CITE_ONLY, words_without_cite=25)
+    assert rule == CARD_ONLY_RULE
+
+
+@pytest.mark.parametrize(
+    ("text", "cite", "completeness", "expected"),
+    [
+        pytest.param("", "Okonkwo 26", CardCompleteness.CITE_ONLY, NotACard.CITE_ONLY, id="cite-only"),
+        pytest.param("", "", CardCompleteness.CITE_ONLY, NotACard.CITE_ONLY, id="cite-only-no-cite"),
+        pytest.param(words(3), "Okonkwo 26", CardCompleteness.FULL, None, id="cited-3-words"),
+        pytest.param(words(1), "", CardCompleteness.FULL, NotACard.NO_CITE_FEW_WORDS, id="no-cite-1-word"),
+        pytest.param(words(24), "", CardCompleteness.FULL, NotACard.NO_CITE_FEW_WORDS, id="no-cite-24-words"),
+        pytest.param(words(25), "", CardCompleteness.FULL, None, id="no-cite-25-words"),
+        pytest.param(words(26), "", CardCompleteness.FULL, None, id="no-cite-26-words"),
+        pytest.param(
+            words(24), " \t\n", CardCompleteness.FULL, NotACard.NO_CITE_FEW_WORDS, id="blank-cite-24-words"
+        ),
+        pytest.param(words(25), " \t\n", CardCompleteness.FULL, None, id="blank-cite-25-words"),
+        pytest.param(
+            words(3), "", CardCompleteness.ABBREVIATED, NotACard.NO_CITE_FEW_WORDS, id="abbreviated-no-cite"
+        ),
+        pytest.param(words(3), "Okonkwo 26", CardCompleteness.ABBREVIATED, None, id="abbreviated-cited"),
+        pytest.param(
+            f"  {words(24)}  \n", "", CardCompleteness.FULL, NotACard.NO_CITE_FEW_WORDS, id="padded-24-words"
+        ),
+        pytest.param(
+            "invented-words-joined-by-hyphens count once " * 4,
+            "",
+            CardCompleteness.FULL,
+            NotACard.NO_CITE_FEW_WORDS,
+            id="hyphenated-12-words",
+        ),
+    ],
+)
+def test_search_index_not_a_card(
+    text: str, cite: str, completeness: CardCompleteness, expected: NotACard | None
+) -> None:
+    card = parsed_card(S_ONE, 0, text, cite=cite, completeness=completeness)
+    assert not_a_card(card) is expected
+
+
+def test_search_index_words_counts_whitespace_separated_words() -> None:
+    assert [len(words(count).split()) for count in (1, 24, 25)] == [1, 24, 25]
+    assert "\t" in words(25) and "\n" in words(25) and " " in words(25)
+
+
+(
+    CITED_SHORT,
+    CITE_ONLY_ALONE,
+    UNCITED_24,
+    UNCITED_25,
+    BLANK_CITE,
+    UNCITED_REPRESENTATIVE,
+    CITED_REPRESENTATIVE,
+) = (
+    sha("cited short"),
+    sha("cite only alone"),
+    sha("uncited 24 words"),
+    sha("uncited 25 words"),
+    sha("blank cite"),
+    sha("uncited representative"),
+    sha("cited representative"),
+)
+CAMP_CITE_ONLY, CAMP_FULL = sha("camp cite only"), sha("camp full")
+LEFT_OUT_WORDS: Final = (
+    "quillfeather",
+    "zanzibarite",
+    "thistledown",
+    "brackenholt",
+    "fernwhistle",
+)
+"""Invented words that only the representatives left out carry: a query for one finds nothing. (A
+non-representative's text is never stored, so a word only it carries would prove nothing here.)"""
+
+
+def card_only_store() -> Store:
+    """Each shape the rule judges, one cluster each, and two clusters of mixed members."""
+    store = Store()
+    # Kept: a cite, however few its words.
+    store.occurs(store.card(S_ONE, 0, CITED_SHORT, "Invented growth evidence"))
+    # Left out, cite only: a tag and a cite with no text.
+    store.occurs(
+        store.card(
+            S_ONE,
+            10,
+            CITE_ONLY_ALONE,
+            "",
+            cite="Quillfeather 25, Invented Review",
+            completeness=CardCompleteness.CITE_ONLY,
+        )
+    )
+    # Left out, no cite and 24 words; kept, no cite and 25.
+    store.occurs(store.card(S_ONE, 20, UNCITED_24, f"zanzibarite {words(23)}", cite=""))
+    store.occurs(store.card(S_ONE, 30, UNCITED_25, words(25), cite=""))
+    # Left out: a cite of nothing but whitespace is no cite.
+    store.occurs(store.card(S_ONE, 40, BLANK_CITE, "Invented thistledown evidence", cite=" \t "))
+    # Left out, judged on the representative: the attributed member has no cite and leads the order,
+    # so the cluster goes, its cited, unattributed sibling with it.
+    uncited = store.card(S_TWO, 0, UNCITED_REPRESENTATIVE, "Invented brackenholt claim", cite="")
+    cited = store.card(S_THREE, 0, UNCITED_REPRESENTATIVE, "Invented marrowvale claim with a cite")
+    store.occurs(uncited, disclosed_by=(SCHOOL, TEAM))
+    store.occurs(cited)
+    # Kept: a cited FULL member leads a cluster that also holds a CITE_ONLY member, which ranks last.
+    full = store.card(S_TWO, 10, CITED_REPRESENTATIVE, "Invented deterrence evidence")
+    cite_only = store.card(
+        S_THREE, 10, CITED_REPRESENTATIVE, "", cite="Adeyemi 25", completeness=CardCompleteness.CITE_ONLY
+    )
+    store.occurs(full)
+    store.occurs(cite_only, disclosed_by=(OTHER_SCHOOL, OTHER_TEAM))
+    # A camp file: one cite-only card left out, one card kept.
+    camp_only = store.card(
+        S_FOUR,
+        0,
+        CAMP_CITE_ONLY,
+        "",
+        cite="Fernwhistle 24",
+        completeness=CardCompleteness.CITE_ONLY,
+        camp="Cascade Institute",
+    )
+    camp_full = store.card(S_FOUR, 10, CAMP_FULL, "Invented camp evidence", camp="Cascade Institute")
+    store.released(camp_only, "2026-policy", recorded=True)
+    store.released(camp_full, "2026-policy", recorded=True)
+    return store
+
+
+#: Written by hand from :func:`card_only_store`: the clusters kept, by store.
+CARD_ONLY_KEPT: Final = {
+    CASELIST: {CITED_SHORT, UNCITED_25, CITED_REPRESENTATIVE},
+    CAMP: {CAMP_FULL},
+}
+#: And the clusters left out, by store and why.
+CARD_ONLY_NOT_CARDS: Final = {
+    CASELIST: {"cite_only": 1, "no_cite_few_words": 3},
+    CAMP: {"cite_only": 1, "no_cite_few_words": 0},
+}
+
+
+@pytest.fixture
+def card_only(tmp_path: Path) -> Built:
+    return card_only_store().service(tmp_path / "data").build(tmp_path / "out", stores=(CASELIST, CAMP))
+
+
+def test_search_index_leaves_out_every_cluster_whose_representative_is_no_card(card_only: Built) -> None:
+    kept = card_only.query("SELECT caselist, cluster_id FROM documents")
+    assert sorted(kept) == sorted(
+        (store, cluster) for store, clusters in CARD_ONLY_KEPT.items() for cluster in clusters
+    )
+
+
+def test_search_index_numbers_the_documents_kept_from_1_in_caselist_and_cluster_order(
+    card_only: Built,
+) -> None:
+    numbered = card_only.query("SELECT doc_id, caselist, cluster_id FROM documents ORDER BY doc_id")
+    in_order = sorted((store, cluster) for store, clusters in CARD_ONLY_KEPT.items() for cluster in clusters)
+    assert numbered == [(number, *key) for number, key in enumerate(in_order, start=1)]
+    assert card_only.query("SELECT DISTINCT doc_id FROM occurrences ORDER BY doc_id") == [
+        (number,) for number in range(1, len(in_order) + 1)
+    ]
+
+
+def test_search_index_card_only_counts_by_store_and_why(card_only: Built) -> None:
+    assert not_cards_by_store(card_only.not_cards) == CARD_ONLY_NOT_CARDS
+
+
+def test_search_index_manifest_counts_only_the_documents_kept(card_only: Built) -> None:
+    counts = card_only.manifest.counts
+    assert (counts.documents, counts.documents_by_store) == (4, {CASELIST: 3, CAMP: 1})
+    # Kept: cited short 1, uncited 25 words 1, cited representative 2, camp 1.
+    assert counts.occurrences == 5
+    assert card_only.query("SELECT count(*) FROM occurrences") == [(5,)]
+    # Read: 9 caselist rows and 2 camp rows; none suppressed, no cluster emptied.
+    assert (counts.occurrence_rows_read, counts.suppressed_occurrences, counts.clusters_left_out) == (
+        11,
+        0,
+        0,
+    )
+
+
+@pytest.mark.parametrize("word", LEFT_OUT_WORDS)
+def test_search_index_card_left_out_matches_nothing(card_only: Built, word: str) -> None:
+    assert card_only.matches(word) == 0
+
+
+def test_search_index_card_kept_beside_one_left_out_still_matches(card_only: Built) -> None:
+    assert card_only.matches("deterrence") == 1
+    assert card_only.matches("invented24") == 1, "the uncited card of exactly 25 words"
+
+
+def test_search_index_card_only_store_gives_identical_bytes_under_shuffles(tmp_path: Path) -> None:
+    built = [
+        card_only_store()
+        .service(tmp_path / f"data-{seed}", seed=seed)
+        .build(tmp_path / f"out-{seed}", stores=(CASELIST, CAMP))
+        for seed in (None, 1, 2)
+    ]
+    assert len({one.manifest.index_id for one in built}) == 1
+    assert all(not_cards_by_store(one.not_cards) == CARD_ONLY_NOT_CARDS for one in built)
+
+
+def test_search_index_with_no_card_left_out_counts_zeros_for_every_store(standard: Built) -> None:
+    assert not_cards_by_store(standard.not_cards) == {CASELIST: {"cite_only": 0, "no_cite_few_words": 0}}
+
+
+def test_search_index_not_cards_sentence() -> None:
+    not_cards = {
+        CASELIST: {NotACard.CITE_ONLY: 1_200, NotACard.NO_CITE_FEW_WORDS: 3},
+        CAMP: {NotACard.CITE_ONLY: 2, NotACard.NO_CITE_FEW_WORDS: 0},
+    }
+    assert not_cards_sentence(not_cards) == (
+        "1,205 left out as no card (1,202 cite only, 3 with no cite and under 25 words)"
+    )

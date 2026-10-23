@@ -85,9 +85,12 @@ from debate_core.application.caselist_sync import (
 from debate_core.application.errors import StoreCredentialsExpired, StoreError
 from debate_core.application.ports.evidence_store import EvidenceObjectStore
 from debate_core.application.search_index_build import (
+    NotCards,
     SearchIndexBuildService,
     SearchIndexSources,
     SearchIndexStoreVersionMismatch,
+    not_cards_by_store,
+    not_cards_sentence,
 )
 from debate_core.application.search_index_publish import (
     ALLOW_SHRINK_FLAG,
@@ -146,6 +149,9 @@ class LocalSearchIndex:
 
     directory: Path
     manifest: SearchIndexManifest
+    not_cards: NotCards | None = None
+    """What its build left out as no card, for an index this run built; `None` for one read back from
+    its directory, since the count is not in the manifest (`v1-e39-t12`, PM ruling 2026-10-22)."""
 
     @property
     def index_id(self) -> str:
@@ -310,6 +316,7 @@ def _counts(
         gzip_bytes_growth=manifest.gzip_object.bytes - previous.gzip_object.bytes
         if previous is not None
         else None,
+        not_cards_by_store=not_cards_by_store(index.not_cards) if index.not_cards is not None else None,
     )
 
 
@@ -458,11 +465,13 @@ class SearchIndexRefresh:
                 return self._failed(
                     f"the index was not built; {_locally(newest)}", failed, newest, login_only
                 )
-            current = LocalSearchIndex(built.directory, built.manifest)
+            current = LocalSearchIndex(built.directory, built.manifest, built.not_cards)
             seen.built = current
         built_now = current is not newest
         said = f"built {current.index_id}" if built_now else f"unchanged since {current.index_id}"
         said += f" ({_size_sentence(_counts(current, built=built_now, published=False))})"
+        if current.not_cards is not None:
+            said += f"; {not_cards_sentence(current.not_cards)}"
         if local_only is not None:
             said += f"; built from this machine's copy of the suppression list alone: {local_only}"
 

@@ -43,6 +43,7 @@ spec:
       description: >-
         Tallies of index documents by cite present or absent, text word-count band and tag
         present or absent, per caselist, counts only, sent to the PM before any rule.
+    # PM ruling 2026-10-22: rule C (CITE_ONLY, or no cite and fewer than 25 words, judged on the representative); the expected exclusion is 1,625 of 52,059 documents, at most 3.9% of a caselist.
     - id: ac2
       description: >-
         The ruled rule leaves the excluded documents out of the index build, by synthetic
@@ -53,7 +54,7 @@ spec:
         The dev index's document count before and after is recorded in
         docs/data/evidence-search-pilot.md (operator).
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

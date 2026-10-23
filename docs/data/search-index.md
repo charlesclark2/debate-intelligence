@@ -43,6 +43,42 @@ stored fields alone:
 The representative's tag, cite, text and formatting are the document's. They come from its source's
 document record (`DocumentRecord.to_parsed_document`); the occurrence table carries no tag or cite.
 
+### Only real cards
+
+A cluster whose representative is no card is left out, with all its occurrences (`v1-e39-t12`, PM
+ruling 2026-10-22, rule C). Both thresholds are one constant, `CARD_ONLY_RULE` in
+`debate_core.application.search_index_build`:
+
+| A representative is no card when | Reason recorded |
+|---|---|
+| Its completeness is CITE_ONLY: a tag and a cite with no evidence text | `cite_only` |
+| Its full cite is empty or only whitespace, and its evidence text has fewer than **25** words, counted as whitespace-separated words (`str.split()`) | `no_cite_few_words` |
+
+It is judged on the representative alone. For CITE_ONLY that is every member of the cluster, since
+completeness leads the order above. For a card with no cite, another member may have one; reading
+every member's card would change the representative order, so they are not read. The parser, the
+parsed store and every fingerprint are untouched: this is the build's rule, and a rebuild with
+another rule needs no re-parse.
+
+The counts that led to it, over the dev index `767b9c7c056b80cb` (52,059 documents, 2026-10-22), are
+in the [`v1-e39-t12` session report](../session-reports/v1-e39-t12-card-only-results.md#the-counts):
+1,291 CITE_ONLY and 334 with no cite and under 25 words, 1,625 in all, at most 3.86% of a caselist.
+
+**Where the count is.** What a build left out, by store and reason, is in its result:
+`tub index build`'s table caption (`N left out as no card (A cite only, B with no cite and under
+25 words)`) and its `--json` `data.not_cards_by_store`, and, for a weekly run that built, the stage's
+reason and the run summary's `search_index.not_cards_by_store`. It is **not** in the manifest: the
+deployed function reads the manifest with `extra="forbid"`, so a new field would make it refuse the
+index (PM ruling 2026-10-22). A run that kept an index already built records `null`, and a weekly run
+that finds the stores unchanged keeps the newest index whatever rule built it.
+
+**What the second read costs.** The rule needs the card, which only the document record holds, so the
+build reads the representatives' sources twice: once to judge each card, then to write the documents
+kept, numbered among themselves. Timed read-only on the operator's Mac on 2026-10-22, one pass took
+4.4 s for `openev` (5,846 documents, 95 sources) and 24.3 s for `hspf26` (11,393 documents, 2,133
+sources), about 2.1 ms a document, so roughly 100 s more for the whole dev store's 52,059. The full
+build is not re-timed here.
+
 ## The schema, format version 1
 
 `PRAGMA user_version` is the format version, and `PRAGMA application_id` is `0x54554253`
@@ -61,7 +97,7 @@ journal and finishes with `VACUUM`, so it has no free pages.
 
 | Column | Type | Searchable | What it holds |
 |---|---|---|---|
-| `doc_id` | integer key | | The document's rank in (caselist, cluster id) order, from 1 |
+| `doc_id` | integer key | | The document's rank in (caselist, cluster id) order among the documents kept, from 1 |
 | `caselist` | text | | Caselist slug, or `openev` |
 | `cluster_id` | text | | The cluster id under `card-fingerprint-v4`. Unique with `caselist` |
 | `event` | text | | `LD`, `POLICY` or `PF`: from the caselist slug, or the camp release |

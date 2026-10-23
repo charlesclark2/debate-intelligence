@@ -61,7 +61,7 @@ v2.3's extension work.
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 47 | 43 | 236 |
-| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 102 | 81 | 486 |
+| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 103 | 81 | 487 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 22 | 8 | 191 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 13 | 2 | 108 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 16 | 7 | 98 |
@@ -172,6 +172,7 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [The retirement rule reaches empty objects, the tagging grant names its one tag, and the module's failures print](plan_specs/v1/e29-cloud-evidence-store/t10-retention-rule-and-grant-loose-ends.yaml) `v1-e29-t10-retention-rule-and-grant-loose-ends` | Pending | 1 | 3.0 |
 | [store sync says why it skipped what it skipped](plan_specs/v1/e29-cloud-evidence-store/t11-store-sync-skip-reasons.yaml) `v1-e29-t11-store-sync-skip-reasons` | Succeeded | 1 | 2.0 |
 | [store sync stops moving the parsed store, which caselist parse --publish publishes](plan_specs/v1/e29-cloud-evidence-store/t12-store-sync-skips-parsed.yaml) `v1-e29-t12-store-sync-skips-parsed` | Succeeded | 1 | 2.0 |
+| [store sync reports a stale parsed copy without needing a blob prefix](plan_specs/v1/e29-cloud-evidence-store/t13-stale-parsed-note-without-blob-prefix.yaml) `v1-e29-t13-stale-parsed-note-without-blob-prefix` | Pending | 1 | 1.0 |
 
 #### [E30 — Caselist Evidence Ingestion](plan_specs/v1/e30-caselist-ingestion/epic.yaml)
 

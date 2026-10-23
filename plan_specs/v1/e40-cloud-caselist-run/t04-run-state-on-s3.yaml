@@ -37,12 +37,24 @@ spec:
     the Mac's state. The store layout document gains `reports/sync/run-lock.json`,
     `reports/sync/state/` and `manifests/_run-state/`, and `store sync` skips
     `manifests/_run-state/` as it skips `manifests/_suppression/`.
+    (PM ruling 2026-10-23.) Deleting anything in a bucket, except that `caselist remove`,
+    under the removal credential, purges the noncurrent versions of the objects under
+    `manifests/_run-state/` after its rewrite of the bundle is confirmed in the bucket. The
+    run, its role and every other command never delete. The run's role has no
+    `s3:DeleteObject` or `s3:DeleteObjectVersion` permission, and a test over its Terraform
+    policy document shows it.
   priority: 1
   constraints:
-    packages: [debate_core.application, debate_core.integrations, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/runbooks, docs/architecture]
+    # PM ruling 2026-10-23: the run role's policy test lives with the run's Terraform module.
+    packages: [debate_core.application, debate_core.integrations, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/runbooks, docs/architecture, infrastructure/modules/caselist_run/tests]
     forbidden:
       - A second copy of the publisher's suppression or withholding rules
-      - Deleting anything in the bucket
+      # PM ruling 2026-10-23 (ADR-0020): replaces "Deleting anything in the bucket".
+      - >-
+        Deleting anything in a bucket, except that `caselist remove`, under the removal
+        credential, purges the noncurrent versions of the objects under
+        `manifests/_run-state/` after its rewrite of the bundle is confirmed in the bucket.
+        The run, its role and every other command never delete.
       - Network or AWS access in any test
       # PM amendment 2026-10-23 (ADR-0020)
       - A command that writes to an evidence bucket without the bucket lock in bucket mode
@@ -65,6 +77,14 @@ spec:
         over an expired one and says so, and a runner whose lease was taken writes nothing
         more and ends `RUN_LOCK_LOST`; every bucket-writing command takes the lock in bucket
         mode, by test.
+    # PM ruling 2026-10-23 (ADR-0020)
+    - id: ac4
+      description: >-
+        A removal against a stubbed bucket leaves no noncurrent version of the run-state
+        bundle that holds the removed rows, and purges only after its rewrite is confirmed;
+        a test over the run role's Terraform policy document shows it has no
+        `s3:DeleteObject` or `s3:DeleteObjectVersion`. Both tests are shown failing first,
+        against code and a policy that do not meet them, and the red run is in the report.
 status:
   phase: Pending
 ---

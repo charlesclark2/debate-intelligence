@@ -33,6 +33,9 @@ spec:
     home moves to prod (ADR-0020 (7)): under the dev lock the run-state bundle and state files
     are copied to the prod bucket, the prod lock object is seeded, the dev lock object is held
     for good by a `moved` holder, the dev schedule is deleted and the prod one enabled.
+    (PM ruling 2026-10-23.) The cutover waits until `t04`'s purge of the run-state bundle's
+    noncurrent versions by `caselist remove` is merged, since policy 1.12 promises it from its
+    merge.
   priority: 1
   constraints:
     packages: [docs/runbooks, docs/data, ops, tests/smoke]

@@ -24,11 +24,16 @@ spec:
     column weighted as today; word stems, with FTS5's porter tokenizer in front of `unicode61`;
     and prefix terms (`word*`). Measure, and report to the PM before adopting, an FTS5 trigram
     index for substring search: its bytes and bytes per document against ADR-0019's
-    900,000,000-byte line and the function's 4,096 MB of temporary storage, which holds two
-    indexes and a download while one replaces the other. The index format version goes from 1 to
+    1,700,000,000-byte SQLite warning line (moved by v1-e39-t14) and the function's 4,096 MB of
+    temporary storage, which holds the old index and the new one while one replaces the other
+    (the gzip streams, so about 2 GB of SQLite fits a same-size swap). The index format version goes from 1 to
     2 once for the whole task, and the index holder refuses an index of a format it does not
     read with a message, never by failing queries. The weekly stage builds the new format after
     the merge.
+    (PM amendment 2026-10-22, from v1-e39-t11's and v1-e39-t14's PM reviews.) When this task
+    rewrites `docs/data/search-index.md` for format 2, it also names the count statement
+    v1-e39-t11 added (`COUNT_STATEMENT`, sharing `_FILTERS` with `MATCH_STATEMENT`) in "How the
+    index is read".
   priority: 2
   constraints:
     packages: [debate_core.domain, debate_core.application, debate_core.integrations, debate_api, packages/debate_core/tests, packages/debate_api/tests, docs/data]

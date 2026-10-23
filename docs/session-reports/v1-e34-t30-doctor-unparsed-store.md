@@ -297,3 +297,13 @@ Accepted with no conditions. Open the pull request with no `--partial`.
   `1.1.0.dev85`, which also predates the OpenAlex setting in the checkout's `.env`. The PM will
   give Charlie one reinstall, then `--check-launchd`, then the `doctor` line, once v1-e31-t30 has
   merged too. They are not run separately.
+
+## PM record, 2026-10-22
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+* **Operator follow-ups 1 and 2:** the agent was reinstalled at `1.1.0.dev103` on 2026-10-22 and
+  `ops/launchd/install.sh --check-launchd` exited 0. Its log showed `Search index caselists hsld26,
+  hspolicy26, hspf26` and four `Search index store` rows, `hsld26`, `hspolicy26`, `hspf26` and
+  `openev`, each `parsed by 2026.10.20-docx-6`, with the agent's `runs` 0 before and after. The
+  check under launchd covers the hand-run `doctor` line, so both follow-ups are closed.

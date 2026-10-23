@@ -1,0 +1,74 @@
+# TASK v1-e29-t13-stale-parsed-note-without-blob-prefix - store sync reports a stale parsed copy without needing a blob prefix
+# Epic: E29 Cloud Evidence Store (S3) | Release: v1.1 (Caselist evidence store) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e29-t13-stale-parsed-note-without-blob-prefix
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e29-cloud-evidence-store
+  annotations:
+    debate/title: "store sync reports a stale parsed copy without needing a blob prefix"
+spec:
+  # Filed by the PM, 2026-10-22, from the agent reinstall of 2026-10-22 and v1-e29-t12's operator follow-up.
+  description: >-
+    v1-e29-t12's dry run prints a note when `<data_dir>/objects/parsed/` holds an old copy of
+    the parsed store, with the command that removes it. On 2026-10-22 a plain `DEBATE_ENV=dev
+    debate-research store sync` refused first with `UNSYNCABLE_KEYSPACE`, because the local blob
+    store holds objects and no `--blob-prefix` was given, so the note never appeared. Check for
+    the stale copy before planning the keyspaces, and print the note on a dry run whether or not
+    the plan is refused afterwards. The refusal itself is unchanged, and nothing is deleted.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/guides]
+    forbidden:
+      - Deleting a local file without the operator's command
+      - Weakening the blob-prefix refusal
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e29-t12-store-sync-skips-parsed
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A dry run over a store with blobs and no --blob-prefix prints the stale-copy note
+        and then the same refusal as before, by a test shown failing first; with no stale
+        copy it prints nothing about one.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e29-t13-stale-parsed-note-without-blob-prefix-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e29-cloud-evidence-store
+spec:
+  description: >-
+    Report the stale parsed copy before the keyspace plan can refuse.
+  goalRef:
+    name: v1-e29-t13-stale-parsed-note-without-blob-prefix
+  graph:
+    nodes:
+      - id: stale-note
+        kind: Task
+        name: Stale-copy note first
+        description: >-
+          Report the stale parsed copy before the keyspace plan can refuse.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Store tests pass
+            command: uv
+            args: [run, pytest, packages/debate_cli/tests, -k, store]
+status:
+  phase: Pending

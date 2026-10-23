@@ -32,6 +32,7 @@ ticked yes or no with its date, before the coach's beta (`v1-e39-t10` ac7).
 | 9. Superseded parsed directories retired in prod | | | |
 | 10. The request to school IT | | | |
 | 11. The beta's prod accounts created | | | |
+| 12. The Lambda bandwidth-quota request sent | | | |
 
 ## The coach's beta
 

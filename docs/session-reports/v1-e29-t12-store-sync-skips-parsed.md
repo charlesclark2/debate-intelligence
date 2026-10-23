@@ -261,3 +261,17 @@ directory was ever pulled into.
 
 **Noted, no action.** The surviving `rm -r <dir>/*` mutant, caught once the line was pinned
 whole, is the right fix. A removal command is exactly where a substring match is too weak.
+
+## PM record, 2026-10-22
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+* **Operator follow-up, the stale `objects/parsed/` copy:** checked on the operator's Mac on
+  2026-10-22, after the agent's reinstall at `1.1.0.dev103`. `~/.debate-research/dev/objects/parsed`
+  does not exist, so there was nothing to remove; the parsed store at `~/.debate-research/dev/parsed`
+  is in place.
+* **Found on the way:** `store sync`'s dry run refuses with `UNSYNCABLE_KEYSPACE` before planning
+  when the local blob store holds objects and no `--blob-prefix` is given, so the stale-copy note,
+  which the dry run prints, cannot appear on a plain dry run.
+  [`v1-e29-t13-stale-parsed-note-without-blob-prefix`](../../plan_specs/v1/e29-cloud-evidence-store/t13-stale-parsed-note-without-blob-prefix.yaml)
+  fixes that.

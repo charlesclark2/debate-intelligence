@@ -22,7 +22,7 @@ spec:
     and `tub index publish`, and the weekly run's search index stage, refuse to publish an index
     whose document count is below a configured share of the current index's (default 90%), or
     built from a store whose aggregates hold no rows, naming both counts and the index left
-    current. An explicit `--allow-shrink` with a reason, recorded in the manifest, lets an
+    current. An explicit `--allow-shrink` with a reason, recorded in the publish's output, lets an
     operator publish a real shrink (a removal, or v1-e39-t12's card-only rule); the weekly stage
     never passes it. Also: the index grew 11.6% in the week to 2026-10-22 (839,438,336 SQLite
     bytes, 314,054,035 gzip bytes, against v1-e39-t09's warning at 900,000,000 and 400,000,000).
@@ -52,7 +52,7 @@ spec:
     # PM ruling 2026-10-22: the reason is recorded in the publish's output, not the manifest, which the deployed function reads with extra="forbid".
     - id: ac2
       description: >-
-        --allow-shrink with a reason publishes and records the reason in the manifest; the
+        --allow-shrink with a reason publishes and records the reason in the publish's output; the
         weekly stage never passes it, by test.
     # PM ruling 2026-10-22: the peak is worked out from the holder's code (A's SQLite plus B's, the gzip streamed); the bytes on /tmp reach the app log with v1-e39-t10's ac5.
     - id: ac3

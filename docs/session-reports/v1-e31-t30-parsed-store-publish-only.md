@@ -468,3 +468,12 @@ depends on, so the sync in condition 4 is required.
 
 **Noted.** Catching the cut affected-set run's guard failure, and fixing it by asking the guard
 rather than relaxing its test, was the right call.
+
+## PM record, 2026-10-22
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+* **Operator follow-up, one dev run of `--publish-only`:** run on 2026-10-22 on the operator's Mac
+  with the installed build `1.1.0.dev103`: `caselist parse --caselist hsld26 --publish-only` printed
+  `Published 0 uploaded, 6125 skipped, 0 failed` to the dev bucket's
+  `parsed/hsld26/2026.10.20-docx-6/`, with nothing parsed or rebuilt. Closed.

@@ -68,7 +68,7 @@ spec:
         The report states, per kind, how many documents of that kind carry no labelled
         impact.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

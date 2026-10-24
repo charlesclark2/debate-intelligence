@@ -319,7 +319,7 @@ def test_publish_puts_the_bundle_under_reports_landscape_in_the_dev_bucket(
     assert data["publish"]["uploaded"] == KEYS
     assert data["publish"]["bucket"] == DEV_BUCKET
     local = Path(data["paths"]["directory"]) / "report.md"
-    stored = buckets.get_object(Bucket=DEV_BUCKET, Key=KEYS[2])["Body"].read()
+    stored = buckets.get_object(Bucket=DEV_BUCKET, Key=KEYS[BUNDLE.index("report.md")])["Body"].read()
     assert stored == local.read_bytes()
     assert "presign" not in result.stdout.casefold() and "X-Amz-Signature" not in result.stdout
 

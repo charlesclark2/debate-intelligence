@@ -6,7 +6,7 @@
 | Spec | [`plan_specs/v1/e32-argument-landscape/t05-landscape-cli.yaml`](../../plan_specs/v1/e32-argument-landscape/t05-landscape-cli.yaml) |
 | Epic / release | `v1-e32-argument-landscape` / `v1.2` |
 | Branch | `task/v1-e32-t05-landscape-cli` |
-| Session status | PARTIAL <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | COMPLETE <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
@@ -24,8 +24,8 @@ One run:
 `--model-mode none` is the only mode, so no run calls a model. t09's aff assignments plug in through
 an optional `AffAssignmentSource`. Until then the report shows the unidentified share.
 
-**Status: PARTIAL, waiting on one input.** Every node through the smoke check is done, and its
-criteria pass. ac1 to ac3 pass, and ac4 passes in the recorded tier locally.
+**Status: the session's work is done; the Goal stays `InProgress`.** Every node through the smoke
+check is done, and its criteria pass. ac1 to ac3 pass, and ac4 passes in the recorded tier locally.
 
 * **The coach's queue pass is applied** (the PM's item 4):
   * seven new positions (Deviation 9): five in the topic's taxonomy, now 1.1.0, and a generic K and
@@ -186,6 +186,10 @@ header names today is `none`.
   `scripts/check_links.py` → OK. `scripts/docs_index.py --check-descriptions` → OK.
   `tests/architecture/test_single_interpreter_source.py` → 55 passed, for the note's percentages.
 * `uv run scripts/validate_specs.py` → OK, 434 files.
+* **After the coach's queue pass**, which changed only `config/landscape/`: the tests that read the
+  real configuration (`packages/debate_core/tests/integrations/landscape`, `tests/config`, and the
+  classify and seed scripts' tests) → **76 passed in 1.54s**. `tests/config` alone → 23 passed, its
+  two overrides-file checks no longer skipped.
 * No `pyproject.toml`, `uv.lock`, conftest or pytest-plugin change, so no whole-selection hand-off.
 
 ## Files changed
@@ -217,8 +221,12 @@ header names today is `none`.
     list of wired integrations gains `landscape.classification_store` and
     `landscape.yaml_taxonomy_repository`, so the count goes from 15 to 17.
 * **`tests/smoke/test_landscape_smoke.py`** (new) and its row in `tests/smoke/README.md`.
-* **`docs/data/landscape/first-run-policy.md`** (new): the first-run note, with the before-pass
-  coverage.
+* **`config/landscape/`**, the coach's queue pass:
+  * `taxonomies/policy-2026-27-nhi.yaml` and `topics.yaml` at 1.1.0, with five positions;
+  * `taxonomies/generic.yaml` at 1.1.0, with two;
+  * `overrides/policy-2026-27-nhi.yaml` (new), with 44 decisions.
+* **`docs/data/landscape/first-run-policy.md`** (new): the first-run note, with the coverage
+  before and after the coach's pass.
 
 ## Deviations from the spec
 

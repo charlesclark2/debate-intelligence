@@ -41,6 +41,21 @@ from a fresh `caselist-credentials-dev` worktree at `origin/dev`, after checking
 module is in it, with `owner.auto.tfvars`'s block and the plan check unchanged (condition 2); and
 this report's stale parts are updated (condition 3).
 
+**Apply A's first run in dev (2026-10-24), and the fix, resumed in this session.** Run from a fresh
+`origin/dev` worktree at `30ba804`, the apply created 8 of the 17 and destroyed nothing, then both
+`CreateSecret` calls failed with `AccessDeniedException: Access to KMS is not allowed`. Creating a
+secret under a customer-managed key has Secrets Manager call `kms:GenerateDataKey` as the caller,
+and the key policy gave break-glass administration only. The fix is one Allow,
+`BreakGlassEncryptsWhenCreatingTheTwoSecrets`: `kms:GenerateDataKey` for break-glass's role
+(`aws:PrincipalArn` like its pattern, the account root as principal, as the other statements do),
+through Secrets Manager in this region, for the two secrets' ARN patterns. No decrypt, no other key
+action, no grant. The three decrypt denies and `NoGrantsAndNoReEncryption` are byte-identical to
+before. A 14th Terraform test holds it, and the three mutations the PM named, plus three more, are
+each killed. The runbook now has the re-plan's exact check (`Plan: 9 to add, 1 to change, 0 to
+destroy.`), a corrected reading of `MalformedPolicyDocumentException`, and how to recover from a
+partial apply. The task merges `--partial` again; the operator re-plans from `caselist-credentials-dev`
+after the merge, and the PM reads the plan first.
+
 ## Plan nodes
 
 | Node | Status | Notes |
@@ -54,8 +69,8 @@ this report's stale parts are updated (condition 3).
 | Node `token-store`: Token store tests pass (`uv run pytest packages/debate_core/tests -k token`) | PASS | `.venv/bin/python -m pytest packages/debate_core/tests -k token -q` under `perl -e 'alarm 115'` → `145 passed in 15.17s` |
 | ac1 — the Secrets Manager backend passes the token store's contract tests with a stubbed client | PASS | `test_token_store_contract.py`: one suite parametrized over the keyring, file and secretsmanager backends (the last over a stubbed client raising botocore's own `ClientError`), plus four Secrets-Manager-only cases (one read per process, a save is one write and no read, built only when named, refused without a secret). Run with `test_token_store.py` → `45 passed in 2.18s` |
 | ac1 — a redaction test shows neither secret reaches a log or an error | PASS | `secrets_manager/test_managed_secret.py` (22 tests) and `commands/test_caselist_auth_secrets_manager.py` (8): every record at DEBUG, botocore's wire loggers included, checked for each secret raw, JSON-escaped once and twice, and by its random core. Two controls show botocore logs both values when the client is bypassed. Against a mutant that turns the quieting off, 10 tests fail and pytest's whole output holds **0** secret-shaped strings; with the harness's guard also off, the same scan finds 11, so it can see them |
-| ac2 — Terraform's tests show only the login role can read the password and only the run role the token, both under the dedicated key | PASS | `terraform -chdir=infrastructure/modules/caselist_run test` → `Success! 13 passed, 0 failed.` Every role and secret has an ARN of its own (`override_resource`). Mutation: 22 of 22 mutants caught (below) |
-| ac2 — the operator applies dev | NOT RUN | After the merge, from a fresh worktree at `origin/dev`, never from this branch (ruling 6); the PM reads the plan before the apply (working agreement 11). Operator follow-ups below |
+| ac2 — Terraform's tests show only the login role can read the password and only the run role the token, both under the dedicated key | PASS | `terraform -chdir=infrastructure/modules/caselist_run test` → `Success! 13 passed, 0 failed.`; with the break-glass encryption fix, `Success! 14 passed, 0 failed.` (the 14th: break-glass may GenerateDataKey for the two secrets through Secrets Manager, holds nothing else beyond administration, and every decrypt deny excepts only the login and run roles; mutants below) Every role and secret has an ARN of its own (`override_resource`). Mutation: 22 of 22 mutants caught (below) |
+| ac2 — the operator applies dev | NOT RUN | The first run (2026-10-24, `origin/dev` at `30ba804`) created 8 of 17 and stopped at both `CreateSecret` calls: the key policy did not let break-glass encrypt. Fixed in this branch; the re-plan from `caselist-credentials-dev` follows its merge, read by the PM first. Operator follow-ups below |
 | ac2 — prod at promotion | NOT RUN | At the pilot's promotion, after this branch merges (runbook, "Prod") |
 | ac2 — one scheduled login stores a token (operator) | NOT RUN | Waits for apply B, which needs `v1-e40-t03`'s network and first image (the PM's ruling (2)) |
 | ac3 — Terraform's tests show the writer permission set can write both secrets and read neither | PASS | Runs `the_writer_writes_both_secrets_and_reads_neither` and `each_secret_policy_refuses_a_read_by_anyone_but_its_one_reader` in the 13 above. Mutants "writer may read the secrets" and "writer may decrypt" caught |
@@ -81,6 +96,11 @@ because none of these tests uses Hypothesis, though the Python run set a fresh
   * Role and writer policies (5): the run role reading the password; the login role reading the
     token; the login role reading S3; the writer reading; the writer decrypting.
   * Schedule (1): the schedule retrying.
+* **The break-glass encryption statement** (the apply A fix): 6 mutants, the PM's three (remove
+  the statement; widen it to `kms:*`; drop the `kms:ViaService` condition) and three more (add
+  `kms:Decrypt`; drop the secrets' encryption context; drop the break-glass principal pattern, so any
+  principal in the account). `6 of 6 caught by a false assertion (none skipped); source restored`.
+  The original 22, rerun with the statement in place: `22 of 22 mutants caught`.
 * **The Python rules**: 16 mutants: set-password without a terminal; set-password printing the
   password; prompting before the secret is checked; a refused login tried again; the alert naming
   the account; the password read before the API is checked; a failure not notified; the token
@@ -211,25 +231,16 @@ registry. Its parts that this change touches are the rows above; CI runs the scr
 
 ## Operator follow-ups
 
-**After the merge: apply A in dev, as the PM ruled (plan, PM reads it, apply, then the coach writes
-the password).** Not from this branch: from a fresh worktree at `origin/dev` that has the merged
-`infrastructure/modules/caselist_run` (ruling 6). These are the runbook's blocks
+**After this fix merges: re-plan apply A in dev, as the PM ruled (plan, PM reads it, apply, then the
+coach writes the password).** Not from this branch: from the `caselist-credentials-dev` worktree,
+moved to `origin/dev` once it holds the fix. These are the runbook's blocks
 ([caselist-cloud-credentials.md](../runbooks/caselist-cloud-credentials.md), "Before you start" and
-steps 1 to 4), with `WT` set to that worktree. Each block's success check is beneath it.
+steps 1 to 4), with `WT` set to that worktree. Each block's success check is beneath it. Dev's state
+holds the 8 resources the first run created; nothing is created or deleted by hand, and nothing is
+`-target`ed.
 
-**1. A fresh worktree at `origin/dev`, and the check that the module is merged in it** (~1 min).
-Made from the kept `dev-preview` worktree, so the main clone is not touched. Skip the `worktree add`
-line if `git worktree list` already shows `caselist-credentials-dev`.
-
-```bash
-cd "$HOME/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/dev-preview"
-git fetch origin
-git worktree add --detach ../caselist-credentials-dev origin/dev
-git worktree list | grep caselist-credentials-dev
-```
-Success looks like a `caselist-credentials-dev` line with `(detached HEAD)`.
-
-Then set `SSO_USER_NAME` to your Identity Center user name:
+**1. The worktree, at `origin/dev` with the fix** (~1 min). The worktree exists from the first run.
+Set `SSO_USER_NAME` to your Identity Center user name:
 
 ```bash
 WT="$HOME/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/caselist-credentials-dev"
@@ -241,10 +252,11 @@ git switch --detach origin/dev
 test -f infrastructure/modules/caselist_run/credentials.tf && test -f infrastructure/envs/dev/caselist_run.tf \
   && echo "ok: $(pwd) at origin/dev $(git rev-parse --short HEAD), caselist_run merged" \
   || echo "NOT MERGED: $(pwd) at origin/dev has no infrastructure/modules/caselist_run; wait for v1-e40-t02 to merge"
+grep -c BreakGlassEncryptsWhenCreatingTheTwoSecrets infrastructure/modules/caselist_run/credentials.tf
 git status --porcelain | grep -v 'owner.auto.tfvars' | head -3
 ```
-Success looks like `ok: ... at origin/dev <commit>, caselist_run merged` and nothing after it.
-`NOT MERGED`: stop until the pull request has merged into `dev`.
+Success looks like `ok: ... at origin/dev <commit>, caselist_run merged`, then `1`, and nothing after
+it. A `0` means the fix has not merged into `dev` yet: stop and wait.
 
 **2. Sign in as break-glass** (~1 min).
 
@@ -279,13 +291,71 @@ if env | grep -qE '^(TF_VAR_|TF_WORKSPACE=|TF_DATA_DIR=|TF_CLI_ARGS)'; then echo
 grep -E '^Plan:|must be replaced|will be destroyed' /tmp/caselist-credentials-plan.txt
 grep -E '^  # ' /tmp/caselist-credentials-plan.txt | grep -v 'module.caselist_run' | head
 ```
-What to read: exactly `Plan: 17 to add, 0 to change, 0 to destroy.`, no `must be replaced` or `will
-be destroyed` line, and nothing printed by the last `grep`. The 17 are counted from the module's
-own test state: the key and alias, two secrets and two policies, two roles each with a policy and
-two exclusive-policy resources, and the permission set, its policy and one assignment. **A
-destroyed or replaced `aws_ssoadmin_account_assignment` or `aws_ssoadmin_permission_set` stops
-everything:** fix `owner.auto.tfvars` and plan again, never apply. No `Plan:` line at all means the
-plan failed; read the end of the file.
+What to read: exactly `Plan: 9 to add, 1 to change, 0 to destroy.`, no `must be replaced` or `will
+be destroyed` line, and nothing printed by the last `grep`. **A destroyed or replaced
+`aws_ssoadmin_account_assignment` or `aws_ssoadmin_permission_set` stops everything:** fix
+`owner.auto.tfvars` and plan again, never apply. No `Plan:` line at all means the plan failed; read
+the end of the file. (A fresh environment, such as prod, plans `17 to add, 0 to change, 0 to
+destroy.` instead.)
+
+Then check the plan itself (~1 min). It prints `PLAN STOP` with the reason for anything but the 9
+creates and the key's policy changing in place:
+
+```bash
+cd "$WT"
+AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev show -json caselist-credentials.tfplan > /tmp/caselist-credentials-plan.json
+python3 -I - /tmp/caselist-credentials-plan.json <<'PLANCHECK'
+import json, sys
+plan = json.load(open(sys.argv[1]))
+key = "module.caselist_run.aws_kms_key.credentials"
+expected_creates = {
+    "module.caselist_run.aws_secretsmanager_secret.tabroom_password",
+    "module.caselist_run.aws_secretsmanager_secret.token",
+    "module.caselist_run.aws_secretsmanager_secret_policy.tabroom_password",
+    "module.caselist_run.aws_secretsmanager_secret_policy.token",
+    "module.caselist_run.aws_iam_role_policy.login",
+    "module.caselist_run.aws_iam_role_policy.run_credentials",
+    "module.caselist_run.aws_iam_role_policies_exclusive.login",
+    "module.caselist_run.aws_iam_role_policies_exclusive.run",
+    "module.caselist_run.aws_ssoadmin_permission_set_inline_policy.credential_writer[0]",
+}
+def unknown(value):
+    if value is True:
+        return True
+    if isinstance(value, dict):
+        return any(unknown(v) for v in value.values())
+    if isinstance(value, list):
+        return any(unknown(v) for v in value)
+    return False
+changes = [c for c in plan.get("resource_changes", []) if c["change"]["actions"] not in (["no-op"], ["read"])]
+creates = {c["address"] for c in changes if c["change"]["actions"] == ["create"]}
+updates = [c for c in changes if c["change"]["actions"] == ["update"]]
+others = sorted(c["address"] + " " + "/".join(c["change"]["actions"]) for c in changes if c["change"]["actions"] not in (["create"], ["update"]))
+problems = []
+if creates != expected_creates:
+    problems.append("creates missing " + str(sorted(expected_creates - creates)) + ", unexpected " + str(sorted(creates - expected_creates)))
+if [u["address"] for u in updates] != [key]:
+    problems.append("updates are " + str(sorted(u["address"] for u in updates)) + ", expected only " + key)
+else:
+    change = updates[0]["change"]
+    before, after = change["before"] or {}, change["after"] or {}
+    changed = sorted(k for k in set(before) | set(after) if before.get(k) != after.get(k))
+    unknowns = sorted(k for k, v in (change.get("after_unknown") or {}).items() if unknown(v))
+    if changed != ["policy"] or unknowns:
+        problems.append("the key changes " + str(changed) + " with unknown " + str(unknowns) + ", expected only policy")
+if others:
+    problems.append("other actions " + str(others))
+print("PLAN OK: 9 to create, the key's policy updated in place, nothing else" if not problems else "PLAN STOP: " + "; ".join(problems))
+PLANCHECK
+```
+Success looks like `PLAN OK: 9 to create, the key's policy updated in place, nothing else`. The 9
+are both secrets, both secret policies, both roles' inline policies, both `policies_exclusive` and
+the permission set's inline policy; the 1 is `module.caselist_run.aws_kms_key.credentials`, updated
+in place, with only `policy` changing. `PLAN STOP` stops everything: send its line and the plan to
+the PM, and do not apply. The check was tested against nine plan shapes (the expected one and eight
+wrong ones: a tenth create, a missing create, the key replaced, its tags changing, its policy
+unknown, a second update, an assignment destroyed, the key unchanged); only the expected one prints
+`PLAN OK`.
 
 **5. After the PM's word: apply the saved plan** (~2 min).
 
@@ -294,9 +364,13 @@ cd "$WT"
 AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev apply -input=false caselist-credentials.tfplan
 AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev output caselist_secret_writer_permission_set_name
 ```
-Success looks like `Apply complete! Resources: 17 added, 0 changed, 0 destroyed.` and
-`"DebateDevCaselistSecretWriter"`. A `MalformedPolicyDocumentException` at the key means the caller
-is not break-glass's role, and nothing was created.
+Success looks like `Apply complete! Resources: 9 added, 1 changed, 0 destroyed.` and
+`"DebateDevCaselistSecretWriter"`. **If it stops partway**, re-plan from this worktree after
+`git switch --detach origin/dev` (block 1), then blocks 4 and 5 with the PM reading the new counts;
+never `-target`, never by hand. A `MalformedPolicyDocumentException` that the provider retries and
+then gets past is IAM catching up with a role created seconds earlier (four retries in about four
+seconds on 2026-10-24); only one that persists and ends the apply means the caller is not
+break-glass's role.
 
 **6. The coach writes the password.** First the worktree's environment, which `set-password` runs
 from (~1 min):

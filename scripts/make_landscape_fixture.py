@@ -15,7 +15,8 @@ could not contradict it.
     uv run python scripts/make_landscape_fixture.py
 
 The fixture is small enough to count on paper: 15 sources, 18 disclosure rows, 16 rounds in range
-by 8 teams, 46 cards (44 of them in range). Its README says what each part exercises. Owned by `v1-e32-t03`.
+by 8 teams, 47 cards (45 of them in range). Its README says what each part exercises. Owned by
+`v1-e32-t03`; `v1-e32-t10` gave the DA and advantage cards their headings for the impact rule.
 """
 
 from __future__ import annotations
@@ -139,6 +140,8 @@ class FixtureCard:
     position: str | None = None
     role: PositionRole | None = PositionRole.READS
     method: ClassificationMethod | None = ClassificationMethod.ALIAS
+    headings: tuple[str, ...] = ()
+    """The normalized headings over the card, which `v1-e32-t10`'s impact rule reads."""
 
 
 def _unplaced(cluster: int, tag: str, cite: str) -> FixtureCard:
@@ -149,37 +152,70 @@ _INHERITED: Final = ClassificationMethod.INHERITED
 _KEYWORD: Final = ClassificationMethod.TAG_KEYWORD
 _ANSWERS: Final = PositionRole.ANSWERS
 _COSTS_TAG: Final = "Single payer cuts administrative costs"
+_COSTS: Final = ("costs advantage",)
+_INNOVATION: Final = ("innovation advantage",)
+_SPENDING: Final = ("spending da",)
+_MIDTERMS: Final = ("midterms da",)
 
 CARDS: Final = {
     "a1": (
         FixtureCard(
             1, "a", "Single payer is the only path to universal coverage", "Brandt 24", "single-payer-aff"
         ),
-        FixtureCard(2, "a", _COSTS_TAG, "Okafor 25", "costs-advantage", method=_INHERITED),
+        FixtureCard(2, "a", _COSTS_TAG, "Okafor 25", "costs-advantage", method=_INHERITED, headings=_COSTS),
         FixtureCard(
-            2, "d", "Administrative costs collapse", "Okafor 25", "costs-advantage", method=_INHERITED
+            2,
+            "d",
+            "2. Extinction from economic collapse",
+            "Okafor 25",
+            "costs-advantage",
+            method=_INHERITED,
+            headings=_COSTS,
         ),
-        FixtureCard(4, "a", "Spending DA non-unique", "Grant 26", "spending-da", role=_ANSWERS),
+        FixtureCard(
+            4, "a", "Spending DA non-unique", "Grant 26", "spending-da", role=_ANSWERS, headings=_SPENDING
+        ),
         _unplaced(5, "Coverage gaps kill", "Patel 25"),
     ),
     "a2": (
-        FixtureCard(2, "b", _COSTS_TAG, "Okafor 25", "costs-advantage"),
-        FixtureCard(6, "a", "Single payer frees capital for research", "Moreau 25", "innovation-advantage"),
+        FixtureCard(2, "b", _COSTS_TAG, "Okafor 25", "costs-advantage", headings=_COSTS),
+        FixtureCard(
+            6,
+            "a",
+            "Single payer frees capital for research",
+            "Moreau 25",
+            "innovation-advantage",
+            headings=(*_INNOVATION, "i l"),
+        ),
         _unplaced(7, "Framing comes first", "Vance 22"),
         FixtureCard(8, "a", "Competition lowers premiums", "Liang 26", "public-option-aff", method=_KEYWORD),
     ),
     "a3": (
         FixtureCard(9, "a", "A public option competes prices down", "Liang 26", "public-option-aff"),
-        FixtureCard(2, "a", _COSTS_TAG, "Okafor '25", "costs-advantage", method=_INHERITED),
+        FixtureCard(2, "a", _COSTS_TAG, "Okafor '25", "costs-advantage", method=_INHERITED, headings=_COSTS),
         _unplaced(10, "Solvency is immediate", "Reyes 24"),
     ),
     "a4": (
-        FixtureCard(6, "a", "Single payer frees capital for research", "Moreau 25", "innovation-advantage"),
-        FixtureCard(3, "b", "Bulk purchasing lowers drug prices", "Haddad 23", "costs-advantage"),
+        FixtureCard(
+            6,
+            "a",
+            "Single payer frees capital for research",
+            "Moreau 25",
+            "innovation-advantage",
+            headings=_INNOVATION,
+        ),
+        FixtureCard(
+            3,
+            "b",
+            "Bulk purchasing lowers drug prices",
+            "Haddad 23",
+            "costs-advantage",
+            headings=(*_COSTS, "impact"),
+        ),
         _unplaced(11, "Inherency: the status quo fails", "Nguyen 26"),
     ),
     "a5": (
-        FixtureCard(2, "c", _COSTS_TAG, "Okafor 25", "costs-advantage"),
+        FixtureCard(2, "c", _COSTS_TAG, "Okafor 25", "costs-advantage", headings=_COSTS),
         FixtureCard(27, "a", "Conditionality is a voting issue", "Feldman 22", "condo-bad"),
         FixtureCard(12, "a", "Extra evidence", "Ito 19", None, None, ClassificationMethod.OVERRIDE),
     ),
@@ -187,13 +223,33 @@ CARDS: Final = {
         FixtureCard(
             1, "b", "Single payer is the only path to universal coverage", "Brandt 24", "single-payer-aff"
         ),
-        FixtureCard(6, "c", "Research funding rises", "Moreau 25", "innovation-advantage", method=_INHERITED),
+        FixtureCard(
+            6,
+            "c",
+            "Independently, research funding prevents extinction",
+            "Moreau 25",
+            "innovation-advantage",
+            method=_INHERITED,
+            headings=_INNOVATION,
+        ),
         _unplaced(13, "Medical debt is rising", "Okoro 26"),
-        FixtureCard(31, "a", "Spending is already high", "Mori 25", "spending-da"),
+        FixtureCard(
+            31, "a", "Spending is already high", "Mori 25", "spending-da", headings=(*_SPENDING, "impact")
+        ),
     ),
     "b1": (
-        FixtureCard(14, "a", "Spending triggers a debt spiral", "Ito 26", "spending-da"),
-        FixtureCard(15, "a", "Debt ceiling fights are near", "Ruiz 26", "spending-da", method=_INHERITED),
+        FixtureCard(
+            14, "a", "Spending triggers a debt spiral", "Ito 26", "spending-da", headings=(*_SPENDING, "link")
+        ),
+        FixtureCard(
+            15,
+            "a",
+            "Debt ceiling fights are near",
+            "Ruiz 26",
+            "spending-da",
+            method=_INHERITED,
+            headings=(*_SPENDING, "turns case"),
+        ),
         FixtureCard(16, "a", "States can implement single payer", "Kowal 24", "states-cp"),
         FixtureCard(
             17,
@@ -203,28 +259,72 @@ CARDS: Final = {
             "costs-advantage",
             _ANSWERS,
             _INHERITED,
+            (*_COSTS, "impact"),
         ),
     ),
     "b2": (
-        FixtureCard(14, "b", "Spending triggers a debt spiral", "Ito 26", "spending-da"),
-        FixtureCard(18, "a", "Healthcare markets commodify care", "Nadler 21", "cap-k"),
+        FixtureCard(
+            14,
+            "b",
+            "Spending triggers a debt spiral",
+            "Ito 26",
+            "spending-da",
+            headings=(*_SPENDING, "impact"),
+        ),
+        FixtureCard(
+            18,
+            "a",
+            "Healthcare markets commodify care",
+            "Nadler 21",
+            "cap-k",
+            headings=("capitalism k", "impact"),
+        ),
         _unplaced(19, "Uniqueness overwhelms the link", "Cole 26"),
     ),
     "b3": (
-        FixtureCard(20, "a", "Health reform costs the incumbents the midterms", "Abara 26", "election-da"),
+        FixtureCard(
+            20,
+            "a",
+            "Health reform costs the incumbents the midterms",
+            "Abara 26",
+            "election-da",
+            headings=(*_MIDTERMS, "no impact"),
+        ),
         FixtureCard(
             21, "a", "National health insurance means a single government insurer", "Ostrova 20", "nhi-t"
         ),
         FixtureCard(22, "a", "Courts can mandate coverage", "Bell 23", "courts-cp", method=_KEYWORD),
     ),
     "b4": (
-        FixtureCard(20, "b", "Reform loses the midterms", "Abara 26", "election-da"),
+        FixtureCard(
+            20,
+            "b",
+            "Reform loses the midterms",
+            "Abara 26",
+            "election-da",
+            headings=(*_MIDTERMS, "impact defense"),
+        ),
         FixtureCard(18, "a", "Healthcare markets commodify care", "Nadler 21", "cap-k"),
-        FixtureCard(23, "a", "Rural hospitals close under single payer", "Duarte 26", "hospital-closures-da"),
+        FixtureCard(
+            23,
+            "a",
+            "Rural hospitals close under single payer",
+            "Duarte 26",
+            "hospital-closures-da",
+            headings=("hospital closures da", "impact"),
+        ),
     ),
     "b5": (
         FixtureCard(16, "a", "States can implement single payer", "Kowal 24", "states-cp"),
-        FixtureCard(14, "c", "Spending triggers a debt spiral", "Ito 2026", "spending-da", method=_INHERITED),
+        FixtureCard(
+            14,
+            "c",
+            "Spending triggers a debt spiral",
+            "Ito 2026",
+            "spending-da",
+            method=_INHERITED,
+            headings=_SPENDING,
+        ),
     ),
     "b6": (
         FixtureCard(29, "a", "Insurance means private carriers too", "Lund 21", "nhi-t"),
@@ -235,12 +335,22 @@ CARDS: Final = {
             "Dube 25",
             "provider-strikes-da",
             method=_INHERITED,
+            headings=("provider strikes da", "impact turns"),
         ),
     ),
     "b7": (
         FixtureCard(18, "b", "Healthcare markets commodify care", "Nadler 21", "cap-k"),
         _unplaced(25, "Off-case overview", "Imai 26"),
         FixtureCard(32, "a", "We meet their interpretation", "Pryor 24", "nhi-t", role=_ANSWERS),
+        FixtureCard(
+            33,
+            "a",
+            "2. Extinction outweighs",
+            "Sato 26",
+            "election-da",
+            role=_ANSWERS,
+            headings=(*_MIDTERMS, "impact"),
+        ),
     ),
     "b8": (
         _unplaced(30, "Case turns", "Soto 25"),
@@ -248,7 +358,7 @@ CARDS: Final = {
     ),
     "b9": (
         FixtureCard(18, "c", "Healthcare markets commodify care", "Nadler 21", "cap-k"),
-        FixtureCard(28, "a", "The plan is a tax", "Iqbal 26", "spending-da"),
+        FixtureCard(28, "a", "The plan is a tax", "Iqbal 26", "spending-da", headings=(*_SPENDING, "impact")),
     ),
 }
 """Each source's cards, in document order: card `n` starts at paragraph `3n`."""
@@ -321,6 +431,7 @@ def cards() -> list[LandscapeCard]:
             cluster_id=_cluster(card.cluster),
             tag=card.tag,
             short_cite=card.cite,
+            headings=card.headings,
         )
         for source, planted in CARDS.items()
         for index, card in enumerate(planted)

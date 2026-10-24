@@ -1,4 +1,4 @@
-"""The landscape report's three files: report.md, positions.csv and top_cards.csv (`v1-e32-t03`).
+"""The landscape report's files: report.md, positions.csv, top_cards.csv (`v1-e32-t03`) and impact_cards.csv.
 
 Pure and deterministic: the same :class:`~debate_core.domain.landscape_report.LandscapeReport`
 renders to the same bytes, in the report's own order (positions by side, kind, teams, rounds and
@@ -9,17 +9,21 @@ id; cards by rank). Nothing here computes a count; the service did.
 * **report.md** is for the weekly prep meeting: what the report was built from and how to read its
   numbers, the positions by side and kind, what is new since the previous snapshot, and what could
   not be counted. `v1-e34-t03`'s stale-data banner goes above it when the data is stale; the service
-  puts it there. It lists no cards: the coach's review of 2026-10-24 found the most-read cards of
-  every position no help in a prep meeting, so they are in top_cards.csv only.
-* **positions.csv** has the positions' rows for a spreadsheet, and **top_cards.csv** each position's
-  most-read cards. Each starts with a header block, one `# key=value` line per fact (the staleness
-  hook's `stale=` among them), and then an ordinary CSV with a header row.
+  puts it there. Of the cards, it lists only each advantage's and DA's impact cards, under its kind's
+  table (`v1-e32-t10`): the coach's review of 2026-10-24 found the most-read cards of every position
+  no help in a prep meeting, so they are in top_cards.csv only, and asked for the impacts instead.
+* **positions.csv** has the positions' rows for a spreadsheet, **top_cards.csv** each position's
+  most-read cards, and **impact_cards.csv** each advantage's and DA's impact cards, with how many
+  documents of each kind carry no labelled impact in its header block. Each starts with a header
+  block, one `# key=value` line per fact (the staleness hook's `stale=` among them), and then an
+  ordinary CSV with a header row.
 
 ## What is written exactly, and what is escaped
 
-A card's tag and short cite are written exactly as parsed in the CSV. A position's label in Markdown,
-where a `|` would split a table cell and a `*` start emphasis, has those characters escaped with a
-backslash and runs of whitespace made one space, so the cell shows the same text. Shares are
+A card's tag and short cite are written exactly as parsed in the CSV. A position's label, and an
+impact card's tag and cite, in Markdown, where a `|` would split a table cell and a `*` start
+emphasis, have those characters escaped with a backslash and runs of whitespace made one space, so
+the cell shows the same text. Shares are
 fractions to three places in the CSV and percentages to one place in Markdown, both rounded half up;
 Markdown writes counts with thousands separators, the CSV without.
 """
@@ -37,15 +41,20 @@ from typing import Final
 from debate_core.arguments.landscape.aff_assignment import PLAN_TEXT_METHOD, TEAM_CARRY_METHOD
 from debate_core.domain.landscape import PositionKind, PositionSide
 from debate_core.domain.landscape_report import (
+    IMPACT_KINDS,
     PLACED_CARD_METHOD,
+    ImpactCoverage,
     LandscapeReport,
     PositionStats,
+    TopCard,
 )
 
 __all__ = [
+    "IMPACT_CARD_COLUMNS",
     "POSITION_COLUMNS",
     "TOP_CARD_COLUMNS",
     "header_metadata",
+    "render_impact_cards_csv",
     "render_markdown",
     "render_positions_csv",
     "render_top_cards_csv",
@@ -79,6 +88,9 @@ TOP_CARD_COLUMNS: Final = (
 )
 """top_cards.csv's columns, in order (ac2)."""
 
+IMPACT_CARD_COLUMNS: Final = TOP_CARD_COLUMNS
+"""impact_cards.csv's columns: a top card's, of the cluster's labelled copies (`v1-e32-t10`)."""
+
 _SIDE_HEADINGS: Final = {
     PositionSide.AFF: "Affirmative positions",
     PositionSide.NEG: "Negative positions",
@@ -97,6 +109,8 @@ _KIND_HEADINGS: Final = {
     PositionKind.CONTENTION: "Contentions",
     PositionKind.RESPONSE: "Responses",
 }
+_IMPACT_NOUNS: Final = {PositionKind.ADVANTAGE: "Advantage", PositionKind.DA: "DA"}
+"""How the line on documents with no labelled impact names each kind's documents."""
 _METHOD_LABELS: Final = {
     PLACED_CARD_METHOD: "A card in the round placed under the aff",
     PLAN_TEXT_METHOD: "The round's plan text names the aff",
@@ -159,25 +173,35 @@ def render_positions_csv(report: LandscapeReport, metadata: Mapping[str, str]) -
 
 def render_top_cards_csv(report: LandscapeReport, metadata: Mapping[str, str]) -> str:
     """top_cards.csv: the header block, then each position's most-read cards by rank."""
+    return _csv(metadata, "top_cards", TOP_CARD_COLUMNS, map(_card_row, report.top_cards))
+
+
+def render_impact_cards_csv(report: LandscapeReport, metadata: Mapping[str, str]) -> str:
+    """impact_cards.csv: the header block with each kind's unlabelled documents, then the impact cards."""
+    impacts = {
+        "impact_cards_per_position": str(report.header.impact_cards_per_position),
+        **{
+            f"no_labelled_impact_{one.kind.value}": f"{one.unlabelled_documents}/{one.documents}"
+            for one in report.impact_coverage
+        },
+    }
     return _csv(
-        metadata,
-        "top_cards",
-        TOP_CARD_COLUMNS,
-        (
-            (
-                card.position_id,
-                str(card.rank),
-                card.fingerprint,
-                str(card.teams_reading),
-                card.tag or "",
-                card.short_cite or "",
-                card.source_object_key,
-                str(card.element_index),
-                card.source_snapshot.isoformat(),
-                card.provenance_mode.value,
-            )
-            for card in report.top_cards
-        ),
+        {**metadata, **impacts}, "impact_cards", IMPACT_CARD_COLUMNS, map(_card_row, report.impact_cards)
+    )
+
+
+def _card_row(card: TopCard) -> tuple[str, ...]:
+    return (
+        card.position_id,
+        str(card.rank),
+        card.fingerprint,
+        str(card.teams_reading),
+        card.tag or "",
+        card.short_cite or "",
+        card.source_object_key,
+        str(card.element_index),
+        card.source_snapshot.isoformat(),
+        card.provenance_mode.value,
     )
 
 
@@ -198,7 +222,7 @@ def render_markdown(report: LandscapeReport) -> str:
     """report.md, without the stale-data banner: the service passes it through the hook."""
     lines: list[str] = []
     lines += _header_section(report)
-    lines += _positions_section(report.positions)
+    lines += _positions_section(report)
     lines += _new_section(report)
     lines += _unclassified_section(report)
     return "\n".join(lines).rstrip("\n") + "\n"
@@ -262,11 +286,18 @@ def _header_section(report: LandscapeReport) -> list[str]:
         "affirmative file is the 2AC answering it.",
         f"* Each position's {report.header.top_cards_per_position:,} most-read cards are in `top_cards.csv`, "
         "where near-duplicate copies of a card count as one card.",
+        f"* **Impact cards**, under each advantage and DA, are up to {header.impact_cards_per_position:,} "
+        "of its cards labelled as an impact, ranked by the teams reading them: a heading over the card says "
+        "`impact` or `impacts` (not `no impact`, `impact defense` or `impact turn`) or `turns case`, or its "
+        "tag opens with an impact word such as `extinction`, `existential` or `the impact`. Only the "
+        "labelled copies of a card count. An impact nobody labelled is not found, so each kind says how "
+        "many of its documents carry no labelled impact. They are also in `impact_cards.csv`.",
         "",
     ]
 
 
-def _positions_section(positions: Sequence[PositionStats]) -> list[str]:
+def _positions_section(report: LandscapeReport) -> list[str]:
+    positions = report.positions
     if not positions:
         return ["## Positions", "", "No position was read in this range.", ""]
     lines: list[str] = []
@@ -279,13 +310,47 @@ def _positions_section(positions: Sequence[PositionStats]) -> list[str]:
                 "| Position | Rounds | Teams | Aff rounds | Neg rounds | Share of teams | First seen | New |",
                 "|---|---|---|---|---|---|---|---|",
             ]
+            listed = list(of_kind)
             lines += [
                 f"| {_cell(stats.label)} (`{stats.position_id}`) | {stats.rounds:,} | {stats.teams:,} | "
                 f"{stats.aff_rounds:,} | {stats.neg_rounds:,} | {_percent(*stats.share_of_teams)} | "
                 f"{stats.first_seen_snapshot.isoformat()} | {'yes' if stats.is_new else ''} |"
-                for stats in of_kind
+                for stats in listed
             ]
             lines.append("")
+            if kind in IMPACT_KINDS:
+                lines += _impact_block(report, kind, listed)
+    return lines
+
+
+def _impact_block(
+    report: LandscapeReport, kind: PositionKind, positions: Sequence[PositionStats]
+) -> list[str]:
+    """Under an advantages or DAs table: its documents with no labelled impact, then each one's cards."""
+    coverage = next(
+        (one for one in report.impact_coverage if one.kind is kind),
+        ImpactCoverage(kind=kind, documents=0, labelled_documents=0),
+    )
+    lines = [
+        f"#### {_KIND_HEADINGS[kind]}: impact cards",
+        "",
+        f"{_IMPACT_NOUNS[kind]} documents with no labelled impact: "
+        f"{_of(coverage.unlabelled_documents, coverage.documents)}.",
+        "",
+    ]
+    for stats in positions:
+        cards = [card for card in report.impact_cards if card.position_id == stats.position_id]
+        named = f"**{_cell(stats.label)}** (`{stats.position_id}`)"
+        if not cards:
+            lines += [f"{named}: no labelled impact card.", ""]
+            continue
+        lines += [named, "", "| Rank | Teams | Tag | Cite |", "|---|---|---|---|"]
+        lines += [
+            f"| {card.rank} | {card.teams_reading:,} | {_cell(card.tag or '')} | "
+            f"{_cell(card.short_cite or '')} |"
+            for card in cards
+        ]
+        lines.append("")
     return lines
 
 

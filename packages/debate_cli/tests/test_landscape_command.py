@@ -50,10 +50,8 @@ CASELIST = SYNTHETIC_RUN_CASELIST
 DEV_BUCKET = "debate-dev-evidence-moto"
 PROD_BUCKET = "debate-prod-evidence-moto"
 PROFILES = {"dev": "debate-dev-evidence", "prod": "debate-prod-evidence"}
-KEYS = [
-    f"reports/landscape/{CASELIST}/2026-09-15/{name}"
-    for name in ("positions.csv", "top_cards.csv", "report.md")
-]
+BUNDLE = ("positions.csv", "top_cards.csv", "impact_cards.csv", "report.md")
+KEYS = [f"reports/landscape/{CASELIST}/2026-09-15/{name}" for name in BUNDLE]
 PLANTED_CODE = {("neg-two", 0): "As PX argued, new spending triggers a crowd-out"}
 
 
@@ -170,7 +168,7 @@ def test_report_writes_the_bundle_and_json_names_paths_counts_methods_and_model_
     directory = world.data_dir / "reports" / "landscape" / CASELIST / "2026-09-15"
     assert data["paths"] == {
         "directory": str(directory),
-        "files": [str(directory / name) for name in ("positions.csv", "top_cards.csv", "report.md")],
+        "files": [str(directory / name) for name in BUNDLE],
     }
     assert all(Path(path).is_file() for path in data["paths"]["files"])
     assert (data["snapshot"], data["topic_id"], data["model_mode"], data["model_calls"]) == (
@@ -321,7 +319,7 @@ def test_publish_puts_the_bundle_under_reports_landscape_in_the_dev_bucket(
     assert data["publish"]["uploaded"] == KEYS
     assert data["publish"]["bucket"] == DEV_BUCKET
     local = Path(data["paths"]["directory"]) / "report.md"
-    stored = buckets.get_object(Bucket=DEV_BUCKET, Key=KEYS[2])["Body"].read()
+    stored = buckets.get_object(Bucket=DEV_BUCKET, Key=KEYS[BUNDLE.index("report.md")])["Body"].read()
     assert stored == local.read_bytes()
     assert "presign" not in result.stdout.casefold() and "X-Amz-Signature" not in result.stdout
 

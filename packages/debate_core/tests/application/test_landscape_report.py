@@ -1,9 +1,9 @@
-"""LandscapeReportService over the synthetic two-snapshot caselist (`v1-e32-t03` ac1 to ac3).
+"""LandscapeReportService over the synthetic two-snapshot caselist (`v1-e32-t03` ac1 to ac3, `v1-e32-t10`).
 
 Every expected number here was counted by hand from the fixture's table
 (`tests/fixtures/landscape/synthetic_caselist/README.md`, `scripts/make_landscape_fixture.py`),
 never read off the service. Tests named `aggregate` are the aggregation node's; `top_cards` the
-top-card node's.
+top-card node's; `impact` `v1-e32-t10`'s impact cards.
 """
 
 from __future__ import annotations
@@ -26,11 +26,11 @@ from debate_core.application.landscape_report import (
 )
 from debate_core.application.landscape_staleness import assess_staleness
 from debate_core.application.ports.parsed_store import OccurrenceRecord
-from debate_core.arguments.landscape.seeding import SeedCard, SeedSource
+from debate_core.arguments.landscape.seeding import SeedCard, SeedSource, SeedTeam
 from debate_core.domain.card_occurrence import ClusterMembership
 from debate_core.domain.caselist import Disclosure, RoundLabel, Side
 from debate_core.domain.debate_files import CardCompleteness
-from debate_core.domain.landscape_classification import OverrideRules
+from debate_core.domain.landscape_classification import OverrideRules, PositionRole
 from debate_core.domain.landscape_report import AffAssignment, LandscapeReport, PositionStats
 from debate_core.testing.landscape_report import (
     SYNTHETIC_CASELIST,
@@ -49,8 +49,12 @@ def _inputs(**changes: object) -> LandscapeReportInputs:
     return dataclasses.replace(read_synthetic_caselist(FIXTURE), **changes)  # pyright: ignore[reportArgumentType]
 
 
-def _report(inputs: LandscapeReportInputs | None = None, *, top_cards: int = 5) -> LandscapeReport:
-    return LandscapeReportService(top_cards=top_cards).build(inputs or _inputs(), synthetic_staleness())
+def _report(
+    inputs: LandscapeReportInputs | None = None, *, top_cards: int = 5, impact_cards: int = 3
+) -> LandscapeReport:
+    return LandscapeReportService(top_cards=top_cards, impact_cards=impact_cards).build(
+        inputs or _inputs(), synthetic_staleness()
+    )
 
 
 def _position(report: LandscapeReport, position_id: str) -> PositionStats:
@@ -137,12 +141,13 @@ def test_aggregate_below_threshold_and_queued_items_are_unclassified_not_counted
         1,
     )
     summary = report.unclassified
-    assert (summary.cards, summary.unplaced_cards, summary.below_threshold_cards) == (44, 8, 2)
+    assert (summary.cards, summary.unplaced_cards, summary.below_threshold_cards) == (45, 8, 2)
     assert (summary.unclassified_cards, summary.decided_no_position_cards) == (10, 1)
-    assert (report.header.cards, report.header.cards_placed) == (44, 33)
+    # b7's answer to the midterms DA (v1-e32-t10's fixture card) is placed, and counts nowhere.
+    assert (report.header.cards, report.header.cards_placed) == (45, 34)
 
 
-@pytest.mark.parametrize(("threshold", "unplaced", "below", "placed"), [(0.95, 8, 10, 25), (0.4, 8, 0, 35)])
+@pytest.mark.parametrize(("threshold", "unplaced", "below", "placed"), [(0.95, 8, 10, 26), (0.4, 8, 0, 36)])
 def test_aggregate_the_report_threshold_decides_what_is_unclassified(
     threshold: float, unplaced: int, below: int, placed: int
 ) -> None:
@@ -165,9 +170,9 @@ def test_aggregate_unclassified_rounds_are_counted_by_side() -> None:
 
 def test_aggregate_disclosures_after_the_snapshot_are_out_of_range() -> None:
     report = _report()
-    # b9 (2026-09-22) reads cap-k and spending-da, and its cards would make 46.
+    # b9 (2026-09-22) reads cap-k and spending-da, and its cards would make 47.
     assert (_position(report, "cap-k").rounds, _position(report, "spending-da").rounds) == (3, 4)
-    assert (report.header.snapshot, report.header.rounds, report.unclassified.cards) == (SECOND, 16, 44)
+    assert (report.header.snapshot, report.header.rounds, report.unclassified.cards) == (SECOND, 16, 45)
 
 
 def test_aggregate_a_round_carried_into_the_next_window_is_one_round_first_seen_in_the_first() -> None:
@@ -535,6 +540,145 @@ def test_top_cards_every_row_is_file_import() -> None:
 
 
 # ------------------------------------------------------------------------------------------------
+# Impact cards (v1-e32-t10)
+# ------------------------------------------------------------------------------------------------
+
+
+def _impacts(report: LandscapeReport, position_id: str) -> list[tuple[str, int]]:
+    return [
+        (card.fingerprint[:2], card.teams_reading)
+        for card in report.impact_cards
+        if card.position_id == position_id
+    ]
+
+
+def _with_card(
+    inputs: LandscapeReportInputs, source: str, element: int, **changes: object
+) -> LandscapeReportInputs:
+    """`inputs` with the classification of `source`'s card at `element` changed."""
+    return dataclasses.replace(
+        inputs,
+        classifications=tuple(
+            one.evolve(**changes)
+            if (one.source_sha256, one.first_element_index) == (source * 32, element)
+            else one
+            for one in inputs.classifications
+        ),
+    )
+
+
+def test_impact_cards_count_only_the_labelled_copies_of_a_cluster() -> None:
+    report = _report()
+    # Cluster 2 is read by XX, ZZ, VV and QQ, but only a1's copy d (XX) is labelled, by its tag.
+    # Cluster 3: a4 (KK), under an impact heading.
+    assert _impacts(report, "costs-advantage") == [("02", 1), ("03", 1)]
+    # Cluster 14 is read by four teams; only b2's copy (QQ) is labelled. Cluster 15 (turns case): YY, JJ.
+    assert _impacts(report, "spending-da") == [("15", 2), ("14", 1)]
+    assert _impacts(report, "hospital-closures-da") == [("23", 1)]
+
+
+def test_impact_cards_rank_by_teams_then_by_cluster_id() -> None:
+    report = _report()
+    # Spending: 15 before 14, against their ids. Costs: 2 and 3 tie at one team, so the id orders them.
+    assert [
+        (card.rank, card.fingerprint[:2]) for card in report.impact_cards if card.position_id == "spending-da"
+    ] == [(1, "15"), (2, "14")]
+    assert [
+        card.fingerprint[:2] for card in report.impact_cards if card.position_id == "costs-advantage"
+    ] == [
+        "02",
+        "03",
+    ]
+
+
+def test_impact_cards_are_capped_at_n_per_position() -> None:
+    report = _report(impact_cards=1)
+    assert [(card.position_id, card.fingerprint[:2]) for card in report.impact_cards] == [
+        ("costs-advantage", "02"),
+        ("spending-da", "15"),
+        ("hospital-closures-da", "23"),
+    ]
+    assert report.header.impact_cards_per_position == 1
+    assert _report().header.impact_cards_per_position == 3
+
+
+def test_impact_cards_show_a_labelled_copy_not_the_clusters_commonest() -> None:
+    costs = next(card for card in _report().impact_cards if card.position_id == "costs-advantage")
+    assert (costs.tag, costs.short_cite, costs.element_index, costs.source_snapshot) == (
+        "2. Extinction from economic collapse",
+        "Okafor 25",
+        6,
+        FIRST,
+    )
+    assert costs.source_object_key == "raw/caselist/synthpolicy26/sha256/a1/a1/" + "a1" * 32
+    assert {card.provenance_mode.value for card in _report().impact_cards} == {"FILE_IMPORT"}
+
+
+def test_impact_an_answer_is_never_an_impact_card() -> None:
+    # b7's answer to the midterms DA is under `impact` and tagged `2. Extinction outweighs`, in a round
+    # on no readable side: only its role keeps it out.
+    assert _impacts(_report(), "election-da") == []
+    as_read = _with_card(read_synthetic_caselist(FIXTURE), "b7", 9, role=PositionRole.READS)
+    assert _impacts(_report(as_read), "election-da") == [("33", 1)]
+
+
+def test_impact_a_card_in_a_round_on_the_other_side_is_never_an_impact_card() -> None:
+    # a6, JJ's affirmative file, has a spending DA card under `impact`: the 2AC answering the DA.
+    assert "31" not in {fingerprint for fingerprint, _ in _impacts(_report(), "spending-da")}
+    inputs = read_synthetic_caselist(FIXTURE)
+    sideless = tuple(
+        one.evolve(side=Side.UNKNOWN) if one.source_sha256 == "a6" * 32 else one for one in inputs.disclosures
+    )
+    report = _report(dataclasses.replace(inputs, disclosures=sideless))
+    assert _impacts(report, "spending-da") == [("15", 2), ("14", 1), ("31", 1)]
+
+
+def test_impact_no_impact_defense_and_impact_turns_headings_label_nothing() -> None:
+    report = _report()
+    # b3 `no impact`, b4 `impact defense`, b6 `impact turns`.
+    assert _impacts(report, "election-da") == []
+    assert _impacts(report, "provider-strikes-da") == []
+    inputs = read_synthetic_caselist(FIXTURE)
+    relabelled = tuple(
+        card.evolve(headings=("midterms da", "impact"))
+        if (card.source_sha256, card.element_index) == ("b3" * 32, 0)
+        else card
+        for card in inputs.cards
+    )
+    assert _impacts(_report(dataclasses.replace(inputs, cards=relabelled)), "election-da") == [("20", 1)]
+
+
+def test_impact_cards_are_listed_for_das_and_advantages_only() -> None:
+    # b2's cap-k card is under `impact`, and a K is not listed.
+    assert {card.position_id for card in _report().impact_cards} == {
+        "costs-advantage",
+        "spending-da",
+        "hospital-closures-da",
+    }
+
+
+def test_impact_out_of_range_and_below_threshold_cards_are_not_impact_cards() -> None:
+    # b9's spending DA card (cluster 28) is under `impact` and disclosed after the report's date.
+    assert "28" not in {fingerprint for fingerprint, _ in _impacts(_report(), "spending-da")}
+    below = _with_card(read_synthetic_caselist(FIXTURE), "b4", 6, confidence=0.5)
+    assert _impacts(_report(below), "hospital-closures-da") == []
+
+
+def test_impact_coverage_counts_documents_with_no_labelled_impact_per_kind() -> None:
+    coverage = {one.kind.value: one for one in _report().impact_coverage}
+    # Advantages: a1 to a6 (b1 only answers); a1 and a4 carry an impact card.
+    # DAs: b1, b2, b3, b4, b5, b6 (a6 is the other side, b9 out of range); b1, b2 and b4 carry one.
+    assert {
+        kind: (one.documents, one.labelled_documents, one.unlabelled_documents)
+        for kind, one in coverage.items()
+    } == {
+        "advantage": (6, 2, 4),
+        "da": (6, 3, 3),
+    }
+    assert [one.kind.value for one in _report().impact_coverage] == ["advantage", "da"]
+
+
+# ------------------------------------------------------------------------------------------------
 # From the stores
 # ------------------------------------------------------------------------------------------------
 
@@ -581,6 +725,32 @@ def test_landscape_cards_take_each_cards_cluster_from_the_occurrence_table() -> 
     ]
 
 
+def test_landscape_cards_carry_the_normalized_headings_without_an_open_tag_or_a_school() -> None:
+    source = SeedSource(
+        sha256="a1" * 32,
+        teams=(SeedTeam(identity="one", side=Side.NEG, names=("Ashgrove Fictional", "XX")),),
+        cards=(
+            SeedCard(
+                tag="Extinction outweighs",
+                section_path=("1NC — Spending DA", "Ashgrove Fictional XX Impacts"),
+                first_element_index=0,
+            ),
+            SeedCard(tag=None, section_path=("Spending DA", "Extinction outweighs"), first_element_index=3),
+            SeedCard(
+                tag="Elsewhere", section_path=("Birchmoor Fictional Turns Case",), first_element_index=6
+            ),
+        ),
+    )
+    rows = [_occurrence("a1" * 32, element, "01" * 32, "d1" * 32) for element in (0, 3, 6)]
+    cards = landscape_cards([source], rows, {"Birchmoor Fictional": ("ZZ",)})
+    # The open tag under the second card is no heading; Birchmoor is another school of the caselist.
+    assert [card.headings for card in cards] == [
+        ("spending da", "impacts"),
+        ("spending da",),
+        ("turns case",),
+    ]
+
+
 # ------------------------------------------------------------------------------------------------
 # No model
 # ------------------------------------------------------------------------------------------------
@@ -590,6 +760,7 @@ def test_no_module_that_builds_or_renders_the_report_imports_a_model_router() ->
     for module in (
         REPO / "packages/debate_core/src/debate_core/application/landscape_report.py",
         REPO / "packages/debate_core/src/debate_core/arguments/landscape/render.py",
+        REPO / "packages/debate_core/src/debate_core/arguments/landscape/impacts.py",
         REPO / "packages/debate_core/src/debate_core/domain/landscape_report.py",
     ):
         imported = {

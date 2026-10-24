@@ -1,4 +1,4 @@
-"""The landscape report's files against hand-written golden files (`v1-e32-t03` ac1, ac2, ac4).
+"""The landscape report's files against hand-written golden files (`v1-e32-t03` ac1, ac2, ac4; `v1-e32-t10`).
 
 `tests/fixtures/landscape/golden/` was written by hand from the synthetic caselist's table, never by
 running the renderer (working agreement 6). The scan reads every school, team code and tournament
@@ -19,9 +19,11 @@ import pytest
 from debate_core.application.landscape_report import LandscapeReportBundle, LandscapeReportService
 from debate_core.application.landscape_staleness import STALE_BANNER_HEADING
 from debate_core.arguments.landscape.render import (
+    IMPACT_CARD_COLUMNS,
     POSITION_COLUMNS,
     TOP_CARD_COLUMNS,
     header_metadata,
+    render_impact_cards_csv,
     render_markdown,
     render_top_cards_csv,
 )
@@ -35,7 +37,8 @@ from debate_core.testing.landscape_report import (
 REPO = Path(__file__).resolve().parents[5]
 FIXTURE = REPO / "tests" / "fixtures" / "landscape" / "synthetic_caselist"
 GOLDEN = REPO / "tests" / "fixtures" / "landscape" / "golden"
-FILES = ("report.md", "positions.csv", "top_cards.csv")
+FILES = ("report.md", "positions.csv", "top_cards.csv", "impact_cards.csv")
+CSV_FILES = ("positions.csv", "top_cards.csv", "impact_cards.csv")
 
 
 def _bundle(
@@ -87,7 +90,11 @@ def test_the_scan_finds_a_team_code_planted_in_a_tag() -> None:
 
 def test_the_csv_columns_are_the_specs() -> None:
     files = _bundle().files
-    for name, columns in (("positions.csv", POSITION_COLUMNS), ("top_cards.csv", TOP_CARD_COLUMNS)):
+    for name, columns in (
+        ("positions.csv", POSITION_COLUMNS),
+        ("top_cards.csv", TOP_CARD_COLUMNS),
+        ("impact_cards.csv", IMPACT_CARD_COLUMNS),
+    ):
         rows = list(csv.reader(line for line in files[name].splitlines() if not line.startswith("#")))
         assert tuple(rows[0]) == columns
     assert POSITION_COLUMNS == (
@@ -110,6 +117,7 @@ def test_the_csv_columns_are_the_specs() -> None:
         "element_index",
         "provenance_mode",
     } <= set(TOP_CARD_COLUMNS)
+    assert IMPACT_CARD_COLUMNS == TOP_CARD_COLUMNS
 
 
 def test_a_stale_report_starts_with_the_banner_and_its_csvs_say_stale_true() -> None:
@@ -117,7 +125,7 @@ def test_a_stale_report_starts_with_the_banner_and_its_csvs_say_stale_true() -> 
     assert files["report.md"].startswith(STALE_BANNER_HEADING)
     assert "2026-09-15, 10 day(s) before this report" in files["report.md"].splitlines()[0]
     assert "| Data freshness | Stale: the newest snapshot is 2026-09-15, 10 day(s) old" in files["report.md"]
-    for name in ("positions.csv", "top_cards.csv"):
+    for name in CSV_FILES:
         assert "# stale=true\n" in files[name]
         assert "# snapshot_age_days=10\n" in files[name]
 
@@ -132,7 +140,7 @@ def test_a_cap_bound_run_makes_a_fresh_report_stale() -> None:
 def test_a_current_report_has_no_banner_and_says_stale_false() -> None:
     files = _bundle().files
     assert files["report.md"].startswith("# Argument landscape: synthpolicy26 through 2026-09-15\n")
-    assert all("# stale=false\n" in files[name] for name in ("positions.csv", "top_cards.csv"))
+    assert all("# stale=false\n" in files[name] for name in CSV_FILES)
 
 
 def _with_tag(report: LandscapeReport, tag: str) -> LandscapeReport:
@@ -142,14 +150,40 @@ def _with_tag(report: LandscapeReport, tag: str) -> LandscapeReport:
     )
 
 
-def test_report_md_lists_no_card_and_points_to_top_cards_csv() -> None:
+def test_report_md_lists_impact_cards_only_and_points_to_top_cards_csv() -> None:
+    """The coach's review of 2026-10-24: no most-read cards in report.md, the impact cards instead."""
     files = _bundle().files
     report = _bundle().report
-    for card in report.top_cards:
+    impact_tags = {card.tag for card in report.impact_cards}
+    for card in (*report.top_cards, *report.impact_cards):
         assert card.source_object_key not in files["report.md"]
-        assert card.tag is None or card.tag not in files["report.md"]
+        assert card.tag is None or card.tag in impact_tags or card.tag not in files["report.md"]
+    for card in report.top_cards:
         assert card.source_object_key in files["top_cards.csv"]
+    for card in report.impact_cards:
+        assert card.source_object_key in files["impact_cards.csv"]
+        assert (
+            f"| {card.rank} | {card.teams_reading} | {card.tag} | {card.short_cite} |" in files["report.md"]
+        )
     assert "most-read cards are in `top_cards.csv`" in files["report.md"]
+
+
+def test_each_kind_says_how_many_of_its_documents_carry_no_labelled_impact() -> None:
+    files = _bundle().files
+    assert "Advantage documents with no labelled impact: 4 of 6 (66.7%)." in files["report.md"]
+    assert "DA documents with no labelled impact: 3 of 6 (50.0%)." in files["report.md"]
+    assert "# no_labelled_impact_advantage=4/6\n# no_labelled_impact_da=3/6\n" in files["impact_cards.csv"]
+
+
+def test_a_tag_in_an_impact_row_is_escaped_in_markdown_and_exact_in_the_csv() -> None:
+    report = _bundle().report
+    tag = "Costs | fall *fast*\nunder_plan"
+    first = report.impact_cards[0].model_copy(update={"tag": tag})
+    changed = report.model_copy(update={"impact_cards": (first, *report.impact_cards[1:])})
+    assert r"| 1 | 1 | Costs \| fall \*fast\* under\_plan | Okafor 25 |" in render_markdown(changed)
+    rendered = render_impact_cards_csv(changed, {})
+    rows = list(csv.reader(line for line in rendered.splitlines(keepends=True) if not line.startswith("#")))
+    assert rows[1][IMPACT_CARD_COLUMNS.index("tag")] == tag
 
 
 def test_markdown_escapes_what_would_break_a_table_in_a_label() -> None:

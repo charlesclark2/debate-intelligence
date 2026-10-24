@@ -208,9 +208,26 @@ file past 1.1.0 (t09's child affs), because the writer refuses a version the fil
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-24
 
 **Notes:**
+
+1. **The lock does what the guide promised.** Every rule is refused by a synthetic fixture,
+   and the refusal names the file, the rule and the id where there is one. There were two red runs
+   (16/21, then 3/22 for the digest), and all 26 mutants were caught on the final code, run with
+   the digest in place, so no rule hides behind another. The writer was tried on a scratch copy of
+   today's config.
+2. **A label edit at a released version needs a bump: accepted as built.** It is the direct result
+   of "every field" and "any edit", and the guide's version table already asked for a patch bump.
+   Renames across versions stay free, with only id, kind and side fixed.
+3. **Leaving default-valued fields out of the canonical JSON: accepted.** Every field a position
+   sets is covered, and a new optional model field won't break every released digest.
+4. **Your third spec edit** ("and the positions digest" in the description's list) is accepted. The
+   spec should describe the file as built.
+
+**The PR:** opened without `--partial`. It merges **before** v1-e32-t05's first `--publish`. The
+operator then writes the 1.1.0 lock with the command in the guide, and the PM commits it in a PM
+batch.

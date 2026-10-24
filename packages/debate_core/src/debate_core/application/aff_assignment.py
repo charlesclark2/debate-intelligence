@@ -15,18 +15,36 @@ on-topic disclosures, `v1-e32-t02`'s classifications and each affirmative file's
 
 A team is the round's school and team code, compared without case, and is only ever an opaque key
 here. Nothing is written or logged.
+
+:class:`AffAssignmentService` is the producer `v1-e32-t05`'s run takes (the PM's note of 2026-10-24),
+as an :class:`AffAssignmentSource`: for a caselist and a through date it reads the caselist's sources
+on its topic as `v1-e32-t02`'s classifier does, reads each affirmative file's plan text
+(:class:`~debate_core.application.plan_texts.PlanTextService`, cached), classifies the cards
+(:class:`~debate_core.application.position_classification.PositionClassificationService`, cached),
+and returns :func:`build_aff_assignments`' assignments.
 """
 
 from __future__ import annotations
 
+import dataclasses
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date
-from typing import Final
+from typing import Final, Protocol, runtime_checkable
 
+from debate_core.application.caselist.evidence_listing import LocalEvidence
+from debate_core.application.caselist.parse_sources import enumerate_sources
 from debate_core.application.caselist.path_parser import UNKNOWN_SCHOOL, UNKNOWN_TEAM_CODE
+from debate_core.application.errors import DomainError
 from debate_core.application.landscape_report import round_id
+from debate_core.application.landscape_seeding import read_seed_sources
+from debate_core.application.plan_texts import PlanTextRun, PlanTextService
+from debate_core.application.ports.classification_store import ClassificationStore
+from debate_core.application.ports.parsed_store import ParsedStore
+from debate_core.application.ports.suppression import SuppressionList
+from debate_core.application.ports.taxonomy_repository import TaxonomyRepository
+from debate_core.application.position_classification import PositionClassificationService
 from debate_core.arguments.landscape.aff_assignment import AffRound, AssignmentCounts, assign_affs
 from debate_core.arguments.landscape.plan_text import DocumentPlanText, PlanTextVocabulary
 from debate_core.arguments.landscape.review_queue import DEFAULT_REVIEW_THRESHOLD, needs_review
@@ -37,7 +55,26 @@ from debate_core.domain.landscape_report import AffAssignment
 
 _AFFIRMATIVE: Final = frozenset({Side.AFF, Side.PRO})
 
-__all__ = ["AffAssignmentRun", "build_aff_assignments"]
+__all__ = [
+    "AffAssignmentCannotStart",
+    "AffAssignmentRun",
+    "AffAssignmentService",
+    "AffAssignmentSource",
+    "build_aff_assignments",
+]
+
+
+class AffAssignmentCannotStart(DomainError):
+    """The caselist's through date is on no topic with a taxonomy, or no affirmative source was read."""
+
+
+@runtime_checkable
+class AffAssignmentSource(Protocol):
+    """What a landscape run asks for its affirmative rounds' affs."""
+
+    async def aff_assignments(self, caselist: str, through: date) -> tuple[AffAssignment, ...]:
+        """Each affirmative round of `caselist` disclosed on or before `through` that a signal identifies."""
+        ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -48,6 +85,75 @@ class AffAssignmentRun:
     """Distinct teams with an affirmative round in range."""
     identified_teams: int
     """Of those, teams with a round assigned an aff or left to a placed card."""
+    plan_texts: PlanTextRun | None = field(default=None, repr=False)
+    """The plan-text reading the assignments were made from, when :class:`AffAssignmentService` read it."""
+
+
+class AffAssignmentService:
+    """The producer of each affirmative round's aff, for a caselist and a through date."""
+
+    def __init__(
+        self,
+        *,
+        store: ParsedStore,
+        local: LocalEvidence,
+        suppression: SuppressionList,
+        taxonomies: TaxonomyRepository,
+        classifications: ClassificationStore,
+        plan_texts: PlanTextService,
+    ) -> None:
+        self._store = store
+        self._local = local
+        self._suppression = suppression
+        self._taxonomies = taxonomies
+        self._classifications = classifications
+        self._plan_texts = plan_texts
+
+    async def aff_assignments(self, caselist: str, through: date) -> tuple[AffAssignment, ...]:
+        return (await self.run(caselist, through)).assignments
+
+    async def run(self, caselist: str, through: date, *, version: str | None = None) -> AffAssignmentRun:
+        """The assignments with their counts and the plan-text reading behind them.
+
+        `version` names the parsed store's version directory; the newest by default.
+        """
+        resolved = self._taxonomies.resolve(caselist, through)
+        if resolved is None or resolved.taxonomy is None:
+            raise AffAssignmentCannotStart(
+                f"topics.yaml puts {caselist} on {through} on no topic with a taxonomy"
+            )
+        reading = await read_seed_sources(
+            store=self._store,
+            local=self._local,
+            suppression=self._suppression,
+            topic=resolved.topic,
+            caselist=caselist,
+            version=version,
+            through=through,
+        )
+        affirmative = {
+            source.sha256
+            for source in reading.sources
+            if any(team.side in _AFFIRMATIVE for team in source.teams)
+        }
+        documents = [
+            one.source_document()
+            for one in await enumerate_sources(self._local, caselist)
+            if one.sha256 in affirmative
+        ]
+        taxonomy = self._taxonomies.taxonomy(resolved.topic.id)
+        plan_texts = await self._plan_texts.read(caselist, documents, PlanTextVocabulary(taxonomy))
+        classified = await PositionClassificationService(
+            taxonomies=self._taxonomies, store=self._classifications
+        ).classify(reading)
+        built = build_aff_assignments(
+            disclosures=reading.disclosures,
+            through=through,
+            classifications=classified.classifications,
+            plan_texts=plan_texts.verdicts,
+            taxonomy=taxonomy,
+        )
+        return dataclasses.replace(built, plan_texts=plan_texts)
 
 
 def build_aff_assignments(

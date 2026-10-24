@@ -21,7 +21,7 @@ how the operator reads them for a snapshot and writes the coach's sheet. Three c
 * **`assign`** reads plan texts as `plan-texts` does, classifies the snapshot's cards as `v1-e32-t02`'s
   classifier does (which may rewrite that classifier's own cache and review queue under the data
   directory), and assigns each affirmative round its aff
-  (:func:`~debate_core.application.aff_assignment.build_aff_assignments`), printing counts by method.
+  (:class:`~debate_core.application.aff_assignment.AffAssignmentService`), printing counts by method.
   `v1-e32-t05` builds the same assignments for the report; this command is how they are counted
   before it does.
 
@@ -47,7 +47,7 @@ from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
-from debate_core.application.aff_assignment import build_aff_assignments
+from debate_core.application.aff_assignment import AffAssignmentService
 from debate_core.application.caselist.evidence_listing import LocalEvidence
 from debate_core.application.caselist.parse_sources import enumerate_sources
 from debate_core.application.caselist.parse_workers import (
@@ -60,7 +60,6 @@ from debate_core.application.errors import DomainError
 from debate_core.application.landscape_seeding import SeedReading, read_seed_sources
 from debate_core.application.landscape_staleness import LandscapeStalenessCheck
 from debate_core.application.plan_texts import PlanTextRun, PlanTextService
-from debate_core.application.position_classification import PositionClassificationService
 from debate_core.arguments.landscape.plan_text import PlanTextVerdict, PlanTextVocabulary
 from debate_core.arguments.landscape.plan_text_sheet import (
     ANSWERS_FILE,
@@ -109,13 +108,19 @@ class _Read:
     """Each affirmative source's affirmative teams, as opaque identities."""
     run: PlanTextRun
     service: PlanTextService
-    repository: YamlTaxonomyRepository
+
+
+@dataclass(frozen=True, slots=True)
+class _Stores:
     data_dir: Path
+    repository: YamlTaxonomyRepository
+    local: LocalEvidence
+    plan_texts: PlanTextService
+    snapshot: date
 
 
-async def _read(arguments: argparse.Namespace) -> _Read:
+async def _stores(arguments: argparse.Namespace) -> _Stores:
     data_dir = _outside_the_repository(arguments.data_dir, "--data-dir")
-    repository = YamlTaxonomyRepository.load(arguments.config_dir)
     objects = FsEvidenceObjectStore(data_dir)
     blobs = FsEvidenceObjectStore(data_dir, subdirectory=BLOB_DIRECTORY.parent)
     local = LocalEvidence(
@@ -128,13 +133,32 @@ async def _read(arguments: argparse.Namespace) -> _Read:
         )
         if snapshot is None:
             raise Refused(f"{arguments.caselist} has no weekly snapshot under {data_dir}")
+    runner: ParseRunner = (
+        InProcessParseRunner()
+        if arguments.workers == 0
+        else ProcessPoolParseRunner(workers=arguments.workers, timeout_seconds=PER_FILE_TIMEOUT_SECONDS)
+    )
+    return _Stores(
+        data_dir=data_dir,
+        repository=YamlTaxonomyRepository.load(arguments.config_dir),
+        local=local,
+        plan_texts=PlanTextService(
+            parser=DebateDocxParser(), runner=runner, store=LocalPlanTextStore(data_dir), local=local
+        ),
+        snapshot=snapshot,
+    )
+
+
+async def _read(arguments: argparse.Namespace) -> _Read:
+    stores = await _stores(arguments)
+    repository, local, snapshot = stores.repository, stores.local, stores.snapshot
     resolved = repository.resolve(arguments.caselist, snapshot)
     if resolved is None or resolved.taxonomy is None:
         raise Refused(f"topics.yaml puts {arguments.caselist} on {snapshot} on no topic with a taxonomy")
     reading = await read_seed_sources(
-        store=LocalParsedStore(data_dir),
+        store=LocalParsedStore(stores.data_dir),
         local=local,
-        suppression=RecordedSuppressionList(local_suppression_list_file(data_dir)),
+        suppression=RecordedSuppressionList(local_suppression_list_file(stores.data_dir)),
         topic=resolved.topic,
         caselist=arguments.caselist,
         version=arguments.version,
@@ -156,14 +180,7 @@ async def _read(arguments: argparse.Namespace) -> _Read:
         f"{resolved.topic.id}, {len(affirmative)} affirmative."
     )
     taxonomy = repository.taxonomy(resolved.topic.id)
-    runner: ParseRunner = (
-        InProcessParseRunner()
-        if arguments.workers == 0
-        else ProcessPoolParseRunner(workers=arguments.workers, timeout_seconds=PER_FILE_TIMEOUT_SECONDS)
-    )
-    service = PlanTextService(
-        parser=DebateDocxParser(), runner=runner, store=LocalPlanTextStore(data_dir), local=local
-    )
+    service = stores.plan_texts
     run = await service.read(arguments.caselist, affirmative, PlanTextVocabulary(taxonomy))
     return _Read(
         reading=reading,
@@ -174,8 +191,6 @@ async def _read(arguments: argparse.Namespace) -> _Read:
         teams=teams,
         run=run,
         service=service,
-        repository=repository,
-        data_dir=data_dir,
     )
 
 
@@ -217,20 +232,23 @@ async def _plan_texts(arguments: argparse.Namespace) -> int:
 
 async def _assign(arguments: argparse.Namespace) -> int:
     started = time.perf_counter()
-    read = await _read(arguments)
-    if not read.affirmative:
+    stores = await _stores(arguments)
+    service = AffAssignmentService(
+        store=LocalParsedStore(stores.data_dir),
+        local=stores.local,
+        suppression=RecordedSuppressionList(local_suppression_list_file(stores.data_dir)),
+        taxonomies=stores.repository,
+        classifications=LocalClassificationStore(stores.data_dir),
+        plan_texts=stores.plan_texts,
+    )
+    found = await service.run(arguments.caselist, stores.snapshot, version=arguments.version)
+    plan = found.plan_texts.counts if found.plan_texts is not None else None
+    if plan is None or not plan.sources:
         print("FAILED: 0 affirmative sources read; no round was assigned.", file=sys.stderr)
         return 1
-    _print_plan_texts(read)
-    classified = await PositionClassificationService(
-        taxonomies=read.repository, store=LocalClassificationStore(read.data_dir)
-    ).classify(read.reading)
-    found = build_aff_assignments(
-        disclosures=read.reading.disclosures,
-        through=read.through,
-        classifications=classified.classifications,
-        plan_texts=read.run.verdicts,
-        taxonomy=read.repository.taxonomy(read.topic_id),
+    print(
+        f"Assigned {arguments.caselist} through {stores.snapshot}: plan texts of {plan.sources} affirmative "
+        f"sources, {plan.hits} cached, {plan.parsed} parsed, {plan.refused} refused, {plan.unread} unread."
     )
     counts = found.counts
     methods = ", ".join(f"{method} {count}" for method, count in counts.by_method.items()) or "none"

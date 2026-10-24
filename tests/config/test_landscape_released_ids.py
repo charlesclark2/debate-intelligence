@@ -222,14 +222,25 @@ def test_a_position_added_at_a_released_version_is_refused(tmp_path: Path) -> No
     assert "Rule (changed-without-bump)" in finding
 
 
-def test_a_kind_changed_at_a_released_version_is_refused_by_both_rules(tmp_path: Path) -> None:
-    root = write_config(tmp_path, positions=edited("states-cp", kind="da"))
+@pytest.mark.parametrize(
+    ("positions", "first_rule", "detail"),
+    [
+        (edited("states-cp", kind="da"), "kind-or-side-changed", "differs from the lock of"),
+        (without("states-cp"), "released-id-missing", "is in the lock of"),
+    ],
+    ids=["kind-changed", "deleted"],
+)
+def test_a_change_at_a_released_version_is_refused_by_both_rules(
+    tmp_path: Path, positions: list[dict[str, Any]], first_rule: str, detail: str
+) -> None:
+    root = write_config(tmp_path, positions=positions)
     findings = released_id_findings(root)
     assert [finding.split(". Rule (")[1].split(")")[0] for finding in findings] == [
-        "kind-or-side-changed",
+        first_rule,
         "changed-without-bump",
     ]
-    assert all(finding.startswith(f"{topic_file(root)}: states-cp ") for finding in findings)
+    assert all(" states-cp " in finding for finding in findings)
+    assert f"states-cp {detail} {TOPIC} 1.0.0" in findings[1]
 
 
 def test_a_version_below_a_released_one_is_refused(tmp_path: Path) -> None:

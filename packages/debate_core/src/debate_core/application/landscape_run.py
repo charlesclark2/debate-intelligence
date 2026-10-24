@@ -113,7 +113,7 @@ __all__ = [
 REPORTS_PREFIX: Final = "reports/landscape"
 """Where a landscape bundle goes in the bucket, and under the data directory."""
 
-BUNDLE_FILES: Final = ("positions.csv", "top_cards.csv", "report.md")
+BUNDLE_FILES: Final = ("positions.csv", "top_cards.csv", "impact_cards.csv", "report.md")
 """The bundle's files, in the order they are uploaded: the page a person opens goes last."""
 
 DEFAULT_MAX_MODEL_ITEMS: Final = 0
@@ -416,6 +416,7 @@ class LandscapeRunService:
                 cards=landscape_cards(
                     reading.sources,
                     await self._parsed.read_occurrences(request.caselist, reading.version) or (),
+                    reading.caselist_names,
                 ),
                 aff_assignments=assignments,
             ),

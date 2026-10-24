@@ -49,6 +49,12 @@ def test_no_impact_impact_defense_and_impact_turns_label_nothing(heading: str) -
     assert not is_impact_heading(heading)
 
 
+@pytest.mark.parametrize("heading", ["impact turns case", "dome impact turns case", "no impact turns case"])
+def test_turns_case_labels_an_impact_whatever_else_the_heading_holds(heading: str) -> None:
+    """The ruling's `turns case` is a label of its own: "the impact turns the case" is an impact."""
+    assert is_impact_heading(heading)
+
+
 @pytest.mark.parametrize(
     "heading",
     [

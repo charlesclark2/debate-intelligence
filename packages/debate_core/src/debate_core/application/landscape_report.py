@@ -5,7 +5,7 @@ classifications `v1-e32-t02` wrote for the caselist's cards, the E30 disclosures
 each file on which side in which round, the E31 fingerprints that say which cards are one card, the
 topic's taxonomy and the coach's overrides, and, from `v1-e32-t09` when it lands, an aff per
 affirmative round. Its output is a :class:`~debate_core.domain.landscape_report.LandscapeReport`
-and that report's three files, rendered by :mod:`debate_core.arguments.landscape.render` and passed
+and that report's four files, rendered by :mod:`debate_core.arguments.landscape.render` and passed
 through `v1-e34-t03`'s staleness hook.
 
 ## What is counted
@@ -49,6 +49,15 @@ of the cluster's cards under the position carry (ties to the first in text order
 such card by source digest and paragraph, with its file's content-addressed `raw/` key and the
 snapshot that file was first disclosed in.
 
+## Impact cards (`v1-e32-t10`)
+
+Per DA and advantage, the cards counted for it that a team labelled as an impact
+(:mod:`debate_core.arguments.landscape.impacts`), card by card: a cluster's teams are the teams of
+the rounds holding one of its *labelled* copies, and the row shows one of those copies. Clusters rank
+as top cards do, by teams then cluster id, up to N per position. Per kind, a document is a file
+holding a card counted for a position of that kind, and the report counts those holding an impact
+card among them, so it can say how many carry no labelled impact.
+
 ## What never leaves this module
 
 School, team code, tournament and round are read to tell rounds and teams apart, and are not in the
@@ -60,7 +69,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections import Counter, defaultdict
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date
 from typing import Final
@@ -74,14 +83,21 @@ from debate_core.application.landscape_staleness import (
     with_staleness_metadata,
 )
 from debate_core.application.ports.parsed_store import OccurrenceRecord
+from debate_core.arguments.landscape.impacts import is_impact_card
 from debate_core.arguments.landscape.render import (
     header_metadata,
+    render_impact_cards_csv,
     render_markdown,
     render_positions_csv,
     render_top_cards_csv,
 )
 from debate_core.arguments.landscape.review_queue import DEFAULT_REVIEW_THRESHOLD, needs_review
 from debate_core.arguments.landscape.seeding import SeedSource
+from debate_core.arguments.landscape.source_headings import (
+    CaselistNames,
+    heading_path,
+    normalize_source_heading,
+)
 from debate_core.domain.caselist import Disclosure, Side
 from debate_core.domain.landscape import Position, PositionKind, PositionSide, Taxonomy
 from debate_core.domain.landscape_classification import (
@@ -92,10 +108,14 @@ from debate_core.domain.landscape_classification import (
     PositionRole,
 )
 from debate_core.domain.landscape_report import (
+    DEFAULT_IMPACT_CARDS,
     DEFAULT_TOP_CARDS,
+    IMPACT_KINDS,
     PLACED_CARD_METHOD,
     AffAssignment,
     AffIdentification,
+    ImpactCard,
+    ImpactCoverage,
     LandscapeCard,
     LandscapeReport,
     PositionStats,
@@ -169,13 +189,19 @@ def round_id(disclosure: Disclosure) -> str:
 
 
 def landscape_cards(
-    sources: Iterable[SeedSource], occurrences: Iterable[OccurrenceRecord]
+    sources: Iterable[SeedSource],
+    occurrences: Iterable[OccurrenceRecord],
+    caselist_names: Mapping[str, Sequence[str]] | None = None,
 ) -> tuple[LandscapeCard, ...]:
-    """Each card of `sources` with the cluster E31's occurrence table placed it in.
+    """Each card of `sources` with the cluster E31's occurrence table placed it in, and its headings.
 
     The occurrence table has a row per card per disclosure; a card's fingerprint and cluster are the
     same in each. A card with no row, or no first paragraph, has no cluster to rank and is left out.
+    The headings are the ones the position matcher reads (`v1-e32-t02`): the card's path without an
+    open tag, each normalized with the disclosing teams' names and `caselist_names`' schools taken
+    out, the empty ones left out.
     """
+    names = CaselistNames(caselist_names or {})
     clusters: dict[tuple[str, int], tuple[str, str]] = {}
     for row in occurrences:
         clusters.setdefault(
@@ -183,12 +209,22 @@ def landscape_cards(
         )
     cards: list[LandscapeCard] = []
     for source in sources:
+        own = [name for team in source.teams for name in team.names if name.strip()]
+        tags = {card.tag for card in source.cards if card.tag is not None}
+        normalized: dict[str, str] = {}
         for card in source.cards:
             if card.first_element_index is None:
                 continue
             found = clusters.get((source.sha256, card.first_element_index))
             if found is None:
                 continue
+            headings: list[str] = []
+            for raw in heading_path(card.tag, card.section_path, tags):
+                text = normalized.get(raw)
+                if text is None:
+                    text = normalized[raw] = normalize_source_heading(raw, own, names).text
+                if text:
+                    headings.append(text)
             cards.append(
                 LandscapeCard(
                     source_sha256=source.sha256,
@@ -197,6 +233,7 @@ def landscape_cards(
                     cluster_id=found[1],
                     tag=card.tag,
                     short_cite=card.short_cite,
+                    headings=tuple(headings),
                 )
             )
     return tuple(cards)
@@ -222,11 +259,11 @@ class LandscapeReportInputs:
 
 @dataclass(frozen=True, slots=True)
 class LandscapeReportBundle:
-    """A report and its three files, the staleness banner and flag already in them."""
+    """A report and its four files, the staleness banner and flag already in them."""
 
     report: LandscapeReport
     files: dict[str, str] = field(repr=False)
-    """`report.md`, `positions.csv` and `top_cards.csv`, by name."""
+    """`report.md`, `positions.csv`, `top_cards.csv` and `impact_cards.csv`, by name."""
 
 
 @dataclass(slots=True)
@@ -257,14 +294,21 @@ class LandscapeReportService:
     """Builds a caselist's landscape report from its classifications, disclosures and fingerprints."""
 
     def __init__(
-        self, *, review_threshold: float = DEFAULT_REVIEW_THRESHOLD, top_cards: int = DEFAULT_TOP_CARDS
+        self,
+        *,
+        review_threshold: float = DEFAULT_REVIEW_THRESHOLD,
+        top_cards: int = DEFAULT_TOP_CARDS,
+        impact_cards: int = DEFAULT_IMPACT_CARDS,
     ) -> None:
         if not 0.0 <= review_threshold <= 1.0:
             raise ValueError(f"the review threshold is between 0 and 1; got {review_threshold}")
-        if top_cards < 1:
-            raise ValueError(f"a report lists at least one card per position; got {top_cards}")
+        if top_cards < 1 or impact_cards < 1:
+            raise ValueError(
+                f"a report lists at least one card per position; got {top_cards} and {impact_cards} (impacts)"
+            )
         self._threshold = review_threshold
         self._top = top_cards
+        self._impact = impact_cards
 
     def bundle(self, inputs: LandscapeReportInputs, staleness: LandscapeStaleness) -> LandscapeReportBundle:
         """The report and its files, with the hook's banner and `stale` flag in them."""
@@ -276,6 +320,7 @@ class LandscapeReportService:
                 "report.md": with_stale_banner(render_markdown(report), staleness),
                 "positions.csv": render_positions_csv(report, metadata),
                 "top_cards.csv": render_top_cards_csv(report, metadata),
+                "impact_cards.csv": render_impact_cards_csv(report, metadata),
             },
         )
 
@@ -355,8 +400,32 @@ class LandscapeReportService:
         top_cards = [
             card
             for stats in positions
-            for card in self._top_cards(
-                stats.position_id, card_reads[stats.position_id], cards_by_key, in_range, inputs.caselist
+            for card in _ranked(
+                TopCard,
+                stats.position_id,
+                card_reads[stats.position_id],
+                cards_by_key,
+                in_range,
+                inputs.caselist,
+                self._top,
+            )
+        ]
+        labelled = {
+            position_id: {key: read for key, read in reads.items() if _is_impact(cards_by_key.get(key))}
+            for position_id, reads in card_reads.items()
+        }
+        impact_cards = [
+            card
+            for stats in positions
+            if stats.kind in IMPACT_KINDS
+            for card in _ranked(
+                ImpactCard,
+                stats.position_id,
+                labelled[stats.position_id],
+                cards_by_key,
+                in_range,
+                inputs.caselist,
+                self._impact,
             )
         ]
 
@@ -386,6 +455,7 @@ class LandscapeReportService:
                 prompt_version=", ".join(sorted(prompt_versions)) or DETERMINISTIC_PROMPT_VERSION,
                 review_threshold=self._threshold,
                 top_cards_per_position=self._top,
+                impact_cards_per_position=self._impact,
                 cards=cards,
                 cards_placed=placed,
                 rounds=len(rounds),
@@ -402,6 +472,10 @@ class LandscapeReportService:
             ),
             positions=tuple(positions),
             top_cards=tuple(top_cards),
+            impact_cards=tuple(impact_cards),
+            impact_coverage=tuple(
+                _impact_coverage(kind, taxonomy, card_reads, labelled) for kind in IMPACT_KINDS
+            ),
             unclassified=UnclassifiedSummary(
                 cards=cards,
                 unplaced_cards=unplaced,
@@ -418,43 +492,64 @@ class LandscapeReportService:
             ),
         )
 
-    def _top_cards(
-        self,
-        position_id: str,
-        reads: dict[tuple[str, int], set[str]],
-        cards: dict[tuple[str, int], LandscapeCard],
-        in_range: _Range,
-        caselist: str,
-    ) -> list[TopCard]:
-        members: defaultdict[str, list[LandscapeCard]] = defaultdict(list)
-        teams: defaultdict[str, set[tuple[str, str]]] = defaultdict(set)
-        for key, read in reads.items():
-            card = cards.get(key)
-            if card is None:
-                continue
-            members[card.cluster_id].append(card)
-            teams[card.cluster_id] |= {
-                team for one in read if (team := in_range.rounds[one].team) is not None
-            }
-        ranked = sorted(members, key=lambda cluster: (-len(teams[cluster]), cluster))[: self._top]
-        rows: list[TopCard] = []
-        for rank, cluster in enumerate(ranked, start=1):
-            shown = _shown_card(members[cluster])
-            first_seen = in_range.source_first_seen[shown.source_sha256]
-            rows.append(
-                TopCard(
-                    position_id=position_id,
-                    rank=rank,
-                    fingerprint=cluster,
-                    teams_reading=len(teams[cluster]),
-                    tag=shown.tag,
-                    short_cite=shown.short_cite,
-                    source_object_key=source_key(caselist, first_seen.isoformat(), shown.source_sha256),
-                    element_index=shown.element_index,
-                    source_snapshot=first_seen,
-                )
+
+def _ranked[RowT: TopCard](
+    row: type[RowT],
+    position_id: str,
+    reads: dict[tuple[str, int], set[str]],
+    cards: dict[tuple[str, int], LandscapeCard],
+    in_range: _Range,
+    caselist: str,
+    limit: int,
+) -> list[RowT]:
+    """Up to `limit` clusters of the cards in `reads`, by distinct teams then cluster id, as `row`s."""
+    members: defaultdict[str, list[LandscapeCard]] = defaultdict(list)
+    teams: defaultdict[str, set[tuple[str, str]]] = defaultdict(set)
+    for key, read in reads.items():
+        card = cards.get(key)
+        if card is None:
+            continue
+        members[card.cluster_id].append(card)
+        teams[card.cluster_id] |= {team for one in read if (team := in_range.rounds[one].team) is not None}
+    ranked = sorted(members, key=lambda cluster: (-len(teams[cluster]), cluster))[:limit]
+    rows: list[RowT] = []
+    for rank, cluster in enumerate(ranked, start=1):
+        shown = _shown_card(members[cluster])
+        first_seen = in_range.source_first_seen[shown.source_sha256]
+        rows.append(
+            row(
+                position_id=position_id,
+                rank=rank,
+                fingerprint=cluster,
+                teams_reading=len(teams[cluster]),
+                tag=shown.tag,
+                short_cite=shown.short_cite,
+                source_object_key=source_key(caselist, first_seen.isoformat(), shown.source_sha256),
+                element_index=shown.element_index,
+                source_snapshot=first_seen,
             )
-        return rows
+        )
+    return rows
+
+
+def _is_impact(card: LandscapeCard | None) -> bool:
+    """A card with a cluster that a heading over it or its tag labels as an impact."""
+    return card is not None and is_impact_card(card.headings, card.tag)
+
+
+def _impact_coverage(
+    kind: PositionKind,
+    taxonomy: Taxonomy,
+    card_reads: Mapping[str, dict[tuple[str, int], set[str]]],
+    labelled: Mapping[str, dict[tuple[str, int], set[str]]],
+) -> ImpactCoverage:
+    """The documents holding a card counted for a position of `kind`, and those holding an impact card."""
+    of_kind = [position_id for position_id in card_reads if taxonomy.position(position_id).kind is kind]
+    return ImpactCoverage(
+        kind=kind,
+        documents=len({sha for position_id in of_kind for sha, _ in card_reads[position_id]}),
+        labelled_documents=len({sha for position_id in of_kind for sha, _ in labelled[position_id]}),
+    )
 
 
 def _read_range(inputs: LandscapeReportInputs) -> _Range:

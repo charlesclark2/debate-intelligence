@@ -8,8 +8,9 @@
     debate-research landscape report --caselist hspolicy26 --publish --accept-scan-hits 3f9a0c1d2e4b
 
 Every decision is :class:`~debate_core.application.landscape_run.LandscapeRunService`'s
-(`v1-e32-t05-landscape-cli`); this is the guards and the rendering. The bundle is `v1-e32-t03`'s:
-`report.md`, `positions.csv` and `top_cards.csv`, under
+(`v1-e32-t05-landscape-cli`); this is the guards and the rendering. The bundle is `v1-e32-t03`'s
+with `v1-e32-t10`'s impact cards: `report.md`, `positions.csv`, `top_cards.csv` and
+`impact_cards.csv`, under
 `<data dir>/reports/landscape/<caselist>/<snapshot>/` unless `--out` names a directory.
 
 ## `--publish`

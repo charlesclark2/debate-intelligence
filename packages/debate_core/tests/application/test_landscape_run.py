@@ -119,7 +119,7 @@ async def _run(service: LandscapeRunService, **request: object) -> LandscapeRunR
 # ------------------------------------------------------------------------------------------------
 
 
-async def test_a_run_writes_the_three_files_under_the_newest_snapshot_and_counts_the_cards(
+async def test_a_run_writes_the_four_files_under_the_newest_snapshot_and_counts_the_cards(
     world: SyntheticRun,
 ) -> None:
     result = await _run(_service(world))
@@ -129,6 +129,7 @@ async def test_a_run_writes_the_three_files_under_the_newest_snapshot_and_counts
     assert result.directory == directory
     assert result.files == tuple(directory / name for name in BUNDLE_FILES)
     assert sorted(path.name for path in directory.iterdir()) == [
+        "impact_cards.csv",
         "positions.csv",
         "report.md",
         "top_cards.csv",

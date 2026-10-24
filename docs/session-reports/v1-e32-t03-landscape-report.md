@@ -505,3 +505,30 @@ A strong task.
 * Long tags are the coach's call in his review.
 
 If anything comes out differently, stop and ask for another review.
+
+## PM review, second
+
+**Verdict:** ACCEPTED
+<!-- ACCEPTED / CHANGES_REQUESTED -->
+
+**Reviewed by / date:** PM, 2026-10-24
+
+**Notes:**
+
+1. **(a).** The coach said yes to the structure and to every section that remains. Moving the
+   most-read cards out of report.md, while top_cards.csv keeps them for ac2, is a section change
+   within condition 2. ac5 is met. Set the Goal `Succeeded`, and open the PR without `--partial`.
+2. **His asks are placed by the PM**, in the next PM batch:
+   * a new E32 task for impact cards per DA and advantage, with the heading and tag rule for DAs
+     first and advantages with t07;
+   * a new E32 task for the negative side's analytic texts (CP texts, K alternatives and roles of
+     the ballot, overviews), reusing v1-e32-t09's raw re-read.
+
+   v1-e32-t09 is not widened: it is on the 2026-11-07 path.
+3. **Quoting a team's own text: decided by the coach, 2026-10-24.** A landscape report may quote
+   plan texts, CP texts and K alternatives word for word, including a text one team reads. The
+   report is the team's own: on the operator's machine and in the private reports bucket, never
+   the public site or the repository, and never beside a team code or school. The PM writes this
+   into the data-use policy as version 1.13 in the next PM batch, and its merge records the coach's
+   approval. Nothing in this task changes for it.
+4. **Q3: yes,** on (a).

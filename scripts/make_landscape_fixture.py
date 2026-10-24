@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Write the synthetic two-snapshot caselist the landscape report is tested against (`v1-e32-t03`).
+"""Write the synthetic caselists the landscape report is tested against (`v1-e32-t03`, `v1-e32-t04`).
 
 `tests/fixtures/landscape/synthetic_caselist/` holds the report's inputs for one invented Policy
 caselist, `synthpolicy26`: its taxonomy, the coach's overrides, the E30 disclosures (who disclosed
@@ -14,9 +14,15 @@ could not contradict it.
 
     uv run python scripts/make_landscape_fixture.py
 
-The fixture is small enough to count on paper: 15 sources, 18 disclosure rows, 16 rounds in range
-by 8 teams, 47 cards (45 of them in range). Its README says what each part exercises. Owned by
-`v1-e32-t03`; `v1-e32-t10` gave the DA and advantage cards their headings for the impact rule.
+The fixture is small enough to count on paper: 20 sources, 24 disclosure rows, 16 rounds in range
+by 8 teams through the second snapshot, 47 cards of the first 15 sources (45 of them in range). Its
+README says what each part exercises. Owned by `v1-e32-t03`; `v1-e32-t10` gave the DA and advantage
+cards their headings for the impact rule, and `v1-e32-t04` the third weekly window that its trends
+are tested on (a rising, a falling and a new position, and a file carried into it under a new path).
+
+`v1-e32-t04` also writes `tests/fixtures/landscape/topic_change_caselist/`: a separate two-snapshot
+Lincoln-Douglas caselist whose topic changes between its snapshots, with the `topics.yaml` that says
+so, for the rule that a trend never compares two topics.
 """
 
 from __future__ import annotations
@@ -52,7 +58,7 @@ TAXONOMY_VERSION: Final = "1.2.0"
 FIRST: Final = date(2026, 9, 8)
 SECOND: Final = date(2026, 9, 15)
 LATER: Final = date(2026, 9, 22)
-"""A snapshot after the report's date: its disclosure is out of range."""
+"""The third snapshot, after the t03 report's date: its disclosures are out of that report's range."""
 _PARAGRAPHS_PER_CARD: Final = 3
 
 POSITIONS: Final = (
@@ -87,6 +93,7 @@ TEAMS: Final = {
 
 FIRST_TOURNAMENT: Final = "Fictional Invitational"
 SECOND_TOURNAMENT: Final = "Imaginary Classic"
+LATER_TOURNAMENT: Final = "Later Tournament"
 
 
 def _source(name: str) -> str:
@@ -121,13 +128,26 @@ DISCLOSURES: Final = (
     ("a6", "JJ", Side.AFF, SECOND_TOURNAMENT, "R3", SECOND),
     ("b7", "VV", Side.UNKNOWN, None, None, SECOND),
     ("b8", "KK", Side.NEG, SECOND_TOURNAMENT, "R4", SECOND),
-    ("b9", "YY", Side.NEG, "Later Tournament", "R1", LATER),
+    ("b9", "YY", Side.NEG, LATER_TOURNAMENT, "R1", LATER),
+    ("ac", "XX", Side.AFF, LATER_TOURNAMENT, "R2", LATER),
+    ("ad", "ZZ", Side.AFF, LATER_TOURNAMENT, "R3", LATER),
+    ("ae", "VV", Side.AFF, LATER_TOURNAMENT, "R4", LATER),
+    ("bc", "QQ", Side.NEG, LATER_TOURNAMENT, "R2", LATER),
+    ("bd", "KK", Side.NEG, LATER_TOURNAMENT, "R3", LATER),
 )
 """(source, team code, side, tournament, round, snapshot), one row per manifest row.
 
 `a1`'s first row is carried from the first window into the second (the same round, listed twice),
 and `b1` is one file two teams disclosed (two rounds). `b7`'s filename gave no side, tournament or
-round. `b9` is disclosed after the report's date.
+round. `b9` and the `ac`-`bd` rows are the third window, after the t03 report's date.
+"""
+
+RENAMED: Final = (("a4", "KK", Side.AFF, SECOND_TOURNAMENT, "R1", LATER, 2),)
+"""(source, team code, side, tournament, round, snapshot, sequence): a file carried into a later window.
+
+`a4` is listed again in the third window, unchanged, under a new path: the per-team sequence number
+between the side and the tournament went up when the team added rounds (`v1-e30-t03`). It is the
+round first seen in the second window, so the third window's trends must not count it.
 """
 
 
@@ -360,6 +380,44 @@ CARDS: Final = {
         FixtureCard(18, "c", "Healthcare markets commodify care", "Nadler 21", "cap-k"),
         FixtureCard(28, "a", "The plan is a tax", "Iqbal 26", "spending-da", headings=(*_SPENDING, "impact")),
     ),
+    "ac": (
+        FixtureCard(
+            6,
+            "d",
+            "Single payer frees capital for research",
+            "Moreau 25",
+            "innovation-advantage",
+            headings=_INNOVATION,
+        ),
+        FixtureCard(
+            1, "c", "Single payer is the only path to universal coverage", "Brandt 24", "single-payer-aff"
+        ),
+    ),
+    "ad": (
+        FixtureCard(
+            6,
+            "e",
+            "Single payer frees capital for research",
+            "Moreau 25",
+            "innovation-advantage",
+            headings=_INNOVATION,
+        ),
+    ),
+    "ae": (
+        FixtureCard(
+            34,
+            "a",
+            "Research spillovers save lives",
+            "Quint 26",
+            "innovation-advantage",
+            headings=_INNOVATION,
+        ),
+    ),
+    "bc": (FixtureCard(18, "d", "Healthcare markets commodify care", "Nadler 21", "cap-k"),),
+    "bd": (
+        FixtureCard(18, "e", "Healthcare markets commodify care", "Nadler 21", "cap-k"),
+        FixtureCard(22, "b", "Courts can mandate coverage", "Bell 23", "courts-cp"),
+    ),
 }
 """Each source's cards, in document order: card `n` starts at paragraph `3n`."""
 
@@ -398,31 +456,45 @@ def taxonomy() -> Taxonomy:
     )
 
 
+def _disclosure(
+    caselist: str,
+    event: Event,
+    school: str,
+    row: tuple[str, str, Side, str | None, str | None, date],
+    sequence: int | None = None,
+) -> Disclosure:
+    """One manifest row, filed as OpenCaselist names a file; `sequence` goes between side and tournament."""
+    source, code, side, tournament, played, snapshot = row
+    parts = [school.replace(" ", ""), code, side.value.title()]
+    parts += [str(sequence)] if sequence is not None else []
+    parts += [tournament.replace(" ", "")] if tournament else []
+    parts += [played] if played else []
+    return Disclosure(
+        source_sha256=_source(source),
+        caselist=caselist,
+        snapshot=snapshot,
+        event=event,
+        school=school,
+        team_code=code,
+        side=side,
+        tournament=tournament,
+        round_label=RoundLabel.from_raw(played) if played else None,
+        source_path=f"{school}/{school} {code}/{'-'.join(parts)}.docx",
+    )
+
+
 def disclosures() -> list[Disclosure]:
-    rows: list[Disclosure] = []
-    for source, code, side, tournament, played, snapshot in DISCLOSURES:
-        school = TEAMS[code]
-        parts = [school.replace(" ", ""), code, side.value.title()]
-        parts += [tournament.replace(" ", "")] if tournament else []
-        parts += [played] if played else []
-        rows.append(
-            Disclosure(
-                source_sha256=_source(source),
-                caselist=CASELIST,
-                snapshot=snapshot,
-                event=Event.POLICY,
-                school=school,
-                team_code=code,
-                side=side,
-                tournament=tournament,
-                round_label=RoundLabel.from_raw(played) if played else None,
-                source_path=f"{school}/{school} {code}/{'-'.join(parts)}.docx",
-            )
+    rows = [_disclosure(CASELIST, Event.POLICY, TEAMS[row[1]], row) for row in DISCLOSURES]
+    rows += [
+        _disclosure(
+            CASELIST, Event.POLICY, TEAMS[code], (source, code, side, tournament, played, snapshot), sequence
         )
+        for source, code, side, tournament, played, snapshot, sequence in RENAMED
+    ]
     return rows
 
 
-def cards() -> list[LandscapeCard]:
+def cards(planted_cards: dict[str, tuple[FixtureCard, ...]] = CARDS) -> list[LandscapeCard]:
     return [
         LandscapeCard(
             source_sha256=_source(source),
@@ -433,14 +505,16 @@ def cards() -> list[LandscapeCard]:
             short_cite=card.cite,
             headings=card.headings,
         )
-        for source, planted in CARDS.items()
+        for source, planted in planted_cards.items()
         for index, card in enumerate(planted)
     ]
 
 
-def classifications() -> list[PositionClassification]:
+def classifications(
+    planted_cards: dict[str, tuple[FixtureCard, ...]] = CARDS, taxonomy_version: str = TAXONOMY_VERSION
+) -> list[PositionClassification]:
     rows: list[PositionClassification] = []
-    for source, planted in CARDS.items():
+    for source, planted in planted_cards.items():
         for index, card in enumerate(planted):
             element = index * _PARAGRAPHS_PER_CARD
             rows.append(
@@ -454,7 +528,7 @@ def classifications() -> list[PositionClassification]:
                     confidence=_CONFIDENCE[card.method] if card.method else 0.0,
                     rationale="synthetic fixture: placed as the fixture table says",
                     method=card.method,
-                    taxonomy_version=TAXONOMY_VERSION,
+                    taxonomy_version=taxonomy_version,
                 )
             )
     return rows
@@ -462,6 +536,99 @@ def classifications() -> list[PositionClassification]:
 
 def _jsonl(rows: list[Disclosure] | list[LandscapeCard] | list[PositionClassification]) -> str:
     return "".join(json.dumps(row.model_dump(mode="json"), sort_keys=True) + "\n" for row in rows)
+
+
+TOPIC_CHANGE_FIXTURE: Final = REPO_ROOT / "tests" / "fixtures" / "landscape" / "topic_change_caselist"
+TOPIC_CHANGE_CASELIST: Final = "synthld26"
+OLD_TOPIC: Final = "synthetic-ld-jul-aug"
+NEW_TOPIC: Final = "synthetic-ld-sep-oct"
+NEW_TOPIC_VERSION: Final = "1.0.0"
+LAST_OF_OLD_TOPIC: Final = date(2026, 8, 25)
+FIRST_OF_NEW_TOPIC: Final = date(2026, 9, 1)
+TOPIC_CHANGE_TEAMS: Final = {"QX": "Maple Grove", "RV": "Larch Point"}
+
+TOPIC_CHANGE_TOPICS: Final = {
+    "schema_version": 1,
+    "topics": [
+        {
+            "id": OLD_TOPIC,
+            "event": "LD",
+            "caselists": [{"caselist": TOPIC_CHANGE_CASELIST, "from": "2026-07-01", "to": "2026-08-31"}],
+        },
+        {
+            "id": NEW_TOPIC,
+            "event": "LD",
+            "taxonomy_version": NEW_TOPIC_VERSION,
+            "caselists": [{"caselist": TOPIC_CHANGE_CASELIST, "from": "2026-09-01", "to": "2026-10-31"}],
+        },
+    ],
+}
+"""The topic map: one snapshot on each topic, the old one with no taxonomy, as LD's rotate."""
+
+TOPIC_CHANGE_POSITIONS: Final = (
+    ("restored-ecosystems-contention", "Restored ecosystems", "contention", "aff", None),
+    ("biopower-k", "Biopower K", "k", "neg", None),
+)
+
+TOPIC_CHANGE_DISCLOSURES: Final = (
+    ("e1", "QX", Side.AFF, "Summer Fictional Open", "R1", LAST_OF_OLD_TOPIC),
+    ("f1", "RV", Side.NEG, "Summer Fictional Open", "R1", LAST_OF_OLD_TOPIC),
+    ("e2", "QX", Side.AFF, "Autumn Fictional Classic", "R1", FIRST_OF_NEW_TOPIC),
+    ("f2", "RV", Side.NEG, "Autumn Fictional Classic", "R1", FIRST_OF_NEW_TOPIC),
+)
+"""The same two teams on each topic: `e1` and `f1` on the old one, `e2` and `f2` on the new."""
+
+TOPIC_CHANGE_CARDS: Final = {
+    "e2": (
+        FixtureCard(
+            40, "a", "Revived species restore food webs", "Okonjo 26", "restored-ecosystems-contention"
+        ),
+    ),
+    "f2": (FixtureCard(41, "a", "Conservation governs life itself", "Arendt 25", "biopower-k"),),
+}
+"""Only the new topic's files are classified: the old topic has no taxonomy."""
+
+
+def topic_change_taxonomy() -> Taxonomy:
+    return Taxonomy.model_validate(
+        {
+            "topic_id": NEW_TOPIC,
+            "taxonomy_version": NEW_TOPIC_VERSION,
+            "event": "LD",
+            "positions": [
+                {"id": one, "label": label, "kind": kind, "side": side}
+                for one, label, kind, side, _ in TOPIC_CHANGE_POSITIONS
+            ],
+        }
+    )
+
+
+def topic_change_disclosures() -> list[Disclosure]:
+    return [
+        _disclosure(TOPIC_CHANGE_CASELIST, Event.LD, TOPIC_CHANGE_TEAMS[row[1]], row)
+        for row in TOPIC_CHANGE_DISCLOSURES
+    ]
+
+
+def write_topic_change_caselist() -> None:
+    TOPIC_CHANGE_FIXTURE.mkdir(parents=True, exist_ok=True)
+    (TOPIC_CHANGE_FIXTURE / "topics.yaml").write_text(
+        yaml.safe_dump(TOPIC_CHANGE_TOPICS, sort_keys=False), encoding="utf-8"
+    )
+    (TOPIC_CHANGE_FIXTURE / "taxonomy.yaml").write_text(
+        yaml.safe_dump(
+            topic_change_taxonomy().model_dump(mode="json", exclude_defaults=True), sort_keys=False
+        ),
+        encoding="utf-8",
+    )
+    (TOPIC_CHANGE_FIXTURE / "disclosures.jsonl").write_text(
+        _jsonl(topic_change_disclosures()), encoding="utf-8"
+    )
+    (TOPIC_CHANGE_FIXTURE / "cards.jsonl").write_text(_jsonl(cards(TOPIC_CHANGE_CARDS)), encoding="utf-8")
+    (TOPIC_CHANGE_FIXTURE / "classifications.jsonl").write_text(
+        _jsonl(classifications(TOPIC_CHANGE_CARDS, NEW_TOPIC_VERSION)), encoding="utf-8"
+    )
+    print(f"wrote {TOPIC_CHANGE_FIXTURE.relative_to(REPO_ROOT)}")
 
 
 def main() -> None:
@@ -476,6 +643,7 @@ def main() -> None:
     (FIXTURE / "cards.jsonl").write_text(_jsonl(cards()), encoding="utf-8")
     (FIXTURE / "classifications.jsonl").write_text(_jsonl(classifications()), encoding="utf-8")
     print(f"wrote {FIXTURE.relative_to(REPO_ROOT)}")
+    write_topic_change_caselist()
 
 
 if __name__ == "__main__":

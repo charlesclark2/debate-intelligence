@@ -375,9 +375,51 @@ v1-e32-t03 questions (session, 2026-10-23)
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED, with conditions closed in-session
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-24
 
 **Notes:**
+
+A strong task.
+* The real-store preview caught the one thing no fixture would have: frontlines counted as reads.
+  The rule that fixes it is measured (4,734 rounds set aside), reported in the Unclassified
+  section, and pinned by a mutant.
+* The aff seam is exactly the contract v1-e32-t09 needs.
+* There were 21 mutants, and the two that first survived each got a test.
+* The goldens were edited by hand, never regenerated.
+* The scan's hits were read in their lines and kept out of this report.
+
+**Rulings**
+
+1. **(a), keep the rule in the report.** "Midterms DA: 438 neg rounds by 127 teams" is what a
+   coach means by read. Moving the role upstream (c) is recorded, not filed. It comes back only if
+   t07 or t09 needs it.
+2. **Yes.** Amend `constraints.packages` with a PM-ruling comment.
+3. **List the hits, don't refuse.** v1-e32-t05 prints every scan hit with its line, and publishes
+   only after the operator confirms that none names a team. That operator check is the E32 gate's
+   "verified". The PM amends t05 in the next PM batch.
+4. **The coach is the operator here, and is being asked today, 2026-10-24.**
+   * If he answers, apply his changes, record yes or no, set the Goal `Succeeded`, and open the PR
+     without `--partial`.
+   * If he has not answered by 2026-10-27, take (a): `--partial`, so t05 can start, with his answer
+     recorded in t05's first-run note.
+
+**Deviations 1 to 5 and Decisions 1 to 12 are accepted.**
+
+**Conditions, to close in this session before the PR:**
+
+1. **Amend `constraints.packages`** (ruling 2).
+2. **Apply the coach's answer** to the review question, when it comes. Changes to section order,
+   column names or tag length are within this task. Anything that changes a count or a rule comes
+   back for another review.
+3. **Update the stale parts of this report.** No re-review is needed beyond condition 2's line.
+
+**Follow-up work:**
+* t05's spliced sentence, the run log in its staleness check, and ruling 3's scan listing go into
+  v1-e32-t05 in the next PM batch.
+* Side as a role signal is recorded under ruling 1.
+* Long tags are the coach's call in his review.
+
+If anything comes out differently, stop and ask for another review.

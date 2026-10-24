@@ -93,7 +93,7 @@ def build_secrets_manager_client(*, region: str, profile: str | None = None) -> 
     """A Secrets Manager client for `region`, signed by `profile` or the SDK's own chain.
 
     No profile is what the cloud tasks use: the chain finds the task role. On the coach's Mac the
-    profile is the one signed in under `Debate<Env>CaselistCredentialWriter`.
+    profile is the one signed in under `Debate<Env>CaselistSecretWriter`.
     """
     try:
         session = boto3.session.Session(profile_name=profile, region_name=region)

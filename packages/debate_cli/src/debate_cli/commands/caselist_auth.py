@@ -20,7 +20,7 @@ expires and when a request last succeeded with it.
 ## The weekly run in the cloud (ADR-0020 (2))
 
 `set-password` writes the coach's Tabroom username and password to the environment's password
-secret in Secrets Manager, signed in under `Debate<Env>CaselistCredentialWriter`. It prompts with
+secret in Secrets Manager, signed in under `Debate<Env>CaselistSecretWriter`. It prompts with
 hidden input, twice, and refuses to run without a terminal: the password is never an argument or
 an environment variable, so it never reaches shell history or a process listing, and nothing it
 prints says anything about it. Nobody reads it back.
@@ -69,7 +69,7 @@ AwsProfileOption = Annotated[
         "--aws-profile",
         help=(
             "AWS profile for the Secrets Manager secrets: the one signed in under "
-            "Debate<Env>CaselistCredentialWriter. Unset uses the SDK's own chain (AWS_PROFILE)."
+            "Debate<Env>CaselistSecretWriter. Unset uses the SDK's own chain (AWS_PROFILE)."
         ),
     ),
 ]

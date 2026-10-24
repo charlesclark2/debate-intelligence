@@ -79,7 +79,9 @@ class WeeklyTeams(DomainModel):
     """The teams disclosing in one window, by side: the denominators of its shares."""
 
     snapshot: date
-    aff_teams: int = Field(ge=0, description="Distinct teams with a round first seen in it, on the affirmative.")
+    aff_teams: int = Field(
+        ge=0, description="Distinct teams with a round first seen in it, on the affirmative."
+    )
     neg_teams: int = Field(ge=0, description="Distinct teams with a round first seen in it, on the negative.")
     teams: int = Field(ge=0, description="Distinct teams with a round first seen in it, on any side.")
 

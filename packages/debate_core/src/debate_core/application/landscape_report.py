@@ -228,6 +228,13 @@ class LandscapeReportInputs:
     cards: Sequence[LandscapeCard] = field(repr=False)
     aff_assignments: Sequence[AffAssignment] = field(default=(), repr=False)
     """`v1-e32-t09`'s per-round affs; empty until it lands."""
+    snapshot_topics: Mapping[date, str] | None = field(default=None, repr=False)
+    """Each weekly snapshot of the caselist through `through` the store holds, with the topic
+    `topics.yaml` puts it on, so the trends stop at a topic change (`v1-e32-t04`); None takes every
+    disclosure's snapshot to be on the taxonomy's topic."""
+    topic_range: tuple[date, date] | None = None
+    """The first and last snapshot date `topics.yaml` gives the topic in this caselist, so the report can
+    say whether its windows span a full topic cycle; None when not known."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -299,12 +306,12 @@ class LandscapeReportService:
 
     def build(self, inputs: LandscapeReportInputs, staleness: LandscapeStaleness) -> LandscapeReport:
         """The report alone. :meth:`bundle` is what writes it out."""
-        return self._count(inputs, staleness)[0]
+        return self.count(inputs, staleness)[0]
 
-    def _count(
+    def count(
         self, inputs: LandscapeReportInputs, staleness: LandscapeStaleness
     ) -> tuple[LandscapeReport, CountedReads]:
-        """The report, and the rounds and reads it was counted from."""
+        """The report, and the rounds and reads it was counted from, for the views beside it."""
         if staleness.newest_snapshot is None or staleness.age_days is None:
             raise ReportCannotShip(
                 f"the staleness check found no snapshot of {inputs.caselist}, so the report cannot say "

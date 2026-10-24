@@ -2,7 +2,7 @@
 
 Every count comes from files teams disclosed to the caselist (FILE_IMPORT), not from evidence the platform has verified. No school, team or debater is named.
 
-**Short history.** The data covers 2 weekly windows on this topic, 2026-09-02 to 2026-09-15, and the topic's dates are not known here, so it may cover less than a full topic cycle. A trend over a few windows is one week's change, not a season's.
+**Short history.** The data covers 2 weekly windows on this topic, 2026-09-02 to 2026-09-15, and the topic's dates are not known here, so it may cover less than a full topic cycle. A trend here is one week's change against the week before, not a season's.
 
 ## About this report
 

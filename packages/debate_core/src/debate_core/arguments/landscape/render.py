@@ -442,8 +442,8 @@ def _short_history(trends: LandscapeTrends | None) -> list[str]:
             "than a full topic cycle"
         )
     return [
-        f"**Short history.** The data covers {count} on this topic, {span}, {cycle}. A trend over a few "
-        "windows is one week's change, not a season's.",
+        f"**Short history.** The data covers {count} on this topic, {span}, {cycle}. A trend here is one "
+        "week's change against the week before, not a season's.",
         "",
     ]
 

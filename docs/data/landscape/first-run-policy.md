@@ -150,8 +150,28 @@ the same checksums after it.
 
 ## The first dev run
 
-Not yet run. It is the operator's, after the merge: a dry run, then the publish with the scan's
-digest once the hits are read (the session report's operator follow-ups).
+Run by the operator on 2026-10-24 from a worktree at `dev`'s `a7aa038` (after both `v1-e32-t05` and
+`v1-e32-t08` merged), coordinated by the PM. No `DEBATE_*` variable was set and no `caselist pull`
+was running.
+
+1. **`landscape report --caselist hspolicy26 --publish --dry-run`**: hspolicy26 through 2026-10-20
+   on policy-2026-27-nhi 1.1.0, overrides digest `e1c2367c…f60ca5`, model mode `none`, 0 model calls;
+   the counts in the table above, exactly; current (newest snapshot 4 days old, no archive awaiting
+   download); three planned uploads; the scan's 6 hits held it back (exit 1), as designed.
+2. **The scan's hits, read by the operator and the PM:** none names a team. They are a tag's word
+   that is also a school's name, one team code that is also an ordinary English word (in two tags),
+   and three evidence authors in short cites. Accepted under digest `ae969d4918b6`; the words are in
+   the local acceptance log, not here.
+3. **`--publish --accept-scan-hits ae969d4918b6`**: the same counts; `Accepted 6 hit(s)`; the bundle
+   written locally and `Uploaded 3, unchanged 0` to `reports/landscape/hspolicy26/2026-10-20/` in the
+   private dev bucket. Review queue 1,340 rows.
+4. **Taxonomy 1.1.0 released:** `scripts/release_landscape_taxonomy.py --topic policy-2026-27-nhi
+   --version 1.1.0` wrote 80 position ids (the topic's 59 and generic.yaml's 21 for Policy) to
+   `config/landscape/released.yaml`, committed in the PM's batch of 2026-10-24; the released-ids check
+   passed (25 tests).
+
+`validate-dev`'s run of the smoke check (ac4) is recorded from the first validate-dev run after the
+merge.
 
 ## The coach's review
 

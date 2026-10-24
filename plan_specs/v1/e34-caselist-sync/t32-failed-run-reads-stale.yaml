@@ -1,0 +1,82 @@
+# TASK v1-e34-t32-failed-run-reads-stale - The staleness hook reports a caselist stale when its latest run failed
+# Epic: E34 Caselist Sync | Release: v1.1 | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e34-t32-failed-run-reads-stale
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e34-caselist-sync
+  annotations:
+    debate/title: "The staleness hook reports a caselist stale when its latest run failed"
+spec:
+  # Filed by the PM, 2026-10-24, from v1-e32-t05's question 4 (the PM's ruling of 2026-10-24).
+  description: >-
+    v1-e34-t03's staleness hook judges a caselist by its newest snapshot's age (up to 8 days)
+    and, since v1-e32-t05, by a cap-bound run. A weekly run that failed outright still reads as
+    current until the snapshot ages out, so a landscape report built the day after a failed run
+    says "Current". Make the hook report stale when the latest run in the run log that listed
+    the caselist ended in failure, naming the run id and its failed stage (never a school, code
+    or file), and current again once a later run succeeds. A run that never listed the caselist
+    (another caselist's run) changes nothing. The banner, the `stale` flag in the landscape
+    report and the E39 pilot's freshness line read the hook, so each shows it without code of
+    its own.
+  priority: 2
+  constraints:
+    packages: [debate_core.application, debate_core.integrations, packages/debate_core/tests]
+    forbidden:
+      - A school, team code or file name in the stale reason
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e34-t03-sync-monitoring
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        With synthetic run logs, the hook reports stale when the latest run that listed the
+        caselist failed, names the run id and stage, and reports current after a later
+        success; a failed run of another caselist changes nothing; tests shown failing
+        first.
+    - id: ac2
+      description: >-
+        A landscape report built over a failed latest run carries the stale banner and
+        `stale=true`, by test through v1-e32-t05's run service.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e34-t32-failed-run-reads-stale-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.1
+    debate/epic: v1-e34-caselist-sync
+spec:
+  description: >-
+    Extend the hook's rule with the run log's latest relevant run, then the report-level test.
+  goalRef:
+    name: v1-e34-t32-failed-run-reads-stale
+  graph:
+    nodes:
+      - id: failed-run-stale
+        kind: Task
+        name: Failed run reads stale
+        description: >-
+          Extend the hook's rule with the run log's latest relevant run, then the
+          report-level test.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Staleness tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests, -k, stale]
+status:
+  phase: Pending

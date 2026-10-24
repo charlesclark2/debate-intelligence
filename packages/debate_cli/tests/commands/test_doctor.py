@@ -81,6 +81,7 @@ WIRED_INTEGRATIONS = [
     "debate_core.integrations.opencaselist",
     "debate_core.integrations.s3",
     "debate_core.integrations.s3.version_directories",
+    "debate_core.integrations.secrets_manager",
 ]
 S3 = "debate_core.integrations.s3"
 S3_VERSION_DIRECTORIES = "debate_core.integrations.s3.version_directories"
@@ -198,7 +199,7 @@ def test_an_integration_that_does_not_import_fails_doctor_naming_each_one(
     assert error["exit_code"] == ExitCode.DOMAIN_FAILURE
     for module in s3_and_opencaselist_do_not_import:
         assert module in error["message"]
-    assert "3 of the 18 integrations" in error["message"]
+    assert "3 of the 19 integrations" in error["message"]
     assert error["details"]["integrations_import"] is False
     assert error["details"]["integrations_failed"] == {
         OPENCASELIST: f"ModuleNotFoundError: no module named {OPENCASELIST!r}",

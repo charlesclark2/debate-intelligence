@@ -19,7 +19,9 @@ and :meth:`ServiceContainer.verify_manifest`, which `debate-research verify` run
 :meth:`ServiceContainer.caselist_sync_monitor` and read back by
 :meth:`ServiceContainer.caselist_sync_history` (`v1-e34-t03-sync-monitoring`); and
 :meth:`ServiceContainer.caselist_parse` and :meth:`ServiceContainer.parsed_publisher`, which
-`debate-research caselist parse` runs (`v1-e31-t06-parse-pipeline`). The import
+`debate-research caselist parse` runs (`v1-e31-t06-parse-pipeline`); and
+:meth:`ServiceContainer.landscape_run`, which `debate-research landscape report` runs
+(`v1-e32-t05-landscape-cli`). The import
 commands also read archives and place manifests through it (:meth:`ServiceContainer.read_archive`,
 :meth:`ServiceContainer.archive_digest`, :meth:`ServiceContainer.evidence_object_path`), so no
 command imports an adapter (`v1-e01-t13-composition-root-cleanup`). The rest of V1's services and
@@ -128,6 +130,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Final, cast
 
 from debate_cli.exit_codes import codes_exit_as_a_retrieval_failure
+from debate_core.application.aff_assignment import AffAssignmentService
 from debate_core.application.caselist.evidence_listing import (
     LocalEvidence,
     digests_in_earlier_manifests,
@@ -171,6 +174,9 @@ from debate_core.application.evidence_sync import (
     SyncKeyspace,
 )
 from debate_core.application.evidence_verifier import EvidenceVerifier
+from debate_core.application.landscape_run import LandscapeRunService
+from debate_core.application.landscape_scan import ScanAcceptanceLog
+from debate_core.application.plan_texts import PlanTextService
 from debate_core.application.ports.archive import ArchiveEntry
 from debate_core.application.ports.caller_identity import CallerIdentity
 from debate_core.application.ports.evidence_store import EvidenceObjectStore, ObjectKey
@@ -192,6 +198,12 @@ from debate_core.application.tub.accounts import AccountAdministration
 from debate_core.application.verify_manifest import VerifyManifest
 from debate_core.domain import new_id
 from debate_core.domain.caselist import Event
+from debate_core.integrations.landscape.classification_store import (
+    LANDSCAPE_DIRECTORY,
+    LocalClassificationStore,
+)
+from debate_core.integrations.landscape.plan_text_store import LocalPlanTextStore
+from debate_core.integrations.landscape.yaml_taxonomy_repository import YamlTaxonomyRepository
 from debate_core.integrations.local import (
     BLOB_DIRECTORY,
     FsEvidenceObjectStore,
@@ -325,6 +337,12 @@ class _PortIdGenerator:
 
 PARSED_DIRECTORY: Final = Path("parsed")
 """Where E31's parse pipeline keeps parsed cards in the data directory (`v1-e31-t06`)."""
+
+LANDSCAPE_REPORTS_DIRECTORY: Final = Path("reports") / "landscape"
+"""Where `landscape report` writes each bundle in the data directory, by caselist and snapshot."""
+
+SCAN_ACCEPTANCES_DIRECTORY: Final = "scan-acceptances"
+"""Beside the classification cache: the scan hits the operator accepted, per caselist (`v1-e32-t05`)."""
 
 _EVERYDAY_PROFILE_SETTING: Final = "storage.s3.aws_profile"
 _REMOVAL_PROFILE_SETTING: Final = "DEBATE_REMOVAL_PROFILE"
@@ -478,6 +496,62 @@ class ServiceContainer:
             lambda: CaselistCardStatsService(
                 SqliteCaselistRepository(self.database), fingerprint_thresholds(self.settings.fingerprints)
             ),
+        )
+
+    def landscape_run(self, *, config_dir: Path, with_bucket: bool) -> LandscapeRunService:
+        """Build one caselist's landscape report over this machine's stores (`v1-e32-t05`).
+
+        `config_dir` holds `topics.yaml`, `taxonomies/` and `overrides/`, read and checked once here.
+        The staleness check is given the sync run log (the PM's ruling of 2026-10-24), and the scan's
+        acceptances are kept beside the classification cache. `with_bucket` is whether this run
+        publishes: only then is this environment's bucket built, signed with the everyday profile.
+
+        **The aff seam.** Each affirmative round's aff comes from `v1-e32-t09`'s
+        :class:`~debate_core.application.aff_assignment.AffAssignmentService`, which reads the
+        affirmative files' plan texts from their cache under the data directory, parsing only what it
+        lacks, through the same worker pool as `caselist parse`. `v1-e32-t09` merged first, so this
+        task wired it (the PM's condition of 2026-10-24).
+        """
+        # Imported here, not at module scope: lxml is loaded only by a command that needs the parser.
+        from debate_core.integrations.docx_parser import DebateDocxParser
+
+        settings = self.settings
+        data_dir = settings.storage.data_dir
+        objects = FsEvidenceObjectStore(data_dir)
+        taxonomies = YamlTaxonomyRepository.load(config_dir)
+        local = self._local_evidence()
+        classifications = LocalClassificationStore(data_dir)
+        parse = settings.parse
+        affs = AffAssignmentService(
+            store=LocalParsedStore(data_dir),
+            local=local,
+            suppression=self.local_suppression_list(),
+            taxonomies=taxonomies,
+            classifications=classifications,
+            plan_texts=PlanTextService(
+                parser=DebateDocxParser(),
+                runner=ProcessPoolParseRunner(
+                    workers=parse.worker_count(os.cpu_count()), timeout_seconds=parse.per_file_timeout_seconds
+                ),
+                store=LocalPlanTextStore(data_dir),
+                local=local,
+            ),
+        )
+        return LandscapeRunService(
+            taxonomies=taxonomies,
+            config_dir=config_dir,
+            parsed_store=LocalParsedStore(data_dir),
+            local=local,
+            suppression=self.local_suppression_list(),
+            classifications=classifications,
+            objects=objects,
+            run_log=SyncRunLog(data_dir / SYNC_RUN_LOG_FILENAME),
+            reports_dir=data_dir / LANDSCAPE_REPORTS_DIRECTORY,
+            acceptances=ScanAcceptanceLog(data_dir / LANDSCAPE_DIRECTORY / SCAN_ACCEPTANCES_DIRECTORY),
+            today=lambda: self.clock()().date(),
+            bucket=self._evidence_bucket if with_bucket else None,
+            aff_assignments=affs,
+            stale_after_days=settings.caselist.stale_after_days,
         )
 
     def caselist_parse(self, *, with_bucket: bool) -> CaselistParseService:

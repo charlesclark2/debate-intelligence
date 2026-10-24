@@ -47,10 +47,11 @@ OVERRIDE_FILES = sorted((CONFIG / OVERRIDE_DIRECTORY).glob("*.yaml"))
 MINIMUM_ACTIVE_POSITIONS = 12
 
 SHORT_WORDS = frozenset(
-    {"at", "cp", "da", "no", "ai", "us", "of", "to", "on", "in", "or", "an", "do", "is", "by"}
+    {"at", "cp", "da", "no", "ai", "us", "of", "to", "on", "in", "or", "an", "do", "is", "by", "uq"}
 )
 """Two-letter words an alias may hold. Any other two letters read as a team code's initials; a
-coach adding a real two-letter word adds it here in the same change."""
+coach adding a real two-letter word adds it here in the same change. `uq` is "uniqueness", confirmed
+by the coach on 2026-10-24 for his first review-queue decisions (`v1-e32-t05`)."""
 
 SHORT_LABEL_ACRONYMS = frozenset({"DA", "CP", "AI", "US"})
 SCHOOL_WORDS = frozenset({"school", "high", "academy", "prep", "hs", "isd", "secondary", "middle"})

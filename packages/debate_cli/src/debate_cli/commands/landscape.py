@@ -1,0 +1,444 @@
+"""`debate-research landscape report`: one caselist's argument landscape, written here and published.
+
+::
+
+    debate-research landscape report --caselist hspolicy26
+    debate-research landscape report --caselist hspolicy26 --snapshot 2026-10-20 --json
+    debate-research landscape report --caselist hspolicy26 --publish --dry-run
+    debate-research landscape report --caselist hspolicy26 --publish --accept-scan-hits 3f9a0c1d2e4b
+
+Every decision is :class:`~debate_core.application.landscape_run.LandscapeRunService`'s
+(`v1-e32-t05-landscape-cli`); this is the guards and the rendering. The bundle is `v1-e32-t03`'s:
+`report.md`, `positions.csv` and `top_cards.csv`, under
+`<data dir>/reports/landscape/<caselist>/<snapshot>/` unless `--out` names a directory.
+
+## `--publish`
+
+Uploads the bundle to `reports/landscape/<caselist>/<snapshot>/` in this environment's evidence
+bucket, which is private, skipping a file the bucket holds with the same SHA-256. Dev or prod only,
+and prod only with `--confirm-prod`; `DEBATE_ENV` never defaults to prod. Never a presigned URL.
+
+## The scan before sharing
+
+Every run scans the bundle for the schools, team codes, tournaments and paths its disclosures name,
+and prints each hit with its line. Those lines can name a school or a team: they are for the
+operator's terminal, and `--json` says so in a `notice`. `--publish` is refused, exit `1`, while a
+hit no earlier run accepted remains, naming the digest of those hits. Read them; when none names a
+team, run again with `--accept-scan-hits <digest>`, which is accepted only while it is the digest of
+the hits the run finds. Accepted hits are remembered on this machine, so next week stops only on new
+ones.
+
+## `--dry-run`
+
+Writes nothing: not the classification cache, the review queue, the bundle, the acceptance log or
+the bucket. With `--publish` it asks the bucket which files would go up.
+
+## Exit codes
+
+`0` when the report was written (and published, when asked). `2` for an unknown caselist or snapshot,
+with the known ones, or a caselist and date `topics.yaml` maps to no topic with a taxonomy, naming
+the file to edit. `1` for a publish the scan holds back, a classification stage over its model
+budget (after writing the review queue, publishing nothing), or a report that cannot be built.
+
+## `--model-mode`
+
+Only `none` until `v1-e32-t07` adds the model stage: classification is deterministic, and no model is
+called.
+"""
+
+from __future__ import annotations
+
+import asyncio
+from datetime import date
+from pathlib import Path
+from typing import Annotated, Final, NoReturn
+
+import typer
+
+from debate_cli.commands.caselist import _snapshot_date  # pyright: ignore[reportPrivateUsage]
+from debate_cli.commands.store import CONFIRM_PROD_FLAG, SYNCABLE_ENVIRONMENTS
+from debate_cli.context import CliContext, cli_context, command_name
+from debate_cli.exit_codes import ExitCode
+from debate_cli.output import CliOutput, CommandFailure, JsonValue, OutputMode
+from debate_core.application.errors import error_code_of
+from debate_core.application.landscape_run import (
+    LandscapeModelMode,
+    LandscapeRequestRefused,
+    LandscapeRunRequest,
+    LandscapeRunResult,
+    PublishRefusal,
+)
+from debate_core.application.settings import Environment, Settings, find_repository_root
+
+__all__ = ["SCAN_NOTICE", "report", "run_summary"]
+
+LANDSCAPE_CONFIG: Final = Path("config") / "landscape"
+
+SCAN_NOTICE: Final = (
+    "scan.hits quote report lines that may name a school or a team code. For this terminal only: "
+    "never paste them into a report, a document, an issue or a commit (docs/policies/caselist-data-use.md)."
+)
+
+
+def report(
+    ctx: typer.Context,
+    caselist: Annotated[str, typer.Option("--caselist", help="Caselist slug, e.g. hspolicy26.")],
+    snapshot: Annotated[
+        str | None,
+        typer.Option("--snapshot", help="The weekly snapshot, YYYY-MM-DD. Default: the newest."),
+    ] = None,
+    out: Annotated[
+        Path | None,
+        typer.Option(
+            "--out",
+            file_okay=False,
+            help="Write the bundle here. Default: <data dir>/reports/landscape/<caselist>/<snapshot>/.",
+        ),
+    ] = None,
+    publish: Annotated[
+        bool,
+        typer.Option("--publish/--no-publish", help="Also upload it to this environment's evidence bucket."),
+    ] = False,
+    dry_run: Annotated[
+        bool, typer.Option("--dry-run", help="Say what a run would write and upload, and write nothing.")
+    ] = False,
+    accept_scan_hits: Annotated[
+        str | None,
+        typer.Option(
+            "--accept-scan-hits",
+            metavar="DIGEST",
+            help="Publish although the scan found these hits: the digest a refused publish printed.",
+        ),
+    ] = None,
+    model_mode: Annotated[
+        LandscapeModelMode,
+        typer.Option("--model-mode", help="none: deterministic classification only, no model call."),
+    ] = LandscapeModelMode.NONE,
+    config_dir: Annotated[
+        Path | None,
+        typer.Option(
+            "--config-dir",
+            file_okay=False,
+            help="The directory holding topics.yaml. Default: config/landscape in this checkout.",
+        ),
+    ] = None,
+    confirm_prod: Annotated[
+        bool, typer.Option(CONFIRM_PROD_FLAG, help="Required to publish to the production evidence bucket.")
+    ] = False,
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Write one machine-readable JSON object to stdout.")
+    ] = False,
+) -> None:
+    """Build a caselist's argument landscape report, write it here and, with --publish, to the bucket."""
+    cli = cli_context(ctx)
+    if json_output and not cli.output.is_json:
+        cli.output = CliOutput(OutputMode.JSON, verbose=cli.output.verbose)
+    settings = cli.services.settings
+    refusal = _environment_refusal(
+        settings, publish=publish, writing=publish and not dry_run, confirmed=confirm_prod
+    )
+    if refusal is not None:
+        _end(cli, ctx, refusal)
+    request = LandscapeRunRequest(
+        caselist=caselist,
+        snapshot=_snapshot_date(snapshot) if snapshot is not None else None,
+        out=_outside_a_checkout(out),
+        publish=publish,
+        dry_run=dry_run,
+        accept_scan_hits=accept_scan_hits,
+        model_mode=model_mode,
+    )
+    service = cli.services.landscape_run(config_dir=_config_dir(config_dir), with_bucket=publish)
+    try:
+        result = asyncio.run(service.run(request))
+    except LandscapeRequestRefused as refused:
+        _end(cli, ctx, _usage_failure(refused))
+    payload = run_summary(result, settings)
+    failure = _publish_failure(result, payload)
+    if failure is None or not cli.output.is_json:
+        cli.output.success(command_name(ctx), payload, display=_display(result, settings))
+    if failure is not None:
+        _end(cli, ctx, failure)
+
+
+def _end(cli: CliContext, ctx: typer.Context, failure: CommandFailure) -> NoReturn:
+    cli.output.failure(failure, command=command_name(ctx))
+    raise typer.Exit(code=failure.exit_code)
+
+
+def _config_dir(given: Path | None) -> Path:
+    """`--config-dir`, or `config/landscape` in the checkout around the working directory."""
+    if given is not None:
+        return given
+    root = find_repository_root()
+    if root is None or not (root / LANDSCAPE_CONFIG).is_dir():
+        raise typer.BadParameter(
+            "no config/landscape/ in a checkout around this directory; name the directory holding "
+            "topics.yaml with --config-dir",
+            param_hint="--config-dir",
+        )
+    return root / LANDSCAPE_CONFIG
+
+
+def _outside_a_checkout(out: Path | None) -> Path | None:
+    """`--out`, refused inside a checkout: a report holds real tags and cites, never committed."""
+    if out is None:
+        return None
+    resolved = out.expanduser().resolve()
+    if find_repository_root(resolved) is not None:
+        raise typer.BadParameter(
+            f"{resolved} is inside a checkout of this repository, and a report holds real tags and cites; "
+            "write it outside, or leave --out out for the data directory",
+            param_hint="--out",
+        )
+    return resolved
+
+
+def _environment_refusal(
+    settings: Settings, *, publish: bool, writing: bool, confirmed: bool
+) -> CommandFailure | None:
+    """A publish needs dev or prod and a bucket; prod needs --confirm-prod. A dry run only reads."""
+    environment = settings.environment
+    if publish and environment not in SYNCABLE_ENVIRONMENTS:
+        return CommandFailure(
+            code="ENVIRONMENT_NOT_SYNCABLE",
+            message=f"`landscape report --publish` writes to dev or prod, not {environment.value}",
+            exit_code=ExitCode.DOMAIN_FAILURE,
+            details={"environment": environment.value},
+            hint="Set DEBATE_ENV=dev and try again.",
+        )
+    if publish and not settings.storage.s3.bucket:
+        return CommandFailure(
+            code="EVIDENCE_STORE_NOT_CONFIGURED",
+            message=f"the {environment.value} environment names no evidence bucket",
+            exit_code=ExitCode.DOMAIN_FAILURE,
+            details={"environment": environment.value},
+            hint="Set storage.s3.bucket for this environment, or run without --publish.",
+        )
+    if writing and environment is Environment.PROD and not confirmed:
+        return CommandFailure(
+            code="CONFIRMATION_REQUIRED",
+            message=f"refusing to publish to the production evidence bucket without {CONFIRM_PROD_FLAG}",
+            exit_code=ExitCode.DOMAIN_FAILURE,
+            details={"environment": environment.value},
+            hint=f"Publish to dev first. Then run with --dry-run, and again with {CONFIRM_PROD_FLAG}.",
+        )
+    return None
+
+
+def _usage_failure(refused: LandscapeRequestRefused) -> CommandFailure:
+    details: dict[str, JsonValue] = {"known": list(refused.known)}
+    if refused.file_to_edit is not None:
+        details["file_to_edit"] = refused.file_to_edit
+    return CommandFailure(
+        code=error_code_of(refused),
+        message=str(refused),
+        exit_code=ExitCode.USAGE_ERROR,
+        details=details,
+        hint=f"Edit {refused.file_to_edit}." if refused.file_to_edit else None,
+    )
+
+
+def _publish_failure(result: LandscapeRunResult, payload: dict[str, JsonValue]) -> CommandFailure | None:
+    """A publish the scan held back: exit 1, after the result and its hits are printed."""
+    refused = result.publish.refused if result.publish is not None else None
+    if refused is None:
+        return None
+    scan = result.scan
+    if refused is PublishRefusal.SCAN_DIGEST_STALE:
+        message = (
+            f"--accept-scan-hits names other hits than the {len(scan.pending)} this run found not yet "
+            f"accepted (digest {scan.digest}); nothing was published"
+        )
+    else:
+        message = (
+            f"the scan found {len(scan.pending)} hit(s) not yet accepted (digest {scan.digest}); "
+            "nothing was published"
+        )
+    return CommandFailure(
+        code=refused.value,
+        message=message,
+        exit_code=ExitCode.DOMAIN_FAILURE,
+        details=payload,
+        hint=(
+            f"Read each hit's line above. If none names a team, run again with --accept-scan-hits "
+            f"{scan.digest}; the report is written locally at {result.directory}."
+        ),
+        panel_details={"digest": scan.digest, "hits_not_yet_accepted": len(scan.pending)},
+    )
+
+
+def run_summary(result: LandscapeRunResult, settings: Settings) -> dict[str, JsonValue]:
+    """The `--json` envelope's `data`: paths, counts, method totals, model calls, scan and publish."""
+    counts = result.classification.counts
+    header = result.report.header
+    unclassified = result.report.unclassified
+    queue = result.classification.review_queue.counts
+    publish = result.publish
+    return {
+        "caselist": result.caselist,
+        "snapshot": result.snapshot.isoformat(),
+        "report_date": result.report_date.isoformat(),
+        "environment": settings.environment.value,
+        "topic_id": result.topic_id,
+        "taxonomy_version": result.taxonomy_version,
+        "overrides_digest": result.overrides_digest,
+        "parsed_version": result.parsed_version,
+        "model_mode": result.model_mode.value,
+        "model_calls": result.model_calls,
+        "dry_run": result.dry_run,
+        "written": result.written,
+        "paths": {"directory": str(result.directory), "files": [str(path) for path in result.files]},
+        "counts": {
+            "sources": counts.sources,
+            "sections": counts.sections,
+            "cards": counts.cards,
+            "cards_counted": counts.cards_counted,
+            "cards_below_threshold": counts.cards_below_threshold,
+            "positions": len(result.report.positions),
+            "top_card_rows": len(result.report.top_cards),
+            "rounds": header.rounds,
+            "rounds_with_a_read": header.rounds_with_a_read,
+            "teams": header.teams,
+            "aff_rounds": unclassified.aff_rounds,
+            "aff_rounds_unidentified": unclassified.aff_rounds_unidentified,
+            "neg_rounds": unclassified.neg_rounds,
+            "neg_rounds_unplaced": unclassified.neg_rounds_unplaced,
+            "other_side_position_rounds": unclassified.other_side_position_rounds,
+        },
+        "classification": {
+            "cards_by_method": dict(counts.cards_by_method),
+            "sections_by_method": dict(counts.sections_by_method),
+            "cache": {
+                "lookups": counts.lookups,
+                "hits": counts.hits,
+                "misses": counts.misses,
+                "written": counts.cache_written,
+            },
+        },
+        "review_queue": {
+            "rows": queue.rows,
+            "items": queue.queued_items,
+            "location": result.classification.review_queue_location,
+        },
+        "aff_assignments": result.aff_assignments,
+        "aff_identification": {one.method: one.rounds for one in result.report.aff_identification},
+        "staleness": {
+            "stale": result.staleness.stale,
+            "newest_snapshot": _iso(result.staleness.newest_snapshot),
+            "age_days": result.staleness.age_days,
+            "archives_awaiting_download": result.staleness.archives_awaiting_download,
+        },
+        "scan": {
+            "hits": [
+                {
+                    "file": hit.file,
+                    "line": hit.line_number,
+                    "kind": hit.kind.value,
+                    "term": hit.term,
+                    "text": hit.line,
+                }
+                for hit in result.scan.hits
+            ],
+            "not_yet_accepted": len(result.scan.pending),
+            "digest": result.scan.digest,
+            "accepted_now": result.scan.accepted_now,
+            "acceptance_log": result.scan.acceptance_log,
+        },
+        "publish": None
+        if publish is None
+        else {
+            "bucket": str(settings.storage.s3.bucket) if settings.storage.s3.bucket else None,
+            "planned": [
+                {
+                    "name": one.name,
+                    "key": one.key,
+                    "sha256": one.sha256,
+                    "action": one.action.value if one.action is not None else None,
+                }
+                for one in publish.planned
+            ],
+            "uploaded": list(publish.uploaded),
+            "unchanged": list(publish.unchanged),
+            "refused": publish.refused.value if publish.refused is not None else None,
+        },
+        "notice": SCAN_NOTICE if result.scan.hits else None,
+    }
+
+
+def _display(result: LandscapeRunResult, settings: Settings) -> str:
+    counts = result.classification.counts
+    header = result.report.header
+    unclassified = result.report.unclassified
+    methods = ", ".join(f"{method} {count}" for method, count in counts.cards_by_method.items())
+    lines = [
+        f"{result.caselist} through {result.snapshot.isoformat()} on {result.topic_id} "
+        f"{result.taxonomy_version} "
+        f"(overrides {result.overrides_digest}, model mode {result.model_mode.value}, "
+        f"{result.model_calls} model calls).",
+        f"Sources {counts.sources}; cards {counts.cards}, {counts.cards_counted} counted "
+        f"({_share(counts.cards_counted, counts.cards)}); by method: {methods}.",
+        f"Positions {len(result.report.positions)}; rounds {header.rounds}, "
+        f"{header.rounds_with_a_read} with a read "
+        f"({_share(header.rounds_with_a_read, header.rounds)}); teams {header.teams}.",
+        f"Affirmative rounds with no identified aff: {unclassified.aff_rounds_unidentified} of "
+        f"{unclassified.aff_rounds}; aff assignments {result.aff_assignments}.",
+        f"Review queue: {result.classification.review_queue.counts.rows} rows "
+        f"({result.classification.review_queue_location}).",
+        _staleness_line(result),
+        (
+            f"Wrote {', '.join(path.name for path in result.files)} to {result.directory}."
+            if result.written
+            else f"Dry run: nothing written; the bundle would go to {result.directory}."
+        ),
+    ]
+    scan = result.scan
+    lines.append(
+        f"Scan: {len(scan.hits)} hit(s), {len(scan.pending)} not yet accepted"
+        + (f" (digest {scan.digest})." if scan.pending else ".")
+    )
+    lines += [
+        f"  {hit.file}:{hit.line_number} {hit.kind.value} {hit.term!r}"
+        + (" (accepted)" if hit not in scan.pending else "")
+        + f": {hit.line}"
+        for hit in scan.hits
+    ]
+    if scan.accepted_now:
+        lines.append(
+            f"Accepted {len(scan.pending)} hit(s) under digest {scan.digest}; "
+            f"recorded in {scan.acceptance_log}."
+        )
+    if result.publish is not None:
+        target = (
+            f"{settings.environment.value} bucket {settings.storage.s3.bucket}"
+            if settings.storage.s3.bucket
+            else "no bucket"
+        )
+        lines.append(f"Publish to {target}:")
+        lines += [
+            f"  {one.action.value if one.action is not None else 'PLANNED'} {one.key} ({one.sha256[:12]})"
+            for one in result.publish.planned
+        ]
+        lines.append(
+            f"Uploaded {len(result.publish.uploaded)}, unchanged {len(result.publish.unchanged)}."
+            if result.publish.refused is None and not result.dry_run
+            else "Nothing uploaded."
+        )
+    return "\n".join(lines)
+
+
+def _staleness_line(result: LandscapeRunResult) -> str:
+    staleness = result.staleness
+    said = (
+        f"newest snapshot {_iso(staleness.newest_snapshot)}, {staleness.age_days} day(s) old, "
+        f"{staleness.archives_awaiting_download} archive(s) awaiting download"
+    )
+    return f"STALE: {said}." if staleness.stale else f"Current: {said}."
+
+
+def _iso(day: date | None) -> str | None:
+    return day.isoformat() if day is not None else None
+
+
+def _share(part: int, whole: int) -> str:
+    return f"{100 * part / whole:.1f}%" if whole else "n/a"

@@ -60,7 +60,18 @@ spec:
     school or team code; the bundle stays local and in the private `reports/` prefix.
   priority: 1
   constraints:
-    packages: [debate_cli, debate_core.application, debate_core.integrations, tests/smoke]
+    # PM ruling 2026-10-24 (v1-e32-t05 review, question 1): the shared synthetic26 store in
+    # debate_core.testing, both packages' tests, the first-run note and the coach's overrides.
+    packages:
+      - debate_cli
+      - debate_core.application
+      - debate_core.integrations
+      - debate_core.testing
+      - packages/debate_core/tests
+      - packages/debate_cli/tests
+      - tests/smoke
+      - docs/data/landscape
+      - config/landscape
     forbidden:
       - Business logic in debate_cli (classification, aggregation and upload planning live in debate_core)
       - boto3 imports outside the E29 S3 adapter; the CLI uses the blob-store port
@@ -102,7 +113,7 @@ spec:
         and review-queue size are recorded in docs/data/landscape/first-run-policy.md, and the coach has
         reviewed the Policy report before 2026-11-07.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

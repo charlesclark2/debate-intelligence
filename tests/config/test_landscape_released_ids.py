@@ -280,6 +280,7 @@ def test_a_missing_lock_file_is_refused_not_read_as_empty(tmp_path: Path) -> Non
     with pytest.raises(TaxonomyConfigError) as refused:
         released_id_findings(root)
     assert refused.value.path == str(root / RELEASED_FILE)
+    assert "does not exist; it is committed, with `releases: []`" in str(refused.value)
 
 
 # ------------------------------------------------------------------------------------------------

@@ -197,3 +197,14 @@ def test_an_empty_store_fails_rather_than_counting_nothing(
     )
     assert run((tmp_path / "data", config_dir), "plan-texts") == 1
     assert "0 affirmative sources" in capsys.readouterr().err
+
+
+def test_assign_assigns_each_affirmative_round_and_prints_counts(
+    world: tuple[Path, Path], capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert run(world, "assign") == 0
+    assert printed(capsys)[-2:] == [
+        "Aff rounds: 6 by 5 teams; assigned 4 (PLAN_TEXT 3, TEAM_CARRY 1), left to placed cards 0, "
+        "unidentified 2 (0 with conflicting plan texts).",
+        "Carry refused into 0 rounds; teams identified 3 of 5; 0 teams whose rounds disagree.",
+    ]

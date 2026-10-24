@@ -2,7 +2,7 @@
 """Read Policy affirmative files' plan texts, and write the coach's plan-text sheet (`v1-e32-t09`).
 
 Until `debate-research landscape report` (`v1-e32-t05`) reads plan texts as part of a report, this is
-how the operator reads them for a snapshot and writes the coach's sheet. Two commands:
+how the operator reads them for a snapshot and writes the coach's sheet. Three commands:
 
 * **`plan-texts`** reads the caselist's parsed sources on the topic through the snapshot (the newest
   weekly one unless `--snapshot` names one), as `v1-e32-t02`'s classifier does, and reads every
@@ -18,8 +18,15 @@ how the operator reads them for a snapshot and writes the coach's sheet. Two com
   (:mod:`debate_core.arguments.landscape.plan_text_sheet`). Both hold the teams' own words, so `--out`
   must be outside the repository, and the script refuses a path inside it. It prints counts only.
 
-Neither writes anything but the plan-text cache and, for `sheet`, the two files. No plan text, team,
-school or path is printed.
+* **`assign`** reads plan texts as `plan-texts` does, classifies the snapshot's cards as `v1-e32-t02`'s
+  classifier does (which may rewrite that classifier's own cache and review queue under the data
+  directory), and assigns each affirmative round its aff
+  (:func:`~debate_core.application.aff_assignment.build_aff_assignments`), printing counts by method.
+  `v1-e32-t05` builds the same assignments for the report; this command is how they are counted
+  before it does.
+
+None writes anything but the plan-text cache, the classifier's files for `assign`, and the two files
+for `sheet`. No plan text, team, school or path is printed.
 
     uv run python scripts/assign_landscape_affs.py plan-texts --caselist hspolicy26
     uv run python scripts/assign_landscape_affs.py sheet --caselist hspolicy26 \\
@@ -40,6 +47,7 @@ from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
+from debate_core.application.aff_assignment import build_aff_assignments
 from debate_core.application.caselist.evidence_listing import LocalEvidence
 from debate_core.application.caselist.parse_sources import enumerate_sources
 from debate_core.application.caselist.parse_workers import (
@@ -52,6 +60,7 @@ from debate_core.application.errors import DomainError
 from debate_core.application.landscape_seeding import SeedReading, read_seed_sources
 from debate_core.application.landscape_staleness import LandscapeStalenessCheck
 from debate_core.application.plan_texts import PlanTextRun, PlanTextService
+from debate_core.application.position_classification import PositionClassificationService
 from debate_core.arguments.landscape.plan_text import PlanTextVerdict, PlanTextVocabulary
 from debate_core.arguments.landscape.plan_text_sheet import (
     ANSWERS_FILE,
@@ -64,6 +73,7 @@ from debate_core.arguments.landscape.plan_text_sheet import (
 from debate_core.arguments.landscape.source_headings import CaselistNames
 from debate_core.domain.caselist import Side, SourceDocument
 from debate_core.integrations.docx_parser import DebateDocxParser
+from debate_core.integrations.landscape.classification_store import LocalClassificationStore
 from debate_core.integrations.landscape.plan_text_store import LocalPlanTextStore
 from debate_core.integrations.landscape.yaml_taxonomy_repository import YamlTaxonomyRepository
 from debate_core.integrations.local import BLOB_DIRECTORY, FsEvidenceObjectStore
@@ -99,6 +109,8 @@ class _Read:
     """Each affirmative source's affirmative teams, as opaque identities."""
     run: PlanTextRun
     service: PlanTextService
+    repository: YamlTaxonomyRepository
+    data_dir: Path
 
 
 async def _read(arguments: argparse.Namespace) -> _Read:
@@ -162,6 +174,8 @@ async def _read(arguments: argparse.Namespace) -> _Read:
         teams=teams,
         run=run,
         service=service,
+        repository=repository,
+        data_dir=data_dir,
     )
 
 
@@ -197,6 +211,38 @@ async def _plan_texts(arguments: argparse.Namespace) -> int:
         print("FAILED: 0 affirmative sources read; nothing was read for plan texts.", file=sys.stderr)
         return 1
     _print_plan_texts(read)
+    print(f"Runtime {time.perf_counter() - started:.1f} s.")
+    return 0
+
+
+async def _assign(arguments: argparse.Namespace) -> int:
+    started = time.perf_counter()
+    read = await _read(arguments)
+    if not read.affirmative:
+        print("FAILED: 0 affirmative sources read; no round was assigned.", file=sys.stderr)
+        return 1
+    _print_plan_texts(read)
+    classified = await PositionClassificationService(
+        taxonomies=read.repository, store=LocalClassificationStore(read.data_dir)
+    ).classify(read.reading)
+    found = build_aff_assignments(
+        disclosures=read.reading.disclosures,
+        through=read.through,
+        classifications=classified.classifications,
+        plan_texts=read.run.verdicts,
+        taxonomy=read.repository.taxonomy(read.topic_id),
+    )
+    counts = found.counts
+    methods = ", ".join(f"{method} {count}" for method, count in counts.by_method.items()) or "none"
+    print(
+        f"Aff rounds: {counts.rounds} by {found.aff_teams} teams; assigned {len(found.assignments)} "
+        f"({methods}), left to placed cards {counts.placed_only}, unidentified {counts.unidentified} "
+        f"({counts.conflicting} with conflicting plan texts)."
+    )
+    print(
+        f"Carry refused into {counts.carry_refused} rounds; teams identified {found.identified_teams} of "
+        f"{found.aff_teams}; {counts.teams_disagreeing} teams whose rounds disagree."
+    )
     print(f"Runtime {time.perf_counter() - started:.1f} s.")
     return 0
 
@@ -277,6 +323,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         "plan-texts", help="Read the affirmative files' plan texts and count them."
     )
     _common(plan_texts)
+    assign = commands.add_parser("assign", help="Assign each affirmative round its aff, and count them.")
+    _common(assign)
     sheet = commands.add_parser("sheet", help="Write the coach's plan-text sheet outside the repository.")
     _common(sheet)
     sheet.add_argument("--out", type=Path, required=True, help="The directory to write the sheet to.")
@@ -290,6 +338,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         if arguments.command == "plan-texts":
             return asyncio.run(_plan_texts(arguments))
+        if arguments.command == "assign":
+            return asyncio.run(_assign(arguments))
         return asyncio.run(_sheet(arguments))
     except (Refused, DomainError, ValueError, OSError) as error:
         print(f"Refused: {error}", file=sys.stderr)

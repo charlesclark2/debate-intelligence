@@ -26,7 +26,9 @@ from debate_core.arguments.landscape.plan_text import (
     PlanTextVocabulary,
     document_plan_text,
     paragraphs_of,
+    plan_text_words,
     read_plan_texts,
+    sheet_plan_texts,
 )
 from debate_core.domain.debate_files import ParsedDocument
 from debate_core.domain.landscape import Taxonomy
@@ -355,3 +357,37 @@ def test_paragraphs_of_a_parsed_document_carry_the_parsers_units_and_card_ranges
     assert document_plan_text(read_plan_texts(found, in_cards, WORDS), WORDS) == DocumentPlanText(
         PlanTextVerdict.NAMES, "sample-plan-aff"
     )
+
+
+# ------------------------------------------------------------------------------------------------
+# The words for the coach's sheet
+# ------------------------------------------------------------------------------------------------
+
+
+def test_the_sheet_shows_plan_texts_that_name_an_aff_or_read_like_one() -> None:
+    found = read(
+        (BLOCK, "Plan"),
+        (ANALYTIC, SHAPED_SAMPLE),
+        (BLOCK, "PT"),
+        (BLOCK, "Advantage One"),
+        (BLOCK, "Plan"),
+        (ANALYTIC, "Other plan."),
+    )
+    assert [one.element_index for one in sheet_plan_texts(found)] == [1, 5]
+
+
+def test_a_plan_texts_words_are_read_back_by_place_and_digest() -> None:
+    specs = paragraphs((BLOCK, "Plan"), (ANALYTIC, SHAPED_SAMPLE), (BLOCK, "Plan"), (ANALYTIC, "Other plan."))
+    found = read_plan_texts(specs, frozenset(), WORDS)
+    assert plan_text_words(specs, found) == (
+        *["the", "united", "states", "federal", "government", "should", "establish", "a", "sample", "plan"],
+        "other",
+        "plan",
+    )
+
+
+def test_a_paragraph_that_reads_differently_gives_no_words() -> None:
+    found = read((BLOCK, "Plan"), (ANALYTIC, SHAPED_SAMPLE))
+    changed = paragraphs((BLOCK, "Plan"), (ANALYTIC, SHAPED_NOTHING))
+    assert plan_text_words(changed, found) is None
+    assert plan_text_words(paragraphs((BLOCK, "Plan")), found) is None

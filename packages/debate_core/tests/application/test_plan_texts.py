@@ -7,6 +7,7 @@ in memory; every word in it is invented.
 
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 from dataclasses import dataclass, field
 from datetime import date
@@ -249,3 +250,49 @@ async def test_the_cache_holds_no_word_of_any_source(world: World) -> None:
     written = world.cache_file.read_text(encoding="utf-8").casefold()
     for word in ("sample plan", "national program", "costs rise", "invented"):
         assert word not in written
+
+
+def no_plan() -> bytes:
+    return build_docx(paragraph_xml(run_xml("Advantage One"), style="Heading3"))
+
+
+@pytest.mark.anyio
+async def test_the_sheet_s_words_are_read_again_only_from_sources_with_a_plan_text(world: World) -> None:
+    named = world.plant(affirmative(NAMED_PLAN))
+    unnamed = world.plant(affirmative(UNNAMED_PLAN))
+    without = world.plant(no_plan())
+    service = world.service()
+    run = await service.read(CASELIST, [named, unnamed, without], vocabulary())
+    calls = len(world.parser.paths)
+    found = await service.words(CASELIST, [named, unnamed, without], run)
+    assert len(world.parser.paths) == calls + 2
+    assert found.words == {
+        named.sha256: tuple(NAMED_PLAN.casefold().rstrip(".").split()),
+        unnamed.sha256: tuple(UNNAMED_PLAN.casefold().rstrip(".").split()),
+    }
+    assert (found.parsed, found.without_plan_text, found.mismatched, found.unread) == (2, 1, 0, 0)
+
+
+@pytest.mark.anyio
+async def test_a_source_that_reads_differently_from_its_reading_is_left_off(world: World) -> None:
+    source = world.plant(affirmative(NAMED_PLAN))
+    service = world.service()
+    run = await service.read(CASELIST, [source], vocabulary())
+    (reading,) = run.readings[source.sha256]
+    changed = dataclasses.replace(
+        run, readings={source.sha256: (dataclasses.replace(reading, digest="0" * 64),)}
+    )
+    found = await service.words(CASELIST, [source], changed)
+    assert (found.words, found.mismatched) == ({}, 1)
+
+
+@pytest.mark.anyio
+async def test_reading_the_words_writes_nothing(world: World) -> None:
+    source = world.plant(affirmative(NAMED_PLAN))
+    service = world.service()
+    run = await service.read(CASELIST, [source], vocabulary())
+    before = sorted(path.relative_to(world.data_dir) for path in world.data_dir.rglob("*"))
+    written = world.cache_file.read_bytes()
+    await service.words(CASELIST, [source], run)
+    assert sorted(path.relative_to(world.data_dir) for path in world.data_dir.rglob("*")) == before
+    assert world.cache_file.read_bytes() == written

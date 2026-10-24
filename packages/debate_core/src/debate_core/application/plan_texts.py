@@ -46,12 +46,14 @@ from debate_core.arguments.landscape.plan_text import (
     PlanTextVocabulary,
     document_plan_text,
     paragraphs_of,
+    plan_text_words,
     read_plan_texts,
+    sheet_plan_texts,
 )
 from debate_core.domain.caselist import SourceDocument
 from debate_core.domain.debate_files import ParsedDocument, ParseFailure
 
-__all__ = ["PLAN_TEXT_SOURCE_PATH", "PlanTextCounts", "PlanTextRun", "PlanTextService"]
+__all__ = ["PLAN_TEXT_SOURCE_PATH", "PlanTextCounts", "PlanTextRun", "PlanTextService", "PlanTextWordsRun"]
 
 PLAN_TEXT_SOURCE_PATH: Final = "plan-text-reading.docx"
 """The path the parser is given in place of a disclosure path, which names a school and a team."""
@@ -80,6 +82,19 @@ class PlanTextRun:
     readings: dict[str, tuple[PlanTextParagraph, ...]] = field(repr=False)
     """What was read of each readable source's plan texts, by digest."""
     counts: PlanTextCounts
+
+
+@dataclass(frozen=True, slots=True)
+class PlanTextWordsRun:
+    """The words of each source's sheet plan texts, for the coach's sheet only. Held in memory."""
+
+    words: dict[str, tuple[str, ...]] = field(repr=False)
+    parsed: int
+    without_plan_text: int
+    """Sources with no plan text the sheet shows; not parsed."""
+    mismatched: int
+    """Sources whose paragraphs no longer read as their reading says; left off the sheet."""
+    unread: int
 
 
 class PlanTextService:
@@ -153,6 +168,40 @@ class PlanTextService:
                 verdicts=dict(sorted(Counter(one.verdict.value for one in verdicts.values()).items())),
                 cache_written=changed,
             ),
+        )
+
+    async def words(
+        self, caselist: str, sources: Sequence[SourceDocument], run: PlanTextRun
+    ) -> PlanTextWordsRun:
+        """The words of each source's sheet plan texts, parsed again from its bytes and never written.
+
+        Only sources whose reading in `run` holds a plan text the sheet shows are parsed.
+        """
+        wanted = {
+            source.sha256: (source, shown)
+            for source in sources
+            if (shown := sheet_plan_texts(run.readings.get(source.sha256, ())))
+        }
+        words: dict[str, tuple[str, ...]] = {}
+        mismatched = unread = parsed = 0
+        jobs = self._jobs([source for source, _ in (wanted[sha] for sha in sorted(wanted))])
+        for job, result in self._runner.run(self._parser, jobs):
+            if not isinstance(result, ParsedDocument):
+                unread += 1
+                continue
+            parsed += 1
+            paragraphs, _ = paragraphs_of(result)
+            found = plan_text_words(paragraphs, wanted[job.source.sha256][1])
+            if found is None:
+                mismatched += 1
+            else:
+                words[job.source.sha256] = found
+        return PlanTextWordsRun(
+            words=dict(sorted(words.items())),
+            parsed=parsed,
+            without_plan_text=len({source.sha256 for source in sources}) - len(wanted),
+            mismatched=mismatched,
+            unread=unread,
         )
 
     def _jobs(self, sources: Sequence[SourceDocument]) -> Iterator[LoadableJob]:

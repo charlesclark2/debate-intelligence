@@ -64,7 +64,9 @@ __all__ = [
     "PlanTextVocabulary",
     "document_plan_text",
     "paragraphs_of",
+    "plan_text_words",
     "read_plan_texts",
+    "sheet_plan_texts",
 ]
 
 PLAN_TEXT_LABELS: Final = frozenset(
@@ -235,6 +237,32 @@ def document_plan_text(
     if any(paragraph.shaped for paragraph in found):
         return DocumentPlanText(PlanTextVerdict.UNNAMED)
     return DocumentPlanText(PlanTextVerdict.NONE)
+
+
+def sheet_plan_texts(found: tuple[PlanTextParagraph, ...]) -> tuple[PlanTextParagraph, ...]:
+    """The plan texts the coach's sheet shows: those that name an aff or read like a plan text."""
+    return tuple(one for one in found if one.named or one.shaped)
+
+
+def plan_text_words(
+    paragraphs: tuple[Paragraph, ...], wanted: tuple[PlanTextParagraph, ...]
+) -> tuple[str, ...] | None:
+    """The words of `wanted`'s paragraphs, in file order; None when one is gone or reads differently.
+
+    A paragraph is found by its element index and must hash to the digest kept for it, so a sheet
+    never shows words from a paragraph other than the one that was read.
+    """
+    by_index = {one.element_index: one for one in paragraphs}
+    words: list[str] = []
+    for one in sorted(wanted, key=lambda found: found.element_index):
+        paragraph = by_index.get(one.element_index)
+        if paragraph is None:
+            return None
+        found = tag_words(paragraph.text)
+        if hashlib.sha256(found.encode()).hexdigest() != one.digest:
+            return None
+        words.extend(found.split())
+    return tuple(words)
 
 
 def _is_label(text: str) -> bool:

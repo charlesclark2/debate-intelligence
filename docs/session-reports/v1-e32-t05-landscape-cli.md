@@ -589,9 +589,51 @@ docs/data/landscape/first-run-policy.md.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED, with conditions closed in-session
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-24
 
 **Notes:**
+
+A clean command over a tested service.
+* The scan's accept rule makes next week's same hit the same hit: digits are masked, and line
+  numbers and counts are kept out of the key. Without that, accepting would come to mean nothing.
+* The unchanged-object skip is checked after upload. 22 mutants were caught.
+* The real-store dry run reproduces t03's preview count for count.
+* The coach's pass is applied with every exception explained. Leaving out the two flagged rows,
+  even though he filled them `none`, is exactly right: a `none` would still put the heading in a
+  committed file.
+
+**Deviations 1 to 11 and Decisions 1 to 8 are accepted.** `generic-theory` as `side: both` is the
+right reading of the ruling.
+
+**Conditions, to close in this session before the PR:**
+
+1. **Wire t09's producer now.** v1-e32-t09 merged before this task, so by the PM's rule this task
+   wires it.
+   * `scripts/task sync` first. t09 touched `render.py` and the golden report.
+   * Pass `AffAssignmentService` as `aff_assignments` in `ServiceContainer.landscape_run`, with a
+     test on the synthetic store. Bring the pinned integration list into agreement with what t09
+     added.
+   * Check whether t09's local plan-text cache is still valid under taxonomy 1.1.0. Its key holds
+     a vocabulary digest, so say whether this pass changed it. If the cache is no longer valid, the
+     first full plan-text pass (about 3.5 min) becomes an operator block between blocks 0 and 1.
+   * The first dev run then publishes with the aff identified, and block 5 is no longer needed.
+2. **`uq`: the coach confirms it is "uniqueness"** (the PM relayed it, 2026-10-24). Add it to
+   `SHORT_WORDS` in `tests/config` in the same change, as the check's own rule requires. Apply the
+   decision (45 of 50), and re-measure the coverage table.
+3. **Remove the stale "Before the pull request" section** (the pass is applied). Then update the
+   Summary, the counts, the first-run note and Operator follow-ups for conditions 1 and 2. No
+   re-review is needed unless condition 1's sync or wiring changes a count or a rule.
+
+**The PR:** opened with `--partial`. ac4 (validate-dev's run) and ac5 (the first dev run and the
+coach's review) follow the merge, and the PM records them. Blocks 0 to 4, on dev's squash commit,
+are accepted as written. Paste the counts back, but not the scan's lines.
+
+**Follow-up work:**
+* The E34 failed-run staleness task is filed by the PM.
+* `--model-mode` and the budget belong to t07.
+* The weekly scheduled run never accepts hits by itself. That is recorded for E34's integration.
+
+If anything comes out differently, stop and ask for another review.

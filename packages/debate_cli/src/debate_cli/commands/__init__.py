@@ -88,6 +88,8 @@ def register_commands(app: typer.Typer) -> None:
     opencaselist_session.command("login")(caselist_auth.login)
     opencaselist_session.command("status")(caselist_auth.status)
     opencaselist_session.command("logout")(caselist_auth.logout)
+    opencaselist_session.command("set-password")(caselist_auth.set_password)
+    opencaselist_session.command("renew")(caselist_auth.renew)
     disclosed_evidence.add_typer(opencaselist_session)
     app.add_typer(disclosed_evidence)
 

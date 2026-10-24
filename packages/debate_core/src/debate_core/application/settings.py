@@ -513,6 +513,9 @@ class CaselistTokenBackend(StrEnum):
     """The OS keychain (the macOS login keychain on the operator's Mac), through `keyring`."""
     FILE = "file"
     """A 0600 file under a gitignored `secrets/` directory."""
+    SECRETSMANAGER = "secretsmanager"
+    """The environment's AWS Secrets Manager secret, `debate-<env>-caselist-token`, which the weekly
+    cloud run reads (ADR-0020 (2)). Never chosen by `auto`."""
 
 
 class SyncNotifierKind(StrEnum):
@@ -645,7 +648,8 @@ class CaselistSettings(SettingsGroup):
         default=CaselistTokenBackend.AUTO,
         description=(
             "Where `caselist auth login` keeps the caselist_token: the OS keychain, a 0600 file, "
-            "or `auto` (the keychain when one is usable, otherwise the file)."
+            "`auto` (the keychain when one is usable, otherwise the file), or `secretsmanager`, the "
+            "environment's Secrets Manager secret the weekly cloud run reads."
         ),
     )
     secret_file: Path | None = Field(
@@ -655,6 +659,30 @@ class CaselistSettings(SettingsGroup):
             "caselist_token`. Any path named `caselist_token`, or under a `secrets/` directory, is "
             "gitignored."
         ),
+    )
+    token_secret_id: str | None = Field(
+        default=None,
+        min_length=1,
+        description=(
+            "The Secrets Manager secret the `secretsmanager` backend keeps the caselist_token in. "
+            "Unset means `debate-<environment>-caselist-token`, the secret Terraform creates "
+            "(ADR-0020 (2)). A name, not a credential."
+        ),
+    )
+    password_secret_id: str | None = Field(
+        default=None,
+        min_length=1,
+        description=(
+            "The Secrets Manager secret holding the Tabroom username and password, which "
+            "`caselist auth set-password` writes and the scheduled login (`caselist auth renew`) "
+            "reads. Unset means `debate-<environment>-caselist-tabroom-password`. A name, not a "
+            "credential: the value is never in a setting."
+        ),
+    )
+    secrets_region: str = Field(
+        default="us-east-1",
+        min_length=1,
+        description="Region of the two caselist secrets. ADR-0010 pins everything to us-east-1.",
     )
 
     # --- The weekly scheduled sync (v1-e34-t02-scheduled-sync) ----------------------------------

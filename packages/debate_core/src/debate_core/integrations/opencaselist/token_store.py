@@ -4,7 +4,7 @@
 `caselist_token` once; this module keeps that token so the scheduled pull (v1-e34-t02) can use it
 without anyone typing a password again. The password itself never reaches this module.
 
-## Two backends
+## Three backends
 
 * :class:`KeyringTokenBackend` — the OS keychain through `keyring`. On the operator's Mac that is
   the login keychain, which is encrypted at rest and unlocked with the session.
@@ -12,6 +12,12 @@ without anyone typing a password again. The password itself never reaches this m
   no usable keychain. Its default place is `<data_dir>/secrets/caselist_token`, and `.gitignore`
   ignores both `secrets/` directories and any file named `caselist_token`, so a data directory
   pointed inside a checkout still cannot commit it.
+* :class:`SecretsManagerTokenBackend` — the environment's Secrets Manager secret,
+  `debate-<env>-caselist-token`, for the weekly run in the cloud (ADR-0020 (2)). The scheduled
+  login and a login by hand write it; only the run's role reads it. It reads the secret once per
+  process and keeps what it read, so a run is one `GetSecretValue` in CloudTrail, not one a
+  request, and it never writes a validation stamp, because the role that reads the token may not
+  write it. It is never deleted from here: the next login replaces it.
 
 The file backend **refuses to read a file anyone but the owner can read**. A token file that became
 group- or world-readable may already have been read, and quietly carrying on would hide that; the
@@ -58,8 +64,12 @@ __all__ = [
     "InsecureTokenFile",
     "KeyringTokenBackend",
     "KeyringUnavailable",
+    "SecretSlot",
+    "SecretsManagerTokenBackend",
     "StoredCaselistToken",
     "TokenBackend",
+    "TokenSecretNotConfigured",
+    "TokenSecretNotDeletable",
     "default_secret_file",
     "keyring_is_usable",
 ]
@@ -118,6 +128,28 @@ class KeyringUnavailable(DomainError):
         )
 
 
+class TokenSecretNotConfigured(DomainError):
+    """`caselist.token_backend` is `secretsmanager`, and this installation built no secret for it."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "caselist.token_backend is `secretsmanager` but no Secrets Manager secret was given "
+            "for the caselist_token; this command cannot use that backend"
+        )
+
+
+class TokenSecretNotDeletable(DomainError):
+    """`logout` was asked to delete the token kept in Secrets Manager."""
+
+    def __init__(self, secret_id: str) -> None:
+        self.secret_id = secret_id
+        super().__init__(
+            f"the caselist_token in Secrets Manager secret {secret_id} is not deleted from here: the "
+            "next login replaces it, and only DebateBreakGlassAdmin may delete the secret "
+            "(ADR-0020 (2))"
+        )
+
+
 # ------------------------------------------------------------------------------------------------
 # The stored record
 # ------------------------------------------------------------------------------------------------
@@ -132,7 +164,7 @@ class StoredCaselistToken:
     expires_at: datetime | None
     last_validated_at: datetime | None
     backend: str
-    """`keyring`, `file` or `settings` (a token supplied through `providers.caselist_token`)."""
+    """`keyring`, `file`, `secretsmanager` or `settings` (a token from `providers.caselist_token`)."""
 
     def expired(self, now: datetime) -> bool:
         """Whether the API's stated expiry has passed. A token with no stated expiry never has."""
@@ -191,6 +223,16 @@ class TokenBackend(Protocol):
     @property
     def name(self) -> str: ...
 
+    @property
+    def location(self) -> str:
+        """Where the record is, for `auth status`. Never its contents."""
+        ...
+
+    @property
+    def stamps_validation(self) -> bool:
+        """Whether a request that worked is written back as `last_validated_at`."""
+        ...
+
     def read(self) -> str | None: ...
 
     def write(self, value: str) -> None: ...
@@ -214,6 +256,14 @@ class KeyringTokenBackend:
     @property
     def name(self) -> str:
         return "keyring"
+
+    @property
+    def location(self) -> str:
+        return f"keychain item {KEYRING_SERVICE}"
+
+    @property
+    def stamps_validation(self) -> bool:
+        return True
 
     def __init__(self, *, account: str, keyring: KeyringLike | None = None) -> None:
         self._account = account
@@ -257,6 +307,14 @@ class FileTokenBackend:
     def name(self) -> str:
         return "file"
 
+    @property
+    def location(self) -> str:
+        return str(self.path)
+
+    @property
+    def stamps_validation(self) -> bool:
+        return True
+
     def __init__(self, path: Path) -> None:
         self.path = path
 
@@ -298,6 +356,62 @@ class FileTokenBackend:
         return True
 
 
+class SecretSlot(Protocol):
+    """One Secrets Manager secret, read and written whole.
+
+    :class:`debate_core.integrations.secrets_manager.ManagedSecret` is the one implementation. It is
+    named here as a Protocol so that this package never imports the AWS SDK, even indirectly (the
+    import-linter contract in the workspace root): the composition root builds the secret and hands
+    it in.
+    """
+
+    @property
+    def secret_id(self) -> str: ...
+
+    def read(self) -> str | None: ...
+
+    def write(self, value: str) -> str | None: ...
+
+
+class SecretsManagerTokenBackend:
+    """The token record in the environment's Secrets Manager secret (ADR-0020 (2))."""
+
+    @property
+    def name(self) -> str:
+        return "secretsmanager"
+
+    def __init__(self, secret: SecretSlot) -> None:
+        self._secret = secret
+        self._known: str | None = None
+        self._read = False
+
+    @property
+    def location(self) -> str:
+        return f"Secrets Manager secret {self._secret.secret_id}"
+
+    @property
+    def stamps_validation(self) -> bool:
+        # The run's role reads the token and may not write it. Writing a stamp after every request
+        # would also be a new secret version per request, where ADR-0020 expects one a week.
+        return False
+
+    def read(self) -> str | None:
+        # Once per process: the token does not change while a run uses it, and CloudTrail should
+        # show one read a run.
+        if not self._read:
+            self._known = self._secret.read()
+            self._read = True
+        return self._known
+
+    def write(self, value: str) -> None:
+        self._secret.write(value)
+        self._known = value
+        self._read = True
+
+    def delete(self) -> bool:
+        raise TokenSecretNotDeletable(self._secret.secret_id)
+
+
 # ------------------------------------------------------------------------------------------------
 # The store
 # ------------------------------------------------------------------------------------------------
@@ -319,12 +433,19 @@ class CaselistTokenStore:
         secret_file: Path,
         keyring: KeyringLike | None = None,
         keyring_usable: Callable[[], bool] = keyring_is_usable,
+        token_secret: Callable[[], SecretSlot] | None = None,
         clock: Callable[[], datetime] | None = None,
     ) -> CaselistTokenStore:
         """The store `caselist.token_backend` names.
 
-        `auto` falls back to the file only when no keychain is usable.
+        `auto` falls back to the file only when no keychain is usable, and never chooses Secrets
+        Manager. `token_secret` builds the secret for `secretsmanager`, and is called only then, so
+        no other choice builds an AWS client.
         """
+        if choice is CaselistTokenBackend.SECRETSMANAGER:
+            if token_secret is None:
+                raise TokenSecretNotConfigured
+            return cls(SecretsManagerTokenBackend(token_secret()), clock=clock)
         if choice is CaselistTokenBackend.FILE:
             return cls(FileTokenBackend(secret_file), clock=clock)
         if keyring is not None or keyring_usable():
@@ -339,10 +460,8 @@ class CaselistTokenStore:
 
     @property
     def location(self) -> str:
-        """Where the token is, for `auth status`: the file's path, or the keychain item's name."""
-        if isinstance(self._backend, FileTokenBackend):
-            return str(self._backend.path)
-        return f"keychain item {KEYRING_SERVICE}"
+        """Where the token is, for `auth status`: a file's path, a keychain item's or a secret's name."""
+        return self._backend.location
 
     def load(self) -> StoredCaselistToken | None:
         """The stored token, or `None` when there is none. Registers it for log redaction."""
@@ -367,7 +486,12 @@ class CaselistTokenStore:
         return stored
 
     def record_validation(self) -> None:
-        """Stamp the stored token as having just worked. A no-op when none is stored."""
+        """Stamp the stored token as having just worked.
+
+        A no-op when none is stored, and for a backend that keeps no stamps (Secrets Manager).
+        """
+        if not self._backend.stamps_validation:
+            return
         stored = self.load()
         if stored is not None:
             self._backend.write(replace(stored, last_validated_at=self._clock()).to_json())

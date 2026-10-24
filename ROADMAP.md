@@ -61,8 +61,8 @@ v2.3's extension work.
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 48 | 44 | 238 |
-| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 103 | 81 | 487 |
-| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 28 | 13 | 212 |
+| [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 104 | 81 | 489 |
+| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 28 | 14 | 212 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 13 | 2 | 108 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 16 | 7 | 98 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 0 | 66 |
@@ -279,6 +279,7 @@ OpenCaselist archives and OpenEv camp files for HS LD, Policy and PF are importe
 | [An older build never rewrites or publishes an occurrence table stamped with a newer fingerprint version](plan_specs/v1/e34-caselist-sync/t29-newer-fingerprint-table-guard.yaml) `v1-e34-t29-newer-fingerprint-table-guard` | Succeeded | 1 | 2.0 |
 | [doctor says when a store the weekly run will index has never been parsed](plan_specs/v1/e34-caselist-sync/t30-doctor-unparsed-store.yaml) `v1-e34-t30-doctor-unparsed-store` | Succeeded | 0 | 1.0 |
 | [The weekly run names caselist parse --publish-only where a publish-only finishes the stage](plan_specs/v1/e34-caselist-sync/t31-pull-fix-text-publish-only.yaml) `v1-e34-t31-pull-fix-text-publish-only` | Pending | 2 | 2.0 |
+| [The staleness hook reports a caselist stale when its latest run failed](plan_specs/v1/e34-caselist-sync/t32-failed-run-reads-stale.yaml) `v1-e34-t32-failed-run-reads-stale` | Pending | 1 | 2.0 |
 
 
 ### v1.2 — Argument landscape & file building
@@ -312,7 +313,7 @@ Weekly argument-landscape reports show which positions are being read and with w
 | [Model classification of what headings cannot place](plan_specs/v1/e32-argument-landscape/t07-model-classification-stage.yaml) `v1-e32-t07-model-classification-stage` | Pending | 3 | 8.0 |
 | [A released position id is never deleted or reused](plan_specs/v1/e32-argument-landscape/t08-released-position-ids.yaml) `v1-e32-t08-released-position-ids` | Succeeded | 1 | 3.0 |
 | [Each Policy affirmative round's plan, counted first, so the landscape names what affs read](plan_specs/v1/e32-argument-landscape/t09-policy-plan-texts.yaml) `v1-e32-t09-policy-plan-texts` | InProgress | 1 | 5.0 |
-| [Impact cards per DA and advantage in the landscape report](plan_specs/v1/e32-argument-landscape/t10-impact-cards-per-position.yaml) `v1-e32-t10-impact-cards-per-position` | Pending | 1 | 4.0 |
+| [Impact cards per DA and advantage in the landscape report](plan_specs/v1/e32-argument-landscape/t10-impact-cards-per-position.yaml) `v1-e32-t10-impact-cards-per-position` | Succeeded | 1 | 4.0 |
 | [Counterplan texts, kritik alternatives and overviews in the landscape report](plan_specs/v1/e32-argument-landscape/t11-negative-analytic-texts.yaml) `v1-e32-t11-negative-analytic-texts` | Pending | 2 | 5.0 |
 
 #### [E33 — Evidence File Builder](plan_specs/v1/e33-file-builder/epic.yaml)

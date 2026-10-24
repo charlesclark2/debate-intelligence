@@ -27,13 +27,14 @@ an optional `AffAssignmentSource`. Until then the report shows the unidentified 
 **Status: PARTIAL, waiting on one input.** Every node through the smoke check is done, and its
 criteria pass. ac1 to ac3 pass, and ac4 passes in the recorded tier locally.
 
-* **The coach's queue pass is applied** (the PM's item 4), as far as it can be today:
-  * five new positions, as taxonomy 1.1.0 (PM ruling (b), Deviation 9);
-  * 41 of the 50 decisions;
-  * coverage measured before and after: cards 48.1% → 50.0%, negative documents with any placed
-    position 35.8% → 40.9%.
-* **Waiting on:** three headings need generic theory and K positions that do not exist (PM
-  question 9), and one needs the coach's word that `uq` is debate vocabulary (Deviation 10).
+* **The coach's queue pass is applied** (the PM's item 4):
+  * seven new positions (Deviation 9): five in the topic's taxonomy, now 1.1.0, and a generic K and
+    generic theory position in `generic.yaml`, now 1.1.0;
+  * 44 of the 50 decisions; the six left are each left for a reason (Deviation 10);
+  * coverage measured before and after: cards 48.1% → 50.1%, negative documents with any placed
+    position 35.8% → 42.4%.
+* **One heading, `uq`, waits on the coach's word** that it is debate vocabulary. It is not needed for
+  the PR (Deviation 10).
 * **NOT RUN, so the Goal stays `InProgress`:**
   * ac5 (the first dev run and the coach's review) comes after the merge, so the PR opens with
     `--partial`;
@@ -52,7 +53,7 @@ criteria pass. ac1 to ac3 pass, and ac4 passes in the recorded tier locally.
 | cli-command | Done | `commands/landscape.py`, registered as the `landscape` group's `report`. The composition root gains `landscape_run` |
 | publish | Done | Through `EvidenceObjectStore`: `head` each key, upload where the recorded digest differs, check the stored digest. Tested against moto in the CLI and against a filesystem store in core |
 | smoke-check | Done | `tests/smoke/test_landscape_smoke.py`, recorded tier, and a row in `tests/smoke/README.md` |
-| first-dev-run | Partly done | The coach's queue pass is applied: five positions (taxonomy 1.1.0) and 41 decisions in `config/landscape/overrides/policy-2026-27-nhi.yaml`, `tests/config` 23 passed. `docs/data/landscape/first-run-policy.md` records coverage before and after. The dev run and the coach's review are operator follow-ups after the merge |
+| first-dev-run | Partly done | The coach's queue pass is applied: seven positions (the topic's taxonomy and `generic.yaml`, both 1.1.0) and 44 decisions in `config/landscape/overrides/policy-2026-27-nhi.yaml`, `tests/config` 23 passed. `docs/data/landscape/first-run-policy.md` records coverage before and after. The dev run and the coach's review are operator follow-ups after the merge |
 
 ## Acceptance criteria
 
@@ -269,28 +270,35 @@ header names today is `none`.
    * `tests/config` passes. Its alias checks fail on a planted bad alias (4 failed), and the file
      was restored byte for byte.
    * t09's ac3 bumps again on top of this. Whichever PR merges second rebases the taxonomy file.
-10. **The pass applies 41 of the 50 decisions.** The rest:
+   * **Two more, in `generic.yaml`** (PM ruling 2026-10-24, (a)): `generic-theory` ("Theory") with
+     the coach's two theory headings as aliases, and `generic-k` ("Generic K") with his K heading.
+     Both are Policy only. `generic.yaml` goes from 1.0.0 to 1.1.0, and the Policy topic stays at
+     the unreleased 1.1.0.
+10. **The pass applies 44 of the 50 decisions.** The rest:
     * **Two headings the coach's sheet flags** as possibly naming a school or tournament, though
       filled `None`, are left out: a `none` would still put the heading in a committed file.
     * **Two he left blank.**
     * **`pharma`**, read on both sides, stays blank. One heading takes one decision.
-    * **Two `Theory` headings and one `Kritiks` heading** wait on generic positions (question 9).
+    * The two `Theory` headings and the `Kritiks` heading are applied under the generic
+      positions (question 9).
     * **`uq`**, decided `none`, is refused by the personal-data check
       (`test_no_override_names_a_team_a_school_or_a_person`) as shaped like a team code. It is the
       check working: a real-data red run. No hspolicy26 disclosure uses `UQ` as a team code (0 of 555
       team-code directories in 9,052 paths). The check's own rule is that a real two-letter word goes
       into `SHORT_WORDS` in `tests/config` in the same change, and I have not done that without the
       coach's word that it is "uniqueness".
-    * Two typos were corrected on the coach's say-so (`disease-a` to `disease-advantage`,
-      `framework` to `framework-t`), and his `-adv` ids map to `-advantage`.
+    * One typo was corrected on the coach's say-so (`disease-a` to `disease-advantage`), and his
+      `-adv` ids map to `-advantage`.
     * The decisions file is outside the repository:
       `~/Documents/debate/landscape-seed/policy-2026-27-nhi-decisions-2026-10-24.csv`. It was
       written from the coach's Numbers sheet, exported to `…-queue-top-50-filled.csv`. The original
       CSV and the Numbers file are untouched.
-11. **One decision moves cards between kinds.** `framework` → `framework-t` moves 96 cards from Ks
-    to T, because under a K's own block the heading is the K's framework. That is most of why K
-    documents fall from 151 to 145 and T rises from 138 to 209. No card loses a placement: 1,657 are
-    newly placed, and 291 move to another position. Question 10.
+11. **`framework` names no position: the coach's decision** (question 10). He first placed it under
+    `framework-t`. Under a K's own block, though, the heading is the K's framework, and with that
+    decision 96 cards moved from Ks to T. With `none` they stay with the K: K documents
+    151 → 145 → 151 and T 138 → 209 → 138, measured before the generic K was added. No decision
+    takes a placement from any card. A decided heading lower on a path wins over an alias above it,
+    which is why three aff documents lose their placed aff to an advantage.
 
 ## Decisions and assumptions
 
@@ -339,7 +347,11 @@ header names today is `none`.
 5. **A dry run writes nothing anywhere:** not the cache (a read-only view of it), not the queue,
    the bundle, the acceptance log or the bucket. With `--publish` it reads the bucket to plan.
 6. **The report date** is today in UTC, from the container's clock, which the tests pin.
-7. **The aff seam** passes t09's producer the reading, `through`, the classifications and the
+7. **`generic-theory` is `side: both`.** The PM's ruling named its label and aliases and not a side.
+   The taxonomy's theory positions are sided by who reads them (condo bad aff, ASPEC neg), and a
+   generic one collects either side's theory, so neither side's reads are set aside as answers.
+   `generic-k` is `side: neg`, like every K in the file.
+8. **The aff seam** passes t09's producer the reading, `through`, the classifications and the
    taxonomy: what t09's `build_aff_assignments` takes, as its branch stood on 2026-10-24.
 
 ## Operator follow-ups
@@ -530,7 +542,11 @@ v1-e32-t05 questions (session, 2026-10-24)
    Recommendation: yes; dev-preview is kept for site deploys.
 ```
 
-Second block, after the coach's queue pass (2026-10-24):
+**The second block, answered by the PM, 2026-10-24:** 9 (a), generic-theory and generic-k added to
+`generic.yaml`, 1.1.0, with the three decisions applied. 10: the coach chose `none` for `framework`,
+recorded with its numbers (Deviation 11).
+
+Second block, after the coach's queue pass (2026-10-24), kept as asked:
 
 ```text
 v1-e32-t05, the coach's queue pass, applied (session, 2026-10-24)

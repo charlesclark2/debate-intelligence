@@ -51,6 +51,16 @@ spec:
     t01's normalizer here, with synthetic cases shown failing first, since this task works on
     the same headings. Aim to merge before v1-e32-t05's first dev run; the first report does not
     wait for it.
+    (PM note 2026-10-24.) The coach decided on 2026-10-24, as data-use policy 1.13, that a
+    landscape report may quote a team's plan text word for word, including a text only one team
+    reads, never beside a school or team code. So the coach's review sheet (outside the
+    repository) and the report may show plan texts verbatim; committed files still hold none,
+    and fixtures stay synthetic. The PM's rulings of 2026-10-24 on the counts: read the raw
+    sources in this task (derived cache, never text in the cache); `PLAN_TEXT` from the
+    paragraph under a plan label only; `TEAM_CARRY` with the guard; caselist titles not taken
+    this season; `national health insurance` plans unidentified and clustered for the coach;
+    `medicare for all` and `m4a` identify single payer until a child exists; ac1 to the
+    affirmative side; numbered DAs, CPs and contentions in the normalizer here.
   priority: 1
   constraints:
     packages: [debate_core.arguments, debate_core.application, debate_core.integrations, scripts, config/landscape, packages/debate_core/tests, tests/scripts, docs/guides]

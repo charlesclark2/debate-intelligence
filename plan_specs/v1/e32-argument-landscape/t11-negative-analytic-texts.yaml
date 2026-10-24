@@ -1,0 +1,90 @@
+# TASK v1-e32-t11-negative-analytic-texts - Counterplan texts, kritik alternatives and overviews in the landscape report
+# Epic: E32 Argument Landscape Reports | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e32-t11-negative-analytic-texts
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+  annotations:
+    debate/title: "Counterplan texts, kritik alternatives and overviews in the landscape report"
+spec:
+  # Filed by the PM, 2026-10-24, from the coach's review of the first Policy report, 2026-10-24 (v1-e32-t03).
+  description: >-
+    The coach asked for each CP's text, each K's alternative or role of the ballot, and each
+    position's overview. These are analytics, which the parsed store does not keep (v1-e32-t03
+    counted 1 CP text card in 322 CP documents), the same finding as plan texts in v1-e32-t09.
+    Reuse t09's raw re-read and its derived cache (never text in the cache) rather than a parser
+    change: counts first, per kind, of documents with a CP-text, alternative, role-of-the-ballot
+    or overview label and the paragraph under it, sent to the PM with the proposed labels before
+    building. Then show, per CP and per K, the distinct texts with the number of teams reading
+    each, quoted word for word as data-use policy 1.13 allows (never beside a school or team
+    code), and per position its most common overview. The report stays on the operator's machine
+    and in the private `reports/` prefix.
+  priority: 2
+  constraints:
+    packages: [debate_core.application, debate_core.arguments, debate_core.domain, tests/fixtures/landscape, packages/debate_core/tests]
+    forbidden:
+      - A school, team code or debater's name beside any card or text in a report, fixture, log or commit
+      - Card text, plan or counterplan text in a committed file or fixture (synthetic values only)
+      - Network or AWS access in any test
+      - Model calls (deterministic only; model stages are v1-e32-t07's)
+  context:
+    - kind: TaskRef
+      name: v1-e32-t09-policy-plan-texts
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e32-t03-landscape-report
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Counts before any rule, per kind, of documents with a CP-text, alternative,
+        role-of-the-ballot or overview label and the paragraph under it, sent to the PM with
+        the proposed labels.
+    - id: ac2
+      description: >-
+        After the ruling, on synthetic sources, the report shows each CP's and K's distinct
+        texts with their team counts and each position's most common overview, matching
+        hand-written golden files; a text never stands beside a school or team code; tests
+        shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e32-t11-negative-analytic-texts-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+spec:
+  description: >-
+    Counts and the PM's ruling first, reusing t09's raw re-read, then the sections and golden
+    files.
+  goalRef:
+    name: v1-e32-t11-negative-analytic-texts
+  graph:
+    nodes:
+      - id: negative-texts
+        kind: Task
+        name: Negative analytic texts
+        description: >-
+          Counts and the PM's ruling first, reusing t09's raw re-read, then the sections
+          and golden files.
+        estimatedEffort: 5h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Landscape report tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_landscape_report.py]
+status:
+  phase: Pending

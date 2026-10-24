@@ -1,0 +1,75 @@
+# TASK v1-e01-t35-pyright-scope-tests - CI's pyright covers tests/architecture and tests/smoke
+# Epic: E01 Repository & Delivery Foundation | Release: v1.0 (Foundation & verified evidence core) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e01-t35-pyright-scope-tests
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+  annotations:
+    debate/title: "CI's pyright covers tests/architecture and tests/smoke"
+spec:
+  # Filed by the PM, 2026-10-24, from v1-e01-t31's question 1.
+  description: >-
+    CI's pyright step runs a bare `uv run --frozen pyright`, so its scope is pyproject.toml's
+    `[tool.pyright] include = ["packages"]`. v1-e01-t31 brought tests/architecture and
+    tests/smoke to 0 errors; this task keeps them there. Set `include = ["packages",
+    "tests/architecture", "tests/smoke"]` and `extraPaths = ["scripts"]`, remove the two scoped
+    `# pyright: ignore[reportMissingImports]` comments v1-e01-t31 added (the imports from
+    scripts/ then resolve), and show a planted type error in each directory failing CI's
+    command. All of tests/ (48 errors on 2026-10-23) is out of scope.
+  priority: 3
+  constraints:
+    packages: [pyproject.toml, tests/architecture, tests/smoke]
+    forbidden:
+      - Any change of test behaviour
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e01-t31-repo-check-false-positives
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        `uv run --frozen pyright` with no arguments reports 0 errors and checks
+        tests/architecture and tests/smoke; a planted type error in each fails it; the two
+        scoped ignores are gone.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e01-t35-pyright-scope-tests-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+spec:
+  description: >-
+    Widen the include, add extraPaths, remove the ignores, plant and remove an error in each.
+  goalRef:
+    name: v1-e01-t35-pyright-scope-tests
+  graph:
+    nodes:
+      - id: pyright-scope
+        kind: Task
+        name: Pyright scope
+        description: >-
+          Widen the include, add extraPaths, remove the ignores, plant and remove an error
+          in each.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Architecture tests pass
+            command: uv
+            args: [run, pytest, tests/architecture]
+status:
+  phase: Pending

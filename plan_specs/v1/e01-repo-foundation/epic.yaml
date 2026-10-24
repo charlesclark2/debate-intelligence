@@ -810,5 +810,24 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e01-t34-validate-dev-green-again
+    - id: t35
+      kind: Task
+      name: 'CI''s pyright covers tests/architecture and tests/smoke'
+      description: >-
+        CI's pyright covers tests/architecture and tests/smoke.
+      inputs:
+        specRef: plan_specs/v1/e01-repo-foundation/t35-pyright-scope-tests.yaml
+        goalRef: v1-e01-t35-pyright-scope-tests
+      dependsOn:
+      - t31
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e01-t35-pyright-scope-tests reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e01-t35-pyright-scope-tests
 status:
   phase: Pending

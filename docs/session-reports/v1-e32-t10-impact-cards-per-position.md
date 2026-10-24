@@ -542,9 +542,24 @@ three for all 31. Goal Succeeded.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED, with one condition closed in-session
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-24
 
 **Notes:**
+
+1. **Built as ruled.**
+   * Hand-written goldens were committed before any code and match byte for byte.
+   * 21 mutants were caught. One first survived and got its test.
+   * The read-only dry run on hspolicy26 reproduces the ruled counts exactly: advantage 411 of
+     1,164 labelled, DA 296 of 662, 31 positions, and the same top three for all 31.
+   * The side and ANSWERS rules are each pinned by a fixture card.
+2. **Deviation 2 is accepted.** It adds t03's fixture card, and the goldens and coverage counts were
+   edited by hand, never regenerated. The two retagged copies keep `top_cards.csv`'s rows unchanged.
+3. **Question 1: yes.** Amend `constraints.packages` with `scripts` (`make_landscape_fixture.py`),
+   `packages/debate_cli` (tests and the command's docstring only) and `tests/smoke`, with a
+   PM-ruling comment. This is the one condition. No re-review is needed.
+
+**The PR:** opened without `--partial`. The next weekly landscape run carries `impact_cards.csv`
+and the report's impact section, with the same scan before sharing.

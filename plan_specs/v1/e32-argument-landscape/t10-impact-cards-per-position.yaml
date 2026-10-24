@@ -15,6 +15,16 @@ metadata:
     debate/title: "Impact cards per DA and advantage in the landscape report"
 spec:
   # Filed by the PM, 2026-10-24, from the coach's review of the first Policy report, 2026-10-24 (v1-e32-t03).
+  # PM rulings on the counts, 2026-10-24 (session report, questions 1-4, each (a) or yes):
+  # 1. An impact heading holds `impact` or `impacts` as whole words, except `no impact`, `impact
+  #    defense` and `impact turn(s)`; or it holds `turns case`. No T/C, no i/l.
+  # 2. A tag, after one leading enumerator, opens with impact, impacts, the impact, our impact,
+  #    extinction, existential, nuclear war, nuke war, goes nuclear, escalation, turns case,
+  #    outweighs, magnitude, timeframe or probability. Not `independently`, `no impact` or
+  #    `nuclear` alone.
+  # 3. Card by card: only the labelled copies of a cluster count, and their teams rank it.
+  # 4. "No labelled impact" uses the same rule and denominator, per kind, in report.md's impact
+  #    section and impact_cards.csv's header block. N defaults to 3 (the PM's brief).
   description: >-
     The coach asked for the impact cards of each DA and advantage in place of the most-read
     cards section, which he removed. Counts first (working agreement 7), read-only, over

@@ -13,7 +13,7 @@ Every count comes from files teams disclosed to the caselist (FILE_IMPORT), not 
 | Coach's overrides | 1789afec01f8e1417460965e050263e11df2d4128ca0ed9604d1643f430639a0 |
 | Parser version | 2026.10.20-docx-6 |
 | Prompt version | none (deterministic classification, no model) |
-| Classification coverage | 33 of 44 cards (75.0%); 15 of 16 rounds (93.8%) |
+| Classification coverage | 34 of 45 cards (75.6%); 15 of 16 rounds (93.8%) |
 | Review threshold | 0.6 |
 | Disclosures counted | 16 rounds by 8 teams: 7 aff rounds by 6 teams, 8 neg rounds by 6 teams |
 | Data freshness | Current: the newest snapshot is 2026-09-15, 2 day(s) old |
@@ -26,6 +26,7 @@ How to read the numbers:
 * **New** means first disclosed after the previous snapshot.
 * A card under an `AT:` heading answers a position and never counts as reading it, and so does a card placed under a position in a round on the other side: a `Midterms DA` block in an affirmative file is the 2AC answering it.
 * Each position's 5 most-read cards are in `top_cards.csv`, where near-duplicate copies of a card count as one card.
+* **Impact cards**, under each advantage and DA, are up to 3 of its cards labelled as an impact, ranked by the teams reading them: a heading over the card says `impact` or `impacts` (not `no impact`, `impact defense` or `impact turn`) or `turns case`, or its tag opens with an impact word such as `extinction`, `existential` or `the impact`. Only the labelled copies of a card count. An impact nobody labelled is not found, so each kind says how many of its documents carry no labelled impact. They are also in `impact_cards.csv`.
 
 ## Affirmative positions
 
@@ -43,6 +44,19 @@ How to read the numbers:
 | Costs advantage (`costs-advantage`) | 6 | 5 | 6 | 0 | 83.3% | 2026-09-08 |  |
 | Innovation advantage (`innovation-advantage`) | 3 | 3 | 3 | 0 | 50.0% | 2026-09-08 |  |
 
+#### Advantages: impact cards
+
+Advantage documents with no labelled impact: 4 of 6 (66.7%).
+
+**Costs advantage** (`costs-advantage`)
+
+| Rank | Teams | Tag | Cite |
+|---|---|---|---|
+| 1 | 1 | 2. Extinction from economic collapse | Okafor 25 |
+| 2 | 1 | Bulk purchasing lowers drug prices | Haddad 23 |
+
+**Innovation advantage** (`innovation-advantage`): no labelled impact card.
+
 ### Theory
 
 | Position | Rounds | Teams | Aff rounds | Neg rounds | Share of teams | First seen | New |
@@ -59,6 +73,27 @@ How to read the numbers:
 | Midterms DA (`election-da`) | 2 | 2 | 0 | 2 | 33.3% | 2026-09-08 |  |
 | Hospital closures DA (`hospital-closures-da`) | 1 | 1 | 0 | 1 | 16.7% | 2026-09-15 | yes |
 | Provider strikes DA (`provider-strikes-da`) | 1 | 1 | 0 | 1 | 16.7% | 2026-09-15 | yes |
+
+#### Disadvantages: impact cards
+
+DA documents with no labelled impact: 3 of 6 (50.0%).
+
+**Spending DA** (`spending-da`)
+
+| Rank | Teams | Tag | Cite |
+|---|---|---|---|
+| 1 | 2 | Debt ceiling fights are near | Ruiz 26 |
+| 2 | 1 | Spending triggers a debt spiral | Ito 26 |
+
+**Midterms DA** (`election-da`): no labelled impact card.
+
+**Hospital closures DA** (`hospital-closures-da`)
+
+| Rank | Teams | Tag | Cite |
+|---|---|---|---|
+| 1 | 1 | Rural hospitals close under single payer | Duarte 26 |
+
+**Provider strikes DA** (`provider-strikes-da`): no labelled impact card.
 
 ### Counterplans
 
@@ -90,7 +125,7 @@ Positions first disclosed after 2026-09-08:
 
 What this report could not count:
 
-* **Cards:** 10 of 44 (22.7%): 8 waiting in the review queue, 2 placed below the review threshold (0.6).
+* **Cards:** 10 of 45 (22.2%): 8 waiting in the review queue, 2 placed below the review threshold (0.6).
 * **Aff rounds with no identified aff:** 3 of 7 (42.9%).
 * **Neg rounds with no placed negative position:** 1 of 8 (12.5%).
 * Counted as answers, not reads: 1 round that placed a card under a position of the other side, counted once per position.

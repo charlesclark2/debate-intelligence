@@ -319,7 +319,27 @@ measures the coverage again, read-only, and records it with the new overrides di
 ### After the merge: the first dev run (ac5)
 
 These blocks run in this task's worktree after the pull request merges and before
-`scripts/task finish --partial`. The worktree holds exactly the code that merged.
+`scripts/task finish --partial`, on dev's squash commit of this pull request (the PM's ruling 8).
+
+**0. Switch to the merged commit** (seconds). It finds the squash commit on `origin/dev` and switches
+to it only when it is an ancestor of `origin/dev` and its tree is the task branch's, so the blocks
+run exactly the code that merged.
+
+```bash
+cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e32-t05-landscape-cli
+git fetch origin
+SQUASH=$(git log origin/dev --format=%H --grep='^v1-e32-t05-landscape-cli: ' -n 1)
+echo "squash commit: ${SQUASH:-none}"
+if [[ -n "$SQUASH" ]] && git merge-base --is-ancestor "$SQUASH" origin/dev && git diff --quiet task/v1-e32-t05-landscape-cli "$SQUASH"; then
+  git switch --detach "$SQUASH"
+  echo "on the merged commit"
+else
+  echo "STOP: no squash commit, not on origin/dev, or its tree differs from the task branch. Tell the session."
+fi
+```
+
+Success looks like a commit id, `HEAD is now at … v1-e32-t05-landscape-cli: …` and `on the
+merged commit`. A `STOP` line means nothing below runs yet.
 
 **1. The dry run** (expected runtime about 1 min; 46 s measured without the bucket). It stops on a
 leftover `DEBATE_*` variable or a running `caselist pull`.
@@ -385,7 +405,16 @@ open ~/.debate-research/dev/reports/landscape/hspolicy26
 He lists any taxonomy or override fixes for the next run. His answer, with both runs' aggregate
 counts, goes into `docs/data/landscape/first-run-policy.md`.
 
-**4. With t09's assignments.** When t09's producer is wired into `landscape_run` by whichever task
+**4. Back to the task branch** before `scripts/task finish --partial`:
+
+```bash
+cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e32-t05-landscape-cli
+git switch task/v1-e32-t05-landscape-cli
+```
+
+Success looks like `Switched to branch 'task/v1-e32-t05-landscape-cli'`.
+
+**5. With t09's assignments.** When t09's producer is wired into `landscape_run` by whichever task
 merges second, its first full plan-text pass is t09's own block (several minutes, in t09's report).
 Blocks 1 and 2 then run again.
 
@@ -394,7 +423,7 @@ Blocks 1 and 2 then run again.
 * **The aff seam** (v1-e32-t09, or this task if it merges second): pass t09's producer as
   `aff_assignments` in `ServiceContainer.landscape_run`, with a test. Merging also needs the pinned
   integration list (17) to agree with whatever t09 adds.
-* **A failed weekly run as stale** (E34, Question 4).
+* **A failed weekly run as stale** (E34): the PM files the task (ruling 4).
 * **`--model-mode` and `max_model_items`** (v1-e32-t07): join the option to `resolve_model_mode`,
   and set the bound from settings.
 * **The weekly scheduled run** (E34) calls `LandscapeRunService` directly. It must supply an
@@ -402,6 +431,21 @@ Blocks 1 and 2 then run again.
   hits by itself.
 
 ## Questions for the PM
+
+**Answered by the PM, 2026-10-24:**
+1. Yes: `constraints.packages` amended with a PM-ruling comment (Deviation 1).
+2. Yes: the command keeps its own `--model-mode none` until t07 joins it to `resolve_model_mode`.
+3. Yes: ac2's budget clause is met on the seam; t07 sets the bound.
+4. (a): the PM files an E34 task so that a failed latest run makes the hook report stale. The
+   cap-bound half is met here.
+5. Yes: ac4 is recorded from the first validate-dev run after the merge, with ac5.
+6. Yes, an agreement 2 run. Block 1 (`--publish --dry-run`) is still the operator's.
+7. Yes to `--config-dir`, `--confirm-prod` and refusing `--out` inside a checkout. `DEBATE_ENV` never
+   defaults to prod, and no prod publish happens before the promotion.
+8. Yes, with the switch to dev's squash commit first, checked as an ancestor of `origin/dev` with a
+   tree equal to the branch head, and the switch back before `finish --partial` (blocks 0 and 4).
+
+Kept as asked:
 
 ```text
 v1-e32-t05 questions (session, 2026-10-24)

@@ -701,9 +701,49 @@ v1-e32-t09 questions (session, 2026-10-23). Counts: hspolicy26 through 2026-10-2
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED, with one condition closed in-session
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-24
 
 **Notes:**
+
+The task that makes the Policy landscape say what affs read.
+* **57.3% of affirmative rounds and 54.0% of teams are now identified,** against 9.0% from
+  headings.
+* Every method is named: `PLAN_TEXT` 959, `TEAM_CARRY` 226, `PLACED_CARD` 70. The guard refused 40
+  carries.
+* The cache holds no text, and a grep shows it.
+* The red runs are recorded. One surviving mutant (a carry into a round no readable team disclosed)
+  got its test.
+* The incidents were handled before any count was kept.
+
+**Rulings**
+
+1. **(b).** Add each shown cluster's commonest plan text, verbatim, and list the one-team clusters
+   too, with their words and text. Policy 1.13 allows it, never beside a school or team code. The
+   sheet stays outside the repository. This is the one condition below.
+2. **(a).** Leave contentions until teams write them; the coach can add `contention ...` aliases.
+3. **Yes.** Amend `constraints.packages` with `debate_core.testing` and `tests/fixtures/landscape`,
+   with a PM-ruling comment.
+4. **Yes.** Whichever of t05 and t09's follow-up merges second wires `AffAssignmentService` into the
+   CLI's composition root, with a test.
+
+**Deviations 1 to 5 and Decisions 1 to 9 are accepted.** Reading every label's paragraph (767
+against the counts' 726) and the 80% frame for the sheet are sound.
+
+**Condition, to close in this session before the PR:**
+* Change the sheet renderer for ruling 1, with tests on synthetic sources shown failing first.
+* Hand the operator one block to rebuild the sheet (about 2.5 min, working agreement 11's guards).
+* Run the school and team-code scan again on the new files, and record the counts.
+* Then update the stale parts of this report. No re-review is needed.
+
+**The PR:** opened with `--partial`. ac3 waits on the coach's answers to the rebuilt sheet, and
+lands in a follow-up session (`scripts/task resume`) that also wires the producer if t05 has not.
+
+**Follow-up work:**
+* Skipping the second classification pass: recorded for t05.
+* Quoting plan texts in the report itself: v1-e32-t11's sections and t05's run will read them again,
+  as the sheet does.
+
+If anything comes out differently, stop and ask for another review.

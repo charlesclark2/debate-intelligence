@@ -192,3 +192,43 @@ output "evidence_search_accounts_profile_name" {
   description = "The name to give the accounts SSO profile (debate-dev-tub-accounts / debate-prod-tub-accounts)."
   value       = module.evidence_search.accounts_profile_name
 }
+
+output "caselist_password_secret_name" {
+  description = "The Tabroom password secret (debate-<env>-caselist-tabroom-password), which `caselist auth set-password` writes."
+  value       = module.caselist_run.password_secret_name
+}
+
+output "caselist_token_secret_name" {
+  description = "The caselist token secret (debate-<env>-caselist-token), which the login task writes and the run reads."
+  value       = module.caselist_run.token_secret_name
+}
+
+output "caselist_credentials_key_alias" {
+  description = "The key that encrypts the two caselist secrets and nothing else."
+  value       = module.caselist_run.credentials_key_alias
+}
+
+output "caselist_login_role_arn" {
+  description = "The login task's role, the only reader of the Tabroom password."
+  value       = module.caselist_run.login_role_arn
+}
+
+output "caselist_run_role_arn" {
+  description = "The run's role, the only reader of the token."
+  value       = module.caselist_run.run_role_arn
+}
+
+output "caselist_secret_writer_permission_set_name" {
+  description = "The coach's writer permission set (DebateDevCaselistSecretWriter / DebateProdCaselistSecretWriter)."
+  value       = module.caselist_run.credential_writer_permission_set_name
+}
+
+output "caselist_secret_writer_profile_name" {
+  description = "The name to give the writer's SSO profile (debate-dev-caselist-writer / debate-prod-caselist-writer), passed as --aws-profile."
+  value       = module.caselist_run.credential_writer_profile_name
+}
+
+output "caselist_login_schedule_name" {
+  description = "The Wednesday login schedule. Null until caselist_login_task is set (apply B)."
+  value       = module.caselist_run.login_schedule_name
+}

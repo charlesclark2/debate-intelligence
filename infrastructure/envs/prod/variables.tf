@@ -214,3 +214,41 @@ variable "evidence_search_accounts_user_names" {
   type        = list(string)
   default     = []
 }
+
+# --- The weekly caselist run in the cloud (v1-e40-t02-secrets-token-store-and-login, ADR-0020) ---
+#
+# Identical in both roots; the person is in the gitignored owner.auto.tfvars, and the login task's
+# placement comes from v1-e40-t03 at apply B.
+
+variable "caselist_credential_writer_user_names" {
+  description = <<-EOT
+    The Identity Center user assigned this environment's CaselistSecretWriter permission set: the
+    coach, who writes the Tabroom password with `caselist auth set-password` and never reads it
+    back. One person at most. Supplied through the gitignored owner.auto.tfvars.
+  EOT
+  type        = list(string)
+  default     = []
+}
+
+variable "caselist_login_task" {
+  description = <<-EOT
+    The run's cluster, public subnets, security group, image repository and the digest of a pushed
+    image, from v1-e40-t03. Null, the default, applies the credentials only (apply A); set, it adds
+    the login task definition pinned by that digest and its Wednesday schedule (apply B).
+  EOT
+  type = object({
+    cluster_arn        = string
+    subnet_ids         = list(string)
+    security_group_ids = list(string)
+    repository_arn     = string
+    repository_url     = string
+    image_digest       = string
+  })
+  default = null
+}
+
+variable "caselist_login_schedule_enabled" {
+  description = "Whether the Wednesday login schedule is enabled once it exists. False pauses the weekly login without destroying it."
+  type        = bool
+  default     = true
+}

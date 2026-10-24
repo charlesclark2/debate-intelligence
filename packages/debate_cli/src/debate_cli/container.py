@@ -186,7 +186,13 @@ from debate_core.application.search_index_build import SearchIndexBuildService
 from debate_core.application.search_index_publish import SearchIndexPublishService
 from debate_core.application.search_index_refresh import SEARCH_INDEX_DIRECTORY, SearchIndexRefresh
 from debate_core.application.search_index_store_check import SearchIndexStoreCheck
-from debate_core.application.settings import ConfigurationError, Environment, Settings, SyncNotifierKind
+from debate_core.application.settings import (
+    CaselistTokenBackend,
+    ConfigurationError,
+    Environment,
+    Settings,
+    SyncNotifierKind,
+)
 from debate_core.application.snapshot_service import SnapshotService
 from debate_core.application.sync_runs import (
     SYNC_RUN_LOG_FILENAME,
@@ -226,6 +232,7 @@ from debate_core.integrations.models.routing_policy import RoutingPolicy
 if TYPE_CHECKING:  # pragma: no cover - imported for the type checker only; see the factories
     from mypy_boto3_s3.client import S3Client
 
+    from debate_core.application.caselist_login import ScheduledLogin, SecretText, TabroomPasswordSecret
     from debate_core.integrations.opencaselist import CaselistTokenStore, OpenCaselistClient
 
 __all__ = [
@@ -1406,13 +1413,74 @@ class ServiceContainer:
         return self.singleton("caselist_token_store", self._build_caselist_token_store)
 
     def _build_caselist_token_store(self) -> CaselistTokenStore:
+        return self.caselist_token_store_on(self.settings.caselist.token_backend)
+
+    def caselist_token_store_on(
+        self, backend: CaselistTokenBackend, *, aws_profile: str | None = None
+    ) -> CaselistTokenStore:
+        """The token store on `backend`, whatever `caselist.token_backend` says (`login --token-backend`).
+
+        `aws_profile` signs the Secrets Manager backend's calls; unset, the SDK's own chain does,
+        which in the cloud is the task role (ADR-0020 (5)). No other backend builds an AWS client.
+        """
         from debate_core.integrations.opencaselist import CaselistTokenStore, default_secret_file
 
         settings = self.settings
         return CaselistTokenStore.for_settings(
-            settings.caselist.token_backend,
+            backend,
             account=settings.environment.value,
             secret_file=settings.caselist.secret_file or default_secret_file(settings.storage.data_dir),
+            token_secret=lambda: self.caselist_secret(self.caselist_token_secret_id, aws_profile=aws_profile),
+        )
+
+    @property
+    def caselist_token_secret_id(self) -> str:
+        """`caselist.token_secret_id`, or the secret Terraform names `debate-<env>-caselist-token`."""
+        settings = self.settings
+        return settings.caselist.token_secret_id or f"debate-{settings.environment.value}-caselist-token"
+
+    @property
+    def caselist_password_secret_id(self) -> str:
+        """`caselist.password_secret_id`, or `debate-<env>-caselist-tabroom-password` (ADR-0020 (2))."""
+        settings = self.settings
+        return (
+            settings.caselist.password_secret_id
+            or f"debate-{settings.environment.value}-caselist-tabroom-password"
+        )
+
+    def caselist_secret(self, secret_id: str, *, aws_profile: str | None = None) -> SecretText:
+        """One of the two caselist secrets, by name, in `caselist.secrets_region`."""
+        from debate_core.integrations import secrets_manager
+
+        hint = f"run `aws sso login --profile {aws_profile}`" if aws_profile else None
+        client = secrets_manager.build_secrets_manager_client(
+            region=self.settings.caselist.secrets_region, profile=aws_profile
+        )
+        return secrets_manager.ManagedSecret(client, secret_id, login_hint=hint)
+
+    def tabroom_password_secret(self, *, aws_profile: str | None = None) -> TabroomPasswordSecret:
+        """The password secret, which `caselist auth set-password` writes and the login task reads."""
+        from debate_core.application.caselist_login import TabroomPasswordSecret
+
+        return TabroomPasswordSecret(
+            self.caselist_secret(self.caselist_password_secret_id, aws_profile=aws_profile)
+        )
+
+    def scheduled_caselist_login(self) -> ScheduledLogin:
+        """`caselist auth renew`, the login task's command: the password in, the token out (ADR-0020 (2)).
+
+        Both secrets are read and written with the SDK's own credentials, the login task's role, and
+        the token always goes to the Secrets Manager backend, whatever `caselist.token_backend` says.
+        A failure goes to :meth:`sync_notifier`, which in the cloud is the alert topic (`v1-e40-t05`).
+        """
+        from debate_core.application.caselist_login import ScheduledLogin
+
+        return ScheduledLogin(
+            credentials=self.tabroom_password_secret(),
+            session=self.opencaselist_client,
+            tokens=lambda: self.caselist_token_store_on(CaselistTokenBackend.SECRETSMANAGER),
+            notifier=self.sync_notifier(),
+            environment=self.settings.environment.value,
         )
 
     def opencaselist_client(self) -> OpenCaselistClient:

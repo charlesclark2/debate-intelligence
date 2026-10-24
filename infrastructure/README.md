@@ -22,6 +22,7 @@ that keeps binding.
 | [`modules/domain_redirect/`](modules/domain_redirect/) | The `.com` names, which 301 to the canonical `.org` site and hold no content | `v1-e36-t02-site-hosting` |
 | [`modules/evidence_bucket/`](modules/evidence_bucket/) | One environment's evidence store: private versioned KMS-encrypted bucket, its key, and the EvidenceOperator and EvidenceRemoval permission sets | `v1-e29-t03-evidence-buckets` |
 | [`modules/evidence_search/`](modules/evidence_search/) | One environment's student evidence search pilot: the function behind CloudFront, the Cognito user pool, the audit log, the TubDeployer and TubAccounts permission sets | `v1-e39-t04-pilot-infrastructure` |
+| [`modules/caselist_run/`](modules/caselist_run/) | One environment's weekly caselist run in the cloud: the credentials key, the Tabroom password and caselist token secrets, the login and run roles, the CaselistSecretWriter permission set, and the scheduled login | `v1-e40-t02-secrets-token-store-and-login` (E40) |
 | [`envs/dev/`](envs/dev/), [`envs/prod/`](envs/prod/) | The two environment roots | `v1-e29-t02-terraform-bootstrap` |
 
 There is no `envs/stage`, and adding one means changing ADR-0013 first.

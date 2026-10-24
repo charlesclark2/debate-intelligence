@@ -130,6 +130,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Final, cast
 
 from debate_cli.exit_codes import codes_exit_as_a_retrieval_failure
+from debate_core.application.aff_assignment import AffAssignmentService
 from debate_core.application.caselist.evidence_listing import (
     LocalEvidence,
     digests_in_earlier_manifests,
@@ -173,7 +174,6 @@ from debate_core.application.evidence_sync import (
     SyncKeyspace,
 )
 from debate_core.application.evidence_verifier import EvidenceVerifier
-from debate_core.application.aff_assignment import AffAssignmentService
 from debate_core.application.landscape_run import LandscapeRunService
 from debate_core.application.landscape_scan import ScanAcceptanceLog
 from debate_core.application.plan_texts import PlanTextService

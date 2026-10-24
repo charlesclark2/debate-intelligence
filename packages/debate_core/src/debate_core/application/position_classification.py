@@ -103,6 +103,10 @@ class ClassificationCounts:
     refused_cached: int
     """Of the misses, cached results that named an id the taxonomy no longer counts under."""
     cache_written: bool
+    model_items: int = 0
+    """Items sent to the model in this run: none in the deterministic stage; `v1-e32-t07` counts its own."""
+    model_calls: int = 0
+    """Model calls this run made: none in the deterministic stage."""
 
     @property
     def hit_rate(self) -> float:

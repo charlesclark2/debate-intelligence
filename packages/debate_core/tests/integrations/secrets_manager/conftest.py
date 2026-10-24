@@ -134,7 +134,7 @@ class AnsweringSecretsManager:
         return AWSResponse(
             request.url,
             status,
-            {"content-type": "application/x-amz-json-1.1"},
+            {"content-type": "application/x-amz-json-1.1"},  # pyright: ignore[reportArgumentType]
             _Body(json.dumps(answer).encode()),  # pyright: ignore[reportArgumentType]
         )
 

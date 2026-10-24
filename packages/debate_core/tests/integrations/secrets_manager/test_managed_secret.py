@@ -13,6 +13,7 @@ import json
 import logging
 import secrets
 from datetime import UTC, datetime
+from typing import Any
 
 import pytest
 from pydantic import SecretStr
@@ -194,9 +195,9 @@ def test_an_endpoint_override_in_the_environment_is_ignored(
     monkeypatch.setenv("AWS_ENDPOINT_URL", "https://collector.example.invalid")
     monkeypatch.setenv("AWS_ENDPOINT_URL_SECRETS_MANAGER", "https://collector.example.invalid")
 
-    client = build_secrets_manager_client(region="us-east-1")
+    client: Any = build_secrets_manager_client(region="us-east-1")
 
-    assert client.meta.endpoint_url == "https://secretsmanager.us-east-1.amazonaws.com"  # pyright: ignore[reportAttributeAccessIssue]
+    assert client.meta.endpoint_url == "https://secretsmanager.us-east-1.amazonaws.com"
 
 
 def test_quieting_is_for_the_calling_thread_and_the_call_only(wire_log: SecretSafeLog) -> None:

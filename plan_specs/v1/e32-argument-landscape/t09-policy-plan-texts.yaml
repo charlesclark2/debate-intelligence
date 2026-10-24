@@ -74,12 +74,23 @@ spec:
     - kind: TaskRef
       name: v1-e32-t01-position-taxonomy
       relation: dependsOn
+  # PM rulings 2026-10-24, on the session's counts (question numbers as in the session report):
+  # 1 (c) read the raw sources in this task, through the parser port, read-only, with a local cache
+  #   of derived fields only (label place, matched ids, plan-text digest), never text;
+  # 2 (a) method PLAN_TEXT, the paragraph directly under a plan-text label; shape-only stays unidentified;
+  # 3 (a) method TEAM_CARRY, never into a round whose own plan text names something else, counted apart;
+  # 4 (a) no caselist round or cite titles this season, and the report's notes say they are not taken;
+  # 5 (a) a plan text naming no aff is unidentified, and clustered on the coach's sheet;
+  # 6 `medicare for all` and `m4a` identify single payer until the coach names a child;
+  # 7 the sheet clusters by the mechanism words that differ; 8 ac1 is the affirmative side only;
+  # 9 the normalizer rule widens to numbered DAs, CPs and contentions.
+  # Order: ac4, then ac2; ac3 waits on the coach, and the PR may go --partial without it.
   acceptanceCriteria:
     - id: ac1
       description: >-
-        Counts, per side and by teams, of plan-text headings, of the paragraph under them as
-        held in the store (by unit), and of distinct plan texts, sent to the PM with one to
-        three options, before any change.
+        Counts, on the affirmative side and by teams, of plan-text headings, of the paragraph
+        under them as held in the store (by unit), and of distinct plan texts, sent to the PM
+        with one to three options, before any change.
     - id: ac2
       description: >-
         After the ruling: a deterministic extraction of each team's plan text and a review

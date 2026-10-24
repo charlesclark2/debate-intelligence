@@ -220,6 +220,13 @@ query time on the Lambda function itself.
 |---|---|---|---|---|
 | The dev index `b9fd48d280ab1c71`, 46,658 documents | Twenty generic queries, 60 timed runs | under 4 ms | 12.1 ms | 207 ms (`the`, 45,948 matches) |
 | Synthetic, 250,000 documents | Twenty queries over a skewed invented vocabulary, 60 timed runs | 69.1 ms | 341 ms | 421 ms |
+
+**On the dev function** (`v1-e39-t13`'s operator follow-up 4, 2026-10-23, recorded by the PM): index
+`4a9f6fa7c02391c2`, format 2, 50,434 documents, image `debate-dev-tub:a257c5a`. Warm `REPORT`
+durations, each search matching 1,000 or more cards and returning 20 results, with no time-budget
+notice: a plain word (the warm-up) 90.33 ms, a plain two-word search 85.80 ms, a nine-word passage
+255.28 ms, a prefix 91.57 ms. `Max Memory Used` was 1,009 to 1,012 MB of 2,048 while serving
+searches.
 | The dev index `f29b81c276dd67c5`, format 1, 50,434 documents (2026-10-23) | The same twenty generic queries, 60 timed runs | 15.3 ms | 66.7 ms | 117.1 ms |
 | Its format 2 measurement copy (2026-10-23) | The same twenty generic queries, 60 timed runs | 10.9 ms | 67.5 ms | 157.7 ms (`the`, 50,163 matches) |
 | The same | Eleven generic passages, the last at 40 content words, 33 timed runs | 86.9 ms | 335.0 ms | 448.3 ms (the 40-word passage) |

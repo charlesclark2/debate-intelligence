@@ -806,5 +806,24 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e34-t31-pull-fix-text-publish-only
+    - id: t32
+      kind: Task
+      name: 'The staleness hook reports a caselist stale when its latest run failed'
+      description: >-
+        The staleness hook reports a caselist stale when its latest run failed.
+      inputs:
+        specRef: plan_specs/v1/e34-caselist-sync/t32-failed-run-reads-stale.yaml
+        goalRef: v1-e34-t32-failed-run-reads-stale
+      dependsOn:
+      - t03
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e34-t32-failed-run-reads-stale reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e34-t32-failed-run-reads-stale
 status:
   phase: Pending

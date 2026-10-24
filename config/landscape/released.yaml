@@ -6,4 +6,88 @@
 # changes its kind or side, or edits a released version's positions without a bump.
 # docs/guides/landscape-taxonomy.md says when the operator writes it.
 schema_version: 1
-releases: []
+releases:
+  - topic_id: policy-2026-27-nhi
+    taxonomy_version: 1.1.0
+    positions_digest: 317dc5876b509e896515b0f748809b072a8d6575e7d9d81436e39633a47f203b
+    positions:
+      - {id: single-payer-aff, kind: aff, side: aff}
+      - {id: costs-advantage, kind: advantage, side: aff}
+      - {id: coverage-advantage, kind: advantage, side: aff}
+      - {id: disease-advantage, kind: advantage, side: aff}
+      - {id: inequality-advantage, kind: advantage, side: aff}
+      - {id: economy-advantage, kind: advantage, side: aff}
+      - {id: growth-advantage, kind: advantage, side: aff}
+      - {id: bioterror-advantage, kind: advantage, side: aff}
+      - {id: budgets-advantage, kind: advantage, side: aff}
+      - {id: stagnation-advantage, kind: advantage, side: aff}
+      - {id: access-advantage, kind: advantage, side: aff}
+      - {id: innovation-advantage, kind: advantage, side: aff}
+      - {id: data-advantage, kind: advantage, side: aff}
+      - {id: pandemics-advantage, kind: advantage, side: aff}
+      - {id: pharma-advantage, kind: advantage, side: aff}
+      - {id: sustainability-advantage, kind: advantage, side: aff}
+      - {id: biotech-advantage, kind: advantage, side: aff}
+      - {id: midterms-da, kind: da, side: neg}
+      - {id: pharma-da, kind: da, side: neg}
+      - {id: economy-da, kind: da, side: neg}
+      - {id: irs-da, kind: da, side: neg}
+      - {id: stocks-da, kind: da, side: neg}
+      - {id: rates-da, kind: da, side: neg}
+      - {id: capital-flight-da, kind: da, side: neg}
+      - {id: federalism-da, kind: da, side: neg}
+      - {id: hhs-da, kind: da, side: neg}
+      - {id: court-clog-da, kind: da, side: neg}
+      - {id: taxes-da, kind: da, side: neg}
+      - {id: permitting-reform-da, kind: da, side: neg}
+      - {id: unions-da, kind: da, side: neg}
+      - {id: doctors-da, kind: da, side: neg}
+      - {id: medical-devices-da, kind: da, side: neg}
+      - {id: innovation-da, kind: da, side: neg}
+      - {id: debt-da, kind: da, side: neg}
+      - {id: ai-da, kind: da, side: neg}
+      - {id: democracy-da, kind: da, side: neg}
+      - {id: states-cp, kind: cp, side: neg}
+      - {id: nhs-cp, kind: cp, side: neg}
+      - {id: advantage-cp, kind: cp, side: neg}
+      - {id: courts-cp, kind: cp, side: neg}
+      - {id: public-option-cp, kind: cp, side: neg}
+      - {id: smokers-pic, kind: cp, side: neg}
+      - {id: taxes-pic, kind: cp, side: neg}
+      - {id: sex-offenders-pic, kind: cp, side: neg}
+      - {id: vouchers-cp, kind: cp, side: neg}
+      - {id: delay-cp, kind: cp, side: neg}
+      - {id: optional-legislation-cp, kind: cp, side: neg}
+      - {id: religious-freedom-cp, kind: cp, side: neg}
+      - {id: ucf-cp, kind: cp, side: neg}
+      - {id: disability-k, kind: k, side: neg}
+      - {id: debility-k, kind: k, side: neg}
+      - {id: trump-k, kind: k, side: neg}
+      - {id: nhi-t, kind: t, side: neg}
+      - {id: multipayer-t, kind: t, side: neg}
+      - {id: single-payer-t, kind: t, side: neg}
+      - {id: no-single-payer-t, kind: t, side: neg}
+      - {id: establish-t, kind: t, side: neg}
+      - {id: should-t, kind: t, side: neg}
+      - {id: comprehensive-t, kind: t, side: neg}
+      - {id: cap-k, kind: k, side: neg}
+      - {id: racial-capitalism-k, kind: k, side: neg}
+      - {id: security-k, kind: k, side: neg}
+      - {id: biopolitics-k, kind: k, side: neg}
+      - {id: settler-colonialism-k, kind: k, side: neg}
+      - {id: colonialism-k, kind: k, side: neg}
+      - {id: antiblackness-k, kind: k, side: neg}
+      - {id: psychoanalysis-k, kind: k, side: neg}
+      - {id: queer-k, kind: k, side: neg}
+      - {id: buddhism-k, kind: k, side: neg}
+      - {id: generic-k, kind: k, side: neg}
+      - {id: framework-t, kind: t, side: neg}
+      - {id: politics-da, kind: da, side: neg}
+      - {id: process-cp, kind: cp, side: neg}
+      - {id: condo-bad, kind: theory, side: aff}
+      - {id: fifty-state-fiat-bad, kind: theory, side: aff}
+      - {id: process-cps-bad, kind: theory, side: aff}
+      - {id: aspec, kind: theory, side: neg}
+      - {id: fspec, kind: theory, side: neg}
+      - {id: vagueness, kind: theory, side: neg}
+      - {id: generic-theory, kind: theory, side: both}

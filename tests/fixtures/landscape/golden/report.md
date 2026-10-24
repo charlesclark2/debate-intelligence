@@ -25,7 +25,7 @@ How to read the numbers:
 * **Share of teams** is the teams that read a position on its own side, over the teams that disclosed on that side through 2026-09-15: 6 on the affirmative, 6 on the negative, and all 8 for a position either side reads.
 * **New** means first disclosed after the previous snapshot.
 * A card under an `AT:` heading answers a position and never counts as reading it, and so does a card placed under a position in a round on the other side: a `Midterms DA` block in an affirmative file is the 2AC answering it.
-* Near-duplicate copies of a card count as one card.
+* Each position's 5 most-read cards are in `top_cards.csv`, where near-duplicate copies of a card count as one card.
 
 ## Affirmative positions
 
@@ -85,85 +85,6 @@ Positions first disclosed after 2026-09-08:
 * Condo bad (`condo-bad`, theory): 1 round, 1 team
 * Hospital closures DA (`hospital-closures-da`, da): 1 round, 1 team
 * Provider strikes DA (`provider-strikes-da`, da): 1 round, 1 team
-
-## Most-read cards
-
-Up to 5 cards per position, ranked by the distinct teams reading them under it. Each is a disclosed card (FILE_IMPORT), shown by its tag and short cite as parsed and by where to find it: its file's content-addressed key and its first paragraph in that file.
-
-### Single payer (`single-payer-aff`)
-
-| Rank | Teams | Tag | Short cite | Source | Paragraph | First disclosed |
-|---|---|---|---|---|---|---|
-| 1 | 2 | Single payer is the only path to universal coverage | Brandt 24 | `raw/caselist/synthpolicy26/sha256/a1/a1/a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1` | 0 | 2026-09-08 |
-
-### Public option (`public-option-aff`)
-
-| Rank | Teams | Tag | Short cite | Source | Paragraph | First disclosed |
-|---|---|---|---|---|---|---|
-| 1 | 1 | A public option competes prices down | Liang 26 | `raw/caselist/synthpolicy26/sha256/a3/a3/a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3a3` | 0 | 2026-09-08 |
-
-### Costs advantage (`costs-advantage`)
-
-| Rank | Teams | Tag | Short cite | Source | Paragraph | First disclosed |
-|---|---|---|---|---|---|---|
-| 1 | 4 | Single payer cuts administrative costs | Okafor 25 | `raw/caselist/synthpolicy26/sha256/a1/a1/a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1` | 3 | 2026-09-08 |
-| 2 | 1 | Bulk purchasing lowers drug prices | Haddad 23 | `raw/caselist/synthpolicy26/sha256/a4/a4/a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4a4` | 3 | 2026-09-15 |
-
-### Innovation advantage (`innovation-advantage`)
-
-| Rank | Teams | Tag | Short cite | Source | Paragraph | First disclosed |
-|---|---|---|---|---|---|---|
-| 1 | 3 | Single payer frees capital for research | Moreau 25 | `raw/caselist/synthpolicy26/sha256/a2/a2/a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2` | 3 | 2026-09-08 |
-
-### Condo bad (`condo-bad`)
-
-| Rank | Teams | Tag | Short cite | Source | Paragraph | First disclosed |
-|---|---|---|---|---|---|---|
-| 1 | 1 | Conditionality is a voting issue | Feldman 22 | `raw/caselist/synthpolicy26/sha256/a5/a5/a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5a5` | 3 | 2026-09-15 |
-
-### Spending DA (`spending-da`)
-
-| Rank | Teams | Tag | Short cite | Source | Paragraph | First disclosed |
-|---|---|---|---|---|---|---|
-| 1 | 4 | Spending triggers a debt spiral | Ito 26 | `raw/caselist/synthpolicy26/sha256/b1/b1/b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1` | 0 | 2026-09-08 |
-| 2 | 2 | Debt ceiling fights are near | Ruiz 26 | `raw/caselist/synthpolicy26/sha256/b1/b1/b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1` | 3 | 2026-09-08 |
-
-### Midterms DA (`election-da`)
-
-| Rank | Teams | Tag | Short cite | Source | Paragraph | First disclosed |
-|---|---|---|---|---|---|---|
-| 1 | 2 | Health reform costs the incumbents the midterms | Abara 26 | `raw/caselist/synthpolicy26/sha256/b3/b3/b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3` | 0 | 2026-09-08 |
-
-### Hospital closures DA (`hospital-closures-da`)
-
-| Rank | Teams | Tag | Short cite | Source | Paragraph | First disclosed |
-|---|---|---|---|---|---|---|
-| 1 | 1 | Rural hospitals close under single payer | Duarte 26 | `raw/caselist/synthpolicy26/sha256/b4/b4/b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4b4` | 6 | 2026-09-15 |
-
-### Provider strikes DA (`provider-strikes-da`)
-
-| Rank | Teams | Tag | Short cite | Source | Paragraph | First disclosed |
-|---|---|---|---|---|---|---|
-| 1 | 1 | Nurses strike over reimbursement cuts | Dube 25 | `raw/caselist/synthpolicy26/sha256/b6/b6/b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6` | 3 | 2026-09-15 |
-
-### States CP (`states-cp`)
-
-| Rank | Teams | Tag | Short cite | Source | Paragraph | First disclosed |
-|---|---|---|---|---|---|---|
-| 1 | 3 | States can implement single payer | Kowal 24 | `raw/caselist/synthpolicy26/sha256/b1/b1/b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1` | 6 | 2026-09-08 |
-
-### Capitalism K (`cap-k`)
-
-| Rank | Teams | Tag | Short cite | Source | Paragraph | First disclosed |
-|---|---|---|---|---|---|---|
-| 1 | 3 | Healthcare markets commodify care | Nadler 21 | `raw/caselist/synthpolicy26/sha256/b2/b2/b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2` | 3 | 2026-09-08 |
-
-### T: national health insurance (`nhi-t`)
-
-| Rank | Teams | Tag | Short cite | Source | Paragraph | First disclosed |
-|---|---|---|---|---|---|---|
-| 1 | 1 | National health insurance means a single government insurer | Ostrova 20 | `raw/caselist/synthpolicy26/sha256/b3/b3/b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3b3` | 3 | 2026-09-08 |
-| 2 | 1 | Insurance means private carriers too | Lund 21 | `raw/caselist/synthpolicy26/sha256/b6/b6/b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6b6` | 0 | 2026-09-15 |
 
 ## Unclassified
 

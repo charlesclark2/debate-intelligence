@@ -81,10 +81,8 @@ def test_a_scan_of_the_output_finds_no_team_code_school_tournament_or_path_from_
 
 
 def test_the_scan_finds_a_team_code_planted_in_a_tag() -> None:
-    planted = _bundle().report
-    first = planted.top_cards[0]
-    leaked = planted.model_copy(update={"top_cards": (first.model_copy(update={"tag": "As XX said"}),)})
-    assert re.search(r"(?<![A-Za-z0-9])XX(?![A-Za-z0-9])", render_markdown(leaked))
+    planted = _with_tag(_bundle().report, "As XX said")
+    assert re.search(r"(?<![A-Za-z0-9])XX(?![A-Za-z0-9])", render_top_cards_csv(planted, {}))
 
 
 def test_the_csv_columns_are_the_specs() -> None:
@@ -144,21 +142,41 @@ def _with_tag(report: LandscapeReport, tag: str) -> LandscapeReport:
     )
 
 
-def test_markdown_escapes_what_would_break_a_table_and_the_csv_keeps_the_tag_exact() -> None:
-    tag = "Costs | fall *fast*\nunder_plan [1] <b>"
-    report = _with_tag(_bundle().report, tag)
-    row = next(line for line in render_markdown(report).splitlines() if line.startswith("| 1 | 2 |"))
-    assert r"Costs \| fall \*fast\* under\_plan \[1\] \<b\>" in row
-    assert row.count(" | ") == 6
-    rows = list(csv.reader(render_top_cards_csv(report, {}).splitlines(keepends=True)[1:]))
-    assert rows[1][TOP_CARD_COLUMNS.index("tag")] == tag
-
-
-def test_a_card_with_no_tag_says_so_in_markdown_and_is_empty_in_the_csv() -> None:
+def test_report_md_lists_no_card_and_points_to_top_cards_csv() -> None:
+    files = _bundle().files
     report = _bundle().report
-    first = report.top_cards[0].model_copy(update={"tag": None, "short_cite": None})
-    report = report.model_copy(update={"top_cards": (first, *report.top_cards[1:])})
-    assert "| 1 | 2 | (no tag) |  |" in render_markdown(report)
+    for card in report.top_cards:
+        assert card.source_object_key not in files["report.md"]
+        assert card.tag is None or card.tag not in files["report.md"]
+        assert card.source_object_key in files["top_cards.csv"]
+    assert "most-read cards are in `top_cards.csv`" in files["report.md"]
+
+
+def test_markdown_escapes_what_would_break_a_table_in_a_label() -> None:
+    report = _bundle().report
+    first = report.positions[0].model_copy(update={"label": "Single | payer *now*\nwith_plan"})
+    row = next(
+        line
+        for line in render_markdown(
+            report.model_copy(update={"positions": (first, *report.positions[1:])})
+        ).splitlines()
+        if "(`single-payer-aff`)" in line
+    )
+    assert row.startswith(r"| Single \| payer \*now\* with\_plan (`single-payer-aff`) |")
+    assert row.count(" | ") == 7
+
+
+def test_the_csv_keeps_a_tag_exact_and_writes_no_tag_as_empty() -> None:
+    tag = "Costs | fall *fast*\nunder_plan [1] <b>"
+    rows = list(
+        csv.reader(render_top_cards_csv(_with_tag(_bundle().report, tag), {}).splitlines(keepends=True)[1:])
+    )
+    assert rows[1][TOP_CARD_COLUMNS.index("tag")] == tag
+    report = _bundle().report
+    untagged = report.top_cards[0].model_copy(update={"tag": None, "short_cite": None})
+    blank = report.model_copy(update={"top_cards": (untagged, *report.top_cards[1:])})
+    rows = list(csv.reader(render_top_cards_csv(blank, {}).splitlines()[1:]))
+    assert (rows[1][TOP_CARD_COLUMNS.index("tag")], rows[1][TOP_CARD_COLUMNS.index("short_cite")]) == ("", "")
 
 
 def test_markdown_counts_carry_thousands_separators_and_the_csv_does_not() -> None:

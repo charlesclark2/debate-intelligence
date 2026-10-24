@@ -7,20 +7,21 @@ id; cards by rank). Nothing here computes a count; the service did.
 ## The files
 
 * **report.md** is for the weekly prep meeting: what the report was built from and how to read its
-  numbers, the positions by side and kind, what is new since the previous snapshot, the most-read
-  cards per position, and what could not be counted. `v1-e34-t03`'s stale-data banner goes above it
-  when the data is stale; the service puts it there.
-* **positions.csv** and **top_cards.csv** are the same rows for a spreadsheet. Each starts with a
-  header block, one `# key=value` line per fact (the staleness hook's `stale=` among them), and then
-  an ordinary CSV with a header row.
+  numbers, the positions by side and kind, what is new since the previous snapshot, and what could
+  not be counted. `v1-e34-t03`'s stale-data banner goes above it when the data is stale; the service
+  puts it there. It lists no cards: the coach's review of 2026-10-24 found the most-read cards of
+  every position no help in a prep meeting, so they are in top_cards.csv only.
+* **positions.csv** has the positions' rows for a spreadsheet, and **top_cards.csv** each position's
+  most-read cards. Each starts with a header block, one `# key=value` line per fact (the staleness
+  hook's `stale=` among them), and then an ordinary CSV with a header row.
 
 ## What is written exactly, and what is escaped
 
-A card's tag and short cite are written exactly as parsed in the CSV. In Markdown, where a `|` would
-split a table cell and a `*` start emphasis, those characters are escaped with a backslash and runs
-of whitespace become one space, so the cell shows the same text. Shares are fractions to three
-places in the CSV and percentages to one place in Markdown, both rounded half up; Markdown writes
-counts with thousands separators, the CSV without.
+A card's tag and short cite are written exactly as parsed in the CSV. A position's label in Markdown,
+where a `|` would split a table cell and a `*` start emphasis, has those characters escaped with a
+backslash and runs of whitespace made one space, so the cell shows the same text. Shares are
+fractions to three places in the CSV and percentages to one place in Markdown, both rounded half up;
+Markdown writes counts with thousands separators, the CSV without.
 """
 
 from __future__ import annotations
@@ -38,7 +39,6 @@ from debate_core.domain.landscape_report import (
     PLACED_CARD_METHOD,
     LandscapeReport,
     PositionStats,
-    TopCard,
 )
 
 __all__ = [
@@ -193,7 +193,6 @@ def render_markdown(report: LandscapeReport) -> str:
     lines += _header_section(report)
     lines += _positions_section(report.positions)
     lines += _new_section(report)
-    lines += _top_cards_section(report)
     lines += _unclassified_section(report)
     return "\n".join(lines).rstrip("\n") + "\n"
 
@@ -254,7 +253,8 @@ def _header_section(report: LandscapeReport) -> list[str]:
         "* A card under an `AT:` heading answers a position and never counts as reading it, and so does "
         "a card placed under a position in a round on the other side: a `Midterms DA` block in an "
         "affirmative file is the 2AC answering it.",
-        "* Near-duplicate copies of a card count as one card.",
+        f"* Each position's {report.header.top_cards_per_position:,} most-read cards are in `top_cards.csv`, "
+        "where near-duplicate copies of a card count as one card.",
         "",
     ]
 
@@ -297,39 +297,6 @@ def _new_section(report: LandscapeReport) -> list[str]:
         for stats in new
     ]
     return [*lines, ""]
-
-
-def _top_cards_section(report: LandscapeReport) -> list[str]:
-    lines = [
-        "## Most-read cards",
-        "",
-        f"Up to {report.header.top_cards_per_position:,} cards per position, ranked by the distinct teams "
-        "reading them under it. Each is a disclosed card (FILE_IMPORT), shown by its tag and short cite "
-        "as parsed and by where to find it: its file's content-addressed key and its first paragraph "
-        "in that file.",
-        "",
-    ]
-    by_position: dict[str, list[TopCard]] = {}
-    for card in report.top_cards:
-        by_position.setdefault(card.position_id, []).append(card)
-    for stats in report.positions:
-        cards = by_position.get(stats.position_id)
-        if not cards:
-            continue
-        lines += [
-            f"### {_cell(stats.label)} (`{stats.position_id}`)",
-            "",
-            "| Rank | Teams | Tag | Short cite | Source | Paragraph | First disclosed |",
-            "|---|---|---|---|---|---|---|",
-        ]
-        lines += [
-            f"| {card.rank} | {card.teams_reading:,} | {_cell(card.tag) if card.tag else '(no tag)'} | "
-            f"{_cell(card.short_cite or '')} | `{card.source_object_key}` | {card.element_index} | "
-            f"{card.source_snapshot.isoformat()} |"
-            for card in cards
-        ]
-        lines.append("")
-    return lines
 
 
 def _unclassified_section(report: LandscapeReport) -> list[str]:

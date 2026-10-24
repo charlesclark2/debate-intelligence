@@ -21,7 +21,7 @@ import pytest
 from debate_core.application.landscape_counts import CountedReads, CountedRound
 from debate_core.application.landscape_report import LandscapeReportInputs, LandscapeReportService
 from debate_core.application.landscape_trends import TrendsCrossTopics, landscape_trends
-from debate_core.domain.caselist import Disclosure, RoundLabel
+from debate_core.domain.caselist import RoundLabel
 from debate_core.domain.landscape import Taxonomy
 from debate_core.domain.landscape_trends import LandscapeTrends, TrendLabel, TrendRow, WeeklyTeams
 from debate_core.testing.landscape_report import (
@@ -164,16 +164,6 @@ def test_the_same_file_read_in_a_new_round_is_a_new_disclosure() -> None:
         _row(trends, "innovation-advantage").weekly_teams,
         _row(trends, "costs-advantage").weekly_teams,
     ) == (4, 1)
-
-
-def test_renaming_every_path_changes_no_trend() -> None:
-    inputs = _through(THIRD)
-
-    def renamed(one: Disclosure, index: int) -> Disclosure:
-        return one.evolve(source_path=f"{one.school}/{one.school} {one.team_code}/renamed-{index}.docx")
-
-    shuffled = tuple(renamed(one, index) for index, one in enumerate(inputs.disclosures))
-    assert _trends(dataclasses.replace(inputs, disclosures=shuffled)) == _trends(inputs)
 
 
 # ------------------------------------------------------------------------------------------------

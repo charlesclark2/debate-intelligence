@@ -72,13 +72,14 @@ def test_the_container_wires_these_integrations() -> None:
     # routing file (v1-e05-t03), `opencaselist` under TYPE_CHECKING and inside two factories, `s3`
     # inside four factories, `s3.version_directories` inside the retention factory (v1-e31-t16),
     # `cloudwatch_audit` and `cognito` inside the pilot accounts factory (v1-e39-t05), and
-    # `landscape.classification_store` and `landscape.yaml_taxonomy_repository` at module level for
-    # the landscape run (v1-e32-t05).
+    # `landscape.classification_store`, `landscape.plan_text_store` and
+    # `landscape.yaml_taxonomy_repository` at module level for the landscape run (v1-e32-t05).
     assert wired_integrations() == (
         "debate_core.integrations.cloudwatch_audit",
         "debate_core.integrations.cognito",
         "debate_core.integrations.docx_parser",
         "debate_core.integrations.landscape.classification_store",
+    "debate_core.integrations.landscape.plan_text_store",
         "debate_core.integrations.landscape.yaml_taxonomy_repository",
         "debate_core.integrations.local",
         "debate_core.integrations.local.fs_version_store",
@@ -222,7 +223,7 @@ def test_the_check_exits_zero_and_reports_json_for_this_checkout(capsys: pytest.
     report = json.loads(capsys.readouterr().out)
     assert report["complete"] is True
     assert report["covered"] is True
-    assert len(report["imported"]) == len(report["wired"]) == 17
+    assert len(report["imported"]) == len(report["wired"]) == 18
 
 
 # ---------------------------------------------------------------------------------------------

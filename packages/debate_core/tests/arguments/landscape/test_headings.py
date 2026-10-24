@@ -107,6 +107,12 @@ CASES: list[tuple[str, str, str, bool]] = [
     ("an advantage's number after a period", "Adv. 3 Growth", "adv growth", READ),
     ("an advantage's number with a hash", "Advantage #1 Costs", "advantage costs", READ),
     ("an advantage's number after a round prefix", "1AC Adv 2 Coverage", "adv coverage", READ),
+    # The PM's ruling of 2026-10-24 widens the rule to numbered DAs, CPs and contentions.
+    ("a DA's number before its name", "DA 1 Midterms", "da midterms", READ),
+    ("a disad's number in words before a colon", "Disad Two: Pharma", "disad pharma", READ),
+    ("a CP's number before its name", "CP 2 States", "cp states", READ),
+    ("a counterplan's roman number before a dash", "Counterplan III - Courts", "counterplan courts", READ),
+    ("a contention's number in words before a colon", "Contention One: Costs", "contention costs", READ),
 ]
 
 KEPT: list[tuple[str, str, str]] = [
@@ -126,6 +132,9 @@ KEPT: list[tuple[str, str, str]] = [
         "Costs Advantage 2 Hospitals",
         "costs advantage 2 hospitals",
     ),
+    ("a two-digit number that names a counterplan", "CP 50 State Fiat", "cp 50 state fiat"),
+    ("a section number after a counterplan's word", "CP 1332 Waiver", "cp 1332 waiver"),
+    ("a number after da further into a heading", "Spending DA 2 Link", "spending da 2 link"),
 ]
 
 
@@ -157,4 +166,14 @@ def test_a_numbered_advantage_heading_reaches_the_committed_costs_advantage_alia
     """The two forms `v1-e32-t02` found missing the costs advantage, against the committed Policy file."""
     taxonomy = yaml.safe_load(POLICY_TAXONOMY.read_text(encoding="utf-8"))
     aliases = next(one["aliases"] for one in taxonomy["positions"] if one["id"] == "costs-advantage")
+    assert normalize_heading(raw).text in aliases
+
+
+@pytest.mark.parametrize(
+    ("raw", "position_id"), [("DA 1 Midterms", "midterms-da"), ("CP 2 States", "states-cp")]
+)
+def test_a_numbered_da_or_cp_heading_reaches_the_committed_aliases(raw: str, position_id: str) -> None:
+    """The widened rule (PM ruling, 2026-10-24), against the committed Policy file."""
+    taxonomy = yaml.safe_load(POLICY_TAXONOMY.read_text(encoding="utf-8"))
+    aliases = next(one["aliases"] for one in taxonomy["positions"] if one["id"] == position_id)
     assert normalize_heading(raw).text in aliases

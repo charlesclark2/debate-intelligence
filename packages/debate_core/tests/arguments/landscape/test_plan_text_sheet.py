@@ -118,10 +118,12 @@ def test_a_school_of_the_caselist_never_reaches_the_words() -> None:
     assert not words & {"harbor", "academy", "ha"}
 
 
-def test_the_frame_is_what_most_plan_texts_share() -> None:
+def test_the_frame_is_what_nearly_every_plan_text_shares() -> None:
     found = cluster_plan_texts(ITEMS, NAMES)
-    assert "financed" in found.frame_words
-    assert "using" not in found.frame_words
+    assert "sample" in found.frame_words
+    assert "financed" not in found.frame_words
+    assert cluster_plan_texts(ITEMS, NAMES, frame_share=0.5).frame_words[:2] == ("establish", "federal")
+    assert "financed" in cluster_plan_texts(ITEMS, NAMES, frame_share=0.5).frame_words
 
 
 def test_no_plan_text_gives_an_empty_sheet() -> None:

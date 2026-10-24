@@ -5,8 +5,8 @@ see what plans teams read, grouped by what differs between them, and not one tea
 :func:`cluster_plan_texts` takes every affirmative document's plan texts as words and:
 
 1. **drops the frame**: a short list of English joining words, and every word in at least
-   `frame_share` of all plan texts (`united`, `states`, `federal`, `government`, `should`, and the like
-   once a season's plans are in). What is left of a plan text is its **mechanism words**;
+   `frame_share` of all plan texts, 80% by default (`united`, `states`, `federal`, `government`,
+   `should`, and the like). What is left of a plan text is its **mechanism words**;
 2. **groups plan texts by their mechanism words**, then merges a group into an earlier, larger one
    whose words it shares at `similarity` or more (Jaccard), largest groups first, so one word's edit
    does not make a new cluster;
@@ -49,7 +49,8 @@ __all__ = [
 ]
 
 DEFAULT_MINIMUM_TEAMS: Final = 2
-DEFAULT_FRAME_SHARE: Final = 0.5
+DEFAULT_FRAME_SHARE: Final = 0.8
+"""Nearly every plan text: a mechanism most teams read (single payer) stays a mechanism word."""
 DEFAULT_SIMILARITY: Final = 0.75
 ANSWERS_FILE: Final = "plan-text-answers.csv"
 ANSWER_COLUMNS: Final = (

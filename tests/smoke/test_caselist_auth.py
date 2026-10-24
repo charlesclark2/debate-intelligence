@@ -65,7 +65,8 @@ def installation(installed_cli: InstalledCli, tmp_path: Path) -> Iterator[Path]:
     (profiles / "dev.toml").write_text(
         f'[storage]\ndata_dir = "{tmp_path / "data"}"\n'
         f'[models]\nrouting_file = "{EXAMPLE_ROUTING_FILE}"\nbudget_usd_daily = 1.0\n'
-        '[caselist]\ntoken_backend = "file"\n',
+        # No notifier: a refused `renew` below must not put a banner on the Mac running the suite.
+        '[caselist]\ntoken_backend = "file"\nnotifier = "none"\n',
         encoding="utf-8",
     )
     installed_cli.configure(DEBATE_PROFILE_DIR=str(profiles), DEBATE_ENV="dev", DEBATE_STORAGE__DATA_DIR=None)
@@ -124,6 +125,25 @@ def test_login_is_refused_while_the_api_is_disabled(installed_cli: InstalledCli,
     result = installed_cli.run("--json", "caselist", "auth", "login", "--username", "nobody", stdin="x\n")
 
     assert result.exit_code == ExitCode.DOMAIN_FAILURE
+    assert json.loads(result.stdout.strip().splitlines()[-1])["error"]["code"] == "CASELIST_API_DISABLED"
+
+
+def test_set_password_is_refused_without_a_terminal_before_any_prompt(
+    installed_cli: InstalledCli, installation: Path
+) -> None:
+    """The password is only ever typed into a terminal: a pipe is refused before anything is asked."""
+    result = installed_cli.run("--json", "caselist", "auth", "set-password", stdin="nobody\nx\nx\n")
+
+    assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.stdout + result.stderr
+    assert json.loads(result.stdout.strip().splitlines()[-1])["error"]["code"] == "NO_TERMINAL"
+    assert "Tabroom password" not in result.stderr
+
+
+def test_renew_is_refused_while_the_api_is_disabled(installed_cli: InstalledCli, installation: Path) -> None:
+    """The cloud login's command, in a build whose profile keeps the API off, reads no secret."""
+    result = installed_cli.run("--json", "caselist", "auth", "renew")
+
+    assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.stdout + result.stderr
     assert json.loads(result.stdout.strip().splitlines()[-1])["error"]["code"] == "CASELIST_API_DISABLED"
 
 

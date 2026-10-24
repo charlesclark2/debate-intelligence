@@ -119,7 +119,7 @@ async def _run(service: LandscapeRunService, **request: object) -> LandscapeRunR
 # ------------------------------------------------------------------------------------------------
 
 
-async def test_a_run_writes_the_four_files_under_the_newest_snapshot_and_counts_the_cards(
+async def test_a_run_writes_the_seven_files_under_the_newest_snapshot_and_counts_the_cards(
     world: SyntheticRun,
 ) -> None:
     result = await _run(_service(world))
@@ -132,7 +132,10 @@ async def test_a_run_writes_the_four_files_under_the_newest_snapshot_and_counts_
         "impact_cards.csv",
         "positions.csv",
         "report.md",
+        "schools.csv",
+        "schools.md",
         "top_cards.csv",
+        "trends.csv",
     ]
     assert (result.topic_id, result.taxonomy_version, result.overrides_digest) == (
         SYNTHETIC_RUN_TOPIC,
@@ -532,3 +535,69 @@ async def test_a_dry_run_records_no_acceptance(tmp_path: Path) -> None:
     assert result.publish is not None and result.publish.refused is None
     assert not result.scan.accepted_now
     assert not (world.data_dir / "landscape" / "scan-acceptances").exists()
+
+
+# ------------------------------------------------------------------------------------------------
+# Trends and the school view in the run (`v1-e32-t04`)
+# ------------------------------------------------------------------------------------------------
+
+TOPICS_WITH_A_CHANGE = f"""\
+schema_version: 1
+topics:
+  - id: policy-earlier-topic
+    event: POLICY
+    caselists:
+      - {{caselist: {CASELIST}, from: 2026-09-01, to: 2026-09-08}}
+  - id: {SYNTHETIC_RUN_TOPIC}
+    event: POLICY
+    taxonomy_version: 1.0.0
+    caselists:
+      - {{caselist: {CASELIST}, from: 2026-09-09, to: 2026-12-31}}
+"""
+"""`synthetic26`'s first snapshot on a topic of its own, before the one with the taxonomy."""
+
+
+async def test_a_run_gives_the_trends_every_snapshots_topic_and_the_topics_range(world: SyntheticRun) -> None:
+    result = await _run(_service(world))
+
+    assert (result.trends.windows, result.trends.previous_snapshot, result.trends.topic_change) == (
+        (date(2026, 9, 8), NEWEST),
+        date(2026, 9, 8),
+        None,
+    )
+    assert (result.trends.topic_from, result.trends.topic_to) == (date(2026, 9, 1), date(2026, 12, 31))
+    report = (result.directory / "report.md").read_text(encoding="utf-8")
+    assert "of a topic that runs 2026-09-01 to 2026-12-31: less than a full topic cycle" in report
+    assert "# full_topic_cycle=false\n" in (result.directory / "trends.csv").read_text(encoding="utf-8")
+
+
+async def test_a_run_reads_a_topic_change_from_topics_yaml_and_draws_no_trend_across_it(
+    world: SyntheticRun,
+) -> None:
+    (world.config_dir / "topics.yaml").write_text(TOPICS_WITH_A_CHANGE, encoding="utf-8")
+
+    result = await _run(_service(world))
+
+    change = result.trends.topic_change
+    assert change is not None
+    assert (change.previous_snapshot, change.previous_topic_id) == (date(2026, 9, 8), "policy-earlier-topic")
+    assert (result.trends.previous_snapshot, result.trends.windows) == (None, (NEWEST,))
+    assert {row.trend.value for row in result.trends.rows} == {"NEW"}
+    assert all(row.delta_points is None for row in result.trends.rows)
+    report = (result.directory / "report.md").read_text(encoding="utf-8")
+    assert "The topic changed: the previous snapshot, 2026-09-08, is on policy-earlier-topic." in report
+
+
+async def test_the_school_view_is_written_locally_and_its_names_are_not_scan_hits(
+    world: SyntheticRun,
+) -> None:
+    result = await _run(_service(world))
+
+    schools = (result.directory / "schools.md").read_text(encoding="utf-8")
+    assert "### Quillmere Academy" in schools
+    assert "| QW | aff | `single-payer-aff` | 1 | Lantern Classic |" in schools
+    assert (result.schools.schools, result.schools.teams) == (3, 3)
+    assert result.scan.hits == ()
+    for name in ("report.md", "positions.csv", "trends.csv"):
+        text = (result.directory / name).read_text(encoding="utf-8")
+        assert "Quillmere" not in text and "QW" not in text

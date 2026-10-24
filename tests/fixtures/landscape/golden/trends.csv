@@ -1,0 +1,43 @@
+# report=trends
+# caselist=synthpolicy26
+# snapshot=2026-09-15
+# previous_snapshot=2026-09-08
+# topic_id=synthetic-policy-topic
+# taxonomy_version=1.2.0
+# overrides_digest=1789afec01f8e1417460965e050263e11df2d4128ca0ed9604d1643f430639a0
+# parser_version=2026.10.20-docx-6
+# prompt_version=none
+# review_threshold=0.6
+# coverage_cards=34/45
+# coverage_rounds=15/16
+# share_of_teams_over=teams disclosing on the position's side: aff 6, neg 6, either side 8
+# provenance_mode=FILE_IMPORT
+# stale=false
+# newest_snapshot=2026-09-15
+# snapshot_age_days=2
+# archives_awaiting_download=0
+# window=2026-09-09/2026-09-15
+# previous_window=2026-09-02/2026-09-08
+# windows_on_topic=2
+# first_window=2026-09-02/2026-09-08
+# topic_cycle=unknown
+# full_topic_cycle=unknown
+# topic_changed_from=
+# trend_threshold_points=5
+# trend_minimum_teams=3
+# weekly_share_over=teams with a round first seen in the window, on the position's side: aff 4, neg 4, either side 8
+# previous_share_over=teams with a round first seen in the window, on the position's side: aff 3, neg 4, either side 7
+# held_back_by_team_floor=4
+position_id,label,kind,weekly_teams,weekly_share,previous_teams,previous_share,delta_points,trend_label,held_back_by_team_floor
+public-option-aff,Public option,aff,0,0.000,1,0.333,-33.3,STEADY,true
+single-payer-aff,Single payer,aff,2,0.500,1,0.333,16.7,STEADY,true
+costs-advantage,Costs advantage,advantage,3,0.750,3,1.000,-25.0,FALLING,false
+innovation-advantage,Innovation advantage,advantage,2,0.500,1,0.333,16.7,STEADY,true
+condo-bad,Condo bad,theory,1,0.250,0,0.000,25.0,NEW,false
+election-da,Midterms DA,da,1,0.250,1,0.250,0.0,STEADY,false
+hospital-closures-da,Hospital closures DA,da,1,0.250,0,0.000,25.0,NEW,false
+provider-strikes-da,Provider strikes DA,da,1,0.250,0,0.000,25.0,NEW,false
+spending-da,Spending DA,da,1,0.250,3,0.750,-50.0,FALLING,false
+states-cp,States CP,cp,1,0.250,2,0.500,-25.0,STEADY,true
+cap-k,Capitalism K,k,1,0.250,1,0.250,0.0,STEADY,false
+nhi-t,T: national health insurance,t,1,0.250,1,0.250,0.0,STEADY,false

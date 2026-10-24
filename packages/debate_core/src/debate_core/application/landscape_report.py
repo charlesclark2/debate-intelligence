@@ -70,6 +70,7 @@ from collections import Counter, defaultdict
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date
+from decimal import Decimal
 from typing import Final
 
 from debate_core.application.caselist.publish_plan import source_key
@@ -83,11 +84,13 @@ from debate_core.application.landscape_counts import (
     round_id,
     team_identity,
 )
+from debate_core.application.landscape_schools import school_view
 from debate_core.application.landscape_staleness import (
     LandscapeStaleness,
     with_stale_banner,
     with_staleness_metadata,
 )
+from debate_core.application.landscape_trends import landscape_trends
 from debate_core.application.ports.parsed_store import OccurrenceRecord
 from debate_core.arguments.landscape.impacts import is_impact_card
 from debate_core.arguments.landscape.render import (
@@ -95,7 +98,10 @@ from debate_core.arguments.landscape.render import (
     render_impact_cards_csv,
     render_markdown,
     render_positions_csv,
+    render_schools_csv,
+    render_schools_markdown,
     render_top_cards_csv,
+    render_trends_csv,
 )
 from debate_core.arguments.landscape.review_queue import DEFAULT_REVIEW_THRESHOLD, needs_review
 from debate_core.arguments.landscape.seeding import SeedSource
@@ -129,8 +135,16 @@ from debate_core.domain.landscape_report import (
     TopCard,
     UnclassifiedSummary,
 )
+from debate_core.domain.landscape_schools import SchoolView
+from debate_core.domain.landscape_trends import (
+    DEFAULT_TREND_MINIMUM_TEAMS,
+    DEFAULT_TREND_THRESHOLD_POINTS,
+    LandscapeTrends,
+)
 
 __all__ = [
+    "CIRCUIT_WIDE_FILES",
+    "SCHOOL_VIEW_FILES",
     "LandscapeReportBundle",
     "LandscapeReportInputs",
     "LandscapeReportService",
@@ -139,6 +153,12 @@ __all__ = [
     "overrides_digest",
     "round_id",
 ]
+
+CIRCUIT_WIDE_FILES: Final = ("report.md", "positions.csv", "top_cards.csv", "impact_cards.csv", "trends.csv")
+"""The bundle's files that name no school, team or debater: the circuit-wide report and its trends."""
+
+SCHOOL_VIEW_FILES: Final = ("schools.csv", "schools.md")
+"""The bundle's per-school view (`v1-e32-t04`): school and team code as disclosed, never more."""
 
 _SIDE_ORDER: Final = {PositionSide.AFF: 0, PositionSide.NEG: 1, PositionSide.BOTH: 2}
 _KIND_ORDER: Final = {kind: index for index, kind in enumerate(PositionKind)}
@@ -239,11 +259,13 @@ class LandscapeReportInputs:
 
 @dataclass(frozen=True, slots=True)
 class LandscapeReportBundle:
-    """A report and its four files, the staleness banner and flag already in them."""
+    """A report, its trends and school view, and their files, the staleness banner and flag in them."""
 
     report: LandscapeReport
     files: dict[str, str] = field(repr=False)
-    """`report.md`, `positions.csv`, `top_cards.csv` and `impact_cards.csv`, by name."""
+    """:data:`CIRCUIT_WIDE_FILES` and :data:`SCHOOL_VIEW_FILES`, by name."""
+    trends: LandscapeTrends = field(repr=False)
+    schools: SchoolView = field(repr=False)
 
 
 @dataclass(slots=True)
@@ -279,6 +301,8 @@ class LandscapeReportService:
         review_threshold: float = DEFAULT_REVIEW_THRESHOLD,
         top_cards: int = DEFAULT_TOP_CARDS,
         impact_cards: int = DEFAULT_IMPACT_CARDS,
+        trend_threshold_points: Decimal = DEFAULT_TREND_THRESHOLD_POINTS,
+        trend_minimum_teams: int = DEFAULT_TREND_MINIMUM_TEAMS,
     ) -> None:
         if not 0.0 <= review_threshold <= 1.0:
             raise ValueError(f"the review threshold is between 0 and 1; got {review_threshold}")
@@ -289,19 +313,40 @@ class LandscapeReportService:
         self._threshold = review_threshold
         self._top = top_cards
         self._impact = impact_cards
+        self._trend_threshold = trend_threshold_points
+        self._trend_minimum = trend_minimum_teams
 
     def bundle(self, inputs: LandscapeReportInputs, staleness: LandscapeStaleness) -> LandscapeReportBundle:
-        """The report and its files, with the hook's banner and `stale` flag in them."""
-        report = self.build(inputs, staleness)
+        """The report, its trends and its school view, with the hook's banner and `stale` flag in them."""
+        report, counted = self.count(inputs, staleness)
+        snapshot = report.header.snapshot
+        trends = landscape_trends(
+            caselist=inputs.caselist,
+            taxonomy=inputs.taxonomy,
+            counted=counted,
+            snapshot=snapshot,
+            snapshot_topics=inputs.snapshot_topics,
+            topic_range=inputs.topic_range,
+            threshold_points=self._trend_threshold,
+            minimum_teams=self._trend_minimum,
+        )
+        schools = school_view(
+            caselist=inputs.caselist, snapshot=snapshot, disclosures=inputs.disclosures, counted=counted
+        )
         metadata = with_staleness_metadata(header_metadata(report), staleness)
         return LandscapeReportBundle(
             report=report,
             files={
-                "report.md": with_stale_banner(render_markdown(report), staleness),
+                "report.md": with_stale_banner(render_markdown(report, trends), staleness),
                 "positions.csv": render_positions_csv(report, metadata),
                 "top_cards.csv": render_top_cards_csv(report, metadata),
                 "impact_cards.csv": render_impact_cards_csv(report, metadata),
+                "trends.csv": render_trends_csv(trends, metadata),
+                "schools.csv": render_schools_csv(schools, metadata),
+                "schools.md": with_stale_banner(render_schools_markdown(schools, report), staleness),
             },
+            trends=trends,
+            schools=schools,
         )
 
     def build(self, inputs: LandscapeReportInputs, staleness: LandscapeStaleness) -> LandscapeReport:

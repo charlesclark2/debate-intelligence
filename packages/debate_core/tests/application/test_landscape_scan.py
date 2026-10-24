@@ -124,3 +124,19 @@ def test_a_damaged_acceptance_line_accepts_nothing(tmp_path: Path) -> None:
     )
 
     assert log.accepted("synthetic26") == {"abc"}
+
+
+def test_the_school_view_is_scanned_for_paths_only() -> None:
+    """`v1-e32-t04`: schools.csv and schools.md name schools, team codes and tournaments by design."""
+    disclosure = _disclosure()
+    line = "Quillmere Academy,QW,aff,single-payer-aff,1,Lantern Classic"
+    files = {"schools.csv": line, "report.md": line}
+    hits = scan_report(files, (disclosure,), school_view_files=("schools.csv",))
+    assert {(hit.file, hit.kind) for hit in hits} == {
+        ("report.md", ScanKind.TEAM_CODE),
+        ("report.md", ScanKind.SCHOOL),
+        ("report.md", ScanKind.TOURNAMENT),
+    }
+    with_a_path = {"schools.csv": f"{line} {disclosure.source_path}"}
+    hits = scan_report(with_a_path, (disclosure,), school_view_files=("schools.csv",))
+    assert [(hit.file, hit.kind) for hit in hits] == [("schools.csv", ScanKind.PATH)]

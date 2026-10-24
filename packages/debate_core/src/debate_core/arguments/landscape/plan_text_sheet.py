@@ -36,6 +36,7 @@ from dataclasses import dataclass, field
 from functools import reduce
 from typing import Final, TextIO
 
+from debate_core.arguments.landscape.plan_text import JOINING_WORDS
 from debate_core.arguments.landscape.source_headings import CaselistNames
 
 __all__ = [
@@ -69,13 +70,6 @@ ANSWER_COLUMNS: Final = (
 )
 _NONE: Final = "none"
 _MARKDOWN_SPECIAL: Final = re.compile(r"([\\`*_\[\]<>|#])")
-_JOINING_WORDS: Final = frozenset(
-    (
-        *("a", "an", "and", "as", "at", "be", "by", "for", "from", "in", "into", "is", "its"),
-        *("of", "on", "or", "that", "the", "their", "this", "to", "with"),
-    )
-)
-"""English joining words, never a mechanism's."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -135,7 +129,7 @@ def cluster_plan_texts(
 ) -> PlanTextSheet:
     """`items`' plan texts grouped by their mechanism words, the clusters fewer teams read withheld."""
     scrubbed = [
-        (one, frozenset(names.without_schools(" ".join(one.words)).split()) - _JOINING_WORDS) for one in items
+        (one, frozenset(names.without_schools(" ".join(one.words)).split()) - JOINING_WORDS) for one in items
     ]
     counts = Counter(word for _, words in scrubbed for word in words)
     frame = frozenset(word for word, count in counts.items() if count >= frame_share * len(scrubbed))

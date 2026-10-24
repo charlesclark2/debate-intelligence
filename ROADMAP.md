@@ -60,7 +60,7 @@ v2.3's extension work.
 
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
-| [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 47 | 43 | 236 |
+| [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 47 | 44 | 236 |
 | [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 103 | 81 | 487 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 26 | 11 | 204 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 13 | 2 | 108 |
@@ -123,7 +123,7 @@ Repo, tooling, CI, promotion flow, task tooling, domain core, and deterministic 
 | [scripts/affected_tests.py prints the tests a branch's changes can break](plan_specs/v1/e01-repo-foundation/t28-affected-test-selection.yaml) `v1-e01-t28-affected-test-selection` | Succeeded | 1 | 4.0 |
 | [debate_core.testing and debate_core.evidence stop importing more than a caller asks for](plan_specs/v1/e01-repo-foundation/t29-slim-package-reexports.yaml) `v1-e01-t29-slim-package-reexports` | Succeeded | 1 | 3.0 |
 | [Tests stop reaching code they do not use: fakes by port, no port re-exports, and a graph option](plan_specs/v1/e01-repo-foundation/t30-test-selection-reach.yaml) `v1-e01-t30-test-selection-reach` | Succeeded | 1 | 4.0 |
-| [Repository checks stop flagging true values, and the smoke tests type-check](plan_specs/v1/e01-repo-foundation/t31-repo-check-false-positives.yaml) `v1-e01-t31-repo-check-false-positives` | Pending | 1 | 1.0 |
+| [Repository checks stop flagging true values, and the smoke tests type-check](plan_specs/v1/e01-repo-foundation/t31-repo-check-false-positives.yaml) `v1-e01-t31-repo-check-false-positives` | Succeeded | 1 | 1.0 |
 | [Test selection, round three: command registration, quoted words, the root pyproject and the contract suites](plan_specs/v1/e01-repo-foundation/t32-test-selection-reach-round-three.yaml) `v1-e01-t32-test-selection-reach-round-three` | Pending | 1 | 3.0 |
 | [When a newer build wrote the database or added a setting, the error says so](plan_specs/v1/e01-repo-foundation/t33-newer-build-messages.yaml) `v1-e01-t33-newer-build-messages` | Pending | 0 | 2.0 |
 | [validate-dev is green again, and a red one is seen](plan_specs/v1/e01-repo-foundation/t34-validate-dev-green-again.yaml) `v1-e01-t34-validate-dev-green-again` | InProgress | 1 | 3.0 |

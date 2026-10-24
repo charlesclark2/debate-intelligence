@@ -3,14 +3,16 @@
 #   debate-<env>-caselist-login   the login task's role: reads the password, writes the token,
 #                                 publishes a failed login to the alert topic. Nothing else: no S3,
 #                                 no other secret.
-#   debate-<env>-caselist-run     the run's role. Its credentials grant is here and reads the token
-#                                 only; it never reads the password. The run's other grants (the
-#                                 evidence bucket, its state, ADR-0020 (3)) are v1-e40-t03's and
-#                                 t04's, as a second inline policy beside this one.
+#   debate-<env>-caselist-run     the run's role: reads the token only, never the password, and
+#                                 holds the everyday evidence permissions (v1-e40-t03), the same
+#                                 document as the EvidenceOperator permission set's, which lists,
+#                                 reads, publishes and never deletes. Nothing more. The run's state
+#                                 (ADR-0020 (3)) lives under prefixes that document already writes.
 #
 # Each role's policies are held exclusive, so a policy attached or written by hand is removed at
 # the next apply. Only DebateBreakGlassAdmin (the apply) and the login schedule's own role hold
-# iam:PassRole on the login role (login_task.tf); DebateMaintainer's PowerUserAccess has none.
+# iam:PassRole on the login role (login_task.tf); DebateMaintainer's PowerUserAccess has none, and
+# the run's deployer is allowed the run's roles and denied the login's (deployer.tf).
 
 # tflint-ignore: aws_resource_missing_tags
 resource "aws_iam_role" "login" {
@@ -50,10 +52,20 @@ resource "aws_iam_role_policy" "run_credentials" {
   policy = local.run_role_credentials_policy
 }
 
-# v1-e40-t03 and t04 add their inline policy's name here.
+# The everyday evidence permissions, exactly as the EvidenceOperator permission set holds them:
+# variables.tf refuses a document that deletes, uses a wildcard or names anything but the evidence
+# bucket and its key.
+resource "aws_iam_role_policy" "run_evidence" {
+  name   = "everyday-evidence"
+  role   = aws_iam_role.run.id
+  policy = var.evidence_policy_json
+}
+
+# The run role's two policies, and no other: one written or attached by hand is removed at the
+# next apply.
 resource "aws_iam_role_policies_exclusive" "run" {
   role_name    = aws_iam_role.run.name
-  policy_names = [aws_iam_role_policy.run_credentials.name]
+  policy_names = [aws_iam_role_policy.run_credentials.name, aws_iam_role_policy.run_evidence.name]
 }
 
 resource "aws_iam_role_policy_attachments_exclusive" "run" {

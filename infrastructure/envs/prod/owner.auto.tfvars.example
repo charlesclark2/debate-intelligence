@@ -35,3 +35,7 @@ evidence_search_budget_emails = ["you@example.com"]
 # `debate-research caselist auth set-password` runs as: write the Tabroom password and the token,
 # read neither back. Exactly one name: the coach whose Tabroom account the run logs in with.
 caselist_credential_writer_user_names = ["your-identity-center-user-name"]
+
+# CaselistRunDeployer is what scripts/caselist_run_deploy.sh runs as (v1-e40-t03): push the run's
+# image, register its task definition, start a run by hand. Adult maintainers only.
+caselist_run_deployer_user_names = ["your-identity-center-user-name"]

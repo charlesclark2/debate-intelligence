@@ -1,4 +1,5 @@
-# Offline tests for the caselist_run module: the credentials of ADR-0020 (2) and the scheduled login.
+# Offline tests for the caselist_run module: the credentials of ADR-0020 (2), the scheduled login,
+# and the run (ADR-0020 (1)).
 #
 # `mock_provider "aws"` means no credentials, no network and no AWS account. Every role and secret
 # gets an ARN of its own below (`override_resource`), because a mocked provider would otherwise give
@@ -15,6 +16,14 @@
 #   ac3  the writer permission set can write both secrets and read neither.
 #   and  the two applies: credentials alone with no login task, then the task pinned by digest
 #        and its Wednesday schedule, never retried.
+#
+# And what they hold it to for task v1-e40-t03, from "The run" below:
+#
+#   ac1  the run role holds the everyday evidence permissions and a read of the token, nothing
+#        more: no read of the password, no s3:DeleteObject or s3:DeleteObjectVersion; the run's
+#        network has no inbound rule; the run task is 8 vCPU, 16 GB, 100 GiB, arm64, under its
+#        deadline, pinned by digest; its schedule starts after the login, disabled by default;
+#        Debate<Env>CaselistRunDeployer passes the run's roles and never the login's.
 #
 # The account id and user name below are invented.
 
@@ -34,6 +43,12 @@ mock_provider "aws" {
   mock_data "aws_partition" {
     defaults = {
       partition = "aws"
+    }
+  }
+
+  mock_data "aws_availability_zones" {
+    defaults = {
+      names = ["us-east-1b", "us-east-1a", "us-east-1c"]
     }
   }
 
@@ -66,6 +81,55 @@ mock_provider "aws" {
     defaults = {
       arn = "arn:aws:logs:us-east-1:111122223333:log-group:debate-mock-caselist-login"
     }
+  }
+
+  mock_resource "aws_ecs_cluster" {
+    defaults = {
+      arn = "arn:aws:ecs:us-east-1:111122223333:cluster/debate-mock-caselist-run"
+    }
+  }
+
+  mock_resource "aws_ecr_repository" {
+    defaults = {
+      arn            = "arn:aws:ecr:us-east-1:111122223333:repository/debate-mock-caselist-run"
+      repository_url = "111122223333.dkr.ecr.us-east-1.amazonaws.com/debate-mock-caselist-run"
+    }
+  }
+
+  mock_resource "aws_security_group" {
+    defaults = {
+      id = "sg-0000000000000000a"
+    }
+  }
+}
+
+override_resource {
+  target = aws_ecs_task_definition.run
+  values = {
+    arn = "arn:aws:ecs:us-east-1:111122223333:task-definition/debate-mock-caselist-run:3"
+  }
+}
+
+override_resource {
+  target = aws_cloudwatch_log_group.run
+  values = {
+    arn = "arn:aws:logs:us-east-1:111122223333:log-group:debate-mock-caselist-run"
+  }
+}
+
+override_resource {
+  target = aws_iam_role.run_execution
+  values = {
+    arn  = "arn:aws:iam::111122223333:role/debate-mock-caselist-run-execution"
+    name = "debate-mock-caselist-run-execution"
+  }
+}
+
+override_resource {
+  target = aws_iam_role.run_scheduler
+  values = {
+    arn  = "arn:aws:iam::111122223333:role/debate-mock-caselist-run-scheduler"
+    name = "debate-mock-caselist-run-scheduler"
   }
 }
 
@@ -123,6 +187,48 @@ variables {
   identity_center_instance_arn = "arn:aws:sso:::instance/ssoins-mock"
   identity_store_id            = "d-mock000000"
   credential_writer_user_names = ["mock-coach"]
+  deployer_user_names          = ["mock-maintainer"]
+
+  # The everyday evidence permissions, in the shape module.evidence_store.operator_policy_json has
+  # (infrastructure/modules/evidence_bucket/operator_access.tf), over an invented bucket and key.
+  evidence_bucket_arn = "arn:aws:s3:::debate-mock-evidence-00000000"
+  evidence_policy_json = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid       = "ListDocumentedEvidencePrefixes"
+        Effect    = "Allow"
+        Action    = "s3:ListBucket"
+        Resource  = "arn:aws:s3:::debate-mock-evidence-00000000"
+        Condition = { StringLike = { "s3:prefix" = ["raw/", "raw/*", "reports/", "reports/*"] } }
+      },
+      {
+        Sid       = "ListEvidenceObjectVersionsForRemovalPlans"
+        Effect    = "Allow"
+        Action    = "s3:ListBucketVersions"
+        Resource  = "arn:aws:s3:::debate-mock-evidence-00000000"
+        Condition = { StringLike = { "s3:prefix" = ["raw/", "raw/*"] } }
+      },
+      {
+        Sid      = "ReadAndPublishEvidenceObjects"
+        Effect   = "Allow"
+        Action   = ["s3:GetObject", "s3:GetObjectVersion", "s3:PutObject"]
+        Resource = "arn:aws:s3:::debate-mock-evidence-00000000/*"
+      },
+      {
+        Sid      = "TagSupersededParsedVersionDirectories"
+        Effect   = "Allow"
+        Action   = ["s3:GetObjectTagging", "s3:PutObjectTagging"]
+        Resource = "arn:aws:s3:::debate-mock-evidence-00000000/parsed/*"
+      },
+      {
+        Sid      = "UseEvidenceKey"
+        Effect   = "Allow"
+        Action   = ["kms:Encrypt", "kms:Decrypt", "kms:GenerateDataKey"]
+        Resource = "arn:aws:kms:us-east-1:111122223333:key/00000000-0000-0000-0000-0000000e1de5"
+      },
+    ]
+  })
 }
 
 # ---------------------------------------------------------------------------------------------
@@ -134,7 +240,7 @@ run "credentials_apply_creates_no_login_task" {
 
   assert {
     condition     = length(aws_ecs_task_definition.login) == 0 && length(aws_scheduler_schedule.login) == 0 && length(aws_iam_role.scheduler) == 0
-    error_message = "Without login_task, the module must create the credentials only: no task definition, no schedule, no scheduler role (apply A)."
+    error_message = "Without image_digest, the module must create no login task definition, no schedule and no scheduler role (apply A)."
   }
 
   assert {
@@ -526,11 +632,17 @@ run "no_identity_center_creates_no_permission_set" {
     identity_center_instance_arn = null
     identity_store_id            = null
     credential_writer_user_names = []
+    deployer_user_names          = []
   }
 
   assert {
     condition     = length(aws_ssoadmin_permission_set.credential_writer) == 0 && output.credential_writer_permission_set_name == null
     error_message = "Without an Identity Center instance there is no writer permission set."
+  }
+
+  assert {
+    condition     = length(aws_ssoadmin_permission_set.deployer) == 0 && output.deployer_permission_set_name == null
+    error_message = "Without an Identity Center instance there is no deployer permission set either (v1-e40-t03)."
   }
 }
 
@@ -542,14 +654,7 @@ run "the_login_task_runs_the_pinned_image_as_the_login_role_every_wednesday" {
   command = apply
 
   variables {
-    login_task = {
-      cluster_arn        = "arn:aws:ecs:us-east-1:111122223333:cluster/debate-mock-caselist-run"
-      subnet_ids         = ["subnet-0000000000000000a", "subnet-0000000000000000b"]
-      security_group_ids = ["sg-0000000000000000a"]
-      repository_arn     = "arn:aws:ecr:us-east-1:111122223333:repository/debate-mock-caselist-run"
-      repository_url     = "111122223333.dkr.ecr.us-east-1.amazonaws.com/debate-mock-caselist-run"
-      image_digest       = "sha256:1111111111111111111111111111111111111111111111111111111111111111"
-    }
+    image_digest = "sha256:1111111111111111111111111111111111111111111111111111111111111111"
   }
 
   assert {
@@ -647,17 +752,10 @@ run "a_login_image_named_by_tag_is_refused" {
   command = plan
 
   variables {
-    login_task = {
-      cluster_arn        = "arn:aws:ecs:us-east-1:111122223333:cluster/debate-mock-caselist-run"
-      subnet_ids         = ["subnet-0000000000000000a"]
-      security_group_ids = ["sg-0000000000000000a"]
-      repository_arn     = "arn:aws:ecr:us-east-1:111122223333:repository/debate-mock-caselist-run"
-      repository_url     = "111122223333.dkr.ecr.us-east-1.amazonaws.com/debate-mock-caselist-run"
-      image_digest       = "latest"
-    }
+    image_digest = "latest"
   }
 
-  expect_failures = [var.login_task]
+  expect_failures = [var.image_digest]
 }
 
 run "a_paused_schedule_is_disabled_not_destroyed" {
@@ -665,14 +763,7 @@ run "a_paused_schedule_is_disabled_not_destroyed" {
 
   variables {
     login_schedule_enabled = false
-    login_task = {
-      cluster_arn        = "arn:aws:ecs:us-east-1:111122223333:cluster/debate-mock-caselist-run"
-      subnet_ids         = ["subnet-0000000000000000a"]
-      security_group_ids = ["sg-0000000000000000a"]
-      repository_arn     = "arn:aws:ecr:us-east-1:111122223333:repository/debate-mock-caselist-run"
-      repository_url     = "111122223333.dkr.ecr.us-east-1.amazonaws.com/debate-mock-caselist-run"
-      image_digest       = "sha256:1111111111111111111111111111111111111111111111111111111111111111"
-    }
+    image_digest           = "sha256:1111111111111111111111111111111111111111111111111111111111111111"
   }
 
   assert {
@@ -772,5 +863,449 @@ run "break_glass_may_only_validate_the_key_and_decrypts_no_stored_version" {
       ])
     )
     error_message = "Only the login and run roles, and break-glass's validation, may escape a decrypt deny; three such denies, and no Allow of a wildcard, a grant or a re-encryption."
+  }
+}
+
+# ---------------------------------------------------------------------------------------------
+# The run (v1-e40-t03): its network, cluster and repository, which need no image
+# ---------------------------------------------------------------------------------------------
+
+run "the_runs_network_has_no_inbound_rule_and_outbound_https_only" {
+  command = apply
+
+  assert {
+    condition     = length(aws_security_group.run.ingress) == 0
+    error_message = "The tasks' security group has no inbound rule (ADR-0020 (1) 5)."
+  }
+
+  assert {
+    condition = jsonencode([
+      for rule in aws_security_group.run.egress : {
+        protocol = rule.protocol, from = rule.from_port, to = rule.to_port, cidrs = rule.cidr_blocks
+        # Unset, these are null under the mocked provider and empty from AWS; either is none.
+        ipv6         = try(length(rule.ipv6_cidr_blocks), 0), groups = try(length(rule.security_groups), 0)
+        prefix_lists = try(length(rule.prefix_list_ids), 0), self = rule.self == true
+      }
+      ]) == jsonencode([{
+        protocol = "tcp", from = 443, to = 443, cidrs = ["0.0.0.0/0"], ipv6 = 0, groups = 0, prefix_lists = 0, self = false
+    }])
+    error_message = "The tasks may reach out on HTTPS and nothing else."
+  }
+
+  assert {
+    condition     = length(aws_default_security_group.run.ingress) == 0 && length(aws_default_security_group.run.egress) == 0
+    error_message = "The VPC's default security group is held with no rule, so nothing in the VPC has an inbound rule."
+  }
+
+  assert {
+    condition     = toset([for subnet in aws_subnet.public : subnet.availability_zone]) == toset(["us-east-1a", "us-east-1b"]) && toset([for subnet in aws_subnet.public : subnet.cidr_block]) == toset(["10.40.0.0/25", "10.40.0.128/25"])
+    error_message = "Two public subnets, in the first two zones by name, each half of the VPC."
+  }
+
+  assert {
+    condition     = aws_route.public_internet.destination_cidr_block == "0.0.0.0/0" && aws_route.public_internet.gateway_id == aws_internet_gateway.run.id && length(aws_route_table_association.public) == 2
+    error_message = "Both subnets route the internet through the internet gateway: they are public."
+  }
+
+  assert {
+    condition     = aws_vpc_endpoint.s3.vpc_endpoint_type == "Gateway" && aws_vpc_endpoint.s3.service_name == "com.amazonaws.us-east-1.s3" && toset(aws_vpc_endpoint.s3.route_table_ids) == toset([aws_route_table.public.id])
+    error_message = "An S3 gateway endpoint on the subnets' route table keeps bucket traffic inside AWS."
+  }
+
+  assert {
+    condition     = aws_ecs_cluster.run.name == "debate-mock-caselist-run" && one([for setting in aws_ecs_cluster.run.setting : setting.value if setting.name == "containerInsights"]) == "disabled"
+    error_message = "The run's cluster is debate-<env>-caselist-run, without Container Insights (ADR-0020, What E40 must not build)."
+  }
+
+  assert {
+    condition = (
+      aws_ecr_repository.run.name == "debate-mock-caselist-run"
+      && aws_ecr_repository.run.image_tag_mutability == "IMMUTABLE"
+      && aws_ecr_repository.run.image_scanning_configuration[0].scan_on_push
+      && aws_ecr_repository.run.encryption_configuration[0].encryption_type == "KMS"
+    )
+    error_message = "The repository has immutable tags, a scan on push and KMS encryption, as v2-e10-t05's ecr module will (ADR-0020, What V2 replaces)."
+  }
+
+  assert {
+    condition     = length(aws_ecs_task_definition.run) == 0 && length(aws_scheduler_schedule.run) == 0 && length(aws_iam_role.run_scheduler) == 0 && output.run_schedule_name == null
+    error_message = "Without image_digest there is no run task definition and no run schedule: they need a pushed image."
+  }
+}
+
+# ---------------------------------------------------------------------------------------------
+# The run role: the everyday evidence permissions and the token, nothing more
+# ---------------------------------------------------------------------------------------------
+
+run "the_run_role_holds_the_everyday_evidence_permissions_and_the_token_and_nothing_more" {
+  command = apply
+
+  assert {
+    condition     = aws_iam_role_policies_exclusive.run.policy_names == toset(["caselist-credentials", "everyday-evidence"]) && length(aws_iam_role_policy_attachments_exclusive.run.policy_arns) == 0
+    error_message = "The run role holds exactly its credentials grant and the everyday evidence permissions, held exclusive, with no managed policy."
+  }
+
+  assert {
+    condition     = aws_iam_role_policy.run_evidence.policy == var.evidence_policy_json
+    error_message = "The run's evidence policy is the everyday document itself, not a copy that could drift from it."
+  }
+
+  assert {
+    condition = toset(flatten([
+      for policy in [aws_iam_role_policy.run_credentials.policy, aws_iam_role_policy.run_evidence.policy] : [
+        for statement in jsondecode(policy).Statement : flatten([statement.Action]) if statement.Effect == "Allow"
+      ]
+      ])) == toset([
+      "secretsmanager:GetSecretValue", "kms:Decrypt",
+      "s3:ListBucket", "s3:ListBucketVersions", "s3:GetObject", "s3:GetObjectVersion", "s3:PutObject",
+      "s3:GetObjectTagging", "s3:PutObjectTagging", "kms:Encrypt", "kms:GenerateDataKey",
+    ])
+    error_message = "The run role may do the everyday evidence actions and read the token, and nothing else."
+  }
+
+  assert {
+    condition = alltrue([
+      for policy in [aws_iam_role_policy.run_credentials.policy, aws_iam_role_policy.run_evidence.policy] :
+      alltrue([
+        for statement in jsondecode(policy).Statement :
+        length(setintersection(toset(flatten([statement.Action])), toset(["s3:DeleteObject", "s3:DeleteObjectVersion", "s3:*", "*"]))) == 0
+      ])
+    ])
+    error_message = "The run role may not delete an object or a version: a delete is a takedown, and takedowns use EvidenceRemoval."
+  }
+
+  assert {
+    condition = alltrue([
+      for policy in [aws_iam_role_policy.run_credentials.policy, aws_iam_role_policy.run_evidence.policy] :
+      !strcontains(policy, "tabroom-password")
+    ])
+    error_message = "Neither of the run role's policies names the password secret."
+  }
+
+  assert {
+    condition = flatten([
+      for policy in [aws_iam_role_policy.run_credentials.policy, aws_iam_role_policy.run_evidence.policy] : [
+        for statement in jsondecode(policy).Statement : flatten([statement.Resource])
+        if contains(flatten([statement.Action]), "secretsmanager:GetSecretValue")
+      ]
+    ]) == ["arn:aws:secretsmanager:us-east-1:111122223333:secret:debate-mock-caselist-token-ToKeNx"]
+    error_message = "The run role reads one secret, the token."
+  }
+}
+
+run "an_evidence_policy_that_deletes_is_refused" {
+  command = plan
+
+  variables {
+    evidence_policy_json = jsonencode({
+      Version = "2012-10-17"
+      Statement = [{
+        Effect   = "Allow"
+        Action   = ["s3:GetObject", "s3:DeleteObject", "s3:DeleteObjectVersion"]
+        Resource = "arn:aws:s3:::debate-mock-evidence-00000000/*"
+      }]
+    })
+  }
+
+  expect_failures = [var.evidence_policy_json]
+}
+
+run "an_evidence_policy_with_a_wildcard_action_is_refused" {
+  command = plan
+
+  variables {
+    evidence_policy_json = jsonencode({
+      Version   = "2012-10-17"
+      Statement = [{ Effect = "Allow", Action = "s3:*", Resource = "arn:aws:s3:::debate-mock-evidence-00000000/*" }]
+    })
+  }
+
+  expect_failures = [var.evidence_policy_json]
+}
+
+run "an_evidence_policy_naming_another_bucket_is_refused" {
+  command = plan
+
+  variables {
+    evidence_policy_json = jsonencode({
+      Version   = "2012-10-17"
+      Statement = [{ Effect = "Allow", Action = "s3:GetObject", Resource = "arn:aws:s3:::debate-prod-evidence-00000000/*" }]
+    })
+  }
+
+  expect_failures = [var.evidence_policy_json]
+}
+
+run "an_evidence_policy_reading_the_password_is_refused" {
+  command = plan
+
+  variables {
+    evidence_policy_json = jsonencode({
+      Version = "2012-10-17"
+      Statement = [{
+        Effect   = "Allow"
+        Action   = "secretsmanager:GetSecretValue"
+        Resource = "arn:aws:secretsmanager:us-east-1:111122223333:secret:debate-mock-caselist-tabroom-password-PaSsWd"
+      }]
+    })
+  }
+
+  expect_failures = [var.evidence_policy_json]
+}
+
+# ---------------------------------------------------------------------------------------------
+# The run task and its schedule, once an image is pushed
+# ---------------------------------------------------------------------------------------------
+
+run "the_run_task_runs_the_pinned_image_as_the_run_role_under_its_deadline" {
+  command = apply
+
+  variables {
+    image_digest = "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+  }
+
+  assert {
+    condition     = jsondecode(aws_ecs_task_definition.run[0].container_definitions)[0].image == "111122223333.dkr.ecr.us-east-1.amazonaws.com/debate-mock-caselist-run@sha256:2222222222222222222222222222222222222222222222222222222222222222"
+    error_message = "The run task runs its repository's image by digest, never a tag."
+  }
+
+  assert {
+    condition = (
+      aws_ecs_task_definition.run[0].cpu == "8192" && aws_ecs_task_definition.run[0].memory == "16384"
+      && aws_ecs_task_definition.run[0].ephemeral_storage[0].size_in_gib == 100
+      && aws_ecs_task_definition.run[0].runtime_platform[0].cpu_architecture == "ARM64"
+      && aws_ecs_task_definition.run[0].requires_compatibilities == toset(["FARGATE"])
+    )
+    error_message = "Fargate, 8 vCPU, 16 GB, 100 GiB of ephemeral storage, arm64 (ADR-0020 (1) 2)."
+  }
+
+  assert {
+    condition = (
+      jsondecode(aws_ecs_task_definition.run[0].container_definitions)[0].entryPoint == ["timeout", "--signal=TERM", "--kill-after=120s", "6h", "debate-research"]
+      && jsondecode(aws_ecs_task_definition.run[0].container_definitions)[0].command == ["--json", "caselist", "pull"]
+      && jsondecode(aws_ecs_task_definition.run[0].container_definitions)[0].stopTimeout == 120
+      && jsondecode(aws_ecs_task_definition.run[0].container_definitions)[0].linuxParameters.initProcessEnabled
+    )
+    error_message = "The command is `debate-research --json caselist pull`, naming no caselist, under a 6-hour deadline in the container (ADR-0020 (1) 6, (5))."
+  }
+
+  assert {
+    condition = {
+      for variable in jsondecode(aws_ecs_task_definition.run[0].container_definitions)[0].environment : variable.name => variable.value
+      } == {
+      DEBATE_ENV                             = "dev"
+      DEBATE_ALLOW_NETWORK                   = "true"
+      DEBATE_CASELIST__API_ENABLED           = "true"
+      DEBATE_CASELIST__TOKEN_BACKEND         = "secretsmanager"
+      DEBATE_CASELIST__TOKEN_SECRET_ID       = "debate-mock-caselist-token"
+      DEBATE_CASELIST__SECRETS_REGION        = "us-east-1"
+      DEBATE_STORAGE__DATA_DIR               = "/var/lib/debate-research/dev"
+      DEBATE_STORAGE__S3__AWS_PROFILE        = ""
+      DEBATE_STORAGE__VOLUME_WARNING_PERCENT = "70"
+      DEBATE_PARSE__WORKERS                  = "8"
+      AWS_REGION                             = "us-east-1"
+    }
+    error_message = "The run's environment is names and switches (ADR-0020 (5)): the token store's Secrets Manager backend, no AWS profile, 8 parse workers, the 70% volume warning. No secret, and no password secret's name."
+  }
+
+  assert {
+    condition     = !can(jsondecode(aws_ecs_task_definition.run[0].container_definitions)[0].secrets) && !strcontains(aws_ecs_task_definition.run[0].container_definitions, "password")
+    error_message = "No secret reaches the run through ECS's `secrets` field, and nothing in its definition names the password."
+  }
+
+  assert {
+    condition     = aws_ecs_task_definition.run[0].task_role_arn == "arn:aws:iam::111122223333:role/debate-mock-caselist-run" && aws_ecs_task_definition.run[0].execution_role_arn == "arn:aws:iam::111122223333:role/debate-mock-caselist-run-execution"
+    error_message = "The run task's role is the run role; its execution role is its own."
+  }
+
+  assert {
+    condition = alltrue([
+      for action in flatten([for statement in jsondecode(aws_iam_role_policy.run_execution.policy).Statement : statement.Action]) :
+      !startswith(action, "secretsmanager:") && !startswith(action, "kms:") && !startswith(action, "s3:")
+    ])
+    error_message = "The run's execution role pulls the image and writes the log: no secret, no key, no bucket."
+  }
+
+  assert {
+    condition     = jsondecode(aws_ecs_task_definition.login[0].container_definitions)[0].image == jsondecode(aws_ecs_task_definition.run[0].container_definitions)[0].image
+    error_message = "The login and the run run the same image, by the same digest."
+  }
+}
+
+run "the_run_schedule_starts_after_the_login_and_is_disabled_by_default" {
+  command = apply
+
+  variables {
+    image_digest = "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+  }
+
+  assert {
+    condition = (
+      aws_scheduler_schedule.run[0].schedule_expression == "cron(0 6 ? * WED *)"
+      && aws_scheduler_schedule.run[0].schedule_expression_timezone == "America/Chicago"
+    )
+    error_message = "The run starts every Wednesday at 06:00 America/Chicago (ADR-0020 (2), When the login runs)."
+  }
+
+  assert {
+    # Field by field: the same zone, the same day of the week, a later hour, so daylight saving
+    # moves both and the run never starts before the login that renews its token.
+    condition = (
+      aws_scheduler_schedule.run[0].schedule_expression_timezone == aws_scheduler_schedule.login[0].schedule_expression_timezone
+      && slice(split(" ", trimsuffix(trimprefix(aws_scheduler_schedule.run[0].schedule_expression, "cron("), ")")), 2, 6) == slice(split(" ", trimsuffix(trimprefix(aws_scheduler_schedule.login[0].schedule_expression, "cron("), ")")), 2, 6)
+      && tonumber(split(" ", trimprefix(aws_scheduler_schedule.run[0].schedule_expression, "cron("))[1]) > tonumber(split(" ", trimprefix(aws_scheduler_schedule.login[0].schedule_expression, "cron("))[1])
+    )
+    error_message = "The run must start after the Wednesday 03:00 America/Chicago login, never before it."
+  }
+
+  assert {
+    condition     = aws_scheduler_schedule.run[0].state == "DISABLED" && aws_scheduler_schedule.login[0].state == "ENABLED" && output.run_schedule_state == "DISABLED"
+    error_message = "The run's schedule ships disabled until v1-e40-t04's bucket mode and lock (the PM's ruling); the login's is enabled as t02 left it."
+  }
+
+  assert {
+    condition = (
+      aws_scheduler_schedule.run[0].target[0].arn == "arn:aws:ecs:us-east-1:111122223333:cluster/debate-mock-caselist-run"
+      && aws_scheduler_schedule.run[0].target[0].ecs_parameters[0].task_definition_arn == "arn:aws:ecs:us-east-1:111122223333:task-definition/debate-mock-caselist-run:3"
+      && aws_scheduler_schedule.run[0].target[0].ecs_parameters[0].launch_type == "FARGATE"
+      && aws_scheduler_schedule.run[0].target[0].ecs_parameters[0].platform_version == "LATEST"
+      && aws_scheduler_schedule.run[0].target[0].ecs_parameters[0].enable_execute_command == false
+      && aws_scheduler_schedule.run[0].target[0].ecs_parameters[0].network_configuration[0].assign_public_ip == true
+      && aws_scheduler_schedule.run[0].target[0].ecs_parameters[0].network_configuration[0].security_groups == toset(["sg-0000000000000000a"])
+      && length(aws_scheduler_schedule.run[0].target[0].ecs_parameters[0].network_configuration[0].subnets) > 0
+    )
+    error_message = "The schedule starts Terraform's revision of the run on the run's cluster: on-demand Fargate, platform 1.4.0 or later, no ECS Exec, a public address, the run's security group."
+  }
+
+  assert {
+    condition     = aws_scheduler_schedule.run[0].target[0].ecs_parameters[0].network_configuration[0].subnets == aws_scheduler_schedule.login[0].target[0].ecs_parameters[0].network_configuration[0].subnets
+    error_message = "The login runs in the run's subnets: one network for both tasks."
+  }
+
+  assert {
+    condition     = aws_scheduler_schedule.run[0].target[0].retry_policy[0].maximum_retry_attempts == 0 && aws_scheduler_schedule.run[0].flexible_time_window[0].mode == "OFF"
+    error_message = "Never twice in a week, and never late by a window: a second run would spend the week's downloads again."
+  }
+
+  assert {
+    condition = toset(flatten([
+      for statement in jsondecode(aws_iam_role_policy.run_scheduler[0].policy).Statement : statement.Resource
+      if statement.Action == "iam:PassRole"
+      ])) == toset([
+      "arn:aws:iam::111122223333:role/debate-mock-caselist-run",
+      "arn:aws:iam::111122223333:role/debate-mock-caselist-run-execution",
+    ])
+    error_message = "The run's scheduler passes the run's two roles and no other."
+  }
+
+  assert {
+    condition = anytrue([
+      for statement in jsondecode(aws_iam_role_policy.run_scheduler[0].policy).Statement :
+      statement.Action == "ecs:RunTask" && statement.Resource == "arn:aws:ecs:us-east-1:111122223333:task-definition/debate-mock-caselist-run:3"
+      && try(statement.Condition.ArnEquals["ecs:cluster"], "") == "arn:aws:ecs:us-east-1:111122223333:cluster/debate-mock-caselist-run"
+    ])
+    error_message = "The run's scheduler runs this one revision, on the run's cluster only."
+  }
+
+  assert {
+    condition     = jsondecode(aws_iam_role.run_scheduler[0].assume_role_policy).Statement[0].Condition.StringEquals["aws:SourceArn"] == "arn:aws:scheduler:us-east-1:111122223333:schedule/default/debate-mock-caselist-run"
+    error_message = "Only the run schedule may assume the run's scheduler role."
+  }
+}
+
+run "run_schedule_enabled_turns_the_run_on" {
+  command = apply
+
+  variables {
+    image_digest         = "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+    run_schedule_enabled = true
+  }
+
+  assert {
+    condition     = aws_scheduler_schedule.run[0].state == "ENABLED"
+    error_message = "run_schedule_enabled = true enables the run's schedule (the cutover, v1-e40-t06)."
+  }
+}
+
+# ---------------------------------------------------------------------------------------------
+# Debate<Env>CaselistRunDeployer: passes the run's roles, never the login's
+# ---------------------------------------------------------------------------------------------
+
+run "the_deployer_passes_the_run_roles_and_never_the_login_roles" {
+  command = apply
+
+  assert {
+    condition     = aws_ssoadmin_permission_set.deployer[0].name == "DebateDevCaselistRunDeployer" && length(aws_ssoadmin_permission_set.deployer[0].name) <= 32 && aws_ssoadmin_permission_set.deployer[0].session_duration == "PT1H"
+    error_message = "The deployer is DebateDevCaselistRunDeployer, inside Identity Center's 32 characters, with one-hour sessions."
+  }
+
+  assert {
+    condition = toset(flatten([
+      for statement in jsondecode(aws_ssoadmin_permission_set_inline_policy.deployer[0].inline_policy).Statement : flatten([statement.Resource])
+      if statement.Effect == "Allow" && contains(flatten([statement.Action]), "iam:PassRole")
+      ])) == toset([
+      "arn:aws:iam::111122223333:role/debate-mock-caselist-run",
+      "arn:aws:iam::111122223333:role/debate-mock-caselist-run-execution",
+    ])
+    error_message = "The deployer may pass the run role and the run's execution role, and no other role."
+  }
+
+  assert {
+    condition = alltrue([
+      for statement in jsondecode(aws_ssoadmin_permission_set_inline_policy.deployer[0].inline_policy).Statement :
+      try(statement.Condition.StringEquals["iam:PassedToService"], "") == "ecs-tasks.amazonaws.com"
+      if statement.Effect == "Allow" && contains(flatten([statement.Action]), "iam:PassRole")
+    ])
+    error_message = "The deployer passes the run's roles to ECS tasks and to nothing else (iam:PassedToService)."
+  }
+
+  assert {
+    condition = anytrue([
+      for statement in jsondecode(aws_ssoadmin_permission_set_inline_policy.deployer[0].inline_policy).Statement :
+      statement.Effect == "Deny" && contains(flatten([statement.Action]), "iam:PassRole")
+      && length(setsubtract(toset([
+        "arn:aws:iam::111122223333:role/debate-mock-caselist-login",
+        "arn:aws:iam::111122223333:role/debate-mock-caselist-login-execution",
+      ]), toset(flatten([statement.Resource])))) == 0
+      && !can(statement.Condition)
+    ])
+    error_message = "The deployer is refused, outright, passing the login role or the login's execution role (ADR-0020 (2), Who can make the login role run)."
+  }
+
+  assert {
+    condition = alltrue([
+      for statement in jsondecode(aws_ssoadmin_permission_set_inline_policy.deployer[0].inline_policy).Statement :
+      alltrue([for action in flatten([statement.Action]) : !contains(["*", "iam:*", "ecs:*", "ecr:*"], action) && !startswith(action, "secretsmanager:") && !startswith(action, "kms:") && !startswith(action, "s3:")])
+      if statement.Effect == "Allow"
+    ])
+    error_message = "The deployer reads no secret, uses no key, touches no bucket and holds no wildcard."
+  }
+
+  assert {
+    condition = anytrue([
+      for statement in jsondecode(aws_ssoadmin_permission_set_inline_policy.deployer[0].inline_policy).Statement :
+      statement.Action == "ecs:RunTask" && statement.Resource == "arn:aws:ecs:us-east-1:111122223333:task-definition/debate-mock-caselist-run:*"
+      && try(statement.Condition.ArnEquals["ecs:cluster"], "") == "arn:aws:ecs:us-east-1:111122223333:cluster/debate-mock-caselist-run"
+    ])
+    error_message = "The deployer starts the run's family, on the run's cluster, and nothing else: never the login's family."
+  }
+
+  assert {
+    condition     = length(aws_ssoadmin_account_assignment.deployer) == 1 && output.deployer_profile_name == "debate-mock-caselist-run-deployer"
+    error_message = "The deployer is assigned to the user named, and its profile is debate-<env>-caselist-run-deployer."
+  }
+}
+
+run "prod_names_its_own_deployer_inside_thirty_two_characters" {
+  command = apply
+
+  variables {
+    name_prefix = "debate-prod-caselist"
+    environment = "prod"
+  }
+
+  assert {
+    condition     = aws_ssoadmin_permission_set.deployer[0].name == "DebateProdCaselistRunDeployer" && length(aws_ssoadmin_permission_set.deployer[0].name) <= 32
+    error_message = "prod's deployer is DebateProdCaselistRunDeployer, 29 characters (v1-e40-t02's lesson: Identity Center allows 32)."
   }
 }

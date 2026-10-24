@@ -81,3 +81,8 @@ output "removal_profile_name" {
   description = "The name to give the takedown SSO profile for this environment (debate-dev-evidence-removal / debate-prod-evidence-removal)."
   value       = local.removal_profile_name
 }
+
+output "operator_policy_json" {
+  description = "The everyday evidence permissions, the EvidenceOperator permission set's inline policy, as JSON. The weekly cloud run's role holds this same document (v1-e40-t03, ADR-0020 (3)), so the run never does more with the evidence than the everyday credential: it lists, reads and publishes, and never deletes."
+  value       = local.operator_policy
+}

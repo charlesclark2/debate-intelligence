@@ -217,8 +217,8 @@ variable "evidence_search_accounts_user_names" {
 
 # --- The weekly caselist run in the cloud (v1-e40-t02-secrets-token-store-and-login, ADR-0020) ---
 #
-# Identical in both roots; the person is in the gitignored owner.auto.tfvars, and the login task's
-# placement comes from v1-e40-t03 at apply B.
+# Identical in both roots; the people are in the gitignored owner.auto.tfvars. The image digest is
+# what scripts/caselist_run_deploy.sh prints after a push (v1-e40-t03).
 
 variable "caselist_credential_writer_user_names" {
   description = <<-EOT
@@ -230,25 +230,36 @@ variable "caselist_credential_writer_user_names" {
   default     = []
 }
 
-variable "caselist_login_task" {
+variable "caselist_run_deployer_user_names" {
   description = <<-EOT
-    The run's cluster, public subnets, security group, image repository and the digest of a pushed
-    image, from v1-e40-t03. Null, the default, applies the credentials only (apply A); set, it adds
-    the login task definition pinned by that digest and its Wednesday schedule (apply B).
+    The Identity Center users assigned this environment's CaselistRunDeployer permission set,
+    which scripts/caselist_run_deploy.sh runs as: push the run's image, register its task
+    definition, start a run by hand. Adult maintainers only. Supplied through the gitignored
+    owner.auto.tfvars.
   EOT
-  type = object({
-    cluster_arn        = string
-    subnet_ids         = list(string)
-    security_group_ids = list(string)
-    repository_arn     = string
-    repository_url     = string
-    image_digest       = string
-  })
-  default = null
+  type        = list(string)
+  default     = []
+}
+
+variable "caselist_image_digest" {
+  description = <<-EOT
+    The digest of the run image scripts/caselist_run_deploy.sh pushed, sha256:<64 hex digits>. Null,
+    the default, applies the credentials, the network, the cluster, the repository and the deployer;
+    set, it adds the login and run task definitions, pinned by this digest, and their Wednesday
+    schedules (apply B).
+  EOT
+  type        = string
+  default     = null
 }
 
 variable "caselist_login_schedule_enabled" {
   description = "Whether the Wednesday login schedule is enabled once it exists. False pauses the weekly login without destroying it."
   type        = bool
   default     = true
+}
+
+variable "caselist_run_schedule_enabled" {
+  description = "Whether the Wednesday 06:00 run schedule is enabled once it exists. False, the default, until v1-e40-t04's bucket mode and the cutover (v1-e40-t06)."
+  type        = bool
+  default     = false
 }

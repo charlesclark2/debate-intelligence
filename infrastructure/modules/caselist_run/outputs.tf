@@ -34,7 +34,7 @@ output "login_role_arn" {
 }
 
 output "run_role_name" {
-  description = "The run's role, the only reader of the token. v1-e40-t03 and t04 add its other grants."
+  description = "The run's role: the only reader of the token, with the everyday evidence permissions and nothing more."
   value       = aws_iam_role.run.name
 }
 
@@ -54,11 +54,71 @@ output "credential_writer_profile_name" {
 }
 
 output "login_task_definition_arn" {
-  description = "The login task definition, pinned by digest. Null until login_task is set (apply B)."
+  description = "The login task definition, pinned by digest. Null until image_digest is set (apply B)."
   value       = local.create_login_task ? aws_ecs_task_definition.login[0].arn : null
 }
 
 output "login_schedule_name" {
-  description = "The Wednesday login schedule. Null until login_task is set (apply B)."
+  description = "The Wednesday login schedule. Null until image_digest is set (apply B)."
   value       = local.create_login_task ? aws_scheduler_schedule.login[0].name : null
+}
+
+output "cluster_name" {
+  description = "The run's ECS cluster, debate-<env>-caselist-run, which both tasks run on."
+  value       = aws_ecs_cluster.run.name
+}
+
+output "repository_name" {
+  description = "The run's image repository, debate-<env>-caselist-run, which scripts/caselist_run_deploy.sh pushes to."
+  value       = aws_ecr_repository.run.name
+}
+
+output "repository_url" {
+  description = "Where scripts/caselist_run_deploy.sh pushes the run image."
+  value       = aws_ecr_repository.run.repository_url
+}
+
+output "run_subnet_ids" {
+  description = "The run's two public subnets."
+  value       = [for subnet in aws_subnet.public : subnet.id]
+}
+
+output "run_security_group_id" {
+  description = "The tasks' security group: no inbound rule, outbound HTTPS only."
+  value       = aws_security_group.run.id
+}
+
+output "run_log_group_name" {
+  description = "The run's log group, debate-<env>-caselist-run."
+  value       = aws_cloudwatch_log_group.run.name
+}
+
+output "run_task_family" {
+  description = "The run task definition's family, debate-<env>-caselist-run."
+  value       = local.run_family
+}
+
+output "run_task_definition_arn" {
+  description = "The run task definition Terraform made, pinned by digest, which the schedule runs. Null until image_digest is set (apply B)."
+  value       = local.create_run_task ? aws_ecs_task_definition.run[0].arn : null
+}
+
+output "run_schedule_name" {
+  description = "The Wednesday 06:00 America/Chicago run schedule. Null until image_digest is set (apply B)."
+  value       = local.create_run_task ? aws_scheduler_schedule.run[0].name : null
+}
+
+output "run_schedule_state" {
+  description = "ENABLED or DISABLED. Disabled until v1-e40-t06's cutover turns run_schedule_enabled on. Null until apply B."
+  value       = local.create_run_task ? aws_scheduler_schedule.run[0].state : null
+}
+
+output "deployer_permission_set_name" {
+  description = "Debate<Env>CaselistRunDeployer, which scripts/caselist_run_deploy.sh runs as. Null when no Identity Center instance was given."
+  value       = local.create_permission_sets ? aws_ssoadmin_permission_set.deployer[0].name : null
+}
+
+output "deployer_profile_name" {
+  description = "The SSO profile name the runbook configures for the deployer, and scripts/caselist_run_deploy.sh uses by default."
+  value       = local.deployer_profile_name
 }

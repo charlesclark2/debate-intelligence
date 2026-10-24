@@ -674,6 +674,11 @@ run "operator_permission_set_reads_and_publishes_but_cannot_delete" {
     condition     = output.operator_profile_name == "debate-dev-evidence"
     error_message = "The operator's SSO profile name must follow name_prefix, as the runbook and v1-e29-t05 assume."
   }
+
+  assert {
+    condition     = output.operator_policy_json == aws_ssoadmin_permission_set_inline_policy.evidence_operator[0].inline_policy
+    error_message = "operator_policy_json is the permission set's own policy: the weekly cloud run's role holds it as the everyday evidence permissions (v1-e40-t03), so what this run asserts of the one holds of the other."
+  }
 }
 
 run "removal_permission_set_deletes_disclosed_material_and_nothing_else" {

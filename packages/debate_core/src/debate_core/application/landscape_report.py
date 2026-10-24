@@ -66,17 +66,23 @@ report: a round is a count, a team is a count. :func:`round_id` names a round by
 
 from __future__ import annotations
 
-import hashlib
-import json
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date
 from typing import Final
 
-from debate_core.application.caselist.path_parser import UNKNOWN_SCHOOL, UNKNOWN_TEAM_CODE
 from debate_core.application.caselist.publish_plan import source_key
 from debate_core.application.errors import DomainError
+from debate_core.application.landscape_counts import (
+    AFF_SIDE,
+    LANDSCAPE_SIDE,
+    NEG_SIDE,
+    CountedReads,
+    CountedRound,
+    round_id,
+    team_identity,
+)
 from debate_core.application.landscape_staleness import (
     LandscapeStaleness,
     with_stale_banner,
@@ -98,7 +104,7 @@ from debate_core.arguments.landscape.source_headings import (
     heading_path,
     normalize_source_heading,
 )
-from debate_core.domain.caselist import Disclosure, Side
+from debate_core.domain.caselist import Disclosure
 from debate_core.domain.landscape import Position, PositionKind, PositionSide, Taxonomy
 from debate_core.domain.landscape_classification import (
     DETERMINISTIC_PROMPT_VERSION,
@@ -134,12 +140,10 @@ __all__ = [
     "round_id",
 ]
 
-_ROUND_ID_DIGITS: Final = 16
 _SIDE_ORDER: Final = {PositionSide.AFF: 0, PositionSide.NEG: 1, PositionSide.BOTH: 2}
 _KIND_ORDER: Final = {kind: index for index, kind in enumerate(PositionKind)}
-_AFF: Final = "aff"
-_NEG: Final = "neg"
-_LANDSCAPE_SIDE: Final = {Side.AFF: _AFF, Side.PRO: _AFF, Side.NEG: _NEG, Side.CON: _NEG}
+_AFF: Final = AFF_SIDE
+_NEG: Final = NEG_SIDE
 _OPPOSITE: Final = {PositionSide.AFF: _NEG, PositionSide.NEG: _AFF}
 """The round side on which a placement under a position of this side answers it."""
 
@@ -155,37 +159,6 @@ def overrides_digest(rules: OverrideRules) -> str:
     reports with the same digest counted under the same decisions.
     """
     return rules.digest_for(one.heading for one in rules.overrides)
-
-
-def _team(disclosure: Disclosure) -> tuple[str, str] | None:
-    if disclosure.school == UNKNOWN_SCHOOL or disclosure.team_code == UNKNOWN_TEAM_CODE:
-        return None
-    return (disclosure.school.casefold(), disclosure.team_code.casefold())
-
-
-def _round_identity(disclosure: Disclosure) -> tuple[str, ...]:
-    team = _team(disclosure)
-    tournament = disclosure.tournament.casefold() if disclosure.tournament else ""
-    label = disclosure.round_label
-    played = (label.normalized or label.raw.casefold()) if label is not None else ""
-    labelled = team is not None and bool(tournament) and bool(played)
-    return (
-        disclosure.caselist,
-        *(team or ("", "")),
-        _LANDSCAPE_SIDE.get(disclosure.side, ""),
-        tournament,
-        played,
-        "" if labelled else disclosure.source_sha256,
-    )
-
-
-def round_id(disclosure: Disclosure) -> str:
-    """The round a disclosure belongs to, as 16 hex digits that show none of its fields.
-
-    `v1-e32-t09` names a round by this when it assigns the round its aff.
-    """
-    identity = json.dumps(_round_identity(disclosure), ensure_ascii=False)
-    return hashlib.sha256(identity.encode()).hexdigest()[:_ROUND_ID_DIGITS]
 
 
 def landscape_cards(
@@ -326,6 +299,12 @@ class LandscapeReportService:
 
     def build(self, inputs: LandscapeReportInputs, staleness: LandscapeStaleness) -> LandscapeReport:
         """The report alone. :meth:`bundle` is what writes it out."""
+        return self._count(inputs, staleness)[0]
+
+    def _count(
+        self, inputs: LandscapeReportInputs, staleness: LandscapeStaleness
+    ) -> tuple[LandscapeReport, CountedReads]:
+        """The report, and the rounds and reads it was counted from."""
         if staleness.newest_snapshot is None or staleness.age_days is None:
             raise ReportCannotShip(
                 f"the staleness check found no snapshot of {inputs.caselist}, so the report cannot say "
@@ -443,7 +422,14 @@ class LandscapeReportService:
                 identified[PLACED_CARD_METHOD] += 1
         read_rounds = {one for read in reads.values() for one in read}
         neg_placed = {one for position_id in neg_positions for one in reads.get(position_id, ())}
-        return LandscapeReport(
+        counted = CountedReads(
+            rounds={
+                one: CountedRound(side=stated.side, team=stated.team, first_seen=stated.first_seen)
+                for one, stated in rounds.items()
+            },
+            reads={position_id: frozenset(read) for position_id, read in reads.items()},
+        )
+        report = LandscapeReport(
             header=ReportHeader(
                 caselist=inputs.caselist,
                 snapshot=in_range.snapshots[-1],
@@ -491,6 +477,7 @@ class LandscapeReportService:
                 AffIdentification(method=method, rounds=count) for method, count in sorted(identified.items())
             ),
         )
+        return report, counted
 
 
 def _ranked[RowT: TopCard](
@@ -565,8 +552,8 @@ def _read_range(inputs: LandscapeReportInputs) -> _Range:
         found = rounds.get(one)
         if found is None:
             found = rounds[one] = _Round(
-                side=_LANDSCAPE_SIDE.get(disclosure.side, ""),
-                team=_team(disclosure),
+                side=LANDSCAPE_SIDE.get(disclosure.side, ""),
+                team=team_identity(disclosure),
                 first_seen=disclosure.snapshot,
             )
         found.first_seen = min(found.first_seen, disclosure.snapshot)

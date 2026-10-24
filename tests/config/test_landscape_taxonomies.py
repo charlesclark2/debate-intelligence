@@ -15,7 +15,8 @@
   each heading is one the normalizer can produce, and the same personal-data check runs over their
   headings (the PM's ruling of 2026-10-23): a decision copies a heading teams wrote into the
   repository, so it is held to what an alias is held to.
-* **Nothing else is in the directory**, so the seeding CSV and the review queue, which hold real
+* **Nothing else is in the directory** but the release lock (`released.yaml`, `v1-e32-t08`, checked
+  in `test_landscape_released_ids.py`), so the seeding CSV and the review queue, which hold real
   headings, cannot be committed beside the files by mistake.
 
 No caselist slug or topic id is written here: the files are found by reading the directory.
@@ -32,6 +33,7 @@ import pytest
 from debate_core.arguments.landscape.headings import normalize_heading
 from debate_core.domain.landscape import Taxonomy
 from debate_core.domain.landscape_classification import OverrideRules
+from debate_core.integrations.landscape.released_ids import RELEASED_FILE
 from debate_core.integrations.landscape.yaml_taxonomy_repository import (
     OVERRIDE_DIRECTORY,
     TAXONOMY_DIRECTORY,
@@ -153,10 +155,11 @@ def test_no_override_names_a_team_a_school_or_a_person(path: Path) -> None:
     assert override_findings(load_override_file(path)) == []
 
 
-def test_the_directory_holds_only_the_topic_map_taxonomies_and_overrides() -> None:
+def test_the_directory_holds_only_the_topic_map_taxonomies_overrides_and_release_lock() -> None:
     found = sorted(str(path.relative_to(CONFIG)) for path in CONFIG.rglob("*") if path.is_file())
     allowed = [
         TOPICS_FILE,
+        RELEASED_FILE,
         *(f"{TAXONOMY_DIRECTORY}/{path.name}" for path in TAXONOMY_FILES),
         *(f"{OVERRIDE_DIRECTORY}/{path.name}" for path in OVERRIDE_FILES),
     ]

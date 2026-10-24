@@ -52,6 +52,7 @@ __all__ = [
     "load_override_file",
     "load_taxonomy_file",
     "load_topic_map",
+    "read_config_file",
     "render_override_file",
 ]
 
@@ -80,7 +81,8 @@ def _construct_unique_mapping(loader: yaml.SafeLoader, node: yaml.MappingNode) -
 _UniqueKeyLoader.add_constructor(yaml.resolver.BaseResolver.DEFAULT_MAPPING_TAG, _construct_unique_mapping)
 
 
-def _read(path: Path) -> object:
+def read_config_file(path: Path) -> object:
+    """One YAML file under `config/landscape/`, refusing a key given twice; errors name the file."""
     try:
         return yaml.load(path.read_text(encoding="utf-8"), Loader=_UniqueKeyLoader)  # noqa: S506
     except (OSError, UnicodeDecodeError) as error:
@@ -92,7 +94,7 @@ def _read(path: Path) -> object:
 def load_topic_map(path: Path) -> TopicMap:
     """Read and check `topics.yaml` alone, for a caller that needs no taxonomy (the seeding script)."""
     try:
-        return TopicMap.model_validate(_read(path))
+        return TopicMap.model_validate(read_config_file(path))
     except ValidationError as error:
         raise TaxonomyConfigError(str(path), str(error)) from error
 
@@ -100,7 +102,7 @@ def load_topic_map(path: Path) -> TopicMap:
 def load_taxonomy_file(path: Path) -> Taxonomy:
     """Read and check one taxonomy file on its own; its `topic_id` must be the file's stem."""
     try:
-        taxonomy = Taxonomy.model_validate(_read(path))
+        taxonomy = Taxonomy.model_validate(read_config_file(path))
     except ValidationError as error:
         raise TaxonomyConfigError(str(path), str(error)) from error
     if taxonomy.topic_id != path.stem:
@@ -113,7 +115,7 @@ def load_taxonomy_file(path: Path) -> Taxonomy:
 def load_override_file(path: Path) -> OverrideRules:
     """Read and check one overrides file on its own; its `topic_id` must be the file's stem."""
     try:
-        rules = OverrideRules.model_validate(_read(path))
+        rules = OverrideRules.model_validate(read_config_file(path))
     except ValidationError as error:
         raise TaxonomyConfigError(str(path), str(error)) from error
     if rules.topic_id != path.stem:

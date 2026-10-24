@@ -253,7 +253,12 @@ def _version_key(version: str) -> tuple[int, ...]:
 def _version_findings(
     topic_id: str, releases: tuple[TaxonomyRelease, ...], current: Taxonomy
 ) -> list[ReleaseFinding]:
-    """A version below the latest release, or a released version whose positions have changed."""
+    """A version below the latest release, or a released version whose positions have changed.
+
+    At a released version, each id added, removed or changed in kind or side is named. An edit the
+    ids, kinds and sides do not show (an alias, a label, a tag keyword) is found by the digest,
+    which cannot say which position changed, so that finding names none.
+    """
     latest = max(releases, key=lambda release: _version_key(release.taxonomy_version))
     if _version_key(current.taxonomy_version) < _version_key(latest.taxonomy_version):
         return [
@@ -288,6 +293,18 @@ def _version_findings(
                 position_id=position_id,
                 rule=ReleaseRule.CHANGED_WITHOUT_BUMP,
                 detail=detail,
+            )
+        )
+    if not findings and positions_digest(current) != same.positions_digest:
+        findings.append(
+            ReleaseFinding(
+                topic_id=topic_id,
+                position_id=None,
+                rule=ReleaseRule.CHANGED_WITHOUT_BUMP,
+                detail=(
+                    f"has positions that changed after {topic_id} {same.taxonomy_version} was released "
+                    "(an alias, a label or another field: their digest no longer matches the lock)"
+                ),
             )
         )
     return findings

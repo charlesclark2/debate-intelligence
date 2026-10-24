@@ -28,6 +28,7 @@ from debate_core.domain.landscape import GENERIC_TOPIC_ID, Taxonomy
 from debate_core.domain.landscape_release import (
     ReleaseFinding,
     ReleaseLock,
+    ReleaseRule,
     TaxonomyRelease,
     merged_into_findings,
     release_findings,
@@ -108,10 +109,15 @@ class _Configuration:
         }
 
     def file_of(self, finding: ReleaseFinding) -> str:
-        """The file to edit for `finding`: the one holding the position now, or the topic's own."""
+        """The file to edit for `finding`: the one holding the position now, or the topic's own.
+
+        A changed digest names no position, and the edit may be in either file, so it names both.
+        """
         topic_file = self.directory / TAXONOMY_DIRECTORY / f"{finding.topic_id}.yaml"
         own = self.files.get(finding.topic_id)
         generic = self.files.get(GENERIC_TOPIC_ID)
+        if finding.position_id is None and finding.rule is ReleaseRule.CHANGED_WITHOUT_BUMP:
+            return f"{topic_file} (with {GENERIC_FILE} merged in)"
         if finding.position_id is None or (own is not None and _holds(own, finding.position_id)):
             return str(topic_file)
         if generic is not None and _holds(generic, finding.position_id):

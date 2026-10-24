@@ -99,8 +99,14 @@ def test_any_field_changes_the_digest_and_a_default_written_out_does_not() -> No
         merged["positions"][0].update(fields)
         return Taxonomy.model_validate(merged)
 
-    assert positions_digest(with_spending_da(deprecated=False, description="")) == positions_digest(taxonomy())
-    for fields in ({"aliases": ("spending da",)}, {"label": "Spending disad"}, {"tag_keywords": ("deficit",)}):
+    assert positions_digest(with_spending_da(deprecated=False, description="")) == positions_digest(
+        taxonomy()
+    )
+    for fields in (
+        {"aliases": ("spending da",)},
+        {"label": "Spending disad"},
+        {"tag_keywords": ("deficit",)},
+    ):
         assert positions_digest(with_spending_da(**fields)) != positions_digest(taxonomy()), fields
 
 

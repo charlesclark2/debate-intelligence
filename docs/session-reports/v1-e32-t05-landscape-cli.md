@@ -27,10 +27,13 @@ an optional `AffAssignmentSource`. Until then the report shows the unidentified 
 **Status: PARTIAL, waiting on one input.** Every node through the smoke check is done, and its
 criteria pass. ac1 to ac3 pass, and ac4 passes in the recorded tier locally.
 
-* **Waiting on:** the PM's item 4 asks for the coach's pass over the review queue to be applied
-  before the PR, and **the sheet in `~/Documents/debate/landscape-seed/` has 0 of 50 decisions
-  filled**. The operator is asked for the filled copy (below). The before-pass coverage is measured
-  and recorded.
+* **The coach's queue pass is applied** (the PM's item 4), as far as it can be today:
+  * five new positions, as taxonomy 1.1.0 (PM ruling (b), Deviation 9);
+  * 41 of the 50 decisions;
+  * coverage measured before and after: cards 48.1% → 50.0%, negative documents with any placed
+    position 35.8% → 40.9%.
+* **Waiting on:** three headings need generic theory and K positions that do not exist (PM
+  question 9), and one needs the coach's word that `uq` is debate vocabulary (Deviation 10).
 * **NOT RUN, so the Goal stays `InProgress`:**
   * ac5 (the first dev run and the coach's review) comes after the merge, so the PR opens with
     `--partial`;
@@ -49,7 +52,7 @@ criteria pass. ac1 to ac3 pass, and ac4 passes in the recorded tier locally.
 | cli-command | Done | `commands/landscape.py`, registered as the `landscape` group's `report`. The composition root gains `landscape_run` |
 | publish | Done | Through `EvidenceObjectStore`: `head` each key, upload where the recorded digest differs, check the stored digest. Tested against moto in the CLI and against a filesystem store in core |
 | smoke-check | Done | `tests/smoke/test_landscape_smoke.py`, recorded tier, and a row in `tests/smoke/README.md` |
-| first-dev-run | Partly done | `docs/data/landscape/first-run-policy.md` records the before-pass coverage. The after-pass coverage waits on the coach's sheet; the dev run and the coach's review are operator follow-ups after the merge |
+| first-dev-run | Partly done | The coach's queue pass is applied: five positions (taxonomy 1.1.0) and 41 decisions in `config/landscape/overrides/policy-2026-27-nhi.yaml`, `tests/config` 23 passed. `docs/data/landscape/first-run-policy.md` records coverage before and after. The dev run and the coach's review are operator follow-ups after the merge |
 
 ## Acceptance criteria
 
@@ -251,10 +254,43 @@ header names today is `none`.
    run as an operator follow-up. Mine was read-only, had no `--publish`, so it asked no bucket, and
    took 46 s. Agreement 2 lets a session run that. The operator's dry run, with `--publish`, is
    still the first follow-up. Question 6.
-8. **"A failed weekly run shows as stale" is only half met.** The staleness hook now gets the run
+8. **"A failed weekly run shows as stale" is only half met** (ruling 4: the PM files the E34 task). The staleness hook now gets the run
    log, and a cap-bound run makes the report stale (tested). The hook is v1-e34-t03's, and it judges
    a failed run only by the snapshot's age, so a run that failed this week still reads as current
    for up to 8 days. I did not change the hook. Question 4.
+
+9. **The taxonomy gains five positions here** (PM ruling 2026-10-24, (b)). The PM's brief asked
+   only for decisions to be applied, but the coach's sheet named five positions the taxonomy did not
+   have. The coach's ids, in the file's style: `debt-da`, `ai-da`, `democracy-da`,
+   `sustainability-advantage` and `biotech-advantage`. Each has the PM's label and its queue heading
+   as its one alias.
+   * `taxonomy_version` 1.0.0 → 1.1.0, in the file (with a note of what was added) and in
+     `topics.yaml`. Nothing has been released, so v1-e32-t08's rule is not engaged.
+   * `tests/config` passes. Its alias checks fail on a planted bad alias (4 failed), and the file
+     was restored byte for byte.
+   * t09's ac3 bumps again on top of this. Whichever PR merges second rebases the taxonomy file.
+10. **The pass applies 41 of the 50 decisions.** The rest:
+    * **Two headings the coach's sheet flags** as possibly naming a school or tournament, though
+      filled `None`, are left out: a `none` would still put the heading in a committed file.
+    * **Two he left blank.**
+    * **`pharma`**, read on both sides, stays blank. One heading takes one decision.
+    * **Two `Theory` headings and one `Kritiks` heading** wait on generic positions (question 9).
+    * **`uq`**, decided `none`, is refused by the personal-data check
+      (`test_no_override_names_a_team_a_school_or_a_person`) as shaped like a team code. It is the
+      check working: a real-data red run. No hspolicy26 disclosure uses `UQ` as a team code (0 of 555
+      team-code directories in 9,052 paths). The check's own rule is that a real two-letter word goes
+      into `SHORT_WORDS` in `tests/config` in the same change, and I have not done that without the
+      coach's word that it is "uniqueness".
+    * Two typos were corrected on the coach's say-so (`disease-a` to `disease-advantage`,
+      `framework` to `framework-t`), and his `-adv` ids map to `-advantage`.
+    * The decisions file is outside the repository:
+      `~/Documents/debate/landscape-seed/policy-2026-27-nhi-decisions-2026-10-24.csv`. It was
+      written from the coach's Numbers sheet, exported to `…-queue-top-50-filled.csv`. The original
+      CSV and the Numbers file are untouched.
+11. **One decision moves cards between kinds.** `framework` → `framework-t` moves 96 cards from Ks
+    to T, because under a K's own block the heading is the K's framework. That is most of why K
+    documents fall from 151 to 145 and T rises from 138 to 209. No card loses a placement: 1,657 are
+    newly placed, and 291 move to another position. Question 10.
 
 ## Decisions and assumptions
 
@@ -492,6 +528,36 @@ v1-e32-t05 questions (session, 2026-10-24)
 8. Where the first dev run is made: this task's worktree after the merge and
    before `scripts/task finish --partial`, so the code is exactly what merged.
    Recommendation: yes; dev-preview is kept for site deploys.
+```
+
+Second block, after the coach's queue pass (2026-10-24):
+
+```text
+v1-e32-t05, the coach's queue pass, applied (session, 2026-10-24)
+
+Applied: taxonomy 1.1.0 with the five positions (your ruling (b)), and 41 of
+the coach's 50 decisions; tests/config passes. Cards placed 48.1% -> 50.0%;
+neg documents with any placed position 35.8% -> 40.9%; full table in
+docs/data/landscape/first-run-policy.md.
+
+9. For two `Theory` headings and one `Kritiks` heading the coach wants one
+   generic theory position and a generic K (his words: "one theory id for those
+   arguments", "a generic-k label"). generic.yaml holds Policy's other Ks and
+   theory positions.
+   (a) Add `generic-theory` ("Theory") and `generic-k` ("Generic K") to
+       generic.yaml, Policy only, with those headings as aliases; generic.yaml
+       1.0.0 -> 1.1.0, the Policy topic stays at the unreleased 1.1.0; then
+       apply the three decisions.
+   (b) Leave the three headings undecided for the first report.
+   Recommendation: (a); the coach asked for both, they are format-level, and
+   folding them into the unreleased 1.1.0 costs no second bump.
+
+10. `framework` -> framework-t (the coach's decision) moves 96 cards from Ks to
+    T, since under a K's own block "framework" is the K's framework. K
+    documents 151 -> 145, T 138 -> 209. Keep it, or leave `framework` blank
+    like `pharma` (read both ways)?
+    Recommendation: ask the coach with that number in front of him; if he
+    keeps it, keep it.
 ```
 
 ## PM review

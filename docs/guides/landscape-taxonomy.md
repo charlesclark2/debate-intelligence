@@ -15,7 +15,8 @@ Where things are:
 | A topic's positions | `config/landscape/taxonomies/<topic id>.yaml`, e.g. [`policy-2026-27-nhi.yaml`](../../config/landscape/taxonomies/policy-2026-27-nhi.yaml) |
 | Positions every topic of an event shares: generic Ks, framework, theory | [`config/landscape/taxonomies/generic.yaml`](../../config/landscape/taxonomies/generic.yaml) |
 | Your decisions on headings the matcher could not place | `config/landscape/overrides/<topic id>.yaml`, written for you from the review queue ([below](#the-review-queue-and-your-decisions)) |
-| The check every edit must pass | [`tests/config/test_landscape_taxonomies.py`](../../tests/config/test_landscape_taxonomies.py) |
+| The ids published reports have released, which no edit may delete or change | [`config/landscape/released.yaml`](../../config/landscape/released.yaml), written for you ([below](#released-ids-and-the-lock-file)) |
+| The checks every edit must pass | [`tests/config/test_landscape_taxonomies.py`](../../tests/config/test_landscape_taxonomies.py) and [`tests/config/test_landscape_released_ids.py`](../../tests/config/test_landscape_released_ids.py) |
 | The models, the source of truth if this page and they disagree | `debate_core.domain.landscape` and `debate_core.integrations.landscape.yaml_taxonomy_repository` |
 
 Matching headings to positions in a report is `v1-e32-t02`; the report itself is `v1-e32-t03`; the
@@ -83,10 +84,10 @@ an ordinary name for the position.
 
 ## Check your edit
 
-Every edit is checked by one command, which takes a second:
+Every edit is checked by one command, which takes a few seconds:
 
 ```bash
-uv run pytest tests/config/test_landscape_taxonomies.py
+uv run pytest tests/config
 ```
 
 A mistake fails it with the file and the problem named, for example
@@ -185,6 +186,64 @@ An alias may stay on the retired position instead of moving, but never on both.
 A report classified under one version must mean the same thing under the next, so an id is never
 deleted and never reused for a different argument, even after it is retired. Retire it instead. A
 renamed position gets a new id; the old one points at it with `merged_into`.
+
+## Released ids and the lock file
+
+An id is *released* once a report counted under its version has been published. From then on the
+check holds it to the rule above. [`config/landscape/released.yaml`](../../config/landscape/released.yaml)
+records, for each topic and each released version, every position id with its kind and side.
+That covers retired positions, and generic.yaml's positions for the topic's event, since the report
+counted those too. It holds nothing else: no labels, no counts. Until the first report is published
+it is empty (`releases: []`), and every edit passes.
+
+Against that file, `tests/config/test_landscape_released_ids.py` refuses, naming the file, the id
+and the rule:
+
+| Refused | What to do instead |
+|---|---|
+| A released id is missing from the file | Put it back and retire it: `deprecated: true`, with `merged_into` if it was renamed or merged |
+| A released id's `kind` or `side` changed | Put it back as it was, retire it, and add a new id for the different argument |
+| The file is at a released version, but its ids, kinds or sides differ from that version's | Bump `taxonomy_version`, in the file and in `topics.yaml` |
+| The file's version is below one already released | Bump it past the released one |
+| A `merged_into` names a retired position | Point it at the position the argument is counted under now |
+
+A label may change at any time, released or not: a rename that still names the same argument keeps
+its id. The check compares ids, kinds and sides only, so it does not notice an alias or label edit
+made without a bump. [Bump `taxonomy_version`](#bump-taxonomy_version) for those as the table below
+says.
+
+### When the operator writes it
+
+The operator writes the lock **when a report under a new `taxonomy_version` is first published**,
+that is, right after the first `debate-research landscape report --publish` whose report shows a
+version the lock does not have yet. The version is the `Taxonomy version` row at the top of
+`report.md`, and `taxonomy_version` in the command's `--json` output. Run it in a worktree up to
+date with `dev`, with the topic id and that version:
+
+```bash
+uv run python scripts/release_landscape_taxonomy.py --topic policy-2026-27-nhi --version 1.1.0
+```
+
+It prints `Released policy-2026-27-nhi 1.1.0: N position ids written to ...`, where N is above
+zero. It reads the committed files in `config/landscape/` and nothing else. It refuses, writing
+nothing, when the topic's file is not at exactly that version (so a lock written late cannot record
+a later edit), when that version is already in the lock, and when the files already break a
+released id. Then check the files and look at what changed:
+
+```bash
+uv run pytest tests/config
+git diff config/landscape/released.yaml
+```
+
+The diff adds one release, with the topic's ids. Commit `released.yaml` in the next PM batch or the
+next task's pull request. A weekly report under a version that is already released needs nothing.
+
+**The first published report** is `v1-e32-t05`'s first `--publish`, of the Policy topic at 1.1.0.
+If this check is on `dev` by then, the operator runs the command above right after that publish. If
+the publish came first, the operator runs it afterwards with the version that report shows, as long
+as the taxonomy file is still at that version. Run it before any later edit bumps the file, because
+the command refuses a version the file has moved past. Whichever of `v1-e32-t05` and `v1-e32-t08`
+merges second adds this step to the first-publish steps of `v1-e32-t05`'s run instructions.
 
 ## Bump `taxonomy_version`
 

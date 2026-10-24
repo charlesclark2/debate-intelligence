@@ -188,9 +188,27 @@ v1-e01-t31 questions (session finished; every acceptance criterion PASS, phase S
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-24
 
 **Notes:**
+
+1. **The narrowing is right, and it is proven both ways.**
+   * Red against the old scanner and against a scanner that flags nothing.
+   * Every figure a session had to reword now passes.
+   * Every declaration shape still fails, including ruff's `py312`.
+   * The two first-pass survivors were deleted rather than justified. The two final survivors are
+     equivalent, as argued.
+   * Dropping `min` from the units for "Python 3.12 min" is exactly the care this check needs.
+2. **The extra pyright fixes are accepted as within ac2's goal.** The `.get` reads change only a
+   failure's message, as the Deviations show.
+3. **Rulings**
+   * **Q1 (a).** The PM files an E01 task: CI's pyright `include` gains `tests/architecture` and
+     `tests/smoke`, with `extraPaths = ["scripts"]`, and the two scoped ignores this task added are
+     removed.
+   * **Q2:** accepted as is. The name in the PM's brief was wrong, and the doc already carries the
+     right one from v1-e01-t30. That is the PM's error, and nothing in the spec needs changing.
+
+**The PR:** opened without `--partial`. No condition.

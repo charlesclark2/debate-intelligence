@@ -15,18 +15,19 @@ metadata:
     debate/title: "A released position id is never deleted or reused"
 spec:
   # Filed by the PM, 2026-10-23, from v1-e32-t01's follow-up work (the id rule is documented in the coach's guide, not enforced).
+  # PM ruling 2026-10-24 (v1-e32-t08's review): the label clause is replaced by "a merged_into naming a retired position; a label may change".
+  # PM ruling 2026-10-24 (v1-e32-t08's review): each release in the lock also holds its positions digest (sha256 of every field as canonical JSON); an edit at a released version whose digest no longer matches is refused.
   description: >-
     docs/guides/landscape-taxonomy.md says a position id, once released, is never deleted or
     reused: it is retired with `deprecated` or `merged_into`, so a report counted under an
     earlier taxonomy_version still names real positions. Nothing enforces it. Add a check, run
     by the config tests in CI, that compares every taxonomy file under
     config/landscape/taxonomies/ with its released form and refuses: an id that was released and
-    is now missing; an id whose kind or side changed instead of a new id being made; a released
-    id that now names a different position (its label changed past a rename the file records);
-    and a file whose positions changed without its taxonomy_version (and topics.yaml's) being
-    bumped. "Released" is the form on `origin/dev` at the first commit that published a report
+    is now missing; an id whose kind or side changed instead of a new id being made; a
+    merged_into naming a retired position; a label may change; and a file whose positions changed
+    without its taxonomy_version (and topics.yaml's) being bumped. "Released" is the form on `origin/dev` at the first commit that published a report
     under that version, recorded in a committed lock file (config/landscape/released.yaml: topic
-    id, version, the ids and their kind and side), written by a small command the operator runs
+    id, version, the ids and their kind and side, and the positions digest), written by a small command the operator runs
     when a report is first published, so CI never needs the network or git history beyond the
     checkout. Must be merged before v1-e32-t05's first published report.
   priority: 2
@@ -88,6 +89,7 @@ spec:
           - type: test_passes
             name: Taxonomy config tests pass
             command: uv
-            args: [run, pytest, tests/config/test_landscape_taxonomies.py]
+            # PM ruling 2026-10-24 (v1-e32-t08's review): run all of tests/config, which holds the released-ids check.
+            args: [run, pytest, tests/config]
 status:
   phase: Pending

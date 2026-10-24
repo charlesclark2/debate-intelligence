@@ -296,4 +296,7 @@ def test_a_password_secret_in_another_shape_is_refused_without_quoting_it(
         TabroomPasswordSecret(ManagedSecret(secrets_manager.client, PASSWORD_SECRET)).read()
 
     assert unreadable.value.__cause__ is None
+    assert unreadable.value.__suppress_context__, (
+        "the decoder's error, which quotes the secret, rides along as the context"
+    )
     assert_never_shown(str(unreadable.value), {"the password": password.replace('"', "'")}, "the error")

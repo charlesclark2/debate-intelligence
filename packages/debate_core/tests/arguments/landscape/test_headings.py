@@ -11,13 +11,17 @@ the real thing (`Sample Squad`, `Harbor Classic R3`), never a real team, school 
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
+import yaml
 
 from debate_core.arguments.landscape.headings import NormalizedHeading, normalize_heading
 from debate_core.domain.landscape import ALIAS_PATTERN
 
 READ = False
 ANSWER = True
+POLICY_TAXONOMY = Path(__file__).resolve().parents[5] / "config/landscape/taxonomies/policy-2026-27-nhi.yaml"
 
 CASES: list[tuple[str, str, str, bool]] = [
     # rule, raw heading, normalized text, answer marker
@@ -95,6 +99,20 @@ CASES: list[tuple[str, str, str, bool]] = [
         "theory 50 state fiat bad",
         ANSWER,
     ),
+    # v1-e32-t02 found these two missing the costs-advantage aliases; v1-e32-t09 fixes them.
+    ("an advantage's number before its name", "Adv 1 Costs", "adv costs", READ),
+    ("an advantage's number in words before a colon", "Advantage One: Costs", "advantage costs", READ),
+    ("an advantage's number in words before a dash", "Advantage Two - Coverage", "advantage coverage", READ),
+    ("an advantage's roman number", "Advantage II Disease", "advantage disease", READ),
+    ("an advantage's number after a period", "Adv. 3 Growth", "adv growth", READ),
+    ("an advantage's number with a hash", "Advantage #1 Costs", "advantage costs", READ),
+    ("an advantage's number after a round prefix", "1AC Adv 2 Coverage", "adv coverage", READ),
+    # The PM's ruling of 2026-10-24 widens the rule to numbered DAs, CPs and contentions.
+    ("a DA's number before its name", "DA 1 Midterms", "da midterms", READ),
+    ("a disad's number in words before a colon", "Disad Two: Pharma", "disad pharma", READ),
+    ("a CP's number before its name", "CP 2 States", "cp states", READ),
+    ("a counterplan's roman number before a dash", "Counterplan III - Courts", "counterplan courts", READ),
+    ("a contention's number in words before a colon", "Contention One: Costs", "contention costs", READ),
 ]
 
 KEPT: list[tuple[str, str, str]] = [
@@ -108,6 +126,15 @@ KEPT: list[tuple[str, str, str]] = [
     ("an offset is not off", "Offsets CP", "offsets cp"),
     ("a final that is not a round", "Final Rule CP", "final rule cp"),
     ("a number that is not a version", "Section 1332 Waiver CP", "section 1332 waiver cp"),
+    ("a number that is part of an advantage's name", "Advantage 340B Pricing", "advantage 340b pricing"),
+    (
+        "a number after advantage further into a heading",
+        "Costs Advantage 2 Hospitals",
+        "costs advantage 2 hospitals",
+    ),
+    ("a two-digit number that names a counterplan", "CP 50 State Fiat", "cp 50 state fiat"),
+    ("a section number after a counterplan's word", "CP 1332 Waiver", "cp 1332 waiver"),
+    ("a number after da further into a heading", "Spending DA 2 Link", "spending da 2 link"),
 ]
 
 
@@ -132,3 +159,21 @@ def test_a_normalized_heading_is_a_fixed_point_and_reads_as_an_alias(raw: str) -
 def test_an_empty_heading_is_empty() -> None:
     assert normalize_heading("   ") == NormalizedHeading(text="", answer=False)
     assert normalize_heading("   ").is_empty
+
+
+@pytest.mark.parametrize("raw", ["Adv 1 Costs", "Advantage One: Costs"])
+def test_a_numbered_advantage_heading_reaches_the_committed_costs_advantage_aliases(raw: str) -> None:
+    """The two forms `v1-e32-t02` found missing the costs advantage, against the committed Policy file."""
+    taxonomy = yaml.safe_load(POLICY_TAXONOMY.read_text(encoding="utf-8"))
+    aliases = next(one["aliases"] for one in taxonomy["positions"] if one["id"] == "costs-advantage")
+    assert normalize_heading(raw).text in aliases
+
+
+@pytest.mark.parametrize(
+    ("raw", "position_id"), [("DA 1 Midterms", "midterms-da"), ("CP 2 States", "states-cp")]
+)
+def test_a_numbered_da_or_cp_heading_reaches_the_committed_aliases(raw: str, position_id: str) -> None:
+    """The widened rule (PM ruling, 2026-10-24), against the committed Policy file."""
+    taxonomy = yaml.safe_load(POLICY_TAXONOMY.read_text(encoding="utf-8"))
+    aliases = next(one["aliases"] for one in taxonomy["positions"] if one["id"] == position_id)
+    assert normalize_heading(raw).text in aliases

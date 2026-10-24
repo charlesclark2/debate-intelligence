@@ -63,9 +63,19 @@ class PlantedCaselist:
         disclosures: Sequence[tuple[str, str]] = (),
         outcome: SourceOutcome = SourceOutcome.PARSED,
         version: str = PARSER_VERSION,
+        content: bytes | None = None,
     ) -> str:
-        """Plant one source named `name`, disclosed at each `(snapshot, path)`; return its digest."""
-        digest = hashlib.sha256(name.encode()).hexdigest()
+        """Plant one source named `name`, disclosed at each `(snapshot, path)`; return its digest.
+
+        With `content`, the source is those bytes: its digest is theirs, and they are written to the
+        blob store as `caselist parse` would find them (`v1-e32-t09` reads plan texts from them).
+        """
+        digest = hashlib.sha256(content if content is not None else name.encode()).hexdigest()
+        if content is not None:
+            blob = self.data_dir / "blobs" / "sha256" / digest[:2] / digest[2:4] / digest
+            blob.parent.mkdir(parents=True, exist_ok=True)
+            blob.write_bytes(content)
+        size = len(content) if content is not None else 100
         first = min((snapshot for snapshot, _ in disclosures), default="2026-09-01")
         common = {
             "caselist": self.caselist,
@@ -80,7 +90,7 @@ class PlantedCaselist:
             {
                 **common,
                 "source_format": "DOCX",
-                "byte_size": 100,
+                "byte_size": size,
                 "outcome": outcome,
                 "reason": None if parsed else "NOT_A_ZIP",
                 "cards": len(cards) if parsed else 0,
@@ -124,7 +134,7 @@ class PlantedCaselist:
                     "classification": "NEW",
                     "path": path,
                     "sha256": digest,
-                    "byte_size": 100,
+                    "byte_size": size,
                     "format": "DOCX",
                 }
             )

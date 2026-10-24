@@ -59,13 +59,22 @@ class CaselistNames:
     def __call__(self, text: str) -> str:
         found = self._done.get(text)
         if found is None:
-            found = text
-            for school, codes in self._schools:
-                if f" {school} " in f" {found} ":
-                    found = _without_words(found, (school, *codes))
+            found = self.without_schools(text)
             if found != text:
                 found = normalize_heading(found).text
             self._done[text] = found
+        return found
+
+    def without_schools(self, text: str) -> str:
+        """`text`, lowercase words one space apart, without any school and the codes beside it.
+
+        Not normalized again, so words that are not a heading (a plan text's, `v1-e32-t09`) keep their
+        shape.
+        """
+        found = text
+        for school, codes in self._schools:
+            if f" {school} " in f" {found} ":
+                found = _without_words(found, (school, *codes))
         return found
 
 

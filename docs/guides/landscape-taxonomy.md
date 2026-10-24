@@ -228,6 +228,59 @@ the way an alias is written, and:
 4. **A heading that matches nothing stays unplaced.** It is never guessed into the nearest-looking
    position, and a card under nothing but such headings goes to the review queue.
 
+## How an affirmative round's aff is identified
+
+Headings name the plan in under a fifth of Policy affirmative files, so the report does not rely on
+them for the aff. Each affirmative round gets its aff from the first of these that says it, and the
+report shows which one did:
+
+1. **Its plan text** (`PLAN_TEXT`). The paragraph directly under a heading or label such as `Plan`,
+   `Plan Text` or `PT`, or a `Plan:` line holding the text itself, names an aff when it holds one of
+   that aff's aliases or tag keywords. `medicare for all` and `m4a` count as single payer until you
+   name a child aff for them. A child named with its parent counts as the child; two unrelated affs
+   named together count as neither. A paragraph that only looks like a plan text, with no label
+   above it, identifies nothing.
+2. **A card the matcher placed under an aff** in that round (`PLACED_CARD`), as for any position.
+3. **The team's other rounds** (`TEAM_CARRY`). When every identified round of a team names one aff,
+   its other affirmative rounds count under it too, but only rounds whose files hold no plan text of
+   their own. A round whose plan text names something else, or no aff at all, is never carried into,
+   and a team whose rounds name two affs carries nothing.
+
+A round none of these identifies is counted as unidentified. The caselist's own round titles and cite
+entries are not read: this project does not take them from the site this season.
+
+Reading a plan text means opening the file again, since the parsed card store keeps cards only, so
+what is read is kept beside the classification cache, at
+`~/.debate-research/dev/landscape/plan_texts/<caselist>.jsonl`: where each plan text is, digests and
+the aff ids it names. Never its words. Adding an alias or tag keyword to an aff makes the next run
+read every affirmative file again (a few minutes on the Mac that holds the store).
+
+## The plan-text sheet and your mechanisms
+
+The plan-text sheet lists what plans teams read, grouped by the words that tell one plan text from
+another. Words nearly every plan text shares (`united states federal government should establish`,
+and the like) are left out as the frame. Each group shows its commonest plan text word for word, with
+how many of its files hold it exactly, and a group one team reads is listed too (data-use policy 1.13).
+No school or team is named beside a text, and a plan text that names a school is not shown. The
+operator writes it outside the repository; it will not replace an answers file you have begun:
+
+```bash
+uv run python scripts/assign_landscape_affs.py sheet --caselist hspolicy26 --out ~/Documents/debate/landscape-seed
+```
+
+That writes `policy-2026-27-nhi-plan-texts.md` and `plan-text-answers.csv` there. For each cluster that
+is a mechanism of single payer, fill the CSV's two last columns:
+
+| Column | What to write |
+|---|---|
+| `mechanism_name` | A short name in sentence case, e.g. `Payroll levy` |
+| `tag_keywords` | Words that mark the mechanism in a plan text or a card's tag, separated by `;`, e.g. `payroll levy; payroll tax` |
+
+Leave both blank to keep a cluster under its aff. Each named mechanism becomes a child aff of single
+payer in the taxonomy file with your keywords, and the version is bumped (a minor bump: new positions).
+The next run reads every affirmative file again and counts rounds under the child their plan text
+names. Your keywords also refine cards placed under single payer by their tags, as rule 3 above says.
+
 ## The review queue and your decisions
 
 Each run writes a review queue: the headings that cards nothing placed sit under, one row each, with

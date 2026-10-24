@@ -34,6 +34,7 @@ from decimal import ROUND_HALF_UP, Decimal
 from itertools import groupby
 from typing import Final
 
+from debate_core.arguments.landscape.aff_assignment import PLAN_TEXT_METHOD, TEAM_CARRY_METHOD
 from debate_core.domain.landscape import PositionKind, PositionSide
 from debate_core.domain.landscape_report import (
     PLACED_CARD_METHOD,
@@ -96,7 +97,13 @@ _KIND_HEADINGS: Final = {
     PositionKind.CONTENTION: "Contentions",
     PositionKind.RESPONSE: "Responses",
 }
-_METHOD_LABELS: Final = {PLACED_CARD_METHOD: "A card in the round placed under the aff"}
+_METHOD_LABELS: Final = {
+    PLACED_CARD_METHOD: "A card in the round placed under the aff",
+    PLAN_TEXT_METHOD: "The round's plan text names the aff",
+    TEAM_CARRY_METHOD: "The team's other rounds name the aff",
+}
+_TITLES_NOT_READ: Final = "The caselist's own round titles and cite entries are not read this season."
+"""The PM's ruling of 2026-10-24 (`v1-e32-t09`): the site's round and cite titles are not taken."""
 _MARKDOWN_SPECIAL: Final = re.compile(r"([\\`*_\[\]<>|])")
 _WHITESPACE: Final = re.compile(r"\s+")
 _THOUSANDTH: Final = Decimal("0.001")
@@ -336,7 +343,7 @@ def _unclassified_section(report: LandscapeReport) -> list[str]:
         f"| {_METHOD_LABELS.get(one.method, one.method)} (`{one.method}`) | {one.rounds:,} |"
         for one in report.aff_identification
     ]
-    lines += [f"| Not identified | {summary.aff_rounds_unidentified:,} |", ""]
+    lines += [f"| Not identified | {summary.aff_rounds_unidentified:,} |", "", _TITLES_NOT_READ, ""]
     return lines
 
 

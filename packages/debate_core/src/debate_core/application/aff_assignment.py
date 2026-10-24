@@ -1,0 +1,217 @@
+"""Each affirmative round's aff for the landscape report, by plan text and by the team's other rounds.
+
+`v1-e32-t09` ac4, through `v1-e32-t03`'s seam. :func:`build_aff_assignments` turns a caselist's
+on-topic disclosures, `v1-e32-t02`'s classifications and each affirmative file's plan-text verdict
+(:class:`~debate_core.application.plan_texts.PlanTextService`) into the
+:class:`~debate_core.domain.landscape_report.AffAssignment` values the report counts:
+
+* **a round** is t03's: :func:`~debate_core.application.landscape_report.round_id` of its
+  disclosures, so the report and this module always mean the same round; only affirmative (or pro)
+  rounds dated on or before `through` are assigned;
+* **a placed aff** is t03's `PLACED_CARD` rule: a card of the round's files `v1-e32-t02` placed under
+  an aff (through its `merged_into` links), READS, at or above the review threshold;
+* **the assignment** is :func:`~debate_core.arguments.landscape.aff_assignment.assign_affs`':
+  `PLAN_TEXT`, then `TEAM_CARRY`, and a round no signal identifies is not assigned.
+
+A team is the round's school and team code, compared without case, and is only ever an opaque key
+here. Nothing is written or logged.
+
+:class:`AffAssignmentService` is the producer `v1-e32-t05`'s run takes (the PM's note of 2026-10-24),
+as an :class:`AffAssignmentSource`: for a caselist and a through date it reads the caselist's sources
+on its topic as `v1-e32-t02`'s classifier does, reads each affirmative file's plan text
+(:class:`~debate_core.application.plan_texts.PlanTextService`, cached), classifies the cards
+(:class:`~debate_core.application.position_classification.PositionClassificationService`, cached),
+and returns :func:`build_aff_assignments`' assignments.
+"""
+
+from __future__ import annotations
+
+import dataclasses
+from collections import defaultdict
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field
+from datetime import date
+from typing import Final, Protocol, runtime_checkable
+
+from debate_core.application.caselist.evidence_listing import LocalEvidence
+from debate_core.application.caselist.parse_sources import enumerate_sources
+from debate_core.application.caselist.path_parser import UNKNOWN_SCHOOL, UNKNOWN_TEAM_CODE
+from debate_core.application.errors import DomainError
+from debate_core.application.landscape_report import round_id
+from debate_core.application.landscape_seeding import read_seed_sources
+from debate_core.application.plan_texts import PlanTextRun, PlanTextService
+from debate_core.application.ports.classification_store import ClassificationStore
+from debate_core.application.ports.parsed_store import ParsedStore
+from debate_core.application.ports.suppression import SuppressionList
+from debate_core.application.ports.taxonomy_repository import TaxonomyRepository
+from debate_core.application.position_classification import PositionClassificationService
+from debate_core.arguments.landscape.aff_assignment import AffRound, AssignmentCounts, assign_affs
+from debate_core.arguments.landscape.plan_text import DocumentPlanText, PlanTextVocabulary
+from debate_core.arguments.landscape.review_queue import DEFAULT_REVIEW_THRESHOLD, needs_review
+from debate_core.domain.caselist import Disclosure, Side
+from debate_core.domain.landscape import PositionKind, Taxonomy
+from debate_core.domain.landscape_classification import ItemKind, PositionClassification, PositionRole
+from debate_core.domain.landscape_report import AffAssignment
+
+_AFFIRMATIVE: Final = frozenset({Side.AFF, Side.PRO})
+
+__all__ = [
+    "AffAssignmentCannotStart",
+    "AffAssignmentRun",
+    "AffAssignmentService",
+    "AffAssignmentSource",
+    "build_aff_assignments",
+]
+
+
+class AffAssignmentCannotStart(DomainError):
+    """The caselist's through date is on no topic with a taxonomy, or no affirmative source was read."""
+
+
+@runtime_checkable
+class AffAssignmentSource(Protocol):
+    """What a landscape run asks for its affirmative rounds' affs."""
+
+    async def aff_assignments(self, caselist: str, through: date) -> tuple[AffAssignment, ...]:
+        """Each affirmative round of `caselist` disclosed on or before `through` that a signal identifies."""
+        ...
+
+
+@dataclass(frozen=True, slots=True)
+class AffAssignmentRun:
+    assignments: tuple[AffAssignment, ...] = field(repr=False)
+    counts: AssignmentCounts
+    aff_teams: int
+    """Distinct teams with an affirmative round in range."""
+    identified_teams: int
+    """Of those, teams with a round assigned an aff or left to a placed card."""
+    plan_texts: PlanTextRun | None = field(default=None, repr=False)
+    """The plan-text reading the assignments were made from, when :class:`AffAssignmentService` read it."""
+
+
+class AffAssignmentService:
+    """The producer of each affirmative round's aff, for a caselist and a through date."""
+
+    def __init__(
+        self,
+        *,
+        store: ParsedStore,
+        local: LocalEvidence,
+        suppression: SuppressionList,
+        taxonomies: TaxonomyRepository,
+        classifications: ClassificationStore,
+        plan_texts: PlanTextService,
+    ) -> None:
+        self._store = store
+        self._local = local
+        self._suppression = suppression
+        self._taxonomies = taxonomies
+        self._classifications = classifications
+        self._plan_texts = plan_texts
+
+    async def aff_assignments(self, caselist: str, through: date) -> tuple[AffAssignment, ...]:
+        return (await self.run(caselist, through)).assignments
+
+    async def run(self, caselist: str, through: date, *, version: str | None = None) -> AffAssignmentRun:
+        """The assignments with their counts and the plan-text reading behind them.
+
+        `version` names the parsed store's version directory; the newest by default.
+        """
+        resolved = self._taxonomies.resolve(caselist, through)
+        if resolved is None or resolved.taxonomy is None:
+            raise AffAssignmentCannotStart(
+                f"topics.yaml puts {caselist} on {through} on no topic with a taxonomy"
+            )
+        reading = await read_seed_sources(
+            store=self._store,
+            local=self._local,
+            suppression=self._suppression,
+            topic=resolved.topic,
+            caselist=caselist,
+            version=version,
+            through=through,
+        )
+        affirmative = {
+            source.sha256
+            for source in reading.sources
+            if any(team.side in _AFFIRMATIVE for team in source.teams)
+        }
+        documents = [
+            one.source_document()
+            for one in await enumerate_sources(self._local, caselist)
+            if one.sha256 in affirmative
+        ]
+        taxonomy = self._taxonomies.taxonomy(resolved.topic.id)
+        plan_texts = await self._plan_texts.read(caselist, documents, PlanTextVocabulary(taxonomy))
+        classified = await PositionClassificationService(
+            taxonomies=self._taxonomies, store=self._classifications
+        ).classify(reading)
+        built = build_aff_assignments(
+            disclosures=reading.disclosures,
+            through=through,
+            classifications=classified.classifications,
+            plan_texts=plan_texts.verdicts,
+            taxonomy=taxonomy,
+        )
+        return dataclasses.replace(built, plan_texts=plan_texts)
+
+
+def build_aff_assignments(
+    *,
+    disclosures: Sequence[Disclosure],
+    through: date,
+    classifications: Sequence[PositionClassification],
+    plan_texts: Mapping[str, DocumentPlanText],
+    taxonomy: Taxonomy,
+    review_threshold: float = DEFAULT_REVIEW_THRESHOLD,
+) -> AffAssignmentRun:
+    """Every affirmative round in range assigned its aff where a signal names one, with counts."""
+    documents: defaultdict[str, set[str]] = defaultdict(set)
+    teams: dict[str, str | None] = {}
+    by_source: defaultdict[str, set[str]] = defaultdict(set)
+    for disclosure in disclosures:
+        if disclosure.side not in _AFFIRMATIVE or disclosure.snapshot > through:
+            continue
+        one = round_id(disclosure)
+        documents[one].add(disclosure.source_sha256)
+        teams[one] = _team(disclosure)
+        by_source[disclosure.source_sha256].add(one)
+    placed: defaultdict[str, set[str]] = defaultdict(set)
+    for item in classifications:
+        if (
+            item.item_kind is not ItemKind.CARD
+            or item.position_id is None
+            or item.role is not PositionRole.READS
+            or needs_review(item, review_threshold)
+        ):
+            continue
+        position = taxonomy.resolve(item.position_id)
+        if position.kind is PositionKind.AFF and not position.deprecated:
+            for one in by_source.get(item.source_sha256, ()):
+                placed[one].add(position.id)
+    rounds = [
+        AffRound(round_key=one, team=teams[one], documents=tuple(sorted(documents[one])))
+        for one in sorted(documents)
+    ]
+    assigned, counts = assign_affs(
+        rounds,
+        plan_texts,
+        {one: frozenset(found) for one, found in placed.items()},
+        PlanTextVocabulary(taxonomy),
+    )
+    keys = {one.round_key for one in assigned} | set(placed)
+    return AffAssignmentRun(
+        assignments=tuple(
+            AffAssignment(round_id=one.round_key, position_id=one.position_id, method=one.method)
+            for one in assigned
+        ),
+        counts=counts,
+        aff_teams=len({team for team in teams.values() if team is not None}),
+        identified_teams=len({teams[one] for one in keys if teams.get(one) is not None}),
+    )
+
+
+def _team(disclosure: Disclosure) -> str | None:
+    if disclosure.school == UNKNOWN_SCHOOL or disclosure.team_code == UNKNOWN_TEAM_CODE:
+        return None
+    return f"{disclosure.school.casefold()}/{disclosure.team_code.casefold()}"

@@ -186,3 +186,24 @@ def test_markdown_counts_carry_thousands_separators_and_the_csv_does_not() -> No
     )
     assert "| Classification coverage | 60,987 of 126,681 cards (48.1%);" in render_markdown(large)
     assert "# coverage_cards=60987/126681\n" in render_top_cards_csv(large, header_metadata(large))
+
+
+def test_plan_text_and_team_carry_identifications_have_labels() -> None:
+    """`v1-e32-t09`'s two methods, as the method table names them."""
+    from debate_core.application.landscape_report import round_id
+    from debate_core.domain.caselist import Side
+    from debate_core.domain.landscape_report import AffAssignment
+
+    inputs = read_synthetic_caselist(FIXTURE)
+    aff_rounds = sorted({round_id(one) for one in inputs.disclosures if one.side is Side.AFF})
+    aff_id = next(one.id for one in inputs.taxonomy.positions if one.kind.value == "aff")
+    assigned = dataclasses.replace(
+        inputs,
+        aff_assignments=(
+            AffAssignment(round_id=aff_rounds[0], position_id=aff_id, method="PLAN_TEXT"),
+            AffAssignment(round_id=aff_rounds[1], position_id=aff_id, method="TEAM_CARRY"),
+        ),
+    )
+    report = LandscapeReportService().bundle(assigned, synthetic_staleness()).files["report.md"]
+    assert "| The round's plan text names the aff (`PLAN_TEXT`) | 1 |" in report
+    assert "| The team's other rounds name the aff (`TEAM_CARRY`) | 1 |" in report

@@ -10,56 +10,63 @@
 
 ## Summary
 
-This session did the two parts of the task that needed no ruling, and stopped where the spec and the
-PM's brief of 2026-10-23 say to stop. The Goal stays **InProgress**: ac2 to ac4 wait for the PM's
-ruling, and ac2 and ac3 then wait for the coach.
+**ac4 and ac2 are built, tested and run on the real store. ac3 waits on the coach.** So the Goal stays
+**InProgress**, and the pull request goes `--partial` as the PM ruled on 2026-10-24, so `v1-e32-t05`
+can use the assignments for the first report. ac3 lands in a follow-up session.
 
-* **The counts**, read-only, counts only, over hspolicy26 through 2026-10-20 with v1-e32-t02's reader
-  ([below](#the-counts-hspolicy26-through-2026-10-20)). No card text, plan text, team code, school or
-  file name is in any output or in this report.
-* **The ruled normalizer fix**: `Adv 1 Costs` and `Advantage One: Costs` now reach the
-  costs-advantage aliases. Its cases were shown failing first, t01's and t02's tests pass, and t02's
-  labeled set is still placed 100%.
+* **Each affirmative round's aff** (ac4). `AffAssignmentService.aff_assignments(caselist, through)`
+  returns `v1-e32-t03`'s `AffAssignment` values, which is the producer t05 asked for. It:
+  * reads each affirmative file's plan text from its own bytes, through the parser port, keeping only
+    derived fields in a local cache;
+  * assigns `PLAN_TEXT` when the paragraph under a plan label names an aff;
+  * assigns `TEAM_CARRY` when a team's identified rounds agree, never into a round whose own plan
+    text names something else;
+  * leaves a round with a placed card to the report's `PLACED_CARD`, and every other round
+    unidentified.
+* **On hspolicy26 through 2026-10-20:** 1,255 of 2,192 affirmative rounds (57.3%) and 298 of 552 teams
+  (54.0%) are identified. Headings alone identify 9.0% of documents.
+  * `PLAN_TEXT` 959, `TEAM_CARRY` 226, and `PLACED_CARD` 70 (left to the report);
+  * 937 rounds are unidentified, and the guard refused 40 carries
+    ([below](#the-real-store-after-the-ruling)).
+* **The coach's sheet** (ac2) is written, outside the repository, at
+  `~/Documents/debate/landscape-seed/policy-2026-27-nhi-plan-texts.md` with its answers CSV:
+  * 959 affirmative documents with a plan text, by 352 teams;
+  * 50 clusters shown, by the mechanism words that differ;
+  * 81 clusters (141 documents) withheld as read by one team.
+  * A scan against all 192 schools and 555 team codes of the caselist found none. Its six hits were
+    ordinary words (below).
+* **The normalizer rule** is widened to numbered DAs, CPs and contentions, as ruled. It changes nothing
+  in today's hspolicy26 beyond the advantage fix of the 23rd.
+* **The spec's ac1** is amended to the affirmative side, with the rulings recorded as a PM-ruling
+  comment.
 
-**Look first at this: the parsed store holds no plan text.** It keeps cards and leaves out every
-other paragraph (`sections`, [parsed-card-store.md](../data/parsed-card-store.md)). A plan text is
-almost always an analytic under a block heading `Plan`, with no card under it. So the store shows
-the heading in only 33 of 1,770 aff documents, and names the aff in none of them.
+**Look first at** [Deviations](#deviations-from-the-spec) 4 and 5:
+* two files outside `constraints.packages`;
+* the sheet built before the PM's note on policy 1.13, which now allows plan texts verbatim.
 
-Read again from the raw sources, in memory, with the same parser version:
-* **1,394 aff documents (78.8%, 448 of 552 teams) have a plan-text label.** In 1,393 of them, the
-  store dropped the paragraph under it.
-* That paragraph **names single payer or Medicare for All in 726 documents (41.0%; 266 teams,
-  48.2%)**, against 159 (9.0%) for the headings today.
-* Together with the headings, 789 documents (44.6%) are identified. Carried across each team's own
-  rounds, with a guard, that rises to 974 (55.0%; 290 teams, 52.5%).
-* **The caselist's own record holds no titles anywhere on this machine.** Round reports and cite
-  entries are API resources this project has never fetched, and the data-use policy does not list
-  them.
-
-The [questions](#questions-for-the-pm) are one paste-ready block with a recommendation each. The
-first is the one everything waits on: **read the raw sources in this task** (my recommendation,
-measured at 0.30 s a document), or change the parser in E31 and re-parse.
+[Question 1](#questions-for-the-pm) asks whether the sheet should show them before the coach reads it.
 
 ## Plan nodes
 
 | Node | Status | Notes |
 |---|---|---|
-| plan-texts | In progress: counts done, waiting on the PM's ruling | Counts and options below. The ruled normalizer fix is done and committed (`7b18d8f`). Extraction, the coach's review sheet and the taxonomy edit come after the ruling (spec, forbidden list) |
+| plan-texts | In progress: ac1, ac2 and ac4 done; ac3 waits on the coach | Counts (2026-10-23), the PM's rulings (2026-10-24), then the normalizer widening, the plan-text reader, the round assignment, the cache, the service, the sheet, the producer and the operator script |
 
 ## Acceptance criteria
 
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
-| ac1: counts per side and by teams of plan-text headings, of the paragraph under them as the store holds it (by unit), and of distinct plan texts, sent to the PM with one to three options, before any change | PASS for the affirmative side, sent here | [The counts](#the-counts-hspolicy26-through-2026-10-20) and [the options](#the-options-for-plan-text-the-store-does-not-keep). The negative side is not counted (Deviations 2, question 8). No parser, store or fingerprint was changed |
-| ac2: after the ruling, a deterministic extraction of each team's plan text and a review sheet outside the repository, by tests on synthetic sources shown failing first | NOT RUN | Waits for the PM's ruling (spec: "change nothing until the PM rules") |
-| ac3: the coach's mechanisms as child affs of single payer with his tag keywords, taxonomy_version bumped, config tests passing | NOT RUN | Waits for the ruling and then for the coach's answers |
-| ac4: counts before any rule of the aff rounds and teams each signal identifies, alone and together, sent to the PM; after the ruling, each identified round carries its aff and the signal, an unidentified round stays unidentified, by tests shown failing first | PARTIAL: the counts are done and sent; the rule waits for the ruling | [Signals alone and together](#signals-alone-and-together). The second half is NOT RUN |
-| plan-texts node: `uv run pytest packages/debate_core/tests/arguments/landscape` | PASS for the code that exists | `.venv/bin/python -m pytest packages/debate_core/tests/arguments/landscape` under `perl -e 'alarm 60'` → 268 passed in 1.61 s. The node is not done: its extraction is still to build |
-| PM brief (3): the two normalizer variants fixed in t01's normalizer, with synthetic cases shown failing first; t01's seeding and t02's matcher tests pass; t02's labeled set still placed 100% | PASS | [The normalizer fix](#the-normalizer-fix-pm-brief-3) |
+| ac1: counts, on the affirmative side and by teams, of plan-text headings, of the paragraph under them as held in the store (by unit), and of distinct plan texts, sent to the PM with one to three options, before any change | PASS | [The counts](#the-counts-hspolicy26-through-2026-10-20) and [the options](#the-options-for-plan-text-the-store-does-not-keep), sent 2026-10-23 and ruled on 2026-10-24. The spec's ac1 now says the affirmative side (ruling 8). No parser, store or fingerprint was changed |
+| ac2: after the ruling, a deterministic extraction of each team's plan text and a review sheet outside the repository grouping them into clusters with team counts, by tests on synthetic sources shown failing first | PASS | Extraction: `plan_text.py` (red 29 failed / 12 passed; then the sheet helpers, 3 failed), `PlanTextService` (10 failed; its words pass, 2 failed). Sheet: `plan_text_sheet.py` (6 failed / 3 passed against hand-written text), `scripts/assign_landscape_affs.py sheet` (5 targeted mutants, each caught). The real sheet: [below](#the-coachs-sheet) |
+| ac3: the coach's mechanisms as child affs of single payer in policy-2026-27-nhi.yaml, with his tag keywords, the taxonomy_version bumped, the config tests passing, and the counts of his decisions in the report | NOT RUN | Waits on the coach's answers to the sheet. A follow-up session applies them (the PM's ruling on order, 2026-10-24) |
+| ac4: counts, before any rule, of the affirmative rounds and teams each signal identifies, alone and together, sent to the PM; after the ruling, each identified round carries its aff and the signal that named it, and an unidentified round stays unidentified, by tests on synthetic sources shown failing first | PASS | Counts: [signals alone and together](#signals-alone-and-together) (2026-10-23). After the ruling: `aff_assignment.py` (red 17 failed / 3 passed), `build_aff_assignments` through t03's `LandscapeReportService` (5 failed), the producer (2 of 3 failed), `assign` (failed before the command existed). Real store: [below](#the-real-store-after-the-ruling) |
+| plan-texts node: `uv run pytest packages/debate_core/tests/arguments/landscape` | PASS | `.venv/bin/python -m pytest packages/debate_core/tests/arguments/landscape` under `perl -e 'alarm 60'` → 376 passed in 6.70 s. The node itself stays open with ac3 |
+| PM brief (3), 2026-10-23: the two normalizer variants fixed with synthetic cases shown failing first; t01's seeding and t02's matcher tests pass; t02's labeled set still placed 100% | PASS | [The normalizer fix](#the-normalizer-fix-pm-brief-3) |
+| PM ruling 9, 2026-10-24: the rule widened to numbered DAs, CPs and contentions, failing cases first, guards like the 340B one, a check against the committed aliases, the real-store effect reported | PASS, with contentions reaching no alias | [Widened](#widened-to-numbered-das-cps-and-contentions-pm-ruling-9); Deviations 3 |
 
 The pytest commands were run as `.venv/bin/python -m pytest <files>` with a `perl -e 'alarm N'`
-limit on the interpreter (working agreement 10).
+limit on the interpreter (working agreement 10). The branch's commits are relative to `dev` at
+`4ba7e4a`, after `scripts/task sync` on 2026-10-24.
 
 ## The counts (hspolicy26, through 2026-10-20)
 
@@ -277,83 +284,332 @@ need analytics. It can be filed then, and the derived cache would be dropped the
   * Their cache keys change with their headings, so t02's cache places those items again on the next
     run, and only those.
 
+
+### Widened to numbered DAs, CPs and contentions (PM ruling 9)
+
+* **The rule** is the advantage rule's, widened to `contention`, `da`, `disad`, `cp` and `counterplan`.
+  A number between the word and a name goes from the front of the heading, so `DA 1 Midterms` becomes
+  `da midterms`, and `CP 2 States` becomes `cp states`.
+* **Numbers are one digit now**, for every kind, advantages included, so `CP 50 State Fiat` keeps the
+  number that names it.
+* **Shown failing first:**
+  * 5 rule cases and 2 checks against the committed aliases (`midterms-da` and `states-cp`) failed, 7
+    in all, with 188 passed;
+  * the 3 new guards passed before the rule, as guards must: `CP 50 State Fiat`, `CP 1332 Waiver`, and
+    `Spending DA 2 Link`, a number further into a heading;
+  * a first CP check written as `CP 2: States` passed before the rule, because the colon already split
+    it, so it was rewritten as `CP 2 States`, which fails.
+  * Green: 195 passed. With the digits widened back to two, the `CP 50 State Fiat` guard fails, so it
+    bites.
+* **t01's and t02's tests** still pass: 357 passed, 2 skipped, the labeled set placed 100% in all
+  three formats.
+* **On the real store** (read-only, 58.8 s), measured against the advantage-only rule of the 23rd: it
+  changes **0** cards' headings.
+  * hspolicy26 has numbered DA headings in 5 documents of 3 teams, all mid-heading, where the rule does
+    not reach. It has no numbered CP or contention heading.
+  * So the widening is a guard for later files.
+* **Contentions reach no alias:** `Contention One: Costs` becomes `contention costs`, and no committed
+  position has a `contention` alias (Deviations 3, question 2).
+
+## What was built after the ruling
+
+| Where | What |
+|---|---|
+| `arguments/landscape/plan_text.py` | Finds each plan text: the paragraph directly under a t01-normalized plan label, or an inline `Plan:` label, in any unit. Reads which aff it names (aliases and tag keywords of aff positions; `medicare for all` and `m4a` name single payer until a position's keywords claim them; a child beats its parent; two unrelated affs conflict). A document's verdict: `NAMES`, `CONFLICTING`, `UNNAMED` (a shaped plan text naming none), `NONE` or `UNREAD`. Keeps derived fields only |
+| `arguments/landscape/aff_assignment.py` | The pure round rule over opaque round keys: `PLAN_TEXT`, then `TEAM_CARRY` with the guard, with counts |
+| `application/ports/plan_text_store.py`, `integrations/landscape/plan_text_store.py` | The cache, `<data_dir>/landscape/plan_texts/<caselist>.jsonl`, keyed by source digest, parser version and vocabulary digest. No text |
+| `application/plan_texts.py` | `PlanTextService`: reads only what the cache lacks, through a `ParseRunner` and the parser port, with `caselist parse`'s blob checks and a placeholder path in place of the disclosure's; `words` reads the sheet's plan texts again in memory, each checked against its cached digest |
+| `arguments/landscape/plan_text_sheet.py` | Clusters plan texts by the mechanism words that differ, withholds clusters fewer than two teams read, takes every caselist school out of the words, and renders the sheet and the answers CSV |
+| `application/aff_assignment.py` | `build_aff_assignments` (t03's `round_id` and `PLACED_CARD` rule), and `AffAssignmentService` with the `AffAssignmentSource` protocol for t05 |
+| `arguments/landscape/render.py` | Labels for `PLAN_TEXT` and `TEAM_CARRY` in the method table, and the note that the caselist's round and cite titles are not read (ruling 4) |
+| `scripts/assign_landscape_affs.py` | `plan-texts`, `assign` and `sheet`, printing counts only |
+| `docs/guides/landscape-taxonomy.md` | How a round's aff is identified, and how the coach answers the plan-text sheet |
+
+## The real store after the ruling
+
+hspolicy26, parser `2026.10.20-docx-6`, through 2026-10-20. Before each run that I ran, the guards
+were checked: no `DEBATE_*` variable set and no `caselist pull` running. Each ran under a 115 s limit
+on the interpreter. The first full pass and the sheet were the operator's (below). Counts only.
+
+**Plan texts** (`plan-texts`):
+
+| Verdict | Aff documents | Aff teams |
+|---|---|---|
+| All affirmative sources | 1,770 | 552 |
+| `NAMES` single payer | **767** | **278** |
+| `UNNAMED`: a plan text naming no aff | 192 | 86 |
+| `NONE`: no plan text | 811 | 284 |
+| `CONFLICTING` | 0 | 0 |
+| `UNREAD` (refused by the parser, or no readable bytes) | 0 | 0 |
+
+`NAMES` is 767 against the counts' 726, because the rule reads every label's paragraph and the counts
+read only the first. `UNNAMED` is the counts' 192 exactly.
+
+**Rounds** (`assign`), by t03's round, so a file read in two rounds counts twice and two files of one
+round count once:
+
+| | Aff rounds | Share |
+|---|---|---|
+| All | 2,192, by 552 teams | |
+| `PLAN_TEXT` | 959 | 43.8% |
+| `TEAM_CARRY` | 226 | 10.3% |
+| Left to the report's `PLACED_CARD` (an aff placed, no plan text naming one) | 70 | 3.2% |
+| **Identified** | **1,255** | **57.3%** |
+| Unidentified | 937 | 42.7% |
+| Of those, the carry refused by the guard (their own plan text names no aff, or a file unread) | 40 | |
+| Of those, with conflicting plan texts | 0 | |
+| Teams with an identified round | **298 of 552** | **54.0%** |
+| Teams whose rounds name two affs | 0 | |
+
+The counts of the 23rd, by document, predicted 55.0% for the same signals with the guard. By t03's
+round it is 57.3%.
+
+**Runtimes:**
+
+| Run | By | Wall-clock |
+|---|---|---|
+| `plan-texts`, first full pass (1,770 sources parsed, 8 workers) | operator | 203.9 s |
+| `plan-texts`, cache warm (1,770 hits) | session | 25.5 s |
+| `assign` (plan texts cached; t02's classification cached) | session | 36.3 s, and 38.3 s through the service |
+| `sheet` (959 sources read again for their words) | operator | 134.3 s |
+
+The cache file is 689 KB for 1,770 readings. A grep for `united states`, `federal government`,
+`should`, `medicare`, `payer`, `establish` and `school` found none of them in it.
+
+## The coach's sheet
+
+`~/Documents/debate/landscape-seed/policy-2026-27-nhi-plan-texts.md` and `plan-text-answers.csv` were
+written by the operator's run, outside the repository:
+
+| Count | Value |
+|---|---|
+| Affirmative documents with a plan text on the sheet (`NAMES` or `UNNAMED`) | 959, by 352 teams |
+| Clusters shown (two or more teams) | 50 |
+| Clusters withheld (one team), and their documents | 81, 141 |
+| Paragraphs that read differently from their cached reading, and sources unread | 0, 0 |
+
+**The scan:** both files against every school of the caselist (192) and every team code (555), by
+whole words, and against each school's first word of four or more letters.
+* No school's name and no school's first word is in either file.
+* There are six hits, all ordinary words. `all` (in `medicare for all`, and in the header) is also one
+  team's code, on four cluster rows and the header. `tag`, in the sheet's own fixed sentence about
+  "tag keywords", is the whole of one school's normalized name.
+
+The scan printed only row labels, and no name went into this report.
+
+## Checks shown failing for their reason
+
+* **Red runs**, each against a skeleton that refused nothing, or before the code existed:
+
+  | Suite | Red |
+  |---|---|
+  | `test_plan_text.py` | 29 failed / 12 passed |
+  | `test_aff_assignment.py` (pure) | 17 failed / 3 passed |
+  | `test_plan_text_store.py` | 3 failed / 4 passed |
+  | `test_plan_texts.py` | 10 failed |
+  | `test_plan_text_sheet.py` | 6 failed / 3 passed |
+  | `test_aff_assignment.py` (application, seam) | 5 failed |
+  | `test_aff_assignment.py` (producer) | 2 failed / 1 passed |
+  | `test_render.py` | 2 failed / 13 passed |
+  | `test_assign_landscape_affs.py`, `assign` | failed before the command existed |
+
+  A refuse-nothing skeleton passes the cases that assert nothing is found by construction.
+* **Written with the code, then shown failing against a stub and restored byte for byte:** the sheet
+  helpers (3 failed) and the words pass (2 failed). The words pass's "writes nothing" guard passes a
+  stub by construction.
+* **18 mutants of `plan_text.py` and `aff_assignment.py`.** Each ran in a fresh process, with bytecode
+  writing off and `__pycache__` cleared, and each file was restored byte for byte. No Hypothesis is
+  used.
+  * First run: 14 caught.
+  * Two first runs proved nothing. One mutant failed at collection (a syntax error, not a catch,
+    agreement 8) and one did not apply (ruff had reflowed the line). Both were re-aimed and caught: no
+    narrowing within a round (1 failed), carried into a round with an unnamed plan text (2 failed).
+  * **One survived:** carrying another team's aff into a round no readable team disclosed. My only
+    no-team test had no team carrying. `test_a_round_no_readable_team_disclosed_is_not_carried_into_from_another_team`
+    was added, and it then caught it (1 failed).
+  * One is equivalent: `elif` made `if` where the team is already in the disagreeing set. It is
+    control flow, not a check, so there is nothing to remove.
+  * Caught, with failures: a conflicting document ignored 2; two affs, first wins 2; unread counted as no
+    plan text 1; placed cards not identifying a team 2; a conflicting round no disagreement 2; a placed
+    round carried into 4; an inline label not needing a plan's shape 1; a label over a label 1; a
+    retired alias with nowhere to go still naming 1; interim words overriding a child 1; words
+    matching inside words 1; advantages naming affs 3; unshaped unnamed as `UNNAMED` 1; the digest of
+    raw text 3.
+* **5 mutants of the script, each caught:** no verdict counts printed (1 failed), negative files read
+  (2), no school scrub on the sheet (1), the sheet written inside the repository (1), an empty store
+  exiting 0 (2).
+  * The "inside the repository" mutant wrote its synthetic sheet into the worktree. I inspected the
+    stray directory (planted words only) and removed it before anything was committed.
+
 ## Before the report (working agreement 10)
 
-* `uv run --frozen scripts/affected_tests.py` → 42 of 427 test files from 4 changed files, in 5.3 s.
-  I ran them with CI's markers: `.venv/bin/python -m pytest -n auto -m "not slow and not live" -p
-  no:randomly <files>` under `perl -e 'alarm 115'` → **1,870 passed, 2 skipped in 34.36 s**. The
-  2 skips are the overrides-file checks above.
-* `uv run --frozen ruff format --check .` → 1179 files already formatted.
-* `uv run --frozen ruff check .` → all checks passed.
-* `uv run --frozen pyright packages/debate_core` → 0 errors, 0 warnings.
+* `uv run --frozen scripts/affected_tests.py` listed 63 of 436 test files, from 25 changed files.
+  `.venv/bin/python -m pytest -n auto -m "not slow and not live" -p no:randomly <files>` under a
+  115 s limit → **2,499 passed, 2 skipped in 64.56 s**. The 2 skips are the overrides-file checks,
+  with no overrides file to check.
+* `uv run --frozen ruff format --check .` → 1205 files already formatted; `ruff check .` → all checks
+  passed.
+* `uv run --frozen pyright packages/debate_core` → 0 errors.
 * `uv run --frozen lint-imports` → 16 kept, 0 broken.
-* `.venv/bin/python scripts/check_thin_handlers.py` → 47 handlers within 25 statements.
-* `uv run scripts/validate_specs.py` → OK, 431 files.
-* `scripts/check_command_blocks.py`, `scripts/check_links.py` and `scripts/docs_index.py
-  --check-descriptions` → OK, run after this report was written.
+* `scripts/check_thin_handlers.py` → 47 handlers within 25 statements.
+* `scripts/check_command_blocks.py --base origin/dev` → OK; `scripts/check_links.py` → OK;
+  `scripts/docs_index.py --check-descriptions` → OK.
+* `uv run scripts/validate_specs.py` → OK, 434 files.
 * No `pyproject.toml`, `uv.lock`, conftest or pytest-plugin change, so no whole-selection hand-off.
 
 ## Files changed
 
-* **`packages/debate_core/src/debate_core/arguments/landscape/headings.py`**: the advantage-number
-  rule and its docstring line.
-* **`packages/debate_core/tests/arguments/landscape/test_headings.py`**: 7 rule cases, 2 guards, and
-  the check against the committed costs-advantage aliases.
-* **This report.** The spec's phase was set to InProgress before the session and is unchanged.
-
-The count scripts are not committed. They were read-only scratch files that print counts. A
-committed counting script belongs with the extraction the ruling decides.
+* **`debate_core.arguments.landscape`:**
+  * `headings.py`: the number rule;
+  * `plan_text.py`, `aff_assignment.py`, `plan_text_sheet.py` (new);
+  * `source_headings.py`: `CaselistNames.without_schools`, the scrub without re-normalizing;
+  * `render.py`: the two labels and the note.
+* **`debate_core.application`:**
+  * `plan_texts.py`, `aff_assignment.py` and `ports/plan_text_store.py` (new).
+* **`debate_core.integrations.landscape`:** `plan_text_store.py` (new).
+* **`debate_core.testing.landscape_store`:** `PlantedCaselist.source` takes real bytes and writes their
+  blob (Deviations 4).
+* **`scripts/assign_landscape_affs.py`** (new).
+* **Tests:**
+  * under `packages/debate_core/tests`: `arguments/landscape/test_headings.py`, `test_plan_text.py`,
+    `test_aff_assignment.py`, `test_plan_text_sheet.py` and `test_render.py`;
+    `application/test_plan_texts.py` and `test_aff_assignment.py`;
+    `integrations/landscape/test_plan_text_store.py`;
+  * `tests/scripts/test_assign_landscape_affs.py`.
+* **`tests/fixtures/landscape/golden/report.md`:** one line, by hand (Deviations 4).
+* **`docs/guides/landscape-taxonomy.md`:** two sections.
+* **The spec:** ac1 on the affirmative side and the rulings as a PM-ruling comment. The PM's own
+  note of 2026-10-24 arrived with the sync.
 
 ## Deviations from the spec
 
-1. **The counts read the raw sources, not only the store.** The spec says to count "for how many the
-   paragraph under it is in the parsed store, and in what unit". The store keeps no analytics and
-   drops a heading that has no card under it. So the store alone shows 33 plan headings, and cannot
-   say what unit the rest are. I re-parsed the aff documents in memory with the store's own parser
-   version, which is reading, not a change. Nothing from that run was kept beyond per-source flags and
-   digests in the scratchpad. That is what option 3 would do, run once as a measurement, and its
-   figures are also option 3's cost. Every store count is given beside it.
-2. **Affirmative side only.** ac1 says "per side". A plan heading in a negative file is a counterplan
-   text or the aff's plan quoted in a block, and identifies no aff. So the PM's brief counts aff
-   documents only, and so did I. Question 8 asks whether to amend ac1.
-3. **The caselist record is a filename, not titles.** The titles the spec names exist only behind the
-   API and outside the policy ([above](#the-caselists-own-record)). The one local record per round,
-   the filename, was counted in their place.
+1. **The counts read the raw sources, not only the store** (2026-10-23). The PM's ruling of 2026-10-24
+   called it the right call, and ruling 1 made it the method.
+2. **Affirmative side only.** ac1 is amended (ruling 8).
+3. **Contentions reach no alias.** Ruling 9 asks for a check against the committed aliases. For DAs
+   and CPs it is there, shown failing first. Contentions lose their number, but the taxonomy has no
+   `contention` alias for them to reach, and hspolicy26 has no numbered contention heading. Question 2
+   asks what to do.
+4. **Two files outside `constraints.packages`:**
+   * `debate_core.testing.landscape_store`: a planted source needs real bytes and a blob for the plan
+     text to be read from;
+   * `tests/fixtures/landscape/golden/report.md`: ruling 4's note is one line of t03's report, and its
+     golden is hand-written, so the line was added by hand.
+
+   Question 3 asks to amend the spec's list.
+5. **The sheet predates the PM's note on policy 1.13.** It shows each cluster's mechanism words and
+   withholds a cluster one team reads, as t01's and t02's sheets did. Policy 1.13 now allows plan
+   texts verbatim, a single team's included, never beside a school or team code. Question 1 asks
+   whether to change the sheet before the coach reads it.
 
 ## Decisions and assumptions
 
-1. **The plan-text labels** are the normalized forms listed under [the counts](#the-counts-hspolicy26-through-2026-10-20),
-   chosen from an exploration pass. In that pass the store's aff headings holding `plan` or `pt`
-   normalized to `plan` (28 documents), `the plan` (2), `plan text` (2) and `plan and solvency` (1).
-   Only forms made of debate vocabulary were printed.
-2. **Medicare for All words** are `medicare for all` and `m4a`, t01's affirmative check's words. They
-   lift the plan-text signal from 691 documents (alias alone) to 726.
-3. **A round is a live on-topic aff disclosure**, and its document's signals are its own. So a document
-   read in three rounds counts three rounds.
-4. **The carry is per team identity**, the opaque school-and-code identity t01's reader builds. With
-   one aff in the taxonomy, a team's identified rounds always agree, so the measured guard is the
-   target round's own plan text.
-5. **No count printed a heading outside debate vocabulary, a tag or a plan text.** Distinct plan texts
-   were counted by SHA-256 over normalized words, and the digests stayed in the scratchpad.
+1. **Every label's paragraph is read**, not only the first, so a 1AC and a later `Plan` block both
+   count. This is why `NAMES` is 767, against the counts' 726.
+2. **A placed round is left to the report.** A round with a card t02 placed under an aff, and no plan
+   text naming one, gets no assignment: t03 counts it as `PLACED_CARD`. It still identifies its team
+   for the carry, and is never carried into.
+3. **Agreement uses the narrowest aff.** A team whose rounds name single payer and, later, a child aff
+   carries the child. Two affs neither of which is the other's ancestor are a disagreement, and so is
+   a round with conflicting plan texts.
+4. **A file with no reading blocks a carry.** An unread file could hold any plan text. hspolicy26 has
+   none.
+5. **Two kinds of failure are handled apart.** A parser refusal is cached as unreadable, since it is
+   deterministic for one parser version. A missing or corrupt blob, or a worker failure, is not cached,
+   so the next run tries it again.
+6. **The parser gets a placeholder path**, `plan-text-reading.docx`, so no disclosure path reaches it.
+7. **The sheet's frame is the words in at least 80% of plan texts.** At half, two mechanisms each read
+   by half the teams became frame and left their clusters wordless, and single payer (about 72% of
+   hspolicy26's plan texts) would have vanished from the sheet. Clusters merge into a larger one they
+   share three quarters of their words with. A short list of English joining words is dropped first.
+8. **The producer reclassifies.** `AffAssignmentService.run` classifies through t02's service, from its
+   cache. Like t02's classifier, that may rewrite t02's own cache and review queue under the data
+   directory. If t05 classifies too, the second pass is all cache hits.
+9. **`assign` reads the newest parsed version** unless `--version` names one, as `classify` does.
 
 ## Operator follow-ups
 
-None. Every read ran in the session under the two-minute limit. No whole-selection run is handed
-over: the pull request's `ci` check runs it.
+1. **Done, 2026-10-24:** the first full `plan-texts` pass, 203.9 s, output as expected (above).
+2. **Done, 2026-10-24:** the coach's sheet, 134.3 s, scanned by the session (above).
+3. **The coach** fills `mechanism_name` and `tag_keywords` in
+   `~/Documents/debate/landscape-seed/plan-text-answers.csv` (the guide's "The plan-text sheet and
+   your mechanisms"). The follow-up session applies them (ac3), pending question 1.
+4. **The pull request, after the PM review**, from the task worktree. First:
+
+```bash
+cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e32-t09-policy-plan-texts
+```
+
+```bash
+scripts/task pr v1-e32-t09-policy-plan-texts --partial
+```
+
+No whole-selection run is handed over: the pull request's `ci` check runs it.
 
 ## Follow-up work
 
-* **Numbered DAs, CPs and contentions** (E32, for the PM to place). `DA 1 Midterms` → `da 1
-  midterms` and `Contention One: Costs` → `contention one costs` miss their aliases the same way the
-  advantages did. Not changed here: the ruling named the two advantage forms.
-* **Round reports and cite titles** (E34 or V3's `v3-e24-t02`, and a data-use policy question for the
-  PM and Charlie). They are the caselist's own statement of each round's aff, and the one signal not
-  available tonight.
-* **What a team's other rounds can say beyond one aff.** Once the coach names single payer's
-  mechanisms as child affs, "agree" can fail for real, and the carry rule should be tested again on
-  the children.
+* **Wiring the producer into the CLI's composition root** (`v1-e32-t05`, or this task's follow-up
+  session if t05 merges first, by the PM's note of 2026-10-24). `AffAssignmentService` and
+  `AffAssignmentSource` are in `debate_core.application.aff_assignment`. Note t05's first dev run: the
+  plan-text cache is per machine, so a machine without it parses every affirmative file once (about
+  3.5 minutes over 8 workers for hspolicy26).
+* **ac3, the coach's mechanisms** (this task's follow-up session): child affs of single payer with
+  his tag keywords, a minor `taxonomy_version` bump, `tests/config`, and the counts of his decisions.
+  The vocabulary digest changes with them, so the next run reads every affirmative file again.
+* **The producer could take classifications** (t05), to skip its second classification pass when the
+  run has already classified.
+* **Quoting plan texts in the report** under policy 1.13 (t03 or t05). The cache holds no text, so a
+  report quoting them reads them again, as the sheet does.
 
 ## Questions for the PM
+
+```text
+v1-e32-t09 questions (session, 2026-10-24). ac2 and ac4 pass; ac3 waits on the coach.
+
+1. The coach's sheet shows each cluster's mechanism words and withholds the
+   81 clusters (141 documents) one team reads, as t01's and t02's sheets did.
+   It was built before your note on policy 1.13, which allows plan texts
+   verbatim, a single team's included, never beside a school or team code.
+   (a) Keep it as written.
+   (b) Add each shown cluster's commonest plan text, verbatim, and list the
+       one-team clusters too, with their words. One more operator run (~2.5 min).
+   Recommendation: (b). The coach names mechanisms faster from the text itself,
+   and the policy now allows it. The sheet stays outside the repository, and
+   the scan for schools and codes runs again before he reads it.
+
+2. Contentions lose their number (ruling 9), but no committed position has a
+   `contention` alias, so `Contention One: Costs` reaches nothing. hspolicy26
+   has no numbered contention heading today.
+   (a) Leave it; revisit when contention headings appear.
+   (b) Have the normalizer read a leading `contention` as `adv`.
+   Recommendation: (a). It is a synonym rule with nothing to measure it on;
+   the coach can add `contention ...` aliases if teams write them.
+
+3. Two files outside constraints.packages: debate_core.testing (a planted
+   source carries real bytes and a blob) and tests/fixtures/landscape (the
+   golden report gains ruling 4's line, by hand). Amend the spec's list?
+   Recommendation: yes, as for t01 and t02.
+
+4. The PR goes --partial now (ac3 open), as you ruled. ac3 then lands in a
+   follow-up session on the coach's answers. Confirm that the follow-up also
+   wires the producer into the composition root if t05 has not merged by then?
+   Recommendation: yes, as your note says: whichever merges second wires it.
+```
+
+### The questions of 2026-10-23, answered
+
+The PM ruled on 2026-10-24:
+* (1) (c), read the raw sources in this task;
+* (2) (a), `PLAN_TEXT`;
+* (3) (a), `TEAM_CARRY` with the guard;
+* (4) (a), no titles this season;
+* (5) (a), unidentified and on the sheet;
+* (6) yes;
+* (7) yes;
+* (8) yes;
+* (9) widen it here.
+
+They are kept as asked:
 
 ```text
 v1-e32-t09 questions (session, 2026-10-23). Counts: hspolicy26 through 2026-10-20,

@@ -144,9 +144,34 @@ None. The branch goes through `dev` and the normal promotion, not a hotfix.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-24
 
 **Notes:**
+
+1. **All three criteria pass on the evidence given.** I read the diff of `9e87f44` against
+   `origin/dev`: the `instagram` block in `site/content/site.yaml`, `instagramLinkSchema`, and
+   `InstagramLink.tsx`, which renders one `<a>` with `rel="noopener noreferrer"`, no child
+   element and no icon. The only Instagram address is in the settings file. Twelve mutants were
+   each killed by the check written for them. The export block refuses seven Instagram and Meta
+   hosts on every fetching element and in every `.html`, `.js`, `.css` and `.txt` file, with the
+   account's own `<a href>` as the only exception. That covers ac2 and more.
+2. **The decisions not in the spec are accepted as made:**
+   - the link sits outside the footer's utility `<nav>`, which stays pinned to the site's own
+     pages;
+   - the text is the link, with no icon, and the accessible name is exactly the visible text;
+   - it opens in the same tab, like the email-updates link;
+   - the full account URL is stored rather than a bare handle;
+   - the schema is strict, so a post, an `/embed/` path or a look-alike host fails the build;
+   - the host list goes beyond the spec's four.
+3. **Working agreement 5 (smoke checks): accepted as a follow-up, not a deviation in this
+   task.** `scripts/site_smoke.py` is outside this task's packages. The PM's next batch amends
+   `v1-e37-t08-smoke-results-band` to also check, on the deployed site, that the footer carries
+   the Instagram link and that no page names an Instagram or Meta host except on that anchor. No
+   new task is needed.
+4. **Shipping.** It goes out through `dev` and the next promotion, not a hotfix. Charlie can see
+   it on the dev site once `validate-dev` has run after the merge.
+5. **Close-out.** Open the PR with `scripts/task pr`. The Goal is already `Succeeded`, in
+   `9c6dfa2`. No operator follow-ups.

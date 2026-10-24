@@ -42,7 +42,17 @@ spec:
     building.
   priority: 2
   constraints:
-    packages: [debate_core.application, debate_core.arguments, debate_core.domain, tests/fixtures/landscape, packages/debate_core/tests]
+    # PM ruling 2026-10-24 (v1-e32-t10 review, question 1): the fixture generator, the landscape
+    # command's tests and docstring only in packages/debate_cli, and the smoke check's bundle list.
+    packages:
+      - debate_core.application
+      - debate_core.arguments
+      - debate_core.domain
+      - packages/debate_cli
+      - packages/debate_core/tests
+      - scripts
+      - tests/fixtures/landscape
+      - tests/smoke
     forbidden:
       - A school, team code or debater's name beside any card or text in a report, fixture, log or commit
       - Card text, plan or counterplan text in a committed file or fixture (synthetic values only)

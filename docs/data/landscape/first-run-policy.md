@@ -68,7 +68,51 @@ that kind at or above the threshold; a team counts when any of its documents on 
 
 ## After the coach's pass over the review queue
 
-Not yet measured: it waits on the coach's filled sheet of the queue's top 50 headings.
+The coach filled the queue's top 50 headings on 2026-10-24. Under the PM's ruling of that day:
+* five positions were added from it as taxonomy 1.1.0: three DAs and two advantages, each with its
+  queue heading as alias;
+* 41 of the 50 decisions were applied with `v1-e32-t02`'s `apply-decisions`: 28 `none` and 13
+  position ids.
+
+Nine headings are not decided yet:
+* two the coach flagged as possibly naming a school or tournament;
+* two he left blank;
+* one read on both sides, as an advantage and as a DA;
+* three waiting on generic theory and K positions;
+* one two-letter heading that the configuration's personal-data check reads as a team code.
+
+Measured by the session the same day: read-only, by the same rules as above, with every card placed
+in memory (the version bump changes every cache key) and the cache's checksum unchanged. 38.0 s and
+33.1 s.
+
+| Count | Before (1.0.0, no decisions) | 1.1.0, no decisions | 1.1.0, 41 decisions |
+|---|---|---|---|
+| **Classification coverage by cards** | 60,987 (48.1%) | 61,735 (48.7%) | **63,392 (50.0%)** |
+| Aff documents with a placed aff | 159 (9.0%) | 159 (9.0%) | 156 (8.8%) |
+| Aff documents with a placed advantage | 1,129 (63.8%) | 1,145 (64.7%) | 1,161 (65.6%) |
+| Aff documents with either | 1,168 (66.0%) | 1,184 (66.9%) | 1,199 (67.7%) |
+| Neg documents with a placed da | 562 (27.1%) | 632 (30.5%) | 662 (32.0%) |
+| Neg documents with a placed cp | 322 (15.6%) | 322 (15.6%) | 322 (15.6%) |
+| Neg documents with a placed k | 151 (7.3%) | 151 (7.3%) | 145 (7.0%) |
+| Neg documents with a placed t | 138 (6.7%) | 138 (6.7%) | 209 (10.1%) |
+| Neg documents with a placed theory position | 24 (1.2%) | 24 (1.2%) | 24 (1.2%) |
+| Neg documents with any of the five | 742 (35.8%) | 804 (38.8%) | 847 (40.9%) |
+| Neg teams with any of the five | 183 (46.7%) | 211 (53.8%) | 224 (57.1%) |
+
+The shares are of 1,770 affirmative and 2,070 negative documents. Classification coverage by rounds
+is the report header's, from the first dev run below.
+
+**Why two counts fall.** The decisions take no placement away from any card: 1,657 cards are newly
+placed and none loses one. But 291 cards move to another position, because a decided heading lower
+on a card's path wins over an alias above it:
+* 96 move from Ks to T, under the heading decided as framework T;
+* 94 move from one advantage to another;
+* 54 move from an aff to an advantage, which is why three aff documents no longer have a placed aff;
+* 40 move from an advantage or an aff to a DA.
+
+**The overrides digest** the report's header names is
+`f86c7f4af5720159d53d8d6a7e8d2860a238d5a5567537341d1727585e7ccb98`. The bump invalidates
+`v1-e32-t02`'s cache, so the first run under 1.1.0 classifies every card again.
 
 ## The first dev run
 

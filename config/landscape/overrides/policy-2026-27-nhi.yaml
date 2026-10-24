@@ -128,3 +128,12 @@ overrides:
   - heading: uniqueness
     position_id: null
     decided: '2026-10-24'
+  - heading: fiat good
+    position_id: generic-theory
+    decided: '2026-10-24'
+  - heading: ontology
+    position_id: generic-k
+    decided: '2026-10-24'
+  - heading: state good
+    position_id: generic-theory
+    decided: '2026-10-24'

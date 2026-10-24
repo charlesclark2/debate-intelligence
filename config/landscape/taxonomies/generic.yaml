@@ -2,9 +2,12 @@
 # Each names the events it applies to; a topic's taxonomy takes the ones for its event. The same
 # rules as a topic file hold (docs/guides/landscape-taxonomy.md). LD-only positions are added with
 # the LD taxonomy (v1-e32-t06), not before.
+#
+# 1.1.0 (2026-10-24, the coach's first review-queue pass, v1-e32-t05): added generic-k and
+# generic-theory for Policy, each with the queue headings the coach placed under it as aliases.
 schema_version: 1
 topic_id: generic
-taxonomy_version: 1.0.0
+taxonomy_version: 1.1.0
 event: null
 positions:
 
@@ -69,6 +72,12 @@ positions:
     side: neg
     events: [POLICY]
     aliases: [buddhism k, k buddhism]
+  - id: generic-k
+    label: Generic K
+    kind: k
+    side: neg
+    events: [POLICY]
+    aliases: [ontology]
 
   # Topicality
   - id: framework-t
@@ -131,3 +140,9 @@ positions:
     side: neg
     events: [POLICY]
     aliases: [vagueness]
+  - id: generic-theory
+    label: Theory
+    kind: theory
+    side: both
+    events: [POLICY]
+    aliases: [fiat good, state good]

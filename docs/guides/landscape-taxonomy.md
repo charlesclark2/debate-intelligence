@@ -191,7 +191,8 @@ renamed position gets a new id; the old one points at it with `merged_into`.
 
 An id is *released* once a report counted under its version has been published. From then on the
 check holds it to the rule above. [`config/landscape/released.yaml`](../../config/landscape/released.yaml)
-records, for each topic and each released version, every position id with its kind and side.
+records, for each topic and each released version, every position id with its kind and side, and a
+*digest* of the positions: a sha256 of every field of every position, so any edit shows, but no text.
 That covers retired positions, and generic.yaml's positions for the topic's event, since the report
 counted those too. It holds nothing else: no labels, no counts. Until the first report is published
 it is empty (`releases: []`), and every edit passes.
@@ -203,14 +204,14 @@ and the rule:
 |---|---|
 | A released id is missing from the file | Put it back and retire it: `deprecated: true`, with `merged_into` if it was renamed or merged |
 | A released id's `kind` or `side` changed | Put it back as it was, retire it, and add a new id for the different argument |
-| The file is at a released version, but its ids, kinds or sides differ from that version's | Bump `taxonomy_version`, in the file and in `topics.yaml` |
+| The file is at a released version, and anything in its positions differs from that version's: an id, a kind or side, an alias, a label, a tag keyword, in the topic's file or in generic.yaml | Bump `taxonomy_version`, in the file and in `topics.yaml` |
 | The file's version is below one already released | Bump it past the released one |
 | A `merged_into` names a retired position | Point it at the position the argument is counted under now |
 
-A label may change at any time, released or not: a rename that still names the same argument keeps
-its id. The check compares ids, kinds and sides only, so it does not notice an alias or label edit
-made without a bump. [Bump `taxonomy_version`](#bump-taxonomy_version) for those as the table below
-says.
+A label may change: a rename that still names the same argument keeps its id. At a released version
+it is an edit like any other, so it comes with a patch bump, as [the table below](#bump-taxonomy_version)
+says. When the check finds a changed digest it cannot say which position changed, so it names the
+topic's file "with generic.yaml merged in": look at `git diff` of both.
 
 ### When the operator writes it
 
@@ -239,11 +240,12 @@ The diff adds one release, with the topic's ids. Commit `released.yaml` in the n
 next task's pull request. A weekly report under a version that is already released needs nothing.
 
 **The first published report** is `v1-e32-t05`'s first `--publish`, of the Policy topic at 1.1.0.
-If this check is on `dev` by then, the operator runs the command above right after that publish. If
-the publish came first, the operator runs it afterwards with the version that report shows, as long
-as the taxonomy file is still at that version. Run it before any later edit bumps the file, because
-the command refuses a version the file has moved past. Whichever of `v1-e32-t05` and `v1-e32-t08`
-merges second adds this step to the first-publish steps of `v1-e32-t05`'s run instructions.
+This check (`v1-e32-t08`) merges into `dev` before that publish (the PM's ruling of 2026-10-24). Right
+after the publish, `v1-e32-t05`'s operator runs the command above for 1.1.0, exactly as written, runs
+the two checks, and the lock is committed in a PM batch. Do it before any later edit bumps the file
+(the mechanism child affs of `v1-e32-t09` come as 1.2.0 or later), because the command refuses a
+version the file has moved past. `v1-e32-t05` merges after `v1-e32-t08`, so it adds this step to its
+own first-publish instructions.
 
 ## Bump `taxonomy_version`
 

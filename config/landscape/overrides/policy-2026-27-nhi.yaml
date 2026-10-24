@@ -137,3 +137,6 @@ overrides:
   - heading: state good
     position_id: generic-theory
     decided: '2026-10-24'
+  - heading: uq
+    position_id: null
+    decided: '2026-10-24'

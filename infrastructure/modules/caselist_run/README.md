@@ -47,9 +47,13 @@ ADR-0020 (2), enforced three times over, so that no single policy left off widen
 An Identity Center permission set's role is `AWSReservedSSO_<set>_<hash>`, so the writer and
 break-glass are matched by `aws:PrincipalArn` patterns; a reprovisioned role keeps its access.
 
-ADR-0020 names the writer `Debate<Env>CaselistCredentialWriter`, which is 33 characters in dev and
+ADR-0020 named the writer `Debate<Env>CaselistCredentialWriter`, which is 33 characters in dev and
 34 in prod. Identity Center allows a permission set 32, so it is `Debate<Env>CaselistSecretWriter`
-here, pending the PM's ruling (the task's session report, Deviations).
+(the PM's ruling of 2026-10-24, in the task's spec and session report).
+
+Every dev apply of this module runs from `origin/dev` after the task merged, never from a task
+branch: an apply from a checkout without `module.caselist_run` would destroy what it created (the
+runbook, "Before you start").
 
 ## Tests
 

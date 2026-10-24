@@ -30,29 +30,67 @@ name or a count, never its value, even if a permission is wrong and the read is 
 | Its SSO profile | `debate-dev-caselist-writer` | `debate-prod-caselist-writer` |
 | Login schedule (apply B) | `debate-dev-caselist-login`, Wednesdays 03:00 America/Chicago | the same, in prod, at the promotion |
 
-ADR-0020 calls the writer `Debate<Env>CaselistCredentialWriter`; Identity Center allows a permission
-set 32 characters, and that name has 33 in dev, so it is `Debate<Env>CaselistSecretWriter`.
+ADR-0020 called the writer `Debate<Env>CaselistCredentialWriter`; Identity Center allows a
+permission set 32 characters, and that name has 33 in dev, so it is
+`Debate<Env>CaselistSecretWriter` (the PM's ruling 1, 2026-10-24).
 
-**The order.** Apply A in dev, then the coach writes the password, now. Apply B in dev waits for
+**The order.** Apply A in dev, then the coach writes the password. Apply B in dev waits for
 `v1-e40-t03`'s first image push, because the login task runs the run's image on the run's network.
 Prod follows at the pilot's promotion (ADR-0020 (7)), by the same steps against `envs/prod`.
 
+**Every dev apply here runs from `dev`, after `v1-e40-t02` has merged: never from a task branch.**
+Once apply A has created these resources, a dev apply from any checkout whose configuration lacks
+`module.caselist_run` would plan to destroy them. So they are created only from a configuration
+that every later dev apply also has: `origin/dev`, with the module merged (the PM's ruling 6,
+2026-10-24).
+
 ## Before you start
 
-**Shell variables**, used by every block below. `WT` is the checkout holding this Terraform: the
-task worktree while the task is in flight, the main clone once it has merged.
+**A fresh worktree at `origin/dev`**, for these applies and nothing else, made from the kept
+`dev-preview` worktree ([team-website.md](team-website.md), "The deploy worktrees") so the main
+clone is not touched. Skip the `worktree add` line if `git worktree list` already shows
+`caselist-credentials-dev`; the next block moves it to `origin/dev` either way.
+
+**Operator command** (expected runtime ~1 min)
+Where: the `dev-preview` worktree
+```bash
+cd "$HOME/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/dev-preview"
+git fetch origin
+git worktree add --detach ../caselist-credentials-dev origin/dev
+git worktree list | grep caselist-credentials-dev
+```
+Success looks like: a `git worktree list` line for `caselist-credentials-dev` with `(detached
+HEAD)`. `already exists` means the worktree is there from an earlier run: go on.
+
+**Shell variables**, used by every block below, and the check that the worktree is `origin/dev` with
+the module merged.
 
 ```bash
-WT=/path/to/your/checkout
+WT="$HOME/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/caselist-credentials-dev"
 SSO_USER_NAME='your-identity-center-user-name'
 
 cd "$WT" || { echo "WT does not exist: $WT"; }
-test -f infrastructure/envs/dev/caselist_run.tf \
-  && echo "ok: $(pwd) on branch $(git branch --show-current)" \
-  || echo "WRONG CHECKOUT: $(pwd) has no infrastructure/envs/dev/caselist_run.tf"
+git fetch origin
+git switch --detach origin/dev
+test -f infrastructure/modules/caselist_run/credentials.tf && test -f infrastructure/envs/dev/caselist_run.tf \
+  && echo "ok: $(pwd) at origin/dev $(git rev-parse --short HEAD), caselist_run merged" \
+  || echo "NOT MERGED: $(pwd) at origin/dev has no infrastructure/modules/caselist_run; wait for v1-e40-t02 to merge"
+git status --porcelain | grep -v 'owner.auto.tfvars' | head -3
 ```
-Success looks like: `ok: <the checkout> on branch task/v1-e40-t02-secrets-token-store-and-login`
-(or `dev` or `main` once merged). Anything else, fix `WT` before going on.
+Success looks like: `ok: <the worktree> at origin/dev <commit>, caselist_run merged`, and nothing
+after it. `NOT MERGED` means the pull request has not merged into `dev` yet: stop and wait. Any
+line after the `ok` is a change in the worktree: it is not `origin/dev` any more, so stop.
+
+**The worktree's environment**, which `set-password` (step 3) runs from.
+
+**Operator command** (expected runtime ~1 min)
+Where: `$WT`
+```bash
+cd "$WT"
+uv sync --all-packages
+uv run debate-research caselist auth set-password --help | grep -c -- '--aws-profile'
+```
+Success looks like: `Resolved ... packages`, then `1`.
 
 **Sign in and confirm the identity the applies run as.** Creating a permission set and the key
 policy needs break-glass, and the key policy lets only `DebateBreakGlassAdmin` administer the key,

@@ -6,7 +6,7 @@
 | Spec | [`plan_specs/v1/e40-cloud-caselist-run/t02-secrets-token-store-and-login.yaml`](../../plan_specs/v1/e40-cloud-caselist-run/t02-secrets-token-store-and-login.yaml) |
 | Epic / release | `v1-e40-cloud-caselist-run` / `v1.8` |
 | Branch | `task/v1-e40-t02-secrets-token-store-and-login` |
-| Session status | PARTIAL <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | PARTIAL: accepted by the PM 2026-10-24, merged `--partial`; ac2's operator parts follow the merge <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
@@ -23,14 +23,23 @@ Three things to look at first:
 
 1. **The writer permission set cannot have the ADR's name.** `DebateDevCaselistCredentialWriter` is
    33 characters and Identity Center allows 32. The module uses `Debate<Env>CaselistSecretWriter`,
-   pending your ruling (Deviation 1).
+   which the PM ruled for (ruling 1); the spec now says so (Deviation 1).
 2. **botocore really does log both secrets at DEBUG.** `botocore.endpoint` logs `PutSecretValue`'s
    `SecretString` and `botocore.parsers` logs `GetSecretValue`'s answer. The client quiets those two
    loggers on the calling thread for each call. The redaction tests drive real botocore through its
    `before-send` hook, and two control tests show the leak when nothing quiets it.
 3. **The phase stays `InProgress`.** ac2's operator parts (apply in dev, prod at promotion, one
-   scheduled login stores a token) cannot be closed by a session. Apply A's plan is the first
-   hand-off below. Every other criterion passes.
+   scheduled login stores a token) cannot be closed by a session. Every other criterion passes. The
+   task merges `--partial`, and apply A runs after the merge, from a fresh worktree at `origin/dev`
+   (ruling 6): a dev apply from a checkout without `module.caselist_run` would destroy what it
+   created.
+
+**After the PM's review (2026-10-24, accepted with conditions), closed in this session:** the spec
+names the writer `Debate<Env>CaselistSecretWriter` with a PM-ruling comment giving the 32-character
+reason (condition 1); the runbook's "Before you start" and the operator follow-ups below run apply A
+from a fresh `caselist-credentials-dev` worktree at `origin/dev`, after checking that the merged
+module is in it, with `owner.auto.tfvars`'s block and the plan check unchanged (condition 2); and
+this report's stale parts are updated (condition 3).
 
 ## Plan nodes
 
@@ -46,7 +55,7 @@ Three things to look at first:
 | ac1 — the Secrets Manager backend passes the token store's contract tests with a stubbed client | PASS | `test_token_store_contract.py`: one suite parametrized over the keyring, file and secretsmanager backends (the last over a stubbed client raising botocore's own `ClientError`), plus four Secrets-Manager-only cases (one read per process, a save is one write and no read, built only when named, refused without a secret). Run with `test_token_store.py` → `45 passed in 2.18s` |
 | ac1 — a redaction test shows neither secret reaches a log or an error | PASS | `secrets_manager/test_managed_secret.py` (22 tests) and `commands/test_caselist_auth_secrets_manager.py` (8): every record at DEBUG, botocore's wire loggers included, checked for each secret raw, JSON-escaped once and twice, and by its random core. Two controls show botocore logs both values when the client is bypassed. Against a mutant that turns the quieting off, 10 tests fail and pytest's whole output holds **0** secret-shaped strings; with the harness's guard also off, the same scan finds 11, so it can see them |
 | ac2 — Terraform's tests show only the login role can read the password and only the run role the token, both under the dedicated key | PASS | `terraform -chdir=infrastructure/modules/caselist_run test` → `Success! 13 passed, 0 failed.` Every role and secret has an ARN of its own (`override_resource`). Mutation: 22 of 22 mutants caught (below) |
-| ac2 — the operator applies dev | NOT RUN | Needs the operator's credentials and the PM's reading of the plan (working agreement 11). First hand-off below |
+| ac2 — the operator applies dev | NOT RUN | After the merge, from a fresh worktree at `origin/dev`, never from this branch (ruling 6); the PM reads the plan before the apply (working agreement 11). Operator follow-ups below |
 | ac2 — prod at promotion | NOT RUN | At the pilot's promotion, after this branch merges (runbook, "Prod") |
 | ac2 — one scheduled login stores a token (operator) | NOT RUN | Waits for apply B, which needs `v1-e40-t03`'s network and first image (the PM's ruling (2)) |
 | ac3 — Terraform's tests show the writer permission set can write both secrets and read neither | PASS | Runs `the_writer_writes_both_secrets_and_reads_neither` and `each_secret_policy_refuses_a_read_by_anyone_but_its_one_reader` in the 13 above. Mutants "writer may read the secrets" and "writer may decrypt" caught |
@@ -135,8 +144,8 @@ registry. Its parts that this change touches are the rows above; CI runs the scr
    `Debate<Env>CaselistCredentialWriter`.** The spec's amendment and ADR-0020 (2) give the latter.
    Identity Center caps a permission set's name at 32 characters, and that name is 33 in dev and 34
    in prod, which the provider refused in the first test run. I used a real name, said so in the
-   module, its README, the runbook and the CLI's help, and left the spec and the ADR for you to
-   amend (Question 1).
+   module, its README, the runbook and the CLI's help. The PM ruled for it (ruling 1): the spec is
+   amended in this branch, and the PM amends ADR-0020.
 2. **Files outside `constraints.packages`**: `pyproject.toml`, for the four import-linter lists (the
    AWS contract's own comment asks each adapter's PR to do this), and `tests/smoke/test_caselist_auth.py`,
    for working agreement 5's smoke checks of the two new commands.
@@ -145,12 +154,12 @@ registry. Its parts that this change touches are the rows above; CI runs the scr
    store does today". The token store registers the *token*. `redaction.register_secret` documents
    that the password is deliberately never registered: that would keep it in a process-wide set for
    the life of the process. I kept that rule. What keeps the password out of logs is that nothing
-   formats it, and that botocore's two wire loggers are silent during the call; the tests check both
-   (Question 4).
+   formats it, and that botocore's two wire loggers are silent during the call; the tests check both.
+   The PM ruled to keep it (ruling 4) and amends ADR-0020's sentence.
 4. **The secrets' policies refuse a little more than the ADR lists.** Writes include
    `UpdateSecretVersionStage`, which moves the current label to an older value. Break-glass-only
    actions add `RotateSecret` and `RestoreSecret` to the ADR's five, since each changes which value
-   or key a read reaches (Question 5).
+   or key a read reaches. The PM ruled to keep them (ruling 5) and adds them to ADR-0020's lists.
 5. **"The token store's contract tests"** did not exist as a shared suite: the keychain and file
    backends had per-backend tests. I wrote the contract as one parametrized file beside them, over
    all three backends. A suite in `debate_core.testing.contracts`, where the repo keeps shared
@@ -158,7 +167,8 @@ registry. Its parts that this change touches are the rows above; CI runs the scr
 6. **The SNS alert path is the existing `Notifier` port.** The scheduled login notifies through
    `ServiceContainer.sync_notifier()`, which `caselist.notifier` chooses. Today that is nothing in
    the cloud; `v1-e40-t05` adds the `sns` kind. The login role's `sns:Publish` names t05's topic,
-   `debate-<env>-caselist-run-alerts`, which does not exist yet (Question 2).
+   `debate-<env>-caselist-run-alerts`, which does not exist yet. The PM ruled that t05 builds the
+   SNS adapter, and adds `debate_core.integrations` to t05's packages (ruling 2).
 
 ## Decisions and assumptions
 
@@ -200,23 +210,40 @@ registry. Its parts that this change touches are the rows above; CI runs the scr
 
 ## Operator follow-ups
 
-**Now: apply A in dev, as the PM ruled (plan, PM reads it, apply, then the coach writes the
-password).** These are the runbook's blocks ([caselist-cloud-credentials.md](../runbooks/caselist-cloud-credentials.md)),
-with `WT` set to this worktree. Each block's success check is beneath it.
+**After the merge: apply A in dev, as the PM ruled (plan, PM reads it, apply, then the coach writes
+the password).** Not from this branch: from a fresh worktree at `origin/dev` that has the merged
+`infrastructure/modules/caselist_run` (ruling 6). These are the runbook's blocks
+([caselist-cloud-credentials.md](../runbooks/caselist-cloud-credentials.md), "Before you start" and
+steps 1 to 4), with `WT` set to that worktree. Each block's success check is beneath it.
 
-**1. Shell variables and the checkout** (seconds). Set `SSO_USER_NAME` to your Identity Center user
-name.
+**1. A fresh worktree at `origin/dev`, and the check that the module is merged in it** (~1 min).
+Made from the kept `dev-preview` worktree, so the main clone is not touched. Skip the `worktree add`
+line if `git worktree list` already shows `caselist-credentials-dev`.
 
 ```bash
-WT=/Users/charlesclark/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e40-t02-secrets-token-store-and-login
+cd "$HOME/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/dev-preview"
+git fetch origin
+git worktree add --detach ../caselist-credentials-dev origin/dev
+git worktree list | grep caselist-credentials-dev
+```
+Success looks like a `caselist-credentials-dev` line with `(detached HEAD)`.
+
+Then set `SSO_USER_NAME` to your Identity Center user name:
+
+```bash
+WT="$HOME/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/caselist-credentials-dev"
 SSO_USER_NAME='your-identity-center-user-name'
 
 cd "$WT" || { echo "WT does not exist: $WT"; }
-test -f infrastructure/envs/dev/caselist_run.tf \
-  && echo "ok: $(pwd) on branch $(git branch --show-current)" \
-  || echo "WRONG CHECKOUT: $(pwd) has no infrastructure/envs/dev/caselist_run.tf"
+git fetch origin
+git switch --detach origin/dev
+test -f infrastructure/modules/caselist_run/credentials.tf && test -f infrastructure/envs/dev/caselist_run.tf \
+  && echo "ok: $(pwd) at origin/dev $(git rev-parse --short HEAD), caselist_run merged" \
+  || echo "NOT MERGED: $(pwd) at origin/dev has no infrastructure/modules/caselist_run; wait for v1-e40-t02 to merge"
+git status --porcelain | grep -v 'owner.auto.tfvars' | head -3
 ```
-Success looks like `ok: ... on branch task/v1-e40-t02-secrets-token-store-and-login`.
+Success looks like `ok: ... at origin/dev <commit>, caselist_run merged` and nothing after it.
+`NOT MERGED`: stop until the pull request has merged into `dev`.
 
 **2. Sign in as break-glass** (~1 min).
 
@@ -270,7 +297,17 @@ Success looks like `Apply complete! Resources: 17 added, 0 changed, 0 destroyed.
 `"DebateDevCaselistSecretWriter"`. A `MalformedPolicyDocumentException` at the key means the caller
 is not break-glass's role, and nothing was created.
 
-**6. The coach writes the password.** First the writer's profile (~1 min):
+**6. The coach writes the password.** First the worktree's environment, which `set-password` runs
+from (~1 min):
+
+```bash
+cd "$WT"
+uv sync --all-packages
+uv run debate-research caselist auth set-password --help | grep -c -- '--aws-profile'
+```
+Success looks like `Resolved ... packages`, then `1`.
+
+Then the writer's profile (~1 min):
 
 ```bash
 ACCOUNT_ID=$(aws sts get-caller-identity --profile debate-admin --query Account --output text)
@@ -321,22 +358,24 @@ ending in the secret's name means that profile can read the password: stop and t
 
 ## Follow-up work
 
-* **The ADR and the spec name the writer `Debate<Env>CaselistCredentialWriter`**
-  (`docs/adr/0020-weekly-caselist-run-in-the-cloud.md`, this task's spec). They need your
-  amendment, whichever name you choose.
+* **ADR-0020, v1-e40-t05 and v1-e40-t06**: the PM amends them for rulings 1 to 5 (the writer's
+  name, t05's packages, the Mac's session check on the first scheduled login's Wednesday, the
+  password's redaction sentence, the added policy actions). This task's spec is amended here.
 * **`v1-e40-t03`**: replace `login_task` with references to the cluster, subnets, security group and
   repository it builds in this module. Add its inline policy to `aws_iam_role_policies_exclusive.run`.
   The image must put `debate-research` on `PATH`, because the login task's `entryPoint` names it.
 * **`v1-e40-t05`**: the `sns` kind of `caselist.notifier`, which the login's failures already go to.
   A dead-letter queue on the login schedule (it has none, and never retries). The topic name the
-  login role may already publish to, `debate-<env>-caselist-run-alerts`. Its spec's packages have no
-  `debate_core.integrations` for an SNS adapter (Question 2).
+  login role may already publish to, `debate-<env>-caselist-run-alerts`. The SNS adapter is t05's,
+  with `debate_core.integrations` added to its packages (ruling 2).
 * **`v2-e10-t04`** adopts the key and both secrets, and `AwsSecretsProvider` can build on
   `debate_core.integrations.secrets_manager.ManagedSecret`, as ADR-0020 plans.
 
 ### Questions for the PM
 
-Paste-ready, one block, each with my recommendation.
+Paste-ready, one block, each with my recommendation. **Ruled by the PM on 2026-10-24** (see PM
+review): 1 (a), 2 (a), 3 as recommended, 4 and 5 kept, 6 merge `--partial` now with apply A from
+`dev` after the merge. Kept below as asked.
 
 ```text
 v1-e40-t02 questions (session report: docs/session-reports/v1-e40-t02-secrets-token-store-and-login.md)

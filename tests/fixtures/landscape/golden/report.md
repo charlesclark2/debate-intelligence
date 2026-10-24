@@ -102,3 +102,5 @@ How affirmative rounds were identified:
 |---|---|
 | A card in the round placed under the aff (`PLACED_CARD`) | 4 |
 | Not identified | 3 |
+
+The caselist's own round titles and cite entries are not read this season.

@@ -1,6 +1,9 @@
 import Image from 'next/image'
 import Link from 'next/link'
 
+import type { InstagramLinkSettings } from '@/lib/content'
+
+import { InstagramLink } from './InstagramLink'
 import type { NavigationItem } from './SiteNav'
 
 /**
@@ -20,13 +23,19 @@ import type { NavigationItem } from './SiteNav'
  * and someone who needs it knows to look in a footer. Anything published and not named in
  * content/site.yaml's primaryNavigation arrives here, so leaving a page out of the nav moves it
  * rather than hiding it.
+ *
+ * Under the note sits the link to the team's Instagram account (v1-e37-t07). It is outside the
+ * utility navigation on purpose: that list is the published pages of this site, and the Instagram
+ * link leaves it.
  */
 export function SiteFooter({
+  instagram,
   navigationLabel,
   note,
   utilityLinks,
   wordmark,
 }: {
+  instagram: InstagramLinkSettings
   navigationLabel: string
   note: string
   utilityLinks: NavigationItem[]
@@ -44,6 +53,9 @@ export function SiteFooter({
         />
         <p className="site-footer__wordmark">{wordmark}</p>
         <p className="site-footer__note">{note}</p>
+        <p className="site-footer__social">
+          <InstagramLink className="site-footer__link" instagram={instagram} />
+        </p>
         {utilityLinks.length > 0 ? (
           <nav aria-label={navigationLabel} className="site-footer__nav">
             <ul className="site-footer__links">

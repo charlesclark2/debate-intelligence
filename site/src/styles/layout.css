@@ -214,6 +214,12 @@
   color: var(--color-text-inverse);
 }
 
+/* The link to the team's Instagram account (v1-e37-t07): a plain text link out, styled like the
+ * utility links so it keeps their 44px touch target. */
+.site-footer__social {
+  margin: var(--space-3) 0 0;
+}
+
 /*
  * The utility links: the accessibility statement and anything else published that the header
  * navigation does not carry. They sit below the note, set apart by a rule, because they are the

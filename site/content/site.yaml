@@ -51,6 +51,19 @@ contactEmails:
     name: Charlie Clark
     role: Head Coach
 
+# The team's Instagram account, as a plain link out: in the footer of every page and on the
+# contact page. Nothing is loaded from Instagram or Meta, no embed, feed, follow button or icon of
+# theirs (docs/policies/website-publishing.md, Analytics and third parties 4). The link text and
+# the note together say where it goes, because a link that leaves the team site has to say so
+# (pre-publication checklist 9). src/lib/content.ts accepts only an https://www.instagram.com/
+# account address here. Showing posts on the site would be a policy change for Charlie to approve
+# first, not an edit to this file.
+instagram:
+  address: https://www.instagram.com/wfbdebate/
+  label: "@wfbdebate on Instagram"
+  externalLinkNote: opens Instagram's site
+  contactHeading: Follow the team
+
 # Navigation label for the Debater login link. The link itself only renders when the debaterLogin
 # feature flag is on, which it is not until the V2 app in web/ exists. See src/lib/feature-flags.ts.
 debaterLoginLabel: Debater login

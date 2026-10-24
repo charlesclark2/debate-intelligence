@@ -74,26 +74,28 @@ The coach filled the queue's top 50 headings on 2026-10-24. Under the PM's rulin
   * a generic K and one generic theory position in `generic.yaml`, now 1.1.0 (Policy only);
   * each takes the queue headings the coach placed under it as aliases. The topic stays at the
     unreleased 1.1.0;
-* **44 of the 50 decisions were applied** with `v1-e32-t02`'s `apply-decisions`: 29 `none` and 15
-  position ids.
+* **45 of the 50 decisions were applied** with `v1-e32-t02`'s `apply-decisions`: 30 `none` and 15
+  position ids. One is `uq`, "uniqueness" as the coach confirmed, which the configuration's
+  personal-data check first refused as shaped like a team code.
 
-Six headings are not decided yet:
+Five headings are not decided yet:
 * two the coach flagged as possibly naming a school or tournament;
 * two he left blank;
-* one read on both sides, as an advantage and as a DA;
-* one two-letter heading that the configuration's personal-data check reads as a team code.
+* one read on both sides, as an advantage and as a DA.
 
 Measured by the session the same day: read-only, by the same rules as above, with every card placed
 in memory (the version bump changes every cache key) and the cache's checksum unchanged. 38.0 s and
-34.8 s.
+34.5 s. The last column also includes `v1-e32-t09`'s change to the heading normalizer, which strips
+an advantage's number before its name. That change alone places 32 more cards and adds 3 aff
+documents with a placed advantage.
 
 | Count | Before (1.0.0, no decisions) | 1.1.0, no decisions | **After the pass** |
 |---|---|---|---|
-| **Classification coverage by cards** | 60,987 (48.1%) | 61,735 (48.7%) | **63,462 (50.1%)** |
+| **Classification coverage by cards** | 60,987 (48.1%) | 61,735 (48.7%) | **63,494 (50.1%)** |
 | Aff documents with a placed aff | 159 (9.0%) | 159 (9.0%) | 156 (8.8%) |
-| Aff documents with a placed advantage | 1,129 (63.8%) | 1,145 (64.7%) | 1,161 (65.6%) |
-| Aff documents with either | 1,168 (66.0%) | 1,184 (66.9%) | 1,199 (67.7%) |
-| Aff teams with either | 378 (68.5%) | 380 (68.8%) | 381 (69.0%) |
+| Aff documents with a placed advantage | 1,129 (63.8%) | 1,145 (64.7%) | 1,164 (65.8%) |
+| Aff documents with either | 1,168 (66.0%) | 1,184 (66.9%) | 1,202 (67.9%) |
+| Aff teams with either | 378 (68.5%) | 380 (68.8%) | 384 (69.6%) |
 | Neg documents with a placed da | 562 (27.1%) | 632 (30.5%) | 662 (32.0%) |
 | Neg documents with a placed cp | 322 (15.6%) | 322 (15.6%) | 322 (15.6%) |
 | Neg documents with a placed k | 151 (7.3%) | 151 (7.3%) | 163 (7.9%) |
@@ -123,8 +125,28 @@ heading inside a plan's block move from the aff to the advantage, since advantag
 this taxonomy.
 
 **The overrides digest** the report's header names is
-`c525f325918ec30fe2bb670eb90fca6dc975025acbfbd78d2c349daa0fd6ae89`. The bump invalidates
-`v1-e32-t02`'s cache, so the first run under 1.1.0 classifies every card again.
+`e1c2367c363ef95718cddb8aa5f59a138013b410386fcb91552102cc95f60ca5`. The bump invalidates
+`v1-e32-t02`'s cache, so the first run under 1.1.0 classifies every card again. `v1-e32-t09`'s
+plan-text cache stays valid: the pass added no aff position, so its vocabulary digest is unchanged.
+All 1,770 affirmative documents are cached under it.
+
+### The report as the first run will build it
+
+The command's own dry run after the pass, with `v1-e32-t09`'s aff assignments wired in: read-only,
+without `--publish`, 42 s. The classification cache, the plan-text cache and the review queue had
+the same checksums after it.
+
+| Count | Before the pass | After the pass, with the affs |
+|---|---|---|
+| **Classification coverage by cards** | 60,987 of 126,681 (48.1%) | 63,494 (50.1%) |
+| **Classification coverage by rounds** | 2,201 of 4,352 (50.6%) | **2,622 (60.2%)** |
+| Affirmative rounds with no identified aff | 1,998 of 2,192 (91.1%) | **940 (42.9%)** |
+| How affirmative rounds are identified | placed card 194 | plan text 959, team carry 226, placed card 67 |
+| Negative rounds with no placed negative position | 1,389 of 2,160 (64.3%) | 1,238 (57.3%) |
+| Position-rounds set aside as answers | 4,734 | 4,965 |
+| Positions read; top-card rows | 68; 318 | 75; 353 |
+| Review queue | 1,433 rows | 1,340 rows |
+| Scan before sharing | 6 hits in `top_cards.csv` | 6 hits in `top_cards.csv`: 3 school names, 2 team codes, 1 tournament |
 
 ## The first dev run
 

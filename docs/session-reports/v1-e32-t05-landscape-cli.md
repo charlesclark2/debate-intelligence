@@ -21,20 +21,33 @@ One run:
 * with `--publish`, uploads it to the same prefix in the dev bucket through the E29 blob-store port,
   skipping any object whose SHA-256 is unchanged.
 
-`--model-mode none` is the only mode, so no run calls a model. t09's aff assignments plug in through
-an optional `AffAssignmentSource`. Until then the report shows the unidentified share.
+`--model-mode none` is the only mode, so no run calls a model. Each affirmative round's aff comes
+from t09's `AffAssignmentService`, which merged first and is wired here (the PM's condition 1).
 
-**Status: the session's work is done; the Goal stays `InProgress`.** Every node through the smoke
-check is done, and its criteria pass. ac1 to ac3 pass, and ac4 passes in the recorded tier locally.
+**Status: the PM's three conditions are closed, and this needs another review before the PR.** The
+PM's line was a re-review if the sync or the wiring changed a count or a rule. Both did, as
+expected:
+* **The sync** brought t09's heading normalizer, which now strips an advantage's number. That places
+  32 more cards (Deviation 13).
+* **The wiring** identifies affirmative rounds by plan text and team carry. On the real store, read
+  only, aff rounds with no identified aff fall from 1,998 of 2,192 (91.1%) to 940 (42.9%). Coverage
+  by rounds rises from 50.6% to 60.2% ([below](#the-wired-report-on-the-real-store)).
 
-* **The coach's queue pass is applied** (the PM's item 4):
+**Also changed, each with its test failing first:**
+* the seam gained a `writes` flag, so a dry run writes no plan-text cache (Deviation 12);
+* a dry run no longer reports the classification cache as written (Deviation 14).
+
+The third block of questions asks for the re-review.
+
+* **The coach's queue pass is applied** (the PM's item 4 and condition 2):
   * seven new positions (Deviation 9): five in the topic's taxonomy, now 1.1.0, and a generic K and
     generic theory position in `generic.yaml`, now 1.1.0;
-  * 44 of the 50 decisions; the six left are each left for a reason (Deviation 10);
+  * 45 of the 50 decisions, `uq` included; the five left are each left for a reason (Deviation 10);
   * coverage measured before and after: cards 48.1% → 50.1%, negative documents with any placed
     position 35.8% → 42.4%.
-* **One heading, `uq`, waits on the coach's word** that it is debate vocabulary. It is not needed for
-  the PR (Deviation 10).
+* **t09's plan-text cache is valid under 1.1.0.** The pass added no aff position, and the
+  vocabulary digest is the same under both versions. All 1,770 affirmative documents are cached under
+  the current parser and vocabulary, so no plan-text block is needed before the first run.
 * **NOT RUN, so the Goal stays `InProgress`:**
   * ac5 (the first dev run and the coach's review) comes after the merge, so the PR opens with
     `--partial`;
@@ -160,6 +173,26 @@ checksum unchanged. The numbers are t02's to the digit: affirmative documents wi
 table is in [the first-run note](../data/landscape/first-run-policy.md). The overrides digest the
 header names today is `none`.
 
+### The wired report on the real store
+
+After the sync and the wiring: `landscape report --caselist hspolicy26 --dry-run`, read-only, without
+`--publish` (no bucket, no AWS call). Before it ran, no `DEBATE_*` variable was set and no `caselist
+pull` was running. **42 s, exit 0.** The classification cache, the plan-text cache and the review
+queue had the same checksums after the run as before, and no report directory was created. Taxonomy
+1.1.0, overrides digest `e1c2367c…`, 45 decisions.
+
+| Count | Before the pass (t03's preview) | Now |
+|---|---|---|
+| Classification coverage by cards | 60,987 of 126,681 (48.1%) | 63,494 (50.1%) |
+| Classification coverage by rounds | 2,201 of 4,352 (50.6%) | **2,622 (60.2%)** |
+| Aff rounds with no identified aff | 1,998 of 2,192 (91.1%) | **940 (42.9%)** |
+| How aff rounds are identified | placed card 194 | plan text 959, team carry 226, placed card 67 |
+| Neg rounds with no placed negative position | 1,389 of 2,160 (64.3%) | 1,238 (57.3%) |
+| Position-rounds set aside as answers | 4,734 | 4,965 |
+| Positions read; top-card rows | 68; 318 | 75; 353 |
+| Review queue | 1,433 rows | 1,340 rows |
+| Scan | 6 hits in `top_cards.csv` | 6 hits in `top_cards.csv`: 3 school, 2 team code, 1 tournament |
+
 ## Before the report (working agreement 10)
 
 * **The affected set is over two minutes.** `uv run scripts/affected_tests.py` lists 155 files. Run
@@ -190,6 +223,18 @@ header names today is `none`.
   real configuration (`packages/debate_core/tests/integrations/landscape`, `tests/config`, and the
   classify and seed scripts' tests) → **76 passed in 1.54s**. `tests/config` alone → 23 passed, its
   two overrides-file checks no longer skipped.
+* **After the sync and the PM's conditions** (agreement 10: the tests of what changed, never the
+  whole selection):
+  * The landscape tests above plus t09's (`test_aff_assignment.py`, `test_plan_texts.py`,
+    `tests/scripts/test_assign_landscape_affs.py`), `packages/debate_core/tests/integrations/landscape`,
+    `tests/config`, the seed script's tests, the smoke check, `tests/architecture` and `tests/specs`
+    → **898 passed in 6.60s**.
+  * `packages/debate_cli/tests` → **898 passed in 30.63s**.
+  * The smoke check in the recorded tier → 2 passed.
+  * ruff format and check, bare `pyright` (0 errors), lint-imports (16 kept), thin handlers (48)
+    and `validate_specs.py` (434 files) all pass.
+  * **My one slip:** a commit chained its checks with `;`, so it went ahead past a ruff import-order
+    finding in `container.py`. The next commit fixed it, with the checks chained by `&&`.
 * No `pyproject.toml`, `uv.lock`, conftest or pytest-plugin change, so no whole-selection hand-off.
 
 ## Files changed
@@ -209,22 +254,28 @@ header names today is `none`.
   `model_items` and `model_calls`, both defaulting to 0. t07 fills them.
 * **`debate_core/testing/landscape_run.py`** (new): `plant_synthetic_run`, the `synthetic26` store
   and config. Shared by the core tests, the CLI tests and the smoke check.
+* **`debate_core/application/aff_assignment.py`** (t09's): `AffAssignmentService.assignments`,
+  this task's seam, which shares the plan-text step with t09's `run`.
+  **`debate_core/application/plan_texts.py`** (t09's): `PlanTextService.without_writes`, for a dry
+  run.
 * **`debate_cli/commands/landscape.py`** (new), registered in `commands/__init__.py`.
 * **`debate_cli/container.py`**: `landscape_run`, wiring `YamlTaxonomyRepository` and
-  `LocalClassificationStore`, the run log, the acceptance log and the bucket. The aff seam is left
-  unwired, with the PM's rule for wiring it in the method's docstring.
+  `LocalClassificationStore`, the run log, the acceptance log, the bucket, and t09's
+  `AffAssignmentService` with its `PlanTextService` (`LocalPlanTextStore` and the parse worker pool).
 * **Tests:**
   * `packages/debate_core/tests/application/test_landscape_run.py` (26) and
     `test_landscape_scan.py` (11);
   * `packages/debate_cli/tests/test_landscape_command.py` (16);
   * `packages/debate_cli/tests/test_installation.py` and `commands/test_doctor.py`: the hand-pinned
     list of wired integrations gains `landscape.classification_store` and
-    `landscape.yaml_taxonomy_repository`, so the count goes from 15 to 17.
+    `landscape.yaml_taxonomy_repository`, and after the wiring `landscape.plan_text_store`, so the
+    count goes from 15 to 18;
+  * `tests/config/test_landscape_taxonomies.py`: `uq` joins `SHORT_WORDS` (condition 2).
 * **`tests/smoke/test_landscape_smoke.py`** (new) and its row in `tests/smoke/README.md`.
 * **`config/landscape/`**, the coach's queue pass:
   * `taxonomies/policy-2026-27-nhi.yaml` and `topics.yaml` at 1.1.0, with five positions;
   * `taxonomies/generic.yaml` at 1.1.0, with two;
-  * `overrides/policy-2026-27-nhi.yaml` (new), with 44 decisions.
+  * `overrides/policy-2026-27-nhi.yaml` (new), with 45 decisions.
 * **`docs/data/landscape/first-run-policy.md`** (new): the first-run note, with the coverage
   before and after the coach's pass.
 
@@ -282,19 +333,19 @@ header names today is `none`.
      the coach's two theory headings as aliases, and `generic-k` ("Generic K") with his K heading.
      Both are Policy only. `generic.yaml` goes from 1.0.0 to 1.1.0, and the Policy topic stays at
      the unreleased 1.1.0.
-10. **The pass applies 44 of the 50 decisions.** The rest:
+10. **The pass applies 45 of the 50 decisions.** The rest:
     * **Two headings the coach's sheet flags** as possibly naming a school or tournament, though
       filled `None`, are left out: a `none` would still put the heading in a committed file.
     * **Two he left blank.**
     * **`pharma`**, read on both sides, stays blank. One heading takes one decision.
     * The two `Theory` headings and the `Kritiks` heading are applied under the generic
       positions (question 9).
-    * **`uq`**, decided `none`, is refused by the personal-data check
-      (`test_no_override_names_a_team_a_school_or_a_person`) as shaped like a team code. It is the
-      check working: a real-data red run. No hspolicy26 disclosure uses `UQ` as a team code (0 of 555
-      team-code directories in 9,052 paths). The check's own rule is that a real two-letter word goes
-      into `SHORT_WORDS` in `tests/config` in the same change, and I have not done that without the
-      coach's word that it is "uniqueness".
+    * **`uq`**, decided `none`, was first refused by the personal-data check
+      (`test_no_override_names_a_team_a_school_or_a_person`) as shaped like a team code: the check
+      working, a real-data red run. No hspolicy26 disclosure uses `UQ` as a team code (0 of 555
+      team-code directories in 9,052 paths). The coach confirmed it is "uniqueness" (condition 2),
+      so it joined `SHORT_WORDS` in `tests/config` in the same commit as its decision, as the check's
+      rule asks. It moves no count: a `none` on a block label passes cards up to the heading above.
     * One typo was corrected on the coach's say-so (`disease-a` to `disease-advantage`), and his
       `-adv` ids map to `-advantage`.
     * The decisions file is outside the repository:
@@ -307,6 +358,39 @@ header names today is `none`.
     151 → 145 → 151 and T 138 → 209 → 138, measured before the generic K was added. No decision
     takes a placement from any card. A decided heading lower on a path wins over an alias above it,
     which is why three aff documents lose their placed aff to an advantage.
+
+12. **t09's producer is wired through this task's seam, not its own protocol.** t09's
+    `AffAssignmentSource.aff_assignments(caselist, through)` reads the caselist and classifies it
+    again. On hspolicy26 that is about 30 s more. It also writes the classification cache and the
+    review queue, which a dry run must not (Decision 5). So `AffAssignmentService` is passed as the
+    PM asked, and the run calls a new method on it, `assignments`. That method takes the run's own
+    reading and classifications and does only the plan-text read and t09's
+    `build_aff_assignments`. Its `writes` flag is False in a dry run, which reads the plan-text
+    cache through `PlanTextService.without_writes()`. t09's protocol, `run` and tests are unchanged
+    and pass. My protocol is renamed `AffAssignmentsFromReading`, so the two names cannot be
+    confused.
+    * The wiring test, `test_the_command_identifies_each_aff_round_through_t09s_plan_texts`, runs
+      through the real composition root. It fails with the seam unwired, together with ac1's test
+      (2 failed).
+    * Making the dry run write the plan-text cache fails
+      `test_publish_dry_run_lists_the_planned_uploads_and_writes_nothing`.
+    * `synthetic26`'s `aff-two` now holds a real `.docx` with a plan text naming single payer, so
+      its round is identified by `PLAN_TEXT`. ac1's hand-worked count of unidentified aff rounds
+      changes from 1 to 0 for that reason.
+13. **The sync moved coverage counts.** It brought t09's heading normalizer, which strips an
+    advantage's number before its name. Measured read-only at 44 decisions, before and after the
+    sync:
+    * cards placed 63,462 → 63,494;
+    * aff documents with a placed advantage 1,161 → 1,164;
+    * aff documents with either 1,199 → 1,202, by teams 381 → 384.
+
+    Nothing else moved. This is t09's rule, merged and reviewed there. It is reported because the
+    PM's condition asks for a re-review when a count changes.
+14. **A dry run reported the classification cache as written.** Under 1.1.0 every key is new, so
+    t02's counts said `cache_written: true`, although the read-only view had dropped the write and
+    every checksum was unchanged. The run now reports `false` in a dry run. The new assertion in
+    `test_a_dry_run_lists_the_planned_uploads_and_writes_nothing` failed first (`True is False`).
+    Found by the dry run on the real store.
 
 ## Decisions and assumptions
 
@@ -364,14 +448,6 @@ header names today is `none`.
 
 ## Operator follow-ups
 
-### Before the pull request: the coach's pass over the review queue
-
-The sheet `~/Documents/debate/landscape-seed/policy-2026-27-nhi-queue-top-50.csv` has its
-`decision` column empty in all 50 rows. When the coach has filled it, the session applies it with
-t02's `apply-decisions`, which skips blank rows, so the two rows marked to leave blank stay blank.
-It commits `config/landscape/overrides/policy-2026-27-nhi.yaml` with `tests/config` passing. It then
-measures the coverage again, read-only, and records it with the new overrides digest.
-
 ### After the merge: the first dev run (ac5)
 
 These blocks run in this task's worktree after the pull request merges and before
@@ -397,7 +473,9 @@ fi
 Success looks like a commit id, `HEAD is now at … v1-e32-t05-landscape-cli: …` and `on the
 merged commit`. A `STOP` line means nothing below runs yet.
 
-**1. The dry run** (expected runtime about 1 min; 46 s measured without the bucket). It stops on a
+No plan-text pass is needed first: t09's cache is whole under 1.1.0 (Summary).
+
+**1. The dry run** (expected runtime about 1 min; 42 s measured without the bucket). It stops on a
 leftover `DEBATE_*` variable or a running `caselist pull`.
 
 ```bash
@@ -415,8 +493,10 @@ fi
 ```
 
 Success looks like:
-* `hspolicy26 through <date>` naming the newest weekly snapshot, and `Sources N` with N above
-  zero (3,825 on 2026-10-20);
+* `hspolicy26 through <date> on policy-2026-27-nhi 1.1.0 (overrides e1c2367c…`, naming the newest
+  weekly snapshot, and `Sources N` with N above zero (3,825 on 2026-10-20);
+* `Affirmative rounds with no identified aff: X of Y; aff assignments N`, with N above zero (940 of
+  2,192 and 1,185 on 2026-10-20);
 * `Current:`, not `STALE:`;
 * `Dry run: nothing written`;
 * `Publish to dev bucket …` with three `UPLOAD reports/landscape/hspolicy26/<date>/…` lines and
@@ -470,15 +550,8 @@ git switch task/v1-e32-t05-landscape-cli
 
 Success looks like `Switched to branch 'task/v1-e32-t05-landscape-cli'`.
 
-**5. With t09's assignments.** When t09's producer is wired into `landscape_run` by whichever task
-merges second, its first full plan-text pass is t09's own block (several minutes, in t09's report).
-Blocks 1 and 2 then run again.
-
 ## Follow-up work
 
-* **The aff seam** (v1-e32-t09, or this task if it merges second): pass t09's producer as
-  `aff_assignments` in `ServiceContainer.landscape_run`, with a test. Merging also needs the pinned
-  integration list (17) to agree with whatever t09 adds.
 * **A failed weekly run as stale** (E34): the PM files the task (ruling 4).
 * **`--model-mode` and `max_model_items`** (v1-e32-t07): join the option to `resolve_model_mode`,
   and set the bound from settings.
@@ -637,3 +710,50 @@ are accepted as written. Paste the counts back, but not the scan's lines.
 * The weekly scheduled run never accepts hits by itself. That is recorded for E34's integration.
 
 If anything comes out differently, stop and ask for another review.
+
+## After the PM review of 2026-10-24: conditions closed
+
+The PM's review above accepted the task with three conditions, closed in this session:
+1. t09's producer is wired (Deviation 12), and the pinned list has 18 entries. t09's plan-text cache
+   is valid under 1.1.0, so no plan-text block is needed.
+2. `uq` is in `SHORT_WORDS` and applied, 45 of 50, with coverage measured again.
+3. The stale section is removed, and the Summary, counts, first-run note and follow-ups are updated.
+
+Third block, for the re-review the conditions ask for (2026-10-24):
+
+```text
+v1-e32-t05 after the PM's conditions (session, 2026-10-24)
+
+Conditions 1 to 3 are closed. Your line was a re-review if the sync or the
+wiring changed a count or a rule; both did:
+
+11. The sync brought t09's normalizer (an advantage's number stripped): cards
+    placed 63,462 -> 63,494, aff documents with a placed advantage 1,161 ->
+    1,164, aff teams with either 381 -> 384. Nothing else moved. Accept?
+    Recommendation: yes; it is t09's reviewed rule.
+
+12. The wiring: t09's own aff_assignments(caselist, through) reads and
+    classifies the caselist again (~30 s) and writes the cache and queue,
+    which a dry run must not. So AffAssignmentService is passed as you asked,
+    but the run calls a new method on it, assignments(reading, through,
+    classifications, taxonomy, writes), sharing t09's plan-text step; a dry run
+    reads the plan-text cache without writing it. On hspolicy26, read-only:
+    aff rounds unidentified 1,998 -> 940 of 2,192 (plan text 959, team carry
+    226, placed card 67); rounds with a read 50.6% -> 60.2%. Accept?
+    Recommendation: yes; it keeps Decision 5 and t09's tests unchanged.
+
+13. Found on the real store: a dry run reported the classification cache as
+    written (cache_written: true) while every checksum was unchanged; it now
+    reports false in a dry run, test shown failing first. Accept?
+    Recommendation: yes.
+
+Then: scripts/task pr --partial, and blocks 0 to 4 after the merge.
+```
+
+**Criteria still open**, so the pull request opens with `--partial` and the Goal stays `InProgress`:
+
+| Criterion | Status | Why |
+|---|---|---|
+| ac4: the smoke check passes in the validate-dev recorded tier | NOT RUN | It passes in the recorded tier locally (2 passed after the sync). validate-dev runs it on the pre-release the merge builds, and the PM records it with ac5 |
+| ac5: the first dev run published, its counts in the first-run note, the coach's review before 2026-11-07 | NOT RUN | Blocks 0 to 4 run after the merge, on dev's squash commit |
+| first-dev-run: the coach reviews the first Policy report | NOT RUN | With ac5 |

@@ -216,6 +216,7 @@ source_modules = [
     "debate_core.integrations.cognito",
     "debate_core.integrations.cloudwatch_audit",
     "debate_core.integrations.parameter_store",
+    "debate_core.integrations.secrets_manager",
     "debate_api",
     "debate_workers",
 ]
@@ -242,6 +243,7 @@ source_modules = [
     "debate_core.integrations.cognito",
     "debate_core.integrations.cloudwatch_audit",
     "debate_core.integrations.parameter_store",
+    "debate_core.integrations.secrets_manager",
     "debate_core.integrations.discovery",
     "debate_core.integrations.http_fetcher",
     "debate_api",
@@ -302,6 +304,7 @@ source_modules = [
     "debate_core.integrations.cognito",
     "debate_core.integrations.cloudwatch_audit",
     "debate_core.integrations.parameter_store",
+    "debate_core.integrations.secrets_manager",
     "debate_core.integrations.http_fetcher",
     # PM ruling 2026-10-22 (v1-e07-t05: feedparser falls back to a loose parser on a hostile feed).
     # The feed providers parse XML with defusedxml only, so lxml stays out of discovery too.
@@ -357,6 +360,7 @@ source_modules = [
     "debate_core.integrations.cognito",
     "debate_core.integrations.cloudwatch_audit",
     "debate_core.integrations.parameter_store",
+    "debate_core.integrations.secrets_manager",
     "debate_core.integrations.opencaselist",
     "debate_core.integrations.http_fetcher",
     "debate_api",

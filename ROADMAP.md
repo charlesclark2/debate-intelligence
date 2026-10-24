@@ -60,9 +60,9 @@ v2.3's extension work.
 
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
-| [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 47 | 44 | 236 |
+| [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 48 | 44 | 238 |
 | [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 103 | 81 | 487 |
-| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 26 | 11 | 204 |
+| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 28 | 12 | 212 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 13 | 2 | 108 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 16 | 7 | 98 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 0 | 66 |
@@ -127,6 +127,7 @@ Repo, tooling, CI, promotion flow, task tooling, domain core, and deterministic 
 | [Test selection, round three: command registration, quoted words, the root pyproject and the contract suites](plan_specs/v1/e01-repo-foundation/t32-test-selection-reach-round-three.yaml) `v1-e01-t32-test-selection-reach-round-three` | Pending | 1 | 3.0 |
 | [When a newer build wrote the database or added a setting, the error says so](plan_specs/v1/e01-repo-foundation/t33-newer-build-messages.yaml) `v1-e01-t33-newer-build-messages` | Pending | 0 | 2.0 |
 | [validate-dev is green again, and a red one is seen](plan_specs/v1/e01-repo-foundation/t34-validate-dev-green-again.yaml) `v1-e01-t34-validate-dev-green-again` | InProgress | 1 | 3.0 |
+| [CI's pyright covers tests/architecture and tests/smoke](plan_specs/v1/e01-repo-foundation/t35-pyright-scope-tests.yaml) `v1-e01-t35-pyright-scope-tests` | Pending | 1 | 1.0 |
 
 #### [E02 — Domain Core: Entities, Ports & Local Persistence](plan_specs/v1/e02-domain-core/epic.yaml)
 
@@ -304,13 +305,15 @@ Weekly argument-landscape reports show which positions are being read and with w
 |---|---|---|---|
 | [Topic position taxonomies](plan_specs/v1/e32-argument-landscape/t01-position-taxonomy.yaml) `v1-e32-t01-position-taxonomy` | Succeeded | 1 | 14.0 |
 | [Position classification](plan_specs/v1/e32-argument-landscape/t02-position-classification.yaml) `v1-e32-t02-position-classification` | Succeeded | 2 | 8.5 |
-| [Weekly landscape report](plan_specs/v1/e32-argument-landscape/t03-landscape-report.yaml) `v1-e32-t03-landscape-report` | Pending | 4 | 12.0 |
+| [Weekly landscape report](plan_specs/v1/e32-argument-landscape/t03-landscape-report.yaml) `v1-e32-t03-landscape-report` | Succeeded | 4 | 12.0 |
 | [Trends and per-school views](plan_specs/v1/e32-argument-landscape/t04-trend-and-school-views.yaml) `v1-e32-t04-trend-and-school-views` | Pending | 1 | 9.0 |
 | [`debate-research landscape` command](plan_specs/v1/e32-argument-landscape/t05-landscape-cli.yaml) `v1-e32-t05-landscape-cli` | Pending | 2 | 10.0 |
 | [LD de-extinction position taxonomy](plan_specs/v1/e32-argument-landscape/t06-ld-de-extinction-taxonomy.yaml) `v1-e32-t06-ld-de-extinction-taxonomy` | Pending | 1 | 3.0 |
 | [Model classification of what headings cannot place](plan_specs/v1/e32-argument-landscape/t07-model-classification-stage.yaml) `v1-e32-t07-model-classification-stage` | Pending | 3 | 8.0 |
 | [A released position id is never deleted or reused](plan_specs/v1/e32-argument-landscape/t08-released-position-ids.yaml) `v1-e32-t08-released-position-ids` | Pending | 1 | 3.0 |
 | [Each Policy affirmative round's plan, counted first, so the landscape names what affs read](plan_specs/v1/e32-argument-landscape/t09-policy-plan-texts.yaml) `v1-e32-t09-policy-plan-texts` | Pending | 1 | 5.0 |
+| [Impact cards per DA and advantage in the landscape report](plan_specs/v1/e32-argument-landscape/t10-impact-cards-per-position.yaml) `v1-e32-t10-impact-cards-per-position` | Pending | 1 | 4.0 |
+| [Counterplan texts, kritik alternatives and overviews in the landscape report](plan_specs/v1/e32-argument-landscape/t11-negative-analytic-texts.yaml) `v1-e32-t11-negative-analytic-texts` | Pending | 2 | 5.0 |
 
 #### [E33 — Evidence File Builder](plan_specs/v1/e33-file-builder/epic.yaml)
 

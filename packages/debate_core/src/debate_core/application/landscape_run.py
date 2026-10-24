@@ -40,6 +40,7 @@ the composition root builds for `DEBATE_ENV`, which is private and encrypted by 
 
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import os
 from collections.abc import Callable, Sequence
@@ -379,6 +380,11 @@ class LandscapeRunService:
             )
         store = _ReadOnlyClassifications(self._classifications) if request.dry_run else self._classifications
         classified = await self._classifier(store).classify(reading)
+        if request.dry_run:
+            # The read-only view dropped the cache write, so the counts must not report one.
+            classified = dataclasses.replace(
+                classified, counts=dataclasses.replace(classified.counts, cache_written=False)
+            )
         if classified.counts.model_items > self._max_model_items:
             raise ModelBudgetExceeded(classified.counts.model_items, self._max_model_items)
         assignments = (

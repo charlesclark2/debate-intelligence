@@ -419,6 +419,8 @@ async def test_a_dry_run_lists_the_planned_uploads_and_writes_nothing(
     assert not (world.data_dir / "reports").exists()
     assert not (world.data_dir / "landscape").exists()
     assert result.classification.review_queue_location == "(not written: dry run)"
+    assert result.classification.counts.misses > 0
+    assert result.classification.counts.cache_written is False
 
 
 async def test_a_dry_run_after_a_publish_plans_nothing_to_upload(

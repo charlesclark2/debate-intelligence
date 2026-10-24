@@ -149,7 +149,6 @@ class AffAssignmentService:
         )
         return dataclasses.replace(built, plan_texts=plan_texts)
 
-
     async def assignments(
         self,
         *,
@@ -173,7 +172,9 @@ class AffAssignmentService:
             taxonomy=taxonomy,
         ).assignments
 
-    async def _read_plan_texts(self, reading: SeedReading, taxonomy: Taxonomy, *, writes: bool) -> PlanTextRun:
+    async def _read_plan_texts(
+        self, reading: SeedReading, taxonomy: Taxonomy, *, writes: bool
+    ) -> PlanTextRun:
         """Each affirmative source's plan-text verdict, from the cache or by parsing it."""
         affirmative = {
             source.sha256

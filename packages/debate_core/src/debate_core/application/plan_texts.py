@@ -114,7 +114,10 @@ class PlanTextService:
     def without_writes(self) -> PlanTextService:
         """The same reading over a view of the cache that is never written: what a dry run reads with."""
         return PlanTextService(
-            parser=self._parser, runner=self._runner, store=_UnwrittenPlanTexts(self._store), local=self._local
+            parser=self._parser,
+            runner=self._runner,
+            store=_UnwrittenPlanTexts(self._store),
+            local=self._local,
         )
 
     async def read(

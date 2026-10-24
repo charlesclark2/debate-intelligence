@@ -79,7 +79,7 @@ def test_the_container_wires_these_integrations() -> None:
         "debate_core.integrations.cognito",
         "debate_core.integrations.docx_parser",
         "debate_core.integrations.landscape.classification_store",
-    "debate_core.integrations.landscape.plan_text_store",
+        "debate_core.integrations.landscape.plan_text_store",
         "debate_core.integrations.landscape.yaml_taxonomy_repository",
         "debate_core.integrations.local",
         "debate_core.integrations.local.fs_version_store",

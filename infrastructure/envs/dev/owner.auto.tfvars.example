@@ -30,3 +30,8 @@ evidence_search_accounts_user_names = ["your-identity-center-user-name"]
 
 # Where the pilot's $10 budget alarm writes. Leave it out and the alarm goes to `owner` above.
 evidence_search_budget_emails = ["you@example.com"]
+
+# The weekly caselist run in the cloud (v1-e40-t02, ADR-0020). CaselistSecretWriter is what
+# `debate-research caselist auth set-password` runs as: write the Tabroom password and the token,
+# read neither back. Exactly one name: the coach whose Tabroom account the run logs in with.
+caselist_credential_writer_user_names = ["your-identity-center-user-name"]

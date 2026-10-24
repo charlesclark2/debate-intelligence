@@ -141,6 +141,7 @@ locals {
   }) : null
 }
 
+# tflint-ignore: aws_resource_missing_tags
 resource "aws_cloudwatch_log_group" "login" {
   count = local.create_login_task ? 1 : 0
 
@@ -148,6 +149,7 @@ resource "aws_cloudwatch_log_group" "login" {
   retention_in_days = var.login_log_retention_days
 }
 
+# tflint-ignore: aws_resource_missing_tags
 resource "aws_iam_role" "login_execution" {
   count = local.create_login_task ? 1 : 0
 
@@ -179,6 +181,7 @@ resource "aws_iam_role_policy_attachments_exclusive" "login_execution" {
   policy_arns = []
 }
 
+# tflint-ignore: aws_resource_missing_tags
 resource "aws_ecs_task_definition" "login" {
   count = local.create_login_task ? 1 : 0
 
@@ -198,6 +201,7 @@ resource "aws_ecs_task_definition" "login" {
   }
 }
 
+# tflint-ignore: aws_resource_missing_tags
 resource "aws_iam_role" "scheduler" {
   count = local.create_login_task ? 1 : 0
 

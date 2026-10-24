@@ -14,6 +14,9 @@
 # neither an IAM grant nor a policy left off by mistake widens a read. The policies are built with
 # jsonencode so the module's tests can read them back under a mocked provider.
 
+# Tagged by the calling root's provider default_tags, which tflint cannot see from inside the
+# module; linting envs/dev or envs/prod follows the module call and checks them there.
+# tflint-ignore: aws_resource_missing_tags
 resource "aws_kms_key" "credentials" {
   description             = "Encrypts the ${var.environment} caselist run's two secrets, the Tabroom password and the caselist token, and nothing else (ADR-0020 (2))."
   key_usage               = "ENCRYPT_DECRYPT"
@@ -28,12 +31,14 @@ resource "aws_kms_alias" "credentials" {
   target_key_id = aws_kms_key.credentials.key_id
 }
 
+# tflint-ignore: aws_resource_missing_tags
 resource "aws_secretsmanager_secret" "tabroom_password" {
   name        = local.password_secret_name
   description = "The coach's Tabroom username and password for the ${var.environment} weekly login. Written with `caselist auth set-password`; read by the login role only (ADR-0020 (2))."
   kms_key_id  = aws_kms_key.credentials.arn
 }
 
+# tflint-ignore: aws_resource_missing_tags
 resource "aws_secretsmanager_secret" "token" {
   name        = local.token_secret_name
   description = "The ${var.environment} caselist_token record. Written by the login role and the coach's writer; read by the run role only (ADR-0020 (2))."

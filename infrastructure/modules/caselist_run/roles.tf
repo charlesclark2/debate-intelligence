@@ -12,6 +12,7 @@
 # the next apply. Only DebateBreakGlassAdmin (the apply) and the login schedule's own role hold
 # iam:PassRole on the login role (login_task.tf); DebateMaintainer's PowerUserAccess has none.
 
+# tflint-ignore: aws_resource_missing_tags
 resource "aws_iam_role" "login" {
   name                 = local.login_role_name
   description          = "The ${var.environment} weekly caselist login task: reads the Tabroom password, writes the caselist token (ADR-0020 (2))."
@@ -35,6 +36,7 @@ resource "aws_iam_role_policy_attachments_exclusive" "login" {
   policy_arns = []
 }
 
+# tflint-ignore: aws_resource_missing_tags
 resource "aws_iam_role" "run" {
   name                 = local.run_role_name
   description          = "The ${var.environment} weekly caselist run. Reads the caselist token, never the Tabroom password (ADR-0020 (2))."

@@ -4,9 +4,12 @@
 # seeded candidates (headings at least two teams used) or from the coach. Never delete or reuse an
 # id once released: retire it with deprecated: true, and merged_into when it was renamed or merged.
 # generic.yaml's Policy positions are merged in when a report reads this file.
+#
+# 1.1.0 (2026-10-24, the coach's first review-queue pass, v1-e32-t05): added debt-da, ai-da,
+# democracy-da, sustainability-advantage and biotech-advantage, each with its queue heading as alias.
 schema_version: 1
 topic_id: policy-2026-27-nhi
-taxonomy_version: 1.0.0
+taxonomy_version: 1.1.0
 event: POLICY
 positions:
 
@@ -88,6 +91,16 @@ positions:
     kind: advantage
     side: aff
     aliases: [adv pharma, pharma adv, advantage pharma]
+  - id: sustainability-advantage
+    label: Sustainability advantage
+    kind: advantage
+    side: aff
+    aliases: [sustainability]
+  - id: biotech-advantage
+    label: Biotech advantage
+    kind: advantage
+    side: aff
+    aliases: [biotech]
 
   # Disadvantages
   - id: midterms-da
@@ -170,6 +183,21 @@ positions:
     kind: da
     side: neg
     aliases: [innovation da, da innovation]
+  - id: debt-da
+    label: Debt DA
+    kind: da
+    side: neg
+    aliases: [debt]
+  - id: ai-da
+    label: AI DA
+    kind: da
+    side: neg
+    aliases: [ai]
+  - id: democracy-da
+    label: Democracy DA
+    kind: da
+    side: neg
+    aliases: [democracy]
 
   # Counterplans and PICs
   - id: states-cp

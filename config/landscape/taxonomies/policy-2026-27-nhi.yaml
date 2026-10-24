@@ -7,9 +7,13 @@
 #
 # 1.1.0 (2026-10-24, the coach's first review-queue pass, v1-e32-t05): added debt-da, ai-da,
 # democracy-da, sustainability-advantage and biotech-advantage, each with its queue heading as alias.
+# 1.2.0 (2026-10-24, the coach's answers to the plan-text sheet, v1-e32-t09): nine mechanisms of
+# single payer as its children and thirteen other affs, each with the coach's tag keywords and no
+# alias. A child's id is its mechanism name in kebab case plus -aff; the others keep the coach's ids.
+# nhi-aff has no keywords: plan_texts/policy-2026-27-nhi.yaml says when a plan text names it.
 schema_version: 1
 topic_id: policy-2026-27-nhi
-taxonomy_version: 1.1.0
+taxonomy_version: 1.2.0
 event: POLICY
 positions:
 
@@ -19,6 +23,129 @@ positions:
     kind: aff
     side: aff
     aliases: [single payer, aff single payer, single payer aff, singlepayer]
+
+  # Single payer's mechanisms, from the coach's plan-text answers: a card under single payer whose tag
+  # holds one child's keywords goes under that child, and a plan text naming one names it
+  - id: global-budgets-aff
+    label: Global budgets
+    kind: aff
+    side: aff
+    parent: single-payer-aff
+    tag_keywords: [global budget, global budgets, global budgeting, global operating budget, global operating budgets]
+  - id: single-public-authority-aff
+    label: Single public authority
+    kind: aff
+    side: aff
+    parent: single-payer-aff
+    tag_keywords: [public authority, financing authority]
+  - id: medicare-for-all-aff
+    label: Medicare for all
+    kind: aff
+    side: aff
+    parent: single-payer-aff
+    tag_keywords: [medicare for all, improved medicare, m4a, "3069", medicaid for all]
+  - id: lower-payment-rates-aff
+    label: Lower payment rates
+    kind: aff
+    side: aff
+    parent: single-payer-aff
+    tag_keywords: [lower payment rates]
+  - id: value-based-reimbursement-aff
+    label: Value-based reimbursement
+    kind: aff
+    side: aff
+    parent: single-payer-aff
+    tag_keywords: [value based reimbursement, value based payments, value based payment, value based healthcare, value based care]
+  - id: disparate-impact-enforcement-aff
+    label: Disparate impact enforcement
+    kind: aff
+    side: aff
+    parent: single-payer-aff
+    tag_keywords: [disparate impact]
+  - id: degrowth-aff
+    label: Degrowth
+    kind: aff
+    side: aff
+    parent: single-payer-aff
+    tag_keywords: [degrowth]
+  - id: prescription-drug-coverage-aff
+    label: Prescription drug coverage
+    kind: aff
+    side: aff
+    parent: single-payer-aff
+    tag_keywords: [prescription drug, covering pharmaceuticals]
+  - id: nanomedicine-coverage-aff
+    label: Nanomedicine coverage
+    kind: aff
+    side: aff
+    parent: single-payer-aff
+    tag_keywords: [nanomedicine, nanomedical]
+
+  # Other affs, from the same answers
+  - id: nhi-aff
+    label: Resolutional NHI
+    kind: aff
+    side: aff
+  - id: public-option-aff
+    label: Public option
+    kind: aff
+    side: aff
+    tag_keywords: [public option, federal employees health benefits]
+  - id: ucc-aff
+    label: UCC
+    kind: aff
+    side: aff
+    tag_keywords: [ucc, universal catastrophic coverage, catastrophic health insurance, sliding scale]
+  - id: indigenous-aff
+    label: Indigenous
+    kind: aff
+    side: aff
+    tag_keywords: [indigenous]
+  - id: reproductive-health-aff
+    label: Reproductive health
+    kind: aff
+    side: aff
+    tag_keywords: [reproductive, hyde amendment]
+  - id: tiered-nhi-aff
+    label: Tiered NHI
+    kind: aff
+    side: aff
+    tag_keywords: [tiered national health insurance]
+  - id: incarceration-aff
+    label: Incarceration
+    kind: aff
+    side: aff
+    tag_keywords: [incarcerated, incarceration, correctional]
+  - id: voucher-aff
+    label: Vouchers
+    kind: aff
+    side: aff
+    tag_keywords: [voucher]
+  - id: medicaid-expansion-aff
+    label: Medicaid expansion
+    kind: aff
+    side: aff
+    tag_keywords: [medicaid expansion]
+  - id: aca-reform-aff
+    label: ACA reform
+    kind: aff
+    side: aff
+    tag_keywords: [affordable care act]
+  - id: childrens-coverage-aff
+    label: Children's coverage
+    kind: aff
+    side: aff
+    tag_keywords: [for all children]
+  - id: eco-nhi-aff
+    label: Ecological NHI
+    kind: aff
+    side: aff
+    tag_keywords: [ecological, green national health insurance, sustainable national health insurance]
+  - id: human-enhancement-aff
+    label: Human enhancement
+    kind: aff
+    side: aff
+    tag_keywords: [human enhancement]
 
   # Advantages: standalone until the headings show which aff each belongs to
   - id: costs-advantage

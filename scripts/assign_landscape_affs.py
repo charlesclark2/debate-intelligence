@@ -14,8 +14,10 @@ how the operator reads them for a snapshot and writes the coach's sheet. Three c
   0.3 s of a worker's time each, so a few minutes for hspolicy26 over the default workers.
 * **`sheet`** does the same, then reads again the plan texts the sheet shows and writes
   `<topic id>-plan-texts.md` and `plan-text-answers.csv` to `--out`: plan texts clustered by the
-  mechanism words that tell them apart, clusters fewer than two teams read withheld
-  (:mod:`debate_core.arguments.landscape.plan_text_sheet`). Both hold the teams' own words, so `--out`
+  mechanism words that tell them apart, each cluster with its commonest plan text word for word,
+  one-team clusters included, and no text that names a school of the caselist
+  (:mod:`debate_core.arguments.landscape.plan_text_sheet`). It refuses to replace an answers CSV in
+  which the coach has written anything. Both hold the teams' own words, so `--out`
   must be outside the repository, and the script refuses a path inside it. It prints counts only.
 
 * **`assign`** reads plan texts as `plan-texts` does, classifies the snapshot's cards as `v1-e32-t02`'s
@@ -37,6 +39,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import csv
 import io
 import os
 import sys
@@ -268,6 +271,7 @@ async def _assign(arguments: argparse.Namespace) -> int:
 async def _sheet(arguments: argparse.Namespace) -> int:
     started = time.perf_counter()
     out = _outside_the_repository(arguments.out, "--out")
+    _refuse_answers_begun(out / ANSWERS_FILE)
     read = await _read(arguments)
     if not read.affirmative:
         print("FAILED: 0 affirmative sources read; no sheet was written.", file=sys.stderr)
@@ -280,6 +284,7 @@ async def _sheet(arguments: argparse.Namespace) -> int:
             teams=read.teams.get(sha, frozenset()),
             named=read.run.verdicts[sha].position_id,
             words=words,
+            texts=found.texts.get(sha, ()),
         )
         for sha, words in found.words.items()
     ]
@@ -303,12 +308,29 @@ async def _sheet(arguments: argparse.Namespace) -> int:
     print(
         f"Sheet: {sheet.documents} documents with a plan text by {sheet.teams} teams; "
         f"{len(sheet.clusters)} clusters shown, {sheet.withheld_clusters} withheld "
-        f"({sheet.withheld_documents} documents) as read by fewer than {sheet.minimum_teams} teams; "
+        f"({sheet.withheld_documents} documents); {sheet.school_texts} plan "
+        f"{'text' if sheet.school_texts == 1 else 'texts'} naming a school not shown; "
         f"{found.mismatched} read differently and {found.unread} unread, left off."
     )
     print(f"Wrote {sheet_path.name} and {ANSWERS_FILE} to {out}.")
     print(f"Runtime {time.perf_counter() - started:.1f} s.")
     return 0
+
+
+def _refuse_answers_begun(answers: Path) -> None:
+    """Refuse to replace an answers CSV in which the coach has written a name or a keyword."""
+    if not answers.is_file():
+        return
+    with answers.open(encoding="utf-8", newline="") as stream:
+        begun = any(
+            (row.get("mechanism_name") or "").strip() or (row.get("tag_keywords") or "").strip()
+            for row in csv.DictReader(stream)
+        )
+    if begun:
+        raise Refused(
+            f"{answers.name} in {answers.parent} already holds answers; "
+            "move it aside before rebuilding the sheet"
+        )
 
 
 def _common(command: argparse.ArgumentParser) -> None:

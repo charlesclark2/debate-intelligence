@@ -27,6 +27,7 @@ from debate_core.arguments.landscape.plan_text import (
     document_plan_text,
     paragraphs_of,
     plan_text_words,
+    read_back_plan_texts,
     read_plan_texts,
     sheet_plan_texts,
 )
@@ -391,3 +392,10 @@ def test_a_paragraph_that_reads_differently_gives_no_words() -> None:
     changed = paragraphs((BLOCK, "Plan"), (ANALYTIC, SHAPED_NOTHING))
     assert plan_text_words(changed, found) is None
     assert plan_text_words(paragraphs((BLOCK, "Plan")), found) is None
+
+
+def test_a_plan_text_is_read_back_word_for_word() -> None:
+    specs = paragraphs((BLOCK, "Plan"), (ANALYTIC, SHAPED_SAMPLE), (BLOCK, "Plan"), (ANALYTIC, "Other plan."))
+    found = read_plan_texts(specs, frozenset(), WORDS)
+    assert read_back_plan_texts(specs, found) == (SHAPED_SAMPLE, "Other plan.")
+    assert read_back_plan_texts(paragraphs((BLOCK, "Plan"), (ANALYTIC, SHAPED_NOTHING)), found[:1]) is None

@@ -158,14 +158,18 @@ def test_the_sheet_clusters_the_plan_texts_and_names_no_one(
     assert run(world, "sheet", "--out", str(out)) == 0
     lines = printed(capsys)
     assert lines[-2:] == [
-        "Sheet: 5 documents with a plan text by 5 teams; 2 clusters shown, 0 withheld (0 documents) as "
-        "read by fewer than 2 teams; 0 read differently and 0 unread, left off.",
+        "Sheet: 5 documents with a plan text by 5 teams; 2 clusters shown, 0 withheld (0 documents); "
+        "1 plan text naming a school not shown; 0 read differently and 0 unread, left off.",
         f"Wrote {TOPIC}-plan-texts.md and plan-text-answers.csv to {out.resolve()}.",
     ]
     sheet = (out / f"{TOPIC}-plan-texts.md").read_text(encoding="utf-8")
     assert "| C01 | 3 | 3 | sample-plan-aff | financed, levy, payroll, plan, sample | |" in sheet
     assert "| C02 | 2 | 2 | none | national, program, route, using, voucher | |" in sheet
     assert "establish, federal, government, should, states, united" in sheet
+    assert f"> {PAYROLL}" in sheet.splitlines()
+    assert "Held exactly by 2 of its 3 documents." in sheet
+    assert f"> {VOUCHER}" in sheet.splitlines()
+    assert "Held exactly by 2 of its 2 documents." in sheet
     with (out / "plan-text-answers.csv").open(encoding="utf-8", newline="") as stream:
         rows = list(csv.DictReader(stream))
     assert [(row["cluster"], row["teams"], row["mechanism_name"], row["tag_keywords"]) for row in rows] == [
@@ -173,8 +177,37 @@ def test_the_sheet_clusters_the_plan_texts_and_names_no_one(
         ("C02", "2", "", ""),
     ]
     written = (sheet + (out / "plan-text-answers.csv").read_text(encoding="utf-8")).casefold()
-    for name in ("school", "code", "three", "sample invitational", "round"):
-        assert name not in written.replace("sample-plan-aff", "").replace("sample plan", "")
+    numbers = ("one", "two", "three", "four", "five", "six")
+    planted = (
+        [f"school {one}" for one in numbers] + [f"code{one}" for one in numbers] + ["sample invitational"]
+    )
+    assert [name for name in planted if name in written] == []
+
+
+def test_the_sheet_never_overwrites_answers_the_coach_has_begun(
+    world: tuple[Path, Path], capsys: pytest.CaptureFixture[str], tmp_path: Path
+) -> None:
+    out = tmp_path / "sheet"
+    out.mkdir()
+    begun = (
+        "cluster,teams,documents,aff_named,words_in_every_plan_text,mechanism_name,tag_keywords\r\n"
+        "C01,3,3,sample-plan-aff,financed levy payroll,Payroll levy,payroll levy\r\n"
+    )
+    (out / "plan-text-answers.csv").write_text(begun, encoding="utf-8", newline="")
+    assert run(world, "sheet", "--out", str(out)) == 2
+    assert "already holds answers" in capsys.readouterr().err
+    with (out / "plan-text-answers.csv").open(encoding="utf-8", newline="") as stream:
+        assert stream.read() == begun
+    assert not (out / f"{TOPIC}-plan-texts.md").exists()
+
+
+def test_the_sheet_replaces_an_unanswered_sheet(
+    world: tuple[Path, Path], capsys: pytest.CaptureFixture[str], tmp_path: Path
+) -> None:
+    out = tmp_path / "sheet"
+    assert run(world, "sheet", "--out", str(out)) == 0
+    assert run(world, "sheet", "--out", str(out)) == 0
+    capsys.readouterr()
 
 
 def test_the_sheet_is_refused_inside_the_repository(

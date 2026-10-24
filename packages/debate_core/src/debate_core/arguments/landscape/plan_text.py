@@ -65,6 +65,7 @@ __all__ = [
     "document_plan_text",
     "paragraphs_of",
     "plan_text_words",
+    "read_back_plan_texts",
     "read_plan_texts",
     "sheet_plan_texts",
 ]
@@ -244,25 +245,32 @@ def sheet_plan_texts(found: tuple[PlanTextParagraph, ...]) -> tuple[PlanTextPara
     return tuple(one for one in found if one.named or one.shaped)
 
 
+def read_back_plan_texts(
+    paragraphs: tuple[Paragraph, ...], wanted: tuple[PlanTextParagraph, ...]
+) -> tuple[str, ...] | None:
+    """`wanted`'s paragraphs word for word, in file order; None when one is gone or reads differently.
+
+    A paragraph is found by its element index and must hash to the digest kept for it, so nothing is
+    shown from a paragraph other than the one that was read.
+    """
+    by_index = {one.element_index: one for one in paragraphs}
+    texts: list[str] = []
+    for one in sorted(wanted, key=lambda found: found.element_index):
+        paragraph = by_index.get(one.element_index)
+        if paragraph is None or hashlib.sha256(tag_words(paragraph.text).encode()).hexdigest() != one.digest:
+            return None
+        texts.append(paragraph.text)
+    return tuple(texts)
+
+
 def plan_text_words(
     paragraphs: tuple[Paragraph, ...], wanted: tuple[PlanTextParagraph, ...]
 ) -> tuple[str, ...] | None:
-    """The words of `wanted`'s paragraphs, in file order; None when one is gone or reads differently.
-
-    A paragraph is found by its element index and must hash to the digest kept for it, so a sheet
-    never shows words from a paragraph other than the one that was read.
-    """
-    by_index = {one.element_index: one for one in paragraphs}
-    words: list[str] = []
-    for one in sorted(wanted, key=lambda found: found.element_index):
-        paragraph = by_index.get(one.element_index)
-        if paragraph is None:
-            return None
-        found = tag_words(paragraph.text)
-        if hashlib.sha256(found.encode()).hexdigest() != one.digest:
-            return None
-        words.extend(found.split())
-    return tuple(words)
+    """The words of `wanted`'s paragraphs, in file order; None as :func:`read_back_plan_texts` says."""
+    texts = read_back_plan_texts(paragraphs, wanted)
+    if texts is None:
+        return None
+    return tuple(word for text in texts for word in tag_words(text).split())
 
 
 def _is_label(text: str) -> bool:

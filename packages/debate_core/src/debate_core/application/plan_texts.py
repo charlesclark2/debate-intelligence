@@ -39,6 +39,7 @@ from debate_core.application.ports.plan_text_store import (
     CachedPlanTextParagraph,
     PlanTextStore,
 )
+from debate_core.arguments.landscape.matcher import tag_words
 from debate_core.arguments.landscape.plan_text import (
     DocumentPlanText,
     PlanTextParagraph,
@@ -46,7 +47,7 @@ from debate_core.arguments.landscape.plan_text import (
     PlanTextVocabulary,
     document_plan_text,
     paragraphs_of,
-    plan_text_words,
+    read_back_plan_texts,
     read_plan_texts,
     sheet_plan_texts,
 )
@@ -95,6 +96,8 @@ class PlanTextWordsRun:
     mismatched: int
     """Sources whose paragraphs no longer read as their reading says; left off the sheet."""
     unread: int
+    texts: dict[str, tuple[str, ...]] = field(default_factory=dict[str, tuple[str, ...]], repr=False)
+    """The same plan texts word for word, as the files hold them (data-use policy 1.13)."""
 
 
 class PlanTextService:
@@ -173,7 +176,7 @@ class PlanTextService:
     async def words(
         self, caselist: str, sources: Sequence[SourceDocument], run: PlanTextRun
     ) -> PlanTextWordsRun:
-        """The words of each source's sheet plan texts, parsed again from its bytes and never written.
+        """The words and the text of each source's sheet plan texts, parsed again and never written.
 
         Only sources whose reading in `run` holds a plan text the sheet shows are parsed.
         """
@@ -183,6 +186,7 @@ class PlanTextService:
             if (shown := sheet_plan_texts(run.readings.get(source.sha256, ())))
         }
         words: dict[str, tuple[str, ...]] = {}
+        texts: dict[str, tuple[str, ...]] = {}
         mismatched = unread = parsed = 0
         jobs = self._jobs([source for source, _ in (wanted[sha] for sha in sorted(wanted))])
         for job, result in self._runner.run(self._parser, jobs):
@@ -191,17 +195,19 @@ class PlanTextService:
                 continue
             parsed += 1
             paragraphs, _ = paragraphs_of(result)
-            found = plan_text_words(paragraphs, wanted[job.source.sha256][1])
+            found = read_back_plan_texts(paragraphs, wanted[job.source.sha256][1])
             if found is None:
                 mismatched += 1
             else:
-                words[job.source.sha256] = found
+                texts[job.source.sha256] = found
+                words[job.source.sha256] = tuple(word for text in found for word in tag_words(text).split())
         return PlanTextWordsRun(
             words=dict(sorted(words.items())),
             parsed=parsed,
             without_plan_text=len({source.sha256 for source in sources}) - len(wanted),
             mismatched=mismatched,
             unread=unread,
+            texts=dict(sorted(texts.items())),
         )
 
     def _jobs(self, sources: Sequence[SourceDocument]) -> Iterator[LoadableJob]:

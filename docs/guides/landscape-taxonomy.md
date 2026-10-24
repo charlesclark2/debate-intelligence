@@ -258,9 +258,11 @@ read every affirmative file again (a few minutes on the Mac that holds the store
 ## The plan-text sheet and your mechanisms
 
 The plan-text sheet lists what plans teams read, grouped by the words that tell one plan text from
-another. Words most plan texts share (`united states federal government should establish`, and the
-like) are left out as the frame. A group fewer than two teams read is counted and not shown, because
-one team's plan text can point at the team. The operator writes it outside the repository:
+another. Words nearly every plan text shares (`united states federal government should establish`,
+and the like) are left out as the frame. Each group shows its commonest plan text word for word, with
+how many of its files hold it exactly, and a group one team reads is listed too (data-use policy 1.13).
+No school or team is named beside a text, and a plan text that names a school is not shown. The
+operator writes it outside the repository; it will not replace an answers file you have begun:
 
 ```bash
 uv run python scripts/assign_landscape_affs.py sheet --caselist hspolicy26 --out ~/Documents/debate/landscape-seed

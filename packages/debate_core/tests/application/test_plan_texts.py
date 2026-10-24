@@ -271,6 +271,7 @@ async def test_the_sheet_s_words_are_read_again_only_from_sources_with_a_plan_te
         unnamed.sha256: tuple(UNNAMED_PLAN.casefold().rstrip(".").split()),
     }
     assert (found.parsed, found.without_plan_text, found.mismatched, found.unread) == (2, 1, 0, 0)
+    assert found.texts == {named.sha256: (NAMED_PLAN,), unnamed.sha256: (UNNAMED_PLAN,)}
 
 
 @pytest.mark.anyio

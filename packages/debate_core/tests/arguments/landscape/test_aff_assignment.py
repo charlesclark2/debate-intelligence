@@ -179,6 +179,11 @@ def test_a_round_no_readable_team_disclosed_is_never_carried_into_or_from() -> N
     assert assigned(specs, {"d1": NAMES_SAMPLE, "d2": NONE}) == {"r1": (SAMPLE, PLAN_TEXT_METHOD)}
 
 
+def test_a_round_no_readable_team_disclosed_is_not_carried_into_from_another_team() -> None:
+    specs = rounds(("r1", "team-a", ("d1",)), ("r2", None, ("d2",)))
+    assert assigned(specs, {"d1": NAMES_SAMPLE, "d2": NONE}) == {"r1": (SAMPLE, PLAN_TEXT_METHOD)}
+
+
 def test_the_counts_add_up() -> None:
     specs = rounds(
         ("r1", "team-a", ("d1",)),

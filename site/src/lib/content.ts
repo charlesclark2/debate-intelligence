@@ -130,6 +130,30 @@ export const contactEmailSchema = z.object({
   role: z.string().min(1),
 })
 
+/**
+ * The team's Instagram account, linked from the footer of every page and from the contact page
+ * (v1-e37-t07). Only an account address on www.instagram.com is accepted: the link is a plain way
+ * out to the team's profile, never a post, an embed or another site's copy of it. The note is
+ * shown beside the label and has to name Instagram, so the link says where it goes.
+ */
+export const instagramLinkSchema = z.object({
+  address: z
+    .string()
+    .regex(
+      /^https:\/\/www\.instagram\.com\/[A-Za-z0-9._]{1,30}\/$/,
+      'must be an Instagram account address, https://www.instagram.com/<handle>/',
+    ),
+  label: z.string().min(1),
+  externalLinkNote: z
+    .string()
+    .min(1)
+    .refine((value) => /instagram/i.test(value), 'must say that the link opens Instagram'),
+  /** The heading over the link on the contact page. */
+  contactHeading: z.string().min(1),
+})
+
+export type InstagramLinkSettings = z.infer<typeof instagramLinkSchema>
+
 export const siteSettingsSchema = z.object({
   name: z.string().min(1),
   shortName: z.string().min(1),
@@ -145,6 +169,7 @@ export const siteSettingsSchema = z.object({
     .min(1, 'the site needs at least one page in its navigation'),
   skipLinkLabel: z.string().min(1),
   contactEmails: z.array(contactEmailSchema).min(1),
+  instagram: instagramLinkSchema,
   debaterLoginLabel: z.string().min(1),
 })
 

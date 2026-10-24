@@ -3,7 +3,7 @@ import { join, relative } from 'node:path'
 
 import { describe, expect, it } from 'vitest'
 
-import { EMAIL_UPDATES_ID, loadEmailUpdatesContent } from '@/lib/content'
+import { EMAIL_UPDATES_ID, loadEmailUpdatesContent, loadSiteSettings } from '@/lib/content'
 
 import { exportDirectory as outDirectory } from './built-export'
 
@@ -76,14 +76,17 @@ function exported(path: string): string {
   return relative(outDirectory, path)
 }
 
-/** Text with every occurrence of the signup address removed, in any escaping it travels in. */
-function withoutSignupLink(text: string): string {
-  if (!emailUpdates.signupUrl) return text
-  const url = emailUpdates.signupUrl
+/** Text with every occurrence of one address removed, in any escaping it travels in. */
+function withoutAddress(text: string, url: string): string {
   return [url, JSON.stringify(url).slice(1, -1), url.replaceAll('/', '\\/')].reduce(
     (remaining, form) => remaining.replaceAll(form, ''),
     text,
   )
+}
+
+/** Text with every occurrence of the signup address removed. */
+function withoutSignupLink(text: string): string {
+  return emailUpdates.signupUrl ? withoutAddress(text, emailUpdates.signupUrl) : text
 }
 
 function providerMentions(text: string): string[] {
@@ -236,6 +239,117 @@ describe('the built site, site/out', () => {
     for (const { path, html } of documents) {
       expect(parse(html).querySelectorAll('iframe, frame, object, embed'), path).toHaveLength(0)
     }
+  })
+})
+
+/**
+ * Instagram and Meta (v1-e37-t07 acceptance criteria 1 and 2).
+ *
+ * The site links to the team's Instagram account and loads nothing of Instagram's: the publishing
+ * policy allows a plain text link out to a social account and forbids the vendor's code
+ * (Analytics and third parties 4). So the one place an Instagram or Meta host may appear in the
+ * export is the account's address from content/site.yaml, in the <a> that carries it and in the
+ * page payload its href travels in, exactly as for the signup link above.
+ */
+const instagram = loadSiteSettings().instagram
+
+/** Instagram's and Meta's hosts, for pages, images, video, the JavaScript SDK and the embed loader. */
+const META_DOMAINS = [
+  'instagram.com',
+  'cdninstagram.com',
+  'instagr.am',
+  'facebook.com',
+  'facebook.net',
+  'fbcdn.net',
+  'fbsbx.com',
+]
+const metaPatterns = META_DOMAINS.map((domain) => ({ domain, pattern: domainPattern(domain) }))
+
+function metaMentions(text: string): string[] {
+  const remaining = withoutAddress(text, instagram.address)
+  return metaPatterns.filter(({ pattern }) => pattern.test(remaining)).map(({ domain }) => domain)
+}
+
+describe('the built site and Instagram, site/out', () => {
+  const documents = filesUnder(outDirectory, '.html').map((path) => ({
+    path: exported(path),
+    document: parse(readFileSync(path, 'utf8')),
+  }))
+  const accountLinks = (root: ParentNode) =>
+    [...root.querySelectorAll('a[href]')].filter((link) => link.getAttribute('href') === instagram.address)
+
+  it('links the account from the footer of every page, with text saying it opens Instagram’s site', () => {
+    expect(documents.length).toBeGreaterThanOrEqual(8)
+    for (const { path, document } of documents) {
+      const footer = document.querySelector('footer')
+      expect(footer, `${path} has no footer`).not.toBeNull()
+      const links = accountLinks(footer!)
+      expect(links, `${path} has no link to the Instagram account in its footer`).toHaveLength(1)
+      expect(links[0]?.textContent).toBe(`${instagram.label} (${instagram.externalLinkNote})`)
+      expect(links[0]?.getAttribute('rel')?.split(' '), path).toEqual(
+        expect.arrayContaining(['noopener', 'noreferrer']),
+      )
+    }
+  })
+
+  it('links it from the body of the contact page too', () => {
+    const main = parse(readFileSync(join(outDirectory, 'contact/index.html'), 'utf8')).querySelector('main')
+    expect(accountLinks(main!)).toHaveLength(1)
+  })
+
+  it('carries the address only on <a href>: no other element or attribute holds it', () => {
+    for (const { path, document } of documents) {
+      const holders = [...document.querySelectorAll('body *')].flatMap((element) =>
+        [...element.attributes]
+          .filter((attribute) => attribute.value.includes(instagram.address))
+          .filter((attribute) => !(element.tagName === 'A' && attribute.name === 'href'))
+          .map((attribute) => `<${element.tagName.toLowerCase()} ${attribute.name}>`),
+      )
+      expect(holders, path).toEqual([])
+    }
+  })
+
+  it('fetches nothing from Instagram or Meta: no script, stylesheet, image, frame or embed', () => {
+    for (const { path, document } of documents) {
+      const offenders = FETCHING_ATTRIBUTES.flatMap(([selector, attribute]) =>
+        [...document.querySelectorAll(selector)]
+          .map((element) => element.getAttribute(attribute) ?? '')
+          .filter((value) => metaPatterns.some(({ pattern }) => pattern.test(value)))
+          .map((value) => `<${selector.split('[')[0]} ${attribute}="${value}">`),
+      )
+      expect(offenders, `${path} loads something from Instagram or Meta`).toEqual([])
+    }
+  })
+
+  it('names Instagram or Meta nowhere else in any page, bundle, stylesheet or payload', () => {
+    const files = [
+      ...filesUnder(outDirectory, '.html'),
+      ...filesUnder(outDirectory, '.js'),
+      ...filesUnder(outDirectory, '.css'),
+      ...filesUnder(outDirectory, '.txt'),
+    ]
+    expect(files.length).toBeGreaterThan(documents.length)
+    for (const path of files) {
+      expect(metaMentions(readFileSync(path, 'utf8')), exported(path)).toEqual([])
+    }
+  })
+})
+
+describe('the Instagram and Meta patterns', () => {
+  it('match their hosts and subdomains, and not a word that merely ends the same way', () => {
+    const matched = (text: string) => metaPatterns.filter(({ pattern }) => pattern.test(text)).length > 0
+    expect(matched('<script src="https://www.instagram.com/embed.js">')).toBe(true)
+    expect(matched('<img src="https://scontent-ord5-1.cdninstagram.com/v/a.jpg">')).toBe(true)
+    expect(matched('<script src="https://connect.facebook.net/en_US/sdk.js">')).toBe(true)
+    expect(matched('<img src="https://scontent.xx.fbcdn.net/a.jpg">')).toBe(true)
+    expect(matched('https://notinstagram.com/x')).toBe(false)
+  })
+
+  it('leave nothing behind once the account address is removed, however it is escaped', () => {
+    const escaped = instagram.address.replaceAll('/', '\\/')
+    expect(metaMentions(`<a href="${instagram.address}">`)).toEqual([])
+    expect(metaMentions(`self.__next_f.push([1,"{\\"href\\":\\"${escaped}\\"}"])`)).toEqual([])
+    expect(metaMentions(`<a href="https://www.instagram.com/someone.else/">`)).toEqual(['instagram.com'])
   })
 })
 

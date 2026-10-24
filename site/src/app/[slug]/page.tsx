@@ -2,9 +2,10 @@ import type { Metadata } from 'next'
 import { Fragment } from 'react'
 
 import { EmailUpdates } from '@/components/EmailUpdates'
+import { InstagramLink } from '@/components/InstagramLink'
 import { Prose } from '@/components/Prose'
 import { Section } from '@/components/Section'
-import { loadEmailUpdatesContent, loadPage, loadRoutedPages } from '@/lib/content'
+import { loadEmailUpdatesContent, loadPage, loadRoutedPages, loadSiteSettings } from '@/lib/content'
 import { buildPageMetadata } from '@/lib/page-metadata'
 
 /** The band holding the at-a-glance block, when a page has one. */
@@ -15,6 +16,13 @@ const AT_A_GLANCE_ID = 'at-a-glance'
  * own; of the Markdown pages only contact carries it, as the other way of hearing from the team.
  */
 const EMAIL_UPDATES_SLUGS: ReadonlySet<string> = new Set(['contact'])
+
+/**
+ * The pages that carry the link to the team's Instagram account in their body as well as in the
+ * footer (v1-e37-t07). The address and the words are in content/site.yaml, not in contact.md, so
+ * the account is named in one place.
+ */
+const INSTAGRAM_SLUGS: ReadonlySet<string> = new Set(['contact'])
 
 /**
  * One route per Markdown file in site/content/pages/, apart from the pages composed by a route
@@ -53,6 +61,7 @@ export async function generateMetadata({
 export default async function ContentPageRoute({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
   const page = loadPage(slug)
+  const { instagram } = loadSiteSettings()
 
   return (
     <>
@@ -82,6 +91,14 @@ export default async function ContentPageRoute({ params }: { params: Promise<{ s
       <Section>
         <Prose html={page.html} />
       </Section>
+
+      {INSTAGRAM_SLUGS.has(slug) ? (
+        <Section title={instagram.contactHeading}>
+          <p>
+            <InstagramLink instagram={instagram} />
+          </p>
+        </Section>
+      ) : null}
 
       {EMAIL_UPDATES_SLUGS.has(slug) ? <EmailUpdates content={loadEmailUpdatesContent()} /> : null}
     </>

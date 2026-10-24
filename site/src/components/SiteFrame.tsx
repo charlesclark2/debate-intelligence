@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react'
 
+import type { InstagramLinkSettings } from '@/lib/content'
+
 import { MAIN_CONTENT_ID } from './landmark-ids'
 import type { NavigationItem } from './SiteNav'
 import { SiteFooter } from './SiteFooter'
@@ -13,6 +15,8 @@ export interface SiteFrameStrings {
   footerNavigationLabel: string
   logoAlternativeText: string
   footerNote: string
+  /** The team's Instagram account, linked from the footer of every page. */
+  instagram: InstagramLinkSettings
 }
 
 /**
@@ -48,6 +52,7 @@ export function SiteFrame({
         {children}
       </main>
       <SiteFooter
+        instagram={strings.instagram}
         navigationLabel={strings.footerNavigationLabel}
         note={strings.footerNote}
         utilityLinks={utilityLinks}

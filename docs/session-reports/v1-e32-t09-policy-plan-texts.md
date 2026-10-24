@@ -29,22 +29,26 @@ can use the assignments for the first report. ac3 lands in a follow-up session.
   * 937 rounds are unidentified, and the guard refused 40 carries
     ([below](#the-real-store-after-the-ruling)).
 * **The coach's sheet** (ac2) is written, outside the repository, at
-  `~/Documents/debate/landscape-seed/policy-2026-27-nhi-plan-texts.md` with its answers CSV:
+  `~/Documents/debate/landscape-seed/policy-2026-27-nhi-plan-texts.md` with its answers CSV. It was
+  rebuilt for the PM's review ruling 1, the condition closed in this session:
   * 959 affirmative documents with a plan text, by 352 teams;
-  * 50 clusters shown, by the mechanism words that differ;
-  * 81 clusters (141 documents) withheld as read by one team.
-  * A scan against all 192 schools and 555 team codes of the caselist found none. Its six hits were
-    ordinary words (below).
+  * all 131 clusters shown, one-team clusters included, by the mechanism words that differ;
+  * each cluster's commonest plan text word for word, with how many of its documents hold it exactly;
+  * no text that names a school of the caselist (none did).
+  * A scan against all 192 schools and 555 team codes of the caselist found none. Its hits were the
+    ordinary words `all` and `tag` (below).
 * **The normalizer rule** is widened to numbered DAs, CPs and contentions, as ruled. It changes nothing
   in today's hspolicy26 beyond the advantage fix of the 23rd.
 * **The spec's ac1** is amended to the affirmative side, with the rulings recorded as a PM-ruling
   comment.
 
-**Look first at** [Deviations](#deviations-from-the-spec) 4 and 5:
-* two files outside `constraints.packages`;
-* the sheet built before the PM's note on policy 1.13, which now allows plan texts verbatim.
+**After the PM review (2026-10-24, accepted with one condition):**
+* the condition is closed: the sheet shows plan texts verbatim, every cluster listed, with failing
+  tests first, one operator rebuild and a new scan ([below](#the-coachs-sheet));
+* `constraints.packages` is amended (ruling 3);
+* the rest of this report is brought up to date.
 
-[Question 1](#questions-for-the-pm) asks whether the sheet should show them before the coach reads it.
+The pull request goes `--partial`; ac3 follows in a resumed session on the coach's answers.
 
 ## Plan nodes
 
@@ -57,7 +61,7 @@ can use the assignments for the first report. ac3 lands in a follow-up session.
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
 | ac1: counts, on the affirmative side and by teams, of plan-text headings, of the paragraph under them as held in the store (by unit), and of distinct plan texts, sent to the PM with one to three options, before any change | PASS | [The counts](#the-counts-hspolicy26-through-2026-10-20) and [the options](#the-options-for-plan-text-the-store-does-not-keep), sent 2026-10-23 and ruled on 2026-10-24. The spec's ac1 now says the affirmative side (ruling 8). No parser, store or fingerprint was changed |
-| ac2: after the ruling, a deterministic extraction of each team's plan text and a review sheet outside the repository grouping them into clusters with team counts, by tests on synthetic sources shown failing first | PASS | Extraction: `plan_text.py` (red 29 failed / 12 passed; then the sheet helpers, 3 failed), `PlanTextService` (10 failed; its words pass, 2 failed). Sheet: `plan_text_sheet.py` (6 failed / 3 passed against hand-written text), `scripts/assign_landscape_affs.py sheet` (5 targeted mutants, each caught). The real sheet: [below](#the-coachs-sheet) |
+| ac2: after the ruling, a deterministic extraction of each team's plan text and a review sheet outside the repository grouping them into clusters with team counts, by tests on synthetic sources shown failing first | PASS | Extraction: `plan_text.py` (red 29 failed / 12 passed; then the sheet helpers, 3 failed), `PlanTextService` (10 failed; its words pass, 2 failed). Sheet: `plan_text_sheet.py` (6 failed / 3 passed against hand-written text), `scripts/assign_landscape_affs.py sheet` (5 targeted mutants, each caught). Verbatim texts (review ruling 1): the sheet's tests 6 failed / 6 passed, the read-back 2 failed, the script's 2 failed, then 5 targeted mutants each caught. The real sheet: [below](#the-coachs-sheet) |
 | ac3: the coach's mechanisms as child affs of single payer in policy-2026-27-nhi.yaml, with his tag keywords, the taxonomy_version bumped, the config tests passing, and the counts of his decisions in the report | NOT RUN | Waits on the coach's answers to the sheet. A follow-up session applies them (the PM's ruling on order, 2026-10-24) |
 | ac4: counts, before any rule, of the affirmative rounds and teams each signal identifies, alone and together, sent to the PM; after the ruling, each identified round carries its aff and the signal that named it, and an unidentified round stays unidentified, by tests on synthetic sources shown failing first | PASS | Counts: [signals alone and together](#signals-alone-and-together) (2026-10-23). After the ruling: `aff_assignment.py` (red 17 failed / 3 passed), `build_aff_assignments` through t03's `LandscapeReportService` (5 failed), the producer (2 of 3 failed), `assign` (failed before the command existed). Real store: [below](#the-real-store-after-the-ruling) |
 | plan-texts node: `uv run pytest packages/debate_core/tests/arguments/landscape` | PASS | `.venv/bin/python -m pytest packages/debate_core/tests/arguments/landscape` under `perl -e 'alarm 60'` → 376 passed in 6.70 s. The node itself stays open with ac3 |
@@ -372,30 +376,41 @@ round it is 57.3%.
 | `plan-texts`, cache warm (1,770 hits) | session | 25.5 s |
 | `assign` (plan texts cached; t02's classification cached) | session | 36.3 s, and 38.3 s through the service |
 | `sheet` (959 sources read again for their words) | operator | 134.3 s |
+| `sheet` rebuilt with verbatim texts (review ruling 1) | operator | 130.1 s |
 
 The cache file is 689 KB for 1,770 readings. A grep for `united states`, `federal government`,
 `should`, `medicare`, `payer`, `establish` and `school` found none of them in it.
 
 ## The coach's sheet
 
-`~/Documents/debate/landscape-seed/policy-2026-27-nhi-plan-texts.md` and `plan-text-answers.csv` were
-written by the operator's run, outside the repository:
+`~/Documents/debate/landscape-seed/policy-2026-27-nhi-plan-texts.md` and `plan-text-answers.csv`,
+outside the repository. They were first written on 2026-10-24 by the operator's run (134.3 s), then
+rebuilt for the PM's review ruling 1 by one operator block with agreement 11's guards (130.1 s). The
+script refuses to replace an answers CSV the coach has begun, and he had not.
 
-| Count | Value |
-|---|---|
-| Affirmative documents with a plan text on the sheet (`NAMES` or `UNNAMED`) | 959, by 352 teams |
-| Clusters shown (two or more teams) | 50 |
-| Clusters withheld (one team), and their documents | 81, 141 |
-| Paragraphs that read differently from their cached reading, and sources unread | 0, 0 |
+| Count | First sheet | Rebuilt sheet |
+|---|---|---|
+| Affirmative documents with a plan text (`NAMES` or `UNNAMED`) | 959, by 352 teams | 959, by 352 teams |
+| Clusters shown | 50 (two or more teams) | **131** (every cluster) |
+| Clusters withheld, and their documents | 81, 141 | 0, 0 |
+| Clusters with their commonest plan text word for word | none | 131 |
+| Plan texts naming a school of the caselist, not shown | not counted | 0 |
+| Paragraphs that read differently from their cached reading, and sources unread | 0, 0 | 0, 0 |
 
-**The scan:** both files against every school of the caselist (192) and every team code (555), by
-whole words, and against each school's first word of four or more letters.
+The rebuilt sheet is 931 lines, and its answers CSV has 131 rows.
+
+**The scan of the rebuilt files** checked every school of the caselist (192) and every team code (555),
+by whole words without case, and each school's first word of four or more letters.
 * No school's name and no school's first word is in either file.
-* There are six hits, all ordinary words. `all` (in `medicare for all`, and in the header) is also one
-  team's code, on four cluster rows and the header. `tag`, in the sheet's own fixed sentence about
-  "tag keywords", is the whole of one school's normalized name.
+* Every team-code hit is the word `all` (as in `medicare for all`), which is also one team's code:
+  * in the sheet, 22 table rows, 21 plan texts and the header paragraph, 44 lines;
+  * in the CSV, 21 rows.
+* The one school hit is `tag`, the whole of one school's normalized name, in the sheet's fixed
+  instruction line about "tag keywords" and the CSV's `tag_keywords` header.
+* The first sheet's scan found the same two words: `all` on four cluster rows and the header, and
+  `tag`.
 
-The scan printed only row labels, and no name went into this report.
+The scan printed only row labels and the matched word, and no name went into this report.
 
 ## Checks shown failing for their reason
 
@@ -435,6 +450,21 @@ The scan printed only row labels, and no name went into this report.
     retired alias with nowhere to go still naming 1; interim words overriding a child 1; words
     matching inside words 1; advantages naming affs 3; unshaped unnamed as `UNNAMED` 1; the digest of
     raw text 3.
+* **The verbatim sheet** (review ruling 1). Its tests were red against new fields with no logic:
+  * the sheet 6 failed / 6 passed, the 6 passing being behaviour kept (two-team withholding when asked,
+    the similarity, the scrub, the frame, the empty sheet);
+  * the read-back 2 failed, after a first attempt that failed at import and was redone;
+  * the script 2 failed.
+
+  Then 5 targeted mutants, each restored byte for byte, each caught:
+
+  | Mutant | Failed |
+  |---|---|
+  | A text naming a school shown | 4 |
+  | Spacing not collapsed | 5 |
+  | One-team clusters withheld by default | 5 |
+  | No escaping in the quoted text | 1 |
+  | The answers guard removed | 1 |
 * **5 mutants of the script, each caught:** no verdict counts printed (1 failed), negative files read
   (2), no school scrub on the sheet (1), the sheet written inside the repository (1), an empty store
   exiting 0 (2).
@@ -446,7 +476,8 @@ The scan printed only row labels, and no name went into this report.
 * `uv run --frozen scripts/affected_tests.py` listed 63 of 436 test files, from 25 changed files.
   `.venv/bin/python -m pytest -n auto -m "not slow and not live" -p no:randomly <files>` under a
   115 s limit → **2,499 passed, 2 skipped in 64.56 s**. The 2 skips are the overrides-file checks,
-  with no overrides file to check.
+  with no overrides file to check. After the review's condition, again: 63 files →
+  **2,507 passed, 2 skipped in 73.58 s**.
 * `uv run --frozen ruff format --check .` → 1205 files already formatted; `ruff check .` → all checks
   passed.
 * `uv run --frozen pyright packages/debate_core` → 0 errors.
@@ -477,7 +508,8 @@ The scan printed only row labels, and no name went into this report.
     `integrations/landscape/test_plan_text_store.py`;
   * `tests/scripts/test_assign_landscape_affs.py`.
 * **`tests/fixtures/landscape/golden/report.md`:** one line, by hand (Deviations 4).
-* **`docs/guides/landscape-taxonomy.md`:** two sections.
+* **`docs/guides/landscape-taxonomy.md`:** two sections, the sheet's paragraph updated for verbatim
+  texts.
 * **The spec:** ac1 on the affirmative side and the rulings as a PM-ruling comment. The PM's own
   note of 2026-10-24 arrived with the sync.
 
@@ -497,10 +529,10 @@ The scan printed only row labels, and no name went into this report.
      golden is hand-written, so the line was added by hand.
 
    Question 3 asks to amend the spec's list.
-5. **The sheet predates the PM's note on policy 1.13.** It shows each cluster's mechanism words and
-   withholds a cluster one team reads, as t01's and t02's sheets did. Policy 1.13 now allows plan
-   texts verbatim, a single team's included, never beside a school or team code. Question 1 asks
-   whether to change the sheet before the coach reads it.
+5. **The sheet predated the PM's note on policy 1.13.** As first written, it showed each cluster's
+   mechanism words and withheld a cluster one team reads, as t01's and t02's sheets did. Policy 1.13
+   allows plan texts verbatim, a single team's included, never beside a school or team code. Review
+   ruling 1 chose that, and the rebuilt sheet shows each cluster's commonest text and every cluster.
 
 ## Decisions and assumptions
 
@@ -533,8 +565,10 @@ The scan printed only row labels, and no name went into this report.
 2. **Done, 2026-10-24:** the coach's sheet, 134.3 s, scanned by the session (above).
 3. **The coach** fills `mechanism_name` and `tag_keywords` in
    `~/Documents/debate/landscape-seed/plan-text-answers.csv` (the guide's "The plan-text sheet and
-   your mechanisms"). The follow-up session applies them (ac3), pending question 1.
-4. **The pull request, after the PM review**, from the task worktree. First:
+   your mechanisms") of the rebuilt sheet. The resumed session applies them (ac3).
+4. **Done, 2026-10-24:** the sheet rebuilt for review ruling 1, 130.1 s, scanned by the session
+   (above).
+5. **The pull request** (the PM accepted on 2026-10-24), from the task worktree. First:
 
 ```bash
 cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e32-t09-policy-plan-texts
@@ -562,6 +596,9 @@ No whole-selection run is handed over: the pull request's `ci` check runs it.
   report quoting them reads them again, as the sheet does.
 
 ## Questions for the PM
+
+None open. The four below were answered in the PM review of 2026-10-24: (1) (b), done in this
+session; (2) (a); (3) yes, amended; (4) yes. Kept as asked:
 
 ```text
 v1-e32-t09 questions (session, 2026-10-24). ac2 and ac4 pass; ac3 waits on the coach.

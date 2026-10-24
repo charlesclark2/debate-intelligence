@@ -180,14 +180,27 @@ run "only_the_login_role_decrypts_the_password_and_only_the_run_role_the_token" 
   command = apply
 
   assert {
-    # Every Allow of kms:Decrypt, by principal and by the secret its context names.
+    # Every Allow of kms:Decrypt, by principal, principal pattern and the secret its context names.
+    # JSON-encoded, so a statement of any shape compares rather than failing to.
     condition = toset([
       for statement in jsondecode(aws_kms_key.credentials.policy).Statement :
-      "${statement.Principal.AWS} ${statement.Condition.StringLike["kms:EncryptionContext:SecretARN"]}"
+      jsonencode({
+        principal = statement.Principal.AWS
+        pattern   = try(statement.Condition.ArnLike["aws:PrincipalArn"], null)
+        secret    = try(statement.Condition.StringLike["kms:EncryptionContext:SecretARN"], null)
+      })
       if statement.Effect == "Allow" && contains(flatten([statement.Action]), "kms:Decrypt")
       ]) == toset([
-      "arn:aws:iam::111122223333:role/debate-mock-caselist-login arn:aws:secretsmanager:us-east-1:111122223333:secret:debate-mock-caselist-tabroom-password-??????",
-      "arn:aws:iam::111122223333:role/debate-mock-caselist-run arn:aws:secretsmanager:us-east-1:111122223333:secret:debate-mock-caselist-token-??????",
+      jsonencode({
+        principal = "arn:aws:iam::111122223333:role/debate-mock-caselist-login"
+        pattern   = null
+        secret    = "arn:aws:secretsmanager:us-east-1:111122223333:secret:debate-mock-caselist-tabroom-password-??????"
+      }),
+      jsonencode({
+        principal = "arn:aws:iam::111122223333:role/debate-mock-caselist-run"
+        pattern   = null
+        secret    = "arn:aws:secretsmanager:us-east-1:111122223333:secret:debate-mock-caselist-token-??????"
+      }),
     ])
     error_message = "The key may let the login role decrypt the password and the run role the token, and nobody else decrypt anything."
   }
@@ -255,7 +268,7 @@ run "only_the_login_role_decrypts_the_password_and_only_the_run_role_the_token" 
   assert {
     condition = anytrue([
       for statement in jsondecode(aws_kms_key.credentials.policy).Statement :
-      statement.Sid == "KeyAdministrationByBreakGlassOnly" && statement.Condition.ArnLike["aws:PrincipalArn"] == "arn:aws:iam::111122223333:role/aws-reserved/sso.amazonaws.com/*AWSReservedSSO_DebateBreakGlassAdmin_*"
+      statement.Sid == "KeyAdministrationByBreakGlassOnly" && try(statement.Condition.ArnLike["aws:PrincipalArn"], "") == "arn:aws:iam::111122223333:role/aws-reserved/sso.amazonaws.com/*AWSReservedSSO_DebateBreakGlassAdmin_*"
       && contains(statement.Action, "kms:PutKeyPolicy")
     ])
     error_message = "Only DebateBreakGlassAdmin's role may administer the key, PutKeyPolicy included."

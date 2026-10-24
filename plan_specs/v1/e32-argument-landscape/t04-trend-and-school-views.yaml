@@ -73,7 +73,7 @@ spec:
         The trend and school sections are appended to the t03 bundle without changing positions.csv or
         top_cards.csv (t03 golden files still pass).
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

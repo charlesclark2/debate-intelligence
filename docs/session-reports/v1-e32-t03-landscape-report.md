@@ -6,7 +6,7 @@
 | Spec | [`plan_specs/v1/e32-argument-landscape/t03-landscape-report.yaml`](../../plan_specs/v1/e32-argument-landscape/t03-landscape-report.yaml) |
 | Epic / release | `v1-e32-argument-landscape` / `v1.2` |
 | Branch | `task/v1-e32-t03-landscape-report` |
-| Session status | PARTIAL, awaiting the PM's ruling on the coach's asks <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | COMPLETE <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
@@ -21,7 +21,7 @@ report bundle of `report.md`, `positions.csv` and `top_cards.csv`, rendered by
 * **The header** names the overrides digest, the prompt version `none`, coverage by cards and by
   rounds, and the denominators behind every share.
 
-Every criterion a session can close passes. **The Goal stays InProgress for one more PM look.**
+Every criterion passes, and **the Goal is Succeeded** (the PM's second review, 2026-10-24, ruling 1).
 The coach answered ac5 on 2026-10-24 ([below](#the-coachs-review-2026-10-24)):
 * **Yes** to the structure and the positions sections.
 * **No** to the most-read cards. That section is now out of report.md, a section change within this
@@ -60,7 +60,7 @@ ordinary word that is also a disclosed code, and a filename token.
 | ac2: top_cards.csv lists up to N (default 5) fingerprints per position, with teams_reading, tag, short cite, source object key, element index and FILE_IMPORT; near-duplicates of one bucket count once | PASS | `golden/top_cards.csv` byte for byte. `test_top_cards_rank_clusters_by_distinct_teams_and_count_near_duplicates_once`: cluster 2 has four exact fingerprints, one team reads two of them, and teams_reading is 4. Also `..._are_capped_at_n_per_position`, `..._ties_are_broken_by_fingerprint` and `..._every_row_is_file_import` |
 | ac3: items below the report threshold, or waiting in the review queue, are excluded and reported as an Unclassified line with count and share | PASS | `test_aggregate_below_threshold_and_queued_items_are_unclassified_not_counted`: 10 of 44 cards, 8 queued and 2 below the threshold; `courts-cp` (below the threshold only) has no row. `..._the_report_threshold_decides_what_is_unclassified` runs at 0.95 and 0.4. `..._unclassified_rounds_are_counted_by_side`: aff rounds with no identified aff 3 of 7, neg rounds with no placed negative position 1 of 8 |
 | ac4: rendering the same inputs twice gives byte-identical Markdown and CSV (golden files), and a scan finds no team code from the fixture disclosures | PASS | `test_rendering_the_fixture_matches_the_golden_file` (3 files). `test_rendering_the_same_inputs_twice_in_any_order_is_byte_identical` uses three shuffles of every input. `test_a_scan_of_the_output_finds_no_team_code_school_tournament_or_path_from_the_disclosures`, shown failing on planted `XX` and on a planted school (below) |
-| ac5: the coach reviews the fixture report and confirms the sections and column names are usable for weekly prep | PASS, pending the PM's ruling on his further asks | The coach answered on 2026-10-24: yes to the structure and to the positions sections and their team counts, no to the most-read cards section. The section is removed (`test_report_md_lists_no_card_and_points_to_top_cards_csv`, shown failing on the previous renderer). What he asks for in its place is the PM's call (second question block, question 1) |
+| ac5: the coach reviews the fixture report and confirms the sections and column names are usable for weekly prep | PASS | The coach answered on 2026-10-24: yes to the structure and to the positions sections and their team counts, no to the most-read cards section. The section is removed (`test_report_md_lists_no_card_and_points_to_top_cards_csv`, shown failing on the previous renderer). What he asks for in its place is filed by the PM as new E32 tasks (second review, ruling 2) |
 | synthetic-caselist-fixture: the README contains "synthetic" | PASS | `grep -c synthetic tests/fixtures/landscape/synthetic_caselist/README.md` → 2 |
 | report-model: `domain/landscape_report.py` contains `class PositionStats` | PASS | `grep -c "class PositionStats" …` → 1 |
 | aggregation: `pytest …/test_landscape_report.py -k aggregate` | PASS | 29 passed in 2.20s |
@@ -346,7 +346,7 @@ So:
 
 1. **The coach's review** is answered (above). Nothing further is needed from him unless the PM
    takes up his asks.
-2. **The pull request,** once the PM rules on the second question block, from the worktree:
+2. **The pull request,** without `--partial` (the PM's second review), from the worktree:
 
 ```bash
 cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e32-t03-landscape-report

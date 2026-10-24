@@ -16,6 +16,9 @@ module is the report as values; `LandscapeReportService` builds it and the rende
 * one :class:`PositionStats` per position read: rounds, distinct teams, the aff/neg split, the
   snapshot it was first seen in and whether that is this one;
 * up to N :class:`TopCard` rows per position, one per card cluster, ranked by distinct teams;
+* up to N :class:`ImpactCard` rows per DA and advantage, the clusters of its cards labelled as an
+  impact (`v1-e32-t10`), and per kind an :class:`ImpactCoverage`: how many of its documents carry no
+  labelled impact;
 * an :class:`UnclassifiedSummary`: what the report could not count, by cards and by rounds;
 * how affirmative rounds were identified, one :class:`AffIdentification` per method.
 
@@ -53,11 +56,15 @@ from debate_core.domain.landscape import PositionId, PositionKind, PositionSide,
 
 __all__ = [
     "AFF_METHOD_PATTERN",
+    "DEFAULT_IMPACT_CARDS",
     "DEFAULT_TOP_CARDS",
+    "IMPACT_KINDS",
     "PLACED_CARD_METHOD",
     "ROUND_ID_PATTERN",
     "AffAssignment",
     "AffIdentification",
+    "ImpactCard",
+    "ImpactCoverage",
     "LandscapeCard",
     "LandscapeReport",
     "PositionStats",
@@ -68,6 +75,12 @@ __all__ = [
 
 DEFAULT_TOP_CARDS: Final = 5
 """How many clusters a position lists by default (ac2)."""
+
+DEFAULT_IMPACT_CARDS: Final = 3
+"""How many impact clusters a DA or advantage lists by default (`v1-e32-t10`, the PM's brief)."""
+
+IMPACT_KINDS: Final = (PositionKind.ADVANTAGE, PositionKind.DA)
+"""The kinds whose impact cards a report lists, in report order (`v1-e32-t10`)."""
 
 ROUND_ID_PATTERN: Final = r"^[0-9a-f]{16}$"
 """A round id: 16 hex digits of a digest of the round's disclosure fields, which it never shows."""
@@ -91,6 +104,14 @@ class LandscapeCard(DomainModel):
     cluster_id: Sha256Hex = Field(description="The near-duplicate cluster it was placed in.")
     tag: str | None = Field(repr=False, description="The tag exactly as parsed; None when it had none.")
     short_cite: str | None = Field(repr=False, description="The short cite exactly as parsed.")
+    headings: tuple[str, ...] = Field(
+        default=(),
+        repr=False,
+        description=(
+            "The headings over the card, outermost first, normalized as the position matcher reads them; "
+            "the empty ones left out. `v1-e32-t10`'s impact rule reads them, and no report shows them."
+        ),
+    )
 
 
 class AffAssignment(DomainModel):
@@ -152,6 +173,33 @@ class TopCard(DomainModel):
     provenance_mode: Literal[ProvenanceMode.FILE_IMPORT] = ProvenanceMode.FILE_IMPORT
 
 
+class ImpactCard(TopCard):
+    """One of a DA's or an advantage's impact cards: a row of impact_cards.csv (`v1-e32-t10`).
+
+    A :class:`TopCard` of the cluster's labelled copies only: its teams are the teams reading a copy
+    labelled as an impact, and the card it shows is one of those copies.
+    """
+
+
+class ImpactCoverage(DomainModel):
+    """How many documents of one kind carry a labelled impact (`v1-e32-t10` ac3)."""
+
+    kind: PositionKind
+    documents: int = Field(ge=0, description="Documents holding a card counted for a position of the kind.")
+    labelled_documents: int = Field(ge=0, description="Of those, the documents holding an impact card.")
+
+    @model_validator(mode="after")
+    def _check_counts(self) -> Self:
+        if self.labelled_documents > self.documents:
+            raise ValueError("documents with a labelled impact are among the documents")
+        return self
+
+    @property
+    def unlabelled_documents(self) -> int:
+        """The documents carrying no labelled impact."""
+        return self.documents - self.labelled_documents
+
+
 class AffIdentification(DomainModel):
     """How many affirmative rounds one method identified the aff of."""
 
@@ -205,6 +253,7 @@ class ReportHeader(DomainModel):
     prompt_version: NonEmptyText = Field(description="`none` while classification is deterministic.")
     review_threshold: float = Field(ge=0.0, le=1.0)
     top_cards_per_position: int = Field(ge=1)
+    impact_cards_per_position: int = Field(ge=1)
     cards: int = Field(ge=0, description="Every card of every source in the range.")
     cards_placed: int = Field(ge=0, description="Cards under a position at or above the threshold.")
     rounds: int = Field(ge=0, description="Distinct rounds disclosed in the range.")
@@ -237,6 +286,10 @@ class LandscapeReport(DomainModel):
     header: ReportHeader
     positions: tuple[PositionStats, ...] = Field(description="Every position read, in report order.")
     top_cards: tuple[TopCard, ...] = Field(description="Each position's most-read cards, in report order.")
+    impact_cards: tuple[ImpactCard, ...] = Field(
+        description="Each DA's and advantage's impact cards, in report order."
+    )
+    impact_coverage: tuple[ImpactCoverage, ...] = Field(description="One per kind of :data:`IMPACT_KINDS`.")
     unclassified: UnclassifiedSummary
     aff_identification: tuple[AffIdentification, ...] = Field(
         description="Identified affirmative rounds by method, in method order."

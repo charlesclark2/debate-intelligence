@@ -173,8 +173,10 @@ from debate_core.application.evidence_sync import (
     SyncKeyspace,
 )
 from debate_core.application.evidence_verifier import EvidenceVerifier
+from debate_core.application.aff_assignment import AffAssignmentService
 from debate_core.application.landscape_run import LandscapeRunService
 from debate_core.application.landscape_scan import ScanAcceptanceLog
+from debate_core.application.plan_texts import PlanTextService
 from debate_core.application.ports.archive import ArchiveEntry
 from debate_core.application.ports.caller_identity import CallerIdentity
 from debate_core.application.ports.evidence_store import EvidenceObjectStore, ObjectKey
@@ -200,6 +202,7 @@ from debate_core.integrations.landscape.classification_store import (
     LANDSCAPE_DIRECTORY,
     LocalClassificationStore,
 )
+from debate_core.integrations.landscape.plan_text_store import LocalPlanTextStore
 from debate_core.integrations.landscape.yaml_taxonomy_repository import YamlTaxonomyRepository
 from debate_core.integrations.local import (
     BLOB_DIRECTORY,
@@ -503,28 +506,51 @@ class ServiceContainer:
         acceptances are kept beside the classification cache. `with_bucket` is whether this run
         publishes: only then is this environment's bucket built, signed with the everyday profile.
 
-        **The aff seam.** No source of per-round affs is wired yet, so the report shows the
-        affirmative side's unidentified share. Whichever of `v1-e32-t05` and `v1-e32-t09` merges
-        second passes `v1-e32-t09`'s producer here as `aff_assignments`, with a test (PM brief,
-        2026-10-24).
+        **The aff seam.** Each affirmative round's aff comes from `v1-e32-t09`'s
+        :class:`~debate_core.application.aff_assignment.AffAssignmentService`, which reads the
+        affirmative files' plan texts from their cache under the data directory, parsing only what it
+        lacks, through the same worker pool as `caselist parse`. `v1-e32-t09` merged first, so this
+        task wired it (the PM's condition of 2026-10-24).
         """
+        # Imported here, not at module scope: lxml is loaded only by a command that needs the parser.
+        from debate_core.integrations.docx_parser import DebateDocxParser
+
         settings = self.settings
         data_dir = settings.storage.data_dir
         objects = FsEvidenceObjectStore(data_dir)
+        taxonomies = YamlTaxonomyRepository.load(config_dir)
+        local = self._local_evidence()
+        classifications = LocalClassificationStore(data_dir)
+        parse = settings.parse
+        affs = AffAssignmentService(
+            store=LocalParsedStore(data_dir),
+            local=local,
+            suppression=self.local_suppression_list(),
+            taxonomies=taxonomies,
+            classifications=classifications,
+            plan_texts=PlanTextService(
+                parser=DebateDocxParser(),
+                runner=ProcessPoolParseRunner(
+                    workers=parse.worker_count(os.cpu_count()), timeout_seconds=parse.per_file_timeout_seconds
+                ),
+                store=LocalPlanTextStore(data_dir),
+                local=local,
+            ),
+        )
         return LandscapeRunService(
-            taxonomies=YamlTaxonomyRepository.load(config_dir),
+            taxonomies=taxonomies,
             config_dir=config_dir,
             parsed_store=LocalParsedStore(data_dir),
-            local=self._local_evidence(),
+            local=local,
             suppression=self.local_suppression_list(),
-            classifications=LocalClassificationStore(data_dir),
+            classifications=classifications,
             objects=objects,
             run_log=SyncRunLog(data_dir / SYNC_RUN_LOG_FILENAME),
             reports_dir=data_dir / LANDSCAPE_REPORTS_DIRECTORY,
             acceptances=ScanAcceptanceLog(data_dir / LANDSCAPE_DIRECTORY / SCAN_ACCEPTANCES_DIRECTORY),
             today=lambda: self.clock()().date(),
             bucket=self._evidence_bucket if with_bucket else None,
-            aff_assignments=None,
+            aff_assignments=affs,
             stale_after_days=settings.caselist.stale_after_days,
         )
 

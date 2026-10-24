@@ -186,7 +186,7 @@ def test_report_writes_the_bundle_and_json_names_paths_counts_methods_and_model_
         4,
         3,
         2,
-        1,
+        0,
     )
     assert data["staleness"]["stale"] is False
     assert data["publish"] is None
@@ -198,6 +198,17 @@ def test_report_writes_the_bundle_and_json_names_paths_counts_methods_and_model_
         "acceptance_log": None,
     }
     assert data["notice"] is None
+
+
+def test_the_command_identifies_each_aff_round_through_t09s_plan_texts(world: SyntheticRun) -> None:
+    """`aff-two` names single payer only in its plan text; `aff-one` places a card under it."""
+    result = landscape(world, "--caselist", CASELIST)
+
+    assert result.exit_code == ExitCode.OK, result.output
+    data = _data(result)
+    assert data["aff_assignments"] == 1
+    assert data["aff_identification"] == {"PLACED_CARD": 1, "PLAN_TEXT": 1}
+    assert (world.data_dir / "landscape" / "plan_texts" / f"{CASELIST}.jsonl").is_file()
 
 
 def test_report_prints_counts_and_where_it_wrote_for_a_person(world: SyntheticRun) -> None:

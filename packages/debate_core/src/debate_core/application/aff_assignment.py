@@ -22,6 +22,10 @@ on its topic as `v1-e32-t02`'s classifier does, reads each affirmative file's pl
 (:class:`~debate_core.application.plan_texts.PlanTextService`, cached), classifies the cards
 (:class:`~debate_core.application.position_classification.PositionClassificationService`, cached),
 and returns :func:`build_aff_assignments`' assignments.
+
+Inside a landscape run it is asked through :meth:`AffAssignmentService.assignments` instead, with the
+run's own reading and classifications, so the caselist is neither read nor classified twice and a
+dry run writes nothing (`v1-e32-t05`, wired by the PM's condition of 2026-10-24).
 """
 
 from __future__ import annotations
@@ -38,7 +42,7 @@ from debate_core.application.caselist.parse_sources import enumerate_sources
 from debate_core.application.caselist.path_parser import UNKNOWN_SCHOOL, UNKNOWN_TEAM_CODE
 from debate_core.application.errors import DomainError
 from debate_core.application.landscape_report import round_id
-from debate_core.application.landscape_seeding import read_seed_sources
+from debate_core.application.landscape_seeding import SeedReading, read_seed_sources
 from debate_core.application.plan_texts import PlanTextRun, PlanTextService
 from debate_core.application.ports.classification_store import ClassificationStore
 from debate_core.application.ports.parsed_store import ParsedStore
@@ -131,18 +135,8 @@ class AffAssignmentService:
             version=version,
             through=through,
         )
-        affirmative = {
-            source.sha256
-            for source in reading.sources
-            if any(team.side in _AFFIRMATIVE for team in source.teams)
-        }
-        documents = [
-            one.source_document()
-            for one in await enumerate_sources(self._local, caselist)
-            if one.sha256 in affirmative
-        ]
         taxonomy = self._taxonomies.taxonomy(resolved.topic.id)
-        plan_texts = await self._plan_texts.read(caselist, documents, PlanTextVocabulary(taxonomy))
+        plan_texts = await self._read_plan_texts(reading, taxonomy, writes=True)
         classified = await PositionClassificationService(
             taxonomies=self._taxonomies, store=self._classifications
         ).classify(reading)
@@ -154,6 +148,45 @@ class AffAssignmentService:
             taxonomy=taxonomy,
         )
         return dataclasses.replace(built, plan_texts=plan_texts)
+
+
+    async def assignments(
+        self,
+        *,
+        reading: SeedReading,
+        through: date,
+        classifications: Sequence[PositionClassification],
+        taxonomy: Taxonomy,
+        writes: bool,
+    ) -> tuple[AffAssignment, ...]:
+        """`v1-e32-t05`'s seam: the affs of a landscape run's reading, from its own classifications.
+
+        Only the plan texts are read here, from their cache; `writes` False reads them without writing
+        it, for a dry run.
+        """
+        plan_texts = await self._read_plan_texts(reading, taxonomy, writes=writes)
+        return build_aff_assignments(
+            disclosures=reading.disclosures,
+            through=through,
+            classifications=classifications,
+            plan_texts=plan_texts.verdicts,
+            taxonomy=taxonomy,
+        ).assignments
+
+    async def _read_plan_texts(self, reading: SeedReading, taxonomy: Taxonomy, *, writes: bool) -> PlanTextRun:
+        """Each affirmative source's plan-text verdict, from the cache or by parsing it."""
+        affirmative = {
+            source.sha256
+            for source in reading.sources
+            if any(team.side in _AFFIRMATIVE for team in source.teams)
+        }
+        documents = [
+            one.source_document()
+            for one in await enumerate_sources(self._local, reading.caselist)
+            if one.sha256 in affirmative
+        ]
+        service = self._plan_texts if writes else self._plan_texts.without_writes()
+        return await service.read(reading.caselist, documents, PlanTextVocabulary(taxonomy))
 
 
 def build_aff_assignments(

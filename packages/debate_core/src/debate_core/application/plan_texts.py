@@ -111,6 +111,12 @@ class PlanTextService:
         self._store = store
         self._local = local
 
+    def without_writes(self) -> PlanTextService:
+        """The same reading over a view of the cache that is never written: what a dry run reads with."""
+        return PlanTextService(
+            parser=self._parser, runner=self._runner, store=_UnwrittenPlanTexts(self._store), local=self._local
+        )
+
     async def read(
         self, caselist: str, sources: Sequence[SourceDocument], vocabulary: PlanTextVocabulary
     ) -> PlanTextRun:
@@ -240,6 +246,19 @@ class PlanTextService:
             return content
 
         return load
+
+
+class _UnwrittenPlanTexts:
+    """The plan-text cache as it is, read; every write dropped (`v1-e32-t05`'s dry run)."""
+
+    def __init__(self, inner: PlanTextStore) -> None:
+        self._inner = inner
+
+    async def read(self, caselist: str) -> tuple[CachedPlanText, ...]:
+        return await self._inner.read(caselist)
+
+    async def replace(self, caselist: str, entries: Sequence[CachedPlanText]) -> None:
+        return None
 
 
 def _entry(

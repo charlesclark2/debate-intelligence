@@ -21,6 +21,11 @@ twice, `spending da` three times, `states cp` once) and two under one nothing na
 `framing`). The first spending card of `neg-one` and the one of `neg-two` are one E31 cluster, as
 are the two costs cards.
 
+`aff-two`'s file also holds a plan text, written as a real `.docx` in the blob store: "The United
+States federal government should establish single payer health insurance", under a `Plan` heading.
+`v1-e32-t09`'s plan-text reading names single payer from it, so with the aff seam wired that round is
+identified by `PLAN_TEXT`, and `aff-one` by its placed card.
+
 `planted_tags` replaces a card's tag by its `(source, index)`: how a test puts a team code or a
 school in a report, so the scan has something to find.
 """
@@ -40,6 +45,7 @@ from debate_core.application.ports.parsed_store import (
     OccurrenceRecord,
 )
 from debate_core.application.ports.suppression import disclosure_digest
+from debate_core.testing.docx_builder import build_docx, paragraph_xml, run_xml
 from debate_core.testing.landscape_store import PARSER_VERSION, PROFILE_VERSION, PlantedCard, PlantedCaselist
 
 __all__ = [
@@ -101,6 +107,7 @@ class _Source:
     snapshot: str
     path: str
     cards: tuple[_Card, ...]
+    plan: str | None = None
 
 
 SOURCES: Final = (
@@ -138,6 +145,7 @@ SOURCES: Final = (
         "2026-09-15",
         "Harrowgate Prep/PX/Harrowgate Prep-PX-Aff-Thistle Open-Round 3.docx",
         (_Card(("1AC", "Costs Advantage"), "Premiums are rising fast", "Delacroix 25", "costs"),),
+        plan="The United States federal government should establish single payer health insurance.",
     ),
 )
 
@@ -165,6 +173,7 @@ def plant_synthetic_run(
                 for card, tag in zip(source.cards, tags, strict=True)
             ],
             disclosures=[(source.snapshot, source.path)],
+            content=_plan_file(source.plan) if source.plan is not None else None,
         )
         for index, (card, tag) in enumerate(zip(source.cards, tags, strict=True)):
             first = index * _PARAGRAPHS_PER_CARD
@@ -198,6 +207,12 @@ def plant_synthetic_run(
     (config_dir / "topics.yaml").write_text(TOPICS, encoding="utf-8")
     (config_dir / "taxonomies" / f"{SYNTHETIC_RUN_TOPIC}.yaml").write_text(TAXONOMY, encoding="utf-8")
     return SyntheticRun(data_dir=data_dir, config_dir=config_dir)
+
+
+def _plan_file(plan: str) -> bytes:
+    return build_docx(
+        paragraph_xml(run_xml("Plan"), style="Heading3") + paragraph_xml(run_xml(plan), style="Analytic")
+    )
 
 
 def _digest(text: str) -> str:

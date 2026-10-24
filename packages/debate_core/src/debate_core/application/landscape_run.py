@@ -88,7 +88,7 @@ __all__ = [
     "BUNDLE_FILES",
     "DEFAULT_MAX_MODEL_ITEMS",
     "REPORTS_PREFIX",
-    "AffAssignmentSource",
+    "AffAssignmentsFromReading",
     "LandscapeModelMode",
     "LandscapeRequestRefused",
     "LandscapeRunRequest",
@@ -179,8 +179,12 @@ class PositionClassifier(Protocol):
     async def classify(self, reading: SeedReading) -> ClassificationRun: ...
 
 
-class AffAssignmentSource(Protocol):
-    """`v1-e32-t09`'s per-round affs, built from the same reading and classifications as the report."""
+class AffAssignmentsFromReading(Protocol):
+    """`v1-e32-t09`'s per-round affs, built from the same reading and classifications as the report.
+
+    :class:`~debate_core.application.aff_assignment.AffAssignmentService` is the one there is. `writes`
+    is False in a dry run, which writes no cache of its own either.
+    """
 
     async def assignments(
         self,
@@ -189,6 +193,7 @@ class AffAssignmentSource(Protocol):
         through: date,
         classifications: Sequence[PositionClassification],
         taxonomy: Taxonomy,
+        writes: bool,
     ) -> Sequence[AffAssignment]: ...
 
 
@@ -311,7 +316,7 @@ class LandscapeRunService:
         acceptances: ScanAcceptanceLog,
         today: Callable[[], date],
         bucket: Callable[[], EvidenceObjectStore] | None = None,
-        aff_assignments: AffAssignmentSource | None = None,
+        aff_assignments: AffAssignmentsFromReading | None = None,
         classifier: ClassifierFactory | None = None,
         stale_after_days: int = DEFAULT_STALE_AFTER_DAYS,
         review_threshold: float = DEFAULT_REVIEW_THRESHOLD,
@@ -383,6 +388,7 @@ class LandscapeRunService:
                     through=snapshot,
                     classifications=classified.classifications,
                     taxonomy=taxonomy,
+                    writes=not request.dry_run,
                 )
             )
             if self._aff is not None

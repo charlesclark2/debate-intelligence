@@ -20,7 +20,7 @@ from debate_core.application.caselist.suppression import RecordedSuppressionList
 from debate_core.application.landscape_report import round_id
 from debate_core.application.landscape_run import (
     BUNDLE_FILES,
-    AffAssignmentSource,
+    AffAssignmentsFromReading,
     LandscapeRunRequest,
     LandscapeRunResult,
     LandscapeRunService,
@@ -73,7 +73,7 @@ def _service(
     *,
     bucket: FsEvidenceObjectStore | None = None,
     run_log: SyncRunLog | None = None,
-    aff_assignments: AffAssignmentSource | None = None,
+    aff_assignments: AffAssignmentsFromReading | None = None,
     classifier: object = None,
 ) -> LandscapeRunService:
     data_dir = world.data_dir
@@ -309,7 +309,7 @@ class _PlanTextFor:
     """Assigns `aff-two`'s round the single payer aff, as `v1-e32-t09` would from its plan text."""
 
     def __init__(self) -> None:
-        self.asked: list[tuple[date, int, str]] = []
+        self.asked: list[tuple[date, int, str, bool]] = []
 
     async def assignments(
         self,
@@ -318,8 +318,9 @@ class _PlanTextFor:
         through: date,
         classifications: Sequence[PositionClassification],
         taxonomy: Taxonomy,
+        writes: bool,
     ) -> Sequence[AffAssignment]:
-        self.asked.append((through, len(classifications), taxonomy.taxonomy_version))
+        self.asked.append((through, len(classifications), taxonomy.taxonomy_version, writes))
         return [
             AffAssignment(round_id=round_id(one), position_id="single-payer-aff", method="PLAN_TEXT")
             for one in reading.disclosures
@@ -331,13 +332,21 @@ async def test_the_aff_seam_passes_t09s_assignments_to_the_report(world: Synthet
     source = _PlanTextFor()
     result = await _run(_service(world, aff_assignments=source))
 
-    assert source.asked == [(NEWEST, 21, "1.0.0")]
+    assert source.asked == [(NEWEST, 21, "1.0.0", True)]
     assert result.aff_assignments == 1
     assert {(one.method, one.rounds) for one in result.report.aff_identification} == {
         ("PLAN_TEXT", 1),
         ("PLACED_CARD", 1),
     }
     assert {one.position_id: one.rounds for one in result.report.positions}["single-payer-aff"] == 2
+
+
+async def test_a_dry_run_asks_the_aff_source_not_to_write(world: SyntheticRun) -> None:
+    source = _PlanTextFor()
+    result = await _run(_service(world, aff_assignments=source), dry_run=True)
+
+    assert [asked[3] for asked in source.asked] == [False]
+    assert result.aff_assignments == 1
 
 
 async def test_without_an_aff_source_the_report_shows_the_unidentified_share(world: SyntheticRun) -> None:

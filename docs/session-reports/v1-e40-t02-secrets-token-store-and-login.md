@@ -383,9 +383,56 @@ v1-e40-t02 questions (session report: docs/session-reports/v1-e40-t02-secrets-to
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED, with conditions closed in-session
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM, 2026-10-24
 
 **Notes:**
+
+Careful security work.
+* The botocore DEBUG leak was found, not assumed. The client quiets the two wire loggers per call,
+  and two control tests prove the leak exists without it.
+* The scan of pytest's own output finds 0 secret-shaped strings against a mutant, and 11 with the
+  guard off, so it can see them.
+* 22 policy mutants and 16 Python mutants were caught. The first-run errors that were counted as
+  catches were found and fixed.
+* The KMS lockout risk is named, with what to look for.
+
+**Rulings**
+
+1. **(a), `Debate<Env>CaselistSecretWriter`.** Amend this task's spec with a PM-ruling comment
+   (condition 1). The PM amends ADR-0020 (2) in the next PM batch.
+2. **(a).** The PM adds `debate_core.integrations` to v1-e40-t05's packages in the next batch.
+3. **As recommended.** On the Wednesday of the first scheduled login, the operator runs
+   `caselist auth status --check` on the Mac. If the Mac's token was ended, the Mac is logged in by
+   hand until t06 stops its schedule, and the answer goes into ADR-0020. The PM adds this to t06.
+4. **Keep it.** The password is never registered with the redaction filter and never formatted.
+   The PM amends ADR-0020's sentence.
+5. **Keep them.** The PM adds `UpdateSecretVersionStage`, `RotateSecret` and `RestoreSecret` to
+   ADR-0020's lists.
+6. **Merge `--partial` now, then apply A from `dev`, not from this branch.** A dev apply from any
+   checkout without `caselist_run` would destroy what this branch created. So the resources must
+   first exist in `dev`'s configuration. Condition 2.
+
+**Deviations 1 to 6 and the Decisions are accepted.** Asking for the password twice, `--aws-profile`
+as an option, one token read per process, and the ARN-pattern key policy are all sound.
+
+**Conditions, to close in this session before the PR:**
+
+1. **Amend the spec** for ruling 1 (`Debate<Env>CaselistSecretWriter`, and why: Identity Center's
+   32-character limit).
+2. **Rewrite Operator follow-ups and the runbook's apply A steps** to run after the merge, from a
+   fresh worktree at `origin/dev`. Check first that the merged `infrastructure/modules/caselist_run`
+   is in it, and set `WT` to that worktree.
+   * Block 3's `PREVIOUS_DEV_WT` stays: the operator copies `owner.auto.tfvars` from the checkout
+     that last applied dev.
+   * The plan's check stays exactly as written: `17 to add, 0 to change, 0 to destroy`, no replaced
+     or destroyed assignment or permission set, and nothing outside `module.caselist_run`.
+3. **Update the stale parts of this report.** No re-review is needed.
+
+**The PR:** opened with `--partial`. ac2's operator parts (apply A, then B after t03, then prod at
+promotion) are recorded by the PM, who sets the Goal `Succeeded` after the first scheduled login
+has written a token and prod is applied.
+
+If anything comes out differently, stop and ask for another review.

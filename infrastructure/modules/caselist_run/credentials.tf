@@ -102,6 +102,25 @@ locals {
         }
       },
       {
+        # Creating a secret under this key is an encryption: CreateSecret has Secrets Manager call
+        # GenerateDataKey as the caller, and Terraform creates both secrets as break-glass. Without
+        # this, the first apply's two CreateSecret calls were refused (2026-10-24). Encryption only,
+        # through Secrets Manager, for the two secrets: break-glass still decrypts nothing (the
+        # denies below).
+        Sid       = "BreakGlassEncryptsWhenCreatingTheTwoSecrets"
+        Effect    = "Allow"
+        Principal = { AWS = "arn:${local.partition}:iam::${local.account_id}:root" }
+        Action    = "kms:GenerateDataKey"
+        Resource  = "*"
+        Condition = {
+          ArnLike      = { "aws:PrincipalArn" = local.break_glass_principal_arns }
+          StringEquals = { "kms:ViaService" = local.secrets_manager_service }
+          StringLike = {
+            "kms:EncryptionContext:SecretARN" = [local.password_secret_arn_pattern, local.token_secret_arn_pattern]
+          }
+        }
+      },
+      {
         Sid       = "TheLoginRoleDecryptsThePassword"
         Effect    = "Allow"
         Principal = { AWS = local.login_role_arn }

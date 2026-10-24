@@ -656,3 +656,51 @@ run "a_paused_schedule_is_disabled_not_destroyed" {
     error_message = "login_schedule_enabled = false keeps the schedule, disabled."
   }
 }
+
+# ---------------------------------------------------------------------------------------------
+# Break-glass creates the secrets: it may encrypt for them, and still decrypts neither
+# ---------------------------------------------------------------------------------------------
+
+run "break_glass_encrypts_for_the_two_secrets_through_secrets_manager_and_decrypts_neither" {
+  command = apply
+
+  assert {
+    # CreateSecret under this key has Secrets Manager call GenerateDataKey as the caller, and the
+    # apply runs as break-glass (apply A's first run, 2026-10-24).
+    condition = anytrue([
+      for statement in jsondecode(aws_kms_key.credentials.policy).Statement :
+      statement.Effect == "Allow"
+      && flatten([statement.Action]) == ["kms:GenerateDataKey"]
+      && statement.Principal.AWS == "arn:aws:iam::111122223333:root"
+      && try(statement.Condition.ArnLike["aws:PrincipalArn"], "") == "arn:aws:iam::111122223333:role/aws-reserved/sso.amazonaws.com/*AWSReservedSSO_DebateBreakGlassAdmin_*"
+      && try(statement.Condition.StringEquals["kms:ViaService"], "") == "secretsmanager.us-east-1.amazonaws.com"
+      && toset(try(statement.Condition.StringLike["kms:EncryptionContext:SecretARN"], [])) == toset([
+        "arn:aws:secretsmanager:us-east-1:111122223333:secret:debate-mock-caselist-tabroom-password-??????",
+        "arn:aws:secretsmanager:us-east-1:111122223333:secret:debate-mock-caselist-token-??????",
+      ])
+    ])
+    error_message = "Break-glass may GenerateDataKey for the two secrets, through Secrets Manager only, so the apply can create them."
+  }
+
+  assert {
+    # Every Allow that names break-glass: administration, or encryption through Secrets Manager.
+    condition = alltrue([
+      for statement in jsondecode(aws_kms_key.credentials.policy).Statement :
+      !contains(flatten([statement.Action]), "kms:Decrypt")
+      && !anytrue([for action in flatten([statement.Action]) : startswith(action, "kms:*") || startswith(action, "kms:ReEncrypt") || action == "kms:CreateGrant" || action == "kms:GenerateDataKey*"])
+      && (statement.Sid == "KeyAdministrationByBreakGlassOnly" || try(statement.Condition.StringEquals["kms:ViaService"], "") == "secretsmanager.us-east-1.amazonaws.com")
+      if statement.Effect == "Allow" && try(statement.Condition.ArnLike["aws:PrincipalArn"], "") == "arn:aws:iam::111122223333:role/aws-reserved/sso.amazonaws.com/*AWSReservedSSO_DebateBreakGlassAdmin_*"
+    ])
+    error_message = "Break-glass's grants on the key are administration and encryption through Secrets Manager: no decrypt, no wildcard, no grant, no re-encryption."
+  }
+
+  assert {
+    # Break-glass is none of the principals the decrypt denies except, so it decrypts neither secret.
+    condition = length([
+      for statement in jsondecode(aws_kms_key.credentials.policy).Statement : statement
+      if statement.Effect == "Deny" && flatten([statement.Action]) == ["kms:Decrypt"]
+      && length(setsubtract(toset(flatten([try(statement.Condition.ArnNotEquals["aws:PrincipalArn"], [])])), toset(["arn:aws:iam::111122223333:role/debate-mock-caselist-login", "arn:aws:iam::111122223333:role/debate-mock-caselist-run"]))) == 0
+    ]) == 3
+    error_message = "All three decrypt denies must except only the login and run roles, so break-glass decrypts neither secret."
+  }
+}

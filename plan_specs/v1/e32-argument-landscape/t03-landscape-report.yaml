@@ -16,6 +16,8 @@ metadata:
     debate/title: Weekly landscape report
     debate/architecture-refs: §8, §10, §13, §14, §16
 spec:
+  # PM ruling 2026-10-23 (v1-e32-t03 brief, item 2): the sentence about the staleness hook had been
+  # spliced into the middle of "...S3 publishing are t05"; it now follows the boundaries, as written.
   description: >-
     Implement LandscapeReportService, a pure aggregation over classified items (t02), E30 Disclosures
     (school, team code, side, tournament, round) and E31 card fingerprints/occurrences, producing one
@@ -29,9 +31,10 @@ spec:
     Output is a Markdown report plus positions.csv and top_cards.csv with a header block recording
     caselist, snapshot, topic id, taxonomy_version, parser_version, prompt version and classification
     coverage. Every card is labeled FILE_IMPORT (disclosed, not platform-verified). Boundaries:
-    week-over-week trends and per-school views are t04; the CLI, local output paths and S3 publishing are Every generated report calls the staleness hook v1-e34-t03 exposes and carries its banner and
-    its `stale` metadata flag; a report that cannot say how old its newest snapshot is does not ship.
-    t05; "files suggest" drafting from top cards is v1-e33-t03.
+    week-over-week trends and per-school views are t04; the CLI, local output paths and S3 publishing are
+    t05; "files suggest" drafting from top cards is v1-e33-t03. Every generated report calls the
+    staleness hook v1-e34-t03 exposes, carries its banner and its stale metadata flag, and a report
+    that cannot say how old its newest snapshot is does not ship.
     (PM amendment 2026-10-22, from the coach's priorities of 2026-10-22.) The first reports are
     built from deterministic classifications only (v1-e32-t02); the header's prompt version
     reads `none` and the Unclassified line carries what the matcher could not place. The Policy
@@ -45,7 +48,16 @@ spec:
     share plainly, and the advantages and negative positions are counted as placed.
   priority: 1
   constraints:
-    packages: [debate_core.application, debate_core.arguments, debate_core.domain, tests/fixtures/landscape]
+    # PM ruling 2026-10-24 (v1-e32-t03 review, ruling 2): the fixture generator the plan node names,
+    # the shared fixture reader in debate_core.testing, and the package's tests.
+    packages:
+      - debate_core.application
+      - debate_core.arguments
+      - debate_core.domain
+      - debate_core.testing
+      - packages/debate_core/tests
+      - scripts
+      - tests/fixtures/landscape
     forbidden:
       - Model calls during aggregation or rendering (report numbers are deterministic)
       - Card body text in the report; only tag, short cite and source reference
@@ -96,7 +108,7 @@ spec:
         The coach reviews the fixture report and confirms the sections and column names are usable for
         weekly prep meetings.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

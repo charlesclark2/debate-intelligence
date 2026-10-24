@@ -10,6 +10,7 @@ Every topic and id here is invented.
 
 from __future__ import annotations
 
+import hashlib
 from typing import Any
 
 import pytest
@@ -21,6 +22,7 @@ from debate_core.domain.landscape_release import (
     ReleaseLock,
     ReleaseRule,
     TaxonomyRelease,
+    positions_digest,
 )
 
 TOPIC = "policy-sample-topic"
@@ -62,6 +64,7 @@ def release(version: str = "1.0.0", ids: tuple[str, ...] = ("spending-da",)) -> 
     return {
         "topic_id": TOPIC,
         "taxonomy_version": version,
+        "positions_digest": "0" * 64,
         "positions": [{"id": one, "kind": "da", "side": "neg"} for one in ids],
     }
 
@@ -74,6 +77,36 @@ def test_a_release_records_every_merged_position_as_id_kind_and_side() -> None:
         ("old-da", "da", "neg"),
         ("condo-bad", "theory", "both"),
     ]
+
+
+CANONICAL_POSITIONS = (
+    '[{"id":"spending-da","kind":"da","label":"Spending DA","side":"neg"},'
+    '{"deprecated":true,"id":"old-da","kind":"da","label":"Old DA","side":"neg"},'
+    '{"events":["POLICY"],"id":"condo-bad","kind":"theory","label":"Condo bad","side":"both"}]'
+)
+"""The merged fixture's positions as canonical JSON, written by hand: set fields only, keys sorted."""
+
+
+def test_a_release_records_the_digest_of_every_field_of_every_merged_position() -> None:
+    expected = hashlib.sha256(CANONICAL_POSITIONS.encode("utf-8")).hexdigest()
+    assert positions_digest(taxonomy()) == expected
+    assert TaxonomyRelease.of(taxonomy()).positions_digest == expected
+
+
+def test_any_field_changes_the_digest_and_a_default_written_out_does_not() -> None:
+    def with_spending_da(**fields: Any) -> Taxonomy:
+        merged = taxonomy().model_dump()
+        merged["positions"][0].update(fields)
+        return Taxonomy.model_validate(merged)
+
+    assert positions_digest(with_spending_da(deprecated=False, description="")) == positions_digest(taxonomy())
+    for fields in ({"aliases": ("spending da",)}, {"label": "Spending disad"}, {"tag_keywords": ("deficit",)}):
+        assert positions_digest(with_spending_da(**fields)) != positions_digest(taxonomy()), fields
+
+
+def test_a_digest_is_sha256_hex() -> None:
+    with pytest.raises(ValidationError, match="positions_digest"):
+        TaxonomyRelease.model_validate({**release(), "positions_digest": "not-a-digest"})
 
 
 def test_a_release_listing_an_id_twice_is_refused() -> None:

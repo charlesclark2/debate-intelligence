@@ -19,6 +19,8 @@ network, no git history. Every topic, id and label here is invented.
 
 from __future__ import annotations
 
+import hashlib
+import json
 from pathlib import Path
 from typing import Any
 
@@ -52,12 +54,23 @@ GENERIC_POSITIONS: list[dict[str, Any]] = [
     },
 ]
 
+
+def digest_of(positions: list[dict[str, Any]]) -> str:
+    """sha256 of these fixture dicts as canonical JSON (keys sorted, no whitespace).
+
+    Each dict here sets exactly the fields its position sets, so this is the digest the lock records,
+    worked out from the fixture rather than by the code under test.
+    """
+    return hashlib.sha256(json.dumps(positions, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
 EMPTY_LOCK = "schema_version: 1\nreleases: []\n"
 LOCK_AT_1_0_0 = f"""\
 schema_version: 1
 releases:
   - topic_id: {TOPIC}
     taxonomy_version: 1.0.0
+    positions_digest: {digest_of([*POSITIONS, *GENERIC_POSITIONS])}
     positions:
       - {{id: spending-da, kind: da, side: neg}}
       - {{id: states-cp, kind: cp, side: neg}}
@@ -341,6 +354,25 @@ def test_a_retirement_a_merge_and_a_new_id_pass_with_the_version_bumped(
     assert released_id_findings(write_config(tmp_path, version="1.1.0", positions=positions)) == []
 
 
-def test_a_label_change_passes_even_at_the_released_version(tmp_path: Path) -> None:
-    root = write_config(tmp_path, positions=edited("states-cp", label="Fifty states CP"))
-    assert released_id_findings(root) == []
+@pytest.mark.parametrize(
+    ("positions", "generic"),
+    [
+        pytest.param(edited("states-cp", aliases=["states cp", "fed cp"]), None, id="alias-added"),
+        pytest.param(edited("states-cp", label="Fifty states CP"), None, id="label-changed"),
+        pytest.param(
+            None, [{**GENERIC_POSITIONS[0], "aliases": ["condo bad", "condo"]}], id="generic-alias-added"
+        ),
+    ],
+)
+def test_any_edit_at_a_released_version_is_refused_and_passes_with_a_bump(
+    tmp_path: Path, positions: list[dict[str, Any]] | None, generic: list[dict[str, Any]] | None
+) -> None:
+    root = write_config(tmp_path / "unbumped", positions=positions, generic=generic)
+    finding = only_finding(root)
+    assert finding.startswith(
+        f"{topic_file(root)} (with generic.yaml merged in): has positions that changed after {TOPIC} 1.0.0 "
+        "was released"
+    )
+    assert "Rule (changed-without-bump)" in finding
+    bumped = write_config(tmp_path / "bumped", version="1.1.0", positions=positions, generic=generic)
+    assert released_id_findings(bumped) == []

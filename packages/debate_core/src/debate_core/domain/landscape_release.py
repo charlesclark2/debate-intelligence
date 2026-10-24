@@ -25,11 +25,13 @@ same argument); only the id, its kind and its side are fixed.
 
 from __future__ import annotations
 
+import hashlib
+import json
 from collections.abc import Mapping
 from enum import StrEnum
-from typing import Final, Literal, Self
+from typing import Annotated, Final, Literal, Self
 
-from pydantic import Field, model_validator
+from pydantic import Field, StringConstraints, model_validator
 
 from debate_core.domain.base import DomainModel
 from debate_core.domain.landscape import PositionId, PositionKind, PositionSide, Taxonomy, TaxonomyVersion
@@ -42,8 +44,11 @@ __all__ = [
     "ReleasedPosition",
     "TaxonomyRelease",
     "merged_into_findings",
+    "positions_digest",
     "release_findings",
 ]
+
+PositionsDigest = Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{64}$")]
 
 
 class ReleaseRule(StrEnum):
@@ -77,12 +82,27 @@ class ReleasedPosition(DomainModel):
     side: PositionSide
 
 
+def positions_digest(taxonomy: Taxonomy) -> str:
+    """The sha256, in hex, of the taxonomy's positions as canonical JSON: every field of every position.
+
+    Each position is dumped with the fields it sets (a field left at its default is the same position
+    whether it is written or not), in file order, keys sorted, no whitespace, UTF-8. Any edit to a
+    position, an alias, a label or a tag keyword as much as an id, changes it.
+    """
+    document = [one.model_dump(mode="json", exclude_defaults=True) for one in taxonomy.positions]
+    canonical = json.dumps(document, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
 class TaxonomyRelease(DomainModel):
     """One topic's positions as a report under `taxonomy_version` counted against them."""
 
     topic_id: PositionId = Field(description="The topic, as topics.yaml names it.")
     taxonomy_version: TaxonomyVersion = Field(
         description="The version the first published report counted under."
+    )
+    positions_digest: PositionsDigest = Field(
+        description="positions_digest of the merged taxonomy at that version; no text, only the hash."
     )
     positions: tuple[ReleasedPosition, ...] = Field(
         description="Every position of the merged taxonomy, retired ones included, in file order."
@@ -103,6 +123,7 @@ class TaxonomyRelease(DomainModel):
         return cls(
             topic_id=taxonomy.topic_id,
             taxonomy_version=taxonomy.taxonomy_version,
+            positions_digest=positions_digest(taxonomy),
             positions=tuple(
                 ReleasedPosition(id=one.id, kind=one.kind, side=one.side) for one in taxonomy.positions
             ),

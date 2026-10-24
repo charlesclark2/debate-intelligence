@@ -10,6 +10,7 @@ Every topic, id and label here is invented.
 
 from __future__ import annotations
 
+import hashlib
 import sys
 from pathlib import Path
 
@@ -53,18 +54,34 @@ positions:
 
 HEADER = """\
 # The position ids published landscape reports have released, per topic and taxonomy version: each
-# id with its kind and side, the topic's own positions and generic.yaml's for its event. Written by
-# scripts/release_landscape_taxonomy.py when a report under a new version is first published; never
-# edited by hand. tests/config/test_landscape_released_ids.py refuses a taxonomy that deletes one of
-# these ids, changes its kind or side, or changes a released version's positions without a bump.
+# id with its kind and side, the topic's own positions and generic.yaml's for its event, and a sha256
+# of those positions (a hash, no text). Written by scripts/release_landscape_taxonomy.py when a report
+# under a new version is first published; never edited by hand. The check in
+# tests/config/test_landscape_released_ids.py refuses a taxonomy that deletes one of these ids,
+# changes its kind or side, or edits a released version's positions without a bump.
 # docs/guides/landscape-taxonomy.md says when the operator writes it.
 """
 
 EMPTY_LOCK = HEADER + "schema_version: 1\nreleases: []\n"
 
+SPENDING_DA = '{"aliases":["spending da"],"id":"spending-da","kind":"da","label":"Spending DA","side":"neg"}'
+STATES_CP = '{"aliases":["states cp"],"id":"states-cp","kind":"cp","label":"States CP","side":"neg"}'
+MEDICAID = '{"aliases":["medicaid da"],"id":"medicaid-da","kind":"da","label":"Medicaid DA","side":"neg"}'
+CONDO_BAD = (
+    '{"aliases":["condo bad"],"events":["POLICY"],"id":"condo-bad","kind":"theory","label":"Condo bad",'
+    '"side":"both"}'
+)
+"""Each position as canonical JSON, written by hand from the fixture: set fields only, keys sorted."""
+
+
+def digest(*positions: str) -> str:
+    return hashlib.sha256(f"[{','.join(positions)}]".encode()).hexdigest()
+
+
 RELEASE_1_0_0 = f"""\
   - topic_id: {TOPIC}
     taxonomy_version: 1.0.0
+    positions_digest: {digest(SPENDING_DA, STATES_CP, CONDO_BAD)}
     positions:
       - {{id: spending-da, kind: da, side: neg}}
       - {{id: states-cp, kind: cp, side: neg}}
@@ -74,6 +91,7 @@ RELEASE_1_0_0 = f"""\
 RELEASE_1_1_0 = f"""\
   - topic_id: {TOPIC}
     taxonomy_version: 1.1.0
+    positions_digest: {digest(SPENDING_DA, STATES_CP, MEDICAID, CONDO_BAD)}
     positions:
       - {{id: spending-da, kind: da, side: neg}}
       - {{id: states-cp, kind: cp, side: neg}}

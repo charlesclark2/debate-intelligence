@@ -1,8 +1,9 @@
 # The position ids published landscape reports have released, per topic and taxonomy version: each
-# id with its kind and side, the topic's own positions and generic.yaml's for its event. Written by
-# scripts/release_landscape_taxonomy.py when a report under a new version is first published; never
-# edited by hand. tests/config/test_landscape_released_ids.py refuses a taxonomy that deletes one of
-# these ids, changes its kind or side, or changes a released version's positions without a bump.
+# id with its kind and side, the topic's own positions and generic.yaml's for its event, and a sha256
+# of those positions (a hash, no text). Written by scripts/release_landscape_taxonomy.py when a report
+# under a new version is first published; never edited by hand. The check in
+# tests/config/test_landscape_released_ids.py refuses a taxonomy that deletes one of these ids,
+# changes its kind or side, or edits a released version's positions without a bump.
 # docs/guides/landscape-taxonomy.md says when the operator writes it.
 schema_version: 1
 releases: []

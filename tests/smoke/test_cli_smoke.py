@@ -288,6 +288,7 @@ def test_prod_refuses_each_stand_in_endpoint_with_a_message_naming_the_setting(
 
             assert run.exit_code == 1, run.output
             error = run.envelope()["error"]
+            assert isinstance(error, dict)
             assert error["code"] == "CONFIGURATION_ERROR", error
             assert error["details"] == {"field": setting, "source": f"env:{variable}"}
             assert setting in error["message"] and variable in error["message"], error["message"]

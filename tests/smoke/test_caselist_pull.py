@@ -528,7 +528,10 @@ def test_a_bucket_listing_that_does_not_answer_fails_publish_with_three_and_the_
     assert data["pending_publish"] == []
     assert data["archives_downloaded"] == 0 and data["openev_downloaded"] == 0
     assert not any(one.server == "files" for one in site.requests()[downloads:])
-    published = {one["Key"] for one in bucket.list_objects_v2(Bucket=BUCKET, Prefix="manifests/")["Contents"]}
+    published = {
+        str(one.get("Key"))
+        for one in bucket.list_objects_v2(Bucket=BUCKET, Prefix="manifests/").get("Contents", [])
+    }
     assert f"manifests/{SYNTHETIC_CASELIST}/{SNAPSHOTS[-1].snapshot.isoformat()}.jsonl" in published
 
 
@@ -583,7 +586,10 @@ def test_a_pending_work_file_that_cannot_be_read_fails_publish_with_one_and_is_l
     assert pulled["error"]["hint"].startswith(stages["publish"]["hint"])
     assert (installation / "data" / PENDING_WORK_FILE).read_bytes() == cut_short
     assert stages["report"]["outcome"] == "completed"
-    published = {one["Key"] for one in bucket.list_objects_v2(Bucket=BUCKET, Prefix="manifests/")["Contents"]}
+    published = {
+        str(one.get("Key"))
+        for one in bucket.list_objects_v2(Bucket=BUCKET, Prefix="manifests/").get("Contents", [])
+    }
     assert f"manifests/{SYNTHETIC_CASELIST}/2026-09-15.jsonl" in published
     assert "aws sso login" not in stage_text(pulled)
     assert str(installation) not in stage_text(pulled)

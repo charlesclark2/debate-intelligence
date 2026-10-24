@@ -288,7 +288,7 @@ def _caption(summary: RunSummary, record: SyncRunRecord | None = None) -> str:
     """
     deferred = summary.archives_deferred
     backlog = _backlog_sentence(record)
-    inbox = _full_archive_sentence(summary) + _inbox_sentence(summary)
+    inbox = _full_archive_sentence(summary) + _inbox_sentence(summary) + _data_volume_sentence(summary)
     if summary.dry_run:
         wanted = sum(1 for one in summary.archives if one.wanted)
         camp = sum(1 for one in summary.openev if one.wanted)
@@ -376,6 +376,16 @@ def _inbox_sentence(summary: RunSummary) -> str:
         f" Inbox: {len(retention.removed)} file(s) removed ({retention.bytes_freed} bytes freed)"
         f"{kept}{failed}."
     )
+
+
+def _data_volume_sentence(summary: RunSummary) -> str:
+    """The data volume's warning, as a leading-space sentence, when the run passed it (`v1-e40-t03`).
+
+    Only a run that reads its volume can pass it: the cloud run, under `storage.volume_warning_percent`.
+    """
+    volume = summary.data_volume
+    warning = volume.warning if volume is not None else None
+    return f" Warning: {warning}." if warning else ""
 
 
 def _backlog_sentence(record: SyncRunRecord | None) -> str:

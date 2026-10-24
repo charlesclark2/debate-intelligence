@@ -66,7 +66,10 @@ What a newer build knows beyond the record is kept **beside** it, keyed by run i
 * what a report stage cut short by an expired session had not compared yet, by caselist and
   snapshot (`v1-e34-t28`), which the next pull or `caselist pull --publish-pending` compares
   (:func:`comparisons_owed_by_the_newest_run`). Details an older build wrote have no such list,
-  and owe no comparison.
+  and owe no comparison;
+* when each stage the run carried out started and ended, and, where the run reads its data volume,
+  the fullest that volume got and the warning past `storage.volume_warning_percent`
+  (`v1-e40-t03`, ADR-0020 (1) 2).
 
 One line a run in :data:`SYNC_RUN_DETAILS_FILENAME`, next to the run log, and one object a run
 under :data:`SYNC_RUN_DETAILS_KEY_PREFIX`, next to the records' prefix and not under it: an older
@@ -177,6 +180,7 @@ __all__ = [
     "SYNC_RUN_DETAILS_KEY_PREFIX",
     "SYNC_RUN_KEY_PREFIX",
     "SYNC_RUN_LOG_FILENAME",
+    "DataVolume",
     "DriftFinding",
     "MonitoredRun",
     "NoRemoteRunLog",
@@ -187,6 +191,7 @@ __all__ = [
     "RunMode",
     "SearchIndexCounts",
     "StageDetails",
+    "StageTiming",
     "StageEntry",
     "SyncRunDetails",
     "SyncRunDetailsLog",
@@ -476,6 +481,32 @@ class SearchIndexCounts(BaseModel):
     An added key, so details a build from before it wrote read as none recorded."""
 
 
+class StageTiming(BaseModel):
+    """When one stage started and ended: a summary's
+    :class:`~debate_core.application.caselist_sync.StageTime` (`v1-e40-t03`)."""
+
+    model_config = ConfigDict(frozen=True, extra="ignore")
+
+    stage: str
+    started_at: datetime
+    finished_at: datetime
+
+
+class DataVolume(BaseModel):
+    """The fullest the data directory's volume got, in bytes and as a share: a summary's
+    :class:`~debate_core.application.caselist_sync.DataVolumeUsage` (`v1-e40-t03`). No path."""
+
+    model_config = ConfigDict(frozen=True, extra="ignore")
+
+    total_bytes: int = Field(ge=0)
+    peak_used_bytes: int = Field(ge=0)
+    peak_percent: float = Field(ge=0)
+    peak_after: str
+    warning_percent: int
+    warning: str | None = None
+    """The summary's sentence when the volume passed `warning_percent`, else `None`."""
+
+
 class SyncRunDetails(BaseModel):
     """What one run has to say that its :class:`SyncRunRecord` cannot hold, keyed by its run id.
 
@@ -519,6 +550,14 @@ class SyncRunDetails(BaseModel):
     """Of the record's `objects_published`, the manifests
     (:attr:`~debate_core.application.caselist_sync.RunSummary.manifests_published`, `v1-e34-t28`).
     A key a build from before it passes over."""
+
+    stage_times: tuple[StageTiming, ...] = ()
+    """When each stage the run carried out started and ended, in the run's order (`v1-e40-t03`).
+    Empty for a run that raised before returning a summary, and in details a build from before it
+    wrote."""
+
+    data_volume: DataVolume | None = None
+    """The fullest the data directory's volume got, or `None` when the run read none (`v1-e40-t03`)."""
 
     def stage(self, name: str) -> StageDetails | None:
         return next((one for one in self.stages if one.stage == name), None)
@@ -751,6 +790,13 @@ def details_for_summary(summary: RunSummary, *, secrets: Sequence[str] = ()) -> 
         else None,
         held_by_request=dict(summary.held_by_request),
         manifests_published=summary.manifests_published,
+        stage_times=tuple(
+            StageTiming(stage=str(one.stage), started_at=one.started_at, finished_at=one.finished_at)
+            for one in summary.stage_times
+        ),
+        data_volume=DataVolume.model_validate(summary.data_volume.as_json())
+        if summary.data_volume is not None
+        else None,
     )
 
 

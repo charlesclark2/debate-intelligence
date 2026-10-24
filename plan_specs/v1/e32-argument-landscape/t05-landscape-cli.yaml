@@ -28,9 +28,10 @@ spec:
     LandscapeRunService in debate_core.application so the E34 scheduled sync can call the same use case.
     It exits non-zero on an unknown caselist or snapshot, a missing taxonomy mapping, or an exceeded model
     budget. The first real runs over the corpus are operator-run in dev. Boundaries: the scheduled weekly
-    run and staleness banner are E34; S3 bucket and sync mechanics are E29; review-queue editing stays the The command calls the staleness hook v1-e34-t03 exposes before writing, so a report built on a
-    stale or cap-bound store says so at the top rather than reading as current.
-    t02 decisions-CSV workflow.
+    run and staleness banner are E34; S3 bucket and sync mechanics are E29; review-queue editing stays the
+    t02 decisions-CSV workflow. The command calls the staleness hook v1-e34-t03 exposes before writing,
+    so a report built on a stale or cap-bound store says so at the top rather than reading as current.
+    (PM ruling 2026-10-24: this sentence was spliced in two; restored.)
     (PM amendment 2026-10-22, from the coach's priorities of 2026-10-22.) The command no longer
     waits for v1-e32-t04: it adds t04's sections when they exist. Until v1-e32-t07 lands,
     classification is deterministic only and `--model-mode` accepts only `none` (the default),
@@ -42,6 +43,21 @@ spec:
     `apply-decisions`) and commit the resulting overrides file, with the config tests passing;
     the two rows marked to leave blank stay blank. Record in the first-run note the round-level
     coverage by side and kind, as v1-e32-t02 measured it, before and after his pass.
+    (PM rulings 2026-10-24, from v1-e32-t03's and v1-e32-t09's reviews.) (1) The staleness check
+    is given the run log, so a cap-bound or failed weekly run shows as stale; v1-e32-t03's
+    preview passed none. (2) The E32 gate's scan before sharing lists every hit with its line
+    (an ordinary word that is also a disclosed code, an author who shares a school's name) and
+    `--publish` goes ahead only when the operator confirms that none names a team; the
+    confirmation is recorded in the run's JSON and the first-run note. A refusal on every hit
+    would block every week. (3) When v1-e32-t09 has merged, the run builds its per-round aff
+    assignments and passes them to v1-e32-t03's `AffAssignment` seam, so the report counts them
+    and names each method (`PLAN_TEXT`, `TEAM_CARRY`, `PLACED_CARD`); until then the affirmative
+    side shows its unidentified share. t09's first full pass over the raw sources takes several
+    minutes, so in the first dev run it is an operator block (working agreement 10, and 11's
+    guards); weekly runs then parse only new sources. (4) The coach removed the most-read cards
+    section from report.md on 2026-10-24 (top_cards.csv keeps them). (5) Data-use policy 1.13
+    lets the report quote plan, counterplan and alternative texts word for word, never beside a
+    school or team code; the bundle stays local and in the private `reports/` prefix.
   priority: 1
   constraints:
     packages: [debate_cli, debate_core.application, debate_core.integrations, tests/smoke]

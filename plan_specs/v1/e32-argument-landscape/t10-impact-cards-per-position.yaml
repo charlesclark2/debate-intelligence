@@ -1,0 +1,93 @@
+# TASK v1-e32-t10-impact-cards-per-position - Impact cards per DA and advantage in the landscape report
+# Epic: E32 Argument Landscape Reports | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e32-t10-impact-cards-per-position
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+  annotations:
+    debate/title: "Impact cards per DA and advantage in the landscape report"
+spec:
+  # Filed by the PM, 2026-10-24, from the coach's review of the first Policy report, 2026-10-24 (v1-e32-t03).
+  description: >-
+    The coach asked for the impact cards of each DA and advantage in place of the most-read
+    cards section, which he removed. Counts first (working agreement 7), read-only, over
+    hspolicy26: v1-e32-t03 measured an "impact" heading or tag in 284 of 562 DA documents (51%)
+    and 229 of 1,129 advantage documents (20%; 1AC impacts are mostly unlabelled). Build the
+    rule for DAs first: a card placed under a DA (READS, on the DA's own side, as v1-e32-t03
+    counts it) is an impact card when an impact heading (t01's normalizer: `impact`, `impacts`,
+    `i/l and impact` and the like) is on its path or its tag opens with an impact word; rank a
+    DA's impact cards by distinct teams reading the cluster, as top cards are ranked, and show
+    up to N with the tag and short cite exactly as parsed and the source reference, FILE_IMPORT.
+    Advantages get the same rule, and the report says plainly how many advantage documents carry
+    no labelled impact; a model stage for unlabelled 1AC impacts is v1-e32-t07's, not this
+    task's. The section sits under each DA and advantage in report.md, and an impact_cards.csv
+    beside top_cards.csv. Send the counts and the proposed heading list to the PM before
+    building.
+  priority: 2
+  constraints:
+    packages: [debate_core.application, debate_core.arguments, debate_core.domain, tests/fixtures/landscape, packages/debate_core/tests]
+    forbidden:
+      - A school, team code or debater's name beside any card or text in a report, fixture, log or commit
+      - Card text, plan or counterplan text in a committed file or fixture (synthetic values only)
+      - Network or AWS access in any test
+      - Model calls (deterministic only; model stages are v1-e32-t07's)
+  context:
+    - kind: TaskRef
+      name: v1-e32-t03-landscape-report
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Counts before any rule, per DA and advantage, of documents with a labelled impact
+        card, sent to the PM with the proposed impact-heading list.
+    - id: ac2
+      description: >-
+        After the ruling, on the synthetic fixture, report.md shows up to N impact cards
+        under each DA and advantage and impact_cards.csv lists them, matching hand-written
+        golden files byte for byte; an ANSWERS card or a card on the other side is never an
+        impact card; tests shown failing first.
+    - id: ac3
+      description: >-
+        The report states, per kind, how many documents of that kind carry no labelled
+        impact.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e32-t10-impact-cards-per-position-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+spec:
+  description: >-
+    Counts and the PM's ruling first, then the rule and its golden files, then the section.
+  goalRef:
+    name: v1-e32-t10-impact-cards-per-position
+  graph:
+    nodes:
+      - id: impact-cards
+        kind: Task
+        name: Impact cards per position
+        description: >-
+          Counts and the PM's ruling first, then the rule and its golden files, then the
+          section.
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Landscape report tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application/test_landscape_report.py]
+status:
+  phase: Pending

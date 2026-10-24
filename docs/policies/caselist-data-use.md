@@ -3,12 +3,12 @@
 
 | | |
 |---|---|
-| Policy version | 1.12 |
-| Status | **Approved**, version 1.12, on the merge of its pull request (decided 2026-10-22). See [Approval](#approval). |
+| Policy version | 1.13 |
+| Status | **Approved**, version 1.13, on the merge of its pull request (decided 2026-10-24). See [Approval](#approval). |
 | Owner | Charlie Clark (product owner and head coach) |
 | Written by | v1-e30-t01-caselist-data-use-policy implementation session, 2026-09-19 |
 | Applies to | Everything the platform collects from OpenCaselist and OpenEv, and everything derived from it, in every environment |
-| Approved by | Charlie Clark, product owner and head coach, 2026-09-19 (versions 1.0 and 1.1), 2026-10-01 (versions 1.3 and 1.4), 2026-10-10 (versions 1.5 and 1.6), 2026-10-11 (version 1.7), 2026-10-13 (version 1.8), 2026-10-15 (version 1.9), 2026-10-19 (version 1.10) and 2026-10-22 (versions 1.11 and 1.12) |
+| Approved by | Charlie Clark, product owner and head coach, 2026-09-19 (versions 1.0 and 1.1), 2026-10-01 (versions 1.3 and 1.4), 2026-10-10 (versions 1.5 and 1.6), 2026-10-11 (version 1.7), 2026-10-13 (version 1.8), 2026-10-15 (version 1.9), 2026-10-19 (version 1.10), 2026-10-22 (versions 1.11 and 1.12) and 2026-10-24 (version 1.13) |
 | Next review | Start of the 2027-28 season, or sooner if a source's terms change |
 
 This is the policy that governs how the Debate Intelligence Platform collects, stores, uses and
@@ -147,7 +147,7 @@ The corpus may be used for the following, and only these:
 | # | Use | Conditions |
 |---|---|---|
 | 1 | **Team-internal research and scouting** — reading what an opponent has disclosed, before or during a tournament | Team members only. Nothing leaves the team. |
-| 2 | **Argument landscape reports** — aggregating the corpus into what positions are being read on the topic, by side, over time (E32) | Circuit-wide reports carry no team codes at all; per-school views are limited by [Personal data](#personal-data). |
+| 2 | **Argument landscape reports** — aggregating the corpus into what positions are being read on the topic, by side, over time (E32) | Circuit-wide reports carry no team codes at all; per-school views are limited by [Personal data](#personal-data). A report may quote a team's own analytic text word for word (plan texts, counterplan texts, kritik alternatives and roles of the ballot), including a text only one team reads, never beside a school or team code. Such a report stays on the operator's machine and in the private buckets' `reports/` prefix, never the public site or the repository (version 1.13). |
 | 3 | **Building and "plussing up" team files** — assembling disclosed and camp cards into the team's own files, extending them with new evidence (E33) | Cite kept verbatim, provenance in the file's sidecar (no line in the file's text since version 1.11), card marked `FILE_IMPORT`/unverified. Files stay inside the team. |
 | 4 | **Parsing, hashing, fingerprinting, deduplication and indexing** of the corpus (E30, E31) | Derived artefacts inherit every rule in this policy, including removal. |
 | 5 | **Parser and classifier evaluation** — measuring how well the platform reads real debate documents | Evaluation runs against the corpus in place; evaluation *fixtures* committed to the repository are synthetic (see [Personal data](#personal-data)). |
@@ -270,7 +270,7 @@ in stored provenance columns that are never searchable (v1-e39-t02).
 
 | Report | Maximum identity shown |
 |---|---|
-| Circuit-wide argument landscape (v1-e32-t03) | Nothing. No school, no team code. |
+| Circuit-wide argument landscape (v1-e32-t03) | Nothing. No school, no team code. It may quote team-written plan, counterplan and alternative texts word for word, never beside either (version 1.13). |
 | Per-school and trend views (v1-e32-t04) | **School plus team code, as disclosed. Never more.** |
 | Operator import/publish summaries (`docs/data/`) | Aggregate counts only. |
 | Built-file sidecar (E33) | School, team code, side, tournament, round — inside the team only. A built file's text carries none of them (version 1.11). |
@@ -635,7 +635,7 @@ before the thing it gates.
 
 ## Approval
 
-**Version 1.12 of this policy is approved.** Publishing caselist and OpenEv imports, loading the
+**Version 1.13 of this policy is approved.** Publishing caselist and OpenEv imports, loading the
 real corpus into dev, model classification over real disclosed text, and automated download (E34)
 are unblocked, each still subject to its own conditions in [Gates](#gates). Version 1.1 recorded
 the maintainer's confirmation of scheduled API downloads and the 10-per-minute rate limit.
@@ -739,16 +739,29 @@ the job ran only on the operator's machine, so under
 its pull request records the approval below. Nothing else changes: the rate limit, the weekly cadence,
 the `401`/`403` rule, the suppression list and every rule on personal data stand as they were.
 
+Version 1.13 lets an argument landscape report (E32) quote a team's own analytic text word for
+word: plan texts, counterplan texts, kritik alternatives and roles of the ballot. Charlie decided
+it on 2026-10-24, from the coach's review of the first Policy report, choosing that a text only one
+team reads may be quoted too, since disclosure already publishes it on OpenCaselist. It changes
+[Permitted uses](#permitted-uses) 2 and the circuit-wide row of "What a report may show". Such a
+quote never stands beside a school or team code. The report that carries it stays on the
+operator's machine and in the private buckets' `reports/` prefix, never on the public site or in
+the repository, and fixtures committed to the repository stay synthetic. A quoted text is derived
+from its source like any other artefact (Permitted uses 4), so a [removal](#removal) of the source
+removes it from the next report built. It loosens the policy, since no report quoted a team's
+own words before, so under [Review and change control](#review-and-change-control) it needs the
+coach's approval, and merging its pull request records the approval below. Nothing else changes.
+
 The standing rule for every future version: until this table records an approval of that version,
 nothing this policy governs may happen under it.
 
 | Field | Value |
 |---|---|
-| Policy version | 1.12 and 1.11 (2026-10-22); 1.10 (2026-10-19); 1.9 (2026-10-15); 1.8 (2026-10-13); 1.7 (2026-10-11); 1.6 and 1.5 (2026-10-10); 1.4 and 1.3 approved 2026-10-01, 1.3 including version 1.2's correction to rule 3; 1.0 and 1.1 approved 2026-09-19 |
+| Policy version | 1.13 (2026-10-24); 1.12 and 1.11 (2026-10-22); 1.10 (2026-10-19); 1.9 (2026-10-15); 1.8 (2026-10-13); 1.7 (2026-10-11); 1.6 and 1.5 (2026-10-10); 1.4 and 1.3 approved 2026-10-01, 1.3 including version 1.2's correction to rule 3; 1.0 and 1.1 approved 2026-09-19 |
 | Approved by | Charlie Clark |
 | Role | Product owner and head coach |
-| Approval date | 2026-10-22 (versions 1.12 and 1.11; 1.10: 2026-10-19; 1.9: 2026-10-15; 1.8: 2026-10-13; 1.7: 2026-10-11; 1.5 and 1.6: 2026-10-10; 1.3 and 1.4: 2026-10-01; 1.0 and 1.1: 2026-09-19) |
-| Scope of approval | Sections [Scope](#scope) through [Review and change control](#review-and-change-control) of version 1.12, including the [clause register](#clause-register) read 2026-09-19 and the [community disclosure norms](#community-disclosure-norms), both confirmed by Charlie |
+| Approval date | 2026-10-24 (version 1.13; 1.12 and 1.11: 2026-10-22; 1.10: 2026-10-19; 1.9: 2026-10-15; 1.8: 2026-10-13; 1.7: 2026-10-11; 1.5 and 1.6: 2026-10-10; 1.3 and 1.4: 2026-10-01; 1.0 and 1.1: 2026-09-19) |
+| Scope of approval | Sections [Scope](#scope) through [Review and change control](#review-and-change-control) of version 1.13, including the [clause register](#clause-register) read 2026-09-19 and the [community disclosure norms](#community-disclosure-norms), both confirmed by Charlie |
 | Open questions resolved at approval | **5** — removal contact address is `ctcb57@gmail.com`. **7** — two-season retention stands. **8** — resolved by a PM spec change to v1-e29-t03 / v1-e30-t07. **2** (version 1.1) — maintainer confirmed scheduled API downloads at 10 file downloads per minute. **6** (version 1.10) — the school's activities director and IT approved the tool for students; no district review for the E39 pilot |
 | Open questions accepted as known gaps | **1** — OpenCaselist privacy page unread. **3** — OpenEv distribution and per-camp terms unread |
 | Open questions left open | **4** — Bedrock data-protection terms, an E32 gate. **6** — for the V2 tub only, if its scope goes beyond the pilot's |

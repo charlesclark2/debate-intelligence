@@ -48,7 +48,16 @@ spec:
     share plainly, and the advantages and negative positions are counted as placed.
   priority: 1
   constraints:
-    packages: [debate_core.application, debate_core.arguments, debate_core.domain, tests/fixtures/landscape]
+    # PM ruling 2026-10-24 (v1-e32-t03 review, ruling 2): the fixture generator the plan node names,
+    # the shared fixture reader in debate_core.testing, and the package's tests.
+    packages:
+      - debate_core.application
+      - debate_core.arguments
+      - debate_core.domain
+      - debate_core.testing
+      - packages/debate_core/tests
+      - scripts
+      - tests/fixtures/landscape
     forbidden:
       - Model calls during aggregation or rendering (report numbers are deterministic)
       - Card body text in the report; only tag, short cite and source reference

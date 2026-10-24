@@ -23,6 +23,7 @@ regenerates it on `dev` ([`v1-e01-t16`](../plan_specs/v1/e01-repo-foundation/t16
 | [data/caselist-sync-runs.md](data/caselist-sync-runs.md) | Counts from each weekly `caselist pull`, recorded by the operator; aggregates only |
 | [data/debate-file-style-survey.md](data/debate-file-style-survey.md) | Which Word styles real team, caselist and camp `.docx` files use, and the share of files per template family |
 | [data/evidence-search-pilot.md](data/evidence-search-pilot.md) | The student search pilot's evidence: early sessions, the promotion checklist, the beta and the go or no-go |
+| [data/landscape/first-run-policy.md](data/landscape/first-run-policy.md) | Counts from the first Policy argument landscape reports on hspolicy26 (`v1-e32-t05`): classification coverage, review queue and scan; aggregates only |
 | [data/parsed-card-store.md](data/parsed-card-store.md) | Layout and record shapes of the parsed card store that caselist parse writes |
 | [data/parser-eval-2026-10.md](data/parser-eval-2026-10.md) | Parser evaluation baseline on 2026.10.18-docx-5: per-unit scores for the labelled tiers |
 | [data/search-index.md](data/search-index.md) | The student search pilot's SQLite FTS5 index: its schema, manifest and pointer, and the record of each full-store build |

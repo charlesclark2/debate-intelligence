@@ -757,3 +757,27 @@ Then: scripts/task pr --partial, and blocks 0 to 4 after the merge.
 | ac4: the smoke check passes in the validate-dev recorded tier | NOT RUN | It passes in the recorded tier locally (2 passed after the sync). validate-dev runs it on the pre-release the merge builds, and the PM records it with ac5 |
 | ac5: the first dev run published, its counts in the first-run note, the coach's review before 2026-11-07 | NOT RUN | Blocks 0 to 4 run after the merge, on dev's squash commit |
 | first-dev-run: the coach reviews the first Policy report | NOT RUN | With ac5 |
+
+## PM review, second
+
+**Verdict:** ACCEPTED
+<!-- ACCEPTED / CHANGES_REQUESTED -->
+
+**Reviewed by / date:** PM, 2026-10-24
+
+**Notes:**
+
+11. **Accepted.** The movement is v1-e32-t09's reviewed normalizer rule: 32 more cards placed, and
+    3 more aff documents and teams with a placed advantage. Nothing else moved.
+12. **Accepted.** Calling a new `assignments(reading, through, classifications, taxonomy, writes)`
+    keeps a dry run truly read-only, which is right (Decision 5), and it shares t09's plan-text step
+    without changing t09's tests. On hspolicy26 the first report now identifies the aff in 1,252
+    of 2,192 aff rounds (940 unidentified, against 1,998 before), and rounds with a read rise from
+    50.6% to 60.2%.
+13. **Accepted.** A dry run reporting `cache_written: true` was a real bug, and the test was shown
+    failing first.
+
+**The PR:** `scripts/task pr --partial`. After the merge, run blocks 0 to 4 on dev's squash commit.
+**Block 2's `--publish` waits until v1-e32-t08 has merged.** Right after the publish, the operator
+runs t08's lock writer for 1.1.0 (the PM's ruling on t08, 2026-10-24), and the PM commits the lock
+in a PM batch.

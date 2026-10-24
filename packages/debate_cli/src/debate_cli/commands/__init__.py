@@ -51,6 +51,7 @@ from debate_cli.commands import (
     caselist_runs,
     config,
     doctor,
+    landscape,
     store,
     tub_index,
     tub_users,
@@ -89,6 +90,12 @@ def register_commands(app: typer.Typer) -> None:
     opencaselist_session.command("logout")(caselist_auth.logout)
     disclosed_evidence.add_typer(opencaselist_session)
     app.add_typer(disclosed_evidence)
+
+    argument_landscape = command_group(
+        "landscape", "Argument landscape reports: what positions a caselist reads."
+    )
+    argument_landscape.command("report")(landscape.report)
+    app.add_typer(argument_landscape)
 
     evidence_store = command_group("store", "Move evidence between this machine and its bucket.")
     evidence_store.command("sync")(store.sync)

@@ -187,7 +187,8 @@ class AffAssignmentService:
             if one.sha256 in affirmative
         ]
         service = self._plan_texts if writes else self._plan_texts.without_writes()
-        return await service.read(reading.caselist, documents, PlanTextVocabulary(taxonomy))
+        vocabulary = PlanTextVocabulary(taxonomy, self._taxonomies.resolutional_plan_words(taxonomy.topic_id))
+        return await service.read(reading.caselist, documents, vocabulary)
 
 
 def build_aff_assignments(

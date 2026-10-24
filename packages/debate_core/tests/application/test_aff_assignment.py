@@ -183,7 +183,15 @@ taxonomy_version: 1.0.0
 event: POLICY
 positions:
   - {id: sample-plan-aff, label: Sample plan, kind: aff, side: aff, aliases: [sample plan]}
+  - {id: national-plan-aff, label: National plan, kind: aff, side: aff}
   - {id: spending-da, label: Spending DA, kind: da, side: neg, aliases: [spending da]}
+"""
+PRODUCER_PLAN_WORDS = """\
+schema_version: 1
+topic_id: policy-sample-topic
+position_id: national-plan-aff
+frame_words: [establish, federal, government, should, states, united]
+resolutional_words: [national, program, route, using, voucher]
 """
 NAMED = "The United States federal government should establish a sample plan financed by a payroll levy."
 UNNAMED = "The United States federal government should establish a national program using a voucher route."
@@ -203,8 +211,8 @@ def _disclosure_path(school: str, side: str, round_number: int) -> str:
     return f"School {school}/Code{school}/{file}"
 
 
-def producer(tmp_path: Path) -> AffAssignmentService:
-    """The service, built over a planted data directory."""
+def producer(tmp_path: Path, *, plan_words: str | None = None) -> AffAssignmentService:
+    """The service, built over a planted data directory; `plan_words` is the topic's plan-text file."""
 
     data_dir = tmp_path / "data"
     store = PlantedCaselist(data_dir, PRODUCER_CASELIST)
@@ -232,6 +240,9 @@ def producer(tmp_path: Path) -> AffAssignmentService:
     (config_dir / "taxonomies").mkdir(parents=True)
     (config_dir / "topics.yaml").write_text(PRODUCER_TOPICS, encoding="utf-8")
     (config_dir / "taxonomies" / "policy-sample-topic.yaml").write_text(PRODUCER_TAXONOMY, encoding="utf-8")
+    if plan_words is not None:
+        (config_dir / "plan_texts").mkdir()
+        (config_dir / "plan_texts" / "policy-sample-topic.yaml").write_text(plan_words, encoding="utf-8")
     objects = FsEvidenceObjectStore(data_dir)
     blobs = FsEvidenceObjectStore(data_dir, subdirectory=Path("blobs"))
     local = LocalEvidence(
@@ -263,6 +274,21 @@ async def test_the_producer_returns_assignments_for_a_caselist_and_a_through_dat
     assert len({one.round_id for one in found}) == 4
     counts = (await service.run(PRODUCER_CASELIST, date(2026, 9, 29))).counts
     assert (counts.rounds, counts.unidentified, counts.placed_only) == (6, 2, 0)
+
+
+@pytest.mark.anyio
+async def test_the_producer_names_the_resolutional_aff_from_the_topics_plan_text_file(tmp_path: Path) -> None:
+
+    service = producer(tmp_path, plan_words=PRODUCER_PLAN_WORDS)
+    found = await service.aff_assignments(PRODUCER_CASELIST, date(2026, 9, 29))
+    assert sorted((one.method, one.position_id) for one in found) == [
+        ("PLAN_TEXT", "national-plan-aff"),
+        ("PLAN_TEXT", "national-plan-aff"),
+        ("PLAN_TEXT", "sample-plan-aff"),
+        ("PLAN_TEXT", "sample-plan-aff"),
+        ("PLAN_TEXT", "sample-plan-aff"),
+        ("TEAM_CARRY", "sample-plan-aff"),
+    ]
 
 
 @pytest.mark.anyio

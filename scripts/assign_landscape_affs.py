@@ -184,7 +184,8 @@ async def _read(arguments: argparse.Namespace) -> _Read:
     )
     taxonomy = repository.taxonomy(resolved.topic.id)
     service = stores.plan_texts
-    run = await service.read(arguments.caselist, affirmative, PlanTextVocabulary(taxonomy))
+    vocabulary = PlanTextVocabulary(taxonomy, repository.resolutional_plan_words(resolved.topic.id))
+    run = await service.read(arguments.caselist, affirmative, vocabulary)
     return _Read(
         reading=reading,
         topic_id=resolved.topic.id,

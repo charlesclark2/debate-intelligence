@@ -6,7 +6,7 @@
 | Spec | [`plan_specs/v1/e32-argument-landscape/t03-landscape-report.yaml`](../../plan_specs/v1/e32-argument-landscape/t03-landscape-report.yaml) |
 | Epic / release | `v1-e32-argument-landscape` / `v1.2` |
 | Branch | `task/v1-e32-t03-landscape-report` |
-| Session status | PARTIAL <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | PARTIAL, awaiting the PM's ruling on the coach's asks <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
@@ -21,9 +21,14 @@ report bundle of `report.md`, `positions.csv` and `top_cards.csv`, rendered by
 * **The header** names the overrides digest, the prompt version `none`, coverage by cards and by
   rounds, and the denominators behind every share.
 
-Every criterion a session can close passes. **The Goal stays InProgress** because ac5 is the coach's
-sign-off on the layout, which only he can give (NOT RUN, see Operator follow-ups). Question 4 asks
-how to close it without holding up t05, whose context needs this task Succeeded.
+Every criterion a session can close passes. **The Goal stays InProgress for one more PM look.**
+The coach answered ac5 on 2026-10-24 ([below](#the-coachs-review-2026-10-24)):
+* **Yes** to the structure and the positions sections.
+* **No** to the most-read cards. That section is now out of report.md, a section change within this
+  task (condition 2).
+* **He asks instead for** impact cards per advantage and DA, an overview of each position, CP texts,
+  and Ks' alternatives or roles of the ballot. That is a new rule and data the store mostly does not
+  hold, so it comes back to the PM under condition 2 (the second question block).
 
 **Look first at Deviation 1.** The read-only preview on hspolicy26 through 2026-10-20 showed that
 **53.2% of the position-rounds counted were on the position's opposite side**. These are aff files
@@ -45,7 +50,7 @@ ordinary word that is also a disclosed code, and a filename token.
 | report-model | Done | `domain/landscape_report.py`: `LandscapeReport`, `ReportHeader`, `PositionStats`, `TopCard`, `UnclassifiedSummary`, `AffIdentification`, plus the inputs `LandscapeCard` and `AffAssignment` |
 | aggregation | Done | `application/landscape_report.py`: `LandscapeReportService`, `round_id`, `overrides_digest`, `landscape_cards`. `read_seed_sources` now also returns the on-topic disclosures as E30 records them, and each card's short cite |
 | top-cards | Done | One row per E31 cluster, ranked by distinct teams then cluster id. The row shows the commonest tag and short cite, taken from the first such card |
-| renderers | Done | `arguments/landscape/render.py`, golden tests, pyright clean. The coach's review (custom criterion) is NOT RUN |
+| renderers | Done | `arguments/landscape/render.py`, golden tests, pyright clean. After the coach's review, report.md lists no cards; they are in top_cards.csv |
 
 ## Acceptance criteria
 
@@ -55,14 +60,14 @@ ordinary word that is also a disclosed code, and a filename token.
 | ac2: top_cards.csv lists up to N (default 5) fingerprints per position, with teams_reading, tag, short cite, source object key, element index and FILE_IMPORT; near-duplicates of one bucket count once | PASS | `golden/top_cards.csv` byte for byte. `test_top_cards_rank_clusters_by_distinct_teams_and_count_near_duplicates_once`: cluster 2 has four exact fingerprints, one team reads two of them, and teams_reading is 4. Also `..._are_capped_at_n_per_position`, `..._ties_are_broken_by_fingerprint` and `..._every_row_is_file_import` |
 | ac3: items below the report threshold, or waiting in the review queue, are excluded and reported as an Unclassified line with count and share | PASS | `test_aggregate_below_threshold_and_queued_items_are_unclassified_not_counted`: 10 of 44 cards, 8 queued and 2 below the threshold; `courts-cp` (below the threshold only) has no row. `..._the_report_threshold_decides_what_is_unclassified` runs at 0.95 and 0.4. `..._unclassified_rounds_are_counted_by_side`: aff rounds with no identified aff 3 of 7, neg rounds with no placed negative position 1 of 8 |
 | ac4: rendering the same inputs twice gives byte-identical Markdown and CSV (golden files), and a scan finds no team code from the fixture disclosures | PASS | `test_rendering_the_fixture_matches_the_golden_file` (3 files). `test_rendering_the_same_inputs_twice_in_any_order_is_byte_identical` uses three shuffles of every input. `test_a_scan_of_the_output_finds_no_team_code_school_tournament_or_path_from_the_disclosures`, shown failing on planted `XX` and on a planted school (below) |
-| ac5: the coach reviews the fixture report and confirms the sections and column names are usable for weekly prep | NOT RUN | A sign-off only the coach can give. The preview and the fixture report are ready for him; the question is in Operator follow-ups |
+| ac5: the coach reviews the fixture report and confirms the sections and column names are usable for weekly prep | PASS, pending the PM's ruling on his further asks | The coach answered on 2026-10-24: yes to the structure and to the positions sections and their team counts, no to the most-read cards section. The section is removed (`test_report_md_lists_no_card_and_points_to_top_cards_csv`, shown failing on the previous renderer). What he asks for in its place is the PM's call (second question block, question 1) |
 | synthetic-caselist-fixture: the README contains "synthetic" | PASS | `grep -c synthetic tests/fixtures/landscape/synthetic_caselist/README.md` → 2 |
 | report-model: `domain/landscape_report.py` contains `class PositionStats` | PASS | `grep -c "class PositionStats" …` → 1 |
 | aggregation: `pytest …/test_landscape_report.py -k aggregate` | PASS | 29 passed in 2.20s |
 | top-cards: `pytest …/test_landscape_report.py -k top_cards` | PASS | 7 passed in 2.23s |
-| renderers: `pytest …/arguments/landscape/test_render.py` | PASS | 13 passed in 3.42s |
+| renderers: `pytest …/arguments/landscape/test_render.py` | PASS | 14 passed (after the coach's change) |
 | renderers: `uv run pyright packages/debate_core` | PASS | 0 errors, 0 warnings, 0 informations (14.0 s) |
-| renderers: the coach reviews the fixture report layout | NOT RUN | Same as ac5 |
+| renderers: the coach reviews the fixture report layout | PASS, as ac5 | As ac5 |
 
 I ran each pytest command as `.venv/bin/python -m pytest …` under `perl -e 'alarm 110'`, which puts
 the time limit on the interpreter (working agreement 10).
@@ -134,7 +139,7 @@ repository, and nothing from them is committed.
 | Neg rounds with no placed negative position | 1,389 of 2,160 (64.3%) |
 | Set aside as answers (other side) | 4,734 rounds, counted once per position |
 | Positions read; new this week; top-card rows | 68 (1 aff, 14 advantages, 4 theory, 17 DAs, 13 CPs, 11 Ks, 8 T); 0; 318 |
-| Files | report.md 822 lines, positions.csv 87, top_cards.csv 337 |
+| Files | report.md 822 lines before the coach's change and 160 after; positions.csv 87; top_cards.csv 337 |
 
 Before the other-side rule, the same run had 73 positions and 2,996 rounds with a read. The most-read
 rows after it are below. The Midterms DA was "966 rounds, 164 teams, 528 aff rounds" before.
@@ -155,7 +160,8 @@ schools and tournaments over three characters. Codes were matched case-sensitive
 names as words without case.
 
 * positions.csv: no hit.
-* report.md: 3 school names, 1 team code and 2 tournaments.
+* report.md: 3 school names, 1 team code and 2 tournaments. After the coach's change it lists no
+  cards, and its only hit is the header's word "Disclosures".
 * top_cards.csv: 3 school names, 1 team code and 1 tournament.
 
 I read each hit in its line, and none names a team:
@@ -171,10 +177,11 @@ so nothing exists to scan for them. Tags and short cites are shown exactly as pa
 
 ## Before the report (working agreement 10)
 
-* `uv run scripts/affected_tests.py` listed 56 files (8.6 s). I ran them with CI's markers:
+* `uv run scripts/affected_tests.py` listed 56 files. I ran them with CI's markers:
   `.venv/bin/python -m pytest -q -n auto -m "not slow and not live" -p no:randomly <files>` under a
-  115 s alarm, at load average 30 → **2,051 passed, 2 skipped in 61.32 s**. The 2 skips are t02's
-  overrides-file checks, which have no file to check yet.
+  115 s alarm → **2,054 passed, 2 skipped in 60.61 s**, after the coach's change and the packages
+  amendment. The first run, at load average 30, gave 2,051 passed and 2 skipped in 61.32 s. The 2
+  skips are t02's overrides-file checks, which have no file to check yet.
 * `uv run --frozen ruff format --check .` → 1188 files already formatted.
 * `uv run --frozen ruff check .` → all checks passed.
 * `uv run --frozen pyright packages/debate_core` → 0 errors.
@@ -200,11 +207,15 @@ so nothing exists to scan for them. Tags and short cites are shown exactly as pa
 * **`testing/landscape_report.py`** (new): reads the fixture back for both test modules.
   `testing/landscape_store.py`: `PlantedCard.short_cite`.
 * **Tests:** `tests/application/test_landscape_report.py` (41) and
-  `tests/arguments/landscape/test_render.py` (13), new; `test_landscape_seeding.py` gains one.
+  `tests/arguments/landscape/test_render.py` (14), new; `test_landscape_seeding.py` gains one.
 * **`scripts/make_landscape_fixture.py`** (new) and **`tests/fixtures/landscape/`**:
   `synthetic_caselist/` (generated inputs and README) and `golden/` (hand-written).
-* **The spec:** the garbled staleness sentence fixed with a PM-ruling comment above the folded block
-  (brief item 2). The phase is unchanged.
+* **The spec:**
+  * the garbled staleness sentence fixed with a PM-ruling comment above the folded block (brief
+    item 2);
+  * `constraints.packages` amended with a PM-ruling comment (review ruling 2).
+
+  The phase is unchanged.
 
 ## Deviations from the spec
 
@@ -286,27 +297,56 @@ so nothing exists to scan for them. Tags and short cites are shown exactly as pa
     Markdown has its table and emphasis characters escaped and whitespace collapsed; the CSV keeps it
     exact.
 
+## The coach's review (2026-10-24)
+
+The coach is the operator (PM ruling 4). He read the real preview, and his answer, in his words:
+
+> I like the overall structure of the document. I would say that for the advantages, it is very
+> useful for the positions section to show which advantages are being read and by what amount of
+> teams. Same with each of the negative positions. However, I don't think the "Most-read cards"
+> section is really that helpful. I think instead, we would want the most read impacts for each of
+> the advantages or the most read overview of the advantages i.e. what is the overall message of the
+> advantage, DA, CP, K, etc. I think the only cards that really matter for this report are impact
+> cards just so we're aware of what impacts are being read with an associated advantage and
+> disadvantage. For CPs and Ks, it's more useful to know the CP text or the alternative/role of the
+> ballot for Kritiks.
+
+**Recorded: yes** to the sections and to the positions' columns; **no** to the most-read cards
+section.
+
+**Applied (condition 2, a section change):** report.md no longer lists cards. A line in "How to read
+the numbers" says each position's most-read cards are in `top_cards.csv`, which ac2 keeps. The
+golden report.md was edited by hand, and two new render tests replace the three that read tags
+from Markdown. `test_report_md_lists_no_card_and_points_to_top_cards_csv` and the golden report fail
+on the previous renderer (2 failed, 12 passed).
+
+**Not applied: what he asks for in place of the cards.** It changes a rule, and most of it needs
+text the store does not hold, so it comes back under condition 2. I measured it first, read-only,
+counts only, in 37.9 s with no cache write. It covers hspolicy26 through 2026-10-20, on the cards a
+report counts: READS, at or above the threshold, not in a round on the other side. A card shows a
+signal when a heading on its path or its tag holds the word.
+
+| Ask | Signal | What the store holds |
+|---|---|---|
+| Impact cards, DAs | `impact`, `impacts` | 936 of 8,782 cards (10.7%); 284 of 562 DA documents (51%); 16 of 17 DAs. 761 by heading, 214 by tag |
+| Impact cards, advantages | the same | 327 of 20,170 cards (1.6%); 229 of 1,129 documents (20%); 13 of 14 advantages. 1AC impacts are tagged as claims ("recession causes war") and rarely labelled |
+| Overviews | `overview` | DAs 175 cards in 42 documents; the other kinds a handful or none. An overview is an analytic, and the store keeps cards |
+| CP texts | `text`, `cp text` | 1 card in 322 CP documents. A CP text is an analytic the parser does not keep, the same gap v1-e32-t09 is measuring for plan texts |
+| K alternative or role of the ballot | `alt`, `alternative`, `role of the ballot`, `rob`, `role of the judge` | 221 of 1,284 cards in 97 of 151 K documents (64%); 8 of 11 Ks. These are cards defending the alt; the alt's own text is an analytic |
+
+So:
+* **impact cards for DAs** are within reach of a heading-and-tag rule for about half of DA
+  documents;
+* **impact cards for advantages** are not, without the model stage (v1-e32-t07);
+* **CP texts, alternatives and overviews** need the parser to keep analytic paragraphs, which is
+  t09's open question about plan texts. Showing team-written text in a report is also a new kind of
+  content under the data-use policy, which is the PM's to decide.
+
 ## Operator follow-ups
 
-1. **The coach's review (ac5 and the renderers node's custom criterion).** Please give the coach:
-   * the real preview, `~/Documents/debate/landscape-seed/landscape-preview/report.md`, with the two
-     CSVs beside it. It is hspolicy26 through 2026-10-20, real tags, outside the repository;
-   * the fixture report, `tests/fixtures/landscape/golden/report.md` and its CSVs in the worktree.
-
-   Ask him:
-
-   ```text
-   Do these sections work for the weekly prep meeting: About this report, Affirmative
-   positions (affs, advantages, theory), Negative positions (DAs, CPs, Ks, T, theory),
-   New this week, Most-read cards, Unclassified? And these columns: Rounds, Teams,
-   Aff rounds, Neg rounds, Share of teams, First seen, New; and for cards Rank, Teams,
-   Tag, Short cite, Source, Paragraph, First disclosed? Yes or no, and what would you
-   change (order, columns, how long tags show, anything missing)?
-   ```
-
-   Paste his answer back into this session. It records yes or no and his changes, makes any change
-   he asks for, and sets the phase if he says yes. The preview never left this machine.
-2. **The pull request,** after the PM's review, from the worktree:
+1. **The coach's review** is answered (above). Nothing further is needed from him unless the PM
+   takes up his asks.
+2. **The pull request,** once the PM rules on the second question block, from the worktree:
 
 ```bash
 cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e32-t03-landscape-report
@@ -315,8 +355,6 @@ cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-
 ```bash
 scripts/task pr v1-e32-t03-landscape-report
 ```
-
-Add `--partial` if the PM accepts it with ac5 still open (question 4).
 
 ## Follow-up work
 
@@ -329,10 +367,14 @@ Add `--partial` if the PM accepts it with ac5 still open (question 4).
   `--publish`, not refuse outright (question 3).
 * **Side as a role signal in t02** (v1-e32-t07 or a new task). If the PM prefers the other-side rule
   upstream, the matcher would need each source's sides; the report's rule could then go.
-* **Long tags.** Some real tags are a paragraph long, and the Markdown shows them whole, as parsed.
-  This is for the coach to say whether a cut would help (question 1 of his review).
+* **Long tags** no longer arise in report.md, which lists no cards since the coach's review.
+* **The coach's asks** (impact cards, overviews, CP texts, alternatives): see the second question
+  block.
 
 ## Questions for the PM
+
+Answered in the PM review of 2026-10-24: (1) a; (2) yes; (3) list the hits; (4) the coach is asked
+today. Kept as asked:
 
 ```text
 v1-e32-t03 questions (session, 2026-10-23)
@@ -368,6 +410,46 @@ v1-e32-t03 questions (session, 2026-10-23)
    (b) wait for him.
    Recommendation: (a). The preview is the shape t05 will write, and the
    2026-11-07 date leaves no slack for a wait.
+```
+
+Second block, after the coach's review (2026-10-24):
+
+```text
+v1-e32-t03 questions after the coach's review (session, 2026-10-24)
+
+The coach said yes to the structure and the positions sections, and no to the
+most-read cards section, which is now out of report.md (top_cards.csv keeps
+them for ac2). In its place he asks for: impact cards per advantage and DA, the
+overview of each position, CP texts, and Ks' alternatives or roles of the
+ballot. Counts on hspolicy26 (read-only, cards a report counts):
+  - DA impacts: an "impact" heading or tag in 284 of 562 DA documents (51%)
+  - advantage impacts: 229 of 1,129 documents (20%); 1AC impacts are unlabelled
+  - overviews: almost none (analytics, which the store does not keep)
+  - CP texts: 1 card in 322 CP documents (analytics, as t09 found for plans)
+  - K alts/ROB: cards defending the alt in 97 of 151 K documents (64%); the
+    alt's own text is an analytic
+
+1. Where do his asks go?
+   (a) Close t03 now: accept the section change as ac5's yes, set Succeeded,
+       open the PR. File one new task for "impact cards per advantage and DA"
+       (heading and tag rule for DAs first, advantages with t07), and add CP
+       texts, alternatives and overviews to t09's analytic-paragraph question.
+   (b) Hold t03 and build the DA impact rule here before the PR.
+   Recommendation: (a). The 2026-11-07 date wants t05 started; a DA impact
+   rule is a new count with its own fixture and review, and the texts need a
+   parser decision t09 is already asking for.
+
+2. CP texts and alternatives are text a team wrote, not evidence. The data-use
+   policy says what a circuit-wide report may show by identity (nothing), but
+   not whether it may quote a team's analytic text; t09's spec keeps plan text
+   out of committed files. May a landscape report (local, and the private
+   bucket) show a CP text or an alternative verbatim?
+   Recommendation: decide this with t09's plan-text options, before anyone
+   builds the extraction. One rule for plan texts, CP texts and alternatives.
+
+3. Set t03's Goal Succeeded on (a)?
+   Recommendation: yes. ac5 asked whether the sections and column names work
+   for prep meetings, and the coach's answer is yes to all that remain.
 ```
 
 ## PM review

@@ -258,14 +258,16 @@ def a_file(live: Path, tmp_path: Path) -> Path:
     return path
 
 
-REFUSED: Final[dict[str, Callable[[Path, Path], Path]]] = {
-    "the data directory": the_data_directory,
-    "a directory inside it": inside_it,
-    "a directory holding it": holding_it,
-    "a symbolic link to it": a_link_to_it,
-    "a directory that is not empty": not_empty,
-    "a file": a_file,
+REFUSED: Final[dict[str, tuple[Callable[[Path, Path], Path], str]]] = {
+    "the data directory": (the_data_directory, "is this environment's own data directory"),
+    "a directory inside it": (inside_it, "is inside this environment's own data directory"),
+    "a directory holding it": (holding_it, "holds this environment's own data directory"),
+    "a symbolic link to it": (a_link_to_it, "is this environment's own data directory"),
+    "a directory that is not empty": (not_empty, "is not empty"),
+    "a file": (a_file, "is not a directory"),
 }
+"""Each directory refused, and the reason given: the data directory is also not empty, so the reason
+is what tells the refusals apart."""
 
 
 @pytest.mark.parametrize("which", sorted(REFUSED))
@@ -273,7 +275,8 @@ def test_a_directory_it_must_not_write_into_is_refused_before_the_lock_is_taken(
     world: World, tmp_path: Path, which: str
 ) -> None:
     live = seeded(world)
-    target = REFUSED[which](live, tmp_path)
+    make, reason = REFUSED[which]
+    target = make(live, tmp_path)
     live_before = files(live)
     bucket_before = world.everything()
     versions_before = len(world.versions(RUN_LOCK_KEY))
@@ -282,10 +285,30 @@ def test_a_directory_it_must_not_write_into_is_refused_before_the_lock_is_taken(
 
     assert refused["exit_code"] == ExitCode.DOMAIN_FAILURE, refused
     assert refused["error"]["code"] == "RESTORE_TARGET_REFUSED", refused["error"]
+    assert reason in refused["error"]["message"], refused["error"]["message"]
     assert "the run lock was not taken" in refused["error"]["message"]
     assert len(world.versions(RUN_LOCK_KEY)) == versions_before, "the lock was not taken"
     assert world.everything() == bucket_before
     assert files(live) == live_before
+
+
+@pytest.mark.parametrize("which", ["the data directory", "the directory that will hold it"])
+def test_a_fresh_machines_data_directory_not_yet_made_is_refused_too(
+    world: World, tmp_path: Path, which: str
+) -> None:
+    """On a Mac with no data directory yet, neither it nor its empty parent is a copy's place."""
+    seeded(world)
+    fresh = world.use(tmp_path / "fresh-home" / "dev")
+    (tmp_path / "fresh-home").mkdir()
+    target = fresh if which == "the data directory" else fresh.parent
+
+    refused = restore(world, target)
+
+    assert refused["error"]["code"] == "RESTORE_TARGET_REFUSED", refused
+    assert ("is this environment's" if which == "the data directory" else "holds this environment's") in (
+        refused["error"]["message"]
+    )
+    assert not fresh.exists()
 
 
 # ------------------------------------------------------------------------------------------------

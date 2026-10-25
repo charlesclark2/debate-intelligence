@@ -261,6 +261,13 @@ SCANNED = ("packages/*/src/**/*.py", "packages/*/tests/**/*.py", "tests/**/*.py"
 MAPPING_MODULE = "packages/debate_core/src/debate_core/evidence/card_mapping.py"
 FIXTURE_MODULE = "tests/fixtures/verification/verification_world.py"
 
+PARAGRAPH_MAP_MODULE = "packages/debate_core/src/debate_core/evidence/numbered_snapshot.py"
+PARAGRAPH_MAP_SHIFTS = ["snapshot_offset - self.source.paragraphs[position].start"]
+"""The one subtraction of this shape that is not the card mapping: a snapshot offset made relative to
+its paragraph, for the numbered snapshot a model reads (v1-e05-t06-card-selection-contract). It never
+touches evidence_text. It is allowed by its exact text, so any other arithmetic in that module is
+still flagged."""
+
 _START = frozenset({"start", "start_offset", "evidence_start_offset"})
 _END = frozenset({"end", "end_offset", "evidence_end_offset"})
 _SPAN_OFFSETS = frozenset({"start_offset", "end_offset"})
@@ -351,6 +358,7 @@ def test_card_mapping_arithmetic_exists_once_in_the_whole_tree() -> None:
     assert {FIXTURE_MODULE, "packages/debate_core/tests/evidence/test_card_mapping.py"} <= callers, (
         f"the scan did not see the mapping's call sites; it saw {sorted(callers)}"
     )
+    assert [line.split(": ", 1)[1] for line in shifts.pop(PARAGRAPH_MAP_MODULE, [])] == PARAGRAPH_MAP_SHIFTS
     assert [line for module, lines in shifts.items() if module != MAPPING_MODULE for line in lines] == []
 
 

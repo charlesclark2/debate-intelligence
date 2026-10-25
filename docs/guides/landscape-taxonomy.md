@@ -363,6 +363,9 @@ federal actor that names no aff names `nhi-aff` when every word of it is either:
 * one of the topic's **frame words**: those in at least 80% of the sheet's plan texts;
 * one of its **resolutional words**: those of the clusters you marked `nhi-aff`.
 
+`nhi-aff` is the least specific aff: when a file's plan texts, a round's files or a team's rounds name
+it and exactly one other aff, they count as that other aff, and `nhi-aff` never makes a conflict.
+
 A plan text with one other word stays unnamed. A text that writes `USFG` is an example, because
 `usfg` is in neither list. Both lists are in `config/landscape/plan_texts/<topic id>.yaml`, one
 lowercase word each. Adding a word is a configuration edit like an alias: `uv run pytest tests/config`

@@ -461,3 +461,36 @@ forbidden-list test should check the page body, not the header.
 
 Re-review after the change. Expect a short one: the part pages, their sizes and headroom, the new
 audit kind and the header.
+
+## PM review, second
+
+<!-- Completed by the PM only. -->
+
+**Verdict:** ACCEPTED
+<!-- ACCEPTED / CHANGES_REQUESTED -->
+
+**Reviewed by / date:** PM (Claude), 2026-10-26
+
+**Notes:**
+
+Both changes are made as asked, and nothing else moved.
+1. **One page per `#` part.**
+   * The front page holds the header and the one contents list (32 KB with the assets). Affirmative
+     is 46% of the line, Negative 54% and Neither side 22%.
+   * A part's path sits under `report/`, so it can never take `schools` or `positions`.
+   * A cross-part link becomes text by the unchanged rule, and a report with no parts is all front
+     page, covered in moto.
+   * The page-weight test is sized from the republished bundle and asserts 25% headroom on the
+     largest part. The old one-page layout fails it, which is exactly what it's for.
+   * `report-part` audits without naming the part, held to the schema by a drift test.
+2. **The header is restored on every landscape page,** and the forbidden-list test reads the page
+   body only. A new test checks that the site's header, Search link and cart are present.
+3. **Red against the pre-review source:** 56 failed, each for its reason. The restored source passes
+   1,085.
+4. **One stale line:** Operator follow-up 5 above still says "There is no Search link or cart". The
+   runbook, which the section says was updated, is the one the operator follows, and it shows the
+   normal header. The PM's deploy blocks will say the same.
+
+The Terraform is unchanged, so the dev plan is still expected as `0 to add, 1 to change, 0 to
+destroy`. The PR merges `--partial` until ac4's apply, deploy and coach's check. The PM reads the
+plan before the apply.

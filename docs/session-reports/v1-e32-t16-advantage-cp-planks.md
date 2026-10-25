@@ -40,7 +40,8 @@ each CP's planks under its CP texts, on synthetic sources, against hand-written 
   * **The dry run without `--publish`** took 75.7 s and wrote nothing. It shows 38 plank rows.
   * **Its scan:** 9 hits, 8 of them t09's in `top_cards.csv`. The other is **1 team-code hit in a
     plank table, not yet accepted** (digest `79cbed0d4d7e`): a question for the PM before the first
-    publish ([below](#questions-for-the-pm)).
+    publish. The PM ruled (a) on 2026-10-25: the operator reads it first
+    ([below](#questions-for-the-pm)).
 * **The counts that led to the rulings are kept below:** 152 planks under `advantage-cp`, most in
   lists after a colon stem, 24 naming an advantage in their own words.
 
@@ -628,10 +629,13 @@ if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset i
 
    Paste every line back. The CLI's own `--dry-run` shows each hit's line, for the terminal only, if a
    hit needs reading.
-3. **The first publish with the planks** is the PM's to coordinate, after the review. It stops on the
-   plank-table hit (digest `79cbed0d4d7e`) until the operator reads that hit's line in
-   `debate-research landscape report --caselist hspolicy26 --dry-run` and accepts it, or it is ruled
-   otherwise (question 1).
+3. **The first publish with the planks** is the PM's to coordinate, after the review, under the ruling
+   of 2026-10-25 on the plank-table hit ([questions](#questions-for-the-pm)):
+   * the operator reads that hit's line in `debate-research landscape report --caselist hspolicy26
+     --dry-run`;
+   * if it is an ordinary word, the publish adds `--accept-scan-hits` with the digest that dry run
+     prints (`79cbed0d4d7e` today);
+   * if it names a team, nothing is published and withholding such planks becomes a follow-up task.
 
 ## Follow-up work
 
@@ -649,7 +653,15 @@ questions as sent are kept below.
 **The question from the build** (`debate_core.testing` in `constraints.packages`) was ruled yes on
 2026-10-25 and is in the spec.
 
-One question from the dry run, paste-ready:
+**The question from the dry run was ruled (a) on 2026-10-25.** Before the first publish with planks:
+* The operator reads the hit's line in the CLI's dry run.
+* **If the word is an ordinary one,** as t09's `All` was, the operator publishes with
+  `--accept-scan-hits` and the digest the dry run prints. Today that is `79cbed0d4d7e`; it changes if
+  anything else in the scan changes.
+* **If it really names a team,** nothing is published. Option (b) then becomes a follow-up task:
+  withhold a plank that holds a disclosed team code as a whole word.
+
+The question as sent:
 
 ```text
 v1-e32-t16 question (session, 2026-10-25, after the operator's refill and dry

@@ -687,8 +687,9 @@ run "removal_permission_set_deletes_disclosed_material_and_nothing_else" {
     identity_store_id            = "d-mock000000"
     evidence_removal_user_names  = ["maintainer"]
 
-    # The takedown's own listing: the everyday table's ListBucketVersions prefixes, and the student
-    # search pilot's index versions, so a removal can find their noncurrent versions (v1-e39-t07).
+    # The takedown's own listing: the everyday table's ListBucketVersions prefixes, the student
+    # search pilot's index versions, so a removal can find their noncurrent versions (v1-e39-t07),
+    # and the landscape bundles, so it can find a school view's (v1-e32-t13).
     list_prefixes_of_action = {
       "s3:ListBucketVersions" = [
         "raw/", "raw/*",
@@ -697,6 +698,7 @@ run "removal_permission_set_deletes_disclosed_material_and_nothing_else" {
         "manifests/", "manifests/*",
         "quarantine/", "quarantine/*",
         "reports/tub/search/", "reports/tub/search/*",
+        "reports/landscape/", "reports/landscape/*",
       ]
     }
   }
@@ -729,13 +731,13 @@ run "removal_permission_set_deletes_disclosed_material_and_nothing_else" {
       alltrue([
         for resource in tolist(flatten([statement.Resource])) :
         anytrue([
-          for prefix in ["raw/", "parsed/", "files/", "manifests/", "quarantine/", "reports/tub/search/"] :
+          for prefix in ["raw/", "parsed/", "files/", "manifests/", "quarantine/", "reports/tub/search/", "reports/landscape/"] :
           startswith(resource, "${aws_s3_bucket.evidence.arn}/${prefix}")
         ])
       ])
       if anytrue([for action in tolist(flatten([statement.Action])) : startswith(action, "s3:Delete")])
     ])
-    error_message = "Delete rights must be scoped to raw/, parsed/, files/, manifests/, quarantine/ and reports/tub/search/ (v1-e39-t07). A delete anywhere else under reports/ must be denied (task spec: forbidden)."
+    error_message = "Delete rights must be scoped to raw/, parsed/, files/, manifests/, quarantine/, reports/tub/search/ (v1-e39-t07) and the landscape school views under reports/landscape/ (v1-e32-t13). A delete anywhere else under reports/ must be denied (task spec: forbidden)."
   }
 
   # v1-e39-t07 (PM amendment 2026-10-19): the takedown credential may delete the student search
@@ -754,8 +756,10 @@ run "removal_permission_set_deletes_disclosed_material_and_nothing_else" {
       "${aws_s3_bucket.evidence.arn}/manifests/*",
       "${aws_s3_bucket.evidence.arn}/quarantine/*",
       "${aws_s3_bucket.evidence.arn}/reports/tub/search/*",
+      "${aws_s3_bucket.evidence.arn}/reports/landscape/*/schools.csv",
+      "${aws_s3_bucket.evidence.arn}/reports/landscape/*/schools.md",
     ])
-    error_message = "A takedown deletes under the five prefixes of disclosed material and reports/tub/search/, exactly. Nothing else under reports/ gains a delete (v1-e39-t07)."
+    error_message = "A takedown deletes under the five prefixes of disclosed material and reports/tub/search/, and the landscape bundles' two school-view files, exactly. Nothing else under reports/ gains a delete (v1-e39-t07, v1-e32-t13)."
   }
 
   assert {
@@ -763,10 +767,48 @@ run "removal_permission_set_deletes_disclosed_material_and_nothing_else" {
       for statement in jsondecode(aws_ssoadmin_permission_set_inline_policy.evidence_removal[0].inline_policy).Statement :
       alltrue([
         for resource in tolist(flatten([statement.Resource])) :
-        !startswith(resource, "${aws_s3_bucket.evidence.arn}/reports/") || startswith(resource, "${aws_s3_bucket.evidence.arn}/reports/tub/search/")
+        !startswith(resource, "${aws_s3_bucket.evidence.arn}/reports/")
+        || startswith(resource, "${aws_s3_bucket.evidence.arn}/reports/tub/search/")
+        || contains([
+          "${aws_s3_bucket.evidence.arn}/reports/landscape/*/schools.csv",
+          "${aws_s3_bucket.evidence.arn}/reports/landscape/*/schools.md",
+        ], resource)
       ])
     ])
-    error_message = "Under reports/, the takedown credential reaches reports/tub/search/ and nothing else."
+    error_message = "Under reports/, the takedown credential reaches reports/tub/search/ and the landscape school views, and nothing else."
+  }
+
+  # v1-e32-t13: the landscape bundles' school views, which name schools and team codes, go with a
+  # removal. Exactly the two file names v1-e32-t04 gives them, in one statement of their own that
+  # may delete and do nothing else; no circuit-wide file (report.md, positions.csv, top_cards.csv,
+  # impact_cards.csv, trends.csv) and no bundle as a whole.
+  assert {
+    condition = [
+      for statement in jsondecode(aws_ssoadmin_permission_set_inline_policy.evidence_removal[0].inline_policy).Statement : {
+        actions   = toset(flatten([statement.Action]))
+        resources = toset(flatten([statement.Resource]))
+      }
+      if anytrue([for resource in flatten([statement.Resource]) : startswith(resource, "${aws_s3_bucket.evidence.arn}/reports/landscape/")])
+      ] == [{
+        actions = toset(["s3:DeleteObject", "s3:DeleteObjectVersion"])
+        resources = toset([
+          "${aws_s3_bucket.evidence.arn}/reports/landscape/*/schools.csv",
+          "${aws_s3_bucket.evidence.arn}/reports/landscape/*/schools.md",
+        ])
+    }]
+    error_message = "One statement reaches reports/landscape/ objects: it deletes schools.csv and schools.md, every version, and nothing else of a bundle (v1-e32-t13)."
+  }
+
+  assert {
+    condition = alltrue(flatten([
+      for statement in jsondecode(aws_ssoadmin_permission_set_inline_policy.evidence_removal[0].inline_policy).Statement : [
+        for resource in flatten([statement.Resource]) : [
+          for name in ["report.md", "positions.csv", "top_cards.csv", "impact_cards.csv", "trends.csv"] :
+          !endswith(resource, name) && !endswith(resource, "reports/landscape/*") && !endswith(resource, "reports/*")
+        ]
+      ]
+    ]))
+    error_message = "No takedown resource names a circuit-wide landscape file, or every file of a bundle (task spec: forbidden)."
   }
 
   assert {

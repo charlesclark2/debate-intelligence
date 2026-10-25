@@ -6,23 +6,34 @@
 | Spec | [`plan_specs/v1/e32-argument-landscape/t15-advantages-per-aff.yaml`](../../plan_specs/v1/e32-argument-landscape/t15-advantages-per-aff.yaml) |
 | Epic / release | `v1-e32-argument-landscape` / `v1.2` |
 | Branch | `task/v1-e32-t15-advantages-per-aff` |
-| Session status | PARTIAL, waiting on the PM's ruling on ac1 <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | COMPLETE <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
-**ac1 is done; nothing is built yet.** The counts below were sent to the PM with a proposed
-cut-off (top 5 per aff and per mechanism), and the session waits for the ruling before it writes
-any code, test or golden file. The Goal stays **InProgress**.
+**Every criterion passes, and the Goal is Succeeded.** report.md now has an **Advantages by
+affirmative** section. It covers each aff v1-e32-t09 assigned rounds to, and each mechanism under it:
+* its advantages, ranked by distinct teams;
+* the top 5, then "and N more, read by M teams", where M counts distinct teams;
+* one closing line naming the affs and mechanisms with no advantage read, with their rounds;
+* the line "N advantage reads in R affirmative rounds, by T teams, have no assigned aff", saying how
+  many of those rounds only a placed card identifies.
 
-On hspolicy26 through 2026-10-20 under taxonomy 1.2.0:
-* **1,093 of the 1,426 assigned affirmative rounds (76.6%) read at least one advantage.** They are
-  read by 279 of the 354 teams with an assigned round.
-* **All 16 advantages are read under some assigned aff.** 11 of them are read under more than one
-  top-level aff, and all 16 under more than one aff or mechanism.
-* **328 affirmative rounds with an advantage read have no assigned aff.** These are 591
-  round-advantage reads by 104 teams. 25 of those rounds are aff rounds that only a placed card
-  identifies (t03's `PLACED_CARD`).
-* **A top 5 per section shows 73.1% of the aff-advantage-team entries; a top 3 shows 52.8%.**
+It follows the PM's six rulings of 2026-10-24, which are recorded above the spec's
+`acceptanceCriteria`. No other bundle file changes: positions.csv, top_cards.csv, impact_cards.csv,
+trends.csv and the school view are byte-identical against their goldens, and t04's file lists and
+t13's removal selection are untouched.
+
+**What to look at first:**
+* the hand-written golden,
+  [`report_section.md`](../../tests/fixtures/landscape/advantages_per_aff/report_section.md), and the
+  fixture table in its README;
+* [the mutants](#mutants): all seven were caught, the PM's four among them;
+* [the live check](#the-section-on-hspolicy26): a dry run on hspolicy26 gives the section exactly
+  ac1's numbers, 591 reads in 328 rounds by 104 teams, 25 of the rounds identified by a placed card.
+
+**The affected set was too long for a session.** It is 180 files and was stopped by the 115 s limit
+at 89%, with nothing failed up to then. Under agreement 10 it is left to the pull request's CI. The
+test directories of what changed, with the always-run list, ran instead: 5,584 passed in 110.3 s.
 
 ## Plan nodes
 
@@ -30,7 +41,7 @@ On hspolicy26 through 2026-10-20 under taxonomy 1.2.0:
 
 | Node | Status | Notes |
 |---|---|---|
-| advantages-per-aff | In progress | Counts sent to the PM (ac1); building waits on the ruling |
+| advantages-per-aff | Done | Counts sent (ac1), the PM ruled the same day, the section built with its golden file and tests shown failing first (ac2) |
 
 ## Acceptance criteria
 
@@ -38,9 +49,9 @@ On hspolicy26 through 2026-10-20 under taxonomy 1.2.0:
 
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
-| ac1: counts before any rule (assigned aff rounds with placed advantage reads, distinct advantages per aff and mechanism, advantages shared across affs, advantage reads with no assigned aff), sent to the PM with a proposed cut-off | PASS | [The counts](#the-counts-hspolicy26-through-2026-10-20-taxonomy-120); sent to the PM on 2026-10-24 |
-| ac2: report.md's section on the synthetic fixture, matching a hand-written golden file, tests failing first | NOT RUN | Waits on the PM's ruling on the cut-off |
-| advantages-per-aff node: `uv run pytest packages/debate_core/tests/application/test_landscape_report.py` | NOT RUN | Waits on the ruling |
+| ac1: counts before any rule (assigned aff rounds with placed advantage reads, distinct advantages per aff and mechanism, advantages shared across affs, advantage reads with no assigned aff), sent to the PM with a proposed cut-off | PASS | [The counts](#the-counts-hspolicy26-through-2026-10-20-taxonomy-120), sent on 2026-10-24 with top 5 proposed; the PM ruled (a) on all six questions the same day |
+| ac2: after the ruling, on the synthetic fixture, report.md shows each aff's and mechanism's advantages with team counts and the cut-off, and the reads with no identified aff, matching a hand-written golden file; an advantage read in a round assigned to another aff is never counted under this one; tests shown failing first | PASS | `test_advantages_report_md_section_matches_the_hand_written_golden_file` against [`report_section.md`](../../tests/fixtures/landscape/advantages_per_aff/report_section.md), and the t03 whole-file golden `report.md` with the section added by hand. `test_advantages_a_read_in_a_round_assigned_to_another_aff_is_never_counted_under_this_one`, with its mutant caught. [Red first](#tests-shown-failing-first) |
+| advantages-per-aff node: `uv run pytest packages/debate_core/tests/application/test_landscape_report.py` | PASS | Run as `.venv/bin/python -m pytest packages/debate_core/tests/application/test_landscape_report.py` under `perl -e 'alarm 100'` (agreement 10: the limit goes on the interpreter) → 76 passed in 1.93 s |
 
 ## The counts (hspolicy26, through 2026-10-20, taxonomy 1.2.0)
 
@@ -180,9 +191,137 @@ and a top 3 shows 285 (47.8%).
 * A top 3 hides 57 rows, among them single payer's fourth and fifth advantages (64 and 59 teams)
   and global budgets' fourth (8).
 
+## The PM's rulings, applied
+
+All six were (a), on 2026-10-24. They are recorded as a comment above the spec's
+`acceptanceCriteria`:
+
+1. **Top 5 per aff and per mechanism**, ranked by distinct teams, ties by id, then "and N more, read by
+   M teams" (`DEFAULT_ADVANTAGES_PER_AFF` 5, a `LandscapeReportService` parameter).
+2. **A round whose aff only a placed card identifies counts with the no-assigned-aff reads**, and the
+   report says how many such rounds there are. t09's assignments are the only source of a section's
+   rounds.
+3. **The line is "591 advantage reads in 328 affirmative rounds, by 104 teams, have no assigned aff"**,
+   with the live numbers, followed by "A placed card identifies the aff of 25 of those rounds, and their
+   advantages are not counted under it."
+4. **One closing line** names each aff and mechanism with assigned rounds but no advantage read, with
+   its rounds (Nanomedicine coverage, a mechanism of Single payer, among them). None of them has a section.
+5. **No section for single payer's rounds that name no mechanism.** They count only in Single payer's
+   section, where every round is one member of a set, so it counts once.
+6. **M is the distinct teams reading any hidden advantage** under that aff or mechanism.
+
+## What was built
+
+| Change | Where |
+|---|---|
+| The count: each round's advantages from t03's own `CountedReads` (affirmative rounds only), each section's rounds from t09's assignments, a mechanism's rounds added once to its top-level aff, the ranking, the cut-off and the distinct hidden teams, the closing line, and the reads with no assigned aff | `application/landscape_advantages.py` (new), called from `LandscapeReportService.count` with the assigned rounds and the rounds t03 identified by a placed card |
+| The values | `domain/landscape_report.py`: `AdvantagesByAff`, `AffAdvantages`, `AffAdvantage`, `AffWithoutAdvantages`, `UnassignedAdvantageReads`, and `LandscapeReport.advantages_by_aff`, which is None when the taxonomy has no advantage, so an LD report has no section |
+| The section | `arguments/landscape/render.py`: `_advantages_section`, after the positions and before the analytic texts. Nothing else in the file changed except the docstring, so a merge with v1-e32-t18's school-view edits keeps both sides |
+| The fixture and its golden | `tests/fixtures/landscape/advantages_per_aff/` (new): taxonomy, round table, README, and `report_section.md` written by hand. In the t03 golden `report.md`, the section was added by hand from that fixture's table: 9 reads in 7 rounds by 6 teams, 4 of the rounds with a placed card |
+| The tests | 11 in `test_landscape_report.py`, named `test_advantages_*` |
+| The coach guide | `docs/guides/landscape-taxonomy.md`, "The advantages under each aff": what puts a round under an aff, the mechanism rule, and that an advantage's `parent` cannot move it |
+
+**Nothing is taken from an advantage's name or its taxonomy `parent`.** The fixture gives
+`costs-advantage` the parent `public-option-aff`, and a test shows costs is not under Public option.
+
+## Tests shown failing first
+
+**Against a skeleton that counted nothing:** the domain values, the wiring and the renderer were in
+place, but `advantages_by_aff` returned no sections and zero reads.
+* Command: `.venv/bin/python -m pytest -p no:randomly -n 0 packages/debate_core/tests/application/test_landscape_report.py -k advantages`.
+* **10 of the 11 new tests failed**, each for its reason:
+  * the golden section did not match;
+  * the counts were zero;
+  * `_section` found no aff (`StopIteration`);
+  * the no-advantage taxonomy still got a section.
+* **The guard against a cut-off below one passed.** The service already refused it.
+* The `-k` also picked up t10's existing `test_impact_cards_are_listed_for_das_and_advantages_only`,
+  which passed.
+* `test_render.py`: the t03 whole-file golden `report.md` failed (1 failed, 31 passed).
+
+**After the implementation:** both files, 108 passed in 2.58 s.
+
+## Mutants
+
+Each mutant was applied to the committed `landscape_advantages.py` by a scratch script, then
+`test_landscape_report.py` and `test_render.py` ran (108 tests). After each run the file was restored
+from git, and the last restore was checked with `git diff --quiet`. Each run had a new, empty
+`HYPOTHESIS_STORAGE_DIRECTORY` (agreement 8), though none of these tests uses Hypothesis. Every catch
+is an assertion failure; nothing errored at collection.
+
+| Mutant | Caught by |
+|---|---|
+| **Another aff's round counted here**: a section reads every round of its teams, whatever aff the round is assigned | 4: the golden section, the other-aff test, the mechanism test, the distinct-teams test |
+| **A mechanism round counted twice under its parent**: rounds kept as a list, and the mechanisms' rounds added again to the parent | 2: the golden section, the mechanism test (6 rounds became 9) |
+| A team counted once per round rather than once per aff-advantage pair | 3: the golden section, the other-aff test, the cut-off test |
+| **The cut-off one too many** (6 shown) | 4: the golden section, the other-aff test, the cut-off test, the distinct-teams test |
+| The cut-off one too few (4 shown) | 4: the same four |
+| **M as a sum** of the hidden advantages' teams | 4: the golden section, the other-aff test, the cut-off test (3 became 5), the distinct-teams test (1 became 2) |
+| The placed-card rounds left out of the no-aff reads | 4: the golden section, the no-aff test, the t03-fixture test, the t03 whole-file golden |
+
+## The section on hspolicy26
+
+This check was not a criterion. The scratch script built the run as in ac1 and ran it as a dry run
+through 2026-10-20.
+* **Guards:** no `DEBATE_*` variable, no `caselist pull`, load average 15.3.
+* **Limits:** the same process group, a 115 s `alarm` and a 100 s pool-killing handler.
+* **Output:** the new section's counts only, no team code.
+* **Runtime:** 82.4 s, `written=False`.
+* **Nothing was written.** The 15 files under `landscape/` and `reports/` had unchanged checksums,
+  and no worker was left.
+
+It gives ac1's numbers exactly:
+* **Single payer:** 1,266 rounds, 313 teams, 263 reading an advantage. Its top 5 are 102, 85, 74, 64
+  and 59 teams, and then 11 more, read by 128 teams.
+* **Global budgets:** 33, 17, 8, 8 and 8 teams, and then 6 more, read by 16 teams.
+* **Public option:** 5, 3, 2, 2 and 2 teams, and then 3 more, read by 1 team. Here a sum would say 3.
+* **The closing line:** Nanomedicine coverage (7 rounds), ucc (14), indigenous (15), incarceration
+  (9), eco-NHI (4), human enhancement (2), and ACA reform, children's coverage and Medicaid expansion
+  (1 each).
+* **The no-aff line:** 591 advantage reads in 328 affirmative rounds, by 104 teams, have no assigned
+  aff; a placed card identifies the aff of 25 of those rounds.
+
+## Before the report (working agreement 10)
+
+* **The affected set.** `uv run scripts/affected_tests.py` selected 180 test files.
+  * They were run as `.venv/bin/python -m pytest -n auto -m "not slow and not live"` over that list,
+    in their own process group under `perl -e 'setpgrp(0,0); alarm 115'`.
+  * **The alarm stopped them at 89%,** with no failure up to then.
+  * No process from this worktree was left running.
+  * Over two minutes, the set is left to the pull request's CI (the PM's ruling of 2026-10-19). It is
+    not handed to the operator.
+* **The test directories of what changed and the always-run list ran in 110.3 s, 5,584 passed.**
+  * `packages/debate_core/tests/application`, `tests/arguments/landscape` and `tests/domain`;
+  * `packages/debate_cli/tests/test_landscape_command.py`;
+  * `tests/architecture`, `tests/specs` and `tests/docs`;
+  * `test_app.py` and `test_help_rendering.py`.
+  * After the guide's edit, `tests/docs` and `tests/architecture` ran again: 254 passed in 14.70 s.
+* **The static checks:**
+  * `uv run --frozen ruff format --check .` → 1297 files already formatted;
+  * `uv run --frozen ruff check .` → all checks passed;
+  * `uv run --frozen pyright packages/debate_core` → 0 errors;
+  * `uv run --frozen lint-imports` → 16 kept, 0 broken;
+  * `scripts/check_thin_handlers.py` → OK, 51 handlers;
+  * `scripts/docs_index.py --check-descriptions` → all 47 documents have a description;
+  * `scripts/check_command_blocks.py` → OK;
+  * `uv run scripts/validate_specs.py` → OK, 445 files.
+
 ## Files changed
 
-<!-- Group by package or directory; one line on why each group changed. -->
+* **`debate_core.application`:**
+  * `landscape_advantages.py` (new): the count;
+  * `landscape_report.py`: the call, the cut-off parameter, and the placed-card rounds collected;
+  * the module docstring.
+* **`debate_core.domain`:** `landscape_report.py`, the section's values and the report's field.
+* **`debate_core.arguments`:** `landscape/render.py`, the section in report.md.
+* **`packages/debate_core/tests`:** `application/test_landscape_report.py`, the 11
+  `test_advantages_*` tests and the fixture reader.
+* **`tests/fixtures/landscape`:**
+  * `advantages_per_aff/` (new);
+  * `golden/report.md`, the section added by hand.
+* **`docs/guides`:** `landscape-taxonomy.md`, "The advantages under each aff".
+* **Spec:** the PM's rulings as a comment above `acceptanceCriteria`, and the Goal Succeeded.
+* **This report.**
 
 ## Deviations from the spec
 
@@ -190,21 +329,38 @@ None.
 
 ## Decisions and assumptions
 
-<!-- Choices the spec left open, with the reasoning. -->
+* **The golden for ac2 is the section, not a whole report.md, on the new fixture.** Writing a whole
+  report by hand for it would mean its header, positions and trends, which this task does not touch.
+  The section is compared byte for byte, from its heading to the next `##`. The whole-file golden of
+  t03's fixture, which every report test already builds, has the section added by hand too, so the
+  section is also checked in place in a full report.
+* **The fixture's inputs are a table read in the test module**, not a generator in `scripts/`. Both
+  `scripts/` and `debate_core.testing` are outside this task's packages.
+* **Sections are ordered** by teams, then rounds, then id, as report positions are. A mechanism
+  follows its aff, in the same order, and the closing line uses the same order.
+* **Only affirmative rounds are counted.** t03 already counts an advantage card in a negative round
+  as an answer. A round on no readable side could count as reading an advantage, but it is no
+  affirmative round, so it is in neither the sections nor the no-aff line. On hspolicy26 there are none
+  (ac1).
+* **A deeper taxonomy is handled.** A mechanism of a mechanism counts under each aff above it, once
+  each, and is listed under its top-level aff. A parent that is not an active aff ends the line.
+  Taxonomy 1.2.0 has one level.
+* **Each advantage row shows its teams only.** That is the PM's "team counts only"; rounds are not
+  shown.
+* **The section is in report.md only.** No CSV and no metadata line changed, so positions.csv and
+  the rest are byte-identical against their goldens.
 
 ## Operator follow-ups
 
-<!-- Commands the operator must run (anything over ~2 minutes), with where to run them, the exact
-command, expected runtime and what success looks like. Also GitHub/AWS settings to change. -->
-
-None.
+None. Republishing the hspolicy26 report with the section is the PM's to coordinate after the merge.
 
 ## Follow-up work
 
-<!-- Bugs, gaps or ideas outside this task's scope, each with the task or epic it belongs to.
-The PM decides whether they become spec changes or new tasks. -->
-
-None.
+* **The 303 affirmative rounds with no identified aff** hold 549 of the 591 no-aff advantage reads.
+  `v1-e32-t17` (kritikal affirmatives) is the task that identifies more of them, and the section's
+  closing line will fall as it does.
+* **When v1-e32-t18 merges**, a sync of `render.py` should keep both sides. `_advantages_section` is
+  one new function and one line in `render_markdown`.
 
 ## PM review
 

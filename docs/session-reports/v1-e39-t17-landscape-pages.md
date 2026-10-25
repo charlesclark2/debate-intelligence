@@ -192,6 +192,12 @@ missing search and cart, and the page weight. Then: 155 passed.
    position id. What is open is whether the adapter itself logs request paths, and so whether
    `infrastructure/modules/evidence_search/main.tf` needs a setting to stop it. Until that is read,
    the ruling's condition is not met.
+   **The README, read by the operator on 2026-10-25:** the v1.1.0 `README.md`
+   (`https://raw.githubusercontent.com/awslabs/aws-lambda-web-adapter/v1.1.0/README.md`) has no line
+   containing `log`, in any case (`grep -n -i -E 'log'` printed nothing, and `curl -fsSL` reported
+   no error). It documents no logging and no setting for it, so it neither says the adapter logs
+   request paths nor says it does not. The answer is taken from the adapter's source at v1.1.0 and
+   from the dev pilot's own app log (Operator follow-ups, item 1b).
 4. **The report outgrew the size layout A was ruled on.** One page is 141,796 of 153,600 bytes, not
    about 94 KB, and the report grew 75% in one republish. It passes today. Options are in the
    message to the PM.
@@ -233,7 +239,23 @@ tag's file is missing.
 { curl -fsSL https://raw.githubusercontent.com/awslabs/aws-lambda-web-adapter/v1.1.0/README.md || curl -fsSL https://raw.githubusercontent.com/awslabs/aws-lambda-web-adapter/main/README.md; } | grep -n -i -E 'log'
 ```
 Paste the output back. If the adapter logs request paths at its default level, the session adds the
-setting that stops it to the function's environment in `main.tf`, with a module test.
+setting that stops it to the function's environment in `main.tf`, with a module test. (Run
+2026-10-25: nothing printed. The README is silent on logging.)
+
+**1b. The adapter's source, and what the deployed adapter has logged** (live read and one AWS read,
+seconds). The first command confirms the tag's README was the file read. The next two print only the
+source's logging lines, which are code, not data. The last prints a count, never a log line: how many
+app-log events from the last 30 days name a pilot path.
+
+```bash
+curl -sS -o /dev/null -w '%{http_code}\n' https://raw.githubusercontent.com/awslabs/aws-lambda-web-adapter/v1.1.0/README.md
+curl -fsSL https://raw.githubusercontent.com/awslabs/aws-lambda-web-adapter/v1.1.0/src/main.rs | grep -n -i -E 'tracing|log|level|filter'
+curl -fsSL https://raw.githubusercontent.com/awslabs/aws-lambda-web-adapter/v1.1.0/src/lib.rs | grep -n -E '(trace|debug|info|warn|error)!\('
+aws logs filter-log-events --profile debate-admin --region us-east-1 --log-group-name debate-dev-tub-app --start-time $(( ($(date +%s) - 2592000) * 1000 )) --filter-pattern '?"/search" ?"/cards/" ?"/account"' --query 'length(events)' --output text
+```
+Success looks like `200`, then a few source lines from each file, then a number. A `0` with debaters'
+use of dev on 2026-10-22 inside the window means the running adapter wrote no request path at its
+level as deployed.
 
 **2. The plan** (about 1 min), for the PM to read before the apply:
 

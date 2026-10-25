@@ -73,6 +73,7 @@ WIRED_INTEGRATIONS = [
     "debate_core.integrations.local.fs_version_store",
     "debate_core.integrations.local.macos_notifier",
     "debate_core.integrations.local.parsed_store",
+    "debate_core.integrations.local.run_state_files",
     "debate_core.integrations.local.search_index",
     "debate_core.integrations.local.sqlite_caselist_repository",
     "debate_core.integrations.local.suppression_list",
@@ -80,12 +81,17 @@ WIRED_INTEGRATIONS = [
     "debate_core.integrations.models.routing_policy",
     "debate_core.integrations.opencaselist",
     "debate_core.integrations.s3",
+    "debate_core.integrations.s3.fencing",
+    "debate_core.integrations.s3.run_lock_object",
     "debate_core.integrations.s3.version_directories",
     "debate_core.integrations.secrets_manager",
 ]
 S3 = "debate_core.integrations.s3"
 S3_VERSION_DIRECTORIES = "debate_core.integrations.s3.version_directories"
 """Inside the `s3` package, so it does not import when `s3` does not (`v1-e31-t16`)."""
+S3_FENCING = "debate_core.integrations.s3.fencing"
+S3_RUN_LOCK_OBJECT = "debate_core.integrations.s3.run_lock_object"
+"""The bucket's run lock and its fence (`v1-e40-t04`): inside `s3` too."""
 OPENCASELIST = "debate_core.integrations.opencaselist"
 
 
@@ -105,8 +111,8 @@ def make_unimportable(monkeypatch: pytest.MonkeyPatch, *modules: str) -> None:
 def s3_and_opencaselist_do_not_import(monkeypatch: pytest.MonkeyPatch) -> tuple[str, ...]:
     # The submodule too: one an earlier test imported is cached, and would import here while `s3`
     # does not, which no installation without boto3 can do.
-    make_unimportable(monkeypatch, S3, S3_VERSION_DIRECTORIES, OPENCASELIST)
-    return (S3, S3_VERSION_DIRECTORIES, OPENCASELIST)
+    make_unimportable(monkeypatch, S3, S3_VERSION_DIRECTORIES, S3_FENCING, S3_RUN_LOCK_OBJECT, OPENCASELIST)
+    return (S3, S3_VERSION_DIRECTORIES, S3_FENCING, S3_RUN_LOCK_OBJECT, OPENCASELIST)
 
 
 # ---------------------------------------------------------------------------------------------
@@ -199,12 +205,14 @@ def test_an_integration_that_does_not_import_fails_doctor_naming_each_one(
     assert error["exit_code"] == ExitCode.DOMAIN_FAILURE
     for module in s3_and_opencaselist_do_not_import:
         assert module in error["message"]
-    assert "3 of the 19 integrations" in error["message"]
+    assert "5 of the 22 integrations" in error["message"]
     assert error["details"]["integrations_import"] is False
     assert error["details"]["integrations_failed"] == {
         OPENCASELIST: f"ModuleNotFoundError: no module named {OPENCASELIST!r}",
         S3: f"ModuleNotFoundError: no module named {S3!r}",
         S3_VERSION_DIRECTORIES: f"ModuleNotFoundError: no module named {S3_VERSION_DIRECTORIES!r}",
+        S3_FENCING: f"ModuleNotFoundError: no module named {S3_FENCING!r}",
+        S3_RUN_LOCK_OBJECT: f"ModuleNotFoundError: no module named {S3_RUN_LOCK_OBJECT!r}",
     }
     assert error["details"]["integrations_wired"] == WIRED_INTEGRATIONS
     # The Unicode check passed, and is still reported.

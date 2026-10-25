@@ -195,7 +195,9 @@ def assign_affs(
         for one in open_rounds:
             if one.round_key in assigned or one.team is None or one.team not in marked:
                 continue
-            if identified[one.team] or one.team in disagreeing:
+            # A team with another aff carried it into every open round with no plan text first, so it
+            # has no marker round here; a team whose rounds disagree carries nothing.
+            if one.team in disagreeing:
                 continue
             if not no_plan_text(one):
                 refused += 1

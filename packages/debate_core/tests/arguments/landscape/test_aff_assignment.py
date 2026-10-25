@@ -391,6 +391,13 @@ def test_a_team_whose_rounds_disagree_reads_the_k_aff_by_its_own_marker_and_carr
     assert counts.unidentified == 1
 
 
+def test_a_team_with_a_conflicting_round_reads_the_k_aff_by_its_own_marker_and_carries_nothing() -> None:
+    specs = rounds(("r1", "team-a", ("d1",)), ("r2", "team-a", ("d2",)), ("r3", "team-a", ("d3",)))
+    found, counts = kritikal_assigned(specs, {"d1": CONFLICTING, "d2": NONE, "d3": NONE}, {"d2"})
+    assert found == {"r2": (KRITIKAL, KRITIKAL_AFF_MARKER_METHOD)}
+    assert counts.unidentified == 2
+
+
 def test_a_round_no_readable_team_disclosed_reads_its_own_marker_and_is_never_carried_into() -> None:
     specs = rounds(("r1", None, ("d1",)), ("r2", None, ("d2",)))
     found, _ = kritikal_assigned(specs, {"d1": NONE, "d2": NONE}, {"d1"})

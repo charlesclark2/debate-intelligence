@@ -17,7 +17,7 @@ from pathlib import Path
 from debate_core.application.landscape_counts import round_id
 from debate_core.application.landscape_report import LandscapeReportInputs, LandscapeReportService
 from debate_core.application.landscape_schools import school_view
-from debate_core.domain.caselist import Disclosure, RoundLabel
+from debate_core.domain.caselist import Disclosure
 from debate_core.domain.landscape_report import AffAssignment
 from debate_core.domain.landscape_schools import SchoolView
 from debate_core.testing.landscape_report import read_synthetic_caselist, synthetic_staleness
@@ -33,34 +33,34 @@ ASH, BIRCH, CEDAR, DRIFT = (
 FI, IC = "Fictional Invitational", "Imaginary Classic"
 
 EXPECTED = [
-    (ASH, "XX", "aff", "costs-advantage", 2, IC),
-    (ASH, "XX", "aff", "single-payer-aff", 2, IC),
-    (ASH, "YY", "neg", "cap-k", 1, IC),
-    (ASH, "YY", "neg", "election-da", 1, IC),
-    (ASH, "YY", "neg", "hospital-closures-da", 1, IC),
-    (ASH, "YY", "neg", "spending-da", 1, FI),
-    (ASH, "YY", "neg", "states-cp", 1, FI),
-    (BIRCH, "QQ", "aff", "condo-bad", 1, IC),
-    (BIRCH, "QQ", "aff", "costs-advantage", 1, IC),
-    (BIRCH, "QQ", "neg", "cap-k", 1, FI),
-    (BIRCH, "QQ", "neg", "spending-da", 1, FI),
-    (BIRCH, "ZZ", "aff", "costs-advantage", 1, FI),
-    (BIRCH, "ZZ", "aff", "innovation-advantage", 1, FI),
-    (BIRCH, "ZZ", "neg", "spending-da", 1, IC),
-    (BIRCH, "ZZ", "neg", "states-cp", 1, IC),
-    (CEDAR, "VV", "aff", "costs-advantage", 1, FI),
-    (CEDAR, "VV", "aff", "public-option-aff", 1, FI),
-    (CEDAR, "WW", "neg", "nhi-t", 2, IC),
-    (CEDAR, "WW", "neg", "election-da", 1, FI),
-    (CEDAR, "WW", "neg", "provider-strikes-da", 1, IC),
-    (DRIFT, "JJ", "aff", "innovation-advantage", 1, IC),
-    (DRIFT, "JJ", "aff", "single-payer-aff", 1, IC),
-    (DRIFT, "JJ", "neg", "spending-da", 1, FI),
-    (DRIFT, "JJ", "neg", "states-cp", 1, FI),
-    (DRIFT, "KK", "aff", "costs-advantage", 1, IC),
-    (DRIFT, "KK", "aff", "innovation-advantage", 1, IC),
+    (ASH, "XX", "aff", "costs-advantage", 2),
+    (ASH, "XX", "aff", "single-payer-aff", 2),
+    (ASH, "YY", "neg", "cap-k", 1),
+    (ASH, "YY", "neg", "election-da", 1),
+    (ASH, "YY", "neg", "hospital-closures-da", 1),
+    (ASH, "YY", "neg", "spending-da", 1),
+    (ASH, "YY", "neg", "states-cp", 1),
+    (BIRCH, "QQ", "aff", "condo-bad", 1),
+    (BIRCH, "QQ", "aff", "costs-advantage", 1),
+    (BIRCH, "QQ", "neg", "cap-k", 1),
+    (BIRCH, "QQ", "neg", "spending-da", 1),
+    (BIRCH, "ZZ", "aff", "costs-advantage", 1),
+    (BIRCH, "ZZ", "aff", "innovation-advantage", 1),
+    (BIRCH, "ZZ", "neg", "spending-da", 1),
+    (BIRCH, "ZZ", "neg", "states-cp", 1),
+    (CEDAR, "VV", "aff", "costs-advantage", 1),
+    (CEDAR, "VV", "aff", "public-option-aff", 1),
+    (CEDAR, "WW", "neg", "nhi-t", 2),
+    (CEDAR, "WW", "neg", "election-da", 1),
+    (CEDAR, "WW", "neg", "provider-strikes-da", 1),
+    (DRIFT, "JJ", "aff", "innovation-advantage", 1),
+    (DRIFT, "JJ", "aff", "single-payer-aff", 1),
+    (DRIFT, "JJ", "neg", "spending-da", 1),
+    (DRIFT, "JJ", "neg", "states-cp", 1),
+    (DRIFT, "KK", "aff", "costs-advantage", 1),
+    (DRIFT, "KK", "aff", "innovation-advantage", 1),
 ]
-"""Through 2026-09-15: school, team code, side, position, rounds, last tournament, in view order."""
+"""Through 2026-09-15: school, team code, side, position and rounds, in view order."""
 
 
 def _view(inputs: LandscapeReportInputs | None = None) -> SchoolView:
@@ -74,11 +74,8 @@ def _view(inputs: LandscapeReportInputs | None = None) -> SchoolView:
     )
 
 
-def _rows(view: SchoolView) -> list[tuple[str, str, str, str, int, str | None]]:
-    return [
-        (row.school, row.team_code, row.side.value, row.position_id, row.rounds, row.last_tournament)
-        for row in view.rows
-    ]
+def _rows(view: SchoolView) -> list[tuple[str, str, str, str, int]]:
+    return [(row.school, row.team_code, row.side.value, row.position_id, row.rounds) for row in view.rows]
 
 
 def test_the_view_matches_the_hand_computed_rows() -> None:
@@ -98,7 +95,7 @@ def test_each_positions_rows_and_the_left_out_rounds_make_the_reports_rounds() -
 
 
 def test_answers_below_threshold_and_other_side_placements_are_not_rows() -> None:
-    rows = {(code, side, position) for _, code, side, position, _, _ in _rows(_view())}
+    rows = {(code, side, position) for _, code, side, position, _ in _rows(_view())}
     # b1's answer to the Costs advantage (YY, JJ), a2's Public option at 0.5 (ZZ), b3's Courts CP at
     # 0.5 (WW), a6's Spending DA block in an aff round (JJ), b8's answer to PICs bad (KK).
     for absent in (
@@ -125,9 +122,9 @@ def test_an_assigned_aff_reaches_the_view_through_the_seam() -> None:
     xx = [row for row in _rows(view) if row[1] == "XX"]
     # The assigned aff replaces the card's single payer for that round; the advantage stays.
     assert xx == [
-        (ASH, "XX", "aff", "costs-advantage", 2, IC),
-        (ASH, "XX", "aff", "public-option-aff", 1, FI),
-        (ASH, "XX", "aff", "single-payer-aff", 1, IC),
+        (ASH, "XX", "aff", "costs-advantage", 2),
+        (ASH, "XX", "aff", "public-option-aff", 1),
+        (ASH, "XX", "aff", "single-payer-aff", 1),
     ]
 
 
@@ -152,20 +149,6 @@ def test_a_team_is_one_team_whatever_its_case_and_shows_its_commonest_spelling()
     lowered[index] = lowered[index].evolve(school="ashgrove fictional", team_code="xx")
     view = _view(dataclasses.replace(inputs, disclosures=tuple(lowered)))
     assert _rows(view) == EXPECTED
-
-
-def test_the_last_tournament_is_the_latest_rounds_and_ties_go_to_the_commonest_then_text_order() -> None:
-    inputs = read_synthetic_caselist(FIXTURE)
-    extra = next(one for one in inputs.disclosures if one.source_sha256 == "b6" * 32)
-    # WW reads T in a second round first seen on 2026-09-15, at a tournament before IC in text order.
-    second = extra.evolve(
-        tournament="Hypothetical Open",
-        round_label=RoundLabel.from_raw("R5"),
-        source_path=extra.source_path.replace("R3", "R5"),
-    )
-    view = _view(dataclasses.replace(inputs, disclosures=(*inputs.disclosures, second)))
-    nhi = next(row for row in view.rows if row.team_code == "WW" and row.position_id == "nhi-t")
-    assert (nhi.rounds, nhi.last_tournament) == (3, "Hypothetical Open")
 
 
 def test_shuffled_inputs_give_the_same_view() -> None:
@@ -214,7 +197,6 @@ def test_a_spelling_disclosed_after_the_snapshot_does_not_change_the_view() -> N
             snapshot=date(2026, 9, 22),
             school="ashgrove fictional",
             team_code="xx",
-            tournament=f"{IC}".lower(),
         )
         for _ in range(4)
     )

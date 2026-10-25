@@ -2,7 +2,7 @@
 
 To seed later scouting, the view lists for each school and team code, exactly as the caselist's
 paths disclosed them, the positions its rounds read on the affirmative and on the negative, with how
-many rounds and the tournament of the latest. It counts what the circuit-wide report counts
+many rounds. It counts what the circuit-wide report counts
 (:mod:`debate_core.application.landscape_report`): reads only, at or above the review threshold, on
 the round's own side, with `v1-e32-t09`'s aff assignments where they are given.
 
@@ -63,9 +63,6 @@ class SchoolRow(DomainModel):
     side: SchoolSide
     position_id: PositionId
     rounds: int = Field(ge=1, description="The team's rounds on this side that read the position.")
-    last_tournament: NonEmptyText | None = Field(
-        description="The tournament of the latest of those rounds; None when none of them named one."
-    )
 
 
 class SchoolView(DomainModel):

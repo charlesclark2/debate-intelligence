@@ -372,7 +372,7 @@ def test_the_trend_and_school_csv_columns_are_the_specs() -> None:
     assert {"weekly_teams", "weekly_share", "previous_share", "delta_points", "trend_label"} <= set(
         TREND_COLUMNS
     )
-    assert SCHOOL_COLUMNS == ("school", "team_code", "side", "position_id", "rounds", "last_tournament")
+    assert SCHOOL_COLUMNS == ("school", "team_code", "side", "position_id", "rounds")
     assert list(_csv_rows(files["schools.csv"])[0]) == list(SCHOOL_COLUMNS)
 
 
@@ -406,6 +406,8 @@ def test_only_the_school_view_names_schools_and_team_codes() -> None:
             re.search(rf"(?<![A-Za-z0-9]){one.team_code}(?![A-Za-z0-9])", files[name]) for one in disclosures
         )
         assert not any(one.source_path in files[name] for one in disclosures)
+        # The PM's ruling of 2026-10-24: school plus team code, never more; no tournament or round.
+        assert not any(one.tournament and one.tournament in files[name] for one in disclosures)
 
 
 def test_a_stale_school_view_starts_with_the_banner() -> None:

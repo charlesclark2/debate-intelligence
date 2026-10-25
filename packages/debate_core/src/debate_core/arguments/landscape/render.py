@@ -36,7 +36,7 @@ emphasis, have those characters escaped with a backslash and runs of whitespace 
 the cell shows the same text. Shares are
 fractions to three places in the CSV and percentages to one place in Markdown, both rounded half up;
 a delta is percentage points to one place, rounded half up, in both. Markdown writes counts with
-thousands separators, the CSV without. A school, team code or tournament in schools.md is escaped
+thousands separators, the CSV without. A school or team code in schools.md is escaped
 as a label is.
 """
 
@@ -134,8 +134,8 @@ TREND_COLUMNS: Final = (
 )
 """trends.csv's columns, in order (`v1-e32-t04` ac1)."""
 
-SCHOOL_COLUMNS: Final = ("school", "team_code", "side", "position_id", "rounds", "last_tournament")
-"""schools.csv's columns, in order (`v1-e32-t04` ac4)."""
+SCHOOL_COLUMNS: Final = ("school", "team_code", "side", "position_id", "rounds")
+"""schools.csv's columns, in order (`v1-e32-t04` ac4, as the PM's ruling of 2026-10-24 amended it)."""
 
 _SCHOOL_VIEW_SHOWS: Final = (
     "school and team code as disclosed, never more (docs/policies/caselist-data-use.md); for the team only"
@@ -651,7 +651,6 @@ def render_schools_csv(view: SchoolView, metadata: Mapping[str, str]) -> str:
                 row.side.value,
                 row.position_id,
                 str(row.rounds),
-                row.last_tournament or "",
             )
             for row in view.rows
         ),
@@ -674,7 +673,7 @@ def render_schools_markdown(view: SchoolView, report: LandscapeReport) -> str:
         "",
         "Every count comes from files teams disclosed to the caselist (FILE_IMPORT), not from evidence the "
         "platform has verified. A row is a team's rounds on one side that the landscape report counts as "
-        "reading the position, with the tournament of the latest of them.",
+        "reading the position.",
         "",
         "| | |",
         "|---|---|",
@@ -696,12 +695,11 @@ def render_schools_markdown(view: SchoolView, report: LandscapeReport) -> str:
         lines += [
             f"### {_cell(listed[0].school)}",
             "",
-            "| Team code | Side | Position | Rounds | Last tournament |",
-            "|---|---|---|---|---|",
+            "| Team code | Side | Position | Rounds |",
+            "|---|---|---|---|",
         ]
         lines += [
-            f"| {_cell(row.team_code)} | {row.side.value} | `{row.position_id}` | {row.rounds:,} | "
-            f"{_cell(row.last_tournament or '')} |"
+            f"| {_cell(row.team_code)} | {row.side.value} | `{row.position_id}` | {row.rounds:,} |"
             for row in listed
         ]
         lines.append("")

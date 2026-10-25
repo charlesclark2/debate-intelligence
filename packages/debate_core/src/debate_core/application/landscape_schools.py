@@ -12,21 +12,17 @@ it assigned. Affs are never read from headings here.
 The school and team code are shown exactly as the caselist's paths disclosed them
 (`docs/policies/caselist-data-use.md`: school plus team code, as disclosed, never more). A team is
 told apart without regard to case, as the report tells it; when its disclosures spell it more than one
-way, the row shows the spelling most of them use, ties to the first in text order. A round's
-tournament is shown the same way.
+way, the row shows the spelling most of them use, ties to the first in text order.
 
 ## What is left out
 
 * A round whose path named no school or team code is no team, and a round on no readable side is on
   neither side, so neither is a row: :class:`~debate_core.domain.landscape_schools.SchoolView` counts
   them.
-* Nothing but the position id and counts: no label, tag, cite, plan text or path.
-
-## Last tournament
-
-The tournament of the row's latest round, latest by the snapshot it was first seen in; among rounds
-first seen in that same snapshot, the tournament most of them name, ties to the first in text order. A
-row none of whose rounds named a tournament has none.
+* Nothing but the position id and counts: no label, tag, cite, plan text, path, tournament or round.
+  The policy names tournament and round labels as what, beside a team code, places a pair of students
+  at a specific round, and this view's row allows school plus team code and never more (the PM's
+  ruling of 2026-10-24 on `v1-e32-t04`'s question 2).
 """
 
 from __future__ import annotations
@@ -51,7 +47,6 @@ def school_view(
 ) -> SchoolView:
     """Every team's positions through `snapshot`, from the rounds and reads the report counted."""
     spellings: defaultdict[tuple[str, str], Counter[tuple[str, str]]] = defaultdict(Counter)
-    tournaments: defaultdict[str, Counter[str]] = defaultdict(Counter)
     for disclosure in disclosures:
         if disclosure.caselist != caselist or disclosure.snapshot > snapshot:
             continue
@@ -61,8 +56,6 @@ def school_view(
         team = team_identity(disclosure)
         if team is not None:
             spellings[team][(disclosure.school, disclosure.team_code)] += 1
-        if disclosure.tournament:
-            tournaments[one][disclosure.tournament] += 1
 
     groups: defaultdict[tuple[tuple[str, str], SchoolSide, str], set[str]] = defaultdict(set)
     no_team: set[str] = set()
@@ -81,13 +74,6 @@ def school_view(
     rows: list[SchoolRow] = []
     for (team, side, position_id), rounds in groups.items():
         school, team_code = _commonest(spellings[team])
-        with_a_tournament = [one for one in rounds if one in tournaments]
-        latest = max((counted.rounds[one].first_seen for one in with_a_tournament), default=None)
-        named = Counter(
-            _commonest(tournaments[one])
-            for one in with_a_tournament
-            if counted.rounds[one].first_seen == latest
-        )
         rows.append(
             SchoolRow(
                 school=school,
@@ -95,7 +81,6 @@ def school_view(
                 side=side,
                 position_id=position_id,
                 rounds=len(rounds),
-                last_tournament=_commonest(named) if named else None,
             )
         )
     rows.sort(
@@ -118,6 +103,6 @@ def school_view(
     )
 
 
-def _commonest[KeyT: str | tuple[str, str]](counts: Counter[KeyT]) -> KeyT:
+def _commonest(counts: Counter[tuple[str, str]]) -> tuple[str, str]:
     """The value most often seen, ties to the first in text order."""
     return min(counts, key=lambda value: (-counts[value], value))

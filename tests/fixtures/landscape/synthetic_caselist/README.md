@@ -121,6 +121,7 @@ says so.
 ## School view (`v1-e32-t04`)
 
 `../golden/schools.csv` lists, per school and team code as disclosed and per side, the positions its
-rounds read through 2026-09-15, with their rounds and the tournament of the latest. The same reads as
+rounds read through 2026-09-15, with their rounds: school plus team code, never more (the PM's ruling
+of 2026-10-24 dropped the last tournament). The same reads as
 the report: no ANSWERS, nothing below the threshold, no placement in a round on the other side.
 `VV`'s `b7` round reads the Capitalism K on no readable side, so it is left out and counted.

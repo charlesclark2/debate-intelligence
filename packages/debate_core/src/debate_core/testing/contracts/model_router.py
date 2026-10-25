@@ -32,6 +32,7 @@ the reported route field for field rather than only for being populated.
 
 from __future__ import annotations
 
+import traceback
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 
@@ -124,6 +125,10 @@ SCORING_CLASSES = tuple(member for member in TaskClass if not member.is_generati
 
 VALID_ANSWER: Mapping[str, JsonValue] = {"paragraph_id": 3, "start_offset": 0, "end_offset": 42}
 INVALID_ANSWER: Mapping[str, JsonValue] = {"paragraph_id": "the third one", "start_offset": 0}
+COERCIBLE_ANSWER: Mapping[str, JsonValue] = {"paragraph_id": "3", "start_offset": 0.0, "end_offset": 42}
+"""Lax validation would accept every value here; strict validation refuses the first two (v1-e05-t05)."""
+REFUSED_VALUE_MARKER = "contract-refused-value-marker"
+"""Invented text an answer carries in a refused field; no error a router raises may repeat it."""
 
 
 def contract_prompt(prompt_id: str = "contract.select-passage") -> ModelPrompt:
@@ -236,6 +241,40 @@ class ModelRouterContract(AdapterContract):
             await router.generate_structured(TaskClass.HIGH_VOLUME, prompt, ContractPassage)
 
         assert (raised.value.prompt_id, raised.value.prompt_version) == ("contract.invalid-answer", "1.0.0")
+
+    async def test_an_answer_is_validated_strictly_without_coercion(
+        self, make_router: ModelRouterFactory
+    ) -> None:
+        """Every router validates strictly, so no router hands a caller a coerced object (v1-e05-t05)."""
+        prompt = contract_prompt("contract.coercible-answer")
+        router = make_router([planned_structured(TaskClass.HIGH_VOLUME, COERCIBLE_ANSWER, prompt=prompt)])
+
+        with pytest.raises(InvalidModelOutput) as raised:
+            await router.generate_structured(TaskClass.HIGH_VOLUME, prompt, ContractPassage)
+
+        assert [(problem.loc, problem.type) for problem in raised.value.problems] == [
+            (("paragraph_id",), "int_type"),
+            (("start_offset",), "int_type"),
+        ]
+
+    async def test_a_refused_answer_is_described_without_its_values(
+        self, make_router: ModelRouterFactory
+    ) -> None:
+        """The error names where and why, never what the model said: an answer may hold source text."""
+        prompt = contract_prompt("contract.refused-value")
+        answer: Mapping[str, JsonValue] = {"paragraph_id": REFUSED_VALUE_MARKER, "start_offset": 0}
+        router = make_router([planned_structured(TaskClass.HIGH_VOLUME, answer, prompt=prompt)])
+
+        with pytest.raises(InvalidModelOutput) as raised:
+            await router.generate_structured(TaskClass.HIGH_VOLUME, prompt, ContractPassage)
+
+        error = raised.value
+        assert {(problem.loc, problem.type) for problem in error.problems} == {
+            (("paragraph_id",), "int_type"),
+            (("end_offset",), "missing"),
+        }
+        assert REFUSED_VALUE_MARKER not in "".join(traceback.format_exception(error))
+        assert REFUSED_VALUE_MARKER not in repr(error.args) + repr(error.problems)
 
     @pytest.mark.parametrize("task_class", SCORING_CLASSES)
     async def test_a_scoring_class_is_refused_before_anything_is_sent(

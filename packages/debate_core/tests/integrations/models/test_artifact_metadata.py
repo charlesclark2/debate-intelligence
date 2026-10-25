@@ -9,6 +9,7 @@ it comes from, not read back from the code under test.
 from __future__ import annotations
 
 import asyncio
+import json
 from collections.abc import Coroutine
 from datetime import UTC, datetime
 from pathlib import Path
@@ -130,9 +131,18 @@ FULL_METADATA_JSON = (
     '"provider_request_id":"example-request-0002",'
     '"snapshot_ids":["01JA8G6Z9R4M2K7Q5W3E1T0Y8B","01JA8G6Z9R4M2K7Q5W3E1T0Y8C"],'
     '"retrieval_ids":["search-result-7","01JA8G6Z9R4M2K7Q5W3E1T0Y8D"],'
-    '"created_at":"2026-10-17T12:30:45.123456Z"}'
+    '"created_at":"2026-10-17T12:30:45.123456Z",'
+    '"repair_attempted":true,"repair_prompt_version":"1.0.0"}'
 )
 """Every field set, written by hand in the order the model declares them."""
+
+METADATA_JSON_BEFORE_REPAIR_FIELDS = (
+    '{"prompt_id":"card.select","prompt_version":"1.10.0",'
+    '"route":{"task_class":"complex_reasoning","provider":"bedrock","model_id":"example-model-id",'
+    '"timeout_seconds":45.5},'
+    '"created_at":"2026-10-17T12:30:45.123456Z"}'
+)
+"""Metadata as persisted before v1-e05-t05 added the repair fields, written by hand."""
 
 
 def test_metadata_round_trips_through_json_unchanged() -> None:
@@ -143,6 +153,26 @@ def test_metadata_round_trips_through_json_unchanged() -> None:
     assert metadata.inference_profile == "example-profile"
     assert metadata.route.effort is Effort.HIGH
     assert metadata.created_at == datetime(2026, 10, 17, 12, 30, 45, 123456, tzinfo=UTC)
+    assert metadata.repair_attempted is True
+    assert metadata.repair_prompt_version == "1.0.0"
+
+
+def test_metadata_persisted_before_the_repair_fields_loads_as_not_repaired() -> None:
+    metadata = GeneratedArtifactMetadata.model_validate_json(METADATA_JSON_BEFORE_REPAIR_FIELDS)
+
+    assert metadata.repair_attempted is False
+    assert metadata.repair_prompt_version is None
+
+
+@pytest.mark.parametrize(("repair_attempted", "repair_prompt_version"), [(True, None), (False, "1.0.0")])
+def test_a_repair_flag_without_its_prompt_version_or_the_reverse_is_refused(
+    repair_attempted: bool, repair_prompt_version: str | None
+) -> None:
+    document = json.loads(METADATA_JSON_BEFORE_REPAIR_FIELDS)
+    document.update(repair_attempted=repair_attempted, repair_prompt_version=repair_prompt_version)
+
+    with pytest.raises(ValidationError, match="repair_prompt_version is set exactly when repair_attempted"):
+        GeneratedArtifactMetadata.model_validate(document)
 
 
 def test_metadata_survives_a_round_trip_of_the_response_it_came_from(registry: PromptRegistry) -> None:
@@ -211,4 +241,6 @@ def test_metadata_holds_no_prompt_text_variables_or_output(registry: PromptRegis
         "snapshot_ids",
         "retrieval_ids",
         "created_at",
+        "repair_attempted",
+        "repair_prompt_version",
     }

@@ -10,9 +10,10 @@ from collections import deque
 from collections.abc import Mapping, Sequence
 from typing import cast
 
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel
 
 from debate_core.application.errors import InvalidModelOutput, ProviderUnavailable
+from debate_core.application.structured_output import validate_model_output
 from debate_core.domain.model_contracts import (
     EmbeddingResponse,
     ModelParams,
@@ -47,7 +48,7 @@ class ScriptedModelRouter:
     Enqueue one answer per call, in call order:
 
     * for `generate_structured`, a Pydantic instance or a mapping to validate against the requested
-      schema; an answer that does not fit surfaces as
+      schema, strictly, as every router does; an answer that does not fit surfaces as
       :class:`~debate_core.application.errors.InvalidModelOutput`, as it would from a model;
     * for `embed`, one vector per text;
     * for `rerank`, one relevance score per document, in document order (the fake sorts them);
@@ -166,12 +167,7 @@ class ScriptedModelRouter:
                 f"scripted a {type(scripted).__name__} where {schema.__name__} was requested",
                 model_id=self._model_id,
             )
-        try:
-            return schema.model_validate(dict(scripted))
-        except ValidationError as error:
-            raise InvalidModelOutput(
-                prompt.prompt_id, prompt.prompt_version, str(error), model_id=self._model_id
-            ) from error
+        return validate_model_output(schema, dict(scripted), prompt=prompt, model_id=self._model_id)
 
 
 def _items(scripted: object, what: str) -> Sequence[object]:

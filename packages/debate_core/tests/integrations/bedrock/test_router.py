@@ -391,6 +391,8 @@ async def test_structured_output_with_no_tool_call_is_invalid_output_naming_the_
 
     assert (raised.value.prompt_id, raised.value.prompt_version) == ("test.choose-passage", "2.1.0")
     assert raised.value.model_id == "provider-model-high-volume"
+    assert [(problem.loc, problem.type) for problem in raised.value.problems] == [((), "missing_tool_call")]
+    assert "Paragraph four" not in str(raised.value)
 
 
 async def test_structured_output_from_another_tool_is_not_an_answer(stubbed: StubbedBedrock) -> None:
@@ -405,15 +407,36 @@ async def test_structured_output_called_twice_is_refused_rather_than_picked_from
 ) -> None:
     stubbed.add_converse([tool_use(TOOL, ANSWER, "tooluse-1"), tool_use(TOOL, ANSWER, "tooluse-2")])
 
-    with pytest.raises(InvalidModelOutput, match="2 times"):
+    with pytest.raises(InvalidModelOutput, match="2 times") as raised:
         await choose(stubbed.router())
+
+    assert [problem.type for problem in raised.value.problems] == ["repeated_tool_call"]
 
 
 async def test_structured_output_that_fails_the_schema_is_invalid_output(stubbed: StubbedBedrock) -> None:
     stubbed.add_answer({"paragraph_id": "the fourth", "start_offset": 10, "end_offset": 90})
 
-    with pytest.raises(InvalidModelOutput, match="paragraph_id"):
+    with pytest.raises(InvalidModelOutput, match="paragraph_id") as raised:
         await choose(stubbed.router())
+
+    assert [(problem.loc, problem.type) for problem in raised.value.problems] == [
+        (("paragraph_id",), "int_type")
+    ]
+    assert "the fourth" not in str(raised.value)
+    assert raised.value.__cause__ is None
+    assert raised.value.__context__ is None
+
+
+async def test_structured_output_is_validated_strictly_without_coercion(stubbed: StubbedBedrock) -> None:
+    """A numeric string is not an integer here: validation is strict for every call (v1-e05-t05)."""
+    stubbed.add_answer({"paragraph_id": "4", "start_offset": 10, "end_offset": 90})
+
+    with pytest.raises(InvalidModelOutput) as raised:
+        await choose(stubbed.router())
+
+    assert [(problem.loc, problem.type) for problem in raised.value.problems] == [
+        (("paragraph_id",), "int_type")
+    ]
 
 
 @pytest.mark.parametrize("stop_reason", ["max_tokens", "guardrail_intervened", "content_filtered"])
@@ -422,8 +445,10 @@ async def test_structured_output_cut_off_or_withheld_is_invalid_even_with_a_tool
 ) -> None:
     stubbed.add_answer(stop_reason=stop_reason)
 
-    with pytest.raises(InvalidModelOutput, match=stop_reason):
+    with pytest.raises(InvalidModelOutput, match=stop_reason) as raised:
         await choose(stubbed.router())
+
+    assert [problem.type for problem in raised.value.problems] == ["unfinished_answer"]
 
 
 @pytest.mark.parametrize("stop_reason", ["tool_use", "end_turn"])

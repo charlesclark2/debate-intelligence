@@ -23,8 +23,11 @@ The fake recomputes the key from the file's own fields and refuses a file whose 
 it, so a fixture copied to the wrong name, or left behind by a prompt version bump, is reported
 rather than served. :meth:`FixtureDirectory.write` writes a file correctly.
 
-The answer is validated against the schema the call asked for, and one that does not fit is an
-:class:`~debate_core.application.errors.InvalidModelOutput`, exactly as from a model. **A missing
+The answer is validated against the schema the call asked for, strictly, by the same
+:func:`~debate_core.application.structured_output.validate_model_output` every router uses, and one
+that does not fit is an :class:`~debate_core.application.errors.InvalidModelOutput`, exactly as from a
+model. `"output": null` stands for a model that answered without calling the schema's tool, which
+`toolChoice` `auto` allows (v1-e05-t05, ac5), and is refused the same way. **A missing
 file is a** :class:`~debate_core.integrations.models.errors.MissingFixtureError` **naming the prompt
 and the key, never a default answer and never a call to a real model.**
 
@@ -55,8 +58,8 @@ from typing import Any, Final, cast
 
 from pydantic import BaseModel, JsonValue, ValidationError
 
-from debate_core.application.errors import InvalidModelOutput
 from debate_core.application.ports.providers import Clock
+from debate_core.application.structured_output import validate_model_output
 from debate_core.domain.model_contracts import (
     EmbeddingResponse,
     ModelParams,
@@ -131,13 +134,16 @@ class FixtureDirectory:
         """Where the answer to `request` is filed."""
         return self.root / safe_directory_name(request.prompt.prompt_id) / f"{fixture_key(request)}.json"
 
-    def write(self, request: ModelRequest, output: Mapping[str, JsonValue]) -> Path:
-        """File `output` as the answer to `request`, and return where it went."""
+    def write(self, request: ModelRequest, output: Mapping[str, JsonValue] | None) -> Path:
+        """File `output` as the answer to `request`, and return where it went.
+
+        `None` files an answer that never called the schema's tool.
+        """
         path = self.path_for(request)
         write_pretty_json(
             path,
             {
-                "output": dict(output),
+                "output": dict(output) if output is not None else None,
                 "output_schema": request.output_schema,
                 "prompt_id": request.prompt.prompt_id,
                 "prompt_version": request.prompt.prompt_version,
@@ -146,8 +152,8 @@ class FixtureDirectory:
         )
         return path
 
-    def read(self, request: ModelRequest) -> dict[str, Any]:
-        """The recorded answer to `request`, not yet validated against its schema.
+    def read(self, request: ModelRequest) -> dict[str, Any] | None:
+        """The recorded answer to `request`, not yet validated against its schema; `None` for no tool call.
 
         Raises :class:`MissingFixtureError` when there is none, and :class:`FixtureFileError` when
         the file is unusable or answers some other request.
@@ -164,8 +170,8 @@ class FixtureDirectory:
                 hint=_HINT,
             )
         output = document.get("output")
-        if not isinstance(output, dict):
-            raise FixtureFileError(path, "it has no `output` object")
+        if "output" not in document or not (output is None or isinstance(output, dict)):
+            raise FixtureFileError(path, "it has no `output` object, and no `null` for an answer without one")
         try:
             filed_for = ModelRequest.model_validate(
                 {
@@ -186,7 +192,7 @@ class FixtureDirectory:
                 "its prompt, version, variables or schema do not hash to its file name, so it answers "
                 "some other request; rewrite it with FixtureDirectory.write",
             )
-        return cast(dict[str, Any], output)
+        return cast(dict[str, Any] | None, output)
 
 
 class FakeModelRouter:
@@ -216,13 +222,9 @@ class FakeModelRouter:
         params: ModelParams | None = None,
     ) -> ModelResponse[OutputT]:
         request = ModelRequest.build(task_class, prompt, schema, params)
-        answer = self.fixtures.read(request)
-        try:
-            output = schema.model_validate(answer)
-        except ValidationError as error:
-            raise InvalidModelOutput(
-                prompt.prompt_id, prompt.prompt_version, str(error), model_id=self._model_id
-            ) from error
+        output = validate_model_output(
+            schema, self.fixtures.read(request), prompt=prompt, model_id=self._model_id
+        )
         return ModelResponse[schema](
             output=output,
             route=self._route(task_class, request.params),

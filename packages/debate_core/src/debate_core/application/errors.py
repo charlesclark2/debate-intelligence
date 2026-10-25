@@ -54,6 +54,8 @@ this package never reads anything from there.
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 from typing import ClassVar, Final
@@ -73,6 +75,7 @@ __all__ = [
     "ModelRequestRejected",
     "ModelUnavailableError",
     "NotFound",
+    "OutputProblem",
     "ProviderCircuitOpen",
     "ProviderError",
     "ProviderRateLimited",
@@ -456,12 +459,34 @@ them (`v1-e29-t09`); every other failure of one object is that object's and is r
 """
 
 
+@dataclass(frozen=True, slots=True)
+class OutputProblem:
+    """One reason a model's answer is not the schema: where, what kind, and pydantic's sentence for it.
+
+    Never the offending value. A model's answer may hold card or source text, so a problem carries
+    the location, the error type and the message, which is everything a repair prompt or a report
+    needs (v1-e05-t05-structured-output-validation, the PM's ruling of 2026-10-24).
+    :func:`~debate_core.application.model_errors.output_problems` builds them from a pydantic
+    `ValidationError` without ever reading its input.
+    """
+
+    loc: tuple[str | int, ...]
+    """Path to the offending field, `()` for the answer as a whole."""
+    type: str
+    """Pydantic's error type (`missing`, `int_type`, `extra_forbidden`), or this project's own."""
+    msg: str
+    """What is wrong, in pydantic's words; never quotes the answer."""
+
+
 class InvalidModelOutput(DomainError):
     """A model returned something that is not a valid instance of the requested output schema.
 
     Raised by :meth:`~debate_core.application.ports.model_router.ModelRouter.generate_structured`
-    after the router's own repair attempts, if any, have failed. It carries the prompt identity so a failing
-    prompt version can be found without correlating logs.
+    when the answer fails strict validation, and, as its subclass
+    :class:`~debate_core.application.model_errors.ModelOutputError`, by the structured-output guard
+    once its one repair attempt has failed too. It carries the prompt identity so a failing prompt
+    version can be found without correlating logs, and the :class:`OutputProblem` list, which holds
+    no part of the answer. Neither the message nor any attribute quotes what the model said.
     """
 
     def __init__(
@@ -471,6 +496,7 @@ class InvalidModelOutput(DomainError):
         message: str,
         *,
         model_id: str | None = None,
+        problems: Sequence[OutputProblem] = (),
     ) -> None:
         self.prompt_id = prompt_id
         """Identifier of the prompt whose output failed validation."""
@@ -478,6 +504,8 @@ class InvalidModelOutput(DomainError):
         """Semantic version of that prompt."""
         self.model_id = model_id
         """The model that produced the output, when the router resolved one."""
+        self.problems = tuple(problems)
+        """Why the answer is not the schema, without its values; empty when the router gave none."""
         by_model = "" if model_id is None else f" from {model_id}"
         super().__init__(f"invalid output{by_model} for prompt {prompt_id}@{prompt_version}: {message}")
 

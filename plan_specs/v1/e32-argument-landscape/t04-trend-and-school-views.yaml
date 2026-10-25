@@ -16,6 +16,10 @@ metadata:
     debate/title: Trends and per-school views
     debate/architecture-refs: §8, §13, §14, §16
 spec:
+  # PM ruling 2026-10-24 (v1-e32-t04 review, question 2): the per-school view shows school plus team
+  # code, as disclosed, and never more (docs/policies/caselist-data-use.md, "What a report may show"),
+  # so "and the last tournament seen" is struck from this description; it shows position ids and
+  # round counts only.
   description: >-
     Extend the landscape bundle with two deterministic views. Trends compare consecutive snapshots of the
     same caselist and topic, computed from disclosures first seen in each snapshot (the rounds disclosed
@@ -31,8 +35,8 @@ spec:
     spans less than a full topic cycle says so on its face, because early history is short by
     construction and a trend drawn over three windows is not a trend. Trends never
     compare across a topic change (the LD and PF topics rotate). The per-school view lists, for each
-    school and team code as disclosed, the positions read on aff and on neg with round counts and the
-    last tournament seen, to seed later scouting. Boundaries: base counts and top cards are t03; the CLI
+    school and team code as disclosed, the positions read on aff and on neg with round counts, to seed
+    later scouting. Boundaries: base counts and top cards are t03; the CLI
     and publishing are t05; opponent prediction, Tabroom results and debater-level profiles belong to V3
     opponent intelligence and are out of scope.
   priority: 2
@@ -59,21 +63,33 @@ spec:
         A position reaches RISING or FALLING only when the share changes by at least the configured
         threshold (default 5 points) and at least the configured minimum of teams (default 3) read it in
         one of the two weeks; a caselist's first snapshot yields all NEW labels and no deltas.
+    # PM ruling 2026-10-24 (v1-e32-t04 review, question 3): rows are kept after a topic change. The
+    # new topic's first window is written like a caselist's first snapshot: every position read is NEW
+    # with no previous share and no delta, so nothing is compared across the change, and the report and
+    # trends.csv's header block name the change.
     - id: ac3
       description: >-
         When topics.yaml maps two snapshots to different topic ids, no trend rows are emitted across them
-        and the report states that the topic changed.
+        and the report states that the topic changed. The new topic's first window is written as a
+        caselist's first snapshot is: every position read is NEW, with no previous share and no delta.
+    # PM rulings 2026-10-24 (v1-e32-t04 review, questions 1 and 2): the per-school view is its own two
+    # files, schools.csv and schools.md (with its "By school" section), never in report.md, which is the
+    # circuit-wide report and names nobody. Its columns are school, team code, side, position_id and
+    # rounds: the last tournament is dropped, because the policy's row for this view allows school plus
+    # team code, as disclosed, and never more.
     - id: ac4
       description: >-
-        schools.csv and the schools section of the Markdown list school, team code, side, position_id,
-        rounds and last tournament, contain no debater names from the fixture, and sort
-        deterministically.
+        schools.csv and schools.md's "By school" section (never report.md) list school, team code, side,
+        position_id and rounds, contain no debater names from the fixture, and sort deterministically.
     - id: ac5
       description: >-
         The trend and school sections are appended to the t03 bundle without changing positions.csv or
         top_cards.csv (t03 golden files still pass).
+# PM record 2026-10-24: ACCEPTED with conditions in the v1-e32-t04 review (rulings: question 1 A,
+# question 2 B, question 3 keep the rows). The conditions were closed in the session, and the phase was set
+# Succeeded at the PM's direction: every criterion passes as amended above.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan
@@ -125,9 +141,10 @@ spec:
       - id: school-view
         kind: Task
         name: Per-school disclosed-positions view
+        # PM ruling 2026-10-24 (v1-e32-t04 review, question 2): round counts only, no last tournament.
         description: >-
-          Group READS by school, team code and side into position rows with round counts and last
-          tournament; exclude ANSWERS items and unclassified items.
+          Group READS by school, team code and side into position rows with round counts; exclude
+          ANSWERS items and unclassified items.
         dependsOn: [fixture-extension]
         outputs: [packages/debate_core/src/debate_core/application/landscape_schools.py]
         estimatedEffort: 2h
@@ -139,9 +156,12 @@ spec:
       - id: render-and-gates
         kind: Task
         name: Render trends and schools into the bundle
+        # PM ruling 2026-10-24 (v1-e32-t04 review, question 1): "By school" is in schools.md, beside
+        # schools.csv, never in report.md; report.md gains "New this week", "Rising" and "Falling".
         description: >-
-          Add trends.csv, schools.csv and the Markdown sections ("New this week", "Rising", "Falling",
-          "By school"); update golden files; confirm t03 goldens unchanged; type check.
+          Add trends.csv and report.md's sections "New this week", "Rising" and "Falling", and the
+          per-school view as schools.csv and schools.md (its "By school" section, never in report.md);
+          update golden files; confirm t03 goldens unchanged; type check.
         dependsOn: [trend-computation, school-view]
         outputs: [tests/fixtures/landscape/golden/trends.csv, tests/fixtures/landscape/golden/schools.csv]
         estimatedEffort: 2h

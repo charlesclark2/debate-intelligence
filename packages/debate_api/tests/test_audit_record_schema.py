@@ -15,7 +15,7 @@ from __future__ import annotations
 import dataclasses
 import json
 from collections.abc import Sequence
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from functools import cache
 from pathlib import Path
 from typing import Any, Final
@@ -34,6 +34,7 @@ from debate_core.application.tub.audit import (
 )
 from debate_core.application.tub.identity import Role, TemporaryPassword
 from debate_core.application.tub.sessions import Session
+from debate_core.domain.landscape_pages import LandscapePage
 
 AUDIT_RECORD_SCHEMA: Final = (
     Path(__file__).resolve().parents[3] / "docs" / "data" / "tub-audit-record.schema.json"
@@ -59,6 +60,7 @@ ACTIONS: Final = (
     "card-viewed",
     "card-copied",
     "cards-downloaded",
+    "landscape-viewed",
 )
 FIELDS: Final = {
     "format_version",
@@ -69,6 +71,9 @@ FIELDS: Final = {
     "account_subject",
     "count",
     "cards",
+    "caselist",
+    "snapshot",
+    "page",
 }
 
 # What the event around a record held, every one of which a record must never hold.
@@ -227,6 +232,7 @@ def every_action() -> dict[str, AuditRecord]:
     access.card_viewed(session(), "hsld26", f"{1:064x}")
     access.card_copied(session(), "hsld26", f"{1:064x}")
     access.cards_downloaded(session(), [("hsld26", f"{1:064x}"), ("openev", f"{3:064x}")])
+    access.landscape_viewed(session(), LandscapePage.SCHOOL, "hspolicy26", date(2026, 10, 20))
     for action in (
         AuditAction.BACKUP_EMAIL_ADDED,
         AuditAction.BACKUP_EMAIL_REMOVED,
@@ -265,7 +271,7 @@ def test_audit_every_actions_record_meets_the_schema_and_holds_no_forbidden_valu
 
 
 def test_audit_the_access_records_carry_exactly_their_fields() -> None:
-    shapes = {action: set(json.loads(EVERY_ACTION[action].to_json())) for action in ACTIONS[-4:]}
+    shapes = {action: set(json.loads(EVERY_ACTION[action].to_json())) for action in ACTIONS[-5:]}
 
     common = {"format_version", "time", "action", "actor_role", "actor_subject"}
     assert shapes == {
@@ -273,7 +279,9 @@ def test_audit_the_access_records_carry_exactly_their_fields() -> None:
         "card-viewed": common | {"cards"},
         "card-copied": common | {"cards"},
         "cards-downloaded": common | {"cards"},
+        "landscape-viewed": common | {"caselist", "snapshot", "page"},
     }
+    assert json.loads(EVERY_ACTION["landscape-viewed"].to_json())["page"] == "school"
     assert json.loads(EVERY_ACTION["cards-downloaded"].to_json())["cards"] == list(CARDS)
 
 
@@ -305,6 +313,15 @@ def test_audit_schema_refuses_a_record_with_a_forbidden_field(field: str) -> Non
         pytest.param("account-added", {"cards": [CARDS[0]]}, id="an account change naming a card"),
         pytest.param("searched", {"actor_subject": f"{USERNAME} {EMAIL}"}, id="a subject with words"),
         pytest.param("searched", {"time": "2026-11-02 15:00"}, id="a time not in UTC seconds"),
+        pytest.param("landscape-viewed", {"page": f"school {SCHOOL}"}, id="a landscape page naming a school"),
+        pytest.param("landscape-viewed", {"page": "school/maple-grove"}, id="a landscape page with a path"),
+        pytest.param("landscape-viewed", {"caselist": "hspolicy26 Maple Grove"}, id="a caselist with words"),
+        pytest.param("landscape-viewed", {"snapshot": "last week"}, id="a snapshot that is no date"),
+        pytest.param("landscape-viewed", {"cards": [CARDS[0]]}, id="a landscape page naming a card"),
+        pytest.param("landscape-viewed", {"count": 3}, id="a landscape page with a count"),
+        pytest.param("landscape-viewed", {"page": "caselists"}, id="the caselists naming a bundle"),
+        pytest.param("searched", {"page": "report"}, id="a search naming a landscape page"),
+        pytest.param("card-viewed", {"caselist": "hspolicy26"}, id="a card view naming a bundle"),
     ],
 )
 def test_audit_schema_refuses_a_record_out_of_shape(action: str, change: dict[str, Any]) -> None:
@@ -330,6 +347,32 @@ def test_audit_schema_refuses_a_record_out_of_shape(action: str, change: dict[st
         ),
         pytest.param(
             {"action": AuditAction.ACCOUNT_ADDED, "cards": CARDS[:1]}, id="an account change naming a card"
+        ),
+        pytest.param({"action": AuditAction.LANDSCAPE_VIEWED}, id="a landscape page of no kind"),
+        pytest.param(
+            {"action": AuditAction.LANDSCAPE_VIEWED, "page": LandscapePage.REPORT}, id="a report of no bundle"
+        ),
+        pytest.param(
+            {
+                "action": AuditAction.LANDSCAPE_VIEWED,
+                "page": LandscapePage.SCHOOL,
+                "caselist": "Maple Grove",
+                "snapshot": date(2026, 10, 20),
+            },
+            id="a landscape page whose caselist is a school",
+        ),
+        pytest.param(
+            {
+                "action": AuditAction.LANDSCAPE_VIEWED,
+                "page": LandscapePage.CASELISTS,
+                "caselist": "hspolicy26",
+                "snapshot": date(2026, 10, 20),
+            },
+            id="the caselists naming a bundle",
+        ),
+        pytest.param(
+            {"action": AuditAction.SEARCHED, "count": 1, "page": LandscapePage.REPORT},
+            id="a search naming a page",
         ),
     ],
 )

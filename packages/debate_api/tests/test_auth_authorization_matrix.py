@@ -1,5 +1,8 @@
 """The authorization matrix (v1-e39-t05 ac1 and ac6): every route, both roles, every session state.
 
+The landscape pages (v1-e39-t17) are in it: a student and a coach alike may read them (data-use
+policy 1.16), and every other session state is refused.
+
 Each route is asked for as a student and as a coach, with a session that is valid, expired,
 idle, tampered, sealed under keys the app does not hold, sealed as another cookie, or absent. Only
 the four session-free routes answer without a valid session, and a coach route refuses a student.
@@ -56,6 +59,17 @@ ROUTE_REQUESTS: list[RouteRequest] = [
     RouteRequest("POST", "/account/email", "/account/email", {"email": "debater.one@example.test"}),
     RouteRequest("POST", "/account/email/verify", "/account/email/verify", {"code": "135790"}),
     RouteRequest("POST", "/account/email/remove", "/account/email/remove", {}),
+    RouteRequest("GET", "/landscape", "/landscape"),
+    RouteRequest("GET", "/landscape/{caselist}", "/landscape/synthpolicy26"),
+    RouteRequest("GET", "/landscape/{caselist}/schools", "/landscape/synthpolicy26/schools"),
+    RouteRequest(
+        "GET", "/landscape/{caselist}/schools/{school}", "/landscape/synthpolicy26/schools/ashgrove"
+    ),
+    RouteRequest(
+        "GET",
+        "/landscape/{caselist}/positions/{position_id}",
+        "/landscape/synthpolicy26/positions/invented-da",
+    ),
     RouteRequest("GET", "/coach", "/coach"),
 ]
 

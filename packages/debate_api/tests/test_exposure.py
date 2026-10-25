@@ -47,6 +47,17 @@ CONCRETE_PATHS: Final = {
     "/account/email": ["/account/email"],
     "/account/email/verify": ["/account/email/verify"],
     "/account/email/remove": ["/account/email/remove"],
+    "/landscape": ["/landscape"],
+    "/landscape/{caselist}": ["/landscape/synthpolicy26", "/landscape/nocaselist26"],
+    "/landscape/{caselist}/schools": ["/landscape/synthpolicy26/schools", "/landscape/synthld26/schools"],
+    "/landscape/{caselist}/schools/{school}": [
+        "/landscape/synthpolicy26/schools/ashgrove",
+        "/landscape/synthpolicy26/schools/oldfield",
+    ],
+    "/landscape/{caselist}/positions/{position_id}": [
+        "/landscape/synthpolicy26/positions/invented-da",
+        "/landscape/synthpolicy26/positions/no-such-position",
+    ],
     "/coach": ["/coach"],
 }
 """At least one real path for every route in `ROUTE_ACCESS`, including the ones that answer an error."""
@@ -118,6 +129,8 @@ def test_exposure_a_503_for_an_unwritten_audit_record_is_private_and_never_store
 
     assert (page.status_code, page.headers["cache-control"]) == (503, PRIVATE_NO_STORE)
     assert (copy.status_code, copy.headers["cache-control"]) == (503, PRIVATE_NO_STORE)
+    landscape = world.browser.get("/landscape/synthpolicy26")
+    assert (landscape.status_code, landscape.headers["cache-control"]) == (503, PRIVATE_NO_STORE)
 
 
 def test_exposure_only_the_hashed_static_files_may_be_cached_and_they_hold_no_data(world: Any) -> None:

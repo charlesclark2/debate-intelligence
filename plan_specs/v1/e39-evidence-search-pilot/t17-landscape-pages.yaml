@@ -49,6 +49,26 @@ spec:
       - Search, download or share links on a landscape page
       - A third-party script, font or stylesheet
       - Network or AWS access in any test (moto and stand-ins only)
+  # PM rulings 2026-10-25, on the counts (ac1, recorded in the session report):
+  # - Layout A: report.md is one page; the school view is a front page, one page per school and one
+  #   per position. A school's path is its heading's anchor slug (-2 for a repeat), a position's its
+  #   id. A test shows no log record the app writes, at any level, holds a school slug or position id;
+  #   the session cites the Lambda Web Adapter's documentation on whether it logs request paths, and
+  #   configures it not to if it does. Each page's weight is asserted against t06's PAGE_BUDGET.
+  # - Contents: one list from the # parts and ## sections, an anchor on every heading, the bundle's own
+  #   ## Contents left out.
+  # - Newest bundle: the newest snapshot holding report.md. If its schools.md is gone the page says so
+  #   and never falls back to an older snapshot; tested with moto by deleting schools.md within the
+  #   five-minute hold.
+  # - Audit: a new landscape-viewed action with caselist, snapshot and page kind, never which school or
+  #   position, format version 1. docs/data/tub-audit-record.schema.json changes with it (a deviation;
+  #   the PM adds docs/data to constraints.packages in a PM batch).
+  # - markdown-it-py is declared in packages/debate_api/pyproject.toml and uv.lock, committed last. The
+  #   whole selection is left to the PR's ci under agreement 10, with no operator hand-off.
+  # - Links: a team-page link opens like the card page's "Open on openCaselist" (new tab, no opener, no
+  #   referrer); linkify stays off; a planted javascript: link, a data: image, an off-site https link in
+  #   report.md and a team-page URL with another caselist each render as text, by test.
+  # - Rendered pages may be cached with the bundle inside the five-minute hold.
   context:
     - kind: TaskRef
       name: v1-e39-t07-removal-audit-and-exposure

@@ -1,4 +1,5 @@
-"""The pilot's routes: sign-in and the account (v1-e39-t05), and the search pages (v1-e39-t06).
+"""The pilot's routes: sign-in and the account (v1-e39-t05), the search pages (v1-e39-t06) and the
+landscape pages (v1-e39-t17).
 
 Each route parses its input, calls a use case in `debate_core.application.tub`, and renders or
 answers. The gate in :mod:`debate_api.access` has already decided who may reach it and checked a
@@ -10,6 +11,8 @@ A state-changing route is a POST that `app.js` sends with `fetch`, and it answer
 
 The search pages' handlers are in :mod:`debate_api.search_pages`; every one is a `GET`. Download
 (`v1-e39-t08`) is :mod:`debate_api.download`'s, a POST like the rest, answered with the file or JSON.
+The landscape pages' handlers are in :mod:`debate_api.landscape_pages`, every one a `GET` for any
+session.
 """
 
 from __future__ import annotations
@@ -24,6 +27,13 @@ from starlette.concurrency import run_in_threadpool
 from debate_api.access import Access, RouteAccess
 from debate_api.cookies import ALL_COOKIES, ENROLMENT_COOKIE, SESSION_COOKIE, SIGN_IN_COOKIE
 from debate_api.download import card_download
+from debate_api.landscape_pages import (
+    landscape_caselists,
+    landscape_position,
+    landscape_report,
+    landscape_school,
+    landscape_school_view,
+)
 from debate_api.pages import IMMUTABLE, qr_code_svg
 from debate_api.search_pages import card_copy, card_page, search_page
 from debate_api.state import pilot_state
@@ -48,6 +58,11 @@ ROUTE_ACCESS: Final = {
     "/account/email": Access.SIGNED_IN,
     "/account/email/verify": Access.SIGNED_IN,
     "/account/email/remove": Access.SIGNED_IN,
+    "/landscape": Access.SIGNED_IN,
+    "/landscape/{caselist}": Access.SIGNED_IN,
+    "/landscape/{caselist}/schools": Access.SIGNED_IN,
+    "/landscape/{caselist}/schools/{school}": Access.SIGNED_IN,
+    "/landscape/{caselist}/positions/{position_id}": Access.SIGNED_IN,
     "/coach": Access.COACH,
 }
 """Every route's path and the access it needs. A route added without an entry here needs a session."""
@@ -84,6 +99,20 @@ def register_routes(app: FastAPI, routes: RouteAccess) -> None:
     app.add_api_route("/account/email", add_email, methods=["POST"], include_in_schema=False)
     app.add_api_route("/account/email/verify", confirm_email, methods=["POST"], include_in_schema=False)
     app.add_api_route("/account/email/remove", remove_email, methods=["POST"], include_in_schema=False)
+    app.add_api_route("/landscape", landscape_caselists, methods=["GET"], include_in_schema=False)
+    app.add_api_route("/landscape/{caselist}", landscape_report, methods=["GET"], include_in_schema=False)
+    app.add_api_route(
+        "/landscape/{caselist}/schools", landscape_school_view, methods=["GET"], include_in_schema=False
+    )
+    app.add_api_route(
+        "/landscape/{caselist}/schools/{school}", landscape_school, methods=["GET"], include_in_schema=False
+    )
+    app.add_api_route(
+        "/landscape/{caselist}/positions/{position_id}",
+        landscape_position,
+        methods=["GET"],
+        include_in_schema=False,
+    )
     app.add_api_route("/coach", coach, methods=["GET"], include_in_schema=False)
     for path, access in ROUTE_ACCESS.items():
         routes.register(path, access)

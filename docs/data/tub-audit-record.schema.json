@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Student search pilot audit record",
-  "description": "One event in debate-<env>-tub-audit (ADR-0019 (e) 3; data-use policy E39 gate item 4). The format version, the time, the action, the actor's role and pool subject, and the account it changed, the cards it reached or a count. Nothing else: additionalProperties is false, so a query, URL, token, name, team code, school, evidence text or IP address has no field to go in. Held to debate_core.application.tub.audit by packages/debate_api/tests/test_audit_record_schema.py.",
+  "description": "One event in debate-<env>-tub-audit (ADR-0019 (e) 3; data-use policy E39 gate item 4). The format version, the time, the action, the actor's role and pool subject, and the account it changed, the cards it reached, a count, or the kind of landscape page shown with its bundle's caselist and snapshot (v1-e39-t17). Nothing else: additionalProperties is false, so a query, URL, token, name, team code, school, evidence text or IP address has no field to go in. Held to debate_core.application.tub.audit by packages/debate_api/tests/test_audit_record_schema.py.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -36,7 +36,8 @@
         "searched",
         "card-viewed",
         "card-copied",
-        "cards-downloaded"
+        "cards-downloaded",
+        "landscape-viewed"
       ]
     },
     "actor_role": {
@@ -69,6 +70,26 @@
         "pattern": "^(?:[a-z]+[0-9]{2}|openev)/[0-9a-f]{64}$"
       },
       "description": "The cards an access reached, as <caselist>/<cluster id>."
+    },
+    "caselist": {
+      "type": "string",
+      "pattern": "^[a-z]+[0-9]{2}$",
+      "description": "The caselist of the landscape bundle a page showed."
+    },
+    "snapshot": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+      "description": "The snapshot of the landscape bundle a page showed."
+    },
+    "page": {
+      "enum": [
+        "caselists",
+        "report",
+        "school-view",
+        "school",
+        "position"
+      ],
+      "description": "Which kind of landscape page was shown, never which school or position."
     }
   },
   "allOf": [
@@ -192,6 +213,90 @@
         "not": {
           "required": [
             "cards"
+          ]
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "action": {
+            "const": "landscape-viewed"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "actor_subject",
+          "page"
+        ],
+        "not": {
+          "anyOf": [
+            {
+              "required": [
+                "count"
+              ]
+            },
+            {
+              "required": [
+                "cards"
+              ]
+            },
+            {
+              "required": [
+                "account_subject"
+              ]
+            }
+          ]
+        },
+        "if": {
+          "properties": {
+            "page": {
+              "const": "caselists"
+            }
+          }
+        },
+        "then": {
+          "not": {
+            "anyOf": [
+              {
+                "required": [
+                  "caselist"
+                ]
+              },
+              {
+                "required": [
+                  "snapshot"
+                ]
+              }
+            ]
+          }
+        },
+        "else": {
+          "required": [
+            "caselist",
+            "snapshot"
+          ]
+        }
+      },
+      "else": {
+        "not": {
+          "anyOf": [
+            {
+              "required": [
+                "caselist"
+              ]
+            },
+            {
+              "required": [
+                "snapshot"
+              ]
+            },
+            {
+              "required": [
+                "page"
+              ]
+            }
           ]
         }
       }

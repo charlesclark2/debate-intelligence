@@ -318,3 +318,10 @@ button.secondary { background: #ffffff; color: var(--link); }
 .cart[hidden] { display: none; }
 
 .cart p { margin: 0; }
+
+/* The landscape pages (v1-e39-t17): a contents list, and a bundle's tables, which may be wider than a
+   Chromebook's screen, scroll inside the page rather than widening it. */
+.landscape-contents ul, .landscape-index { padding-left: 1.25rem; }
+.landscape-index { columns: 16rem; }
+.landscape-body table { display: block; overflow-x: auto; border-collapse: collapse; margin: 0.5rem 0 1rem; }
+.landscape-body th, .landscape-body td { border-bottom: 1px solid var(--line); padding: 0.25rem 0.5rem; text-align: left; vertical-align: top; }

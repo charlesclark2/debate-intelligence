@@ -17,7 +17,7 @@ from typing import Any
 
 import pytest
 from botocore.exceptions import EndpointConnectionError
-from hypothesis import given, settings
+from hypothesis import event, given, settings
 from hypothesis import strategies as st
 
 from debate_core.application.ports.notifier import Notification
@@ -76,7 +76,9 @@ def test_the_message_says_what_the_banner_says_with_the_fix_on_its_own_line(sns:
 
 
 def test_a_notification_with_no_subtitle_or_hint_leaves_their_lines_out(sns: AnsweringSns) -> None:
-    notifier(sns).notify(Notification(title="Weekly caselist login failed", message="It stopped.", fix_command="x"))
+    notifier(sns).notify(
+        Notification(title="Weekly caselist login failed", message="It stopped.", fix_command="x")
+    )
 
     assert sns.sent[0].message == "Weekly caselist login failed\n\nIt stopped.\n\nFix: x"
 
@@ -85,7 +87,12 @@ _PRINTABLE_ASCII = frozenset(string.printable) - frozenset("\t\n\r\x0b\x0c")
 
 
 @settings(max_examples=300, deadline=None)
-@given(title=st.text(min_size=0, max_size=300), environment=st.sampled_from(["dev", "prod"]))
+@given(
+    # Half short, half past the limit: plain st.text() made a title too long for a subject 0.33% of
+    # the time (measured with --hypothesis-show-statistics), so the cut was barely exercised.
+    title=st.one_of(st.text(max_size=60), st.text(min_size=SUBJECT_LIMIT, max_size=300)),
+    environment=st.sampled_from(["dev", "prod"]),
+)
 def test_every_subject_is_one_line_of_ascii_under_100_characters(title: str, environment: str) -> None:
     """SNS refuses a subject it cannot take, and a refused publish is an alert nobody gets.
 
@@ -93,6 +100,12 @@ def test_every_subject_is_one_line_of_ascii_under_100_characters(title: str, env
     character, fewer than 100 characters. Titles carry an em dash or an apostrophe today, and any
     text tomorrow.
     """
+    event(
+        "a title with a character outside printable ASCII"
+        if set(title) - _PRINTABLE_ASCII
+        else "an ASCII title"
+    )
+    event("a title too long for a subject" if len(title) > SUBJECT_LIMIT else "a title that fits")
     subject = sns_module.alert_subject(
         Notification(title=title, message="m", fix_command="f"), environment=environment
     )
@@ -164,14 +177,17 @@ def test_the_client_is_built_once_and_only_when_a_notification_is_sent(fake_aws_
 def test_the_client_gives_up_inside_the_two_minutes_a_stopped_run_has(fake_aws_environment: None) -> None:
     """A run told to stop (RUN_TERMINATED) records, notifies and releases the lock in the 120 seconds
     before SIGKILL. botocore's defaults (60-second timeouts, five attempts) could spend all of it."""
-    config: Any = build_sns_client(region="us-east-1").meta.config  # pyright: ignore[reportAttributeAccessIssue]
+    client: Any = build_sns_client(region="us-east-1")
+    config: Any = client.meta.config
 
-    worst = (config.connect_timeout + config.read_timeout) * config.retries["total_max_attempts"]
+    worst = int((config.connect_timeout + config.read_timeout) * config.retries["total_max_attempts"])
 
     assert worst <= 60
 
 
-@pytest.mark.parametrize("topic_arn", ["", "debate-dev-caselist-run-alerts", "arn:aws:sqs:us-east-1:111122223333:x"])
+@pytest.mark.parametrize(
+    "topic_arn", ["", "debate-dev-caselist-run-alerts", "arn:aws:sqs:us-east-1:111122223333:x"]
+)
 def test_a_topic_that_is_not_an_sns_arn_is_refused_when_the_notifier_is_built(topic_arn: str) -> None:
     with pytest.raises(ValueError, match="SNS topic ARN"):
         SnsNotifier(topic_arn, environment="dev")
@@ -218,7 +234,9 @@ def test_no_credentials_is_logged_and_not_raised(
     assert any(record.name == "debate_core.integrations.sns" for record in every_record)
 
 
-def test_a_client_that_cannot_be_built_is_logged_and_not_raised(every_record: list[logging.LogRecord]) -> None:
+def test_a_client_that_cannot_be_built_is_logged_and_not_raised(
+    every_record: list[logging.LogRecord],
+) -> None:
     def cannot(*, region: str) -> Any:
         raise RuntimeError("no boto3 here")
 

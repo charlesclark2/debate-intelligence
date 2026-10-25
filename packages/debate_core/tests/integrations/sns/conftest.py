@@ -94,7 +94,9 @@ class AnsweringSns:
         )
         if self._failure is not None:
             raise self._failure
-        status, text = (200, _PUBLISHED) if self._refusal is None else (self._refusal[0], _refused(self._refusal[1]))
+        status, text = (
+            (200, _PUBLISHED) if self._refusal is None else (self._refusal[0], _refused(self._refusal[1]))
+        )
         return AWSResponse(
             request.url,
             status,

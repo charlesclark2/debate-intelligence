@@ -1588,15 +1588,24 @@ class ServiceContainer:
         )
 
     def sync_notifier(self) -> Notifier:
-        """macOS Notification Centre on the operator's Mac; nothing in `test` or anywhere else.
+        """macOS Notification Centre on the operator's Mac; the alert topic in the cloud; else nothing.
 
         `caselist.notifier = "auto"` never notifies in the `test` environment, so no test run can
-        put a banner on a developer's screen even with a profile that forgot to say `none`.
+        put a banner on a developer's screen even with a profile that forgot to say `none`. `sns` is
+        only ever chosen by name: the cloud run's and login's task definitions set it, with the
+        topic (`v1-e40-t05`, ADR-0020 (6)).
         """
         settings = self.settings
         kind = settings.caselist.notifier
         if kind is SyncNotifierKind.NONE:
             return NullNotifier()
+        if kind is SyncNotifierKind.SNS:
+            from debate_core.integrations.sns import SnsNotifier
+
+            # The settings refuse `sns` without a topic, so this is never None here.
+            return SnsNotifier(
+                cast(str, settings.caselist.alert_topic_arn), environment=settings.environment.value
+            )
         if kind is SyncNotifierKind.AUTO and (
             settings.environment is Environment.TEST or sys.platform != "darwin"
         ):

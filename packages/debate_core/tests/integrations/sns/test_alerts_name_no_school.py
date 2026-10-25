@@ -104,7 +104,11 @@ def a_week_whose_download_and_import_failed() -> RunSummary:
         caselists=("hsld26",),
         archives=(archive,),
         stages=(
-            StageRecord(stage=SyncStage.SELECT, outcome=StageOutcome.COMPLETED, reason=f"1 archive listed for {SCHOOL}"),
+            StageRecord(
+                stage=SyncStage.SELECT,
+                outcome=StageOutcome.COMPLETED,
+                reason=f"1 archive listed for {SCHOOL}",
+            ),
             StageRecord(
                 stage=SyncStage.DOWNLOAD,
                 outcome=StageOutcome.FAILED,

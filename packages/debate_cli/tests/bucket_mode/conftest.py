@@ -30,6 +30,7 @@ import boto3
 import pytest
 import respx
 from moto import mock_aws
+from tests.fixtures.identity_center_roles import EVERYDAY_ROLE, TAKEDOWN_ROLE, sign_in
 from tests.fixtures.parse_pipeline.build_parse_world import BODIES, CASELIST, WEEKS, build_week_zips
 from typer.testing import CliRunner, Result
 
@@ -43,6 +44,7 @@ API: Final = "https://api.opencaselist.example.invalid/v1"
 FILE_HOST: Final = "https://files.opencaselist.example.invalid"
 BUCKET: Final = "debate-dev-evidence-moto"
 PROFILE: Final = "debate-dev-evidence"
+REMOVAL_PROFILE: Final = "debate-dev-evidence-removal"
 WEEK_1, WEEK_2, WEEK_3 = (week.snapshot for week in WEEKS)
 START: Final = datetime(2026, 10, 14, 11, 0, 5, tzinfo=UTC)
 
@@ -202,7 +204,10 @@ def world(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[World]:
         if name.startswith(("DEBATE_", "AWS_")):
             monkeypatch.delenv(name, raising=False)
     config = tmp_path / "aws-config"
-    config.write_text(f"[profile {PROFILE}]\nregion = us-east-1\n", encoding="utf-8")
+    config.write_text(
+        "".join(f"[profile {name}]\nregion = us-east-1\n" for name in (PROFILE, REMOVAL_PROFILE)),
+        encoding="utf-8",
+    )
     credentials = tmp_path / "aws-credentials"
     credentials.write_text(
         f"[{PROFILE}]\naws_access_key_id = testing\naws_secret_access_key = testing\n", encoding="utf-8"
@@ -242,6 +247,8 @@ def world(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[World]:
         client: S3Client = boto3.client("s3", region_name="us-east-1")  # pyright: ignore[reportUnknownMemberType]
         client.create_bucket(Bucket=BUCKET)
         client.put_bucket_versioning(Bucket=BUCKET, VersioningConfiguration={"Status": "Enabled"})
+        # Each profile is the role its name says: a takedown asks which it is first (v1-e29-t08).
+        sign_in(credentials, {PROFILE: EVERYDAY_ROLE, REMOVAL_PROFILE: TAKEDOWN_ROLE})
         site.get(f"{API}/openev").respond(200, json=[CAMP_FILE])
         site.get(f"{API}/download").respond(200, content=BODIES["cardmirror"])
         for week in WEEKS:

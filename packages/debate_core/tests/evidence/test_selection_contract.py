@@ -17,6 +17,7 @@ import asyncio
 import inspect
 import json
 import logging
+import traceback
 import unicodedata
 from collections.abc import Callable, Iterator, Mapping
 from datetime import UTC, datetime
@@ -782,16 +783,24 @@ def _strings_in(value: object) -> Iterator[str]:
             yield from _strings_in(item)
 
 
-_STANDARD_RECORD_KEYS = frozenset(vars(logging.makeLogRecord({})))
-
-
 def _sentinel_in(text: str) -> bool:
     return any(word in text.casefold() for word in SENTINEL_WORDS)
+
+
+NEED_SENTINEL = "sentinel-5e3a-standing-in-for-the-research-need"
+"""Invented text in a call's variables: the repair carries it once, in the resent prompt; nothing else may."""
 
 
 async def test_guard_quoted_tag_is_refused_after_one_repair_and_nothing_quotes_it(
     registry: PromptRegistry, loaded: LoadedSnapshot, caplog: pytest.LogCaptureFixture
 ) -> None:
+    """t05's two-sentinel test on the check path (the PM's ruling of 2026-10-25).
+
+    SENTINEL is in the snapshot and in the refused tag; NEED_SENTINEL is in the call's research need.
+    The repair resends the rendered prompt unchanged, so SENTINEL appears in it exactly where the
+    snapshot is rendered, and NEED_SENTINEL once; neither appears anywhere else, nor in any error or
+    log record.
+    """
     quoting = {
         **RECORDED_SELECTION,
         "tag": {**cast("dict[str, JsonValue]", RECORDED_SELECTION["tag"]), "text": SENTINEL},
@@ -800,7 +809,7 @@ async def test_guard_quoted_tag_is_refused_after_one_repair_and_nothing_quotes_i
     caplog.set_level(logging.DEBUG)
 
     with pytest.raises(ModelOutputError) as raised:
-        await selector(router, registry).select(loaded, NEED)
+        await selector(router, registry).select(loaded, f"{NEED} {NEED_SENTINEL}")
 
     error = raised.value
     assert error.attempts == 2
@@ -809,24 +818,39 @@ async def test_guard_quoted_tag_is_refused_after_one_repair_and_nothing_quotes_i
     assert [(problem.loc, problem.type) for problem in error.problems] == [
         (("tag", "text"), "quoted_snapshot_text")
     ]
-    for attempt in error.attempt_records:
-        assert not any(_sentinel_in(problem.msg) for problem in attempt.problems)
-    assert not _sentinel_in(str(error))
-    assert not _sentinel_in(repr(error))
-    assert not any(
-        _sentinel_in(text)
-        for text in _strings_in([[problem.loc, problem.type, problem.msg] for problem in error.problems])
-    )
+
+    original, repair = router.calls
+    assert repair.prompt.prompt_id == "model.repair"
+    rendered_original = registry.render(original.prompt)
+    rendered_repair = registry.render(repair.prompt)
+    sent = (rendered_repair.system or "") + rendered_repair.user
+    snapshot_block = f"[P4] {P4}"
+    # The refused tag is not carried: the sentinel is there as often as in the original prompt, once,
+    # inside the rendered snapshot, and nowhere outside it.
+    assert rendered_original.user.count(SENTINEL) == 1
+    assert sent.count(SENTINEL) == 1
+    assert repair.model_dump_json().count(SENTINEL) == 1
+    assert sent.count(snapshot_block) == 1
+    assert not _sentinel_in(sent.replace(snapshot_block, ""))
+    assert cast("str", repair.prompt.variables["failed_user"]) == rendered_original.user
+    for name, value in repair.prompt.variables.items():
+        if name != "failed_user":
+            assert not any(_sentinel_in(text) or NEED_SENTINEL in text for text in _strings_in(value)), name
+    assert sent.count(NEED_SENTINEL) == 1
+    assert repair.model_dump_json().count(NEED_SENTINEL) == 1
+
+    reported = "".join(traceback.format_exception(error))
+    reported += repr(error.args) + repr(error.problems) + repr(error.attempt_records)
+    assert not _sentinel_in(reported)
+    assert NEED_SENTINEL not in reported
+    assert error.__cause__ is None
+    assert error.__context__ is None
+    assert caplog.records, "the guard logs each failed attempt"
     for record in caplog.records:
-        extras = {key: value for key, value in vars(record).items() if key not in _STANDARD_RECORD_KEYS}
         assert not _sentinel_in(record.getMessage())
-        assert not any(_sentinel_in(text) for text in _strings_in(list(extras.values())))
-    # The repair resends the call's own prompt, numbered snapshot and all, so the snapshot's words
-    # are in it (the PM's note of 2026-10-25); the problems it lists never are.
-    repair = router.calls[1].prompt
-    assert repair.prompt_id == "model.repair"
-    assert SENTINEL in cast("str", repair.variables["failed_user"])
-    assert not any(_sentinel_in(text) for text in _strings_in(repair.variables["problems"]))
+        assert not _sentinel_in(repr(vars(record)))
+        assert NEED_SENTINEL not in record.getMessage()
+        assert NEED_SENTINEL not in repr(vars(record))
 
 
 async def test_guard_out_of_bounds_selection_is_repaired_once_and_a_good_repair_is_kept(

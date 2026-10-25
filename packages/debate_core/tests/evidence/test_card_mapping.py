@@ -8,7 +8,8 @@ The last section is `v1-e03-t07` ac3's scan: no other code in the tree does this
 from __future__ import annotations
 
 import ast
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator, Mapping
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import pytest
@@ -261,12 +262,14 @@ SCANNED = ("packages/*/src/**/*.py", "packages/*/tests/**/*.py", "tests/**/*.py"
 MAPPING_MODULE = "packages/debate_core/src/debate_core/evidence/card_mapping.py"
 FIXTURE_MODULE = "tests/fixtures/verification/verification_world.py"
 
+# PM ruling of 2026-10-25 (v1-e05-t06-card-selection-contract): the numbered snapshot's inverse map
+# turns a snapshot offset into a paragraph-relative one and never touches evidence_text, so it is not
+# a second copy of the card mapping. It is allowed by its file and its exact expression only. A
+# second occurrence anywhere, that file included, still fails, and so does removing the allowed line;
+# the tests after test_card_mapping_arithmetic_exists_once_in_the_whole_tree plant each case.
 PARAGRAPH_MAP_MODULE = "packages/debate_core/src/debate_core/evidence/numbered_snapshot.py"
 PARAGRAPH_MAP_SHIFTS = ["snapshot_offset - self.source.paragraphs[position].start"]
-"""The one subtraction of this shape that is not the card mapping: a snapshot offset made relative to
-its paragraph, for the numbered snapshot a model reads (v1-e05-t06-card-selection-contract). It never
-touches evidence_text. It is allowed by its exact text, so any other arithmetic in that module is
-still flagged."""
+"""The one allowed subtraction of this shape outside the card mapping, in PARAGRAPH_MAP_MODULE."""
 
 _START = frozenset({"start", "start_offset", "evidence_start_offset"})
 _END = frozenset({"end", "end_offset", "evidence_end_offset"})
@@ -332,24 +335,52 @@ def _calls_the_mapping(tree: ast.AST) -> bool:
     )
 
 
-def test_card_mapping_arithmetic_exists_once_in_the_whole_tree() -> None:
-    shifts: dict[str, list[str]] = {}
-    callers: set[str] = set()
-    walkers: set[str] = set()
-    for path in _scanned_files():
-        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-        relative = path.relative_to(REPOSITORY).as_posix()
+@dataclass
+class _Scan:
+    """What the scan found: flagged lines by file, the mapping's callers, and the inverse walks."""
+
+    shifts: dict[str, list[str]] = field(default_factory=dict[str, list[str]])
+    callers: set[str] = field(default_factory=set[str])
+    walkers: set[str] = field(default_factory=set[str])
+
+
+def _scan(sources: Iterable[tuple[str, str]]) -> _Scan:
+    """Scan `(repository-relative path, source)` pairs."""
+    scan = _Scan()
+    for relative, source in sources:
+        tree = ast.parse(source, filename=relative)
         walks = [
             f"{relative}:{node.lineno}: loop over quoted_ranges with a running count"
             for node in running_count_walks(tree)
         ]
         found = [f"{relative}:{node.lineno}: {ast.unparse(node)}" for node in offset_shifts(tree)] + walks
         if found:
-            shifts[relative] = found
+            scan.shifts[relative] = found
         if walks:
-            walkers.add(relative)
+            scan.walkers.add(relative)
         if _calls_the_mapping(tree):
-            callers.add(relative)
+            scan.callers.add(relative)
+    return scan
+
+
+def _strays(shifts: Mapping[str, list[str]]) -> list[str]:
+    """Every flagged line outside the card mapping, after the one allowance; a stale allowance is one too."""
+    remaining = dict(shifts)
+    allowed = [line.split(": ", 1)[1] for line in remaining.pop(PARAGRAPH_MAP_MODULE, [])]
+    strays = [line for module, lines in remaining.items() if module != MAPPING_MODULE for line in lines]
+    if allowed != PARAGRAPH_MAP_SHIFTS:
+        strays.append(f"{PARAGRAPH_MAP_MODULE}: expected exactly {PARAGRAPH_MAP_SHIFTS}, found {allowed}")
+    return strays
+
+
+def _repository_sources() -> Iterator[tuple[str, str]]:
+    for path in _scanned_files():
+        yield path.relative_to(REPOSITORY).as_posix(), path.read_text(encoding="utf-8")
+
+
+def test_card_mapping_arithmetic_exists_once_in_the_whole_tree() -> None:
+    scan = _scan(_repository_sources())
+    shifts, callers, walkers = scan.shifts, scan.callers, scan.walkers
 
     # The scan reached the mapping's own arithmetic, both directions of it, and the code that exists
     # to use it, so it cannot pass by reading nothing, or by reading production code only.
@@ -358,8 +389,45 @@ def test_card_mapping_arithmetic_exists_once_in_the_whole_tree() -> None:
     assert {FIXTURE_MODULE, "packages/debate_core/tests/evidence/test_card_mapping.py"} <= callers, (
         f"the scan did not see the mapping's call sites; it saw {sorted(callers)}"
     )
-    assert [line.split(": ", 1)[1] for line in shifts.pop(PARAGRAPH_MAP_MODULE, [])] == PARAGRAPH_MAP_SHIFTS
-    assert [line for module, lines in shifts.items() if module != MAPPING_MODULE for line in lines] == []
+    assert _strays(shifts) == []
+
+
+def _paragraph_map_source() -> str:
+    return (REPOSITORY / PARAGRAPH_MAP_MODULE).read_text(encoding="utf-8")
+
+
+def test_the_allowance_admits_the_paragraph_map_as_it_is() -> None:
+    assert _strays(_scan([(PARAGRAPH_MAP_MODULE, _paragraph_map_source())]).shifts) == []
+
+
+def test_the_allowance_refuses_a_second_subtraction_in_the_paragraph_map_module() -> None:
+    planted = (
+        _paragraph_map_source() + "\n\ndef planted(offset, evidence):\n    return offset - evidence.start\n"
+    )
+
+    [stray] = _strays(_scan([(PARAGRAPH_MAP_MODULE, planted)]).shifts)
+
+    assert stray.startswith(f"{PARAGRAPH_MAP_MODULE}: expected exactly")
+    assert "offset - evidence.start" in stray
+
+
+def test_the_allowance_refuses_the_allowed_expression_in_any_other_file() -> None:
+    elsewhere = "packages/debate_core/src/debate_core/evidence/elsewhere.py"
+    copy = f"def f(self, snapshot_offset, position):\n    return {PARAGRAPH_MAP_SHIFTS[0]}\n"
+
+    strays = _strays(_scan([(PARAGRAPH_MAP_MODULE, _paragraph_map_source()), (elsewhere, copy)]).shifts)
+
+    assert strays == [f"{elsewhere}:2: {PARAGRAPH_MAP_SHIFTS[0]}"]
+
+
+def test_the_allowance_fails_when_the_allowed_line_is_gone() -> None:
+    source = _paragraph_map_source()
+    assert source.count(PARAGRAPH_MAP_SHIFTS[0]) == 1
+    removed = source.replace(PARAGRAPH_MAP_SHIFTS[0], "snapshot_offset")
+
+    assert _strays(_scan([(PARAGRAPH_MAP_MODULE, removed)]).shifts) == [
+        f"{PARAGRAPH_MAP_MODULE}: expected exactly {PARAGRAPH_MAP_SHIFTS}, found []"
+    ]
 
 
 @pytest.mark.parametrize(

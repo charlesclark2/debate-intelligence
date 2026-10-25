@@ -51,7 +51,7 @@ spec:
         After the seed, the operator republishes hspolicy26 to dev and the pilot's school
         page shows the links (operator).
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

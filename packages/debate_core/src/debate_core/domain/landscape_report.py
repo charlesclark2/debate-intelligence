@@ -113,7 +113,6 @@ PLACED_CARD_METHOD: Final = "PLACED_CARD"
 """The method of an aff identified by a card in the round that `v1-e32-t02` placed under it."""
 
 
-
 class ChainRole(StrEnum):
     """A card's place in a DA's or an advantage's link chain, as a team labelled it (`v1-e32-t14`)."""
 
@@ -260,7 +259,8 @@ class ImpactCard(TopCard):
         default=None,
         description=(
             "With no labelled internal link: the tag of the card directly above it in its block, when that "
-            "card is not an impact card. A fact about the file, never called an internal link; report.md only."
+            "card is not an impact card. A fact about the file, never called an internal link; report.md "
+            "only."
         ),
     )
 
@@ -297,7 +297,8 @@ class ChainCoverage(DomainModel):
         ge=0, description="Rows with no labelled internal link that show the card above instead."
     )
     withheld_names: int = Field(
-        ge=0, description="Scenario names two or more teams use, withheld for a school, team code or tournament."
+        ge=0,
+        description="Scenario names two or more teams use, withheld for a school, team code or tournament.",
     )
     roles_without_card: tuple[RoleGap, ...] = Field(description="One per role of the kind, in role order.")
 

@@ -294,6 +294,15 @@ class PositionMatcher:
             rationale += "; an answer heading makes the role ANSWERS"
         return self._result(placement.position_id, role, placement.method, confidence, rationale)
 
+    def placing_index(self, headings: Sequence[str]) -> int | None:
+        """Which of `headings` (normalized, outermost first, as a card's are kept) places an item under them.
+
+        The same nearest alias or override :meth:`place` finds, by its index; None when none does. The
+        headings below it are the item's sub-headings, which `v1-e32-t14` reads roles and scenarios from.
+        """
+        placement = self._placement([NormalizedHeading(text=one, answer=False) for one in headings])
+        return None if placement is None else placement.depth
+
     def heading_candidates(self, heading: str) -> tuple[str, ...]:
         """Positions the review queue offers for an undecided heading: up to three, best first.
 

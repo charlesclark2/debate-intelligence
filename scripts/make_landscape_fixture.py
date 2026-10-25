@@ -286,7 +286,9 @@ CARDS: Final = {
         _unplaced(11, "Inherency: the status quo fails", "Nguyen 26"),
     ),
     "a5": (
-        FixtureCard(2, "c", _COSTS_TAG, "Okafor 25", "costs-advantage", headings=(*_COSTS, "economic collapse")),
+        FixtureCard(
+            2, "c", _COSTS_TAG, "Okafor 25", "costs-advantage", headings=(*_COSTS, "economic collapse")
+        ),
         FixtureCard(27, "a", "Conditionality is a voting issue", "Feldman 22", "condo-bad"),
         FixtureCard(12, "a", "Extra evidence", "Ito 19", None, None, ClassificationMethod.OVERRIDE),
         FixtureCard(38, "a", "U: premiums are rising now", "Vance 26", "costs-advantage", headings=_COSTS),
@@ -361,7 +363,12 @@ CARDS: Final = {
         ),
         _unplaced(19, "Uniqueness overwhelms the link", "Cole 26"),
         FixtureCard(
-            39, "a", "Recession spreads worldwide", "Park 25", "spending-da", headings=(*_SPENDING, "recession")
+            39,
+            "a",
+            "Recession spreads worldwide",
+            "Park 25",
+            "spending-da",
+            headings=(*_SPENDING, "recession"),
         ),
     ),
     "b3": (

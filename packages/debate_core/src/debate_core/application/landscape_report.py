@@ -65,6 +65,27 @@ rounds read, by the rules of :mod:`debate_core.application.landscape_advantages`
 reads, t09's assignments as the only source of a round's aff, and a mechanism's rounds counted once
 under its aff. report.md shows them; no other file does.
 
+## Scenarios and link chains (`v1-e32-t14`)
+
+A card's sub-headings are its headings below the one that placed it, found by the matcher's own rule
+(:meth:`~debate_core.arguments.landscape.matcher.PositionMatcher.placing_index`), and its roles and
+scenario are read from them and its tag (:mod:`debate_core.arguments.landscape.link_chains`). Only the
+cards counted for a position fill its roles or name its scenarios, so an answer or a card on the other
+side never does. Per DA and advantage:
+
+* **A scenario name** shows when two or more teams' counted cards under the position carry it, and is
+  withheld, and counted, when it holds a word of a caselist school, team code or tournament. A row's
+  scenario is the shown name the most teams of its labelled copies carry, ties by name.
+* **A row's internal link** is, per labelled copy, the nearest card above it in its file under the same
+  position heading that is counted for the position and labelled an internal link; the row shows the
+  tag the most teams' copies have, ties by tag. With none, and only then, the row carries the tag of
+  the card directly above a copy in its block when that card is not an impact card: the card above it
+  in the file, for report.md, never called an internal link.
+* **Its link chain** is its most-read cluster per role, ranked as impact cards are, by the teams of the
+  copies labelled with the role; the impact role is the impact section's first row.
+* **Per kind**, the documents with no scenario heading and no role label, the rows with a scenario, an
+  internal link or the card above, the names withheld, and the positions with no card for each role.
+
 ## What never leaves this module
 
 School, team code, tournament and round are read to tell rounds and teams apart, and are not in the
@@ -102,7 +123,16 @@ from debate_core.application.landscape_staleness import (
 from debate_core.application.landscape_trends import landscape_trends
 from debate_core.application.ports.parsed_store import OccurrenceRecord
 from debate_core.arguments.landscape.analytic_texts import AnalyticTextInputs, TextGroup, top_texts
+from debate_core.arguments.landscape.headings import NormalizedHeading
 from debate_core.arguments.landscape.impacts import is_impact_card
+from debate_core.arguments.landscape.link_chains import (
+    SubHeading,
+    card_roles,
+    card_scenario,
+    caselist_words,
+    is_withheld,
+)
+from debate_core.arguments.landscape.matcher import PositionMatcher
 from debate_core.arguments.landscape.render import (
     header_metadata,
     render_impact_cards_csv,
@@ -131,18 +161,23 @@ from debate_core.domain.landscape_classification import (
 )
 from debate_core.domain.landscape_report import (
     DEFAULT_ADVANTAGES_PER_AFF,
+    CHAIN_ROLES,
     DEFAULT_IMPACT_CARDS,
     DEFAULT_TOP_CARDS,
     IMPACT_KINDS,
     PLACED_CARD_METHOD,
     AffAssignment,
     AffIdentification,
+    ChainCard,
+    ChainCoverage,
+    ChainRole,
     ImpactCard,
     ImpactCoverage,
     LandscapeCard,
     LandscapeReport,
     PositionStats,
     ReportHeader,
+    RoleGap,
     TopCard,
     UnclassifiedSummary,
 )
@@ -208,7 +243,7 @@ def landscape_cards(
     same in each. A card with no row, or no first paragraph, has no cluster to rank and is left out.
     The headings are the ones the position matcher reads (`v1-e32-t02`): the card's path without an
     open tag, each normalized with the disclosing teams' names and `caselist_names`' schools taken
-    out, the empty ones left out.
+    out, the empty ones left out, each with whether it answers (`v1-e32-t14`).
     """
     names = CaselistNames(caselist_names or {})
     clusters: dict[tuple[str, int], tuple[str, str]] = {}
@@ -220,20 +255,20 @@ def landscape_cards(
     for source in sources:
         own = [name for team in source.teams for name in team.names if name.strip()]
         tags = {card.tag for card in source.cards if card.tag is not None}
-        normalized: dict[str, str] = {}
+        normalized: dict[str, NormalizedHeading] = {}
         for card in source.cards:
             if card.first_element_index is None:
                 continue
             found = clusters.get((source.sha256, card.first_element_index))
             if found is None:
                 continue
-            headings: list[str] = []
+            headings: list[NormalizedHeading] = []
             for raw in heading_path(card.tag, card.section_path, tags):
-                text = normalized.get(raw)
-                if text is None:
-                    text = normalized[raw] = normalize_source_heading(raw, own, names).text
-                if text:
-                    headings.append(text)
+                heading = normalized.get(raw)
+                if heading is None:
+                    heading = normalized[raw] = normalize_source_heading(raw, own, names)
+                if heading.text:
+                    headings.append(heading)
             cards.append(
                 LandscapeCard(
                     source_sha256=source.sha256,
@@ -242,7 +277,10 @@ def landscape_cards(
                     cluster_id=found[1],
                     tag=card.tag,
                     short_cite=card.short_cite,
-                    headings=tuple(headings),
+                    headings=tuple(one.text for one in headings),
+                    heading_answers=tuple(one.answer for one in headings)
+                    if any(one.answer for one in headings)
+                    else (),
                 )
             )
     return tuple(cards)
@@ -485,6 +523,12 @@ class LandscapeReportService:
             )
         ]
 
+        chains = _LinkChains(inputs, in_range, card_reads, labelled, cards_by_key)
+        impact_cards = [chains.with_lead_in(card) for card in impact_cards]
+        chain_cards = [
+            card for stats in positions if stats.kind in IMPACT_KINDS for card in chains.chain(stats)
+        ]
+
         aff_positions = {one.id for one in taxonomy.positions if one.kind is PositionKind.AFF}
         neg_positions = {
             one.id for one in taxonomy.positions if one.side in (PositionSide.NEG, PositionSide.BOTH)
@@ -540,6 +584,10 @@ class LandscapeReportService:
             impact_cards=tuple(impact_cards),
             impact_coverage=tuple(
                 _impact_coverage(kind, taxonomy, card_reads, labelled) for kind in IMPACT_KINDS
+            ),
+            chain_cards=tuple(chain_cards),
+            chain_coverage=tuple(
+                chains.coverage(kind, positions, impact_cards, chain_cards) for kind in IMPACT_KINDS
             ),
             unclassified=UnclassifiedSummary(
                 cards=cards,
@@ -736,6 +784,227 @@ def _ranked[RowT: TopCard](
             )
         )
     return rows
+
+
+class _LinkChains:
+    """`v1-e32-t14`'s reading of the counted DA and advantage cards: roles, scenarios and lead-ins."""
+
+    def __init__(
+        self,
+        inputs: LandscapeReportInputs,
+        in_range: _Range,
+        card_reads: Mapping[str, dict[tuple[str, int], set[str]]],
+        labelled: Mapping[str, dict[tuple[str, int], set[str]]],
+        cards: dict[tuple[str, int], LandscapeCard],
+    ) -> None:
+        self._taxonomy = inputs.taxonomy
+        self._caselist = inputs.caselist
+        self._range = in_range
+        self._reads = card_reads
+        self._labelled = labelled
+        self._cards = cards
+        self._matcher = PositionMatcher(inputs.taxonomy, inputs.overrides)
+        self._no_position = frozenset(
+            one.heading for one in inputs.overrides.overrides if one.position_id is None
+        )
+        self._words = caselist_words(inputs.disclosures)
+        files: defaultdict[str, list[LandscapeCard]] = defaultdict(list)
+        for card in inputs.cards:
+            files[card.source_sha256].append(card)
+        self._files = {
+            sha: sorted(found, key=lambda card: card.element_index) for sha, found in files.items()
+        }
+        self._place = {
+            (card.source_sha256, card.element_index): number
+            for found in self._files.values()
+            for number, card in enumerate(found)
+        }
+        self._placing: dict[tuple[str, int], int | None] = {}
+        self._shown: dict[str, dict[str, set[tuple[str, str]]]] = {}
+        self._withheld: dict[str, int] = {}
+
+    # Per card -----------------------------------------------------------------------------------
+
+    def _placing_index(self, card: LandscapeCard) -> int | None:
+        key = (card.source_sha256, card.element_index)
+        if key not in self._placing:
+            self._placing[key] = self._matcher.placing_index(card.headings)
+        return self._placing[key]
+
+    def _sub_headings(self, card: LandscapeCard) -> tuple[SubHeading, ...]:
+        index = self._placing_index(card)
+        if index is None:
+            return ()
+        return tuple(
+            SubHeading(text, card.answers(number))
+            for number, text in enumerate(card.headings)
+            if number > index
+        )
+
+    def _section(self, card: LandscapeCard) -> tuple[tuple[str, bool], ...] | None:
+        """The headings down to the placing one: the position heading a card sits under in its file."""
+        index = self._placing_index(card)
+        if index is None:
+            return None
+        return tuple((card.headings[number], card.answers(number)) for number in range(index + 1))
+
+    def _roles(self, card: LandscapeCard, kind: PositionKind) -> frozenset[ChainRole]:
+        return card_roles(self._sub_headings(card), card.headings, card.tag, kind)
+
+    def _teams(self, rounds: Iterable[str]) -> set[tuple[str, str]]:
+        return {team for one in rounds if (team := self._range.rounds[one].team) is not None}
+
+    # Per position -------------------------------------------------------------------------------
+
+    def _names(self, position_id: str) -> dict[str, set[tuple[str, str]]]:
+        """The scenario names a position shows, with their teams: two or more teams, none withheld."""
+        if position_id not in self._shown:
+            kind = self._taxonomy.position(position_id).kind
+            teams: defaultdict[str, set[tuple[str, str]]] = defaultdict(set)
+            for key, rounds in self._reads.get(position_id, {}).items():
+                card = self._cards.get(key)
+                if card is None:
+                    continue
+                name = card_scenario(self._sub_headings(card), kind, self._no_position).name
+                if name is not None:
+                    teams[name] |= self._teams(rounds)
+            used = {name: found for name, found in teams.items() if len(found) >= 2}
+            withheld = {name for name in used if is_withheld(name, self._words)}
+            self._withheld[position_id] = len(withheld)
+            self._shown[position_id] = {name: found for name, found in used.items() if name not in withheld}
+        return self._shown[position_id]
+
+    def chain(self, stats: PositionStats) -> list[ChainCard]:
+        """The position's most-read card for each role a team labelled, in role order."""
+        found: list[ChainCard] = []
+        counted = self._reads.get(stats.position_id, {})
+        for role in CHAIN_ROLES[stats.kind]:
+            if role is ChainRole.IMPACT:
+                reads = self._labelled.get(stats.position_id, {})
+            else:
+                reads = {
+                    key: rounds
+                    for key, rounds in counted.items()
+                    if (card := self._cards.get(key)) is not None and role in self._roles(card, stats.kind)
+                }
+            for top in _ranked(
+                TopCard, stats.position_id, reads, self._cards, self._range, self._caselist, 1
+            ):
+                found.append(ChainCard(**top.model_dump(), role=role))
+        return found
+
+    # Per impact row -----------------------------------------------------------------------------
+
+    def with_lead_in(self, row: ImpactCard) -> ImpactCard:
+        """The row with its scenario and its labelled internal link, or else the card above it."""
+        kind = self._taxonomy.position(row.position_id).kind
+        names = self._names(row.position_id)
+        scenario: defaultdict[str, set[tuple[str, str]]] = defaultdict(set)
+        link: defaultdict[str, set[tuple[str, str]]] = defaultdict(set)
+        above: defaultdict[str, set[tuple[str, str]]] = defaultdict(set)
+        for key, rounds in self._labelled.get(row.position_id, {}).items():
+            card = self._cards.get(key)
+            if card is None or card.cluster_id != row.fingerprint:
+                continue
+            teams = self._teams(rounds)
+            name = card_scenario(self._sub_headings(card), kind, self._no_position).name
+            if name is not None and name in names:
+                scenario[name] |= teams
+            tag = self._internal_link_tag(card, row.position_id, kind)
+            if tag is not None:
+                link[tag] |= teams
+            tag = self._card_above_tag(card)
+            if tag is not None:
+                above[tag] |= teams
+        internal_link = _most_teams(link)
+        return row.model_copy(
+            update={
+                "scenario": _most_teams(scenario),
+                "internal_link_tag": internal_link,
+                "card_above_tag": None if internal_link is not None else _most_teams(above),
+            }
+        )
+
+    def _internal_link_tag(self, card: LandscapeCard, position_id: str, kind: PositionKind) -> str | None:
+        """The tag of the nearest card above `card` under its position heading, counted and labelled IL."""
+        section = self._section(card)
+        if section is None:
+            return None
+        counted = self._reads.get(position_id, {})
+        file = self._files[card.source_sha256]
+        for prior in reversed(file[: self._place[(card.source_sha256, card.element_index)]]):
+            if self._section(prior) != section:
+                return None
+            if (prior.source_sha256, prior.element_index) not in counted:
+                continue
+            if ChainRole.INTERNAL_LINK in self._roles(prior, kind):
+                return prior.tag
+        return None
+
+    def _card_above_tag(self, card: LandscapeCard) -> str | None:
+        """The tag of the card directly above `card` in its block, unless that card is an impact card."""
+        number = self._place[(card.source_sha256, card.element_index)]
+        if number == 0:
+            return None
+        prior = self._files[card.source_sha256][number - 1]
+        same_block = prior.headings == card.headings and all(
+            prior.answers(index) == card.answers(index) for index in range(len(card.headings))
+        )
+        if not same_block or _is_impact(prior):
+            return None
+        return prior.tag
+
+    # Per kind -----------------------------------------------------------------------------------
+
+    def coverage(
+        self,
+        kind: PositionKind,
+        positions: Sequence[PositionStats],
+        impact_cards: Sequence[ImpactCard],
+        chain_cards: Sequence[ChainCard],
+    ) -> ChainCoverage:
+        """What the kind's scenarios and chains could not see, and what its rows show."""
+        listed = [stats.position_id for stats in positions if stats.kind is kind]
+        documents: set[str] = set()
+        structured: set[str] = set()
+        for position_id, reads in self._reads.items():
+            if self._taxonomy.position(position_id).kind is not kind:
+                continue
+            for key in reads:
+                documents.add(key[0])
+                card = self._cards.get(key)
+                if card is None or key[0] in structured:
+                    continue
+                if card_scenario(self._sub_headings(card), kind, self._no_position).heading or self._roles(
+                    card, kind
+                ):
+                    structured.add(key[0])
+        rows = [row for row in impact_cards if row.position_id in listed]
+        for position_id in listed:
+            self._names(position_id)
+        filled = {(card.position_id, card.role) for card in chain_cards}
+        return ChainCoverage(
+            kind=kind,
+            documents=len(documents),
+            unstructured_documents=len(documents - structured),
+            positions=len(listed),
+            impact_rows=len(rows),
+            rows_with_scenario=sum(row.scenario is not None for row in rows),
+            rows_with_internal_link=sum(row.internal_link_tag is not None for row in rows),
+            rows_with_card_above=sum(row.card_above_tag is not None for row in rows),
+            withheld_names=sum(self._withheld[position_id] for position_id in listed),
+            roles_without_card=tuple(
+                RoleGap(role=role, positions=sum((one, role) not in filled for one in listed))
+                for role in CHAIN_ROLES[kind]
+            ),
+        )
+
+
+def _most_teams(found: Mapping[str, set[tuple[str, str]]]) -> str | None:
+    """The key the most teams carry, ties to the first in text order; None when there is none."""
+    if not found:
+        return None
+    return min(found, key=lambda one: (-len(found[one]), one))
 
 
 def _is_impact(card: LandscapeCard | None) -> bool:

@@ -145,6 +145,8 @@ grep -E '^  # ' /tmp/caselist-credentials-plan.txt | grep -v 'module.caselist_ru
 (`/tmp/caselist-credentials-plan.txt`) to the PM before step 2. If the first `grep` prints no
 `Plan:` line at all, the plan failed: read the end of the file, fix what it says, and plan again.
 
+**In a fresh environment** (prod, or a dev with none of this applied):
+
 * The first `grep` must print exactly `Plan: 17 to add, 0 to change, 0 to destroy.`, and **no line
   saying `must be replaced` or `will be destroyed`**. A destroyed or replaced
   `aws_ssoadmin_account_assignment` or `aws_ssoadmin_permission_set` anywhere means
@@ -155,6 +157,70 @@ grep -E '^  # ' /tmp/caselist-credentials-plan.txt | grep -v 'module.caselist_ru
   `DebateDevCaselistSecretWriter` permission set, its inline policy and one account assignment.
 * There is **no `aws_secretsmanager_secret_version`**: both secrets are created empty, and no value
   is ever in state.
+
+**In dev, re-planning after the partial apply of 2026-10-24.** The first apply in dev created 8 of
+the 17 (both roles, both roles' `policy_attachments_exclusive`, the key, the alias, the permission set
+and its assignment) and stopped at the two `CreateSecret` calls: the key policy did not yet let
+break-glass encrypt under the key, which creating a secret needs. With the fix merged, the re-plan
+creates the other 9 and changes the key's policy in place. The two `grep`s above still apply; the
+first must print exactly `Plan: 9 to add, 1 to change, 0 to destroy.` and no `must be replaced` or
+`will be destroyed`, and the second nothing. Then this block checks the plan itself, and prints
+`PLAN STOP` with the reason for anything but exactly that:
+
+**Operator command** (expected runtime ~1 min)
+Where: `$WT`
+```bash
+cd "$WT"
+AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev show -json caselist-credentials.tfplan > /tmp/caselist-credentials-plan.json
+python3 -I - /tmp/caselist-credentials-plan.json <<'PLANCHECK'
+import json, sys
+plan = json.load(open(sys.argv[1]))
+key = "module.caselist_run.aws_kms_key.credentials"
+expected_creates = {
+    "module.caselist_run.aws_secretsmanager_secret.tabroom_password",
+    "module.caselist_run.aws_secretsmanager_secret.token",
+    "module.caselist_run.aws_secretsmanager_secret_policy.tabroom_password",
+    "module.caselist_run.aws_secretsmanager_secret_policy.token",
+    "module.caselist_run.aws_iam_role_policy.login",
+    "module.caselist_run.aws_iam_role_policy.run_credentials",
+    "module.caselist_run.aws_iam_role_policies_exclusive.login",
+    "module.caselist_run.aws_iam_role_policies_exclusive.run",
+    "module.caselist_run.aws_ssoadmin_permission_set_inline_policy.credential_writer[0]",
+}
+def unknown(value):
+    if value is True:
+        return True
+    if isinstance(value, dict):
+        return any(unknown(v) for v in value.values())
+    if isinstance(value, list):
+        return any(unknown(v) for v in value)
+    return False
+changes = [c for c in plan.get("resource_changes", []) if c["change"]["actions"] not in (["no-op"], ["read"])]
+creates = {c["address"] for c in changes if c["change"]["actions"] == ["create"]}
+updates = [c for c in changes if c["change"]["actions"] == ["update"]]
+others = sorted(c["address"] + " " + "/".join(c["change"]["actions"]) for c in changes if c["change"]["actions"] not in (["create"], ["update"]))
+problems = []
+if creates != expected_creates:
+    problems.append("creates missing " + str(sorted(expected_creates - creates)) + ", unexpected " + str(sorted(creates - expected_creates)))
+if [u["address"] for u in updates] != [key]:
+    problems.append("updates are " + str(sorted(u["address"] for u in updates)) + ", expected only " + key)
+else:
+    change = updates[0]["change"]
+    before, after = change["before"] or {}, change["after"] or {}
+    changed = sorted(k for k in set(before) | set(after) if before.get(k) != after.get(k))
+    unknowns = sorted(k for k, v in (change.get("after_unknown") or {}).items() if unknown(v))
+    if changed != ["policy"] or unknowns:
+        problems.append("the key changes " + str(changed) + " with unknown " + str(unknowns) + ", expected only policy")
+if others:
+    problems.append("other actions " + str(others))
+print("PLAN OK: 9 to create, the key's policy updated in place, nothing else" if not problems else "PLAN STOP: " + "; ".join(problems))
+PLANCHECK
+```
+Success looks like `PLAN OK: 9 to create, the key's policy updated in place, nothing else`. The 9
+are both secrets, both secret policies, both roles' inline policies, both `policies_exclusive` and
+the permission set's inline policy; the 1 is `module.caselist_run.aws_kms_key.credentials`, updated
+in place with only its `policy` changing. **`PLAN STOP` stops everything**: send its line and the
+plan to the PM, and do not apply.
 
 ## Step 2 — Apply the saved plan
 
@@ -167,13 +233,69 @@ cd "$WT"
 AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev apply -input=false caselist-credentials.tfplan
 AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev output caselist_secret_writer_permission_set_name
 ```
-Success looks like `Apply complete! Resources: 17 added, 0 changed, 0 destroyed.` and then
-`"DebateDevCaselistSecretWriter"`. A stale plan (`Saved plan is stale`) means something changed in
-between: go back to step 1.
+Success looks like `Apply complete! Resources: 17 added, 0 changed, 0 destroyed.` in a fresh
+environment, or `Apply complete! Resources: 9 added, 1 changed, 0 destroyed.` for dev's re-plan, and
+then `"DebateDevCaselistSecretWriter"`. A stale plan (`Saved plan is stale`) means something changed
+in between: go back to step 1.
 
-**If the apply stops at the key** with `MalformedPolicyDocumentException` about the policy not
-letting the caller update it later, the identity is not `DebateBreakGlassAdmin`'s role: check the
-`sts get-caller-identity` line above. Nothing was created; plan again once it is.
+**`MalformedPolicyDocumentException` at the key is usually IAM catching up.** The key policy names
+the login and run roles, which the same apply created seconds earlier, and KMS refuses a principal
+IAM has not yet propagated. The provider retries this by itself: on 2026-10-24 it retried four
+times in about four seconds and then created the key, so it needs nothing. Only an error that
+**persists**, ending the apply at the key and saying the policy would not let the caller update it
+later, means the identity is not `DebateBreakGlassAdmin`'s role: check the `sts
+get-caller-identity` line above, and plan again once it is.
+
+**If an apply stops partway**, recover only by re-planning from the same worktree: move it to
+`origin/dev` again (the second block of [Before you start](#before-you-start), which runs `git
+switch --detach origin/dev`), then step 1 from the top, and read the new counts with the PM before
+applying. Never `-target`, and never create or delete a resource by hand: the saved plan from the
+same configuration is what keeps the state and the account in step.
+
+**If `CreateSecret` is refused again.** Creating a secret under this key has Secrets Manager
+validate the caller's access to it: one `GenerateDataKey` and one `Decrypt` as the caller, with
+`SecretVersionId` the literal `RequestToValidateKeyAccess`, whose results are discarded ("Validating
+access to the KMS key" in [Secret encryption and decryption in AWS Secrets
+Manager](https://docs.aws.amazon.com/secretsmanager/latest/userguide/security-encryption.html)). The
+key policy allows break-glass exactly those two calls and denies it every other decrypt; the first
+run in dev was refused at the `GenerateDataKey`, before the policy allowed them. A refusal now means
+a call reached KMS in a shape the policy does not expect. Do not change the policy or the secrets by
+hand: pull the KMS events of the minute the apply failed, with `REFUSED_FROM` and `REFUSED_TO` a
+couple of minutes either side of the error's time, and send the PM what it prints: each call's
+action, its result, and the `SecretVersionId` it carried.
+
+**Operator command** (expected runtime ~1 min)
+Where: `$WT`
+```bash
+cd "$WT"
+REFUSED_FROM='2026-10-24T22:14:00Z'
+REFUSED_TO='2026-10-24T22:17:00Z'
+aws cloudtrail lookup-events --profile debate-admin --region us-east-1 \
+  --lookup-attributes AttributeKey=EventSource,AttributeValue=kms.amazonaws.com \
+  --start-time "$REFUSED_FROM" --end-time "$REFUSED_TO" --output json > /tmp/caselist-kms-events.json
+python3 -I - /tmp/caselist-kms-events.json <<'KMSEVENTS'
+import json, sys
+events = json.load(open(sys.argv[1])).get("Events", [])
+print(str(len(events)) + " KMS events")
+for event in events:
+    detail = json.loads(event["CloudTrailEvent"])
+    context = (detail.get("requestParameters") or {}).get("encryptionContext") or {}
+    issuer = ((detail.get("userIdentity") or {}).get("sessionContext") or {}).get("sessionIssuer") or {}
+    print(" ".join([
+        str(detail.get("eventTime")),
+        str(detail.get("eventName")),
+        str(detail.get("errorCode", "ok")),
+        "invokedBy=" + str(detail.get("invokedBy", "-")),
+        "role=" + str(issuer.get("userName", "-")),
+        "SecretVersionId=" + str(context.get("SecretVersionId", "-")),
+        "SecretARN=" + str(context.get("SecretARN", "-")).rsplit(":", 1)[-1],
+    ]))
+KMSEVENTS
+```
+Success looks like `N KMS events` with N above zero, then one line per call: its time, its action
+(`GenerateDataKey` or `Decrypt`), `ok` or the error code, the service that made it, the role and the
+`SecretVersionId`. `0 KMS events` does not mean nothing was refused: CloudTrail takes up to about five
+minutes to deliver an event, or the window missed it, so wait or widen the window and run it again.
 
 ## Step 3 — The coach writes the Tabroom password
 

@@ -37,9 +37,20 @@ ADR-0020 (2), enforced three times over, so that no single policy left off widen
 | Change who may read (policy, key, rotation, deletion, replication) | `DebateBreakGlassAdmin` only | `DebateBreakGlassAdmin` only |
 
 * **The key policy** delegates nothing to IAM. The account appears only together with a principal
-  pattern (break-glass for administration, the writer for encryption), and three denies refuse a
-  decrypt of the password to all but the login role, of the token to all but the run role, and of
-  anything to all but those two. Grants and re-encryption are refused to everyone.
+  pattern (break-glass for administration and key validation, the writer for encryption), and three
+  denies refuse a decrypt of the password to all but the login role, of the token to all but the run
+  role, and of anything to all but those two, each also exempting break-glass's pattern. A fourth
+  deny then refuses break-glass every decrypt whose `SecretVersionId` is not
+  `RequestToValidateKeyAccess`. Grants and re-encryption are refused to everyone.
+* **Break-glass validates the key, and reads nothing.** Terraform creates the secrets as break-glass,
+  and Secrets Manager checks a caller's access to a secret's key with a `GenerateDataKey` and a
+  `Decrypt` as the caller, `SecretVersionId` the literal `RequestToValidateKeyAccess`, and discards
+  the results ("Validating access to the KMS key" in [Secret encryption and decryption in AWS
+  Secrets Manager](https://docs.aws.amazon.com/secretsmanager/latest/userguide/security-encryption.html)).
+  Break-glass is allowed exactly those two calls, through Secrets Manager, for the two secrets. A
+  stored version's data key is bound to its own `SecretVersionId`, so a decrypt that must carry the
+  validation id cannot open a password or a token. Without them the first apply in dev (2026-10-24)
+  could not create the secrets.
 * **Each secret's resource policy** only refuses: reads to all but its one reader, writes to all
   but its writers, and every administrative action to all but break-glass.
 * **Each role's IAM policy** names exactly its own secret and context.
@@ -65,5 +76,6 @@ terraform -chdir=infrastructure/modules/caselist_run init -backend=false
 terraform -chdir=infrastructure/modules/caselist_run test
 ```
 
-The read rules were checked by mutation: 22 mutants that widen or drop one rule each, every one
-caught by a failing assertion (the task's session report lists them).
+The read rules were checked by mutation: 22 mutants that widen or drop one rule each, then 14 more
+on break-glass's key validation (narrowing, widening or dropping each of its statements and the
+split denies), every one caught by a failing assertion (the task's session report lists them).

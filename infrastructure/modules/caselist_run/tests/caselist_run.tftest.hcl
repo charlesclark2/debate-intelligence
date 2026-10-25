@@ -180,29 +180,47 @@ run "only_the_login_role_decrypts_the_password_and_only_the_run_role_the_token" 
   command = apply
 
   assert {
-    # Every Allow of kms:Decrypt, by principal, principal pattern and the secret its context names.
-    # JSON-encoded, so a statement of any shape compares rather than failing to.
+    # Every Allow of kms:Decrypt, by principal, principal pattern, service, secret and version id.
+    # JSON-encoded, so a statement of any shape compares rather than failing to. The login role
+    # decrypts the password and the run role the token, any version; break-glass decrypts only to
+    # validate the key (SecretVersionId RequestToValidateKeyAccess), which opens no stored version.
     condition = toset([
       for statement in jsondecode(aws_kms_key.credentials.policy).Statement :
       jsonencode({
         principal = statement.Principal.AWS
         pattern   = try(statement.Condition.ArnLike["aws:PrincipalArn"], null)
+        service   = try(statement.Condition.StringEquals["kms:ViaService"], null)
         secret    = try(statement.Condition.StringLike["kms:EncryptionContext:SecretARN"], null)
+        version   = try(statement.Condition.StringEquals["kms:EncryptionContext:SecretVersionId"], null)
       })
       if statement.Effect == "Allow" && contains(flatten([statement.Action]), "kms:Decrypt")
       ]) == toset([
       jsonencode({
         principal = "arn:aws:iam::111122223333:role/debate-mock-caselist-login"
         pattern   = null
+        service   = "secretsmanager.us-east-1.amazonaws.com"
         secret    = "arn:aws:secretsmanager:us-east-1:111122223333:secret:debate-mock-caselist-tabroom-password-??????"
+        version   = null
       }),
       jsonencode({
         principal = "arn:aws:iam::111122223333:role/debate-mock-caselist-run"
         pattern   = null
+        service   = "secretsmanager.us-east-1.amazonaws.com"
         secret    = "arn:aws:secretsmanager:us-east-1:111122223333:secret:debate-mock-caselist-token-??????"
+        version   = null
+      }),
+      jsonencode({
+        principal = "arn:aws:iam::111122223333:root"
+        pattern   = "arn:aws:iam::111122223333:role/aws-reserved/sso.amazonaws.com/*AWSReservedSSO_DebateBreakGlassAdmin_*"
+        service   = "secretsmanager.us-east-1.amazonaws.com"
+        secret = [
+          "arn:aws:secretsmanager:us-east-1:111122223333:secret:debate-mock-caselist-tabroom-password-??????",
+          "arn:aws:secretsmanager:us-east-1:111122223333:secret:debate-mock-caselist-token-??????",
+        ]
+        version = "RequestToValidateKeyAccess"
       }),
     ])
-    error_message = "The key may let the login role decrypt the password and the run role the token, and nobody else decrypt anything."
+    error_message = "The key may let the login role decrypt the password, the run role the token, and break-glass only validate the key; nobody else decrypts anything."
   }
 
   assert {
@@ -211,8 +229,10 @@ run "only_the_login_role_decrypts_the_password_and_only_the_run_role_the_token" 
       statement.Effect == "Deny" && statement.Principal.AWS == "*" && flatten([statement.Action]) == ["kms:Decrypt"]
       && try(statement.Condition.StringLike["kms:EncryptionContext:SecretARN"], "") == "arn:aws:secretsmanager:us-east-1:111122223333:secret:debate-mock-caselist-tabroom-password-??????"
       && try(statement.Condition.ArnNotEquals["aws:PrincipalArn"], "") == "arn:aws:iam::111122223333:role/debate-mock-caselist-login"
+      && try(statement.Condition.ArnNotLike["aws:PrincipalArn"], "") == "arn:aws:iam::111122223333:role/aws-reserved/sso.amazonaws.com/*AWSReservedSSO_DebateBreakGlassAdmin_*"
+      && toset(keys(statement.Condition)) == toset(["StringLike", "ArnNotEquals", "ArnNotLike"])
     ])
-    error_message = "The key policy must deny decrypting the password to every principal but the login role."
+    error_message = "The key policy must deny decrypting the password to every principal but the login role and break-glass (whose decrypts the validation deny limits)."
   }
 
   assert {
@@ -221,8 +241,10 @@ run "only_the_login_role_decrypts_the_password_and_only_the_run_role_the_token" 
       statement.Effect == "Deny" && statement.Principal.AWS == "*" && flatten([statement.Action]) == ["kms:Decrypt"]
       && try(statement.Condition.StringLike["kms:EncryptionContext:SecretARN"], "") == "arn:aws:secretsmanager:us-east-1:111122223333:secret:debate-mock-caselist-token-??????"
       && try(statement.Condition.ArnNotEquals["aws:PrincipalArn"], "") == "arn:aws:iam::111122223333:role/debate-mock-caselist-run"
+      && try(statement.Condition.ArnNotLike["aws:PrincipalArn"], "") == "arn:aws:iam::111122223333:role/aws-reserved/sso.amazonaws.com/*AWSReservedSSO_DebateBreakGlassAdmin_*"
+      && toset(keys(statement.Condition)) == toset(["StringLike", "ArnNotEquals", "ArnNotLike"])
     ])
-    error_message = "The key policy must deny decrypting the token to every principal but the run role."
+    error_message = "The key policy must deny decrypting the token to every principal but the run role and break-glass (whose decrypts the validation deny limits)."
   }
 
   assert {
@@ -231,8 +253,10 @@ run "only_the_login_role_decrypts_the_password_and_only_the_run_role_the_token" 
       statement.Effect == "Deny" && statement.Principal.AWS == "*" && flatten([statement.Action]) == ["kms:Decrypt"]
       && !can(statement.Condition.StringLike)
       && toset(try(statement.Condition.ArnNotEquals["aws:PrincipalArn"], [])) == toset(["arn:aws:iam::111122223333:role/debate-mock-caselist-login", "arn:aws:iam::111122223333:role/debate-mock-caselist-run"])
+      && try(statement.Condition.ArnNotLike["aws:PrincipalArn"], "") == "arn:aws:iam::111122223333:role/aws-reserved/sso.amazonaws.com/*AWSReservedSSO_DebateBreakGlassAdmin_*"
+      && toset(keys(statement.Condition)) == toset(["ArnNotEquals", "ArnNotLike"])
     ])
-    error_message = "The key policy must deny every decrypt to every principal but the login and run roles (ADR-0020 (2))."
+    error_message = "The key policy must deny every decrypt to every principal but the login and run roles and break-glass (ADR-0020 (2))."
   }
 
   assert {
@@ -654,5 +678,99 @@ run "a_paused_schedule_is_disabled_not_destroyed" {
   assert {
     condition     = length(aws_scheduler_schedule.login) == 1 && aws_scheduler_schedule.login[0].state == "DISABLED"
     error_message = "login_schedule_enabled = false keeps the schedule, disabled."
+  }
+}
+
+# ---------------------------------------------------------------------------------------------
+# Break-glass creates the secrets: it may validate the key, and decrypts no stored version
+# ---------------------------------------------------------------------------------------------
+#
+# CreateSecret has Secrets Manager validate the caller's access to the key with a GenerateDataKey
+# and a Decrypt as the caller, SecretVersionId "RequestToValidateKeyAccess" ("Validating access to
+# the KMS key", https://docs.aws.amazon.com/secretsmanager/latest/userguide/security-encryption.html).
+# The apply runs as break-glass, and its first run in dev was refused at that GenerateDataKey.
+
+run "break_glass_may_only_validate_the_key_and_decrypts_no_stored_version" {
+  command = apply
+
+  assert {
+    # 1. Exactly two break-glass grants beyond administration: GenerateDataKey and Decrypt, each
+    #    with the validation version id, through Secrets Manager, for the two secrets.
+    condition = toset([
+      for statement in jsondecode(aws_kms_key.credentials.policy).Statement :
+      jsonencode({
+        action    = statement.Action
+        principal = statement.Principal.AWS
+        service   = try(statement.Condition.StringEquals["kms:ViaService"], null)
+        version   = try(statement.Condition.StringEquals["kms:EncryptionContext:SecretVersionId"], null)
+        secrets   = try(toset(flatten([statement.Condition.StringLike["kms:EncryptionContext:SecretARN"]])), null)
+        keys      = sort(keys(statement.Condition))
+      })
+      if statement.Effect == "Allow" && try(statement.Condition.ArnLike["aws:PrincipalArn"], "") == "arn:aws:iam::111122223333:role/aws-reserved/sso.amazonaws.com/*AWSReservedSSO_DebateBreakGlassAdmin_*" && statement.Sid != "KeyAdministrationByBreakGlassOnly"
+      ]) == toset([for action in ["kms:GenerateDataKey", "kms:Decrypt"] : jsonencode({
+        action    = action
+        principal = "arn:aws:iam::111122223333:root"
+        service   = "secretsmanager.us-east-1.amazonaws.com"
+        version   = "RequestToValidateKeyAccess"
+        secrets = toset([
+          "arn:aws:secretsmanager:us-east-1:111122223333:secret:debate-mock-caselist-tabroom-password-??????",
+          "arn:aws:secretsmanager:us-east-1:111122223333:secret:debate-mock-caselist-token-??????",
+        ])
+        keys = ["ArnLike", "StringEquals", "StringLike"]
+    })])
+    error_message = "Break-glass may GenerateDataKey and Decrypt only to validate the key: SecretVersionId RequestToValidateKeyAccess, through Secrets Manager, for the two secrets."
+  }
+
+  assert {
+    # 2. Break-glass is denied any decrypt with another SecretVersionId, or none, for any secret.
+    condition = anytrue([
+      for statement in jsondecode(aws_kms_key.credentials.policy).Statement :
+      statement.Effect == "Deny" && statement.Principal.AWS == "*" && flatten([statement.Action]) == ["kms:Decrypt"]
+      && try(statement.Condition.ArnLike["aws:PrincipalArn"], "") == "arn:aws:iam::111122223333:role/aws-reserved/sso.amazonaws.com/*AWSReservedSSO_DebateBreakGlassAdmin_*"
+      && try(statement.Condition.StringNotEquals["kms:EncryptionContext:SecretVersionId"], "") == "RequestToValidateKeyAccess"
+      && toset(keys(statement.Condition)) == toset(["ArnLike", "StringNotEquals"])
+    ])
+    error_message = "The key policy must deny break-glass every decrypt whose SecretVersionId is not RequestToValidateKeyAccess, whatever the secret."
+  }
+
+  assert {
+    # 3. The login role alone decrypts the password and the run role alone the token: of the
+    #    decrypt allows that do not demand the validation version id, those two and no others.
+    condition = toset([
+      for statement in jsondecode(aws_kms_key.credentials.policy).Statement :
+      "${statement.Principal.AWS} ${jsonencode(try(statement.Condition.StringLike["kms:EncryptionContext:SecretARN"], null))}"
+      if statement.Effect == "Allow" && contains(flatten([statement.Action]), "kms:Decrypt")
+      && try(statement.Condition.StringEquals["kms:EncryptionContext:SecretVersionId"], null) != "RequestToValidateKeyAccess"
+      ]) == toset([
+      "arn:aws:iam::111122223333:role/debate-mock-caselist-login \"arn:aws:secretsmanager:us-east-1:111122223333:secret:debate-mock-caselist-tabroom-password-??????\"",
+      "arn:aws:iam::111122223333:role/debate-mock-caselist-run \"arn:aws:secretsmanager:us-east-1:111122223333:secret:debate-mock-caselist-token-??????\"",
+    ])
+    error_message = "Only the login role may decrypt a stored password, and only the run role a stored token."
+  }
+
+  assert {
+    # 4. No other principal gains a decrypt: across every decrypt deny, the only principals exempted
+    #    are the two roles (ArnNotEquals) and break-glass's pattern (ArnNotLike), which the deny in 2
+    #    holds to the validation.
+    condition = (
+      toset(flatten([
+        for statement in jsondecode(aws_kms_key.credentials.policy).Statement : flatten([try(statement.Condition.ArnNotEquals["aws:PrincipalArn"], [])])
+        if statement.Effect == "Deny" && contains(flatten([statement.Action]), "kms:Decrypt")
+      ])) == toset(["arn:aws:iam::111122223333:role/debate-mock-caselist-login", "arn:aws:iam::111122223333:role/debate-mock-caselist-run"])
+      && toset(flatten([
+        for statement in jsondecode(aws_kms_key.credentials.policy).Statement : flatten([try(statement.Condition.ArnNotLike["aws:PrincipalArn"], [])])
+        if statement.Effect == "Deny" && contains(flatten([statement.Action]), "kms:Decrypt")
+      ])) == toset(["arn:aws:iam::111122223333:role/aws-reserved/sso.amazonaws.com/*AWSReservedSSO_DebateBreakGlassAdmin_*"])
+      && length([
+        for statement in jsondecode(aws_kms_key.credentials.policy).Statement : statement
+        if statement.Effect == "Deny" && contains(flatten([statement.Action]), "kms:Decrypt") && can(statement.Condition.ArnNotEquals)
+      ]) == 3
+      && alltrue([
+        for statement in jsondecode(aws_kms_key.credentials.policy).Statement :
+        !anytrue([for action in flatten([statement.Action]) : startswith(action, "kms:*") || startswith(action, "kms:ReEncrypt") || action == "kms:CreateGrant"])
+        if statement.Effect == "Allow"
+      ])
+    )
+    error_message = "Only the login and run roles, and break-glass's validation, may escape a decrypt deny; three such denies, and no Allow of a wildcard, a grant or a re-encryption."
   }
 }

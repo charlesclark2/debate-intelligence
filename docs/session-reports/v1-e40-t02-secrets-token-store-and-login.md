@@ -41,6 +41,20 @@ from a fresh `caselist-credentials-dev` worktree at `origin/dev`, after checking
 module is in it, with `owner.auto.tfvars`'s block and the plan check unchanged (condition 2); and
 this report's stale parts are updated (condition 3).
 
+**Apply A's first run in dev (2026-10-24), and the fix, resumed in this session.** Run from a fresh
+`origin/dev` worktree at `30ba804`, the apply created 8 of the 17 and destroyed nothing, then both
+`CreateSecret` calls failed with `AccessDeniedException: Access to KMS is not allowed`. Creating a
+secret under a customer-managed key has Secrets Manager call `kms:GenerateDataKey` as the caller,
+and the key policy gave break-glass administration only. The fix, as the PM's second review
+completed it: break-glass may make Secrets Manager's key-validation calls, a `GenerateDataKey` and a
+`Decrypt` with `SecretVersionId` `RequestToValidateKeyAccess`, through Secrets Manager, for the two
+secrets, and is denied every other decrypt (see [Changes after the second
+review](#changes-after-the-second-review)). No other key action and no grant;
+`NoGrantsAndNoReEncryption` is byte-identical to before. The runbook now has the re-plan's exact check (`Plan: 9 to add, 1 to change, 0 to
+destroy.`), a corrected reading of `MalformedPolicyDocumentException`, and how to recover from a
+partial apply. The task merges `--partial` again; the operator re-plans from `caselist-credentials-dev`
+after the merge, and the PM reads the plan first.
+
 ## Plan nodes
 
 | Node | Status | Notes |
@@ -54,8 +68,8 @@ this report's stale parts are updated (condition 3).
 | Node `token-store`: Token store tests pass (`uv run pytest packages/debate_core/tests -k token`) | PASS | `.venv/bin/python -m pytest packages/debate_core/tests -k token -q` under `perl -e 'alarm 115'` → `145 passed in 15.17s` |
 | ac1 — the Secrets Manager backend passes the token store's contract tests with a stubbed client | PASS | `test_token_store_contract.py`: one suite parametrized over the keyring, file and secretsmanager backends (the last over a stubbed client raising botocore's own `ClientError`), plus four Secrets-Manager-only cases (one read per process, a save is one write and no read, built only when named, refused without a secret). Run with `test_token_store.py` → `45 passed in 2.18s` |
 | ac1 — a redaction test shows neither secret reaches a log or an error | PASS | `secrets_manager/test_managed_secret.py` (22 tests) and `commands/test_caselist_auth_secrets_manager.py` (8): every record at DEBUG, botocore's wire loggers included, checked for each secret raw, JSON-escaped once and twice, and by its random core. Two controls show botocore logs both values when the client is bypassed. Against a mutant that turns the quieting off, 10 tests fail and pytest's whole output holds **0** secret-shaped strings; with the harness's guard also off, the same scan finds 11, so it can see them |
-| ac2 — Terraform's tests show only the login role can read the password and only the run role the token, both under the dedicated key | PASS | `terraform -chdir=infrastructure/modules/caselist_run test` → `Success! 13 passed, 0 failed.` Every role and secret has an ARN of its own (`override_resource`). Mutation: 22 of 22 mutants caught (below) |
-| ac2 — the operator applies dev | NOT RUN | After the merge, from a fresh worktree at `origin/dev`, never from this branch (ruling 6); the PM reads the plan before the apply (working agreement 11). Operator follow-ups below |
+| ac2 — Terraform's tests show only the login role can read the password and only the run role the token, both under the dedicated key | PASS | `terraform -chdir=infrastructure/modules/caselist_run test` → `Success! 13 passed, 0 failed.`; with break-glass's key validation, `Success! 14 passed, 0 failed.` (the 14th, `break_glass_may_only_validate_the_key_and_decrypts_no_stored_version`: break-glass may GenerateDataKey and Decrypt only with the validation context, is denied any other decrypt, the login and run roles alone decrypt a stored password and token, and no other principal escapes a deny; against the first fix's policy it fails; mutants below) Every role and secret has an ARN of its own (`override_resource`). Mutation: 22 of 22 mutants caught (below) |
+| ac2 — the operator applies dev | NOT RUN | The first run (2026-10-24, `origin/dev` at `30ba804`) created 8 of 17 and stopped at both `CreateSecret` calls: the key policy did not let break-glass encrypt. Fixed in this branch; the re-plan from `caselist-credentials-dev` follows its merge, read by the PM first. Operator follow-ups below |
 | ac2 — prod at promotion | NOT RUN | At the pilot's promotion, after this branch merges (runbook, "Prod") |
 | ac2 — one scheduled login stores a token (operator) | NOT RUN | Waits for apply B, which needs `v1-e40-t03`'s network and first image (the PM's ruling (2)) |
 | ac3 — Terraform's tests show the writer permission set can write both secrets and read neither | PASS | Runs `the_writer_writes_both_secrets_and_reads_neither` and `each_secret_policy_refuses_a_read_by_anyone_but_its_one_reader` in the 13 above. Mutants "writer may read the secrets" and "writer may decrypt" caught |
@@ -81,6 +95,18 @@ because none of these tests uses Hypothesis, though the Python run set a fresh
   * Role and writer policies (5): the run role reading the password; the login role reading the
     token; the login role reading S3; the writer reading; the writer decrypting.
   * Schedule (1): the schedule retrying.
+* **The break-glass encryption statement** (the apply A fix): 6 mutants, the PM's three (remove
+  the statement; widen it to `kms:*`; drop the `kms:ViaService` condition) and three more (add
+  `kms:Decrypt`; drop the secrets' encryption context; drop the break-glass principal pattern, so any
+  principal in the account). `6 of 6 caught by a false assertion (none skipped); source restored`.
+  The original 22, rerun with the statement in place: `22 of 22 mutants caught`.
+* **Break-glass's key validation** (the second review): the PM's named mutants, drop
+  `SecretVersionId` from break-glass's GenerateDataKey; from its Decrypt; exempt every principal
+  (`ArnNotLike "*"`) from the password deny, the token deny and the general deny (three); drop the
+  break-glass-only deny; the validation Decrypt for any `SecretARN`; and without `kms:ViaService`.
+  With them, the first fix's six, adapted to the statement's new text. `14 of 14 caught by a false
+  assertion (none skipped); source restored`. The original 22, rerun: `22 of 22 mutants caught`, none
+  skipped.
 * **The Python rules**: 16 mutants: set-password without a terminal; set-password printing the
   password; prompting before the secret is checked; a refused login tried again; the alert naming
   the account; the password read before the API is checked; a failure not notified; the token
@@ -211,25 +237,16 @@ registry. Its parts that this change touches are the rows above; CI runs the scr
 
 ## Operator follow-ups
 
-**After the merge: apply A in dev, as the PM ruled (plan, PM reads it, apply, then the coach writes
-the password).** Not from this branch: from a fresh worktree at `origin/dev` that has the merged
-`infrastructure/modules/caselist_run` (ruling 6). These are the runbook's blocks
+**After this fix merges: re-plan apply A in dev, as the PM ruled (plan, PM reads it, apply, then the
+coach writes the password).** Not from this branch: from the `caselist-credentials-dev` worktree,
+moved to `origin/dev` once it holds the fix. These are the runbook's blocks
 ([caselist-cloud-credentials.md](../runbooks/caselist-cloud-credentials.md), "Before you start" and
-steps 1 to 4), with `WT` set to that worktree. Each block's success check is beneath it.
+steps 1 to 4), with `WT` set to that worktree. Each block's success check is beneath it. Dev's state
+holds the 8 resources the first run created; nothing is created or deleted by hand, and nothing is
+`-target`ed.
 
-**1. A fresh worktree at `origin/dev`, and the check that the module is merged in it** (~1 min).
-Made from the kept `dev-preview` worktree, so the main clone is not touched. Skip the `worktree add`
-line if `git worktree list` already shows `caselist-credentials-dev`.
-
-```bash
-cd "$HOME/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/dev-preview"
-git fetch origin
-git worktree add --detach ../caselist-credentials-dev origin/dev
-git worktree list | grep caselist-credentials-dev
-```
-Success looks like a `caselist-credentials-dev` line with `(detached HEAD)`.
-
-Then set `SSO_USER_NAME` to your Identity Center user name:
+**1. The worktree, at `origin/dev` with the fix** (~1 min). The worktree exists from the first run.
+Set `SSO_USER_NAME` to your Identity Center user name:
 
 ```bash
 WT="$HOME/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/caselist-credentials-dev"
@@ -241,10 +258,12 @@ git switch --detach origin/dev
 test -f infrastructure/modules/caselist_run/credentials.tf && test -f infrastructure/envs/dev/caselist_run.tf \
   && echo "ok: $(pwd) at origin/dev $(git rev-parse --short HEAD), caselist_run merged" \
   || echo "NOT MERGED: $(pwd) at origin/dev has no infrastructure/modules/caselist_run; wait for v1-e40-t02 to merge"
+grep -c BreakGlassDecryptsOnlyToValidateTheKey infrastructure/modules/caselist_run/credentials.tf
 git status --porcelain | grep -v 'owner.auto.tfvars' | head -3
 ```
-Success looks like `ok: ... at origin/dev <commit>, caselist_run merged` and nothing after it.
-`NOT MERGED`: stop until the pull request has merged into `dev`.
+Success looks like `ok: ... at origin/dev <commit>, caselist_run merged`, then `1`, and nothing after
+it. A `0` means the fix, with the second review's validation `Decrypt`, has not merged into `dev`
+yet: stop and wait.
 
 **2. Sign in as break-glass** (~1 min).
 
@@ -279,13 +298,71 @@ if env | grep -qE '^(TF_VAR_|TF_WORKSPACE=|TF_DATA_DIR=|TF_CLI_ARGS)'; then echo
 grep -E '^Plan:|must be replaced|will be destroyed' /tmp/caselist-credentials-plan.txt
 grep -E '^  # ' /tmp/caselist-credentials-plan.txt | grep -v 'module.caselist_run' | head
 ```
-What to read: exactly `Plan: 17 to add, 0 to change, 0 to destroy.`, no `must be replaced` or `will
-be destroyed` line, and nothing printed by the last `grep`. The 17 are counted from the module's
-own test state: the key and alias, two secrets and two policies, two roles each with a policy and
-two exclusive-policy resources, and the permission set, its policy and one assignment. **A
-destroyed or replaced `aws_ssoadmin_account_assignment` or `aws_ssoadmin_permission_set` stops
-everything:** fix `owner.auto.tfvars` and plan again, never apply. No `Plan:` line at all means the
-plan failed; read the end of the file.
+What to read: exactly `Plan: 9 to add, 1 to change, 0 to destroy.`, no `must be replaced` or `will
+be destroyed` line, and nothing printed by the last `grep`. **A destroyed or replaced
+`aws_ssoadmin_account_assignment` or `aws_ssoadmin_permission_set` stops everything:** fix
+`owner.auto.tfvars` and plan again, never apply. No `Plan:` line at all means the plan failed; read
+the end of the file. (A fresh environment, such as prod, plans `17 to add, 0 to change, 0 to
+destroy.` instead.)
+
+Then check the plan itself (~1 min). It prints `PLAN STOP` with the reason for anything but the 9
+creates and the key's policy changing in place:
+
+```bash
+cd "$WT"
+AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev show -json caselist-credentials.tfplan > /tmp/caselist-credentials-plan.json
+python3 -I - /tmp/caselist-credentials-plan.json <<'PLANCHECK'
+import json, sys
+plan = json.load(open(sys.argv[1]))
+key = "module.caselist_run.aws_kms_key.credentials"
+expected_creates = {
+    "module.caselist_run.aws_secretsmanager_secret.tabroom_password",
+    "module.caselist_run.aws_secretsmanager_secret.token",
+    "module.caselist_run.aws_secretsmanager_secret_policy.tabroom_password",
+    "module.caselist_run.aws_secretsmanager_secret_policy.token",
+    "module.caselist_run.aws_iam_role_policy.login",
+    "module.caselist_run.aws_iam_role_policy.run_credentials",
+    "module.caselist_run.aws_iam_role_policies_exclusive.login",
+    "module.caselist_run.aws_iam_role_policies_exclusive.run",
+    "module.caselist_run.aws_ssoadmin_permission_set_inline_policy.credential_writer[0]",
+}
+def unknown(value):
+    if value is True:
+        return True
+    if isinstance(value, dict):
+        return any(unknown(v) for v in value.values())
+    if isinstance(value, list):
+        return any(unknown(v) for v in value)
+    return False
+changes = [c for c in plan.get("resource_changes", []) if c["change"]["actions"] not in (["no-op"], ["read"])]
+creates = {c["address"] for c in changes if c["change"]["actions"] == ["create"]}
+updates = [c for c in changes if c["change"]["actions"] == ["update"]]
+others = sorted(c["address"] + " " + "/".join(c["change"]["actions"]) for c in changes if c["change"]["actions"] not in (["create"], ["update"]))
+problems = []
+if creates != expected_creates:
+    problems.append("creates missing " + str(sorted(expected_creates - creates)) + ", unexpected " + str(sorted(creates - expected_creates)))
+if [u["address"] for u in updates] != [key]:
+    problems.append("updates are " + str(sorted(u["address"] for u in updates)) + ", expected only " + key)
+else:
+    change = updates[0]["change"]
+    before, after = change["before"] or {}, change["after"] or {}
+    changed = sorted(k for k in set(before) | set(after) if before.get(k) != after.get(k))
+    unknowns = sorted(k for k, v in (change.get("after_unknown") or {}).items() if unknown(v))
+    if changed != ["policy"] or unknowns:
+        problems.append("the key changes " + str(changed) + " with unknown " + str(unknowns) + ", expected only policy")
+if others:
+    problems.append("other actions " + str(others))
+print("PLAN OK: 9 to create, the key's policy updated in place, nothing else" if not problems else "PLAN STOP: " + "; ".join(problems))
+PLANCHECK
+```
+Success looks like `PLAN OK: 9 to create, the key's policy updated in place, nothing else`. The 9
+are both secrets, both secret policies, both roles' inline policies, both `policies_exclusive` and
+the permission set's inline policy; the 1 is `module.caselist_run.aws_kms_key.credentials`, updated
+in place, with only `policy` changing. `PLAN STOP` stops everything: send its line and the plan to
+the PM, and do not apply. The check was tested against nine plan shapes (the expected one and eight
+wrong ones: a tenth create, a missing create, the key replaced, its tags changing, its policy
+unknown, a second update, an assignment destroyed, the key unchanged); only the expected one prints
+`PLAN OK`.
 
 **5. After the PM's word: apply the saved plan** (~2 min).
 
@@ -294,9 +371,13 @@ cd "$WT"
 AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev apply -input=false caselist-credentials.tfplan
 AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev output caselist_secret_writer_permission_set_name
 ```
-Success looks like `Apply complete! Resources: 17 added, 0 changed, 0 destroyed.` and
-`"DebateDevCaselistSecretWriter"`. A `MalformedPolicyDocumentException` at the key means the caller
-is not break-glass's role, and nothing was created.
+Success looks like `Apply complete! Resources: 9 added, 1 changed, 0 destroyed.` and
+`"DebateDevCaselistSecretWriter"`. **If it stops partway**, re-plan from this worktree after
+`git switch --detach origin/dev` (block 1), then blocks 4 and 5 with the PM reading the new counts;
+never `-target`, never by hand. A `MalformedPolicyDocumentException` that the provider retries and
+then gets past is IAM catching up with a role created seconds earlier (four retries in about four
+seconds on 2026-10-24); only one that persists and ends the apply means the caller is not
+break-glass's role.
 
 **6. The coach writes the password.** First the worktree's environment, which `set-password` runs
 from (~1 min):
@@ -418,6 +499,48 @@ v1-e40-t02 questions (session report: docs/session-reports/v1-e40-t02-secrets-to
    B's first Wednesday login has written a token and prod is applied at promotion.
 ```
 
+## Changes after the second review
+
+The PM's second review (2026-10-24, changes requested) found that the first fix covered only half of
+what `CreateSecret` asks KMS for. AWS documents it in "Validating access to the KMS key", in [Secret
+encryption and decryption in AWS Secrets
+Manager](https://docs.aws.amazon.com/secretsmanager/latest/userguide/security-encryption.html):
+when a secret's key is set, Secrets Manager calls both `GenerateDataKey` and `Decrypt` as the
+caller, with `SecretARN` the secret's ARN and `SecretVersionId` the literal
+`RequestToValidateKeyAccess`, and discards the results. The page answers the question the first
+fix's evidence hand-off was to settle (does the call carry `SecretARN`): it does, so the `SecretARN`
+condition stays, and that hand-off is withdrawn. Changes 1 to 5, in `254fa53` and the commit after it:
+
+1. **`BreakGlassEncryptsWhenCreatingTheTwoSecrets` is narrowed to validation:** `StringEquals
+   kms:EncryptionContext:SecretVersionId = RequestToValidateKeyAccess`, beside `kms:ViaService`.
+2. **`BreakGlassDecryptsOnlyToValidateTheKey`**, one Allow: `kms:Decrypt`, break-glass's
+   `aws:PrincipalArn` pattern (the account root as principal), `kms:ViaService` Secrets Manager in
+   this region, `SecretARN` like the two secrets' patterns, `SecretVersionId` the validation id.
+3. **The decrypt denies are split.** Each of the three existing denies keeps its `ArnNotEquals` for
+   its reader roles and gains `ArnNotLike` for break-glass's pattern (`aws:PrincipalArn` with both
+   operators, ANDed). One new deny, `BreakGlassDecryptsNothingButTheValidation`, refuses break-glass
+   every decrypt whose `SecretVersionId` is not the validation id (`StringNotEquals`, true also when
+   the key is missing), for any secret. It is the union of the three break-glass halves the PM
+   described, since the general deny's half has no `SecretARN` condition and so covers the other
+   two: the four exempt exactly break-glass's validation and nothing wider. The module's comment
+   explains the shape. `NoGrantsAndNoReEncryption` is byte-identical.
+4. **Tests and mutations.** The 14th run is replaced by
+   `break_glass_may_only_validate_the_key_and_decrypts_no_stored_version`, which shows the four
+   properties asked for. The decrypt-allow set in the first key-policy run now encodes each
+   statement's service and version id, and the three split denies are checked for exactly their
+   exemptions. `Success! 14 passed, 0 failed.`; against the first fix's policy, `Failure! 12
+   passed, 2 failed.` (false assertions, none skipped). Mutants: `14 of 14` and the original
+   `22 of 22` caught, as listed under Acceptance criteria.
+5. **Runbook and report.** The re-plan's counts are the same (`9 to add, 1 to change, 0 to
+   destroy`, only the key's `policy` changing), so the plan check is unchanged; block 1 above now
+   greps for the validation `Decrypt`, so a `dev` holding only the first fix stops. The runbook's
+   partial-apply note adds the validation reading and, if `CreateSecret` is refused again, a block
+   that pulls CloudTrail's KMS events for that minute and prints each call's action, result and
+   `SecretVersionId` for the PM (tested offline against sample events, a missing-field event and an
+   empty window). The page is cited in `credentials.tf`, the module README, the runbook and here.
+
+Stopped here for the PM's third review, as asked: no pull request is opened.
+
 ## PM review
 
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
@@ -476,3 +599,129 @@ promotion) are recorded by the PM, who sets the Goal `Succeeded` after the first
 has written a token and prod is applied.
 
 If anything comes out differently, stop and ask for another review.
+
+## PM review, second
+
+**Verdict:** CHANGES_REQUESTED
+<!-- ACCEPTED / CHANGES_REQUESTED -->
+
+**Reviewed by / date:** PM (Claude), 2026-10-24
+
+**Notes:**
+
+The fix is well made, but it covers only half of what `CreateSecret` asks KMS for. The re-apply
+would fail again, at the next call.
+
+1. **What AWS documents.** In "Secret encryption and decryption in AWS Secrets Manager"
+   (https://docs.aws.amazon.com/secretsmanager/latest/userguide/security-encryption.html),
+   under "Validating access to the KMS key": when a secret's KMS key is established or changed,
+   Secrets Manager calls **both `GenerateDataKey` and `Decrypt`** as the caller, to confirm the
+   caller may use the key, and discards the results. In those validation requests, the encryption
+   context's `SecretARN` is the secret's real ARN and its `SecretVersionId` is the literal
+   `RequestToValidateKeyAccess`.
+2. **What that means here.** The first apply was refused at `GenerateDataKey`, so the `Decrypt`
+   was never reached. With `BreakGlassEncryptsWhenCreatingTheTwoSecrets` in place, the next call
+   is break-glass's validation `Decrypt`. No statement allows it, and `NobodyElseDecryptsAnything`
+   (and, for the password, `NobodyButTheLoginRoleDecryptsThePassword`) denies it explicitly. Both
+   `CreateSecret` calls would fail as before. The PM's context asked for this page to be cited
+   before the context condition was kept. The report doesn't cite it, and the page has the answer.
+3. **What is safe to allow.** A KMS ciphertext can be decrypted only with the encryption context it
+   was made under. A validation data key is made under `SecretVersionId = RequestToValidateKeyAccess`
+   and thrown away. Every real secret version's data key is bound to its own version id. So a
+   `Decrypt` that requires `SecretVersionId = RequestToValidateKeyAccess` can never open a stored
+   password or token.
+
+**Changes, before this goes to a PR:**
+
+1. **Narrow the existing break-glass Allow to validation only.** Add
+   `StringEquals "kms:EncryptionContext:SecretVersionId" = "RequestToValidateKeyAccess"` to
+   `BreakGlassEncryptsWhenCreatingTheTwoSecrets`. Break-glass needs to encrypt only to validate.
+   It never writes a secret value.
+2. **Add the validation `Decrypt` for break-glass, and nothing more.** One `Allow` with `kms:Decrypt`,
+   the break-glass `aws:PrincipalArn` pattern, `kms:ViaService` set to Secrets Manager in this
+   region, `kms:EncryptionContext:SecretARN` like the two secret patterns, and
+   `kms:EncryptionContext:SecretVersionId` equal to `RequestToValidateKeyAccess`.
+3. **Exempt exactly that case from the decrypt denies, without widening them for anyone else.** A
+   Deny's conditions are ANDed, so "not (break-glass and validation)" cannot be one statement. Split
+   each affected deny instead:
+   - one deny for every principal other than the deny's own reader roles **and** break-glass;
+   - one deny for break-glass whenever `SecretVersionId` is not `RequestToValidateKeyAccess`.
+
+   Write the conditions with the operators IAM allows together on `aws:PrincipalArn` (`ArnNotEquals`
+   for the role ARNs, `ArnNotLike` for the break-glass pattern), or an equivalent form you can show
+   is no wider. Explain the shape in the module's comment. `NoGrantsAndNoReEncryption` stays byte
+   for byte.
+4. **Tests and mutations.** Extend the 14th test, or add one. It must show four things:
+   - break-glass may `GenerateDataKey` and `Decrypt` only with the validation context, through
+     Secrets Manager, for the two secrets;
+   - break-glass is denied `Decrypt` with any other `SecretVersionId`;
+   - the login role alone still decrypts the password, and the run role alone the token;
+   - no other principal gains a decrypt.
+
+   Mutants, each to be caught by a false assertion: drop the `SecretVersionId` condition from
+   either break-glass Allow; exempt every principal (not just break-glass) from a deny; drop the
+   break-glass-only deny; widen the validation `Decrypt` to any `SecretARN`; drop its `ViaService`.
+   Re-run the original 22 and the 6 from the first fix.
+5. **Runbook and report.** Re-planning shows the same counts (`9 to add, 1 to change, 0 to destroy`,
+   with only the key's `policy` changing), so the plan check is unchanged. Add the validation reading
+   to the runbook's partial-apply note: if `CreateSecret` is refused again, the operator pulls
+   CloudTrail's KMS events for that minute and gives the PM the action and the
+   `SecretVersionId` it carried. Cite the AWS page in the module comment and in this report.
+6. **Then ask for another review.** This is an access rule. The PM reads the diff before the PR.
+
+What stands from the first review: rulings 1 to 6, the deviations and the decisions. The
+`MalformedPolicyDocumentException` reading, the partial-apply recovery and the JSON plan check
+are good, and stay. Dev still holds the 8 resources from the first run. That is safe, and nothing
+is to be done by hand.
+
+## PM review, third
+
+**Verdict:** ACCEPTED
+<!-- ACCEPTED / CHANGES_REQUESTED -->
+
+**Reviewed by / date:** PM (Claude), 2026-10-24
+
+**Notes:**
+
+I read `credentials.tf` at `531731e` statement by statement, not only the report.
+
+1. **The key policy now does exactly what AWS's validation needs, and no more.**
+   * **Two break-glass Allows.** `GenerateDataKey` and `Decrypt` each require break-glass's
+     `aws:PrincipalArn` pattern, `kms:ViaService` set to Secrets Manager, `SecretARN` like the two
+     secrets, and `SecretVersionId = RequestToValidateKeyAccess`.
+   * **The three existing decrypt denies** keep their reader roles under `ArnNotEquals` and add
+     break-glass under `ArnNotLike`, ANDed. So no principal other than break-glass escapes any of
+     them.
+   * **`BreakGlassDecryptsNothingButTheValidation`** denies break-glass every decrypt whose version
+     id isn't the validation id. `StringNotEquals` is also true when the key is missing, so a decrypt
+     with no context is denied too.
+   * **The result.** The only decrypt break-glass can make is a validation key, and KMS's binding of
+     ciphertext to encryption context means that can never open a stored version. Login alone
+     decrypts the password, the run role alone the token. `NoGrantsAndNoReEncryption` is unchanged.
+2. **The session's single deny covers the three break-glass halves the PM described.** The
+   general deny's half has no `SecretARN` condition, so it covers the other two. Accepted as no
+   wider, with the reasoning in the module comment.
+3. **Tests and mutants.** The new 14th run fails against the first fix's policy (12 passed,
+   2 failed, false assertions), which is the evidence it can see the gap. 14 of 14 and 22 of 22
+   mutants were caught, none skipped. The AWS page is cited in the module, its README, the runbook
+   and this report.
+4. **Runbook.** Block 1 now stops on a `dev` that holds only the first fix (`grep -c
+   BreakGlassDecryptsOnlyToValidateTheKey`). The plan's counts and its JSON check are unchanged.
+   The CloudTrail block for a second refusal is a good addition.
+
+**Close-out.** Open the PR with `scripts/task pr --partial`. The phase stays `InProgress`, as in
+the first review's ruling 6. After the merge, the operator re-plans apply A from
+`caselist-credentials-dev`, and the PM reads that plan before the apply.
+
+## Criteria still open at this merge
+
+The task merges `--partial` (the first review's ruling 6; the third review's close-out), with the
+Goal `InProgress`. These criteria stay open; the PM sets the Goal `Succeeded` once they close:
+
+| Criterion | Status | What closes it |
+|---|---|---|
+| ac2 — the operator applies dev | NOT RUN | After this merge, the re-plan of apply A from `caselist-credentials-dev` at `origin/dev` (`Plan: 9 to add, 1 to change, 0 to destroy.`, `PLAN OK`), read by the PM, then the apply; then the coach's `set-password` and the refusal checks (Operator follow-ups, blocks 1 to 7) |
+| ac2 — prod at promotion | NOT RUN | The runbook's "Prod" section at the pilot's promotion, from a `main` checkout (`17 to add`) |
+| ac2 — one scheduled login stores a token (operator) | NOT RUN | Apply B after `v1-e40-t03`'s first image push, then the first Wednesday's check that the token secret has a version from that morning (runbook step 5) |
+
+Every other criterion is PASS, as recorded under Acceptance criteria.

@@ -61,6 +61,10 @@ locals {
   login_role_arn = aws_iam_role.login.arn
   run_role_arn   = aws_iam_role.run.arn
 
+  # The SecretVersionId Secrets Manager puts in the encryption context of the GenerateDataKey and
+  # Decrypt it makes to validate a caller's access to a secret's key (the page cited below).
+  key_validation_version_id = "RequestToValidateKeyAccess"
+
   # What administering the key means: everything Terraform does to create, read, rotate, tag and
   # retire it. No cryptographic operation, and no grant.
   key_administration_actions = [
@@ -99,6 +103,49 @@ locals {
         Resource  = "*"
         Condition = {
           ArnLike = { "aws:PrincipalArn" = local.break_glass_principal_arns }
+        }
+      },
+      {
+        # Break-glass creates both secrets (the apply), and Secrets Manager validates the caller's
+        # access to the key when a secret's key is set: it calls GenerateDataKey and Decrypt as the
+        # caller and discards the results, with SecretVersionId the literal RequestToValidateKeyAccess
+        # ("Validating access to the KMS key" in "Secret encryption and decryption in AWS Secrets
+        # Manager", https://docs.aws.amazon.com/secretsmanager/latest/userguide/security-encryption.html).
+        # Without this, the first apply's two CreateSecret calls were refused (2026-10-24). These two
+        # statements allow exactly the validation, through Secrets Manager, for the two secrets.
+        # Break-glass never writes or reads a secret value: a stored version's data key is bound to
+        # its own SecretVersionId, so a decrypt that must carry the validation id cannot open one.
+        Sid       = "BreakGlassEncryptsWhenCreatingTheTwoSecrets"
+        Effect    = "Allow"
+        Principal = { AWS = "arn:${local.partition}:iam::${local.account_id}:root" }
+        Action    = "kms:GenerateDataKey"
+        Resource  = "*"
+        Condition = {
+          ArnLike = { "aws:PrincipalArn" = local.break_glass_principal_arns }
+          StringEquals = {
+            "kms:ViaService"                        = local.secrets_manager_service
+            "kms:EncryptionContext:SecretVersionId" = local.key_validation_version_id
+          }
+          StringLike = {
+            "kms:EncryptionContext:SecretARN" = [local.password_secret_arn_pattern, local.token_secret_arn_pattern]
+          }
+        }
+      },
+      {
+        Sid       = "BreakGlassDecryptsOnlyToValidateTheKey"
+        Effect    = "Allow"
+        Principal = { AWS = "arn:${local.partition}:iam::${local.account_id}:root" }
+        Action    = "kms:Decrypt"
+        Resource  = "*"
+        Condition = {
+          ArnLike = { "aws:PrincipalArn" = local.break_glass_principal_arns }
+          StringEquals = {
+            "kms:ViaService"                        = local.secrets_manager_service
+            "kms:EncryptionContext:SecretVersionId" = local.key_validation_version_id
+          }
+          StringLike = {
+            "kms:EncryptionContext:SecretARN" = [local.password_secret_arn_pattern, local.token_secret_arn_pattern]
+          }
         }
       },
       {
@@ -151,7 +198,14 @@ locals {
         }
       },
       {
-        # The read rule for the password, said as a refusal so no later Allow can loosen it.
+        # The read rules, said as refusals so no later Allow can loosen them. A Deny's conditions
+        # are ANDed, so "unless break-glass validating" cannot be one statement. Each of the next
+        # three denies everyone but its reader roles (ArnNotEquals) and break-glass (ArnNotLike, its
+        # role being a pattern); BreakGlassDecryptsNothingButTheValidation then denies break-glass
+        # every decrypt whose SecretVersionId is not the validation's, for any secret. It is the
+        # union of the three break-glass halves the split leaves, so the four together exempt
+        # exactly break-glass's validation and nothing wider. A negated operator is true when the
+        # key is missing, so a decrypt carrying no SecretVersionId is denied to break-glass too.
         Sid       = "NobodyButTheLoginRoleDecryptsThePassword"
         Effect    = "Deny"
         Principal = { AWS = "*" }
@@ -160,6 +214,7 @@ locals {
         Condition = {
           StringLike   = { "kms:EncryptionContext:SecretARN" = local.password_secret_arn_pattern }
           ArnNotEquals = { "aws:PrincipalArn" = local.login_role_arn }
+          ArnNotLike   = { "aws:PrincipalArn" = local.break_glass_principal_arns }
         }
       },
       {
@@ -171,6 +226,7 @@ locals {
         Condition = {
           StringLike   = { "kms:EncryptionContext:SecretARN" = local.token_secret_arn_pattern }
           ArnNotEquals = { "aws:PrincipalArn" = local.run_role_arn }
+          ArnNotLike   = { "aws:PrincipalArn" = local.break_glass_principal_arns }
         }
       },
       {
@@ -181,6 +237,18 @@ locals {
         Resource  = "*"
         Condition = {
           ArnNotEquals = { "aws:PrincipalArn" = [local.login_role_arn, local.run_role_arn] }
+          ArnNotLike   = { "aws:PrincipalArn" = local.break_glass_principal_arns }
+        }
+      },
+      {
+        Sid       = "BreakGlassDecryptsNothingButTheValidation"
+        Effect    = "Deny"
+        Principal = { AWS = "*" }
+        Action    = "kms:Decrypt"
+        Resource  = "*"
+        Condition = {
+          ArnLike         = { "aws:PrincipalArn" = local.break_glass_principal_arns }
+          StringNotEquals = { "kms:EncryptionContext:SecretVersionId" = local.key_validation_version_id }
         }
       },
       {

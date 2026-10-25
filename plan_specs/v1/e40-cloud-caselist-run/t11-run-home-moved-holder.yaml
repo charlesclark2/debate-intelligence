@@ -1,0 +1,74 @@
+# TASK v1-e40-t11-run-home-moved-holder - The dev lock held for good when the weekly run's home moves to prod
+# Epic: E40 — Weekly Caselist Run in the Cloud | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e40-t11-run-home-moved-holder
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+  annotations:
+    debate/title: "The dev lock held for good when the weekly run's home moves to prod"
+spec:
+  # Filed by the PM, 2026-10-25, from v1-e40-t06's follow-up (ADR-0020 (7) step 3).
+  description: >-
+    At the pilot's promotion, ADR-0020 (7) step 3 moves the weekly run's home to prod: the dev
+    lock is written as held for good, naming `home_environment: prod`, so no dev build publishes
+    to dev's run state afterwards. No command writes that holder. Add one (its name proposed in
+    the report) that writes it under the dev lock, refuses while a run holds the lock, and is
+    undone only by a documented release the coach confirms. Every lock-taking command's refusal
+    names the holder and where the run now lives. Needed before the promotion.
+  priority: 3
+  constraints:
+    packages: [debate_core.application, packages/debate_core/tests, debate_cli, packages/debate_cli/tests, docs/runbooks]
+    forbidden:
+      - A holder written without the lock
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e40-t06-cutover
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Against moto, the command writes the held-for-good holder under the lock, refuses
+        while a run holds it, every lock-taking command's refusal names it, and the release
+        undoes it; tests shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e40-t11-run-home-moved-holder-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+spec:
+  description: >-
+    Write the moved holder that ends dev's tenure as the run's home, and its release.
+  goalRef:
+    name: v1-e40-t11-run-home-moved-holder
+  graph:
+    nodes:
+      - id: moved-holder
+        kind: Task
+        name: Moved holder
+        description: >-
+          Write the moved holder that ends dev's tenure as the run's home, and its
+          release.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Caselist tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/application, -k, run_state]
+status:
+  phase: Pending

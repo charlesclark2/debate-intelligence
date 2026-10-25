@@ -861,3 +861,15 @@ Added by the PM. Nothing above is changed, and this section is not a review.
 * **ac1 is complete** (its CI part was recorded in the second review).
 * **Still open, so the Goal stays `InProgress`:** ac2's hand run (step 8), which is `v1-e40-t06`'s
   cutover step 5, after `v1-e40-t04`'s seed.
+
+## PM record, 2026-10-25
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+* **The run image `v1.1.0-dev.151`** was pushed for `v1-e40-t05`'s alerts on 2026-10-25, digest
+  `sha256:4f71910e12e8cabd71fbe572604801b9a280df6715a79304ee87db03a9305748`, and applied as the run's
+  task definition revision `3`.
+  * A first push from a shell that still held an older `TAG` (`v1.1.0-dev.138`) was caught from the
+    script's own message and checked with `ecr describe-images` before any apply. It was pushed
+    again with the tag set explicitly.
+* **Still open, so the Goal stays `InProgress`:** ac2's hand run, which is `v1-e40-t06`'s cutover.

@@ -1,0 +1,95 @@
+# TASK v1-e40-t09-cloud-backfile-import - The backfile imports run once each in the cloud, not on the operator's machine
+# Epic: E40 — Weekly Caselist Run in the Cloud | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e40-t09-cloud-backfile-import
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+  annotations:
+    debate/title: "The backfile imports run once each in the cloud, not on the operator's machine"
+spec:
+  # Filed by the PM, 2026-10-25, from Charlie's ruling on v1-e34-t34's question 4 (2026-10-25).
+  description: >-
+    The four backfile complete archives (hspolicy25, hsld25, hspolicy24, hsld24: about 14.9 GB,
+    and about 70 GB with their parsed stores, by v1-e34-t34's counts) do not fit the operator's
+    machine. Run t34's `caselist backfile-import --caselist <slug>` as a one-off Fargate task on
+    the caselist run image, one caselist per task, started by hand from the run deployer's
+    profile, never scheduled, with ephemeral storage sized from t34's estimate and its
+    free-space check. It uses the run's Tabroom token, the bucket's run lock (t34's two locked
+    steps), t34's backfile ledger in the bucket and its no-import window (Tuesday 06:00 to
+    Thursday 00:00 America/Chicago), and starts only after the first scheduled cloud weekly run
+    has succeeded. Terraform gives the task what it needs (a task definition, or the run's with
+    an ephemeral storage override) and no new grant unless t34's steps need one the run role
+    lacks, named for the PM; the PM reads the plan before the apply. Data-use policy 1.18 names
+    the task's working copy. The four imports are operator runs, at most one a day, with counts
+    in docs/data.
+  priority: 2
+  constraints:
+    packages: [infrastructure, ops, docs/runbooks, docs/data, debate_core.application, packages/debate_core/tests, tests/smoke]
+    forbidden:
+      - A schedule for the import
+      - A permission set or account assignment changed
+      - A download outside v1-e34-t34's budget and window, or a second Tabroom login
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e34-t34-backfile-seasons-import
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e40-t06-cutover
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Terraform tests show the task's ephemeral storage, no schedule, and the run role
+        unchanged or changed by exactly the named grant; the started command refuses inside
+        the window or without budget, by a stubbed run; tests shown failing first.
+    - id: ac2
+      description: >-
+        A dry run on Fargate in dev (listings and a HEAD, no download) exits 0 after the PM
+        reads the plan and the operator applies it (operator).
+    - id: ac3
+      description: >-
+        The four imports, at most one a day, with counts in docs/data, and the next weekly
+        cloud run after the first one restores and finishes in its usual time (operator).
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e40-t09-cloud-backfile-import-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+spec:
+  description: >-
+    Give the backfile import a one-off cloud task with room for an archive and its parse, then
+    run the four imports.
+  goalRef:
+    name: v1-e40-t09-cloud-backfile-import
+  graph:
+    nodes:
+      - id: cloud-backfile-import
+        kind: Task
+        name: Cloud backfile import
+        description: >-
+          Give the backfile import a one-off cloud task with room for an archive and its
+          parse, then run the four imports.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Terraform checks pass
+            command: bash
+            args: [scripts/terraform_checks.sh]
+status:
+  phase: Pending

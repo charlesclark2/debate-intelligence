@@ -94,7 +94,9 @@ sign-in](#your-first-sign-in).
 
 You manage accounts from your Mac with `debate-research tub users`. Every command acts on one
 environment: `--env prod` for students, `--env dev` for the maintainer's and synthetic test
-accounts only (the dev pool never holds a student, ADR-0013). Each command writes one record to the
+accounts only (the dev pool never holds a student, ADR-0013, except at most two pilot validation
+students until the pilot's promotion to prod, whose dev accounts you remove then: data-use policy
+1.18). Each command writes one record to the
 pilot's audit log, naming the account by its internal identifier and never by username.
 
 | You want to | Command |

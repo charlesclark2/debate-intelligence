@@ -1,0 +1,86 @@
+# TASK v1-e32-t25-readable-impact-chains - What each impact runs through, named in words a debater uses
+# Epic: E32 Argument Landscape Reports | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e32-t25-readable-impact-chains
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+  annotations:
+    debate/title: "What each impact runs through, named in words a debater uses"
+spec:
+  # Filed by the PM, 2026-10-25, from the coach's read of the pilot's landscape report (2026-10-25).
+  description: >-
+    v1-e32-t14's "What each impact runs through" names a rank's chain only from a labelled
+    internal link. Otherwise it says there is none and quotes the card above the impact in the
+    file, and a rank with neither shows nothing: hspolicy26's Economy DA reads that way for all
+    three of its ranks. Count first, per DA and advantage: ranks with a labelled internal link,
+    with only a card above, and with neither. Then each rank is named by the first of: the
+    coach's scenario name (v1-e32-t22), a labelled internal link, the impact card's own tag, the
+    card above it. A rank with none of these is left out rather than shown empty, and the
+    section says how many were left out. A tag is quoted under the report's existing rules:
+    never beside a school or team code.
+  priority: 2
+  constraints:
+    packages: [debate_core.arguments, debate_core.application, packages/debate_core/tests, tests/fixtures/landscape, docs/guides]
+    forbidden:
+      - A school or team code beside a quoted tag (policy 1.13)
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e32-t22-scenario-vocabulary
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Counts before building: ranks per DA and advantage with a labelled internal link,
+        with only a card above, and with neither.
+    - id: ac2
+      description: >-
+        On synthetic fixtures, each rank takes the first name in the order above, an empty
+        rank is left out and counted, and no quoted tag stands beside a school or team code,
+        matching hand-written golden files; tests shown failing first.
+    - id: ac3
+      description: >-
+        The operator's dry run on hspolicy26 shows the Economy DA's ranks named, with the
+        counts before and after (operator).
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e32-t25-readable-impact-chains-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+spec:
+  description: >-
+    Count how impact ranks are named today, then name each from the best source it has and drop
+    empty ones.
+  goalRef:
+    name: v1-e32-t25-readable-impact-chains
+  graph:
+    nodes:
+      - id: readable-impact-chains
+        kind: Task
+        name: Readable impact chains
+        description: >-
+          Count how impact ranks are named today, then name each from the best source it
+          has and drop empty ones.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Landscape tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/arguments/landscape]
+status:
+  phase: Pending

@@ -362,3 +362,18 @@ A large task, built in the order ruled and tested where it matters.
 **After the merge:** once policy 1.15 is merged, the operator's two blocks (suggest `states-cp`, then
 build the draft with `--allow-draft`), counts only, before `scripts/task finish --partial`. No
 re-review is needed.
+
+## PM record, 2026-10-25
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+* **ac6: done.** validate-dev's run `40174570850` on `dev` (2026-10-25 07:54 UTC, commit `e60bd8e`,
+  which contains this task's merge `114b94b`) concluded `success`, and so did run `40193904183` at
+  12:37 UTC. Its recorded tier runs `tests/smoke/test_files_cli.py`.
+* **The operator's two blocks,** from `origin/dev` at `e229387`, counts only:
+  * `files suggest --caselist hspolicy26 --position states-cp --top 10`: `"status": "ok"`, 10 cards,
+    none left out, and no pin needed a school or team code (policy 1.15).
+  * `files build` of that draft with `--allow-draft`: `"status": "ok"`, 10 cards placed from 4
+    sources, no warnings, none unattributed, quality `PASS`. Two checks were `WARN`,
+    `duplicate-cards` and `cite-present`; the coach reads the draft before any follow-up is filed.
+* Every criterion is met, so the Goal is set to `Succeeded` in the PM batch of 2026-10-25 (p).

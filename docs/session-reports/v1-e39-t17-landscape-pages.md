@@ -501,3 +501,33 @@ Both changes are made as asked, and nothing else moved.
 The Terraform is unchanged, so the dev plan is still expected as `0 to add, 1 to change, 0 to
 destroy`. The PR merges `--partial` until ac4's apply, deploy and coach's check. The PM reads the
 plan before the apply.
+
+## PM record, 2026-10-25
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+* **ac4: done, in dev, 2026-10-25.**
+  * **The plan** from `origin/dev` at `e229387`: `Plan: 0 to add, 1 to change, 0 to destroy`, the one
+    change being `module.evidence_search.aws_iam_role_policy.function`. Read in full by the PM: the
+    `GetObject` statement gained `reports/landscape/*` and its new Sid, and a new
+    `ListTheLandscapeBundlesOnly` statement allows `s3:ListBucket` only with `s3:prefix`
+    `reports/landscape/*`. No permission set or account assignment was in the plan's actions.
+  * **The apply** of that saved plan; the role's Sids afterwards included both new ones.
+  * **Step 9's role check:** the four reads and the landscape listing `allowed`;
+    `GetObjectVersion`, `PutObject`, `DeleteObject`, `parsed/`, a listing with no prefix and a
+    listing of `raw/` each `implicitDeny`; no managed policy attached.
+  * **The deploy:** `Deployed e2293874bf6dd45b635ee91896c74742c8591f32 to dev`, the function on
+    `debate-dev-tub@sha256:3468a3e5a784232e0a2e7768eb736da65eacb555d52c6087d7f812ee51077bb6`, with
+    `{"status":"ok"}` from `/healthz` through CloudFront.
+  * **Signed out,** `/landscape`, `/landscape/hspolicy26`, `/landscape/hspolicy26/report/negative`
+    and `/landscape/hspolicy26/schools` each answered `302 private, no-store` to the sign-in.
+  * **Signed in as the coach:** Landscape in the header beside Search and the cart; hspolicy26
+    through 2026-10-20 with the report and the school view; the report's contents and its parts on
+    their own pages; a school's page and a position's page, the latter's team links opening
+    OpenCaselist.
+  * **The audit lines** (`landscape-viewed`) named the caselist, the snapshot and the page kind
+    (`school-view`, `school`, `position`), with no school or team code.
+* **Two findings from the coach, filed:** a school's page shows team codes without links, because
+  `v1-e32-t18` linked only the by-position tables (`v1-e32-t23`); and "What each impact runs
+  through" reads poorly where no internal link is labelled (`v1-e32-t25`).
+* Every criterion is met, so the Goal is set to `Succeeded` in the PM batch of 2026-10-25 (p).

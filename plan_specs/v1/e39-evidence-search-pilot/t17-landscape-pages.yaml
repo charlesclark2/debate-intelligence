@@ -40,7 +40,8 @@ spec:
     operator's, as for every pilot deploy.
   priority: 1
   constraints:
-    packages: [debate_api, packages/debate_api/tests, debate_core.application, debate_core.domain, packages/debate_core/tests, infrastructure/modules/evidence_search, infrastructure/envs, docs/runbooks, docs/guides]
+    # PM amendment 2026-10-25, from the PM's review: ac1's counts recorded under docs/data.
+    packages: [debate_api, packages/debate_api/tests, debate_core.application, debate_core.domain, packages/debate_core/tests, infrastructure/modules/evidence_search, infrastructure/envs, docs/runbooks, docs/guides, docs/data]
     forbidden:
       - A landscape page to anyone not signed in, or cached by CloudFront or the browser
       - A bundle held longer than five minutes
@@ -101,7 +102,7 @@ spec:
         applied in dev by the operator after the PM reads the plan; the deployed dev pilot
         shows the hspolicy26 report to a signed-in coach (operator).
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

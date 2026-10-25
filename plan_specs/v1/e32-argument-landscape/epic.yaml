@@ -555,6 +555,7 @@ spec:
         goalRef: v1-e32-t22-scenario-vocabulary
       dependsOn:
       - t14
+      - t17
       acceptanceCriteria:
       - type: command_succeeds
         name: Task spec v1-e32-t22-scenario-vocabulary reports phase Succeeded
@@ -564,5 +565,82 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e32-t22-scenario-vocabulary
+    - id: t23
+      kind: Task
+      name: 'Team links on a school''s page, as on a position''s'
+      description: >-
+        Team links on a school's page, as on a position's.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t23-school-page-team-links.yaml
+        goalRef: v1-e32-t23-school-page-team-links
+      dependsOn:
+      - t18
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t23-school-page-team-links reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t23-school-page-team-links
+    - id: t24
+      kind: Task
+      name: 'Policy affs whose plan text has no label, identified by the plan or the advantages'
+      description: >-
+        Policy affs whose plan text has no label, identified by the plan or the advantages.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t24-unlabelled-plan-affs.yaml
+        goalRef: v1-e32-t24-unlabelled-plan-affs
+      dependsOn:
+      - t17
+      - t15
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t24-unlabelled-plan-affs reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t24-unlabelled-plan-affs
+    - id: t25
+      kind: Task
+      name: 'What each impact runs through, named in words a debater uses'
+      description: >-
+        What each impact runs through, named in words a debater uses.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t25-readable-impact-chains.yaml
+        goalRef: v1-e32-t25-readable-impact-chains
+      dependsOn:
+      - t22
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t25-readable-impact-chains reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t25-readable-impact-chains
+    - id: t26
+      kind: Task
+      name: 'The review queue ordered by the local proxy model, which places nothing'
+      description: >-
+        The review queue ordered by the local proxy model, which places nothing.
+      inputs:
+        specRef: plan_specs/v1/e32-argument-landscape/t26-review-queue-proxy-ordering.yaml
+        goalRef: v1-e32-t26-review-queue-proxy-ordering
+      dependsOn:
+      - t21
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e32-t26-review-queue-proxy-ordering reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e32-t26-review-queue-proxy-ordering
 status:
   phase: Pending

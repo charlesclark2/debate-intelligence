@@ -513,3 +513,21 @@ reads the password rule ignores.
 **The PR merges `--partial`,** phase `InProgress`, until the operator's test alert is received (ac1).
 The PM reads the dev plan (expected `25 to add, 5 to change, 2 to destroy`, with no account
 assignment or permission set) before any apply. No re-review is needed.
+
+## PM record, 2026-10-25
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+* **The alerts apply in dev, 2026-10-25.** The plan stopped once on an extra resource,
+  `module.evidence_store.aws_ssoadmin_permission_set_inline_policy.evidence_removal[0]`: it was
+  `v1-e32-t13`'s unapplied removal grant. Its printed diff was exactly the added
+  `DeleteLandscapeSchoolViews` statement and the listing prefix change, so the PM approved the
+  combined plan, `25 to add, 6 to change, 2 to destroy`, with no account assignment and no other
+  permission set. The apply matched it.
+* **The subscription** was confirmed through the API with `--authenticate-on-unsubscribe true`,
+  using the token from the confirmation email, not its link; `ConfirmationWasAuthenticated` is
+  `true`. The runbook's pattern check printed `PATTERNS OK: 15 of 15`.
+* **ac1's operator half: done.** The test alert's task stopped at 21:02:22 UTC, and the coach's email
+  arrived at 16:02 CDT, the same minute. It ran on the run image `v1.1.0-dev.151` (see
+  `v1-e40-t03`'s record).
+* Every criterion is met, so the Goal is set to `Succeeded` in the PM batch of 2026-10-25 (p).

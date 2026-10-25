@@ -382,3 +382,20 @@ The build the cutover session needs, with a runbook to run it.
 
 **The PR merges `--partial`,** phase `InProgress`, until the cutover session runs ac1 and ac2. The
 PM reads every plan in the runbook before its apply. No re-review is needed.
+
+## PM record, 2026-10-25
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+* **validate-dev failed on the first pre-release with this task** (run `40235077988`, 2026-10-25
+  21:21 UTC, installed build `v1.1.0-dev.152` at `f92826c`): 1 failed, 112 passed in the recorded tier.
+  * `test_doctor_checks_the_search_index_stores_only_when_asked_and_fails_on_one_never_parsed`
+    expected a hint naming `openev` alone. The installed build carries `config/profiles/dev.toml`,
+    which names this task's three caselists, so it rightly names all four stores. A checkout's
+    console script, run from the harness's scratch directory, falls back to the built-in profile
+    and names none, which is why the PR's `ci` passed.
+  * **Fixed by the PM in the batch of 2026-10-25 (p):** the test reads the build's
+    `caselist.sync_caselists` from `config show` and expects each, then `openev`. It passes against
+    the checkout, and the installed shape was checked by hand from the repository root.
+  * The cutover's prerequisite, a green validate-dev on a pre-release containing this task, is met
+    by the first pre-release after that batch merges.

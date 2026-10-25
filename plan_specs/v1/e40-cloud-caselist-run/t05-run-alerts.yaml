@@ -54,7 +54,9 @@ spec:
   priority: 2
   constraints:
     # PM ruling 2026-10-24 (v1-e40-t02's question 2): debate_core.integrations added for the SNS adapter.
-    packages: [infrastructure, debate_core.application, debate_core.integrations, packages/debate_core/tests, docs/runbooks]
+    # PM amendment 2026-10-25, from the PM's review (question 2): the CLI's test-alert command, its
+    # tests, and pyproject.toml's dependency on the SNS adapter.
+    packages: [infrastructure, debate_core.application, debate_core.integrations, packages/debate_core/tests, docs/runbooks, debate_cli, packages/debate_cli/tests, pyproject.toml]
     forbidden:
       - A school, team code, file name or card text in an alert
       - Network or AWS access in any test
@@ -75,7 +77,7 @@ spec:
         resource policies, the login role or its task definition, and a read or refused read
         of the password by any principal but the login role, each with the topic as target.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

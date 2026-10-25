@@ -36,9 +36,10 @@ policies **without performing the action**, as in the [team website runbook](tea
 The function is reachable only through CloudFront: its URL requires `AWS_IAM`, and CloudFront
 signs every request through origin access control. The evidence bucket is untouched: its Block
 Public Access settings and policy are as they were, and the function reads it through its own role,
-which may read `reports/tub/search/*`, current objects under `raw/` and the suppression list, and
-nothing else. **The dev pool holds the maintainer and synthetic users only, never a student**
-(ADR-0013).
+which may read `reports/tub/search/*`, `reports/landscape/*`, current objects under `raw/` and the
+suppression list, and list `reports/landscape/` only (`v1-e39-t17`); nothing else. **The dev pool holds the maintainer and synthetic users only, never a student**
+(ADR-0013), except at most two pilot validation students until the pilot's promotion to prod, whose
+dev accounts the coach removes then (data-use policy 1.18).
 
 Three settings are made here with the CLI, because provider 5.100.0, the version this repository
 locks, cannot make them: the audit group's deletion protection, the managed login branding, and the
@@ -1584,7 +1585,8 @@ published index is format 2; take it to the PM.
 ## What this runbook deliberately does not do
 
 - **Create a student's account.** That is the coach's `tub users add`, in prod
-  ([the accounts guide](../guides/evidence-search-accounts.md)). The dev pool never holds a student.
+  ([the accounts guide](../guides/evidence-search-accounts.md)). The dev pool never holds a student, except the
+  pilot validation students data-use policy 1.18 allows until the promotion.
 - **Publish an index.** `tub index publish` is `v1-e39-t02`'s, under the `EvidenceOperator`
   profile. The weekly agent run rebuilds the index when the parsed store changed and publishes it to
   dev (`v1-e39-t09`); publishing it to prod is the operator's, with `tub index publish --newest`, as

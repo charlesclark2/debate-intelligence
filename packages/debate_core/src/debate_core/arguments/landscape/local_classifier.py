@@ -867,6 +867,9 @@ class CoachSample:
     """Each model's confidence at the target held-out precision."""
     populations: Mapping[str, int]
     """The unplaced cards the stratifying model predicts in each stratum, sampled or not."""
+    cell_populations: Mapping[str, Mapping[str, int]]
+    """The same, by stratum and then by the kind of position the stratifying model predicts: the cells
+    the sample draws from, kind by kind, and the weights a score over every unplaced card uses."""
     items: tuple[SampleItem, ...]
 
 
@@ -936,6 +939,10 @@ def coach_sample(
         stratified_by=stratified_by,
         thresholds={name: one.threshold for name, one in comparisons.items()},
         populations={name: sum(len(rows) for rows in by_stratum[name].values()) for name, _ in SAMPLE_STRATA},
+        cell_populations={
+            name: {kind: len(rows) for kind, rows in sorted(by_stratum[name].items())}
+            for name, _ in SAMPLE_STRATA
+        },
         items=tuple(
             SampleItem(
                 sample_row=number,
@@ -1017,6 +1024,7 @@ def sample_lines(sample: CoachSample) -> list[str]:
         "stratified_by": sample.stratified_by,
         "thresholds": dict(sample.thresholds),
         "populations": dict(sample.populations),
+        "cell_populations": {name: dict(cells) for name, cells in sample.cell_populations.items()},
     }
     lines = [json.dumps(header, sort_keys=True, separators=(",", ":"))]
     lines += [
@@ -1057,12 +1065,17 @@ def read_sample(lines: Iterable[str]) -> CoachSample:
         )
     thresholds = cast(dict[str, object], header["thresholds"])
     populations = cast(dict[str, object], header["populations"])
+    cells = cast(dict[str, dict[str, object]], header["cell_populations"])
     return CoachSample(
         stratified_by=str(header["stratified_by"]),
         thresholds={
             str(name): None if one is None else float(cast(float, one)) for name, one in thresholds.items()
         },
         populations={str(name): int(cast(int, one)) for name, one in populations.items()},
+        cell_populations={
+            str(name): {str(kind): int(cast(int, one)) for kind, one in found.items()}
+            for name, found in cells.items()
+        },
         items=tuple(items),
     )
 
@@ -1119,7 +1132,8 @@ class SampleScore:
     at_threshold: StratumScore
     """The labelled cards it predicts at or above its own threshold, and the right ones among them."""
     weighted_accuracy: float | None
-    """Accuracy over every unplaced card it predicts, each stratum weighted by its population."""
+    """Accuracy over every unplaced card the stratifying model predicts, each labelled card weighted by
+    its cell's population (stratum and predicted kind)."""
     weighted_precision_at_threshold: float | None
     """Precision over the unplaced cards it would place at its threshold, weighted the same way."""
 
@@ -1129,16 +1143,31 @@ class SampleScore:
 
 
 def _weighted(
-    sample: CoachSample, scored: Sequence[tuple[SampleItem, bool, bool]]
+    sample: CoachSample, scored: Sequence[tuple[SampleItem, bool, bool]], cell_of: Callable[[SampleItem], str]
 ) -> tuple[float | None, float | None]:
-    """`(accuracy, precision of the chosen)` over the population, from `(item, right, chosen)` triples."""
-    labelled = Counter(item.stratum for item, _, _ in scored)
-    weight = {name: sample.populations.get(name, 0) / count for name, count in labelled.items()}
-    right = sum(weight[item.stratum] for item, correct, _ in scored if correct)
-    total = sum(weight[item.stratum] for item, _, _ in scored)
-    chosen_right = sum(weight[item.stratum] for item, correct, chosen in scored if correct and chosen)
-    chosen = sum(weight[item.stratum] for item, _, chosen in scored if chosen)
-    return (right / total if total else None, chosen_right / chosen if chosen else None)
+    """`(accuracy, precision of the chosen)` over the population, from `(item, right, chosen)` triples.
+
+    Each labelled card stands for its cell's unplaced cards (:attr:`CoachSample.cell_populations`):
+    the stratum and the kind the stratifying model predicts, which the sample draws kind by kind.
+    """
+    labelled = Counter((item.stratum, cell_of(item)) for item, _, _ in scored)
+    weight = {
+        (name, kind): sample.cell_populations.get(name, {}).get(kind, 0) / count
+        for (name, kind), count in labelled.items()
+    }
+
+    def total(chosen_only: bool, right_only: bool) -> float:
+        return sum(
+            weight[(item.stratum, cell_of(item))]
+            for item, right, chosen in scored
+            if (chosen or not chosen_only) and (right or not right_only)
+        )
+
+    every, chosen = total(False, False), total(True, False)
+    return (
+        total(False, True) / every if every else None,
+        total(True, True) / chosen if chosen else None,
+    )
 
 
 def score_sample(
@@ -1147,6 +1176,11 @@ def score_sample(
     """Each model's score on the coach's labels, in the order the sample names the models."""
     labelled_items = [item for item in sample.items if item.sample_row in labels]
     names = list(dict.fromkeys(name for item in sample.items for name in item.predictions))
+
+    def cell_of(item: SampleItem) -> str:
+        prediction = item.predictions.get(sample.stratified_by)
+        return "no prediction" if prediction is None else _kind(taxonomy, prediction.position_id)
+
     scores: list[SampleScore] = []
     for model in names:
         threshold = sample.thresholds.get(model)
@@ -1161,7 +1195,7 @@ def score_sample(
         strata = {
             name: [right for item, right, _ in scored if item.stratum == name] for name, _ in SAMPLE_STRATA
         }
-        weighted_accuracy, weighted_precision = _weighted(sample, scored)
+        weighted_accuracy, weighted_precision = _weighted(sample, scored, cell_of)
         chosen = [right for _, right, picked in scored if picked]
         scores.append(
             SampleScore(

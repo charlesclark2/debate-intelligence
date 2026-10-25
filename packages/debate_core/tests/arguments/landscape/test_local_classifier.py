@@ -748,6 +748,11 @@ def test_the_sample_strata_and_one_card_per_document_worked_by_hand() -> None:
         "just-below-threshold": 3,
         "far-below-threshold": 3,
     }
+    assert sample.cell_populations == {
+        "at-or-above-threshold": {"da": 1, "cp": 1},
+        "just-below-threshold": {"da": 1, "cp": 2},
+        "far-below-threshold": {"cp": 3},
+    }
     assert sorted(item.sample_row for item in sample.items) == list(range(1, 8))
     assert sample.thresholds == {"proxy": 0.6, "specified": 0.0}
     assert all(set(item.predictions) == {"proxy", "specified"} for item in sample.items)
@@ -815,9 +820,10 @@ def test_the_sample_kept_beside_the_file_holds_ids_and_predictions_only(
     assert not any(word in text for word in ("deficit", "states solve", "evidence", "link"))
     again = read_sample(lines)
     assert again.items == sample.items
-    assert (again.thresholds, again.populations, again.stratified_by) == (
+    assert (again.thresholds, again.populations, again.cell_populations, again.stratified_by) == (
         sample.thresholds,
         sample.populations,
+        sample.cell_populations,
         "proxy",
     )
 
@@ -850,6 +856,11 @@ def test_the_score_by_stratum_and_weighted_by_population_worked_by_hand() -> Non
         stratified_by="proxy",
         thresholds={"proxy": 0.6, "specified": 0.0},
         populations={"at-or-above-threshold": 100, "just-below-threshold": 300, "far-below-threshold": 600},
+        cell_populations={
+            "at-or-above-threshold": {"da": 60, "cp": 40},
+            "just-below-threshold": {"da": 100, "cp": 200},
+            "far-below-threshold": {"da": 300, "cp": 300},
+        },
         items=(
             item(1, "at-or-above-threshold", ("spending-da", 0.8), ("spending-da", 0.9)),
             item(2, "at-or-above-threshold", ("states-cp", 0.7), ("states-cp", 0.9)),
@@ -868,7 +879,9 @@ def test_the_score_by_stratum_and_weighted_by_population_worked_by_hand() -> Non
         6: "states-cp",
     }
     proxy_score, specified_score = score_sample(MEASURE_TAXONOMY, sample, labels)
-    # proxy: right on 1, 4, 6. Weights: 100/2, 300/2, 600/2 per card.
+    # proxy: right on 1, 4, 6. Each card stands for its cell (stratum, the proxy's predicted kind): the
+    # proxy predicts da for 1, 3 and 5 and cp for 2, 4 and 6, one card a cell, so the weights are the
+    # cells' populations: 60, 40, 100, 200, 300, 300.
     assert (proxy_score.model, proxy_score.labelled, proxy_score.correct, proxy_score.no_position) == (
         "proxy",
         6,
@@ -881,12 +894,12 @@ def test_the_score_by_stratum_and_weighted_by_population_worked_by_hand() -> Non
         ("far-below-threshold", 1, 2, 600),
     ]
     assert (proxy_score.at_threshold.correct, proxy_score.at_threshold.labelled) == (1, 2)
-    assert proxy_score.weighted_accuracy == pytest.approx((50 + 150 + 300) / 1000)
-    assert proxy_score.weighted_precision_at_threshold == pytest.approx(50 / 100)
+    assert proxy_score.weighted_accuracy == pytest.approx((60 + 200 + 300) / 1000)
+    assert proxy_score.weighted_precision_at_threshold == pytest.approx(60 / (60 + 40))
     # specified: right on 1, 3, 4, 6, and it places every card (threshold 0).
     assert (specified_score.correct, specified_score.at_threshold.labelled) == (4, 6)
-    assert specified_score.weighted_accuracy == pytest.approx((50 + 150 + 150 + 300) / 1000)
-    assert specified_score.weighted_precision_at_threshold == pytest.approx((50 + 150 + 150 + 300) / 1000)
+    assert specified_score.weighted_accuracy == pytest.approx((60 + 100 + 200 + 300) / 1000)
+    assert specified_score.weighted_precision_at_threshold == pytest.approx((60 + 100 + 200 + 300) / 1000)
     assert [(one.name, one.correct, one.labelled) for one in specified_score.by_predicted_kind] == [
         ("cp", 2, 3),
         ("da", 2, 3),

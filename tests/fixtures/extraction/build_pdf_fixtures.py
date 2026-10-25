@@ -53,6 +53,7 @@ on the marker alone, before it reads a word.
 
 from __future__ import annotations
 
+import zlib
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -187,9 +188,29 @@ def journal_article_pdf(*, encrypted: bool = False) -> bytes:
 
 
 def plain_pages_pdf(page_count: int) -> bytes:
-    """`page_count` pages of one short sentence each: what the page-count limit is tested with."""
-    page = (DrawnLine("A page of a long synthetic report.", LEFT_MARGIN, _FIRST_BODY_Y, _BODY_SIZE),)
-    return pdf_bytes([page] * page_count)
+    """`page_count` pages of one sentence each, different on every page: the page-count limit's sample."""
+    pages = [
+        (DrawnLine(f"Sentence {number} of a long synthetic report.", LEFT_MARGIN, _FIRST_BODY_Y, _BODY_SIZE),)
+        for number in range(1, page_count + 1)
+    ]
+    return pdf_bytes(pages)
+
+
+def long_compressed_page_pdf(*, keep_compressed_bytes: int | None = None) -> bytes:
+    """One page of 50 distinct lines in a FlateDecode stream that expands to about 3,700 bytes.
+
+    What the decompression limit is tested with, and, cut short, a truncated download.
+    """
+    lines = tuple(
+        DrawnLine(
+            f"Line {index} of a long page, about topic {index * 7919 % 1000}.",
+            LEFT_MARGIN,
+            740.0 - 14 * index,
+            10.0,
+        )
+        for index in range(50)
+    )
+    return pdf_bytes([lines], compressed=True, keep_compressed_bytes=keep_compressed_bytes)
 
 
 # --------------------------------------------------------------------------------------------
@@ -218,8 +239,18 @@ def _number(value: float) -> bytes:
     return (f"{value:.2f}".rstrip("0").rstrip(".")).encode("ascii")
 
 
-def pdf_bytes(pages: Sequence[Sequence[DrawnLine]], *, encrypted: bool = False) -> bytes:
-    """A PDF drawing each page's lines, deterministic for the same input."""
+def pdf_bytes(
+    pages: Sequence[Sequence[DrawnLine]],
+    *,
+    encrypted: bool = False,
+    compressed: bool = False,
+    keep_compressed_bytes: int | None = None,
+) -> bytes:
+    """A PDF drawing each page's lines, deterministic for the same input.
+
+    `compressed` writes each content stream with FlateDecode; `keep_compressed_bytes` then cuts each
+    compressed stream to that many bytes, which is how a truncated download is simulated.
+    """
     objects: list[bytes] = []
     font_id = 3
     first_page_id = 4
@@ -234,7 +265,13 @@ def pdf_bytes(pages: Sequence[Sequence[DrawnLine]], *, encrypted: bool = False) 
             + b"/Resources << /Font << /F1 %d 0 R >> >> /Contents %d 0 R >>" % (font_id, page_id + 1)
         )
         stream = _content_stream(lines)
-        objects.append(b"<< /Length %d >>\nstream\n" % len(stream) + stream + b"endstream")
+        if not compressed:
+            objects.append(b"<< /Length %d >>\nstream\n" % len(stream) + stream + b"endstream")
+            continue
+        packed = zlib.compress(stream, 9)[:keep_compressed_bytes]
+        objects.append(
+            b"<< /Length %d /Filter /FlateDecode >>\nstream\n" % len(packed) + packed + b"\nendstream"
+        )
     encrypt_id = None
     if encrypted:
         objects.append(

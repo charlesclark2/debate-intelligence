@@ -712,3 +712,16 @@ I read `credentials.tf` at `531731e` statement by statement, not only the report
 **Close-out.** Open the PR with `scripts/task pr --partial`. The phase stays `InProgress`, as in
 the first review's ruling 6. After the merge, the operator re-plans apply A from
 `caselist-credentials-dev`, and the PM reads that plan before the apply.
+
+## Criteria still open at this merge
+
+The task merges `--partial` (the first review's ruling 6; the third review's close-out), with the
+Goal `InProgress`. These criteria stay open; the PM sets the Goal `Succeeded` once they close:
+
+| Criterion | Status | What closes it |
+|---|---|---|
+| ac2 — the operator applies dev | NOT RUN | After this merge, the re-plan of apply A from `caselist-credentials-dev` at `origin/dev` (`Plan: 9 to add, 1 to change, 0 to destroy.`, `PLAN OK`), read by the PM, then the apply; then the coach's `set-password` and the refusal checks (Operator follow-ups, blocks 1 to 7) |
+| ac2 — prod at promotion | NOT RUN | The runbook's "Prod" section at the pilot's promotion, from a `main` checkout (`17 to add`) |
+| ac2 — one scheduled login stores a token (operator) | NOT RUN | Apply B after `v1-e40-t03`'s first image push, then the first Wednesday's check that the token secret has a version from that morning (runbook step 5) |
+
+Every other criterion is PASS, as recorded under Acceptance criteria.

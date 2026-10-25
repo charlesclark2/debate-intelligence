@@ -81,7 +81,7 @@ spec:
         applied in dev by the operator after the PM reads the plan; the deployed dev pilot
         shows the hspolicy26 report to a signed-in coach (operator).
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

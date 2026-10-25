@@ -1564,8 +1564,7 @@ class SyncRunLog:
         return {record.run_id: record for record in self.read()}
 
     def latest_listing(self, caselist: str) -> SyncRunRecord | None:
-        """The most recent run that listed `caselist`'s archives, which is what knows its backlog, and
-        whether the latest run of it failed (:mod:`~debate_core.application.landscape_staleness`)."""
+        """The most recent run that listed `caselist`'s archives, which is what knows its backlog."""
         for record in reversed(self.read()):
             if caselist in record.deferred_by_caselist:
                 return record

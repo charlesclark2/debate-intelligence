@@ -27,7 +27,12 @@ from typing import Any
 from debate_cli.context import CliContext
 from debate_core.application.caselist.run_lock import RunTerminated
 
-__all__ = ["holding_the_bucket_lock", "run_holding_the_bucket_lock", "terminated_on_sigterm"]
+__all__ = [
+    "cancelled_on_sigterm",
+    "holding_the_bucket_lock",
+    "run_holding_the_bucket_lock",
+    "terminated_on_sigterm",
+]
 
 
 @contextmanager
@@ -65,3 +70,24 @@ def terminated_on_sigterm() -> Iterator[None]:
         yield
     finally:
         signal.signal(signal.SIGTERM, previous)
+
+
+async def cancelled_on_sigterm[T](on_sigterm: Callable[[], None] | None, work: Coroutine[Any, Any, T]) -> T:
+    """Await `work`, with SIGTERM calling `on_sigterm` on the event loop instead of killing the process.
+
+    What `caselist pull` runs under in bucket mode: the handler is the pull's
+    :meth:`~debate_core.application.caselist.bucket_run.BucketRun.terminate`, which cancels the run so
+    that it is recorded, saves what it may and releases the lock (ADR-0020 (1) 6). `None`, local mode,
+    leaves SIGTERM as it was. Where the loop cannot take a signal handler, nothing changes either.
+    """
+    if on_sigterm is None:
+        return await work
+    loop = asyncio.get_running_loop()
+    try:
+        loop.add_signal_handler(signal.SIGTERM, on_sigterm)
+    except (NotImplementedError, RuntimeError, ValueError):
+        return await work
+    try:
+        return await work
+    finally:
+        loop.remove_signal_handler(signal.SIGTERM)

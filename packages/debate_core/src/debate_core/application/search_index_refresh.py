@@ -117,12 +117,14 @@ __all__ = [
     "SEARCH_INDEX_DIRECTORY",
     "SQLITE_BYTES_WARNING",
     "LocalRetention",
+    "RESTORED_INDEX_MARKER",
     "LocalSearchIndex",
     "SearchIndexRefresh",
     "built_from",
     "local_indexes",
     "newest_local_index",
     "remove_superseded",
+    "restored_from_the_bucket",
     "size_warnings",
 ]
 
@@ -138,6 +140,16 @@ and the new one, so two of this size are 79% of the function's 4,096 MB (`v1-e39
 
 GZIP_BYTES_WARNING: Final = 400_000_000
 """Gzip bytes past which a build is warned of: ADR-0019's trigger for a higher bandwidth quota."""
+
+RESTORED_INDEX_MARKER: Final = "restored-from-bucket"
+"""A file beside the manifest of an index directory a bucket-mode run restored (`v1-e40-t04`).
+
+Such a directory holds the published index's manifest and nothing else: ADR-0020 (3) restores the
+manifest alone, so that the stage can compare digests and skip a rebuild. Two rules follow, and the
+PM's ruling on the plan (2026-10-24) has a test for each. When the digests match, it is the index the
+stage keeps current, without the check of files it does not hold; and it is never published from,
+so a digest that differs builds afresh, and a pointer that names another index fails the stage
+rather than publishing a manifest without its files."""
 
 KEEP_NEWEST: Final = 2
 """How many of the newest local indexes a build never removes: the one it built and the one before."""
@@ -156,6 +168,11 @@ class LocalSearchIndex:
     @property
     def index_id(self) -> str:
         return self.manifest.index_id
+
+
+def restored_from_the_bucket(index: LocalSearchIndex) -> bool:
+    """Whether `index` is a published manifest a bucket-mode run restored (:data:`RESTORED_INDEX_MARKER`)."""
+    return (index.directory / RESTORED_INDEX_MARKER).exists()
 
 
 def newest_local_index(out: Path) -> LocalSearchIndex | None:
@@ -530,6 +547,12 @@ class SearchIndexRefresh:
             return report(
                 StageOutcome.SKIPPED, f"{said}, which current.json names: nothing to build or publish"
             )
+        if restored_from_the_bucket(current):
+            return report(
+                StageOutcome.FAILED,
+                f"{said}; it is a copy of a published manifest restored from the bucket, without its "
+                f"files, so it is never published, and {_published(pointer)}",
+            )
         try:
             # Never with `allow_shrink`: a shrink the guard refuses is published by hand (v1-e39-t14).
             await self._publisher.publish(current.directory)
@@ -577,7 +600,7 @@ class SearchIndexRefresh:
             provenance_limit=self._provenance_limit,
         ):
             return False
-        if self._publisher is None:
+        if self._publisher is None or restored_from_the_bucket(newest):
             return True
         try:
             self._publisher.check(newest.directory)

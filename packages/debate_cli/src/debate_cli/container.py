@@ -131,6 +131,7 @@ from typing import TYPE_CHECKING, Final, cast
 
 from debate_cli.exit_codes import codes_exit_as_a_retrieval_failure
 from debate_core.application.aff_assignment import AffAssignmentService
+from debate_core.application.caselist.bucket_run import BucketRun
 from debate_core.application.caselist.evidence_listing import (
     LocalEvidence,
     digests_in_earlier_manifests,
@@ -155,6 +156,7 @@ from debate_core.application.caselist.run_lock import (
     BucketWriteGuard,
     HolderKind,
 )
+from debate_core.application.caselist.run_state import RunState
 from debate_core.application.caselist.status_service import CaselistStatusService
 from debate_core.application.caselist.suppression import (
     REMOVAL_LOG_KEY,
@@ -227,6 +229,7 @@ from debate_core.integrations.local import (
 )
 from debate_core.integrations.local.fs_version_store import FsEvidenceVersionStore
 from debate_core.integrations.local.parsed_store import LocalParsedStore
+from debate_core.integrations.local.run_state_files import LocalRunStateFiles
 from debate_core.integrations.local.search_index import SqliteSearchIndexWriter
 from debate_core.integrations.local.sqlite_caselist_repository import SqliteCaselistRepository
 from debate_core.integrations.local.suppression_list import (
@@ -606,6 +609,8 @@ class ServiceContainer:
             place_cards=self.caselist_card_stats().place,
             failure_rate_threshold=parse.failure_rate_threshold,
             failure_rate_minimum_sources=parse.failure_rate_minimum_sources,
+            # Bucket mode (`v1-e40-t04`): raw sources a restored copy lacks come from the bucket.
+            fetch_missing=self.run_state().fetch_sources if self._in_bucket_mode else None,
         )
 
     def parsed_publisher(self) -> ParsedStorePublisher:
@@ -1116,7 +1121,7 @@ class ServiceContainer:
             endpoint_url=s3.endpoint_url,
             ignore_configured_endpoints=self._ignores_configured_endpoints,
         )
-        if self.settings.caselist.run_state is RunStateMode.BUCKET and s3.bucket:
+        if self._in_bucket_mode:
             # Bucket mode (`v1-e40-t04`): every write this client sends asks the run lock first,
             # whichever adapter sends it, the takedown's included (ADR-0020 (4) 4).
             from debate_core.integrations.s3.fencing import fence_client
@@ -1167,6 +1172,51 @@ class ServiceContainer:
             task=metadata.rsplit("/", 1)[-1] if metadata else None,
         )
 
+    def run_state(self) -> RunState:
+        """This environment's run state in its bucket: the restore and the saves (`v1-e40-t04`).
+
+        Over the bucket's everyday adapter, whose client the run lock fences in bucket mode, this
+        machine's manifests and database, and the publisher's own withholding rule. Raises
+        :class:`EvidenceStoreNotConfigured` when this environment names no bucket.
+        """
+        return self.singleton("run_state", self._build_run_state)
+
+    def _build_run_state(self) -> RunState:
+        settings = self.settings
+        data_dir = settings.storage.data_dir
+        return RunState(
+            bucket=self._evidence_bucket(),
+            files=LocalRunStateFiles(data_dir),
+            local=self._local_evidence(),
+            staged=self._local_evidence,
+            withheld=lambda evidence: functools.partial(withheld_manifest_reason, evidence),
+            suppression=self.suppression_list(),
+            data_dir=data_dir,
+            clock=self.clock(),
+        )
+
+    def bucket_run(self) -> BucketRun:
+        """What `caselist pull` does around its run for the bucket's run lock and state (`v1-e40-t04`)."""
+        return self.singleton("bucket_run", self._build_bucket_run)
+
+    def _build_bucket_run(self) -> BucketRun:
+        # Imported here, not at module scope: lxml is loaded only by a command that needs the parser.
+        from debate_core.integrations.docx_parser import DebateDocxParser
+
+        bucket = bool(self.settings.storage.s3.bucket)
+        return BucketRun(
+            guard=self.bucket_write_guard(),
+            lock=self.bucket_run_lock if bucket else None,
+            state=self.run_state if bucket else None,
+            parsed_version=DebateDocxParser().parser_version,
+        )
+
+    @property
+    def _in_bucket_mode(self) -> bool:
+        """`caselist.run_state = "bucket"` in an environment that names a bucket (`v1-e40-t04`)."""
+        settings = self.settings
+        return settings.caselist.run_state is RunStateMode.BUCKET and bool(settings.storage.s3.bucket)
+
     def bucket_write_guard(self) -> BucketWriteGuard:
         """What every command that writes to this environment's bucket enters first (`v1-e40-t04`).
 
@@ -1186,8 +1236,9 @@ class ServiceContainer:
         """Whether botocore's own endpoint routes are ignored: in prod, always."""
         return self.settings.environment is Environment.PROD
 
-    def _local_evidence(self) -> LocalEvidence:
-        data_dir = self.settings.storage.data_dir
+    def _local_evidence(self, data_dir: Path | None = None) -> LocalEvidence:
+        """This machine's evidence store, or (`v1-e40-t04`) the same view of a scratch directory."""
+        data_dir = self.settings.storage.data_dir if data_dir is None else data_dir
         objects = FsEvidenceObjectStore(data_dir)
         blobs = FsEvidenceObjectStore(data_dir, subdirectory=BLOB_DIRECTORY.parent)
         return LocalEvidence(
@@ -1321,6 +1372,10 @@ class ServiceContainer:
             read_full_archive=self.read_full_archive,
             # The cloud run's 70% warning on its ephemeral volume (`v1-e40-t03`); unset on the Mac.
             volume_warning_percent=settings.storage.volume_warning_percent,
+            # Bucket mode (`v1-e40-t04`): each state file saved as it is written, and the run-state
+            # bundle after a publish that confirmed everything.
+            state_written=self.bucket_run().state_written(),
+            after_publish=self.bucket_run().after_publish if self._in_bucket_mode else None,
         )
 
     def search_index_store_check(self) -> SearchIndexStoreCheck:

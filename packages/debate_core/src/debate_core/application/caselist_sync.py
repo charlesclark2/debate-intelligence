@@ -512,6 +512,7 @@ disk is not the run's to judge. A reading that fails costs the run its reading, 
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import hashlib
 import json
@@ -610,7 +611,12 @@ from debate_core.application.ports.suppression import (
 from debate_core.domain.caselist import CASELIST_SLUG_PATTERN, Acquisition, Event
 
 if TYPE_CHECKING:  # pragma: no cover - sync_runs imports this module, so its types are named only
-    from debate_core.application.sync_runs import SyncRunDetails, SyncRunMonitor, SyncRunRecord
+    from debate_core.application.sync_runs import (
+        BucketRunDetails,
+        SyncRunDetails,
+        SyncRunMonitor,
+        SyncRunRecord,
+    )
 
 __all__ = [
     "BULK_DOWNLOAD_WINDOW",
@@ -652,6 +658,7 @@ __all__ = [
     "PendingWork",
     "PendingWorkUnreadable",
     "PublishedParsedStore",
+    "PullBracket",
     "PulledRun",
     "RetentionDecision",
     "RunSummary",
@@ -1945,10 +1952,14 @@ class PendingWork:
     target `caselist publish` would accept: a week (`2026-09-01`), a complete archive
     (`full/2026-09-15`) or a camp release (`openev`, `2026-policy`). There is no file when nothing
     is owed.
+
+    `on_written` is called with the path after every write or removal: in bucket mode, the save of
+    the file to the bucket (`v1-e40-t04`).
     """
 
-    def __init__(self, path: Path) -> None:
+    def __init__(self, path: Path, *, on_written: Callable[[Path], None] | None = None) -> None:
         self.path = Path(path)
+        self._on_written = on_written
 
     def read(self) -> tuple[PendingSnapshot, ...]:
         """What is owed, in the order it was recorded; nothing when there is no file.
@@ -1993,9 +2004,11 @@ class PendingWork:
         """
         if not owed:
             remove_state_file(self.path)
-            return
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        write_state_file(self.path, {"publish": [one.as_json() for one in owed]})
+        else:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            write_state_file(self.path, {"publish": [one.as_json() for one in owed]})
+        if self._on_written is not None:
+            self._on_written(self.path)
 
 
 def snapshots_still_owed(
@@ -2059,9 +2072,11 @@ class DownloadLedger:
         path: Path,
         *,
         limit: int = DEFAULT_BULK_DOWNLOADS_PER_DAY,
+        on_written: Callable[[Path], None] | None = None,
     ) -> None:
         self.path = Path(path)
         self.limit = limit
+        self._on_written = on_written
 
     @staticmethod
     def window_start(now: datetime) -> datetime:
@@ -2093,6 +2108,8 @@ class DownloadLedger:
                 "bulk_download_starts": [started.astimezone(UTC).isoformat() for started in sorted(kept)],
             },
         )
+        if self._on_written is not None:
+            self._on_written(self.path)
 
     def _own_starts(self) -> tuple[datetime, ...]:
         if not self.path.is_file():
@@ -2186,8 +2203,9 @@ class OpenEvDeliveries:
     since the importer refuses a removed file on its own.
     """
 
-    def __init__(self, path: Path) -> None:
+    def __init__(self, path: Path, *, on_written: Callable[[Path], None] | None = None) -> None:
         self.path = Path(path)
+        self._on_written = on_written
 
     def read(self) -> dict[int, OpenEvDelivery]:
         """Every id this machine has imported, and what it delivered."""
@@ -2237,6 +2255,8 @@ class OpenEvDeliveries:
                 "deliveries": {str(one): deliveries[one].as_json() for one in sorted(deliveries)},
             },
         )
+        if self._on_written is not None:
+            self._on_written(self.path)
 
 
 _SHA256_HEX: Final = re.compile(r"^[0-9a-f]{64}$")
@@ -2852,8 +2872,14 @@ class CaselistSyncService:
         later_manifests: LaterManifests | None = None,
         volume_warning_percent: int | None = None,
         read_volume: Callable[[Path], VolumeReading] = read_volume,
+        state_written: Callable[[Path], None] | None = None,
+        after_publish: Callable[[], Awaitable[object]] | None = None,
     ) -> None:
         self._source = source
+        # Bucket mode (`v1-e40-t04`): each state file is saved as it is written, a download's start
+        # before the download, and the run-state bundle after a publish that confirmed everything.
+        self._state_written = state_written
+        self._after_publish = after_publish
         self._volume_warning_percent = volume_warning_percent
         self._read_volume = read_volume
         self._archives = archive_importer
@@ -2882,10 +2908,13 @@ class CaselistSyncService:
         self._ledger = DownloadLedger(
             self._state_dir / DOWNLOAD_LEDGER_FILENAME,
             limit=min(bulk_downloads_per_day, DEFAULT_BULK_DOWNLOADS_PER_DAY),
+            on_written=state_written,
         )
-        self._pending = PendingWork(self._state_dir / PENDING_WORK_FILENAME)
+        self._pending = PendingWork(self._state_dir / PENDING_WORK_FILENAME, on_written=state_written)
         self._suppression = suppression
-        self._deliveries = OpenEvDeliveries(self._state_dir / OPENEV_DELIVERIES_FILENAME)
+        self._deliveries = OpenEvDeliveries(
+            self._state_dir / OPENEV_DELIVERIES_FILENAME, on_written=state_written
+        )
         self._local_directories = _named_directories(
             (self._inbox, "the inbox"), (self._state_dir, "the data directory")
         )
@@ -3545,6 +3574,8 @@ class CaselistSyncService:
         await self._timed(SyncStage.IMPORT, tally, lambda: self._import_stage(tally))
         self._note_local_copy_only(tally, SyncStage.IMPORT, since=fallbacks)
         await self._timed(SyncStage.PUBLISH, tally, lambda: self._publish_stage(tally))
+        if self._after_publish is not None:
+            await self._after_publish()
         await self._timed(SyncStage.PARSE, tally, lambda: self._parse_stage(tally))
         await self._timed(SyncStage.SEARCH_INDEX, tally, lambda: self._search_index_stage(plan, tally))
         await self._timed(SyncStage.LANDSCAPE, tally, lambda: self._landscape_stage(plan, tally))
@@ -3617,6 +3648,10 @@ class CaselistSyncService:
             if listing is None:  # pragma: no cover - a selection to download always carries one
                 continue
             started = self._clock()
+            if self._state_written is not None:
+                # Bucket mode: the start is in the bucket's ledger before the download starts, so no
+                # task that dies mid-download can lose it from the count of five a day (ADR-0020 (3)).
+                self._ledger.record(started)
             try:
                 downloaded = await self._source.download_archive(listing, self._inbox)
             except ProviderRateLimited as limited:
@@ -3632,7 +3667,8 @@ class CaselistSyncService:
             tally.downloaded_archives.append((selection, downloaded))
             # Recorded even when the bytes were `already_present`: the client streamed the whole
             # archive before it could tell, and the server counted the download.
-            self._ledger.record(started)
+            if self._state_written is None:
+                self._ledger.record(started)
 
         if deferred_from is not None:
             tally.archives = _mark_deferred(tally.archives, wanted[deferred_from:])
@@ -4841,6 +4877,31 @@ class CaselistSyncService:
 # ------------------------------------------------------------------------------------------------
 
 
+class PullBracket(Protocol):
+    """What a pull does around its run for the bucket's run lock and state (`v1-e40-t04`).
+
+    :class:`~debate_core.application.caselist.bucket_run.BucketRun`, named here by its shape because
+    it is built over this module. See that module for what each step does and in which mode.
+    """
+
+    @property
+    def bucket_mode(self) -> bool: ...
+
+    def watching(self, task: asyncio.Task[object]) -> None: ...
+
+    async def start(
+        self, caselists: Sequence[str], *, dry_run: bool, restore_parsed: bool = True
+    ) -> None: ...
+
+    async def after_run(self) -> None: ...
+
+    async def finish(self) -> None: ...
+
+    def details(self) -> BucketRunDetails | None: ...
+
+    def as_terminated(self, cancelled: asyncio.CancelledError) -> BaseException: ...
+
+
 @dataclass(frozen=True, slots=True)
 class PulledRun:
     """What one `caselist pull` produced, in whichever mode it ran."""
@@ -4864,6 +4925,7 @@ async def run_pull(
     monitor: Callable[[], SyncRunMonitor],
     progress: Callable[[str], None],
     full_archive: str | None = None,
+    bracket: PullBracket | None = None,
 ) -> PulledRun:
     """Run one `caselist pull`: a dry run, a whole run, or `--publish-pending`.
 
@@ -4878,6 +4940,9 @@ async def run_pull(
         progress: Where a one-line account of what is starting goes (the CLI's `--verbose`).
         full_archive: `--full-archive <slug>`: that caselist's complete archive takes the run's one
             slot (`v1-e34-t04`), and the caselist is pulled too. Never with `publish_pending`.
+        bracket: The bucket's run lock and state around the run (:class:`PullBracket`, `v1-e40-t04`).
+            It starts inside the monitor, so that a refusal is recorded, and ends after the monitor
+            has recorded the run. `None` is local mode without the lock check, as before it.
 
     Raises :class:`NoCaselistsConfigured` when asked to pull no caselist, and whatever the service
     or the monitor raise; the monitor has recorded and announced it first.
@@ -4885,10 +4950,15 @@ async def run_pull(
     record: SyncRunRecord | None = None
     details: SyncRunDetails | None = None
     caselists = _with_requested(caselists, full_archive)
+    task = asyncio.current_task()
+    if bracket is not None and task is not None:
+        bracket.watching(task)
     if dry_run:
         # A dry run writes nothing (v1-e34-t02 ac2), so it leaves no run record either.
         if not caselists:
             raise NoCaselistsConfigured
+        if bracket is not None:
+            await bracket.start(caselists, dry_run=True)
         progress(f"pulling {', '.join(caselists)} (dry run)")
         summary = await sync_service().run(caselists, dry_run=True, full_archive=full_archive)
     else:
@@ -4897,18 +4967,35 @@ async def run_pull(
         async def one_run() -> RunSummary:
             # Inside the monitor, so that a refusal — no caselist, the API not turned on, an
             # expired token, another run holding the lock — is recorded and announced too.
-            # What earlier runs owed again for drift is read from their records (`v1-e34-t26`).
-            owed_for_drift = watching.snapshots_owed_again_for_drift()
-            # And the check the newest run's report stage was cut short on, which a pull makes as a
-            # drain does (`v1-e34-t28`).
-            comparisons_owed = watching.comparisons_owed()
+            try:
+                if not publish_pending and not caselists:
+                    raise NoCaselistsConfigured
+                if bracket is not None:
+                    # The lock and the restore first: the run log read next is the restored one.
+                    await bracket.start(caselists, dry_run=False, restore_parsed=not publish_pending)
+                summary = await pulled(
+                    # What earlier runs owed again for drift is read from their records (`v1-e34-t26`).
+                    watching.snapshots_owed_again_for_drift(),
+                    # And the check the newest run's report stage was cut short on, which a pull makes
+                    # as a drain does (`v1-e34-t28`).
+                    watching.comparisons_owed(),
+                )
+                if bracket is not None:
+                    await bracket.after_run()
+                return summary
+            except asyncio.CancelledError as cancelled:
+                if bracket is None:
+                    raise
+                raise bracket.as_terminated(cancelled) from None
+
+        async def pulled(
+            owed_for_drift: frozenset[PendingSnapshot], comparisons_owed: tuple[PendingSnapshot, ...]
+        ) -> RunSummary:
             if publish_pending:
                 progress("completing the publishes an earlier run deferred")
                 return await sync_service().publish_pending(
                     owed_for_drift=owed_for_drift, comparisons_owed=comparisons_owed
                 )
-            if not caselists:
-                raise NoCaselistsConfigured
             progress(f"pulling {', '.join(caselists)}")
             return await sync_service().run(
                 caselists,
@@ -4917,9 +5004,16 @@ async def run_pull(
                 comparisons_owed=comparisons_owed,
             )
 
-        monitored = await watching.watch(
-            one_run, caselists=caselists, mode="publish_pending" if publish_pending else "run"
-        )
+        try:
+            monitored = await watching.watch(
+                one_run,
+                caselists=caselists,
+                mode="publish_pending" if publish_pending else "run",
+                bucket_run=bracket.details if bracket is not None else lambda: None,
+            )
+        finally:
+            if bracket is not None:
+                await bracket.finish()
         summary, record, details = monitored.summary, monitored.record, monitored.details
 
     written_to = sync_service().summary_path(summary) if not summary.dry_run else None

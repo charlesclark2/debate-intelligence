@@ -64,7 +64,7 @@ import json
 import logging
 import re
 import threading
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -736,7 +736,7 @@ class BucketWriteGuard:
         return self._mode is RunStateMode.BUCKET and self._lock is not None
 
     @contextmanager
-    def held(self, command: str) -> Iterator[TakenLock | None]:
+    def held(self, command: str) -> Generator[TakenLock | None]:
         """Hold what `command` needs to write to the bucket for the length of the block."""
         if self._lock is None:
             yield None

@@ -1261,7 +1261,10 @@ def test_advantages_report_md_section_matches_the_hand_written_golden_file() -> 
     bundle = LandscapeReportService().bundle(_advantage_inputs(), synthetic_staleness())
     report_md = bundle.files["report.md"]
     start = report_md.index("## Advantages by affirmative\n")
-    end = report_md.index("\n## ", start) + 1
+    # The section ends at the next section of its level or the next part's heading (`v1-e32-t20`).
+    following = re.compile(r"\n#{1,2} ").search(report_md, start)
+    assert following is not None
+    end = following.start() + 1
     assert report_md[start:end] == (ADVANTAGES / "report_section.md").read_text(encoding="utf-8")
 
 

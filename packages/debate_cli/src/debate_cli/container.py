@@ -149,6 +149,12 @@ from debate_core.application.caselist.removal_service import (
     TakedownAccess,
     TakedownNotConfigured,
 )
+from debate_core.application.caselist.run_lock import (
+    RUN_LOCK_KEY,
+    BucketRunLock,
+    BucketWriteGuard,
+    HolderKind,
+)
 from debate_core.application.caselist.status_service import CaselistStatusService
 from debate_core.application.caselist.suppression import (
     REMOVAL_LOG_KEY,
@@ -190,6 +196,7 @@ from debate_core.application.settings import (
     CaselistTokenBackend,
     ConfigurationError,
     Environment,
+    RunStateMode,
     Settings,
     SyncNotifierKind,
 )
@@ -246,6 +253,7 @@ __all__ = [
 ]
 
 SERVICE_NAMES: Final[tuple[str, ...]] = (
+    "bucket_write_guard",
     "caselist_import",
     "caselist_parse",
     "caselist_publish",
@@ -350,6 +358,9 @@ LANDSCAPE_REPORTS_DIRECTORY: Final = Path("reports") / "landscape"
 
 SCAN_ACCEPTANCES_DIRECTORY: Final = "scan-acceptances"
 """Beside the classification cache: the scan hits the operator accepted, per caselist (`v1-e32-t05`)."""
+
+_ECS_METADATA_VARIABLE: Final = "ECS_CONTAINER_METADATA_URI_V4"
+"""Set by ECS in every task's containers: how the run lock tells the cloud run from the Mac."""
 
 _EVERYDAY_PROFILE_SETTING: Final = "storage.s3.aws_profile"
 _REMOVAL_PROFILE_SETTING: Final = "DEBATE_REMOVAL_PROFILE"
@@ -1098,12 +1109,76 @@ class ServiceContainer:
         from debate_core.integrations.s3 import build_s3_client
 
         s3 = self.settings.storage.s3
-        return build_s3_client(
+        client = build_s3_client(
             region=s3.region,
             profile=profile,
             profile_setting=profile_setting,
             endpoint_url=s3.endpoint_url,
             ignore_configured_endpoints=self._ignores_configured_endpoints,
+        )
+        if self.settings.caselist.run_state is RunStateMode.BUCKET and s3.bucket:
+            # Bucket mode (`v1-e40-t04`): every write this client sends asks the run lock first,
+            # whichever adapter sends it, the takedown's included (ADR-0020 (4) 4).
+            from debate_core.integrations.s3.fencing import fence_client
+
+            fence_client(client, self.bucket_run_lock())
+        return client
+
+    def bucket_run_lock(self) -> BucketRunLock:
+        """This command's lease on the bucket's run lock, `reports/sync/run-lock.json` (`v1-e40-t04`).
+
+        One per command, on a client of its own that is never fenced: its writes are the lock's.
+        Signed with the everyday profile, which a takedown also holds, because `EvidenceRemoval`
+        may write nowhere but `manifests/_suppression/`. The holder is `cloud` inside an ECS task,
+        which ECS marks with `ECS_CONTAINER_METADATA_URI_V4`, and `mac` anywhere else; the task is
+        the last segment of that address. Raises :class:`EvidenceStoreNotConfigured` when this
+        environment names no bucket.
+        """
+        return self.singleton("bucket_run_lock", self._build_bucket_run_lock)
+
+    def _build_bucket_run_lock(self) -> BucketRunLock:
+        # Imported here, not at module scope: boto3 is an optional dependency. See the docstring.
+        from debate_core.integrations.s3 import build_s3_client
+        from debate_core.integrations.s3.run_lock_object import S3LockObject
+
+        settings = self.settings
+        s3 = settings.storage.s3
+        if not s3.bucket:
+            raise EvidenceStoreNotConfigured(settings.environment)
+        client = build_s3_client(
+            region=s3.region,
+            profile=s3.aws_profile,
+            profile_setting=_EVERYDAY_PROFILE_SETTING,
+            endpoint_url=s3.endpoint_url,
+            ignore_configured_endpoints=self._ignores_configured_endpoints,
+        )
+        metadata = os.environ.get(_ECS_METADATA_VARIABLE, "").rstrip("/")
+        return BucketRunLock(
+            store=S3LockObject(
+                bucket=str(s3.bucket),
+                key=RUN_LOCK_KEY,
+                client=client,
+                profile=s3.aws_profile,
+                profile_setting=_EVERYDAY_PROFILE_SETTING,
+            ),
+            environment=settings.environment.value,
+            clock=self.clock(),
+            kind=HolderKind.CLOUD if metadata else HolderKind.MAC,
+            task=metadata.rsplit("/", 1)[-1] if metadata else None,
+        )
+
+    def bucket_write_guard(self) -> BucketWriteGuard:
+        """What every command that writes to this environment's bucket enters first (`v1-e40-t04`).
+
+        Bucket mode takes the lease; local mode refuses a bucket that holds a lock object (the PM's
+        ruling 3(a)). An environment that names no bucket has nothing to guard.
+        """
+        return self.singleton(
+            "bucket_write_guard",
+            lambda: BucketWriteGuard(
+                mode=self.settings.caselist.run_state,
+                lock=self.bucket_run_lock if self.settings.storage.s3.bucket else None,
+            ),
         )
 
     @property

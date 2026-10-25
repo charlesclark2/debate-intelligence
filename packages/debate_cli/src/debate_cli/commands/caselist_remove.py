@@ -134,6 +134,7 @@ from typing import Annotated, Any
 
 import typer
 
+from debate_cli.bucket_lock import run_holding_the_bucket_lock
 from debate_cli.commands.store import CONFIRM_PROD_FLAG, SYNCABLE_ENVIRONMENTS
 from debate_cli.context import CliContext, cli_context, command_name
 from debate_cli.exit_codes import ExitCode
@@ -239,7 +240,7 @@ def remove(
     cli.output.detail(
         f"executing under the takedown profile: {_what_the_plan_covers(plan, carried_out=True)}"
     )
-    report = _run(service.execute(plan))
+    report = run_holding_the_bucket_lock(cli, "caselist remove", lambda: service.execute(plan))
     cli.output.success(
         command_name(ctx), plan_summary(plan, settings, report), display=render_plan(plan, report)
     )
@@ -272,7 +273,11 @@ def unsuppress(
     service = cli.services.caselist_removal()
     code = _reason(reason, REINSTATEMENT_REASONS, _REINSTATEMENT_REASONS)
     plan = _run(service.plan_unsuppress(sha256.strip().lower(), reason=code, request_id=request))
-    report = _run(service.unsuppress(plan)) if execute else None
+    report = (
+        run_holding_the_bucket_lock(cli, "caselist unsuppress", lambda: service.unsuppress(plan))
+        if execute
+        else None
+    )
     cli.output.success(
         command_name(ctx), unsuppress_summary(plan, settings, report), display=render_unsuppress(plan, report)
     )

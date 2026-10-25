@@ -64,14 +64,16 @@ import json
 import logging
 import re
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from typing import Final
 
-from debate_core.application.errors import DomainError
+from debate_core.application.errors import DomainError, StoreError
 from debate_core.application.ports.run_lock import LockObjectChanged, LockObjectStore
+from debate_core.application.settings import RunStateMode
 
 __all__ = [
     "CLOCK_SKEW_MARGIN",
@@ -81,6 +83,7 @@ __all__ = [
     "RUN_LOCK_KEY",
     "BucketKeepsRunState",
     "BucketRunLock",
+    "BucketWriteGuard",
     "HolderKind",
     "LockBody",
     "LockHolder",
@@ -91,6 +94,7 @@ __all__ = [
     "RunLockUnreadable",
     "RunLockWrongHome",
     "RunStateNotSeeded",
+    "RunTerminated",
     "TakenLock",
     "is_content_addressed",
     "lock_run_id",
@@ -356,6 +360,23 @@ class BucketKeepsRunState(DomainError):
     def __init__(self) -> None:
         super().__init__(
             f"this bucket keeps its run state (it holds {RUN_LOCK_KEY}); set caselist.run_state = bucket"
+        )
+
+
+class RunTerminated(DomainError):
+    """The process was told to stop (SIGTERM): the container's deadline, or `ecs stop-task`.
+
+    ADR-0020 (1) 6 and `v1-e40-t03`'s follow-up: the run's entry point is `timeout --signal=TERM
+    --kill-after=120s 6h`, and ECS stops a task with SIGTERM and SIGKILL 120 seconds later. A
+    command told to stop saves what ADR-0020 (3) lets it, writes a failed run record and releases
+    the lock in that time. A failure, so the coach is told; the run that follows reads it stale
+    under `v1-e34-t32`'s rule until its own record lands.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(
+            "the run was told to stop (SIGTERM, the run's deadline or a stop by hand) before it "
+            "finished; it saved what it may and released the bucket's run lock"
         )
 
 
@@ -686,3 +707,63 @@ class BucketRunLock:
                 logger.warning(
                     "run lock: a renewal failed (%s); the next one tries again", type(unanswered).__name__
                 )
+
+
+# ------------------------------------------------------------------------------------------------
+# Every command that writes to a bucket
+# ------------------------------------------------------------------------------------------------
+
+
+class BucketWriteGuard:
+    """What every command that writes to an evidence bucket enters before it writes (ADR-0020 (4)).
+
+    In bucket mode, the lease: taken, renewed in the background, and released when the command
+    ends, however it ends. In local mode, the PM's ruling 3(a) of 2026-10-24: a command refuses a
+    bucket that holds a lock object (:class:`BucketKeepsRunState`), and with no lock object, or no
+    session to ask with, nothing changes. A dry run enters nothing: it reads and takes nothing.
+
+    Args:
+        mode: `caselist.run_state`.
+        lock: Builds this command's lease, or `None` when the environment names no bucket.
+    """
+
+    def __init__(self, *, mode: RunStateMode, lock: Callable[[], BucketRunLock] | None) -> None:
+        self._mode = mode
+        self._lock = lock
+
+    @property
+    def bucket_mode(self) -> bool:
+        return self._mode is RunStateMode.BUCKET and self._lock is not None
+
+    @contextmanager
+    def held(self, command: str) -> Iterator[TakenLock | None]:
+        """Hold what `command` needs to write to the bucket for the length of the block."""
+        if self._lock is None:
+            yield None
+            return
+        lock = self._lock()
+        if self._mode is not RunStateMode.BUCKET:
+            self.refuse_a_seeded_bucket(lock)
+            yield None
+            return
+        taken = lock.take(command=command)
+        lock.start_renewing()
+        try:
+            yield taken
+        finally:
+            lock.release()
+
+    @staticmethod
+    def refuse_a_seeded_bucket(lock: BucketRunLock) -> None:
+        """Ruling 3(a): raise :class:`BucketKeepsRunState` when the bucket holds a lock object.
+
+        A store that cannot be asked (no session, most often) changes nothing: the command goes on
+        as it did before, and meets the same store at its first bucket call.
+        """
+        try:
+            seeded = lock.bucket_is_seeded()
+        except StoreError as unasked:
+            logger.info("run lock: not checked in local mode (%s)", type(unasked).__name__)
+            return
+        if seeded:
+            raise BucketKeepsRunState

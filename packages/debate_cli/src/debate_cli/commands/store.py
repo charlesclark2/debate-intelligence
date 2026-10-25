@@ -60,6 +60,7 @@ from typing import Annotated, Any
 
 import typer
 
+from debate_cli.bucket_lock import run_holding_the_bucket_lock
 from debate_cli.context import CliContext, cli_context, command_name
 from debate_cli.exit_codes import ExitCode, exit_code_for_failure_codes
 from debate_cli.output import CommandFailure, JsonValue, TableSpec
@@ -137,7 +138,11 @@ def sync(
         _note_a_stale_parsed_copy(cli, _run(service.stale_parsed_copy()))
     else:
         cli.output.detail(f"transferring {len(plan.transfers)} object(s)")
-        report = _run(service.execute(plan))
+        report = (
+            run_holding_the_bucket_lock(cli, "store sync --push", lambda: service.execute(plan))
+            if direction is SyncDirection.PUSH
+            else _run(service.execute(plan))
+        )
 
     payload = sync_report(report, settings)
     if report.succeeded:

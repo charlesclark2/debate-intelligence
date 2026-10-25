@@ -78,6 +78,7 @@ from typing import Annotated, Final, NoReturn
 
 import typer
 
+from debate_cli.bucket_lock import run_holding_the_bucket_lock
 from debate_cli.commands.caselist import _snapshot_date  # pyright: ignore[reportPrivateUsage]
 from debate_cli.commands.store import CONFIRM_PROD_FLAG, SYNCABLE_ENVIRONMENTS
 from debate_cli.context import CliContext, cli_context, command_name
@@ -190,7 +191,11 @@ def report(
     )
     service = cli.services.landscape_run(config_dir=_config_dir(config_dir), with_bucket=publish)
     try:
-        result = asyncio.run(service.run(request))
+        result = (
+            run_holding_the_bucket_lock(cli, "landscape report --publish", lambda: service.run(request))
+            if publish and not dry_run
+            else asyncio.run(service.run(request))
+        )
     except LandscapeRequestRefused as refused:
         _end(cli, ctx, _usage_failure(refused))
     payload = run_summary(result, settings)

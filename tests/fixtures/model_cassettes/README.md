@@ -48,7 +48,14 @@ FixtureDirectory(Path("tests/fixtures/model_outputs")).write(request, {"paragrap
 ```
 
 The fake recomputes the key from the file's own fields when it reads one, so a fixture copied to the
-wrong name, or left behind by a prompt version bump, is refused rather than served. A call with no
+wrong name, or left behind by a prompt version bump, is refused rather than served.
+
+`"output": null`, in a fixture or a cassette, is an answer that never called the schema's tool,
+which Bedrock's `toolChoice` `auto` allows. Both routers refuse it as invalid output, and the
+structured-output guard repairs it like any other (`v1-e05-t05`, ac5). A repair is a second call,
+to `model.repair`, and needs a fixture or cassette of its own; `tests/fixtures/model_outputs/malformed/`
+has worked examples. Record mode writes nothing for a call whose answer was invalid, so the first
+half of a repaired call's pair is written by hand. A call with no
 fixture fails with `MissingFixtureError`, naming the prompt and the key; it never gets a default.
 
 ## Recording cassettes

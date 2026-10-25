@@ -53,8 +53,10 @@ from botocore.config import Config
 from botocore.exceptions import BotoCoreError, ClientError
 from pydantic import BaseModel, ValidationError
 
-from debate_core.application.errors import InvalidModelOutput, ModelUnavailableError
+from debate_core.application.errors import InvalidModelOutput, ModelUnavailableError, OutputProblem
+from debate_core.application.model_errors import describe_problems
 from debate_core.application.ports.providers import Clock
+from debate_core.application.structured_output import missing_tool_call, validate_model_output
 from debate_core.domain.model_contracts import (
     EmbeddingResponse,
     ModelParams,
@@ -76,7 +78,9 @@ __all__ = [
     "CONNECT_TIMEOUT_SECONDS",
     "DEFAULT_BACKOFF_BASE_SECONDS",
     "DEFAULT_BACKOFF_CAP_SECONDS",
+    "REPEATED_TOOL_CALL",
     "SERVICE_NAME",
+    "UNFINISHED_ANSWER",
     "BedrockModelRouter",
     "BedrockRuntimeClient",
     "ClientFactory",
@@ -103,6 +107,12 @@ ACCEPTED_STOP_REASONS: Final = frozenset({"tool_use", "end_turn"})
 """Converse stop reasons a structured answer may come with. `max_tokens` means the tool input was
 cut off; `guardrail_intervened` or `content_filtered` mean it was withheld; any other is not an
 answer either."""
+
+UNFINISHED_ANSWER: Final = "unfinished_answer"
+"""The problem type of an answer that stopped for a reason not in :data:`ACCEPTED_STOP_REASONS`."""
+
+REPEATED_TOOL_CALL: Final = "repeated_tool_call"
+"""The problem type of an answer that called the schema's tool more than once."""
 
 _TOOL_NAME_UNSAFE: Final = re.compile(r"[^A-Za-z0-9_-]")
 _TOOL_NAME_LIMIT: Final = 64
@@ -389,26 +399,47 @@ class BedrockModelRouter:
 def _structured_output[OutputT: BaseModel](
     response: Mapping[str, Any], schema: type[OutputT], prompt: ModelPrompt, route: ResolvedRoute
 ) -> OutputT:
-    """The schema instance the model's call of the tool carries, or `InvalidModelOutput`."""
+    """The schema instance the model's call of the tool carries, or `InvalidModelOutput`.
+
+    The tool's input is validated by :func:`~debate_core.application.structured_output.validate_model_output`,
+    strictly, like every router's; the error names the problems and never the model's words.
+    """
     name = tool_name_for(schema)
     stop_reason = response.get("stopReason")
 
-    def refuse(message: str) -> InvalidModelOutput:
-        return InvalidModelOutput(prompt.prompt_id, prompt.prompt_version, message, model_id=route.model_id)
+    def refuse(problem: OutputProblem) -> InvalidModelOutput:
+        return InvalidModelOutput(
+            prompt.prompt_id,
+            prompt.prompt_version,
+            describe_problems((problem,)),
+            model_id=route.model_id,
+            problems=(problem,),
+        )
 
     message = _as_mapping(_as_mapping(response.get("output")).get("message"))
     calls = [_as_mapping(_as_mapping(block).get("toolUse")) for block in _as_list(message.get("content"))]
     ours = [call for call in calls if call.get("name") == name]
     if stop_reason not in ACCEPTED_STOP_REASONS:
-        raise refuse(f"the model stopped with {stop_reason!r}, which is not a finished answer")
+        raise refuse(
+            OutputProblem(
+                loc=(),
+                type=UNFINISHED_ANSWER,
+                msg=f"the model stopped with {stop_reason!r}, which is not a finished answer",
+            )
+        )
     if not ours:
-        raise refuse(f"the model did not call the {name} tool (stopReason {stop_reason!r})")
+        raise refuse(
+            missing_tool_call(f"the model did not call the {name} tool (stopReason {stop_reason!r})")
+        )
     if len(ours) > 1:
-        raise refuse(f"the model called the {name} tool {len(ours)} times; one answer was asked for")
-    try:
-        return schema.model_validate(ours[0].get("input"))
-    except ValidationError as error:
-        raise refuse(str(error)) from error
+        raise refuse(
+            OutputProblem(
+                loc=(),
+                type=REPEATED_TOOL_CALL,
+                msg=f"the model called the {name} tool {len(ours)} times; one answer was asked for",
+            )
+        )
+    return validate_model_output(schema, ours[0].get("input"), prompt=prompt, model_id=route.model_id)
 
 
 def _invoke(route: ResolvedRoute, body: Mapping[str, Any]) -> dict[str, Any]:

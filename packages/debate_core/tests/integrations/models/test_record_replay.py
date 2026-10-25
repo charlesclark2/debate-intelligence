@@ -18,11 +18,12 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from pydantic import BaseModel, JsonValue, ValidationError
+from pydantic import BaseModel, JsonValue
 
-from debate_core.application.errors import InvalidModelOutput, ProviderUnavailable
+from debate_core.application.errors import ProviderUnavailable
 from debate_core.application.ports.model_router import ModelRouter
 from debate_core.application.settings import ConfigurationError
+from debate_core.application.structured_output import validate_model_output
 from debate_core.domain.model_contracts import (
     EmbeddingResponse,
     ModelParams,
@@ -133,12 +134,7 @@ class StandInRealRouter:
         )
         if planned is None:
             raise ProviderUnavailable("stand-in", f"no answer planned for {prompt.prompt_id}")
-        try:
-            output = schema.model_validate(dict(planned.answer))
-        except ValidationError as error:
-            raise InvalidModelOutput(
-                prompt.prompt_id, prompt.prompt_version, str(error), model_id=route.model_id
-            ) from error
+        output = validate_model_output(schema, dict(planned.answer), prompt=prompt, model_id=route.model_id)
         return ModelResponse[schema](
             output=output,
             route=route,

@@ -35,6 +35,11 @@ The request, with the call's values: {{ research_need }}
 
 (`card.select` and its schema path illustrate the format. That prompt is v1-e05-t06's to write.)
 
+The first released prompt is [`model/repair.md`](model/repair.md), the structured-output guard's
+one repair attempt (`v1-e05-t05-structured-output-validation`). It answers in the schema of the
+call it repairs and runs on that call's route, so its `output_schema` names the placeholder
+`RepairedSchema` and its `task_class` is not used for routing.
+
 ### Front matter
 
 Every key is required, and an unknown key is refused.

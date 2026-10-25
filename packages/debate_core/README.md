@@ -83,6 +83,7 @@ cross them. Full write-up: [docs/architecture/ports-and-adapters.md](../../docs/
 | `ports/persistence.py` | `ArticleRepository`, `SnapshotStore`, `CardRepository`, `SearchRepository` (which also keeps each search's per-provider record, v1-e08-t01), and the `Page` returned by every listing |
 | `ports/providers.py` | `SearchProvider`, `DiscoveryProviders` (the enabled providers and their health: what a federated search fans out over, v1-e08-t01), `ArticleFetcher`, `ContentExtractor`, `Clock`, `IdGenerator`, and the value objects they exchange |
 | `ports/model_router.py` | `ModelRouter` (`generate_structured`, `embed`, `rerank`) and `RoutingConfigError`; every model call goes through it (v1-e05-t01-model-router-port) |
+| `structured_output.py`, `model_errors.py` | `StructuredOutputGuard`, the way a service asks for structured output: it checks the call against the prompt's registry entry, validates strictly (`validate_model_output`, which every router uses too), repairs an invalid answer once with `model.repair`, and raises `ModelOutputError` after that. `ValidationPolicy(fail_closed=...)` is given on every call (v1-e05-t05-structured-output-validation) |
 | `ports/caselist.py` | `CaselistRepository`, the boundary the E30 importers, publisher and removal command store through (v1-e30-t02) |
 | `ports/debate_files.py` | `DebateFileParser`, the boundary a debate `.docx` is taken apart behind. Synchronous, because parsing waits on nothing, and a file it cannot read comes back as a `ParseFailure` rather than an exception (v1-e31-t03) |
 | `ports/evidence_store.py` | `EvidenceObjectStore` and `ObjectInfo`: evidence stored under a *name* rather than a digest — manifests, reports — plus the key validation both its adapters share (v1-e29-t04) |
@@ -98,6 +99,10 @@ Things worth knowing before you write a service:
   `httpx` failures at its own edge.
 * **`CardRepository.save` requires `expected_revision`** and raises `RevisionMismatch`, so model
   reprocessing cannot overwrite a student's edit. Creating is a separate method.
+* **Structured output goes through `StructuredOutputGuard`, not the router.** No call gets a
+  coerced, partial or default object, and an evidence action (`fail_closed=True`) that gets a
+  `ModelOutputError` marks its card UNVERIFIED. An error or a log line never quotes the model's
+  answer: `InvalidModelOutput.problems` hold each problem's location, type and message only.
 * **Async where the work is I/O.** Extraction, the clock and the id generator are synchronous.
 
 ### `testing/` — in-memory fakes (v1-e02-t02-ports)

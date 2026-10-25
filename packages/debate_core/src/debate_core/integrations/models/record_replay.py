@@ -30,7 +30,9 @@ the call's in full, and a call that differs in either is an unrecorded call, not
 
 A replayed response is the recorded one with its route marked as provider `fake` and no region or
 inference profile, because no model was reached. The recorded model id is kept: it says which
-model's answer is being replayed.
+model's answer is being replayed. Its output is validated strictly, as every router's is
+(:func:`~debate_core.application.structured_output.validate_model_output`); a hand-written cassette
+with `"output": null` replays an answer that never called the schema's tool (v1-e05-t05, ac5).
 """
 
 from __future__ import annotations
@@ -42,9 +44,9 @@ from typing import Any, Final
 
 from pydantic import BaseModel, JsonValue, ValidationError
 
-from debate_core.application.errors import InvalidModelOutput
 from debate_core.application.ports.model_router import ModelRouter
 from debate_core.application.settings import ConfigurationError
+from debate_core.application.structured_output import validate_model_output
 from debate_core.domain.model_contracts import (
     EmbeddingResponse,
     ModelParams,
@@ -298,12 +300,7 @@ class RecordReplayModelRouter:
         route = _replayed_route(recorded, response.get("route"))
         usage = _validated(recorded, ModelUsage, response.get("usage"))
         prompt = request.prompt
-        try:
-            output = schema.model_validate(response.get("output"))
-        except ValidationError as error:
-            raise InvalidModelOutput(
-                prompt.prompt_id, prompt.prompt_version, str(error), model_id=route.model_id
-            ) from error
+        output = validate_model_output(schema, response.get("output"), prompt=prompt, model_id=route.model_id)
         return _validated(
             recorded,
             ModelResponse[schema],

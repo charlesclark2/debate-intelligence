@@ -315,9 +315,42 @@ for id in $(gh run list --repo charlesclark2/debate-intelligence --workflow dev-
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-24
 
 **Notes:**
+
+1. **The count did its job.** It withdrew the PM's hypothesis with evidence: the hotfix tags
+   `v1.0.1-dev.1` and `.2` went through at commits that differed from the default branch's head.
+   It also found the second refusal (10-14, `7a9c4ff`) and showed that the spec's condition held
+   both times. It withdrew its own 21-commit miscount and its own wrong claim-time query. Exactly
+   the right habits.
+2. **Built as ruled (option 1).**
+   * The pre-check uses a freshly fetched dev head (`FETCH_HEAD`, never the checkout's
+     `origin/dev`), checks ancestry, and compares the workflow trees, so a reverted change still
+     tags.
+   * GitHub's wording, pinned from run 40149948706, is a second guard only, re-checked against a
+     fresh head.
+   * The check runs once, before the first push, which keeps "any other refusal fails as today"
+     true.
+   * Hotfix claims are unchanged, and a test pins it.
+3. **The rest is accepted as made:**
+   * **"Reads as skipped" means a run that succeeds with a notice annotation, every later step
+     skipped, and a job summary saying why.** A job-level `skipped` would need a second job that
+     moves the token and the checkout. That's not worth it, and this is the reading the PM meant.
+   * The workflow and the script deliberately take effect at different times, with the claim's
+     command line unchanged and pinned. A commit merged before this change behaves exactly as today.
+   * **What's known is documented as observed or reported,** with the conservative direction stated
+     (it may skip a commit GitHub would have tagged, never the reverse): two refusals in 374 runs,
+     GitHub's documentation silent, discussion #151442.
+4. **Red, then green.** 11 failed against the skeleton, and 17 of 17 mutants were caught, including
+   the stale-dev-head mutant the PM asked for. The coverage gap that turned up got its own test. The
+   affected set was run in three parts (2,178 passed).
+5. **The two read-only queries are optional, for the record only.** The PM won't block on them. If
+   the operator runs the `d47c851` one, its answer goes in a PM record.
+6. **Follow-up work:** the REST-API tag is not pursued, because it would change v1-e01-t09's atomic
+   claim and its permissions. `next` stays as it is.
+
+No re-review is needed. The Goal is `Succeeded`.

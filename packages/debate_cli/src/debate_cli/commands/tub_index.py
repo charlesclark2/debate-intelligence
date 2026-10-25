@@ -49,6 +49,7 @@ from typing import Annotated
 
 import typer
 
+from debate_cli.bucket_lock import run_holding_the_bucket_lock
 from debate_cli.commands.caselist import event_for_caselist
 from debate_cli.context import CliContext, cli_context, command_name
 from debate_cli.exit_codes import ExitCode
@@ -162,7 +163,9 @@ def publish(
         index = _newest_built(cli, ctx)
     service = cli.services.search_index_publish()
     cli.output.detail(f"publishing {index.name} to {cli.services.settings.storage.s3.bucket}")
-    published = asyncio.run(service.publish(index, allow_shrink=allow_shrink))
+    published = run_holding_the_bucket_lock(
+        cli, "tub index publish", lambda: service.publish(index, allow_shrink=allow_shrink)
+    )
     if published.allowed_shrink is not None:
         cli.output.note(f"published past the shrink guard with {ALLOW_SHRINK_FLAG}: {_allowed(published)}")
     cli.output.success(command_name(ctx), publish_summary(published), display=_publish_table(published))

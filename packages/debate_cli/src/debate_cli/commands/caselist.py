@@ -189,6 +189,7 @@ from typing import Annotated, Any, Final
 
 import typer
 
+from debate_cli.bucket_lock import run_holding_the_bucket_lock
 from debate_cli.commands.store import CONFIRM_PROD_FLAG, SYNCABLE_ENVIRONMENTS
 from debate_cli.context import CliContext, cli_context, command_name
 from debate_cli.exit_codes import ExitCode, exit_code_for_failure_codes
@@ -499,7 +500,7 @@ def publish(
         report = PublishReport(plan=plan, applied=False)
     else:
         cli.output.detail(f"uploading {len(plan.uploads)} source(s)")
-        report = _run(service.execute(plan))
+        report = run_holding_the_bucket_lock(cli, "caselist publish", lambda: service.execute(plan))
 
     payload = publish_summary(report, settings)
     display = _publish_table(report, settings)

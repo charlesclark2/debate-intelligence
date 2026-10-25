@@ -47,7 +47,12 @@ document as the EvidenceOperator permission set: list the documented prefixes, r
 retired `parsed/` directory, use the evidence key. Nothing more, and no delete. `evidence_policy_json`
 is refused at plan time if it allows anything else, names another bucket or another key. The task's
 environment names the token's secret and holds no secret; the CLI reads the token itself with the
-task role, through t02's Secrets Manager client, which keeps botocore's wire logs quiet.
+task role, through t02's Secrets Manager client, which keeps botocore's wire logs quiet. It also sets
+bucket mode, `DEBATE_CASELIST__RUN_STATE=bucket` (`v1-e40-t04`, ADR-0020 (3) and (4)): the run
+restores its working copy from the evidence bucket, saves its state back, and holds the bucket's run
+lock, `reports/sync/run-lock.json`, while it writes. Those writes need no grant beyond the everyday
+document's: conditional writes are `s3:PutObject`. The run role still never deletes, which
+`the_run_role_never_deletes` checks over its policies by IAM's own wildcard matching.
 
 The deployer may pass the run role and the run's execution role to ECS tasks, and an explicit deny
 refuses it the login role and the login's execution role. `ecs:RegisterTaskDefinition` takes no

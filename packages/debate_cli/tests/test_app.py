@@ -151,6 +151,7 @@ def test_doctor_reports_the_environment_as_json() -> None:
     # A later epic adding one adds it here too: this is the list an operator reads to find out
     # what this installation is wired for.
     assert data["services"] == [
+        "bucket_write_guard",
         "caselist_import",
         "caselist_parse",
         "caselist_publish",

@@ -686,3 +686,67 @@ def test_publish_with_the_printed_digest_goes_ahead_and_a_stale_one_is_refused(
     later = landscape(planted_world, "--caselist", CASELIST, "--publish")
     assert later.exit_code == ExitCode.OK, later.output
     assert _data(later)["scan"]["not_yet_accepted"] == 0
+
+
+# ------------------------------------------------------------------------------------------------
+# v1-e40-t04: in bucket mode `--publish` holds the bucket's run lock (the PM's ruling 2, 2026-10-24)
+# ------------------------------------------------------------------------------------------------
+
+RUN_LOCK = "reports/sync/run-lock.json"
+
+
+def _place_the_lock(client: S3Client, *, held_until: datetime | None) -> None:
+    """The seeded lock object: free, or held by another runner until `held_until`."""
+    stamp = "%Y-%m-%dT%H:%M:%SZ"
+    holder = {"kind": "cloud", "run_id": "20260917T110005Z", "task": None, "command": "caselist pull"}
+    body = {
+        "format_version": 1,
+        "home_environment": "dev",
+        "state": "held" if held_until is not None else "free",
+        "holder": holder if held_until is not None else None,
+        "acquired_at": None,
+        "renewed_at": None,
+        "lease_expires_at": held_until.strftime(stamp) if held_until is not None else None,
+        "took_over_from": None,
+    }
+    client.put_bucket_versioning(Bucket=DEV_BUCKET, VersioningConfiguration={"Status": "Enabled"})
+    client.put_object(Bucket=DEV_BUCKET, Key=RUN_LOCK, Body=json.dumps(body).encode())
+
+
+def _lock_commands(client: S3Client) -> list[str]:
+    commands: list[str] = []
+    for version in client.list_object_versions(Bucket=DEV_BUCKET, Prefix=RUN_LOCK).get("Versions", []):
+        body = json.loads(
+            client.get_object(Bucket=DEV_BUCKET, Key=RUN_LOCK, VersionId=version["VersionId"])["Body"].read()  # pyright: ignore[reportTypedDictNotRequiredAccess]
+        )
+        if body.get("holder"):
+            commands.append(body["holder"]["command"])
+    return commands
+
+
+def test_publish_in_bucket_mode_takes_the_run_lock_and_releases_it(
+    world: SyntheticRun, buckets: S3Client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DEBATE_CASELIST__RUN_STATE", "bucket")
+    _place_the_lock(buckets, held_until=None)
+
+    result = landscape(world, "--caselist", CASELIST, "--publish")
+
+    assert result.exit_code == ExitCode.OK, result.stdout
+    assert set(KEYS) <= set(_keys(buckets, DEV_BUCKET))
+    assert "landscape report --publish" in _lock_commands(buckets)
+    assert json.loads(buckets.get_object(Bucket=DEV_BUCKET, Key=RUN_LOCK)["Body"].read())["state"] == "free"
+
+
+def test_publish_in_bucket_mode_is_refused_while_another_runner_holds_the_lock(
+    world: SyntheticRun, buckets: S3Client, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("DEBATE_CASELIST__RUN_STATE", "bucket")
+    today = SYNTHETIC_RUN_TODAY
+    _place_the_lock(buckets, held_until=datetime(today.year, today.month, today.day, 9, 20, tzinfo=UTC))
+
+    result = landscape(world, "--caselist", CASELIST, "--publish")
+
+    assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.stdout
+    assert _error(result)["code"] == "RUN_LOCK_HELD"
+    assert _keys(buckets, DEV_BUCKET) == [RUN_LOCK], "nothing published"

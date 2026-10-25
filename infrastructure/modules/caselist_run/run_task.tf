@@ -61,6 +61,9 @@ locals {
     { name = "DEBATE_CASELIST__TOKEN_BACKEND", value = "secretsmanager" },
     { name = "DEBATE_CASELIST__TOKEN_SECRET_ID", value = local.token_secret_name },
     { name = "DEBATE_CASELIST__SECRETS_REGION", value = local.region },
+    # Bucket mode (v1-e40-t04, ADR-0020 (3) and (4)): the run restores its working copy from the
+    # evidence bucket, saves its state back, and holds the bucket's run lock while it writes.
+    { name = "DEBATE_CASELIST__RUN_STATE", value = "bucket" },
     { name = "DEBATE_STORAGE__DATA_DIR", value = local.run_data_dir },
     { name = "DEBATE_STORAGE__S3__AWS_PROFILE", value = "" },
     { name = "DEBATE_STORAGE__VOLUME_WARNING_PERCENT", value = tostring(local.volume_warning_percent) },

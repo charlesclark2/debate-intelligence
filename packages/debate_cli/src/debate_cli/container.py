@@ -131,6 +131,7 @@ from typing import TYPE_CHECKING, Final, cast
 
 from debate_cli.exit_codes import codes_exit_as_a_retrieval_failure
 from debate_core.application.aff_assignment import AffAssignmentService
+from debate_core.application.caselist.bucket_run import BucketRun
 from debate_core.application.caselist.evidence_listing import (
     LocalEvidence,
     digests_in_earlier_manifests,
@@ -149,6 +150,14 @@ from debate_core.application.caselist.removal_service import (
     TakedownAccess,
     TakedownNotConfigured,
 )
+from debate_core.application.caselist.run_lock import (
+    RUN_LOCK_KEY,
+    BucketRunLock,
+    BucketWriteGuard,
+    HolderKind,
+)
+from debate_core.application.caselist.run_state import RunState
+from debate_core.application.caselist.run_state_seed import RunStateSeed
 from debate_core.application.caselist.status_service import CaselistStatusService
 from debate_core.application.caselist.suppression import (
     REMOVAL_LOG_KEY,
@@ -190,6 +199,7 @@ from debate_core.application.settings import (
     CaselistTokenBackend,
     ConfigurationError,
     Environment,
+    RunStateMode,
     Settings,
     SyncNotifierKind,
 )
@@ -220,6 +230,7 @@ from debate_core.integrations.local import (
 )
 from debate_core.integrations.local.fs_version_store import FsEvidenceVersionStore
 from debate_core.integrations.local.parsed_store import LocalParsedStore
+from debate_core.integrations.local.run_state_files import LocalRunStateFiles
 from debate_core.integrations.local.search_index import SqliteSearchIndexWriter
 from debate_core.integrations.local.sqlite_caselist_repository import SqliteCaselistRepository
 from debate_core.integrations.local.suppression_list import (
@@ -246,6 +257,7 @@ __all__ = [
 ]
 
 SERVICE_NAMES: Final[tuple[str, ...]] = (
+    "bucket_write_guard",
     "caselist_import",
     "caselist_parse",
     "caselist_publish",
@@ -350,6 +362,9 @@ LANDSCAPE_REPORTS_DIRECTORY: Final = Path("reports") / "landscape"
 
 SCAN_ACCEPTANCES_DIRECTORY: Final = "scan-acceptances"
 """Beside the classification cache: the scan hits the operator accepted, per caselist (`v1-e32-t05`)."""
+
+_ECS_METADATA_VARIABLE: Final = "ECS_CONTAINER_METADATA_URI_V4"
+"""Set by ECS in every task's containers: how the run lock tells the cloud run from the Mac."""
 
 _EVERYDAY_PROFILE_SETTING: Final = "storage.s3.aws_profile"
 _REMOVAL_PROFILE_SETTING: Final = "DEBATE_REMOVAL_PROFILE"
@@ -595,6 +610,8 @@ class ServiceContainer:
             place_cards=self.caselist_card_stats().place,
             failure_rate_threshold=parse.failure_rate_threshold,
             failure_rate_minimum_sources=parse.failure_rate_minimum_sources,
+            # Bucket mode (`v1-e40-t04`): raw sources a restored copy lacks come from the bucket.
+            fetch_missing=self.run_state().fetch_sources if self._in_bucket_mode else None,
         )
 
     def parsed_publisher(self) -> ParsedStorePublisher:
@@ -993,7 +1010,12 @@ class ServiceContainer:
             takedown=self.takedown_access,
             clock=clock,
             environment=settings.environment.value,
+            run_state=self.removal_run_state(),
         )
+
+    def removal_run_state(self) -> RunState | None:
+        """The run's state a removal restores first and rewrites last, in bucket mode only (`v1-e40-t04`)."""
+        return self.run_state() if self._in_bucket_mode else None
 
     def takedown_access(self) -> TakedownAccess:
         """The `EvidenceRemoval` profile's reach into this environment's bucket, built on demand.
@@ -1098,12 +1120,133 @@ class ServiceContainer:
         from debate_core.integrations.s3 import build_s3_client
 
         s3 = self.settings.storage.s3
-        return build_s3_client(
+        client = build_s3_client(
             region=s3.region,
             profile=profile,
             profile_setting=profile_setting,
             endpoint_url=s3.endpoint_url,
             ignore_configured_endpoints=self._ignores_configured_endpoints,
+        )
+        if self._in_bucket_mode:
+            # Bucket mode (`v1-e40-t04`): every write this client sends asks the run lock first,
+            # whichever adapter sends it, the takedown's included (ADR-0020 (4) 4).
+            from debate_core.integrations.s3.fencing import fence_client
+
+            fence_client(client, self.bucket_run_lock())
+        return client
+
+    def bucket_run_lock(self) -> BucketRunLock:
+        """This command's lease on the bucket's run lock, `reports/sync/run-lock.json` (`v1-e40-t04`).
+
+        One per command, on a client of its own that is never fenced: its writes are the lock's.
+        Signed with the everyday profile, which a takedown also holds, because `EvidenceRemoval`
+        may write nowhere but `manifests/_suppression/`. The holder is `cloud` inside an ECS task,
+        which ECS marks with `ECS_CONTAINER_METADATA_URI_V4`, and `mac` anywhere else; the task is
+        the last segment of that address. Raises :class:`EvidenceStoreNotConfigured` when this
+        environment names no bucket.
+        """
+        return self.singleton("bucket_run_lock", self._build_bucket_run_lock)
+
+    def _build_bucket_run_lock(self) -> BucketRunLock:
+        # Imported here, not at module scope: boto3 is an optional dependency. See the docstring.
+        from debate_core.integrations.s3 import build_s3_client
+        from debate_core.integrations.s3.run_lock_object import S3LockObject
+
+        settings = self.settings
+        s3 = settings.storage.s3
+        if not s3.bucket:
+            raise EvidenceStoreNotConfigured(settings.environment)
+        client = build_s3_client(
+            region=s3.region,
+            profile=s3.aws_profile,
+            profile_setting=_EVERYDAY_PROFILE_SETTING,
+            endpoint_url=s3.endpoint_url,
+            ignore_configured_endpoints=self._ignores_configured_endpoints,
+        )
+        metadata = os.environ.get(_ECS_METADATA_VARIABLE, "").rstrip("/")
+        return BucketRunLock(
+            store=S3LockObject(
+                bucket=str(s3.bucket),
+                key=RUN_LOCK_KEY,
+                client=client,
+                profile=s3.aws_profile,
+                profile_setting=_EVERYDAY_PROFILE_SETTING,
+            ),
+            environment=settings.environment.value,
+            clock=self.clock(),
+            kind=HolderKind.CLOUD if metadata else HolderKind.MAC,
+            task=metadata.rsplit("/", 1)[-1] if metadata else None,
+        )
+
+    def run_state(self) -> RunState:
+        """This environment's run state in its bucket: the restore and the saves (`v1-e40-t04`).
+
+        Over the bucket's everyday adapter, whose client the run lock fences in bucket mode, this
+        machine's manifests and database, and the publisher's own withholding rule. Raises
+        :class:`EvidenceStoreNotConfigured` when this environment names no bucket.
+        """
+        return self.singleton("run_state", self._build_run_state)
+
+    def _build_run_state(self) -> RunState:
+        settings = self.settings
+        data_dir = settings.storage.data_dir
+        return RunState(
+            bucket=self._evidence_bucket(),
+            files=LocalRunStateFiles(data_dir),
+            local=self._local_evidence(),
+            staged=self._local_evidence,
+            withheld=lambda evidence: functools.partial(withheld_manifest_reason, evidence),
+            suppression=self.suppression_list(),
+            data_dir=data_dir,
+            clock=self.clock(),
+        )
+
+    def run_state_seed(self) -> RunStateSeed:
+        """`caselist seed-run-state` over this environment's bucket (`v1-e40-t04`)."""
+        return self.singleton(
+            "run_state_seed",
+            lambda: RunStateSeed(
+                lock=self.bucket_run_lock,
+                state=self.run_state,
+                bucket=self._evidence_bucket(),
+                data_dir=self.settings.storage.data_dir,
+            ),
+        )
+
+    def bucket_run(self) -> BucketRun:
+        """What `caselist pull` does around its run for the bucket's run lock and state (`v1-e40-t04`)."""
+        return self.singleton("bucket_run", self._build_bucket_run)
+
+    def _build_bucket_run(self) -> BucketRun:
+        # Imported here, not at module scope: lxml is loaded only by a command that needs the parser.
+        from debate_core.integrations.docx_parser import DebateDocxParser
+
+        bucket = bool(self.settings.storage.s3.bucket)
+        return BucketRun(
+            guard=self.bucket_write_guard(),
+            lock=self.bucket_run_lock if bucket else None,
+            state=self.run_state if bucket else None,
+            parsed_version=DebateDocxParser().parser_version,
+        )
+
+    @property
+    def _in_bucket_mode(self) -> bool:
+        """`caselist.run_state = "bucket"` in an environment that names a bucket (`v1-e40-t04`)."""
+        settings = self.settings
+        return settings.caselist.run_state is RunStateMode.BUCKET and bool(settings.storage.s3.bucket)
+
+    def bucket_write_guard(self) -> BucketWriteGuard:
+        """What every command that writes to this environment's bucket enters first (`v1-e40-t04`).
+
+        Bucket mode takes the lease; local mode refuses a bucket that holds a lock object (the PM's
+        ruling 3(a)). An environment that names no bucket has nothing to guard.
+        """
+        return self.singleton(
+            "bucket_write_guard",
+            lambda: BucketWriteGuard(
+                mode=self.settings.caselist.run_state,
+                lock=self.bucket_run_lock if self.settings.storage.s3.bucket else None,
+            ),
         )
 
     @property
@@ -1111,8 +1254,9 @@ class ServiceContainer:
         """Whether botocore's own endpoint routes are ignored: in prod, always."""
         return self.settings.environment is Environment.PROD
 
-    def _local_evidence(self) -> LocalEvidence:
-        data_dir = self.settings.storage.data_dir
+    def _local_evidence(self, data_dir: Path | None = None) -> LocalEvidence:
+        """This machine's evidence store, or (`v1-e40-t04`) the same view of a scratch directory."""
+        data_dir = self.settings.storage.data_dir if data_dir is None else data_dir
         objects = FsEvidenceObjectStore(data_dir)
         blobs = FsEvidenceObjectStore(data_dir, subdirectory=BLOB_DIRECTORY.parent)
         return LocalEvidence(
@@ -1246,6 +1390,10 @@ class ServiceContainer:
             read_full_archive=self.read_full_archive,
             # The cloud run's 70% warning on its ephemeral volume (`v1-e40-t03`); unset on the Mac.
             volume_warning_percent=settings.storage.volume_warning_percent,
+            # Bucket mode (`v1-e40-t04`): each state file saved as it is written, and the run-state
+            # bundle after a publish that confirmed everything.
+            state_written=self.bucket_run().state_written(),
+            after_publish=self.bucket_run().after_publish if self._in_bucket_mode else None,
         )
 
     def search_index_store_check(self) -> SearchIndexStoreCheck:

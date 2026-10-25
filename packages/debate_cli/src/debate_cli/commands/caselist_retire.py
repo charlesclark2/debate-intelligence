@@ -44,6 +44,7 @@ from typing import Annotated
 
 import typer
 
+from debate_cli.bucket_lock import run_holding_the_bucket_lock
 from debate_cli.commands.store import CONFIRM_PROD_FLAG, SYNCABLE_ENVIRONMENTS
 from debate_cli.context import CliContext, cli_context, command_name
 from debate_cli.exit_codes import ExitCode
@@ -53,6 +54,7 @@ from debate_core.application.caselist.version_retention import (
     RetentionPlan,
     RetentionRefusal,
     RetentionResult,
+    VersionDirectoryRetention,
 )
 from debate_core.application.settings import Environment, Settings
 
@@ -102,9 +104,25 @@ def retire(
     refusal = plan.refusal(confirmation) if execute else (plan.refusals[0] if plan.refusals else None)
     if refusal is not None:
         _refuse(cli, ctx, _failure(refusal, plan))
-    result = asyncio.run(service.execute(plan, confirmation=confirmation)) if execute else None
+    result = _execute(cli, service, plan, confirmation, bucket=bucket) if execute else None
     cli.output.success(
         command_name(ctx), retire_summary(plan, result, settings), display=_table(plan, result)
+    )
+
+
+def _execute(
+    cli: CliContext,
+    service: VersionDirectoryRetention,
+    plan: RetentionPlan,
+    confirmation: str | None,
+    *,
+    bucket: bool,
+) -> RetentionResult:
+    """Carry the plan out: in the bucket, holding its run lock, since tagging is a write (`v1-e40-t04`)."""
+    if not bucket:
+        return asyncio.run(service.execute(plan, confirmation=confirmation))
+    return run_holding_the_bucket_lock(
+        cli, "caselist retire --bucket", lambda: service.execute(plan, confirmation=confirmation)
     )
 
 

@@ -125,6 +125,7 @@ from typing import Annotated, Any, cast
 
 import typer
 
+from debate_cli.bucket_lock import cancelled_on_sigterm
 from debate_cli.commands.caselist import event_for_caselist
 from debate_cli.context import cli_context, command_name
 from debate_cli.exit_codes import ExitCode, exit_code_for_failure_codes
@@ -191,15 +192,20 @@ def pull(
         )
     slugs = [] if publish_pending else list(caselist) if caselist else list(settings.caselist.sync_caselists)
 
+    bracket = cli.services.bucket_run()
     pulled = _run(
-        run_pull(
-            lambda: cli.services.caselist_sync(event_for_caselist=event_for_caselist),
-            slugs,
-            dry_run=dry_run,
-            publish_pending=publish_pending,
-            monitor=cli.services.caselist_sync_monitor,
-            progress=cli.output.detail,
-            full_archive=full_archive,
+        cancelled_on_sigterm(
+            bracket.terminate if bracket.bucket_mode else None,
+            run_pull(
+                lambda: cli.services.caselist_sync(event_for_caselist=event_for_caselist),
+                slugs,
+                dry_run=dry_run,
+                publish_pending=publish_pending,
+                monitor=cli.services.caselist_sync_monitor,
+                progress=cli.output.detail,
+                full_archive=full_archive,
+                bracket=bracket,
+            ),
         )
     )
     summary = pulled.summary

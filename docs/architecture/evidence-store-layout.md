@@ -105,8 +105,11 @@ manifests/hsld26/2026-09-15.jsonl                       one snapshot's sources
 manifests/openev/2026-ndi.jsonl                         one camp's files
 manifests/_suppression/suppression-list.jsonl           sha256 values that must never be re-imported
 manifests/_suppression/removal-log.jsonl                request id, date, reason code, environment
+manifests/_run-state/run-state.tar.gz                   the run's manifests and database (v1-e40-t04)
 reports/hsld26/2026-09-15/argument-landscape.json       what the field is running
 reports/sync/2026-09-15T06-00Z.json                     one scheduled sync run
+reports/sync/run-lock.json                              which runner may write to the bucket now
+reports/sync/state/caselist-sync-download-starts.json   the run's download ledger, and its other state
 reports/tub/search/3f9a0c1d2e4b5a69/search-index.sqlite.gz  one build of the search pilot's index
 reports/tub/search/3f9a0c1d2e4b5a69/manifest.json       what that build is and was built from
 reports/tub/search/current.json                         which build the pilot serves; written last
@@ -117,6 +120,28 @@ quarantine/wfb/01J9Z4K7QF3M2N                           an upload awaiting scann
 
 `manifests/_suppression/` is singled out in the IAM policies: it is the one place the takedown
 credential may write, because a suppression list that is appended to has to be read first.
+
+### The weekly run's state: `reports/sync/run-lock.json`, `reports/sync/state/` and `manifests/_run-state/`
+
+In bucket mode (`caselist.run_state = "bucket"`, `v1-e40-t04`,
+[ADR-0020](../adr/0020-weekly-caselist-run-in-the-cloud.md) (3) and (4)) the evidence bucket of the
+run's home environment is the record of the weekly run's state, and a data directory is a working
+copy restored from it. Three keys or prefixes hold it.
+
+| Key or prefix | What is under it | Personal data | Written by | Deleted |
+|---|---|---|---|---|
+| `reports/sync/run-lock.json` | The run lock: which runner holds a lease to write to this bucket, until when, and whom it took over from | None: run ids, commands, times | `caselist seed-run-state` creates it; every bucket-writing command in bucket mode takes, renews and releases it, by S3 conditional writes only | Never. Released by writing `state: free`; its history is its versions |
+| `reports/sync/state/` | The run log and its details, the download ledger, the OpenEv deliveries and the pending-work file, by their names in the data directory | None | A bucket-mode run, each as it is written (the ledger before each download); the seed | Never. A file the run removed is saved as an empty object |
+| `manifests/_run-state/` | The run-state bundle, `run-state.tar.gz`: the data directory's manifests and a compacted copy of its SQLite database | **Yes**: the manifests' paths and the database's school and team codes | A bucket-mode run, only when every snapshot it records is confirmed in the bucket and none is withheld; the seed; a removal's rewrite | Only by `caselist remove`, under `EvidenceRemoval`, which purges its noncurrent versions after its rewrite is confirmed |
+
+`store sync` skips `manifests/_run-state/` either way and on either side, as it skips
+`manifests/_suppression/` and `parsed/`: the bundle's rules are its writers', and a copy would keep
+none of them. A run never creates the lock: a bucket with no lock object has no run state, and a
+bucket-mode command refuses it before it restores or writes anything. Neither credential needs a
+grant it did not already hold: the everyday policy reads and writes every key above, and a
+conditional write needs `s3:PutObject` alone; the removal credential's listing and deleting of
+versions under `manifests/` already reach `manifests/_run-state/`, and it writes the bundle and the
+lock through the everyday profile, as it writes rewritten manifests.
 
 ### `reports/tub/search/`: the student search pilot's index
 

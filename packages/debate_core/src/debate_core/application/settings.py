@@ -133,6 +133,7 @@ __all__ = [
     "SearchProviderName",
     "Settings",
     "StorageSettings",
+    "RunStateMode",
     "SyncNotifierKind",
     "environment_for_build_channel",
     "find_repository_root",
@@ -553,6 +554,17 @@ class SyncNotifierKind(StrEnum):
     """Nothing: the run log and `caselist runs` only."""
 
 
+class RunStateMode(StrEnum):
+    """Where a caselist run's state is kept between runs (`v1-e40-t04`, ADR-0020 (3) and (4))."""
+
+    LOCAL = "local"
+    """In this machine's data directory, as every run before the cloud run kept it. The default."""
+    BUCKET = "bucket"
+    """In the evidence bucket: a run restores a working copy at its start, saves its state back,
+    and every command that writes to the bucket takes the bucket's run lock first. Only the cloud
+    run sets it until the cutover (`v1-e40-t06`)."""
+
+
 class CaselistSettings(SettingsGroup):
     """What the caselist importers will read, and how large an archive they will open.
 
@@ -819,6 +831,19 @@ class CaselistSettings(SettingsGroup):
             "publish is refused and current.json stays; `tub index publish --allow-shrink "
             '"<reason>"` publishes a real shrink by hand. An index built from a store whose '
             "aggregates hold no rows is refused whatever this says."
+        ),
+    )
+
+    # --- Where a run keeps its state (v1-e40-t04, ADR-0020 (3) and (4)) -------------------------
+
+    run_state: RunStateMode = Field(
+        default=RunStateMode.LOCAL,
+        description=(
+            "Where `caselist pull` keeps its state between runs: `local`, this machine's data "
+            "directory, or `bucket`, the evidence bucket, restored at a run's start and saved back, "
+            "with every command that writes to the bucket holding its run lock "
+            "(reports/sync/run-lock.json). The cloud run sets `bucket`; the Mac stays `local` until "
+            "the cutover."
         ),
     )
 

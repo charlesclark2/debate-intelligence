@@ -49,6 +49,7 @@ from debate_cli.commands import (
     caselist_remove,
     caselist_retire,
     caselist_runs,
+    caselist_seed,
     config,
     doctor,
     landscape,
@@ -81,6 +82,7 @@ def register_commands(app: typer.Typer) -> None:
     disclosed_evidence.command("remove")(caselist_remove.remove)
     disclosed_evidence.command("retire")(caselist_retire.retire)
     disclosed_evidence.command("runs")(caselist_runs.runs)
+    disclosed_evidence.command("seed-run-state")(caselist_seed.seed_run_state)
     disclosed_evidence.command("status")(caselist.status)
     disclosed_evidence.command("unsuppress")(caselist_remove.unsuppress)
 

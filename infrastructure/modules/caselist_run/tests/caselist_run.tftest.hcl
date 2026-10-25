@@ -238,6 +238,41 @@ variables {
 # Apply A: the credentials, the roles and the writer, with no network and no login task
 # ---------------------------------------------------------------------------------------------
 
+# v1-e40-t04 ac4 (the PM's ruling of 2026-10-23): the run, its role and every command but a removal
+# never delete. The run role's policies may not allow s3:DeleteObject or s3:DeleteObjectVersion by
+# any spelling IAM matches: the names themselves, a wildcard over them (s3:Delete*, s3:*Object*,
+# s3:*), or an Allow with NotAction, which allows every action it does not name. It runs first, so
+# that a policy another run cannot read still reaches it. The run of the role's grants further down
+# lists the role's actions exactly; this one is the rule, so a policy that adds an action and a
+# test that adds it to that list still cannot add a delete.
+run "the_run_role_never_deletes" {
+  command = apply
+
+  assert {
+    condition = length(flatten([
+      for policy in [aws_iam_role_policy.run_credentials.policy, aws_iam_role_policy.run_evidence.policy] : [
+        for statement in jsondecode(policy).Statement : [
+          for action in flatten([try(statement.Action, [])]) : action
+          if anytrue([
+            for deleting in ["s3:DeleteObject", "s3:DeleteObjectVersion"] :
+            can(regex("^(?i)${replace(replace(action, "*", ".*"), "?", ".")}$", deleting))
+          ])
+        ] if statement.Effect == "Allow"
+      ]
+    ])) == 0
+    error_message = "The run role may not delete an object or a version, by name or by a wildcard over either: a delete is a removal's, under the EvidenceRemoval credential (ADR-0020 (3))."
+  }
+
+  assert {
+    condition = alltrue(flatten([
+      for policy in [aws_iam_role_policy.run_credentials.policy, aws_iam_role_policy.run_evidence.policy] : [
+        for statement in jsondecode(policy).Statement : !(statement.Effect == "Allow" && can(statement.NotAction))
+      ]
+    ]))
+    error_message = "No Allow statement of the run role's may use NotAction: it allows every action it does not name, deletes included."
+  }
+}
+
 run "credentials_apply_creates_no_login_task" {
   command = apply
 
@@ -1135,13 +1170,14 @@ run "the_run_task_runs_the_pinned_image_as_the_run_role_under_its_deadline" {
       DEBATE_CASELIST__TOKEN_BACKEND         = "secretsmanager"
       DEBATE_CASELIST__TOKEN_SECRET_ID       = "debate-mock-caselist-token"
       DEBATE_CASELIST__SECRETS_REGION        = "us-east-1"
+      DEBATE_CASELIST__RUN_STATE             = "bucket"
       DEBATE_STORAGE__DATA_DIR               = "/var/lib/debate-research/dev"
       DEBATE_STORAGE__S3__AWS_PROFILE        = ""
       DEBATE_STORAGE__VOLUME_WARNING_PERCENT = "70"
       DEBATE_PARSE__WORKERS                  = "8"
       AWS_REGION                             = "us-east-1"
     }
-    error_message = "The run's environment is names and switches (ADR-0020 (5)): the token store's Secrets Manager backend, no AWS profile, 8 parse workers, the 70% volume warning. No secret, and no password secret's name."
+    error_message = "The run's environment is names and switches (ADR-0020 (5)): the token store's Secrets Manager backend, no AWS profile, 8 parse workers, the 70% volume warning, bucket mode (v1-e40-t04). No secret, and no password secret's name."
   }
 
   assert {

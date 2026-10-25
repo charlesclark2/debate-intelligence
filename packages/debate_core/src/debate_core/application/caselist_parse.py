@@ -70,7 +70,7 @@ import hashlib
 import logging
 import time
 from collections import Counter
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Awaitable, Callable, Iterator, Sequence
 from dataclasses import dataclass, field
 from typing import Final
 
@@ -296,6 +296,10 @@ class CaselistParseService:
         failure_rate_minimum_sources: The `parse.failure_rate_minimum_sources` setting: how many
             sources a run must have tried before its failure rate is judged. Required, with no
             default here, so that the one default is the setting's.
+        fetch_missing: In bucket mode (`v1-e40-t04`), fetches from the bucket's `raw/` the sources a
+            run is about to parse and this machine does not hold, before any is parsed: none in an
+            ordinary week, all of them in a full re-parse on a restored copy. `None` reads this
+            machine's blob store alone, as every parse before it did.
     """
 
     def __init__(
@@ -310,6 +314,7 @@ class CaselistParseService:
         failure_rate_threshold: float,
         failure_rate_minimum_sources: int,
         clock: Callable[[], float] = time.monotonic,
+        fetch_missing: Callable[[str, Sequence[EnumeratedSource]], Awaitable[object]] | None = None,
     ) -> None:
         if failure_rate_minimum_sources < 1:
             raise ValueError("failure_rate_minimum_sources must be at least 1")
@@ -318,6 +323,7 @@ class CaselistParseService:
                 "the parse pipeline reads sources from files: give LocalEvidence a blob_path_for"
             )
         self._local = local
+        self._fetch_missing = fetch_missing
         self._store = store
         self._parser = parser
         self._runner = runner
@@ -416,6 +422,8 @@ class CaselistParseService:
         fingerprint version than this build's (`v1-e34-t29`).
         """
         await self._refuse_a_newer_table(plan)
+        if self._fetch_missing is not None:
+            await self._fetch_missing(plan.caselist, plan.to_parse)
         started = self._clock()
         by_digest = {source.sha256: source for source in plan.sources}
         parsed = cards = 0

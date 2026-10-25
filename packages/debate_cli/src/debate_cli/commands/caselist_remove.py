@@ -130,10 +130,11 @@ import asyncio
 import shlex
 from collections import Counter
 from collections.abc import Coroutine
-from typing import Annotated, Any
+from typing import Annotated, Any, TypedDict
 
 import typer
 
+from debate_cli.bucket_lock import run_holding_the_bucket_lock
 from debate_cli.commands.store import CONFIRM_PROD_FLAG, SYNCABLE_ENVIRONMENTS
 from debate_cli.context import CliContext, cli_context, command_name
 from debate_cli.exit_codes import ExitCode
@@ -163,6 +164,7 @@ from debate_core.application.caselist.removal_service import (
     RemovalReport,
     UnsuppressPlan,
     UnsuppressReport,
+    on_the_working_copy,
 )
 from debate_core.application.ports.caselist_source import openev_id_of_inbox_name
 from debate_core.application.ports.evidence_versions import ObjectVersion
@@ -224,25 +226,37 @@ def remove(
         raise InvalidRemovalRequest("--request is required: the register id, e.g. RM-2026-01")
     _refuse(cli, ctx, _guard(settings, execute=execute, confirmed=confirm_prod, command="caselist remove"))
 
-    service = cli.services.caselist_removal()
-    cli.output.detail(f"planning against {settings.storage.s3.bucket}")
-    plan = _run(
-        service.plan(
-            selector, request_id=request, reason=code, include_shared=include_shared, only_named=only_named
-        )
+    removal, working_copy = cli.services.caselist_removal, cli.services.removal_run_state()
+    asked = RemovalAsked(
+        request_id=request, reason=code, include_shared=include_shared, only_named=only_named
     )
+    cli.output.detail(f"planning against {settings.storage.s3.bucket}")
     if not execute:
+        plan = _run(on_the_working_copy(working_copy, lambda: removal().plan(selector, **asked)))
         cli.output.success(
             command_name(ctx), plan_summary(plan, settings, None), display=render_plan(plan, None)
         )
         return
-    cli.output.detail(
-        f"executing under the takedown profile: {_what_the_plan_covers(plan, carried_out=True)}"
+    cli.output.detail("planning again and executing under the takedown profile")
+    report = run_holding_the_bucket_lock(
+        cli,
+        "caselist remove",
+        lambda: on_the_working_copy(working_copy, lambda: removal().plan_and_execute(selector, **asked)),
     )
-    report = _run(service.execute(plan))
+    plan = report.plan
+    cli.output.detail(f"executed: {_what_the_plan_covers(plan, carried_out=True)}")
     cli.output.success(
         command_name(ctx), plan_summary(plan, settings, report), display=render_plan(plan, report)
     )
+
+
+class RemovalAsked(TypedDict):
+    """What a removal is asked for besides its selector, as :meth:`CaselistRemovalService.plan` takes it."""
+
+    request_id: str
+    reason: ReasonCode
+    include_shared: bool
+    only_named: bool
 
 
 def unsuppress(
@@ -272,7 +286,11 @@ def unsuppress(
     service = cli.services.caselist_removal()
     code = _reason(reason, REINSTATEMENT_REASONS, _REINSTATEMENT_REASONS)
     plan = _run(service.plan_unsuppress(sha256.strip().lower(), reason=code, request_id=request))
-    report = _run(service.unsuppress(plan)) if execute else None
+    report = (
+        run_holding_the_bucket_lock(cli, "caselist unsuppress", lambda: service.unsuppress(plan))
+        if execute
+        else None
+    )
     cli.output.success(
         command_name(ctx), unsuppress_summary(plan, settings, report), display=render_unsuppress(plan, report)
     )

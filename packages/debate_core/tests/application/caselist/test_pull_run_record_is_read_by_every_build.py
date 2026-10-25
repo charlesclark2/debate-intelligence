@@ -414,12 +414,21 @@ def objects_under(world: World, prefix: str) -> dict[str, Any]:
 #: they are checked for their shape apart from the rest (`times_and_volume_in_run_order`).
 TIMES_AND_VOLUME: Final = ("stage_times", "data_volume")
 
+#: The key `v1-e40-t04` added to the details: what a bucket-mode run did with the bucket's run lock and
+#: its state. `None` in local mode, which every scenario here runs in; its values are pinned by
+#: `debate_cli/tests/bucket_mode/`. A build from before it passes over it (`extra="ignore"`).
+BUCKET_RUN: Final = "bucket_run"
+
 #: The stages a run times, in the order it carries them out.
 RUN_ORDER: Final = [str(stage) for stage in SyncStage]
 
 
 def without_the_version(details: Mapping[str, Any]) -> dict[str, Any]:
-    return {key: value for key, value in details.items() if key not in ("schema_version", *TIMES_AND_VOLUME)}
+    return {
+        key: value
+        for key, value in details.items()
+        if key not in ("schema_version", *TIMES_AND_VOLUME, BUCKET_RUN)
+    }
 
 
 def times_and_volume_in_run_order(details: Mapping[str, Any]) -> bool:
@@ -430,6 +439,7 @@ def times_and_volume_in_run_order(details: Mapping[str, Any]) -> bool:
         named == [stage for stage in RUN_ORDER if stage in named]
         and all(one["started_at"] <= one["finished_at"] for one in details["stage_times"])
         and details["data_volume"] is None
+        and details.get(BUCKET_RUN) is None
     )
 
 

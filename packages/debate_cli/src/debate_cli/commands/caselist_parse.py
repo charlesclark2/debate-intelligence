@@ -68,6 +68,7 @@ from typing import Annotated, Final
 
 import typer
 
+from debate_cli.bucket_lock import run_holding_the_bucket_lock
 from debate_cli.commands.caselist import (
     _no_bucket,  # pyright: ignore[reportPrivateUsage]
     _refuse,  # pyright: ignore[reportPrivateUsage]
@@ -165,7 +166,13 @@ def parse(
     plan = asyncio.run(service.plan(caselist, snapshot=snapshot, reparse=reparse))
     report = service.dry_run(plan) if dry_run else asyncio.run(service.run(plan))
     published = (
-        asyncio.run(cli.services.parsed_publisher().publish(caselist, plan.version)) if writing else None
+        run_holding_the_bucket_lock(
+            cli,
+            "caselist parse --publish",
+            lambda: cli.services.parsed_publisher().publish(caselist, plan.version),
+        )
+        if writing
+        else None
     )
     payload = parse_summary(report, published, settings)
     failure = _failure(report, published, payload)
@@ -224,7 +231,11 @@ def _publish_only(
     )
     # With the bucket: the check asks the list the publisher is given, this environment's.
     version = asyncio.run(cli.services.caselist_parse(with_bucket=True).publishable_version(caselist))
-    published = asyncio.run(cli.services.parsed_publisher().publish(caselist, version))
+    published = run_holding_the_bucket_lock(
+        cli,
+        "caselist parse --publish-only",
+        lambda: cli.services.parsed_publisher().publish(caselist, version),
+    )
     payload = publish_only_summary(published, settings)
     failure = _publish_failure(published, payload)
     if failure is None or not cli.output.is_json:

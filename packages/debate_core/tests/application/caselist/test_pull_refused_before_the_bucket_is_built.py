@@ -246,6 +246,8 @@ async def test_its_details_carry_the_code_and_the_fix_which_names_the_setting(wo
             # A run refused before any stage has no stage to time and read no volume (`v1-e40-t03`).
             "stage_times": [],
             "data_volume": None,
+            # Local mode: no bucket-mode run, so nothing of the bucket's run lock or state (`v1-e40-t04`).
+            "bucket_run": None,
         }
     ]
     assert PROFILE_SETTING in THE_FIX

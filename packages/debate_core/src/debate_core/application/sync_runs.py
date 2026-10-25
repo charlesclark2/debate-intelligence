@@ -132,6 +132,7 @@ from typing import Final, Literal, cast
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from debate_core.application.caselist.publish_plan import InvalidPublishTarget, validate_publish_target
+from debate_core.application.caselist.run_lock import RunLockHeld, RunLockLost
 from debate_core.application.caselist.status_service import CASELIST_DRIFT
 from debate_core.application.caselist_sync import (
     REQUIRED_STAGES,
@@ -162,6 +163,12 @@ __all__ = [
     "ANOTHER_RUN_HELD_THE_LOCK",
     "ANOTHER_RUN_HELD_THE_LOCK_TITLE",
     "BACKLOG_GROWTH_RUNS",
+    "RUN_LOCK_LOST",
+    "RUN_LOCK_LOST_TITLE",
+    "TOOK_OVER_THE_LOCK",
+    "TOOK_OVER_THE_LOCK_TITLE",
+    "BucketRunDetails",
+    "RestoreDetails",
     "DRIFTED_AGAIN_TITLE",
     "FIX_FIRST_BANNER_WORDS",
     "HELD_BY_A_REMOVAL_TITLE",
@@ -507,6 +514,42 @@ class DataVolume(BaseModel):
     """The summary's sentence when the volume passed `warning_percent`, else `None`."""
 
 
+class RestoreDetails(BaseModel):
+    """What a bucket-mode run restored before it started (`v1-e40-t04`): counts and ids, no path."""
+
+    model_config = ConfigDict(frozen=True, extra="ignore")
+
+    started_at: datetime
+    finished_at: datetime
+    state_files: int = Field(default=0, ge=0)
+    parsed_version: str | None = None
+    parsed_objects: int = Field(default=0, ge=0)
+    parsed_bytes: int = Field(default=0, ge=0)
+    parsed_kept: int = Field(default=0, ge=0)
+    index_id: str | None = None
+
+
+class BucketRunDetails(BaseModel):
+    """What a bucket-mode run (`caselist.run_state = "bucket"`) did with the bucket's run lock and state.
+
+    `v1-e40-t04`, ADR-0020 (3) and (4). The record's shape is frozen, so all of it is here.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="ignore")
+
+    held_by: str | None = None
+    """For a run another runner's live lease refused: that runner, as its lock names it."""
+    held_until: datetime | None = None
+    """And when its lease runs out."""
+    took_over: str | None = None
+    """For a run that took over an expired lease: whose, and when it expired, in one sentence."""
+    lock_lost: bool = False
+    """The lease was taken over while the run ran: it wrote nothing more, and ended `RUN_LOCK_LOST`."""
+    restore: RestoreDetails | None = None
+    bundle: str | None = None
+    """What became of the run-state bundle at the run's last save: saved, or why not."""
+
+
 class SyncRunDetails(BaseModel):
     """What one run has to say that its :class:`SyncRunRecord` cannot hold, keyed by its run id.
 
@@ -558,6 +601,10 @@ class SyncRunDetails(BaseModel):
 
     data_volume: DataVolume | None = None
     """The fullest the data directory's volume got, or `None` when the run read none (`v1-e40-t03`)."""
+
+    bucket_run: BucketRunDetails | None = None
+    """What a bucket-mode run did with the bucket's run lock and state, or `None` in local mode
+    (`v1-e40-t04`). A key a build from before it passes over."""
 
     def stage(self, name: str) -> StageDetails | None:
         return next((one for one in self.stages if one.stage == name), None)
@@ -941,6 +988,40 @@ The runbook quotes both."""
 
 RUNS_COMMAND: Final = "debate-research caselist runs"
 
+RUN_LOCK_LOST_TITLE: Final = "caselist pull lost the bucket's run lock"
+RUN_LOCK_LOST: Final = (
+    "Another runner took this run's lease on the bucket's run lock over after it expired, so this run "
+    "wrote nothing more to the bucket and ended RUN_LOCK_LOST. Its record is on this machine only; the "
+    "run that took over records and announces its own outcome."
+)
+"""A bucket-mode run whose lease was taken (`v1-e40-t04`, ADR-0020 (4) 4 and (6))."""
+
+TOOK_OVER_THE_LOCK_TITLE: Final = "caselist pull took over an expired run lock"
+TOOK_OVER_THE_LOCK: Final = (
+    "The run that held it ended without releasing it: killed, stopped, or out of its deadline. This run "
+    "carried on from the last state that run saved."
+)
+"""A bucket-mode run that took over an expired lease (`v1-e40-t04`, ADR-0020 (4) 6 and (6))."""
+
+
+def _bucket_lock_held(bucket: BucketRunDetails | None) -> str:
+    """What a run refused by another runner's live lease says: that runner and its lease, from the details."""
+    if bucket is None or bucket.held_by is None:
+        return (
+            "Another runner held the bucket's run lock, so this one did nothing. That run records and "
+            "announces its own outcome."
+        )
+    until = (
+        f", its lease until {bucket.held_until.astimezone(UTC).strftime('%Y-%m-%dT%H:%M:%SZ')}"
+        if bucket.held_until is not None
+        else ""
+    )
+    return (
+        f"Another runner held the bucket's run lock ({bucket.held_by}{until}), so this one did nothing. "
+        "That run records and announces its own outcome."
+    )
+
+
 _WHAT_STOPPED_A_RUN: Final = {
     "STORE_PROFILE_NOT_CONFIGURED": (
         "the AWS profile it publishes with is not one this machine's AWS config defines"
@@ -1087,12 +1168,27 @@ def notifications_for(
     """
     where = f"Run {record.run_id} ({record.environment})"
     sent: list[Notification] = []
+    bucket = details.bucket_run
     if record.error_class == SyncRunInProgress.__name__:
         sent.append(
             Notification(
                 title=ANOTHER_RUN_HELD_THE_LOCK_TITLE,
                 message=f"{where}: {ANOTHER_RUN_HELD_THE_LOCK}",
                 fix_command=RUNS_COMMAND,
+            )
+        )
+    elif record.error_class == RunLockHeld.__name__:
+        sent.append(
+            Notification(
+                title=ANOTHER_RUN_HELD_THE_LOCK_TITLE,
+                message=f"{where}: {_bucket_lock_held(bucket)}",
+                fix_command=RUNS_COMMAND,
+            )
+        )
+    elif record.error_class == RunLockLost.__name__:
+        sent.append(
+            Notification(
+                title=RUN_LOCK_LOST_TITLE, message=f"{where}: {RUN_LOCK_LOST}", fix_command=RUNS_COMMAND
             )
         )
     elif record.error_class == CaselistAuthExpired.__name__:
@@ -1173,6 +1269,14 @@ def notifications_for(
                 if only_parse
                 else PULL_COMMAND,
                 hint=" ".join(hints) or None,
+            )
+        )
+    if bucket is not None and bucket.took_over is not None:
+        sent.append(
+            Notification(
+                title=TOOK_OVER_THE_LOCK_TITLE,
+                message=f"{where} {bucket.took_over}. {TOOK_OVER_THE_LOCK}",
+                fix_command=RUNS_COMMAND,
             )
         )
     if credentials_expired:
@@ -1338,7 +1442,7 @@ def banner_words(
     """
     if details is None:
         return None
-    if record.error_class == SyncRunInProgress.__name__:
+    if record.error_class in (SyncRunInProgress.__name__, RunLockHeld.__name__):
         return LOCK_BANNER_WORDS
     if record.error_class == CaselistAuthExpired.__name__:
         return None
@@ -1798,8 +1902,15 @@ class SyncRunMonitor:
         *,
         caselists: Sequence[str],
         mode: RunMode,
+        bucket_run: Callable[[], BucketRunDetails | None] = lambda: None,
     ) -> MonitoredRun:
-        """Run `pull` and record it. An exception is recorded, notified, and raised again."""
+        """Run `pull` and record it. An exception is recorded, notified, and raised again.
+
+        `bucket_run` is what a bucket-mode run has to add to its details (`v1-e40-t04`), asked once the
+        run has ended. An error whose class says its record stays local (`record_stays_local`, a run
+        that never held the bucket's run lock or lost it) is recorded on this machine and announced,
+        and never published or owed to the bucket: it did not hold the lock (ADR-0020 (4)).
+        """
         started = self._clock()
         try:
             summary = await pull()
@@ -1816,7 +1927,13 @@ class SyncRunMonitor:
                 secrets=self._secret_values(),
             )
             stopped = details_for_failure(error, run_id=run_id, secrets=self._secret_values())
-            await self._finish(record, stopped, publish_pending_stage=False)
+            stopped = stopped.model_copy(update={"bucket_run": bucket_run()})
+            await self._finish(
+                record,
+                stopped,
+                publish_pending_stage=False,
+                local_only=bool(getattr(error, "record_stays_local", False)),
+            )
             raise
         record = record_for_summary(
             summary,
@@ -1831,6 +1948,7 @@ class SyncRunMonitor:
             for stage in (SyncStage.PUBLISH, SyncStage.REPORT, SyncStage.PARSE, SyncStage.SEARCH_INDEX)
         )
         details = details_for_summary(summary, secrets=self._secret_values())
+        details = details.model_copy(update={"bucket_run": bucket_run()})
         notifications, published = await self._finish(record, details, publish_pending_stage=publish_pending)
         return MonitoredRun(
             summary=summary,
@@ -1871,12 +1989,17 @@ class SyncRunMonitor:
         return comparisons_owed_by_the_newest_run(records, self.details.read())
 
     async def _finish(
-        self, record: SyncRunRecord, details: SyncRunDetails, *, publish_pending_stage: bool
+        self,
+        record: SyncRunRecord,
+        details: SyncRunDetails,
+        *,
+        publish_pending_stage: bool,
+        local_only: bool = False,
     ) -> tuple[list[Notification], bool]:
         """Log, publish and notify, in that order: the local record exists before anything can fail."""
         self.log.append(record)
         self._keep(details)
-        published, login_hint = await self._publish(record)
+        published, login_hint = (False, None) if local_only else await self._publish(record)
         credentials_expired = publish_pending_stage or login_hint is not None
         notifications = notifications_for(
             record,

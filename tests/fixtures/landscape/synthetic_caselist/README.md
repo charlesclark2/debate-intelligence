@@ -213,14 +213,15 @@ holding each where they count:
 | `Fund a sample research prize.` | `b6` (WW), after the label `Innovation` | 1 | Innovation |
 | `Publish a sample price list.` | `b1` (YY, JJ), `b6` (WW) | 3 | not named |
 | `Hire sample navigators.` | `b4` (YY) | 1 | not named |
-| `Ashgrove Fictional should host a sample pilot.` | `b5` (ZZ) | 1 | not named; withheld |
+| `Ashgrove Fictional should host a sample pilot to cut costs and spur innovation.` | `b5` (ZZ) | 1 | Costs, Innovation; withheld |
 
 * **`b6`'s second CP text ends in a colon** and lists four planks (paragraphs 20 to 24), one of them
   after a paragraph that is only an advantage's alias (21). The others are separate planks, labelled
   (`Plank 2:`, `2.`, `Second,`) or `should` analytics past the guard.
 * **Grouped by what they solve,** the top 3 per advantage: Costs shows the first three by teams (4, 3
-  and 2), then 1 more plank read by 1 team (QQ). Innovation shows 3 and 1. "not named" shows 3 and 1;
-  `b5`'s plank naming a school is withheld. Costs comes first, with 6 teams (YY, JJ, WW, KK, QQ, ZZ)
+  and 2), then 1 more plank read by 1 team (QQ). Innovation shows 3 and 1. "not named" shows 3 and 1.
+  `b5`'s plank naming a school names both advantages, and is withheld from both and counted once.
+  Costs comes first, with 6 teams (YY, JJ, WW, KK, QQ, ZZ)
   against Innovation's 3 (QQ, ZZ, WW); "not named" is always last.
 * **The totals count a plank once:** 8 distinct planks, the one naming both advantages once, read by 6
   teams, 1 of the planks withheld.

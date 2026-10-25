@@ -782,8 +782,8 @@ def _cp_planks(
     """`v1-e32-t16`'s planks of one CP: grouped by the advantage each solves, the top `limit` per group.
 
     A plank naming two advantages is in both groups and once in the CP's totals; one naming none is in the
-    last group, "solves: not named". A plank naming a school of the caselist is withheld, from every group,
-    and counted once.
+    last group, "solves: not named". A plank naming a school of the caselist is withheld from every group by
+    :func:`top_texts`, and counted here once.
     """
     withheld = {
         digest
@@ -792,8 +792,6 @@ def _cp_planks(
     }
     members: defaultdict[str | None, dict[str, TextGroup]] = defaultdict(dict)
     for digest, copies in by_digest.items():
-        if digest in withheld:
-            continue
         for solves in sorted(copies.solves) or [None]:
             members[solves][digest] = TextGroup(teams=frozenset(copies.teams), texts=tuple(copies.texts))
     groups: list[tuple[int, str, PlankGroup]] = []

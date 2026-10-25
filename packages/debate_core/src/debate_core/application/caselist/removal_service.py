@@ -71,10 +71,10 @@ from __future__ import annotations
 import re
 import tempfile
 import uuid
-from collections.abc import Callable, Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Final
+from typing import Final, Protocol
 
 from debate_core.application.caselist.evidence_listing import LocalEvidence
 from debate_core.application.caselist.inbox_purge import CaselistInbox, InboxPurge, purge_inbox
@@ -89,6 +89,7 @@ from debate_core.application.caselist.removal_plan import (
     RemovalSelector,
     Side,
 )
+from debate_core.application.caselist.run_state import RUN_STATE_BUNDLE_KEY
 from debate_core.application.caselist.suppression import (
     REMOVAL_LOG_KEY,
     SUPPRESSION_LIST_KEY,
@@ -130,14 +131,18 @@ from debate_core.domain import SHA256_HEX_PATTERN
 
 __all__ = [
     "PREFLIGHT_PREFIX",
+    "BundleSaved",
     "CaselistRemovalService",
     "NotSuppressed",
     "NotTheTakedownRole",
     "RemovalIncomplete",
     "RemovalReport",
+    "RemovalRunState",
+    "RunStateBundleNotRewritten",
     "TakedownAccess",
     "TakedownNotConfigured",
     "TakedownPreflightFailed",
+    "on_the_working_copy",
     "UnsuppressPlan",
     "UnsuppressReport",
     "permission_set_of",
@@ -565,6 +570,54 @@ class UnsuppressReport:
     failure. Empty when the preflight ran in an earlier call of the same service."""
 
 
+class RemovalRunState(Protocol):
+    """The run's state in the bucket, as a removal in bucket mode reaches it (`v1-e40-t04`, ADR-0020 (3)).
+
+    :class:`~debate_core.application.caselist.run_state.RunState`, named here by its shape.
+    """
+
+    async def restore(self, caselists: Sequence[str], *, parsed_version: str | None) -> object: ...
+
+    async def save_state_files(self) -> None: ...
+
+    async def save_bundle(self) -> BundleSaved: ...
+
+
+class BundleSaved(Protocol):
+    @property
+    def saved(self) -> bool: ...
+
+    @property
+    def reason(self) -> str: ...
+
+    @property
+    def version_id(self) -> str | None: ...
+
+
+async def on_the_working_copy[T](run_state: RemovalRunState | None, work: Callable[[], Awaitable[T]]) -> T:
+    """In bucket mode, restore the working copy, then do `work`, which builds the removal service.
+
+    The restore comes first because it replaces this machine's database whole, and the service opens
+    the database when it is built. A removal that executes runs this holding the bucket's run lock, so
+    the copy it plans from is the copy it rewrites the bundle from (`v1-e40-t04`). `None`, local mode,
+    restores nothing.
+    """
+    if run_state is not None:
+        await run_state.restore((), parsed_version=None)
+    return await work()
+
+
+class RunStateBundleNotRewritten(DomainError):
+    """The removal's rewrite of the run-state bundle was not confirmed in the bucket: nothing of it purged."""
+
+    def __init__(self, reason: str) -> None:
+        self.reason = reason
+        super().__init__(
+            f"the run-state bundle was not rewritten without the removed files ({reason}), so its earlier "
+            "versions were not purged; run the same removal again"
+        )
+
+
 @dataclass
 class CaselistRemovalService:
     """Executes removal plans and un-suppress requests for one environment.
@@ -589,6 +642,10 @@ class CaselistRemovalService:
     takedown: Callable[[], TakedownAccess]
     clock: Clock
     environment: str
+    run_state: RemovalRunState | None = None
+    """In bucket mode (`v1-e40-t04`): the run's state, restored before a plan and rewritten after a
+    removal, its earlier versions then purged. `None` in local mode, where no bundle exists: a local-mode
+    command refuses a bucket that holds one (the PM's ruling 3(a))."""
     _access: TakedownAccess | None = field(default=None, init=False)
 
     # --------------------------------------------------------------------------------------
@@ -607,7 +664,8 @@ class CaselistRemovalService:
         """The dry run. Reads only, with the everyday profile only.
 
         The plan includes the later uploads the store holds at each removed path unless
-        `only_named` (`v1-e30-t11`); :meth:`execute` carries out whichever plan it is given.
+        `only_named` (`v1-e30-t11`); :meth:`execute` carries out whichever plan it is given. In bucket
+        mode the service is built on the working copy :func:`on_the_working_copy` restored first.
         """
         return await self.planner.plan(
             selector,
@@ -616,6 +674,26 @@ class CaselistRemovalService:
             include_shared=include_shared,
             only_named=only_named,
         )
+
+    async def plan_and_execute(
+        self,
+        selector: RemovalSelector,
+        *,
+        request_id: str,
+        reason: ReasonCode,
+        include_shared: bool = False,
+        only_named: bool = False,
+    ) -> RemovalReport:
+        """:meth:`plan` and :meth:`execute` as one step, for a command that holds the bucket's run lock
+        across both: in bucket mode the working copy the plan is made from is the one executed."""
+        plan = await self.plan(
+            selector,
+            request_id=request_id,
+            reason=reason,
+            include_shared=include_shared,
+            only_named=only_named,
+        )
+        return await self.execute(plan)
 
     async def execute(self, plan: RemovalPlan) -> RemovalReport:
         """Carry out `plan`. Raises before any change if the takedown credential is missing or refused.
@@ -647,6 +725,7 @@ class CaselistRemovalService:
             await self._rewrite_local_manifests(plan, counts)
             await self._purge_inbox(plan, counts)
             await self._delete_records(plan, counts)
+            await self._rewrite_run_state(access, counts)
         except (DomainError, OSError) as stopped:
             failure = stopped
         entry = self._log_entry(plan, counts, failure)
@@ -763,6 +842,29 @@ class CaselistRemovalService:
                 )
             if source.delete_source_record:
                 counts.local_records_deleted += int(await self.caselists.delete_source(source.sha256))
+
+    async def _rewrite_run_state(self, access: TakedownAccess, counts: _Counts) -> None:
+        """Bucket mode, after the records: the bundle rewritten, confirmed, then its other versions purged.
+
+        The PM's ruling of 2026-10-23: under the removal credential, after the rewrite is confirmed in
+        the bucket. The save confirms it (the bucket's current version is the one written, with the
+        digest written), and a save that is not confirmed is :class:`RunStateBundleNotRewritten`,
+        with nothing purged: the earlier versions still name the removed files, so the removal is
+        incomplete until it is run again.
+        """
+        if self.run_state is None:
+            return
+        await self.run_state.save_state_files()
+        rewritten = await self.run_state.save_bundle()
+        if not rewritten.saved or rewritten.version_id is None:
+            raise RunStateBundleNotRewritten(rewritten.reason)
+        stale = tuple(
+            version
+            for version in await access.versions.list_versions(RUN_STATE_BUNDLE_KEY)
+            if version.key == RUN_STATE_BUNDLE_KEY and version.version_id != rewritten.version_id
+        )
+        refuse_protected_versions(stale)
+        counts.s3_versions_deleted += await access.versions.delete_versions(stale)
 
     @staticmethod
     async def _put_lines(store: EvidenceObjectStore, rewrite: ManifestRewrite) -> str | None:

@@ -1010,7 +1010,12 @@ class ServiceContainer:
             takedown=self.takedown_access,
             clock=clock,
             environment=settings.environment.value,
+            run_state=self.removal_run_state(),
         )
+
+    def removal_run_state(self) -> RunState | None:
+        """The run's state a removal restores first and rewrites last, in bucket mode only (`v1-e40-t04`)."""
+        return self.run_state() if self._in_bucket_mode else None
 
     def takedown_access(self) -> TakedownAccess:
         """The `EvidenceRemoval` profile's reach into this environment's bucket, built on demand.

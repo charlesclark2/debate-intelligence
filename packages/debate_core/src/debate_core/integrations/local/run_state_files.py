@@ -2,9 +2,11 @@
 
 :class:`~debate_core.application.ports.run_state.RunStateFiles` over `<data_dir>`:
 
-* **pack**: the database is copied with SQLite's online backup API into a scratch directory under
-  the data directory, never tarred as it lies, because the weekly run's database is in WAL mode and
-  its file alone is not the database while a writer is open. The tar holds
+* **pack**: the database is copied with `VACUUM INTO` into a scratch directory under the data
+  directory, never tarred as it lies. The weekly run's database is in WAL mode, so its file alone is
+  not the database while a writer is open; and a row a removal deleted stays in the file's free pages
+  until they are reused, which an online backup copies too. `VACUUM INTO` writes a consistent,
+  compacted copy that holds neither, so a removal's rewrite of the bundle holds no removed row. The tar holds
   `objects/manifests/<key>` for every manifest and `debate.sqlite3`, gzipped.
 * **unpack**: every member is checked before anything is written: a regular file or a directory,
   named under `objects/manifests/` or exactly `debate.sqlite3`, with no absolute path and no `..`.
@@ -97,14 +99,10 @@ class LocalRunStateFiles:
 
 
 def _backup(source: Path, destination: Path) -> None:
-    """A consistent copy of the database at `source`, through SQLite's online backup."""
+    """A consistent, compacted copy of the database at `source`: `VACUUM INTO`, read-only."""
     reading = sqlite3.connect(f"file:{source}?mode=ro", uri=True)
     try:
-        writing = sqlite3.connect(destination)
-        try:
-            reading.backup(writing)
-        finally:
-            writing.close()
+        reading.execute("VACUUM INTO ?", (str(destination),))
     finally:
         reading.close()
 

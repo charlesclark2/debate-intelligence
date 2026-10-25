@@ -137,9 +137,33 @@ None. ac2's validate-dev run happens on its own after the merge, and the PM reco
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-24
 
 **Notes:**
+
+A tidy, well-bounded change.
+1. **ac1 and ac3 pass, red first.**
+   * 11 failures at `488acf2`, each for the missing feature.
+   * The seven files come from t04's constants rather than a copy, and a file in neither list is a
+     `KeyError`, not a guess.
+   * The counts come from the run's result, and the hand-worked fixture counts match.
+   * The failed-run sentence is the hook's own. The tests plant a fictional school, a `.docx` path
+     and an `HTTP 403` message in the records, and show none of them reaches stdout.
+2. **Accepted as made:**
+   * `failed_run` under `staleness`, with `FailedSyncRun`'s own keys, `stopped_before_stages`
+     included;
+   * `paths.files` left unchanged;
+   * `--help` built from the constants by assigning `report.__doc__`, which keeps the hub module out
+     of the affected set;
+   * the docstring held to `BUNDLE_FILES` by a test;
+   * the PM's amendment written as `ac3`, the only change to the spec.
+3. **ac2 is validate-dev's run after the merge,** as with v1-e32-t05's ac4. It merges `--partial`
+   with the phase `InProgress`, and the PM records the run and sets the Goal `Succeeded` in a PM
+   batch.
+4. **The affected set** stopped at its alarm about 89% through with no failure, so it is left to
+   the PR's `ci` under agreement 10. The changed package and the always-run list passed (1,204).
+5. **The note about `v1-e32-t11`** is right. If its sync conflicts in `landscape.py`, keep both
+   sides.

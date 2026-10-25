@@ -1,0 +1,45 @@
+{
+  "paragraphs": [
+    "Journal of Synthetic Conservation Studies · Volume 12 (2026)",
+    "Moral Hazard and the Return of Lost Species",
+    "R. Okonkwo-Hale and T. Lindqvist",
+    "Abstract",
+    "De-extinction promises to reverse losses that conservation once treated as final. We ask whether the promise creates a moral hazard: if extinction can be undone, the urgency of protecting living populations may fade. We find that the cost-effective path for most agencies remains habitat protection, and that long-term funding for revival programs competes directly with it.",
+    "1. Introduction",
+    "The idea of bringing back the woolly mammoth or the passenger pigeon has moved from fiction to grant proposals. Proponents describe the work as extinction reversed, a correction of past harm. Critics answer that every dollar spent on revival is a dollar not spent on species still here, and that de-extinction risks becoming a well-intentioned distraction from the slower work of conservation. Between 2019-2024 the three largest revival programs raised more than the annual budgets of most regional wildlife agencies combined.",
+    "2. Methods",
+    "We compared funding records for revival programs with records for habitat protection in the same regions. Where the two drew on the same donors, we counted a dollar for revival as a dollar withdrawn from protection, which overstates the competition; a long-term view would also count donors who give only because revival is exciting. Agencies that relied on co-operation with private funders reported the sharpest declines, and the biodiversity they protect is concentrated in small populations that cannot wait for a revived species to arrive.",
+    "3. Results",
+    "Protecting habitat remained the cost-effective choice in every region we studied. The populations that recovered fastest were those whose habitat was protected before decline set in, and the cooperation of landowners mattered more than any single grant. Some agencies describe their partnerships as co-operation between equals; others call it dependence. Either way, the resur-rection of a lost species does nothing for the environmental conditions that caused its loss.",
+    "4. Conclusion",
+    "De-extinction is not a substitute for conservation. The long-term health of living populations depends on environmental protection that is funded before a species is lost, not after. A well-funded revival program is no answer to an extinction that cheaper protection could have prevented.",
+    "Acknowledgments",
+    "We thank the agencies that shared their records, and colleagues of Okonkwo-Hale at the regional office for comments on an early draft.",
+    "Received 3 March 2026; accepted 9 June 2026."
+  ],
+  "line_joins": [
+    {"paragraph_index": 6, "page_number": 1, "before": "describe the work as extinc", "after": "tion reversed", "character": "-", "hyphen_kept": false, "decision": "joined_form_in_document", "hyphenated_form_count": 0, "joined_form_count": 2},
+    {"paragraph_index": 6, "page_number": 1, "before": "and that de", "after": "-extinction risks", "character": "-", "hyphen_kept": true, "decision": "hyphenated_form_in_document", "hyphenated_form_count": 2, "joined_form_count": 0},
+    {"paragraph_index": 6, "page_number": 1, "before": "becoming a well", "after": "-intentioned distraction", "character": "-", "hyphen_kept": true, "decision": "undetermined", "hyphenated_form_count": 0, "joined_form_count": 0},
+    {"paragraph_index": 6, "page_number": 1, "before": "slower work of conser", "after": "vation. Between", "character": "-", "hyphen_kept": false, "decision": "joined_form_in_document", "hyphenated_form_count": 0, "joined_form_count": 3},
+    {"paragraph_index": 6, "page_number": 1, "before": "Between 2019", "after": "-2024 the three", "character": "-", "hyphen_kept": true, "decision": "not_a_word_break", "hyphenated_form_count": 0, "joined_form_count": 0},
+    {"paragraph_index": 8, "page_number": 2, "before": "competition; a long", "after": "-term view", "character": "-", "hyphen_kept": true, "decision": "hyphenated_form_in_document", "hyphenated_form_count": 2, "joined_form_count": 0},
+    {"paragraph_index": 8, "page_number": 2, "before": "relied on co", "after": "-operation with", "character": "-", "hyphen_kept": true, "decision": "undetermined", "hyphenated_form_count": 1, "joined_form_count": 1},
+    {"paragraph_index": 8, "page_number": 2, "before": "and the bio", "after": "diversity they", "character": "­", "hyphen_kept": false, "decision": "soft_hyphen", "hyphenated_form_count": 0, "joined_form_count": 0},
+    {"paragraph_index": 8, "page_number": 2, "before": "in small popu", "after": "lations that", "character": "-", "hyphen_kept": false, "decision": "joined_form_in_document", "hyphenated_form_count": 0, "joined_form_count": 3},
+    {"paragraph_index": 10, "page_number": 2, "before": "remained the cost", "after": "-effective choice", "character": "-", "hyphen_kept": true, "decision": "hyphenated_form_in_document", "hyphenated_form_count": 1, "joined_form_count": 0},
+    {"paragraph_index": 10, "page_number": 2, "before": "Either way, the resur", "after": "-rection of", "character": "-", "hyphen_kept": true, "decision": "undetermined", "hyphenated_form_count": 0, "joined_form_count": 0},
+    {"paragraph_index": 10, "page_number": 2, "before": "nothing for the envi", "after": "ronmental conditions", "character": "-", "hyphen_kept": false, "decision": "joined_form_in_document", "hyphenated_form_count": 0, "joined_form_count": 1},
+    {"paragraph_index": 14, "page_number": 3, "before": "colleagues of Okonkwo", "after": "-Hale at", "character": "-", "hyphen_kept": true, "decision": "hyphenated_form_in_document", "hyphenated_form_count": 1, "joined_form_count": 0}
+  ],
+  "removed_lines": [
+    {"page_number": 1, "edge": "bottom", "reason": "running_footer", "text": "Synthetic open-access test fixture, CC BY 4.0, not a real publication"},
+    {"page_number": 1, "edge": "bottom", "reason": "page_number", "text": "Page 1 of 3"},
+    {"page_number": 2, "edge": "top", "reason": "running_header", "text": "Okonkwo-Hale and Lindqvist · Moral Hazard and the Return of Lost Species"},
+    {"page_number": 2, "edge": "bottom", "reason": "running_footer", "text": "Synthetic open-access test fixture, CC BY 4.0, not a real publication"},
+    {"page_number": 2, "edge": "bottom", "reason": "page_number", "text": "Page 2 of 3"},
+    {"page_number": 3, "edge": "top", "reason": "running_header", "text": "Okonkwo-Hale and Lindqvist · Moral Hazard and the Return of Lost Species"},
+    {"page_number": 3, "edge": "bottom", "reason": "running_footer", "text": "Synthetic open-access test fixture, CC BY 4.0, not a real publication"},
+    {"page_number": 3, "edge": "bottom", "reason": "page_number", "text": "Page 3 of 3"}
+  ]
+}

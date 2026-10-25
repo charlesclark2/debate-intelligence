@@ -9,6 +9,9 @@ publications, people and text are invented for these tests. No saved real articl
 
 | Sample | What it is | Where it came from |
 |---|---|---|
+| `news-article.html` | A newspaper story: leaderboard and in-story ads, section navigation, share tools, related stories, a comment section, newsletter sign-up, NewsArticle JSON-LD, a relative `rel=canonical` | Written by hand for these tests; The Daily Meridian and everyone in it are invented |
+| `think-tank-report.html` | A policy report: donate banner, breadcrumbs, subheadings, a key-findings list, a pull quote, author bios, a related-research sidebar, a JSON-LD list holding a BreadcrumbList and a Report | Written by hand; the Harwell Institute is invented |
+| `gov-press-release.html` | A federal-agency press release: agency banner, primary, breadcrumb and side navigation, a media-contact box, "last updated", no JSON-LD | Written by hand; the Federal Office of Synthetic Wildlife is invented and imitates no real agency. No real .gov page was fetched |
 | `journal-article.pdf` | Three-page open-access journal article: running header and footer, page numbers, thirteen line-end hyphens | Written by `build_pdf_fixtures.py`, with no PDF library; its docstring lists every line and every break |
 
 ## Expected output is written by hand

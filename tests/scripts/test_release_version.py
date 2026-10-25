@@ -717,3 +717,10 @@ def test_a_hotfix_head_is_claimed_as_today_even_when_dev_has_moved_past_it_with_
     assert code == 0
     assert json.loads(capsys.readouterr().out)["tag"] == "v0.1.1-dev.1"
     assert remote_tags(remote)["v0.1.1-dev.1"] == fix
+
+
+def test_a_commit_git_cannot_read_is_an_error_not_a_commit_off_dev(clone: Path) -> None:
+    head = merge_to_dev(clone, "head")
+
+    with pytest.raises(rv.ReleaseVersionError, match="merge-base --is-ancestor failed"):
+        rv.GitDevBranch("origin", clone).contains(head, "e" * 40)

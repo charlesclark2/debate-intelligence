@@ -6,7 +6,8 @@ caselist snapshot on a topic, and `taxonomies/<topic id>.yaml` lists that topic'
 report (`v1-e32-t03`) ask this port, so neither knows where the files are or how they are checked.
 The coach's review-queue decisions on a topic's headings (`overrides/<topic id>.yaml`,
 `v1-e32-t02`) are read and checked with them, against the topic's merged taxonomy, and so is when a
-plan text names the topic's resolutional aff (`plan_texts/<topic id>.yaml`, `v1-e32-t09`).
+plan text names the topic's resolutional aff (`plan_texts/<topic id>.yaml`, `v1-e32-t09`), and who a
+CP text read by its place names (`analytic_texts/<topic id>.yaml`, `v1-e32-t11`).
 
 Synchronous, unlike the storage ports: the files are a few kilobytes read once when the repository
 is built, and an adapter checks every file then, so a bad edit fails before any report starts
@@ -20,6 +21,7 @@ from datetime import date
 from typing import Protocol, runtime_checkable
 
 from debate_core.application.errors import DomainError, NotFound
+from debate_core.arguments.landscape.analytic_texts import CounterplanActors
 from debate_core.arguments.landscape.plan_text import ResolutionalPlanWords
 from debate_core.domain.landscape import Taxonomy, Topic, TopicMap
 from debate_core.domain.landscape_classification import OverrideRules
@@ -88,6 +90,13 @@ class TaxonomyRepository(Protocol):
 
     def resolutional_plan_words(self, topic_id: str) -> ResolutionalPlanWords | None:
         """When a plan text naming no aff names the topic's resolutional aff; None with no such file.
+
+        Raises :class:`NoTaxonomyForTopic` for a topic with no taxonomy, or no such topic.
+        """
+        ...
+
+    def cp_text_actors(self, topic_id: str) -> CounterplanActors | None:
+        """The actors a CP text read by its place must name (`v1-e32-t11`); None with no such file.
 
         Raises :class:`NoTaxonomyForTopic` for a topic with no taxonomy, or no such topic.
         """

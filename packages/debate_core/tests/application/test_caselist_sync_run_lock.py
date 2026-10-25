@@ -507,11 +507,8 @@ def test_the_lease_is_thirty_minutes_renewed_every_five_with_five_minutes_for_cl
 
     from debate_core.application.caselist.run_lock import RENEW_EVERY
 
-    assert (LEASE, RENEW_EVERY, CLOCK_SKEW_MARGIN) == (
-        timedelta(minutes=30),
-        timedelta(minutes=5),
-        timedelta(minutes=5),
-    )
+    numbers = (LEASE, RENEW_EVERY, CLOCK_SKEW_MARGIN)
+    assert numbers == (timedelta(minutes=30), timedelta(minutes=5), timedelta(minutes=5))
     defaults = {name: one.default for name, one in inspect.signature(BucketRunLock).parameters.items()}
     assert (defaults["lease"], defaults["renew_every"], defaults["skew_margin"]) == (
         LEASE,

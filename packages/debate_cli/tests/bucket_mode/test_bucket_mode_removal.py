@@ -1,4 +1,4 @@
-"""A removal reaches the run-state bundle, and purges its old versions only once the rewrite is confirmed (ac4).
+"""A removal reaches the run-state bundle, and purges its old versions only once it confirms its rewrite.
 
 `v1-e40-t04`, ADR-0020 (3), "Removal covers it", and the PM's ruling of 2026-10-23: `caselist remove`,
 under the removal credential, purges the noncurrent versions of the objects under

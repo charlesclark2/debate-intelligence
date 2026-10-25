@@ -20,6 +20,9 @@ and the local filesystem while V2 runs the same use cases on DynamoDB, S3 and Be
 | `DebateFileParser` | `debate_files` | Reading a debate `.docx` into sections and cards (E31) |
 | `ParsedStore` | `parsed_store` | The parsed card store `caselist parse` writes (E31) |
 | `Notifier` | `notifier` | Telling the operator an unattended run needs attention (E34) |
+| `LockObjectStore` | `run_lock` | The bucket's run lock, changed by conditional writes only (E40) |
+| `WriteFence` | `run_lock` | What every bucket write asks first in bucket mode (E40) |
+| `RunStateFiles` | `run_state` | This machine's manifests and database, as the run-state bundle (E40) |
 | `SearchProvider` | `providers` | One discovery source |
 | `DiscoveryProviders` | `providers` | The enabled discovery sources and their health (E08) |
 | `ArticleFetcher` | `providers` | HTTP retrieval |

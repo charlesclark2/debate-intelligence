@@ -45,9 +45,11 @@ roles to ECS and is refused the login's, so nobody but the schedule ever starts 
    enabled (unless step 3 paused it) and the run's disabled.
 6. Step 7, **the cloud rehearsal**: one run started by the deployer as a dry run, which lists and
    writes nothing.
-7. Step 8, **one run by hand**, after `v1-e40-t04`: until bucket mode and its lock are applied, a
-   cloud run would start from an empty data directory, download every archive again and publish
-   without the bucket's lock. Step 8 says so again.
+7. Step 8, at the cutover (`v1-e40-t06`), after `v1-e40-t04`: **the seed**, once the Mac's agent is
+   unloaded; then the run task **in bucket mode**, applied; then **one run by hand**. Until bucket
+   mode and its lock are applied, a cloud run would start from an empty data directory, download
+   every archive again and publish without the bucket's lock (the PM's rulings on t04's plan,
+   2026-10-24). Step 8 says so again.
 8. The run's schedule is enabled at the cutover (`v1-e40-t06`), never before.
 
 **Every dev apply here runs from `dev`, after `v1-e40-t03` has merged, never from a task branch**,
@@ -545,13 +547,106 @@ debate-research caselist runs --remote --last 3
 ```
 Success looks like the newest runs being the Mac's, none started at the rehearsal's time.
 
-## Step 8 — One run by hand (after `v1-e40-t04`)
+## Step 8 — The seed, bucket mode, and one run by hand (at the cutover, after `v1-e40-t04`)
 
-**Not before `v1-e40-t04`'s bucket mode is applied and the lock seeded.** Today a cloud run starts
-from an empty data directory: it would select every week as new, spend the day's five downloads,
-and publish to the dev bucket while the Mac's agent may too, with no lock between them (the PM's
-ruling for this task). Once t04 is applied, a hand-started run restores the working copy and takes
-the lock first.
+**Not before `v1-e40-t04` has merged and been released, and not before `v1-e40-t06`'s cutover has
+unloaded the Mac's agent** (ADR-0020 (4), cutover steps 3 to 5; the PM's ruling 3(b) on t04's plan).
+Without bucket mode a cloud run starts from an empty data directory: it would select every week as
+new, spend the day's five downloads, and publish to the dev bucket while the Mac's agent may too,
+with no lock between them. In bucket mode a run restores the working copy and takes the bucket's run
+lock first, and it refuses a bucket that holds no lock object (`RUN_STATE_NOT_SEEDED`). The seed
+creates that object from the Mac's state. From then on the bucket keeps the run's state, and a
+local-mode command on the Mac refuses the bucket (`BUCKET_KEEPS_RUN_STATE`). That is why the agent
+goes first: left loaded, it would be refused every Wednesday.
+
+The parts, in order: the agent is unloaded; the seed's plan; the seed; the run task in bucket mode,
+planned (the PM reads it) and applied; one run by hand.
+
+**The agent is unloaded, and no pull is running.** Read-only.
+
+**Operator command** (expected runtime ~1 min)
+Where: your Mac, anywhere
+```bash
+if launchctl print "gui/$(id -u)/com.debate-intelligence.caselist-sync" >/dev/null 2>&1; then echo "STOP: the agent is still loaded; v1-e40-t06 unloads it first"; elif pgrep -f "caselist pull" >/dev/null; then echo "STOP: a caselist pull is running"; else echo "agent unloaded, no pull running"; fi
+```
+Success looks like `agent unloaded, no pull running`.
+
+**The seed's plan.** With the installed build, a release that has `v1-e40-t04`, in bucket mode for
+this command alone. It writes nothing anywhere: it lists the lock's key and heads each of the Mac's
+manifests in the bucket.
+
+**Operator command** (expected runtime ~1 min)
+Where: your Mac, the installed build
+```bash
+aws sso login --profile debate-dev-evidence
+if env | grep -q '^DEBATE_'; then echo "STOP: DEBATE_ overrides are set in this shell"; else DEBATE_ENV=dev DEBATE_CASELIST__RUN_STATE=bucket debate-research --json caselist seed-run-state | grep -oE '"(applied|seeded_already)": (true|false)|"manifests": [0-9]+|"code": "[A-Z_]+"'; fi
+```
+
+**What to read, and what stops you.**
+
+* Go on only with `"applied": false`, `"seeded_already": false` and `"manifests":` **above zero**
+  (50 on 2026-10-24). Zero manifests is an empty data directory, not a Mac ready to seed: stop.
+* `"code": "SEED_REFUSED"` stops you. Run the block again without the `grep` to read the reason.
+  "already holds a run lock" means the bucket is seeded: stop and tell the PM. "not in the bucket
+  with the same SHA-256" means the Mac imported something it has not published: run `caselist pull
+  --publish-pending` in local mode (the bucket is not seeded yet, so local mode still publishes),
+  then this block again. A manifest the publisher withholds names the removal to run again.
+
+**The seed.** It creates the lock object with `If-None-Match: *`, so of two seeds only one gets past
+its first write, uploads the run-state bundle and the five state files, checks each back against
+its SHA-256, and releases the lock.
+
+**Operator command** (expected runtime ~1 min)
+Where: your Mac, the installed build
+```bash
+if env | grep -q '^DEBATE_'; then echo "STOP: DEBATE_ overrides are set in this shell"; elif pgrep -f "caselist pull" >/dev/null; then echo "STOP: a caselist pull is running"; else DEBATE_ENV=dev DEBATE_CASELIST__RUN_STATE=bucket debate-research --json caselist seed-run-state --execute | grep -oE '"applied": (true|false)|"manifests": [0-9]+|"checked_back": \[[^]]*\]|"code": "[A-Z_]+"'; fi
+```
+Success looks like `"applied": true`, the same `"manifests":` count as the plan, above zero, and
+`"checked_back":` naming six keys: `manifests/_run-state/run-state.tar.gz` and the five under
+`reports/sync/state/`. Anything else: stop and send the PM the output. The seed releases the lock
+whatever happened after it created it.
+
+From here on, every command on the Mac that writes to the dev bucket runs in bucket mode
+(`DEBATE_CASELIST__RUN_STATE=bucket`, which `v1-e40-t06` puts in the profile), and restores the
+working copy first.
+
+**The run task in bucket mode.** Two changes reach the run's task definition in one apply: an image
+built from a release that has `v1-e40-t04`, and `DEBATE_CASELIST__RUN_STATE=bucket` in its
+environment, from this module (the PM's ruling 1 on t04's plan). Build and push the image as
+[A new image, later](#a-new-image-later) says, and put the digest line it prints in place of the
+old one in `owner.auto.tfvars`. Then the plan.
+
+**Operator command** (expected runtime ~2 min)
+Where: `$WT`, a worktree of `dev` with `v1-e40-t04` merged
+```bash
+cd "$WT"
+if env | grep -qE '^(TF_VAR_|TF_WORKSPACE=|TF_DATA_DIR=|TF_CLI_ARGS)'; then echo "STOP: a Terraform override is set in this shell"; else AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev plan -input=false -no-color -out=caselist-bucket-mode.tfplan | tee /tmp/caselist-bucket-mode-plan.txt | tail -5; fi
+grep -E '^Plan:|must be replaced|will be destroyed' /tmp/caselist-bucket-mode-plan.txt
+grep -c 'DEBATE_CASELIST__RUN_STATE' /tmp/caselist-bucket-mode-plan.txt
+grep -E '^  # ' /tmp/caselist-bucket-mode-plan.txt | grep -v 'module.caselist_run' | head
+grep -E '^ +[~+] state ' /tmp/caselist-bucket-mode-plan.txt
+```
+
+**What to read, and what stops you.** Send the plan to the PM; apply only after the PM's word.
+
+* `Plan: 2 to add, 4 to change, 2 to destroy.`, as for any new image: the login and run task
+  definitions each replaced (the two `must be replaced` lines), and the two schedules and their
+  scheduler roles' policies repointed at the new revisions. The run schedule's revision is the one
+  ruling 1 expects to see repointed.
+* The second `grep` prints `1` or more: the run's new revision carries bucket mode. `0`: stop.
+* Nothing printed by the third, and no schedule's `state` turning `ENABLED` in the fourth: the run's
+  schedule stays `DISABLED` until `v1-e40-t06` enables it.
+
+**Operator command** (expected runtime ~1 min)
+Where: `$WT`
+```bash
+cd "$WT"
+AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev apply -input=false caselist-bucket-mode.tfplan
+AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev output caselist_run_schedule_state
+```
+Success looks like `Apply complete! Resources: 2 added, 4 changed, 2 destroyed.`, then `"DISABLED"`.
+
+**One run by hand.**
 
 The network a run by hand starts in is the schedule's: read it from the root's outputs.
 
@@ -597,6 +692,24 @@ debate-research caselist runs --remote --last 3
 ```
 Success looks like the cloud run's id (the UTC time it started) at the top, with its outcome and
 counts in the same columns as the Mac's runs, and no warning that a record was skipped or unreadable.
+
+**It ran in bucket mode, and left the lock free.** Its details in the bucket say what it restored
+and whether it saved the run-state bundle. Put the cloud run's id in `RUN_ID`.
+
+**Operator command** (expected runtime ~1 min)
+Where: `$WT`
+```bash
+cd "$WT"
+RUN_ID='the-cloud-runs-id-caselist-runs-printed'
+BUCKET=$(AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev output -raw evidence_bucket_name)
+aws s3 cp "s3://${BUCKET}/reports/sync-run-details/2026/${RUN_ID}.json" - --profile debate-dev-evidence | grep -oE '"bundle": "saved[^"]*"|"took_over": (null|"[^"]*")|"parsed_objects": [0-9]+|"lock_lost": (true|false)'
+aws s3 cp "s3://${BUCKET}/reports/sync/run-lock.json" - --profile debate-dev-evidence | grep -oE '"state": "[a-z]+"|"home_environment": "[a-z]+"'
+```
+Success looks like `"bundle": "saved, ...`, `"took_over": null`, `"parsed_objects":` above zero (the
+parsed store's current version directory, about 15,000 objects at today's size), `"lock_lost":
+false`, then `"state": "free"` and `"home_environment": "dev"`. The restore's start and end are in
+the same file, under `bucket_run.restore`: they are the cloud figure the PM asked for in place of an
+estimate (t04's plan, question 7).
 
 ## A new image, later
 

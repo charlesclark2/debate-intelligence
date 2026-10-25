@@ -300,6 +300,28 @@ says so, logs `INCOMPLETE`, and the fix is to run the same command again, with t
 while no `caselist pull` is running: if one holds the sync's lock, the removal stops `INCOMPLETE`
 with *a caselist pull is running*, and you re-run it once the pull has finished.
 
+**In bucket mode** (after the cutover: `caselist.run_state = "bucket"`, `v1-e40-t04`, ADR-0020
+(3)), the same command, run with `DEBATE_CASELIST__RUN_STATE=bucket` until `v1-e40-t06` puts it in
+the profile, does three things more, and nothing in what you type changes:
+
+* **It works on the bucket's copy.** Before it plans, the dry run as well, it restores this
+  machine's manifests, database and state files from the run-state bundle
+  (`manifests/_run-state/run-state.tar.gz`): a few seconds. So the plan is of the state the cloud
+  run left, not of an older one on this machine.
+* **`--execute` holds the bucket's run lock** for the whole of it, planning included. While the
+  cloud run holds the lock, the removal is refused with `RUN_LOCK_HELD` and nothing is changed:
+  run it again once that run has finished (`caselist runs --remote --last 1`).
+* **It rewrites the run-state bundle, and only then purges the bundle's old versions.** Every
+  version of the bundle holds the removed file's manifest rows and database records. After its
+  records step, the removal saves the bundle again without them, confirms that the bucket's current
+  version is the one it wrote, and then deletes every other version with the takedown profile. A
+  rewrite the bucket does not confirm deletes nothing and stops the removal `INCOMPLETE` with
+  `RUN_STATE_BUNDLE_NOT_REWRITTEN`: run the same command again. The count of versions deleted in the
+  `DONE` output includes the bundle's.
+
+The parse in the next block runs in bucket mode too, with the same variable. It fetches from the
+bucket's `raw/` any source it has to parse and this machine lacks.
+
 **Then rebuild the parsed card store's aggregates.** The removal deletes the removed file's parsed
 cards and, for every caselist it touches, the store's `index.jsonl`, `failures.jsonl` and
 `occurrences.jsonl` (`v1-e31-t06`), here and in the bucket, because each of them can name the

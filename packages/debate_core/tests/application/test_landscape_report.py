@@ -847,7 +847,14 @@ def test_chain_each_role_shows_its_most_read_labelled_cluster() -> None:
 
 def test_chain_the_impact_role_is_the_impact_sections_first_row() -> None:
     report = _report()
-    for card in report.chain_cards:
+    impacts = [card for card in report.chain_cards if card.role.value == "impact"]
+    # The Costs advantage and the Spending and Hospital closures DAs have impact cards.
+    assert [card.position_id for card in impacts] == [
+        "costs-advantage",
+        "spending-da",
+        "hospital-closures-da",
+    ]
+    for card in impacts:
         if card.role.value == "impact":
             first = next(one for one in report.impact_cards if one.position_id == card.position_id)
             assert (card.fingerprint, card.teams_reading, card.tag) == (

@@ -31,14 +31,42 @@ which is what makes re-running the workflow for one commit safe.
 N is unique and increases in the order runs *claim* it. Two overlapping merges are numbered in the
 order their `ci` runs finished, which is not always the order they merged.
 
+## A commit dev has moved past (v1-e01-t36)
+
+GitHub sometimes refuses this workflow's token a tag, "refusing to allow a GitHub App to create or
+update workflow `.github/workflows/validate-dev.yml` without `workflows` permission", although the
+tag changes no file. When it does is not documented: GitHub's documentation says only that editing
+files under `.github/workflows` needs the Workflows permission. What is known, as observed here and
+reported elsewhere, not as GitHub's rule:
+
+* Observed: 2 of 374 runs to 2026-10-24 were refused, both for a dev commit that was behind dev's
+  head when a later commit had changed `.github/workflows/` (run 38647659339 on 2026-10-14, run
+  40149948706 on 2026-10-25). The second commit's workflows were identical to the tag
+  `v1.1.0-dev.136`'s, so a matching tag does not help.
+* Observed: `v1.0.1-dev.1` and `v1.0.1-dev.2` were tagged at hotfix heads whose workflows differed
+  from dev's head, so the rule is not "differs from the default branch's head".
+* Reported (GitHub community discussion #151442, no GitHub answer): a tag is refused when no branch
+  head has the tagged commit's workflow files.
+
+So a dev claim checks, before it pushes and against dev's head fetched at that moment, whether dev's
+head is past the commit with different workflow files, and if so ends superseded: it names dev's
+head, pushes nothing, writes `superseded=true` and exits 0, and the workflow builds, publishes and
+dispatches nothing. Dev's head gets its own pre-release. The check is conservative: it may skip a
+commit GitHub would have tagged (another branch still had its workflows), never the reverse. If a
+push is still refused with that wording, dev may have moved after the check, so the check runs again
+against a fresh head; only if it holds is the commit superseded, and otherwise the refusal fails
+like any other. A hotfix claim is never checked: a hotfix head is its own branch's head.
+
 ## Commands
 
     release_version.py next  --source dev|hotfix --sha SHA   # what would be claimed; pushes nothing
     release_version.py claim --source dev|hotfix --sha SHA   # push the tag, print the claim
     release_version.py prune --keep 30 < releases.json       # dev pre-releases to delete
 
-`claim` also appends `tag=`, `version=`, `number=`, `target=` and `reused=` lines to the file named
-by `$GITHUB_OUTPUT` when it is set. Standard library only, so the runner's own python3 runs it.
+`claim` also appends `tag=`, `version=`, `number=`, `target=`, `sha=` and `reused=` lines to the file
+named by `$GITHUB_OUTPUT` when it is set, or, for a superseded commit, `superseded=true`, `sha=` and
+`superseded_by=` (and prints a `::notice::` instead of the JSON). Standard library only, so the
+runner's own python3 runs it.
 """
 
 from __future__ import annotations
@@ -267,7 +295,7 @@ WORKFLOW_REFUSAL = re.compile(
 
 def is_workflow_refusal(stderr: str) -> bool:
     """Whether a failed push's stderr is GitHub's refusal for want of the `workflows` permission."""
-    return False
+    return WORKFLOW_REFUSAL.search(stderr) is not None
 
 
 class CommitSuperseded(Exception):
@@ -309,8 +337,24 @@ class DevBranch(Protocol):
 
 
 def superseded_by(branch: DevBranch, sha: str) -> CommitSuperseded | None:
-    """The supersession of `sha`, when dev's head is past it with different workflow files."""
-    return None
+    """The supersession of `sha`, when dev's head is past it with different workflow files.
+
+    Conservative by design: it may skip a commit GitHub would have tagged, never the reverse (see
+    "A commit dev has moved past" in the module docstring).
+    """
+    head = branch.head()
+    if head == sha or not branch.contains(head, sha):
+        return None
+    changed = branch.workflow_changes(sha, head)
+    if not changed:
+        return None
+    return CommitSuperseded(sha, head, changed)
+
+
+def _raise_if_superseded(branch: DevBranch, sha: str) -> None:
+    superseded = superseded_by(branch, sha)
+    if superseded is not None:
+        raise superseded
 
 
 class TagStore(Protocol):
@@ -337,18 +381,29 @@ def claim_dev_tag(
 
     The push is the claim. A rejected push means another run pushed that tag between our listing
     and our push, so the tags are listed again and the next number is tried.
+
+    With `dev_branch`, a commit that dev's head has passed with a change to its workflow files raises
+    :class:`CommitSuperseded` instead: checked before the first push, so no tag is attempted, and
+    again against a fresh head if a push is still refused with GitHub's workflow wording, for dev
+    moving in between. That wording alone supersedes nothing; it fails like any other refusal.
     """
     unexplained: list[str] = []
-    for _ in range(max_attempts):
+    for attempt in range(max_attempts):
         tags = store.dev_tags()
         already = existing_build_for(target, sha, tags)
         if already is not None:
             return Claim(already, sha, reused=True)
+        # Once, before the first push. A later attempt follows a collision, not a refusal, and a
+        # refusal it meets is checked below.
+        if attempt == 0 and dev_branch is not None:
+            _raise_if_superseded(dev_branch, sha)
         build = DevBuild(target, next_dev_number(target, tags))
         result, detail = store.push_tag(build.tag, sha)
         if result is PushResult.CREATED:
             return Claim(build, sha, reused=False)
-        if result is PushResult.FAILED:
+        if result is PushResult.WORKFLOW_REFUSED and dev_branch is not None:
+            _raise_if_superseded(dev_branch, sha)
+        if result in (PushResult.FAILED, PushResult.WORKFLOW_REFUSED):
             unexplained.append(detail.strip())
             if len(unexplained) >= MAX_UNEXPLAINED_PUSH_FAILURES:
                 raise ReleaseVersionError(
@@ -401,6 +456,8 @@ class GitTagStore:
         # claiming the same number, which is a collision exactly as much as "already exists" is.
         if any(sign in pushed.stderr for sign in _COLLISION_SIGNS) or tag in self.dev_tags():
             return PushResult.TAKEN, pushed.stderr
+        if is_workflow_refusal(pushed.stderr):
+            return PushResult.WORKFLOW_REFUSED, pushed.stderr
         return PushResult.FAILED, pushed.stderr
 
     def stable_tags(self, *, merged_into: str | None = None) -> list[str]:
@@ -524,7 +581,18 @@ def main(argv: Sequence[str] | None = None) -> int:
             print(json.dumps(Claim(build, sha, reused=existing is not None).as_outputs()))
             return 0
 
-        claim = claim_dev_tag(store, target, sha)
+        # Only a merge to dev can be superseded by dev's head. A hotfix head is the head of its own
+        # branch, and v1.0.1-dev.1 and .2 were tagged at hotfix heads whose workflows differed from
+        # dev's head, so a hotfix claims as it always has.
+        dev_branch = (
+            GitDevBranch(arguments.remote, arguments.repository) if arguments.source is Source.DEV else None
+        )
+        try:
+            claim = claim_dev_tag(store, target, sha, dev_branch=dev_branch)
+        except CommitSuperseded as superseded:
+            _write_github_output(superseded.as_outputs())
+            print(superseded.notice)
+            return 0
         outputs = claim.as_outputs()
         _write_github_output(outputs)
         print(json.dumps(outputs))

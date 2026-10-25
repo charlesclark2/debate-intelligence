@@ -34,6 +34,14 @@ How to read the numbers:
 * **The link chain** of each advantage and DA is its most-read card for each role a team labelled, by a heading under the position or the tag's first words: uniqueness (`U`, `UQ`), link, internal link (`IL`) and impact, and for an advantage harms, inherency and solvency. An `AT:` heading, a heading naming two roles, and a card that answers the position or is read on the other side fill no role. A role no team labelled says so.
 * **Trends** compare this week's window with the previous one. A round counts in the week its file was first disclosed, whatever path it was later filed under, and a position's share is the teams that read it that week on its own side over the week's teams disclosing on that side: this week 4 on the affirmative and 4 on the negative, the previous 3 and 4. **NEW** is read for the first time on this topic; **RISING** and **FALLING** moved by at least 5 points with at least 3 teams reading it in one of the two weeks; everything else is **STEADY**. Every position's row is in `trends.csv`.
 
+## Contents
+
+* [Affirmative](#affirmative): [Affirmative positions](#affirmative-positions), [Advantages by affirmative](#advantages-by-affirmative)
+* [Negative](#negative): [Negative positions](#negative-positions), [Counterplan texts, alternatives and roles of the ballot](#counterplan-texts-alternatives-and-roles-of-the-ballot)
+* [Neither side](#neither-side): [Overviews](#overviews), [New this week](#new-this-week), [Rising](#rising), [Falling](#falling), [Unclassified](#unclassified)
+
+# Affirmative
+
 ## Affirmative positions
 
 ### Affs
@@ -106,6 +114,17 @@ Link chain:
 | Position | Rounds | Teams | Aff rounds | Neg rounds | Share of teams | First seen | New |
 |---|---|---|---|---|---|---|---|
 | Condo bad (`condo-bad`) | 1 | 1 | 1 | 0 | 16.7% | 2026-09-15 | yes |
+
+## Advantages by affirmative
+
+Under each aff, the advantages read in the affirmative rounds assigned to it (by the round's plan text or the team's other rounds), ranked by the teams reading them; the 5 the most teams read are shown. A round assigned to a mechanism counts under the mechanism and once under its aff. An advantage read in a round assigned to another aff is never counted under this one, and nothing is taken from an advantage's name.
+
+No affirmative round assigned an aff reads an advantage.
+
+9 advantage reads in 7 affirmative rounds, by 6 teams, have no assigned aff.
+A placed card identifies the aff of 4 of those rounds, and their advantages are not counted under it.
+
+# Negative
 
 ## Negative positions
 
@@ -211,15 +230,6 @@ Link chain:
 |---|---|---|---|---|---|---|---|
 | T: national health insurance (`nhi-t`) | 2 | 1 | 0 | 2 | 16.7% | 2026-09-08 |  |
 
-## Advantages by affirmative
-
-Under each aff, the advantages read in the affirmative rounds assigned to it (by the round's plan text or the team's other rounds), ranked by the teams reading them; the 5 the most teams read are shown. A round assigned to a mechanism counts under the mechanism and once under its aff. An advantage read in a round assigned to another aff is never counted under this one, and nothing is taken from an advantage's name.
-
-No affirmative round assigned an aff reads an advantage.
-
-9 advantage reads in 7 affirmative rounds, by 6 teams, have no assigned aff.
-A placed card identifies the aff of 4 of those rounds, and their advantages are not counted under it.
-
 ## Counterplan texts, alternatives and roles of the ballot
 
 The teams' own words, quoted as their files hold them (data-use policy 1.13), never beside a school or team code. A text belongs to the position its section is placed under: the nearest placed heading over its label, as a card is placed. A label under no placed heading is counted here and never placed by a guess. Texts worded alike are one text. Each CP and K shows the 3 texts the most teams read, and how many more there are. A text naming a school of the caselist is withheld.
@@ -280,6 +290,8 @@ Found by a role-of-the-ballot label (`Role of the ballot`, `ROB`, `The role of t
 | Rank | Teams | Text |
 |---|---|---|
 | 1 | 1 | The role of the ballot is to vote for the best sample method. |
+
+# Neither side
 
 ## Overviews
 

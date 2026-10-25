@@ -7,7 +7,9 @@ position here is invented (no real debate file is in the repository). The tests'
 how they render are written by hand from these files (working agreement 6).
 
 * `synthpolicy26/2026-10-20/`: the newest bundle. Two schools whose headings share an anchor
-  (`Birch Hollow` and `Birch-Hollow`), a display name with no team page, two team pages, and a
-  `### Counterplan texts` under `## Counterplan texts`, so a page repeats an anchor.
-* `synthpolicy26/2026-10-13/`: an older bundle, whose school `Oldfield` must never be shown.
+  (`Birch Hollow` and `Birch-Hollow`), a display name with no team page, two team pages, in both
+  the by-school and the by-position tables (`v1-e32-t23`), and a `### Counterplan texts` under
+  `## Counterplan texts`, so a page repeats an anchor.
+* `synthpolicy26/2026-10-13/`: an older bundle, whose school `Oldfield` must never be shown. Its
+  by-school table keeps the shape before `v1-e32-t23`, with no team page column.
 * `synthld26/2026-10-19/`: a report with no school view.

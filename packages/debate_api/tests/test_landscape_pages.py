@@ -384,10 +384,14 @@ def large_school_view() -> str:
         lines += [
             f"### Invented{school:03d}",
             "",
-            "| Team code | Side | Position | Rounds |",
-            "|---|---|---|---|",
+            "| Team code | Side | Position | Rounds | Team page |",
+            "|---|---|---|---|---|",
         ]
-        lines += [f"| T{row:03d} | neg | `invented-position-{row}` | {row} |" for row in range(rows)]
+        lines += [
+            f"| T{row:03d} | neg | `invented-position-{row}` | {row} | "
+            f"[openCaselist](https://opencaselist.com/synthpolicy26/Invented{school:03d}/T{row:03d}) |"
+            for row in range(rows)
+        ]
         lines.append("")
     lines += ["## By position", "", "### Disadvantages", "", "#### `invented-position-0`", ""]
     lines += ["| School | Team code | Side | Rounds | Team page |", "|---|---|---|---|---|"]
@@ -434,6 +438,9 @@ def test_every_landscape_page_of_a_bundle_as_large_as_hspolicy26s_is_under_the_p
     assert world.browser.get("/landscape/synthpolicy26/positions/invented-position-0").text.count(
         "noopener"
     ) == (HSPOLICY26_LARGEST_POSITION_ROWS)
+    assert world.browser.get("/landscape/synthpolicy26/schools/invented000").text.count("noopener") == (
+        HSPOLICY26_LARGEST_SCHOOL_ROWS
+    )
     assert all(weight < PAGE_BUDGET for weight in others.values()), others
     assert max(part_weights.values()) <= (1 - HEADROOM) * PAGE_BUDGET, part_weights
     world.services.search_index.close()

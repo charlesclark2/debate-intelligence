@@ -6,56 +6,51 @@
 | Spec | [`plan_specs/v1/e32-argument-landscape/t11-negative-analytic-texts.yaml`](../../plan_specs/v1/e32-argument-landscape/t11-negative-analytic-texts.yaml) |
 | Epic / release | `v1-e32-argument-landscape` / `v1.2` |
 | Branch | `task/v1-e32-t11-negative-analytic-texts` |
-| Session status | PARTIAL: stopped for the PM's ruling after the counts <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | PARTIAL: built and tested; the operator's first cache fill and the dry run are next <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
-**The counts are done (ac1), and nothing is built.** As the PM's context asks, the session stops here
-for a ruling ([the questions](#questions-for-the-pm)). ac2 waits on that ruling, so the Goal stays
-**InProgress**.
+**Built, after the PM's rulings of 2026-10-24.** The landscape report now quotes each CP's texts and
+each K's alternatives and roles of the ballot, and counts each position's overviews, on synthetic
+sources against hand-written golden files.
 
-The counts cover hspolicy26 through 2026-10-20, its newest snapshot. They were read-only, under t09's
-guards, and printed counts only. Every one of the 3,825 on-topic sources was re-read from its blob
-with t09's pattern (the parser in memory, a placeholder path). Each label was placed by t02's matcher
-from the headings over it.
+* **CP texts:** by label, and as the first `should` analytic of a block whose nearest placed heading is
+  a CP the team reads, past the actor guard (ruling 1). The guard's actors are config:
+  `config/landscape/analytic_texts/policy-2026-27-nhi.yaml`.
+* **The top 3 texts per CP and K**, with their team counts, then "and N more texts, read by M teams"
+  (ruling 4). Texts are grouped by their normalized words. A text naming a school of the caselist is
+  withheld and counted.
+* **Overviews are counted only** (ruling 3): per position, the teams with one on each side, and no
+  overview text in the cache or the report.
+* **Every label found is counted** by where it went. So the report states how many it could not place,
+  and a kind that shows almost nothing (roles of the ballot) says so (ruling 2).
+* **The cache** holds derived fields only, beside t09's, keyed as ruled (ruling 5). The texts to quote
+  are read again in memory and checked against their digests.
+* **Tests were shown failing first**, and 21 targeted mutants on the withholding rule, the placement
+  rule and the guard were all caught, after one new test ([below](#mutants)).
 
-What the store shows, kind by kind:
-* **CP texts are almost never labelled.** A `Text:`-style label is in 68 negative documents (37
-  teams), and only 10 of them (7 teams) sit under a heading the matcher places on a CP.
-  * The CP text is usually the first `should` paragraph of the CP's own block, with no label. That is
-    133 documents (56 teams) under a placed CP heading.
-  * All 163 such paragraphs have at most 12 words before `should`, and 146 open with "The fifty",
-    "The United" or "The 50".
-  * Question 1 is whether that position rule may name a CP text.
-* **K alternatives are mostly card tags the store already holds:** "The alternative is ...", "The
-  alt is ...". The labels are in 452 negative documents (185 teams). 72 of them (33 teams) sit under
-  a heading placed on a K. The rest are under `1NC`/`OFF`-style headings that place nothing, as the
-  report already counts their cards.
-* **Roles of the ballot are rare:** 30 negative documents, and 1 under a placed K.
-* **Overviews are labelled in 335 negative documents (94 teams) and 159 affirmative ones (52).**
-  * The most common overview of a position is read by one team in 13 of 16 negative positions, and
-    in all 6 affirmative ones.
-  * Data-use policy 1.13 lists plan texts, CP texts, alternatives and roles of the ballot, but not
-    overviews (question 3).
-* **Quoting at report time is cheap:** 270 sources re-read for 365 texts in 14.9 s over 6 workers.
-  * Every paragraph matched its digest.
-  * 1 text names a school and would be withheld.
-  * t05's scan would hit twice: the ordinary word `all` in one CP text, and the school in the text
-    that is withheld.
+**What is left:**
+* **The first fill of the new cache** is the operator's (about 2 minutes over 8 workers;
+  [the block](#operator-follow-ups)).
+* **Then the dry run on hspolicy26**, without `--publish`, with its runtime and the scan's hits by
+  section. I run it once the cache is warm.
+* **The Goal stays InProgress** until both are recorded. Every criterion is otherwise met.
 
 ## Plan nodes
 
 | Node | Status | Notes |
 |---|---|---|
-| negative-texts | In progress: the counts (ac1) done and sent; stopped for the PM's ruling before any building | Scratch count scripts only, outside the repository. No code, test, fixture or config changed |
+| negative-texts | In progress: built and tested; the dry run on hspolicy26 waits on the operator's first cache fill | The counts (2026-10-24), the PM's rulings (2026-10-24), then the reader, the cache, the config, the report's sections and golden, the service, the run's seam and wiring, the operator script and the guide |
 
 ## Acceptance criteria
 
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
-| ac1: counts before any rule, per kind, of documents with a CP-text, alternative, role-of-the-ballot or overview label and the paragraph under it, sent to the PM with the proposed labels | PASS | [The counts](#the-counts-hspolicy26-through-2026-10-20), [the proposed labels](#the-proposed-labels), [the questions](#questions-for-the-pm), sent 2026-10-24. Nothing was built |
-| ac2: after the ruling, on synthetic sources, the report shows each CP's and K's distinct texts with their team counts and each position's most common overview, matching hand-written golden files; a text never beside a school or team code; tests shown failing first | NOT RUN | Waits on the PM's ruling (the PM's context: build nothing before it) |
-| negative-texts node: `uv run pytest packages/debate_core/tests/application/test_landscape_report.py` | NOT RUN as a criterion | Nothing changed yet. Baseline only: `.venv/bin/python -m pytest packages/debate_core/tests/application/test_landscape_report.py -q -p no:randomly` under `perl -e 'alarm 100'` → 52 passed in 5.97 s |
+| ac1: counts before any rule, per kind, of documents with a CP-text, alternative, role-of-the-ballot or overview label and the paragraph under it, sent to the PM with the proposed labels | PASS | [The counts](#the-counts-hspolicy26-through-2026-10-20), [the proposed labels](#the-proposed-labels), [the questions](#questions-for-the-pm), sent 2026-10-24 and ruled on the same day. Nothing was built before the ruling |
+| ac2: after the ruling, on synthetic sources, the report shows each CP's and K's distinct texts with their team counts and each position's most common overview (ruling 3: overview counts, no text), matching hand-written golden files; a text never beside a school or team code; tests shown failing first | PASS | `tests/fixtures/landscape/golden/report.md`'s two new sections, hand-written from the hand-written `synthetic_caselist/analytic_texts.json`, matched on the renderer's first run (`test_rendering_the_fixture_matches_the_golden_file[report.md]`). The red runs: [below](#checks-shown-failing-for-their-reason). Never beside a school or team code: `test_texts_a_text_is_never_beside_a_school_or_team_code`, the golden's scan test, and the run's test that the texts are in report.md and no other file (Deviations 1 for the overview clause) |
+| negative-texts node: `uv run pytest packages/debate_core/tests/application/test_landscape_report.py` | PASS | `.venv/bin/python -m pytest packages/debate_core/tests/application/test_landscape_report.py -q -p no:randomly` under `perl -e 'alarm 100'` → 65 passed (52 before this task) |
+| PM ruling 1: how many of the 163 the guard keeps, and one test of a `should` analytic it refuses | PASS in part | The refused test: `test_the_actor_guard_refuses_a_should_analytic_naming_no_actor_and_counts_it` (and the twelve-word and whole-word cases). With the committed actor list, measured in memory on the counts' 163: **158 kept, 5 refused**, all 5 theory analytics ("our counter interpretation is that we should ...", "logical policy maker is a neg argument"). The count from the built reader on the real store comes from the operator's fill ([pending](#operator-follow-ups)) |
+| PM: the dry run on hspolicy26 without `--publish`, with counts, its runtime and the scan's hits by section | NOT RUN | Waits on the operator's first cache fill: a dry run writes no cache, so on a cold cache it would parse every source and keep nothing |
 
 ## The counts (hspolicy26, through 2026-10-20)
 
@@ -340,18 +335,195 @@ is the text, opening with those words.
 | compound with a part or a position (`Impact overview`, `Link O/V`, `UQ O/V`, `Midterms DA overview`, `Overview – Cap K`) | 191 / 60 | yes |
 | Left out: `O/W`, `Extinction O/W` | | "outweighs", not an overview |
 
+## The PM's rulings, applied
+
+The PM ruled on the counts on 2026-10-24:
+* (1) (b), with an actor guard;
+* (2) the labels as proposed;
+* (3) (c), counts only;
+* (4) the top 3;
+* (5) the key as proposed.
+
+The rulings are a PM-ruling comment above the spec's `acceptanceCriteria`.
+
+### What was built
+
+| Where | What |
+|---|---|
+| `domain/landscape_texts.py` (new) | What is kept of one text (`AnalyticTextReading`: kind, form, label and paragraph, unit, kept, digest, placement, position and role; never words; an overview has no digest) and what the report shows (`LandscapeTexts`: per CP and K its top texts and the rest as a count, per kind the coverage, per position the overview teams) |
+| `arguments/landscape/analytic_texts.py` (new) | The pure reader: the ruled label lists, inline and sentence labels, the CP text by its place with the actor guard, placement by the nearest placed heading through t02's matcher (the label's own path, cut as a card's, with the team's names and the caselist's schools taken out), the rules digest, reading back against a digest, the school rule, and the ranking with its cut-off |
+| `application/ports/analytic_text_store.py`, `integrations/landscape/analytic_text_store.py` (new) | The cache, `<data_dir>/landscape/analytic_texts/<caselist>.jsonl`, beside t09's, keyed by (source digest, parser version, rules digest). Derived fields only |
+| `application/analytic_texts.py` (new) | `AnalyticTextService`: `read` parses only what the cache lacks through t09's blob jobs (now one shared function, `plan_texts.blob_jobs`) and a placeholder path; `quote` reads again in memory only the sources holding a CP text, alternative or role of the ballot placed under its kind; `report_inputs` is the run's seam, and a dry run writes no cache |
+| `application/landscape_report.py`, `domain/landscape_report.py` | The report's `texts`: a text counts for the teams of the rounds disclosing its file, as a card's read does (never in a round on the other side); every label is counted by where it went |
+| `arguments/landscape/render.py` | report.md's two sections, "Counterplan texts, alternatives and roles of the ballot" and "Overviews", before "New this week". Texts are in report.md only |
+| `application/landscape_run.py`, `debate_cli/container.py` | The `AnalyticTextsFromReading` seam beside t09's, wired over the same worker pool |
+| `integrations/landscape/yaml_taxonomy_repository.py`, `application/ports/taxonomy_repository.py` | `analytic_texts/<topic id>.yaml` loaded and checked with the taxonomies; `cp_text_actors(topic)` |
+| `config/landscape/analytic_texts/policy-2026-27-nhi.yaml` (new) | The actor phrases (ruling 1) |
+| `scripts/read_landscape_texts.py` (new) | Fills the cache and prints counts only; `--quote` counts the texts read again |
+| `docs/guides/landscape-taxonomy.md` | "CP texts, alternatives, roles of the ballot and overviews": the labels, what is left out, and how to edit the actors |
+
+### The actor guard (ruling 1)
+
+The rule:
+* at most 12 words before the text's first `should`;
+* among them one of the config's actor phrases, as whole words.
+
+The committed list is `fifty states`, `50 states`, `states`, `state`, `territories`, `governors`,
+`united states`, `usfg`, `federal government`, `congress`, `supreme court`, `federal judiciary`,
+`courts`, `executive branch`, `president`, `department of health and human services`, `hhs`,
+`centers for medicare and medicaid services` and `cms`.
+
+Measured in memory on the counts' 163 paragraphs (read-only, 41.4 s for the pass):
+* **158 kept and 5 refused**;
+* the phrases that matched: `fifty states` 68, `united states` 64, `50 states` 22, `state` 2, `usfg` 1,
+  `states` 1;
+* the 5 refused are theory analytics, not CP texts: "our counter interpretation is that we" (twice),
+  "logic is neg debate", and "logical policy maker is a neg argument debate" (twice). Each is fewer
+  than 12 words, with no actor.
+
+The reader's own count on the real store comes from the operator's fill: its "CP texts by place in
+negative files" line. It should be a little under 158. A paragraph that opens with an inline `Text:`
+label counts as that label, not as a text by its place, and the counts found 7 such paragraphs among
+the 163.
+
+### Checks shown failing for their reason
+
+Each check was run red before its code, against a skeleton that found nothing, or by taking out the
+line it checks:
+
+| Suite | Red |
+|---|---|
+| `arguments/landscape/test_analytic_texts.py` (the reader) | 50 failed, 21 passed. The 21 are the nothing-found cases, the guard's True cases and the rules digest, which a find-nothing skeleton passes by construction |
+| The same, for an inline label being no part of its text (found while writing the fixture) | 8 failed, 64 passed |
+| `integrations/landscape/test_analytic_text_store.py` | 3 failed, 4 passed (the protocol, the key, the no-text fields, an empty cache) |
+| `integrations/landscape/test_analytic_text_files.py` | 9 failed, 2 passed. A first attempt failed at import and was redone against a skeleton (agreement 8) |
+| `tests/config`, the directory test without its new line | 1 failed, 55 passed |
+| `application/test_landscape_report.py` and the golden | 12 failed (the golden report.md among them), 85 passed. One expectation of mine was wrong (7 labels through the first snapshot; it is 5) and was corrected before the code |
+| `application/test_analytic_texts.py` (the service) | 14 failed, 2 passed (the two writes-nothing guards) |
+| `application/test_landscape_run.py` (the seam) | 3 failed, 31 passed |
+| `debate_cli/tests/test_landscape_command.py` (the wiring) | Written after the wiring; it fails with the wiring line removed, and passed after the line was restored byte for byte |
+| `tests/scripts/test_read_landscape_texts.py` | 4 failed against a stub |
+
+The golden `report.md` matched on the renderer's first run. Every count in it was worked out by hand
+from the fixture's table, in its README's "Analytic texts".
+
+### Mutants
+
+There were 21 targeted mutants. Each:
+* was applied to one file, after a check that its replacement occurs exactly once;
+* ran the four covering suites (185 tests) in a fresh process, with bytecode writing off and
+  `__pycache__` cleared;
+* was restored from a copy and compared byte for byte.
+
+No Hypothesis is used, so there is no example database to isolate (agreement 8). Every run took
+1.5 to 4.8 s.
+
+| Rule | Mutant | Failed |
+|---|---|---|
+| Withholding | `names_a_school` never true | 7 |
+| Withholding | `names_a_school` on the raw text, not its words | 6 |
+| Withholding | a text naming a school still shown | 3 |
+| Withholding | withheld texts not counted | 4 |
+| Withholding | the report given no schools | 4 |
+| Withholding | the seam gives the report no schools | 1 |
+| Placement | the team's own names left in a heading | 2 |
+| Placement | an open tag read as a heading | 1 |
+| Placement | the outermost heading wins | 1 |
+| Placement | headings that place nothing read as no heading | 2 |
+| Placement | an answer counted as a read in the report | 3 |
+| Placement | a round on the other side counted | 2 |
+| Placement | a text under another kind of position counted | 3 |
+| Placement | a text by its place under any position | 1 |
+| Placement | a text by its place under an answer | 1 |
+| Guard | no twelve-word limit | 1 |
+| Guard | no actor needed | 10 |
+| Guard | an actor matched inside words | 1 |
+| Guard | the words before the last `should` | **survived**, then 1 |
+| Guard | not applied by the reader | 8 |
+| Guard | refusals not counted | 5 |
+
+**The one survivor** read the words before the last `should`. No test had two `should`s. The new case,
+a CP text whose second `should` comes after 12 words, catches it: 1 failed.
+
+### Before the report (working agreement 10)
+
+* **The affected set** (`uv run scripts/affected_tests.py`) is **180 test files**.
+  * I ran them once with `-n auto -m "not slow and not live"` under a 115 s limit on the interpreter,
+    and the limit stopped it (exit 142). A second attempt, to capture the output, stopped the same way.
+    Other sessions had the load average at 7 to 14.
+  * The alarm left two xdist workers and their smoke-test stand-in servers running, orphaned. They were
+    my worktree's interpreter with their parent gone; I found and stopped them.
+  * So, by agreement 10 and the PM's ruling of 2026-10-19, the whole affected set is left to the pull
+    request's `ci` check.
+* **Within the limit, the test directories of what changed and the always-run list:**
+
+  | Run | Result |
+  |---|---|
+  | `arguments/landscape`, `integrations/landscape`, the application's landscape, analytic-text, plan-text, assignment and classification tests, `tests/config`, the four landscape scripts' tests | 964 passed |
+  | The domain's landscape tests, `tests/architecture`, `tests/specs`, `tests/smoke/test_landscape_smoke.py` | 415 passed |
+  | All of `packages/debate_cli/tests`, the pinned integration lists among them | 907 passed in 37.4 s |
+  | `tests/fixtures/caselist/test_build_synthetic_archives.py`, `tests/smoke/test_caselist_cards.py` | 19 passed |
+
+* **The cheap checks:**
+  * `ruff format --check .`: 1259 files already formatted;
+  * `ruff check .`: all checks passed;
+  * `pyright` (the project's configuration): 0 errors;
+  * `lint-imports`: 16 kept, 0 broken;
+  * `check_thin_handlers.py`: 50 handlers within 25 statements;
+  * `docs_index.py --check-descriptions`: OK;
+  * `check_command_blocks.py --base origin/dev`: OK;
+  * `check_links.py`: OK;
+  * `pre-commit run check-merge-conflict --all-files`: passed;
+  * `validate_specs.py`: OK, 437 files.
+* **No shared test ground changed:** no `pyproject.toml`, `uv.lock`, conftest or pytest plugin. So no
+  whole-selection hand-off.
+
 ## Files changed
 
-* **`docs/session-reports/v1-e32-t11-negative-analytic-texts.md`:** this report.
-
-No code, test, fixture, config or spec changed. The count scripts are scratch files in the
-session's scratchpad, outside the repository.
+* **`debate_core.domain`:** `landscape_texts.py` (new); `landscape_report.py` (the report's `texts`).
+* **`debate_core.arguments.landscape`:** `analytic_texts.py` (new); `render.py` (the two sections).
+* **`debate_core.application`:**
+  * `analytic_texts.py` and `ports/analytic_text_store.py` (new);
+  * `landscape_report.py` (the aggregation), `landscape_run.py` (the seam);
+  * `plan_texts.py` (`blob_jobs`, shared, behaviour unchanged: t09's tests pass);
+  * `ports/taxonomy_repository.py` (`cp_text_actors`).
+* **`debate_core.integrations.landscape`:** `analytic_text_store.py` (new); `yaml_taxonomy_repository.py`.
+* **`debate_core.testing.landscape_report`:** reads the fixture's `analytic_texts.json`.
+* **`debate_cli`:** `container.py` (the wiring); `tests/test_landscape_command.py`,
+  `tests/test_installation.py` and `tests/commands/test_doctor.py` (the pinned integration lists gain
+  `landscape.analytic_text_store`).
+* **`config/landscape/analytic_texts/policy-2026-27-nhi.yaml`** (new).
+* **Tests:**
+  * `packages/debate_core/tests`: `arguments/landscape/test_analytic_texts.py`,
+    `application/test_analytic_texts.py`, `integrations/landscape/test_analytic_text_store.py` and
+    `test_analytic_text_files.py` (new); `application/test_landscape_report.py` and
+    `test_landscape_run.py`;
+  * `tests/config/test_landscape_taxonomies.py`; `tests/scripts/test_read_landscape_texts.py` (new).
+* **`tests/fixtures/landscape`:** `synthetic_caselist/analytic_texts.json` (new, by hand), its README,
+  and `golden/report.md` (two sections, by hand).
+* **`scripts/read_landscape_texts.py`** (new).
+* **`docs/guides/landscape-taxonomy.md`:** a section on the texts.
+* **The spec:** the PM's rulings as a comment above `acceptanceCriteria`.
 
 ## Deviations from the spec
 
-None so far.
+1. **ac2 still says "each position's most common overview".** Ruling 3 replaced it with counts only:
+   per position, on each side, the teams with an overview, and no text. The code follows the ruling,
+   and ac2 is reported against it. Question 1 asks to amend ac2's wording.
+2. **Files outside `constraints.packages`**, each needed by a ruling or by the wiring:
+   * `debate_core.integrations` (the cache adapter and the actor file's loading);
+   * `debate_core.testing` (the fixture's loader);
+   * `debate_cli` (the composition root and its pinned lists);
+   * `config/landscape` (ruling 1's actor list);
+   * `tests/config`;
+   * `tests/scripts` and `scripts` (the operator's fill);
+   * `docs/guides`.
+
+   t09's PM amended its own list the same way. Question 2 asks to amend this one.
 
 ## Decisions and assumptions
+
+From the counts (2026-10-24):
 
 1. **Both sides were counted for every kind,** and the tables lead with the negative side. An
    affirmative CP text or alternative is one the aff answers. For overviews the coach said "each
@@ -360,22 +532,100 @@ None so far.
    a heading (an `Overview` block) is placed by the headings over it, not by its own words.
 3. **The shape pass read negative sources only.** A CP text in an affirmative file is an answer's
    quote, and the comparison rule asks for READS.
-4. **The most common overview is the first paragraph under the label,** over 8 words, of any unit.
-   The overview's analytics alone would miss the 257 overviews written as tags.
+4. **The most common overview was measured as the first paragraph under the label,** over 8 words,
+   of any unit. Ruling 3 made overviews counts only, so the build keeps no overview text or digest.
+
+From the build:
+
+5. **An inline label is no part of its text.** `Text: The fifty states should ...` and the same text
+   with no label are one text, and the report quotes it without its label.
+6. **A text counts as a card's read does:** for the teams of the rounds disclosing its file. A round on
+   the other side of the position does not count, and a round on no readable side does. A text under an
+   answer heading, under another kind of position, or in a round on the other side is counted as
+   "placed elsewhere". **An overview counts on both sides**, READS, as ruling 3 asks; under an answer
+   heading it is "placed under an answer".
+7. **A text read again differently** keeps its teams in the count, from its reading, and is not quoted.
+   Another copy of the same words shows instead. One with no copy read again is not shown and is
+   counted as "could not be read again". A blob is content-addressed, so this should not happen.
+8. **The guard reads the words before the first `should`.** A CP text opens with its actor, and its
+   second `should` may come late. t09's plan-text rule reads the last, for preambles such as "care
+   should be a right, so ...". The counts' 163 were measured this way.
+9. **The cache's key leaves out the team names and the caselist's schools** used to place a heading.
+   A school seen for the first time in a later week is not taken out of a heading cached before it,
+   until the next parser, rules, taxonomy or overrides change reads every file again. Keying on the
+   caselist's schools would read every file again every week the caselist gains a school.
+10. **A CP no card counts still shows its texts.** The texts section is not limited to the positions
+    table, so a CP whose texts are placed but whose cards are below the threshold is shown.
+11. **The first fill has its own script,** not `landscape report`. A report run also rewrites the
+    classification cache and the coach's review queue, which t09 avoided for the same reason.
 
 ## Operator follow-ups
 
-None yet. After the ruling, the first report run with these sections fills the new cache from
-every on-topic source. That is about 2 minutes over 8 workers, so it is an operator block, and the
-PM coordinates the first publish.
+1. **Fill the analytic-text cache for hspolicy26** (expected runtime about 2 to 4 minutes over the
+   default workers, longer if other sessions load the machine). It reads every on-topic file of the
+   newest snapshot through the parser and writes only `~/.debate-research/dev/landscape/analytic_texts/hspolicy26.jsonl`,
+   with digests, indexes and ids and no text. It prints counts only, and refuses to start if a
+   `DEBATE_*` variable is set or a `caselist pull` is running. First, from the task worktree:
+
+```bash
+cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e32-t11-negative-analytic-texts
+```
+
+```bash
+if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; elif pgrep -f "caselist pull" >/dev/null; then echo "STOP: a caselist pull is running; wait for it to finish"; else uv run python scripts/read_landscape_texts.py --caselist hspolicy26; fi
+```
+
+   **Success looks like:**
+   * `Read hspolicy26 2026.10.20-docx-6 through 2026-10-20: 3825 sources on policy-2026-27-nhi, 2070
+     negative, 1770 affirmative.`;
+   * an `Analytic texts:` line with `3825 sources`, `0 cached` and a parsed count above zero, `0
+     unread` and `cache written`;
+   * each kind's found and placed counts, all above zero, and the `CP texts by place in negative
+     files:` line;
+   * the `Runtime` line.
+
+   Paste every line back. A `STOP:` line means nothing ran.
+2. **Then I run the dry run** of `debate-research landscape report --caselist hspolicy26 --dry-run`,
+   without `--publish`, on the warm cache. I record its runtime, its counts and the scan's hits by
+   section, and finish this report.
+3. **The first publish with these sections** is the PM's to coordinate, after the review.
 
 ## Follow-up work
 
-None yet.
+* **Overviews quoted**, should the coach and Charlie ever list them in the data-use policy. The reader
+  would keep a digest for them again, and the report would show them as it shows texts.
+* **The CLI's JSON** does not include the texts' counts yet. The run's result carries them
+  (`LandscapeRunResult.analytic_texts`), for t05's command to print if the PM wants them.
+* **Labels that name their own position** (`Midterms DA overview`, 127 of 669 compound overview
+  labels in the counts) are placed only by the headings over them. A rule reading a label's own words
+  as a heading would place 30 more, but it is a placement change, and the matcher's to make.
 
 ## Questions for the PM
 
-Paste-ready for the PM:
+Two, both about the spec. Paste-ready:
+
+```text
+v1-e32-t11 questions (session, 2026-10-24, after the build). The build follows
+your rulings 1-5; the dry run waits on the operator's first cache fill.
+
+1. ac2 still says "each position's most common overview". Your ruling 3 (the
+   coach's decision) made overviews counts only: per position, on each side,
+   the teams with one, and no text. Amend ac2's wording to that?
+   Recommendation: yes, so the criterion says what was built.
+
+2. Files outside constraints.packages, each needed by a ruling or the wiring:
+   debate_core.integrations (the cache adapter, the actor file's loading),
+   debate_core.testing (the fixture's loader), debate_cli (the composition
+   root and its two pinned integration lists), config/landscape (ruling 1's
+   actors), tests/config, tests/scripts and scripts (the operator's fill), and
+   docs/guides. Amend the list with a PM-ruling comment?
+   Recommendation: yes, as for t09.
+```
+
+### The questions of 2026-10-24 on the counts, answered
+
+The PM ruled the same day: (1) (b) with an actor guard; (2) yes; (3) (c), counts only, the coach's
+decision; (4) yes, top 3; (5) yes, that key. Kept as asked:
 
 ```text
 v1-e32-t11 questions (session, 2026-10-24). Counts only, nothing built.

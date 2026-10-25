@@ -268,9 +268,67 @@ the window and the budget refusals on every run.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-25
 
 **Notes:**
+
+A careful build of something that touches the weekly run's lock and its bucket, with the rulings
+applied where they belong and the one ruling that was wrong caught by a green run rather than
+argued for.
+1. **ac1 and ac2 pass.**
+   * The counts and estimates are sound, and the estimates are labelled as estimates.
+   * The red runs are recorded: 30 failed against the skeleton, with the 30 passes explained, and 5
+     failed against the start commit for what was already written.
+   * All 7 mutants were caught, with a fresh Hypothesis directory.
+   * The tests go through the real composition root with moto and respx.
+2. **ac3 as amended passes.** The amendment merged in the PM batch of 2026-10-25 (p) and now asks
+   for the Mac's dry run.
+   * The dry run refused as expected (`NOT_ENOUGH_FREE_SPACE`, 11.0 GB free against 29.7 GB needed,
+     and `RUN_STATE_NOT_SEEDED`), and it showed the archive, the download left and the window state.
+   * The window and budget refusals are shown by the tests on every run, which is what the amendment
+     asked for.
+   * Merge `origin/dev` into the branch, record ac3 as PASS and set the Goal to `Succeeded`.
+3. **Deviation 1 is accepted: a backfile is its own dated snapshot, not `full/<date>`.**
+   * The PM's ruling was wrong, and the first green run's `parsed 0, cards 0` proved it.
+   * Keeping the parse pipeline, its eight callers and the occurrence table's provenance unchanged
+     for the current season is worth more than a cleaner namespace.
+   * A backfile has no weekly series to collide with. Its cards are dated by the archive's date,
+     which a backfile's season label (`v1-e39-t18`) makes plain.
+   * No pipeline change is filed.
+4. **Deviation 3, the lock re-take fix, is accepted:** a real bug, red on the start commit and
+   tested.
+   * It is in the weekly run's critical path, so **this PR merges after the cutover session, not
+     before it.** The cutover's release then holds no change to the lock. Nothing here can run before
+     2026-11-05 anyway.
+5. **Deviation 2: amend.** The PM adds `tests/smoke` to `constraints.packages` in a PM batch. The
+   run-lock test is already inside `packages/debate_core/tests`.
+6. **Accepted as made:**
+   * bucket mode only;
+   * `--confirm-prod`;
+   * the weekly pull's suppression list for holds during the unlocked import;
+   * a dry run that exits 1 on refusal;
+   * the free-space estimate;
+   * running the import again as the post-removal rebuild;
+   * no index stage;
+   * no run record;
+   * the API gate first;
+   * the bundle growth estimates, with the real figure recorded at the first import.
+7. **Follow-ups the PM takes:**
+   * `v1-e40-t09` is amended to:
+     * alert on a failed backfile import, as the weekly run does;
+     * run the post-removal rebuild as the same task with no download;
+     * note the dated-snapshot namespace and the free space each caselist needs (about 30 GB for
+       `hspolicy25`, 33 GB for `hsld25`).
+   * An E40 task is filed: a held upload recorded in a cloud task's working copy vanishes when the
+     task stops, for the weekly run and the backfile import alike, so the removal runbook's "run
+     the removal again" loses it. Those records need to reach the bucket.
+   * `v1-e30-t28` already reads the setting by its amendment, and the accessor test here pins it.
+8. **The affected set** (341 files, about four minutes) is left to the PR's `ci` under agreement 10.
+   The bucket-mode suite, the sync and landscape tests, the settings tests, the always-run list and
+   the static checks passed in the session. The node's criterion (`2016 passed`) was run by the
+   operator.
+
+No re-review is needed after the Goal is set.

@@ -264,8 +264,9 @@ def test_every_landscape_page_loads_only_the_pilots_script_and_stylesheet_with_n
 # Page weight, with a bundle as large as hspolicy26's
 # --------------------------------------------------------------------------------------------
 
-HSPOLICY26_REPORT_HTML: Final = 66_015
-"""report.md's rendered size, measured from the newest hspolicy26 bundle on 2026-10-25."""
+HSPOLICY26_REPORT_HTML: Final = 115_492
+"""report.md's rendered size, measured from the newest hspolicy26 bundle on 2026-10-25 after it was
+republished in `v1-e32-t20`'s shape (66,015 bytes before, at the counts sent to the PM)."""
 HSPOLICY26_LARGEST_SCHOOL_ROWS: Final = 117
 HSPOLICY26_LARGEST_POSITION_ROWS: Final = 260
 """Above the largest position's rows in hspolicy26 (Affirmative side: Advantages held 810 over 16)."""
@@ -281,7 +282,7 @@ def large_report() -> str:
             lines += ["| Position | Rounds | Teams | Share of teams |", "|---|---|---|---|"]
             lines += [
                 f"| Invented position {section}-{row} (`invented-{section}-{row}`) | {row} | {row} | 12.5% |"
-                for row in range(48)
+                for row in range(84)
             ]
             lines.append("")
     return "\n".join(lines)

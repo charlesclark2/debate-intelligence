@@ -414,6 +414,34 @@ add for such a heading places its texts too.
 Each CP and K shows its 3 texts the most teams read, then how many more texts and teams there are.
 Texts worded alike are one text. A text naming a school of the caselist is withheld and counted.
 
+### A CP's planks
+
+An advantage CP is a set of planks, each solving one of the aff's advantages, and a States CP often has
+several too. Under each CP's texts the report shows its planks, as you ruled on 2026-10-25:
+
+* **A list.** A CP text ending in a colon ("The fifty states should:") lists its planks in the
+  paragraphs after it, up to the first card or heading. Each is an analytic or a plain paragraph of at
+  most 60 words. Word's list numbers are not in the text, so the place is what makes them planks. A
+  list plank names no actor itself, so it shows only when its CP text has one.
+* **Separate planks.** Later in the CP text's block, another `should` analytic with an actor, or a
+  paragraph opening `Plank 2:`, `2.` or `Second,`, is a plank too. The label is no part of its words.
+* **What a plank solves.** Every advantage named by:
+  * an alias of the advantage in the plank's own words, as whole words;
+  * a list paragraph just above it that is only an advantage's alias (`Costs`), which is a label and
+    not a plank;
+  * or a card under a separate plank whose tag says `solves <alias>` or is an alias.
+
+  A plan is never what a plank solves. A plank naming none is under "not named", never a guess. A card
+  saying `solves` with words that are no alias is counted, and its words are never shown.
+
+Each CP's planks are grouped by the advantage they solve. Each group shows its 3 planks the most teams
+read, then how many more there are, and "not named" comes last. A plank naming two advantages is under
+both, and counted once in the CP's total. Planks are counterplan text under the data-use policy, like
+the CP texts above: in report.md only, never beside a school or team code, and a plank naming a school
+is withheld and counted. Since one-word aliases (`costs`, `coverage`) name advantages here as well as
+headings, the fill's `--quote` run prints how many planks each alias names, so an alias that names too
+much shows.
+
 The actors are in `config/landscape/analytic_texts/<topic id>.yaml`, one lowercase phrase each and no
 `the` (`fifty states`, `usfg`, `congress`). Adding one is a configuration edit like an alias: `uv run
 pytest tests/config` checks it, and the next run reads every file of the topic again, once (551

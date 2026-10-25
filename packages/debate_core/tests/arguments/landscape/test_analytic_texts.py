@@ -210,6 +210,12 @@ def test_the_actor_guard_refuses_an_actor_more_than_twelve_words_before_should()
         (CONGRESS, True),
         ("The USFG should establish a sample cap.", True),
         ("Twelve words come first here before the actor so that congress should act.", True),
+        # The words before the first `should` are read: a CP text's second `should` may come late.
+        (
+            "Congress should act now, and every one of the many sample markets "
+            "that follow in time should adapt.",
+            True,
+        ),
         (THEORY, False),
         ("The states should act.", False),
         ("Congressional staff say the plan works.", False),

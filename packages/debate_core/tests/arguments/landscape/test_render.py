@@ -209,6 +209,23 @@ def test_each_kind_says_how_many_of_its_documents_carry_no_labelled_impact() -> 
     assert "# no_labelled_impact_advantage=3/6\n# no_labelled_impact_da=2/6\n" in files["impact_cards.csv"]
 
 
+def test_the_card_above_an_impact_is_never_called_its_internal_link() -> None:
+    """`v1-e32-t14`, the PM's ruling: a fact about the file, in report.md only, counted apart."""
+    files = _bundle().files
+    above = "Single payer cuts administrative costs"
+    assert f"* Rank 1: no labelled internal link. Card above it in the file: {above}\n" in files["report.md"]
+    assert f"Internal link: {above}" not in files["report.md"]
+    rows = list(
+        csv.DictReader(line for line in files["impact_cards.csv"].splitlines() if not line.startswith("#"))
+    )
+    costs = next(row for row in rows if row["position_id"] == "costs-advantage" and row["rank"] == "1")
+    assert costs["internal_link_tag"] == ""
+    assert above not in files["impact_cards.csv"]
+    labelled = next(row for row in rows if row["position_id"] == "spending-da" and row["rank"] == "3")
+    assert labelled["internal_link_tag"] == "Deficits spike interest rates"
+    assert "* Rank 3: Internal link: Deficits spike interest rates\n" in files["report.md"]
+
+
 def test_a_tag_in_an_impact_row_is_escaped_in_markdown_and_exact_in_the_csv() -> None:
     report = _bundle().report
     tag = "Costs | fall *fast*\nunder_plan"

@@ -17,6 +17,7 @@
 <p>Signed in as <strong>{{ username }}</strong>{% if role == "coach" %} (coach){% endif %}.</p>
 <ul>
 {% if signed_in %}<li><a href="/">Search</a></li>
+<li><a href="/landscape">Landscape</a></li>
 <li><a href="/account">Your account</a></li>
 {% endif %}{% if role == "coach" and signed_in %}<li><a href="/coach">Coach</a></li>
 {% endif %}</ul>

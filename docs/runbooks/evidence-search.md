@@ -609,7 +609,7 @@ ROLE=$(aws iam get-role --role-name debate-dev-tub-function --query Role.Arn --o
 BUCKET=arn:aws:s3:::debate-dev-evidence-a7508de8
 
 echo "== reads it may make (expect allowed)"
-for KEY in reports/tub/search/current.json raw/example/file.docx manifests/_suppression/suppression-list.jsonl; do
+for KEY in reports/tub/search/current.json reports/landscape/example26/2026-01-05/report.md raw/example/file.docx manifests/_suppression/suppression-list.jsonl; do
   aws iam simulate-principal-policy --policy-source-arn "$ROLE" --action-names s3:GetObject \
     --resource-arns "${BUCKET}/${KEY}" --query 'EvaluationResults[].[EvalResourceName,EvalDecision]' --output text
 done
@@ -624,6 +624,14 @@ aws iam simulate-principal-policy --policy-source-arn "$ROLE" --action-names s3:
   --query 'EvaluationResults[].[EvalResourceName,EvalDecision]' --output text
 aws iam simulate-principal-policy --policy-source-arn "$ROLE" --action-names s3:ListBucket \
   --resource-arns "$BUCKET" --query 'EvaluationResults[].[EvalActionName,EvalDecision]' --output text
+aws iam simulate-principal-policy --policy-source-arn "$ROLE" --action-names s3:ListBucket \
+  --resource-arns "$BUCKET" --context-entries ContextKeyName=s3:prefix,ContextKeyValues=raw/,ContextKeyType=string \
+  --query 'EvaluationResults[].[EvalActionName,EvalDecision]' --output text
+
+echo "== the one listing it may make, of the landscape bundles (expect allowed)"
+aws iam simulate-principal-policy --policy-source-arn "$ROLE" --action-names s3:ListBucket \
+  --resource-arns "$BUCKET" --context-entries ContextKeyName=s3:prefix,ContextKeyValues=reports/landscape/,ContextKeyType=string \
+  --query 'EvaluationResults[].[EvalActionName,EvalDecision]' --output text
 
 echo "== its log groups: append only (expect allowed, then implicitDeny)"
 aws iam simulate-principal-policy --policy-source-arn "$ROLE" \
@@ -645,10 +653,11 @@ aws iam simulate-principal-policy --policy-source-arn "$ROLE" \
 echo "== attached managed policies (expect nothing printed)"
 aws iam list-attached-role-policies --role-name debate-dev-tub-function --query 'AttachedPolicies[].PolicyArn' --output text
 ```
-Success looks like: `allowed` for the three reads, the two log actions and `ssm:GetParameter`;
-`implicitDeny` for everything else, including `parsed/`; and an empty line for the attached
-policies. Any `allowed` in the second, fourth or fifth group means the role is wider than the
-table: stop.
+Success looks like: `allowed` for the four reads, the landscape listing, the two log actions and
+`ssm:GetParameter`; `implicitDeny` for everything else, including `parsed/`, a listing with no
+prefix and a listing of `raw/`; and an empty line for the attached policies. Any `allowed` in the
+second, fifth or sixth group means the role is wider than the table: stop. Before `v1-e39-t17` the
+role had three reads and no listing at all.
 
 **The two permission sets.**
 
@@ -1360,6 +1369,109 @@ building a file or taking more than a few seconds: send all the lines to the PM 
 opens. The fix would be lowering `TUB_DOWNLOAD_CARD_CAP` or `TUB_DOWNLOAD_SOURCE_XML_BYTES`, or the
 fetch ceiling, in proportion.
 
+## The landscape pages
+
+`v1-e39-t17`, under data-use policy 1.16 and the E39 gate's item 11. A signed-in member, student or
+coach, opens **Landscape** in the header and reads each caselist's newest landscape report and its
+school view, rendered on the server from the bundle's own `report.md` and `schools.md`.
+
+- **What it reads.** At most every five minutes, before answering, an environment lists
+  `reports/landscape/` (the role's one listing, limited to that prefix by `s3:prefix`), takes each
+  caselist's newest snapshot that holds `report.md` (which `landscape run` uploads last), and reads
+  that snapshot's `report.md` and `schools.md` again only if their size or time changed. So a
+  removal that deletes a school view (`v1-e32-t13`), a republished report or a newer snapshot shows
+  within five minutes, and an older snapshot's view is never shown in place of a deleted one. If the
+  bucket does not answer after five minutes, the pages answer `503` rather than an older copy.
+- **The pages.** `/landscape`; `/landscape/<caselist>`, the report's header and its contents list;
+  `/landscape/<caselist>/report/<part>`, one page per `#` part (Affirmative, Negative, Neither side),
+  by its heading's anchor; `/landscape/<caselist>/schools`, the view's front page listing every
+  school and position; one page per school (by its heading's anchor) and per position (by its id).
+  The site's header, Search link and cart included, is the same as on every page; the reports
+  themselves offer no search, download or share link. The only links out are the view's team pages
+  on openCaselist, each checked at render.
+- **The audit.** Every page view writes a `landscape-viewed` record to `debate-<env>-tub-audit`
+  with the page's kind (`caselists`, `report`, `report-part`, `school-view`, `school` or
+  `position`) and the bundle's caselist and snapshot, never which part, school or position. A view whose record is not
+  written answers `503`.
+
+### Granting the read, then deploying
+
+The role's read of `reports/landscape/` is a Terraform change to one resource, then a deploy, in that
+order: a function deployed before the apply answers `503` on every landscape page, since its role
+may not list the bundles yet. Agreement 11 applies: the plan is one block and is read before the
+apply, which is another. Run the plan and the apply from a checkout of `dev` that holds the merged
+change. Each block stops on a leftover `DEBATE_*` override, and on an `owner.auto.tfvars` without the
+pilot's two lines ([Before you start](#before-you-start)).
+
+**Operator command, the plan** (expected runtime ~1 min)
+Where: `$WT`, a checkout of `dev` with `v1-e39-t17` merged, its `infrastructure/envs/dev/owner.auto.tfvars` in place
+```bash
+cd "$WT"
+if env | grep -q '^DEBATE_'; then echo "STOP: unset these first: $(env | grep '^DEBATE_' | cut -d= -f1 | tr '\n' ' ')"; elif [ "$(grep -c -E 'evidence_search_(deployer|accounts)_user_names' infrastructure/envs/dev/owner.auto.tfvars)" != 2 ]; then echo "STOP: owner.auto.tfvars lacks the pilot's two lines"; else AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev init -input=false > /dev/null && AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev plan -input=false -out=landscape-read.tfplan; fi
+```
+Read the plan. It should say `Plan: 0 to add, 1 to change, 0 to destroy.`, the one change
+`module.evidence_search.aws_iam_role_policy.function` updated in place. Its policy diff adds
+`reports/landscape/*` to the `s3:GetObject` statement's resources, renames that statement's `Sid` to
+`ReadThePilotIndexLandscapeBundlesCurrentRawEvidenceAndTheSuppressionList`, and adds one statement,
+`ListTheLandscapeBundlesOnly`: `s3:ListBucket` on the evidence bucket with the condition
+`StringLike` `s3:prefix` `reports/landscape/*`. **Stop if anything else is in the plan**: another
+resource, a destroy, an account assignment, or a listing without that condition. Something else
+means `dev` holds another task's unapplied change or a stale `owner.auto.tfvars`; send the plan to
+the PM before going on.
+
+**Operator command, the apply** (expected runtime ~1 min)
+Where: `$WT`, after the plan above was read
+```bash
+cd "$WT"
+if env | grep -q '^DEBATE_'; then echo "STOP: unset the DEBATE_ overrides first"; else AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev apply -input=false landscape-read.tfplan && rm landscape-read.tfplan; fi
+```
+Success looks like `Apply complete! Resources: 0 added, 1 changed, 0 destroyed.` Then run
+[step 9](#step-9--confirm-the-roles-are-least-privilege)'s first block, which now checks the
+landscape read and listing too.
+
+**Operator command, the deploy** (expected runtime ~4 min)
+Where: `$WT`, the same checkout
+```bash
+cd "$WT"
+uv sync --all-packages
+scripts/tub_deploy.sh dev
+```
+The image installs what `uv.lock` records for `debate-api`, and since `v1-e39-t17` that includes
+`markdown-it-py`, which renders the bundles; nothing else needs installing. Success looks like
+step 8's: `{"status":"ok"}` from `/healthz` through CloudFront, and `Deployed <sha> to dev`.
+
+**Check the pages.** First signed out, from your Mac: every landscape route needs a session.
+
+**Operator command** (expected runtime seconds)
+Where: your Mac, anywhere
+```bash
+for P in /landscape /landscape/hspolicy26 /landscape/hspolicy26/report/negative /landscape/hspolicy26/schools; do curl -sS -o /dev/null -w "$P %{http_code} %header{cache-control}\n" "https://tub.dev.wfbdebate.com$P"; done
+```
+Success looks like four lines ending `302 private, no-store`.
+
+Then signed in as the coach, in a browser on `https://tub.dev.wfbdebate.com/`:
+
+1. **Landscape** in the header lists `hspolicy26` with its newest snapshot's date, a link to
+   the report and one to positions by school.
+2. **The report** shows its title, its header and one contents list (`Affirmative`, `Negative`,
+   `Neither side` with their sections, once the bundle is in `v1-e32-t20`'s shape). Each part's link
+   opens that part's page, and each section's link opens its part at the section.
+3. **Positions by school** lists the schools and the positions by kind. One school's page shows
+   its table; one position's page shows its teams, and a team page opens openCaselist in a new tab.
+
+Then the audit records those views wrote, which name no school, team code or position:
+
+**Operator command** (expected runtime seconds)
+Where: your Mac, anywhere
+```bash
+aws logs filter-log-events --profile debate-admin --region us-east-1 --log-group-name debate-dev-tub-audit \
+  --filter-pattern '"landscape-viewed"' --query 'events[-5:].message' --output text
+```
+Success looks like up to five JSON lines, each with `"action":"landscape-viewed"`, a `page` of the
+kind you opened, and `"caselist":"hspolicy26"` with the snapshot's date (none on the `caselists`
+page). Record the deploy digest and these results in [What to record](#what-to-record). A `503` on
+every landscape page after the deploy means the apply has not reached the role: check step 9.
+
 ## What a refusal looks like in the app log
 
 The function logs to `debate-<env>-tub-app` (30 days). It never logs a query, a card id, a card's
@@ -1385,6 +1497,7 @@ beside the button.
 | `the suppression list was not read, so no search is answered until it is: <error type>` | The list could not be read (`StoreAccessDenied` when it does not exist, see above), or holds a line this build cannot read (`ValueError`). Every search and card page answers `503`, and every request tries again | Create the list if it is missing; otherwise read the list with the operator profile and find the line, as the removal runbook's residue section does |
 | `tub audit: a card-viewed record was not written, so the card was not sent` (or `card-copied`, `cards-downloaded`) | The audit log refused a write; the card was not sent (gate item 4) | Check the audit group exists and the role may write to it (step 9) |
 | `tub audit: a searched record was not written` | A search count was lost; the search was answered | Nothing if it does not repeat |
+| `tub audit: a landscape-viewed record was not written, so the page was not sent` | The audit log refused a write; the landscape page was not sent (gate items 4 and 11) | As for a card view |
 
 A refused index leaves the last loaded one serving in an environment that has one. An environment
 with none, a new one, answers `503` to every search until an index loads, and tries again on every
@@ -1424,6 +1537,8 @@ for.
 | Download: cart (c), the refusal check (`Duration`; the message; no file) | | |
 | 10: managed login rendered; asset hosts recorded | Rendered; both sign-ins reached the callback; hosts in the table above | n/a |
 | 12: IT request sent; confirmed and date | n/a | |
+| Landscape pages: the read grant's apply (`0 added, 1 changed`); deploy digest | | |
+| Landscape pages: the coach saw the hspolicy26 report and its school view; the `landscape-viewed` lines | | |
 
 ## Rolling back a deploy
 

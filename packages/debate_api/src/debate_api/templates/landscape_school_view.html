@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}{{ bundle.caselist }} positions by school · Team evidence search{% endblock %}
+{% block main %}
+<nav class="back-link" aria-label="Back"><a href="/landscape">All landscape reports</a> · <a href="/landscape/{{ bundle.caselist }}">The report</a></nav>
+{% if view is none %}
+<h1>No positions by school this week</h1>
+<p>The {{ bundle.caselist }} report through {{ bundle.snapshot.isoformat() }} has no per-school view: it has been removed. Older weeks' views are not shown.</p>
+{% else %}
+<h1>{{ view.title or "Positions by school" }}</h1>
+{% if view.contents %}<nav class="landscape-contents" aria-labelledby="contents-heading">
+<h2 id="contents-heading">Contents</h2>
+<ul>
+{% for entry in view.contents %}<li><a href="{{ entry.href }}">{{ entry.text }}</a></li>
+{% endfor %}</ul>
+</nav>
+{% endif %}<div class="landscape-body">
+{{ view.header_html | safe }}
+{% if view.contents %}
+<h2 id="{{ view.by_school_anchor }}">By school</h2>
+{{ view.by_school_lead_html | safe }}
+<ul class="landscape-index">
+{% for school in view.schools %}<li><a href="/landscape/{{ bundle.caselist }}/schools/{{ school.path | urlencode }}">{{ school.heading }}</a></li>
+{% endfor %}</ul>
+<h2 id="{{ view.by_position_anchor }}">By position</h2>
+{{ view.by_position_lead_html | safe }}
+{% for kind in view.kinds %}<h3 id="{{ kind.anchor }}">{{ kind.heading }}</h3>
+{{ kind.lead_html | safe }}
+<ul class="landscape-index">
+{% for position in kind.positions %}<li><a href="/landscape/{{ bundle.caselist }}/positions/{{ position.path | urlencode }}"><code>{{ position.heading }}</code></a></li>
+{% endfor %}{% for heading in kind.unaddressed %}<li>{{ heading }}</li>
+{% endfor %}</ul>
+{% endfor %}{{ view.rest_html | safe }}
+{% endif %}</div>
+{% endif %}
+{% endblock %}

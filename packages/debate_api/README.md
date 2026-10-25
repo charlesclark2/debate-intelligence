@@ -11,13 +11,15 @@ Before V2's service, `debate_api` serves the student evidence search pilot of
 pages from a plain ASGI app, which uvicorn serves and the Lambda Web Adapter forwards function URL
 events to. `debate_api.app:create_app` is the app factory; `debate_api.container` is its
 composition root, the only module that builds an adapter. Sign-in and the account pages are
-`v1-e39-t05`'s; the search pages, the card page and Copy card are `v1-e39-t06`'s.
+`v1-e39-t05`'s; the search pages, the card page and Copy card are `v1-e39-t06`'s; the landscape
+pages are `v1-e39-t17`'s.
 
 | Module | What it holds |
 |---|---|
 | `access` | the gate in front of every route: which routes need a session, the coach check, CSRF |
 | `routes` | the routes, and `ROUTE_ACCESS`, the access each needs |
 | `search_pages` | the search page, its results, the card page and Copy card's copy, all `GET` |
+| `landscape_pages`, `landscape_markdown` | the landscape report and its school view, rendered from the newest bundle with markdown-it, raw HTML escaped and every link checked |
 | `copy_card` | Copy card's HTML and text, from a fixed table of emphasis, colour and size styles |
 | `cookies` | the AES-GCM `__Host-` cookies and what each holds |
 | `configuration` | the environment variables, and the cookie keys (the placeholder is refused) |

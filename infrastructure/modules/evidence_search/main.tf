@@ -171,24 +171,39 @@ locals {
     ]
   })
 
-  # The three key patterns of the role table. `raw/*` with GetObject and no GetObjectVersion is
+  # The four key patterns of the role table. `raw/*` with GetObject and no GetObjectVersion is
   # what "current objects under raw/" means: a request without a version id reads the current
   # version, and a request naming an older one needs the action this role does not hold.
+  # `reports/landscape/*` is the landscape pages' bundles (v1-e39-t17, data-use policy 1.16).
   function_readable_object_arns = [
     "${var.evidence_bucket_arn}/reports/tub/search/*",
+    "${var.evidence_bucket_arn}/reports/landscape/*",
     "${var.evidence_bucket_arn}/raw/*",
     "${var.evidence_bucket_arn}/manifests/_suppression/suppression-list.jsonl",
   ]
+
+  # The one listing the role may make: the landscape bundles, to find each caselist's newest
+  # snapshot, since a bundle has no pointer to it. `s3:prefix` is what ListObjectsV2's Prefix is
+  # checked against; a listing of the bucket root or of any other prefix is refused.
+  function_listable_prefixes = ["reports/landscape/*"]
 
   function_role_policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
       {
-        # No GetObjectVersion, no list, no write.
-        Sid      = "ReadThePilotIndexCurrentRawEvidenceAndTheSuppressionList"
+        # No GetObjectVersion and no write.
+        Sid      = "ReadThePilotIndexLandscapeBundlesCurrentRawEvidenceAndTheSuppressionList"
         Effect   = "Allow"
         Action   = "s3:GetObject"
         Resource = local.function_readable_object_arns
+      },
+      {
+        # No ListBucketVersions, and no listing outside the landscape bundles.
+        Sid       = "ListTheLandscapeBundlesOnly"
+        Effect    = "Allow"
+        Action    = "s3:ListBucket"
+        Resource  = var.evidence_bucket_arn
+        Condition = { StringLike = { "s3:prefix" = local.function_listable_prefixes } }
       },
       {
         # The evidence bucket's key, and only through S3: the role cannot call KMS directly on a
@@ -279,6 +294,11 @@ resource "aws_lambda_function" "pilot" {
     size = local.function_ephemeral_storage_mb
   }
 
+  # Text, with no application log level, keeps the Lambda Web Adapter above debug. v1.1.0 logs a
+  # request's URL and headers only at debug (src/lib.rs lines 1543, 1624 and 1665), at the level
+  # AWS_LAMBDA_LOG_LEVEL sets (src/main.rs lines 20-23), which Lambda sets only for the JSON format.
+  # The dev pilot's app log held no request path in 30 days of use (v1-e39-t17, 2026-10-25), and a
+  # page's path can name a school.
   logging_config {
     log_format = "Text"
     log_group  = aws_cloudwatch_log_group.app.name

@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% block title %}{{ bundle.caselist }} landscape · Team evidence search{% endblock %}
+{% block main %}
+<nav class="back-link" aria-label="Back"><a href="/landscape">All landscape reports</a>{% if bundle.school_view is not none %} · <a href="/landscape/{{ bundle.caselist }}/schools">Positions by school</a>{% endif %}</nav>
+<h1>{{ report.title or "Argument landscape" }}</h1>
+{% if report.contents %}<nav class="landscape-contents" aria-labelledby="contents-heading">
+<h2 id="contents-heading">Contents</h2>
+<ul>
+{% for entry in report.contents %}<li><a href="{{ entry.href }}">{{ entry.text }}</a>{% if entry.sections %}
+<ul>
+{% for section in entry.sections %}<li><a href="{{ section.href }}">{{ section.text }}</a></li>
+{% endfor %}</ul>
+{% endif %}</li>
+{% endfor %}</ul>
+</nav>
+{% endif %}<div class="landscape-body">
+{{ report.front_html | safe }}
+</div>
+{% endblock %}

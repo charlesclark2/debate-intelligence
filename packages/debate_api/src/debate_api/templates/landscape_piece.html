@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}{{ piece.heading }} · {{ bundle.caselist }} positions by school · Team evidence search{% endblock %}
+{% block main %}
+<nav class="back-link" aria-label="Back"><a href="/landscape/{{ bundle.caselist }}/schools">{{ view.title or "Positions by school" }}</a></nav>
+<h1>{% if piece.kind is not none %}<code>{{ piece.heading }}</code>{% else %}{{ piece.heading }}{% endif %}</h1>
+{% if piece.kind is not none %}<p class="help">{{ piece.kind }}, in the {{ bundle.caselist }} view through {{ bundle.snapshot.isoformat() }}.</p>
+{% else %}<p class="help">In the {{ bundle.caselist }} view through {{ bundle.snapshot.isoformat() }}.</p>
+{% endif %}<div class="landscape-body">
+{{ piece.body_html | safe }}
+</div>
+{% endblock %}

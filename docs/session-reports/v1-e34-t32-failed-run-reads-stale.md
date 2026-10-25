@@ -230,9 +230,63 @@ None. The affected set (156 files) runs in the PR's `ci` check (agreement 10).
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED, with one condition to close in this session
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-24
 
 **Notes:**
+
+A small rule done properly.
+* The outcomes a run record can carry were counted from the code before choosing, as asked, and
+  the table is the clearest account of the run log we have.
+* What a killed run leaves behind is answered: no record at all, so it can never flip the hook.
+* Both run-log rules now read the one record (`latest_listing`), so they cannot disagree about which
+  run is latest.
+* The reason names only a schema-held run id and `SyncStage` values. A stage literally named after a
+  school is not repeated.
+* 11 mutants were caught, and the four tests that pass at red by design are shown to bite.
+
+**Rulings**
+
+1. **(b).** Count a run that raised, when its record's `caselists` names the caselist, except a
+   `SyncRunInProgress` refusal. The run holding the lock is the one that counts, and a second launch
+   must not flip the report. The reason is "`<run id>` stopped before its stages (`<error class>`)".
+   It is the class name only, never the message, and the class name passes the same kind of filter
+   as the stage names: it must be an identifier, or it is left out. This is the condition below.
+   An expired token is the likeliest way a weekly run fails outright, which is the case this task
+   exists for.
+2. **Keep it.** An `incomplete` run captured and published its snapshot, and the run log does not
+   call it failed.
+3. **The PM amends the description** in the next batch: no E39 freshness line reads the hook today,
+   and the sentence goes. If one is built, it reads the hook unchanged.
+4. **No new task.** The PM folds it into `v1-e32-t12-landscape-cli-seven-files`, which already
+   changes that command's output: the status line prints the hook's failed-run sentence, and the
+   JSON gains the failed run's id and stages, or its error class.
+
+**Accepted as made:**
+* "ended in failure" is the `failed` outcome;
+* "listed" in t05's meaning;
+* a run-level failure makes every caselist it listed stale;
+* the CSV header changed only by `stale=`;
+* `_awaiting` made a module function;
+* the deviation about E39 (ruling 3).
+
+**A killed Mac run leaves no record.** Nothing in this log could drive a rule for it. A missed week
+shows only as an absent record. Recorded here, with no task for now. For the cloud run,
+`v1-e40-t05`'s late-run alarm covers it.
+
+**Condition, to close in this session (no re-review needed):**
+
+* **Implement ruling 1** in `landscape_staleness.py`, with tests shown failing first:
+  * a raised run naming the caselist reads stale with the class name;
+  * a later run that listed the caselist and did not fail clears it;
+  * a `SyncRunInProgress` refusal changes nothing;
+  * a raised run naming another caselist changes nothing;
+  * an error class that is not an identifier is left out of the sentence.
+* **Mutants, each caught:** the lock refusal counted; the error message used in place of the class;
+  `caselists` ignored; the raised rule winning over a later success.
+* Update `test_a_run_that_stopped_on_an_error_before_listing_changes_nothing` to the new behaviour,
+  and update the summary, Decisions and Questions here. Commit.
+
+If anything comes out differently, stop and ask for another review.

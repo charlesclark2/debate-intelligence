@@ -28,6 +28,11 @@ spec:
     that nothing of the season remains. Where a step has no command today, the runbook says so
     and names the gap as follow-up work, never a hand `aws s3 rm` over a prefix it has not
     listed first.
+    (PM amendment 2026-10-25, from data-use policy version 1.17.) Seasons from 2021-22 on are kept
+    as backfiles once they leave the two-season window, so the purge deletes only seasons before
+    2021-22, the per-school landscape views of the season leaving the window, and expired noncurrent
+    versions; it lists backfile seasons and their counts for the September review, and deletes none
+    of them.
   priority: 3
   constraints:
     packages: [docs/runbooks, tests/docs]

@@ -32,7 +32,9 @@ spec:
     from.
   priority: 1
   constraints:
-    packages: [debate_core.evidence, debate_core.domain, prompts/card]
+    # PM amendment 2026-10-25, from the PM's ruling 2 on the session's questions: the guard's check
+    # hook and the one call site of card.select and card.markup sit above debate_core.evidence.
+    packages: [debate_core.evidence, debate_core.domain, debate_core.application, prompts/card]
     forbidden:
       - Any schema field that accepts evidence/quote text from the model
       - Accepting offsets that fall outside the snapshot or outside the selected paragraph range

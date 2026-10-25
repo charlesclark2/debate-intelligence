@@ -1,0 +1,86 @@
+# TASK v1-e39-t18-backfiles-in-the-pilot-index - Backfile seasons searchable on the pilot, without slowing its cold start
+# Epic: E39 — Team Evidence Search (Student Pilot) | Release: v1.7 (Team evidence search pilot) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e39-t18-backfiles-in-the-pilot-index
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.7
+    debate/epic: v1-e39-evidence-search-pilot
+  annotations:
+    debate/title: "Backfile seasons searchable on the pilot, without slowing its cold start"
+spec:
+  # Filed by the PM, 2026-10-25, from data-use policy version 1.17 (Charlie, 2026-10-25).
+  description: >-
+    Policy 1.17 makes backfile cards searchable on the pilot with the same provenance line as
+    any disclosed card. The pilot loads its whole SQLite index at cold start (ADR-0019), so
+    adding several seasons can slow every cold start. Count first, from the dev store once
+    v1-e34-t34 has imported backfiles: the index's size and build time with and without them,
+    and the function's cold start and memory with each, against ADR-0019's targets and
+    v1-e39-t14's shrink guard. Send the counts to the PM with options: one index; a separate
+    backfile index searched on request (a "include earlier seasons" choice); or backfiles only
+    for card clusters the current season lacks. After the ruling, build it. A result from a
+    backfile season says its season. Removal reaches backfile cards within five minutes, as for
+    current ones (gate item 1).
+  priority: 2
+  constraints:
+    packages: [debate_core.application, debate_core.integrations, packages/debate_core/tests, debate_api, packages/debate_api/tests, debate_cli, packages/debate_cli/tests, infrastructure/modules/evidence_search, docs/runbooks]
+    forbidden:
+      - A backfile card without its provenance line
+      - A slower cold start than ADR-0019 allows, unmeasured
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e34-t34-backfile-seasons-import
+      relation: dependsOn
+    - kind: TaskRef
+      name: v1-e39-t14-index-shrink-guard
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Counts before building: index size, build time, cold start and memory with and
+        without backfiles, sent to the PM with the options.
+    - id: ac2
+      description: >-
+        After the ruling, a backfile card is found, shows its season and its provenance
+        line, and is gone within five minutes of a removal; the cold start stays within
+        ADR-0019's target; tests shown failing first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e39-t18-backfiles-in-the-pilot-index-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.7
+    debate/epic: v1-e39-evidence-search-pilot
+spec:
+  description: >-
+    Measure the index with backfiles, rule on its shape, then build and measure again.
+  goalRef:
+    name: v1-e39-t18-backfiles-in-the-pilot-index
+  graph:
+    nodes:
+      - id: backfile-index
+        kind: Task
+        name: Backfiles in the pilot index
+        description: >-
+          Measure the index with backfiles, rule on its shape, then build and measure
+          again.
+        estimatedEffort: 4h
+        acceptanceCriteria:
+          - type: test_passes
+            name: API tests pass
+            command: uv
+            args: [run, pytest, packages/debate_api/tests]
+status:
+  phase: Pending

@@ -1,0 +1,82 @@
+# TASK v1-e32-t22-scenario-vocabulary - A coach-edited scenario vocabulary per DA and advantage
+# Epic: E32 Argument Landscape Reports | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e32-t22-scenario-vocabulary
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+  annotations:
+    debate/title: "A coach-edited scenario vocabulary per DA and advantage"
+spec:
+  # Filed by the PM, 2026-10-25, from v1-e32-t14's ruling 2 (c) (the PM, 2026-10-25).
+  description: >-
+    v1-e32-t14 names a scenario by normalized heading words two or more teams use, so "dome" and
+    "golden dome" stay apart and some answers filed without a marker show as scenarios. Give
+    each DA and advantage an optional list of scenarios in the taxonomy, each with a name and
+    its heading forms, as v1-e32-t09's mechanisms are, seeded from t14's report table of names
+    used by two or more teams (the coach edits the seed). A heading form matches as t14's words
+    do; a name in the list replaces t14's words for that position; positions without a list keep
+    t14's rule. A taxonomy version bump under v1-e32-t08's released-ids lock. Withholding by
+    caselist words still applies.
+  priority: 3
+  constraints:
+    packages: [config/landscape, tests/config, debate_core.arguments, debate_core.application, tests/fixtures/landscape, packages/debate_core/tests, docs/guides]
+    forbidden:
+      - A scenario name holding a caselist school, team code or tournament word
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e32-t14-scenarios-and-link-chains
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        A position's scenario list merges heading forms under one name and drops listed
+        non-scenarios, positions without a list keep t14's rule, matching hand-written
+        golden files; the taxonomy bump passes the released-ids check; tests shown failing
+        first.
+    - id: ac2
+      description: >-
+        The coach's edited seed for policy-2026-27-nhi is committed and the next report uses
+        it (operator for the coach's edit).
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e32-t22-scenario-vocabulary-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+spec:
+  description: >-
+    Add scenario lists to the taxonomy, seed them from t14's names, and use them in place of
+    heading words where present.
+  goalRef:
+    name: v1-e32-t22-scenario-vocabulary
+  graph:
+    nodes:
+      - id: scenario-vocabulary
+        kind: Task
+        name: Scenario vocabulary
+        description: >-
+          Add scenario lists to the taxonomy, seed them from t14's names, and use them in
+          place of heading words where present.
+        estimatedEffort: 3h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Landscape tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/arguments/landscape]
+status:
+  phase: Pending

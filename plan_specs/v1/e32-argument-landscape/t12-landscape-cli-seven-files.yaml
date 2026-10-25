@@ -1,0 +1,81 @@
+# TASK v1-e32-t12-landscape-cli-seven-files - The landscape command names the seven-file bundle and counts its trends and schools
+# Epic: E32 Argument Landscape Reports | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e32-t12-landscape-cli-seven-files
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+  annotations:
+    debate/title: "The landscape command names the seven-file bundle and counts its trends and schools"
+spec:
+  # Filed by the PM, 2026-10-24, from v1-e32-t04's follow-up work 2 (the PM's review of 2026-10-24).
+  description: >-
+    `debate_cli/commands/landscape.py`'s module docstring and its output still name t05's four
+    files, though v1-e32-t04 made the bundle seven (`positions.csv`, `top_cards.csv`,
+    `impact_cards.csv`, `trends.csv`, `schools.csv`, `schools.md`, `report.md`), and its JSON
+    carries no trend or school counts. Make the help, the docstring and the human output name
+    the seven files, and add to `--json` the trend rows by label, the rows held back by the team
+    floor, and the school view's school, team code and row counts, as counts only. The
+    circuit-wide and school files are told apart in the output, so an operator sees which files
+    name schools.
+  priority: 3
+  constraints:
+    packages: [debate_cli, packages/debate_cli/tests, tests/smoke]
+    forbidden:
+      - A school, team code or debater name in any output, test or fixture beyond the synthetic fixture's fictional ones
+      - Changing the bundle's files or their contents
+  context:
+    - kind: TaskRef
+      name: v1-e32-t04-trend-and-school-views
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        On the synthetic fixture, `landscape report --json` carries the seven files, marked
+        circuit-wide or school view, the trend rows by label, the rows held back and the
+        school view's counts; the human output and `--help` name the seven files; tests
+        shown failing first.
+    - id: ac2
+      description: >-
+        The landscape smoke check passes in the validate-dev recorded tier.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e32-t12-landscape-cli-seven-files-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+spec:
+  description: >-
+    Update the command's docstring, help and output, add the counts to its JSON, and update the
+    command and smoke tests.
+  goalRef:
+    name: v1-e32-t12-landscape-cli-seven-files
+  graph:
+    nodes:
+      - id: cli-seven-files
+        kind: Task
+        name: Landscape command names seven files
+        description: >-
+          Update the command's docstring, help and output, add the counts to its JSON, and
+          update the command and smoke tests.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Landscape command tests pass
+            command: uv
+            args: [run, pytest, packages/debate_cli/tests/test_landscape_command.py]
+status:
+  phase: Pending

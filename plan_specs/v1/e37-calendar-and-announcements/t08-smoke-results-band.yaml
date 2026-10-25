@@ -23,6 +23,11 @@ spec:
     in the content; when it holds none, the band is absent. The checks count markup by class
     (`results-group__result` and the band's), never read or print a student's name, and run
     against dev and prod as the existing checks do.
+    (PM amendment 2026-10-24, from v1-e37-t07's review, working agreement 5.) One more check, for
+    v1-e37-t07's Instagram link: every page the smoke check fetches carries exactly one link in its
+    footer whose address is site/content/site.yaml's `instagram.address`, and no page names an
+    Instagram or Meta host (instagram.com, cdninstagram.com, instagr.am, facebook.com,
+    facebook.net, fbcdn.net, fbsbx.com) anywhere but on that one anchor's href.
   priority: 3
   constraints:
     packages: [scripts, tests/scripts]
@@ -33,6 +38,9 @@ spec:
     - kind: TaskRef
       name: v1-e37-t06-season-results
       relation: dependsOn
+    - kind: TaskRef
+      name: v1-e37-t07-instagram-link
+      relation: dependsOn
   acceptanceCriteria:
     - id: ac1
       description: >-
@@ -42,6 +50,13 @@ spec:
     - id: ac2
       description: >-
         The checks print counts only, never a name.
+    # PM amendment 2026-10-24 (v1-e37-t07's review)
+    - id: ac3
+      description: >-
+        With recorded pages, the Instagram check passes on a page whose footer has the one link
+        and no other Instagram or Meta host, and fails naming the check for a page with no link,
+        two links, or an Instagram or Meta host on a script, image, iframe or any other attribute;
+        tests shown failing first.
 status:
   phase: Pending
 ---

@@ -738,6 +738,39 @@ same `keeps` line.
 In the register's entry for the request: the time of `DONE`, the time P2 found the card gone, the
 index id P3 published, and P4's counts. No cluster id, path, tag or card text goes in the register.
 
+## Argument landscape bundles (E32)
+
+**Added 2026-10-24 by the PM, from `v1-e32-t04`'s follow-up work. Manual until `v1-e32-t13`
+makes `caselist remove` and the annual purge reach them.**
+
+Since `v1-e32-t04`, a landscape bundle under `reports/landscape/<caselist>/<snapshot>/`, in the
+private bucket and in the operator's local `reports/`, holds a per-school view: `schools.csv` and
+`schools.md`, with schools and team codes as disclosed. The data-use policy keeps per-school views
+on the same clock as their sources and removes them with their sources. `caselist remove` does not
+yet touch `reports/landscape/`. The circuit-wide files (`report.md` and its CSVs) name no school or
+team. A removal reaches them in the next report, as policy 1.13 says for quoted texts.
+
+So, after `--execute` has printed `DONE`, and only when the removed source's caselist has a
+landscape bundle:
+
+1. **List the bundles that could hold the removed school or team.** Read-only, dev's names:
+
+   ```bash
+   BUCKET=debate-dev-evidence-a7508de8
+   CASELIST=the-caselist-slug
+   aws s3 ls "s3://${BUCKET}/reports/landscape/${CASELIST}/" --profile debate-dev-evidence
+   DATA_DIR="$(debate-research --json config show | jq -r '.data.settings["storage.data_dir"]')"
+   ls "${DATA_DIR}/reports/landscape/${CASELIST}/" 2>/dev/null
+   ```
+
+2. **Stop and tell the PM** which snapshots are listed, and nothing else: not the school, not the
+   team code. The PM coordinates, as an operator block, deleting each listed bundle's
+   `schools.csv` and `schools.md` locally and in the bucket, noncurrent versions included, under
+   the removal credential, and then republishing the newest snapshot's bundle without the removed
+   rounds (`debate-research landscape report --caselist <slug> --publish`).
+3. **Record it** in the register's entry: the snapshots whose school view was deleted, and the
+   snapshot republished. No school, team code or path goes in the register.
+
 ## Step 9 — Check nothing re-imports it
 
 At the next import (or immediately, if you have the next archive on hand):

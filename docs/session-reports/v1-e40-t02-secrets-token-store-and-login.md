@@ -725,3 +725,31 @@ Goal `InProgress`. These criteria stay open; the PM sets the Goal `Succeeded` on
 | ac2 — one scheduled login stores a token (operator) | NOT RUN | Apply B after `v1-e40-t03`'s first image push, then the first Wednesday's check that the token secret has a version from that morning (runbook step 5) |
 
 Every other criterion is PASS, as recorded under Acceptance criteria.
+
+## PM record, 2026-10-24
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+* **ac2, "the operator applies dev": done.** The operator ran apply A from the
+  `caselist-credentials-dev` worktree at `origin/dev` after this branch's second merge.
+  * The first run, at `30ba804`, created 8 of the 17 resources and was refused at both
+    `CreateSecret` calls (`kms:GenerateDataKey` by break-glass, invoked by Secrets Manager, "no
+    resource-based policy allows"). The four `MalformedPolicyDocumentException`s at `CreateKey` in
+    the same run were the provider retrying while IAM caught up with the new roles.
+  * The re-plan printed `Plan: 9 to add, 1 to change, 0 to destroy.` and the runbook's JSON check
+    printed `PLAN OK`. The PM compared the key policy's statements before and after: the three
+    break-glass validation statements added, the three decrypt denies changed only by break-glass's
+    `ArnNotLike`, nothing removed.
+  * The apply printed `Apply complete! Resources: 9 added, 1 changed, 0 destroyed.` and
+    `"DebateDevCaselistSecretWriter"`.
+  * Block 6: the coach signed in as `DebateDevCaselistSecretWriter`, `set-password` printed
+    `Written to Secrets Manager secret debate-dev-caselist-tabroom-password.`, and the secret holds
+    `1` version.
+  * Block 7: `get-secret-value` was refused (`AccessDeniedException`) for
+    `debate-dev-caselist-writer`, `debate-dev` and `debate-admin`, and CloudTrail recorded
+    `3 "errorCode":"AccessDenied"`.
+* **ADR-0020 (2)** is amended in the PM batch of 2026-10-24 (j) for rulings 1, 4 and 5 and the
+  key-validation statements.
+* **Still open, so the Goal stays `InProgress`:** apply B in dev after `v1-e40-t03`'s first image
+  push (`11 to add`), the first Wednesday's scheduled login writing a token (with the Mac's
+  `caselist auth status --check` that morning, `v1-e40-t06`), and prod at the pilot's promotion.

@@ -31,9 +31,17 @@ spec:
     names email the coach when who may read the password changes (state `ENABLED`), and on any
     `GetSecretValue` of the password by a principal other than the login role, refused attempts
     included (state `ENABLED_WITH_ALL_CLOUDTRAIL_MANAGEMENT_EVENTS`).
+    (PM ruling 2026-10-24, from v1-e40-t02's question 2.) This task builds the SNS adapter behind
+    the `sns` kind, in `debate_core.integrations`, beside t02's Secrets Manager client and under
+    the same rules: one small boto3 client, no endpoint override, nothing about the message body in
+    a log. t02's scheduled login already sends its failures to `caselist.notifier`, and its role
+    may already `sns:Publish` to `debate-<env>-caselist-run-alerts`, so the topic keeps exactly that
+    name. The login schedule, which never retries, gains a dead-letter queue, and the dead-letter
+    alarm covers it as well as the run's schedule.
   priority: 2
   constraints:
-    packages: [infrastructure, debate_core.application, packages/debate_core/tests, docs/runbooks]
+    # PM ruling 2026-10-24 (v1-e40-t02's question 2): debate_core.integrations added for the SNS adapter.
+    packages: [infrastructure, debate_core.application, debate_core.integrations, packages/debate_core/tests, docs/runbooks]
     forbidden:
       - A school, team code, file name or card text in an alert
       - Network or AWS access in any test

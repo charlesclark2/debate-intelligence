@@ -1199,6 +1199,15 @@ run "the_run_schedule_starts_after_the_login_and_is_disabled_by_default" {
   }
 
   assert {
+    condition = alltrue([
+      for statement in jsondecode(aws_iam_role_policy.run_scheduler[0].policy).Statement :
+      try(statement.Condition.StringEquals["iam:PassedToService"], "") == "ecs-tasks.amazonaws.com"
+      if statement.Action == "iam:PassRole"
+    ])
+    error_message = "The run's scheduler passes the run's roles to ECS tasks and to nothing else (iam:PassedToService)."
+  }
+
+  assert {
     condition = anytrue([
       for statement in jsondecode(aws_iam_role_policy.run_scheduler[0].policy).Statement :
       statement.Action == "ecs:RunTask" && statement.Resource == "arn:aws:ecs:us-east-1:111122223333:task-definition/debate-mock-caselist-run:3"

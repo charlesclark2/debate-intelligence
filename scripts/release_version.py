@@ -250,8 +250,67 @@ class PushResult(enum.Enum):
     CREATED = "created"
     TAKEN = "taken"
     """The remote already has a tag of that name: another run claimed the number."""
+    WORKFLOW_REFUSED = "workflow refused"
+    """GitHub refused the token a tag whose workflow files it reads as a workflow change."""
     FAILED = "failed"
     """Anything else, e.g. a ref lock held by a concurrent push. Worth retrying a few times."""
+
+
+WORKFLOWS_DIRECTORY = ".github/workflows"
+DEV_BRANCH = "dev"
+
+WORKFLOW_REFUSAL = re.compile(
+    r"refusing to allow a GitHub App to create or update workflow `[^`]+` without `workflows` permission"
+)
+"""GitHub's refusal of a tag push that it reads as a workflow change, as run 40149948706 printed it."""
+
+
+def is_workflow_refusal(stderr: str) -> bool:
+    """Whether a failed push's stderr is GitHub's refusal for want of the `workflows` permission."""
+    return False
+
+
+class CommitSuperseded(Exception):
+    """Dev moved past the commit with a change to its workflow files, so no tag is claimed for it."""
+
+    def __init__(self, sha: str, head: str, workflows: Sequence[str]) -> None:
+        self.sha = sha
+        self.head = head
+        self.workflows = tuple(workflows)
+        super().__init__(f"{sha} is superseded by dev's head {head}")
+
+    def as_outputs(self) -> dict[str, str]:
+        return {"superseded": "true", "sha": self.sha, "superseded_by": self.head}
+
+    @property
+    def notice(self) -> str:
+        """A GitHub Actions notice naming dev's head, which marks the run as superseded, not failed."""
+        return (
+            f"::notice title=Dev pre-release superseded::{self.sha} is superseded by dev's head "
+            f"{self.head}, which changed {', '.join(self.workflows)} after it. Nothing is tagged, "
+            "built or published for it; dev's head gets its own pre-release."
+        )
+
+
+class DevBranch(Protocol):
+    """Dev's head on the remote and what changed after a commit: git in production, a stub in tests."""
+
+    def head(self) -> str:
+        """The commit dev's head is at on the remote now, fetched, never a stale local ref."""
+        ...
+
+    def contains(self, head: str, sha: str) -> bool:
+        """Whether `sha` is `head` or one of its ancestors."""
+        ...
+
+    def workflow_changes(self, sha: str, head: str) -> list[str]:
+        """The files under `.github/workflows/` that differ between `sha` and `head`."""
+        ...
+
+
+def superseded_by(branch: DevBranch, sha: str) -> CommitSuperseded | None:
+    """The supersession of `sha`, when dev's head is past it with different workflow files."""
+    return None
 
 
 class TagStore(Protocol):
@@ -267,7 +326,12 @@ class TagStore(Protocol):
 
 
 def claim_dev_tag(
-    store: TagStore, target: Release, sha: str, *, max_attempts: int = MAX_CLAIM_ATTEMPTS
+    store: TagStore,
+    target: Release,
+    sha: str,
+    *,
+    max_attempts: int = MAX_CLAIM_ATTEMPTS,
+    dev_branch: DevBranch | None = None,
 ) -> Claim:
     """Claim the next free dev number for `target` by pushing its tag at `sha`.
 
@@ -301,6 +365,18 @@ _COLLISION_SIGNS = ("already exists", "cannot lock ref")
 """What git says when a tag push loses to another push of the same tag."""
 
 
+def _git(repository: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
+    result = subprocess.run(
+        ["git", "-C", str(repository), *args],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if check and result.returncode != 0:
+        raise ReleaseVersionError(f"git {' '.join(args)} failed: {result.stderr.strip()}")
+    return result
+
+
 class GitTagStore:
     """Tags on a git remote, listed with `ls-remote` and claimed with a non-forced push."""
 
@@ -309,15 +385,7 @@ class GitTagStore:
         self.repository = repository
 
     def _git(self, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
-        result = subprocess.run(
-            ["git", "-C", str(self.repository), *args],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if check and result.returncode != 0:
-            raise ReleaseVersionError(f"git {' '.join(args)} failed: {result.stderr.strip()}")
-        return result
+        return _git(self.repository, *args, check=check)
 
     def dev_tags(self) -> dict[str, str]:
         output = self._git("ls-remote", "--tags", self.remote, "refs/tags/v*-dev.*").stdout
@@ -341,6 +409,33 @@ class GitTagStore:
         if merged_into is not None:
             args += ["--merged", merged_into]
         return [tag for tag in self._git(*args).stdout.split() if STABLE_TAG.match(tag)]
+
+
+class GitDevBranch:
+    """Dev on a git remote: its head fetched at the moment of asking, compared with local history."""
+
+    def __init__(
+        self, remote: str = "origin", repository: Path = REPOSITORY_ROOT, branch: str = DEV_BRANCH
+    ) -> None:
+        self.remote = remote
+        self.repository = repository
+        self.branch = branch
+
+    def head(self) -> str:
+        # The checkout's refs/remotes/origin/dev is as old as the checkout, and dev may have moved
+        # since; fetching the branch both names its head now and brings that commit's objects here.
+        _git(self.repository, "fetch", "--quiet", "--no-tags", self.remote, f"refs/heads/{self.branch}")
+        return _git(self.repository, "rev-parse", "--verify", "FETCH_HEAD^{commit}").stdout.strip()
+
+    def contains(self, head: str, sha: str) -> bool:
+        result = _git(self.repository, "merge-base", "--is-ancestor", sha, head, check=False)
+        if result.returncode not in (0, 1):
+            raise ReleaseVersionError(f"git merge-base --is-ancestor failed: {result.stderr.strip()}")
+        return result.returncode == 0
+
+    def workflow_changes(self, sha: str, head: str) -> list[str]:
+        output = _git(self.repository, "diff", "--name-only", sha, head, "--", WORKFLOWS_DIRECTORY).stdout
+        return [line for line in output.splitlines() if line]
 
 
 def parse_ls_remote_tags(output: str) -> dict[str, str]:

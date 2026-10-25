@@ -29,7 +29,10 @@ id; cards by rank). Nothing here computes a count; the service did.
 * **schools.csv** and **schools.md** are the per-school view (`v1-e32-t04`): the only files that name
   a school or a team code, exactly as disclosed, and nothing more (`docs/policies/caselist-data-use.md`,
   "What a report may show"). They show position ids and counts only: no label, tag, cite or text. The
-  circuit-wide files above name nobody, so the view is kept out of them.
+  circuit-wide files above name nobody, so the view is kept out of them. Since policy 1.14 they also
+  link each team's public OpenCaselist page (`v1-e32-t18`), schools.csv in its `team_page` column and
+  schools.md in its **By position** section, which lists under each position, by kind, the teams that
+  read it. No circuit-wide file carries a link.
 
 ## What is written exactly, and what is escaped
 
@@ -65,7 +68,7 @@ from debate_core.domain.landscape_report import (
     PositionStats,
     TopCard,
 )
-from debate_core.domain.landscape_schools import SchoolView
+from debate_core.domain.landscape_schools import SchoolRow, SchoolView
 from debate_core.domain.landscape_texts import QUOTED_KINDS, AnalyticTextKind, TextCoverage
 from debate_core.domain.landscape_trends import (
     WINDOW_DAYS,
@@ -75,6 +78,7 @@ from debate_core.domain.landscape_trends import (
     WeeklyTeams,
     window_start,
 )
+from debate_core.domain.search_source_links import NoTeamPage
 
 __all__ = [
     "IMPACT_CARD_COLUMNS",
@@ -138,12 +142,28 @@ TREND_COLUMNS: Final = (
 )
 """trends.csv's columns, in order (`v1-e32-t04` ac1)."""
 
-SCHOOL_COLUMNS: Final = ("school", "team_code", "side", "position_id", "rounds")
-"""schools.csv's columns, in order (`v1-e32-t04` ac4, as the PM's ruling of 2026-10-24 amended it)."""
+SCHOOL_COLUMNS: Final = ("school", "team_code", "side", "position_id", "rounds", "team_page")
+"""schools.csv's columns, in order (`v1-e32-t04` ac4, as the PM's ruling of 2026-10-24 amended it, and
+`v1-e32-t18`'s `team_page`: the team's openCaselist page, or empty)."""
 
 _SCHOOL_VIEW_SHOWS: Final = (
-    "school and team code as disclosed, never more (docs/policies/caselist-data-use.md); for the team only"
+    "school and team code as disclosed, and the team's public openCaselist page, never more "
+    "(docs/policies/caselist-data-use.md, version 1.14); for the team only"
 )
+_NO_TEAM_PAGE: Final = {
+    NoTeamPage.UNREAD: "whose school or team code could not be read",
+    NoTeamPage.CASELIST: "whose caselist is no address word",
+    NoTeamPage.SCHOOL: "whose school is not one address word",
+    NoTeamPage.TEAM_CODE: "whose team code is not one address word",
+}
+"""Why a team has no page link, as the school view counts it, in the order the rule checks."""
+_BY_POSITION_SIDES: Final = (PositionSide.NEG, PositionSide.AFF, PositionSide.BOTH)
+"""The by-position section's order (`v1-e32-t18`): the negative's DAs, CPs, Ks and Ts, then the aff's."""
+_BY_POSITION_SIDE_PREFIXES: Final = {
+    PositionSide.NEG: "",
+    PositionSide.AFF: "Affirmative side: ",
+    PositionSide.BOTH: "Either side: ",
+}
 
 _SIDE_HEADINGS: Final = {
     PositionSide.AFF: "Affirmative positions",
@@ -756,6 +776,7 @@ def render_schools_csv(view: SchoolView, metadata: Mapping[str, str]) -> str:
         "shows": _SCHOOL_VIEW_SHOWS,
         "rounds_on_no_side": str(view.rounds_on_no_side),
         "rounds_with_no_team": str(view.rounds_with_no_team),
+        "team_pages": _team_pages(view),
     }
     return _csv(
         {**metadata, **extra},
@@ -768,6 +789,7 @@ def render_schools_csv(view: SchoolView, metadata: Mapping[str, str]) -> str:
                 row.side.value,
                 row.position_id,
                 str(row.rounds),
+                view.team_page(row) or "",
             )
             for row in view.rows
         ),
@@ -775,7 +797,7 @@ def render_schools_csv(view: SchoolView, metadata: Mapping[str, str]) -> str:
 
 
 def render_schools_markdown(view: SchoolView, report: LandscapeReport) -> str:
-    """schools.md, without the stale-data banner: the per-school view, by school (ac4)."""
+    """schools.md, without the stale-data banner: the per-school view, by school (ac4), then by position."""
     header = report.header
     left_out = (
         f"{_count(view.rounds_on_no_side, 'round')} on no readable side; "
@@ -784,9 +806,9 @@ def render_schools_markdown(view: SchoolView, report: LandscapeReport) -> str:
     lines = [
         f"# Positions by school: {view.caselist} through {view.snapshot.isoformat()}",
         "",
-        "This page names schools and team codes exactly as they were disclosed, and nothing more: no "
-        "debater, and no text from anyone's files. It is for the team only, and stays on this machine and "
-        "in the private bucket.",
+        "This page names schools and team codes exactly as they were disclosed, and links each team's "
+        "public openCaselist page, and nothing more: no debater, and no text from anyone's files. It is for "
+        "the team only, and stays on this machine and in the private bucket.",
         "",
         "Every count comes from files teams disclosed to the caselist (FILE_IMPORT), not from evidence the "
         "platform has verified. A row is a team's rounds on one side that the landscape report counts as "
@@ -800,13 +822,14 @@ def render_schools_markdown(view: SchoolView, report: LandscapeReport) -> str:
         f"| Taxonomy version | {header.taxonomy_version} |",
         f"| Coach's overrides | {header.overrides_digest} |",
         f"| Schools | {view.schools:,}, with {_count(view.teams, 'team code')} |",
+        f"| Team pages | {_team_pages(view)} |",
         f"| Left out | {left_out} |",
         "",
         "## By school",
         "",
     ]
     if not view.rows:
-        return "\n".join([*lines, "No team read a counted position in this range.", ""])
+        lines += ["No team read a counted position in this range.", ""]
     for _, rows in groupby(view.rows, key=lambda row: row.school.casefold()):
         listed = list(rows)
         lines += [
@@ -820,7 +843,75 @@ def render_schools_markdown(view: SchoolView, report: LandscapeReport) -> str:
             for row in listed
         ]
         lines.append("")
+    lines += _by_position_section(view, report)
     return "\n".join(lines).rstrip("\n") + "\n"
+
+
+def _team_pages(view: SchoolView) -> str:
+    """How many teams link to their page, and why the rest do not."""
+    without = view.teams_without_team_page
+    text = (
+        f"{view.teams_with_team_page:,} of {_count(view.teams, 'team code')} link to their openCaselist page"
+    )
+    if not without:
+        return text
+    reasons = ", ".join(
+        f"{without[reason]:,} {_NO_TEAM_PAGE[reason]}" for reason in NoTeamPage if without[reason]
+    )
+    return f"{text}; {without.total():,} do not: {reasons}"
+
+
+def _by_position_section(view: SchoolView, report: LandscapeReport) -> list[str]:
+    """Each position the view's teams read, by side and kind in the report's order, its teams by rounds."""
+    lines = [
+        "## By position",
+        "",
+        "The negative's positions by kind, then the affirmative side's, in the report's order. Under each, "
+        "every team that read it, by rounds. A team's openCaselist page lists the rounds it disclosed, with "
+        "their files; it is linked when the school and the team code are each one word of the page's "
+        "address.",
+        "",
+    ]
+    by_position: dict[str, list[SchoolRow]] = {}
+    for row in view.rows:
+        by_position.setdefault(row.position_id, []).append(row)
+    read = [stats for stats in report.positions if stats.position_id in by_position]
+    if not read:
+        return [*lines, "No team read a counted position in this range.", ""]
+    for side in _BY_POSITION_SIDES:
+        for kind, of_kind in groupby(
+            (stats for stats in read if stats.side is side), key=lambda one: one.kind
+        ):
+            lines += [f"### {_BY_POSITION_SIDE_PREFIXES[side]}{_KIND_HEADINGS[kind]}", ""]
+            for stats in of_kind:
+                rows = sorted(
+                    by_position[stats.position_id],
+                    key=lambda row: (
+                        -row.rounds,
+                        row.school.casefold(),
+                        row.school,
+                        row.team_code.casefold(),
+                        row.team_code,
+                        row.side.value,
+                    ),
+                )
+                lines += [
+                    f"#### `{stats.position_id}`",
+                    "",
+                    "| School | Team code | Side | Rounds | Team page |",
+                    "|---|---|---|---|---|",
+                ]
+                lines += [
+                    f"| {_cell(row.school)} | {_cell(row.team_code)} | {row.side.value} | {row.rounds:,} | "
+                    f"{_team_page_cell(view.team_page(row))} |"
+                    for row in rows
+                ]
+                lines.append("")
+    return lines
+
+
+def _team_page_cell(url: str | None) -> str:
+    return "none" if url is None else f"[openCaselist]({url})"
 
 
 def _unclassified_section(report: LandscapeReport) -> list[str]:

@@ -34,18 +34,33 @@ The origin is fixed, and every part of the path is a stored value checked agains
 below, so no link is ever taken from a request (the task's forbidden "a redirect or link target taken
 from the request"). The link opens in a new tab with no opener and no referrer, and is never logged
 or audited: it leaves the platform.
+
+## The landscape school view's team pages (`v1-e32-t18`)
+
+The same rule gives each team in a landscape report's school view the link to its page
+(:func:`team_page_url`), from the view's caselist, school and team code and nothing else: data-use
+policy 1.14 allows exactly that link there. :func:`why_no_team_page` says which part kept a team from
+having one, so the view can count them.
 """
 
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import Final
 
 from debate_core.domain.caselist import CASELIST_SLUG_PATTERN, TEAM_CODE_MAX_LENGTH
 from debate_core.domain.evidence_search import OccurrenceProvenance
 
-__all__ = ["OPENCASELIST_ORIGIN", "SourceLink", "source_link"]
+__all__ = [
+    "OPENCASELIST_ORIGIN",
+    "NoTeamPage",
+    "SourceLink",
+    "source_link",
+    "team_page_url",
+    "why_no_team_page",
+]
 
 OPENCASELIST_ORIGIN: Final = "https://opencaselist.com"
 """The site a disclosed card's team page is on. A fixed origin: no part of a link is ever the request's."""
@@ -69,14 +84,44 @@ class SourceLink:
     url: str
 
 
+class NoTeamPage(StrEnum):
+    """Why a team has no page link: the first part the rule refused, in the order it checks them."""
+
+    UNREAD = "unread"
+    """The parser could not read the school or the team code (`UNKNOWN`)."""
+    CASELIST = "caselist"
+    """The caselist is not a caselist slug."""
+    SCHOOL = "school"
+    """The school is not one address word: a display name with a space, say."""
+    TEAM_CODE = "team_code"
+    """The team code is not one address word of letters and digits."""
+
+
+def why_no_team_page(caselist: str, school: str, team_code: str) -> NoTeamPage | None:
+    """Why this team has no page link, or `None` when it has one."""
+    if _UNREAD in (school, team_code):
+        return NoTeamPage.UNREAD
+    for reason, pattern, value in (
+        (NoTeamPage.CASELIST, _CASELIST, caselist),
+        (NoTeamPage.SCHOOL, _SCHOOL, school),
+        (NoTeamPage.TEAM_CODE, _TEAM_CODE, team_code),
+    ):
+        if pattern.fullmatch(value) is None:
+            return reason
+    return None
+
+
+def team_page_url(caselist: str, school: str, team_code: str) -> str | None:
+    """The team's page on openCaselist, or `None` when :func:`why_no_team_page` gives a reason."""
+    if why_no_team_page(caselist, school, team_code) is not None:
+        return None
+    return f"{OPENCASELIST_ORIGIN}/{caselist}/{school}/{team_code}"
+
+
 def source_link(occurrence: OccurrenceProvenance) -> SourceLink | None:
     """The link to the page that publishes `occurrence`'s file, or `None` when none can be built."""
-    caselist, school, team_code = occurrence.caselist, occurrence.school, occurrence.team_code
-    if not occurrence.provenance or school is None or team_code is None or _UNREAD in (school, team_code):
+    school, team_code = occurrence.school, occurrence.team_code
+    if not occurrence.provenance or school is None or team_code is None:
         return None
-    if any(
-        pattern.fullmatch(value) is None
-        for pattern, value in ((_CASELIST, caselist), (_SCHOOL, school), (_TEAM_CODE, team_code))
-    ):
-        return None
-    return SourceLink(label=OPENCASELIST_LABEL, url=f"{OPENCASELIST_ORIGIN}/{caselist}/{school}/{team_code}")
+    url = team_page_url(occurrence.caselist, school, team_code)
+    return None if url is None else SourceLink(label=OPENCASELIST_LABEL, url=url)

@@ -82,14 +82,15 @@ POSITIONS: Final = (
 TEAMS: Final = {
     "XX": "Ashgrove Fictional",
     "YY": "Ashgrove Fictional",
-    "ZZ": "Birchmoor Fictional",
-    "QQ": "Birchmoor Fictional",
+    "ZZ": "Birchmoor",
+    "QQ": "Birchmoor",
     "VV": "Cedarvale Fictional",
     "WW": "Cedarvale Fictional",
     "JJ": "Driftwood Fictional",
     "KK": "Driftwood Fictional",
 }
-"""Team code to school."""
+"""Team code to school. Birchmoor is one address word, as the real archive spells a school, so the
+school view links its teams' pages (`v1-e32-t18`); the others are display names, which get none."""
 
 FIRST_TOURNAMENT: Final = "Fictional Invitational"
 SECOND_TOURNAMENT: Final = "Imaginary Classic"

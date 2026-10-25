@@ -5,7 +5,9 @@ The inputs `v1-e32-t03-landscape-report`, `v1-e32-t10-impact-cards-per-position`
 `synthpolicy26`, written by `scripts/make_landscape_fixture.py`. Every school, team code,
 tournament, tag and cite here is synthetic. Team codes are doubled letters (`XX`, `YY`, `ZZ`,
 `QQ`, `VV`, `WW`, `JJ`, `KK`) at four fictional schools, so a scan of a report for them means
-something (ac4).
+something (ac4). `Birchmoor` is one word, as the real archive spells a school, and the other three
+are display names with a space, so the school view links only Birchmoor's teams to their
+openCaselist pages (`v1-e32-t18`).
 
 What the report should say about these inputs is in `../golden/`, written by hand from the table
 in the generator (working agreement 6), never by running the report. `expected_trends.csv` here is

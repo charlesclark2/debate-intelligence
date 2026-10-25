@@ -3,7 +3,8 @@
 An openCaselist team page is `https://opencaselist.com/<caselist>/<school>/<team code>`, the school
 and team code in the URL's own form: one word of letters, digits and hyphens. Every expected link
 is written by hand (working agreement 6). Every school, team code, camp and title is invented
-(data-use policy, rule 5).
+(data-use policy, rule 5). The landscape school view links each team by the same rule, from its
+caselist, school and team code (`v1-e32-t18`).
 """
 
 from __future__ import annotations
@@ -13,7 +14,14 @@ from typing import Any
 import pytest
 
 from debate_core.domain.evidence_search import OccurrenceProvenance
-from debate_core.domain.search_source_links import OPENCASELIST_ORIGIN, SourceLink, source_link
+from debate_core.domain.search_source_links import (
+    OPENCASELIST_ORIGIN,
+    NoTeamPage,
+    SourceLink,
+    source_link,
+    team_page_url,
+    why_no_team_page,
+)
 
 
 def disclosed(**changes: Any) -> OccurrenceProvenance:
@@ -114,3 +122,51 @@ def test_a_camp_card_has_no_link_because_the_index_stores_no_openev_file_address
     """The index keeps a camp card's camp, year, event and file title, and no OpenEv path or id."""
     assert source_link(camp()) is None
     assert source_link(camp(camp_file_title=None)) is None
+
+
+@pytest.mark.parametrize(
+    ("caselist", "school", "team_code", "url"),
+    [
+        ("hspolicy26", "Cedarbrook", "LM", "https://opencaselist.com/hspolicy26/Cedarbrook/LM"),
+        (
+            "hspolicy26",
+            "North-Cedarbrook",
+            "Ab12",
+            "https://opencaselist.com/hspolicy26/North-Cedarbrook/Ab12",
+        ),
+    ],
+)
+def test_a_team_page_is_the_caselist_school_and_team_code_on_opencaselist(
+    caselist: str, school: str, team_code: str, url: str
+) -> None:
+    assert why_no_team_page(caselist, school, team_code) is None
+    assert team_page_url(caselist, school, team_code) == url
+
+
+@pytest.mark.parametrize(
+    ("caselist", "school", "team_code", "reason"),
+    [
+        ("hspolicy26", "UNKNOWN", "LM", NoTeamPage.UNREAD),
+        ("hspolicy26", "Cedarbrook", "UNKNOWN", NoTeamPage.UNREAD),
+        ("HSPolicy26", "Cedarbrook", "LM", NoTeamPage.CASELIST),
+        ("hspolicy26", "Cedar Brook", "LM", NoTeamPage.SCHOOL),
+        ("hspolicy26", "Cedarbrook/..", "LM", NoTeamPage.SCHOOL),
+        ("hspolicy26", "Cédarbrook", "LM", NoTeamPage.SCHOOL),
+        ("hspolicy26", "Cedar Brook", "L-M", NoTeamPage.SCHOOL),
+        ("hspolicy26", "Cedarbrook", "L-M", NoTeamPage.TEAM_CODE),
+        ("hspolicy26", "Cedarbrook", "L&M", NoTeamPage.TEAM_CODE),
+        ("hspolicy26", "Cedarbrook", "L" * 13, NoTeamPage.TEAM_CODE),
+    ],
+)
+def test_a_team_whose_values_are_not_the_urls_form_has_no_page_and_says_why(
+    caselist: str, school: str, team_code: str, reason: NoTeamPage
+) -> None:
+    """The first part refused is the reason: the parser's `UNKNOWN`, then caselist, school and team code."""
+    assert why_no_team_page(caselist, school, team_code) is reason
+    assert team_page_url(caselist, school, team_code) is None
+
+
+def test_the_card_page_and_the_school_view_link_a_team_alike() -> None:
+    link = source_link(disclosed(caselist="hspolicy26", school="North-Cedarbrook", team_code="Ab12"))
+    assert link is not None
+    assert link.url == team_page_url("hspolicy26", "North-Cedarbrook", "Ab12")

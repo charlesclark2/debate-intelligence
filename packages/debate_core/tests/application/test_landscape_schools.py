@@ -26,7 +26,7 @@ REPO = Path(__file__).resolve().parents[4]
 FIXTURE = REPO / "tests" / "fixtures" / "landscape" / "synthetic_caselist"
 ASH, BIRCH, CEDAR, DRIFT = (
     "Ashgrove Fictional",
-    "Birchmoor Fictional",
+    "Birchmoor",
     "Cedarvale Fictional",
     "Driftwood Fictional",
 )

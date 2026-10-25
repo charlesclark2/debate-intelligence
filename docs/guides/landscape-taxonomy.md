@@ -410,6 +410,21 @@ So after an edit to the taxonomy, your decisions or the actors, run the fill on 
 publish. A dry run writes no cache, so without the fill first the dry run and the publish would each
 read every file again (the PM's ruling of 2026-10-24 on v1-e32-t11's question 4).
 
+## Who reads each position: the school view
+
+Beside the report, each run writes the school view, `schools.md` and `schools.csv`, which name schools
+and team codes exactly as disclosed and nothing else. `schools.md` lists them twice: **By school**, each
+team's positions on each side, and **By position**, the negative's DAs, CPs, Ks and Ts and then the
+affirmative side's positions, each with every team that read it, its side and its rounds, most rounds
+first. Each team links to its public openCaselist page, where its disclosures are; `schools.csv` has the
+same link in its `team_page` column. The link is built from the caselist, the school and the team code
+alone, as the student search's card page builds it, so a team whose school or team code is not one word
+of the page's address (a school with a space in it, say) has no link, and the view's **Team pages** row
+counts them. On hspolicy26 through 2026-10-20, all 475 team codes at 155 schools had one.
+
+The report itself, `report.md` and its CSVs, names no school or team and carries no link. The view stays
+on this machine and in the private bucket, like the report.
+
 ## The review queue and your decisions
 
 Each run writes a review queue: the headings that cards nothing placed sit under, one row each, with

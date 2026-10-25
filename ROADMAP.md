@@ -62,12 +62,12 @@ v2.3's extension work.
 |---|---|---|---|---|---|
 | [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 49 | 45 | 240 |
 | [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 107 | 82 | 494 |
-| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 38 | 22 | 238 |
+| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 39 | 22 | 240 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 13 | 2 | 108 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 16 | 7 | 98 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 0 | 66 |
 | [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 22 | 13 | 154 |
-| [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 16 | 12 | 66 |
+| [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 17 | 12 | 72 |
 | [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 1 | 8 | 1 | 24 |
 | [v2.0](plan_specs/releases/v2.0.yaml) | Cloud platform foundation | 3 | 17 | 0 | 164 |
 | [v2.1](plan_specs/releases/v2.1.yaml) | Web app, debate tub & async jobs | 3 | 18 | 0 | 198 |
@@ -328,6 +328,7 @@ Weekly argument-landscape reports show which positions are being read and with w
 | [Kritikal affirmatives identified, not left among the rounds with no identified aff](plan_specs/v1/e32-argument-landscape/t17-kritikal-affirmatives.yaml) `v1-e32-t17-kritikal-affirmatives` | Pending | 2 | 4.0 |
 | [The school view by position: every team that reads each DA, CP and K, with its caselist page](plan_specs/v1/e32-argument-landscape/t18-school-view-by-position.yaml) `v1-e32-t18-school-view-by-position` | Succeeded | 1 | 2.0 |
 | [A dry run's scan refusal says nothing was written and gives the publish command](plan_specs/v1/e32-argument-landscape/t19-dry-run-scan-refusal-wording.yaml) `v1-e32-t19-dry-run-scan-refusal-wording` | Pending | 1 | 1.0 |
+| [report.md in two halves: every affirmative section together, then every negative one](plan_specs/v1/e32-argument-landscape/t20-report-sides-together.yaml) `v1-e32-t20-report-sides-together` | Pending | 1 | 2.0 |
 
 #### [E33 — Evidence File Builder](plan_specs/v1/e33-file-builder/epic.yaml)
 
@@ -486,6 +487,7 @@ Debaters search the team's evidence store from a school Chromebook or at home: a
 | [An index that would drop most of the cards is never published](plan_specs/v1/e39-evidence-search-pilot/t14-index-shrink-guard.yaml) `v1-e39-t14-index-shrink-guard` | Succeeded | 1 | 3.0 |
 | [tub index prune: the runbook's prune of superseded index versions as one command](plan_specs/v1/e39-evidence-search-pilot/t15-tub-index-prune.yaml) `v1-e39-t15-tub-index-prune` | Pending | 1 | 2.0 |
 | [Open on OpenEv: a camp card links to its camp file](plan_specs/v1/e39-evidence-search-pilot/t16-open-on-openev.yaml) `v1-e39-t16-open-on-openev` | Pending | 1 | 3.0 |
+| [The landscape report and its school view on the pilot, for signed-in team members](plan_specs/v1/e39-evidence-search-pilot/t17-landscape-pages.yaml) `v1-e39-t17-landscape-pages` | Pending | 2 | 6.0 |
 
 
 ### v1.8 — Weekly caselist run in the cloud

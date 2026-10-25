@@ -307,3 +307,36 @@ Mutants 13 and 20 were caught first by the variable-set test. Each was then run 
 - `scripts/check_command_blocks.py --base origin/dev` → `OK: no # comments in 424 shell code blocks in 153 Markdown files`
 
 The Goal stays `Succeeded`. Stopping for the PM's re-review.
+
+## PM review, second
+
+<!-- Completed by the PM only. -->
+
+**Verdict:** ACCEPTED
+<!-- ACCEPTED / CHANGES_REQUESTED -->
+
+**Reviewed by / date:** PM (Claude), 2026-10-24
+
+**Notes:**
+
+Question 1 is built in the shape asked, and nothing else moved.
+1. **The repair carries the call's own prompt.** The registry renders it once, before any model
+   call, and it opens the repair's system and user turns byte for byte. The schema and the filtered
+   problems follow, and nothing from the failed answer is included.
+   * Rendering up front also refuses, before anything is sent, a call whose variables don't fit its
+     prompt. That is a good side effect.
+   * A prompt with no system turn is handled.
+2. **The tests:** five new tests failed against the pre-review guard. The two sentinels behave as
+   ruled: the answer's reaches nothing, and the call's appears once in the repair and in no error
+   or log record. Two calls that fail alike now send different requests, and each malformed case
+   has its own repair fixture, "wrong types" and "coercible values" included.
+3. **Mutants:** 21 of 21 caught. Mutant 13 is flipped (the rendered prompt dropped), and the new
+   mutant 20 (the prompt altered) is caught by the byte-for-byte test on its own.
+4. **`model.repair` 1.0.0** was edited in place and re-locked from dev's empty lock. That's right:
+   it is the first released prompt, and nothing on dev has used it.
+5. **The `tests/application` directory** passed whole in the first round. This round it hit the
+   alarm under load, and nothing else in it imports the changed modules, so it is left to the PR's
+   `ci` with the affected set (agreement 10).
+
+The Goal is `Succeeded`. The PM files the follow-ups in a PM batch: the `constraints.packages`
+amendment, the t03 record-mode task, and the t07 note on a failed attempt's usage.

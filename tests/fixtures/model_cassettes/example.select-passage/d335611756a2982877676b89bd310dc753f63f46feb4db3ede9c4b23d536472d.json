@@ -1,0 +1,44 @@
+{
+  "call": "generate_structured",
+  "cassette_format": 1,
+  "key": "d335611756a2982877676b89bd310dc753f63f46feb4db3ede9c4b23d536472d",
+  "request": {
+    "output_schema": "debate_core.testing.contracts.model_router.ContractPassage",
+    "params": {
+      "effort": null,
+      "max_tokens": null,
+      "temperature": null,
+      "timeout_seconds": null
+    },
+    "prompt": {
+      "prompt_id": "example.select-passage",
+      "prompt_version": "1.0.0",
+      "variables": {
+        "tag": "An answer that never calls the tool"
+      }
+    },
+    "task_class": "high_volume"
+  },
+  "response": {
+    "invoked_at": "2026-01-01T00:00:00Z",
+    "output": null,
+    "prompt_id": "example.select-passage",
+    "prompt_version": "1.0.0",
+    "provider_request_id": "example-request-0101",
+    "route": {
+      "inference_profile": null,
+      "max_tokens": 256,
+      "model_id": "example-recorded-model",
+      "provider": "bedrock",
+      "region": "example-region-1",
+      "task_class": "high_volume",
+      "temperature": null,
+      "timeout_seconds": 30.0
+    },
+    "usage": {
+      "input_tokens": 120,
+      "latency_ms": 850.0,
+      "output_tokens": 18
+    }
+  }
+}

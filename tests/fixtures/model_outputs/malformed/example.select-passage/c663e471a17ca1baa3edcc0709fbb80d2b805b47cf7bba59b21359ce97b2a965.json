@@ -1,0 +1,11 @@
+{
+  "output": {
+    "paragraph_id": 3
+  },
+  "output_schema": "debate_core.testing.contracts.model_router.ContractPassage",
+  "prompt_id": "example.select-passage",
+  "prompt_version": "1.0.0",
+  "variables": {
+    "tag": "Malformed answer: missing fields"
+  }
+}

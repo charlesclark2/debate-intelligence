@@ -1,0 +1,57 @@
+{
+  "call": "generate_structured",
+  "cassette_format": 1,
+  "key": "3015d1c9b332aeb3eb1a505c9ba8ba4b6df53bb95e99329f85b4570d12691194",
+  "request": {
+    "output_schema": "debate_core.testing.contracts.model_router.ContractPassage",
+    "params": {
+      "effort": null,
+      "max_tokens": null,
+      "temperature": null,
+      "timeout_seconds": null
+    },
+    "prompt": {
+      "prompt_id": "model.repair",
+      "prompt_version": "1.0.0",
+      "variables": {
+        "failed_prompt": "example.select-passage@1.0.0",
+        "json_schema": "{\n  \"additionalProperties\": false,\n  \"description\": \"The output schema the contract asks for: which passage, by id and offsets, never its text.\",\n  \"properties\": {\n    \"end_offset\": {\n      \"title\": \"End Offset\",\n      \"type\": \"integer\"\n    },\n    \"paragraph_id\": {\n      \"title\": \"Paragraph Id\",\n      \"type\": \"integer\"\n    },\n    \"start_offset\": {\n      \"title\": \"Start Offset\",\n      \"type\": \"integer\"\n    }\n  },\n  \"required\": [\n    \"paragraph_id\",\n    \"start_offset\",\n    \"end_offset\"\n  ],\n  \"title\": \"ContractPassage\",\n  \"type\": \"object\"\n}",
+        "problems": [
+          {
+            "loc": [],
+            "msg": "the answer did not call the schema's tool",
+            "type": "missing_tool_call"
+          }
+        ],
+        "schema_name": "ContractPassage"
+      }
+    },
+    "task_class": "high_volume"
+  },
+  "response": {
+    "invoked_at": "2026-01-01T00:00:00Z",
+    "output": {
+      "end_offset": 57,
+      "paragraph_id": 2,
+      "start_offset": 12
+    },
+    "prompt_id": "model.repair",
+    "prompt_version": "1.0.0",
+    "provider_request_id": "example-request-0102",
+    "route": {
+      "inference_profile": null,
+      "max_tokens": 256,
+      "model_id": "example-recorded-model",
+      "provider": "bedrock",
+      "region": "example-region-1",
+      "task_class": "high_volume",
+      "temperature": null,
+      "timeout_seconds": 30.0
+    },
+    "usage": {
+      "input_tokens": 120,
+      "latency_ms": 850.0,
+      "output_tokens": 18
+    }
+  }
+}

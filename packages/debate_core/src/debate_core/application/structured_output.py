@@ -77,6 +77,7 @@ __all__ = [
     "StructuredOutputGuard",
     "StructuredResult",
     "missing_tool_call",
+    "repair_prompt",
     "validate_model_output",
 ]
 
@@ -221,7 +222,7 @@ class StructuredOutputGuard:
         model_id: str | None = None
         for number in range(1, 2 + policy.max_repairs):
             if number > 1:
-                attempt_prompt = self._repair_prompt(prompt, schema, problems)
+                attempt_prompt = repair_prompt(prompt, schema, problems, version=self._repair_version)
             try:
                 response = await self._router.generate_structured(task_class, attempt_prompt, schema, params)
             except InvalidModelOutput as invalid:
@@ -271,27 +272,33 @@ class StructuredOutputGuard:
                 requested=task_class.value,
             )
 
-    def _repair_prompt(
-        self, prompt: ModelPrompt, schema: type[BaseModel], problems: Sequence[OutputProblem]
-    ) -> ModelPrompt:
-        """The `model.repair` call for an answer to `prompt` that failed for `problems`.
 
-        The schema and the problems, and the failed prompt's id so a reader of the repair cassette can
-        tell which call it repaired. Nothing the model said, and none of the call's variables.
-        """
-        listed = problems[:MAX_REPORTED_PROBLEMS]
-        return ModelPrompt(
-            prompt_id=REPAIR_PROMPT_ID,
-            prompt_version=self._repair_version,
-            variables={
-                "failed_prompt": f"{prompt.prompt_id}@{prompt.prompt_version}",
-                "schema_name": schema.__name__,
-                "json_schema": json.dumps(schema.model_json_schema(), indent=2, sort_keys=True),
-                "problems": [
-                    {"loc": list(problem.loc), "type": problem.type, "msg": problem.msg} for problem in listed
-                ],
-            },
-        )
+def repair_prompt(
+    failed: ModelPrompt,
+    schema: type[BaseModel],
+    problems: Sequence[OutputProblem],
+    *,
+    version: str = REPAIR_PROMPT_VERSION,
+) -> ModelPrompt:
+    """The `model.repair` call for an answer to `failed` that did not fit `schema` for `problems`.
+
+    It holds the schema, at most :data:`MAX_REPORTED_PROBLEMS` problems, and the failed prompt's id
+    and version, so a reader of a repair cassette can tell which prompt it repaired. Nothing the
+    model said, and none of the failed call's variables, so no source text is sent again.
+    """
+    listed = _described(problems)[:MAX_REPORTED_PROBLEMS]
+    return ModelPrompt(
+        prompt_id=REPAIR_PROMPT_ID,
+        prompt_version=version,
+        variables={
+            "failed_prompt": f"{failed.prompt_id}@{failed.prompt_version}",
+            "schema_name": schema.__name__,
+            "json_schema": json.dumps(schema.model_json_schema(), indent=2, sort_keys=True),
+            "problems": [
+                {"loc": list(problem.loc), "type": problem.type, "msg": problem.msg} for problem in listed
+            ],
+        },
+    )
 
 
 def validate_model_output[OutputT: BaseModel](

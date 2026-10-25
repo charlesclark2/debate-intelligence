@@ -1,0 +1,29 @@
+{
+  "output": {
+    "paragraph_id": 3
+  },
+  "output_schema": "debate_core.testing.contracts.model_router.ContractPassage",
+  "prompt_id": "model.repair",
+  "prompt_version": "1.0.0",
+  "variables": {
+    "failed_prompt": "example.select-passage@1.0.0",
+    "json_schema": "{\n  \"additionalProperties\": false,\n  \"description\": \"The output schema the contract asks for: which passage, by id and offsets, never its text.\",\n  \"properties\": {\n    \"end_offset\": {\n      \"title\": \"End Offset\",\n      \"type\": \"integer\"\n    },\n    \"paragraph_id\": {\n      \"title\": \"Paragraph Id\",\n      \"type\": \"integer\"\n    },\n    \"start_offset\": {\n      \"title\": \"Start Offset\",\n      \"type\": \"integer\"\n    }\n  },\n  \"required\": [\n    \"paragraph_id\",\n    \"start_offset\",\n    \"end_offset\"\n  ],\n  \"title\": \"ContractPassage\",\n  \"type\": \"object\"\n}",
+    "problems": [
+      {
+        "loc": [
+          "start_offset"
+        ],
+        "msg": "Field required",
+        "type": "missing"
+      },
+      {
+        "loc": [
+          "end_offset"
+        ],
+        "msg": "Field required",
+        "type": "missing"
+      }
+    ],
+    "schema_name": "ContractPassage"
+  }
+}

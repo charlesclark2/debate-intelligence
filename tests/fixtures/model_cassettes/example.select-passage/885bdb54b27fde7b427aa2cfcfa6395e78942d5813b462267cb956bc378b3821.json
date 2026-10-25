@@ -1,0 +1,44 @@
+{
+  "call": "generate_structured",
+  "cassette_format": 1,
+  "key": "885bdb54b27fde7b427aa2cfcfa6395e78942d5813b462267cb956bc378b3821",
+  "request": {
+    "output_schema": "debate_core.testing.contracts.model_router.ContractPassage",
+    "params": {
+      "effort": null,
+      "max_tokens": null,
+      "temperature": null,
+      "timeout_seconds": null
+    },
+    "prompt": {
+      "prompt_id": "example.select-passage",
+      "prompt_version": "1.0.0",
+      "variables": {
+        "tag": "An empty tool call whose repair was never recorded"
+      }
+    },
+    "task_class": "high_volume"
+  },
+  "response": {
+    "invoked_at": "2026-01-01T00:00:00Z",
+    "output": {},
+    "prompt_id": "example.select-passage",
+    "prompt_version": "1.0.0",
+    "provider_request_id": "example-request-0103",
+    "route": {
+      "inference_profile": null,
+      "max_tokens": 256,
+      "model_id": "example-recorded-model",
+      "provider": "bedrock",
+      "region": "example-region-1",
+      "task_class": "high_volume",
+      "temperature": null,
+      "timeout_seconds": 30.0
+    },
+    "usage": {
+      "input_tokens": 120,
+      "latency_ms": 850.0,
+      "output_tokens": 18
+    }
+  }
+}

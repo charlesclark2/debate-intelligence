@@ -269,3 +269,42 @@ def test_assign_assigns_each_affirmative_round_and_prints_counts(
         "unidentified 2 (0 with conflicting plan texts).",
         "Carry refused into 0 rounds; teams identified 3 of 5; 0 teams whose rounds disagree.",
     ]
+
+
+KRITIKAL = f"""\
+schema_version: 1
+topic_id: {TOPIC}
+position_id: kritikal-aff
+families:
+  - {{id: cap, label: Capitalism, phrases: [cap]}}
+"""
+
+
+def test_with_a_k_aff_config_the_markers_and_the_k_aff_rounds_are_counted(
+    world: tuple[Path, Path], capsys: pytest.CaptureFixture[str]
+) -> None:
+    data_dir, config_dir = world
+    taxonomy = config_dir / "taxonomies" / f"{TOPIC}.yaml"
+    taxonomy.write_text(
+        TAXONOMY + "  - {id: kritikal-aff, label: Kritikal affirmative, kind: aff, side: aff}\n",
+        encoding="utf-8",
+    )
+    (config_dir / "kritikal_affs").mkdir()
+    (config_dir / "kritikal_affs" / f"{TOPIC}.yaml").write_text(KRITIKAL, encoding="utf-8")
+    PlantedCaselist(data_dir, CASELIST).source(
+        "kritikal-one",
+        [PlantedCard(("1AC", "Advantage One"))],
+        disclosures=[("2026-09-15", path(1, "Aff", 7))],
+        content=build_docx(
+            paragraph_xml(run_xml("Advocacy"), style="Heading3")
+            + paragraph_xml(run_xml("We affirm an invented refusal."), style="Analytic")
+        ),
+    )
+    assert run(world, "plan-texts") == 0
+    assert "K-aff markers: 1 documents hold one, 1 of them with no plan text, by 1 teams." in printed(capsys)
+    assert run(world, "assign") == 0
+    lines = printed(capsys)
+    assert "KRITIKAL_AFF_MARKER 1" in lines[-3]
+    assert lines[-1] == (
+        "K aff: 1 affirmative documents hold a marker; the carry refused by the advantage guard in 0 rounds."
+    )

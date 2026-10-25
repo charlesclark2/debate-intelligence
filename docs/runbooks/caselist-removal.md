@@ -367,6 +367,9 @@ DEBATE_ENV=dev uv run debate-research caselist import <archive> --caselist hsld2
       [When `caselist status` reports removal residue](#when-caselist-status-reports-removal-residue).
 - [ ] The `DONE` line counts the inbox files deleted and rewritten, and the dry run run again says
       *DOWNLOAD INBOX (…): nothing in it holds a removed file.*
+- [ ] Where the plan listed *LANDSCAPE SCHOOL VIEWS*, the `DONE` line counts them, status reports no
+      *school view file(s)* as residue, and the PM has the caselist and snapshot of the *REPUBLISH*
+      line ([Argument landscape bundles](#argument-landscape-bundles-e32)).
 - [ ] The re-import counts the file as `SUPPRESSED`.
 - [ ] The parse in step 5 exited 0, and each `index.jsonl` key the plan listed is back:
       `DEBATE_ENV=dev uv run debate-research store ls <that key>` lists 1 object.
@@ -762,36 +765,137 @@ index id P3 published, and P4's counts. No cluster id, path, tag or card text go
 
 ## Argument landscape bundles (E32)
 
-**Added 2026-10-24 by the PM, from `v1-e32-t04`'s follow-up work. Manual until `v1-e32-t13`
-makes `caselist remove` and the annual purge reach them.**
-
 Since `v1-e32-t04`, a landscape bundle under `reports/landscape/<caselist>/<snapshot>/`, in the
-private bucket and in the operator's local `reports/`, holds a per-school view: `schools.csv` and
-`schools.md`, with schools and team codes as disclosed. The data-use policy keeps per-school views
-on the same clock as their sources and removes them with their sources. `caselist remove` does not
-yet touch `reports/landscape/`. The circuit-wide files (`report.md` and its CSVs) name no school or
-team. A removal reaches them in the next report, as policy 1.13 says for quoted texts.
+private bucket and in the operator's local `<data dir>/reports/landscape/`, holds a per-school view:
+`schools.csv` and `schools.md`, with schools and team codes as disclosed. The data-use policy keeps
+per-school views on the same clock as their sources and removes them with their sources. The
+circuit-wide files (`report.md` and its CSVs) name no school or team: a removal never touches them,
+and reaches them in the next report, as policy 1.13 says for quoted texts.
 
-So, after `--execute` has printed `DONE`, and only when the removed source's caselist has a
-landscape bundle:
+Since `v1-e32-t13`, `caselist remove` reaches the school views itself; the manual steps the PM added
+here on 2026-10-24 are gone. What to read and do, in the steps above:
 
-1. **List the bundles that could hold the removed school or team.** Read-only, dev's names:
+- **Step 4, the dry run.** Under *LANDSCAPE SCHOOL VIEWS* the plan lists, by side and key, every
+  `schools.csv` and `schools.md` of every bundle of each caselist the removal touches, on this
+  machine and in the bucket. A key is a caselist, a snapshot and a file's name, nothing else. No
+  circuit-wide file and no other caselist's bundle is ever listed. In dev and prod the bucket lines
+  say *versions not counted*: the everyday profile may list `reports/` but not its versions, and
+  `--execute` lists every version with the removal profile instead. When the caselist has no bundle
+  the section says *(none: …)*.
+- **A dry run that stops with `UNKNOWN_LANDSCAPE_FILE`.** A bundle of a caselist the removal touches
+  holds a file that is neither a school view nor a circuit-wide file, and the error names its key.
+  Nothing was planned or changed. Look at the file. A `.schools.csv.incoming` or
+  `.schools.md.incoming` is a school view an interrupted `landscape report` left half-written:
+  delete it on this machine and run the dry run again. Anything else, stop and tell the PM the key.
+- **Step 5, `--execute`.** It deletes them, every version, under the removal profile, after the
+  `raw/` and `parsed/` objects and before the records. The `DONE` line says how many of the local
+  files and bucket versions it deleted were school views. Nothing is done by hand.
+- **REPUBLISH.** The plan names the newest snapshot's bundle it takes a school view from, with the
+  `landscape report --publish` command that rebuilds it without the removed rounds. The removal
+  never republishes. After `DONE`, tell the PM the caselist and snapshot the *REPUBLISH* line names,
+  and nothing else: not the school, not the team code. The PM coordinates the republish.
+- **Step 6, `caselist status`.** A school view a removal should have deleted is *REMOVAL RESIDUE*:
+  see [Landscape school views](#landscape-school-views) below. A view written after the removal, such
+  as the republished one, is never counted.
+- **Register.** In the request's entry: how many school-view files and bucket versions the `DONE`
+  line says were deleted, and that the republish is with the PM. No key, school, team code or path.
 
-   ```bash
-   BUCKET=debate-dev-evidence-a7508de8
-   CASELIST=the-caselist-slug
-   aws s3 ls "s3://${BUCKET}/reports/landscape/${CASELIST}/" --profile debate-dev-evidence
-   DATA_DIR="$(debate-research --json config show | jq -r '.data.settings["storage.data_dir"]')"
-   ls "${DATA_DIR}/reports/landscape/${CASELIST}/" 2>/dev/null
-   ```
+**Before the first such removal in an environment**, the removal profile's grant has to be applied
+there (`v1-e32-t13`'s Terraform change to `operator_access.tf`). Without it, `--execute` stops
+`INCOMPLETE` with `STORE_ACCESS_DENIED` at the school views, after the suppression entries and the
+`raw/` and `parsed/` deletes and before anything on this machine. Running the same command again
+after the apply finishes it.
 
-2. **Stop and tell the PM** which snapshots are listed, and nothing else: not the school, not the
-   team code. The PM coordinates, as an operator block, deleting each listed bundle's
-   `schools.csv` and `schools.md` locally and in the bucket, noncurrent versions included, under
-   the removal credential, and then republishing the newest snapshot's bundle without the removed
-   rounds (`debate-research landscape report --caselist <slug> --publish`).
-3. **Record it** in the register's entry: the snapshots whose school view was deleted, and the
-   snapshot republished. No school, team code or path goes in the register.
+## The annual purge: landscape school views
+
+The data-use policy's annual purge runs each September for the season that has just aged out
+(1 August to 31 July, kept for that season and the following one), in dev and in prod, and the
+operator's local store with them. Its other steps have no runbook yet. These are the steps for the
+landscape bundles: the school views of every bundle whose snapshot falls in the purged season are
+deleted, locally and in the bucket, every version included, under the removal profile. Circuit-wide
+files are kept indefinitely (policy, "Retention") and are never deleted here.
+
+Run it in dev first, then in prod with prod's names. The first block lists and writes the delete
+requests; nothing is deleted until the second. It reads the bucket with the removal profile, which
+since `v1-e32-t13` may list versions under `reports/landscape/`, and this machine's data directory
+from `debate-research config show`, so it first refuses a shell with a `DEBATE_` override set or a
+`caselist pull` running.
+
+**Operator command** (expected runtime seconds; reads only)
+Where: your Mac, a checkout of this repository, in a shell with no `DEBATE_` variable set
+```bash
+SEASON_START=2026-08-01
+SEASON_END=2027-07-31
+aws sso login --profile debate-dev-evidence-removal
+BUCKET=$(python3 -c 'import tomllib; print(tomllib.load(open("config/profiles/dev.toml", "rb"))["storage"]["s3"]["bucket"])')
+PURGE="${TMPDIR:-/tmp}/landscape-school-view-purge"
+rm -rf "$PURGE" && mkdir -p "$PURGE"
+if env | grep -q '^DEBATE_'; then
+  echo "STOP: a DEBATE_ variable is set in this shell; open a new one"
+elif pgrep -f 'caselist pull' >/dev/null; then
+  echo "STOP: a caselist pull is running; wait for it"
+else
+  DATA_DIR="$(DEBATE_ENV=dev debate-research --json config show | jq -r '.data.settings["storage.data_dir"]')"
+  echo "bucket: $BUCKET, data directory: $DATA_DIR"
+  aws s3api list-object-versions --profile debate-dev-evidence-removal --bucket "$BUCKET" \
+    --prefix reports/landscape/ --output json > "$PURGE/versions.json"
+  python3 - "$PURGE" "$DATA_DIR" "$SEASON_START" "$SEASON_END" <<'PY'
+import json, sys
+from datetime import date
+from pathlib import Path
+
+purge, data_dir = Path(sys.argv[1]), Path(sys.argv[2])
+start, end = date.fromisoformat(sys.argv[3]), date.fromisoformat(sys.argv[4])
+views = {"schools.csv", "schools.md"}
+circuit_wide = {"report.md", "positions.csv", "top_cards.csv", "impact_cards.csv", "trends.csv"}
+
+def purged(key):
+    parts = key.removeprefix("reports/landscape/").split("/")
+    if len(parts) != 3 or parts[2] not in views | circuit_wide:
+        sys.exit(f"STOP: {key} is neither a school view nor a circuit-wide file; nothing was written")
+    return parts[2] in views and start <= date.fromisoformat(parts[1]) <= end
+
+listing = json.loads((purge / "versions.json").read_text() or "{}")
+versions = listing.get("Versions", []) + listing.get("DeleteMarkers", [])
+doomed = [{"Key": one["Key"], "VersionId": one["VersionId"]} for one in versions if purged(one["Key"])]
+root = data_dir / "reports" / "landscape"
+local = sorted(path for path in root.glob("*/*/*") if purged(path.relative_to(data_dir).as_posix())) if root.is_dir() else []
+bundles = {one["Key"].rsplit("/", 1)[0] for one in versions}
+for key in sorted({one["Key"] for one in doomed}):
+    print(f"would delete {sum(1 for one in doomed if one['Key'] == key)} version(s) of {key}")
+for path in local:
+    print(f"would delete local {path.relative_to(data_dir).as_posix()}")
+for number, first in enumerate(range(0, len(doomed), 1000), 1):
+    (purge / f"delete-{number}.json").write_text(json.dumps({"Objects": doomed[first:first + 1000], "Quiet": True}))
+(purge / "local.txt").write_text("".join(f"{path}\n" for path in local))
+print(f"{len(doomed)} bucket version(s) and {len(local)} local file(s) to delete, of {len(bundles)} bundle(s) listed in the bucket")
+PY
+fi
+```
+Success looks like one `would delete` line per key and per local file, each a `schools.csv` or
+`schools.md` of a snapshot between `SEASON_START` and `SEASON_END`, then the counts. The number of
+bundles listed is above zero wherever a landscape report was ever published: `0 bundle(s)` with
+nothing to delete means the listing found nothing at all, so check the bucket name before going on.
+`0 bucket version(s) and 0 local file(s)` with bundles listed means there is nothing of that season
+to delete. A `STOP` line means nothing was written: do not go on, and tell the PM the key it names.
+
+**Then delete.** Same shell as the dry run.
+
+**Operator command** (expected runtime seconds; deletes, and cannot be undone)
+Where: your Mac, the same shell as the dry run
+```bash
+for REQUEST in "$PURGE"/delete-*.json(N); do
+  aws s3api delete-objects --profile debate-dev-evidence-removal --bucket "$BUCKET" \
+    --delete "file://${REQUEST}" --query 'length(Errors || `[]`)' --output text
+done
+while IFS= read -r FILE; do rm -f -- "$FILE"; done < "$PURGE/local.txt"
+echo "deleted; run the dry run again"
+```
+Success looks like a `0` for each request file (no errors), then the `deleted` line. Run the dry run
+again: it prints `0 bucket version(s) and 0 local file(s) to delete` and the same number of bundles.
+Then the purged season's newest bundle of each caselist is republished, if it is still wanted, by
+the PM, as after a removal. Record the counts with the purge's others in `docs/data/`, as the
+policy asks: counts only, no key.
 
 ## Step 9 — Check nothing re-imports it
 
@@ -969,6 +1073,9 @@ some of these:
   `RM-…`, completed `<date> <time>` UTC.* The command exits 1. See
   [Versions older than a removal](#versions-older-than-a-removal) below. One line can carry both
   kinds, separated by a semicolon.
+- *REMOVAL RESIDUE in `<caselist>`: N school view file(s) and N local school view file(s) older than
+  `RM-…`, completed `<date> <time>` UTC.* (`v1-e32-t13`.) The command exits 1. See
+  [Landscape school views](#landscape-school-views) below.
 - *SUPPRESSED SOURCE OBJECTS in `<caselist>`: N current object(s) (sha256 `<twelve characters>`,
   …).* The bucket's current listing of the caselist's sources still holds a removed file
   (`v1-e30-t12`). The command exits 1. Where the residue was checked the same file is in a REMOVAL
@@ -1184,6 +1291,29 @@ the file's sha256, and the aggregates and the rewritten manifests by their time.
 
 So the clean line means what it says about `raw/`, `parsed/`, the aggregates and the manifests a
 removal rewrote, and no more. The AWS CLI check in step 6 is still there for one key.
+
+### Landscape school views
+
+A removal deletes the `schools.csv` and `schools.md` of every landscape bundle of each caselist it
+touches, here and in the bucket (`v1-e32-t13`, [Argument landscape bundles](#argument-landscape-bundles-e32)).
+So a school view of such a caselist written before the removal is one it should have taken. Status
+compares each with the latest completed removal **run** whose own scope names the caselist, by the
+same 15-minute margin, and counts it under *school view* (the bucket) or *local school view* (this
+machine). A view written after that run, such as the bundle republished without the removed rounds,
+is never counted.
+
+| What is left | How it gets there |
+|---|---|
+| A school view in the bucket or on this machine, written before the removal | A build from before `v1-e32-t13` made the removal and never reached the views; a run that stopped at them; or an older bundle copied back |
+
+**Clearing it.** Run the same removal again, exactly as above for older versions. Its plan reaches
+each caselist an earlier completed run of the request touched, but only the views written before
+that run completed, so it takes exactly what status counts and leaves a republished view alone.
+
+**What this does not see.** In the bucket it reads a plain listing of `reports/landscape/`, the
+current objects only: the everyday profile may not list versions under `reports/`. A noncurrent
+version of a school view left under a newer one is not counted; the same removal run again lists
+and deletes those with the removal profile, by the same rule.
 
 ### Not checked
 

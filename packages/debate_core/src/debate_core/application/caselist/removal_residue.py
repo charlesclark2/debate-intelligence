@@ -109,6 +109,14 @@ not looked at, not that something was found.
 * **`manifests/_suppression/`**: the list, the log, the path holds and the scopes are appended to,
   and their old versions are the record of what was asked, which no removal deletes.
 
+## Landscape school views (`v1-e32-t13`)
+
+A removal deletes the school views of each caselist it touches. Which of them are left is counted by
+:func:`~debate_core.application.caselist.removal_school_views.school_views_left`, from a plain listing
+of `reports/landscape/` (the everyday profile lists no versions under `reports/`) and this machine's
+files, against the latest completed run whose own scope names the caselist; the caller puts them in
+:attr:`CaselistResidue.school_views`. They are part of :attr:`CaselistResidue.found`.
+
 So "nothing found" means no version of a wholly removed file is left under `raw/` and `parsed/`, no
 copy a withdrawal took from a caselist that keeps no holder of it, and no aggregate or rewritten
 manifest version is older than a removal that touched its caselist, and the command says exactly
@@ -266,10 +274,23 @@ class CaselistResidue:
     withdrawn_copies: tuple[WithdrawnCopy, ...] = ()
     """Files withdrawn from this caselist, by the withdrawal record, of whose copy here something is
     left, in digest order (`v1-e30-t19`). Part of :attr:`found` since `v1-e30-t24`."""
+    school_views: tuple[OlderVersions, ...] = ()
+    """Landscape school-view files of this caselist written before :attr:`school_views_older_than`,
+    in the bucket and on this machine, by role (`v1-e32-t13`,
+    :mod:`~debate_core.application.caselist.removal_school_views`). Part of :attr:`found`."""
+    school_views_older_than: RemovalCompletion | None = None
+    """The latest completed removal run whose own scope names this caselist, which the views in
+    :attr:`school_views` are older than; it may be earlier than :attr:`older_than` (see that module's
+    docstring). `None` when no view is left."""
 
     @property
     def found(self) -> bool:
-        return bool(self.files) or bool(self.older_versions) or bool(self.withdrawn_copies)
+        return (
+            bool(self.files)
+            or bool(self.older_versions)
+            or bool(self.withdrawn_copies)
+            or bool(self.school_views)
+        )
 
     @property
     def current_objects(self) -> int | None:

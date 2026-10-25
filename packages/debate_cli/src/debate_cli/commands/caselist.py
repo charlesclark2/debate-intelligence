@@ -177,6 +177,14 @@ still in the inbox; that changes no exit code either. And the error panel no lon
 report it carries in `error.details`, which in prod on 2026-10-18 was about 1,000 lines of sha256:
 it prints the counts, one line per snapshot that differs, with digests by prefix. `--json` keeps
 every field.
+
+One since `v1-e32-t13`. Per caselist a completed removal run's own scope names, the landscape
+school-view files (`schools.csv`, `schools.md`) written before that run completed: in the bucket by a
+plain listing of `reports/landscape/`, which the everyday profile may make (it lists no versions
+there), and on this machine under `<data dir>/reports/landscape/`. They are residue, `1`, and the same
+removal run again deletes them. A view written after the run, such as the newest bundle republished
+without the removed rounds, is not counted. JSON gives them as `school_views` and
+`school_views_older_than` beside `older_versions`.
 """
 
 from __future__ import annotations
@@ -645,6 +653,8 @@ def _residue_held(report: CaselistStatusReport) -> str:
         return f"the bucket still holds versions of {files} removed file(s)"
     if any(one.older_versions for one in report.residue):
         return "the bucket still holds versions older than a removal"
+    if any(one.school_views for one in report.residue):
+        return "landscape school views older than a removal are still held"
     copies = sum(len(one.withdrawn_copies) for one in report.residue)
     return (
         f"the bucket still holds copies of {copies} file(s) withdrawn from a caselist that keeps no "
@@ -974,6 +984,15 @@ def _residue_entry(residue: CaselistResidue) -> dict[str, JsonValue]:
             "request_id": residue.older_than.request_id,
             "completed_at": _utc_stamp(residue.older_than.completed_at),
         },
+        "school_views": [{"role": one.role, "files": one.versions} for one in residue.school_views]
+        if residue.checked
+        else None,
+        "school_views_older_than": None
+        if residue.school_views_older_than is None
+        else {
+            "request_id": residue.school_views_older_than.request_id,
+            "completed_at": _utc_stamp(residue.school_views_older_than.completed_at),
+        },
     }
 
 
@@ -1001,6 +1020,12 @@ def _residue_found(residue: CaselistResidue, *, withdrawn: bool = False) -> str:
             f"{listed} older than {residue.older_than.request_id}, completed "
             f"{residue.older_than.completed_at.astimezone(UTC):%Y-%m-%d %H:%M} UTC"
         )
+    if residue.school_views and residue.school_views_older_than is not None:
+        counts = [f"{one.versions} {one.role} file(s)" for one in residue.school_views]
+        found.append(
+            f"{' and '.join(counts)} older than {residue.school_views_older_than.request_id}, completed "
+            f"{residue.school_views_older_than.completed_at.astimezone(UTC):%Y-%m-%d %H:%M} UTC"
+        )
     if withdrawn and residue.withdrawn_copies:
         found.append(_withdrawn_counts(residue))
     return f"{residue.caselist}: " + "; ".join(found)
@@ -1011,7 +1036,7 @@ def _residue_lines(report: CaselistStatusReport) -> list[str]:
     lines = [
         f"REMOVAL RESIDUE in {_residue_found(one)}."
         for one in report.residue
-        if one.files or one.older_versions
+        if one.files or one.older_versions or one.school_views
     ]
     if lines:
         lines.append("A removal left them; docs/runbooks/caselist-removal.md says what to run.")

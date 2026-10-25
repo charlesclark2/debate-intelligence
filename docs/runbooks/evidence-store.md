@@ -522,6 +522,7 @@ ones step 5 lists for that change.
 |---|---|---|
 | `v1-e29-t06`: `DebateEvidenceOperator` may list object versions under `raw/`, `parsed/`, `files/`, `manifests/` and `quarantine/` (one statement added to one inline policy) | 2026-10-08 | 2026-10-08 |
 | `v1-e31-t16`: `DebateEvidenceOperator` may get and put object tags under `parsed/` (one statement added to one inline policy), a lifecycle rule `expire-retired-parsed-version-directories` expires `parsed/` objects tagged `debate-retention=superseded`, and `remove-orphaned-parsed-delete-markers` removes the delete markers under `parsed/` with nothing behind them (two rules added) | 2026-10-17 | not applied yet |
+| `v1-e32-t13`: `DebateEvidenceRemoval` may list object versions under `reports/landscape/` and delete `schools.csv` and `schools.md` there, every version, and no other landscape file (one statement and one listing prefix added to one inline policy). Needed before the next `caselist remove --execute` in that environment ([caselist-removal.md](caselist-removal.md#argument-landscape-bundles-e32)) | not applied yet | not applied yet |
 
 ## If something is wrong
 

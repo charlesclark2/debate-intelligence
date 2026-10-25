@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from inspect import signature
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import pytest
 from tests.fixtures.caselist.build_synthetic_archives import (
@@ -229,7 +229,15 @@ class RemovalWorld:
             environment="dev",
             bucket=self.bucket_name,
             **log,
+            # The landscape bundles under reports/ are the planner's since v1-e32-t13, likewise.
+            **self._local_reports(RemovalPlanner),
         )
+
+    def _local_reports(self, built: type) -> dict[str, Any]:
+        """The data directory keyed as the bucket is, for a build whose planner and service take it."""
+        if "local_reports" not in signature(built).parameters:
+            return {}
+        return {"local_reports": FsEvidenceVersionStore(self.data_dir)}
 
     def takedown(self) -> TakedownAccess:
         """The takedown credential's reach, on moto (which does not enforce IAM: the tests that need a
@@ -257,6 +265,7 @@ class RemovalWorld:
             takedown=takedown or self.takedown,
             clock=FixedClock(REMOVAL_TIME),
             environment="dev",
+            **self._local_reports(CaselistRemovalService),
         )
 
     def tree(self) -> dict[str, bytes]:

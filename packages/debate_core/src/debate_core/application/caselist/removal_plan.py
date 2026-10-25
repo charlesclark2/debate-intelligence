@@ -149,6 +149,20 @@ caselist the removal removes or withdraws anything from, is planned for deletion
 here and in the bucket (:attr:`ObjectKind.PARSED_AGGREGATE`). They hold nothing that cannot be
 rebuilt, and the next `caselist parse` rebuilds the current directory's without what was removed.
 
+## The landscape bundles' school views (`v1-e32-t13`)
+
+Each landscape bundle, `reports/landscape/<caselist>/<snapshot>/`, holds a per-school view
+(`schools.csv`, `schools.md`) naming schools and team codes as disclosed. The plan lists every one of
+every caselist it touches (:attr:`RemovalPlan.touched_caselists`), on this machine and in the bucket
+(:attr:`RemovalPlan.school_views`), and, for a re-run, those of each caselist an earlier completed run
+of the request touched that were written before that run completed
+(:attr:`RemovalPlan.school_view_reach`). Never a circuit-wide file, never another caselist's bundle:
+:mod:`~debate_core.application.caselist.removal_school_views` says how, and `caselist status` counts
+what a removal left by the same selection. The everyday profile may list `reports/` but not its
+versions, so in dev and prod the bucket's are not counted here; the execution lists them with the
+removal profile. The plan names the newest bundle to republish (:attr:`RemovalPlan.republish`) and
+republishes nothing.
+
 ## The sync's inbox
 
 The plan also lists every file in the download inbox (`caselist pull`'s, `v1-e30-t09`) that holds
@@ -247,6 +261,13 @@ from debate_core.application.caselist.removal_path_versions import (
     path_identity,
     snapshot_date,
 )
+from debate_core.application.caselist.removal_school_views import (
+    LANDSCAPE_PREFIX,
+    SchoolViewReach,
+    bundle_of,
+    reached,
+    school_view_cutoffs,
+)
 from debate_core.application.caselist.suppression import read_held_digests, read_path_holds, read_withdrawals
 from debate_core.application.errors import DomainError, StoreAccessDenied
 from debate_core.application.ports.caselist import CaselistRepository
@@ -261,7 +282,9 @@ from debate_core.application.ports.suppression import (
     HeldDigestEntry,
     PathHoldEntry,
     ReasonCode,
+    RemovalLogEntry,
     RemovalLogWithScopes,
+    RemovalScopeEntry,
     RemovalSelectorKind,
     SuppressionAction,
     SuppressionEntry,
@@ -287,6 +310,7 @@ __all__ = [
     "RemovalPlan",
     "RemovalPlanner",
     "RemovalSelector",
+    "SchoolViewRemoval",
     "Side",
     "SourceSelector",
     "TeamSelector",
@@ -541,6 +565,22 @@ class ObjectRemoval:
 
 
 @dataclass(frozen=True, slots=True)
+class SchoolViewRemoval:
+    """One landscape school-view file a removal deletes (`v1-e32-t13`).
+
+    Its key is a caselist, a snapshot and a file's name, so the plan prints it; nothing else is kept.
+    """
+
+    key: ObjectKey
+    side: Side
+    versions: tuple[ObjectVersion, ...] | None
+    """The versions the plan saw it delete. On this machine, the file. In the bucket, every version
+    the removal reaches, or `None` where the everyday profile may not list versions under
+    `reports/`, which is the rule in dev and prod: the plan then saw the current object, and
+    `--execute` lists every version under the removal profile and deletes those the rule reaches."""
+
+
+@dataclass(frozen=True, slots=True)
 class RemovalPlan:
     """Everything a removal would do, in the order the executor does it."""
 
@@ -590,6 +630,18 @@ class RemovalPlan:
     """The noncurrent manifest versions the execution's sweep would delete, as the dry run's
     credential lists and reads them (`v1-e30-t19`); `None` where it may not, so they were not
     counted. The execution works them out again with the takedown credential."""
+    school_view_reach: tuple[SchoolViewReach, ...] = ()
+    """The caselists whose landscape school views the removal deletes, and which of them
+    (`v1-e32-t13`, :mod:`~debate_core.application.caselist.removal_school_views`): every view of a
+    caselist it touches now, and of one an earlier completed run of the request touched, the views
+    written before that run completed. The execution deletes by this, as the removal profile lists them."""
+    school_views: tuple[SchoolViewRemoval, ...] = ()
+    """The school-view files :attr:`school_view_reach` takes, on this machine and in the bucket, as the
+    dry run's credential sees them."""
+    school_view_versions_counted: bool = True
+    """Whether the bucket's school-view versions were listed. The everyday profile may list
+    `reports/` but not its versions, so in dev and prod they are not: kept apart from
+    :attr:`versions_counted`, which says the same of the evidence prefixes."""
 
     def of(self, disposition: Disposition) -> tuple[PlannedSource, ...]:
         return tuple(source for source in self.sources if source.disposition is disposition)
@@ -709,7 +761,24 @@ class RemovalPlan:
             and not any(source.local_blob for source in self.sources)
             and not self.inbox
             and self.superseded_versions == ()
+            and not self.school_views
         )
+
+    def school_views_on(self, side: Side) -> tuple[SchoolViewRemoval, ...]:
+        return tuple(planned for planned in self.school_views if planned.side is side)
+
+    @property
+    def republish(self) -> tuple[tuple[str, date], ...]:
+        """For each caselist the removal deletes school views of, its newest snapshot among them.
+
+        That bundle is to be republished without the removed rounds once the removal is done
+        (`landscape report --publish`). The removal never republishes: the PM coordinates it.
+        """
+        newest: dict[str, date] = {}
+        for planned in self.school_views:
+            caselist, snapshot = bundle_of(planned.key)
+            newest[caselist] = max(snapshot, newest.get(caselist, snapshot))
+        return tuple(sorted(newest.items()))
 
     async def swept_from(self, versions: EvidenceVersionStore) -> tuple[ObjectVersion, ...]:
         """The noncurrent manifest versions this plan's sweep deletes, as `versions` lists them.
@@ -836,6 +905,8 @@ class RemovalPlanner:
         local: This machine's manifests (and blobs, as named objects).
         local_blobs: This machine's blob tree, as the takedown sees it (one version per file).
         local_parsed: This machine's parsed-card tree (E31), likewise. Empty until E31 writes one.
+        local_reports: The data directory as the takedown sees it, keyed as the bucket is, for the
+            landscape bundles under `reports/landscape/` (`v1-e32-t13`). Required, like the inbox.
         remote: The environment's bucket through the everyday profile: listings, heads, manifests.
         remote_versions: The bucket's versions through whichever credential the composition root
             gives it; a denial means "not counted", not failure.
@@ -861,6 +932,7 @@ class RemovalPlanner:
         local: LocalEvidence,
         local_blobs: EvidenceVersionStore,
         local_parsed: EvidenceVersionStore,
+        local_reports: EvidenceVersionStore,
         remote: EvidenceObjectStore,
         remote_versions: EvidenceVersionStore,
         inbox: CaselistInbox,
@@ -874,6 +946,7 @@ class RemovalPlanner:
         self._local = local
         self._local_blobs = local_blobs
         self._local_parsed = local_parsed
+        self._local_reports = local_reports
         self._remote = remote
         self._remote_versions = remote_versions
         self._inbox = inbox
@@ -909,7 +982,8 @@ class RemovalPlanner:
         state = SuppressionState.from_entries(existing, existing_holds)
         # Where this request's earlier runs withdrew a copy from, and what they rewrote (v1-e30-t19).
         recorded = _withdrawn_by_the_request(await read_withdrawals(self._suppression), request_id)
-        earlier_rewrites = await self._earlier_rewrites(request_id)
+        log_entries, scopes = await self._removal_log.entries(), await self._removal_log.scopes()
+        earlier_rewrites = self._earlier_rewrites(log_entries, scopes, request_id)
         caselists = await self._known_caselists()
         copies = [copy for caselist in caselists for copy in await self._manifest_copies(caselist)]
 
@@ -1085,18 +1159,73 @@ class RemovalPlanner:
             path_holds=path_holds,
             earlier_rewrites=earlier_rewrites,
         )
-        return replace(plan, superseded_versions=await self._swept(plan))
+        reach = self._school_view_reach(plan, log_entries, scopes)
+        school_views, school_versions_counted = await self._school_views(reach)
+        return replace(
+            plan,
+            superseded_versions=await self._swept(plan),
+            school_view_reach=reach,
+            school_views=school_views,
+            school_view_versions_counted=school_versions_counted,
+        )
 
-    async def _earlier_rewrites(self, request_id: str) -> tuple[EarlierRewrite, ...]:
+    def _earlier_rewrites(
+        self, entries: Sequence[RemovalLogEntry], scopes: Sequence[RemovalScopeEntry], request_id: str
+    ) -> tuple[EarlierRewrite, ...]:
         """The manifests this request's earlier runs in this environment rewrote, from their scopes,
         each with its run's completion where the log says it completed (:func:`~debate_core.
         application.caselist.manifest_sweep.earlier_rewrites`)."""
-        return earlier_rewrites(
-            await self._removal_log.entries(),
-            await self._removal_log.scopes(),
-            request_id=request_id,
-            environment=self._environment,
+        return earlier_rewrites(entries, scopes, request_id=request_id, environment=self._environment)
+
+    def _school_view_reach(
+        self, plan: RemovalPlan, entries: Sequence[RemovalLogEntry], scopes: Sequence[RemovalScopeEntry]
+    ) -> tuple[SchoolViewReach, ...]:
+        """Every caselist the plan touches, whole; and each an earlier completed run of the request
+        touched, up to that run's completion (`v1-e32-t13`). OpenEv has no landscape bundle."""
+        now = sorted(caselist for caselist in plan.touched_caselists if caselist != OPENEV)
+        earlier = school_view_cutoffs(entries, scopes, self._environment, request_id=plan.request_id)
+        return (
+            *(SchoolViewReach(caselist) for caselist in now),
+            *(
+                SchoolViewReach(caselist, older_than=completion)
+                for caselist, completion in sorted(earlier.items())
+                if caselist not in now and caselist != OPENEV
+            ),
         )
+
+    async def _school_views(
+        self, reach: Sequence[SchoolViewReach]
+    ) -> tuple[tuple[SchoolViewRemoval, ...], bool]:
+        """The school-view files `reach` takes, here and in the bucket, and whether the bucket's
+        versions could be listed. One listing of every bundle on each side, read through
+        :func:`~debate_core.application.caselist.removal_school_views.reached`, which is the
+        selection the execution and `caselist status` use too."""
+        if not reach:
+            return (), True
+        found = [
+            SchoolViewRemoval(key=version.key, side=Side.LOCAL, versions=(version,))
+            for version in await self._local_reports.list_versions(LANDSCAPE_PREFIX)
+            if reached(version.key, version.last_modified, reach)
+        ]
+        try:
+            listed = await self._remote_versions.list_versions(LANDSCAPE_PREFIX)
+        except StoreAccessDenied:
+            # The everyday profile may list reports/ but not its versions: the current objects, dated.
+            found += [
+                SchoolViewRemoval(key=info.key, side=Side.BUCKET, versions=None)
+                for info in await self._remote.list_objects(LANDSCAPE_PREFIX)
+                if reached(info.key, info.last_modified, reach)
+            ]
+            return tuple(found), False
+        by_key: dict[str, list[ObjectVersion]] = {}
+        for version in listed:
+            if reached(version.key, version.last_modified, reach):
+                by_key.setdefault(version.key, []).append(version)
+        found += [
+            SchoolViewRemoval(key=key, side=Side.BUCKET, versions=tuple(versions))
+            for key, versions in sorted(by_key.items())
+        ]
+        return tuple(found), True
 
     async def _swept(self, plan: RemovalPlan) -> tuple[ObjectVersion, ...] | None:
         """What the execution's sweep would delete, as the everyday credential sees it; `None` where

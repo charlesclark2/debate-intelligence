@@ -45,6 +45,20 @@ spec:
     - kind: TaskRef
       name: v1-e32-t04-trend-and-school-views
       relation: dependsOn
+  # PM rulings, 2026-10-24, on the session's four questions (session report, "Relay for the PM"):
+  # 1. Run lock (A): no change. remove --execute already holds the run lock (v1-e40-t04); local mode
+  #    stays without a lease.
+  # 2. ac3 (A): the removal credential's listing of reports/landscape/ is accepted, on condition that
+  #    s3:DeleteObject and s3:DeleteObjectVersion are granted only on reports/landscape/*/schools.csv
+  #    and reports/landscape/*/schools.md, pinned by a Terraform test that a mutant widening a delete
+  #    to reports/landscape/*, or adding a circuit-wide file name, fails. The report lists the plan
+  #    resources expected to change.
+  # 3. Annual purge (A) now: the school-view purge steps stay their own section in
+  #    caselist-removal.md. The PM files the purge-runbook task (B) in a PM batch.
+  # 4. Status sees current school views only (A), on condition that after deleting, --execute lists
+  #    versions again under the removal credential and confirms no version or delete marker of the
+  #    removed caselist's school views remains; an existing test is cited, or one is added, shown
+  #    failing first.
   acceptanceCriteria:
     - id: ac1
       description: >-
@@ -63,7 +77,7 @@ spec:
         else new, by Terraform test; the removal runbook's manual landscape section is
         replaced, and the annual purge's steps cover school views.
 status:
-  phase: Pending
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

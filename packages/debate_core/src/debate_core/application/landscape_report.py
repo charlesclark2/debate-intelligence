@@ -75,6 +75,7 @@ from typing import Final
 
 from debate_core.application.caselist.publish_plan import source_key
 from debate_core.application.errors import DomainError
+from debate_core.application.landscape_bundle_files import CIRCUIT_WIDE_FILES, SCHOOL_VIEW_FILES
 from debate_core.application.landscape_counts import (
     AFF_SIDE,
     LANDSCAPE_SIDE,
@@ -165,11 +166,6 @@ __all__ = [
     "round_id",
 ]
 
-CIRCUIT_WIDE_FILES: Final = ("report.md", "positions.csv", "top_cards.csv", "impact_cards.csv", "trends.csv")
-"""The bundle's files that name no school, team or debater: the circuit-wide report and its trends."""
-
-SCHOOL_VIEW_FILES: Final = ("schools.csv", "schools.md")
-"""The bundle's per-school view (`v1-e32-t04`): school and team code as disclosed, never more."""
 
 _SIDE_ORDER: Final = {PositionSide.AFF: 0, PositionSide.NEG: 1, PositionSide.BOTH: 2}
 _KIND_ORDER: Final = {kind: index for index, kind in enumerate(PositionKind)}

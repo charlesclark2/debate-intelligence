@@ -10,7 +10,9 @@
 #   EvidenceRemoval  - takedowns only: delete objects and their noncurrent versions under the five
 #                      prefixes that hold disclosed material, and under reports/tub/search/, the
 #                      student search pilot's index versions, which hold card text (v1-e39-t07);
-#                      append to the suppression list. Assigned to one accountable person.
+#                      delete the landscape bundles' school views, schools.csv and schools.md,
+#                      which name schools and team codes (v1-e32-t13); append to the suppression
+#                      list. Assigned to one accountable person.
 #
 # Why two sets rather than one that can do everything: a removal under
 # docs/policies/caselist-data-use.md is irreversible — the noncurrent versions go too, so there is
@@ -87,9 +89,24 @@ locals {
   # under reports/ gains a delete. docs/architecture/evidence-store-layout.md says the same.
   removable_index_prefix = "reports/tub/search/"
 
+  # The landscape bundles' per-school views (v1-e32-t13): `reports/landscape/<caselist>/<snapshot>/`
+  # holds schools.csv and schools.md, naming schools and team codes as disclosed, beside circuit-wide
+  # files that name none. The data-use policy removes a per-school view with its sources, so a
+  # takedown lists every bundle's versions and deletes those two files, noncurrent versions included,
+  # and nothing else of a bundle. The names are v1-e32-t04's SCHOOL_VIEW_FILES (debate_core's
+  # landscape_bundle_files.py); a test there reads this list and fails if the two part ways. An ARN's
+  # `*` crosses `/`, so each matches the file in every caselist's every snapshot and nothing that
+  # merely ends like it. On the takedown credential only, like removable_index_prefix.
+  landscape_prefix  = "reports/landscape/"
+  school_view_files = ["schools.csv", "schools.md"]
+  school_view_arns = [
+    for name in local.school_view_files : "${aws_s3_bucket.evidence.arn}/${local.landscape_prefix}*/${name}"
+  ]
+
   removal_list_prefix_conditions = concat(
     local.removable_list_prefix_conditions,
     [local.removable_index_prefix, "${local.removable_index_prefix}*"],
+    [local.landscape_prefix, "${local.landscape_prefix}*"],
   )
 
   # manifests/_suppression/suppression-list.jsonl and removal-log.jsonl (v1-e30-t07). Appending to
@@ -208,6 +225,19 @@ locals {
           "s3:DeleteObjectVersion",
         ]
         Resource = "${aws_s3_bucket.evidence.arn}/${local.removable_index_prefix}*"
+      },
+      {
+        # A removal's school views (v1-e32-t13): the two per-school files of every landscape bundle,
+        # and no circuit-wide file. Delete only: listing them is the statement above, and reading or
+        # writing them is the everyday credential's (`landscape report --publish`). A statement of its
+        # own, so the delete-scoping tests can name exactly which part of reports/ it reaches.
+        Sid    = "DeleteLandscapeSchoolViews"
+        Effect = "Allow"
+        Action = [
+          "s3:DeleteObject",
+          "s3:DeleteObjectVersion",
+        ]
+        Resource = local.school_view_arns
       },
       {
         Sid    = "MaintainSuppressionList"

@@ -164,7 +164,7 @@ class S3EvidenceObjectStore:
                         # entry missing either is not something a sync could transfer, so it is left
                         # out of the listing rather than turned into an ObjectInfo that lies.
                         continue
-                    found.append(ObjectInfo(key=key, size=size))
+                    found.append(ObjectInfo(key=key, size=size, last_modified=stored.get("LastModified")))
         return tuple(sorted(found, key=lambda info: info.key))
 
     def _head_or_raise(self, key: ObjectKey) -> ObjectInfo:

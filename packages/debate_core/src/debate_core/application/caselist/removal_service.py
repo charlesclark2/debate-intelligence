@@ -39,13 +39,16 @@ own (`v1-e29-t09`); `docs/runbooks/caselist-removal.md` says when one is still r
    before them, beside the list too, the caselist each withdrawn copy is taken from (`v1-e30-t16`),
    so no suppressed disclosure is on a copy without its caselist beside it.
 2. **The bucket**: every version of every `raw/` and `parsed/` object, listed again with the
-   takedown credential so nothing the dry run could not see is missed; then each rewritten
-   manifest, written and every superseded version of it purged; then the sweep
+   takedown credential so nothing the dry run could not see is missed; then every version of each
+   landscape school view the plan reaches (`v1-e32-t13`), listed the same way and chosen by the
+   selection the plan used (:mod:`~debate_core.application.caselist.removal_school_views`); then
+   each rewritten manifest, written and every superseded version of it purged; then the sweep
    (:mod:`~debate_core.application.caselist.manifest_sweep`): every noncurrent version of any other
    manifest of the same caselists that still names what was removed, and of each manifest an
    earlier run of the same request rewrote, every version older than that rewrite (`v1-e30-t19`).
    The dry run counted the same sweep with the everyday credential.
-3. **This machine**: blobs and parsed files, then manifests, then the sync's download inbox
+3. **This machine**: blobs and parsed files, then the school views under `reports/landscape/`, then
+   manifests, then the sync's download inbox
    (`v1-e30-t09`: removed camp files and imported archives deleted, archives still waiting to be
    imported rewritten without the removed files; see
    :mod:`~debate_core.application.caselist.inbox_purge`), then — last — the records. The records
@@ -62,8 +65,14 @@ own (`v1-e29-t09`); `docs/runbooks/caselist-removal.md` says when one is still r
 
 Anything under `manifests/_suppression/` but the preflight's probes, its own and those earlier
 preflights left (:func:`refuse_protected_versions`): the suppression list and the removal log are
-append-only and their versions are the record of what was asked. And nothing under `reports/`,
-which IAM would refuse anyway.
+append-only and their versions are the record of what was asked. And nothing under `reports/` but
+the landscape bundles' school views (`v1-e32-t13`), which is all the removal profile may delete
+there besides the search pilot's superseded index versions: never a circuit-wide landscape file,
+another caselist's bundle, or the run-state bundle.
+
+The bundle the removal took school views from is not republished here. The plan names the newest
+snapshot's (:attr:`~debate_core.application.caselist.removal_plan.RemovalPlan.republish`), and the PM
+coordinates `landscape report --publish` once the removal is done.
 """
 
 from __future__ import annotations
@@ -89,6 +98,7 @@ from debate_core.application.caselist.removal_plan import (
     RemovalSelector,
     Side,
 )
+from debate_core.application.caselist.removal_school_views import LANDSCAPE_PREFIX, reached
 from debate_core.application.caselist.run_state import RUN_STATE_BUNDLE_KEY
 from debate_core.application.caselist.suppression import (
     REMOVAL_LOG_KEY,
@@ -139,6 +149,7 @@ __all__ = [
     "RemovalReport",
     "RemovalRunState",
     "RunStateBundleNotRewritten",
+    "SchoolViewsLeft",
     "TakedownAccess",
     "TakedownNotConfigured",
     "TakedownPreflightFailed",
@@ -513,6 +524,8 @@ class _Counts:
     manifests_rewritten: int = 0
     manifest_rows_dropped: int = 0
     s3_versions_deleted: int = 0
+    school_view_files_deleted: int = 0
+    school_view_versions_deleted: int = 0
     inbox: InboxPurge = field(default_factory=InboxPurge)
     rewrites: list[ManifestRewriteRecord] = field(default_factory=lambda: [])
     """Each manifest rewritten in the bucket so far, with the version its rewrite is."""
@@ -535,6 +548,11 @@ class RemovalReport:
     """Versions earlier preflights left under :data:`PREFLIGHT_PREFIX` that this run's preflight
     could not delete (`v1-e29-t09`). Counted in the command's output, and removed by hand; never a
     failure. Empty when the preflight ran in an earlier call of the same service."""
+    school_view_files_deleted: int = 0
+    """Of :attr:`local_files_deleted`, the landscape school-view files (`v1-e32-t13`). For the
+    command's output only: a removal-log line's keys are pinned, so the log counts them with the rest."""
+    school_view_versions_deleted: int = 0
+    """Of :attr:`s3_versions_deleted`, the versions of landscape school-view files."""
 
     @property
     def completed(self) -> bool:
@@ -607,6 +625,21 @@ async def on_the_working_copy[T](run_state: RemovalRunState | None, work: Callab
     return await work()
 
 
+class SchoolViewsLeft(DomainError):
+    """After deleting, the removal credential still lists versions of school views the removal reached.
+
+    A delete the store answered and did not carry out, or a view written again while the removal
+    ran. The run stops `INCOMPLETE`; running the same removal again takes them. Counts only: no key.
+    """
+
+    def __init__(self, versions: int) -> None:
+        self.versions = versions
+        super().__init__(
+            f"{versions} version(s) or delete marker(s) of landscape school views this removal reached "
+            "are still in the bucket after it deleted them; run the same removal again"
+        )
+
+
 class RunStateBundleNotRewritten(DomainError):
     """The removal's rewrite of the run-state bundle was not confirmed in the bucket: nothing of it purged."""
 
@@ -631,6 +664,8 @@ class CaselistRemovalService:
     local: LocalEvidence
     local_blobs: EvidenceVersionStore
     local_parsed: EvidenceVersionStore
+    local_reports: EvidenceVersionStore
+    """The data directory, keyed as the bucket is, for the landscape bundles' school views (`v1-e32-t13`)."""
     inbox: CaselistInbox
     """The sync's download inbox in this environment. Required, so no removal can forget it."""
     remote: EvidenceObjectStore
@@ -719,9 +754,11 @@ class CaselistRemovalService:
             await suppression.append_path_holds(plan.path_holds)
             suppressed = True
             await self._delete_bucket_objects(plan, access, counts)
+            await self._delete_bucket_school_views(plan, access, counts)
             await self._rewrite_bucket_manifests(plan, access, counts)
             await self._sweep_superseded_manifests(plan, access, counts)
             await self._delete_local_files(plan, counts)
+            await self._delete_local_school_views(plan, counts)
             await self._rewrite_local_manifests(plan, counts)
             await self._purge_inbox(plan, counts)
             await self._delete_records(plan, counts)
@@ -753,6 +790,8 @@ class CaselistRemovalService:
             inbox_files_deleted=counts.inbox.deleted,
             inbox_files_rewritten=counts.inbox.rewritten,
             preflight_probes_left=probes_left,
+            school_view_files_deleted=counts.school_view_files_deleted,
+            school_view_versions_deleted=counts.school_view_versions_deleted,
         )
         if failure is not None:
             raise RemovalIncomplete(report, failure, suppressed=suppressed, unlogged=unlogged) from failure
@@ -773,6 +812,40 @@ class CaselistRemovalService:
             )
             refuse_protected_versions(versions)
             counts.s3_versions_deleted += await access.versions.delete_versions(versions)
+
+    async def _delete_bucket_school_views(
+        self, plan: RemovalPlan, access: TakedownAccess, counts: _Counts
+    ) -> None:
+        """Every version of every landscape school view the plan reaches, as the takedown lists them now.
+
+        One listing of every bundle, read through the plan's own selection, so a version the dry run
+        could not see (the everyday profile lists no versions under `reports/`) is taken by the same
+        rule as the current object it saw. Counted with the other bucket versions; the log holds counts.
+
+        Then it lists them again, and a version or delete marker the rule still reaches is
+        :class:`SchoolViewsLeft` (the PM's ruling 4 of 2026-10-24): `caselist status` sees only the
+        current school views, so this is the check that none of their versions survived.
+        """
+        if not plan.school_view_reach:
+            return
+        doomed = await self._school_view_versions(plan, access)
+        refuse_protected_versions(doomed)
+        if doomed:
+            deleted = await access.versions.delete_versions(doomed)
+            counts.s3_versions_deleted += deleted
+            counts.school_view_versions_deleted += deleted
+        left = await self._school_view_versions(plan, access)
+        if left:
+            raise SchoolViewsLeft(len(left))
+
+    @staticmethod
+    async def _school_view_versions(plan: RemovalPlan, access: TakedownAccess) -> tuple[ObjectVersion, ...]:
+        """Every version and delete marker under `reports/landscape/` the plan's reach takes."""
+        return tuple(
+            version
+            for version in await access.versions.list_versions(LANDSCAPE_PREFIX)
+            if reached(version.key, version.last_modified, plan.school_view_reach)
+        )
 
     async def _rewrite_bucket_manifests(
         self, plan: RemovalPlan, access: TakedownAccess, counts: _Counts
@@ -813,6 +886,19 @@ class CaselistRemovalService:
                 version for version in await store.list_versions(planned.key) if version.key == planned.key
             )
             counts.local_files_deleted += await store.delete_versions(versions)
+
+    async def _delete_local_school_views(self, plan: RemovalPlan, counts: _Counts) -> None:
+        """This machine's landscape school views the plan reaches, by the same selection."""
+        if not plan.school_view_reach:
+            return
+        doomed = tuple(
+            version
+            for version in await self.local_reports.list_versions(LANDSCAPE_PREFIX)
+            if reached(version.key, version.last_modified, plan.school_view_reach)
+        )
+        deleted = await self.local_reports.delete_versions(doomed)
+        counts.local_files_deleted += deleted
+        counts.school_view_files_deleted += deleted
 
     async def _rewrite_local_manifests(self, plan: RemovalPlan, counts: _Counts) -> None:
         for rewrite in plan.manifests_on(Side.LOCAL):

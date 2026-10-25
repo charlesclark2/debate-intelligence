@@ -60,15 +60,15 @@ v2.3's extension work.
 
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
-| [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 48 | 44 | 238 |
+| [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 49 | 44 | 240 |
 | [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 104 | 82 | 489 |
-| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 30 | 16 | 216 |
+| [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 30 | 17 | 216 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 13 | 2 | 108 |
 | [v1.4](plan_specs/releases/v1.4.yaml) | Federated research from the CLI | 2 | 16 | 7 | 98 |
 | [v1.5](plan_specs/releases/v1.5.yaml) | V1 quality gate & team pilot | 1 | 7 | 0 | 66 |
 | [v1.6](plan_specs/releases/v1.6.yaml) | Public team website | 3 | 22 | 13 | 154 |
 | [v1.7](plan_specs/releases/v1.7.yaml) | Team evidence search pilot | 1 | 16 | 12 | 66 |
-| [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 1 | 6 | 1 | 20 |
+| [v1.8](plan_specs/releases/v1.8.yaml) | Weekly caselist run in the cloud | 1 | 7 | 1 | 21 |
 | [v2.0](plan_specs/releases/v2.0.yaml) | Cloud platform foundation | 3 | 17 | 0 | 164 |
 | [v2.1](plan_specs/releases/v2.1.yaml) | Web app, debate tub & async jobs | 3 | 18 | 0 | 198 |
 | [v2.2](plan_specs/releases/v2.2.yaml) | Research workspace | 2 | 12 | 0 | 117 |
@@ -128,6 +128,7 @@ Repo, tooling, CI, promotion flow, task tooling, domain core, and deterministic 
 | [When a newer build wrote the database or added a setting, the error says so](plan_specs/v1/e01-repo-foundation/t33-newer-build-messages.yaml) `v1-e01-t33-newer-build-messages` | Pending | 0 | 2.0 |
 | [validate-dev is green again, and a red one is seen](plan_specs/v1/e01-repo-foundation/t34-validate-dev-green-again.yaml) `v1-e01-t34-validate-dev-green-again` | InProgress | 1 | 3.0 |
 | [CI's pyright covers tests/architecture and tests/smoke](plan_specs/v1/e01-repo-foundation/t35-pyright-scope-tests.yaml) `v1-e01-t35-pyright-scope-tests` | Pending | 1 | 1.0 |
+| [A dev pre-release for a commit dev has moved past with a workflow change is reported superseded, not failed](plan_specs/v1/e01-repo-foundation/t36-prerelease-superseded-commit.yaml) `v1-e01-t36-prerelease-superseded-commit` | Pending | 1 | 2.0 |
 
 #### [E02 — Domain Core: Entities, Ports & Local Persistence](plan_specs/v1/e02-domain-core/epic.yaml)
 
@@ -308,7 +309,7 @@ Weekly argument-landscape reports show which positions are being read and with w
 | [Position classification](plan_specs/v1/e32-argument-landscape/t02-position-classification.yaml) `v1-e32-t02-position-classification` | Succeeded | 2 | 8.5 |
 | [Weekly landscape report](plan_specs/v1/e32-argument-landscape/t03-landscape-report.yaml) `v1-e32-t03-landscape-report` | Succeeded | 4 | 12.0 |
 | [Trends and per-school views](plan_specs/v1/e32-argument-landscape/t04-trend-and-school-views.yaml) `v1-e32-t04-trend-and-school-views` | Succeeded | 1 | 9.0 |
-| [`debate-research landscape` command](plan_specs/v1/e32-argument-landscape/t05-landscape-cli.yaml) `v1-e32-t05-landscape-cli` | InProgress | 2 | 10.0 |
+| [`debate-research landscape` command](plan_specs/v1/e32-argument-landscape/t05-landscape-cli.yaml) `v1-e32-t05-landscape-cli` | Succeeded | 2 | 10.0 |
 | [LD de-extinction position taxonomy](plan_specs/v1/e32-argument-landscape/t06-ld-de-extinction-taxonomy.yaml) `v1-e32-t06-ld-de-extinction-taxonomy` | Pending | 1 | 3.0 |
 | [Model classification of what headings cannot place](plan_specs/v1/e32-argument-landscape/t07-model-classification-stage.yaml) `v1-e32-t07-model-classification-stage` | Pending | 3 | 8.0 |
 | [A released position id is never deleted or reused](plan_specs/v1/e32-argument-landscape/t08-released-position-ids.yaml) `v1-e32-t08-released-position-ids` | Succeeded | 1 | 3.0 |
@@ -490,6 +491,7 @@ The weekly caselist run (pull, import, publish, parse, search index) runs in the
 | [A cloud run keeps its state in the evidence bucket](plan_specs/v1/e40-cloud-caselist-run/t04-run-state-on-s3.yaml) `v1-e40-t04-run-state-on-s3` | Pending | 1 | 5.0 |
 | [A failed or late cloud run emails the coach](plan_specs/v1/e40-cloud-caselist-run/t05-run-alerts.yaml) `v1-e40-t05-run-alerts` | Pending | 1 | 2.0 |
 | [Cut over: the cloud run takes the schedule and the Mac stops](plan_specs/v1/e40-cloud-caselist-run/t06-cutover.yaml) `v1-e40-t06-cutover` | Pending | 4 | 2.0 |
+| [The evidence bucket itself refuses an unconditional write of the run lock](plan_specs/v1/e40-cloud-caselist-run/t07-lock-writes-conditional-at-the-bucket.yaml) `v1-e40-t07-lock-writes-conditional-at-the-bucket` | Pending | 1 | 1.0 |
 
 
 ## V2

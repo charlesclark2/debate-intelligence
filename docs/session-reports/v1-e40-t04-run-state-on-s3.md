@@ -6,36 +6,313 @@
 | Spec | [`plan_specs/v1/e40-cloud-caselist-run/t04-run-state-on-s3.yaml`](../../plan_specs/v1/e40-cloud-caselist-run/t04-run-state-on-s3.yaml) |
 | Epic / release | `v1-e40-cloud-caselist-run` / `v1.8` |
 | Branch | `task/v1-e40-t04-run-state-on-s3` |
-| Session status | IN PROGRESS: stopped for the PM's ruling on the plan <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | COMPLETE, for the PM's review. The Goal stays `InProgress`: the Terraform change merges `--partial`, as the PM ruled <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
-The PM asked for a plan before any code, then a stop (PM context, 2026-10-24). This report holds
-that plan. No code, test or Terraform has changed yet. The plan is under
-[Plan for the PM's ruling](#plan-for-the-pms-ruling) and the questions are in one paste-ready block
-under [Questions for the PM](#questions-for-the-pm).
+Bucket mode is built, as the plan the PM accepted on 2026-10-24 describes it. With
+`caselist.run_state = "bucket"`, a run restores a working copy from the evidence bucket, saves its
+state back, and holds the bucket's run lock while it writes. Only the cloud run sets bucket mode
+until `v1-e40-t06`. The pieces:
 
-Three findings the PM should read first:
+* **The lock** is `reports/sync/run-lock.json`, changed only by S3 conditional writes, with a
+  30-minute lease renewed every 5 minutes. Every write of a named object waits for a renewal that
+  started after it asked, and writers waiting together share one.
+* **The fence** is one hook on every S3 client a bucket-mode command builds. It asks the lease before
+  each write, so a command that forgot the lock is refused rather than writing unfenced.
+* **Every bucket-writing command takes the lock**, the two the PM added (`caselist retire
+  --bucket`, `landscape report --publish`) included. A test classifies every registered command,
+  so a new one cannot slip past.
+* **Local mode** refuses a bucket that holds a lock object (ruling 3(a)), and with no lock object
+  nothing changes.
+* **The restore** is one-way and checked against the publisher's SHA-256. It refuses a bundle
+  holding a manifest the publisher withholds, using the publisher's own rule. It fetches raw sources
+  only as the parse needs them, and restores no gzip of the index.
+* **The save** writes each state file as it is written: the download ledger before each download,
+  and a removed file as an empty object. It saves the bundle only when every manifest is confirmed
+  and none is withheld.
+* **SIGTERM** records `RUN_TERMINATED`, saves what ADR-0020 (3) allows and releases the lock.
+* **`caselist seed-run-state`** is built and tested, and never run here.
+* **A removal** in bucket mode plans on a restored copy under the lock, rewrites the bundle, and
+  purges its old versions with the takedown credential only after the rewrite is confirmed.
+* **`store sync`** skips `manifests/_run-state/`.
+* **Terraform:** the run task gains `DEBATE_CASELIST__RUN_STATE=bucket`, and a new test run,
+  `the_run_role_never_deletes`, checks the role's policies.
 
-1. **No principal needs a new IAM grant.** The run role and the operator get everything bucket mode
-   does from the EvidenceOperator document they share: the lock's conditional writes, the state
-   files, the bundle, the parsed-store restore and the raw fetch. The removal credential's purge of
-   the bundle's noncurrent versions is already inside its `manifests/` grants, and the removal
-   writes the bundle and the lock through the everyday profile, as it writes rewritten manifests
-   today. So nothing goes into `operator_policy_json`, and the run role gets no inline policy.
-2. **The run's task definition does not set bucket mode.** `DEBATE_CASELIST__RUN_STATE=bucket` has
-   to go into `infrastructure/modules/caselist_run/run_task.tf`, which is outside this task's
-   `constraints.packages` (only the module's `tests/` is in). Question 1.
-3. **Two bucket-writing commands are missing from ADR-0020 (4)'s list:** `caselist retire --bucket`
-   (it writes object tags) and `landscape report --publish`. The spec's forbidden list covers every
-   command that writes a bucket, so the plan gives both the lock. Question 2.
+All four acceptance criteria pass by test, and ac4's two halves were shown red first. 21 mutants
+were all caught; the one that first survived was the reason for a new test.
 
-The run-state bundle measures **9,882,693 bytes gzipped** (61.5 MB raw). Restoring today's state is
-dominated by the parsed store's 9.14 GB in 15,344 objects. Its local cost is small: hashing every
-file took 12.7 s on the Mac and decompressing the bundle 0.74 s. The transfer time needs AWS, so it
-is an estimate here (see [Measurements](#measurements-read-only-on-the-operators-mac-2026-10-24)).
+Three things the PM should read first:
 
-## Plan for the PM's ruling
+1. **The bundle's database copy is `VACUUM INTO`, not an online backup** (a change from the plan). I
+   checked on this Mac that SQLite keeps a deleted row in the file's free pages, and an online
+   backup copies them. So a removal's rewritten bundle would still have held the removed rows.
+   `VACUUM INTO` writes a compacted copy without them, and ac4's test checks the removed file's
+   digest is in no byte of the remaining bundle version.
+2. **A run killed after its publish stage leaves that week's parse late**, never lost, exactly as a
+   Mac run does. The bundle saved after the publish records the week as imported. The next run finds
+   nothing new, and the parse stage parses only what its own run imported. The week is parsed by
+   the next pull that imports into the caselist, or by `caselist parse --publish` by hand. ac2's
+   tests show both halves. A "parse owed" marker would close it; it is listed as follow-up work.
+3. **Phase.** All four criteria pass, but the PM ruled that a Terraform change merges `--partial`,
+   with the plan read and the apply after the seed. So the phase stays `InProgress`, and the PM
+   decides when it becomes `Succeeded`.
+
+As the PM asked me to say: a `RUN_LOCK_LOST` run reads stale under `v1-e34-t32`'s rule until the
+record of the run that took over lands. A `SIGTERM`'d run's failed record (`RunTerminated`) also
+reads stale until a later run's record lands. Both are as they should be.
+
+## PM rulings on the plan (2026-10-24), and where each is
+
+| Ruling | Where |
+|---|---|
+| 1. Packages gain `infrastructure/modules/caselist_run`; the one environment line and its assertion; `--partial` | Spec comment and `packages` (896bd82); `run_task.tf` and the run task test's environment map (f8fb163) |
+| 2. `caselist retire --bucket` and `landscape report --publish` take the lock | `caselist_retire._execute`, `landscape.report` (091fb2d); tests in `bucket_mode/test_bucket_mode_lock.py` and `test_landscape_command.py` |
+| 3(a). Local mode refuses a seeded bucket | `BucketWriteGuard.refuse_a_seeded_bucket`; `BucketKeepsRunState` keeps a pull's record local |
+| 3(b). The seed is t06's cutover step; t03's step 8 follows | `docs/runbooks/caselist-cloud-run.md` step 8: the agent check, the seed's dry run, the seed, the bucket-mode apply, then the run by hand |
+| 4. `caselist seed-run-state` as named | `commands/caselist_seed.py`, `run_state_seed.py` |
+| 5. Shared renewals, and a test that a write arriving during an in-flight renewal waits for the next | `BucketRunLock.renew`; `test_a_write_that_arrives_during_an_in_flight_renewal_waits_for_the_next_one` |
+| 6. No gzip restore; a manifest-only directory never published from; a changed digest rebuilds; both tested | `search_index_refresh.RESTORED_INDEX_MARKER`; three tests in `test_search_index_stage.py`, two in `bucket_mode/test_bucket_mode_restore.py` |
+| 7. No restore timing now | The first bucket-mode run's details carry `bucket_run.restore`; step 8's last block reads it |
+| The bucket-policy deny is the evidence bucket module's, filed by the PM | Not built (filed on dev as `v1-e40-t07`) |
+| Mutants as listed, plus the local-mode refusal | [Mutants](#mutants) |
+
+## Plan nodes
+
+| Node | Status | Notes |
+|---|---|---|
+| `state` — Run state on S3 | Done | Built in the plan's order: setting, lock, fence, commands, restore, save, SIGTERM, seed, removal, store sync and layout, Terraform, runbooks, mutants, checks |
+
+## Acceptance criteria
+
+| Criterion | Status | Evidence (command → result) |
+|---|---|---|
+| ac1 — a run on an empty data directory restores from a stubbed bucket and produces the same parse and index as a run on a full one | PASS | `pytest packages/debate_cli/tests/bucket_mode/test_bucket_mode_restore.py` → `7 passed`. Two copies of one seeded moto bucket: week 3 pulled on the Mac's full directory against one, on an empty directory against the other. Equal `parse` counts, equal parsed-store file digests, byte-equal published index manifests, equal evidence key by key. A second test does it where the bucket holds no parsed store (a full parse from `raw/`, 7 sources). Also tested: a changed parsed file stops the restore (`BLOB_INTEGRITY_ERROR`); a withheld manifest is never restored, in the publisher's words; an unchanged store is not rebuilt and its restored index holds the manifest alone; `tub index publish --newest` refuses a restored directory; the saved state files and bundle are the run's own |
+| ac2 — a run killed at each stage leaves the bucket readable by the next run | PASS | `pytest packages/debate_cli/tests/bucket_mode/test_bucket_mode_kills.py` → `21 passed`. A hard kill at the start of each of 8 stages, after the 1st, 2nd, 4th, 8th, 12th, 16th and 20th bucket write, and at the very end; a real SIGTERM at 5 stages. After each, a fresh run on an empty directory (36 minutes later after a hard kill) takes over and finishes. The bucket then equals what an uninterrupted run leaves on a copy, key by key and ETag by ETag, but for the late parse in finding 2, which the by-hand catch-up closes in the same test. A SIGTERM'd run records `failed`/`RunTerminated` locally and in the bucket, saves its state files and releases the lock |
+| ac3 — a second runner refused while live; an expired lease taken over and said; a runner whose lease was taken writes nothing more and ends `RUN_LOCK_LOST`; every bucket-writing command takes the lock | PASS | `pytest packages/debate_core/tests/application/test_caselist_sync_run_lock.py` → `18 passed` (moto, conditional writes): refusal, takeover and its message, the skew margin, wrong home, an unreadable lock, the first-writer race, lost lease, release without delete, shared renewals, the 403 listing rule, the fence on a real client. `pytest packages/debate_cli/tests/bucket_mode/test_bucket_mode_lock.py` → `26 passed`: the same at the command, with the bucket unchanged byte for byte for a refused runner; `RUN_LOCK_LOST` with nothing written after the takeover, and with nothing left to write; no lock object never started on; each of 8 commands takes and releases the lock and is refused under another's lease; every registered command classified; local mode's refusal and its no-lock case. `test_landscape_command.py` → `19 passed`, its 2 new tests for `landscape report --publish` |
+| ac4 — a removal leaves no noncurrent version of the bundle holding the removed rows and purges only after its rewrite is confirmed; the run role's policy has no `s3:DeleteObject`/`s3:DeleteObjectVersion`; both shown failing first | PASS | Removal: `pytest packages/debate_cli/tests/bucket_mode/test_bucket_mode_removal.py` → `4 passed`, after its red run (below). Terraform: `terraform test` in `infrastructure/modules/caselist_run` → `Success! 27 passed, 0 failed.`, `run "the_run_role_never_deletes"... pass`, after its red run against four mutated policies (below) |
+| Node `state`: `uv run pytest packages/debate_core/tests/application -k caselist_sync` | PASS | `219 passed in 8.54s` |
+
+### The red runs (ac4)
+
+**The removal half**, against the removal before its bundle step: the tests at 865db31 (b4a2511
+before the sync onto `dev` at `cd56754`), on the code of the commit before it.
+`perl -e 'alarm 115; exec @ARGV' .venv/bin/python -m pytest -q -p no:randomly -n 0 packages/debate_cli/tests/bucket_mode/test_bucket_mode_removal.py`:
+
+```text
+FAILED test_bucket_mode_removal.py::test_a_removal_leaves_one_version_of_the_bundle_and_it_does_not_hold_the_removed_file
+  AssertionError: every noncurrent version purged, and no delete marker left; assert 3 == 1
+FAILED test_bucket_mode_removal.py::test_the_purge_comes_after_the_rewrite_is_written
+  assert [] == ['put']
+FAILED test_bucket_mode_removal.py::test_a_rewrite_the_bucket_does_not_confirm_purges_nothing_and_the_removal_is_incomplete
+  assert 0 != <ExitCode.OK: 0>
+3 failed, 1 passed in 18.87s
+```
+
+The one that passed is the premise, that every version of the bundle names the file before the
+removal. After 5f9b171, `4 passed`.
+
+**The Terraform half**, against `roles.tf` mutated four ways. Each time, one statement was added to
+the run role's credentials policy, which `evidence_policy_json`'s plan-time validation does not
+read, and the file was restored from git afterwards:
+
+```text
+MUTANT s3:DeleteObjectVersion by name: Failure! 24 passed, 3 failed.  run "the_run_role_never_deletes"... fail
+MUTANT s3:Delete* by wildcard:         Failure! 24 passed, 3 failed.  run "the_run_role_never_deletes"... fail
+MUTANT s3:*Object* by wildcard:        Failure! 24 passed, 3 failed.  run "the_run_role_never_deletes"... fail
+MUTANT an Allow with NotAction:        Failure! 5 passed, 2 failed, 20 skipped.  run "the_run_role_never_deletes"... fail
+```
+
+Each failure is the new run's own assertion message, not an error. Under the NotAction mutant
+another run errors and skips the rest of the file, which is why the new run is the file's first
+(d6b43d5). Without the environment line, the run task's test fails (`Failure! 26 passed, 1
+failed.`, `the_run_task_runs_the_pinned_image_as_the_run_role_under_its_deadline`), and with it, it
+passes.
+
+### Mutants
+
+By hand, under working agreement 10, each against the test files that cover it, with the source
+restored after each. 21 mutants, all caught. "Caught" means a named test failed on an assertion.
+The first batch printed `ERRORED` only because `-x` under xdist exits with code 2; each of its lines
+names a failing test.
+
+| Mutant | Caught by |
+|---|---|
+| Lease 30 → 60 minutes | `test_a_renewal_moves_the_lease_on_and_release_frees_it_without_deleting` and 3 more |
+| Renewal every 5 → 15 minutes | `test_the_lease_is_thirty_minutes_renewed_every_five_with_five_minutes_for_clock_skew` |
+| Skew margin ignored | `test_a_second_runner_is_refused_while_the_lease_is_live_and_writes_nothing` |
+| Skew comparison `>=` | the same |
+| Shared renewal: an in-flight renewal counts | `test_a_write_that_arrives_during_an_in_flight_renewal_waits_for_the_next_one` and 6 more |
+| A content-addressed write renews | `test_a_content_addressed_write_needs_a_held_lease_and_no_renewal` |
+| A named write skips its renewal | `test_a_renewal_the_store_did_not_answer_lets_no_write_through_and_keeps_the_lease` and 4 more |
+| The takeover's `If-Match` matches any version | `test_a_runner_whose_lease_was_taken_over_...` and 6 more |
+| `took_over_from` not written | `test_an_expired_lease_is_taken_over_and_the_new_holder_says_so` |
+| A 412 on renewal does not mark the lease lost | `test_a_runner_whose_lease_was_taken_over_loses_it_at_its_next_renewal_and_writes_nothing_more` |
+| The fence lets a lost lease write | the same |
+| `RUN_LOCK_LOST`: the run's end never asks the lease | First **survived**: the fence refused the bundle's write, so the run still ended `RUN_LOCK_LOST`. That masks a run whose bundle save writes nothing. The new `test_a_run_whose_lease_is_taken_ends_run_lock_lost_even_with_nothing_left_to_write` (071e4b5) catches it |
+| No lock object: the run creates one itself | `test_a_bucket_with_no_lock_object_is_never_started_on` (run alone too) |
+| A refused read of the lock is taken for absence | `test_a_read_refused_for_a_missing_key_is_absence_and_for_a_present_one_is_a_refusal` |
+| Local mode: a seeded bucket is not refused | `test_in_local_mode_a_bucket_writing_command_refuses_a_bucket_that_holds_a_lock_object` |
+| The bundle saved with a manifest unconfirmed | `test_the_bundle_is_not_saved_while_a_manifest_is_unconfirmed_in_the_bucket` |
+| The withheld check skipped on save | `test_a_bundle_holding_a_manifest_the_publisher_withholds_is_not_saved_in_the_publishers_words` |
+| The withheld check skipped on restore | `test_a_bundle_holding_a_manifest_the_publisher_withholds_is_never_restored` |
+| The confirm compares the version and not the digest | `test_a_bundle_the_bucket_holds_with_another_digest_than_was_written_is_not_confirmed` |
+| The purge despite an unconfirmed rewrite | `test_a_rewrite_the_bucket_does_not_confirm_purges_nothing_and_the_removal_is_incomplete` |
+| The purge before the rewrite | the same, and `test_the_purge_comes_after_the_rewrite_is_written` |
+
+Two tests were added before the run, because no test could catch their mutants: the lease's
+numbers (every test overrides the interval), and the confirm's digest (37cf831).
+
+### What was run, and what was left to CI
+
+`uv run scripts/affected_tests.py` chose **371 of 460 test files (80.7%)** from 52 changed files.
+The reasons are new modules in `debate_core.application.ports`, which the root conftest imports,
+and `settings.py`. That is the whole selection in all but name, well past two minutes. So under
+working agreement 10 (the PM's ruling of 2026-10-19) it is left to the pull request's `ci` check
+and not handed to the operator. Within the two minutes I ran the test files of what changed and the
+always-run list, once before and once after the sync onto `dev` at `cd56754`. After the sync:
+
+| Run | Result |
+|---|---|
+| Core: `test_caselist_sync*`, `test_sync_runs`, `test_search_index_stage`, `test_store_sync_skips_parsed`, `test_settings*`, `test_port_conformance`, `test_landscape_staleness`, `integrations/s3`, `integrations/local`, `tests/architecture`, `tests/specs`, `tests/docs`, the docs-check scripts' tests, `test_app.py`, `test_help_rendering.py` | `1249 passed in 27.53s` |
+| Core: the removal, pending-work, sync, inbox-retention and parsed-removal tests under `caselist/`, `test_evidence_sync*`, `test_caselist_parse*`, `caselist/test_pull*` (43 files) | `800 passed in 76.37s`. A first try passed two files twice, through overlapping globs, and three tests of one file then could not find their conftest's fixtures. With each path once, all pass, and that file passes alone, serially and in parallel |
+| CLI: `bucket_mode/`, `commands/test_caselist_pull*`, `test_store`, `test_doctor`, `test_caselist_runs`, `test_pull_refused_before_the_bucket_is_built`, `test_installation`, `test_app`, `test_config_command` | `340 passed in 63.80s` |
+| CLI: `commands/test_caselist_remove*`, `test_caselist_publish`, `test_caselist_parse*`, `test_caselist_retire`, `test_tub_index`, `test_landscape_command`, `test_recorded_failure_codes`, `test_retryable_store_failures`, `test_missing_profile_and_missing_grant`, `test_help_rendering`, `test_output` | `323 passed in 51.78s` |
+| `terraform test` in `infrastructure/modules/caselist_run` (offline, through the main checkout's provider mirror) | `Success! 27 passed, 0 failed.` |
+| `TF_CLI_CONFIG_FILE=<mirror> bash scripts/terraform_checks.sh` (before the sync) | `All Terraform checks passed.` in 29 s; the `.terraform` directories it left were removed, and no lock file changed |
+| `uv run --frozen ruff format --check .` / `ruff check .` | `1273 files already formatted` / `All checks passed!` |
+| `uv run --frozen pyright` (the workspace, as CI runs it) | `0 errors, 0 warnings, 0 informations` |
+| `uv run --frozen lint-imports` / `scripts/check_thin_handlers.py` | `Contracts: 16 kept, 0 broken.` / `OK: 51 CLI command and API route handlers within 25 statements` |
+| `scripts/validate_specs.py` / `docs_index.py --check-descriptions` / `check_command_blocks.py --base origin/dev` / `check_links.py` / `pre-commit run check-merge-conflict` | `OK: 439 files ...` / `All 47 indexed documents ... have a description` / `OK: no # comments in 424 shell code blocks ...` / `OK: 2301 relative links ...` / `Passed` |
+
+**CI time.** The new end-to-end tests under `packages/debate_cli/tests/bucket_mode/` add about 380
+test-seconds, measured at load 10 on this Mac, so likely about half that idle. ac2's 21 kill runs
+make up most of it, at three pulls each. CI deals them across its parts. If one part's pytest step
+passes two minutes, agreement 1's fix is another part.
+
+## Files changed
+
+* **`debate_core.application`**:
+  * `settings.py`: `caselist.run_state`.
+  * `ports/run_lock.py`: `LockObjectStore`, `LockObjectChanged`, `WriteFence`.
+  * `ports/run_state.py`: `RunStateFiles` and the bundle's keys.
+  * `caselist/run_lock.py`: the lease, its errors, `RunTerminated`, `BucketWriteGuard`.
+  * `caselist/run_state.py`: the restore and the saves.
+  * `caselist/bucket_run.py`: one pull's lock, restore, saves and stop.
+  * `caselist/run_state_seed.py`: the seed.
+  * `caselist/removal_service.py`: the bundle's rewrite and purge, `on_the_working_copy`.
+  * `caselist_sync.py`: state-file hooks, the ledger before a download in bucket mode, the save
+    after the publish, `PullBracket`.
+  * `caselist_parse.py`: `fetch_missing`.
+  * `sync_runs.py`: `BucketRunDetails`, local-only records, three notifications.
+  * `search_index_refresh.py`: the restored-index rules.
+  * `evidence_sync.py`: skips `manifests/_run-state/`.
+* **`debate_core.integrations`**:
+  * `s3/run_lock_object.py`: the lock by conditional writes.
+  * `s3/fencing.py`: the fence.
+  * `local/run_state_files.py`: the bundle's files, `VACUUM INTO`.
+* **`debate_cli`**:
+  * `bucket_lock.py`: the lock around a command; SIGTERM.
+  * `commands/caselist_seed.py` and its registration.
+  * The lock at each command's write: `caselist`, `caselist_parse`, `caselist_remove`,
+    `caselist_retire`, `landscape`, `tub_index` and `store`.
+  * `caselist_pull`: SIGTERM and the bracket.
+  * `container.py`: the lock, the guard, the fence, the run state, the seed and the bucket run.
+* **Tests**:
+  * `debate_core/tests/application/test_caselist_sync_run_lock.py` and
+    `test_caselist_sync_run_state.py`.
+  * Three runs in `test_search_index_stage.py`.
+  * The details' pinned keys in two `caselist/` tests.
+  * `debate_cli/tests/bucket_mode/`: a conftest and four test modules.
+  * Two tests in `test_landscape_command.py`.
+  * The pinned integration and service lists in `test_doctor.py`, `test_installation.py` and
+    `test_app.py`; the details in `test_pull_refused_before_the_bucket_is_built.py`.
+* **`infrastructure/modules/caselist_run`**: `run_task.tf`, the bucket-mode line; `README.md`;
+  `tests/caselist_run.tftest.hcl`, `the_run_role_never_deletes` and the environment assertion.
+* **Docs**:
+  * `docs/architecture/evidence-store-layout.md`: the three prefixes.
+  * `docs/runbooks/caselist-cloud-run.md`: step 8's seed, bucket mode and checks.
+  * `docs/runbooks/caselist-removal.md`: bucket mode.
+* **Spec**: `constraints.packages` amended under its PM-ruling comment (ruling 1).
+
+## Deviations from the spec
+
+1. **`constraints.packages` gains `infrastructure/modules/caselist_run`** for the one environment
+   line and its assertion: the PM's ruling 1, amended in the spec under its comment.
+2. **Two more bucket-writing commands take the lock** than ADR-0020 (4) listed: ruling 2. The ADR
+   now lists them (dev's PM batch 2026-10-24k).
+3. **The download ledger in bucket mode is recorded and saved before each download starts.**
+   ADR-0020 (3) says "before each download starts, as the local file is today", but the local file
+   is written after a download finishes. In local mode nothing changes. In bucket mode a failed
+   download now counts against the five a day: conservative, and never an extra download.
+4. **The bundle's database copy is `VACUUM INTO`, where the plan said an online backup**: finding 1.
+
+## Decisions and assumptions
+
+* **Which commands restore.**
+  * `caselist pull` restores everything: the bundle, the state files, the index manifest and the
+    parsed store.
+  * A dry run restores the bundle and the state files to this machine, and takes no lock.
+  * `--publish-pending` restores no parsed store.
+  * `caselist remove` restores the bundle and the state files, under the lock when it executes,
+    before the removal service opens the database: building the service opens it, and the restore
+    replaces the file whole.
+  * The other bucket-writing commands take the lock and work on this machine's data directory as
+    it is.
+  * `v1-e40-t06`'s comparison and a hand publish to prod may want a `caselist restore-run-state`
+    command. The service exists; adding the command is follow-up work.
+* **The run record's schema is frozen**, so `RUN_LOCK_LOST`, `RUN_TERMINATED`, `RUN_STATE_NOT_SEEDED`
+  and the rest are error classes and codes, and the takeover, the restore's counts and times, and
+  the bundle's outcome go in the details' new `bucket_run`. Builds before it pass over `bucket_run`
+  (`extra="ignore"`).
+* **Records that stay on this machine:** a run another runner's lease refused, a lost lease, no
+  lock object, a wrong home, an unreadable lock, a missing bundle, and local mode's refusal. None of
+  those runs held the lock, so none writes to the bucket, and none is owed to it later.
+* **The holder** is `cloud` when ECS's `ECS_CONTAINER_METADATA_URI_V4` is set, `mac` otherwise. The
+  task is that address's last segment, which names the container, since reading the task's ARN
+  would mean a request to the metadata endpoint.
+* **SIGTERM outside `caselist pull`** raises `RunTerminated` in the main thread, so the lock is
+  released. The pull's own SIGTERM is installed only in bucket mode, so the Mac's agent behaves as
+  before. A thread already uploading when the stop arrives may finish its one request. A process-pool
+  parse may not stop at once, and ECS's SIGKILL at 120 seconds is then the end (follow-up).
+* **The seed requires bucket mode**, and refuses an unconfirmed or withheld manifest. Its dry run
+  reads only a listing of the lock's key and a `HeadObject` per manifest.
+* **No IAM grant changed**, as the plan's table shows. `the_run_role_never_deletes` covers the
+  role's policies by IAM's own wildcard matching, `NotAction` included.
+
+## Operator follow-ups
+
+None to run now. After the merge, step 8 of `docs/runbooks/caselist-cloud-run.md`, at the cutover
+(`v1-e40-t06`), in this order and coordinated by the PM block by block:
+
+1. Check that the Mac's agent is unloaded (one read-only block). Unloading it is `v1-e40-t06`'s
+   step 3.
+2. The seed's dry run, then, on its own, `caselist seed-run-state --execute`. Working agreement 11:
+   two blocks, each guarded against `DEBATE_` overrides and a running pull, each with a count that
+   must be above zero.
+3. A new image from a release with t04, then the plan of the run task in bucket mode, for the PM to
+   read. Expect `Plan: 2 to add, 4 to change, 2 to destroy.`, both task definitions replaced and
+   both schedules repointed, `DEBATE_CASELIST__RUN_STATE` in the run's new revision, and its
+   schedule still `DISABLED`. Then the apply.
+4. One run by hand (t03's ac2), and the block that reads its `bucket_run` details: the bundle saved,
+   no takeover, the restore's counts and times, and the lock `free` after it.
+
+## Follow-up work
+
+* **The parse of a week a killed run published** (finding 2). A small "parse owed" record would let
+  the next run parse that week instead of waiting for the next import into the caselist. Today it
+  is late exactly as on the Mac. For the PM: `v1-e40-t06`, or an E34 task.
+* **`caselist restore-run-state`**, for `v1-e40-t06`'s comparison and a hand publish to prod from a
+  restored copy (ADR-0020 (4) and (7)). The service, `RunState.restore`, is built.
+* **SIGTERM during a process-pool parse.** The cancellation reaches the run, but whether the pool's
+  workers stop inside 120 seconds is not tested, because the tests use the in-process runner. ECS's
+  SIGKILL then ends it, as a hard kill, and the next run takes over. This is for the first cloud
+  run's logs to show, or for an E31 task.
+* **The bucket-policy deny on unconditional lock writes** is filed by the PM as `v1-e40-t07`.
+
+## The plan, as the PM accepted it (2026-10-24)
+
+Kept as it was sent, for the record. What changed in the building is under [Deviations from the spec](#deviations-from-the-spec) and [Decisions and assumptions](#decisions-and-assumptions).
 
 ### What is added or changed
 
@@ -313,9 +590,9 @@ moto here answers `If-Match` with `412`, a missing key under `If-Match` with `40
 13. Mutants.
 14. The affected set, ruff, pyright, lint-imports, `check_thin_handlers.py`, validate_specs.
 
-## Questions for the PM
+### The questions, as sent
 
-Paste-ready, one block, each with my recommendation.
+Ruled by the PM on 2026-10-24: 1 yes, 2 yes, 3 (a) and (b), 4 as named, 5 yes with a test, 6 as planned with both rules tested, 7 skip. Kept as sent.
 
 ```text
 v1-e40-t04 questions (session report: docs/session-reports/v1-e40-t04-run-state-on-s3.md, "Plan for the PM's ruling")
@@ -363,50 +640,6 @@ v1-e40-t04 questions (session report: docs/session-reports/v1-e40-t04-run-state-
    directory, then remove that directory. Recommend: skip it, since the fallback week is rare and
    its time is the home connection's.
 ```
-
-## Plan nodes
-
-| Node | Status | Notes |
-|---|---|---|
-| `state` — Run state on S3 | NOT STARTED | Waiting on the PM's ruling on the plan |
-
-## Acceptance criteria
-
-| Criterion | Status | Evidence (command → result) |
-|---|---|---|
-| ac1 — empty directory restores and matches a full one | NOT RUN | Not built yet |
-| ac2 — killed at each stage leaves the bucket readable | NOT RUN | Not built yet |
-| ac3 — lease, takeover, RUN_LOCK_LOST, every command takes the lock | NOT RUN | Not built yet |
-| ac4 — removal purges after confirm; run role has no delete; red runs first | NOT RUN | Not built yet |
-| Node `state`: `uv run pytest packages/debate_core/tests/application -k caselist_sync` | NOT RUN | Not built yet |
-
-## Files changed
-
-* `docs/session-reports/v1-e40-t04-run-state-on-s3.md`: this plan.
-
-## Deviations from the spec
-
-None yet. Questions 1 and 2 would each be one if ruled as recommended: the packages amendment, and
-two commands beyond ADR-0020 (4)'s list.
-
-## Decisions and assumptions
-
-* The record's schema is frozen (`sync_runs.py`), so `RUN_LOCK_LOST`, `RUN_TERMINATED`, the
-  takeover and the restore's times go into the run's details, codes and notification. The record
-  gains nothing.
-* The restore replaces the local manifests and database by rename. A seeded bucket is the record
-  (ADR-0020 (3)), so the working copy follows it one way.
-
-## Operator follow-ups
-
-None yet. The seed, the Terraform apply and t03's step 8 follow the PM's ruling and the merge,
-block by block.
-
-## Follow-up work
-
-* **Evidence bucket module (outside this task):** optionally, a bucket-policy deny on a `PutObject`
-  of `reports/sync/run-lock.json` without `s3:if-match` or `s3:if-none-match`, so the bucket itself
-  refuses an unconditional lock write.
 
 ## PM review
 

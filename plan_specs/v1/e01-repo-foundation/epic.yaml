@@ -829,5 +829,25 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e01-t35-pyright-scope-tests
+    - id: t36
+      kind: Task
+      name: 'A dev pre-release for a commit dev has moved past with a workflow change is reported superseded, not failed'
+      description: >-
+        A dev pre-release for a commit dev has moved past with a workflow change is reported
+        superseded, not failed.
+      inputs:
+        specRef: plan_specs/v1/e01-repo-foundation/t36-prerelease-superseded-commit.yaml
+        goalRef: v1-e01-t36-prerelease-superseded-commit
+      dependsOn:
+      - t09
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e01-t36-prerelease-superseded-commit reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e01-t36-prerelease-superseded-commit
 status:
   phase: Pending

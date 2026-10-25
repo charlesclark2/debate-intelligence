@@ -25,6 +25,11 @@ spec:
     (another caselist's run) changes nothing. The banner, the `stale` flag in the landscape
     report and the E39 pilot's freshness line read the hook, so each shows it without code of
     its own.
+    (PM amendment 2026-10-24, the PM's ruling 3 on this task's review.) No E39 freshness line reads
+    the hook today: only the landscape report, its run service and two scripts do. The mention
+    above is withdrawn. A freshness line built on the hook later reads it unchanged. By ruling 1, a
+    run that raised before listing, naming the caselist, also reads stale (except a run-lock
+    refusal), and ruling 4 put the CLI's status line into v1-e32-t12.
   priority: 2
   constraints:
     packages: [debate_core.application, debate_core.integrations, packages/debate_core/tests]

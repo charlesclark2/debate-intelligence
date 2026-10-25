@@ -188,5 +188,24 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e40-t06-cutover
+    - id: t07
+      kind: Task
+      name: 'The evidence bucket itself refuses an unconditional write of the run lock'
+      description: >-
+        The evidence bucket itself refuses an unconditional write of the run lock.
+      inputs:
+        specRef: plan_specs/v1/e40-cloud-caselist-run/t07-lock-writes-conditional-at-the-bucket.yaml
+        goalRef: v1-e40-t07-lock-writes-conditional-at-the-bucket
+      dependsOn:
+      - t04
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e40-t07-lock-writes-conditional-at-the-bucket reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e40-t07-lock-writes-conditional-at-the-bucket
 status:
   phase: Pending

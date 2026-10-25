@@ -511,3 +511,13 @@ Added by the PM. Nothing above is changed, and this section is not a review.
 * Every criterion is met, so the Goal is set to `Succeeded` in the PM batch of 2026-10-22 (e).
 * Still owed by the operator: reinstalling the agent with a build carrying this task before its
   Wednesday 2026-10-28 run.
+
+## PM record, 2026-10-24
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+* **The operator's agent reinstall is done,** before the Wednesday 2026-10-28 run. The build is
+  `v1.1.0-dev.138`, installed with `scripts/install_channel.sh` and the agent reinstalled with
+  `ops/launchd/install.sh`, keeping its environment, caselists and schedule.
+  `ops/launchd/install.sh --check-launchd` printed `exit code 0`, with `runs: 0 before, 0 after`.
+  The owed item above is closed.

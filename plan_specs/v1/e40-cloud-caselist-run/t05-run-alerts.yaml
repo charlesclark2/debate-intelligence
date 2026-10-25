@@ -38,6 +38,19 @@ spec:
     may already `sns:Publish` to `debate-<env>-caselist-run-alerts`, so the topic keeps exactly that
     name. The login schedule, which never retries, gains a dead-letter queue, and the dead-letter
     alarm covers it as well as the run's schedule.
+    (PM amendment 2026-10-24, from v1-e40-t03's follow-up work.) The run's side needs four things
+    t03 left out on purpose:
+    * `caselist.notifier = sns` and the topic in the run task's environment;
+    * `sns:Publish` on `debate-<env>-caselist-run-alerts` for the run role. It is the one grant the
+      module's tests now refuse ("nothing more"), so update them, in a run-role inline policy under
+      `aws_iam_role_policies_exclusive.run`, never in the EvidenceOperator document the run role
+      shares;
+    * a dead-letter queue on the run's schedule, as on the login's;
+    * the late-run metric filter reads the run's log group, `debate-<env>-caselist-run`, where the
+      `--json` summary lands.
+
+    A `RUN_TERMINATED` or `RUN_LOCK_LOST` run (v1-e40-t04) is a failed run for the alert, with its
+    code.
   priority: 2
   constraints:
     # PM ruling 2026-10-24 (v1-e40-t02's question 2): debate_core.integrations added for the SNS adapter.

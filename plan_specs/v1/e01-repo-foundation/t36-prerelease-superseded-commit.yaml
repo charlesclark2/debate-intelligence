@@ -1,0 +1,89 @@
+# TASK v1-e01-t36-prerelease-superseded-commit - A dev pre-release for a commit dev has moved past with a workflow change is reported superseded, not failed
+# Epic: E01 Repository & Delivery Foundation | Release: v1.0 (Foundation & verified evidence core) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e01-t36-prerelease-superseded-commit
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+  annotations:
+    debate/title: "A dev pre-release for a commit dev has moved past with a workflow change is reported superseded, not failed"
+spec:
+  # Filed by the PM, 2026-10-24, from the dev pre-release failure of 2026-10-25 (run 40149948706), read by the PM.
+  description: >-
+    On 2026-10-25 the dev pre-release for `f1f31d9` failed at its claim: GitHub refused the tag
+    push, "refusing to allow a GitHub App to create or update workflow
+    `.github/workflows/validate-dev.yml` without `workflows` permission". While that run waited
+    for CI, dev had moved to `09fcd05`, whose merge changed `validate-dev.yml`, so tagging the
+    older commit read as a workflow change to a token that cannot make one. The next commit's
+    pre-release (`v1.1.0-dev.137`, at dev's head) went through, so nothing was lost, but the run
+    read as a broken build. Count first, from the claim's own code and this repository's run
+    history: how the refusal reads, and whether the claim can tell, before pushing, that the
+    commit is no longer dev's head and that a later commit on dev changed `.github/workflows/`.
+    Then make the claim, in that case, end with a notice that the commit is superseded by dev's
+    head (named), build nothing, publish nothing and exit 0, so the workflow reads as skipped.
+    Any other refusal still fails as today, after the existing retries. The token's permissions
+    are not widened: no `workflows` permission and no stored secret.
+  priority: 2
+  constraints:
+    packages: [scripts, tests/scripts, .github/workflows, docs/process]
+    forbidden:
+      - Widening the workflow token's permissions or adding a repository secret
+      - Re-tagging or rebuilding a published vX.Y.Z-dev.N
+      - Network access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e01-t09-dev-prerelease-channel
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        With a stubbed git and tag store, a claim for a commit behind dev's head, where a
+        later dev commit changed `.github/workflows/`, ends superseded with dev's head
+        named, pushes no tag and exits 0; a claim at dev's head, or behind it with no
+        workflow change after it, claims as today; any other push refusal still fails after
+        the retries; tests shown failing first.
+    - id: ac2
+      description: >-
+        The workflow's run for a superseded commit reads as skipped, not failed, and the
+        next commit's pre-release is unaffected, by test over the workflow's steps.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e01-t36-prerelease-superseded-commit-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.0
+    debate/epic: v1-e01-repo-foundation
+spec:
+  description: >-
+    Count how the refusal reads and what the claim can see, then add the superseded case to the
+    claim and the workflow, with tests.
+  goalRef:
+    name: v1-e01-t36-prerelease-superseded-commit
+  graph:
+    nodes:
+      - id: superseded-claim
+        kind: Task
+        name: Superseded pre-release claim
+        description: >-
+          Count how the refusal reads and what the claim can see, then add the superseded
+          case to the claim and the workflow, with tests.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Release version tests pass
+            command: uv
+            args: [run, pytest, tests/scripts/test_release_version.py]
+status:
+  phase: Pending

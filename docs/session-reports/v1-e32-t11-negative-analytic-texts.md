@@ -824,9 +824,53 @@ hspolicy26 through 2026-10-20: 3,825 on-topic sources re-read in memory
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-24
 
 **Notes:**
+
+Built as ruled, measured on the real store, and no new scan hit.
+1. **ac1 passes.** The counts came first, were read-only and printed counts only, and nothing was
+   built before the rulings. The scratch-file incident (a whole paragraph kept as a sentence label's
+   form) was caught, the file deleted and the passes redone before any count was kept. That is the
+   handling asked for.
+2. **ac2 passes, against ruling 3.** The golden's two sections were hand-written from a hand-written
+   fixture and matched on the first run. A text stands beside no school or team code, and texts are in
+   `report.md` only, pinned on the fixture by the seam's test. Red runs are shown for every suite, and
+   the import-failure first attempt was redone against a skeleton (agreement 8).
+3. **Ruling 1's guard is measured twice and the numbers agree:** 158 kept and 5 refused on the counts'
+   163, and 151 and 5 in the fill, the difference being the 7 inline `Text:` paragraphs counted as
+   labels. The 5 refused are theory analytics. The actor list is config, not Python.
+4. **Mutants:** 21 on the withholding, placement and guard rules. The one survivor (the words before
+   the last `should`) gained a test and is caught. Decision 8, the first `should` for CP texts against
+   t09's last for plan texts, is accepted with its reason.
+5. **The dry run:** 74 s, nothing written (checksums before and after), the run's other lines identical
+   to t09's, 31 texts shown and 1 withheld. The scan's 8 hits and digest `81374e646621` are t09's, all
+   in `top_cards.csv`, with 0 in the new sections.
+6. **Accepted as made:** decisions 1 to 11; the fill as its own script (decision 11); the cache key
+   leaving out schools (decision 9); a CP no card counts still showing its texts (decision 10); `blob_jobs`
+   shared with t09 with its tests unchanged; the phase set `Succeeded`, since no criterion waits on a
+   run after the merge. The guide's two refused examples are generic theory wording, not a team's CP or
+   plan text, and stay.
+7. **The affected set** stopped at its alarm twice under other sessions' load, so it is left to the PR's
+   `ci` under agreement 10. The changed directories and the always-run list passed (2,305). Stopping
+   the orphaned xdist workers was right.
+
+**Rulings on the four questions:**
+1. **Yes, ac2's wording is amended to ruling 3:** per position, on each side, the teams with an
+   overview, and no text. The PM makes the edit in a PM batch after this merges, so the session does not
+   touch the spec again.
+2. **Yes, `constraints.packages` is amended** with the listed packages and paths, as for t09, in the
+   same PM batch.
+3. **(a), keep them.** The tag was in `top_cards.csv` before this task, with team counts and no school
+   or team code beside it, which is what policy 1.13 asks. Option (b) would empty most of the
+   alternatives section.
+4. **(a), no code change.** The PM adds the line to the guide's actor paragraph in the same batch: after
+   an edit to the taxonomy, the overrides or the actors, the operator runs
+   `scripts/read_landscape_texts.py` first, then the dry run and the publish. A dry run keeps writing
+   nothing.
+
+**The first publish with these sections** is the PM's to coordinate after the merge, under taxonomy
+1.2.0 from `dev-preview`, with the scan's two `All` hits accepted as for t09. No re-review is needed.

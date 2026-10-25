@@ -46,6 +46,7 @@ from debate_core.application.search_index_build import (
 from debate_core.application.search_index_publish import SearchIndexPublishService
 from debate_core.application.search_index_refresh import (
     GZIP_BYTES_WARNING,
+    RESTORED_INDEX_MARKER,
     SEARCH_INDEX_DIRECTORY,
     SQLITE_BYTES_WARNING,
     SearchIndexRefresh,
@@ -927,3 +928,68 @@ def newest_index_directory(world: World) -> Path:
     newest = newest_local_index(world.out)
     assert newest is not None
     return newest.directory
+
+
+# ------------------------------------------------------------------------------------------------
+# v1-e40-t04: a manifest restored from the bucket, alone (the PM's ruling 6 on the plan, 2026-10-24)
+# ------------------------------------------------------------------------------------------------
+
+
+def restored_alone(world: World, index_id: str) -> None:
+    """What a bucket-mode run's restore leaves of a published index: its manifest, and the marker."""
+    directory = world.out / index_id
+    for path in directory.iterdir():
+        if path.name != SEARCH_INDEX_MANIFEST_NAME:
+            path.unlink()
+    (directory / RESTORED_INDEX_MARKER).write_text("restored\n", encoding="utf-8")
+    os.utime(directory / SEARCH_INDEX_MANIFEST_NAME)
+
+
+def test_index_stage_keeps_a_restored_manifest_whose_digests_match_without_a_rebuild(world: World) -> None:
+    first = world.refresh()
+    assert first.counts is not None
+    restored_alone(world, first.counts.index_id)
+    puts = list(world.bucket.puts)
+
+    again = world.refresh()
+
+    assert again.outcome is StageOutcome.SKIPPED, again.reason
+    assert "which current.json names: nothing to build or publish" in again.reason
+    assert world.builder.builds == 1, "no gzip restored, and none needed"
+    assert world.bucket.puts == puts
+
+
+def test_index_stage_rebuilds_when_a_restored_manifests_digests_differ(world: World) -> None:
+    first = world.refresh()
+    assert first.counts is not None
+    restored_alone(world, first.counts.index_id)
+    write_store(world.parsed, OPENEV_STORE, ["Invented camp evidence", "Invented later camp evidence"])
+
+    second = world.refresh()
+
+    assert second.outcome is StageOutcome.COMPLETED, second.reason
+    assert second.counts is not None and second.counts.index_id != first.counts.index_id
+    assert world.builder.builds == 2
+    assert published_with(world, second) == second.counts.index_id
+
+
+def test_index_stage_never_publishes_from_a_restored_manifest(world: World) -> None:
+    """The pointer names another index than the restored one, whose digests match: a publish would put
+    a manifest up without its files, so the stage fails instead and the pointer stays."""
+    first = world.refresh()
+    assert first.counts is not None
+    write_store(world.parsed, OPENEV_STORE, ["Invented camp evidence", "Invented later camp evidence"])
+    second = world.refresh()
+    assert second.counts is not None
+    shutil.rmtree(world.out / second.counts.index_id)
+    restored_alone(world, first.counts.index_id)
+    write_store(world.parsed, OPENEV_STORE, ["Invented camp evidence"])
+    puts = list(world.bucket.puts)
+
+    refused = world.refresh()
+
+    assert refused.outcome is StageOutcome.FAILED, refused.reason
+    assert "never published" in refused.reason
+    assert world.bucket.puts == puts
+    pointer = world.pointer()
+    assert pointer is not None and pointer.index_id == second.counts.index_id

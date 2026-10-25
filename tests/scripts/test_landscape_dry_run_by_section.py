@@ -59,7 +59,7 @@ def test_the_dry_run_prints_the_planks_and_the_scans_hits_by_section_and_counts_
         "words, 1 not read again.",
         "Scan: 2 hits, 1 not yet accepted (digest 0123456789ab).",
         "  report.md | Counterplan texts | team_code: 1 (0 not yet accepted)",
-        "  report.md | Counterplan texts: plank table | school: 1 (1 not yet accepted)",
+        "  report.md | Counterplan planks: plank table | school: 1 (1 not yet accepted)",
         "Hits in report.md's plank tables: 1.",
     ]
     # Counts only: no hit's term or line, and no text or plank.

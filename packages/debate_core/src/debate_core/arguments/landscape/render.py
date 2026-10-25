@@ -347,7 +347,11 @@ def render_markdown(report: LandscapeReport, trends: LandscapeTrends | None = No
     """
     parts = {
         "Affirmative": [*_positions_section(report, PositionSide.AFF), *_advantages_section(report)],
-        "Negative": [*_positions_section(report, PositionSide.NEG), *_texts_sections(report)],
+        "Negative": [
+            *_positions_section(report, PositionSide.NEG),
+            *_texts_sections(report),
+            *_planks_section(report),
+        ],
         "Neither side": [
             *_no_positions_section(report),
             *_positions_section(report, PositionSide.BOTH),
@@ -695,11 +699,8 @@ def _texts_sections(report: LandscapeReport) -> list[str]:
         if one.unread:
             lines.append(f"* Could not be read again as they were read: {one.unread:,}.")
         lines.append("")
-        if kind is AnalyticTextKind.CP_TEXT:
-            lines += _plank_coverage(coverage[AnalyticTextKind.CP_PLANK])
         shown = [position for position in texts.positions if position.kind is kind]
-        planks = {one.position_id: one for one in texts.planks} if kind is AnalyticTextKind.CP_TEXT else {}
-        if not shown and not planks:
+        if not shown:
             lines += [f"No {_TEXT_NOUNS[kind]} was placed under {under} the team reads.", ""]
         for position in shown:
             lines += [
@@ -714,10 +715,47 @@ def _texts_sections(report: LandscapeReport) -> list[str]:
                 more = position.more
                 noun = "text" if more.texts == 1 else "texts"
                 lines += [f"And {more.texts:,} more {noun}, read by {_count(more.teams, 'team')}.", ""]
-            if position.position_id in planks:
-                lines += _planks_table(planks.pop(position.position_id))
-        for left in sorted(planks.values(), key=lambda one: (-one.teams, one.position_id)):
-            lines += [f"**{_cell(left.label)}** (`{left.position_id}`)", "", *_planks_table(left)]
+    return lines
+
+
+def _planks_section(report: LandscapeReport) -> list[str]:
+    """`v1-e32-t16`'s negative section, after the CP texts: each CP's planks by the advantage they solve."""
+    texts = report.texts
+    if texts is None:
+        return []
+    one = next(found for found in texts.coverage if found.kind is AnalyticTextKind.CP_PLANK)
+    lines = [
+        "## Counterplan planks",
+        "",
+        "A CP's planks, quoted as its texts above are (data-use policy 1.13), never beside a school or team "
+        "code. A CP text ending in a colon lists them in the paragraphs after it, up to the first card or "
+        "heading, and a later `should` analytic past the actor guard, or a paragraph opening `Plank 2:`, "
+        "`2.` or `Second,`, is one too. A plank solves each advantage its own words, a label just above it "
+        'or a card under it name by an alias; one naming none is "solves: not named", never a guess. Each '
+        f"CP shows, per advantage, the {texts.texts_per_position:,} planks the most teams read, and how many "
+        "more there are. A plank naming a school of the caselist is withheld.",
+        "",
+        f"Found: {one.labels:,} in {one.documents:,} files.",
+        "",
+        f"* Placed under a CP the team reads, and counted: {one.counted:,}.",
+        _not_placed(one),
+        "* Placed under another kind of position, as an answer, or in a round on the other side: "
+        f"{one.elsewhere:,}.",
+        f"* Left out because their CP text fails the actor guard: {one.refused_by_guard:,}.",
+        "* Labels naming the plank after them (a list paragraph that is only an advantage's alias): "
+        f"{one.plank_labels:,}.",
+        "* Cards under a plank saying `solves` with words no advantage's alias holds, counted and never "
+        f"shown: {one.solves_other_words:,}.",
+    ]
+    if one.withheld_texts:
+        lines.append(f"* Withheld for naming a school: {_count(one.withheld_texts, 'plank')}.")
+    if one.unread:
+        lines.append(f"* Could not be read again as they were read: {one.unread:,}.")
+    lines.append("")
+    if not texts.planks:
+        return [*lines, "No plank was placed under a CP the team reads.", ""]
+    for planks in texts.planks:
+        lines += [f"**{_cell(planks.label)}** (`{planks.position_id}`)", "", *_planks_table(planks)]
     return lines
 
 
@@ -749,32 +787,6 @@ def _overviews_section(report: LandscapeReport) -> list[str]:
         f"{one.aff_teams:,} | {one.neg_teams:,} |"
         for one in texts.overviews
     ]
-    return [*lines, ""]
-
-
-def _plank_coverage(one: TextCoverage) -> list[str]:
-    """`v1-e32-t16`'s rule, and where every plank found went."""
-    lines = [
-        "A CP's planks: a CP text ending in a colon lists them in the paragraphs after it, up to the first "
-        "card or heading, and a later `should` analytic past the actor guard, or a paragraph opening "
-        "`Plank 2:`, `2.` or `Second,`, is one too. A plank solves each advantage its own words, a label "
-        'just above it or a card under it name by an alias; one naming none is "solves: not named", never a '
-        f"guess. Found: {one.labels:,} in {one.documents:,} files.",
-        "",
-        f"* Placed under a CP the team reads, and counted: {one.counted:,}.",
-        _not_placed(one),
-        "* Placed under another kind of position, as an answer, or in a round on the other side: "
-        f"{one.elsewhere:,}.",
-        f"* Left out because their CP text fails the actor guard: {one.refused_by_guard:,}.",
-        "* Labels naming the plank after them (a list paragraph that is only an advantage's alias): "
-        f"{one.plank_labels:,}.",
-        "* Cards under a plank saying `solves` with words no advantage's alias holds, counted and never "
-        f"shown: {one.solves_other_words:,}.",
-    ]
-    if one.withheld_texts:
-        lines.append(f"* Withheld for naming a school: {_count(one.withheld_texts, 'plank')}.")
-    if one.unread:
-        lines.append(f"* Could not be read again as they were read: {one.unread:,}.")
     return [*lines, ""]
 
 

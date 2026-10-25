@@ -37,7 +37,7 @@ How to read the numbers:
 ## Contents
 
 * [Affirmative](#affirmative): [Affirmative positions](#affirmative-positions), [Advantages by affirmative](#advantages-by-affirmative)
-* [Negative](#negative): [Negative positions](#negative-positions), [Counterplan texts, alternatives and roles of the ballot](#counterplan-texts-alternatives-and-roles-of-the-ballot)
+* [Negative](#negative): [Negative positions](#negative-positions), [Counterplan texts, alternatives and roles of the ballot](#counterplan-texts-alternatives-and-roles-of-the-ballot), [Counterplan planks](#counterplan-planks)
 * [Neither side](#neither-side): [Overviews](#overviews), [New this week](#new-this-week), [Rising](#rising), [Falling](#falling), [Unclassified](#unclassified)
 
 # Affirmative
@@ -245,17 +245,6 @@ Found by a CP-text label (`Text:`, `CP Text`) or as the first `should` analytic 
 * Withheld for naming a school: 1 text.
 * Could not be read again as they were read: 1.
 
-A CP's planks: a CP text ending in a colon lists them in the paragraphs after it, up to the first card or heading, and a later `should` analytic past the actor guard, or a paragraph opening `Plank 2:`, `2.` or `Second,`, is one too. A plank solves each advantage its own words, a label just above it or a card under it name by an alias; one naming none is "solves: not named", never a guess. Found: 16 in 8 files.
-
-* Placed under a CP the team reads, and counted: 14.
-* Not placed: 1 (0 under headings that place nothing, such as `1NC` or `OFF`; 1 under no heading).
-* Placed under another kind of position, as an answer, or in a round on the other side: 1.
-* Left out because their CP text fails the actor guard: 2.
-* Labels naming the plank after them (a list paragraph that is only an advantage's alias): 1.
-* Cards under a plank saying `solves` with words no advantage's alias holds, counted and never shown: 1.
-* Withheld for naming a school: 1 plank.
-* Could not be read again as they were read: 1.
-
 **States CP** (`states-cp`)
 
 | Rank | Teams | Text |
@@ -265,20 +254,6 @@ A CP's planks: a CP text ending in a colon lists them in the paragraphs after it
 | 3 | 2 | The fifty states should adopt a sample payment cap. |
 
 And 1 more text, read by 1 team.
-
-Its planks: 8, read by 6 teams, by the advantage each solves. A plank naming two advantages is under each and counted once. 1 is withheld for naming a school.
-
-| Solves | Rank | Teams | Plank |
-|---|---|---|---|
-| Costs advantage | 1 | 4 | Expand sample clinics to cut costs. |
-| Costs advantage | 2 | 3 | Cap sample drug prices to cut costs and spur innovation. |
-| Costs advantage | 3 | 2 | The fifty states should also cap sample premiums. |
-| Innovation advantage | 1 | 3 | Cap sample drug prices to cut costs and spur innovation. |
-| Innovation advantage | 2 | 1 | Fund a sample research prize. |
-| not named | 1 | 3 | Publish a sample price list. |
-| not named | 2 | 1 | Hire sample navigators. |
-
-* Costs advantage: and 1 more plank, read by 1 team.
 
 **Courts CP** (`courts-cp`)
 
@@ -315,6 +290,37 @@ Found by a role-of-the-ballot label (`Role of the ballot`, `ROB`, `The role of t
 | Rank | Teams | Text |
 |---|---|---|
 | 1 | 1 | The role of the ballot is to vote for the best sample method. |
+
+## Counterplan planks
+
+A CP's planks, quoted as its texts above are (data-use policy 1.13), never beside a school or team code. A CP text ending in a colon lists them in the paragraphs after it, up to the first card or heading, and a later `should` analytic past the actor guard, or a paragraph opening `Plank 2:`, `2.` or `Second,`, is one too. A plank solves each advantage its own words, a label just above it or a card under it name by an alias; one naming none is "solves: not named", never a guess. Each CP shows, per advantage, the 3 planks the most teams read, and how many more there are. A plank naming a school of the caselist is withheld.
+
+Found: 16 in 8 files.
+
+* Placed under a CP the team reads, and counted: 14.
+* Not placed: 1 (0 under headings that place nothing, such as `1NC` or `OFF`; 1 under no heading).
+* Placed under another kind of position, as an answer, or in a round on the other side: 1.
+* Left out because their CP text fails the actor guard: 2.
+* Labels naming the plank after them (a list paragraph that is only an advantage's alias): 1.
+* Cards under a plank saying `solves` with words no advantage's alias holds, counted and never shown: 1.
+* Withheld for naming a school: 1 plank.
+* Could not be read again as they were read: 1.
+
+**States CP** (`states-cp`)
+
+Its planks: 8, read by 6 teams, by the advantage each solves. A plank naming two advantages is under each and counted once. 1 is withheld for naming a school.
+
+| Solves | Rank | Teams | Plank |
+|---|---|---|---|
+| Costs advantage | 1 | 4 | Expand sample clinics to cut costs. |
+| Costs advantage | 2 | 3 | Cap sample drug prices to cut costs and spur innovation. |
+| Costs advantage | 3 | 2 | The fifty states should also cap sample premiums. |
+| Innovation advantage | 1 | 3 | Cap sample drug prices to cut costs and spur innovation. |
+| Innovation advantage | 2 | 1 | Fund a sample research prize. |
+| not named | 1 | 3 | Publish a sample price list. |
+| not named | 2 | 1 | Hire sample navigators. |
+
+* Costs advantage: and 1 more plank, read by 1 team.
 
 # Neither side
 

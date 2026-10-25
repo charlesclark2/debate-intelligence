@@ -417,7 +417,8 @@ Texts worded alike are one text. A text naming a school of the caselist is withh
 ### A CP's planks
 
 An advantage CP is a set of planks, each solving one of the aff's advantages, and a States CP often has
-several too. Under each CP's texts the report shows its planks, as you ruled on 2026-10-25:
+several too. The report's "Counterplan planks" section, after the CP texts in its negative part, shows
+each CP's planks, as you ruled on 2026-10-25:
 
 * **A list.** A CP text ending in a colon ("The fifty states should:") lists its planks in the
   paragraphs after it, up to the first card or heading. Each is an analytic or a plain paragraph of at

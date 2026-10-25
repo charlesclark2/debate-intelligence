@@ -131,6 +131,7 @@ from typing import TYPE_CHECKING, Final, cast
 
 from debate_cli.exit_codes import codes_exit_as_a_retrieval_failure
 from debate_core.application.aff_assignment import AffAssignmentService
+from debate_core.application.analytic_texts import AnalyticTextService
 from debate_core.application.caselist.bucket_run import BucketRun
 from debate_core.application.caselist.evidence_listing import (
     LocalEvidence,
@@ -214,6 +215,7 @@ from debate_core.application.tub.accounts import AccountAdministration
 from debate_core.application.verify_manifest import VerifyManifest
 from debate_core.domain import new_id
 from debate_core.domain.caselist import Event
+from debate_core.integrations.landscape.analytic_text_store import LocalAnalyticTextStore
 from debate_core.integrations.landscape.classification_store import (
     LANDSCAPE_DIRECTORY,
     LocalClassificationStore,
@@ -533,6 +535,11 @@ class ServiceContainer:
         affirmative files' plan texts from their cache under the data directory, parsing only what it
         lacks, through the same worker pool as `caselist parse`. `v1-e32-t09` merged first, so this
         task wired it (the PM's condition of 2026-10-24).
+
+        **The analytic-text seam.** Each CP's and K's texts and each position's overview count come from
+        `v1-e32-t11`'s :class:`~debate_core.application.analytic_texts.AnalyticTextService`, which reads
+        every on-topic source's paragraphs through the same worker pool, caching derived fields under the
+        data directory, and reads again only the texts the report quotes.
         """
         # Imported here, not at module scope: lxml is loaded only by a command that needs the parser.
         from debate_core.integrations.docx_parser import DebateDocxParser
@@ -544,6 +551,9 @@ class ServiceContainer:
         local = self._local_evidence()
         classifications = LocalClassificationStore(data_dir)
         parse = settings.parse
+        runner = ProcessPoolParseRunner(
+            workers=parse.worker_count(os.cpu_count()), timeout_seconds=parse.per_file_timeout_seconds
+        )
         affs = AffAssignmentService(
             store=LocalParsedStore(data_dir),
             local=local,
@@ -551,13 +561,11 @@ class ServiceContainer:
             taxonomies=taxonomies,
             classifications=classifications,
             plan_texts=PlanTextService(
-                parser=DebateDocxParser(),
-                runner=ProcessPoolParseRunner(
-                    workers=parse.worker_count(os.cpu_count()), timeout_seconds=parse.per_file_timeout_seconds
-                ),
-                store=LocalPlanTextStore(data_dir),
-                local=local,
+                parser=DebateDocxParser(), runner=runner, store=LocalPlanTextStore(data_dir), local=local
             ),
+        )
+        texts = AnalyticTextService(
+            parser=DebateDocxParser(), runner=runner, store=LocalAnalyticTextStore(data_dir), local=local
         )
         return LandscapeRunService(
             taxonomies=taxonomies,
@@ -573,6 +581,7 @@ class ServiceContainer:
             today=lambda: self.clock()().date(),
             bucket=self._evidence_bucket if with_bucket else None,
             aff_assignments=affs,
+            analytic_texts=texts,
             stale_after_days=settings.caselist.stale_after_days,
         )
 

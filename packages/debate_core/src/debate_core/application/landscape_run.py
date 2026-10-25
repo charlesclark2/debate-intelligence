@@ -15,13 +15,15 @@ same use case. One run, for one caselist at one weekly snapshot (the newest unle
    model mode is :attr:`LandscapeModelMode.NONE`, so the run's model budget is 0 items; a stage that
    sent more is refused with :class:`ModelBudgetExceeded` after the queue is written and before the
    report is, so nothing is written or published from it.
-4. **Builds** `v1-e32-t03`'s bundle, with `v1-e32-t04`'s trends and per-school view (given each of
-   the caselist's weekly snapshots and the topic `topics.yaml` puts it on, so a trend stops at a topic
-   change, and the topic's range, so the report can say whether its history is a full topic cycle),
-   with `v1-e32-t09`'s per-round aff assignments when a source of
-   them is wired (until then the report shows the affirmative side's unidentified share), and
-   `v1-e34-t03`'s staleness hook given the sync run log, so a run the daily download cap held back
-   makes the report stale whatever its snapshot's age (the PM's ruling of 2026-10-24).
+4. **Builds** `v1-e32-t03`'s bundle, with `v1-e32-t11`'s CP texts, alternatives, roles of the ballot and
+   overview counts when a source of them is wired (the run's reading of each source's own paragraphs,
+   cached as derived fields; a dry run writes no cache), with `v1-e32-t04`'s trends and per-school view
+   (given each of the caselist's weekly snapshots and the topic `topics.yaml` puts it on, so a trend
+   stops at a topic change, and the topic's range, so the report can say whether its history is a full
+   topic cycle), with `v1-e32-t09`'s per-round aff assignments when a source of them is wired (until
+   then the report shows the affirmative side's unidentified share), and `v1-e34-t03`'s staleness hook
+   given the sync run log, so a run the daily download cap held back makes the report stale whatever its
+   snapshot's age (the PM's ruling of 2026-10-24).
 5. **Scans** the bundle (:mod:`debate_core.application.landscape_scan`) and returns every hit: the
    per-school view, which names schools and team codes by design, for paths only.
 6. **Writes** the bundle to `<data dir>/reports/landscape/<caselist>/<snapshot>/`, or `--out`.
@@ -54,6 +56,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Final, Protocol
 
+from debate_core.application.analytic_texts import AnalyticTextsForReport
 from debate_core.application.caselist.evidence_listing import LocalEvidence
 from debate_core.application.caselist.publish_plan import manifest_prefix, snapshot_of_manifest_key
 from debate_core.application.errors import DomainError, NotFound
@@ -85,9 +88,10 @@ from debate_core.application.ports.suppression import SuppressionList
 from debate_core.application.ports.taxonomy_repository import TaxonomyRepository
 from debate_core.application.position_classification import ClassificationRun, PositionClassificationService
 from debate_core.application.sync_runs import SyncRunLog
+from debate_core.arguments.landscape.analytic_texts import CounterplanActors
 from debate_core.arguments.landscape.review_queue import DEFAULT_REVIEW_THRESHOLD, ReviewRow
 from debate_core.domain.landscape import Taxonomy
-from debate_core.domain.landscape_classification import PositionClassification
+from debate_core.domain.landscape_classification import OverrideRules, PositionClassification
 from debate_core.domain.landscape_report import AffAssignment, LandscapeReport
 from debate_core.domain.landscape_schools import SchoolView
 from debate_core.domain.landscape_trends import LandscapeTrends
@@ -97,6 +101,7 @@ __all__ = [
     "DEFAULT_MAX_MODEL_ITEMS",
     "REPORTS_PREFIX",
     "AffAssignmentsFromReading",
+    "AnalyticTextsFromReading",
     "LandscapeModelMode",
     "LandscapeRequestRefused",
     "LandscapeRunRequest",
@@ -216,6 +221,24 @@ class AffAssignmentsFromReading(Protocol):
     ) -> Sequence[AffAssignment]: ...
 
 
+class AnalyticTextsFromReading(Protocol):
+    """`v1-e32-t11`'s CP texts, alternatives, roles of the ballot and overviews, read for the run's reading.
+
+    :class:`~debate_core.application.analytic_texts.AnalyticTextService` is the one there is. `writes` is
+    False in a dry run, which writes no cache of its own either.
+    """
+
+    async def report_inputs(
+        self,
+        *,
+        reading: SeedReading,
+        taxonomy: Taxonomy,
+        overrides: OverrideRules,
+        actors: CounterplanActors | None,
+        writes: bool,
+    ) -> AnalyticTextsForReport: ...
+
+
 class PublishAction(StrEnum):
     UPLOAD = "UPLOAD"
     """Not in the bucket, or there with a different or unrecorded digest."""
@@ -304,6 +327,8 @@ class LandscapeRunResult:
     scan: ScanResult
     publish: PublishOutcome | None = None
     """None when no publish was asked for: `--no-publish`, and a dry run without `--publish`."""
+    analytic_texts: AnalyticTextsForReport | None = field(default=None, repr=False)
+    """`v1-e32-t11`'s reading of the analytic texts and its counts; None when no source of them is wired."""
 
     @property
     def model_calls(self) -> int:
@@ -338,6 +363,7 @@ class LandscapeRunService:
         today: Callable[[], date],
         bucket: Callable[[], EvidenceObjectStore] | None = None,
         aff_assignments: AffAssignmentsFromReading | None = None,
+        analytic_texts: AnalyticTextsFromReading | None = None,
         classifier: ClassifierFactory | None = None,
         stale_after_days: int = DEFAULT_STALE_AFTER_DAYS,
         review_threshold: float = DEFAULT_REVIEW_THRESHOLD,
@@ -356,6 +382,7 @@ class LandscapeRunService:
         self._today = today
         self._bucket = bucket
         self._aff = aff_assignments
+        self._texts = analytic_texts
         self._classifier: ClassifierFactory = classifier or self._deterministic
         self._stale_after_days = stale_after_days
         self._threshold = review_threshold
@@ -420,10 +447,21 @@ class LandscapeRunService:
             if self._aff is not None
             else ()
         )
+        overrides = self._taxonomies.overrides(resolved.topic.id)
+        texts = (
+            await self._texts.report_inputs(
+                reading=reading,
+                taxonomy=taxonomy,
+                overrides=overrides,
+                actors=self._taxonomies.cp_text_actors(resolved.topic.id),
+                writes=not request.dry_run,
+            )
+            if self._texts is not None
+            else None
+        )
         staleness = await LandscapeStalenessCheck(
             objects=self._objects, run_log=self._run_log, stale_after_days=self._stale_after_days
         ).check(request.caselist, report_date=self._today())
-        overrides = self._taxonomies.overrides(resolved.topic.id)
         snapshot_topics = await self._snapshot_topics(request.caselist, snapshot)
         topic_range = next(
             (
@@ -448,6 +486,7 @@ class LandscapeRunService:
                     reading.caselist_names,
                 ),
                 aff_assignments=assignments,
+                analytic_texts=texts.inputs if texts is not None else None,
                 snapshot_topics=snapshot_topics,
                 topic_range=topic_range,
             ),
@@ -486,6 +525,7 @@ class LandscapeRunService:
             written=not request.dry_run,
             scan=scan,
             publish=publish,
+            analytic_texts=texts,
         )
 
     async def _snapshot(self, caselist: str, asked: date | None) -> date:

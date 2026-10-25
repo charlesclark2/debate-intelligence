@@ -15,12 +15,14 @@ from pathlib import Path
 
 import pytest
 
+from debate_core.application.analytic_texts import AnalyticTextCounts, AnalyticTextsForReport, QuotedTextsRun
 from debate_core.application.caselist.evidence_listing import LocalEvidence
 from debate_core.application.caselist.suppression import RecordedSuppressionList
 from debate_core.application.landscape_report import round_id
 from debate_core.application.landscape_run import (
     BUNDLE_FILES,
     AffAssignmentsFromReading,
+    AnalyticTextsFromReading,
     LandscapeRunRequest,
     LandscapeRunResult,
     LandscapeRunService,
@@ -39,10 +41,13 @@ from debate_core.application.landscape_staleness import STALE_BANNER_HEADING
 from debate_core.application.ports.classification_store import ClassificationStore
 from debate_core.application.position_classification import ClassificationRun, PositionClassificationService
 from debate_core.application.sync_runs import SYNC_RUN_LOG_FILENAME, StageEntry, SyncRunLog, SyncRunRecord
+from debate_core.arguments.landscape.analytic_texts import AnalyticTextInputs, CounterplanActors, text_digest
 from debate_core.domain.caselist import Side
 from debate_core.domain.landscape import Taxonomy
-from debate_core.domain.landscape_classification import PositionClassification
+from debate_core.domain.landscape_classification import OverrideRules, PositionClassification, PositionRole
 from debate_core.domain.landscape_report import AffAssignment
+from debate_core.domain.landscape_texts import AnalyticTextKind, AnalyticTextReading, TextForm, TextPlacement
+from debate_core.domain.style_profile import StructuralUnit
 from debate_core.integrations.landscape.classification_store import (
     LocalClassificationStore,
     review_queue_path,
@@ -74,6 +79,7 @@ def _service(
     bucket: FsEvidenceObjectStore | None = None,
     run_log: SyncRunLog | None = None,
     aff_assignments: AffAssignmentsFromReading | None = None,
+    analytic_texts: AnalyticTextsFromReading | None = None,
     classifier: object = None,
 ) -> LandscapeRunService:
     data_dir = world.data_dir
@@ -96,6 +102,7 @@ def _service(
         today=lambda: SYNTHETIC_RUN_TODAY,
         bucket=(lambda: bucket) if bucket is not None else None,
         aff_assignments=aff_assignments,
+        analytic_texts=analytic_texts,
         classifier=classifier,  # pyright: ignore[reportArgumentType]
     )
 
@@ -648,3 +655,111 @@ async def test_the_school_view_is_written_locally_and_its_names_are_not_scan_hit
     for name in ("report.md", "positions.csv", "trends.csv"):
         text = (result.directory / name).read_text(encoding="utf-8")
         assert "Quillmere" not in text and "QW" not in text
+
+
+# ------------------------------------------------------------------------------------------------
+# The analytic-text seam (v1-e32-t11)
+# ------------------------------------------------------------------------------------------------
+
+STATES_TEXT = "The fifty states should establish a sample program."
+CODED_TEXT = "The fifty states should copy what PX argued."
+"""`PX` is Harrowgate Prep's code: a quoted text holding it must be a scan hit in report.md."""
+
+
+class _TextsFor:
+    """Places a CP text under `states-cp` in `neg-one`'s file, as `v1-e32-t11`'s reader would."""
+
+    def __init__(self, text: str = STATES_TEXT) -> None:
+        self.text = text
+        self.asked: list[tuple[str, int, bool, bool]] = []
+
+    async def report_inputs(
+        self,
+        *,
+        reading: SeedReading,
+        taxonomy: Taxonomy,
+        overrides: OverrideRules,
+        actors: CounterplanActors | None,
+        writes: bool,
+    ) -> AnalyticTextsForReport:
+        self.asked.append((taxonomy.taxonomy_version, len(overrides.overrides), actors is None, writes))
+        (neg_one,) = {
+            one.source_sha256
+            for one in reading.disclosures
+            if one.side is Side.NEG and one.tournament == "Lantern Classic"
+        }
+        reading_of = AnalyticTextReading(
+            kind=AnalyticTextKind.CP_TEXT,
+            form=TextForm.BY_PLACE,
+            label_element_index=4,
+            element_index=4,
+            unit=StructuralUnit.ANALYTIC,
+            kept=False,
+            digest=text_digest(self.text),
+            placement=TextPlacement.PLACED,
+            position_id="states-cp",
+            role=PositionRole.READS,
+        )
+        counts = AnalyticTextCounts(
+            sources=1,
+            hits=0,
+            parsed=1,
+            refused=0,
+            unread=0,
+            readings={"CP_TEXT": 1},
+            placed={"CP_TEXT": 1},
+            refused_by_guard=0,
+            cache_written=writes,
+        )
+        return AnalyticTextsForReport(
+            inputs=AnalyticTextInputs(
+                readings={neg_one: (reading_of,)},
+                texts={(neg_one, 4): self.text},
+                caselist_names=reading.caselist_names,
+            ),
+            read=counts,
+            quoted=QuotedTextsRun(
+                texts={(neg_one, 4): self.text}, sources=1, wanted=1, mismatched=0, unread=0
+            ),
+        )
+
+
+async def test_the_texts_seam_puts_the_quoted_texts_in_report_md_and_nowhere_else(
+    world: SyntheticRun,
+) -> None:
+    source = _TextsFor()
+    result = await _run(_service(world, analytic_texts=source))
+
+    assert source.asked == [("1.0.0", 0, True, True)]
+    assert result.analytic_texts is not None and result.analytic_texts.read.parsed == 1
+    texts = result.report.texts
+    assert texts is not None
+    assert [(one.position_id, [(row.teams, row.text) for row in one.texts]) for one in texts.positions] == [
+        ("states-cp", [(1, STATES_TEXT)])
+    ]
+    for name in BUNDLE_FILES:
+        written = (result.directory / name).read_text(encoding="utf-8")
+        assert (STATES_TEXT in written) is (name == "report.md"), name
+
+
+async def test_a_dry_run_asks_the_texts_source_not_to_write(world: SyntheticRun) -> None:
+    source = _TextsFor()
+    result = await _run(_service(world, analytic_texts=source), dry_run=True)
+
+    assert [asked[3] for asked in source.asked] == [False]
+    assert result.report.texts is not None
+
+
+async def test_without_a_texts_source_the_report_has_no_text_sections(world: SyntheticRun) -> None:
+    result = await _run(_service(world))
+
+    assert result.report.texts is None
+    assert "## Counterplan texts" not in (result.directory / "report.md").read_text(encoding="utf-8")
+
+
+async def test_a_team_code_in_a_quoted_text_is_a_scan_hit_in_report_md(world: SyntheticRun) -> None:
+    result = await _run(_service(world, analytic_texts=_TextsFor(CODED_TEXT)), dry_run=True)
+
+    assert [(hit.file, hit.kind, hit.term) for hit in result.scan.hits if CODED_TEXT in hit.line] == [
+        ("report.md", ScanKind.TEAM_CODE, "PX")
+    ]

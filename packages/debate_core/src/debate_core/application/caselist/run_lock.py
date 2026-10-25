@@ -354,8 +354,11 @@ class BucketKeepsRunState(DomainError):
     """A local-mode command would write to a bucket that keeps its run state (the PM's ruling 3(a)).
 
     Once a bucket is seeded its state is the bucket's, and a machine in local mode would publish
-    from an older copy and download against a ledger the bucket does not share.
+    from an older copy and download against a ledger the bucket does not share. A pull so refused
+    keeps its record on this machine: it would otherwise write it to the bucket it refused.
     """
+
+    record_stays_local = True
 
     def __init__(self) -> None:
         super().__init__(

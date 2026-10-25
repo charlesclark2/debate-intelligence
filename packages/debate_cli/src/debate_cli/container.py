@@ -1790,25 +1790,35 @@ class ServiceContainer:
     def backfile_import(self, *, event_for_caselist: Callable[[str], Event | None]) -> BackfileImportService:
         """`caselist backfile-import`: one backfile caselist, imported, parsed and published (`v1-e34-t34`).
 
-        Over the bucket's lock and state, and the suppression list's two copies read as one with no
-        fallback to this machine's alone: a backfile import that cannot read the bucket's copy stops
-        rather than bring back a file a removal took out. Everything comes from settings, so the same
-        build runs it on the Mac and in the caselist image.
+        Over the bucket's lock and state, and the very suppression list the weekly pull's importers
+        read: both copies as one, and a held upload recorded in this machine's copy, which the
+        everyday credential may write (the pull's rule, so that removal and holds reach a backfile
+        exactly as they reach the current season). Everything comes from settings, so the same build
+        runs it on the Mac and in the caselist image.
         """
         return self.singleton("backfile_import", lambda: self._build_backfile_import(event_for_caselist))
 
-    def _build_backfile_import(self, event_for_caselist: Callable[[str], Event | None]) -> BackfileImportService:
+    def _build_backfile_import(
+        self, event_for_caselist: Callable[[str], Event | None]
+    ) -> BackfileImportService:
         # Imported here, not at module scope: lxml is loaded only by a command that needs the parser.
         from debate_core.application.caselist.backfile_import import BackfileImportService
         from debate_core.integrations.docx_parser import DebateDocxParser
 
         settings = self.settings
+        # The E34 gate first: an installation that has not turned the API on refuses before any
+        # bucket adapter is built, as the survey and the pull do.
+        source = self.opencaselist_client()
         bucket = bool(settings.storage.s3.bucket)
-        suppression = self.suppression_list() if bucket else self.local_suppression_list()
+        suppression: SuppressionList = self.local_suppression_list()
+        if bucket:
+            suppression = LocalFallbackSuppressionList(
+                self.suppression_list(), local=self.local_suppression_list()
+            )
         return BackfileImportService(
             caselist_settings=settings.caselist,
             bucket_mode=self._in_bucket_mode,
-            source=self.opencaselist_client(),
+            source=source,
             importer=CaselistImportService(
                 caselists=SqliteCaselistRepository(self.database),
                 blobs=FsSnapshotStore(settings.storage.data_dir),

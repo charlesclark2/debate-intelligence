@@ -222,19 +222,27 @@ def _caption(result: BackfileSurveyResult) -> str:
 
 def backfile_import(
     ctx: typer.Context,
-    caselist: Annotated[str, typer.Option("--caselist", help="The backfile caselist to import, e.g. hspolicy25.")],
+    caselist: Annotated[
+        str, typer.Option("--caselist", help="The backfile caselist to import, e.g. hspolicy25.")
+    ],
     execute: Annotated[
-        bool, typer.Option("--execute", help="Import it. Without it, a dry run that downloads and writes nothing.")
+        bool,
+        typer.Option("--execute", help="Import it. Without it, a dry run that downloads and writes nothing."),
     ] = False,
     confirm_prod: Annotated[
         bool, typer.Option(CONFIRM_PROD_FLAG, help="Required with --execute in the production environment.")
     ] = False,
 ) -> None:
-    """Import one backfile caselist's complete archive: download, import, parse, publish. Dry run by default."""
+    """Import a backfile caselist's complete archive: download, import, parse, publish. Dry run by default."""
     cli = cli_context(ctx)
     settings = cli.services.settings
     if execute and settings.environment is Environment.PROD and not confirm_prod:
-        _refuse(cli, ctx, (Refusal("CONFIRMATION_REQUIRED", f"refusing production's bucket without {CONFIRM_PROD_FLAG}"),), None)
+        _refuse(
+            cli,
+            ctx,
+            (Refusal("CONFIRMATION_REQUIRED", f"refusing production's bucket without {CONFIRM_PROD_FLAG}"),),
+            None,
+        )
     service = cli.services.backfile_import(event_for_caselist=event_for_caselist)
     if not execute:
         plan = asyncio.run(service.plan(caselist))
@@ -261,7 +269,9 @@ def backfile_import(
     cli.output.success(command_name(ctx), payload, display=_import_table(report.plan, report))
 
 
-def _refuse(cli: CliContext, ctx: typer.Context, refusals: tuple[Refusal, ...], plan: BackfilePlan | None) -> NoReturn:
+def _refuse(
+    cli: CliContext, ctx: typer.Context, refusals: tuple[Refusal, ...], plan: BackfilePlan | None
+) -> NoReturn:
     failure = CommandFailure(
         code="BACKFILE_IMPORT_REFUSED",
         message="; ".join(f"{one.code}: {one.message}" for one in refusals),
@@ -325,23 +335,37 @@ def _import_table(plan: BackfilePlan, report: BackfileReport | None) -> TableSpe
     space = plan.space
     rows = [
         ["Caselist", f"{plan.caselist} ({plan.season})"],
-        ["Complete archive", f"{plan.archive_date} ({plan.archive_bytes:,} bytes)" if plan.archive_bytes else "—"],
+        [
+            "Complete archive",
+            f"{plan.archive_date} ({plan.archive_bytes:,} bytes)" if plan.archive_bytes else "—",
+        ],
         ["Already imported", "yes" if plan.already_imported else "no"],
         ["Backfile downloads left (24 h)", str(plan.downloads_left)],
         ["No-import window", "inside" if plan.inside_window else "outside"],
         [
             "Free space",
-            f"{space.free_bytes:,} free; {space.required_bytes:,} needed ({space.estimate_bytes:,} estimate + 25%)"
+            f"{space.free_bytes:,} free; {space.required_bytes:,} needed "
+            f"({space.estimate_bytes:,} estimate + 25%)"
             if space is not None
             else "—",
         ],
     ]
     if report is not None:
         rows += [
-            ["Imported", f"{report.members} member(s), {report.stored} stored, {report.suppressed} suppressed"],
-            ["Published", f"{report.sources_uploaded} source(s) uploaded, {report.sources_skipped} already there"],
+            [
+                "Imported",
+                f"{report.members} member(s), {report.stored} stored, {report.suppressed} suppressed",
+            ],
+            [
+                "Published",
+                f"{report.sources_uploaded} source(s) uploaded, {report.sources_skipped} already there",
+            ],
             ["Bundle", report.bundle or "—"],
-            ["Parsed", f"{report.parsed} parsed, {report.unsupported} unsupported, {report.failed} failed, {report.cards} card(s)"],
+            [
+                "Parsed",
+                f"{report.parsed} parsed, {report.unsupported} unsupported, {report.failed} failed, "
+                f"{report.cards} card(s)",
+            ],
             ["Parsed store", f"{report.parsed_uploaded} object(s) uploaded"],
         ]
     return TableSpec(

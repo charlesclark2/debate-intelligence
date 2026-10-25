@@ -620,6 +620,7 @@ if TYPE_CHECKING:  # pragma: no cover - sync_runs imports this module, so its ty
     )
 
 __all__ = [
+    "archive_entries",
     "BULK_DOWNLOAD_WINDOW",
     "DEFAULT_BULK_DOWNLOADS_PER_DAY",
     "DEFAULT_FULL_ARCHIVE_INTERVAL_DAYS",
@@ -5837,6 +5838,11 @@ def _entries_of(read: ArchiveReader, archive: Path) -> Iterable[ArchiveEntry]:
     except OSError as unreadable:
         raise _unreadable_in_the_inbox(archive, unreadable) from unreadable
     return _reading(entries, archive)
+
+
+def archive_entries(read: ArchiveReader, archive: Path) -> Iterable[ArchiveEntry]:
+    """A weekly or complete archive's entries, read as a pull reads them: `caselist backfile-import`'s too."""
+    return _entries_of(read, archive)
 
 
 def _reading(entries: Iterable[ArchiveEntry], archive: Path) -> Iterator[ArchiveEntry]:

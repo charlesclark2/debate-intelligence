@@ -1,9 +1,9 @@
-"""`caselist backfile-import` end to end, in bucket mode, over moto and a stand-in OpenCaselist (`v1-e34-t34` ac2).
+"""`caselist backfile-import` end to end in bucket mode, over moto and a stand-in site (`v1-e34-t34` ac2).
 
 The PM's rulings of 2026-10-25, each by test, through the real application and composition root:
 
-* a backfile caselist's complete archive imports into its `full/<date>` namespace, parses and
-  publishes, and its manifest reaches the run-state bundle;
+* a backfile caselist's complete archive imports as its dated snapshot, parses and publishes, and
+  its manifest reaches the run-state bundle;
 * the bucket's run lock is the weekly run's, held per step and free during the download;
 * the window, the budget, the free-space precheck, the marker and the seed each refuse before anything
   is downloaded, and the dry run names them;
@@ -54,7 +54,8 @@ BACKFILE: Final = "testcl25"
 OTHER_BACKFILE: Final = "testcl24"
 ARCHIVE_DATE: Final = date(2026, 6, 30)
 LATER_ARCHIVE_DATE: Final = date(2026, 7, 28)
-FULL_KEY: Final = f"manifests/{BACKFILE}/full/{ARCHIVE_DATE.isoformat()}.jsonl"
+MANIFEST_KEY: Final = f"manifests/{BACKFILE}/{ARCHIVE_DATE.isoformat()}.jsonl"
+"""The backfile's one dated snapshot: its complete archive, filed in the series every reader reads."""
 WEEKLY_LEDGER_KEY: Final = "reports/sync/state/caselist-sync-download-starts.json"
 WEEK_1, WEEK_2, _ = (week.snapshot for week in WEEKS)
 
@@ -153,7 +154,7 @@ def refusals(envelope: dict[str, Any]) -> list[str]:
     return list(envelope["error"]["details"]["refusals"])
 
 
-def member_rows(world: World, key: str = FULL_KEY) -> list[dict[str, Any]]:
+def member_rows(world: World, key: str = MANIFEST_KEY) -> list[dict[str, Any]]:
     rows = [json.loads(line) for line in world.body(key).decode("utf-8").splitlines()]
     return [row for row in rows if row.get("kind") == "member"]
 
@@ -209,7 +210,7 @@ def test_the_dry_run_lists_and_sizes_and_downloads_writes_and_locks_nothing(
 # ------------------------------------------------------------------------------------------------
 
 
-def test_a_backfile_imports_parses_and_publishes_into_its_full_namespace(
+def test_a_backfile_imports_parses_and_publishes_as_its_dated_snapshot(
     backfiles: tuple[World, Site],
 ) -> None:
     world, site = backfiles
@@ -231,10 +232,12 @@ def test_a_backfile_imports_parses_and_publishes_into_its_full_namespace(
     raw = world.object_keys(f"raw/caselist/{BACKFILE}/")
     assert {key.rsplit("/", 1)[-1] for key in raw} == {row["sha256"] for row in member_rows(world)}
     assert any(key.endswith("/occurrences.jsonl") for key in world.object_keys(f"parsed/{BACKFILE}/"))
-    assert any(name.endswith(FULL_KEY) for name in bundle_names(world)), (
+    assert any(name.endswith(MANIFEST_KEY) for name in bundle_names(world)), (
         "the bundle holds the backfile's manifest"
     )
-    assert world.object_keys(f"manifests/{BACKFILE}/") == {FULL_KEY}, "a complete archive only: no weekly"
+    assert world.object_keys(f"manifests/{BACKFILE}/") == {MANIFEST_KEY}, (
+        "one snapshot, the complete archive's"
+    )
     assert counts["archive_left_inbox"] is True
     assert site.fetched == [f"{FILE_HOST}/{archive_name(BACKFILE, ARCHIVE_DATE)}"]
     assert world.everything()[WEEKLY_LEDGER_KEY] == weekly_ledger, "the weekly run's ledger is never touched"
@@ -286,6 +289,27 @@ def test_inside_the_no_import_window_it_refuses_to_start_and_the_dry_run_says_so
     assert refusals(execute(world)) == ["INSIDE_NO_IMPORT_WINDOW"]
     assert site.fetched == []
     assert world.object_keys(f"manifests/{BACKFILE}/") == set()
+
+
+def test_a_window_that_opens_during_the_import_stops_the_next_locked_step_and_the_run_resumes_after_it(
+    backfiles: tuple[World, Site],
+) -> None:
+    world, site = backfiles
+    site.while_fetching.append(lambda: setattr(world.clock, "now", ON_A_WEDNESDAY))
+
+    stopped = execute(world)
+
+    assert refusals(stopped) == ["INSIDE_NO_IMPORT_WINDOW"]
+    assert world.object_keys(f"manifests/{BACKFILE}/") == set(), "the publish step never took the lock"
+    assert world.lock()["state"] == "free"
+
+    world.clock.now = ON_A_WEDNESDAY + timedelta(days=1)
+    resumed = execute(world)
+
+    assert resumed["exit_code"] == ExitCode.OK, resumed
+    assert resumed["data"]["in_inbox"] is True
+    assert len(site.fetched) == 1, "the archive left in the inbox is imported; no second download"
+    assert world.object_keys(f"manifests/{BACKFILE}/") == {MANIFEST_KEY}
 
 
 def test_one_complete_archive_a_day_from_the_buckets_ledger_whatever_machine_asks(
@@ -478,11 +502,13 @@ def test_a_source_on_the_suppression_list_is_not_brought_back_by_a_backfile(
 def test_a_path_a_removal_holds_holds_a_later_complete_archive_of_the_backfile(
     backfiles: tuple[World, Site], tmp_path: Path
 ) -> None:
+    """A whole-file removal by `--source` holds the path it took the file from (`v1-e30-t13`): new bytes
+    there, in a later complete archive of the backfile, are refused and counted under the request."""
     world, site = backfiles
     assert execute(world)["exit_code"] == ExitCode.OK
     world.use(tmp_path / "the-macs-copy")
     removed = world.run(
-        "caselist", "remove", "--team", f"{BACKFILE}/Westfield/XY", "--reason", "REQUESTED_BY_TEAM",
+        "caselist", "remove", "--source", digest_of("direct"), "--reason", "REQUESTED_BY_TEAM",
         "--request", "RM-2026-06", "--execute",
     )  # fmt: skip
     assert removed["exit_code"] == ExitCode.OK, removed
@@ -493,8 +519,8 @@ def test_a_path_a_removal_holds_holds_a_later_complete_archive_of_the_backfile(
 
     imported = execute(world)
 
-    assert imported["exit_code"] == ExitCode.OK, imported
+    assert imported["exit_code"] == ExitCode.OK, json.dumps(imported.get("error"))[:1500]
     assert imported["data"]["archive_date"] == LATER_ARCHIVE_DATE.isoformat()
     assert imported["data"]["import"]["held_by_request"] == {"RM-2026-06": 1}
-    later_key = f"manifests/{BACKFILE}/full/{LATER_ARCHIVE_DATE.isoformat()}.jsonl"
+    later_key = f"manifests/{BACKFILE}/{LATER_ARCHIVE_DATE.isoformat()}.jsonl"
     assert digest_of("cardmirror") not in {row.get("sha256") for row in member_rows(world, later_key)}

@@ -38,9 +38,15 @@ class BackfileHasNoLandscape(DomainError):
             "classifies one into positions or gives it a per-school view, so it has no landscape report"
         )
 
+
 def refuse_backfiles(caselists: Iterable[str | None], backfiles: Sequence[str]) -> None:
     """Raise :class:`BackfileIsNotPulled` when any of `caselists` is a backfile."""
+    named = sorted({one for one in caselists if one is not None and one in backfiles})
+    if named:
+        raise BackfileIsNotPulled(named)
 
 
 def refuse_a_landscape(caselist: str, backfiles: Sequence[str]) -> None:
     """Raise :class:`BackfileHasNoLandscape` when `caselist` is a backfile."""
+    if caselist in backfiles:
+        raise BackfileHasNoLandscape(caselist)

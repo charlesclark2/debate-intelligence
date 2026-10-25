@@ -56,6 +56,16 @@ published, with its validate-dev run, image job included, green. `v1-e40-t05`'s 
 `v1-e40-t04`'s bucket mode into the run's task definition (the PM's ruling (a) on `v1-e40-t05`), so the
 image apply of step 4 changes the image alone.
 
+**From this task's merge until step 3's seed, no dev command that writes the bucket runs from a
+checkout** (the PM's ruling of 2026-10-26). A checkout of `dev` from the merge on has the dev profile
+in bucket mode, and the dev bucket is not seeded until step 3. So a bucket-writing command run from
+one, such as a landscape publish from `dev-preview`, `caselist publish` or `tub index publish`, is
+refused with `RUN_STATE_NOT_SEEDED`; or, with `DEBATE_CASELIST__RUN_STATE=local` set to get past
+that, it would publish to dev outside the lock while the cutover is under way. Wait for the seed.
+Commands that only read the bucket, or do not touch it, are unchanged. The Mac's installed agent is
+unaffected: it runs the build installed on the Mac, whose profile is the one from before this task,
+until step 3 replaces it.
+
 **The worktree every dev apply used**, `caselist-credentials-dev`, moved to `origin/dev`, with the
 check that this task is merged in it. Its gitignored `owner.auto.tfvars` is the one every dev apply
 read.

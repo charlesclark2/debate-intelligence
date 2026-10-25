@@ -499,3 +499,22 @@ def test_a_fenced_client_refuses_every_write_without_the_lease_and_lets_reads_th
     fenced.put_object(Bucket=evidence_bucket, Key=BLOB_KEY, Body=b"y")
 
     assert len(versions(s3_client, evidence_bucket)) == before + 1, "the manifest renewed; the blob did not"
+
+
+def test_the_lease_is_thirty_minutes_renewed_every_five_with_five_minutes_for_clock_skew() -> None:
+    """ADR-0020 (4)'s numbers, and the lease every command is built with unless a test says otherwise."""
+    import inspect
+
+    from debate_core.application.caselist.run_lock import RENEW_EVERY
+
+    assert (LEASE, RENEW_EVERY, CLOCK_SKEW_MARGIN) == (
+        timedelta(minutes=30),
+        timedelta(minutes=5),
+        timedelta(minutes=5),
+    )
+    defaults = {name: one.default for name, one in inspect.signature(BucketRunLock).parameters.items()}
+    assert (defaults["lease"], defaults["renew_every"], defaults["skew_margin"]) == (
+        LEASE,
+        RENEW_EVERY,
+        CLOCK_SKEW_MARGIN,
+    )

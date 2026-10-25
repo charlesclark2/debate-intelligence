@@ -394,3 +394,29 @@ def test_a_stop_cancels_the_run_once_and_a_cancellation_nobody_asked_for_stays_o
         raise AssertionError("not cancelled")
 
     assert isinstance(asyncio.run(stopped()), RunTerminated)
+
+
+def test_a_bundle_the_bucket_holds_with_another_digest_than_was_written_is_not_confirmed(
+    tmp_path: Path, s3_client: S3Client, evidence_bucket: str
+) -> None:
+    """The confirm reads the bucket's recorded SHA-256 back, not only which version is current."""
+    from debate_core.application.ports.evidence_store import ObjectInfo
+
+    data_dir = a_data_directory(tmp_path)
+    bucket = S3EvidenceObjectStore(bucket=evidence_bucket, client=s3_client)
+    asyncio.run(bucket.put_file(MANIFEST, data_dir / "objects" / MANIFEST))
+
+    class HoldsOtherBytes(S3EvidenceObjectStore):
+        async def head(self, key: str) -> ObjectInfo:
+            found = await super().head(key)
+            if key != RUN_STATE_BUNDLE_KEY:
+                return found
+            return ObjectInfo(key=key, size=found.size, sha256="0" * 64, version_id=found.version_id)
+
+    state = run_state(data_dir, s3_client, evidence_bucket)
+    state._bucket = HoldsOtherBytes(bucket=evidence_bucket, client=s3_client)  # pyright: ignore[reportPrivateUsage]
+
+    unconfirmed = asyncio.run(state.save_bundle())
+
+    assert not unconfirmed.saved
+    assert unconfirmed.reason.startswith("not confirmed")

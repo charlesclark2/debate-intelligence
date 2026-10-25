@@ -72,7 +72,7 @@ spec:
         prompt's registry entry is refused before the model is called, by test shown failing
         first.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

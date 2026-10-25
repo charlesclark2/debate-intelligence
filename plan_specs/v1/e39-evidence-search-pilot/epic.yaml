@@ -383,5 +383,25 @@ spec:
         - scripts/validate_specs.py
         - --require-succeeded
         - v1-e39-t16-open-on-openev
+    - id: t17
+      kind: Task
+      name: 'The landscape report and its school view on the pilot, for signed-in team members'
+      description: >-
+        The landscape report and its school view on the pilot, for signed-in team members.
+      inputs:
+        specRef: plan_specs/v1/e39-evidence-search-pilot/t17-landscape-pages.yaml
+        goalRef: v1-e39-t17-landscape-pages
+      dependsOn:
+      - t07
+      - t11
+      acceptanceCriteria:
+      - type: command_succeeds
+        name: Task spec v1-e39-t17-landscape-pages reports phase Succeeded
+        command: uv
+        args:
+        - run
+        - scripts/validate_specs.py
+        - --require-succeeded
+        - v1-e39-t17-landscape-pages
 status:
   phase: Pending

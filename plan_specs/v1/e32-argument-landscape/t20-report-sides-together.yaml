@@ -1,0 +1,84 @@
+# TASK v1-e32-t20-report-sides-together - report.md in two halves: every affirmative section together, then every negative one
+# Epic: E32 Argument Landscape Reports | Release: v1.2 (Argument landscape & file building) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e32-t20-report-sides-together
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+  annotations:
+    debate/title: "report.md in two halves: every affirmative section together, then every negative one"
+spec:
+  # Filed by the PM, 2026-10-25, from the coach's read of the republished Policy report (Charlie, 2026-10-25).
+  description: >-
+    The coach asked for every affirmative section of report.md in one place. Sections were added
+    one task at a time (v1-e32-t03, t09, t10, t11, t14, t15, t16), each where its task put it,
+    so affirmative material (the affs and their mechanisms, plan texts, advantages, advantages
+    by aff, advantage impact cards and chains) is split by negative material. Reorder report.md
+    into a header and a short contents list; then an Affirmative half; then a Negative half (DAs
+    with their impacts, scenarios and chains, CPs with their texts and planks, Ks with their
+    alternatives and roles of the ballot, Ts); then what belongs to neither side (overviews,
+    which are counted on both sides, trends, new this week, the coverage and method notes).
+    Content does not change: every section's words and numbers are byte-identical, only their
+    order and the headings that group them, which the hand-written golden report.md shows. No
+    other bundle file changes. Starts after v1-e32-t14 merges, since t14, t15 and t16 all edit
+    the renderer; if v1-e32-t16 has merged too, its section goes in the CP part.
+  priority: 1
+  constraints:
+    packages: [debate_core.arguments, debate_core.application, tests/fixtures/landscape, packages/debate_core/tests, docs/guides]
+    forbidden:
+      - A change to any section's words or numbers beyond the grouping headings and the contents list
+      - A change to any bundle file other than report.md
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e32-t14-scenarios-and-link-chains
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        On the synthetic fixture, report.md reads header, contents, Affirmative, Negative,
+        then the sections of neither side, matching a hand-written golden file; each
+        section's body is byte-identical to its body before the reorder, by a test that
+        compares them section by section; no other bundle file changes; tests shown failing
+        first.
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e32-t20-report-sides-together-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.2
+    debate/epic: v1-e32-argument-landscape
+spec:
+  description: >-
+    Reorder the renderer's sections into the two halves and the shared part, with a contents
+    list and a section-by-section identity test.
+  goalRef:
+    name: v1-e32-t20-report-sides-together
+  graph:
+    nodes:
+      - id: report-sides
+        kind: Task
+        name: Report sides together
+        description: >-
+          Reorder the renderer's sections into the two halves and the shared part, with a
+          contents list and a section-by-section identity test.
+        estimatedEffort: 2h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Landscape render tests pass
+            command: uv
+            args: [run, pytest, packages/debate_core/tests/arguments/landscape/test_render.py]
+status:
+  phase: Pending

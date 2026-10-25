@@ -6,7 +6,7 @@
 | Spec | [`plan_specs/v1/e40-cloud-caselist-run/t06-cutover.yaml`](../../plan_specs/v1/e40-cloud-caselist-run/t06-cutover.yaml) |
 | Epic / release | `v1-e40-cloud-caselist-run` / `v1.8` |
 | Branch | `task/v1-e40-t06-cutover` |
-| Session status | PARTIAL: everything a session can build is built and tested, except the base images' digests, which wait for the operator's paste (Operator follow-up 1). The Goal stays `InProgress`: ac1 and ac2 are the cutover session's to run <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | COMPLETE for a session: everything is built and tested, the base images' digests included after the PM's review. The Goal stays `InProgress`: ac1 and ac2 are the cutover session's to run <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
@@ -308,6 +308,33 @@ FYI, going ahead unless you say otherwise:
 
 Reply with: 1a/1b, 2a/2b/2c, 3 adopt or not, 4 amend or not.
 ```
+
+## Changes after the PM's review
+
+The PM accepted the task on 2026-10-26 (rulings: 1 (a), 2 (a), 3 adopted, 4 amend) with two changes
+to follow, both made:
+
+1. **The cutover runbook's "Before you start"** says that from this task's merge until step 3's seed
+   no dev command that writes the bucket runs from a checkout (a landscape publish from `dev-preview`,
+   for example): the dev profile is in bucket mode and the bucket is unseeded. The Mac's installed
+   agent is unaffected (c322cae).
+2. **Both base images pinned by their index digests** in `ops/caselist_run/Dockerfile`, from Operator
+   follow-up 1's output, which the operator ran on 2026-10-26 (`docker buildx imagetools inspect`,
+   each an `application/vnd.oci.image.index.v1+json`):
+
+   | Image | Index digest | Registry page |
+   |---|---|---|
+   | `python:3.12-slim-bookworm` (the tag `--print-base-image` names), both the install and run stages | `sha256:6a0e06f5ba0b373d051aabd3fffb9b873f27f9a2a3a14bcbe37dee6f0e3bbc70` | <https://hub.docker.com/_/python/tags?name=slim-bookworm> |
+   | `ghcr.io/astral-sh/uv:0.11.7` | `sha256:240fb85ab0f263ef12f492d8476aa3a2e4e1e333f7d67fbdd923d00a506a516a` | <https://github.com/astral-sh/uv/pkgs/container/uv> |
+
+   The Dockerfile's comment cites both pages and says the python digest moves with
+   `requires-python`, which `check_image.sh` now enforces. `test_caselist_run_deploy.py` pins the two
+   digests, written by hand from the operator's output, and requires both python stages to carry one:
+   against the unpinned Dockerfile, `2 failed`; pinned, `pytest tests/scripts/test_caselist_run_deploy.py
+   tests/architecture/test_single_interpreter_source.py` gives `77 passed`. The Dockerfile names no
+   Python version, so the single-interpreter test needs no exemption. The image built from the pins is
+   first built by the cutover's step 4 dry run and validate-dev's image job, both of which reach the
+   registries; nothing here built it.
 
 ## PM review
 

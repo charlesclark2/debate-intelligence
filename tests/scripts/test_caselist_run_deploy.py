@@ -552,10 +552,32 @@ def test_the_image_installs_the_release_with_install_channel_on_the_slim_python_
     dockerfile = DOCKERFILE.read_text(encoding="utf-8")
 
     assert re.findall(
-        r"^FROM python:\$\{PYTHON_VERSION\}-slim-bookworm AS (\w+)$", dockerfile, re.MULTILINE
+        r"^FROM python:\$\{PYTHON_VERSION\}-slim-bookworm@sha256:[0-9a-f]{64} AS (\w+)$",
+        dockerfile,
+        re.MULTILINE,
     ) == ["install", "run"]
     assert 'sh /build/install_channel.sh --no-path-warning --dir /build/assets "${RELEASE_TAG}"' in dockerfile
     assert "ARG PYTHON_VERSION\n" in dockerfile, "no default: the version comes from requires-python"
+
+
+PYTHON_INDEX_DIGEST = "sha256:6a0e06f5ba0b373d051aabd3fffb9b873f27f9a2a3a14bcbe37dee6f0e3bbc70"
+UV_INDEX_DIGEST = "sha256:240fb85ab0f263ef12f492d8476aa3a2e4e1e333f7d67fbdd923d00a506a516a"
+"""The two index digests the registries gave for the base images' tags on 2026-10-26 (`v1-e40-t06`),
+written here by hand from the operator's output, not read back from the Dockerfile."""
+
+
+def test_both_base_images_are_pinned_by_the_digests_the_registries_gave() -> None:
+    """A tag can be moved upstream; a digest cannot. Both stages build on one python image."""
+    dockerfile = DOCKERFILE.read_text(encoding="utf-8")
+    froms = re.findall(r"^FROM (\S+)", dockerfile, re.MULTILINE)
+
+    assert froms == [
+        f"ghcr.io/astral-sh/uv:0.11.7@{UV_INDEX_DIGEST}",
+        f"python:${{PYTHON_VERSION}}-slim-bookworm@{PYTHON_INDEX_DIGEST}",
+        f"python:${{PYTHON_VERSION}}-slim-bookworm@{PYTHON_INDEX_DIGEST}",
+    ]
+    assert "https://hub.docker.com/_/python/tags" in dockerfile
+    assert "https://github.com/astral-sh/uv/pkgs/container/uv" in dockerfile
 
 
 def test_the_run_stage_puts_debate_research_on_path_and_runs_it_as_an_unprivileged_user() -> None:

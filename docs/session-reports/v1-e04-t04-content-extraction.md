@@ -13,9 +13,8 @@
 **Checkpoint 1 of 3 (2026-10-25): rules proposed, nothing built yet.** As the PM's context asked,
 this commit proposes the de-hyphenation rule and the running header and footer rule, with counts from
 the synthetic PDF fixture, before any extractor code is written. The fixture builder and the PDF are
-committed; the dependencies are declared in `pyproject.toml` but not yet locked, because none of them
-is in uv's cache and the lock needs the network (operator follow-up below). The session stops here
-for the PM's ruling on the two rules and the operator's lock.
+committed; the dependencies are declared in `pyproject.toml` and locked by the operator (licences below). The
+session stops here for the PM's ruling on the two rules and on two transitive licences.
 
 ## Plan nodes
 
@@ -150,21 +149,42 @@ when it does not end in sentence-final punctuation and the next page's first bod
 indented: that is how `envi-|ronmental` is joined across pages 2 and 3, with page 2's footer and page
 3's header removed between them. Paragraph boundaries move only whitespace, never a word.
 
-### Dependencies, before the lock
+### Dependencies and their licences, as locked
 
-| Package | Licence expected | Note |
-|---|---|---|
-| `trafilatura` (floor 2.0) | Apache-2.0 | GPLv3+ before 1.8.0, hence the floor |
-| `readability-lxml` (floor 0.8.1) | Apache-2.0 | |
-| `pypdf` (floor 6.0) | BSD-3-Clause | No dependencies of its own. 6.0 caps one FlateDecode stream's expansion |
+Locked by the operator's `uv lock` (2026-10-25). Every licence below was read from the installed
+package's own metadata (`importlib.metadata`: `License-Expression`, else `License`, else its licence
+classifiers), at the version the lock holds.
 
-`pypdf` was chosen over `pdfminer.six` for that cap (a PDF bomb guard the library holds itself) and
-because it has no dependencies; the line positions the rules need come from its text visitor. Each
-licence and version will be read from the installed package metadata after the lock, the transitive
-packages included, and anything under GPL or AGPL refused. Two transitive packages may need a ruling:
-`chardet` (through readability-lxml; LGPL-2.1 in the releases I know) and `tld` (through trafilatura's
-`courlan`; a choice of MPL-1.1, GPL-2.0 or LGPL-2.1). Neither is GPL-only; the report will give the
-locked version and its declared licence.
+| Package | Locked version | Licence (as declared) | Brought in by |
+|---|---|---|---|
+| `trafilatura` | 2.3.1 | Apache-2.0 | `extraction` extra |
+| `readability-lxml` | 0.9 | Apache-2.0 | `extraction` extra |
+| `pypdf` | 6.21.2 | BSD-3-Clause | `extraction` extra |
+| `babel` | 2.18.0 | BSD-3-Clause | courlan |
+| `chardet` | 5.2.0 | **LGPL** (classifier: LGPLv2 or later) | readability-lxml |
+| `charset-normalizer` | 3.5.2 (was 3.5.1) | MIT | trafilatura and htmldate (both need `>=3.5.2`, hence the bump) |
+| `courlan` | 1.4.0 | Apache-2.0 | trafilatura |
+| `cssselect` | 1.3.0 | BSD | readability-lxml |
+| `dateparser` | 1.4.3 | BSD-3-Clause | htmldate |
+| `htmldate` | 1.11.0 | Apache-2.0 | trafilatura |
+| `justext` | 3.0.2 | BSD-2-Clause | trafilatura |
+| `lxml-html-clean` | 0.4.5 | BSD-3-Clause | readability-lxml, justext |
+| `pytz` | 2026.5 | MIT | dateparser |
+| `regex` | 2026.9.29 | Apache-2.0 AND CNRI-Python | dateparser |
+| `tld` | 0.13.2 | **MPL-1.1 OR GPL-2.0-only OR LGPL-2.1-or-later** | courlan |
+| `tzlocal` | 5.4.5 | MIT | dateparser |
+| `tzdata` | 2026.5 | (not installed: locked only for `sys_platform == 'win32'`) | tzlocal |
+| `lxml` | 6.1.3 (already locked) | BSD-3-Clause | trafilatura, readability-lxml |
+
+Nothing is GPL-only or AGPL. Two need the PM's ruling. `chardet` 5.2.0 is LGPL-2.0-or-later, a
+weak copyleft that is not GPL. `tld` 0.13.2 is offered under a choice of three licences, of which
+the project would take MPL-1.1. Both are used unmodified, as installed libraries.
+
+`pypdf` was chosen over `pdfminer.six` because it has no dependencies of its own, and because it
+holds its own resource limits. Version 6.21.2 has `pypdf.Configuration`, with a 75 MB default
+ceiling on each stream's decompressed output (FlateDecode, LZW, run-length, JBIG2) and caps on array
+and dictionary sizes; the adapter can lower them alongside its own byte and page limits. The line
+positions the rules need come from pypdf's text visitor.
 
 ### Smaller choices
 
@@ -192,6 +212,9 @@ git status --short
 Success looks like: `uv lock` reports `Added pypdf`, `Added readability-lxml` and `Added trafilatura`
 with their versions (and their dependencies), `uv sync` finishes without an error, and `git status`
 prints only ` M uv.lock`. Paste the output back into the session; the session commits `uv.lock`.
+
+Done 2026-10-25: 17 packages added (`trafilatura` 2.3.1, `readability-lxml` 0.9, `pypdf` 6.21.2 and
+14 they need), `charset-normalizer` 3.5.1 to 3.5.2, `git status` showed only ` M uv.lock`.
 
 ## Follow-up work
 

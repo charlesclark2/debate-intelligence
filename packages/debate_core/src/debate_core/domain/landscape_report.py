@@ -19,6 +19,8 @@ module is the report as values; `LandscapeReportService` builds it and the rende
 * up to N :class:`ImpactCard` rows per DA and advantage, the clusters of its cards labelled as an
   impact (`v1-e32-t10`), and per kind an :class:`ImpactCoverage`: how many of its documents carry no
   labelled impact;
+* under each impact row its scenario and internal link, and per DA and advantage one
+  :class:`ChainCard` per chain role, with a :class:`ChainCoverage` per kind (`v1-e32-t14`);
 * an :class:`UnclassifiedSummary`: what the report could not count, by cards and by rounds;
 * how affirmative rounds were identified, one :class:`AffIdentification` per method;
 * :class:`AdvantagesByAff` (`v1-e32-t15`): under each aff `v1-e32-t09` assigned rounds to, and each
@@ -48,6 +50,7 @@ module is the report as values; `LandscapeReportService` builds it and the rende
 from __future__ import annotations
 
 from datetime import date
+from enum import StrEnum
 from typing import Annotated, Final, Literal, Self
 
 from pydantic import Field, StringConstraints, model_validator
@@ -72,12 +75,17 @@ __all__ = [
     "AffAssignment",
     "AffIdentification",
     "AffWithoutAdvantages",
+    "CHAIN_ROLES",
+    "ChainCard",
+    "ChainCoverage",
+    "ChainRole",
     "ImpactCard",
     "ImpactCoverage",
     "LandscapeCard",
     "LandscapeReport",
     "PositionStats",
     "ReportHeader",
+    "RoleGap",
     "TopCard",
     "UnassignedAdvantageReads",
     "UnclassifiedSummary",
@@ -104,6 +112,34 @@ AFF_METHOD_PATTERN: Final = r"^[A-Z][A-Z0-9_]*$"
 PLACED_CARD_METHOD: Final = "PLACED_CARD"
 """The method of an aff identified by a card in the round that `v1-e32-t02` placed under it."""
 
+
+
+class ChainRole(StrEnum):
+    """A card's place in a DA's or an advantage's link chain, as a team labelled it (`v1-e32-t14`)."""
+
+    UNIQUENESS = "uniqueness"
+    LINK = "link"
+    INTERNAL_LINK = "internal_link"
+    IMPACT = "impact"
+    HARMS = "harms"
+    INHERENCY = "inherency"
+    SOLVENCY = "solvency"
+
+
+CHAIN_ROLES: Final = {
+    PositionKind.DA: (ChainRole.UNIQUENESS, ChainRole.LINK, ChainRole.INTERNAL_LINK, ChainRole.IMPACT),
+    PositionKind.ADVANTAGE: (
+        ChainRole.UNIQUENESS,
+        ChainRole.LINK,
+        ChainRole.INTERNAL_LINK,
+        ChainRole.IMPACT,
+        ChainRole.HARMS,
+        ChainRole.INHERENCY,
+        ChainRole.SOLVENCY,
+    ),
+}
+"""The roles each kind's link chain shows, in report order: the coach's list (`v1-e32-t14`)."""
+
 RoundId = Annotated[str, StringConstraints(pattern=ROUND_ID_PATTERN)]
 AffMethod = Annotated[str, StringConstraints(pattern=AFF_METHOD_PATTERN)]
 
@@ -125,6 +161,24 @@ class LandscapeCard(DomainModel):
             "the empty ones left out. `v1-e32-t10`'s impact rule reads them, and no report shows them."
         ),
     )
+    heading_answers: tuple[bool, ...] = Field(
+        default=(),
+        repr=False,
+        description=(
+            "Beside each of `headings`, whether it answers (`AT:`); empty when none does. "
+            "`v1-e32-t14`'s answer sub-heading fills no chain role and names no scenario."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _check_answers(self) -> Self:
+        if self.heading_answers and len(self.heading_answers) != len(self.headings):
+            raise ValueError("heading_answers is empty or one flag per heading")
+        return self
+
+    def answers(self, index: int) -> bool:
+        """Whether heading `index` answers a position."""
+        return bool(self.heading_answers) and self.heading_answers[index]
 
 
 class AffAssignment(DomainModel):
@@ -190,8 +244,72 @@ class ImpactCard(TopCard):
     """One of a DA's or an advantage's impact cards: a row of impact_cards.csv (`v1-e32-t10`).
 
     A :class:`TopCard` of the cluster's labelled copies only: its teams are the teams reading a copy
-    labelled as an impact, and the card it shows is one of those copies.
+    labelled as an impact, and the card it shows is one of those copies. `v1-e32-t14` adds what the
+    impact runs through, each from those copies and only as their files label it.
     """
+
+    scenario: str | None = Field(
+        default=None,
+        description="The scenario name, normalized heading words two or more teams use; None when none is.",
+    )
+    internal_link_tag: str | None = Field(
+        default=None,
+        description="The tag, as parsed, of the labelled internal-link card above it; None when none is.",
+    )
+    card_above_tag: str | None = Field(
+        default=None,
+        description=(
+            "With no labelled internal link: the tag of the card directly above it in its block, when that "
+            "card is not an impact card. A fact about the file, never called an internal link; report.md only."
+        ),
+    )
+
+
+class ChainCard(TopCard):
+    """A DA's or an advantage's most-read card for one chain role (`v1-e32-t14`), rank 1 always.
+
+    A :class:`TopCard` of the cluster's copies labelled with the role, ranked as impact cards are.
+    """
+
+    role: ChainRole
+
+
+class RoleGap(DomainModel):
+    """How many positions of a kind have no labelled card for one chain role."""
+
+    role: ChainRole
+    positions: int = Field(ge=0)
+
+
+class ChainCoverage(DomainModel):
+    """What one kind's scenarios and link chains could not see (`v1-e32-t14` ac3)."""
+
+    kind: PositionKind
+    documents: int = Field(ge=0, description="Documents holding a card counted for a position of the kind.")
+    unstructured_documents: int = Field(
+        ge=0, description="Of those, the documents with no scenario heading and no chain-role label."
+    )
+    positions: int = Field(ge=0, description="Positions of the kind the report lists.")
+    impact_rows: int = Field(ge=0)
+    rows_with_scenario: int = Field(ge=0)
+    rows_with_internal_link: int = Field(ge=0)
+    rows_with_card_above: int = Field(
+        ge=0, description="Rows with no labelled internal link that show the card above instead."
+    )
+    withheld_names: int = Field(
+        ge=0, description="Scenario names two or more teams use, withheld for a school, team code or tournament."
+    )
+    roles_without_card: tuple[RoleGap, ...] = Field(description="One per role of the kind, in role order.")
+
+    @model_validator(mode="after")
+    def _check_counts(self) -> Self:
+        if self.unstructured_documents > self.documents:
+            raise ValueError("unstructured documents are among the documents")
+        if max(self.rows_with_scenario, self.rows_with_internal_link + self.rows_with_card_above) > (
+            self.impact_rows
+        ):
+            raise ValueError("rows with a scenario or a lead-in are among the impact rows")
+        return self
 
 
 class ImpactCoverage(DomainModel):
@@ -389,6 +507,12 @@ class LandscapeReport(DomainModel):
         description="Each DA's and advantage's impact cards, in report order."
     )
     impact_coverage: tuple[ImpactCoverage, ...] = Field(description="One per kind of :data:`IMPACT_KINDS`.")
+    chain_cards: tuple[ChainCard, ...] = Field(
+        default=(), description="Each DA's and advantage's most-read card per chain role, in report order."
+    )
+    chain_coverage: tuple[ChainCoverage, ...] = Field(
+        default=(), description="One per kind of :data:`IMPACT_KINDS` (`v1-e32-t14`)."
+    )
     unclassified: UnclassifiedSummary
     aff_identification: tuple[AffIdentification, ...] = Field(
         description="Identified affirmative rounds by method, in method order."

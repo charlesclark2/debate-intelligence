@@ -16,7 +16,7 @@ Every count comes from files teams disclosed to the caselist (FILE_IMPORT), not 
 | Coach's overrides | 1789afec01f8e1417460965e050263e11df2d4128ca0ed9604d1643f430639a0 |
 | Parser version | 2026.10.20-docx-6 |
 | Prompt version | none (deterministic classification, no model) |
-| Classification coverage | 34 of 45 cards (75.6%); 15 of 16 rounds (93.8%) |
+| Classification coverage | 45 of 56 cards (80.4%); 15 of 16 rounds (93.8%) |
 | Review threshold | 0.6 |
 | Disclosures counted | 16 rounds by 8 teams: 7 aff rounds by 6 teams, 8 neg rounds by 6 teams |
 | Data freshness | Current: the newest snapshot is 2026-09-15, 2 day(s) old |
@@ -30,6 +30,8 @@ How to read the numbers:
 * A card under an `AT:` heading answers a position and never counts as reading it, and so does a card placed under a position in a round on the other side: a `Midterms DA` block in an affirmative file is the 2AC answering it.
 * Each position's 5 most-read cards are in `top_cards.csv`, where near-duplicate copies of a card count as one card.
 * **Impact cards**, under each advantage and DA, are up to 3 of its cards labelled as an impact, ranked by the teams reading them: a heading over the card says `impact` or `impacts` (not `no impact`, `impact defense` or `impact turn`) or `turns case`, or its tag opens with an impact word such as `extinction`, `existential` or `the impact`. Only the labelled copies of a card count. An impact nobody labelled is not found, so each kind says how many of its documents carry no labelled impact. They are also in `impact_cards.csv`.
+* **What each impact runs through**, under its impact cards: a row's **scenario** is heading words two or more teams use under the position (a `Scenario 1` heading's name, a named heading, or the words beside an impact or internal-link label, such as `Dome impact`), and its **internal link** is the nearest card above it under the same position heading that a heading or its tag labels an internal link. Neither is guessed. With no labelled internal link, the card directly above the impact card in its block is shown as the card above it in the file when it is not an impact card itself: where it sits, not what it does. A scenario name holding a word of a caselist school, team code or tournament is withheld.
+* **The link chain** of each advantage and DA is its most-read card for each role a team labelled, by a heading under the position or the tag's first words: uniqueness (`U`, `UQ`), link, internal link (`IL`) and impact, and for an advantage harms, inherency and solvency. An `AT:` heading, a heading naming two roles, and a card that answers the position or is read on the other side fill no role. A role no team labelled says so.
 * **Trends** compare this week's window with the previous one. A round counts in the week its file was first disclosed, whatever path it was later filed under, and a position's share is the teams that read it that week on its own side over the week's teams disclosing on that side: this week 4 on the affirmative and 4 on the negative, the previous 3 and 4. **NEW** is read for the first time on this topic; **RISING** and **FALLING** moved by at least 5 points with at least 3 teams reading it in one of the two weeks; everything else is **STEADY**. Every position's row is in `trends.csv`.
 
 ## Affirmative positions
@@ -50,16 +52,54 @@ How to read the numbers:
 
 #### Advantages: impact cards
 
-Advantage documents with no labelled impact: 4 of 6 (66.7%).
+Advantage documents with no labelled impact: 3 of 6 (50.0%).
+
+Advantage documents with no scenario heading and no role label: 1 of 6 (16.7%).
+
+* Impact rows: 3; with a scenario two or more teams name: 1.
+* With a labelled internal link: 0 of 3 rows; with none: 3, of which 1 shows the card above it in the file.
+* Scenario names withheld for holding a word of a caselist school, team code or tournament: 0.
+* Positions with no labelled card, by role: uniqueness 2 of 2, link 2 of 2, internal link 1 of 2, impact 1 of 2, harms 2 of 2, inherency 2 of 2, solvency 1 of 2.
 
 **Costs advantage** (`costs-advantage`)
 
-| Rank | Teams | Tag | Cite |
+| Rank | Teams | Tag | Cite | Scenario |
+|---|---|---|---|---|
+| 1 | 1 | 2. Extinction from economic collapse | Okafor 25 | economic collapse |
+| 2 | 1 | Bulk purchasing lowers drug prices | Haddad 23 |  |
+| 3 | 1 | Extinction from a debt crisis | Okafor 26 |  |
+
+What each impact runs through:
+
+* Rank 1: no labelled internal link. Card above it in the file: Single payer cuts administrative costs
+* Rank 2: no labelled internal link.
+* Rank 3: no labelled internal link.
+
+Link chain:
+
+| Role | Teams | Tag | Cite |
 |---|---|---|---|
-| 1 | 1 | 2. Extinction from economic collapse | Okafor 25 |
-| 2 | 1 | Bulk purchasing lowers drug prices | Haddad 23 |
+| Uniqueness |  | no labelled card |  |
+| Link |  | no labelled card |  |
+| Internal link |  | no labelled card |  |
+| Impact | 1 | 2. Extinction from economic collapse | Okafor 25 |
+| Harms |  | no labelled card |  |
+| Inherency |  | no labelled card |  |
+| Solvency | 1 | Single payer solves within a year | Reyes 25 |
 
 **Innovation advantage** (`innovation-advantage`): no labelled impact card.
+
+Link chain:
+
+| Role | Teams | Tag | Cite |
+|---|---|---|---|
+| Uniqueness |  | no labelled card |  |
+| Link |  | no labelled card |  |
+| Internal link | 1 | Single payer frees capital for research | Moreau 25 |
+| Impact |  | no labelled card |  |
+| Harms |  | no labelled card |  |
+| Inherency |  | no labelled card |  |
+| Solvency |  | no labelled card |  |
 
 ### Theory
 
@@ -80,24 +120,78 @@ Advantage documents with no labelled impact: 4 of 6 (66.7%).
 
 #### Disadvantages: impact cards
 
-DA documents with no labelled impact: 3 of 6 (50.0%).
+DA documents with no labelled impact: 2 of 6 (33.3%).
+
+DA documents with no scenario heading and no role label: 2 of 6 (33.3%).
+
+* Impact rows: 4; with a scenario two or more teams name: 1.
+* With a labelled internal link: 1 of 4 rows; with none: 3, of which 0 show the card above it in the file.
+* Scenario names withheld for holding a word of a caselist school, team code or tournament: 1.
+* Positions with no labelled card, by role: uniqueness 3 of 4, link 2 of 4, internal link 3 of 4, impact 2 of 4.
 
 **Spending DA** (`spending-da`)
 
-| Rank | Teams | Tag | Cite |
+| Rank | Teams | Tag | Cite | Scenario |
+|---|---|---|---|---|
+| 1 | 2 | Debt ceiling fights are near | Ruiz 26 |  |
+| 2 | 1 | Spending triggers a debt spiral | Ito 26 |  |
+| 3 | 1 | Rate spikes cause a recession | Park 26 | recession |
+
+What each impact runs through:
+
+* Rank 1: no labelled internal link.
+* Rank 2: no labelled internal link.
+* Rank 3: Internal link: Deficits spike interest rates
+
+Link chain:
+
+| Role | Teams | Tag | Cite |
 |---|---|---|---|
-| 1 | 2 | Debt ceiling fights are near | Ruiz 26 |
-| 2 | 1 | Spending triggers a debt spiral | Ito 26 |
+| Uniqueness | 1 | Spending is at a record high now | Ito 25 |
+| Link | 2 | Spending triggers a debt spiral | Ito 26 |
+| Internal link | 1 | Deficits spike interest rates | Lee 26 |
+| Impact | 2 | Debt ceiling fights are near | Ruiz 26 |
 
 **Midterms DA** (`election-da`): no labelled impact card.
 
+Link chain:
+
+| Role | Teams | Tag | Cite |
+|---|---|---|---|
+| Uniqueness |  | no labelled card |  |
+| Link | 1 | The link: reform polls badly | Ward 26 |
+| Internal link |  | no labelled card |  |
+| Impact |  | no labelled card |  |
+
 **Hospital closures DA** (`hospital-closures-da`)
 
-| Rank | Teams | Tag | Cite |
+| Rank | Teams | Tag | Cite | Scenario |
+|---|---|---|---|---|
+| 1 | 1 | Rural hospitals close under single payer | Duarte 26 |  |
+
+What each impact runs through:
+
+* Rank 1: no labelled internal link.
+
+Link chain:
+
+| Role | Teams | Tag | Cite |
 |---|---|---|---|
-| 1 | 1 | Rural hospitals close under single payer | Duarte 26 |
+| Uniqueness |  | no labelled card |  |
+| Link |  | no labelled card |  |
+| Internal link |  | no labelled card |  |
+| Impact | 1 | Rural hospitals close under single payer | Duarte 26 |
 
 **Provider strikes DA** (`provider-strikes-da`): no labelled impact card.
+
+Link chain:
+
+| Role | Teams | Tag | Cite |
+|---|---|---|---|
+| Uniqueness |  | no labelled card |  |
+| Link |  | no labelled card |  |
+| Internal link |  | no labelled card |  |
+| Impact |  | no labelled card |  |
 
 ### Counterplans
 
@@ -228,10 +322,10 @@ Held back by the team floor: 4 positions moved by 5 points or more, but fewer th
 
 What this report could not count:
 
-* **Cards:** 10 of 45 (22.2%): 8 waiting in the review queue, 2 placed below the review threshold (0.6).
+* **Cards:** 10 of 56 (17.9%): 8 waiting in the review queue, 2 placed below the review threshold (0.6).
 * **Aff rounds with no identified aff:** 3 of 7 (42.9%).
 * **Neg rounds with no placed negative position:** 1 of 8 (12.5%).
-* Counted as answers, not reads: 1 round that placed a card under a position of the other side, counted once per position.
+* Counted as answers, not reads: 2 rounds that placed a card under a position of the other side, counted once per position.
 * Not counted and not queued: 1 card under headings the coach ruled name no position.
 
 How affirmative rounds were identified:

@@ -55,7 +55,7 @@ spec:
         No circuit-wide file carries a link or team code, by test; the counts of linked and
         unlinked teams on hspolicy26 are in the report.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

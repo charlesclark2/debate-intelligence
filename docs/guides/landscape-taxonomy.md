@@ -15,6 +15,7 @@ Where things are:
 | A topic's positions | `config/landscape/taxonomies/<topic id>.yaml`, e.g. [`policy-2026-27-nhi.yaml`](../../config/landscape/taxonomies/policy-2026-27-nhi.yaml) |
 | Positions every topic of an event shares: generic Ks, framework, theory | [`config/landscape/taxonomies/generic.yaml`](../../config/landscape/taxonomies/generic.yaml) |
 | Your decisions on headings the matcher could not place | `config/landscape/overrides/<topic id>.yaml`, written for you from the review queue ([below](#the-review-queue-and-your-decisions)) |
+| When a plan text that names no aff names the resolutional aff | `config/landscape/plan_texts/<topic id>.yaml`, e.g. [`policy-2026-27-nhi.yaml`](../../config/landscape/plan_texts/policy-2026-27-nhi.yaml) ([below](#the-resolutional-plan)) |
 | The ids published reports have released, which no edit may delete or change | [`config/landscape/released.yaml`](../../config/landscape/released.yaml), written for you ([below](#released-ids-and-the-lock-file)) |
 | The checks every edit must pass | [`tests/config/test_landscape_taxonomies.py`](../../tests/config/test_landscape_taxonomies.py) and [`tests/config/test_landscape_released_ids.py`](../../tests/config/test_landscape_released_ids.py) |
 | The models, the source of truth if this page and they disagree | `debate_core.domain.landscape` and `debate_core.integrations.landscape.yaml_taxonomy_repository` |
@@ -297,10 +298,12 @@ report shows which one did:
 
 1. **Its plan text** (`PLAN_TEXT`). The paragraph directly under a heading or label such as `Plan`,
    `Plan Text` or `PT`, or a `Plan:` line holding the text itself, names an aff when it holds one of
-   that aff's aliases or tag keywords. `medicare for all` and `m4a` count as single payer until you
-   name a child aff for them. A child named with its parent counts as the child; two unrelated affs
-   named together count as neither. A paragraph that only looks like a plan text, with no label
-   above it, identifies nothing.
+   that aff's aliases or tag keywords. A child named with its parent counts as the child; two affs
+   named together, two children of single payer included, count as neither. A paragraph that only
+   looks like a plan text, with no label above it, identifies nothing, and neither does a text whose
+   `should` has no federal actor before it (`The fifty states ... should`): that is a counterplan
+   under a plan label, not the team's plan. A plan text that names no aff can still name the
+   resolutional aff ([below](#the-resolutional-plan)).
 2. **A card the matcher placed under an aff** in that round (`PLACED_CARD`), as for any position.
 3. **The team's other rounds** (`TEAM_CARRY`). When every identified round of a team names one aff,
    its other affirmative rounds count under it too, but only rounds whose files hold no plan text of
@@ -341,6 +344,33 @@ Leave both blank to keep a cluster under its aff. Each named mechanism becomes a
 payer in the taxonomy file with your keywords, and the version is bumped (a minor bump: new positions).
 The next run reads every affirmative file again and counts rounds under the child their plan text
 names. Your keywords also refine cards placed under single payer by their tags, as rule 3 above says.
+Commas between keywords work as well as `;`.
+
+**Your answers of 2026-10-24 are in taxonomy 1.2.0** (`v1-e32-t09`):
+* nine mechanisms of single payer, as its children;
+* thirteen other affs, with the ids you wrote in `aff_named`, such as `public-option-aff`.
+
+A child's id is its mechanism name in kebab case plus `-aff`, such as `global-budgets-aff`. Each
+label is your mechanism name in sentence case, because the configuration check reads a capital
+after the first word as a person's name. Each position has your keywords and no alias. A cluster
+you marked `none` gets no position.
+
+### The resolutional plan
+
+Every plan says "national health insurance", so `nhi-aff` has no keywords. Instead, a plan text with a
+federal actor that names no aff names `nhi-aff` when every word of it is either:
+* an English joining word (`the`, `of`, `in` and the like);
+* one of the topic's **frame words**: those in at least 80% of the sheet's plan texts;
+* one of its **resolutional words**: those of the clusters you marked `nhi-aff`.
+
+`nhi-aff` is the least specific aff: when a file's plan texts, a round's files or a team's rounds name
+it and exactly one other aff, they count as that other aff, and `nhi-aff` never makes a conflict.
+
+A plan text with one other word stays unnamed. A text that writes `USFG` is an example, because
+`usfg` is in neither list. Both lists are in `config/landscape/plan_texts/<topic id>.yaml`, one
+lowercase word each. Adding a word is a configuration edit like an alias: `uv run pytest tests/config`
+checks it, and the next run reads every affirmative file again. The words come from teams' plan
+texts, so the check refuses one shaped like a team code or naming a school, as it does for an alias.
 
 ## The review queue and your decisions
 

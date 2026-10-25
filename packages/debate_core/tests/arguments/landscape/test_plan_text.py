@@ -1,12 +1,14 @@
 """Finding a plan text and reading the aff it names (`v1-e32-t09-policy-plan-texts` ac4).
 
 The PM's rulings of 2026-10-24: the plan text is the paragraph directly under a plan-text label, it
-identifies a round when it names an aff's alias or tag keyword (`medicare for all` and `m4a` naming
-single payer until the coach names a child), a paragraph that only looks like a plan text identifies
-nothing, and only what is derived from a plan text is kept, never its words.
+identifies a round when it names an aff's alias or tag keyword, a paragraph that only looks like a plan
+text identifies nothing, and only what is derived from a plan text is kept, never its words. From the
+PM's context for ac3 (2026-10-24): a text whose actor is not the federal government is no plan text (a
+fifty-states counterplan), a plan text naming no aff whose words outside the frame are all
+resolutional names the topic's resolutional aff, and `medicare for all` and `m4a` name only what the
+taxonomy's own words say.
 
-Every taxonomy, label and paragraph here is invented. `single-payer-aff` is the one real id, because
-the interim words are tied to it.
+Every taxonomy, label, word and paragraph here is invented.
 """
 
 from __future__ import annotations
@@ -24,6 +26,7 @@ from debate_core.arguments.landscape.plan_text import (
     PlanTextParagraph,
     PlanTextVerdict,
     PlanTextVocabulary,
+    ResolutionalPlanWords,
     document_plan_text,
     paragraphs_of,
     plan_text_words,
@@ -40,6 +43,10 @@ ANALYTIC = StructuralUnit.ANALYTIC
 TAG = StructuralUnit.TAG
 SHAPED_SAMPLE = "The United States federal government should establish a sample plan."
 SHAPED_NOTHING = "The United States federal government should establish a national program."
+FIFTY_STATES = (
+    "The fifty states and all relevant subnational actors should establish a sample plan "
+    "in the United States."
+)
 
 
 def position(identifier: str, kind: str = "aff", **fields: Any) -> dict[str, Any]:
@@ -67,6 +74,7 @@ def taxonomy(*positions: dict[str, Any]) -> Taxonomy:
 SAMPLE = taxonomy(
     position("sample-plan-aff", aliases=["sample plan", "sample plan aff"]),
     position("route-plan-aff", parent="sample-plan-aff", tag_keywords=["voucher route"]),
+    position("toll-plan-aff", parent="sample-plan-aff", tag_keywords=["toll route"]),
     position("other-plan-aff", aliases=["other plan"]),
     position("single-payer-aff", aliases=["single payer"]),
     position("costs-advantage", kind="advantage", aliases=["adv costs", "costs"]),
@@ -170,6 +178,37 @@ def test_shaped_needs_should_and_a_federal_actor() -> None:
     assert shapes == [True, True, False, False]
 
 
+@pytest.mark.parametrize(
+    "text",
+    [
+        FIFTY_STATES,
+        "The fifty United States should establish a sample plan.",
+        "Each state government should establish a sample plan, as the federal government has not.",
+    ],
+)
+def test_a_text_whose_actor_is_not_the_federal_government_is_no_plan_text(text: str) -> None:
+    (found,) = read((BLOCK, "Plan"), (ANALYTIC, text))
+    assert (found.shaped, found.named) == (False, ())
+    assert verdict((BLOCK, "Plan"), (ANALYTIC, text)) == DocumentPlanText(PlanTextVerdict.NONE)
+    assert sheet_plan_texts((found,)) == ()
+
+
+def test_the_federal_actor_may_follow_an_earlier_should() -> None:
+    (found,) = read(
+        (BLOCK, "Plan"),
+        (
+            ANALYTIC,
+            "Care should be a right, so the United States federal government should establish a sample plan.",
+        ),
+    )
+    assert (found.shaped, found.named) == (True, ("sample-plan-aff",))
+
+
+def test_a_text_with_no_should_still_names_its_aff() -> None:
+    (found,) = read((BLOCK, "Plan"), (ANALYTIC, "Sample plan."))
+    assert (found.shaped, found.named) == (False, ("sample-plan-aff",))
+
+
 def test_every_label_in_a_document_is_read() -> None:
     found = read((BLOCK, "Plan"), (ANALYTIC, SHAPED_SAMPLE), (BLOCK, "PT"), (ANALYTIC, "Other plan."))
     assert [one.named for one in found] == [("sample-plan-aff",), ("other-plan-aff",)]
@@ -235,28 +274,147 @@ def test_a_retired_alias_names_where_it_was_merged_and_nothing_when_retired_alon
 
 
 @pytest.mark.parametrize("words", ["medicare for all", "m4a"])
-def test_the_interim_words_name_single_payer(words: str) -> None:
-    assert WORDS.named(f"the usfg should adopt {words}") == ("single-payer-aff",)
+def test_no_interim_words_name_an_aff_the_taxonomy_does_not_give_them(words: str) -> None:
+    assert WORDS.named(f"the usfg should adopt {words}") == ()
 
 
-def test_the_interim_words_go_to_a_child_whose_keywords_hold_them() -> None:
+def test_a_childs_keywords_name_the_child() -> None:
     named_child = PlanTextVocabulary(
         taxonomy(
             position("single-payer-aff", aliases=["single payer"]),
-            position("medicare-for-all-aff", parent="single-payer-aff", tag_keywords=["medicare for all"]),
+            position(
+                "medicare-for-all-aff", parent="single-payer-aff", tag_keywords=["medicare for all", "m4a"]
+            ),
         )
     )
-    assert named_child.named("the usfg should adopt medicare for all") == ("medicare-for-all-aff",)
-    assert named_child.named("the usfg should adopt m4a") == ("single-payer-aff",)
-
-
-def test_the_interim_words_name_nothing_without_single_payer() -> None:
-    assert (
-        PlanTextVocabulary(taxonomy(position("sample-plan-aff", aliases=["sample plan"]))).named(
-            "medicare for all"
-        )
-        == ()
+    assert named_child.named("the usfg should adopt m4a") == ("medicare-for-all-aff",)
+    assert named_child.named("the usfg should adopt single payer by medicare for all") == (
+        "medicare-for-all-aff",
     )
+
+
+def test_two_children_of_one_parent_conflict() -> None:
+    assert verdict((BLOCK, "Plan"), (ANALYTIC, "A sample plan by the voucher route and the toll route.")) == (
+        DocumentPlanText(PlanTextVerdict.CONFLICTING)
+    )
+
+
+# ------------------------------------------------------------------------------------------------
+# A plan text that says only the resolution
+# ------------------------------------------------------------------------------------------------
+
+RESOLUTIONAL = ResolutionalPlanWords(
+    topic_id="sample-topic",
+    position_id="national-plan-aff",
+    frame_words=("establish", "federal", "government", "should", "states", "united"),
+    resolutional_words=("national", "program", "thus"),
+)
+NATIONAL = taxonomy(
+    position("sample-plan-aff", aliases=["sample plan"]),
+    position("other-plan-aff", aliases=["other plan"]),
+    position("national-plan-aff"),
+    position("spending-da", kind="da", aliases=["spending da"]),
+)
+WITH_RESOLUTIONAL = PlanTextVocabulary(NATIONAL, RESOLUTIONAL)
+
+
+def resolutional_verdict(text: str) -> DocumentPlanText:
+    return verdict((BLOCK, "Plan"), (ANALYTIC, text), vocabulary=WITH_RESOLUTIONAL)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        SHAPED_NOTHING,
+        "Thus: the United States federal government should establish a national program in the United States",
+        "The United States federal government should thus establish a national program.",
+    ],
+)
+def test_a_plan_text_of_frame_and_resolutional_words_names_the_resolutional_aff(text: str) -> None:
+    assert resolutional_verdict(text) == DocumentPlanText(PlanTextVerdict.NAMES, "national-plan-aff")
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "The United States federal government should establish a national voucher program.",
+        "The United States federal government should establish a national program for Arctic cleanup.",
+    ],
+)
+def test_one_word_outside_the_sets_leaves_it_unnamed(text: str) -> None:
+    assert resolutional_verdict(text) == DocumentPlanText(PlanTextVerdict.UNNAMED)
+
+
+def test_an_aff_the_plan_text_names_wins_over_the_resolutional_rule() -> None:
+    found = resolutional_verdict(
+        "The United States federal government should establish a national sample plan."
+    )
+    assert found == DocumentPlanText(PlanTextVerdict.NAMES, "sample-plan-aff")
+
+
+def test_the_resolutional_aff_beside_one_other_aff_names_the_other() -> None:
+    found = verdict(
+        (BLOCK, "Plan"),
+        (ANALYTIC, SHAPED_NOTHING),
+        (BLOCK, "Plan"),
+        (ANALYTIC, "Sample plan."),
+        vocabulary=WITH_RESOLUTIONAL,
+    )
+    assert found == DocumentPlanText(PlanTextVerdict.NAMES, "sample-plan-aff")
+
+
+def test_the_resolutional_aff_never_makes_a_conflict_and_never_settles_one() -> None:
+    assert WITH_RESOLUTIONAL.narrowest({"national-plan-aff"}) == ("national-plan-aff",)
+    assert WITH_RESOLUTIONAL.narrowest({"national-plan-aff", "sample-plan-aff"}) == ("sample-plan-aff",)
+    assert WITH_RESOLUTIONAL.narrowest({"national-plan-aff", "sample-plan-aff", "other-plan-aff"}) == (
+        "other-plan-aff",
+        "sample-plan-aff",
+    )
+
+
+def test_without_the_rule_the_same_aff_conflicts_like_any_other() -> None:
+    assert PlanTextVocabulary(NATIONAL).narrowest({"national-plan-aff", "sample-plan-aff"}) == (
+        "national-plan-aff",
+        "sample-plan-aff",
+    )
+
+
+def test_the_resolutional_rule_needs_a_federal_actor() -> None:
+    assert resolutional_verdict("National program.") == DocumentPlanText(PlanTextVerdict.NONE)
+    assert resolutional_verdict("The fifty states should establish a national program.") == DocumentPlanText(
+        PlanTextVerdict.NONE
+    )
+
+
+def test_without_the_rule_a_resolutional_plan_text_is_unnamed() -> None:
+    assert verdict((BLOCK, "Plan"), (ANALYTIC, SHAPED_NOTHING)) == DocumentPlanText(PlanTextVerdict.UNNAMED)
+
+
+@pytest.mark.parametrize(
+    ("position_id", "kind", "fields"),
+    [
+        ("absent-plan-aff", "aff", {}),
+        ("national-plan-aff", "da", {}),
+        ("national-plan-aff", "aff", {"deprecated": True}),
+    ],
+)
+def test_the_resolutional_aff_must_be_an_active_aff_of_the_taxonomy(
+    position_id: str, kind: str, fields: dict[str, Any]
+) -> None:
+    with pytest.raises(ValueError, match=position_id):
+        PlanTextVocabulary(
+            taxonomy(position("national-plan-aff", kind=kind, **fields)),
+            RESOLUTIONAL.model_copy(update={"position_id": position_id}),
+        )
+
+
+@pytest.mark.parametrize(
+    ("field", "words"),
+    [("frame_words", ("Federal",)), ("resolutional_words", ("two words",)), ("resolutional_words", ())],
+)
+def test_the_word_sets_are_single_lowercase_words(field: str, words: tuple[str, ...]) -> None:
+    with pytest.raises(ValueError, match=field):
+        ResolutionalPlanWords.model_validate({**RESOLUTIONAL.model_dump(), field: words})
 
 
 # ------------------------------------------------------------------------------------------------
@@ -315,6 +473,13 @@ def test_the_vocabulary_digest_moves_with_the_words_and_only_with_them() -> None
     )
     assert len(WORDS.digest) == 64
     assert WORDS.digest == again.digest != renamed.digest
+
+
+def test_the_vocabulary_digest_moves_with_the_resolutional_words() -> None:
+    fewer = RESOLUTIONAL.model_copy(update={"resolutional_words": ("national", "program")})
+    assert PlanTextVocabulary(NATIONAL).digest != WITH_RESOLUTIONAL.digest
+    assert PlanTextVocabulary(NATIONAL, fewer).digest != WITH_RESOLUTIONAL.digest
+    assert PlanTextVocabulary(NATIONAL, RESOLUTIONAL).digest == WITH_RESOLUTIONAL.digest
 
 
 # ------------------------------------------------------------------------------------------------

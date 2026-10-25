@@ -65,7 +65,9 @@ spec:
   constraints:
     # PM ruling 2026-10-24 (v1-e32-t09 review, ruling 3): debate_core.testing (a planted source carries
     # real bytes and a blob) and tests/fixtures/landscape (the golden report's titles line, by hand).
-    packages: [debate_core.arguments, debate_core.application, debate_core.integrations, debate_core.testing, scripts, config/landscape, packages/debate_core/tests, tests/scripts, tests/fixtures/landscape, docs/guides]
+    # PM ruling 2026-10-24 (resumed question 2): tests/config, which ac3 names, and whose directory test
+    # lists config/landscape/plan_texts/.
+    packages: [debate_core.arguments, debate_core.application, debate_core.integrations, debate_core.testing, scripts, config/landscape, packages/debate_core/tests, tests/scripts, tests/fixtures/landscape, tests/config, docs/guides]
     forbidden:
       - Card text, a school, team code, file name or person's name in any fixture, log, report or commit (synthetic values only)
       - Network or AWS access in any test
@@ -87,6 +89,17 @@ spec:
   # 7 the sheet clusters by the mechanism words that differ; 8 ac1 is the affirmative side only;
   # 9 the normalizer rule widens to numbered DAs, CPs and contentions.
   # Order: ac4, then ac2; ac3 waits on the coach, and the PR may go --partial without it.
+  # PM context for ac3, 2026-10-24 (the coach's answers are final): ac3 extends to the thirteen
+  #   top-level affs the coach named, in the same minor bump to 1.2.0; a child's id is its
+  #   mechanism_name in kebab case plus -aff, a top-level aff keeps the coach's id; keywords go into
+  #   tag_keywords only, no alias; medicare for all and m4a move to the Medicare for All child;
+  #   nhi-aff by a resolutional word set in config next to the taxonomy, never in Python; a text whose
+  #   actor is not the United States federal government is no plan text; C61, C66 and C74 stay
+  #   CONFLICTING; released.yaml is the operator's, at the next publish.
+  # PM rulings 2026-10-24 on the resumed questions: labels in sentence case (the config check), and
+  #   nhi-aff is the least specific aff: beside exactly one other aff it names that aff, and it never
+  #   makes a conflict (the narrowest-aff step); the incarceration and single payer document stays
+  #   CONFLICTING.
   acceptanceCriteria:
     - id: ac1
       description: >-
@@ -112,7 +125,7 @@ spec:
         it, and an unidentified round stays unidentified, by tests on synthetic sources shown failing
         first.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

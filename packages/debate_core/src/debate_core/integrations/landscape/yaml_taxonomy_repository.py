@@ -6,6 +6,7 @@ The directory holds the coach's files::
     config/landscape/taxonomies/<topic id>.yaml        one topic's positions
     config/landscape/taxonomies/generic.yaml           format-level positions, merged in by event
     config/landscape/overrides/<topic id>.yaml         the coach's decisions on that topic's headings
+    config/landscape/plan_texts/<topic id>.yaml        when a plan text names the resolutional aff
 
 :meth:`YamlTaxonomyRepository.load` reads every file at once and checks each on its own (the
 models in :mod:`debate_core.domain.landscape`) and against the others:
@@ -17,6 +18,8 @@ models in :mod:`debate_core.domain.landscape`) and against the others:
   so an alias the two files both claim is refused here;
 * an overrides file's `topic_id` is its file's stem, the topic has a taxonomy, and every decision
   names a position that taxonomy counts under (`v1-e32-t02`);
+* a plan-text file's `topic_id` is its file's stem, the topic has a taxonomy, and the aff it names
+  is an active aff of it (`v1-e32-t09`);
 * a mapping that gives one key twice is an error rather than YAML's silent "last one wins", which
   would drop a coach's first list of aliases without a word.
 
@@ -40,12 +43,14 @@ from debate_core.application.ports.taxonomy_repository import (
     ResolvedTopic,
     TaxonomyConfigError,
 )
+from debate_core.arguments.landscape.plan_text import PlanTextVocabulary, ResolutionalPlanWords
 from debate_core.domain.landscape import GENERIC_TOPIC_ID, Taxonomy, TopicMap
 from debate_core.domain.landscape_classification import OverrideRules
 
 __all__ = [
     "GENERIC_FILE",
     "OVERRIDE_DIRECTORY",
+    "PLAN_TEXT_DIRECTORY",
     "TAXONOMY_DIRECTORY",
     "TOPICS_FILE",
     "YamlTaxonomyRepository",
@@ -59,6 +64,7 @@ __all__ = [
 TOPICS_FILE: Final = "topics.yaml"
 TAXONOMY_DIRECTORY: Final = "taxonomies"
 OVERRIDE_DIRECTORY: Final = "overrides"
+PLAN_TEXT_DIRECTORY: Final = "plan_texts"
 GENERIC_FILE: Final = f"{GENERIC_TOPIC_ID}.yaml"
 
 
@@ -112,6 +118,19 @@ def load_taxonomy_file(path: Path) -> Taxonomy:
     return taxonomy
 
 
+def load_plan_text_file(path: Path) -> ResolutionalPlanWords:
+    """Read and check one plan-text file on its own; its `topic_id` must be the file's stem."""
+    try:
+        words = ResolutionalPlanWords.model_validate(read_config_file(path))
+    except ValidationError as error:
+        raise TaxonomyConfigError(str(path), str(error)) from error
+    if words.topic_id != path.stem:
+        raise TaxonomyConfigError(
+            str(path), f"its topic_id is {words.topic_id}, but the file is named for {path.stem}"
+        )
+    return words
+
+
 def load_override_file(path: Path) -> OverrideRules:
     """Read and check one overrides file on its own; its `topic_id` must be the file's stem."""
     try:
@@ -155,10 +174,12 @@ class YamlTaxonomyRepository:
         topic_map: TopicMap,
         taxonomies: Mapping[str, Taxonomy],
         overrides: Mapping[str, OverrideRules] | None = None,
+        plan_texts: Mapping[str, ResolutionalPlanWords] | None = None,
     ) -> None:
         self._topic_map = topic_map
         self._taxonomies = dict(taxonomies)
         self._overrides = dict(overrides or {})
+        self._plan_texts = dict(plan_texts or {})
 
     @classmethod
     def load(cls, directory: Path) -> YamlTaxonomyRepository:
@@ -203,7 +224,12 @@ class YamlTaxonomyRepository:
                 merged[topic.id] = own.with_generic(generic[1]) if generic is not None else own
             except ValidationError as error:
                 raise TaxonomyConfigError(str(path), f"with {GENERIC_FILE} merged in: {error}") from error
-        return cls(topic_map, merged, _load_overrides(directory / OVERRIDE_DIRECTORY, merged))
+        return cls(
+            topic_map,
+            merged,
+            _load_overrides(directory / OVERRIDE_DIRECTORY, merged),
+            _load_plan_texts(directory / PLAN_TEXT_DIRECTORY, merged),
+        )
 
     def topic_map(self) -> TopicMap:
         return self._topic_map
@@ -218,6 +244,11 @@ class YamlTaxonomyRepository:
         if topic_id not in self._taxonomies:
             raise NoTaxonomyForTopic(topic_id)
         return self._overrides.get(topic_id, OverrideRules(topic_id=topic_id))
+
+    def resolutional_plan_words(self, topic_id: str) -> ResolutionalPlanWords | None:
+        if topic_id not in self._taxonomies:
+            raise NoTaxonomyForTopic(topic_id)
+        return self._plan_texts.get(topic_id)
 
     def resolve(self, caselist: str, snapshot: date) -> ResolvedTopic | None:
         found = self._topic_map.resolve(caselist, snapshot)
@@ -246,4 +277,25 @@ def _load_overrides(directory: Path, taxonomies: Mapping[str, Taxonomy]) -> dict
         except ValueError as error:
             raise TaxonomyConfigError(str(path), str(error)) from error
         found[rules.topic_id] = rules
+    return found
+
+
+def _load_plan_texts(directory: Path, taxonomies: Mapping[str, Taxonomy]) -> dict[str, ResolutionalPlanWords]:
+    """Every plan-text file, each checked against its topic's merged taxonomy."""
+    paths = sorted(directory.iterdir()) if directory.is_dir() else []
+    found: dict[str, ResolutionalPlanWords] = {}
+    for path in paths:
+        if path.suffix != ".yaml":
+            raise TaxonomyConfigError(str(path), "a plan-text file ends in .yaml; this one would be skipped")
+        words = load_plan_text_file(path)
+        taxonomy = taxonomies.get(words.topic_id)
+        if taxonomy is None:
+            raise TaxonomyConfigError(
+                str(path), f"no topic in {TOPICS_FILE} gives {words.topic_id} a taxonomy, so nothing reads it"
+            )
+        try:
+            PlanTextVocabulary(taxonomy, words)
+        except ValueError as error:
+            raise TaxonomyConfigError(str(path), str(error)) from error
+        found[words.topic_id] = words
     return found

@@ -45,6 +45,7 @@ taxonomy_version: 1.0.0
 event: POLICY
 positions:
   - {{id: sample-plan-aff, label: Sample plan, kind: aff, side: aff, aliases: [sample plan]}}
+  - {{id: national-plan-aff, label: National plan, kind: aff, side: aff}}
   - {{id: spending-da, label: Spending DA, kind: da, side: neg, aliases: [spending da]}}
 """
 
@@ -148,6 +149,33 @@ def test_plan_texts_are_read_counted_and_cached(
     assert printed(capsys)[1:] == [
         "Plan texts: 6 sources, 6 cached, 0 parsed, 0 refused by the parser, 0 unread; cache unchanged.",
         *VERDICTS,
+    ]
+
+
+def test_plan_texts_name_the_resolutional_aff_from_the_topics_plan_text_file(
+    world: tuple[Path, Path], capsys: pytest.CaptureFixture[str]
+) -> None:
+    _, config_dir = world
+    (config_dir / "plan_texts").mkdir()
+    (config_dir / "plan_texts" / f"{TOPIC}.yaml").write_text(
+        f"""\
+schema_version: 1
+topic_id: {TOPIC}
+position_id: national-plan-aff
+frame_words: [establish, federal, government, should, states, united]
+resolutional_words: [national, program, route, using, voucher]
+""",
+        encoding="utf-8",
+    )
+    assert run(world, "plan-texts") == 0
+    assert printed(capsys)[2:] == [
+        "  NAMES: 5 documents, 5 teams",
+        "  CONFLICTING: 0 documents, 0 teams",
+        "  UNNAMED: 0 documents, 0 teams",
+        "  NONE: 1 documents, 1 teams",
+        "  UNREAD: 0 documents, 0 teams",
+        "  names sample-plan-aff: 3 documents, 3 teams",
+        "  names national-plan-aff: 2 documents, 2 teams",
     ]
 
 

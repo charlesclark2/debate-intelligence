@@ -15,6 +15,9 @@
   each heading is one the normalizer can produce, and the same personal-data check runs over their
   headings (the PM's ruling of 2026-10-23): a decision copies a heading teams wrote into the
   repository, so it is held to what an alias is held to.
+* **The resolutional plan's words** (`plan_texts/<topic id>.yaml`, `v1-e32-t09`) load with the
+  taxonomies, and the same check runs over them: they came from the teams' plan texts, so a word
+  shaped like a team code or naming a school is refused.
 * **Nothing else is in the directory** but the release lock (`released.yaml`, `v1-e32-t08`, checked
   in `test_landscape_released_ids.py`), so the seeding CSV and the review queue, which hold real
   headings, cannot be committed beside the files by mistake.
@@ -31,21 +34,25 @@ from typing import Any
 import pytest
 
 from debate_core.arguments.landscape.headings import normalize_heading
+from debate_core.arguments.landscape.plan_text import ResolutionalPlanWords
 from debate_core.domain.landscape import Taxonomy
 from debate_core.domain.landscape_classification import OverrideRules
 from debate_core.integrations.landscape.released_ids import RELEASED_FILE
 from debate_core.integrations.landscape.yaml_taxonomy_repository import (
     OVERRIDE_DIRECTORY,
+    PLAN_TEXT_DIRECTORY,
     TAXONOMY_DIRECTORY,
     TOPICS_FILE,
     YamlTaxonomyRepository,
     load_override_file,
+    load_plan_text_file,
     load_taxonomy_file,
 )
 
 CONFIG = Path(__file__).resolve().parents[2] / "config" / "landscape"
 TAXONOMY_FILES = sorted((CONFIG / TAXONOMY_DIRECTORY).glob("*.yaml"))
 OVERRIDE_FILES = sorted((CONFIG / OVERRIDE_DIRECTORY).glob("*.yaml"))
+PLAN_TEXT_FILES = sorted((CONFIG / PLAN_TEXT_DIRECTORY).glob("*.yaml"))
 MINIMUM_ACTIVE_POSITIONS = 12
 
 SHORT_WORDS = frozenset(
@@ -106,6 +113,16 @@ def override_findings(rules: OverrideRules) -> list[str]:
     return findings
 
 
+def plan_text_findings(words: ResolutionalPlanWords) -> list[str]:
+    """Every word of a plan-text file shaped like a team code or naming a school."""
+    findings: list[str] = []
+    for word in (*words.frame_words, *words.resolutional_words):
+        findings += _heading_findings(f"the plan-text words of {words.topic_id}", word)
+        if word in SCHOOL_WORDS:
+            findings.append(f"the plan-text words of {words.topic_id}: {word!r} names a school")
+    return findings
+
+
 # ------------------------------------------------------------------------------------------------
 # The committed files
 # ------------------------------------------------------------------------------------------------
@@ -155,13 +172,19 @@ def test_no_override_names_a_team_a_school_or_a_person(path: Path) -> None:
     assert override_findings(load_override_file(path)) == []
 
 
-def test_the_directory_holds_only_the_topic_map_taxonomies_overrides_and_release_lock() -> None:
+@pytest.mark.parametrize("path", PLAN_TEXT_FILES, ids=lambda path: path.stem)
+def test_no_plan_text_word_names_a_team_a_school_or_a_person(path: Path) -> None:
+    assert plan_text_findings(load_plan_text_file(path)) == []
+
+
+def test_the_directory_holds_only_the_topic_map_taxonomies_overrides_plan_texts_and_release_lock() -> None:
     found = sorted(str(path.relative_to(CONFIG)) for path in CONFIG.rglob("*") if path.is_file())
     allowed = [
         TOPICS_FILE,
         RELEASED_FILE,
         *(f"{TAXONOMY_DIRECTORY}/{path.name}" for path in TAXONOMY_FILES),
         *(f"{OVERRIDE_DIRECTORY}/{path.name}" for path in OVERRIDE_FILES),
+        *(f"{PLAN_TEXT_DIRECTORY}/{path.name}" for path in PLAN_TEXT_FILES),
     ]
     assert found == sorted(allowed)
 
@@ -240,3 +263,28 @@ def test_the_override_check_passes_debate_vocabulary() -> None:
         }
     )
     assert override_findings(rules) == []
+
+
+@pytest.mark.parametrize(
+    ("word", "expected"),
+    [("qx", "shaped like a team code"), ("academy", "names a school")],
+)
+def test_the_plan_text_check_refuses(word: str, expected: str) -> None:
+    words = ResolutionalPlanWords(
+        topic_id="policy-sample-topic",
+        position_id="sample-plan-aff",
+        frame_words=("federal", "should"),
+        resolutional_words=("national", word),
+    )
+    (finding,) = plan_text_findings(words)
+    assert expected in finding
+
+
+def test_the_plan_text_check_passes_debate_vocabulary() -> None:
+    words = ResolutionalPlanWords(
+        topic_id="policy-sample-topic",
+        position_id="sample-plan-aff",
+        frame_words=("federal", "should", "us"),
+        resolutional_words=("national", "plan"),
+    )
+    assert plan_text_findings(words) == []

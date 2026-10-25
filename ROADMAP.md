@@ -60,7 +60,7 @@ v2.3's extension work.
 
 | Release | Theme | Epics | Tasks | Done | Est. hours |
 |---|---|---|---|---|---|
-| [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 49 | 44 | 240 |
+| [v1.0](plan_specs/releases/v1.0.yaml) | Foundation & verified evidence core | 3 | 49 | 45 | 240 |
 | [v1.1](plan_specs/releases/v1.1.yaml) | Caselist evidence store | 4 | 104 | 82 | 489 |
 | [v1.2](plan_specs/releases/v1.2.yaml) | Argument landscape & file building | 3 | 30 | 17 | 216 |
 | [v1.3](plan_specs/releases/v1.3.yaml) | URL → verified card | 2 | 13 | 2 | 108 |
@@ -128,7 +128,7 @@ Repo, tooling, CI, promotion flow, task tooling, domain core, and deterministic 
 | [When a newer build wrote the database or added a setting, the error says so](plan_specs/v1/e01-repo-foundation/t33-newer-build-messages.yaml) `v1-e01-t33-newer-build-messages` | Pending | 0 | 2.0 |
 | [validate-dev is green again, and a red one is seen](plan_specs/v1/e01-repo-foundation/t34-validate-dev-green-again.yaml) `v1-e01-t34-validate-dev-green-again` | InProgress | 1 | 3.0 |
 | [CI's pyright covers tests/architecture and tests/smoke](plan_specs/v1/e01-repo-foundation/t35-pyright-scope-tests.yaml) `v1-e01-t35-pyright-scope-tests` | Pending | 1 | 1.0 |
-| [A dev pre-release for a commit dev has moved past with a workflow change is reported superseded, not failed](plan_specs/v1/e01-repo-foundation/t36-prerelease-superseded-commit.yaml) `v1-e01-t36-prerelease-superseded-commit` | Pending | 1 | 2.0 |
+| [A dev pre-release for a commit dev has moved past with a workflow change is reported superseded, not failed](plan_specs/v1/e01-repo-foundation/t36-prerelease-superseded-commit.yaml) `v1-e01-t36-prerelease-superseded-commit` | Succeeded | 1 | 2.0 |
 
 #### [E02 — Domain Core: Entities, Ports & Local Persistence](plan_specs/v1/e02-domain-core/epic.yaml)
 
@@ -488,7 +488,7 @@ The weekly caselist run (pull, import, publish, parse, search index) runs in the
 | [ADR-0020: the weekly caselist run in the cloud, its credentials and its state](plan_specs/v1/e40-cloud-caselist-run/t01-cloud-run-adr.yaml) `v1-e40-t01-cloud-run-adr` | Succeeded | 2 | 3.0 |
 | [The caselist token in Secrets Manager, and a scheduled login that renews it](plan_specs/v1/e40-cloud-caselist-run/t02-secrets-token-store-and-login.yaml) `v1-e40-t02-secrets-token-store-and-login` | InProgress | 1 | 4.0 |
 | [The weekly run as a container on a schedule](plan_specs/v1/e40-cloud-caselist-run/t03-run-image-and-schedule.yaml) `v1-e40-t03-run-image-and-schedule` | InProgress | 1 | 4.0 |
-| [A cloud run keeps its state in the evidence bucket](plan_specs/v1/e40-cloud-caselist-run/t04-run-state-on-s3.yaml) `v1-e40-t04-run-state-on-s3` | Pending | 1 | 5.0 |
+| [A cloud run keeps its state in the evidence bucket](plan_specs/v1/e40-cloud-caselist-run/t04-run-state-on-s3.yaml) `v1-e40-t04-run-state-on-s3` | InProgress | 1 | 5.0 |
 | [A failed or late cloud run emails the coach](plan_specs/v1/e40-cloud-caselist-run/t05-run-alerts.yaml) `v1-e40-t05-run-alerts` | Pending | 1 | 2.0 |
 | [Cut over: the cloud run takes the schedule and the Mac stops](plan_specs/v1/e40-cloud-caselist-run/t06-cutover.yaml) `v1-e40-t06-cutover` | Pending | 4 | 2.0 |
 | [The evidence bucket itself refuses an unconditional write of the run lock](plan_specs/v1/e40-cloud-caselist-run/t07-lock-writes-conditional-at-the-bucket.yaml) `v1-e40-t07-lock-writes-conditional-at-the-bucket` | Pending | 1 | 1.0 |

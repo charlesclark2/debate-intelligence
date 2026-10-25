@@ -277,7 +277,15 @@ SEVEN_FILES = [
     ("schools.md", "school_view"),
     ("report.md", "circuit_wide"),
 ]
-FICTIONAL_IDENTITIES = ("Quillmere", "Brindle", "Harrowgate", "Lantern Classic", "Thistle Open", '"QW"', '"PX"')
+FICTIONAL_IDENTITIES = (
+    "Quillmere",
+    "Brindle",
+    "Harrowgate",
+    "Lantern Classic",
+    "Thistle Open",
+    '"QW"',
+    '"PX"',
+)
 
 
 def _flat(text: str) -> str:

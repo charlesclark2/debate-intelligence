@@ -5,7 +5,9 @@ directory with its own `config/landscape/`: two weekly manifests, four parsed so
 invented teams, and their occurrence table. The installed build then writes the report with
 `--model-mode none` (the PM's amendment of 2026-10-22: no model, no Bedrock) and `--no-publish`, so
 it needs no bucket and no stand-in. The counts below are the fixture table's, worked out by hand in
-that module's docstring: nine cards, seven under a heading an alias names.
+that module's docstring: nine cards, seven under a heading an alias names. The bundle is seven files,
+five circuit-wide and two school view, and the command marks each (`v1-e32-t12`); the trend and
+school-view counts are worked out by hand in `packages/debate_cli/tests/test_landscape_command.py`.
 
 Unmarked, like the other offline caselist smoke checks. Every school, team code and card is
 invented, and none of them may appear in what the command prints.
@@ -25,13 +27,13 @@ from debate_cli.exit_codes import ExitCode
 from debate_core.testing.landscape_run import SyntheticRun, plant_synthetic_run
 
 BUNDLE = (
-    "positions.csv",
-    "top_cards.csv",
-    "impact_cards.csv",
-    "trends.csv",
-    "schools.csv",
-    "schools.md",
-    "report.md",
+    ("positions.csv", "circuit_wide"),
+    ("top_cards.csv", "circuit_wide"),
+    ("impact_cards.csv", "circuit_wide"),
+    ("trends.csv", "circuit_wide"),
+    ("schools.csv", "school_view"),
+    ("schools.md", "school_view"),
+    ("report.md", "circuit_wide"),
 )
 
 
@@ -70,12 +72,21 @@ def test_landscape_report_writes_the_bundle_offline_with_no_model(
     data = json.loads(result.stdout)["data"]
     directory = world.data_dir / "reports" / "landscape" / "synthetic26" / "2026-09-15"
     assert data["paths"]["directory"] == str(directory)
-    for name in BUNDLE:
+    assert data["bundle"] == [
+        {"name": name, "path": str(directory / name), "view": view} for name, view in BUNDLE
+    ]
+    for name, _ in BUNDLE:
         assert (directory / name).is_file()
         assert (directory / name).stat().st_size > 0
     assert (data["model_mode"], data["model_calls"], data["publish"]) == ("none", 0, None)
     assert data["classification"]["cards_by_method"] == {"ALIAS": 7, "UNPLACED": 2}
     assert (data["counts"]["cards"], data["counts"]["positions"]) == (9, 4)
+    assert data["trends"] == {
+        "rows_by_label": {"NEW": 0, "RISING": 0, "FALLING": 0, "STEADY": 4},
+        "held_back_by_team_floor": 1,
+    }
+    assert data["school_view"] == {"schools": 3, "team_codes": 3, "rows": 7}
+    assert data["staleness"]["failed_run"] is None
     assert data["scan"]["hits"] == []
     for identity in ("Quillmere", "Brindle", "Harrowgate", "Lantern Classic", "Thistle Open", '"QW"', '"PX"'):
         assert identity not in result.stdout

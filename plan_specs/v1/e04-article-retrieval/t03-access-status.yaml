@@ -62,7 +62,7 @@ spec:
       description: >-
         Paywall marker rules live in a versioned data file and classifier results carry the rules version.
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

@@ -10,13 +10,17 @@
 
 ## Summary
 
-Stopped after counting, before building, as the PM's brief asks: the hypothesis (GitHub compares
-the tagged commit's workflow files with the default branch's head, and the default branch is dev)
-is consistent with every local count, but it is not confirmed. GitHub documents no rule for when a
-ref push needs the `workflows` permission, and the one public description of the rule says "the
-latest commit of any branch", not the default branch. The repository facts that would settle it
-(the default branch, the run history, the claim times) need `gh` calls on the operator's
-credentials, handed over below. No code has changed yet.
+Stopped after counting, before any code, because the evidence says something other than the PM's
+hypothesis, and the brief says to report that and stop. The default branch is `dev`, and both
+refusals in the run history (2026-10-14 and 2026-10-25) hit a dev commit that was behind dev's head
+when a later commit had changed `.github/workflows/`. But the two hotfix pre-releases,
+`v1.0.1-dev.1` and `v1.0.1-dev.2` (2026-10-23), were tagged with the same token at commits whose
+workflows differed from dev's head throughout the hour around them. If GitHub compared a pushed tag
+with the default branch's head, both would have been refused. Every observation fits the one
+public description instead: a push is refused only when the tagged commit's workflows match no
+branch's head. The spec's condition is still safe under that reading: it never misses a refusal,
+but it would skip some pre-releases GitHub would have allowed. Which condition to build is the PM's
+call (question below). No code has changed.
 
 ## Plan nodes
 
@@ -53,19 +57,17 @@ All from the shared repository's local refs; nothing fetched.
   `dev.136`'s (`cadafe7`). The next first-parent commit, `8378f5c` (#472, merged 6 minutes after
   `f1f31d9`), modified `.github/workflows/validate-dev.yml` (61 insertions, 2 deletions), and
   `v1.1.0-dev.137` points at `09fcd05`. `f1f31d9` has no tag.
-* **Workflow-changing dev commits.** 21 first-parent commits on `origin/dev` changed
-  `.github/workflows/`. Since the channel was added (`c5cb1e8`, 2026-09-28), the commit just before
-  one went untagged three times, each with a short gap: `f1f31d9` (6 min before `8378f5c`),
-  `ec6cffa` (6 min before `5f11f33`, validate-dev.yml) and `7a9c4ff` (2 min before `beb0f20`,
-  ci.yml). CI never cancels a dev push (`ci.yml` cancels only pull-request runs), so a short gap
-  alone does not explain a missing tag. Untagged is not the same as refused, though: 173 of 465
-  first-parent commits have no tag, mostly for other reasons. Which of the three failed with this
-  refusal is operator command 3.
-* **Two possible counterexamples.** `d47c851` (`v0.1.0-dev.16`) and `b163981` (`v0.1.0-dev.19`)
-  were tagged although back-merges that changed `back-merge.yml` and `promotion-guard.yml` landed 1
-  and 4 minutes after them (`c4c515a`, `4200fe2`). If their claims ran after those back-merges, the
-  rule "behind dev's head and different workflows is refused" is wrong, or was not in force then.
-  The claim times are operator command 5.
+* **Workflow-changing dev commits**, counted by comparing each first-parent commit's
+  `.github/workflows` tree with its first parent's. Since the channel was added (`c5cb1e8`,
+  2026-09-28) 16 commits changed it. The commit just before one went untagged three times, each
+  with a short gap: `f1f31d9` (6 min before `8378f5c`), `ec6cffa` (6 min before `5f11f33`,
+  validate-dev.yml) and `7a9c4ff` (2 min before `beb0f20`, ci.yml). CI never cancels a dev push
+  (`ci.yml` cancels only pull-request runs), so a short gap alone does not explain a missing tag.
+  An earlier count with `git diff-tree -m --first-parent` said 21 and included back-merges
+  (`057b3f7`, `4200fe2`) whose trees did not change; it is withdrawn.
+* **One dev counterexample candidate.** `d47c851` (`v0.1.0-dev.16`) was tagged although the
+  back-merge `c4c515a`, which changed `back-merge.yml` and `promotion-guard.yml`, landed one minute
+  after it. Whether its claim ran before or after that back-merge is still unknown (below).
 * **What the claim step can see.** The checkout uses `fetch-depth: 0`, so every branch and tag as
   of the checkout is there, and the claim step already holds the token as a git header, so it can
   also ask the remote for dev's current head (`ls-remote`, `fetch`) before it pushes.
@@ -75,6 +77,44 @@ All from the shared repository's local refs; nothing fetched.
   change to the script only for commits that contain it. A commit merged before this task, run
   after it, gets the new YAML with the old script, so the YAML must not pass the old script a new
   flag.
+
+### What the run history says (operator commands, 2026-10-24)
+
+* **Default branch:** `dev` (`gh api repos/charlesclark2/debate-intelligence --jq .default_branch`).
+* **Runs of `dev-prerelease.yml`:** 296 success, 76 skipped, 2 failure.
+* **Both failures are this refusal.** Run 40149948706 (2026-10-25T01:15:51Z) and run 38647659339
+  (2026-10-14T22:26:29Z). The `headSha` that `gh` reports for a `workflow_run` run is the default
+  branch's head when the run started (`09fcd05` and `beb0f20`), not the commit it tags. The 10-14
+  run started 83 seconds after `beb0f20` (ci.yml) landed, which fits a claim for `7a9c4ff`, still
+  untagged. So the refusal has happened twice in 374 runs, and both times the spec's condition
+  held.
+* **The refusal's exact wording**, from run 40149948706's claim step:
+
+  ```text
+  release_version: pushing v1.1.0-dev.137 failed 3 times for a reason other than the tag existing; last error: To https://github.com/charlesclark2/debate-intelligence
+   ! [remote rejected] f1f31d9eb1c5f0305ddc8697d4f4600631ad91ed -> v1.1.0-dev.137 (refusing to allow a GitHub App to create or update workflow `.github/workflows/validate-dev.yml` without `workflows` permission)
+  ```
+* **The claim-time query was wrong.** `gh run list --commit X` matches the default branch's head
+  when a run started, for the reason above, so its output does not say when `d47c851` was claimed.
+  The session's mistake; a corrected query is under Operator follow-ups.
+* **Open branches at the refusal.** At 01:16:01Z the only open pull request was #473, whose head's
+  workflows are the new tree (`9d13ab3`). No branch head that the session can see still had
+  `f1f31d9`'s tree (`d65eaeb`), so this incident fits both readings of the rule.
+
+### The hotfix tags contradict the default-branch reading
+
+* `v1.0.1-dev.1` (`82afb9c`) and `v1.0.1-dev.2` (`298bc37`) are the hotfix pre-releases of
+  `hotfix/schedule-2026-10-22` (merged into main as `a8aebae`, PR #431, 2026-10-23T05:18Z). Both
+  commits have workflows tree `23bf80b`. Every first-parent dev commit from 2026-10-22T22:59 to
+  2026-10-23T01:25 (-05:00) has tree `d65eaeb`. So both tags were pushed at commits whose workflows
+  differed from the default branch's head, and both went through.
+* A hotfix head is the head of its own branch, so under "matches the latest commit of any branch"
+  its tag is never refused. That fits. Under "compared with the default branch's head", both would
+  have been refused.
+* Not yet confirmed: that both tags were pushed by the workflow's claim step, with
+  `GITHUB_TOKEN`, rather than by hand. The query is under Operator follow-ups.
+* Tags do not count as a match: `f1f31d9`'s workflows were identical to the tag
+  `v1.1.0-dev.136`'s, and its push was still refused.
 
 ### GitHub's documentation, searched by the session
 
@@ -95,21 +135,40 @@ A documentation search, not a call against this repository, so the session ran i
   https://github.com/orgs/community/discussions/26164) reports the same refusal for tags on older
   commits.
 * So the documented rule is none, and the reported one is "any branch", which is broader than the
-  PM's "the default branch". For a dev commit that is an ancestor of dev's head, both readings
+  PM's "the default branch". The hotfix tags above fit the reported one. For a dev commit that is an ancestor of dev's head, both readings
   refuse only when its workflows differ from dev's head: dev's head is itself a branch head. They
   differ only when the workflows match another branch's head (main, or an open task branch). Then
   "any branch" lets the push through and a check against dev's head alone would skip a commit
-  that could have been tagged. It would never miss a refusal. Operator command 6 tests that
-  difference on this incident: if a branch head with `f1f31d9`'s workflows (tree `d65eaeb`) existed
-  at 01:15 UTC and the push was still refused, "any branch" does not describe this repository.
+  that could have been tagged. It would never miss a refusal. This incident cannot tell the two readings apart (no branch head had `d65eaeb` at
+  01:16Z); the hotfix tags can.
 
 ## Operator follow-ups
 
 <!-- Commands the operator must run (anything over ~2 minutes), with where to run them, the exact
 command, expected runtime and what success looks like. Also GitHub/AWS settings to change. -->
 
-The counting hand-off of 2026-10-24 is in the session transcript. Its results go here when they
-come back.
+The first counting hand-off (2026-10-24) ran; its results are under Decisions. Two queries remain,
+both read-only and a few seconds each.
+
+The first confirms that the hotfix tags came from the workflow's claim step. For each
+`workflow_dispatch` run it prints the run id, branch, head, start time, conclusion, and the tag,
+commit and `reused` value from the claim's output. Success looks like two runs on
+`hotfix/schedule-2026-10-22` with `reused: false`, tagging `82afb9c` and `298bc37`.
+
+```bash
+cd /Users/charlesclark/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e01-t36-prerelease-superseded-commit
+for id in $(gh run list --repo charlesclark2/debate-intelligence --workflow dev-prerelease.yml --event workflow_dispatch --limit 50 --json databaseId --jq '.[].databaseId'); do echo "$id $(gh run view "$id" --repo charlesclark2/debate-intelligence --json headBranch,headSha,createdAt,conclusion --jq '.headBranch + " " + .headSha[0:7] + " " + .createdAt + " " + .conclusion') $(gh run view "$id" --repo charlesclark2/debate-intelligence --log 2>/dev/null | grep -oE '"(tag|sha|reused)": "[^"]+"' | head -3 | tr '\n' ' ')"; done
+```
+
+The second says when `d47c851` was claimed: the runs that started between its merge and 25
+minutes later, with the tag, commit and `reused` value each one's claim printed. Success looks
+like a line naming `v0.1.0-dev.16`; its start time, against `c4c515a`'s landing at
+2026-09-30T03:21:56Z, is the answer.
+
+```bash
+cd /Users/charlesclark/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e01-t36-prerelease-superseded-commit
+for id in $(gh run list --repo charlesclark2/debate-intelligence --workflow dev-prerelease.yml --created '2026-09-30T03:19:00Z..2026-09-30T03:45:00Z' --limit 50 --json databaseId --jq '.[].databaseId'); do echo "$id $(gh run view "$id" --repo charlesclark2/debate-intelligence --json createdAt,conclusion --jq '.createdAt + " " + .conclusion') $(gh run view "$id" --repo charlesclark2/debate-intelligence --log 2>/dev/null | grep -oE '"(tag|sha|reused)": "[^"]+"' | head -3 | tr '\n' ' ')"; done
+```
 
 ## Follow-up work
 

@@ -8,6 +8,7 @@ The directory holds the coach's files::
     config/landscape/overrides/<topic id>.yaml         the coach's decisions on that topic's headings
     config/landscape/plan_texts/<topic id>.yaml        when a plan text names the resolutional aff
     config/landscape/analytic_texts/<topic id>.yaml    the actors a CP text read by its place names
+    config/landscape/kritikal_affs/<topic id>.yaml     the K-aff position and its K families
 
 :meth:`YamlTaxonomyRepository.load` reads every file at once and checks each on its own (the
 models in :mod:`debate_core.domain.landscape`) and against the others:
@@ -46,12 +47,14 @@ from debate_core.application.ports.taxonomy_repository import (
     TaxonomyConfigError,
 )
 from debate_core.arguments.landscape.analytic_texts import CounterplanActors
+from debate_core.arguments.landscape.kritikal_aff import KritikalAffConfig
 from debate_core.arguments.landscape.plan_text import PlanTextVocabulary, ResolutionalPlanWords
 from debate_core.domain.landscape import GENERIC_TOPIC_ID, Taxonomy, TopicMap
 from debate_core.domain.landscape_classification import OverrideRules
 
 __all__ = [
     "ANALYTIC_TEXT_DIRECTORY",
+    "KRITIKAL_AFF_DIRECTORY",
     "GENERIC_FILE",
     "OVERRIDE_DIRECTORY",
     "PLAN_TEXT_DIRECTORY",
@@ -71,6 +74,7 @@ TAXONOMY_DIRECTORY: Final = "taxonomies"
 OVERRIDE_DIRECTORY: Final = "overrides"
 PLAN_TEXT_DIRECTORY: Final = "plan_texts"
 ANALYTIC_TEXT_DIRECTORY: Final = "analytic_texts"
+KRITIKAL_AFF_DIRECTORY: Final = "kritikal_affs"
 GENERIC_FILE: Final = f"{GENERIC_TOPIC_ID}.yaml"
 
 
@@ -150,6 +154,19 @@ def load_analytic_text_file(path: Path) -> CounterplanActors:
     return actors
 
 
+def load_kritikal_aff_file(path: Path) -> KritikalAffConfig:
+    """Read and check one K-aff file on its own; its `topic_id` must be the file's stem."""
+    try:
+        config = KritikalAffConfig.model_validate(read_config_file(path))
+    except ValidationError as error:
+        raise TaxonomyConfigError(str(path), str(error)) from error
+    if config.topic_id != path.stem:
+        raise TaxonomyConfigError(
+            str(path), f"its topic_id is {config.topic_id}, but the file is named for {path.stem}"
+        )
+    return config
+
+
 def load_override_file(path: Path) -> OverrideRules:
     """Read and check one overrides file on its own; its `topic_id` must be the file's stem."""
     try:
@@ -195,12 +212,14 @@ class YamlTaxonomyRepository:
         overrides: Mapping[str, OverrideRules] | None = None,
         plan_texts: Mapping[str, ResolutionalPlanWords] | None = None,
         analytic_texts: Mapping[str, CounterplanActors] | None = None,
+        kritikal_affs: Mapping[str, KritikalAffConfig] | None = None,
     ) -> None:
         self._topic_map = topic_map
         self._taxonomies = dict(taxonomies)
         self._overrides = dict(overrides or {})
         self._plan_texts = dict(plan_texts or {})
         self._analytic_texts = dict(analytic_texts or {})
+        self._kritikal_affs = dict(kritikal_affs or {})
 
     @classmethod
     def load(cls, directory: Path) -> YamlTaxonomyRepository:
@@ -251,6 +270,7 @@ class YamlTaxonomyRepository:
             _load_overrides(directory / OVERRIDE_DIRECTORY, merged),
             _load_plan_texts(directory / PLAN_TEXT_DIRECTORY, merged),
             _load_analytic_texts(directory / ANALYTIC_TEXT_DIRECTORY, merged),
+            _load_kritikal_affs(directory / KRITIKAL_AFF_DIRECTORY, merged),
         )
 
     def topic_map(self) -> TopicMap:
@@ -276,6 +296,11 @@ class YamlTaxonomyRepository:
         if topic_id not in self._taxonomies:
             raise NoTaxonomyForTopic(topic_id)
         return self._analytic_texts.get(topic_id)
+
+    def kritikal_aff(self, topic_id: str) -> KritikalAffConfig | None:
+        if topic_id not in self._taxonomies:
+            raise NoTaxonomyForTopic(topic_id)
+        return self._kritikal_affs.get(topic_id)
 
     def resolve(self, caselist: str, snapshot: date) -> ResolvedTopic | None:
         found = self._topic_map.resolve(caselist, snapshot)
@@ -344,4 +369,26 @@ def _load_analytic_texts(directory: Path, taxonomies: Mapping[str, Taxonomy]) ->
                 f"no topic in {TOPICS_FILE} gives {actors.topic_id} a taxonomy, so nothing reads it",
             )
         found[actors.topic_id] = actors
+    return found
+
+
+def _load_kritikal_affs(directory: Path, taxonomies: Mapping[str, Taxonomy]) -> dict[str, KritikalAffConfig]:
+    """Every K-aff file, each naming an active aff of its topic's merged taxonomy."""
+    paths = sorted(directory.iterdir()) if directory.is_dir() else []
+    found: dict[str, KritikalAffConfig] = {}
+    for path in paths:
+        if path.suffix != ".yaml":
+            raise TaxonomyConfigError(str(path), "a K-aff file ends in .yaml; this one would be skipped")
+        config = load_kritikal_aff_file(path)
+        taxonomy = taxonomies.get(config.topic_id)
+        if taxonomy is None:
+            raise TaxonomyConfigError(
+                str(path),
+                f"no topic in {TOPICS_FILE} gives {config.topic_id} a taxonomy, so nothing reads it",
+            )
+        try:
+            PlanTextVocabulary(taxonomy, None, config)
+        except ValueError as error:
+            raise TaxonomyConfigError(str(path), str(error)) from error
+        found[config.topic_id] = config
     return found

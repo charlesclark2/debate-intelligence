@@ -49,7 +49,13 @@ from debate_core.application.ports.parsed_store import ParsedStore
 from debate_core.application.ports.suppression import SuppressionList
 from debate_core.application.ports.taxonomy_repository import TaxonomyRepository
 from debate_core.application.position_classification import PositionClassificationService
-from debate_core.arguments.landscape.aff_assignment import AffRound, AssignmentCounts, assign_affs
+from debate_core.arguments.landscape.aff_assignment import (
+    AffRound,
+    AssignmentCounts,
+    KritikalSignals,
+    assign_affs,
+)
+from debate_core.arguments.landscape.kritikal_aff import KritikalAffConfig, KritikalAffInputs, KritikalReading
 from debate_core.arguments.landscape.plan_text import (
     DocumentPlanText,
     PlanTextVocabulary,
@@ -66,6 +72,7 @@ _AFFIRMATIVE: Final = frozenset({Side.AFF, Side.PRO})
 __all__ = [
     "AffAssignmentCannotStart",
     "AffAssignmentRun",
+    "AffAssignmentsForReport",
     "AffAssignmentService",
     "AffAssignmentSource",
     "build_aff_assignments",
@@ -95,6 +102,16 @@ class AffAssignmentRun:
     """Of those, teams with a round assigned an aff or left to a placed card."""
     plan_texts: PlanTextRun | None = field(default=None, repr=False)
     """The plan-text reading the assignments were made from, when :class:`AffAssignmentService` read it."""
+    kritikal: KritikalAffInputs | None = field(default=None, repr=False)
+    """What the report's K-aff group is counted from (`v1-e32-t17`); None when the topic reads no K aff."""
+
+
+@dataclass(frozen=True, slots=True)
+class AffAssignmentsForReport:
+    """What a landscape run is given for its affirmative rounds: the assignments, and the K-aff inputs."""
+
+    assignments: tuple[AffAssignment, ...] = field(repr=False)
+    kritikal: KritikalAffInputs | None = field(default=None, repr=False)
 
 
 class AffAssignmentService:
@@ -151,6 +168,8 @@ class AffAssignmentService:
             plan_texts=plan_texts.verdicts,
             taxonomy=taxonomy,
             resolutional=self._taxonomies.resolutional_plan_words(taxonomy.topic_id),
+            kritikal=self._taxonomies.kritikal_aff(taxonomy.topic_id),
+            kritikal_readings=plan_texts.kritikal,
         )
         return dataclasses.replace(built, plan_texts=plan_texts)
 
@@ -162,21 +181,24 @@ class AffAssignmentService:
         classifications: Sequence[PositionClassification],
         taxonomy: Taxonomy,
         writes: bool,
-    ) -> tuple[AffAssignment, ...]:
+    ) -> AffAssignmentsForReport:
         """`v1-e32-t05`'s seam: the affs of a landscape run's reading, from its own classifications.
 
         Only the plan texts are read here, from their cache; `writes` False reads them without writing
         it, for a dry run.
         """
         plan_texts = await self._read_plan_texts(reading, taxonomy, writes=writes)
-        return build_aff_assignments(
+        built = build_aff_assignments(
             disclosures=reading.disclosures,
             through=through,
             classifications=classifications,
             plan_texts=plan_texts.verdicts,
             taxonomy=taxonomy,
             resolutional=self._taxonomies.resolutional_plan_words(taxonomy.topic_id),
-        ).assignments
+            kritikal=self._taxonomies.kritikal_aff(taxonomy.topic_id),
+            kritikal_readings=plan_texts.kritikal,
+        )
+        return AffAssignmentsForReport(assignments=built.assignments, kritikal=built.kritikal)
 
     async def _read_plan_texts(
         self, reading: SeedReading, taxonomy: Taxonomy, *, writes: bool
@@ -193,7 +215,11 @@ class AffAssignmentService:
             if one.sha256 in affirmative
         ]
         service = self._plan_texts if writes else self._plan_texts.without_writes()
-        vocabulary = PlanTextVocabulary(taxonomy, self._taxonomies.resolutional_plan_words(taxonomy.topic_id))
+        vocabulary = PlanTextVocabulary(
+            taxonomy,
+            self._taxonomies.resolutional_plan_words(taxonomy.topic_id),
+            self._taxonomies.kritikal_aff(taxonomy.topic_id),
+        )
         return await service.read(reading.caselist, documents, vocabulary)
 
 
@@ -206,6 +232,8 @@ def build_aff_assignments(
     taxonomy: Taxonomy,
     resolutional: ResolutionalPlanWords | None = None,
     review_threshold: float = DEFAULT_REVIEW_THRESHOLD,
+    kritikal: KritikalAffConfig | None = None,
+    kritikal_readings: Mapping[str, KritikalReading] | None = None,
 ) -> AffAssignmentRun:
     """Every affirmative round in range assigned its aff where a signal names one, with counts.
 
@@ -223,6 +251,7 @@ def build_aff_assignments(
         teams[one] = _team(disclosure)
         by_source[disclosure.source_sha256].add(one)
     placed: defaultdict[str, set[str]] = defaultdict(set)
+    advantage_rounds: set[str] = set()
     for item in classifications:
         if (
             item.item_kind is not ItemKind.CARD
@@ -232,18 +261,33 @@ def build_aff_assignments(
         ):
             continue
         position = taxonomy.resolve(item.position_id)
-        if position.kind is PositionKind.AFF and not position.deprecated:
+        if position.deprecated:
+            continue
+        if position.kind is PositionKind.AFF:
             for one in by_source.get(item.source_sha256, ()):
                 placed[one].add(position.id)
+        elif position.kind is PositionKind.ADVANTAGE:
+            advantage_rounds.update(by_source.get(item.source_sha256, ()))
     rounds = [
         AffRound(round_key=one, team=teams[one], documents=tuple(sorted(documents[one])))
         for one in sorted(documents)
     ]
+    readings = kritikal_readings or {}
+    signals = (
+        None
+        if kritikal is None
+        else KritikalSignals(
+            position_id=taxonomy.resolve(kritikal.position_id).id,
+            marker_documents=frozenset(sha for sha, found in readings.items() if found.markers),
+            advantage_rounds=frozenset(advantage_rounds),
+        )
+    )
     assigned, counts = assign_affs(
         rounds,
         plan_texts,
         {one: frozenset(found) for one, found in placed.items()},
         PlanTextVocabulary(taxonomy, resolutional),
+        signals,
     )
     keys = {one.round_key for one in assigned} | set(placed)
     return AffAssignmentRun(
@@ -254,6 +298,17 @@ def build_aff_assignments(
         counts=counts,
         aff_teams=len({team for team in teams.values() if team is not None}),
         identified_teams=len({teams[one] for one in keys if teams.get(one) is not None}),
+        kritikal=None
+        if kritikal is None or signals is None
+        else KritikalAffInputs(
+            position_id=signals.position_id,
+            marker_sources=signals.marker_documents,
+            heading_families={
+                sha: found.heading_families for sha, found in readings.items() if found.heading_families
+            },
+            families={one.id: one.label for one in kritikal.families},
+            refused_by_advantage=frozenset(counts.refused_by_advantage),
+        ),
     )
 
 

@@ -23,6 +23,7 @@ from datetime import date
 from pathlib import Path
 
 import pytest
+import yaml
 
 from debate_core.application.aff_assignment import (
     AffAssignmentCannotStart,
@@ -36,9 +37,25 @@ from debate_core.application.caselist.parse_workers import InProcessParseRunner
 from debate_core.application.caselist.suppression import RecordedSuppressionList
 from debate_core.application.landscape_report import LandscapeReportInputs, LandscapeReportService, round_id
 from debate_core.application.plan_texts import PlanTextService
+from debate_core.arguments.landscape.kritikal_aff import (
+    KritikalAffConfig,
+    KritikalFamily,
+    KritikalMarker,
+    KritikalMarkerKind,
+    KritikalReading,
+)
 from debate_core.arguments.landscape.plan_text import DocumentPlanText, PlanTextVerdict
-from debate_core.domain.caselist import Side
+from debate_core.domain.caselist import Disclosure, Event, RoundLabel, Side
+from debate_core.domain.landscape import Taxonomy
+from debate_core.domain.landscape_classification import (
+    ClassificationMethod,
+    ItemKind,
+    PositionClassification,
+    PositionRole,
+)
 from debate_core.domain.landscape_report import AffAssignment
+from debate_core.domain.landscape_texts import TextForm
+from debate_core.domain.style_profile import StructuralUnit
 from debate_core.integrations.docx_parser import DebateDocxParser
 from debate_core.integrations.landscape.classification_store import LocalClassificationStore
 from debate_core.integrations.landscape.plan_text_store import LocalPlanTextStore
@@ -184,6 +201,7 @@ event: POLICY
 positions:
   - {id: sample-plan-aff, label: Sample plan, kind: aff, side: aff, aliases: [sample plan]}
   - {id: national-plan-aff, label: National plan, kind: aff, side: aff}
+  - {id: kritikal-aff, label: Kritikal affirmative, kind: aff, side: aff}
   - {id: spending-da, label: Spending DA, kind: da, side: neg, aliases: [spending da]}
 """
 PRODUCER_PLAN_WORDS = """\
@@ -197,7 +215,23 @@ NAMED = "The United States federal government should establish a sample plan fin
 UNNAMED = "The United States federal government should establish a national program using a voucher route."
 
 
+PRODUCER_KRITIKAL = """\
+schema_version: 1
+topic_id: policy-sample-topic
+position_id: kritikal-aff
+families:
+  - {id: cap, label: Capitalism, phrases: [cap, capitalism]}
+"""
+KRITIKAL_FILE = "a K-aff file: an advocacy statement and no plan text"
+
+
 def _plan_file(plan: str | None) -> bytes:
+    if plan == KRITIKAL_FILE:
+        return build_docx(
+            paragraph_xml(run_xml("1AC - Capitalism"), style="Heading2")
+            + paragraph_xml(run_xml("Advocacy"), style="Heading3")
+            + paragraph_xml(run_xml("We affirm an invented refusal."), style="Analytic")
+        )
 
     if plan is None:
         return build_docx(paragraph_xml(run_xml("Advantage One"), style="Heading3"))
@@ -212,7 +246,11 @@ def _disclosure_path(school: str, side: str, round_number: int) -> str:
 
 
 def producer(
-    tmp_path: Path, *, plan_words: str | None = None, extra: tuple[tuple[str, str | None], ...] = ()
+    tmp_path: Path,
+    *,
+    plan_words: str | None = None,
+    extra: tuple[tuple[str, str | None], ...] = (),
+    kritikal: str | None = None,
 ) -> AffAssignmentService:
     """The service over a planted data directory; `plan_words` is the topic's plan-text file.
 
@@ -249,6 +287,9 @@ def producer(
     if plan_words is not None:
         (config_dir / "plan_texts").mkdir()
         (config_dir / "plan_texts" / "policy-sample-topic.yaml").write_text(plan_words, encoding="utf-8")
+    if kritikal is not None:
+        (config_dir / "kritikal_affs").mkdir()
+        (config_dir / "kritikal_affs" / "policy-sample-topic.yaml").write_text(kritikal, encoding="utf-8")
     objects = FsEvidenceObjectStore(data_dir)
     blobs = FsEvidenceObjectStore(data_dir, subdirectory=Path("blobs"))
     local = LocalEvidence(
@@ -317,6 +358,27 @@ async def test_the_producer_carries_the_other_aff_of_a_team_that_also_reads_the_
 
 
 @pytest.mark.anyio
+async def test_the_producer_reads_the_topics_k_aff_config_and_carries_the_k_aff(tmp_path: Path) -> None:
+    service = producer(
+        tmp_path, kritikal=PRODUCER_KRITIKAL, extra=(("Seven", KRITIKAL_FILE), ("Seven", None))
+    )
+    run = await service.run(PRODUCER_CASELIST, date(2026, 9, 29))
+    assert sorted(
+        (one.method, one.position_id) for one in run.assignments if one.position_id == "kritikal-aff"
+    ) == [
+        ("KRITIKAL_AFF_CARRY", "kritikal-aff"),
+        ("KRITIKAL_AFF_MARKER", "kritikal-aff"),
+    ]
+    assert run.kritikal is not None
+    assert (len(run.kritikal.marker_sources), set(run.kritikal.heading_families.values())) == (1, {("cap",)})
+    without = await producer(tmp_path / "plain", extra=(("Seven", KRITIKAL_FILE), ("Seven", None))).run(
+        PRODUCER_CASELIST, date(2026, 9, 29)
+    )
+    assert "kritikal-aff" not in {one.position_id for one in without.assignments}
+    assert without.kritikal is None
+
+
+@pytest.mark.anyio
 async def test_the_producer_reads_nothing_disclosed_after_the_through_date(tmp_path: Path) -> None:
 
     found = await producer(tmp_path).aff_assignments(PRODUCER_CASELIST, date(2026, 9, 10))
@@ -328,3 +390,150 @@ async def test_the_producer_refuses_a_date_on_no_topic_with_a_taxonomy(tmp_path:
 
     with pytest.raises(AffAssignmentCannotStart):
         await producer(tmp_path).aff_assignments(PRODUCER_CASELIST, date(2027, 3, 1))
+
+
+# ------------------------------------------------------------------------------------------------
+# Kritikal affirmatives (`v1-e32-t17`)
+# ------------------------------------------------------------------------------------------------
+#
+# Over `tests/fixtures/landscape/kritikal_affs/`: its rounds and cards, every file with no plan text but
+# d1's, which names single payer, and the fixture's marker files and heading families as the K-aff
+# reading. The rule gives the assignments and the refusal the fixture's README table gives by hand.
+
+KRITIKAL_FIXTURE = REPO / "tests" / "fixtures" / "landscape" / "kritikal_affs"
+KRITIKAL_CONFIG = KritikalAffConfig(
+    topic_id="synthetic-policy-topic",
+    position_id="kritikal-aff",
+    families=(
+        KritikalFamily(id="cap", label="Capitalism", phrases=("cap",)),
+        KritikalFamily(id="settler-colonialism", label="Settler colonialism", phrases=("set col",)),
+        KritikalFamily(id="afropessimism", label="Afropessimism", phrases=("afropessimism",)),
+        KritikalFamily(id="feminism", label="Feminism", phrases=("feminism",)),
+        KritikalFamily(id="queer", label="Queer theory", phrases=("queer",)),
+    ),
+)
+
+
+def _kritikal_world() -> tuple[list[Disclosure], list[PositionClassification], Taxonomy, dict[str, str]]:
+    table = yaml.safe_load((KRITIKAL_FIXTURE / "rounds.yaml").read_text(encoding="utf-8"))
+    taxonomy = Taxonomy.model_validate(
+        yaml.safe_load((KRITIKAL_FIXTURE / "taxonomy.yaml").read_text(encoding="utf-8"))
+    )
+    school_of = {code: school for school, codes in table["schools"].items() for code in codes}
+    disclosures: list[Disclosure] = []
+    names: dict[str, str] = {}
+    for row in table["rounds"]:
+        school, code, side = school_of[row["team"]], row["team"], Side(row["side"])
+        for name in row["files"]:
+            disclosures.append(
+                Disclosure(
+                    caselist="synthpolicy26",
+                    event=Event.POLICY,
+                    school=school,
+                    team_code=code,
+                    side=side,
+                    tournament=row["tournament"],
+                    round_label=RoundLabel(raw=row["round"], normalized=row["round"]),
+                    snapshot=date(2026, 9, 15),
+                    source_path=f"{school}/{school} {code}/{code}-{side.value}-{row['round']}-{name}.docx",
+                    source_sha256=name * 32,
+                )
+            )
+        names[f"{row['team']} {row['tournament']} {row['side']}"] = round_id(disclosures[-1])
+    classifications = [
+        PositionClassification(
+            item_id=f"{name * 32}:card:{index}",
+            item_kind=ItemKind.CARD,
+            source_sha256=name * 32,
+            first_element_index=index,
+            position_id=position,
+            role=PositionRole.READS,
+            method=ClassificationMethod.ALIAS,
+            confidence=1.0,
+            rationale="synthetic fixture: placed as the fixture table says",
+            taxonomy_version=taxonomy.taxonomy_version,
+            prompt_version="none",
+        )
+        for name, cards in table["files"].items()
+        for index, position in enumerate(cards)
+    ]
+    return disclosures, classifications, taxonomy, names
+
+
+def _kritikal_run(
+    *, kritikal: KritikalAffConfig | None = KRITIKAL_CONFIG, below_threshold: bool = False
+) -> tuple[AffAssignmentRun, dict[str, str]]:
+    disclosures, classifications, taxonomy, names = _kritikal_world()
+    if below_threshold:
+        classifications = [
+            one.model_copy(update={"confidence": 0.5}) if one.position_id == "costs-advantage" else one
+            for one in classifications
+        ]
+    table = yaml.safe_load((KRITIKAL_FIXTURE / "rounds.yaml").read_text(encoding="utf-8"))["kritikal"]
+    marker = KritikalMarker(KritikalMarkerKind.ROLE_OF_THE_BALLOT, TextForm.SENTENCE, 3, StructuralUnit.TAG)
+    readings = {
+        one.source_sha256: KritikalReading(
+            markers=(marker,) if one.source_sha256[:2] in table["marker_files"] else (),
+            heading_families=tuple(table["heading_families"].get(one.source_sha256[:2], ())),
+        )
+        for one in disclosures
+    }
+    plan_texts = {
+        one.source_sha256: DocumentPlanText(PlanTextVerdict.NAMES, SINGLE_PAYER)
+        if one.source_sha256.startswith("d1")
+        else DocumentPlanText(PlanTextVerdict.NONE)
+        for one in disclosures
+    }
+    found = build_aff_assignments(
+        disclosures=disclosures,
+        through=date(2026, 9, 15),
+        classifications=classifications,
+        plan_texts=plan_texts,
+        taxonomy=taxonomy,
+        kritikal=kritikal,
+        kritikal_readings=readings,
+    )
+    return found, names
+
+
+def test_kritikal_the_rule_gives_the_fixtures_assignments_and_refusal() -> None:
+    found, names = _kritikal_run()
+    assert {(one.round_id, one.position_id, one.method) for one in found.assignments} == {
+        (names["AA Fictional Invitational AFF"], "kritikal-aff", "KRITIKAL_AFF_MARKER"),
+        (names["AA Imaginary Classic AFF"], "kritikal-aff", "KRITIKAL_AFF_CARRY"),
+        (names["BB Fictional Invitational AFF"], "kritikal-aff", "KRITIKAL_AFF_MARKER"),
+        (names["CC Fictional Invitational AFF"], SINGLE_PAYER, "PLAN_TEXT"),
+    }
+    assert found.counts.refused_by_advantage == (names["AA Pretend Open AFF"],)
+    assert (found.counts.placed_only, found.counts.unidentified) == (1, 2)
+
+
+def test_kritikal_the_report_inputs_hold_the_marker_files_families_and_refusals() -> None:
+    found, names = _kritikal_run()
+    assert found.kritikal is not None
+    assert found.kritikal.position_id == "kritikal-aff"
+    assert found.kritikal.marker_sources == {name * 32 for name in ("c1", "c4", "d1", "e1", "f1")}
+    assert found.kritikal.heading_families["c1" * 32] == ("cap", "settler-colonialism")
+    assert "c2" * 32 in found.kritikal.heading_families and "e1" * 32 not in found.kritikal.heading_families
+    assert list(found.kritikal.families) == [
+        "cap",
+        "settler-colonialism",
+        "afropessimism",
+        "feminism",
+        "queer",
+    ]
+    assert found.kritikal.refused_by_advantage == {names["AA Pretend Open AFF"]}
+
+
+def test_kritikal_an_advantage_placed_below_the_threshold_does_not_stop_the_carry() -> None:
+    found, names = _kritikal_run(below_threshold=True)
+    assert (names["AA Pretend Open AFF"], "kritikal-aff", "KRITIKAL_AFF_CARRY") in {
+        (one.round_id, one.position_id, one.method) for one in found.assignments
+    }
+    assert found.counts.refused_by_advantage == ()
+
+
+def test_kritikal_without_a_config_no_round_is_a_k_aff_and_there_are_no_inputs() -> None:
+    found, _ = _kritikal_run(kritikal=None)
+    assert {one.method for one in found.assignments} == {"PLAN_TEXT"}
+    assert found.kritikal is None

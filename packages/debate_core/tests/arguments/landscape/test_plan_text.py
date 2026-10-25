@@ -19,6 +19,7 @@ from typing import Any
 
 import pytest
 
+from debate_core.arguments.landscape.kritikal_aff import KritikalAffConfig, KritikalFamily
 from debate_core.arguments.landscape.plan_text import (
     PLAN_TEXT_LABELS,
     DocumentPlanText,
@@ -480,6 +481,29 @@ def test_the_vocabulary_digest_moves_with_the_resolutional_words() -> None:
     assert PlanTextVocabulary(NATIONAL).digest != WITH_RESOLUTIONAL.digest
     assert PlanTextVocabulary(NATIONAL, fewer).digest != WITH_RESOLUTIONAL.digest
     assert PlanTextVocabulary(NATIONAL, RESOLUTIONAL).digest == WITH_RESOLUTIONAL.digest
+
+
+def _kritikal(position_id: str = "single-payer-aff", *phrases: str) -> KritikalAffConfig:
+    families = (KritikalFamily(id="cap", label="Capitalism", phrases=phrases or ("cap",)),)
+    return KritikalAffConfig(topic_id="sample-topic", position_id=position_id, families=families)
+
+
+def test_the_vocabulary_digest_moves_with_the_k_aff_config(  # `v1-e32-t17`
+) -> None:
+    with_kritikal = PlanTextVocabulary(SAMPLE, None, _kritikal())
+    assert with_kritikal.digest != WORDS.digest
+    assert (
+        with_kritikal.digest
+        != PlanTextVocabulary(SAMPLE, None, _kritikal("single-payer-aff", "capitalism")).digest
+    )
+    assert with_kritikal.digest == PlanTextVocabulary(SAMPLE, None, _kritikal()).digest
+    assert with_kritikal.kritikal == _kritikal()
+
+
+@pytest.mark.parametrize("position_id", ["costs-advantage", "gone-plan-aff", "no-such-aff"])
+def test_a_k_aff_config_naming_no_active_aff_is_refused(position_id: str) -> None:
+    with pytest.raises(ValueError, match="no active aff"):
+        PlanTextVocabulary(SAMPLE, None, _kritikal(position_id))
 
 
 # ------------------------------------------------------------------------------------------------

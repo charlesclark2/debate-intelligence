@@ -13,6 +13,7 @@ import pytest
 from pydantic import ValidationError
 
 from debate_core.application.ports.plan_text_store import (
+    CachedKritikalMarker,
     CachedPlanText,
     CachedPlanTextParagraph,
     PlanTextKey,
@@ -97,7 +98,10 @@ def test_a_reading_has_no_field_for_text() -> None:
         "vocabulary_digest",
         "readable",
         "paragraphs",
+        "kritikal_markers",
+        "heading_families",
     }
+    assert set(CachedKritikalMarker.model_fields) == {"kind", "form", "element_index", "unit"}
     assert set(CachedPlanTextParagraph.model_fields) == {
         "label_element_index",
         "element_index",

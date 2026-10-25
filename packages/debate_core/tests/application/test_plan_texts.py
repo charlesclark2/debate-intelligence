@@ -19,10 +19,17 @@ import pytest
 from debate_core.application.caselist.evidence_listing import LocalEvidence
 from debate_core.application.caselist.parse_workers import InProcessParseRunner
 from debate_core.application.plan_texts import PLAN_TEXT_SOURCE_PATH, PlanTextService
+from debate_core.arguments.landscape.kritikal_aff import (
+    KritikalAffConfig,
+    KritikalFamily,
+    KritikalMarkerKind,
+    KritikalReading,
+)
 from debate_core.arguments.landscape.plan_text import DocumentPlanText, PlanTextVerdict, PlanTextVocabulary
 from debate_core.domain.caselist import SnapshotDate, SourceDocument, SourceFormat, SourceOrigin
 from debate_core.domain.debate_files import ParsedDocument, ParseFailure
 from debate_core.domain.landscape import Taxonomy
+from debate_core.domain.landscape_texts import TextForm
 from debate_core.integrations.docx_parser import DebateDocxParser
 from debate_core.integrations.landscape.plan_text_store import LocalPlanTextStore
 from debate_core.integrations.local import FsEvidenceObjectStore
@@ -38,7 +45,7 @@ def _position(identifier: str, aliases: list[str]) -> dict[str, Any]:
     return {"id": identifier, "label": label, "kind": "aff", "side": "aff", "aliases": aliases}
 
 
-def vocabulary(*aliases: str) -> PlanTextVocabulary:
+def vocabulary(*aliases: str, kritikal: KritikalAffConfig | None = None) -> PlanTextVocabulary:
     return PlanTextVocabulary(
         Taxonomy.model_validate(
             {
@@ -47,7 +54,9 @@ def vocabulary(*aliases: str) -> PlanTextVocabulary:
                 "event": "POLICY",
                 "positions": [_position("sample-plan-aff", list(aliases or ("sample plan",)))],
             }
-        )
+        ),
+        None,
+        kritikal,
     )
 
 
@@ -297,3 +306,72 @@ async def test_reading_the_words_writes_nothing(world: World) -> None:
     await service.words(CASELIST, [source], run)
     assert sorted(path.relative_to(world.data_dir) for path in world.data_dir.rglob("*")) == before
     assert world.cache_file.read_bytes() == written
+
+
+# ------------------------------------------------------------------------------------------------
+# K-aff markers, read and cached beside the plan texts (`v1-e32-t17`)
+# ------------------------------------------------------------------------------------------------
+
+KRITIKAL = KritikalAffConfig(
+    topic_id="sample-topic",
+    position_id="sample-plan-aff",
+    families=(KritikalFamily(id="cap", label="Capitalism", phrases=("cap", "capitalism")),),
+)
+
+
+def kritikal_vocabulary() -> PlanTextVocabulary:
+    return vocabulary(kritikal=KRITIKAL)
+
+
+def kritikal_affirmative() -> bytes:
+    return build_docx(
+        "".join(
+            [
+                paragraph_xml(run_xml("1AC - Capitalism"), style="Heading2"),
+                paragraph_xml(run_xml("Advocacy"), style="Heading3"),
+                paragraph_xml(run_xml("We affirm an invented refusal of the frame."), style="Analytic"),
+                paragraph_xml(run_xml("The role of the ballot is an invented pedagogy"), style="Heading4"),
+                paragraph_xml(
+                    run_xml("Sample 26", character_style="Style13ptBold") + run_xml(" invented cite")
+                ),
+                paragraph_xml(run_xml("An invented body of evidence that goes on.", underline="single")),
+            ]
+        )
+    )
+
+
+@pytest.mark.anyio
+async def test_a_k_aff_files_markers_and_heading_families_are_read_and_cached(world: World) -> None:
+    kritikal = world.plant(kritikal_affirmative())
+    named = world.plant(affirmative(NAMED_PLAN))
+    run = await world.service().read(CASELIST, [kritikal, named], kritikal_vocabulary())
+    assert run.verdicts[kritikal.sha256] == DocumentPlanText(PlanTextVerdict.NONE)
+    found = run.kritikal[kritikal.sha256]
+    assert [(one.kind, one.form, one.element_index) for one in found.markers] == [
+        (KritikalMarkerKind.ADVOCACY, TextForm.LABEL, 1),
+        (KritikalMarkerKind.ROLE_OF_THE_BALLOT, TextForm.SENTENCE, 3),
+    ]
+    assert found.heading_families == ("cap",)
+    assert run.kritikal[named.sha256] == KritikalReading()
+    again = await world.service().read(CASELIST, [kritikal, named], kritikal_vocabulary())
+    assert (again.counts.parsed, again.counts.cache_written) == (0, False)
+    assert again.kritikal == run.kritikal
+
+
+@pytest.mark.anyio
+async def test_a_k_aff_config_reads_every_source_again(world: World) -> None:
+    source = world.plant(kritikal_affirmative())
+    before = await world.service().read(CASELIST, [source], vocabulary())
+    assert before.kritikal[source.sha256] == KritikalReading()
+    after = await world.service().read(CASELIST, [source], kritikal_vocabulary())
+    assert after.counts.parsed == 1
+    assert len(after.kritikal[source.sha256].markers) == 2
+
+
+@pytest.mark.anyio
+async def test_the_cache_holds_no_word_of_a_k_aff_file(world: World) -> None:
+    await world.service().read(CASELIST, [world.plant(kritikal_affirmative())], kritikal_vocabulary())
+    written = world.cache_file.read_text(encoding="utf-8").casefold()
+    # A marker's kind (`ADVOCACY`) and a family's id (`cap`) are kept; no word of the file is.
+    for word in ("refusal", "pedagogy", "invented", "frame", "capitalism", "role of the ballot", "1ac"):
+        assert word not in written

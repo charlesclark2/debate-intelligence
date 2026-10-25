@@ -48,6 +48,26 @@ spec:
     - kind: TaskRef
       name: v1-e03-t03-span-extraction
       relation: dependsOn
+  # PM rulings of 2026-10-25, on the session's three questions:
+  # 1. Keep the repair. An answer the anti-authoring guard refuses takes the same path as a schema
+  #    failure: one repair through v1-e05-t05's guard, then ModelOutputError with attempts=2. The
+  #    repair request carries the rendered original prompt, unchanged as t05 ruled, plus the
+  #    problems as counts, field names and offsets only, never the matched words or anything else
+  #    from the refused answer. t05's two-sentinel test is extended to this path: a phrase in both
+  #    the snapshot and the refused tag appears in the repair only where the snapshot is rendered,
+  #    and in no error or log record. The check hook is optional; a call without one behaves
+  #    exactly as t05's guard does, pinned by a test.
+  # 2. Accepted. debate_core/application/structured_output.py (the hook) and
+  #    debate_core/application/card_selection.py (the only call site of card.select and
+  #    card.markup) are needed, because the layer contract keeps debate_core.evidence below the
+  #    guard. The PM adds debate_core.application to constraints.packages in a PM batch; until then
+  #    it is recorded as a deviation.
+  # 3. Accepted, with conditions. The numbered snapshot's inverse map turns a snapshot offset into a
+  #    paragraph-relative one and never touches evidence_text, so it is not a second copy of the
+  #    card mapping. v1-e03-t07's one-mapping scan allows it by file and exact expression, with a
+  #    comment citing this ruling, and still fails on a second occurrence anywhere, that file
+  #    included, and when the allowed line is removed; tests keep both cases. ac4's round trip
+  #    through v1-e03-t03 shows the two maps agree on non-ASCII text.
   acceptanceCriteria:
     - id: ac1
       description: >-

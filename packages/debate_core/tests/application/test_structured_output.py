@@ -830,6 +830,10 @@ async def _outcome(
     return router.calls, ("returned", result.output, result.attempts, result.metadata)
 
 
+def _finds_nothing(output: ContractPassage) -> tuple[OutputProblem, ...]:
+    return ()
+
+
 @pytest.mark.parametrize(
     ("script", "ending", "prompts"),
     [
@@ -847,7 +851,7 @@ async def test_a_call_without_a_check_behaves_as_t05s_guard_does(
 ) -> None:
     omitted = await _outcome(registry, script)
     unset = await _outcome(registry, script, check=None)
-    finds_nothing = await _outcome(registry, script, check=lambda output: ())
+    finds_nothing = await _outcome(registry, script, check=_finds_nothing)
 
     assert unset == omitted
     assert finds_nothing == omitted

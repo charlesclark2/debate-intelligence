@@ -90,7 +90,7 @@ Twelve, on the restore's refusals, its lock, its guards and its wiring, each run
 `alarm 115`), and the file restored from git after each. No Hypothesis property is involved, so
 agreement 8's database rule does not arise.
 
-| Mutant | First run | After a850840's successor (5efc… below) |
+| Mutant | First run | After 2b75a80 |
 |---|---|---|
 | The data directory itself allowed | **survived**: the non-empty check refused it first | caught: 3 failed |
 | A directory inside it allowed | caught: 1 failed | |

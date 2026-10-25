@@ -4,7 +4,8 @@ One environment's weekly caselist run in the cloud. Decision:
 [ADR-0020](../../../docs/adr/0020-weekly-caselist-run-in-the-cloud.md). Epic:
 [E40](../../../plan_specs/v1/e40-cloud-caselist-run/epic.yaml). Operator steps:
 [caselist-cloud-credentials.md](../../../docs/runbooks/caselist-cloud-credentials.md) (the credentials
-and the login) and [caselist-cloud-run.md](../../../docs/runbooks/caselist-cloud-run.md) (the run).
+and the login), [caselist-cloud-run.md](../../../docs/runbooks/caselist-cloud-run.md) (the run) and
+[caselist-run-alerts.md](../../../docs/runbooks/caselist-run-alerts.md) (the alerts).
 
 Called once from [`envs/dev`](../../envs/dev/caselist_run.tf) and once from
 [`envs/prod`](../../envs/prod/caselist_run.tf), with the same arguments. It holds no account id or
@@ -33,6 +34,24 @@ builds the run, in the apply between those two, and in apply B:
 | `run_task.tf` | The run's execution role and log group; then the run task definition (Fargate, arm64, 8 vCPU, 16 GB, 100 GiB, `debate-research --json caselist pull` under a 6-hour deadline, pinned by digest), its scheduler role, which trusts the run's schedule group only, and the schedule group `debate-<env>-caselist-run` with the schedule in it, Wednesdays at 06:00 America/Chicago, never retried, **created disabled** | the run's; B for the task and schedule |
 | `roles.tf` | The run role's `everyday-evidence` policy: `module.evidence_store.operator_policy_json` itself | the run's |
 | `deployer.tf` | The `Debate<Env>CaselistRunDeployer` permission set: push to the repository, register a run task definition passing the run's two roles and never the login's, start, watch and stop a run | the run's |
+
+[`v1-e40-t05-run-alerts`](../../../plan_specs/v1/e40-cloud-caselist-run/t05-run-alerts.yaml)
+tells the coach, by email, when something goes wrong (ADR-0020 (6)), in one apply after B:
+
+| File | Resources |
+|---|---|
+| `alerts.tf` | The topic `debate-<env>-caselist-run-alerts`, its policy (these rules and alarms publish, by ARN) and the coach's email subscription; the rules `debate-<env>-caselist-run-stopped` and `-login-stopped` on a task of either family that stopped with a non-zero exit code or never started; the metric filter counting `RunsRecorded` (namespace `debate/caselist-run`) from the run's `--json` summary, and the alarm `debate-<env>-caselist-run-late`, 7 of 7 one-day periods, missing data breaching, actions off until `late_run_alarm_actions_enabled`; the queues `debate-<env>-caselist-login-dlq` and `-run-dlq` and the alarm `debate-<env>-caselist-schedule-failed` over both; the CloudTrail rules `-credentials-key-changed`, `-credentials-secret-policy-changed`, `-login-role-changed` and `-login-task-changed` (state `ENABLED`) and `-password-read` (state `ENABLED_WITH_ALL_CLOUDTRAIL_MANAGEMENT_EVENTS`), each with the topic as target |
+| `roles.tf` | The run role's `caselist-alerts` policy: `sns:Publish` on the topic and nothing else |
+| `run_task.tf`, `login_task.tf` | `DEBATE_CASELIST__NOTIFIER=sns` and the topic in both tasks' environments; each schedule's dead-letter queue, and `sqs:SendMessage` on its own queue for its scheduler role |
+
+The tasks publish what the Mac's banners say through `debate_core.integrations.sns`; an image built
+from a release without it refuses `caselist.notifier = sns`, so the alerts' apply carries an image
+from a release that has it (the runbook says how). The late-run alarm is in ALARM from the moment it
+exists, because missing data breaches; the cutover turns its email on after the first recorded run,
+with `caselist_run_late_alarm_actions_enabled = true` in the root's `owner.auto.tfvars`. The metric
+is the one ADR-0020 (6) names, with no dimension, so both environments' alarms read the same series.
+They agree because only the run's home records runs (ADR-0020 (7)): before the promotion prod's alarm
+has its email off, and at the home's move the old home's alarm is turned off with its schedule.
 
 Apply A needs no network. The run's apply needs no image. Apply B takes the digest of an image
 `scripts/caselist_run_deploy.sh` pushed as `image_digest`, and creates both task definitions and both
@@ -111,7 +130,8 @@ runbook, "Before you start").
 ## Tests
 
 `tests/caselist_run.tftest.hcl`, under a mocked provider, with an ARN of its own for every role and
-secret: 14 runs for the credentials and the login (`v1-e40-t02`), 12 for the run (`v1-e40-t03`).
+secret: 14 runs for the credentials and the login (`v1-e40-t02`), 12 for the run (`v1-e40-t03`),
+10 for the alerts (`v1-e40-t05`).
 
 ```bash
 terraform -chdir=infrastructure/modules/caselist_run init -backend=false
@@ -122,4 +142,10 @@ The read rules were checked by mutation: 22 mutants that widen or drop one rule 
 on break-glass's key validation (narrowing, widening or dropping each of its statements and the
 split denies), every one caught by a failing assertion (`v1-e40-t02`'s session report lists them).
 The run's pass-role and secret-read rules were checked the same way: 22 more, every one caught
-(`v1-e40-t03`'s report).
+(`v1-e40-t03`'s report). The alerts: 28 more, on each rule's state and target, the password rule's
+principal exclusion, the run role's grant beyond its one topic, the alarms, the queues and the tasks'
+environment, every one caught (`v1-e40-t05`'s report).
+
+A rule or target in these tests is named by its literal key, never iterated as a whole `for_each`
+map: those resource types carry a deprecated attribute, and Terraform 1.16 panics rendering a failed
+assertion that refers to the whole object instead of printing its message.

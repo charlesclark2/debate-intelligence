@@ -391,8 +391,10 @@ class BackfileImportService:
                 )
             )
         space = None
-        if not already and size is not None:
-            space = space_needed(size, free_bytes=self._free_bytes(), in_inbox=in_inbox)
+        if size is not None:
+            # Imported already, it is a rebuild: the parsed store is restored and what it lacks is
+            # parsed again from `raw/`, so the room is the archive's less the inbox's copy.
+            space = space_needed(size, free_bytes=self._free_bytes(), in_inbox=in_inbox or already)
             if not space.enough:
                 refusals.append(
                     Refusal(

@@ -272,6 +272,40 @@ def test_a_backfile_import_is_not_a_weekly_run_and_leaves_the_run_log_alone(
     assert world.object_keys("reports/sync-runs/") == runs_before
 
 
+def test_running_it_again_rebuilds_the_aggregates_after_a_removal_with_no_second_download(
+    backfiles: tuple[World, Site], tmp_path: Path
+) -> None:
+    """The removal runbook's rebuild for a backfile: run the import again. It restores the backfile's
+    parsed store, rebuilds its aggregates without what the removal took out, and publishes them."""
+    world, site = backfiles
+    assert execute(world)["exit_code"] == ExitCode.OK
+    world.use(tmp_path / "the-macs-copy")
+    removed = world.run(
+        "caselist", "remove", "--source", digest_of("direct"), "--reason", "REQUESTED_BY_TEAM",
+        "--request", "RM-2026-07", "--execute",
+    )  # fmt: skip
+    assert removed["exit_code"] == ExitCode.OK, removed
+    assert not [
+        key for key in world.object_keys(f"parsed/{BACKFILE}/") if key.endswith("/occurrences.jsonl")
+    ], "a whole-file removal deletes the aggregates of every caselist it touches"
+    world.use(tmp_path / "a-later-task")
+
+    planned = dry_run(world)
+    rebuilt = execute(world)
+
+    assert planned["data"]["already_imported"] is True
+    assert planned["data"]["refusals"] == [], "imported already: no download, so no budget is spent"
+    assert planned["data"]["space"]["estimate_bytes"] == 5 * len(zipped(MEMBERS))
+    assert rebuilt["exit_code"] == ExitCode.OK, rebuilt
+    assert len(site.fetched) == 1
+    [occurrences] = [
+        key for key in world.object_keys(f"parsed/{BACKFILE}/") if key.endswith("/occurrences.jsonl")
+    ]
+    table = world.body(occurrences).decode("utf-8")
+    assert digest_of("direct") not in table
+    assert digest_of("verbatim") in table and digest_of("wiki") in table
+
+
 # ------------------------------------------------------------------------------------------------
 # What it refuses, before anything is fetched
 # ------------------------------------------------------------------------------------------------
@@ -473,6 +507,9 @@ def test_a_removal_reaches_a_backfiles_manifest_and_its_bytes(
     assert removed["exit_code"] == ExitCode.OK, removed
     assert removed_digest not in {row["sha256"] for row in member_rows(world)}
     assert not [key for key in world.object_keys(f"raw/caselist/{BACKFILE}/") if key.endswith(removed_digest)]
+    assert not [
+        key for key in world.object_keys(f"parsed/{BACKFILE}/") if key.endswith(f"{removed_digest}.jsonl")
+    ]
     assert removed_digest.encode() not in gzip.decompress(world.body(RUN_STATE_BUNDLE_KEY))
 
 

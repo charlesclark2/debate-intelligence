@@ -114,13 +114,18 @@ recipe choose.
 
 Among the card's occurrences in the recipe's `caselist`, the builder takes:
 
-1. the one seen in the **latest snapshot**;
-2. then the one in the file with the **lowest source SHA-256**;
-3. then the one that starts at the **lowest paragraph** of that file;
-4. then the one whose disclosure has the lowest digest, when one file was disclosed at two paths.
+1. an **attributed** occurrence before an unattributed one: one whose disclosure is on record, so
+   the built file's sidecar can say which team disclosed the card (for a camp card, one whose
+   release is on record, so the sidecar can name the camp file);
+2. then the one seen in the **latest snapshot**;
+3. then the one in the file with the **lowest source SHA-256**;
+4. then the one that starts at the **lowest paragraph** of that file;
+5. then the one whose disclosure has the lowest digest, when one file was disclosed at two paths.
 
-Every step reads a field the occurrence store holds, so the same store always gives the same
-choice. The result is recorded as `AUTO`.
+An unattributed occurrence is used only when the card has no attributed one, and `files build`
+names every card that was resolved to one before it builds the file. Every step reads a field the
+occurrence store holds or the record it points to, so the same store always gives the same choice.
+The result is recorded as `AUTO`.
 
 AUTO never leaves the recipe's own `caselist`. A camp card reaches a caselist recipe only by a pin;
 a recipe whose `caselist` is `openev` chooses among camp cards instead ([below](#camp-cards-openev)).
@@ -179,7 +184,7 @@ Camp files from OpenEv are kept in a store of their own, named `openev`, one cop
 
 A camp pin can sit in any recipe, beside cards from a caselist. For a file of camp cards alone, set
 the recipe's own `caselist` to `openev`, and unpinned cards are chosen among camp releases by the
-same four steps, where the latest release is the one of the latest year, then the first by name
+same five steps, where the latest release is the one of the latest year, then the first by name
 (`2031-ld`, `2031-pf`, `2031-policy`). A camp card's provenance line names the camp, year, event and
 file title, as the data-use policy sets out:
 
@@ -208,6 +213,10 @@ of it was withdrawn:
 * a pin to a removed copy is refused with `SUPPRESSED_OCCURRENCE`. It is not moved to another copy:
   remove the pin to let the recipe choose, or pin another.
 
+A removal also **holds** the path the file was taken from, so a later upload at that path is not
+used either. The same three rules apply to a copy at a held path, from the moment the hold reaches
+your machine, before the next `caselist parse` takes the copy out of the store.
+
 Camp cards follow the same rules. A camp file removed as a whole is never used. Withdrawing one
 team's disclosure of a file does not withdraw a camp's release of the same file; a camp release a
 removal takes a file out of drops it at the next `caselist parse --caselist openev`.
@@ -234,7 +243,7 @@ the second hat of the first pocket.
 | `UNKNOWN_CARD` | The recipe's caselist (or `openev`) has no occurrence of this fingerprint |
 | `PIN_MISMATCH` | The pin matches no occurrence of the card, or two disclosures that differ in who disclosed them |
 | `DUPLICATE_REF` | The card is already in the file |
-| `SUPPRESSED_OCCURRENCE` | The removal suppression list stops the pinned copy, or every copy of the card |
+| `SUPPRESSED_OCCURRENCE` | The removal suppression list stops or holds the pinned copy, or every copy of the card |
 
 No message repeats what you wrote in a field, because what you wrote may be a team code.
 

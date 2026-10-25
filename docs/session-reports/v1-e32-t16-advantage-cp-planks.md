@@ -6,42 +6,51 @@
 | Spec | [`plan_specs/v1/e32-argument-landscape/t16-advantage-cp-planks.yaml`](../../plan_specs/v1/e32-argument-landscape/t16-advantage-cp-planks.yaml) |
 | Epic / release | `v1-e32-argument-landscape` / `v1.2` |
 | Branch | `task/v1-e32-t16-advantage-cp-planks` |
-| Session status | IN PROGRESS: counts taken and sent to the PM with the proposed plank rule; nothing built, waiting for the ruling <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | PARTIAL: built and tested after the PM's rulings of 2026-10-25; ac3, the operator's cache refill and dry run, is NOT RUN, so the phase stays InProgress <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
-**Counts only so far (ac1); nothing is built.** They were taken read-only on hspolicy26 through
-2026-10-20 under taxonomy 1.2.0, using t11's reader and placement. They change the picture the spec
-starts from:
+**Built, after the PM's rulings of 2026-10-25** ([below](#the-pms-rulings-applied)). report.md now shows
+each CP's planks under its CP texts, on synthetic sources, against hand-written golden files.
 
-* **An advantage CP's planks are a list, not further `should` analytics.** Under `advantage-cp`,
-  14 teams have a CP text by its place. 12 of them write it as a short stem ending in a colon
-  (`... should:`), followed by one paragraph per plank with no `should` and no actor. Word's list
-  numbering is not in the paragraph text, so nothing marks them as planks except their place.
-  Only 1 block holds two `should` analytics.
-* **So t11 drops every plank, not only plank 2 onward.** The 12-team "text" it quotes for
-  `advantage-cp` is the shared stem.
-* **The proposed rule finds 152 planks under `advantage-cp`** (14 teams), 297 under `states-cp`
-  (28 teams) and 13 under three other CPs (one team each).
-* **Most planks name no advantage.** Under `advantage-cp`, 24 of 152 name one in their own words,
-  each with a one-word alias. None has a heading or card of its own that names one. 128 name none.
-* **The planks are almost all different.** 92 of `advantage-cp`'s 103 distinct planks are one
-  team's, so a top 3 per CP would show 6 of its 114 team-plank pairs. Cut-off question below.
+* **What a plank is:**
+  * **a list:** the paragraphs after a CP text ending in a colon, up to the first card or heading.
+    A list plank passes the actor guard through its CP text.
+  * **separate planks:** later `should` analytics past the guard, or paragraphs opening `Plank 2:`,
+    `2.` or `Second,`.
+  * A list paragraph that is only an advantage's alias is a label naming the plank after it.
+* **What it solves:** every advantage its own words, its label or a card under it name, by an alias
+  as whole words. A plan is never named. A card saying `solves` with other words is counted, never
+  shown.
+* **How it shows.** Planks are grouped by the advantage they solve: the top 3 per advantage, then "and
+  N more planks, read by M teams", with "not named" last.
+  * A plank naming two advantages is under each, and counted once in the CP's total.
+  * A plank naming a school is withheld and counted.
+  * Planks are in report.md only.
+* **Tests were shown failing first.** 15 targeted mutants were all caught, after one redundant check
+  was removed ([below](#mutants)).
+* **Still open: ac3.** The operator refills the analytic-text cache (about 9 minutes), then runs the
+  dry run without `--publish`. Both blocks are [below](#operator-follow-ups). The fill's `--quote`
+  run prints the plank counts by alias the PM asked for.
+* **The counts that led to the rulings are kept below:** 152 planks under `advantage-cp`, most in
+  lists after a colon stem, 24 naming an advantage in their own words.
 
 ## Plan nodes
 
 | Node | Status | Notes |
 |---|---|---|
-| advantage-cp-planks | In progress | The counts (2026-10-25), sent to the PM. The build waits for the ruling |
+| advantage-cp-planks | Built; ac3 open | The counts (2026-10-25), the PM's rulings (2026-10-25), then the reader, the cache counts, the report's grouping and section, the fixture and golden, the fill script and the guide. The operator's refill and dry run (ac3) are open |
 
 ## Acceptance criteria
 
 | Criterion | Status | Evidence (command → result) |
 |---|---|---|
-| ac1: counts before any rule, of advantage-CP blocks with several `should` analytics, plank labels or numbered planks, and of planks naming an advantage by heading, card or own words, or none, sent to the PM with the proposed plank rule | PASS (sent 2026-10-25, ruling pending) | [The counts](#the-counts-hspolicy26-through-2026-10-20), [the proposed rule](#the-proposed-plank-rule), [the questions](#questions-for-the-pm). Nothing was built before them |
-| ac2: after the ruling, on synthetic sources, report.md shows each multi-plank CP's planks with team counts and what each solves or "not named", matching hand-written golden files; never beside a school or team code; a plank naming a school withheld and counted; tests shown failing first | NOT RUN | Waits for the ruling |
-| ac3: the operator's refill of the analytic-text cache and a dry run without `--publish` on hspolicy26, with the scan's hits by section (operator) | NOT RUN | After the build |
-| advantage-cp-planks node: `uv run pytest packages/debate_core/tests/application/test_landscape_report.py` | NOT RUN | After the build |
+| ac1: counts before any rule, of advantage-CP blocks with several `should` analytics, plank labels or numbered planks, and of planks naming an advantage by heading, card or own words, or none, sent to the PM with the proposed plank rule | PASS | [The counts](#the-counts-hspolicy26-through-2026-10-20), [the proposed rule](#the-proposed-plank-rule), [the questions](#questions-for-the-pm), sent 2026-10-25 and ruled on the same day. Nothing was built before the ruling |
+| ac2: after the ruling, on synthetic sources, report.md shows each multi-plank CP's planks with team counts and what each solves or "not named", matching hand-written golden files; never beside a school or team code; a plank naming a school withheld and counted; tests shown failing first | PASS | `tests/fixtures/landscape/golden/report.md`'s States CP planks and plank coverage, hand-written from the fixture README's new "Planks" table, matched on the renderer's first run (`test_rendering_the_fixture_matches_the_golden_file[report.md]`). Never beside a school or team code: `test_texts_a_text_is_never_beside_a_school_or_team_code`, which dumps the whole texts model with its planks, now non-empty. Withheld and counted: `test_planks_a_plank_naming_a_school_is_withheld_and_counted`, and `CpPlanks.withheld == 1`. Red runs: [below](#checks-shown-failing-for-their-reason) |
+| ac3: the operator's refill of the analytic-text cache and a dry run without `--publish` on hspolicy26, with the scan's hits by section (operator) | NOT RUN | The operator's two blocks are [below](#operator-follow-ups). The rules digest changed, so the refill reads every on-topic source again |
+| advantage-cp-planks node: `uv run pytest packages/debate_core/tests/application/test_landscape_report.py` | PASS | `.venv/bin/python -m pytest packages/debate_core/tests/application/test_landscape_report.py -q` under `perl -e 'alarm 100'` → 81 passed (76 before this task's tests) |
+| PM ruling 2: a mutant where a list plank under a stem that fails the guard still shows | PASS | "list plank under a stem failing the guard shows": 4 failed ([below](#mutants)) |
+| PM: mutants on the list boundary (past the first card, the 60-word cap), the alias-only label read as a plank, a partial-word alias match, and a plank double-counted in the totals | PASS | 2, 1 (removed) and 1 (off by one), 4, 1 and 2 failed ([below](#mutants)) |
 
 ## The counts (hspolicy26, through 2026-10-20)
 
@@ -213,15 +222,171 @@ place in 4 of the 6 `advantage-cp` blocks, and keeps none of planks 2 onward (13
    grouped by their normalized words (t11's digest), with their team counts, and cut off at t11's
    top 3 (question 4). A plank naming a school of the caselist is withheld and counted: 0 today.
 
+## The PM's rulings, applied
+
+The PM ruled on the counts on 2026-10-25:
+* (1) the rule as written, lists included, and (a): an alias-only list paragraph is a label;
+* (2) (a): a list plank passes the guard through its stem;
+* (3) (a): advantages only, by any alias, as whole phrases;
+* (4) (b): the top 3 per advantage within each CP.
+
+They are a PM-ruling comment above the spec's `acceptanceCriteria`, committed before the build
+(`f6fc110`). The branch was first synced onto `origin/dev` with `scripts/task sync`. That brought in
+t15's merge and the PM batch of 2026-10-25, with no conflict; the branch was not on the remote, so
+nothing was pushed.
+
+### What was built
+
+| Where | What |
+|---|---|
+| `domain/landscape_texts.py` | `AnalyticTextKind.CP_PLANK`, its forms `LIST` and `SEPARATE`. A plank's reading adds its CP text's paragraph (`stem_element_index`), the advantages it solves (ids, sorted) and its cards saying `solves` with other words, a count. No words. `PlankGroup` and `CpPlanks`, the report's groups; `LandscapeTexts.planks`. `TextCoverage` gains the plank counts |
+| `arguments/landscape/analytic_texts.py` | The planks of each CP text the reader finds (`_Planks`), the plank label (`plank_words`), the advantage aliases of the taxonomy (`AnalyticTextRules.advantage_aliases`), matching them as whole phrases (`advantage_aliases_in`), reading a plank back without its label. `_RULE_VERSION` is `analytic-texts-2` and the 60-word cap is in the digest, so the cache refills |
+| `application/ports/analytic_text_store.py`, `application/analytic_texts.py` | The cache keeps each source's alias-only labels and refused list planks, beside t11's guard count; the run and the report's inputs carry them; planks are quoted like CP texts |
+| `application/landscape_report.py` | Planks counted as a CP text is, then per CP grouped by what they solve (`_cp_planks`): the top 3 per group through t11's `top_texts`, "not named" last, the totals once per plank, a school-naming plank counted once |
+| `arguments/landscape/render.py` | Under the CP texts' coverage, where every plank went; under each CP's texts table, its planks' totals, one table by what they solve, and each group's "and N more planks" |
+| `testing/landscape_report.py` | The fixture's loader reads a plank's `stem`, `solves` and counts |
+| `tests/fixtures/landscape/` | The States CP's planks in `analytic_texts.json`, by hand; the README's "Planks"; the golden `report.md` |
+| `scripts/read_landscape_texts.py` | Prints the plank counts, and with `--quote` the planks naming each advantage alias in their own words |
+| `docs/guides/landscape-taxonomy.md` | "A CP's planks" |
+
+### Checks shown failing for their reason
+
+Each suite ran red before its code, against a skeleton that found no planks:
+
+| Suite | Red |
+|---|---|
+| `arguments/landscape/test_cp_planks.py` (the reader) | 12 failed, 9 passed. The 9 are the reading's validation cases (8) and the alias table (1), written with the domain types before these tests, so they never ran red |
+| `application/test_analytic_texts.py` (the service) | 2 failed, 16 passed, both on the missing counts (`AttributeError`); the plank assertions before them passed on the reader |
+| `application/test_landscape_report.py` | 5 failed, 76 passed. `test_planks_out_of_range_files_are_not_read` passed against the skeleton: t11's loop already counted in-range planks by their kind, and the new counts default to 0 |
+| `arguments/landscape/test_render.py`, the golden `report.md` | 1 failed, 35 passed |
+| `tests/scripts/test_read_landscape_texts.py` | Written with the script's change; then run against the committed script: 2 failed, 2 passed (the data-directory and empty-store guards). The new script was restored from a copy, byte for byte |
+| `integrations/landscape/test_analytic_text_store.py` | Its "no field for text" pin failed on the new fields, and was extended by hand with the five: two counts, a paragraph index, the advantages' ids, a count |
+
+Two expectations of t11's changed with the rulings, by hand:
+* **`test_the_first_should_analytic_of_a_block_under_a_placed_cp_is_its_text_by_place`.** Its block's
+  second `should` analytic, past the guard, is now the first text's separate plank (ruling 1).
+* **The CP-text coverage row: 16 found and 2 under no heading.** The fixture's `b6` gained a labelled
+  CP text with no actor, under no heading, whose list the guard refuses. t11's golden lines changed to
+  match: 16 found, 3 not placed, 2 of them under no heading.
+
+### Mutants
+
+There were 15 targeted mutants. Each:
+* was applied to one file, after a check that its target occurs exactly once;
+* ran the six covering suites (233 tests) in a fresh process, with bytecode writing off and
+  `__pycache__` cleared;
+* was restored from a copy and compared byte for byte.
+
+No Hypothesis is used, so there is no example database to isolate (agreement 8). Every run took 1.9
+to 2.1 s.
+
+| Rule | Mutant | Failed |
+|---|---|---|
+| List boundary | the list goes on past the first card | 2 |
+| List boundary | no 60-word cap | 1 |
+| List boundary | the cap at 59 words (`<` for `<=`) | 1 |
+| Label | an alias-only paragraph read as a plank | 4 |
+| Label | the label names no plank | 2 |
+| Naming | an alias matched inside a word | 1 |
+| Naming | a card under a plank names nothing | 1 |
+| Guard | a list plank under a stem failing the guard still shows | 4 |
+| Totals | a plank naming two advantages counted twice | 2 |
+| Groups | no top-3 cap per advantage | 2 |
+| Groups | "not named" not last | 2 |
+| Groups | a two-advantage plank under its first advantage only | 2 |
+| Withholding | a school-naming plank never counted | 4 |
+| Withholding | counted once per group, not per CP | 4 |
+| Withholding | shown (`top_texts` never withholds) | 10 |
+
+**Two survivors on the way, both settled before the final run:**
+* **"A withheld plank still shown" survived.** The report skipped a school-naming plank before grouping,
+  and `top_texts` also withholds it in every group, so the skip could not be told from its absence.
+  The skip was removed (agreement 8). Withholding now rests on `top_texts`, which the last mutant
+  checks; the set that counts a withheld plank once per CP stays.
+* **"Counted once per group" survived first.** The fixture's school-naming plank named no advantage,
+  so it sat in one group either way. It now names both advantages; the golden is unchanged, since a
+  withheld plank shows in neither group.
+
+A refinement I tried, leaving a withheld plank's teams out of the group's teams that order the
+groups, could not be told apart on the fixture either, and was reverted, not kept untested.
+
+### Before the report (working agreement 10)
+
+* **The affected set** (`scripts/affected_tests.py`) is **191 of 477 test files**.
+  * I ran it once, `-n auto -m "not slow and not live"`, under a 115 s limit on the interpreter. The
+    limit stopped it at about 89% (exit 142), with the load at 4 to 7.
+  * Its 17 worker processes exited on their own once their parent's channel closed, and none was
+    left.
+  * So, by agreement 10, the whole affected set is left to the pull request's `ci`.
+* **Within the limit, the directories of what changed and the always-run list:**
+
+  | Run | Result |
+  |---|---|
+  | `arguments/landscape`, `integrations/landscape`, `tests/config`, the application's landscape, analytic-text and plan-text tests, the landscape scripts' tests | 999 passed in 3.0 s |
+  | The domain's landscape tests, `tests/architecture`, `tests/specs`, `tests/smoke/test_landscape_smoke.py` | 417 passed in 6.7 s |
+  | `packages/debate_cli/tests` without `bucket_mode/` | 954 passed in 38.7 s |
+  | `bucket_mode/` without `test_bucket_mode_kills.py` | 37 passed in 22.6 s |
+
+  **The bucket-mode kill tests** kill real subprocesses, and ran 15 tests in 110 s in one process under
+  this load. In the whole CLI run they held the session past the limit twice, after every other test
+  had passed. They import nothing this task changed, so they are left to `ci`.
+* **The cheap checks:**
+  * `ruff format --check .`: 1319 files already formatted;
+  * `ruff check .`: all checks passed;
+  * `pyright packages/debate_core`: 0 errors;
+  * `lint-imports`: 16 kept, 0 broken;
+  * `check_thin_handlers.py`: 54 handlers within 25 statements;
+  * `docs_index.py --check-descriptions`: OK;
+  * `check_command_blocks.py --base origin/dev`: OK;
+  * `check_links.py`: OK;
+  * `pre-commit run check-merge-conflict --all-files`: passed;
+  * `validate_specs.py`: OK, 453 files.
+* **No shared test ground changed:** no `pyproject.toml`, `uv.lock`, conftest or pytest plugin. So no
+  whole-selection hand-off.
+
+### Counts by alias
+
+The PM asked for these, to see whether a one-word alias over-matches.
+* **From the counts** (the same whole-phrase match, on the planks the rule finds):
+  * under `advantage-cp`: `costs` 6, `budgets` 5, `innovation` 3, `disease` 3, `coverage` 2,
+    `inequality` 2, `pandemics` 2 and `bioterror` 1;
+  * under `states-cp`: `coverage` 7, `costs` 4, `access` 4, `budgets` 2 and `innovation` 1;
+  * under `public-option-cp`: `coverage` 1 and `costs` 1.
+
+  Every match is a one-word alias. No multi-word alias matched.
+* **From the build:** the fill's `--quote` line prints the same count over every plank read again, any
+  CP. It is recorded here when the operator's run comes back (ac3).
+
+The counts cannot say whether a match is right: they print no plank. That would take the coach
+reading the shown planks in report.md, or the operator reading the dry run's.
+
 ## Files changed
 
-* This report only. The counting script is a scratch file outside the repository.
+* **`debate_core.domain`:** `landscape_texts.py`.
+* **`debate_core.arguments.landscape`:** `analytic_texts.py`, `render.py`.
+* **`debate_core.application`:** `analytic_texts.py`, `landscape_report.py`, `ports/analytic_text_store.py`.
+* **`debate_core.testing`:** `landscape_report.py`, the fixture's loader ([Deviations](#deviations-from-the-spec)).
+* **Tests:**
+  * `packages/debate_core/tests`: `arguments/landscape/test_cp_planks.py` (new); `test_analytic_texts.py`
+    (t11's two-`should` expectation); `application/test_analytic_texts.py`;
+    `application/test_landscape_report.py`; `integrations/landscape/test_analytic_text_store.py`;
+  * `tests/scripts/test_read_landscape_texts.py`.
+* **`tests/fixtures/landscape`:** `synthetic_caselist/analytic_texts.json` and its README, by hand;
+  `golden/report.md`, by hand.
+* **`scripts/read_landscape_texts.py`.**
+* **`docs/guides/landscape-taxonomy.md`:** "A CP's planks".
+* **The spec:** the PM's rulings as a comment above `acceptanceCriteria`.
+* **This report.**
 
 ## Deviations from the spec
 
-None so far.
+1. **`debate_core.testing` is outside `constraints.packages`.** The fixture's loader,
+   `read_synthetic_analytic_texts`, has to read a plank's fields for the golden. t11's PM amended its
+   own list the same way (question 1).
 
 ## Decisions and assumptions
+
+From the counts (2026-10-25):
 
 1. **A list was counted although the spec names only `should` analytics, labels and numbered
    paragraphs.** The `should` count alone (1 block) could not explain 14 teams. The second pass
@@ -236,17 +401,114 @@ None so far.
    `sh`) and kept everything else. A real pull runs as `uv` or Python, and would still stop it. That
    shard was then run again.
 
+From the build:
+
+5. **No heading can be under a plank.** The proposed rule named "a card or heading under the plank".
+   Planks are read within their CP text's block, and a heading ends the block, so no heading lies
+   between a plank and the next. The alias-only label of ruling 1 is what names a list plank from
+   above it.
+6. **A plank is placed with its CP text,** whatever that is placed under. It counts as a CP text does:
+   under a CP, READS, in a round not on the other side. Elsewhere it is counted where it went.
+7. **The planks of a CP text run to the block's next heading or next CP text.**
+   * The list ends at the first card, as ruled. Separate planks can follow it in the same block.
+   * A card's tag names the most recent separate plank before it. A card after a list names no plank.
+8. **A list paragraph holding `should` is a list plank.** It is not a separate plank too: each
+   paragraph is read once.
+9. **An alias-only label** is a list paragraph that normalizes, as a heading does (`2. Medical
+   Innovation:`), to an advantage's alias.
+10. **A plank's advantages are the union over its copies.** Two files with the same words may name
+    different advantages, for example when one has a card under it. Each name comes from a file, so the
+    union guesses nothing.
+11. **The CP's total counts its distinct planks, the withheld one included.** It says how many are
+    withheld (`8, read by 6 teams ... 1 is withheld`).
+12. **The groups are ordered** by the distinct teams with a plank in them, then the advantage's id,
+    with "not named" last. A group's teams are every one of its planks' teams.
+13. **"The stem once above its CP's plank groups"** is t11's texts table, unchanged. A CP's planks
+    hang off several of its texts, so they are grouped per CP under that table, not per text.
+14. **The fill's counts by alias** count each plank read again, not each distinct plank, over every
+    CP. They show how often an alias matches, which is what the PM asked to see.
+15. **The fixture keeps t11's golden lines.** `b6`'s second text gained a colon, which leaves its
+    digest unchanged, and the list hangs off it. The only t11 line that moved is the new labelled
+    text's.
+
 ## Operator follow-ups
 
-None yet. The cache refill and the dry run (ac3) come after the build, in t11's shape.
+1. **Refill the analytic-text cache for hspolicy26** (expected runtime about 9 minutes on a loaded
+   machine, the PM's estimate; t11's first fill took 551 s).
+   * **Why it is needed:** the rules digest changed, so every on-topic source of the newest snapshot
+     is read again through the parser.
+   * **What it writes:** only `~/.debate-research/dev/landscape/analytic_texts/hspolicy26.jsonl`, with
+     digests, indexes, ids and counts, no text.
+   * **What it prints:** counts only, with `--quote` the planks read again and their counts by alias.
+   * **Its guards:** it refuses to start if a `DEBATE_*` variable is set or a `caselist pull` is
+     running.
+
+   First, from the task worktree:
+
+```bash
+cd ~/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e32-t16-advantage-cp-planks
+```
+
+```bash
+if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; elif pgrep -f "caselist pull" >/dev/null; then echo "STOP: a caselist pull is running; wait for it to finish"; else uv run python scripts/read_landscape_texts.py --caselist hspolicy26 --quote; fi
+```
+
+   **Success looks like:**
+   * the `Read hspolicy26 ...` line. Through 2026-10-20 it says 3825 sources, 2070 negative and 1770
+     affirmative; a newer snapshot says more;
+   * an `Analytic texts:` line with `0 cached` (the rules digest changed), a parsed count above zero,
+     `0 unread` and `cache written`;
+   * each kind's found and placed counts, `CP_PLANK` above zero, then the `CP texts by place` and
+     `CP planks:` lines;
+   * the `Quoted:` line with `0 not` and `0 unread`;
+   * the `Planks naming an advantage alias in their own words:` line;
+   * the `Runtime` line.
+
+   Paste every line back. A `STOP:` line means nothing ran.
+2. **Then the dry run, without `--publish`, on the warm cache** (expected about 75 s; t11's took 74 s).
+   It writes nothing. Run it after the refill, never before: without the refill, the dry run would read
+   every file again and write no cache. From the same worktree:
+
+```bash
+if env | grep -q '^DEBATE_'; then echo "STOP: a DEBATE_ variable is set; unset it and paste again"; elif pgrep -f "caselist pull" >/dev/null; then echo "STOP: a caselist pull is running; wait for it to finish"; else uv run debate-research landscape report --caselist hspolicy26 --dry-run; fi
+```
+
+   **Success looks like:**
+   * exit 0, with the planned files listed and nothing written;
+   * the scan's line of hits and its digest. t11's dry run had 8 hits, all in `top_cards.csv`, digest
+     `81374e646621`.
+
+   Paste the whole output back. The session then records the scan's hits by section, as t11 did, with
+   a counts-only read of the dry run in memory that writes nothing.
+3. **The first publish with the planks** is the PM's to coordinate, after the review.
 
 ## Follow-up work
 
-None yet.
+* **The CLI's JSON** does not carry the plank counts, as it does not carry t11's text counts
+  (`LandscapeRunResult.analytic_texts` holds them for t05's command).
+* **A card after a whole list** (9 lists, 6 teams, in the counts) names an advantage that no one plank
+  can be given. Pairing them by order would be a guess; a rule for it, if the coach wants one, is a
+  ruling first.
 
 ## Questions for the PM
 
-Paste-ready:
+**Answered.** The PM ruled on the counts on 2026-10-25 ([above](#the-pms-rulings-applied)). The
+questions as sent are kept below.
+
+One question from the build, paste-ready:
+
+```text
+v1-e32-t16 question (session, 2026-10-25, after the build). Built to your
+rulings of 2026-10-25; 15 targeted mutants caught; the operator's refill and
+dry run (ac3) are open, so the phase stays InProgress.
+
+1. debate_core.testing is outside constraints.packages: the fixture's loader
+   (read_synthetic_analytic_texts) reads a plank's stem, solves and counts for
+   the golden. Amend the list with a PM-ruling comment, as for t11?
+   Recommendation: yes.
+```
+
+The questions on the counts, as sent:
 
 ```text
 v1-e32-t16 counts (session, 2026-10-25). Counts only, nothing built.

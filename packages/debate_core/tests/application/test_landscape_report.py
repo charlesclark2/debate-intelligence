@@ -1102,7 +1102,8 @@ def _coverage(texts: LandscapeTexts, kind: AnalyticTextKind) -> TextCoverage:
     ("kind", "expected"),
     [
         # labels, documents, counted, elsewhere, place nothing, no heading, withheld, unread, guard
-        (AnalyticTextKind.CP_TEXT, (15, 8, 11, 2, 1, 1, 1, 1, 2)),
+        # b6's labelled text with no actor, under no heading, is v1-e32-t16's (its list is refused).
+        (AnalyticTextKind.CP_TEXT, (16, 8, 11, 2, 1, 2, 1, 1, 2)),
         (AnalyticTextKind.K_ALTERNATIVE, (9, 8, 5, 1, 1, 2, 0, 0, 0)),
         (AnalyticTextKind.ROLE_OF_THE_BALLOT, (2, 2, 1, 0, 1, 0, 0, 0, 0)),
         (AnalyticTextKind.OVERVIEW, (8, 8, 5, 1, 1, 1, 0, 0, 0)),
@@ -1167,6 +1168,88 @@ def test_texts_a_text_is_never_beside_a_school_or_team_code() -> None:
     assert not {
         name for name in names if re.search(rf"(?<![A-Za-z0-9]){re.escape(name)}(?![A-Za-z0-9])", dumped)
     }
+
+
+# ------------------------------------------------------------------------------------------------
+# A CP's planks (v1-e32-t16), grouped by the advantage they solve
+# ------------------------------------------------------------------------------------------------
+#
+# Counted by hand from the same fixture's planks (its README's "Planks"): the teams are t11's above.
+
+
+def _planks(report: LandscapeReport | None = None):  # noqa: ANN202 - the report's own type
+    found = {one.position_id: one for one in _texts(report).planks}
+    return found
+
+
+def test_planks_each_cp_groups_its_planks_by_the_advantage_they_solve_top_three_each() -> None:
+    states = _planks()["states-cp"]
+    assert [
+        (group.solves, group.label, [(row.rank, row.teams, row.text) for row in group.planks])
+        for group in states.groups
+    ] == [
+        (
+            "costs-advantage",
+            "Costs advantage",
+            [
+                (1, 4, "Expand sample clinics to cut costs."),
+                (2, 3, "Cap sample drug prices to cut costs and spur innovation."),
+                (3, 2, "The fifty states should also cap sample premiums."),
+            ],
+        ),
+        (
+            "innovation-advantage",
+            "Innovation advantage",
+            [
+                (1, 3, "Cap sample drug prices to cut costs and spur innovation."),
+                (2, 1, "Fund a sample research prize."),
+            ],
+        ),
+        (None, None, [(1, 3, "Publish a sample price list."), (2, 1, "Hire sample navigators.")]),
+    ]
+    assert states.groups[0].more == MoreTexts(
+        position_id="states-cp", kind=AnalyticTextKind.CP_PLANK, texts=1, teams=1
+    )
+    assert [group.more for group in states.groups[1:]] == [None, None]
+    assert list(_planks()) == ["states-cp"]
+
+
+def test_planks_a_plank_naming_two_advantages_counts_once_in_the_totals() -> None:
+    states = _planks()["states-cp"]
+    assert (states.planks, states.teams, states.withheld) == (8, 6, 1)
+
+
+def test_planks_a_plank_naming_a_school_is_withheld_and_counted() -> None:
+    texts = _texts()
+    shown = {row.text for one in texts.planks for group in one.groups for row in group.planks}
+    assert shown and not any("Ashgrove" in text for text in shown)
+    assert _coverage(texts, AnalyticTextKind.CP_PLANK).withheld_texts == 1
+
+
+def test_planks_every_plank_in_range_is_counted_by_where_it_went() -> None:
+    one = _coverage(_texts(), AnalyticTextKind.CP_PLANK)
+    assert (
+        one.labels,
+        one.documents,
+        one.counted,
+        one.elsewhere,
+        one.headings_place_nothing,
+        one.no_heading,
+        one.withheld_texts,
+        one.unread,
+        one.refused_by_guard,
+        one.plank_labels,
+        one.solves_other_words,
+    ) == (16, 8, 14, 1, 0, 1, 1, 1, 2, 1, 1)
+
+
+def test_planks_out_of_range_files_are_not_read() -> None:
+    # b9's plank, label and refusals are after the report's date; through the first snapshot, b1, b2 and
+    # b3's five planks are in range, and b6's refusals and label are not.
+    shown = {row.text for one in _texts().planks for group in one.groups for row in group.planks}
+    assert "Ban sample surprise bills." not in shown
+    first = _coverage(_texts(_report(_inputs(through=FIRST))), AnalyticTextKind.CP_PLANK)
+    assert (first.labels, first.refused_by_guard, first.plank_labels) == (5, 0, 0)
 
 
 # ------------------------------------------------------------------------------------------------

@@ -24,9 +24,11 @@ v1-e03-t03 extraction and give evidence byte-identical to the snapshot slice, no
 included. An artifact's metadata field takes only the type `with_inputs` returns, so pyright and
 validation both refuse the bare `response.metadata`.
 
-**Look at first:** the three deviations. Two files outside `constraints.packages` carry the work
-(a `check` hook on t05's guard, and the new `application/card_selection.py` call site). I also had
-to allow one expression in v1-e03-t07's "the card mapping exists once" scan, by its exact text.
+**Look at first:** the three deviations, which the PM ruled on during the session (2026-10-25,
+all accepted; see [PM rulings of 2026-10-25](#pm-rulings-of-2026-10-25-and-the-work-they-asked-for)).
+Two files outside `constraints.packages` carry the work: a `check` hook on t05's guard, and the
+new `application/card_selection.py` call site. One expression is allowed in v1-e03-t07's "the card
+mapping exists once" scan, by file and exact text.
 
 ## Plan nodes
 
@@ -143,10 +145,14 @@ astral character (an emoji) in 69 to 75% of them.
 * **Outside `constraints.packages`** (Deviations 1 to 3): `application/structured_output.py` (the
   `check` hook), `application/card_selection.py` (the call site), `prompts/prompts.lock.json` (the
   two new entries, written by `lock_prompts.py`), `prompts/README.md` (two lines now point at the
-  real prompt), the two new test files under `packages/debate_core/tests/evidence/`, one allowance in
-  `packages/debate_core/tests/evidence/test_card_mapping.py`, and four fixture files under
+  real prompt), the two new test files under `packages/debate_core/tests/evidence/`, the allowance
+  in `packages/debate_core/tests/evidence/test_card_mapping.py` (its scan is now a function, with
+  four tests of the allowance), a new section in
+  `packages/debate_core/tests/application/test_structured_output.py` (the optional check), and
+  four fixture files under
   `tests/fixtures/model_outputs/card.{select,markup}/` and `tests/fixtures/model_cassettes/card.{select,markup}/`.
-* **`plan_specs/.../t06-card-selection-contract.yaml`**: phase `Succeeded`.
+* **`plan_specs/.../t06-card-selection-contract.yaml`**: phase `Succeeded`, and the PM's rulings
+  of 2026-10-25 as a comment above `acceptanceCriteria`.
 
 ## Deviations from the spec
 
@@ -158,14 +164,17 @@ astral character (an emoji) in 69 to 75% of them.
    attempt records, logs and policy. With `check` unset nothing changes: t05's suite passes
    unchanged (`508 passed` with t04's). A consequence the PM should agree to: **an answer the
    guard refuses gets the one repair**, whose prompt lists the guard's problems (counts, field
-   names, offsets). It is not refused on the first answer.
+   names, offsets). It is not refused on the first answer. **PM ruling, 2026-10-25: keep the
+   repair**, with the two-sentinel test extended to this path and the no-check behaviour pinned.
 2. **The call site `debate_core/application/card_selection.py`** (outside `constraints.packages`).
    The spec puts the guard in `debate_core.evidence`, but the layers contract keeps `evidence` below
    `application`, where `StructuredOutputGuard`, `ModelOutputError` and `OutputProblem` live. So the
    evidence module returns its own `GuardProblem` values, and `CardSelector` in the application
    layer converts them, runs both prompts with `SELECTION_POLICY = ValidationPolicy(fail_closed=True)`,
    and builds the artifacts. It is the only code that calls `card.select` or `card.markup`, which is
-   how "never without fail_closed=True" is held.
+   how "never without fail_closed=True" is held. **PM ruling, 2026-10-25: accepted.** The PM adds
+   `debate_core.application` to `constraints.packages` in a PM batch; until then it stays recorded
+   here.
 3. **One allowance in v1-e03-t07's "the card mapping exists once" scan**
    (`test_card_mapping_arithmetic_exists_once_in_the_whole_tree`). The scan flags every `x - y.start`
    in the tree outside `card_mapping.py`. The numbered snapshot's inverse map,
@@ -174,8 +183,9 @@ astral character (an emoji) in 69 to 75% of them.
    requires it ("tested both ways"). I could have reshaped the line to slip past the scanner, which
    would silently weaken the check. Instead I allowed that one expression by its exact text in the
    test. Shown: a planted second subtraction in `numbered_snapshot.py` fails the check, and so does
-   removing the allowed line. **This edits another task's guard test, so it is the PM's to accept**
-   or to replace with a different rule.
+   removing the allowed line. **PM ruling, 2026-10-25: accepted, with conditions**: the allowance
+   names the file and the exact expression with a comment citing the ruling, and both failing cases
+   are kept as tests. Both are done.
 4. **Names the spec did not give.** The spec names `CardSelection`, `MarkupSpan` and
    `TagSuggestion`. `card.markup` needs an output schema of its own, so `MarkupSuggestion` (spans
    and a rationale) is added, and the kept artifacts are `GeneratedCardSelection` and
@@ -186,6 +196,71 @@ astral character (an emoji) in 69 to 75% of them.
    `src` called it; t04's one test passes both and still passes.
 
 No schema needed coercion. Validation stays t05's strict JSON with extra keys forbidden.
+
+## PM rulings of 2026-10-25 and the work they asked for
+
+The PM answered the three questions during the session. The rulings are recorded as a comment
+above the task's `acceptanceCriteria` (it parses as a comment: the criteria and context are
+unchanged, and no ruling text is in the loaded document).
+
+1. **Keep the repair.** No code change was needed: the guard's refusals already took t05's path.
+   * **The two-sentinel test, extended to the check path.**
+     `test_guard_quoted_tag_is_refused_after_one_repair_and_nothing_quotes_it` now follows
+     t05's `test_repair_sentinels_the_answers_reaches_nothing_and_the_calls_reaches_only_the_repair`.
+     `SENTINEL` sits in the snapshot (P4) and in the refused tag. `NEED_SENTINEL` sits in the
+     call's research need. In the rendered repair, `SENTINEL` occurs once, exactly as often as in
+     the original prompt, and only inside the rendered `[P4] ...` block. No sentinel word remains
+     once that block is removed, and `failed_user` equals the original rendered user turn.
+     `NEED_SENTINEL` occurs once. No repair variable other than `failed_user` holds either
+     sentinel. Neither is in the error's traceback, args, problems or attempt records, the error has
+     no `__cause__` or `__context__`, and neither is in any log record's message or
+     `repr(vars(record))`.
+   * **The optional hook, pinned** in t05's suite:
+     `test_check_is_optional_and_unset_by_default` (keyword-only, default `None`);
+     `test_a_call_without_a_check_behaves_as_t05s_guard_does`, for a valid, a repaired and a
+     refused call, where omitting `check`, passing `None` and passing a check that finds nothing
+     give the same router calls and the same result or error, matching the hand-written prompt
+     sequence and ending; and
+     `test_check_problems_are_repaired_then_refused_like_validation_problems`, which checks both
+     answers, puts the check's problem in the repair prompt, and ends with `attempts == 2` and
+     `fail_closed`.
+2. **The two application files are accepted**, and recorded in Deviations until the PM batch.
+3. **The allowance is accepted, with conditions.** The allowance in `test_card_mapping.py` now
+   carries a comment citing the ruling, and names `PARAGRAPH_MAP_MODULE` and the exact
+   expression. The scan is a function (`_scan`, `_strays`), so the cases I had shown by hand are
+   kept tests: the module as it is passes; a second subtraction in the same file fails; the
+   allowed expression in any other file fails; the allowed line removed fails. ac4's round trip
+   (the numbered snapshot's map, then v1-e03-t03's extraction and `CardMarkup`) is the evidence
+   the two maps agree on non-ASCII text.
+
+### Mutation run on the new tests
+
+Six more mutants, the same way: each alone, a fresh `HYPOTHESIS_STORAGE_DIRECTORY` per run,
+restored after, run against `test_structured_output.py`, `test_selection_contract.py`,
+`test_numbered_snapshot.py` and `test_card_mapping.py`. All six were caught, and none errored at
+collection.
+
+| Mutant | Result | Caught by |
+|---|---|---|
+| The repair's answer is not checked (check on the first attempt only) | caught, 3 failed | `test_check_problems_are_repaired_then_refused_like_validation_problems`, the card-path sentinel test, `test_guard_markup_outside_the_selection_is_refused_fail_closed` |
+| A call without a check gets a default check that finds nothing | caught, 1 failed | `test_check_is_optional_and_unset_by_default` only. That mutant behaves the same as no check, so only the signature pin can see it, as "optional" requires. |
+| The allowance no longer requires its exact line | caught, 2 failed | `test_the_allowance_refuses_a_second_subtraction_in_the_paragraph_map_module`, `test_the_allowance_fails_when_the_allowed_line_is_gone` |
+| The allowance admits the expression in any file | caught, 1 failed | `test_the_allowance_refuses_the_allowed_expression_in_any_other_file` |
+| The quoted-text problem quotes the matched words | caught, 2 failed | `test_guard_quoted_text_problem_never_holds_the_words`, the card-path sentinel test |
+| The guard's problems carry the research need | caught, 2 failed | the card-path sentinel test, `test_guard_out_of_bounds_selection_is_repaired_once_and_a_good_repair_is_kept` |
+
+### Checks after the rulings
+
+* `.venv/bin/python -m pytest packages/debate_core/tests/evidence packages/debate_core/tests/application/test_structured_output.py packages/debate_core/tests/integrations/models tests/specs tests/architecture -n auto -m "not slow and not live"`
+  under `perl -e 'alarm 115'` → `2260 passed in 16.86s`.
+* The logging suites in one process,
+  `.venv/bin/python -m pytest packages/debate_core/tests/application/test_structured_output.py packages/debate_core/tests/evidence/test_selection_contract.py -n 0 -p no:randomly`
+  → `154 passed`.
+* `uv run ruff format --check .` → `1326 files already formatted`; `uv run ruff check .` →
+  `All checks passed!`; `uv run pyright packages/debate_core` → `0 errors` (a first run found an
+  untyped lambda in the new t05 test, committed before pyright ran; fixed in the next commit);
+  `uv run lint-imports` → `16 kept, 0 broken`; `uv run scripts/validate_specs.py` → `OK`.
+* The affected set is still the whole selection in effect, and is left to the pull request's `ci`.
 
 ## Decisions and assumptions
 
@@ -298,6 +373,7 @@ None. The affected set is the whole selection in effect, which the pull request'
 
 ## Follow-up work
 
+* **PM batch:** add `debate_core.application` to this spec's `constraints.packages` (ruling 2).
 * **v1-e06-t02-card-service** consumes this: `CardSelector.select` then `mark_up` on a
   `LoadedSnapshot`, `NumberedSnapshot.evidence_selection` and `markup_spans` into extraction and
   `CardMarkup`, and a `ModelOutputError` (with `fail_closed=True`) mapped to an UNVERIFIED card.

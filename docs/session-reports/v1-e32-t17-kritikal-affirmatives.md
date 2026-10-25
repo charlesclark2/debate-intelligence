@@ -864,9 +864,54 @@ rounds) place nothing; 75 (78 rounds) place only neg positions.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-25
 
 **Notes:**
+
+Built as ruled, measured on the real store, and honest about every count that moved between the
+counts step and the build.
+1. **ac1 and ac2 pass,** and so does the node's criterion.
+   * The goldens are hand-written from a hand-written fixture.
+   * Every suite was red for its reason, with the passes explained as controls.
+   * The released-ids check passes, with the 1.1.0 and 1.2.0 locks unchanged.
+2. **Mutants: 14.** The one equivalent check was removed with a comment saying why, and the other
+   survivor got a test. That is agreement 8 applied exactly.
+3. **The real store, after the operator's refill:**
+   * 40 rounds by 19 teams are K affs, 31 by their own marker and 9 by carry;
+   * unidentified rounds fall from 709 to 669 of 2,192;
+   * `PLAN_TEXT`, `TEAM_CARRY` and `PLACED_CARD` are unchanged;
+   * no scan hit is in the new section.
+
+   The 28-to-31 difference is explained to the round: three fewer method files, because only the
+   approved wording counts, and one more `The 1AC is` file, read in any unit, which is disclosed in six
+   rounds.
+4. **Option (b) is closed.** The control's `TEAM_CARRY` share is 2 rounds, which is not worth a rule
+   that would also make teams disagree. No task is filed.
+5. **The method sentence is not widened now.** The approved `Our method is` matches no file today, and
+   the wider pattern's 3 files need their own control count. Revisit it with `v1-e32-t24`'s counts,
+   which read the same no-plan files.
+6. **The advantage guard's 17 refused rounds** are `v1-e32-t24`'s, as ruling 4 meant.
+7. **Deviations 1 and 2 accepted.** The PM amends `constraints.packages` (`debate_core.integrations`,
+   `scripts`, `tests/scripts`) in a PM batch. The control row gives rounds, with its files named in
+   the label.
+8. **Decisions 1 to 9 accepted,** including:
+   * the per-round "no plan text" rule, which leaves out nothing today, as measured;
+   * the guard on the carry only;
+   * families from pocket, hat and block headings, longest phrase first;
+   * `security` read as `securitization` only;
+   * no marker's words kept.
+9. **The affected set** (210 files) stopped at 69% with no failure, so it is left to the PR's `ci` under
+   agreement 10.
+   * The application suite passed in full: 3,783 tests.
+   * One `debate_cli` failure under load, in `v1-e40-t06`'s `test_restore_run_state.py`, passed alone
+     in one process. That matches t06's own note on that file's SQLite state. CI decides.
+10. **Before the PR:** the coach's edit to the K families, `tests/config`, then the plan-text step once
+    more (about 204 s) and the dry run, recorded here.
+11. **The publish:** one republish after the cutover's step 9, never between the seed and step 8. It
+    carries this group and `v1-e32-t23`'s team links together.
+
+The Goal is `Succeeded`, and the PR merges in full after the coach's edit is committed. No re-review is
+needed.

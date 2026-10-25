@@ -589,3 +589,216 @@ report that point falls after the first review, because the second review was in
 
 ac1's Terraform part and ac3 passed, as the table in "Acceptance criteria" shows. The phase stays
 `InProgress`.
+
+## Changes after apply B (resumed 2026-10-24)
+
+**What happened.** Apply B in dev ran from `caselist-credentials-dev` at `origin/dev` with the
+`v1.1.0-dev.137` digest. It created 15 of its 17 resources and destroyed nothing. Both
+`aws_scheduler_schedule` resources failed with `ValidationException: The execution role you provide
+must allow AWS EventBridge Scheduler to assume the role.`
+
+**The cause** is AWS's documented rule, "Confused deputy prevention in EventBridge Scheduler"
+(<https://docs.aws.amazon.com/scheduler/latest/UserGuide/cross-service-confused-deputy-prevention.html>,
+cited from the PM's diagnosis; I did not fetch it from this session). Scheduler assumes a
+schedule's execution role with `aws:SourceArn` set to the ARN of the schedule's **group**, never the
+schedule's own ARN. Both trust policies, `TheLoginScheduleOnly` and `TheRunScheduleOnly`, named
+`schedule/default/<name>`, so Scheduler could assume neither role. The tests pinned that same wrong
+ARN, so they passed. This is the gap the fix closes.
+
+**One thing points away from IAM propagation.** The AWS provider in use (v5.100.0, the binary in
+the offline mirror) contains AWS's exact message. That suggests the provider matches on it to retry
+while a new role propagates. If so, a propagation delay would have been retried, and the condition
+was what failed. I read only the strings in the binary, not the provider's source.
+
+### The fix
+
+* **One schedule group per schedule** (`login_task.tf`, `run_task.tf`):
+  `aws_scheduler_schedule_group.login`, named `debate-<env>-caselist-login`, and
+  `aws_scheduler_schedule_group.run`, named `debate-<env>-caselist-run`. Each exists only with
+  `image_digest`, like its schedule, so it is part of apply B. Each schedule's `group_name` is its
+  own group's name. Neither uses the `default` group, which any schedule in the account may join.
+* **Each scheduler role's trust** is `StringEquals` with `aws:SourceAccount` (kept) and with
+  `aws:SourceArn`, exactly its own group's ARN:
+  `arn:<partition>:scheduler:<region>:<account>:schedule-group/<group name>`. There is no wildcard
+  and no `ArnLike`. The login's scheduler role is still assumable only by the login's schedule,
+  because that schedule is its group's only member. The ARN is written out, as the schedule's ARN
+  was, so the PM reads it in the plan rather than as `(known after apply)`. The schedule still
+  depends on the role through `role_arn`, so the trust update finishes before the schedule is
+  created.
+* The comments in `login_task.tf` and `run_task.tf`, the module README and both runbooks cite the
+  AWS page.
+
+**What else names a schedule's ARN: nothing.** I searched the module, both roots, the runbooks,
+`scripts/` and `ops/` for `schedule/default`, `schedule-group`, `group_name`, `scheduler:` and the
+two `*_schedule_arn` locals. Only the two trust policies and the two test assertions pinning them
+named a schedule's ARN, and all four are changed. Other policies name ARNs, but no schedule's:
+* both scheduler roles' `ecs:RunTask` name the task definition revision and an `ArnEquals` on
+  `ecs:cluster`;
+* their `iam:PassRole` names the task's two roles with `iam:PassedToService`;
+* the deployer's permission set has no `scheduler:` action (its `scheduler:GetSchedule` was removed
+  before the merge);
+* no output carries a schedule ARN.
+
+### Evidence
+
+| Check | Command | Result |
+|---|---|---|
+| Module tests | `terraform -chdir=infrastructure/modules/caselist_run test`, initialised offline from the mirror | `Success! 26 passed, 0 failed.`: t02's 14 runs and t03's 12, all still passing |
+| New assertions | `the_login_task_runs_the_pinned_image_as_the_login_role_every_wednesday`, `the_run_schedule_starts_after_the_login_and_is_disabled_by_default`, `credentials_apply_creates_no_login_task` | Each trust policy has exactly one statement, for `scheduler.amazonaws.com`. Its whole `Condition` equals `{StringEquals = {aws:SourceAccount = <account>, aws:SourceArn = <its own group's ARN>}}`, compared as one value, so a wrong shape makes the assertion false rather than erroring. Each group is named `debate-mock-caselist-login` or `-run`, and each schedule's `group_name` is its own group's. The run's group is not the login's. Apply A creates no group |
+| Mutants | Each applied to the committed files and the module's tests run, then restored with `git checkout` (tree clean afterwards) | **10 of 10 caught, each by an assertion turning false and none by an error** (listed below) |
+| Red run | The first two mutants restore the configuration dev applied | Both fail on the trust assertion |
+| Every Terraform check | `TF_CLI_CONFIG_FILE=<mirror> bash scripts/terraform_checks.sh` | `All Terraform checks passed.` in 30 s: fmt, validate (both roots, the module), tflint, every module's tests |
+| The re-plan's JSON check | The check from the runbook, run with `python3 -I` against synthetic plans in `terraform show -json`'s shape | 11 of 11 as expected (below) |
+| Command blocks | `scripts/check_command_blocks.py --base origin/dev` | `OK`. The new blocks have no `#`, and no `!` inside double quotes |
+| Affected set | `scripts/affected_tests.py --base origin/dev`: 74 of 454 files, selected from words in the changed docs (terraform_checks.sh is the real check for `infrastructure/`) | All 74 files, `-m "not slow and not live"`, in five batches under `alarm 115`: 572, 607, 179, 849 and 63 passed, 2,270 in all, none failed. One earlier batch hit the alarm at about 93% with no failure, so it was split and run again in full. The machine's load reached 22 during the runs |
+| Specs | `uv run scripts/validate_specs.py` | `OK: 437 files` |
+
+No Python changed, so ruff, pyright and lint-imports have nothing new to check.
+
+The mutants, each caught where expected:
+
+| Mutant | Caught by |
+|---|---|
+| The login's trust names the schedule's ARN again | the login trust assertion (line 748) |
+| The run's trust names the schedule's ARN again | the run trust assertion (line 1256) |
+| The run's schedule put in the login's group | the run group assertion (line 1270) |
+| The run's group given the login's group name (one group) | the run trust and group assertions (lines 1256, 1270) |
+| The login's schedule in the `default` group | the login group assertion (line 762) |
+| The run's schedule in the `default` group | the run group assertion (line 1270) |
+| The login's trust a wildcard `ArnLike` on `schedule-group/*` | line 748 |
+| The run's trust a wildcard `ArnLike` on `schedule-group/*` | line 1256 |
+| `aws:SourceAccount` dropped from the login's trust | line 748 |
+| `aws:SourceAccount` dropped from the run's trust | line 1256 |
+
+My first mutation pass labelled all ten "survived", even though one run failed each time. The
+script read only stdout, and terraform writes `Error: Test assertion failed` to stderr. I read one
+mutant's full output, fixed the script to read both streams and record the failing assertion's
+line, and reran all ten. The table above is that second pass.
+
+The JSON check's 11 cases. It printed `PLAN OK` for:
+* the correct re-plan;
+* the login paused in `owner.auto.tfvars` with its schedule planned `DISABLED`.
+
+It printed `PLAN STOP`, with its reason, for each of these:
+* a trust still naming the schedule's ARN, which is no update at all;
+* the run's role trusting the login's group;
+* a wildcard `ArnLike`;
+* the run's schedule in the `default` group;
+* the run's schedule `ENABLED`;
+* the login `DISABLED` though the file does not pause it;
+* a change outside the module;
+* a scheduler role replaced;
+* a trust policy unknown at plan.
+
+### The plans
+
+* **Dev's re-plan, from its partial state: exactly `Plan: 4 to add, 2 to change, 0 to destroy.`**
+  * The 4 to add are `aws_scheduler_schedule_group.login[0]`, `aws_scheduler_schedule_group.run[0]`,
+    `aws_scheduler_schedule.login[0]` and `aws_scheduler_schedule.run[0]`.
+  * The 2 to change are `aws_iam_role.scheduler[0]` and `aws_iam_role.run_scheduler[0]`, each
+    changing only `assume_role_policy`, in place.
+  * The runbook's step 6 now has a JSON check, in the style of t02's re-plan check. It prints
+    `PLAN OK` only for that shape: those four creates; those two updates, each changing only its
+    trust, to its own group's ARN with `aws:SourceAccount`; each schedule in its own group with its
+    cron; the run's schedule `DISABLED`; and nothing outside `module.caselist_run`, no replace, no
+    destroy.
+* **A fresh environment (prod)** plans apply B as **19 to add**: t02's 12 and the run's 7, each with
+  its group. The run's apply before it is unchanged at 23 to add and 1 to change, because the groups
+  exist only with `image_digest`.
+* **Both runbooks** carry the counts, the cause, the citation and the partial-apply rule: re-plan
+  from the same worktree at `origin/dev`, never `-target`, and never a resource made or deleted by
+  hand. The cloud-run runbook's step 6 has dev's re-plan note and its check. The credentials
+  runbook's step 5 has the 19 and points to that check.
+
+### One choice for the PM
+
+**The check takes the login's expected state from `owner.auto.tfvars`.** You asked that it confirm
+the login's schedule `ENABLED`. Step 3's token check pauses the login with
+`caselist_login_schedule_enabled = false` in that file if a new login ends the Mac's token, and
+nothing on `dev` records which way the token check went. So the check expects `ENABLED` unless the
+file pauses the login, then `DISABLED`. Its `PLAN OK` line names the state it confirmed, for you to
+read. If the token check was never run, or found the Mac's token intact, the line says `ENABLED`, as
+you asked. If you would rather it insist on `ENABLED` whatever the file says, that is a one-line
+change.
+
+### Criteria after this session
+
+| Criterion | Result | Evidence or what closes it |
+|---|---|---|
+| ac1 — Terraform's tests show the run role's grants and the schedule | PASS | `Success! 26 passed, 0 failed.`, now with the group trust, and 10 of 10 new mutants caught |
+| ac1 — the image builds from a tag and runs `caselist pull` against stubbed services in CI | NOT RUN | Not touched or checked by this session; closed by validate-dev's `image` job on `dev`, as recorded above |
+| ac2 — the operator applies dev and starts one run by hand; its record matches a Mac run's shape | NOT RUN | Apply B's re-plan and apply after this merges, then the rehearsal (step 7). The hand run (step 8) follows `v1-e40-t04` |
+| ac3 — each stage's times in the run's details, the 70% volume warning | PASS | Unchanged by this session (no Python changed) |
+
+The phase stays `InProgress`, and this merges `--partial`. Nothing was applied from the branch.
+
+### Operator follow-ups, after this merges
+
+From `caselist-credentials-dev`, as before. The PM reads the plan before the apply.
+
+**1. The worktree at `origin/dev`, with this fix in it** (~1 min).
+
+```bash
+WT="$HOME/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/caselist-credentials-dev"
+cd "$WT" || { echo "WT does not exist: $WT"; }
+git fetch origin
+git switch --detach origin/dev
+grep -q 'resource "aws_scheduler_schedule_group" "login"' infrastructure/modules/caselist_run/login_task.tf && echo "ok: $(git rev-parse --short HEAD), the schedule groups merged" || echo "NOT MERGED: wait for this fix to reach origin/dev"
+git status --porcelain | grep -v 'owner.auto.tfvars' | head -3
+grep -cE '^caselist_image_digest += "sha256:[0-9a-f]{64}"$' infrastructure/envs/dev/owner.auto.tfvars
+```
+Success looks like `ok: <commit>, the schedule groups merged`, nothing from `git status`, then `1`:
+the dev.137 digest is still in `owner.auto.tfvars`. A `0` means the digest line is gone, so stop:
+without it, the plan would destroy both task definitions.
+
+**2. Break-glass** (~1 min).
+
+```bash
+aws sso login --sso-session debate
+aws sts get-caller-identity --profile debate-admin --query Arn --output text
+```
+Success looks like an ARN containing `AWSReservedSSO_DebateBreakGlassAdmin`.
+
+**3. The re-plan** (~2 min): the runbook's step 6 plan block.
+
+```bash
+cd "$WT"
+if env | grep -qE '^(TF_VAR_|TF_WORKSPACE=|TF_DATA_DIR=|TF_CLI_ARGS)'; then echo "STOP: a Terraform override is set in this shell"; else AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev plan -input=false -no-color -out=caselist-tasks.tfplan | tee /tmp/caselist-tasks-plan.txt | tail -5; fi
+grep -E '^Plan:|must be replaced|will be destroyed' /tmp/caselist-tasks-plan.txt
+grep -E '^  # ' /tmp/caselist-tasks-plan.txt | grep -v 'module.caselist_run' | head
+```
+Success looks like exactly `Plan: 4 to add, 2 to change, 0 to destroy.`, with no `must be replaced`
+or `will be destroyed` line, and nothing from the second `grep`.
+
+**4. The JSON check** (~1 min). This is the block under "In dev, re-planning after apply B's partial
+apply of 2026-10-24" in [caselist-cloud-run.md](../runbooks/caselist-cloud-run.md), step 6, run in
+the same worktree. Success looks like `PLAN OK: the two schedule groups and two schedules created,
+the two scheduler roles' trust updated in place to their own groups, the login's schedule ENABLED
+and the run's DISABLED, nothing else`. `PLAN STOP` stops everything. Send
+`/tmp/caselist-tasks-plan.txt` and the check's line to the PM.
+
+**5. After the PM's word, the apply** (~1 min).
+
+```bash
+cd "$WT"
+AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev apply -input=false caselist-tasks.tfplan
+AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev output caselist_run_schedule_state
+```
+Success looks like `Apply complete! Resources: 4 added, 2 changed, 0 destroyed.`, then
+`"DISABLED"`. If it stops partway, re-plan from step 3. Never `-target`, and never a resource made
+by hand.
+
+Then the rehearsal (the runbook's step 7) as the second review ordered it. ac2's hand run follows
+`v1-e40-t04`.
+
+## PM review
+
+<!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
+this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
+
+**Verdict:** PENDING
+<!-- ACCEPTED / CHANGES_REQUESTED -->
+
+**Reviewed by / date:**
+
+**Notes:**

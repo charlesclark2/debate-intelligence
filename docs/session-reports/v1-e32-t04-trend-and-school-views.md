@@ -6,7 +6,7 @@
 | Spec | [`plan_specs/v1/e32-argument-landscape/t04-trend-and-school-views.yaml`](../../plan_specs/v1/e32-argument-landscape/t04-trend-and-school-views.yaml) |
 | Epic / release | `v1-e32-argument-landscape` / `v1.2` |
 | Branch | `task/v1-e32-t04-trend-and-school-views` |
-| Session status | COMPLETE, phase left InProgress for two PM rulings <!-- COMPLETE / PARTIAL / BLOCKED --> |
+| Session status | COMPLETE: accepted with conditions, closed in this session, phase Succeeded <!-- COMPLETE / PARTIAL / BLOCKED --> |
 
 ## Summary
 
@@ -20,20 +20,23 @@ the caselist's previous one on the same topic:
 * a topic change is named, never compared across;
 * the report says on its face when its windows span less than a full topic cycle.
 
-The **school view** (`schools.csv`, `schools.md`) lists each school and team code as disclosed, with
-the positions its rounds read on each side, the round counts and the last tournament. It takes t03's
+The **school view** (`schools.csv`, `schools.md`, never `report.md`) lists each school and team code
+as disclosed, with the positions its rounds read on each side and the round counts, and nothing more.
+It takes t03's
 counted reads, so `v1-e32-t09`'s aff assignments reach it through the `AffAssignment` seam with no
 code of its own.
 
-Every acceptance criterion passes. **I left the phase InProgress** because two rules in the PM's
-brief disagree with the spec as written, and the brief says to ask:
-1. where the "By school" section goes;
-2. whether `last_tournament` is allowed.
+The PM accepted the work with conditions on 2026-10-24 and ruled on the three questions:
+1. the school view stays in its own two files;
+2. `last_tournament` is dropped;
+3. the rows after a topic change are kept.
 
-Both are in [Questions for the PM](#questions-for-the-pm). The dry run on hspolicy26 is
-[below](#dry-run-on-the-newest-hspolicy26-snapshot), counts only. **Look first at question 1:**
-I put the school view in its own two files, not in `report.md`, so that the circuit-wide report
-still names nobody.
+The conditions are closed in
+[Closing the PM's conditions](#closing-the-pms-conditions-2026-10-24): the spec is amended, the
+column is gone from the code, both goldens and the tests, and the Goal is `Succeeded`. Every
+acceptance criterion passes as amended. The dry run on hspolicy26 is
+[below](#dry-run-on-the-newest-hspolicy26-snapshot), counts only. It was taken before the column
+was dropped, and dropping it changes none of its counts.
 
 ## Plan nodes
 
@@ -50,8 +53,8 @@ still names nobody.
 |---|---|---|
 | ac1: on a three-snapshot fixture, trends.csv gives per position the weekly teams, weekly share, previous share, delta in points and a label, matching a hand-computed expected file | PASS | `test_the_third_windows_trends_csv_matches_the_hand_computed_expected_file`: the rendered rows equal `tests/fixtures/landscape/synthetic_caselist/expected_trends.csv` byte for byte. `test_the_third_window_matches_the_hand_computed_expected_rows` checks the computed values. The working is in the fixture README's "Trends" table. |
 | ac2: RISING/FALLING only at ≥ threshold (default 5 points) and ≥ minimum teams (default 3) in one of the two weeks; a first snapshot is all NEW with no deltas | PASS | `test_a_change_of_exactly_the_threshold_moves_only_with_enough_teams` (8 cases, 20 teams a week, so 1 team is exactly 5 points: 4→5 and 2→3 teams move, 1→2, 2→1 and 0→2 are held back). Also `…below_the_configured_threshold…`, `test_the_team_floor_is_configurable`, `test_a_caselists_first_snapshot_is_all_new_with_no_deltas` and `test_a_first_snapshot_writes_all_new_with_no_previous_share_or_delta`. |
-| ac3: when topics.yaml maps two snapshots to different topics, no trend rows cross them and the report says the topic changed | PASS (see [question 3](#questions-for-the-pm)) | On the fixture's `topics.yaml`: `test_no_trend_crosses_a_topic_change_and_the_trends_say_it_changed` and `test_a_topic_change_draws_no_trend_and_the_report_says_the_topic_changed`. Through the real run and `YamlTaxonomyRepository`: `test_a_run_reads_a_topic_change_from_topics_yaml_and_draws_no_trend_across_it`. An old-topic round in the inputs is refused: `test_a_round_from_the_other_topic_is_refused`. |
-| ac4: schools.csv and the Markdown schools section list school, team code, side, position_id, rounds, last tournament; no debater names; deterministic order | PASS (see [questions 1 and 2](#questions-for-the-pm)) | `test_rendering_the_fixture_matches_the_golden_file[schools.csv]` and `[schools.md]` (hand-written goldens). `test_the_view_matches_the_hand_computed_rows` (26 rows). `test_the_school_view_carries_no_debater_name_tag_cite_or_path`: names planted in every tag, cite, heading and filename leave both files equal to their goldens. `test_shuffled_inputs_give_the_same_view`, plus the bundle-wide shuffle test, for the order. |
+| ac3: when topics.yaml maps two snapshots to different topics, no trend rows cross them and the report says the topic changed; the new topic's first window is all NEW with no previous share or delta (amended, PM ruling 3) | PASS | On the fixture's `topics.yaml`: `test_no_trend_crosses_a_topic_change_and_the_trends_say_it_changed` and `test_a_topic_change_draws_no_trend_and_the_report_says_the_topic_changed`. Through the real run and `YamlTaxonomyRepository`: `test_a_run_reads_a_topic_change_from_topics_yaml_and_draws_no_trend_across_it`. An old-topic round in the inputs is refused: `test_a_round_from_the_other_topic_is_refused`. |
+| ac4: schools.csv and schools.md's "By school" section (never report.md) list school, team code, side, position_id and rounds; no debater names; deterministic order (amended, PM rulings 1 and 2) | PASS | `test_rendering_the_fixture_matches_the_golden_file[schools.csv]` and `[schools.md]` (goldens edited by hand to drop the column). `test_the_view_matches_the_hand_computed_rows` (26 rows). `test_only_the_school_view_names_schools_and_team_codes` now also checks that no fixture tournament reaches either file; it fails against the code before the drop (`assert not True`). `test_the_school_view_carries_no_debater_name_tag_cite_or_path`: names planted in every tag, cite, heading and filename leave both files equal to their goldens. `test_shuffled_inputs_give_the_same_view`, plus the bundle-wide shuffle test, for the order. |
 | ac5: the trend and school sections are added to the t03 bundle without changing positions.csv or top_cards.csv (t03 goldens still pass) | PASS | `test_rendering_the_fixture_matches_the_golden_file[positions.csv]`, `[top_cards.csv]` and `[impact_cards.csv]` pass. `git diff --stat c03cf83 -- tests/fixtures/landscape/golden/positions.csv …/top_cards.csv …/impact_cards.csv` prints nothing. `report.md`'s golden gained the trend sections, as the render node asks. |
 | `fixture-extension`: expected trends file exists, contains `RISING` | PASS | `tests/fixtures/landscape/synthetic_caselist/expected_trends.csv`, 2 `RISING` rows |
 | `trend-computation`: `uv run pytest packages/debate_core/tests/application/test_landscape_trends.py` | PASS | `25 passed in 8.57s` |
@@ -77,7 +80,9 @@ The mutation scripts are in the scratchpad, not the repository.
 | Weekly teams on any side | caught |
 | First week labelled STEADY | caught |
 | Rows read only last week dropped | caught |
-| School view: no-side rounds become aff rows; earliest tournament for latest; ties to the last; rounds ascending; no-team rounds not counted | all caught |
+| School view: no-side rounds become aff rows; rounds ascending; no-team rounds not counted | all caught (re-run after the drop: still caught) |
+| School view: earliest tournament for latest | **moot**: the last tournament is dropped (PM ruling 2) |
+| School view: ties to the last in text order | Its catch had been the last-tournament test. The same tie-break also picks a team's spelling, so after the drop it **survived**. Added `test_a_spelling_tie_shows_the_first_spelling_in_text_order`, which catches it. |
 | School view: disclosures after the snapshot not ignored | **survived** at first. Added `test_a_spelling_disclosed_after_the_snapshot_does_not_change_the_view`, which now catches it. |
 
 I deleted `test_renaming_every_path_changes_no_trend` (agreement 8). It passed against the
@@ -217,15 +222,17 @@ the floor were not changed.
 5. **A full topic cycle** means the first window opens on or before the topic's first date in
    `topics.yaml`, and the next window would fall past its last. Without the range, the report says
    it may be short.
-6. **Last tournament** is the tournament of the row's latest round by first-seen snapshot. Within
-   that snapshot it is the one most of the row's rounds name, ties going to the first in text order.
-   A school or code spelled more than one way shows its most common spelling.
-7. **The scan in the school view looks for paths only.** Schools, codes and tournaments are its
-   content, and listing them would stop every publish on every team. Paths stay hits in every file.
+6. **Spelling.** A school or code spelled more than one way shows its most common spelling, ties
+   going to the first in text order. The last-tournament rule that was here is dropped (PM ruling 2).
+7. **The scan in the school view looks for paths only.** Schools and codes are its content, and
+   listing them would stop every publish on every team. Paths stay hits in every file.
 8. **ADR-0016's window, not a daily cadence.** The trends use the weekly manifests, as t05's run
    already does.
 
 ## Questions for the PM
+
+Ruled by the PM on 2026-10-24 (question 1 A, question 2 B, question 3 keep the rows): see the PM
+review. Kept as asked.
 
 A relay prompt for the PM, ready to paste:
 
@@ -267,7 +274,21 @@ FYI, going ahead unless told otherwise:
 
 ## Operator follow-ups
 
-None from this session. The publish of the seven-file bundle is the PM's coordinated block. The dry
+Open the pull request. This is the command the conditions name; it pushes `task/v1-e32-t04-trend-and-school-views`
+and opens a PR into `dev`. It refuses if `origin/dev` has moved since the branch was made, and then
+says to run `scripts/task sync v1-e32-t04-trend-and-school-views` first. Run it in the task
+worktree, never the main checkout; the second line must print the task branch:
+
+```bash
+cd /Users/charlesclark/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/v1-e32-t04-trend-and-school-views
+git branch --show-current
+scripts/task pr v1-e32-t04-trend-and-school-views
+```
+
+Success looks like the PR's URL printed, or the compare page opening in the browser. CI then runs
+the 169-file affected set and the whole selection.
+
+The publish of the seven-file bundle is the PM's coordinated block. The dry
 run above lists the files it would upload. They all go to `reports/landscape/<caselist>/<snapshot>/`
 in the private bucket and the local `reports/` directory, and nowhere else.
 
@@ -290,6 +311,61 @@ in the private bucket and the local `reports/` directory, and nowhere else.
    done for E32's report. Its other consequence, that a missed week is a permanent hole, shows as
    the missing 2026-07-21 window. The windows row names a gap only when it falls between the two
    compared windows.
+
+## Closing the PM's conditions (2026-10-24)
+
+The PM's review below accepted the work with three conditions, to close in this session with no
+re-review.
+
+1. **The spec is amended** (commit `Amend v1-e32-t04's spec…`), each change with a `# PM ruling
+   2026-10-24` comment above its folded block:
+   * ac3 says the new topic's first window is written as a first snapshot is;
+   * ac4 names `schools.csv` and `schools.md` (never `report.md`), with the columns school, team
+     code, side, position_id and rounds;
+   * the render node puts "By school" in `schools.md`.
+
+   The same ruling also struck "last tournament" from the Goal's description and the school-view
+   node, which still asked for it. The conditions don't name those two, so I record them here. I
+   printed the parsed nodes to check that no comment leaked into the text.
+2. **`last_tournament` is dropped** (commit `Drop last_tournament…`):
+   * removed from `SchoolRow`, the computation, `schools.csv`'s columns, `schools.md`'s table and its
+     intro sentence, and the fixture README;
+   * both goldens edited by hand: the column, its 26 cells and the sentence;
+   * `test_the_last_tournament_is_…` deleted;
+   * `test_only_the_school_view_names_schools_and_team_codes` now also asserts no tournament
+     appears. Against the code before the drop it fails with `assert not True`.
+
+   Results:
+   * `uv run pytest packages/debate_core/tests/application/test_landscape_schools.py` → 9 passed,
+     then 10 with the spelling-tie test below;
+   * `uv run pytest packages/debate_core/tests/arguments/landscape/test_render.py` → 32 passed;
+   * the no-debater-name tests, `test_the_school_view_carries_no_debater_name_tag_cite_or_path` and
+     `test_no_tag_cite_heading_or_path_reaches_the_view`, and the shuffle tests,
+     `test_rendering_the_same_inputs_twice_in_any_order_is_byte_identical` and
+     `test_shuffled_inputs_give_the_same_view` → 4 passed.
+
+   **One result came out differently.** The PM listed two tournament mutants to mark moot. The first,
+   earliest tournament for latest, is moot. The second, ties going to the last, survived when re-run:
+   the same tie-break picks a team's displayed spelling, and only the deleted tournament test had
+   caught it. I added `test_a_spelling_tie_shows_the_first_spelling_in_text_order` (commit `Test the
+   spelling tie…`), which catches it, as the earlier survivor was handled. It changes no behaviour.
+3. **The Goal is `Succeeded`**:
+   * set with `uv run scripts/task_helper.py set-phase v1-e32-t04-trend-and-school-views Succeeded`;
+   * a `# PM record 2026-10-24` comment above its `status:`;
+   * `uv run scripts/validate_specs.py --require-succeeded v1-e32-t04-trend-and-school-views` →
+     `Succeeded`.
+
+**Checks after the changes:**
+* The 42 targets as before, with CI's markers under a 115 s alarm → 1337 passed in 30.66s.
+* The affected set is still 169 files, which is left to the pull request's `ci` as before.
+* `ruff check .` passed; `ruff format --check .` reports 1245 files already formatted.
+* `pyright` (whole repository): 0 errors.
+* `lint-imports`: 16 kept. `check_thin_handlers.py`: OK.
+* `validate_specs.py`: `OK: 435 files, 40 epics, 373 tasks, 22 releases`.
+
+**Not done by me: `scripts/task pr`.** It pushes the branch and opens the pull request, and the
+repository's rules have a session never push or open a PR; the operator runs it. The command is
+under [Operator follow-ups](#operator-follow-ups).
 
 ## PM review
 

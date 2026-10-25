@@ -367,9 +367,35 @@ None. Republishing the hspolicy26 report with the section is the PM's to coordin
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-25
 
 **Notes:**
+
+Built to the six rulings, with no deviations.
+1. **ac1 and ac2 pass.** The counts reused t03's `CountedReads` and t09's assignments, with neither
+   re-implemented, read-only, and with checksums unchanged. The golden section was hand-written and
+   checked twice, on its own fixture and inside t03's whole-file golden. 10 of the 11 new tests
+   failed first, each for its reason.
+2. **Mutants:** 7 of 7 caught, including the PM's four: another aff's round counted here, a
+   mechanism round counted twice, the cut-off, and M as a sum.
+3. **The live dry run gives ac1's numbers exactly.** Public option's tail shows why M has to be
+   distinct teams: "read by 1 team", where a sum would say 3.
+4. **Accepted as made:**
+   * nothing is taken from an advantage's name or its `parent`, pinned by the fixture's
+     costs-under-public-option test;
+   * affirmative rounds only;
+   * a deeper taxonomy is handled;
+   * teams shown, not rounds;
+   * `report.md` the only file changed;
+   * the section golden plus the in-place check;
+   * the coach's guide section.
+5. **The affected set** stopped at 89% with no failure, so it is left to the PR's `ci` under
+   agreement 10. Everything that changed passed within the limit (5,584).
+6. **Follow-up:** the 303 rounds with no identified aff are v1-e32-t17's, as the report says.
+
+**After the merge:** the PM coordinates one republish of hspolicy26 with this section and
+v1-e32-t18's "By position". If the sync conflicts with t18 in `render.py`, keep both sides. No
+re-review is needed.

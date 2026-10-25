@@ -15,6 +15,7 @@ directory. The restore must:
 
 from __future__ import annotations
 
+import gc
 import hashlib
 import json
 import sqlite3
@@ -56,7 +57,14 @@ def restore(world: World, into: Path, *more: str) -> dict[str, Any]:
 
 
 def files(directory: Path) -> dict[str, str]:
-    """Every file under `directory` with its SHA-256: what "left as it was" is checked by."""
+    """Every file under `directory` with its SHA-256: what "left as it was" is checked by.
+
+    Collected first: an earlier command of the test, run in this process, can leave a SQLite
+    connection for the garbage collector, and closing it checkpoints the database's write-ahead log
+    into the file, whenever that happens. A probe of `sqlite3.connect` showed the restore opening no
+    database at all.
+    """
+    gc.collect()
     return {
         path.relative_to(directory).as_posix(): hashlib.sha256(path.read_bytes()).hexdigest()
         for path in sorted(directory.rglob("*"))

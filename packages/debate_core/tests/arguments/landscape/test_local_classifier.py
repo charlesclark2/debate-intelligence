@@ -95,6 +95,8 @@ WORDS = {
 }
 FILLER = ("evidence", "proves", "key", "now", "only", "causes", "solves", "because")
 KINDS = {"spending-da": "da", "states-cp": "cp", "cap-k": "k", "costs-advantage": "advantage"}
+NOISE = 0.35
+"""The share of placed cards whose tag speaks for a position drawn at random, as a real tag often does."""
 
 TAXONOMY = Taxonomy.model_validate(
     {
@@ -138,7 +140,11 @@ def _tag(rng: random.Random, position_id: str, school: str, code: str) -> str:
 
 
 def synthetic_sources(seed: int = 7) -> tuple[SeedSource, ...]:
-    """Twelve teams, three documents each: eight placed cards and two unplaced ones per document."""
+    """Twelve teams, three documents each: eight placed cards and two unplaced ones per document.
+
+    About a third of the placed cards' tags speak for a position drawn at random, so a model reading
+    tags alone is unsure of some cards and wrong about some.
+    """
     rng = random.Random(seed)
     sources: list[SeedSource] = []
     number = 0
@@ -152,9 +158,10 @@ def synthetic_sources(seed: int = 7) -> tuple[SeedSource, ...]:
                     label = WORDS[position_id][0]
                     pocket = rng.choice(("1NC", f"{school} {code} Neg", f"{TOURNAMENT} Round 2"))
                     for _ in range(4):
+                        said = rng.choice(sorted(WORDS)) if rng.random() < NOISE else position_id
                         cards.append(
                             SeedCard(
-                                tag=_tag(rng, position_id, school, code),
+                                tag=_tag(rng, said, school, code),
                                 section_path=(pocket, label) if rng.random() < 0.7 else (label, "Link"),
                                 short_cite=f"{AUTHOR} 24",
                             )
@@ -614,6 +621,23 @@ def test_the_precision_estimate_weighs_held_out_precision_to_the_placed_cards_mi
     # From 0.95 no unseen held-out card is left to say how the 0.99 card would do.
     assert found[0.95] == (1, 0, None)
     assert threshold == 0.6
+
+
+def test_the_cards_placed_at_the_estimated_confidence_are_counted_by_kind() -> None:
+    proxy = compare(TAXONOMY, ROWS, seed=7, without_placing_headings=True, minimum_support=1)
+    unplaced = proxy.would_place[0]
+    assert unplaced.placement == UNPLACED and unplaced.estimated_threshold is not None
+    assert unplaced.estimated_threshold != proxy.threshold, "seed 7 puts the two confidences apart"
+    at = next(one for one in unplaced.estimates if one.confidence == unplaced.estimated_threshold)
+    assert sum(count for _, count in unplaced.by_kind_at_estimated) == at.cards > 0
+    expected = Counter(
+        KINDS[prediction.position_id]
+        for row in ROWS
+        if row.placement == UNPLACED
+        and (prediction := proxy.predictions[row.item_id]) is not None
+        and prediction.confidence >= unplaced.estimated_threshold
+    )
+    assert dict(unplaced.by_kind_at_estimated) == dict(expected)
 
 
 def test_a_thin_point_is_passed_over_and_a_supported_failure_stops_the_threshold() -> None:

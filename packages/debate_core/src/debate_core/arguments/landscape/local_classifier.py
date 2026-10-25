@@ -670,6 +670,8 @@ class WouldPlace:
     """At each grid confidence, how many it would place and the precision held-out cards suggest."""
     estimated_threshold: float | None = None
     """The lowest grid confidence from which every :attr:`estimates` precision is at the target."""
+    by_kind_at_estimated: tuple[tuple[str, int], ...] = ()
+    """At :attr:`estimated_threshold`, by the predicted position's kind."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -801,6 +803,11 @@ def compare(
             if measure.unseen_at_or_above
             else ((), None)
         )
+        at_estimated = Counter(
+            _kind(taxonomy, prediction.position_id)
+            for _, prediction in these
+            if prediction is not None and estimated is not None and prediction.confidence >= estimated
+        )
         standings.append(
             WouldPlace(
                 placement=placement,
@@ -812,6 +819,7 @@ def compare(
                 at_threshold_seen=sum(seen for seen, _ in placed),
                 estimates=estimates,
                 estimated_threshold=estimated,
+                by_kind_at_estimated=tuple(sorted(at_estimated.items())),
             )
         )
     return Comparison(

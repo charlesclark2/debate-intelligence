@@ -322,6 +322,7 @@ def comparison_json(name: str, comparison: Comparison) -> dict[str, object]:
                 "at_threshold_seen": one.at_threshold_seen,
                 "by_kind": dict(one.by_kind),
                 "estimated_threshold": one.estimated_threshold,
+                "by_kind_at_estimated": dict(one.by_kind_at_estimated),
                 "estimates": [
                     {
                         "confidence": estimate.confidence,
@@ -420,7 +421,11 @@ def _print_comparison(name: str, comparison: Comparison) -> None:
             if unplaced.estimated_threshold is None
             else f"{unplaced.estimated_threshold:.3f}"
         )
-        print(f"  Confidence at an estimated {TARGET_PRECISION:.0%} on the UNPLACED cards: {threshold}.")
+        kinds = ", ".join(f"{kind} {count}" for kind, count in unplaced.by_kind_at_estimated) or "none"
+        print(
+            f"  Confidence at an estimated {TARGET_PRECISION:.0%} on the UNPLACED cards: {threshold}; "
+            f"it would place {sum(count for _, count in unplaced.by_kind_at_estimated)}: {kinds}."
+        )
 
 
 async def _compare(arguments: argparse.Namespace) -> int:

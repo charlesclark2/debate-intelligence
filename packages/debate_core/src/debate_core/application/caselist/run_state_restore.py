@@ -1,0 +1,145 @@
+"""A run's working copy, restored from the bucket into a directory of its own (`v1-e40-t06`, ADR-0020).
+
+`debate-research caselist restore-run-state --into <directory>`, run by the operator on the Mac:
+
+* for the cutover's comparison (`v1-e40-t06`'s ac1): the Mac restores the cloud run's working copy,
+  then re-parses and rebuilds the index from it, offline, and compares (`ops/caselist_run/`);
+* for a hand publish to prod until the pilot's promotion, from a copy restored under the dev lock
+  (ADR-0020 (7)).
+
+**What is restored** is what a `caselist pull` restores at its start
+(:meth:`~debate_core.application.caselist.run_state.RunState.restore`): the run-state bundle, the
+state files, the published index's manifest and the parsed store's current version directory of each
+caselist named and `openev`, each checked against the SHA-256 its publisher recorded. Then the copy's
+suppression list is reconciled with the bucket's, so that a parse or an index build in the copy
+leaves out what the bucket's list stops. Raw sources are not restored: a parse in the copy fetches
+from `raw/` the ones it needs, as a cloud run's does.
+
+**Under the lock.** A run saves its state at several moments: the download ledger before each
+download, the bundle after its publish stage and again at its end, the run log at its end. A copy
+taken between two of them would mix two states. So the restore holds the bucket's run lock, taken
+the way every command that writes a bucket takes it, and no runner is part-way through its week
+while it reads. The lock object is the only thing it writes to
+the bucket. Every other write goes to the named directory: :class:`RunStateRestore` is given a
+:class:`RunState` and a suppression list over that directory, never over this environment's own.
+
+**The directory** must be new or empty, and must be neither this environment's data directory nor
+inside it nor holding it. A copy restored over another store would mix the two, and its newest
+parsed generation, which a later parse or publish reads, could be the other store's.
+
+**What is logged** is counts. The directory is the operator's own path, and never logged.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Final
+
+from debate_core.application.caselist.run_state import RestoreReport, RunState
+from debate_core.application.caselist.suppression import RecordedSuppressionList
+from debate_core.application.errors import DomainError
+
+__all__ = [
+    "RESTORE_COMMAND",
+    "RestoreTargetRefused",
+    "RestoredCopy",
+    "RunStateRestore",
+    "restore_target_refusal",
+]
+
+RESTORE_COMMAND: Final = "caselist restore-run-state"
+"""The command the lock's holder names while the restore holds it."""
+
+
+class RestoreTargetRefused(DomainError):
+    """The directory named is one a restore must not write into. Nothing was taken or written."""
+
+    def __init__(self, reason: str) -> None:
+        self.reason = reason
+        super().__init__(f"nothing was restored: {reason}")
+
+
+def restore_target_refusal(target: Path, *, live_data_dir: Path) -> str | None:
+    """Why a copy may not be restored into `target`, or `None` when it may. Reads, never writes.
+
+    Both paths are compared resolved, so a symbolic link to the data directory is the data
+    directory.
+    """
+    resolved = target.expanduser().resolve()
+    live = live_data_dir.expanduser().resolve()
+    if resolved == live:
+        return "the directory named is this environment's own data directory; name a new, empty one"
+    if live in resolved.parents:
+        return "the directory named is inside this environment's own data directory; name one outside it"
+    if resolved in live.parents:
+        return "the directory named holds this environment's own data directory; name a new, empty one"
+    if resolved.exists() and not resolved.is_dir():
+        return "the path named is not a directory"
+    if resolved.is_dir() and any(resolved.iterdir()):
+        return (
+            "the directory named is not empty, and a copy restored over another store would mix the two; "
+            "name a new, empty one"
+        )
+    return None
+
+
+@dataclass(frozen=True, slots=True)
+class RestoredCopy:
+    """What a restore put into its directory. Counts and ids only."""
+
+    report: RestoreReport
+    manifests: int
+    suppression_entries: int
+
+
+class RunStateRestore:
+    """The restore into a named directory. See the module docstring.
+
+    Args:
+        state_in: The run's state in the bucket, over a given data directory.
+        suppression_in: The suppression list over a given data directory's copy and the bucket's.
+        live_data_dir: This environment's own data directory, which is refused.
+        parsed_version: The parsed store's version directory this build reads.
+    """
+
+    def __init__(
+        self,
+        *,
+        state_in: Callable[[Path], RunState],
+        suppression_in: Callable[[Path], RecordedSuppressionList],
+        live_data_dir: Path,
+        parsed_version: str,
+    ) -> None:
+        self._state_in = state_in
+        self._suppression_in = suppression_in
+        self._live_data_dir = Path(live_data_dir)
+        self._parsed_version = parsed_version
+
+    def refusal(self, target: Path) -> str | None:
+        """Why `target` is refused, or `None`: see :func:`restore_target_refusal`."""
+        return restore_target_refusal(target, live_data_dir=self._live_data_dir)
+
+    async def restore(self, target: Path, caselists: Sequence[str]) -> RestoredCopy:
+        """Restore the working copy into `target`. Call it holding the bucket's run lock.
+
+        Raises :class:`RestoreTargetRefused` before anything is written, and otherwise what
+        :meth:`RunState.restore` raises.
+        """
+        refusal = self.refusal(target)
+        if refusal is not None:
+            raise RestoreTargetRefused(refusal)
+        directory = target.expanduser().resolve()
+        directory.mkdir(parents=True, exist_ok=True)
+        state = self._state_in(directory)
+        report = await state.restore(caselists, parsed_version=self._parsed_version)
+        # The copy's own list starts empty, so reconciling writes only the copy: the bucket's holds
+        # everything the copy's does.
+        suppression = self._suppression_in(directory)
+        await suppression.reconcile()
+        return RestoredCopy(
+            report=report,
+            manifests=len(await state.local_manifests()),
+            suppression_entries=len(await suppression.entries()),
+        )

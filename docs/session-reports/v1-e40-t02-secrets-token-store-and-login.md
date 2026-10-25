@@ -753,3 +753,27 @@ Added by the PM. Nothing above is changed, and this section is not a review.
 * **Still open, so the Goal stays `InProgress`:** apply B in dev after `v1-e40-t03`'s first image
   push (`11 to add`), the first Wednesday's scheduled login writing a token (with the Mac's
   `caselist auth status --check` that morning, `v1-e40-t06`), and prod at the pilot's promotion.
+
+## PM record, 2026-10-24 (second)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+* **The token question (ruling 3) is answered, by hand, before any scheduled login.** This is
+  `v1-e40-t03`'s runbook step 3. The operator first logged the Mac in again, because its keychain
+  token had expired. Then, in order:
+  1. `caselist auth status --check` on the keychain token, in the agent's own environment, printed
+     `"status": "ok"`;
+  2. a hand login with `caselist auth login --token-backend secretsmanager` under the writer's
+     profile stored a new token in `debate-dev-caselist-token`;
+  3. the same check printed `"status": "ok"` again.
+
+  So a new login does not end the token another login holds. Apply B keeps the login schedule
+  enabled. Each token printed an expiry about 14 days after its login (2026-11-08 for logins on
+  2026-10-25 UTC). ADR-0020 records both in the PM batch of 2026-10-24 (k).
+* **Apply B in dev is partly applied.** From `caselist-credentials-dev` with the `v1.1.0-dev.137`
+  image, 15 of 17 resources were created and nothing was destroyed. Both schedules were refused:
+  each scheduler role's trust policy named its schedule's ARN in `aws:SourceArn`, where
+  EventBridge Scheduler requires a schedule group's ARN. `v1-e40-t03`'s resumed session fixes it
+  with one schedule group per schedule. The re-plan follows its merge, read by the PM first.
+* **Still open:** the two schedules, the first Wednesday's scheduled login writing a token, and prod
+  at the pilot's promotion.

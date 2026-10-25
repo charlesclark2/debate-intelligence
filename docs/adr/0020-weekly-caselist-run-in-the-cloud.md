@@ -324,7 +324,10 @@ policy left off by mistake widens the read:
 
 **Who can make the login role run.** The login task definition is owned by Terraform and pins its
 image by digest. Only `DebateBreakGlassAdmin` (the apply) and the login schedule's role
-(`debate-<env>-caselist-scheduler`, assumable only by `scheduler.amazonaws.com` for that schedule)
+(`debate-<env>-caselist-scheduler`, assumable only by `scheduler.amazonaws.com` for that schedule;
+**amended 2026-10-24:** EventBridge Scheduler requires a scheduler role's `aws:SourceArn` to be a
+schedule *group's* ARN, never a schedule's, so each schedule has a group of its own, and each role
+trusts only its own group (`v1-e40-t03`'s fix after apply B))
 hold `iam:PassRole` on the login role. `DebateMaintainer`'s PowerUserAccess has no `iam:PassRole`,
 and neither has `EvidenceOperator`. No person runs the login task, because `RunTask` accepts a
 command override and so would let them run anything as the login role. The run task, whose role
@@ -365,6 +368,15 @@ free of expiry rules, heals a token revoked early, and makes the audit trail reg
 login is never retried (`CaselistLoginRejected`, as today), so a wrong password costs one attempt a
 week and cannot lock the account. If it fails, the coach is emailed, and the run at 06:00 uses the
 previous token if it still works.
+**Amended 2026-10-24 (answered by hand, `v1-e40-t02`'s ruling 3):**
+* **A new login does not end another login's token.** In dev, the Mac's keychain token was checked
+  `ok`, a hand login under the writer wrote a new token to the token secret, and the Mac's token
+  still checked `ok`. So the weekly login and the Mac's own token live side by side, and the login
+  schedule is enabled from apply B.
+* **A token lasts about 14 days.** Logins on 2026-10-25 UTC each printed an expiry of 2026-11-08.
+  The Mac's own token is not renewed by the cloud login. Until the cutover, the Mac is logged in by
+  hand at least every two weeks, or its Wednesday run stops on `CASELIST_AUTH_EXPIRED`. Since
+  `v1-e34-t32`, that also marks the landscape report stale.
 
 **The unattended-login risk, plainly.** The login is a JSON call that takes a username and a
 password and returns a token. Nothing in our client answers a second step, nothing in the recorded
@@ -507,6 +519,13 @@ Every change is an S3 conditional write, and only the first of two concurrent wr
 writes to an evidence bucket**: `caselist pull` in every mode, `caselist remove` and `unsuppress`,
 `caselist publish`, `caselist parse --publish`, `tub index publish` and `store sync --push`. A dry
 run reads and takes nothing. The local `flock` stays too, for two runs on one machine.
+**Amended 2026-10-24 (PM rulings on `v1-e40-t04`'s plan):**
+* **Two more commands take the lock in bucket mode:** `caselist retire --bucket` (`--execute` and
+  `--restore`, which write object tags) and `landscape report --publish`. A test classifies every
+  registered command as bucket-writing or not, so a new command cannot slip past.
+* **A Mac in local mode refuses** a bucket-writing command once the bucket holds a lock object,
+  saying the bucket keeps its run state. With no lock object, nothing changes. So between the seed
+  and a fallback week, the Mac cannot publish from state older than the bucket's.
 
 **What the Mac's agent does while the lock is held.** After the cutover the agent is unloaded, so it
 does nothing. If it is loaded again, or the coach runs `caselist pull` by hand, the build (in bucket
@@ -534,6 +553,11 @@ removing it).
    **seeds**: with a session, a command (`t04`) creates the lock object, takes it, uploads the
    run-state bundle and the state files from the Mac's data directory, checks them back, and releases
    it. Every build that can publish from the Mac now takes the lock.
+   **Amended 2026-10-24 (PM ruling 3, `v1-e40-t04`):** the seed is `debate-research caselist
+   seed-run-state`, a dry run by default, `--execute` to seed and `--confirm-prod` in prod. It runs
+   only here, after step 3 has unloaded the agent, never earlier. So `v1-e40-t03`'s hand run (its
+   ac2) is step 5's run, and before the cutover the cloud's only run is `t03`'s dry-run rehearsal,
+   which writes nothing.
 5. The operator starts **one cloud run by hand** (`aws ecs run-task` on the run's task definition).
    Its record, its parse counts and its index's document count are compared with the Mac's (below).
 6. The cloud schedule is enabled, then, after its first recorded run, the late-run alarm's actions.
@@ -805,6 +829,7 @@ that is unplugged, closed or away, which is the coach's reason for the move.
 | Claim | Source |
 |---|---|
 | (Read 2026-10-24.) Setting a secret's key makes Secrets Manager validate the caller with a `GenerateDataKey` and a `Decrypt`, discarded, whose encryption context is the secret's ARN and `SecretVersionId` `RequestToValidateKeyAccess` | [Secret encryption and decryption](https://docs.aws.amazon.com/secretsmanager/latest/userguide/security-encryption.html), "Validating access to the KMS key" |
+| (Read 2026-10-24.) A scheduler execution role's trust policy scopes `aws:SourceArn` to a schedule group's ARN, never to a schedule or a name prefix | [Confused deputy prevention in EventBridge Scheduler](https://docs.aws.amazon.com/scheduler/latest/UserGuide/cross-service-confused-deputy-prevention.html) |
 | Secrets Manager calls `GenerateDataKey` for `PutSecretValue` and `Decrypt` for `GetSecretValue`; `PutSecretValue` decrypts only when a request changes an existing version; the encryption context `SecretARN` and `SecretVersionId`; `kms:ViaService`; the CloudTrail shape of `GenerateDataKey` and `Decrypt` with `invokedBy` | [Secret encryption and decryption](https://docs.aws.amazon.com/secretsmanager/latest/userguide/security-encryption.html) |
 | Conditional writes: `If-None-Match` and `If-Match` on `PutObject`; a delete marker counts as absent; the first of concurrent writers wins and the rest get `412`; `409` on a concurrent delete; conditional deletes exist for general purpose buckets | [Conditional requests](https://docs.aws.amazon.com/AmazonS3/latest/userguide/conditional-requests.html), [Conditional writes](https://docs.aws.amazon.com/AmazonS3/latest/userguide/conditional-writes.html) |
 | Fargate ephemeral storage: 20 GiB default, 200 GiB at most, set by `ephemeralStorage`, holds the image, AES-256 encrypted, platform version 1.4.0 | [Fargate task ephemeral storage](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/fargate-task-storage.html) |

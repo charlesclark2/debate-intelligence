@@ -1,0 +1,82 @@
+# TASK v1-e40-t07-lock-writes-conditional-at-the-bucket - The evidence bucket itself refuses an unconditional write of the run lock
+# Epic: E40 — Weekly Caselist Run in the Cloud | Release: v1.8 (Weekly caselist run in the cloud) | Major: V1
+---
+apiVersion: planspec.io/v1alpha1
+kind: Goal
+metadata:
+  name: v1-e40-t07-lock-writes-conditional-at-the-bucket
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+  annotations:
+    debate/title: "The evidence bucket itself refuses an unconditional write of the run lock"
+spec:
+  # Filed by the PM, 2026-10-24, from v1-e40-t04's follow-up work (the PM's rulings on its plan, 2026-10-24).
+  description: >-
+    v1-e40-t04's lock (`reports/sync/run-lock.json`) is written only with S3 conditional writes
+    (`If-Match`, `If-None-Match`), and the code fences every write. The bucket does not yet
+    insist on it, so a tool or a hand command that writes the lock without a condition could
+    overwrite a live holder. First read AWS's documentation for the S3 condition keys that
+    require conditional writes in a bucket policy (`s3:if-match`, `s3:if-none-match`, or
+    whatever AWS names them), and cite the page. Then add a bucket-policy statement to the
+    evidence bucket that denies `s3:PutObject` on exactly that key unless one of those
+    conditions is present, in both environments, and nothing else. Terraform tests show the
+    statement's exact scope. No apply from the branch: the PM reads the plan.
+  priority: 3
+  constraints:
+    packages: [infrastructure/modules/evidence_bucket, infrastructure/envs, docs/runbooks]
+    forbidden:
+      - A deny that reaches any key other than reports/sync/run-lock.json
+      - Network or AWS access in any test
+  context:
+    - kind: TaskRef
+      name: v1-e40-t04-run-state-on-s3
+      relation: dependsOn
+  acceptanceCriteria:
+    - id: ac1
+      description: >-
+        Terraform's tests show a deny of an unconditional `s3:PutObject` on
+        `reports/sync/run-lock.json` and on no other key, with a mutant for each widening
+        caught.
+    - id: ac2
+      description: >-
+        The operator applies dev, the PM having read the plan, and an unconditional put of
+        the lock is refused while a conditional one succeeds (operator).
+status:
+  phase: Pending
+---
+apiVersion: planspec.io/v1alpha1
+kind: Plan
+metadata:
+  name: v1-e40-t07-lock-writes-conditional-at-the-bucket-plan
+  namespace: debate-intelligence
+  labels:
+    planspec.io/kind: task
+    debate/major-version: v1
+    debate/release: v1.8
+    debate/epic: v1-e40-cloud-caselist-run
+spec:
+  description: >-
+    Read the condition keys, add the bucket-policy statement and its tests, then the operator's
+    apply.
+  goalRef:
+    name: v1-e40-t07-lock-writes-conditional-at-the-bucket
+  graph:
+    nodes:
+      - id: lock-bucket-policy
+        kind: Task
+        name: Conditional lock writes at the bucket
+        description: >-
+          Read the condition keys, add the bucket-policy statement and its tests, then the
+          operator's apply.
+        estimatedEffort: 1h
+        acceptanceCriteria:
+          - type: test_passes
+            name: Terraform checks pass
+            command: bash
+            args: [scripts/terraform_checks.sh]
+status:
+  phase: Pending

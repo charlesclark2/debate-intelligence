@@ -42,6 +42,22 @@ spec:
     `debate-research caselist auth status --check` on the Mac. If the Mac's session was ended, the
     Mac is logged in by hand each week until this task unloads its schedule. Either way the answer
     is recorded in ADR-0020 and in this task's report, and the cutover's runbook says which.
+    (PM amendment 2026-10-24.) That question is answered: in dev on 2026-10-24, before any
+    scheduled login, a hand login into the token secret left the Mac's keychain token working
+    (ADR-0020 (2), amended). So the Mac needs no hand login because of the cloud login. Its own
+    token lasts about 14 days, though, so until this cutover the Mac is logged in by hand at least
+    every two weeks. The cutover also carries these, from the PM's rulings on v1-e40-t03 and
+    v1-e40-t04:
+    * `caselist.sync_caselists` goes into `config/profiles/dev.toml` (and `prod.toml` at the home
+      move) in the same pull request that removes the slugs from the plist. Committing the slugs is
+      ADR-0020 (5)'s decision, and code never hardcodes them.
+    * The seed, `debate-research caselist seed-run-state` (v1-e40-t04), runs at cutover step 4,
+      after the agent is unloaded, never earlier: a dry run, then `--execute`, as working agreement
+      11 asks. v1-e40-t03's hand run (its ac2) is step 5's run, and v1-e40-t04's task-definition
+      change (bucket mode in the run's environment) is applied after the seed.
+    * Before the cutover, the run image's two base images (`python:3.12-slim-bookworm` and the
+      pinned uv image) are pinned by digest rather than tag, in `ops/caselist_run/Dockerfile`, and a
+      new image is pushed and its digest applied.
   priority: 1
   constraints:
     packages: [docs/runbooks, docs/data, ops, tests/smoke]

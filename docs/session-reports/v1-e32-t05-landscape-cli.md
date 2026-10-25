@@ -793,3 +793,12 @@ Added by the PM. Nothing above is changed, and this section is not a review.
   [the first-run note](../data/landscape/first-run-policy.md#the-coachs-review).
 * **ac4 is still to be recorded:** the PM records validate-dev's result for the recorded tier, which
   runs the landscape smoke check, and then sets the Goal `Succeeded`.
+
+## PM record, 2026-10-24 (second)
+
+Added by the PM. Nothing above is changed, and this section is not a review.
+
+* **ac4: done.** validate-dev's run `40147989140` on `dev` (2026-10-25 00:46 UTC, workflow dispatch)
+  concluded `success`. Its recorded tier installs the pre-release and runs the smoke suite, the
+  landscape smoke check included. The four runs before it were also green.
+* Every criterion is met, so the Goal is set to `Succeeded` in the PM batch of 2026-10-24 (k).

@@ -72,7 +72,7 @@ spec:
         download, showing the window, budget and free-space refusals; the imports themselves are
         v1-e40-t09's (operator).
 status:
-  phase: Pending
+  phase: InProgress
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan

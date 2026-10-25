@@ -381,8 +381,9 @@ events have not arrived yet; wait five minutes and run it again.
 
 Apply B now creates the login task and the run task together, on the network, cluster and repository
 `v1-e40-t03` builds, pinned by one image digest (`caselist_image_digest`; t02's `caselist_login_task`
-is gone). Its steps are [caselist-cloud-run.md](caselist-cloud-run.md)'s 1 to 5: the run's
-infrastructure, the deployer's profile, the first image push, then apply B, whose plan is `17 to
+is gone). Its steps are [caselist-cloud-run.md](caselist-cloud-run.md)'s 1 to 6: the run's
+infrastructure, the token check (does a new login end the Mac's token?), the deployer's profile,
+the first image push, then apply B, whose plan is `17 to
 add`: this login's 11 (the log group `debate-dev-caselist-login`, the execution role and the
 scheduler role, each with one inline policy and two exclusive-policy resources, the task definition
 `debate-dev-caselist-login` whose image ends `@sha256:` and the digest, and the schedule) and the

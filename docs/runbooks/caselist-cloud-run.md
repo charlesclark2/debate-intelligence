@@ -1,9 +1,10 @@
-<!-- docs-index: The weekly cloud run's container: applying its network, cluster, repository and deployer, pushing its image, the login and run tasks with their schedules, and one run by hand -->
+<!-- docs-index: The weekly cloud run's container: applying its network, cluster, repository and deployer, checking whether a new login ends the Mac's token, pushing its image, the login and run tasks with their schedules, a dry-run rehearsal, and one run by hand -->
 # Runbook: the weekly caselist run as a container on a schedule
 
 How the weekly caselist run becomes a Fargate task in the team's AWS account: its network, cluster,
-image repository and deployer permission set; its image, built from a release and pushed; the login
-and run task definitions with their Wednesday schedules (apply B); and one run started by hand.
+image repository and deployer permission set; a hand login that shows whether a new login ends the
+Mac's token; its image, built from a release and pushed; the login and run task definitions with
+their Wednesday schedules (apply B); a dry-run rehearsal in the cloud; and one run started by hand.
 Spec: [`v1-e40-t03-run-image-and-schedule`](../../plan_specs/v1/e40-cloud-caselist-run/t03-run-image-and-schedule.yaml).
 Decision: [ADR-0020](../adr/0020-weekly-caselist-run-in-the-cloud.md) (1), (5). The credentials and
 the login are [caselist-cloud-credentials.md](caselist-cloud-credentials.md)'s (`v1-e40-t02`). The
@@ -36,13 +37,18 @@ roles to ECS and is refused the login's, so nobody but the schedule ever starts 
    ([caselist-cloud-credentials.md](caselist-cloud-credentials.md), steps 1 to 4).
 2. **This runbook's steps 1 and 2**: the network, the cluster, the repository, the run's execution
    role and log group, the run role's evidence policy and the deployer. No image is needed.
-3. Steps 3 and 4: the deployer's profile, and the first image, built from a release and pushed.
-4. Step 5, **apply B**: both task definitions, pinned by that image's digest, the login's schedule
-   enabled and the run's disabled.
-5. Step 6, **one run by hand**, after `v1-e40-t04`: until bucket mode and its lock are applied, a
+3. Step 3, **the token check** (PM ruling, 2026-10-24): does a new login end the Mac's keychain
+   token? A hand login as the writer answers it before the login's schedule exists, and puts a
+   token in the secret. If it does, apply B pauses the login until `v1-e40-t06`.
+4. Steps 4 and 5: the deployer's profile, and the first image, built from a release and pushed.
+5. Step 6, **apply B**: both task definitions, pinned by that image's digest, the login's schedule
+   enabled (unless step 3 paused it) and the run's disabled.
+6. Step 7, **the cloud rehearsal**: one run started by the deployer as a dry run, which lists and
+   writes nothing.
+7. Step 8, **one run by hand**, after `v1-e40-t04`: until bucket mode and its lock are applied, a
    cloud run would start from an empty data directory, download every archive again and publish
-   without the bucket's lock. Step 6 says so again.
-6. The run's schedule is enabled at the cutover (`v1-e40-t06`), never before.
+   without the bucket's lock. Step 8 says so again.
+8. The run's schedule is enabled at the cutover (`v1-e40-t06`), never before.
 
 **Every dev apply here runs from `dev`, after `v1-e40-t03` has merged, never from a task branch**,
 for the reason t02's runbook gives: an apply from a configuration without these resources would plan
@@ -95,7 +101,7 @@ grep -c '^caselist_image_digest' infrastructure/envs/dev/owner.auto.tfvars
 ```
 Success looks like `8`, then `0`. Fewer than 8: a line is missing, so find it in the checkout that
 last applied dev before planning. A `1` on the second line means an image digest is already set,
-which belongs to step 5: take that line out for step 1's plan.
+which belongs to step 6: take that line out for step 1's plan.
 
 ## Step 1 — Plan the run's network, cluster, repository and deployer
 
@@ -128,7 +134,7 @@ before step 2. No `Plan:` line at all means the plan failed: read the end of the
   resources (5); the run role's `everyday-evidence` policy (1); the `DebateDevCaselistRunDeployer`
   permission set, its inline policy and one account assignment (3).
 * `Plan: 40 to add` means t02's apply A has not been applied: stop, and do that first.
-* There is no task definition and no schedule yet: those need an image (step 5).
+* There is no task definition and no schedule yet: those need an image (step 6).
 
 ## Step 2 — Apply the saved plan
 
@@ -146,7 +152,93 @@ Success looks like `Apply complete! Resources: 23 added, 1 changed, 0 destroyed.
 `"DebateDevCaselistRunDeployer"` and the repository's URL ending `/debate-dev-caselist-run`. A stale
 plan (`Saved plan is stale`) means something changed in between: go back to step 1.
 
-## Step 3 — The deployer's SSO profile
+## Step 3 — Does a new login end the Mac's token? (before apply B)
+
+Apply B (step 6) creates the login's schedule enabled, and from then on the login task logs in
+afresh every Wednesday at 03:00. The Mac's agent still runs the weeks on the token in its keychain.
+If OpenCaselist ends a token when the same account logs in again, the Mac's next run fails with
+`CASELIST_AUTH_EXPIRED`. This step finds out by hand before the schedule can (PM ruling,
+2026-10-24). It checks the Mac's token, logs in once as the writer into the token secret, exactly as
+the scheduled login would, and checks the Mac's token again. That hand login also puts the token in
+the secret that step 7's rehearsal reads. Nothing in AWS changes but the token secret. Each check
+makes one request to OpenCaselist.
+
+**The Mac's token, as the agent runs.** The plist's `PATH` and `DEBATE_ENV` and nothing of your
+shell's.
+
+**Operator command** (expected runtime ~1 min)
+Where: your Mac, anywhere
+```bash
+PLIST="$HOME/Library/LaunchAgents/com.debate-intelligence.caselist-sync.plist"
+AGENT_PATH=$(plutil -extract EnvironmentVariables.PATH raw "$PLIST")
+AGENT_ENV=$(plutil -extract EnvironmentVariables.DEBATE_ENV raw "$PLIST")
+env -i HOME="${HOME}" PATH="${AGENT_PATH}" DEBATE_ENV="${AGENT_ENV}" sh -c 'debate-research --json caselist auth status --check' 2>&1 | grep -oE '"status": "(ok|error)"|"backend": "[a-z]+"|"checked_now": true|"code": "[A-Z_]+"'
+```
+Success looks like `"status": "ok"`, `"backend": "keyring"`, `"checked_now": true`. A
+`"code": "CASELIST_AUTH_EXPIRED"` here means the Mac's token had already ended, and this step can
+tell nothing: log the Mac in again (the first block under "If it does not" below), run this block
+again, and go on only when it prints `"status": "ok"`.
+
+**The hand login, as the writer, into the token secret.** It prompts for the Tabroom username and
+password, as `caselist auth login` always has, and stores only the token.
+
+**Operator command** (expected runtime ~1 min)
+Where: `$WT`
+```bash
+cd "$WT"
+if env | grep -q '^DEBATE_'; then echo "STOP: DEBATE_ overrides are set in this shell"; else DEBATE_ENV=dev DEBATE_CASELIST__API_ENABLED=true uv run debate-research caselist auth login --token-backend secretsmanager --aws-profile debate-dev-caselist-writer; fi
+```
+Success looks like: `Logged in. The caselist_token is stored in the secretsmanager backend (Secrets
+Manager secret debate-dev-caselist-token) ... The password was not stored.` An `AccessDenied` means
+the writer's session has expired: `aws sso login --sso-session debate`, then run it again.
+
+**The Mac's token again**, straight after.
+
+**Operator command** (expected runtime ~1 min)
+Where: your Mac, anywhere
+```bash
+PLIST="$HOME/Library/LaunchAgents/com.debate-intelligence.caselist-sync.plist"
+AGENT_PATH=$(plutil -extract EnvironmentVariables.PATH raw "$PLIST")
+AGENT_ENV=$(plutil -extract EnvironmentVariables.DEBATE_ENV raw "$PLIST")
+env -i HOME="${HOME}" PATH="${AGENT_PATH}" DEBATE_ENV="${AGENT_ENV}" sh -c 'debate-research --json caselist auth status --check' 2>&1 | grep -oE '"status": "(ok|error)"|"backend": "[a-z]+"|"checked_now": true|"code": "[A-Z_]+"'
+```
+
+**What to read.** Either way, send the PM the three blocks' output: it answers `v1-e40-t06`'s token
+question for ADR-0020.
+
+* **`"status": "ok"`**: a new login leaves the Mac's token working. Go on to step 4, and apply B
+  as written.
+* **`"code": "CASELIST_AUTH_EXPIRED"`**: the new login ended the Mac's token. Do the two blocks
+  below, then go on to step 4.
+
+**If it does not: log the Mac in again**, into its keychain, as the agent runs. It prompts as above.
+
+**Operator command** (expected runtime ~1 min)
+Where: your Mac, anywhere
+```bash
+PLIST="$HOME/Library/LaunchAgents/com.debate-intelligence.caselist-sync.plist"
+AGENT_PATH=$(plutil -extract EnvironmentVariables.PATH raw "$PLIST")
+AGENT_ENV=$(plutil -extract EnvironmentVariables.DEBATE_ENV raw "$PLIST")
+env -i HOME="${HOME}" PATH="${AGENT_PATH}" DEBATE_ENV="${AGENT_ENV}" sh -c 'debate-research caselist auth login'
+```
+Success looks like `Logged in. The caselist_token is stored in the keyring backend (...)`. Then the
+check block above prints `"status": "ok"` again.
+
+**And pause the weekly login until `v1-e40-t06`**, so it cannot end the Mac's token on Wednesday.
+The line goes in the gitignored `owner.auto.tfvars`, which step 6's plan reads; t06 takes it out.
+
+**Operator command** (expected runtime ~1 min)
+Where: `$WT`
+```bash
+cd "$WT"
+grep -q '^caselist_login_schedule_enabled' infrastructure/envs/dev/owner.auto.tfvars || printf 'caselist_login_schedule_enabled = false\n' >> infrastructure/envs/dev/owner.auto.tfvars
+grep -cE '^caselist_login_schedule_enabled += +false$' infrastructure/envs/dev/owner.auto.tfvars
+```
+Success looks like `1`. `0` means the file already sets the login schedule another way: make that
+line `caselist_login_schedule_enabled = false` by hand. Step 6's plan then shows the login's
+schedule `DISABLED`, and step 7's rehearsal waits for t06 (it says why).
+
+## Step 4 — The deployer's SSO profile
 
 Once per Mac.
 
@@ -165,7 +257,7 @@ Success looks like: an ARN containing `AWSReservedSSO_DebateDevCaselistRunDeploy
 can take a minute to provision a new set's role; if the last line says the role does not exist, wait
 a minute and run it again.
 
-## Step 4 — Build the first image and push it
+## Step 5 — Build the first image and push it
 
 The image is the installed CLI from one release, built for arm64 on this Mac (no emulation). Use a
 dev pre-release that contains `v1-e40-t03`'s merge and whose validate-dev run, image job included,
@@ -211,18 +303,18 @@ Success looks like `pushed: <account>.dkr.ecr.us-east-1.amazonaws.com/debate-dev
 hex digits>`, then the line `caselist_image_digest = "sha256:<the same digits>"` under "before the
 environment's apply B". No `pushed:` line means the push failed: the lines above it say why.
 
-## Step 5 — Apply B: the login and run tasks and their schedules
+## Step 6 — Apply B: the login and run tasks and their schedules
 
 Apply B is t02's and this task's together: the login task definition and its Wednesday 03:00
 schedule, and the run task definition and its Wednesday 06:00 schedule, both pinned by the digest
-step 4 printed. The digest goes in the gitignored `owner.auto.tfvars`, which every later dev apply
+step 5 printed. The digest goes in the gitignored `owner.auto.tfvars`, which every later dev apply
 already carries; a plan without it would destroy both tasks, and the plan check below stops that.
 
 **Operator command** (expected runtime ~1 min)
 Where: `$WT`
 ```bash
 cd "$WT"
-DIGEST='sha256:the-64-hex-digits-step-4-printed'
+DIGEST='sha256:the-64-hex-digits-step-5-printed'
 grep -q '^caselist_image_digest' infrastructure/envs/dev/owner.auto.tfvars && echo "STOP: owner.auto.tfvars already names an image digest" || printf 'caselist_image_digest = "%s"\n' "$DIGEST" >> infrastructure/envs/dev/owner.auto.tfvars
 terraform fmt infrastructure/envs/dev
 grep -cE '^caselist_image_digest += "sha256:[0-9a-f]{64}"$' infrastructure/envs/dev/owner.auto.tfvars
@@ -247,7 +339,8 @@ grep -cE '^ +[+~] secrets ' /tmp/caselist-tasks-plan.txt
 * `Plan: 17 to add, 0 to change, 0 to destroy.`, no line saying `must be replaced` or `will be
   destroyed`, and nothing printed by the second `grep`.
 * The third prints the login's `cron(0 3 ? * WED *)` with `ENABLED`, and the run's `cron(0 6 ? * WED
-  *)` with **`DISABLED`**. A run schedule `ENABLED` here is wrong: stop.
+  *)` with **`DISABLED`**. A run schedule `ENABLED` here is wrong: stop. If step 3 paused the
+  login, its schedule shows `DISABLED` too; `ENABLED` then is wrong: stop.
 * The last prints `0`: no secret reaches either task through ECS.
 * The 17: t02's 11 (the login's log group, its execution role and the scheduler role, each with one
   inline policy and two exclusive-policy resources, its task definition and schedule) and the run's
@@ -262,10 +355,86 @@ AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev apply -input=f
 AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev output caselist_run_schedule_state
 ```
 Success looks like `Apply complete! Resources: 17 added, 0 changed, 0 destroyed.`, then
-`"DISABLED"`. The first scheduled login runs the next Wednesday at 03:00 Chicago time; t02's
-runbook, step 5's last block, checks it.
+`"DISABLED"`. The first scheduled login runs the next Wednesday at 03:00 Chicago time, unless step 3
+paused it; t02's runbook, step 5's last block, checks it.
 
-## Step 6 — One run by hand (after `v1-e40-t04`)
+## Step 7 — A cloud rehearsal: one dry-run pull (after apply B)
+
+The deployer starts the run task once, with its command overridden to `--json caselist pull
+--dry-run --caselist <slug>`, under the same six-hour entry point. The image, the network, the run
+role and the token read from Secrets Manager all take part. A dry run lists what it would download
+and downloads, writes and records nothing, so it is safe before `v1-e40-t04` (PM ruling,
+2026-10-24). It lists from an empty data directory, so it wants every week: that count is expected.
+
+It needs a working token in the token secret: step 3's hand login put one there, and after a
+Wednesday the scheduled login has. **If step 3 found that a new login ends the Mac's token, wait for
+`v1-e40-t06`**: logging the Mac in again there ended the secret's token in turn, and the login
+schedule is paused, so the rehearsal would stop at `CASELIST_AUTH_EXPIRED`.
+
+**The network and one of the agent's caselists.** The network is the schedule's, from the root's
+outputs; the slug is the first the Mac's agent pulls.
+
+**Operator command** (expected runtime ~1 min)
+Where: `$WT`
+```bash
+cd "$WT"
+SUBNETS=$(AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev output -json caselist_run_subnet_ids | tr -d '[]" \n')
+SECURITY_GROUP=$(AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev output -raw caselist_run_security_group_id)
+SLUG=$(plutil -extract ProgramArguments json -o - "$HOME/Library/LaunchAgents/com.debate-intelligence.caselist-sync.plist" | python3 -c 'import json, sys; a = json.load(sys.stdin); print(a[a.index("--caselist") + 1] if "--caselist" in a else "")')
+echo "subnets ${SUBNETS}; security group ${SECURITY_GROUP}; caselist ${SLUG}"
+```
+Success looks like two `subnet-` ids joined by a comma, one `sg-` id and one caselist slug, such as
+`hsld26`. No slug means the plist names none: set one the agent pulls by hand, for example
+`SLUG='hsld26'`.
+
+**Start it**, as the deployer, on the run's cluster, the newest revision of the run's family.
+
+**Operator command** (expected runtime ~1 min to start)
+Where: `$WT`, in the shell that set `SLUG`
+```bash
+cd "$WT"
+OVERRIDES=$(printf '{"containerOverrides":[{"name":"run","command":["--json","caselist","pull","--dry-run","--caselist","%s"]}]}' "$SLUG")
+if [ -z "$SLUG" ]; then echo "STOP: SLUG is not set; run the block above first"; else TASK=$(aws ecs run-task --profile debate-dev-caselist-run-deployer --region us-east-1 --cluster debate-dev-caselist-run --task-definition debate-dev-caselist-run --launch-type FARGATE --platform-version LATEST --count 1 --network-configuration "awsvpcConfiguration={subnets=[${SUBNETS}],securityGroups=[${SECURITY_GROUP}],assignPublicIp=ENABLED}" --overrides "$OVERRIDES" --query 'tasks[0].taskArn' --output text); echo "started ${TASK}"; fi
+```
+Success looks like `started arn:aws:ecs:us-east-1:<account>:task/debate-dev-caselist-run/<id>`.
+`None` means it did not start: run it again without `--query` to see the failure.
+
+**Watch it** every five minutes or so; a dry run lists and stops, so it should finish in minutes,
+not hours.
+
+**Operator command** (expected runtime ~1 min each time)
+Where: `$WT`, in the same shell
+```bash
+aws ecs describe-tasks --profile debate-dev-caselist-run-deployer --region us-east-1 --cluster debate-dev-caselist-run --tasks "$TASK" --query 'tasks[0].[lastStatus,stopCode,containers[0].exitCode]' --output text
+```
+Success looks like `STOPPED	EssentialContainerExited	0`. `RUNNING` (or `PENDING`) means it is not
+done yet. A non-zero exit code is a failed rehearsal: read its result below.
+
+**Its result: it listed, and downloaded, wrote and published nothing.** The pull's `--json` result is
+one line in the run's log.
+
+**Operator command** (expected runtime ~1 min)
+Where: `$WT`, in the same shell
+```bash
+aws logs tail debate-dev-caselist-run --profile debate-dev-caselist-run-deployer --region us-east-1 --since 1h | grep '"command": "caselist pull"' | grep -oE '"status": "(ok|error)"|"dry_run": true|"archives_wanted": [0-9]+|"archives_downloaded": [0-9]+|"objects_published": [0-9]+|"code": "[A-Z_]+"'
+```
+Success looks like `"status": "ok"`, `"dry_run": true`, `"archives_wanted": <any count>`,
+`"archives_downloaded": 0` and `"objects_published": 0`. A `"code"` line is a failure.
+`CASELIST_AUTH_EXPIRED` means the secret's token does not work: go back to step 3. Any other code,
+or nothing printed, goes to the PM with the log's last lines (`aws logs tail` without the `grep`s).
+
+**It recorded nothing.** The bucket's run records end where they did: no run at the rehearsal's
+start time.
+
+**Operator command** (expected runtime ~1 min)
+Where: your Mac, the installed build
+```bash
+aws sso login --profile debate-dev-evidence
+debate-research caselist runs --remote --last 3
+```
+Success looks like the newest runs being the Mac's, none started at the rehearsal's time.
+
+## Step 8 — One run by hand (after `v1-e40-t04`)
 
 **Not before `v1-e40-t04`'s bucket mode is applied and the lock seeded.** Today a cloud run starts
 from an empty data directory: it would select every week as new, spend the day's five downloads,

@@ -39,13 +39,43 @@ Four things to look at first:
    the ten everyday actions, or names another bucket or key. The only thing outside
    `module.caselist_run` that changes is that new output, which adds no resource to a plan.
 2. **ac2 is not safe before `v1-e40-t04`**, and ADR-0020 does not make it so. A cloud run today starts
-   from an empty data directory and has no bucket lock. Question 1 proposes running ac2 after t04,
-   with a `--dry-run` rehearsal in the cloud before that.
+   from an empty data directory and has no bucket lock. The PM ruled that ac2 waits for t04, and
+   accepted a `--dry-run` rehearsal in the cloud first: the runbook's step 7.
 3. **The scheduled run would refuse to start today, on purpose.** ADR-0020 (5) puts the caselists in
    `caselist.sync_caselists` in the bundled profile, and the task names none. `config/profiles/dev.toml`
-   has none yet (they are in the Mac's plist), and `config/` is outside this task. Question 2.
+   has none yet (they are in the Mac's plist). The PM ruled that `v1-e40-t06` adds them in the
+   cutover pull request.
 4. **The phase stays `InProgress`.** ac1's CI part runs in validate-dev after the merge, and ac2 is
    the operator's. Every other criterion passes. This merges `--partial`, like t02.
+
+**After the PM review (ACCEPTED with conditions, 2026-10-24)**, the three conditions are closed in
+this session:
+
+1. **The spec's `constraints.packages`** now lists `scripts`, `.github/workflows`, `tests/scripts` and
+   `tests/smoke`, under a `# PM ruling 2026-10-24` comment (ruling 5). `validate_specs` passes, and
+   the parsed list shows all eleven entries.
+2. **Two runbook steps** in [caselist-cloud-run.md](../runbooks/caselist-cloud-run.md), each block
+   with its success check. The steps after them are renumbered: the profile is now 4, the image 5,
+   apply B 6, and the hand run 8.
+   * **Step 3, before apply B: does a new login end the Mac's token?** (ruling 6). It runs
+     `caselist auth status --check` on the Mac's keychain token, with the agent's plist environment.
+     Then it runs the hand login, `caselist auth login --token-backend secretsmanager` under the
+     writer's profile, and the check again. If the token is ended, the coach logs the Mac in again
+     and adds `caselist_login_schedule_enabled = false` to `owner.auto.tfvars` until t06. Step 6's
+     plan check then expects the login's schedule `DISABLED`. Either way, the output goes to the PM
+     for ADR-0020.
+   * **Step 7, after apply B: the cloud rehearsal** (ruling 1). The deployer starts the run task
+     with the command overridden to `--json caselist pull --dry-run --caselist <slug>`, the slug
+     read from the agent's plist. It checks for a stop with exit code 0, and for a result with
+     `"dry_run": true`, `"archives_downloaded": 0` and `"objects_published": 0`. It also checks that
+     `caselist runs --remote` shows no new record. It runs after step 3's hand login, or after the
+     first scheduled login.
+   * One thing follows from ruling 6 that the ruling did not say, so it is written into step 7. If
+     step 3 finds that a login ends the other token, the Mac's second login ends the secret's token
+     in turn. The login is then paused, so the rehearsal waits for t06.
+3. **This summary and the Operator follow-ups** below. The token check sits between B4 and B5, and
+   B6 points to it. The rehearsal follows B6. The credentials runbook's step 5 now names the
+   cloud-run runbook's steps 1 to 6.
 
 ## Plan nodes
 
@@ -60,7 +90,7 @@ Four things to look at first:
 | Node `image-schedule`: Terraform checks pass (`bash scripts/terraform_checks.sh`) | PASS | Run as written, with the registry replaced by the provider already unpacked in the main checkout (`TF_CLI_CONFIG_FILE` naming a `filesystem_mirror`; every directory needs only `hashicorp/aws`): `All Terraform checks passed.`, exit 0, 27.5 s (after the sync below). fmt, validate, tflint and `terraform test` of every root and module. No lock file changed, and the `.terraform` directories it left were removed |
 | ac1 — Terraform's tests show the run role's grants and the schedule | PASS | `terraform -chdir=infrastructure/modules/caselist_run test` → `Success! 26 passed, 0 failed.` t02's 14 runs pass (its first 13 on the new inputs, and the break-glass run its pull request #465 added); 12 are new (below). Mutation: 22 of 22 caught (below) |
 | ac1 — the image builds from a tag and runs `debate-research caselist pull` against stubbed services in CI | NOT RUN | It runs in validate-dev's new `image` job, which runs only after a merge into `dev`. What can run before the merge did. `tests/scripts/test_caselist_run_deploy.py` → `20 passed` (the build's arguments, the offline check, the push and registration, the prod guard; 7 of 7 mutants caught). `tests/smoke/test_caselist_pull.py` against the workspace's build → `9 passed`, now asserting stage times. Operator follow-up A built a real tag locally: `scripts/caselist_run_deploy.sh dev v1.1.0-dev.134 --dry-run` printed all six `ok:` lines (linux/arm64, user 10001:10001, entrypoint `debate-research`; no credential name in the environment; no credential file; `debate-research` and `timeout` on `PATH`; `v1.1.0-dev.134`; SQLite 3.50.4 with FTS5), then `Dry run complete`, in 26 s. That build ran the release's installer but not the pull against stubbed services, which only the CI job does. The first validate-dev run after the merge closes this, and gives the CI build's time |
-| ac2 — the operator applies dev and starts one run by hand; its record matches a Mac run's shape | NOT RUN | Operator, after the merge, and the hand run only after `v1-e40-t04` (question 1). Runbook [caselist-cloud-run.md](../runbooks/caselist-cloud-run.md), steps 1 to 6 |
+| ac2 — the operator applies dev and starts one run by hand; its record matches a Mac run's shape | NOT RUN | Operator, after the merge, and the hand run only after `v1-e40-t04` (question 1). Runbook [caselist-cloud-run.md](../runbooks/caselist-cloud-run.md), steps 1 to 8 (the hand run is step 8) |
 | ac3 — each stage's start and end in the run's details, a 70% volume warning in the summary by test with a stubbed volume, the record's fields unchanged | PASS | `test_caselist_sync_stage_times_and_volume.py` → `11 passed`: every stage timed in order, a stage's 7 minutes read from a stub that moves the clock, dry runs and `--publish-pending` timed for what they carry out, a 75% stub warning with its text, exactly 70% not warning and one byte more warning, the fullest reading kept, no reading without the setting, a failed reading costing no stage. Against a skeleton that times and reads nothing, 10 of them fail. The record: the test lists its 23 fields by hand, and `test_pull_run_record_is_read_by_every_build.py`'s schema checks against the two older builds pass unchanged (83 passed with the refusal suite). The CLI shows the warning in its caption (`test_caselist_pull.py`, 3 new) |
 
 **The 12 new Terraform runs**:
@@ -245,7 +275,7 @@ minutes, each under `perl -e 'alarm 115'` on `.venv/bin/python -m pytest -m "not
 `ok:` lines, the last `ok: SQLite 3.50.4 with FTS5`, then `Dry run complete. debate-dev-caselist-run:v1.1.0-dev.134
 built and checked; nothing was pushed and no AWS call was made.`, in 26 s. The first attempt passed
 the block's placeholder tag word for word, and the script refused it as an unrecognised argument
-before building anything. So the runbook's step 4 now sets `TAG` from `gh` itself and stops if it is
+before building anything. So the runbook's image step (step 5 since the renumbering) now sets `TAG` from `gh` itself and stops if it is
 empty.
 
 **After the merge, in this order.** These are the runbook's blocks
@@ -318,26 +348,48 @@ AWS_PROFILE=debate-admin terraform -chdir=infrastructure/envs/dev output caselis
 Success looks like `Apply complete! Resources: 23 added, 1 changed, 0 destroyed.` and
 `"DebateDevCaselistRunDeployer"`.
 
-**B5. The deployer's profile, then the first image**: the runbook's steps 3 and 4. First the profile
+**The token check, before B5 and B6** (PM ruling 6): the runbook's step 3, about 5 minutes. It
+does not depend on B5. Run it after B4 and before apply B, because apply B enables the login's
+schedule. First, `caselist auth status --check` on the Mac, with the agent's environment. Then the
+hand login as the writer into the token secret, which prompts for the Tabroom password. Then the
+check again. If the second check prints `"status": "ok"`, go on. If it prints
+`"code": "CASELIST_AUTH_EXPIRED"`, the new login ended the Mac's token: log the Mac in again and add
+`caselist_login_schedule_enabled = false` to `owner.auto.tfvars` (the step's two last blocks). Send
+the PM the output either way.
+
+**B5. The deployer's profile, then the first image**: the runbook's steps 4 and 5. First the profile
 block. Then the dry run, which builds and checks with no AWS call (~1 min; 26 s in follow-up A). Then the push, which
 prints `pushed: ...@sha256:<digest>` and the `caselist_image_digest = "sha256:..."` line, and
 registers nothing before apply B. The tag to use is the newest dev pre-release containing this merge
 whose validate-dev run, image job included, is green.
 
-**B6. Apply B**: the runbook's step 5. Add the digest to `owner.auto.tfvars`, then plan.
+**B6. Apply B**: the runbook's step 6, **only after the token check above**. Add the digest to
+`owner.auto.tfvars`, then plan.
 
 * The plan must read exactly `Plan: 17 to add, 0 to change, 0 to destroy.`, with no change outside
   `module.caselist_run`.
-* The login's `cron(0 3 ? * WED *)` must be `ENABLED`, and the run's `cron(0 6 ? * WED *)`
-  **`DISABLED`**.
+* The login's `cron(0 3 ? * WED *)` must be `ENABLED`, or `DISABLED` if the token check paused it,
+  and the run's `cron(0 6 ? * WED *)` **`DISABLED`**.
 * `0` lines may name `secrets`.
 
 The PM reads the plan, and then it is applied. That closes t02's apply B too, and the first
 Wednesday login is t02's follow-up.
 
+**The rehearsal, after B6** (PM ruling 1): the runbook's step 7, about 15 minutes. The deployer
+starts the run task once as `--json caselist pull --dry-run --caselist <slug>`, with the slug read
+from the agent's plist. Success looks like:
+
+* `STOPPED	EssentialContainerExited	0`;
+* in the log, `"status": "ok"`, `"dry_run": true`, `"archives_downloaded": 0` and
+  `"objects_published": 0`;
+* no new record in `caselist runs --remote --last 3`.
+
+It needs the token check's hand login, or a Wednesday's scheduled login. If the token check paused
+the login, the rehearsal waits for `v1-e40-t06`.
+
 **Later, not now:**
 
-* **ac2, one run by hand**: the runbook's step 6, **after `v1-e40-t04`** is applied and the lock
+* **ac2, one run by hand**: the runbook's step 8, **after `v1-e40-t04`** is applied and the lock
   seeded (question 1). The record check is `debate-research caselist runs --remote --last 3` on the
   Mac.
 * **ac1's CI part**: the first validate-dev run on `dev` after the merge. Its `image` job must be
@@ -409,9 +461,87 @@ v1-e40-t03 questions (session report: docs/session-reports/v1-e40-t03-run-image-
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED, with conditions to close in this session
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-24
 
 **Notes:**
+
+Careful work that builds on t02 rather than beside it.
+* The run role takes the EvidenceOperator set's own policy through a new output. That's better
+  than a copy, and a plan-time validation refuses a delete, a wildcard, another bucket or another
+  key.
+* t02's `login_task` is now references. Its 14 runs pass, and 12 new runs cover the network, the
+  run role, the task, the schedule and the deployer.
+* 22 of 22 Terraform mutants were caught, and the two weaknesses the first run found were fixed
+  rather than counted. The test that hid the any-KMS-key gap was replaced, as agreement 8 says.
+* I read `network.tf`: no inbound rule, egress 443 only, and the default security group taken over
+  with none. The tasks get a public IP rather than a NAT gateway, as the ADR's cost line chose.
+* ac3 is additive, and the record's 23 fields are pinned by hand.
+* The schedule is created disabled, and starts after the login by a field-by-field test.
+
+**Rulings**
+
+1. **ac2 waits for `v1-e40-t04`, as recommended.** A hand run before t04 starts from an empty data
+   directory, with no bucket lock and a download ledger the Mac doesn't share. **Yes to the cloud
+   rehearsal.** Add it to the runbook as a step after apply B and before step 6: the run task
+   started by the deployer with its command overridden to `--json caselist pull --dry-run
+   --caselist <slug>`. Its success check is that it lists, downloads nothing and writes nothing. It
+   needs a token in the token secret, so the step says it runs after the first scheduled login, or
+   after the token step in ruling 6 (condition 2).
+2. **The caselists:** `v1-e40-t06` adds `caselist.sync_caselists` to `config/profiles/dev.toml`
+   (and to `prod.toml` at the home move), in the cutover pull request that removes the slugs from
+   the plist. Committing caselist slugs to config is ADR-0020 (5)'s decision. Code never hardcodes
+   them. The PM amends t06 in the next batch.
+3. **Keep the `image` job required by `conclude`.** The image is what the cloud run will be.
+4. **The digest in the gitignored `owner.auto.tfvars`: accepted until `v2-e10-t03`'s OIDC
+   applies.** The plan check stops a copy without it. The runbook's note on reading the digest back
+   from the deployed task definition stays.
+5. **Amend `constraints.packages`** to add `scripts`, `.github/workflows`, `tests/scripts` and
+   `tests/smoke`, with a PM-ruling comment dated 2026-10-24 (condition 1).
+6. **Before apply B enables the login schedule, answer t06's token question by hand (PM ruling).**
+   Apply B's login schedule starts enabled, and the Mac's agent still runs the weeks on its
+   keychain token. If a new login ends that token, the Mac's next run fails. Nobody may run the
+   login task, but the coach can log in by hand with `caselist auth login --token-backend
+   secretsmanager` under the writer's profile. That issues a new token exactly as the scheduled
+   login would. So the runbook gets a step before apply B, in three parts:
+   1. `caselist auth status --check` on the Mac's keychain token;
+   2. the hand login to Secrets Manager;
+   3. `caselist auth status --check` again.
+
+   If the keychain token still checks, apply B as written. If it doesn't, the coach logs the Mac
+   in again, and apply B sets `login_schedule_enabled = false` until t06. Either way, the answer goes
+   to the PM for ADR-0020. The hand login also puts a token in the secret, which ruling 1's
+   rehearsal needs (condition 2).
+
+**Accepted as made:**
+* deviations 1 to 4 (the blank AWS profile meaning none is right for a task signing with its
+  role);
+* the arm64 runner (the repository is public, so it costs nothing);
+* Wednesday 06:00 America/Chicago;
+* the schedule pinned to Terraform's revision;
+* the six-hour `timeout` entry point;
+* the volume check off by default;
+* ECR immutable with five images kept. The runbook already says to apply a new digest before five
+  more pushes.
+
+**Follow-up work, the PM's to file or fold in:**
+* SIGTERM, saving state and releasing the lock go to `v1-e40-t04`, which owns them.
+* `sns:Publish` for the run role, `caselist.notifier = sns` and the run log's metric filter go to
+  `v1-e40-t05`.
+* Pinning the two base images by digest goes into `v1-e40-t06`, before the cutover.
+
+**Conditions, to close in this session (no re-review needed):**
+
+1. **Amend the spec's packages** for ruling 5.
+2. **Add the two runbook steps**, the token check before apply B (ruling 6) and the cloud rehearsal
+   after it (ruling 1), each with its success check. Point Operator follow-ups B6 at the first.
+   Command blocks keep the house rules: no `#`, no `!` inside double quotes.
+3. **Update this report's summary and Operator follow-ups**, and commit.
+
+**The PR** merges `--partial`, as for t02, with the phase `InProgress`. After the merge: B1 to B4
+(the PM reads B3's plan before B4), then the token step, then B5 and B6 (the PM reads apply B's
+plan), then the rehearsal. ac2 follows t04.
+
+If anything comes out differently, stop and ask for another review.

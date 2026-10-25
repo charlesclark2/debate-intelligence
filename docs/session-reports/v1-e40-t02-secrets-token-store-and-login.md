@@ -550,3 +550,77 @@ promotion) are recorded by the PM, who sets the Goal `Succeeded` after the first
 has written a token and prod is applied.
 
 If anything comes out differently, stop and ask for another review.
+
+## PM review, second
+
+**Verdict:** CHANGES_REQUESTED
+<!-- ACCEPTED / CHANGES_REQUESTED -->
+
+**Reviewed by / date:** PM (Claude), 2026-10-24
+
+**Notes:**
+
+The fix is well made, but it covers only half of what `CreateSecret` asks KMS for. The re-apply
+would fail again, at the next call.
+
+1. **What AWS documents.** In "Secret encryption and decryption in AWS Secrets Manager"
+   (https://docs.aws.amazon.com/secretsmanager/latest/userguide/security-encryption.html),
+   under "Validating access to the KMS key": when a secret's KMS key is established or changed,
+   Secrets Manager calls **both `GenerateDataKey` and `Decrypt`** as the caller, to confirm the
+   caller may use the key, and discards the results. In those validation requests, the encryption
+   context's `SecretARN` is the secret's real ARN and its `SecretVersionId` is the literal
+   `RequestToValidateKeyAccess`.
+2. **What that means here.** The first apply was refused at `GenerateDataKey`, so the `Decrypt`
+   was never reached. With `BreakGlassEncryptsWhenCreatingTheTwoSecrets` in place, the next call
+   is break-glass's validation `Decrypt`. No statement allows it, and `NobodyElseDecryptsAnything`
+   (and, for the password, `NobodyButTheLoginRoleDecryptsThePassword`) denies it explicitly. Both
+   `CreateSecret` calls would fail as before. The PM's context asked for this page to be cited
+   before the context condition was kept. The report doesn't cite it, and the page has the answer.
+3. **What is safe to allow.** A KMS ciphertext can be decrypted only with the encryption context it
+   was made under. A validation data key is made under `SecretVersionId = RequestToValidateKeyAccess`
+   and thrown away. Every real secret version's data key is bound to its own version id. So a
+   `Decrypt` that requires `SecretVersionId = RequestToValidateKeyAccess` can never open a stored
+   password or token.
+
+**Changes, before this goes to a PR:**
+
+1. **Narrow the existing break-glass Allow to validation only.** Add
+   `StringEquals "kms:EncryptionContext:SecretVersionId" = "RequestToValidateKeyAccess"` to
+   `BreakGlassEncryptsWhenCreatingTheTwoSecrets`. Break-glass needs to encrypt only to validate.
+   It never writes a secret value.
+2. **Add the validation `Decrypt` for break-glass, and nothing more.** One `Allow` with `kms:Decrypt`,
+   the break-glass `aws:PrincipalArn` pattern, `kms:ViaService` set to Secrets Manager in this
+   region, `kms:EncryptionContext:SecretARN` like the two secret patterns, and
+   `kms:EncryptionContext:SecretVersionId` equal to `RequestToValidateKeyAccess`.
+3. **Exempt exactly that case from the decrypt denies, without widening them for anyone else.** A
+   Deny's conditions are ANDed, so "not (break-glass and validation)" cannot be one statement. Split
+   each affected deny instead:
+   - one deny for every principal other than the deny's own reader roles **and** break-glass;
+   - one deny for break-glass whenever `SecretVersionId` is not `RequestToValidateKeyAccess`.
+
+   Write the conditions with the operators IAM allows together on `aws:PrincipalArn` (`ArnNotEquals`
+   for the role ARNs, `ArnNotLike` for the break-glass pattern), or an equivalent form you can show
+   is no wider. Explain the shape in the module's comment. `NoGrantsAndNoReEncryption` stays byte
+   for byte.
+4. **Tests and mutations.** Extend the 14th test, or add one. It must show four things:
+   - break-glass may `GenerateDataKey` and `Decrypt` only with the validation context, through
+     Secrets Manager, for the two secrets;
+   - break-glass is denied `Decrypt` with any other `SecretVersionId`;
+   - the login role alone still decrypts the password, and the run role alone the token;
+   - no other principal gains a decrypt.
+
+   Mutants, each to be caught by a false assertion: drop the `SecretVersionId` condition from
+   either break-glass Allow; exempt every principal (not just break-glass) from a deny; drop the
+   break-glass-only deny; widen the validation `Decrypt` to any `SecretARN`; drop its `ViaService`.
+   Re-run the original 22 and the 6 from the first fix.
+5. **Runbook and report.** Re-planning shows the same counts (`9 to add, 1 to change, 0 to destroy`,
+   with only the key's `policy` changing), so the plan check is unchanged. Add the validation reading
+   to the runbook's partial-apply note: if `CreateSecret` is refused again, the operator pulls
+   CloudTrail's KMS events for that minute and gives the PM the action and the
+   `SecretVersionId` it carried. Cite the AWS page in the module comment and in this report.
+6. **Then ask for another review.** This is an access rule. The PM reads the diff before the PR.
+
+What stands from the first review: rulings 1 to 6, the deviations and the decisions. The
+`MalformedPolicyDocumentException` reading, the partial-apply recovery and the JSON plan check
+are good, and stay. Dev still holds the 8 resources from the first run. That is safe, and nothing
+is to be done by hand.

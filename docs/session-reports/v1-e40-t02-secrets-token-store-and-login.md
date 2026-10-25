@@ -673,3 +673,42 @@ What stands from the first review: rulings 1 to 6, the deviations and the decisi
 `MalformedPolicyDocumentException` reading, the partial-apply recovery and the JSON plan check
 are good, and stay. Dev still holds the 8 resources from the first run. That is safe, and nothing
 is to be done by hand.
+
+## PM review, third
+
+**Verdict:** ACCEPTED
+<!-- ACCEPTED / CHANGES_REQUESTED -->
+
+**Reviewed by / date:** PM (Claude), 2026-10-24
+
+**Notes:**
+
+I read `credentials.tf` at `531731e` statement by statement, not only the report.
+
+1. **The key policy now does exactly what AWS's validation needs, and no more.**
+   * **Two break-glass Allows.** `GenerateDataKey` and `Decrypt` each require break-glass's
+     `aws:PrincipalArn` pattern, `kms:ViaService` set to Secrets Manager, `SecretARN` like the two
+     secrets, and `SecretVersionId = RequestToValidateKeyAccess`.
+   * **The three existing decrypt denies** keep their reader roles under `ArnNotEquals` and add
+     break-glass under `ArnNotLike`, ANDed. So no principal other than break-glass escapes any of
+     them.
+   * **`BreakGlassDecryptsNothingButTheValidation`** denies break-glass every decrypt whose version
+     id isn't the validation id. `StringNotEquals` is also true when the key is missing, so a decrypt
+     with no context is denied too.
+   * **The result.** The only decrypt break-glass can make is a validation key, and KMS's binding of
+     ciphertext to encryption context means that can never open a stored version. Login alone
+     decrypts the password, the run role alone the token. `NoGrantsAndNoReEncryption` is unchanged.
+2. **The session's single deny covers the three break-glass halves the PM described.** The
+   general deny's half has no `SecretARN` condition, so it covers the other two. Accepted as no
+   wider, with the reasoning in the module comment.
+3. **Tests and mutants.** The new 14th run fails against the first fix's policy (12 passed,
+   2 failed, false assertions), which is the evidence it can see the gap. 14 of 14 and 22 of 22
+   mutants were caught, none skipped. The AWS page is cited in the module, its README, the runbook
+   and this report.
+4. **Runbook.** Block 1 now stops on a `dev` that holds only the first fix (`grep -c
+   BreakGlassDecryptsOnlyToValidateTheKey`). The plan's counts and its JSON check are unchanged.
+   The CloudTrail block for a second refusal is a good addition.
+
+**Close-out.** Open the PR with `scripts/task pr --partial`. The phase stays `InProgress`, as in
+the first review's ruling 6. After the merge, the operator re-plans apply A from
+`caselist-credentials-dev`, and the PM reads that plan before the apply.

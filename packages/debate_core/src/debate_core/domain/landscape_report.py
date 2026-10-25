@@ -81,6 +81,8 @@ __all__ = [
     "ChainRole",
     "ImpactCard",
     "ImpactCoverage",
+    "KritikalAffs",
+    "KritikalFamilyCount",
     "LandscapeCard",
     "LandscapeReport",
     "PositionStats",
@@ -425,6 +427,45 @@ class AdvantagesByAff(DomainModel):
     unassigned: UnassignedAdvantageReads
 
 
+class KritikalFamilyCount(DomainModel):
+    """One K family named in the K-aff files' headings: a count of words, never a placement."""
+
+    family_id: PositionId
+    label: NonEmptyText
+    files: int = Field(ge=1, description="Files of the K-aff rounds whose headings name it.")
+    teams: int = Field(ge=1, description="Distinct teams of the K-aff rounds disclosing those files.")
+
+
+class KritikalAffs(DomainModel):
+    """report.md's kritikal affirmatives (`v1-e32-t17`, the PM's rulings of 2026-10-25)."""
+
+    position_id: PositionId
+    label: NonEmptyText
+    rounds: int = Field(ge=0, description="Affirmative rounds assigned the K aff, by either method.")
+    teams: int = Field(ge=0, description="Distinct teams of those rounds.")
+    by_marker: int = Field(ge=0, description="Of the rounds, those a marker in their own file identifies.")
+    by_carry: int = Field(ge=0, description="Of the rounds, those carried from the team's other rounds.")
+    refused_by_advantage: int = Field(
+        ge=0, description="Rounds the K aff was not carried into because their own file reads an advantage."
+    )
+    families: tuple[KritikalFamilyCount, ...] = Field(
+        description="The K families the K-aff files' headings name, by files, then teams, then the config's "
+        "order."
+    )
+    control_files: int = Field(
+        ge=0, description="Files with a K-aff marker and no plan text in rounds another method identifies."
+    )
+    control_rounds: int = Field(ge=0, description="The rounds those files are disclosed in.")
+
+    @model_validator(mode="after")
+    def _check_counts(self) -> Self:
+        if self.by_marker + self.by_carry != self.rounds:
+            raise ValueError("every K-aff round is identified by its own marker or by carry")
+        if self.control_rounds and not self.control_files:
+            raise ValueError("a control round holds a marker file")
+        return self
+
+
 class UnclassifiedSummary(DomainModel):
     """What the report could not count (ac3): cards, and rounds by side."""
 
@@ -526,4 +567,8 @@ class LandscapeReport(DomainModel):
     advantages_by_aff: AdvantagesByAff | None = Field(
         default=None,
         description="`v1-e32-t15`'s advantages per assigned aff; None when the taxonomy has no advantage.",
+    )
+    kritikal_affs: KritikalAffs | None = Field(
+        default=None,
+        description="`v1-e32-t17`'s kritikal affirmatives; None when the run read no K-aff markers.",
     )

@@ -34,16 +34,21 @@ from typing import Final
 from debate_core.arguments.landscape.plan_text import DocumentPlanText, PlanTextVerdict, PlanTextVocabulary
 
 __all__ = [
+    "KRITIKAL_AFF_CARRY_METHOD",
+    "KRITIKAL_AFF_MARKER_METHOD",
     "PLAN_TEXT_METHOD",
     "TEAM_CARRY_METHOD",
     "AffRound",
     "AssignedAff",
     "AssignmentCounts",
+    "KritikalSignals",
     "assign_affs",
 ]
 
 PLAN_TEXT_METHOD: Final = "PLAN_TEXT"
 TEAM_CARRY_METHOD: Final = "TEAM_CARRY"
+KRITIKAL_AFF_MARKER_METHOD: Final = "KRITIKAL_AFF_MARKER"
+KRITIKAL_AFF_CARRY_METHOD: Final = "KRITIKAL_AFF_CARRY"
 _UNREAD: Final = DocumentPlanText(PlanTextVerdict.UNREAD)
 
 
@@ -66,6 +71,19 @@ class AssignedAff:
 
 
 @dataclass(frozen=True, slots=True)
+class KritikalSignals:
+    """What names a round's kritikal affirmative (`v1-e32-t17`): its id, the files with a marker, and the
+    rounds reading an advantage, which a K aff is never carried into."""
+
+    position_id: str
+    marker_documents: frozenset[str] = field(repr=False)
+    """Source digests holding a K-aff marker."""
+    advantage_rounds: frozenset[str] = field(repr=False)
+    """Round keys whose own files carry a card t02 placed under an advantage (READS, at or above the
+    review threshold): t15's placement."""
+
+
+@dataclass(frozen=True, slots=True)
 class AssignmentCounts:
     rounds: int
     by_method: dict[str, int]
@@ -78,6 +96,8 @@ class AssignmentCounts:
     """Unassigned rounds of a team that carries an aff, refused because of their own plan text."""
     teams_carrying: int
     teams_disagreeing: int
+    refused_by_advantage: tuple[str, ...] = ()
+    """Round keys a K aff was not carried into because their own file reads an advantage, sorted."""
 
 
 def assign_affs(
@@ -85,6 +105,7 @@ def assign_affs(
     plan_texts: Mapping[str, DocumentPlanText],
     placed: Mapping[str, frozenset[str]],
     vocabulary: PlanTextVocabulary,
+    kritikal: KritikalSignals | None = None,
 ) -> tuple[tuple[AssignedAff, ...], AssignmentCounts]:
     """Each round's aff by plan text, then by its team's other rounds, in round-key order, with counts.
 
@@ -125,7 +146,13 @@ def assign_affs(
         elif narrowed and team not in disagreeing:
             carried_by[team] = narrowed[0]
     carrying: set[str] = set()
-    refused = placed_only = unidentified = 0
+    refused = placed_only = 0
+
+    def no_plan_text(one: AffRound) -> bool:
+        return all(
+            plan_texts.get(document, _UNREAD).verdict is PlanTextVerdict.NONE for document in one.documents
+        )
+
     for one in rounds:
         if one.round_key in assigned:
             continue
@@ -134,23 +161,50 @@ def assign_affs(
             continue
         aff = carried_by.get(one.team) if one.team is not None else None
         if aff is not None and one.round_key not in conflicting:
-            if all(
-                plan_texts.get(document, _UNREAD).verdict is PlanTextVerdict.NONE
-                for document in one.documents
-            ):
+            if no_plan_text(one):
                 assigned[one.round_key] = AssignedAff(one.round_key, aff, TEAM_CARRY_METHOD)
                 carrying.add(one.team or "")
                 continue
             refused += 1
-        unidentified += 1
+    refused_by_advantage: list[str] = []
+    if kritikal is not None:
+        open_rounds = [
+            one
+            for one in rounds
+            if one.round_key not in assigned
+            and not placed.get(one.round_key)
+            and one.round_key not in conflicting
+        ]
+        marked: set[str] = set()
+        for one in open_rounds:
+            if no_plan_text(one) and any(document in kritikal.marker_documents for document in one.documents):
+                assigned[one.round_key] = AssignedAff(
+                    one.round_key, kritikal.position_id, KRITIKAL_AFF_MARKER_METHOD
+                )
+                if one.team is not None:
+                    marked.add(one.team)
+        for one in open_rounds:
+            if one.round_key in assigned or one.team is None or one.team not in marked:
+                continue
+            if identified[one.team] or one.team in disagreeing:
+                continue
+            if not no_plan_text(one):
+                refused += 1
+            elif one.round_key in kritikal.advantage_rounds:
+                refused_by_advantage.append(one.round_key)
+            else:
+                assigned[one.round_key] = AssignedAff(
+                    one.round_key, kritikal.position_id, KRITIKAL_AFF_CARRY_METHOD
+                )
     ordered = tuple(assigned[key] for key in sorted(assigned))
     return ordered, AssignmentCounts(
         rounds=len(rounds),
         by_method=dict(sorted(Counter(one.method for one in ordered).items())),
         placed_only=placed_only,
-        unidentified=unidentified,
+        unidentified=len(rounds) - len(ordered) - placed_only,
         conflicting=len(conflicting),
         carry_refused=refused,
         teams_carrying=len(carrying),
         teams_disagreeing=len(disagreeing),
+        refused_by_advantage=tuple(sorted(refused_by_advantage)),
     )

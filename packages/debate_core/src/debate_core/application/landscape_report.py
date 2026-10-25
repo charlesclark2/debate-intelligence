@@ -114,6 +114,7 @@ from debate_core.application.landscape_counts import (
     round_id,
     team_identity,
 )
+from debate_core.application.landscape_kritikal import kritikal_affs
 from debate_core.application.landscape_schools import school_view
 from debate_core.application.landscape_staleness import (
     LandscapeStaleness,
@@ -131,6 +132,7 @@ from debate_core.arguments.landscape.analytic_texts import (
 )
 from debate_core.arguments.landscape.headings import NormalizedHeading
 from debate_core.arguments.landscape.impacts import is_impact_card
+from debate_core.arguments.landscape.kritikal_aff import KritikalAffInputs
 from debate_core.arguments.landscape.link_chains import (
     SubHeading,
     card_roles,
@@ -320,6 +322,9 @@ class LandscapeReportInputs:
     analytic_texts: AnalyticTextInputs | None = field(default=None, repr=False)
     """`v1-e32-t11`'s readings of the caselist's CP texts, alternatives, roles of the ballot and overviews,
     with the texts to quote read again; None when the run read none, and the report has no such sections."""
+    kritikal_affs: KritikalAffInputs | None = field(default=None, repr=False)
+    """`v1-e32-t17`'s K-aff markers, the K families of each file's headings and the rounds the advantage
+    guard refused; None when the run read none, and the report has no kritikal-affirmative group."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -620,6 +625,16 @@ class LandscapeReportService:
                 assigned={one: found.position_id for one, found in assigned.items()},
                 placed_card_rounds=placed_card_rounds,
                 limit=self._advantages,
+            ),
+            kritikal_affs=None
+            if inputs.kritikal_affs is None
+            else kritikal_affs(
+                inputs=inputs.kritikal_affs,
+                taxonomy=taxonomy,
+                counted=counted,
+                by_source=in_range.by_source,
+                assigned={one: (found.position_id, found.method) for one, found in assigned.items()},
+                placed_card_rounds=placed_card_rounds,
             ),
         )
         return report, counted

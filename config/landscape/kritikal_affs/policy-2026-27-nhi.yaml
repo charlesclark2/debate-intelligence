@@ -1,0 +1,75 @@
+# The kritikal affirmative (v1-e32-t17, the PM's rulings of 2026-10-25). A round reads position_id when
+# a file of it holds no plan text and a K-aff marker: a role of the ballot (v1-e32-t11's labels), an
+# advocacy-statement label (`Advocacy`, `Advocacy statement`, `Our advocacy is`, inline `Advocacy:`),
+# `The 1AC is`, or a method label (`Method`, `Our method is`, inline `Method:`; not `Methods`). The
+# markers are in the code; this file names the position and the K families.
+#
+# families: what the report's kritikal-affirmative group counts in the K-aff files' headings, a family
+# per line with the files and teams naming it. It is a count of words in headings, never a placement:
+# a family names no position and moves no round. Lowercase words, matched whole in a heading as the
+# normalizer writes it; a longer phrase is matched first, so "racial cap" is not also "cap".
+# docs/guides/landscape-taxonomy.md says how to edit it. No team, school or text is written here.
+schema_version: 1
+topic_id: policy-2026-27-nhi
+position_id: kritikal-aff
+families:
+  - id: cap
+    label: Capitalism
+    phrases: [cap, capitalism, capitalist, marxism, marxist, communism]
+  - id: racial-capitalism
+    label: Racial capitalism
+    phrases: [racial cap, racial capitalism]
+  - id: neoliberalism
+    label: Neoliberalism
+    phrases: [neoliberalism, neoliberal, neolib]
+  - id: afropessimism
+    label: Afropessimism
+    phrases: [afropessimism, afro pessimism, afropess, afro pess]
+  - id: antiblackness
+    label: Antiblackness
+    phrases: [antiblackness, anti blackness]
+  - id: settler-colonialism
+    label: Settler colonialism
+    phrases: [settler colonialism, settler colonial, set col, setcol]
+  - id: colonialism
+    label: Colonialism
+    phrases: [colonialism, coloniality, decolonial, decoloniality, decolonization]
+  - id: biopolitics
+    label: Biopolitics
+    phrases: [biopolitics, biopower, necropolitics]
+  - id: disability
+    label: Disability
+    phrases: [disability, ableism, crip]
+  - id: debility
+    label: Debility
+    phrases: [debility]
+  - id: psychoanalysis
+    label: Psychoanalysis
+    phrases: [psychoanalysis, lacan, lacanian, death drive]
+  - id: queer
+    label: Queer theory
+    phrases: [queer, queerness]
+  - id: feminism
+    label: Feminism
+    phrases: [feminism, feminist, patriarchy]
+  - id: security
+    label: Security
+    phrases: [securitization]
+  - id: buddhism
+    label: Buddhism
+    phrases: [buddhism, buddhist]
+  - id: baudrillard
+    label: Baudrillard
+    phrases: [baudrillard]
+  - id: deleuze
+    label: Deleuze
+    phrases: [deleuze, deleuzian]
+  - id: nietzsche
+    label: Nietzsche
+    phrases: [nietzsche]
+  - id: anthropocentrism
+    label: Anthropocentrism
+    phrases: [anthropocentrism]
+  - id: ontology
+    label: Ontology
+    phrases: [ontology]

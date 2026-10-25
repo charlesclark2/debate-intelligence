@@ -97,7 +97,6 @@ _ARABIC_FORMS: Final = (
     re.compile(r"page\s+([0-9]+)\s+of\s+[0-9]+", re.IGNORECASE),
     re.compile(r"[-\u2013]\s*([0-9]+)\s*[-\u2013]"),
 )
-_ROMAN_FORM: Final = re.compile(r"[ivxlcdm]+")
 _ROMAN_VALUES: Final = (
     (1000, "m"),
     (900, "cm"),
@@ -277,15 +276,12 @@ def _page_number_form(text: str) -> tuple[str, int] | None:
         match = form.fullmatch(text)
         if match is not None:
             return "arabic", int(match[1])
-    if _ROMAN_FORM.fullmatch(text):
-        value = _roman_value(text)
-        if value is not None:
-            return "roman", value
-    return None
+    value = _roman_value(text)
+    return ("roman", value) if value is not None else None
 
 
 def _roman_value(numeral: str) -> int | None:
-    """The value of a lowercase roman numeral written the standard way, or None (`iiii`, `vx`)."""
+    """The value of a lowercase roman numeral written the standard way; None for `iiii`, `vx`, `IV`."""
     value, rest = 0, numeral
     for amount, symbol in _ROMAN_VALUES:
         while rest.startswith(symbol):

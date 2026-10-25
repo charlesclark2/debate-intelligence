@@ -305,6 +305,10 @@ def test_other_line_end_hyphenations_are_not_evidence_for_either_spelling() -> N
     assert [(join.hyphenated_form_count, join.joined_form_count) for join in broken.line_joins] == [
         (0, 0)
     ] * 2
+    # The fragment `example`, cut off before another break, is not a mid-line spelling of `exam-ple`.
+    fragment = one_paragraph("an exam-", "ple of an example-", "like case")
+    assert fragment.paragraphs == ("an exam-ple of an example-like case",)
+    assert [join.decision for join in fragment.line_joins] == [JoinDecision.UNDETERMINED] * 2
 
 
 def test_a_word_that_starts_or_ends_a_line_unbroken_is_evidence() -> None:

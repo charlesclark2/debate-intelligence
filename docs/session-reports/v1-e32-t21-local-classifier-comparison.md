@@ -591,9 +591,48 @@ it touches plus the always-run list and leave the rest to the pull request's `ci
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-26
 
 **Notes:**
+
+The most useful finding of this task is the one the spec didn't ask for: the specified model's
+held-out score measures the alias table, not the cards that need placing.
+1. **ac1 passes.**
+   * Determinism holds for a seed whatever the card order.
+   * No school, team code or name is a feature, with a positive control showing the three-team rule
+     is what keeps a debater's name out.
+   * Writes stay under the data directory.
+   * Red against a refuse-nothing skeleton: 23 failed, and the 4 that passed are controls.
+   * The real leak the planted-store test caught on its first run (teams' identities in the feature
+     table) was fixed with keyed digests and an unstored salt. That's the right fix.
+2. **ac2's measurements pass; the coach-labelled sample is an operator step** and not yet run, so
+   the PR merges `--partial`.
+3. **Rulings on the four questions:**
+   1. **(a): the proxy is judged,** the sample is stratified on it, and both models are scored. The
+      deviation (the proxy, the mix-weighed estimate, and the stratification) is accepted: each was
+      needed to answer the question honestly, and none is wired.
+   2. **The decision and its bar are accepted.** Use the proxy only to order the review queue for
+      now. Wire it as `LOCAL_MODEL` only if the coach's labels give at least 27 of 30 right in the
+      top stratum, a weighted precision of at least 90% at the chosen threshold, and no kind under
+      4 of 5. Otherwise drop it as a placer and keep the ordering. The ordering is a small E32 task
+      the PM files.
+   3. **Retention: a follow-up.** The PM amends `v1-e30-t28` (the annual purge) and files the
+      removal runbook's line, to delete `<data dir>/landscape/local-classifier/<caselist>/`. The
+      directory stays until the coach's sample is scored, then follows the decision. Meanwhile the
+      script's refusal of a table a removal has reached is the guard.
+   4. **The coach's file: accepted as built.** It stays on the operator's machine for the coach,
+      who is the operator, under the same rules as the review queue. Withholding one-team words
+      would blank the rare technical words the coach needs to judge a card.
+4. **Accepted as made:**
+   * decisions 1 to 11: field-prefixed tokens, the three-team rule, every team code out of tags, no
+     tuning on the held-out tenth, the threshold rule and the one-card-per-document draw;
+   * deviations 2 and 4;
+   * scikit-learn as an extra only, so an installed build doesn't get it.
+5. **The affected set** is the whole selection (`uv.lock`), so it is left to the PR's `ci` under
+   agreement 10. What it touches and the always-run list passed.
+
+No re-review is needed. The coach's sample and its score are recorded by the PM when the operator
+runs them.

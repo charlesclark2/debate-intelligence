@@ -363,9 +363,64 @@ Nothing else. The whole-selection run is the pull request's `ci` (agreement 10).
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-25
 
 **Notes:**
+
+Built to the rulings, and the report shows its work where it matters: every join and removal on the
+record, and the fixture's decisions in a table anyone can check.
+1. **ac1 to ac4 and every node criterion pass.**
+   * The golden expectations were committed before any extractor existed (`a50ea75`), and both red
+     runs are recorded, with the passes explained as controls.
+   * Three of the session's own wrong expectations were corrected in named commits rather than
+     quietly.
+2. **Mutants: 22 of 22 caught.** Of the two first-run survivors, one was a real gap, now pinned
+   (`exam-|ple of an example-|like`). The other was an equivalent regex, removed and the mutant
+   retargeted. That is agreement 8 applied exactly. The property's generation statistics are reported,
+   with a clear note of what it proves and what it doesn't.
+3. **The two readings of the PM's rulings are confirmed as built:**
+   * **`Page n of m` is a page-number form.** The ruling listed whole-line forms, and that one is
+     their plain combination.
+   * **"Mid-line" means the fragments beside any line-end break don't count.** A complete word that
+     starts or ends a line unbroken does count. That is what the ruling meant.
+4. **The fixture's counts are what the PM asked for:** 13 joins, 5 dropped, 8 kept, 3 of those
+   UNDETERMINED. No compound was fused, and one broken word (`resur-|rection`) was left hyphenated
+   and recorded. That trade is the one ruling 1 chose.
+5. **Deviations accepted:**
+   * the providers port and the shared fake, which are behaviour-neutral moves. The PM amends
+     `constraints.packages` in a PM batch with `debate_core.application`, `debate_core.testing`,
+     `tests/fixtures/extraction`, `tests/architecture`, `pyproject.toml` and `uv.lock`;
+   * `UnverifiedMetadataHints`;
+   * the schema.org paywall refusal, which the PM's context asked for;
+   * no licence allowlist exists, so the ruling lives here and a CI licence check is filed.
+6. **Accepted as made:**
+   * strict decoding with no replacement characters;
+   * trafilatura `fast` with tables off;
+   * the fallback's text kept only when longer;
+   * the `h1` as a hint and not a paragraph;
+   * `<br>` as one space;
+   * pypdf `strict=False`, with truncated streams refused;
+   * the limits checked before any page is read, with decompression ceilings set per call;
+   * encrypted files refused;
+   * the minimum and limits as constructor parameters for t05 to pass from settings;
+   * an empty page as an empty extraction;
+   * determinism per `extractor_version`.
+7. **Licences are recorded as locked:**
+   * chardet 5.2.0 (LGPL-2.0-or-later);
+   * tld 0.13.2, under MPL-1.1, the option elected;
+   * nothing GPL-only or AGPL.
+8. **Follow-ups the PM files:**
+   * a CI licence check over `uv.lock` (E01);
+   * a measurement on real open-access papers and pages after t05 (E04): decisions per join, a hand
+     check of the UNDETERMINED ones, PDFs refused under `strict=False`, and pages refused by strict
+     decoding.
+
+   The wiring notes go to t05 and t06 as written.
+9. **The affected set** is the whole selection (`pyproject.toml`, `uv.lock`), so it is left to the
+   PR's `ci` under agreement 10. The 1,770 tests run over what it touches and the always-run list
+   passed, and so did ruff, pyright, the import contracts and the thin-handler check.
+
+No re-review is needed. The Goal is `Succeeded`, so the PR merges in full.

@@ -53,6 +53,9 @@ locals {
     { name = "DEBATE_CASELIST__PASSWORD_SECRET_ID", value = local.password_secret_name },
     { name = "DEBATE_CASELIST__SECRETS_REGION", value = local.region },
     { name = "DEBATE_STORAGE__DATA_DIR", value = "/tmp/debate-research" },
+    # A failed login emails the coach through the alert topic, never naming the account (v1-e40-t05).
+    { name = "DEBATE_CASELIST__NOTIFIER", value = "sns" },
+    { name = "DEBATE_CASELIST__ALERT_TOPIC_ARN", value = local.alert_topic_arn },
     { name = "AWS_REGION", value = local.region },
   ]
 
@@ -148,6 +151,14 @@ locals {
         Condition = {
           StringEquals = { "iam:PassedToService" = "ecs-tasks.amazonaws.com" }
         }
+      },
+      {
+        # A start Scheduler could not deliver goes to the login's dead-letter queue, sent with this
+        # role (alerts.tf).
+        Sid      = "KeepAStartThatFailed"
+        Effect   = "Allow"
+        Action   = "sqs:SendMessage"
+        Resource = aws_sqs_queue.schedule_dead_letters["login"].arn
       },
     ]
   }) : null
@@ -286,11 +297,15 @@ resource "aws_scheduler_schedule" "login" {
       }
     }
 
-    # Never twice in a week: a start that failed is the dead-letter alarm's to report (v1-e40-t05),
-    # and a refused login is not tried again.
+    # Never twice in a week, and a refused login is not tried again. A start that failed goes to
+    # the dead-letter queue, whose alarm emails the coach (alerts.tf).
     retry_policy {
       maximum_retry_attempts       = 0
       maximum_event_age_in_seconds = 3600
+    }
+
+    dead_letter_config {
+      arn = aws_sqs_queue.schedule_dead_letters["login"].arn
     }
   }
 }

@@ -122,3 +122,28 @@ output "deployer_profile_name" {
   description = "The SSO profile name the runbook configures for the deployer, and scripts/caselist_run_deploy.sh uses by default."
   value       = local.deployer_profile_name
 }
+
+output "alert_topic_arn" {
+  description = "The alert topic, debate-<env>-caselist-run-alerts, which emails the coach (ADR-0020 (6))."
+  value       = aws_sns_topic.alerts.arn
+}
+
+output "alert_subscription_arn" {
+  description = "The coach's email subscription. `pending confirmation` until the coach follows the link AWS emails."
+  value       = aws_sns_topic_subscription.coach.arn
+}
+
+output "late_run_alarm_name" {
+  description = "The late-run alarm, debate-<env>-caselist-run-late: no run recorded in seven days."
+  value       = aws_cloudwatch_metric_alarm.late_run.alarm_name
+}
+
+output "late_run_alarm_actions_enabled" {
+  description = "Whether the late-run alarm emails the coach: false until the cutover's first recorded run (v1-e40-t06)."
+  value       = aws_cloudwatch_metric_alarm.late_run.actions_enabled
+}
+
+output "schedule_dead_letter_queue_names" {
+  description = "The login's and the run's dead-letter queues, by schedule: where a start Scheduler could not deliver waits 14 days."
+  value       = { for which, queue in aws_sqs_queue.schedule_dead_letters : which => queue.name }
+}

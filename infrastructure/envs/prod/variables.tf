@@ -263,3 +263,9 @@ variable "caselist_run_schedule_enabled" {
   type        = bool
   default     = false
 }
+
+variable "caselist_run_late_alarm_actions_enabled" {
+  description = "Whether the late-run alarm (no run recorded in seven days) emails the coach. False, the default, until the cutover's first recorded cloud run (v1-e40-t06): the alarm is in ALARM until a run records itself."
+  type        = bool
+  default     = false
+}

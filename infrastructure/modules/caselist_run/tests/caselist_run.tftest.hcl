@@ -27,7 +27,12 @@
 #        ARN only (Scheduler's confused-deputy rule; apply B in dev, 2026-10-24);
 #        Debate<Env>CaselistRunDeployer passes the run's roles and never the login's.
 #
-# The account id and user name below are invented.
+# And for task v1-e40-t05, from "What emails the coach" at the end: the alert topic and the coach's
+# subscription, the task-state rules, the late-run metric and alarm, the dead-letter queues and their
+# alarm, the CloudTrail rules on who may read the password (its ac1 and ac2), and the run role's one
+# new grant, sns:Publish on that topic alone ("nothing more" above, updated).
+#
+# The account id, user name and address below are invented.
 
 mock_provider "aws" {
   mock_data "aws_region" {
@@ -102,6 +107,87 @@ mock_provider "aws" {
     defaults = {
       id = "sg-0000000000000000a"
     }
+  }
+
+  # v1-e40-t05's alerts. Each queue and rule gets its own ARN below, so "the run's schedule sends to
+  # the run's queue" and "the topic admits these rules" cannot hold of any one of them.
+  mock_resource "aws_sns_topic" {
+    defaults = {
+      arn = "arn:aws:sns:us-east-1:111122223333:debate-mock-caselist-run-alerts"
+    }
+  }
+
+  mock_resource "aws_sns_topic_subscription" {
+    defaults = {
+      arn = "pending confirmation"
+    }
+  }
+
+  mock_resource "aws_sqs_queue" {
+    defaults = {
+      arn = "arn:aws:sqs:us-east-1:111122223333:debate-mock-caselist-unnamed-dlq"
+    }
+  }
+
+  mock_resource "aws_cloudwatch_event_rule" {
+    defaults = {
+      arn = "arn:aws:events:us-east-1:111122223333:rule/debate-mock-caselist-unnamed"
+    }
+  }
+
+  mock_resource "aws_cloudwatch_metric_alarm" {
+    defaults = {
+      arn = "arn:aws:cloudwatch:us-east-1:111122223333:alarm:debate-mock-caselist-unnamed"
+    }
+  }
+}
+
+override_resource {
+  target = aws_sqs_queue.schedule_dead_letters["login"]
+  values = {
+    arn = "arn:aws:sqs:us-east-1:111122223333:debate-mock-caselist-login-dlq"
+  }
+}
+
+override_resource {
+  target = aws_sqs_queue.schedule_dead_letters["run"]
+  values = {
+    arn = "arn:aws:sqs:us-east-1:111122223333:debate-mock-caselist-run-dlq"
+  }
+}
+
+override_resource {
+  target = aws_cloudwatch_event_rule.task_stopped["run"]
+  values = {
+    arn = "arn:aws:events:us-east-1:111122223333:rule/debate-mock-caselist-run-stopped"
+  }
+}
+
+override_resource {
+  target = aws_cloudwatch_event_rule.task_stopped["login"]
+  values = {
+    arn = "arn:aws:events:us-east-1:111122223333:rule/debate-mock-caselist-login-stopped"
+  }
+}
+
+override_resource {
+  target = aws_cloudwatch_event_rule.password_read
+  values = {
+    arn = "arn:aws:events:us-east-1:111122223333:rule/debate-mock-caselist-password-read"
+  }
+}
+
+override_resource {
+  target = aws_cloudwatch_metric_alarm.late_run
+  values = {
+    arn = "arn:aws:cloudwatch:us-east-1:111122223333:alarm:debate-mock-caselist-run-late"
+  }
+}
+
+override_resource {
+  target = aws_cloudwatch_metric_alarm.schedule_failed
+  values = {
+    arn = "arn:aws:cloudwatch:us-east-1:111122223333:alarm:debate-mock-caselist-schedule-failed"
   }
 }
 
@@ -190,6 +276,7 @@ variables {
   identity_store_id            = "d-mock000000"
   credential_writer_user_names = ["mock-coach"]
   deployer_user_names          = ["mock-maintainer"]
+  alert_email                  = "coach@example.invalid"
 
   # The everyday evidence permissions, in the shape module.evidence_store.operator_policy_json has
   # (infrastructure/modules/evidence_bucket/operator_access.tf), over an invented bucket and key.
@@ -250,7 +337,7 @@ run "the_run_role_never_deletes" {
 
   assert {
     condition = length(flatten([
-      for policy in [aws_iam_role_policy.run_credentials.policy, aws_iam_role_policy.run_evidence.policy] : [
+      for policy in [aws_iam_role_policy.run_credentials.policy, aws_iam_role_policy.run_evidence.policy, aws_iam_role_policy.run_alerts.policy] : [
         for statement in jsondecode(policy).Statement : [
           for action in flatten([try(statement.Action, [])]) : action
           if anytrue([
@@ -265,7 +352,7 @@ run "the_run_role_never_deletes" {
 
   assert {
     condition = alltrue(flatten([
-      for policy in [aws_iam_role_policy.run_credentials.policy, aws_iam_role_policy.run_evidence.policy] : [
+      for policy in [aws_iam_role_policy.run_credentials.policy, aws_iam_role_policy.run_evidence.policy, aws_iam_role_policy.run_alerts.policy] : [
         for statement in jsondecode(policy).Statement : !(statement.Effect == "Allow" && can(statement.NotAction))
       ]
     ]))
@@ -995,8 +1082,8 @@ run "the_run_role_holds_the_everyday_evidence_permissions_and_the_token_and_noth
   command = apply
 
   assert {
-    condition     = aws_iam_role_policies_exclusive.run.policy_names == toset(["caselist-credentials", "everyday-evidence"]) && length(aws_iam_role_policy_attachments_exclusive.run.policy_arns) == 0
-    error_message = "The run role holds exactly its credentials grant and the everyday evidence permissions, held exclusive, with no managed policy."
+    condition     = aws_iam_role_policies_exclusive.run.policy_names == toset(["caselist-credentials", "everyday-evidence", "caselist-alerts"]) && length(aws_iam_role_policy_attachments_exclusive.run.policy_arns) == 0
+    error_message = "The run role holds exactly its credentials grant, the everyday evidence permissions and its publish to the alert topic, held exclusive, with no managed policy."
   }
 
   assert {
@@ -1006,20 +1093,43 @@ run "the_run_role_holds_the_everyday_evidence_permissions_and_the_token_and_noth
 
   assert {
     condition = toset(flatten([
-      for policy in [aws_iam_role_policy.run_credentials.policy, aws_iam_role_policy.run_evidence.policy] : [
+      for policy in [aws_iam_role_policy.run_credentials.policy, aws_iam_role_policy.run_evidence.policy, aws_iam_role_policy.run_alerts.policy] : [
         for statement in jsondecode(policy).Statement : flatten([statement.Action]) if statement.Effect == "Allow"
       ]
       ])) == toset([
       "secretsmanager:GetSecretValue", "kms:Decrypt",
       "s3:ListBucket", "s3:ListBucketVersions", "s3:GetObject", "s3:GetObjectVersion", "s3:PutObject",
       "s3:GetObjectTagging", "s3:PutObjectTagging", "kms:Encrypt", "kms:GenerateDataKey",
+      "sns:Publish",
     ])
-    error_message = "The run role may do the everyday evidence actions and read the token, and nothing else."
+    error_message = "The run role may do the everyday evidence actions, read the token and publish an alert, and nothing else."
+  }
+
+  assert {
+    # v1-e40-t05: the one grant t03 left out. Its resources, across every policy of the role, are the
+    # environment's alert topic and nothing else: no wildcard, no other topic.
+    condition = toset(flatten([
+      for policy in [aws_iam_role_policy.run_credentials.policy, aws_iam_role_policy.run_evidence.policy, aws_iam_role_policy.run_alerts.policy] : [
+        for statement in jsondecode(policy).Statement : flatten([statement.Resource])
+        if statement.Effect == "Allow" && anytrue([for action in flatten([statement.Action]) : startswith(action, "sns:")])
+      ]
+    ])) == toset([aws_sns_topic.alerts.arn])
+    error_message = "The run role publishes to the environment's alert topic, debate-<env>-caselist-run-alerts, and to nothing else."
+  }
+
+  assert {
+    condition     = jsondecode(aws_iam_role_policy.run_alerts.policy).Statement == [{ Sid = "TellTheCoachARunFailed", Effect = "Allow", Action = "sns:Publish", Resource = "arn:aws:sns:us-east-1:111122223333:debate-mock-caselist-run-alerts" }]
+    error_message = "The run role's caselist-alerts policy is one statement: sns:Publish on the alert topic, with no wildcard."
+  }
+
+  assert {
+    condition     = !strcontains(aws_iam_role_policy.run_evidence.policy, "sns:")
+    error_message = "The publish grant is the run role's own policy, never a statement in the evidence document the EvidenceOperator permission set shares."
   }
 
   assert {
     condition = alltrue([
-      for policy in [aws_iam_role_policy.run_credentials.policy, aws_iam_role_policy.run_evidence.policy] :
+      for policy in [aws_iam_role_policy.run_credentials.policy, aws_iam_role_policy.run_evidence.policy, aws_iam_role_policy.run_alerts.policy] :
       alltrue([
         for statement in jsondecode(policy).Statement :
         length(setintersection(toset(flatten([statement.Action])), toset(["s3:DeleteObject", "s3:DeleteObjectVersion", "s3:*", "*"]))) == 0
@@ -1030,7 +1140,7 @@ run "the_run_role_holds_the_everyday_evidence_permissions_and_the_token_and_noth
 
   assert {
     condition = alltrue([
-      for policy in [aws_iam_role_policy.run_credentials.policy, aws_iam_role_policy.run_evidence.policy] :
+      for policy in [aws_iam_role_policy.run_credentials.policy, aws_iam_role_policy.run_evidence.policy, aws_iam_role_policy.run_alerts.policy] :
       !strcontains(policy, "tabroom-password")
     ])
     error_message = "Neither of the run role's policies names the password secret."
@@ -1038,7 +1148,7 @@ run "the_run_role_holds_the_everyday_evidence_permissions_and_the_token_and_noth
 
   assert {
     condition = flatten([
-      for policy in [aws_iam_role_policy.run_credentials.policy, aws_iam_role_policy.run_evidence.policy] : [
+      for policy in [aws_iam_role_policy.run_credentials.policy, aws_iam_role_policy.run_evidence.policy, aws_iam_role_policy.run_alerts.policy] : [
         for statement in jsondecode(policy).Statement : flatten([statement.Resource])
         if contains(flatten([statement.Action]), "secretsmanager:GetSecretValue")
       ]
@@ -1175,9 +1285,11 @@ run "the_run_task_runs_the_pinned_image_as_the_run_role_under_its_deadline" {
       DEBATE_STORAGE__S3__AWS_PROFILE        = ""
       DEBATE_STORAGE__VOLUME_WARNING_PERCENT = "70"
       DEBATE_PARSE__WORKERS                  = "8"
+      DEBATE_CASELIST__NOTIFIER              = "sns"
+      DEBATE_CASELIST__ALERT_TOPIC_ARN       = "arn:aws:sns:us-east-1:111122223333:debate-mock-caselist-run-alerts"
       AWS_REGION                             = "us-east-1"
     }
-    error_message = "The run's environment is names and switches (ADR-0020 (5)): the token store's Secrets Manager backend, no AWS profile, 8 parse workers, the 70% volume warning, bucket mode (v1-e40-t04). No secret, and no password secret's name."
+    error_message = "The run's environment is names and switches (ADR-0020 (5)): the token store's Secrets Manager backend, no AWS profile, 8 parse workers, the 70% volume warning, bucket mode (v1-e40-t04), the sns notifier and its topic (v1-e40-t05). No secret, and no password secret's name."
   }
 
   assert {
@@ -1407,4 +1519,449 @@ run "prod_names_its_own_deployer_inside_thirty_two_characters" {
     condition     = aws_ssoadmin_permission_set.deployer[0].name == "DebateProdCaselistRunDeployer" && length(aws_ssoadmin_permission_set.deployer[0].name) <= 32
     error_message = "prod's deployer is DebateProdCaselistRunDeployer, 29 characters (v1-e40-t02's lesson: Identity Center allows 32)."
   }
+}
+
+# ---------------------------------------------------------------------------------------------
+# v1-e40-t05: what emails the coach
+# ---------------------------------------------------------------------------------------------
+#
+#   ac1  a failed run, a missed schedule and a failed login each produce an alert: the task-state
+#        rules (run and login), the late-run metric and alarm, the schedules' dead-letter queues and
+#        their alarm, the topic each of them targets, and the sns notifier in both tasks.
+#   ac2  the CloudTrail rules match a change to the credentials' key or resource policies, the login
+#        role or its task definition, and a read or refused read of the password by any principal
+#        but the login role, each with the topic as target.
+#
+# A rule's pattern is read back as the JSON EventBridge receives. Whether EventBridge matches an
+# event with it is AWS's to say: the runbook's step checks each pattern against AWS's own matcher
+# (`aws events test-event-pattern`) before the subscription is trusted.
+
+run "the_alert_topic_emails_the_coach_and_admits_only_these_rules_and_alarms" {
+  command = apply
+
+  assert {
+    condition     = aws_sns_topic.alerts.name == "debate-mock-caselist-run-alerts" && aws_sns_topic.alerts.arn == local.alert_topic_arn && output.alert_topic_arn == local.alert_topic_arn
+    error_message = "The topic is debate-<env>-caselist-run-alerts, the name the login role was already allowed to publish to (v1-e40-t02)."
+  }
+
+  assert {
+    condition     = aws_sns_topic_subscription.coach.topic_arn == aws_sns_topic.alerts.arn && aws_sns_topic_subscription.coach.protocol == "email" && aws_sns_topic_subscription.coach.endpoint == "coach@example.invalid"
+    error_message = "The topic's subscription is the coach's address, by email."
+  }
+
+  assert {
+    # Every Allow, by service and the sources it admits. JSON-encoded, so a statement of any shape
+    # compares rather than failing to.
+    condition = toset([
+      for statement in jsondecode(aws_sns_topic_policy.alerts.policy).Statement :
+      jsonencode({
+        effect  = statement.Effect
+        service = try(statement.Principal.Service, null)
+        action  = statement.Action
+        sources = try(toset(statement.Condition.ArnEquals["aws:SourceArn"]), null)
+      })
+      ]) == toset([
+      jsonencode({
+        effect  = "Allow"
+        service = "events.amazonaws.com"
+        action  = "sns:Publish"
+        sources = toset(concat(
+          [
+            "arn:aws:events:us-east-1:111122223333:rule/debate-mock-caselist-run-stopped",
+            "arn:aws:events:us-east-1:111122223333:rule/debate-mock-caselist-login-stopped",
+            "arn:aws:events:us-east-1:111122223333:rule/debate-mock-caselist-password-read",
+          ],
+          [for rule in aws_cloudwatch_event_rule.credential_write : rule.arn],
+        ))
+      }),
+      jsonencode({
+        effect  = "Allow"
+        service = "cloudwatch.amazonaws.com"
+        action  = "sns:Publish"
+        sources = toset([
+          "arn:aws:cloudwatch:us-east-1:111122223333:alarm:debate-mock-caselist-run-late",
+          "arn:aws:cloudwatch:us-east-1:111122223333:alarm:debate-mock-caselist-schedule-failed",
+        ])
+      }),
+    ])
+    error_message = "The topic lets these EventBridge rules and these two alarms publish, each by its own ARN, and grants nothing else."
+  }
+
+  assert {
+    condition = alltrue([
+      for policy in [aws_iam_role_policy.login.policy, aws_iam_role_policy.run_alerts.policy] : anytrue([
+        for statement in jsondecode(policy).Statement : statement.Action == "sns:Publish" && statement.Resource == aws_sns_topic.alerts.arn
+      ])
+    ])
+    error_message = "The login role and the run role each publish to this topic: the one t02 named and this task created are the same."
+  }
+}
+
+run "a_run_or_a_login_that_stops_non_zero_emails_the_coach" {
+  command = apply
+
+  assert {
+    condition = alltrue([
+      for which, family in { run = "debate-mock-caselist-run", login = "debate-mock-caselist-login" } :
+      jsonencode(jsondecode(aws_cloudwatch_event_rule.task_stopped[which].event_pattern)) == jsonencode({
+        detail = {
+          "$or" = [
+            { containers = { exitCode = [{ "anything-but" = 0 }] } },
+            { stopCode = ["TaskFailedToStart"] },
+          ]
+          clusterArn        = ["arn:aws:ecs:us-east-1:111122223333:cluster/debate-mock-caselist-run"]
+          lastStatus        = ["STOPPED"]
+          taskDefinitionArn = [{ prefix = "arn:aws:ecs:us-east-1:111122223333:task-definition/${family}:" }]
+        }
+        "detail-type" = ["ECS Task State Change"]
+        source        = ["aws.ecs"]
+      })
+    ])
+    error_message = "Each task-state rule matches its own family's tasks on the run's cluster that stopped with an exit code other than 0, or never started (ADR-0020 (6))."
+  }
+
+  assert {
+    condition     = alltrue([for which in ["run", "login"] : aws_cloudwatch_event_rule.task_stopped[which].state == "ENABLED"])
+    error_message = "Both task-state rules are enabled: an AWS service event reaches a rule in the default state."
+  }
+
+  assert {
+    condition = alltrue([
+      for which in ["run", "login"] :
+      aws_cloudwatch_event_target.task_stopped[which].rule == aws_cloudwatch_event_rule.task_stopped[which].name
+      && aws_cloudwatch_event_target.task_stopped[which].arn == aws_sns_topic.alerts.arn
+    ])
+    error_message = "Each task-state rule's target is the alert topic."
+  }
+
+  assert {
+    # The email: which task, its exit code, its stop code and reason, and its id; one JSON string,
+    # with EventBridge's placeholders intact (jsonencode would escape their angle brackets).
+    condition = alltrue([
+      for which in ["run", "login"] :
+      startswith(aws_cloudwatch_event_target.task_stopped[which].input_transformer[0].input_template, "\"The dev weekly caselist ${which} task stopped with exit code <exit_code> (<stop_code>: <reason>). Task <task>.")
+      && can(tostring(jsondecode(aws_cloudwatch_event_target.task_stopped[which].input_transformer[0].input_template)))
+      && aws_cloudwatch_event_target.task_stopped[which].input_transformer[0].input_paths == tomap({
+        task      = "$.detail.taskArn"
+        exit_code = "$.detail.containers[0].exitCode"
+        stop_code = "$.detail.stopCode"
+        reason    = "$.detail.stoppedReason"
+      })
+    ])
+    error_message = "A stopped task's email names the task, its environment, its exit code and why it stopped, and nothing from the run's data."
+  }
+
+  assert {
+    condition     = aws_cloudwatch_event_rule.task_stopped["run"].name == "debate-mock-caselist-run-stopped" && aws_cloudwatch_event_rule.task_stopped["login"].name == "debate-mock-caselist-login-stopped"
+    error_message = "The rules are debate-<env>-caselist-run-stopped and debate-<env>-caselist-login-stopped."
+  }
+}
+
+run "both_tasks_send_their_own_failures_to_the_topic" {
+  command = apply
+
+  variables {
+    image_digest = "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+  }
+
+  assert {
+    condition = alltrue([
+      for definitions in [aws_ecs_task_definition.run[0].container_definitions, aws_ecs_task_definition.login[0].container_definitions] :
+      { for variable in jsondecode(definitions)[0].environment : variable.name => variable.value if startswith(variable.name, "DEBATE_CASELIST__NOTIFIER") || variable.name == "DEBATE_CASELIST__ALERT_TOPIC_ARN" } == {
+        DEBATE_CASELIST__NOTIFIER        = "sns"
+        DEBATE_CASELIST__ALERT_TOPIC_ARN = "arn:aws:sns:us-east-1:111122223333:debate-mock-caselist-run-alerts"
+      }
+    ])
+    error_message = "The run and the login each set caselist.notifier = sns and the alert topic: a failed run or login emails the coach what the Mac's banners say (ADR-0020 (5), (6))."
+  }
+}
+
+run "a_week_with_no_recorded_run_alarms_and_emails_once_the_cutover_turns_it_on" {
+  command = apply
+
+  assert {
+    condition = (
+      aws_cloudwatch_log_metric_filter.runs_recorded.log_group_name == "debate-mock-caselist-run"
+      && aws_cloudwatch_log_metric_filter.runs_recorded.log_group_name == aws_cloudwatch_log_group.run.name
+      && aws_cloudwatch_log_metric_filter.runs_recorded.pattern == "{ ($.command = \"caselist pull\") && (($.data.run_record.run_id = \"*\") || ($.error.details.run_record.run_id = \"*\")) }"
+    )
+    error_message = "The metric filter reads the run's log group, where the --json summary lands, and counts a pull whose envelope carries the run's record, under data or under error.details."
+  }
+
+  assert {
+    condition = (
+      aws_cloudwatch_log_metric_filter.runs_recorded.metric_transformation[0].name == "RunsRecorded"
+      && aws_cloudwatch_log_metric_filter.runs_recorded.metric_transformation[0].namespace == "debate/caselist-run"
+      && aws_cloudwatch_log_metric_filter.runs_recorded.metric_transformation[0].value == "1"
+      && aws_cloudwatch_log_metric_filter.runs_recorded.metric_transformation[0].default_value == null
+    )
+    error_message = "One RunsRecorded in debate/caselist-run per recorded run, and no default value: a week with none is missing data, which breaches."
+  }
+
+  assert {
+    condition = (
+      aws_cloudwatch_metric_alarm.late_run.alarm_name == "debate-mock-caselist-run-late"
+      && aws_cloudwatch_metric_alarm.late_run.namespace == "debate/caselist-run"
+      && aws_cloudwatch_metric_alarm.late_run.metric_name == "RunsRecorded"
+      && aws_cloudwatch_metric_alarm.late_run.statistic == "Sum"
+      && aws_cloudwatch_metric_alarm.late_run.period == 86400
+      && aws_cloudwatch_metric_alarm.late_run.evaluation_periods == 7
+      && aws_cloudwatch_metric_alarm.late_run.datapoints_to_alarm == 7
+      && aws_cloudwatch_metric_alarm.late_run.threshold == 1
+      && aws_cloudwatch_metric_alarm.late_run.comparison_operator == "LessThanThreshold"
+      && aws_cloudwatch_metric_alarm.late_run.treat_missing_data == "breaching"
+    )
+    error_message = "The late-run alarm: one-day periods, 7 of 7 below one run, missing data breaching (ADR-0020 (6))."
+  }
+
+  assert {
+    condition     = aws_cloudwatch_metric_alarm.late_run.alarm_actions == toset([aws_sns_topic.alerts.arn]) && length(coalesce(aws_cloudwatch_metric_alarm.late_run.ok_actions, [])) == 0
+    error_message = "The late-run alarm emails the coach through the topic, and only when it goes into ALARM."
+  }
+
+  assert {
+    condition     = aws_cloudwatch_metric_alarm.late_run.actions_enabled == false && output.late_run_alarm_actions_enabled == false
+    error_message = "Its actions are off until the cutover's first recorded run: the alarm is in ALARM from the moment it exists."
+  }
+}
+
+run "late_run_alarm_actions_enabled_turns_its_email_on" {
+  command = apply
+
+  variables {
+    late_run_alarm_actions_enabled = true
+  }
+
+  assert {
+    condition     = aws_cloudwatch_metric_alarm.late_run.actions_enabled == true
+    error_message = "late_run_alarm_actions_enabled = true is how the cutover (v1-e40-t06) turns the late-run email on."
+  }
+}
+
+run "a_schedule_that_cannot_start_its_task_emails_the_coach" {
+  command = apply
+
+  variables {
+    image_digest = "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+  }
+
+  assert {
+    condition = alltrue([
+      for which in ["login", "run"] :
+      aws_sqs_queue.schedule_dead_letters[which].name == "debate-mock-caselist-${which}-dlq"
+      && aws_sqs_queue.schedule_dead_letters[which].message_retention_seconds == 1209600
+      && aws_sqs_queue.schedule_dead_letters[which].sqs_managed_sse_enabled == true
+    ])
+    error_message = "Each schedule has a dead-letter queue of its own, kept 14 days, encrypted."
+  }
+
+  assert {
+    condition = (
+      aws_scheduler_schedule.login[0].target[0].dead_letter_config[0].arn == "arn:aws:sqs:us-east-1:111122223333:debate-mock-caselist-login-dlq"
+      && aws_scheduler_schedule.run[0].target[0].dead_letter_config[0].arn == "arn:aws:sqs:us-east-1:111122223333:debate-mock-caselist-run-dlq"
+    )
+    error_message = "The login's schedule, which never retries, and the run's each send a start they could not deliver to their own queue."
+  }
+
+  assert {
+    # Each scheduler role may send to its own queue, and to no other queue.
+    condition = (
+      toset(flatten([
+        for statement in jsondecode(aws_iam_role_policy.scheduler[0].policy).Statement : flatten([statement.Resource])
+        if anytrue([for action in flatten([statement.Action]) : startswith(action, "sqs:")])
+      ])) == toset(["arn:aws:sqs:us-east-1:111122223333:debate-mock-caselist-login-dlq"])
+      && toset(flatten([
+        for statement in jsondecode(aws_iam_role_policy.run_scheduler[0].policy).Statement : flatten([statement.Resource])
+        if anytrue([for action in flatten([statement.Action]) : startswith(action, "sqs:")])
+      ])) == toset(["arn:aws:sqs:us-east-1:111122223333:debate-mock-caselist-run-dlq"])
+      && alltrue([
+        for policy in [aws_iam_role_policy.scheduler[0].policy, aws_iam_role_policy.run_scheduler[0].policy] : alltrue([
+          for statement in jsondecode(policy).Statement : flatten([statement.Action]) == ["sqs:SendMessage"]
+          if anytrue([for action in flatten([statement.Action]) : startswith(action, "sqs:")])
+        ])
+      ])
+    )
+    error_message = "Scheduler sends to a dead-letter queue with the schedule's own role: sqs:SendMessage on its own queue, nothing more."
+  }
+
+  assert {
+    condition = (
+      toset([for query in aws_cloudwatch_metric_alarm.schedule_failed.metric_query : try(query.metric[0].dimensions.QueueName, null) if length(query.metric) > 0]) == toset(["debate-mock-caselist-login-dlq", "debate-mock-caselist-run-dlq"])
+      && alltrue([for query in aws_cloudwatch_metric_alarm.schedule_failed.metric_query : try(query.metric[0].metric_name, "") == "ApproximateNumberOfMessagesVisible" if length(query.metric) > 0])
+      && one([for query in aws_cloudwatch_metric_alarm.schedule_failed.metric_query : query.expression if query.return_data == true]) == "FILL(login, 0) + FILL(run, 0)"
+      && aws_cloudwatch_metric_alarm.schedule_failed.threshold == 1
+      && aws_cloudwatch_metric_alarm.schedule_failed.comparison_operator == "GreaterThanOrEqualToThreshold"
+    )
+    error_message = "One alarm over both queues: a message in either is a schedule that could not start its task."
+  }
+
+  assert {
+    condition     = aws_cloudwatch_metric_alarm.schedule_failed.alarm_actions == toset([aws_sns_topic.alerts.arn]) && aws_cloudwatch_metric_alarm.schedule_failed.actions_enabled == true
+    error_message = "The dead-letter alarm emails the coach through the topic, from the start."
+  }
+}
+
+run "the_credential_rules_match_each_change_of_who_may_read_the_password" {
+  command = apply
+
+  assert {
+    # ac2: the key's policy. Matched by the key's ARN in the event's resources, or by the id or ARN
+    # the caller named it by.
+    condition = jsonencode(jsondecode(aws_cloudwatch_event_rule.credential_write["credentials-key-changed"].event_pattern)) == jsonencode({
+      detail = {
+        "$or" = [
+          { resources = { ARN = ["arn:aws:kms:us-east-1:111122223333:key/00000000-0000-0000-0000-00000000c0de"] } },
+          { requestParameters = { keyId = ["arn:aws:kms:us-east-1:111122223333:key/00000000-0000-0000-0000-00000000c0de", "00000000-0000-0000-0000-00000000c0de"] } },
+        ]
+        eventName   = ["PutKeyPolicy", "CreateGrant", "DisableKey", "ScheduleKeyDeletion"]
+        eventSource = ["kms.amazonaws.com"]
+      }
+      "detail-type" = ["AWS API Call via CloudTrail"]
+      source        = ["aws.kms"]
+    })
+    error_message = "The key rule matches PutKeyPolicy, CreateGrant, DisableKey and ScheduleKeyDeletion on the credentials key (ADR-0020 (2))."
+  }
+
+  assert {
+    # ac2: either secret's resource policy, or what else only break-glass may do to it.
+    condition = (
+      toset(jsondecode(aws_cloudwatch_event_rule.credential_write["credentials-secret-policy-changed"].event_pattern).detail.eventName) == toset([
+        "PutResourcePolicy", "DeleteResourcePolicy", "UpdateSecret", "DeleteSecret", "RestoreSecret", "ReplicateSecretToRegions", "RotateSecret",
+      ])
+      && jsonencode(jsondecode(aws_cloudwatch_event_rule.credential_write["credentials-secret-policy-changed"].event_pattern).detail.requestParameters.secretId) == jsonencode([
+        "debate-mock-caselist-tabroom-password",
+        { prefix = "arn:aws:secretsmanager:us-east-1:111122223333:secret:debate-mock-caselist-tabroom-password-" },
+        "debate-mock-caselist-token",
+        { prefix = "arn:aws:secretsmanager:us-east-1:111122223333:secret:debate-mock-caselist-token-" },
+      ])
+      && jsondecode(aws_cloudwatch_event_rule.credential_write["credentials-secret-policy-changed"].event_pattern).detail.eventSource == ["secretsmanager.amazonaws.com"]
+    )
+    error_message = "The secrets rule matches a change to either secret's resource policy, its key, its deletion, by the secret's name or ARN."
+  }
+
+  assert {
+    # ac2: the login role. Every IAM write naming it; ENABLED delivers no read.
+    condition = jsonencode(jsondecode(aws_cloudwatch_event_rule.credential_write["login-role-changed"].event_pattern)) == jsonencode({
+      detail = {
+        eventSource       = ["iam.amazonaws.com"]
+        requestParameters = { roleName = ["debate-mock-caselist-login"] }
+      }
+      "detail-type" = ["AWS API Call via CloudTrail"]
+      source        = ["aws.iam"]
+    })
+    error_message = "The login role rule matches every IAM write naming the login role."
+  }
+
+  assert {
+    # ac2: the login task definition, and the login task run by anyone but its schedule's role.
+    condition = jsonencode(jsondecode(aws_cloudwatch_event_rule.credential_write["login-task-changed"].event_pattern).detail["$or"]) == jsonencode([
+      { eventName = ["RegisterTaskDefinition"], requestParameters = { taskRoleArn = ["arn:aws:iam::111122223333:role/debate-mock-caselist-login"] } },
+      { eventName = ["RegisterTaskDefinition"], requestParameters = { executionRoleArn = ["arn:aws:iam::111122223333:role/debate-mock-caselist-login"] } },
+      { eventName = ["RegisterTaskDefinition"], requestParameters = { family = ["debate-mock-caselist-login"] } },
+      {
+        eventName = ["RunTask", "StartTask"]
+        requestParameters = { taskDefinition = [
+          "debate-mock-caselist-login",
+          { prefix = "debate-mock-caselist-login:" },
+          { prefix = "arn:aws:ecs:us-east-1:111122223333:task-definition/debate-mock-caselist-login:" },
+        ] }
+        userIdentity = { arn = [{ "anything-but" = { prefix = "arn:aws:sts::111122223333:assumed-role/debate-mock-caselist-scheduler/" } }] }
+      },
+    ])
+    error_message = "The login task rule matches a task definition naming the login role or its family, and the login run by anyone but the login schedule's role."
+  }
+
+  assert {
+    condition = alltrue([
+      for name, rule in aws_cloudwatch_event_rule.credential_write :
+      rule.state == "ENABLED" && rule.name == "debate-mock-caselist-${name}"
+      && jsondecode(rule.event_pattern)["detail-type"] == ["AWS API Call via CloudTrail"]
+    ])
+    error_message = "The four write rules are enabled: write events reach a rule in the default state, refused writes included."
+  }
+
+  assert {
+    condition = alltrue([
+      for name, rule in aws_cloudwatch_event_rule.credential_write :
+      aws_cloudwatch_event_target.credential_write[name].rule == rule.name && aws_cloudwatch_event_target.credential_write[name].arn == aws_sns_topic.alerts.arn
+    ]) && length(aws_cloudwatch_event_rule.credential_write) == 4
+    error_message = "Each credentials rule's target is the alert topic."
+  }
+}
+
+run "a_read_of_the_password_by_anyone_but_the_login_role_emails_the_coach" {
+  command = apply
+
+  assert {
+    condition     = aws_cloudwatch_event_rule.password_read.state == "ENABLED_WITH_ALL_CLOUDTRAIL_MANAGEMENT_EVENTS"
+    error_message = "GetSecretValue is a read-only event: it reaches a rule only in the ENABLED_WITH_ALL_CLOUDTRAIL_MANAGEMENT_EVENTS state (ADR-0020 (6))."
+  }
+
+  assert {
+    # The whole pattern: any caller whose ARN is not one of the login role's own task sessions; a
+    # GetSecretValue of the password by its name or ARN, or any BatchGetSecretValue; and no errorCode
+    # condition, so a refused read matches too.
+    condition = jsonencode(jsondecode(aws_cloudwatch_event_rule.password_read.event_pattern)) == jsonencode({
+      detail = {
+        "$or" = [
+          {
+            eventName = ["GetSecretValue"]
+            requestParameters = { secretId = [
+              "debate-mock-caselist-tabroom-password",
+              { prefix = "arn:aws:secretsmanager:us-east-1:111122223333:secret:debate-mock-caselist-tabroom-password-" },
+            ] }
+          },
+          { eventName = ["BatchGetSecretValue"] },
+        ]
+        eventSource  = ["secretsmanager.amazonaws.com"]
+        userIdentity = { arn = [{ "anything-but" = { prefix = "arn:aws:sts::111122223333:assumed-role/debate-mock-caselist-login/" } }] }
+      }
+      "detail-type" = ["AWS API Call via CloudTrail"]
+      source        = ["aws.secretsmanager"]
+    })
+    error_message = "The password rule matches a read of the password, refused or not, by every principal but the login role's task sessions."
+  }
+
+  assert {
+    condition     = !strcontains(aws_cloudwatch_event_rule.password_read.event_pattern, "errorCode") && !strcontains(aws_cloudwatch_event_rule.password_read.event_pattern, "debate-mock-caselist-token")
+    error_message = "A refused read is matched as a read is, and the rule is about the password, not the token the run reads every week."
+  }
+
+  assert {
+    condition = (
+      aws_cloudwatch_event_target.password_read.rule == aws_cloudwatch_event_rule.password_read.name
+      && aws_cloudwatch_event_target.password_read.arn == aws_sns_topic.alerts.arn
+      && aws_cloudwatch_event_target.password_read.input_transformer[0].input_paths == tomap({
+        event     = "$.detail.eventName"
+        principal = "$.detail.userIdentity.arn"
+        time      = "$.detail.eventTime"
+        refused   = "$.detail.errorCode"
+      })
+    )
+    error_message = "The password rule's target is the alert topic, and its email says the event, the principal, the time and whether it was refused (ADR-0020 (6))."
+  }
+}
+
+run "prod_names_its_own_topic" {
+  command = apply
+
+  variables {
+    name_prefix = "debate-prod-caselist"
+    environment = "prod"
+  }
+
+  assert {
+    condition     = aws_sns_topic.alerts.name == "debate-prod-caselist-run-alerts" && aws_cloudwatch_metric_alarm.late_run.alarm_name == "debate-prod-caselist-run-late" && aws_cloudwatch_event_rule.password_read.name == "debate-prod-caselist-password-read"
+    error_message = "prod's topic, alarm and rules carry prod's names."
+  }
+}
+
+run "an_alert_address_that_is_not_one_email_is_refused" {
+  command = plan
+
+  variables {
+    alert_email = "coach@example.invalid, someone@example.invalid"
+  }
+
+  expect_failures = [var.alert_email]
 }

@@ -277,3 +277,18 @@ output "caselist_run_deployer_profile_name" {
   description = "The name to give the deployer's SSO profile (debate-dev-caselist-run-deployer / debate-prod-caselist-run-deployer), which scripts/caselist_run_deploy.sh uses."
   value       = module.caselist_run.deployer_profile_name
 }
+
+output "caselist_alert_topic_arn" {
+  description = "The alert topic (debate-<env>-caselist-run-alerts), which emails the coach when a run or login fails, a run is late, a schedule cannot start, or someone changes who may read the password."
+  value       = module.caselist_run.alert_topic_arn
+}
+
+output "caselist_alert_subscription_arn" {
+  description = "The coach's email subscription to the alert topic: `pending confirmation` until the link AWS emails is followed."
+  value       = module.caselist_run.alert_subscription_arn
+}
+
+output "caselist_run_late_alarm_actions_enabled" {
+  description = "Whether the late-run alarm emails the coach: false until the cutover's first recorded run."
+  value       = module.caselist_run.late_run_alarm_actions_enabled
+}

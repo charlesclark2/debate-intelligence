@@ -20,6 +20,13 @@
 #                         schedule, disabled until the cutover
 #   deployer.tf           the Debate<Env>CaselistRunDeployer permission set
 #
+# v1-e40-t05 tells the coach when something goes wrong:
+#
+#   alerts.tf             the alert topic and the coach's email subscription; the rules on a task
+#                         that stopped non-zero; the late-run metric and alarm; the schedules'
+#                         dead-letter queues and their alarm; the CloudTrail rules on who may read
+#                         the password. The tasks publish to the topic themselves too.
+#
 # Applies are operator-run (docs/runbooks/caselist-cloud-credentials.md). There are no GitHub OIDC
 # roles until v2-e10-t03, so CI never runs plan or apply against this module, and neither does an
 # agent session. tests/caselist_run.tftest.hcl runs under a mocked provider.
@@ -59,10 +66,10 @@ locals {
   credential_writer_set_name   = "Debate${title(var.environment)}CaselistSecretWriter"
   credential_writer_principals = "${local.sso_role_arn_prefix}${local.credential_writer_set_name}_*"
 
-  # The alert topic is v1-e40-t05's, by the name ADR-0020 (6) gives it. The login role may publish
-  # to it before it exists; the publish fails until then, and the task's non-zero exit is what
-  # t05's task-state rule catches meanwhile.
-  alert_topic_arn = "arn:${local.partition}:sns:${local.region}:${local.account_id}:${var.name_prefix}-run-alerts"
+  # The alert topic (alerts.tf), by the name ADR-0020 (6) gives it. Written out rather than read
+  # from the topic, so the roles' policies and the tasks' environments are known at plan time and
+  # unchanged by the apply that creates the topic; the module's tests hold the two equal.
+  alert_topic_arn = "arn:${local.partition}:sns:${local.region}:${local.account_id}:${local.alert_topic_name}"
 
   ecs_tasks_assume_role_policy = jsonencode({
     Version = "2012-10-17"

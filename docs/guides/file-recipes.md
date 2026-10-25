@@ -11,14 +11,17 @@ Where things are:
 
 | What | Where |
 |---|---|
-| Your recipes | The evidence workspace, `files/recipes/<topic>/<name>.yaml` under `settings.files_dir`. Never in the repository |
+| Your recipes | The evidence workspace, `<data dir>/files/recipes/<topic>/<name>.yaml`, where `files suggest` writes its drafts. Never in the repository |
+| Built files | `<data dir>/files/built/<topic>/<name>.docx`, with its `.provenance.json`, `.quality.json` and `.quality.md`. Never in the repository |
 | The published schema, for an editor that checks YAML as you type | [`docs/data/file-recipe.schema.json`](../data/file-recipe.schema.json) |
 | The three synthetic examples below | [`tests/fixtures/file_builder/recipes/`](../../tests/fixtures/file_builder/recipes/) |
 | The models, the source of truth if this page and they disagree | `debate_core.domain.file_recipe` and `debate_core.application.file_recipes` |
 
-Building a file from a recipe is `debate-research files build <recipe>` (`v1-e33-t03`, not yet
-built); `files suggest` will write a draft recipe for you from the landscape's most-read cards. This
-page is about the recipe itself (`v1-e33-t01`).
+Building a file from a recipe is `debate-research files build <recipe>` (`v1-e33-t03`), which writes
+the `.docx`, its provenance sidecar and its quality report, and `files check <file>` checks a built
+file again. `files suggest --caselist <slug> --position <id>` writes a draft recipe for you from the
+landscape's most-read cards: `status: draft`, which `files build` builds only with `--allow-draft`.
+Neither ever writes inside a git working tree. This page is about the recipe itself (`v1-e33-t01`).
 
 ## A recipe holds no evidence
 

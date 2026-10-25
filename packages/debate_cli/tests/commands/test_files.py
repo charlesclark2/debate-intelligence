@@ -26,6 +26,7 @@ import shutil
 import zipfile
 from collections.abc import Iterator
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from io import BytesIO
 from pathlib import Path
 from typing import Any, Final
@@ -42,6 +43,7 @@ from debate_cli.exit_codes import ExitCode
 from debate_core.application.caselist.parse_workers import InProcessParseRunner
 from debate_core.application.file_build_service import UnattributedCard
 from debate_core.application.file_quality_service import FileQualityService
+from debate_core.application.ports.suppression import ReasonCode, SuppressionAction, SuppressionEntry
 from debate_core.domain.file_provenance import provenance_sidecar_name
 from debate_core.integrations.docx_parser import DOCX_PARSER_VERSION, DebateDocxParser
 from debate_core.testing.fakes.persistence import InMemorySnapshotStore
@@ -467,3 +469,52 @@ def test_files_help_names_its_three_commands_and_build_documents_its_exit_codes(
     help_text = " ".join(invoke("files", "build", "--help").stdout.split())
     for code in ("Exit 0:", "Exit 1:", "Exit 2:"):
         assert code in help_text
+
+
+# ------------------------------------------------------------------------------------------------
+# The removal runbook's step 8: `files check` over the built files finds a removed card
+# ------------------------------------------------------------------------------------------------
+
+RUNBOOK: Final = Path(__file__).resolve().parents[4] / "docs" / "runbooks" / "caselist-removal.md"
+
+
+def test_the_removal_runbooks_step_8_runs_files_check_over_each_environments_built_files() -> None:
+    step = RUNBOOK.read_text(encoding="utf-8").split("## Step 8 — Suppression and built files", 1)[1]
+    step = step.split("\n## ", 1)[0]
+    blocks = [block.strip() for block in step.split("```bash")[1:]]
+    commands = [block.split("```", 1)[0].strip() for block in blocks]
+    assert commands == [
+        f"find ~/.debate-research/{env}/files/built -name '*.docx' -print0 | DEBATE_ENV={env} xargs -0 -n 1 "
+        "uv run debate-research files check"
+        for env in ("dev", "prod")
+    ]
+
+
+def test_files_check_fails_the_suppression_check_of_a_built_file_once_its_source_is_removed(
+    world: Planted,
+) -> None:
+    built = invoke("--json", "files", "build", str(world.corpus.recipe))
+    assert built.exit_code == ExitCode.OK, built.output
+    docx = envelope(built)["data"]["files"]["docx"]
+    removed = world.corpus.cards[0].source_sha256
+    entry = SuppressionEntry(
+        action=SuppressionAction.SUPPRESS,
+        sha256=removed,
+        recorded_at=datetime(2026, 10, 24, 9, 0, tzinfo=UTC),
+        reason=ReasonCode.REQUESTED_BY_TEAM,
+        request_id="RM-2026-90",
+    )
+    listed = world.data_dir / "suppression" / "suppression-list.jsonl"
+    listed.parent.mkdir(parents=True, exist_ok=True)
+    with listed.open("a", encoding="utf-8") as stream:
+        stream.write(entry.to_line() + "\n")
+
+    result = invoke("--json", "files", "check", docx)
+
+    assert result.exit_code == ExitCode.DOMAIN_FAILURE, result.output
+    assert envelope(result)["error"]["details"]["quality"]["failing_checks"] == ["suppression"]
+    report = json.loads(Path(f"{docx}.quality.json").read_text(encoding="utf-8"))
+    (finding,) = [
+        one for one in report["results"] if one["check"] == "suppression" and one["status"] == "FAIL"
+    ]
+    assert "RM-2026-90" in finding["message"]

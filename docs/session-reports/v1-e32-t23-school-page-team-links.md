@@ -120,14 +120,17 @@ None.
 ## Operator follow-ups
 
 **ac3: republish hspolicy26 to dev after the cutover's seed** (`v1-e40-t06`, step 3 of
-`docs/runbooks/caselist-cutover.md`). Do not run this before the seed. Until then a bucket-mode
+`docs/runbooks/caselist-cutover.md`). The republish runs after the cutover's step 9, never between
+the seed and step 8, and never during a Wednesday cloud run (the PM's review of 2026-10-25). Do not
+run this before the seed. Until then a bucket-mode
 checkout refuses the publish with `RUN_STATE_NOT_SEEDED`, and getting past that would write to dev
 outside the lock. In bucket mode `landscape report --publish` takes the run lock (ADR-0020, amended
 2026-10-24), so do not run it while a cloud run is going. The sequence is the first dev run's
 (`docs/data/landscape/first-run-policy.md`, "The first dev run"): a dry run, then the publish.
 
 **Operator command** (expected runtime ~2 min, most of it the report's build)
-Where: the `dev-preview` worktree, after this task has merged into `dev` and the seed is done
+Where: the `dev-preview` worktree, after this task has merged into `dev` and the cutover's step 9 is
+done, outside a Wednesday cloud run
 ```bash
 cd "$HOME/Documents/debate/debate-intelligence-tool/debate-intelligence-worktrees/dev-preview"
 git fetch origin
@@ -188,9 +191,35 @@ None.
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-25
 
 **Notes:**
+
+A small change, done the way small changes should be: the golden file changed by hand and red
+first, and the pilot proven to need nothing.
+1. **ac1 and ac2 pass.**
+   * The tests were red at `a9cd37b` (6 failed, each named) and green after `e8ce35d`.
+   * The test that a team's cell is the same in both lists is the right one: it pins the brief, not
+     the markup.
+   * Tightening `test_landscape_run.py`'s row assertion, which had stopped pinning the row because
+     the old cells were still a substring of the new row, is a good catch.
+2. **Mutants: 4 of 4 caught,** the pilot's `team_pages=False` included.
+3. **The page budget holds:** the largest hspolicy26-shaped school page, with 117 links, weighs
+   57,903 bytes against 153,600.
+4. **Decisions 1 to 4 accepted:**
+   * the older synthetic bundle keeps the old shape, as a bundle published before this change would;
+   * no lead paragraph;
+   * smoke checks unchanged;
+   * no pilot change and no deploy.
+5. **ac3's republish:** after the cutover session's step 9, not during steps 3 to 8. Between the seed
+   and step 8 the cutover's own run and comparison hold the lock, and a publish then would sit in
+   the middle of the comparison. Not on a Wednesday morning either, when the cloud run holds it. The
+   PM records the upload line and the pilot check when the operator runs them.
+6. **The affected set** (220 files) was stopped at 115 s, 90% through, with no failure, and is left to
+   the PR's `ci` under agreement 10. The changed areas, the always-run list and the static checks
+   passed.
+
+The PR merges `--partial`, with the phase `InProgress`, until ac3. No re-review is needed.

@@ -42,7 +42,7 @@ cannot delete, and removing evidence is an operator procedure with its own crede
 still worth doing: it is how an operator notices that the bucket holds a corpus their laptop does
 not.
 
-## Three things a sync never moves, either way
+## Four things a sync never moves, either way
 
 * **`manifests/_suppression/`** — the suppression list and the removal log. They are append-only
   and merged as a set union by `caselist remove` and `unsuppress`
@@ -63,6 +63,11 @@ not.
   bucket's parsed store is not something this machine's `objects/` was meant to hold. A stale
   `objects/parsed/` copy is reported by :meth:`EvidenceSyncService.stale_parsed_copy`, for the
   operator to remove, and never deleted here.
+* **`manifests/_run-state/`** — the run-state bundle (`v1-e40-t04`): this machine's manifests and
+  database, which a bucket-mode run saves, the seed uploads and a removal rewrites and purges. Its
+  rules are theirs (saved only when every snapshot it records is confirmed, never with a manifest
+  the publisher withholds), and a sync that copied it would keep none of them. Skipped whatever is
+  on either side, as `parsed/` is, never `would_delete`.
 
 A push also leaves out **a blob that only rows at a path a removal holds name** (`v1-e30-t22`): the
 bytes a build from before `v1-e30-t13` imported at a removed file's path, which `caselist publish`
@@ -160,6 +165,7 @@ from debate_core.application.ports.evidence_store import (
 )
 from debate_core.application.ports.parsed_store import PARSED_PREFIX
 from debate_core.application.ports.providers import Clock
+from debate_core.application.ports.run_state import RUN_STATE_PREFIX
 from debate_core.application.ports.suppression import SuppressionList, SuppressionState
 from debate_core.domain import Sha256Hex
 
@@ -311,6 +317,10 @@ class SkipKind(StrEnum):
     PARSED_STORE = "parsed_store"
     """Under `parsed/`, either way and on either side, which only `caselist parse --publish` publishes
     (`v1-e29-t12`)."""
+
+    RUN_STATE = "run_state"
+    """Under `manifests/_run-state/`, either way and on either side: the run-state bundle, which a
+    bucket-mode run, the seed and a removal write, and nothing copies (`v1-e40-t04`)."""
 
     ANOTHER_KEYSPACE = "another_keyspace"
     """A key another keyspace's longer prefix owns, so that one plans it and this one moves nothing."""
@@ -931,6 +941,8 @@ class EvidenceSyncService:
             )
         if _is_parsed_store_key(remote_key):
             return _parsed_store_skip(keyspace, key, source.size), 0
+        if _is_run_state_key(remote_key):
+            return _run_state_skip(keyspace, key, source.size), 0
         if keyspace.content_addressed:
             digest = keyspace.digest_of_key(key)
             if digest is not None and suppression.suppresses_source(digest):
@@ -1366,10 +1378,23 @@ def _parsed_store_skip(keyspace: SyncKeyspace, local_key: ObjectKey, size: int) 
     )
 
 
+def _run_state_skip(keyspace: SyncKeyspace, local_key: ObjectKey, size: int) -> PlannedObject:
+    return _planned(
+        keyspace,
+        local_key,
+        SyncAction.SKIPPED,
+        size,
+        "the run-state bundle is written by a bucket-mode run, the seed and a removal only",
+        skip_kind=SkipKind.RUN_STATE,
+    )
+
+
 def _only_at_the_destination(keyspace: SyncKeyspace, local_key: ObjectKey, size: int) -> PlannedObject:
-    """`would_delete`, except under `parsed/`, which is skipped whatever is on either side."""
+    """`would_delete`, except under `parsed/` and `manifests/_run-state/`, skipped on either side."""
     if _is_parsed_store_key(keyspace.remote_key(local_key)):
         return _parsed_store_skip(keyspace, local_key, size)
+    if _is_run_state_key(keyspace.remote_key(local_key)):
+        return _run_state_skip(keyspace, local_key, size)
     return _planned(keyspace, local_key, SyncAction.WOULD_DELETE, size, "absent at the source")
 
 
@@ -1440,6 +1465,10 @@ def _is_documented_prefix(remote_key: ObjectKey) -> bool:
 
 def _is_parsed_store_key(remote_key: ObjectKey) -> bool:
     return remote_key.startswith(PARSED_STORE_PREFIX)
+
+
+def _is_run_state_key(remote_key: ObjectKey) -> bool:
+    return remote_key.startswith(RUN_STATE_PREFIX)
 
 
 def _stated_digest(landed: ObjectInfo, key: ObjectKey) -> Sha256Hex:

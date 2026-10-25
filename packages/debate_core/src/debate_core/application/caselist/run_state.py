@@ -79,7 +79,7 @@ from debate_core.application.errors import BlobIntegrityError, DomainError, NotF
 from debate_core.application.evidence_sync import WithheldManifests
 from debate_core.application.ports.evidence_store import EvidenceObjectStore, ObjectInfo, ObjectKey
 from debate_core.application.ports.parsed_store import OPENEV_STORE
-from debate_core.application.ports.run_state import RunStateFiles
+from debate_core.application.ports.run_state import RUN_STATE_BUNDLE_KEY, RUN_STATE_PREFIX, RunStateFiles
 from debate_core.application.ports.suppression import SuppressionList
 from debate_core.application.search_index_refresh import RESTORED_INDEX_MARKER, SEARCH_INDEX_DIRECTORY
 from debate_core.application.sync_runs import SYNC_RUN_DETAILS_FILENAME, SYNC_RUN_LOG_FILENAME
@@ -104,12 +104,6 @@ __all__ = [
 ]
 
 logger = logging.getLogger(__name__)
-
-RUN_STATE_PREFIX: Final = "manifests/_run-state/"
-"""The run-state bundle's prefix. Personal data: `store sync` skips it, and a removal reaches it."""
-
-RUN_STATE_BUNDLE_KEY: Final = f"{RUN_STATE_PREFIX}run-state.tar.gz"
-"""The one object under it. Its key holds no school, team code or file name."""
 
 STATE_PREFIX: Final = "reports/sync/state/"
 """The state with no personal data, beside the run summaries' prefix."""

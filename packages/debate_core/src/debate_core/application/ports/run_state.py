@@ -15,7 +15,20 @@ from typing import Final, Protocol, runtime_checkable
 
 from debate_core.application.errors import DomainError
 
-__all__ = ["BUNDLE_DATABASE_NAME", "BUNDLE_MANIFESTS_DIRECTORY", "RunStateBundleUnreadable", "RunStateFiles"]
+__all__ = [
+    "BUNDLE_DATABASE_NAME",
+    "BUNDLE_MANIFESTS_DIRECTORY",
+    "RUN_STATE_BUNDLE_KEY",
+    "RUN_STATE_PREFIX",
+    "RunStateBundleUnreadable",
+    "RunStateFiles",
+]
+
+RUN_STATE_PREFIX: Final = "manifests/_run-state/"
+"""The run-state bundle's prefix. Personal data: `store sync` skips it, and a removal reaches it."""
+
+RUN_STATE_BUNDLE_KEY: Final = f"{RUN_STATE_PREFIX}run-state.tar.gz"
+"""The one object under it. Its key holds no school, team code or file name."""
 
 BUNDLE_MANIFESTS_DIRECTORY: Final = "objects/manifests"
 """Where the manifests are in a bundle, and under the data directory: the same relative path."""

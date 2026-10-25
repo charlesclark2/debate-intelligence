@@ -646,9 +646,58 @@ v1-e40-t04 questions (session report: docs/session-reports/v1-e40-t04-run-state-
 <!-- Completed by the PM only. scripts/task pr refuses to open a PR unless the last Verdict in
 this report is ACCEPTED. A later review is appended after this one; this one is never edited. -->
 
-**Verdict:** PENDING
+**Verdict:** ACCEPTED
 <!-- ACCEPTED / CHANGES_REQUESTED -->
 
-**Reviewed by / date:**
+**Reviewed by / date:** PM (Claude), 2026-10-24
 
 **Notes:**
+
+The largest task in E40, built as the accepted plan said, and checked hard.
+
+1. **All four criteria pass by test, and ac4's halves were red first.**
+   * ac1 compares an empty-directory run with a full one key by key, digest by digest and manifest
+     by manifest, and again with no parsed store in the bucket.
+   * ac2 kills at the start of each of 8 stages, after 7 counts of bucket writes and at the end,
+     plus 5 real SIGTERMs. Each next run takes over and leaves the bucket equal to an uninterrupted
+     run's, ETag for ETag, apart from the late parse in finding 2.
+   * ac3 covers the lease, the takeover, the skew margin, the first-writer race, `RUN_LOCK_LOST`,
+     the never-start-without-a-lock refusal, all 8 commands and the classification of every
+     command.
+   * ac4's removal and Terraform red runs are in the report. `the_run_role_never_deletes` matches
+     IAM wildcards and `NotAction`, not just names.
+2. **21 mutants were caught.** The one that survived (a run's end not asking the lease) was masked
+   by the fence, and it got its own test. Two tests were added up front where no test could catch a
+   mutant. That is the right instinct.
+3. **Finding 1 (`VACUUM INTO`, not an online backup): accepted, and a good catch.** The online backup
+   would have copied a removed row's free pages into the rewritten bundle, and a removal must not
+   leave the removed rows in any version. ac4 now checks the removed file's digest is in no byte of
+   the remaining version.
+4. **Finding 2 (a run killed after its publish leaves that week's parse late): accepted** as the
+   Mac's behaviour, never a loss. The "parse owed" record is a small new E34 task in the PM's next
+   batch.
+5. **Accepted as made:**
+   * the packages amendment (ruling 1);
+   * the two extra lock-takers (ruling 2), the local-mode refusal (3(a)) and the seed at t06's step
+     4 (3(b));
+   * deviation 3, the ledger recorded before a download in bucket mode: conservative, and never an
+     extra download;
+   * deviation 4, `VACUUM INTO`;
+   * which commands restore;
+   * records that stay local for runs that never held the lock;
+   * the holder from ECS's metadata variable;
+   * SIGTERM in the main thread outside `pull`, and only in bucket mode inside it.
+6. **The stale readings** under v1-e34-t32 for `RUN_LOCK_LOST` and `RunTerminated` are recorded,
+   as asked.
+7. **Folded into `v1-e40-t06` in the PM's next batch:**
+   * `caselist restore-run-state`, for the comparison and a hand publish to prod;
+   * a JSON plan check for the bucket-mode apply, in the style of t02's and t03's. It must allow
+     exactly the two task definitions replaced and the two schedules repointed (`2 to add, 4 to
+     change, 2 to destroy`), with the run's schedule still `DISABLED`;
+   * reading the first cloud run's logs for a process-pool parse stopping within 120 s of SIGTERM.
+8. **CI:** about 380 more test-seconds in `bucket_mode/`. If one part's pytest step passes two
+   minutes, agreement 1's fix is another part.
+
+**The PR** merges `--partial`, with the phase `InProgress`. Nothing is applied before the cutover.
+The PM sets the Goal `Succeeded` once t06's step 4 has seeded dev and the bucket-mode task
+definition is applied. After this merges, `v1-e32-t13`'s removal work can start.

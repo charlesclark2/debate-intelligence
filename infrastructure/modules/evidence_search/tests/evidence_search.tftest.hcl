@@ -801,6 +801,27 @@ run "managed_login_is_served_at_the_login_host" {
 # The function and the distribution (ADR-0019 (a)).
 # ---------------------------------------------------------------------------------------------
 
+run "web_adapter_never_logs_at_debug" {
+  # v1-e39-t17: the adapter (v1.1.0) logs a request's URL and headers only at debug, and a landscape
+  # page's path names a school. Nothing here may lower its level: no JSON format with an
+  # application log level, and no variable that sets a tracing level.
+  assert {
+    condition = (
+      aws_lambda_function.pilot.logging_config[0].log_format == "Text" &&
+      !contains(["DEBUG", "TRACE"], upper(coalesce(try(aws_lambda_function.pilot.logging_config[0].application_log_level, null), "unset")))
+    )
+    error_message = "The function logs as Text with no debug or trace application level, so the Web Adapter never logs a request's URL or headers."
+  }
+
+  assert {
+    condition = length(setintersection(
+      toset(keys(aws_lambda_function.pilot.environment[0].variables)),
+      toset(["RUST_LOG", "AWS_LAMBDA_LOG_LEVEL", "AWS_LAMBDA_LOG_FORMAT", "AWS_LWA_LOG_LEVEL"]),
+    )) == 0
+    error_message = "No environment variable may set the Web Adapter's log level or format."
+  }
+}
+
 run "function_has_the_settings_adr_0019_gives_it" {
   assert {
     condition = (

@@ -19,8 +19,9 @@ caselist and snapshot. The function's role gains the read of `reports/landscape/
 limited to that prefix, tested in the module, and the runbook has the plan, apply, deploy and check
 blocks. The Goal stays **InProgress**: ac4's apply, deploy and coach's check are the operator's. **Look
 first at** three open items, all in Deviations: the report was republished after the counts and now
-weighs 92% of the page line as one page; ADR-0019's role table says "no list"; and the Lambda Web
-Adapter's documentation still has to be read, which is a live fetch, so it is handed to the operator.
+weighs 92% of the page line as one page; and ADR-0019's role table says "no list". The Lambda Web
+Adapter's logging, read by the operator, logs request paths only at `debug`, which the deployed
+function never runs at; a module test now keeps it that way.
 
 ## Counts before building (ac1)
 
@@ -110,7 +111,7 @@ Deviations).
 | ac1 — counts before building, sent to the PM with the proposed layout | PASS | The tables above, measured read-only with markdown-it-py 4.2.0 (two scratch scripts, under 1 s); sent as a relay prompt; ruled 2026-10-25 (layout A), recorded as a `# PM rulings` comment above the spec's `acceptanceCriteria` |
 | ac2 — with a moto bucket holding synthetic bundles, student and coach see the list, report and school view with contents and anchors; signed-out, expired and tampered sessions refused on every new route, in the matrix; private and uncached; failing first | PASS | `packages/debate_api/tests/test_landscape_pages.py` (87 passed, both roles): hand-written expectations for the list, the report's contents and its twelve heading ids (one `-2`), the front page's school and position links, a school page, a position page. `test_landscape_bundles.py` reads the same fixtures from a versioned moto bucket through the real `S3EvidenceObjectStore`. `test_auth_authorization_matrix.py` has the five routes: 319 passed over valid, expired, idle, tampered, foreign-key, other-cookie and absent sessions; before the rows were added, `test_the_matrix_covers_every_route_the_app_serves` failed listing the five routes. `test_exposure.py` has them too, 404s included: `private, no-store` for student, coach and nobody. Red run below |
 | ac3 — re-read after five minutes (deleted school view, republished report); raw HTML escaped; a refused team page renders as text; one audit record per view, naming caselist, snapshot and page and no school or team code | PASS | `test_landscape_bundles.py` (26 passed): in moto, a deleted `schools.md` still shows at 4 min 59 s and is gone at 5 min, with no older view; a republished `report.md` likewise; a newer snapshot likewise. A failing bucket after five minutes gives 503, not the old bundle. Planted `<script>`, `<img onerror>`, raw `<a>`, a `javascript:` link, a `data:` image, an off-site link, an autolink, a bare URL and a team page in `report.md` render as text, as do another caselist's team page, a query, a display name, a deeper path and plain http in `schools.md`. Six page kinds each write one record, compared whole; none names a school, team code or position; a 404 writes none; a failed write gives 503 with no page. A log test at `NOTSET` over moto finds no school, anchor, position id or team code in any record but the test client's own httpx lines |
-| ac4 — the role's read granted by Terraform, tested, applied in dev after the PM reads the plan; the deployed dev pilot shows the hspolicy26 report to a signed-in coach | NOT RUN (Terraform tested: PASS) | `terraform test` for `evidence_search`: 17 passed, including the new `function_role_lists_only_the_landscape_bundles_and_reads_them`; `scripts/terraform_checks.sh` passed in full, offline (30 s). The plan, apply, deploy and coach's check are operator steps after the merge (Operator follow-ups) |
+| ac4 — the role's read granted by Terraform, tested, applied in dev after the PM reads the plan; the deployed dev pilot shows the hspolicy26 report to a signed-in coach | NOT RUN (Terraform tested: PASS) | `terraform test` for `evidence_search`: 18 passed (17 before the adapter-logging run), including the new `function_role_lists_only_the_landscape_bundles_and_reads_them`; `scripts/terraform_checks.sh` passed in full, offline (30 s). The plan, apply, deploy and coach's check are operator steps after the merge (Operator follow-ups) |
 | Node: `uv run pytest packages/debate_api/tests` | PASS | `.venv/bin/python -m pytest packages/debate_api/tests` → `966 passed in 9.65s` |
 
 **Failing first.** The new tests were run against a refuse-nothing skeleton, then the committed code
@@ -186,7 +187,7 @@ missing search and cart, and the page weight. Then: 155 passed.
    evidence bucket only. No `GetObjectVersion`, no write"* and *"`s3:ListBucket` | the evidence bucket,
    for the prefix `reports/landscape/` only (`s3:prefix`), so the landscape pages can find each
    caselist's newest bundle. No `ListBucketVersions`"*.
-3. **The Lambda Web Adapter's documentation has not been read.** Reading it is a live fetch, which is
+3. **The Lambda Web Adapter's logging** (closed, 2026-10-25). Reading it is a live fetch, which is
    the operator's (the PM's rule since `v1-e07-t05`), so it is a one-line hand-off below. The test
    the ruling asked for exists: no record the app writes, at any level, holds a school's anchor or a
    position id. What is open is whether the adapter itself logs request paths, and so whether
@@ -198,6 +199,22 @@ missing search and cart, and the page weight. Then: 155 passed.
    no error). It documents no logging and no setting for it, so it neither says the adapter logs
    request paths nor says it does not. The answer is taken from the adapter's source at v1.1.0 and
    from the dev pilot's own app log (Operator follow-ups, item 1b).
+   **The source and the log, read by the operator the same day.** The v1.1.0 README answered `200`.
+   `src/main.rs` lines 20 to 23 initialise logging with `tracing::init_default_subscriber()`, which "respects
+   AWS_LAMBDA_LOG_LEVEL and AWS_LAMBDA_LOG_FORMAT environment variables set by Lambda's advanced
+   logging configuration". In `src/lib.rs`, a request's path is logged only at `debug`: line 1543
+   (the stripped base path), line 1624 (`app_url` and every request header, the session cookie
+   included) and line 1665 (the response status and size). The one `warn!` with a path, line 1583,
+   names the adapter's own SnapStart hook path when an outside request asks for it. The dev pilot's
+   app log, `debate-dev-tub-app`, held **0** events naming `/search`, `/cards/` or `/account` in the
+   last 30 days, which cover the debaters' use of dev on 2026-10-22. Line 1624 would have written one
+   per request at `debug`. **So the adapter does not log request paths as deployed**, and nothing
+   needed turning off. The function logs as `Text` with no application log level, the one setting
+   under which Lambda sets `AWS_LAMBDA_LOG_LEVEL`. A new module run, `web_adapter_never_logs_at_debug`,
+   fails if the format becomes JSON at `DEBUG` or `TRACE`, or if `RUST_LOG`, `AWS_LAMBDA_LOG_LEVEL`,
+   `AWS_LAMBDA_LOG_FORMAT` or `AWS_LWA_LOG_LEVEL` is set. Each of those two mutants failed its
+   assertion (17 passed, 1 failed), and the restored module passes 18 of 18. `main.tf` gains only a
+   comment, so the dev plan's expected count is unchanged.
 4. **The report outgrew the size layout A was ruled on.** One page is 141,796 of 153,600 bytes, not
    about 94 KB, and the report grew 75% in one republish. It passes today. Options are in the
    message to the PM.

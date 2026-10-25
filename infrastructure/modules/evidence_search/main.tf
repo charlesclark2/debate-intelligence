@@ -294,6 +294,11 @@ resource "aws_lambda_function" "pilot" {
     size = local.function_ephemeral_storage_mb
   }
 
+  # Text, with no application log level, keeps the Lambda Web Adapter above debug. v1.1.0 logs a
+  # request's URL and headers only at debug (src/lib.rs lines 1543, 1624 and 1665), at the level
+  # AWS_LAMBDA_LOG_LEVEL sets (src/main.rs lines 20-23), which Lambda sets only for the JSON format.
+  # The dev pilot's app log held no request path in 30 days of use (v1-e39-t17, 2026-10-25), and a
+  # page's path can name a school.
   logging_config {
     log_format = "Text"
     log_group  = aws_cloudwatch_log_group.app.name

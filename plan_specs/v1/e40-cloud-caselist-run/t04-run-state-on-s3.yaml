@@ -46,7 +46,9 @@ spec:
   priority: 1
   constraints:
     # PM ruling 2026-10-23: the run role's policy test lives with the run's Terraform module.
-    packages: [debate_core.application, debate_core.integrations, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/runbooks, docs/architecture, infrastructure/modules/caselist_run/tests]
+    # PM ruling 2026-10-24 (plan question 1): infrastructure/modules/caselist_run is added for the
+    # run task's one environment line, DEBATE_CASELIST__RUN_STATE=bucket, and its assertion.
+    packages: [debate_core.application, debate_core.integrations, debate_cli, packages/debate_core/tests, packages/debate_cli/tests, docs/runbooks, docs/architecture, infrastructure/modules/caselist_run]
     forbidden:
       - A second copy of the publisher's suppression or withholding rules
       # PM ruling 2026-10-23 (ADR-0020): replaces "Deleting anything in the bucket".

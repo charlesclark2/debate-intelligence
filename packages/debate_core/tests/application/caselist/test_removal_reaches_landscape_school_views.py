@@ -178,12 +178,10 @@ async def plan_of(world: RemovalWorld, *, versions: EvidenceVersionStore | None 
 async def removed(world: RemovalWorld) -> None:
     """`caselist remove --source <the round 5 affirmative> --request RM-2026-01 --execute`."""
     service = world.service()
-    report = await service.execute(await service.plan(SourceSelector(REMOVED), **_asked()))
+    report = await service.execute(
+        await service.plan(SourceSelector(REMOVED), request_id=REQUEST, reason=ReasonCode.REQUESTED_BY_TEAM)
+    )
     assert report.completed
-
-
-def _asked() -> dict[str, object]:
-    return {"request_id": REQUEST, "reason": ReasonCode.REQUESTED_BY_TEAM}
 
 
 class ReportsVersionsRefused:
@@ -293,7 +291,11 @@ class TestTheExecution:
         bucket_before, local_before = bucket_reports(bundles), local_reports(bundles)
         service = bundles.service()
 
-        report = await service.execute(await service.plan(SourceSelector(REMOVED), **_asked()))
+        report = await service.execute(
+            await service.plan(
+                SourceSelector(REMOVED), request_id=REQUEST, reason=ReasonCode.REQUESTED_BY_TEAM
+            )
+        )
 
         assert report.completed
         assert bucket_reports(bundles) == {

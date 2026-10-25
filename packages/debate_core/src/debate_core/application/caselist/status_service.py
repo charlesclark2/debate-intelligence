@@ -157,7 +157,7 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Final, Protocol
@@ -617,7 +617,9 @@ class CaselistStatusService:
                 if self._environment is not None
                 else CompletedRemovals()
             )
-            cutoffs = school_view_cutoffs(entries, scopes, self._environment) if self._environment else {}
+            cutoffs: Mapping[str, RemovalCompletion] = (
+                school_view_cutoffs(entries, scopes, self._environment) if self._environment else {}
+            )
             withdrawn, not_attributed = await self._withdrawn_copies(suppression, caselists)
             left = [
                 await self._school_views_left(

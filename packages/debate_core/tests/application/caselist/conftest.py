@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from inspect import signature
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import pytest
 from tests.fixtures.caselist.build_synthetic_archives import (
@@ -216,8 +216,6 @@ class RemovalWorld:
             if "removal_log" in signature(RemovalPlanner).parameters
             else {}
         )
-        # The landscape bundles under reports/ are the planner's since v1-e32-t13, likewise.
-        log |= self._local_reports(RemovalPlanner)
         return RemovalPlanner(
             caselists=self.repository,
             local=self.local,
@@ -231,9 +229,11 @@ class RemovalWorld:
             environment="dev",
             bucket=self.bucket_name,
             **log,
+            # The landscape bundles under reports/ are the planner's since v1-e32-t13, likewise.
+            **self._local_reports(RemovalPlanner),
         )
 
-    def _local_reports(self, built: type) -> dict[str, EvidenceVersionStore]:
+    def _local_reports(self, built: type) -> dict[str, Any]:
         """The data directory keyed as the bucket is, for a build whose planner and service take it."""
         if "local_reports" not in signature(built).parameters:
             return {}

@@ -545,3 +545,33 @@ Careful work that builds on t02 rather than beside it.
 plan), then the rehearsal. ac2 follows t04.
 
 If anything comes out differently, stop and ask for another review.
+
+## PM review, second
+
+**Verdict:** ACCEPTED
+<!-- ACCEPTED / CHANGES_REQUESTED -->
+
+**Reviewed by / date:** PM (Claude), 2026-10-24
+
+**Notes:**
+
+The three conditions are closed. I read the runbook's step 3 in full, and step 7's checks as the
+report gives them.
+
+1. **Step 3, the token check, is what ruling 6 asked for.**
+   * The Mac's check runs with the agent's own plist environment, under `env -i`, so it tests the
+     token the agent actually uses.
+   * The hand login is guarded against stray `DEBATE_` overrides, and stores only the token.
+   * An already-expired Mac token is caught before the test, rather than read as the answer.
+   * The pause is one gitignored line that step 6's plan check expects.
+   * The blocks keep the house rules.
+2. **Step 7, the rehearsal:** a deployer-started dry-run pull. Its checks are a zero exit, `dry_run`
+   true, nothing downloaded or published, and no new run record. Those are the right four.
+3. **The consequence the session added is correct, and it is accepted.** If one login ends the
+   other's token, the Mac's second login ends the secret's token in turn. So with the login paused,
+   the rehearsal waits for `v1-e40-t06`.
+4. **The packages amendment** is under its PM-ruling comment, and `validate_specs` passes.
+
+Nothing else changes from the first review. The PR merges `--partial`, with the phase
+`InProgress`. After the merge: B1 to B4 (the PM reads B3's plan), the token check (its output to
+the PM), B5, B6 (the PM reads apply B's plan), then the rehearsal. ac2 follows `v1-e40-t04`.

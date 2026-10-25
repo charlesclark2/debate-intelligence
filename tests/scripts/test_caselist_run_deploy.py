@@ -159,6 +159,9 @@ class World:
     )
     image_user: str = "10001:10001"
     sqlite_version: str = "3.40.1"
+    # Minors no Python has, so that this file names no real one (`test_single_interpreter_source.py`).
+    base_python: str = "3.98"
+    tool_python: str = "3.98"
     task_definition: dict[str, object] | None = field(default_factory=run_task_definition)
     pushed_before: str | None = None
 
@@ -232,6 +235,8 @@ case "${{1:-}}" in
     case "${{arguments}}" in
       *"--version"*) echo '{{"data": {{"version": "1.2.0.dev40", "tag": "{DEV_TAG}", "channel": "dev"}}}}' ;;
       *"fts5"*) echo "{self.sqlite_version}" ;;
+      *"/usr/local/bin/python3"*) echo "{self.base_python}" ;;
+      *"version_info"*) echo "{self.tool_python}" ;;
     esac
     ;;
 esac
@@ -403,11 +408,12 @@ def test_a_dry_run_builds_the_releases_image_for_arm64_checks_it_and_calls_no_aw
     assert f"RELEASE_TAG={DEV_TAG}" in build
     assert build[build.index("--file") + 1].endswith("ops/caselist_run/Dockerfile")
     assert build[build.index("--tag") + 1] == f"debate-dev-caselist-run:{DEV_TAG}"
-    assert len(run.calls_starting("docker", "run")) == 4, "the check's four offline containers"
+    assert len(run.calls_starting("docker", "run")) == 6, "the check's six offline containers"
     assert all(
         "--network" in call and call[call.index("--network") + 1] == "none"
         for call in run.calls_starting("docker", "run")
     )
+    assert "ok: the base image's Python is 3.98, the one debate-research runs on" in run.stdout
     assert "ok: SQLite 3.40.1 with FTS5" in run.stdout
     assert run.calls_to("aws") == []
     assert run.calls_starting("docker", "push") == []
@@ -442,6 +448,17 @@ def test_an_image_with_sqlite_older_than_the_pilots_floor_is_refused(world: Worl
 
     assert run.returncode != 0
     assert "SQLite is 3.39.4, older than 3.40.0" in run.stderr
+
+
+def test_a_base_image_digest_of_another_python_than_debate_research_runs_on_is_refused(world: World) -> None:
+    """`v1-e40-t06`: the base image is pinned by digest, which outlives a move of requires-python."""
+    world.tool_python = "3.97"
+
+    run = world.deploy("dev", DEV_TAG, "--dry-run")
+
+    assert run.returncode != 0
+    assert "base image has Python 3.98, and debate-research runs on 3.97" in run.stderr
+    assert "--print-base-image" in run.stderr
 
 
 def test_an_image_that_runs_as_root_is_refused(world: World) -> None:

@@ -8,14 +8,14 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 
-from debate_core.application.ports.providers import (
-    Clock,
-    ExtractedContent,
-    ExtractionQuality,
-    SourceMetadataHints,
-)
+from debate_core.application.ports.providers import Clock
 from debate_core.domain import AccessStatus
 from debate_core.domain.discovery import CandidateResult, ProviderQuery, ProviderResponse
+from debate_core.retrieval.extraction import (
+    ExtractedContent,
+    ExtractionQuality,
+    UnverifiedMetadataHints,
+)
 from debate_core.retrieval.fetch_types import FetchResult
 from debate_core.testing.fakes.clock_and_ids import FixedClock
 
@@ -149,7 +149,7 @@ class FakeContentExtractor:
             paragraphs=paragraphs,
             extractor_name=self._name,
             extractor_version=self.version,
-            metadata_hints=SourceMetadataHints(canonical_url=fetched.final_url),
+            metadata_hints=UnverifiedMetadataHints(canonical_url=fetched.final_url),
             quality=ExtractionQuality(
                 character_count=sum(len(paragraph) for paragraph in paragraphs),
                 paragraph_count=len(paragraphs),

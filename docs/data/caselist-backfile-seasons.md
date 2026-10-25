@@ -61,9 +61,26 @@ The PM's ruling of 2026-10-25 (Q3): the four complete archives only, under polic
 Whether the site could regenerate the 2021-22 to 2023-24 archives is a question Charlie may put to the
 maintainer, outside this task.
 
-## The dry run on the Mac
+## The dry run on the Mac, 2026-10-25
 
-_Not yet run._
+`DEBATE_ENV=dev uv run debate-research --json caselist backfile-import --caselist hspolicy25`, run by the
+operator from the task worktree on 2026-10-25 (a Sunday, outside the no-import window), before the
+cutover's seed. It made one downloads listing and one `HEAD`, read the bucket's backfile ledger, and
+downloaded, wrote and locked nothing. Exit `1`, `BACKFILE_IMPORT_REFUSED`, as expected:
+
+| | |
+|---|---|
+| Complete archive | 2026-06-30, 3,958,272,657 bytes (the survey's `HEAD` said the same) |
+| Already imported | no |
+| Backfile downloads left in 24 hours | 1 |
+| Inside the no-import window | no |
+| Free on the data directory's volume | 11,044,614,144 bytes |
+| Estimate (archive, blobs, parsed store) | 23,749,635,942 bytes |
+| Needed, with 25% headroom | 29,687,044,928 bytes |
+| Refusals | `RUN_STATE_NOT_SEEDED`, `NOT_ENOUGH_FREE_SPACE` |
+
+The Mac cannot hold one backfile import, so the imports run in the cloud (the PM's ruling Q4). The
+window and budget refusals are shown by the tests (`packages/debate_cli/tests/bucket_mode/test_backfile_import.py`).
 
 ## Imports
 

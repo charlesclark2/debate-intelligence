@@ -53,7 +53,7 @@ spec:
         The workflow's run for a superseded commit reads as skipped, not failed, and the
         next commit's pre-release is unaffected, by test over the workflow's steps.
 status:
-  phase: InProgress
+  phase: Succeeded
 ---
 apiVersion: planspec.io/v1alpha1
 kind: Plan
